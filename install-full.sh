@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full macOS installer for the exact 来啦～老弟 build.
+# Full macOS installer for the exact 超級碧琪 build.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,10 +112,10 @@ else
   echo "    已跳过"
 fi
 
-echo "==> 4/6 构建并安装来啦～老弟.app"
+echo "==> 4/6 构建并安装超級碧琪.app"
 chmod +x "$REPO_ROOT/desktop/macos/build.sh"
 PINKIE_BUILD_DIR="$STATE_ROOT/build" "$REPO_ROOT/desktop/macos/build.sh" >/dev/null
-SOURCE_APP="$STATE_ROOT/build/来啦～老弟.app"
+SOURCE_APP="$STATE_ROOT/build/超級碧琪.app"
 if [[ -n "${PINKIE_APP_ROOT:-}" ]]; then
   APP_ROOT="$PINKIE_APP_ROOT"
   mkdir -p "$APP_ROOT"
@@ -125,11 +125,17 @@ else
   APP_ROOT="$HOME/Applications"
   mkdir -p "$APP_ROOT"
 fi
-TARGET_APP="$APP_ROOT/来啦～老弟.app"
+TARGET_APP="$APP_ROOT/超級碧琪.app"
+LEGACY_APP="$APP_ROOT/来啦～老弟.app"
 if [[ -d "$TARGET_APP" ]]; then
   mkdir -p "$BACKUP_ROOT/app"
-  ditto "$TARGET_APP" "$BACKUP_ROOT/app/来啦～老弟.app"
+  ditto "$TARGET_APP" "$BACKUP_ROOT/app/超級碧琪.app"
   rm -rf "$TARGET_APP"
+fi
+if [[ -d "$LEGACY_APP" ]]; then
+  mkdir -p "$BACKUP_ROOT/app"
+  ditto "$LEGACY_APP" "$BACKUP_ROOT/app/来啦～老弟.app"
+  rm -rf "$LEGACY_APP"
 fi
 ditto "$SOURCE_APP" "$TARGET_APP"
 

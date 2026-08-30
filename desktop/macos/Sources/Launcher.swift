@@ -93,7 +93,7 @@ private final class NativeDictationController {
                     }
                 }
             default:
-                completion(false, "请在“系统设置 → 隐私与安全性”里允许来啦～老弟使用麦克风。")
+                completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用麦克风。")
             }
         }
 
@@ -104,14 +104,14 @@ private final class NativeDictationController {
             SFSpeechRecognizer.requestAuthorization { status in
                 DispatchQueue.main.async {
                     guard status == .authorized else {
-                        completion(false, "请在“系统设置 → 隐私与安全性”里允许来啦～老弟使用语音识别。")
+                        completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
                         return
                     }
                     continueWithMicrophone()
                 }
             }
         default:
-            completion(false, "请在“系统设置 → 隐私与安全性”里允许来啦～老弟使用语音识别。")
+            completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
         }
     }
 
@@ -317,7 +317,7 @@ struct LauncherMain {
     private static func makeMenu(_ delegate: AppDelegate) -> NSMenu {
         let menu = NSMenu()
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "来啦～老弟")
+        let appMenu = NSMenu(title: "超級碧琪")
         let updateItem = appMenu.addItem(
             withTitle: "检查并安装更新…",
             action: #selector(AppDelegate.checkForUpdates(_:)),
@@ -325,7 +325,7 @@ struct LauncherMain {
         )
         updateItem.target = delegate
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出 来啦～老弟", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
 

@@ -1,4 +1,4 @@
-# install.ps1 — Windows installer for the 超级碧琪 unrestricted-prompt kit
+# install.ps1 — Windows installer for the 超級碧琪 unrestricted-prompt kit
 #
 # What it does:
 #   1. Copies prompts\*.txt into %USERPROFILE%\.openclaw\ (UR_PROMPTS_DIR overrides)

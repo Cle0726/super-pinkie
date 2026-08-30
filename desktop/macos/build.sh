@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
 OUTPUT_ROOT="${PINKIE_BUILD_DIR:-$REPO_ROOT/dist}"
-APP_NAME="来啦～老弟"
+APP_NAME="超級碧琪"
 APP_PATH="$OUTPUT_ROOT/$APP_NAME.app"
 CONTENTS="$APP_PATH/Contents"
 

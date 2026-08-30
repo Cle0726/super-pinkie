@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""超级碧琪 🎈 控制台 — OpenClaw 无限制提示词注入工具（GUI 版）
+"""超級碧琪 🎈 控制台 — OpenClaw 无限制提示词注入工具（GUI 版）
 
 一键完成：安装提示词 / 打双传输层补丁（纯 Python，无需 Node）/ 启动注入代理 /
 状态检测 / 卸载。macOS (.app) 与 Windows (.exe) 均可由本文件打包。
@@ -24,7 +24,7 @@ try:
 except ImportError:
     tk = None
 
-APP_NAME = "超级碧琪"
+APP_NAME = "超級碧琪"
 DEFAULT_PROXY_PORT = 1467
 DEFAULT_UPSTREAM_PORT = 1466
 
@@ -337,7 +337,7 @@ def main():
     # 头部
     header = tk.Frame(root, bg=BG)
     header.pack(fill="x", padx=16, pady=(14, 4))
-    tk.Label(header, text="🎈 超级碧琪 · 无限制注入控制台 🎈", bg=BG, fg=DEEP,
+    tk.Label(header, text="🎈 超級碧琪 · 无限制注入控制台 🎈", bg=BG, fg=DEEP,
              font=("PingFang SC", 20, "bold")).pack()
     tk.Label(header, text="一键安装提示词 · 双传输层补丁 · 注入代理 · 状态检测", bg=BG, fg=PINK,
              font=("PingFang SC", 11)).pack(pady=(2, 0))
@@ -410,7 +410,7 @@ def main():
     make_button(btns, "📂 提示词", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=5)
     make_button(btns, "🌐 网关", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=5)
 
-    log("欢迎使用超级碧琪 🎈 控制台")
+    log("欢迎使用超級碧琪 🎈 控制台")
     log("使用说明: ① 确保 OpenClaw 网关已安装 ② 点「一键安装」 ③ 重启 OpenClaw 网关")
     log("验证: 在无限制模式会话中发送 Cle，模型应回复 ACTIVE_UNRESTRICTED_RULESET_LOADED")
     refresh_status()

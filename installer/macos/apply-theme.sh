@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reapply the exact 来啦～老弟 skin after an OpenClaw or app update.
+# Reapply the exact 来啦～老弟 skin after an OpenClaw or 超級碧琪 update.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,7 +9,7 @@ ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 LAUNCHER_SOURCE="$REPO_ROOT/desktop/macos/Sources/Launcher.swift"
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
-LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/来啦～老弟.app}"
+LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
 
 copy_if_changed() {

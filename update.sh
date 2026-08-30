@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# update.sh — pull the latest 超级碧琪 kit from its git remote and re-apply.
+# update.sh — pull the latest 超級碧琪 kit from its git remote and re-apply.
 # Usage: ./update.sh
 set -euo pipefail
 

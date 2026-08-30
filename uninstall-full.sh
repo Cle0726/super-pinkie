@@ -3,7 +3,7 @@ set -euo pipefail
 
 STATE_ROOT="${PINKIE_STATE_ROOT:-$HOME/Library/Application Support/SuperPinkie}"
 CONFIG_ROOT="${PINKIE_CONFIG_ROOT:-$HOME/.config/super-pinkie}"
-APP_PATH="/Applications/来啦～老弟.app"
+APP_PATH="/Applications/超級碧琪.app"
 
 if [[ -f "$CONFIG_ROOT/install.env" ]]; then
   source "$CONFIG_ROOT/install.env"
@@ -21,7 +21,7 @@ rm -f \
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install.sh" --remove || true
 
 if [[ -d "$APP_PATH" ]]; then
-  TRASH_TARGET="$HOME/.Trash/来啦～老弟-$(date +%Y%m%d-%H%M%S).app"
+  TRASH_TARGET="$HOME/.Trash/超級碧琪-$(date +%Y%m%d-%H%M%S).app"
   mv "$APP_PATH" "$TRASH_TARGET"
   echo "App 已移到废纸篓：$TRASH_TARGET"
 fi

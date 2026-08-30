@@ -1,4 +1,4 @@
-# 超级碧琪 🎈 — 来啦～老弟完整发行版
+# 超級碧琪 🎈 — 来啦～老弟完整发行版
 
 「来啦～老弟」的完整公开发行仓库。包含当前 App 的全部页面 UI、三模式人格与素材、模式转场、语音输入/回复、图片放大、项目文件夹管理、提示词库、HTTP 注入代理、传输层补丁、一键安装和 Git 拉取更新。
 
@@ -46,7 +46,7 @@ App 菜单选择“检查并安装更新…”，或运行：
 
 GitHub Releases 提供：
 
-- `super-pinkie-macos-<版本>.zip`：本机签名的「来啦～老弟.app」
+- `super-pinkie-macos-<版本>.zip`：本机签名的「超級碧琪.app」
 - `super-pinkie-full-<版本>.zip`：完整源码、安装器、资源与文档
 
 macOS App 需要本机已安装并配置 OpenClaw；完整功能首次使用建议运行 `install-full.sh`。
@@ -98,7 +98,7 @@ installer/macos/    UI 重应用与开机服务模板
 macOS `.app` / Windows `.exe` 控制台：一键安装提示词、打补丁、启停代理、状态检测。
 
 - 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `.exe`）。
-- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.\\build-win.ps1`。
+- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超級碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.\\build-win.ps1`。生成的桌面成品分别为 `超級碧琪.app` 和 `超級碧琪.exe`。
 - 推送 `v*` tag 会自动触发 GitHub Actions 构建两个平台的成品并挂到 Release。
 
 ## 安装

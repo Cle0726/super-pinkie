@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
-  <key>CFBundleDisplayName</key><string>来啦～老弟</string>
+  <key>CFBundleDisplayName</key><string>超級碧琪</string>
   <key>CFBundleExecutable</key><string>Launcher</string>
   <key>CFBundleIconFile</key><string>PinkieAppIcon</string>
   <key>CFBundleIdentifier</key><string>com.cle0726.super-pinkie</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>来啦～老弟</string>
+  <key>CFBundleName</key><string>超級碧琪</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>@VERSION@</string>
   <key>CFBundleVersion</key><string>@VERSION@</string>

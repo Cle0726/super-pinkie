@@ -1,4 +1,4 @@
-# update.ps1 — pull the latest 超级碧琪 kit from its git remote and re-apply.
+# update.ps1 — pull the latest 超級碧琪 kit from its git remote and re-apply.
 # Usage:  .\update.ps1
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path)
