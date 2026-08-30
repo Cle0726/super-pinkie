@@ -41,11 +41,16 @@ jobs:
         run: python -m pip install --upgrade pip pyinstaller
       - name: Build .exe
         run: pyinstaller --noconfirm --windowed --onefile --name "超級碧琪" --add-data "prompts;prompts" --add-data "proxy/ur-rewrite-proxy.py;proxy" app/super_pinkie.py
+      - name: Pack .exe
+        shell: pwsh
+        run: Compress-Archive -LiteralPath "dist/超級碧琪.exe" -DestinationPath "dist/super-pinkie-control-windows.zip" -Force
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: 超級碧琪-windows
-          path: dist/超級碧琪.exe
+          path: |
+            dist/超級碧琪.exe
+            dist/super-pinkie-control-windows.zip
 
   release:
     name: Attach to GitHub Release
@@ -60,4 +65,4 @@ jobs:
         with:
           files: |
             artifacts/**/super-pinkie-control-macos.zip
-            artifacts/**/超級碧琪.exe
+            artifacts/**/super-pinkie-control-windows.zip
