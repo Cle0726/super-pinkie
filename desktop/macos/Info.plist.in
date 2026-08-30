@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+  <key>CFBundleDisplayName</key><string>来啦～老弟</string>
+  <key>CFBundleExecutable</key><string>Launcher</string>
+  <key>CFBundleIconFile</key><string>PinkieAppIcon</string>
+  <key>CFBundleIdentifier</key><string>com.cle0726.super-pinkie</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>来啦～老弟</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+  <key>CFBundleVersion</key><string>@VERSION@</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>用于碧琪的语音输入功能。</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>用于把先生的语音转换成聊天输入。</string>
+</dict>
+</plist>

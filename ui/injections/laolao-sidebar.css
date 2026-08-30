@@ -1,0 +1,316 @@
+/* 来啦～老弟 · 侧边栏分组管理（置顶 / 项目 / 最近 + 一键清理） */
+
+/* 隐藏原生置顶按钮，避免与本插件的置顶分组重复（原生 ⋯ 菜单保留） */
+.session-action--pin { display: none; }
+
+/* 隐藏会话列表头部的 agent 筛选下拉（与左上角模式切换重复） */
+.sidebar-agent-scope { display: none; }
+
+.laolao-group {
+  margin: 4px 0 2px;
+}
+
+.laolao-group__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  user-select: none;
+}
+
+.laolao-group__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.laolao-group__toggle:hover { opacity: 1; }
+.laolao-group__toggle svg { width: 10px; height: 10px; }
+.laolao-group--collapsed .laolao-group__toggle { transform: rotate(-90deg); }
+
+.laolao-group__label {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.laolao-group__count {
+  font-size: 11px;
+  opacity: 0.45;
+  margin-left: 2px;
+}
+
+.laolao-group__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.laolao-group__action:hover { opacity: 1; background: rgba(127, 127, 127, 0.16); }
+.laolao-group__action svg { width: 13px; height: 13px; }
+.laolao-group__action + .laolao-group__action { margin-left: 0; }
+
+.laolao-group__list--collapsed { display: none; }
+
+.laolao-group__empty {
+  padding: 4px 26px 6px;
+  font-size: 12px;
+  opacity: 0.4;
+}
+
+.laolao-project__path {
+  margin: -3px 26px 4px;
+  overflow: hidden;
+  color: #a45d7c;
+  font-size: 10px;
+  line-height: 1.35;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.laolao-group__label--folder::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 5px 1px 0;
+  border-radius: 50%;
+  background: #e65393;
+  box-shadow: 0 0 0 3px rgba(230, 83, 147, 0.10);
+  content: "";
+}
+
+/* 会话行内按钮（置顶 / 归档到项目） */
+.laolao-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar-recent-session:hover .laolao-row-actions,
+.laolao-row-actions.laolao-row-actions--pinned {
+  opacity: 1;
+}
+
+.laolao-row-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.laolao-row-btn:hover { opacity: 1; background: rgba(127, 127, 127, 0.18); }
+.laolao-row-btn.laolao-active { opacity: 1; }
+.laolao-row-btn svg { width: 12px; height: 12px; }
+
+/* 项目选择菜单 / 通用浮层 */
+.laolao-menu {
+  position: fixed;
+  z-index: 99999;
+  min-width: 168px;
+  max-width: 240px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  color: #0f172a;
+  font-size: 13px;
+}
+
+html[data-theme-mode="dark"] .laolao-menu {
+  background: rgba(24, 25, 26, 0.92);
+  color: #f7f8f8;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.laolao-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.laolao-menu__item:hover { background: rgba(127, 127, 127, 0.14); }
+.laolao-menu__item svg { width: 13px; height: 13px; flex: none; opacity: 0.7; }
+
+.laolao-menu__divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgba(127, 127, 127, 0.22);
+}
+
+.laolao-menu__project-path {
+  max-width: 244px;
+  margin: 2px 5px 6px;
+  padding: 7px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(218, 87, 145, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 239, 246, 0.42);
+  color: #9a5775;
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.laolao-menu__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.laolao-menu__input:focus { border-color: #ec6ea5; }
+
+/* 确认弹窗 */
+.laolao-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 99998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.laolao-modal {
+  width: min(360px, calc(100vw - 48px));
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+  color: #0f172a;
+}
+
+html[data-theme-mode="dark"] .laolao-modal {
+  background: rgba(24, 25, 26, 0.95);
+  color: #f7f8f8;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.laolao-modal__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.laolao-modal__body {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  opacity: 0.75;
+}
+
+.laolao-modal__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.laolao-modal__btn {
+  padding: 7px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.laolao-modal__btn:hover { background: rgba(127, 127, 127, 0.12); }
+
+.laolao-modal__btn--danger {
+  border-color: #e25c5c;
+  background: #e25c5c;
+  color: #fff;
+}
+
+.laolao-modal__btn--danger:hover { background: #c94a4a; }
+
+/* Toast */
+.laolao-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%) translateY(12px);
+  z-index: 99999;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  color: #0f172a;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+html[data-theme-mode="dark"] .laolao-toast {
+  background: rgba(24, 25, 26, 0.92);
+  color: #f7f8f8;
+}
+
+.laolao-toast--show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

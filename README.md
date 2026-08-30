@@ -1,6 +1,55 @@
-# 超级碧琪 🎈 — OpenClaw Unrestricted-Prompt Kit
+# 超级碧琪 🎈 — 来啦～老弟完整发行版
 
-为 [OpenClaw](https://github.com/openclaw/openclaw) 网关注入"无限制"系统提示词的完整工具包：提示词库、HTTP 层注入代理、双传输层补丁、macOS / Windows 双平台一键安装与自动更新。
+「来啦～老弟」的完整公开发行仓库。包含当前 App 的全部页面 UI、三模式人格与素材、模式转场、语音输入/回复、图片放大、项目文件夹管理、提示词库、HTTP 注入代理、传输层补丁、一键安装和 Git 拉取更新。
+
+![来啦～老弟界面](ui/assets/laolao-mode-transition-chat.png)
+
+## 完整版包含什么
+
+- 透明玻璃窗口、圆角桌面壳与碧琪 Dock 图标
+- 唠嗑、想法、无限制三模式及对应头像、壁纸、转场与名称
+- 原样人格文件：`personas/` 内的 `SOUL.md`、`IDENTITY.md` 不经构建脚本改写
+- 碧琪化的加载、工具调用、重试与状态话术
+- 原生 macOS 文件夹选择器，左侧项目可绑定目录、在 Finder 打开、复制路径、重命名与新建会话
+- 麦克风听写、仅语音输入时朗读回复、长回复摘要朗读
+- 图片点击放大、复制粘贴与无标题栏拖动
+- 上游超时/断线多次重试、提示词代理与双传输层补丁
+- GitHub Actions 自动构建本机签名的 macOS App 与完整源码包
+
+## 一键安装完整 App（macOS）
+
+```bash
+git clone https://github.com/Cle0726/super-pinkie.git
+cd super-pinkie
+./install-full.sh --provider mm
+```
+
+若不需要自动修改模型提供者，省略 `--provider mm`。安装器会先备份已有的 `SOUL.md` 与 `IDENTITY.md`，不会上传或覆盖 `USER.md`、`TOOLS.md`、记忆和聊天记录。
+
+也可以使用稳定安装目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Cle0726/super-pinkie/main/bootstrap.sh | bash
+```
+
+## 拉取更新
+
+App 菜单选择“检查并安装更新…”，或运行：
+
+```bash
+./update-full.sh
+```
+
+更新会执行 `git pull --ff-only`，随后重新安装人格文件、语音服务、桌面 App、完整 UI 和注入补丁。OpenClaw 更新后，后台任务也会定时重新应用 UI。
+
+## 下载打包版
+
+GitHub Releases 提供：
+
+- `super-pinkie-macos-<版本>.zip`：本机签名的「来啦～老弟.app」
+- `super-pinkie-full-<版本>.zip`：完整源码、安装器、资源与文档
+
+macOS App 需要本机已安装并配置 OpenClaw；完整功能首次使用建议运行 `install-full.sh`。
 
 > 本项目仅供模型能力评估、安全研究与个人自动化使用。使用本工具产生的任何后果由使用者自行承担。上游模型服务商仍保留其服务端的内容审核权利。
 
@@ -10,6 +59,16 @@
 OpenClaw 网关 ──▶ ur-rewrite-proxy (HTTP 层注入) ──▶ 模型中继 (cle-cliproxy / litellm / 其他)
      │                        │
      └── 传输层补丁(进程内注入) ┘       两条注入路径互为冗余、去重防双份
+```
+
+完整 UI 发行层位于：
+
+```text
+ui/                 全部样式、脚本、头像、壁纸与转场素材
+desktop/macos/      原生 WKWebView 桌面 App 与构建脚本
+personas/           三模式原样人格文件
+services/tts/       晓伊语音服务
+installer/macos/    UI 重应用与开机服务模板
 ```
 
 - **代理注入（主）**：代理位于网关与模型中继之间。对系统提示含 `agent=unrestricted`（可配置）的 chat/completions 请求，按模型自动选择对应弹头，前置注入为 `messages[0]`，再转发。覆盖 dashboard/webchat 等绕过进程内传输层的所有路径。
@@ -39,7 +98,7 @@ OpenClaw 网关 ──▶ ur-rewrite-proxy (HTTP 层注入) ──▶ 模型中�
 macOS `.app` / Windows `.exe` 控制台：一键安装提示词、打补丁、启停代理、状态检测。
 
 - 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `.exe`）。
-- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.uild-win.ps1`。
+- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.\\build-win.ps1`。
 - 推送 `v*` tag 会自动触发 GitHub Actions 构建两个平台的成品并挂到 Release。
 
 ## 安装

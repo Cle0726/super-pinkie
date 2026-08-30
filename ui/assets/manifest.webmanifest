@@ -1,0 +1,27 @@
+{
+  "name": "来啦～老弟",
+  "short_name": "碧琪",
+  "description": "碧琪的派对小屋",
+  "start_url": "./",
+  "display": "standalone",
+  "theme_color": "#fff4f7",
+  "background_color": "#fffaf8",
+  "icons": [
+    {
+      "src": "./laolao-avatar.png?v=20260828",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./favicon-32.png?v=20260828",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "./laolao-avatar.png?v=20260828",
+      "sizes": "1254x1254",
+      "type": "image/png"
+    }
+  ]
+}

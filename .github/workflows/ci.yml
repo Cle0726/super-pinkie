@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  portable-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check JavaScript injections
+        run: find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Check shell scripts
+        run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
+      - name: Check Python services
+        run: python -m py_compile services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py
+      - name: Confirm personality files are present
+        run: test -s personas/chat/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
+
+  macos-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build local-signed app
+        run: |
+          chmod +x desktop/macos/build.sh
+          desktop/macos/build.sh
+      - name: Verify signature
+        run: codesign --verify --deep --strict 'dist/来啦～老弟.app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: super-pinkie-macos
+          path: dist/super-pinkie-macos-*.zip
