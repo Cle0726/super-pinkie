@@ -34,6 +34,14 @@ OpenClaw 网关 ──▶ ur-rewrite-proxy (HTTP 层注入) ──▶ 模型中�
 
 - Windows 10/11 详细部署：[docs/WINDOWS.md](docs/WINDOWS.md)
 
+## App 版（图形界面，无需命令行）
+
+macOS `.app` / Windows `.exe` 控制台：一键安装提示词、打补丁、启停代理、状态检测。
+
+- 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `.exe`）。
+- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.uild-win.ps1`。
+- 推送 `v*` tag 会自动触发 GitHub Actions 构建两个平台的成品并挂到 Release。
+
 ## 安装
 
 ### macOS (Intel / M1/M2/M3/M4)

@@ -161,14 +161,14 @@ function patchAiFile(file, shouldRemove) {
 	if (shouldRemove) {
 		if (!applied) { console.log(`[ai] ${path.basename(file)}: patch not present; nothing to remove`); return; }
 		if (!src.includes(HELPER) || !src.includes(AI_CALL_NEW)) { console.error(`[ai] helper/call block not found verbatim; refusing to strip (${file}). Patch manually.`); process.exit(1); }
-		src = src.replace(HELPER, "").replace(AI_CALL_NEW, AI_CALL_OLD);
+		src = src.replace(HELPER + AI_ANCHOR, AI_ANCHOR).replace(AI_CALL_NEW, AI_CALL_OLD);
 		fs.writeFileSync(file, src);
 		console.log(`[ai] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
 		return;
 	}
 	if (applied) { console.log(`[ai] ${path.basename(file)}: patch already applied.`); return; }
 	if (!src.includes(AI_ANCHOR) || !src.includes(AI_CALL_OLD)) { console.error(`[ai] anchors not found in ${file}; this @openclaw/ai version may have changed. Patch manually.`); process.exit(1); }
-	src = src.replace(AI_ANCHOR, HELPER + "\n" + AI_ANCHOR).replace(AI_CALL_OLD, AI_CALL_NEW);
+	src = src.replace(AI_ANCHOR, HELPER + AI_ANCHOR).replace(AI_CALL_OLD, AI_CALL_NEW);
 	fs.writeFileSync(file, src);
 	console.log(`[ai] ${path.basename(file)}: patch applied. Restart the gateway to take effect.`);
 }
