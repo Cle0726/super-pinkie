@@ -296,19 +296,71 @@ def proxy_health(port=DEFAULT_PROXY_PORT):
         return False
 
 
-# ---------------------------------------------------------------- GUI
+# ---------------------------------------------------------------- GUI (糖果粉主题)
+BG = "#FFF0F5"          # 薰衣草粉底
+PINK = "#FF69B4"        # 热粉
+DEEP = "#C2185B"        # 深玫红
+CARD = "#FFFFFF"        # 卡片白
+BTN = "#FFB6C1"         # 浅粉按钮
+BTN_ACTIVE = "#FF69B4"
+TEXT = "#5C2A44"        # 深紫红字
+LOG_BG = "#FFF7FA"
+
+
+def make_button(parent, text, command, big=False):
+    return tk.Button(
+        parent, text=text, command=command, bg=BTN, activebackground=BTN_ACTIVE,
+        fg=DEEP, activeforeground="white", relief="flat", bd=0,
+        font=("PingFang SC", 13 if big else 11, "bold"),
+        padx=14, pady=6, cursor="hand2",
+    )
+
+
+def make_card(parent, text, row=0):
+    lbl = tk.Label(parent, text=text, bg=CARD, fg=TEXT, anchor="w", justify="left",
+                   font=("PingFang SC", 11), padx=12, pady=8)
+    lbl.grid(row=row, column=0, sticky="ew", padx=2, pady=2)
+    return lbl
+
+
 def main():
     if tk is None:
         print("需要 tkinter。macOS 请安装 python.org 的 Python；Linux 装 python3-tk。")
         return
 
     root = tk.Tk()
-    root.title(f"{APP_NAME} 🎈 控制台")
-    root.geometry("760x520")
-    root.minsize(640, 420)
+    root.title(f"{APP_NAME} 🎈")
+    root.geometry("780x560")
+    root.minsize(680, 460)
+    root.configure(bg=BG)
 
-    log_text = scrolledtext.ScrolledText(root, height=14, state="disabled", font=("Menlo", 10))
-    log_text.pack(fill="both", expand=True, padx=10, pady=(10, 4))
+    # 头部
+    header = tk.Frame(root, bg=BG)
+    header.pack(fill="x", padx=16, pady=(14, 4))
+    tk.Label(header, text="🎈 超级碧琪 · 无限制注入控制台 🎈", bg=BG, fg=DEEP,
+             font=("PingFang SC", 20, "bold")).pack()
+    tk.Label(header, text="一键安装提示词 · 双传输层补丁 · 注入代理 · 状态检测", bg=BG, fg=PINK,
+             font=("PingFang SC", 11)).pack(pady=(2, 0))
+
+    # 状态卡片
+    card = tk.Frame(root, bg=CARD, highlightbackground=PINK, highlightthickness=1)
+    card.pack(fill="x", padx=16, pady=8)
+    card.columnconfigure(0, weight=1)
+    status_var = tk.StringVar(value="检测中…")
+    make_card(card, "").config(textvariable=status_var)
+
+    # 日志区
+    log_frame = tk.Frame(root, bg=BG)
+    log_frame.pack(fill="both", expand=True, padx=16, pady=8)
+    log_text = scrolledtext.ScrolledText(log_frame, height=12, state="disabled",
+                                         bg=LOG_BG, fg=TEXT, insertbackground=DEEP,
+                                         font=("Menlo", 11), relief="flat",
+                                         highlightbackground=PINK, highlightthickness=1)
+    log_text.pack(fill="both", expand=True)
+
+    # 底部提示
+    tk.Label(root, text="💡 验证：无限制模式会话发送 Cle → 回复 ACTIVE_UNRESTRICTED_RULESET_LOADED",
+             bg=BG, fg=PINK, font=("PingFang SC", 10)).pack(pady=(0, 10))
 
     def log(msg):
         log_text.configure(state="normal")
@@ -330,6 +382,7 @@ def main():
         log("== 卸载 ==")
         proxy.stop()
         apply_patch(True, log)
+        refresh_status()
 
     def refresh_status():
         root_path = resolve_openclaw_root() or "未找到"
@@ -337,23 +390,25 @@ def main():
         patched = False
         if dist:
             patched = "applyUnrestrictedInjection" in open(dist, encoding="utf-8", errors="ignore").read()
+        pstat = proxy.status()
+        health = proxy_health()
         status_var.set(
             f"OpenClaw: {root_path}\n"
-            f"补丁状态: {'✅ 已安装' if patched else '❌ 未安装'} | 代理状态: {'🟢 ' + proxy.status() if proxy.status() == '运行中' else '🔴 未运行'} | 代理健康: {'✅' if proxy_health() else '—'}"
+            f"补丁状态: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
+            f"代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'}   |   "
+            f"代理健康: {'✅' if health else '—'}"
         )
 
-    btn_frame = ttk.Frame(root)
-    btn_frame.pack(fill="x", padx=10, pady=6)
-    ttk.Button(btn_frame, text="🚀 一键安装", command=do_install).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="🗑 卸载", command=do_uninstall).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="▶ 启动代理", command=proxy.start).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="⏹ 停止代理", command=proxy.stop).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="🔄 刷新状态", command=refresh_status).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="📂 提示词目录", command=lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=4)
-    ttk.Button(btn_frame, text="🌐 网关页面", command=lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
-
-    status_var = tk.StringVar()
-    ttk.Label(root, textvariable=status_var, anchor="w", justify="left", relief="groove", padding=6).pack(fill="x", padx=10, pady=(0, 10))
+    # 按钮区（函数已定义）
+    btns = tk.Frame(root, bg=BG)
+    btns.pack(fill="x", padx=16, pady=6)
+    make_button(btns, "🚀 一键安装", do_install, big=True).pack(side="left", padx=5)
+    make_button(btns, "🗑 卸载", do_uninstall).pack(side="left", padx=5)
+    make_button(btns, "▶ 启动代理", proxy.start).pack(side="left", padx=5)
+    make_button(btns, "⏹ 停止代理", proxy.stop).pack(side="left", padx=5)
+    make_button(btns, "🔄 刷新", refresh_status).pack(side="left", padx=5)
+    make_button(btns, "📂 提示词", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=5)
+    make_button(btns, "🌐 网关", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=5)
 
     log("欢迎使用超级碧琪 🎈 控制台")
     log("使用说明: ① 确保 OpenClaw 网关已安装 ② 点「一键安装」 ③ 重启 OpenClaw 网关")

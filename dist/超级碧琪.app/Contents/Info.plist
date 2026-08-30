@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>超级碧琪</string>
 	<key>CFBundleIconFile</key>
-	<string>icon-windowed.icns</string>
+	<string>PinkieAppIcon.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.cle0726.superpinkie</string>
 	<key>CFBundleInfoDictionaryVersion</key>

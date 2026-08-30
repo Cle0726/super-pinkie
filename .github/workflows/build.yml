@@ -1,0 +1,58 @@
+name: build-apps
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: macOS .app
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+      - name: Build .app
+        run: pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" --osx-bundle-identifier "com.cle0726.superpinkie" app/super_pinkie.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 超级碧琪-macos
+          path: dist/超级碧琪.app
+
+  build-windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+      - name: Build .exe
+        run: pyinstaller --noconfirm --windowed --onefile --name "超级碧琪" --add-data "prompts;prompts" --add-data "proxy/ur-rewrite-proxy.py;proxy" app/super_pinkie.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 超级碧琪-windows
+          path: dist/超级碧琪.exe
+
+  release:
+    name: Attach to GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/超级碧琪.app.zip
+            artifacts/**/超级碧琪.exe

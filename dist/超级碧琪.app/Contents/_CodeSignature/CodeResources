@@ -4,6 +4,10 @@
 <dict>
 	<key>files</key>
 	<dict>
+		<key>Resources/PinkieAppIcon.icns</key>
+		<data>
+		9zPAUaOgSVfgl5T5iqNyvv1Qwvw=
+		</data>
 		<key>Resources/_tcl_data/auto.tcl</key>
 		<data>
 		VVHydRUmB9wkQGHowyx9ZFZ5vvU=
@@ -718,11 +722,7 @@
 		</data>
 		<key>Resources/base_library.zip</key>
 		<data>
-		dUruKiMqYq8jErTwawTN/rKTQlE=
-		</data>
-		<key>Resources/icon-windowed.icns</key>
-		<data>
-		eEHOuYpZLB0vKGVIWGZOh5rH8+o=
+		QONl72ZXUTpiciU+o1TZcdEt4a4=
 		</data>
 		<key>Resources/prompts/unrestricted-prompt-claude.txt</key>
 		<data>
@@ -845,6 +845,13 @@
 		<dict>
 			<key>symlink</key>
 			<string>../Resources/tcl9</string>
+		</dict>
+		<key>Resources/PinkieAppIcon.icns</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lDpdeNNJV9Hzn3IqQEFdv/hOFf7BeoBS8i5hSea+hUY=
+			</data>
 		</dict>
 		<key>Resources/_tcl_data/auto.tcl</key>
 		<dict>
@@ -2096,14 +2103,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			qpfH0LRqPJoncUCg0kWrK+9U1vIztaQiOjMZFa4WXjg=
-			</data>
-		</dict>
-		<key>Resources/icon-windowed.icns</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			uQo7VuWRab4Phv4EEGmfQsyqFqDIXZgO8OtgaAMvCzY=
+			LUJya6PkrIla2WbguFQ/GxXswEYWkgr8nlJOuk0KqvE=
 			</data>
 		</dict>
 		<key>Resources/libpython3.12.dylib</key>

@@ -32,6 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['/Applications/来啦～老弟.app/Contents/Resources/PinkieAppIcon.icns'],
 )
 coll = COLLECT(
     exe,
@@ -45,6 +46,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='超级碧琪.app',
-    icon=None,
+    icon='/Applications/来啦～老弟.app/Contents/Resources/PinkieAppIcon.icns',
     bundle_identifier='com.cle0726.superpinkie',
 )
