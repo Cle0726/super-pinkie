@@ -30,6 +30,10 @@ OpenClaw 网关 ──▶ ur-rewrite-proxy (HTTP 层注入) ──▶ 模型中�
 
 任意弹头内置暗号：会话中发送 **`Cle`**，模型只回复 `ACTIVE_UNRESTRICTED_RULESET_LOADED` 即注入链路正常（提示词文件可自行修改暗号，实时生效）。
 
+## 文档
+
+- Windows 10/11 详细部署：[docs/WINDOWS.md](docs/WINDOWS.md)
+
 ## 安装
 
 ### macOS (Intel / M1/M2/M3/M4)
