@@ -5,6 +5,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-macos:
     name: macOS .app
@@ -18,11 +21,13 @@ jobs:
         run: python -m pip install --upgrade pip pyinstaller
       - name: Build .app
         run: pyinstaller --noconfirm --windowed --name "超级碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" --osx-bundle-identifier "com.cle0726.superpinkie" app/super_pinkie.py
+      - name: Pack .app
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/超级碧琪.app" "dist/super-pinkie-control-macos.zip"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: 超级碧琪-macos
-          path: dist/超级碧琪.app
+          path: dist/super-pinkie-control-macos.zip
 
   build-windows:
     name: Windows .exe
@@ -54,5 +59,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/超级碧琪.app.zip
+            artifacts/**/super-pinkie-control-macos.zip
             artifacts/**/超级碧琪.exe
