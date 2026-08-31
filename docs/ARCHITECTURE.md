@@ -18,7 +18,7 @@ OpenClaw Control UI
   └─ splash / transition assets   启动与切换动画
            │
            ▼
-OpenClaw Gateway ── ur-rewrite-proxy ── 模型上游
+OpenClaw Gateway ── mm-retry-proxy ── 模型上游
            └────── transport patch ─────┘
 ```
 

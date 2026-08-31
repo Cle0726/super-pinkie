@@ -24,7 +24,7 @@ $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PromptsDir = if ($env:UR_PROMPTS_DIR) { $env:UR_PROMPTS_DIR } else { Join-Path $env:USERPROFILE ".openclaw" }
 $ProxyPort = if ($env:UR_PROXY_PORT) { $env:UR_PROXY_PORT } else { "1467" }
 $UpstreamPort = if ($env:UR_UPSTREAM_PORT) { $env:UR_UPSTREAM_PORT } else { "1466" }
-$ProxyScript = Join-Path $RepoDir "proxy\ur-rewrite-proxy.py"
+$ProxyScript = Join-Path $RepoDir "proxy\mm-retry-proxy.py"
 $PatchScript = Join-Path $RepoDir "patch\reapply-unrestricted-patch.mjs"
 $TaskName = "OpenClawURProxy"
 
@@ -34,7 +34,7 @@ if ($Remove) {
   Write-Host "==> stopping proxy + removing scheduled task"
   Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Get-Process -Name "python*" -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like "*ur-rewrite-proxy*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name "python*" -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like "*mm-retry-proxy*" } | Stop-Process -Force -ErrorAction SilentlyContinue
   Write-Host "done. Config baseUrl changes (if any) must be reverted manually."
   exit 0
 }
@@ -47,6 +47,11 @@ Write-Host "    $count prompt files installed"
 
 Write-Host "==> 2/4 patching OpenClaw transports"
 node $PatchScript
+if ($LASTEXITCODE -ne 0) { throw "Transport patch failed" }
+node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Context protection patch failed" }
+python (Join-Path $RepoDir "services\context\setup.py")
+if ($LASTEXITCODE -ne 0) { throw "Context policy setup failed" }
 
 Write-Host "==> 3/4 installing proxy as scheduled task '$TaskName' (port $ProxyPort -> $UpstreamPort)"
 $action = New-ScheduledTaskAction -Execute "python" -Argument "`"$ProxyScript`" $ProxyPort" -WorkingDirectory (Split-Path $ProxyScript)

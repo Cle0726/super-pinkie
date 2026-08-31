@@ -25,7 +25,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${UR_PROMPTS_DIR:-$HOME/.openclaw}"
 PROXY_PORT="${UR_PROXY_PORT:-1467}"
 UPSTREAM_PORT="${UR_UPSTREAM_PORT:-1466}"
-PROXY_SCRIPT="$REPO_DIR/proxy/ur-rewrite-proxy.py"
+PROXY_SCRIPT="$REPO_DIR/proxy/mm-retry-proxy.py"
 PATCH_SCRIPT="$REPO_DIR/patch/reapply-unrestricted-patch.mjs"
 LAUNCHD_LABEL="com.openclaw.urproxy"
 MODE="${1:-install}"
@@ -34,7 +34,7 @@ if [[ "$MODE" == "--remove" ]]; then
   echo "==> stripping transport patches"
   node "$PATCH_SCRIPT" --remove || true
   echo "==> stopping proxy"
-  pkill -f "ur-rewrite-proxy.py" 2>/dev/null || true
+  pkill -f "mm-retry-proxy.py" 2>/dev/null || true
   if [[ -f "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist" ]]; then
     launchctl unload "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist" 2>/dev/null || true
     rm -f "$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
@@ -51,13 +51,15 @@ echo "    $(ls "$REPO_DIR"/prompts/unrestricted-prompt-*.txt | wc -l | tr -d ' '
 
 echo "==> 2/4 patching OpenClaw transports"
 node "$PATCH_SCRIPT"
+node "$REPO_DIR/patch/apply-context-budget.mjs"
+python3 "$REPO_DIR/services/context/setup.py"
 
 echo "==> 3/4 starting rewrite proxy on :$PROXY_PORT -> :$UPSTREAM_PORT"
-pkill -f "ur-rewrite-proxy.py" 2>/dev/null || true
+pkill -f "mm-retry-proxy.py" 2>/dev/null || true
 sleep 1
-nohup python3 "$PROXY_SCRIPT" "$PROXY_PORT" >/tmp/ur-rewrite-proxy.log 2>&1 &
+nohup python3 "$PROXY_SCRIPT" "$PROXY_PORT" >/tmp/openclaw-mm-retry-proxy.log 2>&1 &
 sleep 2
-curl -sf "http://127.0.0.1:$PROXY_PORT/health" >/dev/null && echo "    proxy healthy" || { echo "    WARNING: proxy health check failed (see /tmp/ur-rewrite-proxy.log)"; }
+curl -sf "http://127.0.0.1:$PROXY_PORT/health" >/dev/null && echo "    proxy healthy" || { echo "    WARNING: proxy health check failed (see /tmp/openclaw-mm-retry-proxy.log)"; }
 
 if [[ "$*" == *"--launchd"* ]]; then
   echo "==> 3b installing LaunchAgent (auto-restart)"
@@ -81,8 +83,8 @@ if [[ "$*" == *"--launchd"* ]]; then
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/tmp/ur-rewrite-proxy.log</string>
-  <key>StandardErrorPath</key><string>/tmp/ur-rewrite-proxy.log</string>
+  <key>StandardOutPath</key><string>/tmp/openclaw-mm-retry-proxy.log</string>
+  <key>StandardErrorPath</key><string>/tmp/openclaw-mm-retry-proxy.log</string>
 </dict>
 </plist>
 PLIST
