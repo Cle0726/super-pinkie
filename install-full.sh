@@ -11,6 +11,7 @@ INSTALL_INJECTION=1
 INSTALL_AGENTS=1
 INSTALL_TTS=1
 INSTALL_SERVICES=1
+PROJECT_AGENT_ADDED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -72,9 +73,29 @@ install_persona() {
   done
 }
 
-echo "==> 1/6 安装原样人格文件"
+ensure_project_agent() {
+  command -v openclaw >/dev/null 2>&1 || return 0
+  if ! openclaw agents list --json 2>/dev/null | node -e '
+    let source = "";
+    process.stdin.on("data", (chunk) => source += chunk);
+    process.stdin.on("end", () => {
+      try { process.exit(JSON.parse(source).some((agent) => agent.id === "project") ? 0 : 1); }
+      catch { process.exit(1); }
+    });
+  '; then
+    openclaw agents add project --non-interactive --workspace "$HOME/.openclaw/workspace-project"
+    PROJECT_AGENT_ADDED=1
+  fi
+  openclaw agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
+  if [[ "$PROJECT_AGENT_ADDED" == "1" ]]; then
+    openclaw gateway restart >/dev/null 2>&1 || true
+  fi
+}
+
+echo "==> 1/6 安装人格文件（原有三套保持原样）"
 if [[ "$INSTALL_AGENTS" == "1" ]]; then
   install_persona "$REPO_ROOT/personas/chat" "$HOME/.openclaw/workspace" chat
+  install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
   install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
   install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
 else
@@ -90,6 +111,10 @@ if [[ "$INSTALL_INJECTION" == "1" ]]; then
   fi
 else
   echo "    已跳过"
+fi
+
+if [[ "$INSTALL_AGENTS" == "1" ]]; then
+  ensure_project_agent
 fi
 
 echo "==> 3/6 安装碧琪语音服务"
@@ -140,6 +165,12 @@ fi
 ditto "$SOURCE_APP" "$TARGET_APP"
 
 echo "==> 5/6 注入完整 UI 与模式功能"
+LEGACY_REAPPLY_PLIST="$HOME/Library/LaunchAgents/com.laolao.theme-reapply.plist"
+if [[ -f "$LEGACY_REAPPLY_PLIST" ]]; then
+  launchctl bootout "gui/$(id -u)/com.laolao.theme-reapply" >/dev/null 2>&1 || true
+  mkdir -p "$BACKUP_ROOT/legacy-launchagents"
+  mv "$LEGACY_REAPPLY_PLIST" "$BACKUP_ROOT/legacy-launchagents/"
+fi
 PINKIE_APP_PATH="$TARGET_APP" "$REPO_ROOT/installer/macos/apply-theme.sh"
 
 echo "==> 6/6 安装更新入口"

@@ -6,6 +6,23 @@
 /* 隐藏会话列表头部的 agent 筛选下拉（与左上角模式切换重复） */
 .sidebar-agent-scope { display: none; }
 
+/* 当前选中会话：玫粉描边 + 淡粉底，选中态一眼可辨 */
+.sidebar-recent-session.sidebar-recent-session--active {
+  border-radius: 10px !important;
+  background: var(--accent-subtle, #ffe6f0) !important;
+  box-shadow: inset 0 0 0 1.5px var(--accent, #e94f91) !important;
+}
+
+html[data-theme-mode="dark"] .sidebar-recent-session.sidebar-recent-session--active {
+  background: rgba(233, 79, 145, 0.16) !important;
+  box-shadow: inset 0 0 0 1.5px #ed93b1 !important;
+}
+
+/* 模式隔离：非当前模式 agent 的会话行整体隐藏 */
+.sidebar-recent-session.laolao-mode-hidden {
+  display: none !important;
+}
+
 .laolao-group {
   margin: 4px 0 2px;
 }
@@ -313,4 +330,9 @@ html[data-theme-mode="dark"] .laolao-toast {
 .laolao-toast--show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+/* Rows from another mode's agent must never share the current sidebar,
+   including the short frame while OpenClaw changes agent scope. */
+.sidebar-recent-session.laolao-mode-hidden {
+  display: none !important;
 }

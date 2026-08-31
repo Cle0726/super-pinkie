@@ -1,0 +1,141 @@
+/* 来啦～老弟 · 顶栏用量统计（迷你胶囊组，碧琪粉主题） */
+
+.laolao-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 12px;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  opacity: 0.88;
+  transition: opacity 0.15s ease;
+}
+
+.laolao-usage:hover {
+  opacity: 1;
+}
+
+.laolao-usage__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  background: var(--accent-muted, #f9b8d1);
+  color: #72243e;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.laolao-usage__chip:hover {
+  background: #ed93b1;
+  color: #4b1528;
+}
+
+.laolao-usage__chip--na {
+  color: rgba(114, 36, 62, 0.6);
+}
+
+.laolao-usage__chip--cost {
+  background: var(--accent, #e94f91);
+  color: var(--accent-foreground, #ffffff);
+}
+
+.laolao-usage__chip--cost:hover {
+  background: var(--accent-hover, #d83f7f);
+  color: var(--accent-foreground, #ffffff);
+}
+
+/* 额度：空心描边款，和实底的金额区分 */
+.laolao-usage__chip--quota {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--accent, #e94f91);
+  color: var(--accent, #e94f91);
+}
+
+.laolao-usage__chip--quota:hover {
+  background: var(--accent-subtle, #ffe6f0);
+  color: var(--accent-hover, #d83f7f);
+}
+
+/* 暗色模式 */
+html[data-theme-mode="dark"] .laolao-usage__chip {
+  background: rgba(233, 79, 145, 0.32);
+  color: #ffd9e8;
+}
+
+html[data-theme-mode="dark"] .laolao-usage__chip:hover {
+  background: rgba(233, 79, 145, 0.48);
+  color: #ffffff;
+}
+
+html[data-theme-mode="dark"] .laolao-usage__chip--na {
+  color: rgba(255, 217, 232, 0.6);
+}
+
+html[data-theme-mode="dark"] .laolao-usage__chip--cost {
+  background: var(--accent, #e94f91);
+  color: #ffffff;
+}
+
+html[data-theme-mode="dark"] .laolao-usage__chip--quota {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px #ed93b1;
+  color: #ed93b1;
+}
+
+html[data-theme-mode="dark"] .laolao-usage__chip--quota:hover {
+  background: rgba(233, 79, 145, 0.18);
+  color: #ffd9e8;
+}
+
+/* 数值上涨时的脉冲动效 */
+@keyframes laolao-usage-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.18);
+    background: var(--accent, #e94f91);
+    color: #ffffff;
+    box-shadow: 0 0 0 4px var(--accent-glow, rgba(233, 79, 145, 0.2));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.laolao-usage__chip--pulse {
+  animation: laolao-usage-pulse 0.6s ease-out;
+}
+
+/* 模型思考/输出中：整组胶囊呼吸波浪（依次错峰，像数据在流动） */
+@keyframes laolao-usage-live {
+  0%, 100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgba(233, 79, 145, 0);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(-1.5px);
+    box-shadow: 0 2px 10px 0 rgba(233, 79, 145, 0.45);
+    filter: brightness(1.12);
+  }
+}
+
+.laolao-usage--live {
+  opacity: 1;
+}
+
+.laolao-usage--live .laolao-usage__chip {
+  animation: laolao-usage-live 1.4s ease-in-out infinite;
+}
+
+.laolao-usage--live .laolao-usage__chip:nth-child(2) { animation-delay: 0.12s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(3) { animation-delay: 0.24s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(4) { animation-delay: 0.36s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(5) { animation-delay: 0.48s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(6) { animation-delay: 0.6s; }

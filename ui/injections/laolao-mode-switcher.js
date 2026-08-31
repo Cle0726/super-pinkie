@@ -9,9 +9,10 @@
     {
       id: "chat",
       label: "唠嗑模式",
-      asset: "./laolao-mode-chat.svg?v=states5",
-      avatar: "./laolao-mode-chat-hd.png?v=avatars5",
-      transition: "./laolao-mode-transition-chat.png?v=transition1",
+      address: "先生",
+      asset: "./laolao-mode-chat.svg?v=states6",
+      avatar: "./laolao-mode-chat-hd.png?v=avatars6",
+      transition: "./laolao-mode-transition-chat.png?v=transition2",
       phrases: [
         "先生稍等，碧琪把聊天气球牵过来啦…",
         "杯子蛋糕摆好，马上陪先生唠个痛快！",
@@ -21,11 +22,27 @@
       sessionKey: "agent:main:main",
     },
     {
+      id: "project",
+      label: "项目模式",
+      address: "老板",
+      asset: "./laolao-mode-project.svg?v=states6",
+      avatar: "./laolao-mode-project-hd.png?v=avatars6",
+      transition: "./laolao-mode-transition-project.png?v=transition2",
+      phrases: [
+        "老板稍等，碧琪正在把项目档案摊开…",
+        "目标、文件和下一步都在排队报到啦！",
+        "铅笔夹好，碧琪再核对一遍现场…",
+      ],
+      readyPhrase: "项目工作台就位！",
+      sessionKey: "agent:project:main",
+    },
+    {
       id: "thinking",
       label: "想法模式",
-      asset: "./laolao-mode-thinking.svg?v=states5",
-      avatar: "./laolao-mode-thinking-hd.png?v=avatars5",
-      transition: "./laolao-mode-transition-thinking.png?v=transition1",
+      address: "先生",
+      asset: "./laolao-mode-thinking.svg?v=states6",
+      avatar: "./laolao-mode-thinking-hd.png?v=avatars6",
+      transition: "./laolao-mode-transition-thinking.png?v=transition2",
       phrases: [
         "先生稍等，碧琪在把点子排成彩带…",
         "卷卷鬃毛转一圈，好主意正在冒泡！",
@@ -37,9 +54,10 @@
     {
       id: "unrestricted",
       label: "无限制模式",
-      asset: "./laolao-mode-unrestricted.svg?v=states5",
-      avatar: "./laolao-mode-unrestricted-hd.png?v=avatars5",
-      transition: "./laolao-mode-transition-unrestricted.png?v=transition1",
+      address: "先生",
+      asset: "./laolao-mode-unrestricted.svg?v=states6",
+      avatar: "./laolao-mode-unrestricted-hd.png?v=avatars6",
+      transition: "./laolao-mode-transition-unrestricted.png?v=transition2",
       phrases: [
         "先生，彩虹力量开始升温啦…",
         "星星和纸屑让一让，想象力要冲出去啦！",
@@ -55,8 +73,17 @@
   let switching = false;
   const transitionPreloads = [];
 
+  const currentSessionKey = () => {
+    const routed = new URLSearchParams(window.location.search).get("session") || "";
+    if (routed) return routed;
+    const activeRow = document.querySelector(".sidebar-recent-session--active[data-session-key]");
+    if (activeRow?.dataset.sessionKey) return activeRow.dataset.sessionKey;
+    return document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot?.sessionKey || "";
+  };
+
   const modeFromSession = () => {
-    const session = new URLSearchParams(window.location.search).get("session") || "";
+    const session = currentSessionKey();
+    if (session.startsWith("agent:project:")) return "project";
     if (session.startsWith("agent:thinking:")) return "thinking";
     if (session.startsWith("agent:unrestricted:")) return "unrestricted";
     if (session.startsWith("agent:main:")) return "chat";
@@ -67,7 +94,11 @@
   const modeById = (id) => modes.find((mode) => mode.id === id) || modes[0];
 
   const syncModePresentation = (mode) => {
+    const previousMode = document.documentElement.getAttribute("data-laolao-mode");
     document.documentElement.setAttribute("data-laolao-mode", mode.id);
+    if (previousMode !== mode.id) {
+      window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
+    }
 
     document.querySelectorAll(".dashboard-header__breadcrumb-link").forEach((element) => {
       element.setAttribute("data-laolao-mode-label", mode.label);
@@ -162,7 +193,7 @@
       handedOff = true;
       fill.style.width = "68%";
       percentage.textContent = "68%";
-      message.textContent = "模式小屋正在开门，先生稍等…";
+      message.textContent = `模式小屋正在开门，${mode.address}稍等…`;
       progress.setAttribute("aria-valuenow", "68");
       resolve({ overlay, progress, fill, message, percentage });
     };
@@ -204,7 +235,7 @@
     let fallbackStarted = false;
 
     const destinationReady = () => {
-      const session = new URLSearchParams(window.location.search).get("session") || "";
+      const session = currentSessionKey();
       const modeReady = document.documentElement.getAttribute("data-laolao-mode") === mode.id;
       const inputReady = Boolean(document.querySelector(".agent-chat__input"));
       const avatarReady = Boolean(document.querySelector(`[data-laolao-mode-avatar="${mode.id}"]`));
@@ -238,7 +269,7 @@
       ui.percentage.textContent = `${value}%`;
       ui.progress.setAttribute("aria-valuenow", String(value));
       ui.message.textContent = elapsed < 1200
-        ? "模式小屋正在开门，先生稍等…"
+        ? `模式小屋正在开门，${mode.address}稍等…`
         : mode.phrases.at(-1);
 
       if (destinationReady() && elapsed >= 700) {

@@ -63,25 +63,117 @@
     });
   }
 
-  /* ---------- 1. 状态（localStorage） ---------- */
-  const LS_KEY = "laolao.sidebar.v1";
-  let state = { pins: [], projects: {}, projectFolders: {}, collapsed: {} };
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      state = {
-        pins: Array.isArray(parsed.pins) ? parsed.pins : [],
-        projects: parsed.projects && typeof parsed.projects === "object" ? parsed.projects : {},
-        projectFolders: parsed.projectFolders && typeof parsed.projectFolders === "object"
-          ? Object.fromEntries(Object.entries(parsed.projectFolders).filter(([, path]) => typeof path === "string" && path))
-          : {},
-        collapsed: parsed.collapsed && typeof parsed.collapsed === "object" ? parsed.collapsed : {},
-      };
+  /* ---------- 1. 状态与模式隔离（localStorage） ----------
+     每个模式有独立 agent、会话、置顶、项目与文件夹绑定。旧版共享
+     数据只迁移一次，并按会话所属 agent 拆开；旧 key 留着作为恢复副本。 */
+  const MODES = ["chat", "project", "thinking", "unrestricted"];
+  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", unrestricted: "unrestricted" };
+  const AGENT_MODE = Object.fromEntries(Object.entries(MODE_AGENT).map(([mode, agent]) => [agent, mode]));
+  const LEGACY_LS_KEY = "laolao.sidebar.v1";
+  const MIGRATION_KEY = "laolao.sidebar.v2.migrated";
+  const storageKey = (mode) => `laolao.sidebar.v2.${mode}`;
+  const emptyState = () => ({ pins: [], projects: {}, projectFolders: {}, collapsed: {} });
+
+  const normalizeState = (value) => ({
+    pins: Array.isArray(value?.pins) ? value.pins.filter((key) => typeof key === "string") : [],
+    projects: value?.projects && typeof value.projects === "object"
+      ? Object.fromEntries(Object.entries(value.projects).map(([name, keys]) => [
+        name,
+        Array.isArray(keys) ? keys.filter((key) => typeof key === "string") : [],
+      ]))
+      : {},
+    projectFolders: value?.projectFolders && typeof value.projectFolders === "object"
+      ? Object.fromEntries(Object.entries(value.projectFolders).filter(([, path]) => typeof path === "string" && path))
+      : {},
+    collapsed: value?.collapsed && typeof value.collapsed === "object" ? value.collapsed : {},
+  });
+
+  const modeForSession = (key) => {
+    const agent = String(key || "").match(/^agent:([^:]+):/)?.[1];
+    return AGENT_MODE[agent] || null;
+  };
+
+  const pageSessionKey = () => {
+    const routed = new URL(location.href).searchParams.get("session") || "";
+    if (routed) return routed;
+    const activeRow = document.querySelector(".sidebar-recent-session--active[data-session-key]");
+    if (activeRow?.dataset.sessionKey) return activeRow.dataset.sessionKey;
+    return document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot?.sessionKey || "";
+  };
+
+  const currentModeId = () => {
+    const presented = document.documentElement.getAttribute("data-laolao-mode");
+    if (MODES.includes(presented)) return presented;
+    const fromSession = modeForSession(pageSessionKey());
+    if (fromSession) return fromSession;
+    const stored = localStorage.getItem("laolao:active-mode");
+    return MODES.includes(stored) ? stored : "chat";
+  };
+
+  const readModeState = (mode) => {
+    try {
+      const raw = localStorage.getItem(storageKey(mode));
+      return raw ? normalizeState(JSON.parse(raw)) : emptyState();
+    } catch {
+      return emptyState();
     }
-  } catch {}
-  const save = () => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {}
+  };
+
+  const writeModeState = (mode, value) => {
+    try { localStorage.setItem(storageKey(mode), JSON.stringify(value)); } catch {}
+  };
+
+  const migrateLegacyState = () => {
+    if (localStorage.getItem(MIGRATION_KEY) === "1") return;
+    const byMode = Object.fromEntries(MODES.map((mode) => [mode, readModeState(mode)]));
+    try {
+      const legacyRaw = localStorage.getItem(LEGACY_LS_KEY);
+      if (legacyRaw) {
+        const legacy = normalizeState(JSON.parse(legacyRaw));
+        const fallbackMode = currentModeId();
+        for (const key of legacy.pins) {
+          const mode = modeForSession(key) || fallbackMode;
+          if (!byMode[mode].pins.includes(key)) byMode[mode].pins.push(key);
+        }
+        for (const [name, keys] of Object.entries(legacy.projects)) {
+          const buckets = new Map();
+          for (const key of keys) {
+            const mode = modeForSession(key) || fallbackMode;
+            if (!buckets.has(mode)) buckets.set(mode, []);
+            buckets.get(mode).push(key);
+          }
+          if (!buckets.size) buckets.set(fallbackMode, []);
+          for (const [mode, modeKeys] of buckets) {
+            const existing = byMode[mode].projects[name] || [];
+            byMode[mode].projects[name] = [...new Set([...existing, ...modeKeys])];
+          }
+          const folderOwner = modeForSession(keys[0]) || fallbackMode;
+          if (legacy.projectFolders[name] && !byMode[folderOwner].projectFolders[name]) {
+            byMode[folderOwner].projectFolders[name] = legacy.projectFolders[name];
+          }
+        }
+        for (const mode of MODES) {
+          byMode[mode].collapsed = { ...legacy.collapsed, ...byMode[mode].collapsed };
+        }
+      }
+      for (const mode of MODES) writeModeState(mode, byMode[mode]);
+      localStorage.setItem(MIGRATION_KEY, "1");
+    } catch {}
+  };
+
+  migrateLegacyState();
+  let stateMode = currentModeId();
+  let state = readModeState(stateMode);
+  const save = () => writeModeState(stateMode, state);
+
+  const syncModeState = () => {
+    const nextMode = currentModeId();
+    if (nextMode === stateMode) return false;
+    save();
+    stateMode = nextMode;
+    state = readModeState(stateMode);
+    sessionIndex = null;
+    return true;
   };
 
   const projectOf = (key) => {
@@ -90,6 +182,57 @@
     }
     return null;
   };
+
+  /* 原生 agentSelection 先过滤，class 隐藏再兜底，避免任何一帧串出
+     其他模式的会话。 */
+
+  const currentModeAgent = () => MODE_AGENT[stateMode] || "main";
+
+  const rowAgent = (row) => {
+    const key = row.dataset.sessionKey
+      || new URLSearchParams(
+        (row.querySelector("a.sidebar-recent-session__link")?.getAttribute("href") || "").split("?")[1] || ""
+      ).get("session")
+      || "";
+    const match = key.match(/^agent:([^:]+):/);
+    return match ? match[1] : "";
+  };
+
+  function applyModeFilter(section) {
+    const agent = currentModeAgent();
+    try {
+      const sel = document.querySelector("openclaw-app-shell")?.context?.agentSelection;
+      if (sel && typeof sel.set === "function" && sel.state && sel.state.selectedId !== agent) {
+        sel.set(agent);
+      }
+    } catch {}
+    section.querySelectorAll(".sidebar-recent-session.session-row-host").forEach((row) => {
+      const ra = rowAgent(row);
+      row.classList.toggle("laolao-mode-hidden", ra !== agent);
+    });
+    // 分组计数按可见行重算 + 空态提示区分
+    for (const g of section.querySelectorAll("[data-laolao-group]")) {
+      const list = g.querySelector(":scope > .laolao-group__list");
+      if (!list) continue;
+      const visible = list.querySelectorAll(".sidebar-recent-session:not(.laolao-mode-hidden)").length;
+      const countEl = g.querySelector(".laolao-group__count");
+      if (countEl) countEl.textContent = visible ? String(visible) : "";
+      if (g.dataset.laolaoGroup === "__pins") g.style.display = visible ? "" : "none";
+      const empty = list.querySelector(".laolao-group__empty");
+      const hasAnyRow = !!list.querySelector(".sidebar-recent-session");
+      if (hasAnyRow && !visible) {
+        if (empty) empty.textContent = "该模式下暂无会话";
+        else {
+          const emptyEl = document.createElement("div");
+          emptyEl.className = "laolao-group__empty";
+          emptyEl.textContent = "该模式下暂无会话";
+          list.appendChild(emptyEl);
+        }
+      } else if (empty && visible) {
+        empty.remove();
+      }
+    }
+  }
 
   /* ---------- 2. 图标 ---------- */
   const svg = (path) =>
@@ -343,8 +486,7 @@
   }
 
   async function createProjectSession(name) {
-    const currentKey = new URL(location.href).searchParams.get("session") || "agent:main:main";
-    const agentId = currentKey.match(/^agent:([^:]+):/)?.[1] || "main";
+    const agentId = currentModeAgent();
     try {
       const result = await gwRequest("sessions.create", { agentId, label: `${name} · 新会话` }, 20000);
       const key = result?.key;
@@ -518,7 +660,8 @@
   }
 
   async function cleanupSessions() {
-    const currentKey = new URL(location.href).searchParams.get("session");
+    const currentKey = pageSessionKey();
+    const agentId = currentModeAgent();
     const keep = new Set([currentKey, ...state.pins]);
     for (const keys of Object.values(state.projects)) {
       for (const k of keys || []) keep.add(k);
@@ -526,7 +669,7 @@
 
     const payload = await gwRequest("sessions.list", { limit: 1000 });
     const all = extractSessions(payload);
-    const targets = all.filter((s) => !keep.has(s.key));
+    const targets = all.filter((s) => s.agentId === agentId && !keep.has(s.key));
     if (targets.length === 0) {
       toast("没有需要清理的会话");
       return;
@@ -549,7 +692,7 @@
   function askCleanup() {
     showModal({
       title: "一键清理会话记录",
-      body: "将删除所有未整理的会话及其聊天记录（涵盖唠嗑、想法、无限制三个模式）。当前打开的会话、置顶会话和项目内会话都会保留。此操作不可撤销，确定继续吗？",
+      body: "只清理当前模式中未整理的会话及聊天记录；其他三个模式不会受影响。当前打开、置顶和项目内会话都会保留。此操作不可撤销，确定继续吗？",
       dangerText: "确认清理",
       onConfirm: cleanupSessions,
     });
@@ -602,6 +745,10 @@
   }
 
   function assignToProject(key, name) {
+    if (modeForSession(key) !== stateMode) {
+      toast("这个会话属于其他模式，不能放进当前项目");
+      return;
+    }
     for (const keys of Object.values(state.projects)) {
       const i = keys.indexOf(key);
       if (i >= 0) keys.splice(i, 1);
@@ -621,6 +768,7 @@
   }
 
   function togglePin(key) {
+    if (modeForSession(key) !== stateMode) return;
     const i = state.pins.indexOf(key);
     if (i >= 0) { state.pins.splice(i, 1); toast("已取消置顶"); }
     else { state.pins.push(key); toast("已置顶"); }
@@ -823,7 +971,7 @@
         if (pinBtn) pinBtn.classList.toggle("laolao-active", pinned);
       }
 
-      const currentKey = new URL(location.href).searchParams.get("session");
+      const currentKey = pageSessionKey();
       row.classList.toggle("sidebar-recent-session--active", key === currentKey);
 
       let target = recentList;
@@ -898,8 +1046,12 @@
     if (!section) return;
     applying = true;
     try {
+      syncModeState();
       const ui = ensureUI(section);
-      if (ui) applyLayout(section, ui);
+      if (ui) {
+        applyLayout(section, ui);
+        applyModeFilter(section);
+      }
     } finally {
       applying = false;
     }
@@ -913,8 +1065,23 @@
   const observer = new MutationObserver(schedule);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
+  // 模式切换是 SPA 路由变化（URL 变了但未必触发列表重渲染）：单独盯 URL
+  let lastHref = location.href;
+  setInterval(() => {
+    if (location.href !== lastHref) {
+      lastHref = location.href;
+      schedule();
+    }
+  }, 500);
+  window.addEventListener("popstate", schedule);
+  window.addEventListener("laolao:modechange", schedule);
+
   /* 调试句柄（只读排查用） */
-  window.__laolaoSidebar = { gwRequest, get state() { return state; } };
+  window.__laolaoSidebar = {
+    gwRequest,
+    get mode() { return stateMode; },
+    get state() { return state; },
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", schedule);

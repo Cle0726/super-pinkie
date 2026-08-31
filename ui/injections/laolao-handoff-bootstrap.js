@@ -5,7 +5,7 @@
   try {
     handoff = JSON.parse(sessionStorage.getItem("laolao:mode-handoff") || "null");
   } catch {}
-  if (!handoff || !["chat", "thinking", "unrestricted"].includes(handoff.mode)) return;
+  if (!handoff || !["chat", "project", "thinking", "unrestricted"].includes(handoff.mode)) return;
 
   const splash = document.getElementById("laolao-splash");
   const fill = document.getElementById("laolao-splash-fill");
@@ -16,6 +16,7 @@
 
   const details = {
     chat: { label: "唠嗑模式", waiting: "新聊天正在铺开彩带…" },
+    project: { label: "项目模式", waiting: "项目档案正在摊开…" },
     thinking: { label: "想法模式", waiting: "灵感房间正在亮灯…" },
     unrestricted: { label: "无限制模式", waiting: "彩虹力量正在接管房间…" },
   }[handoff.mode];
@@ -25,7 +26,7 @@
   splash.classList.add("is-mode-progress", `is-mode-progress--${handoff.mode}`);
   splash.style.setProperty(
     "--laolao-mode-progress-image",
-    `url("./laolao-mode-transition-${handoff.mode}.png?v=transition1")`,
+    `url("./laolao-mode-transition-${handoff.mode}.png?v=transition2")`,
   );
   const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
   const title = splash.querySelector(".laolao-splash__title");

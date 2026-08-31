@@ -18,12 +18,33 @@ jobs:
           python-version: "3.12"
       - name: Check JavaScript injections
         run: find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Check sidebar mode isolation
+        run: node tests/sidebar-mode-isolation.test.mjs
       - name: Check shell scripts
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
       - name: Check Python services
         run: python -m py_compile services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py
       - name: Confirm personality files are present
-        run: test -s personas/chat/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
+        run: |
+          test -s personas/chat/SOUL.md && test -s personas/project/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
+          grep -Fq '始终称呼用户为“老板”' personas/project/SOUL.md
+          grep -Fq '每个新会话都重新定位并完整读取本次所需 Skill' personas/project/SOUL.md
+      - name: Confirm four-mode UI assets are present
+        run: |
+          test -s ui/assets/laolao-mode-project-hd.png
+          test -s ui/assets/laolao-mode-project.svg
+          test -s ui/assets/laolao-mode-transition-project.png
+          test -s ui/assets/laolao-wallpaper-project.png
+          node - <<'NODE'
+          const fs = require('fs');
+          const source = fs.readFileSync('ui/injections/laolao-mode-switcher.js', 'utf8');
+          const ids = ['chat', 'project', 'thinking', 'unrestricted'];
+          const positions = ids.map((id) => source.indexOf(`id: "${id}"`));
+          if (positions.some((position) => position < 0)) throw new Error('missing mode');
+          if (positions.some((position, index) => index > 0 && position <= positions[index - 1])) {
+            throw new Error('mode order changed');
+          }
+          NODE
 
   macos-build:
     runs-on: macos-15

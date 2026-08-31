@@ -11,7 +11,7 @@
 OpenClaw Control UI
   ├─ laolao-theme.css             透明玻璃与交互
   ├─ laolao-sidebar.js            置顶、项目、目录管理
-  ├─ laolao-mode-switcher.js      三模式无缝切换
+  ├─ laolao-mode-switcher.js      四模式无缝切换
   ├─ laolao-live-voice.js         语音回合与摘要朗读
   ├─ laolao-image-viewer.js       图片放大
   ├─ laolao-phrases.js            中文人格状态话术

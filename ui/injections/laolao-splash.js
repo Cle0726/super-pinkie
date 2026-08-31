@@ -18,12 +18,14 @@
     } catch {}
     sessionStorage.removeItem(modeHandoffKey);
     const session = currentUrl.searchParams.get("session") || "";
-    const inferredMode = session.startsWith("agent:thinking:")
-      ? "thinking"
-      : session.startsWith("agent:unrestricted:")
-        ? "unrestricted"
-        : "chat";
-    const modeId = ["chat", "thinking", "unrestricted"].includes(storedHandoff?.mode)
+    const inferredMode = session.startsWith("agent:project:")
+      ? "project"
+      : session.startsWith("agent:thinking:")
+        ? "thinking"
+        : session.startsWith("agent:unrestricted:")
+          ? "unrestricted"
+          : "chat";
+    const modeId = ["chat", "project", "thinking", "unrestricted"].includes(storedHandoff?.mode)
       ? storedHandoff.mode
       : inferredMode;
     const modeDetails = {
@@ -31,6 +33,12 @@
         label: "唠嗑模式",
         waiting: ["新聊天正在铺开彩带…", "碧琪在确认唠嗑小屋已经站稳…"],
         ready: "唠嗑小屋准备好啦！",
+      },
+      project: {
+        label: "项目模式",
+        address: "老板",
+        waiting: ["老板，项目档案正在摊开…", "碧琪在确认目标、文件和工具都已就位…"],
+        ready: "项目工作台准备好啦！",
       },
       thinking: {
         label: "想法模式",
@@ -48,7 +56,7 @@
       window.history.replaceState(window.history.state, "", currentUrl.href);
     }
     splash.classList.add("is-mode-progress", `is-mode-progress--${modeId}`);
-    splash.style.setProperty("--laolao-mode-progress-image", `url("./laolao-mode-transition-${modeId}.png?v=transition1")`);
+    splash.style.setProperty("--laolao-mode-progress-image", `url("./laolao-mode-transition-${modeId}.png?v=transition2")`);
     const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
     const title = splash.querySelector(".laolao-splash__title");
     if (eyebrow) eyebrow.textContent = "碧琪的模式切换";
@@ -102,7 +110,7 @@
       window.requestAnimationFrame(tickHandoff);
     });
     window.setTimeout(() => {
-      if (!handoffCompleted) message.textContent = "先生，连接比平时慢，碧琪还在认真等…";
+      if (!handoffCompleted) message.textContent = `${modeDetails.address || "先生"}，连接比平时慢，碧琪还在认真等…`;
     }, 8000);
     window.setTimeout(completeHandoff, 30000);
     return;

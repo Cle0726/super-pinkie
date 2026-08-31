@@ -50,8 +50,40 @@
   height: 42px;
 }
 
+.laolao-splash.is-mode-progress--chat .laolao-splash__progress-fill {
+  background: linear-gradient(90deg, #e94f91 0%, #f483b2 38%, #f6bd69 67%, #ef72aa 100%);
+  background-size: 180% 100%;
+  animation: laolao-splash-chat-flow 2.2s ease-in-out infinite;
+}
+
+.laolao-splash.is-mode-progress--chat .laolao-splash__progress-fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 13px 11px, rgba(255,255,255,.78) 0 2px, transparent 2.6px),
+    radial-gradient(circle at 35px 30px, rgba(255,238,173,.76) 0 2.5px, transparent 3px),
+    radial-gradient(circle at 57px 15px, rgba(255,255,255,.56) 0 1.5px, transparent 2px);
+  background-size: 70px 42px;
+  animation: laolao-splash-chat-confetti 1.9s linear infinite;
+}
+
 .laolao-splash.is-mode-progress--thinking .laolao-splash__progress-fill {
-  background: linear-gradient(90deg, #c865ad, #eaa2d3);
+  background: linear-gradient(90deg, #9d74c8 0%, #cf75b7 42%, #e9a4d6 70%, #8bc6df 100%);
+  background-size: 180% 100%;
+  animation: laolao-splash-thinking-flow 2.8s ease-in-out infinite;
+}
+
+.laolao-splash.is-mode-progress--thinking .laolao-splash__progress-fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 18px 28px, transparent 0 4px, rgba(255,255,255,.7) 4.5px 5.5px, transparent 6px),
+    radial-gradient(circle at 48px 13px, transparent 0 2px, rgba(255,255,255,.58) 2.5px 3.5px, transparent 4px),
+    radial-gradient(circle at 76px 25px, rgba(255,255,255,.72) 0 1.8px, transparent 2.4px);
+  background-size: 90px 42px;
+  animation: laolao-splash-thinking-bubbles 2.5s linear infinite;
 }
 
 .laolao-splash.is-mode-progress--unrestricted .laolao-splash__progress-fill {
@@ -163,6 +195,26 @@
 @keyframes laolao-splash-shine {
   0% { left: -48%; }
   54%, 100% { left: 118%; }
+}
+
+@keyframes laolao-splash-chat-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-splash-chat-confetti {
+  from { background-position: 0 0; }
+  to { background-position: 70px 0; }
+}
+
+@keyframes laolao-splash-thinking-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-splash-thinking-bubbles {
+  from { background-position: 0 8px; }
+  to { background-position: 90px -8px; }
 }
 
 @media (max-width: 720px) {

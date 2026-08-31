@@ -53,6 +53,10 @@ html[data-laolao-mode="chat"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper.png");
 }
 
+html[data-laolao-mode="project"] {
+  --laolao-wallpaper-image: url("./laolao-wallpaper-project.png");
+}
+
 html[data-laolao-mode="thinking"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper-thinking.png");
 }
@@ -754,6 +758,10 @@ img.chat-avatar.assistant {
   background: linear-gradient(100deg, transparent 39%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.80) 50%, rgba(190, 111, 204, 0.28) 54%, transparent 61%);
 }
 
+.laolao-mode-transition--project .laolao-mode-transition__sweep {
+  background: linear-gradient(100deg, transparent 39%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.78) 50%, rgba(78, 166, 160, 0.26) 54%, transparent 61%);
+}
+
 .laolao-mode-transition--unrestricted .laolao-mode-transition__sweep {
   background: linear-gradient(100deg, transparent 38%, rgba(244, 93, 152, 0.16) 44%, rgba(255, 229, 118, 0.66) 49%, rgba(103, 195, 236, 0.48) 53%, transparent 61%);
 }
@@ -825,8 +833,45 @@ img.chat-avatar.assistant {
   transition: width 100ms linear;
 }
 
+/* 唠嗑模式：糖果彩带在进度里自然流动，保留轻快感但不做廉价霓虹。 */
+.laolao-mode-transition--chat .laolao-mode-transition__fill {
+  background: linear-gradient(90deg, #e94f91 0%, #f483b2 38%, #f6bd69 67%, #ef72aa 100%);
+  background-size: 180% 100%;
+  animation: laolao-chat-progress-flow 2.2s ease-in-out infinite;
+}
+
+.laolao-mode-transition--chat .laolao-mode-transition__fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 13px 11px, rgba(255,255,255,.78) 0 2px, transparent 2.6px),
+    radial-gradient(circle at 35px 30px, rgba(255,238,173,.76) 0 2.5px, transparent 3px),
+    radial-gradient(circle at 57px 15px, rgba(255,255,255,.56) 0 1.5px, transparent 2px);
+  background-size: 70px 42px;
+  animation: laolao-chat-confetti 1.9s linear infinite;
+}
+
 .laolao-mode-transition--thinking .laolao-mode-transition__fill {
-  background: linear-gradient(90deg, #c865ad, #eaa2d3);
+  background: linear-gradient(90deg, #9d74c8 0%, #cf75b7 42%, #e9a4d6 70%, #8bc6df 100%);
+  background-size: 180% 100%;
+  animation: laolao-thinking-progress-flow 2.8s ease-in-out infinite;
+}
+
+.laolao-mode-transition--thinking .laolao-mode-transition__fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 18px 28px, transparent 0 4px, rgba(255,255,255,.7) 4.5px 5.5px, transparent 6px),
+    radial-gradient(circle at 48px 13px, transparent 0 2px, rgba(255,255,255,.58) 2.5px 3.5px, transparent 4px),
+    radial-gradient(circle at 76px 25px, rgba(255,255,255,.72) 0 1.8px, transparent 2.4px);
+  background-size: 90px 42px;
+  animation: laolao-thinking-bubbles 2.5s linear infinite;
+}
+
+.laolao-mode-transition--project .laolao-mode-transition__fill {
+  background: linear-gradient(90deg, #e75d9c 0%, #ef9ec1 45%, #59aaa5 100%);
 }
 
 .laolao-mode-transition--unrestricted .laolao-mode-transition__fill {
@@ -874,6 +919,26 @@ img.chat-avatar.assistant {
 @keyframes laolao-mode-transition-shine {
   0% { left: -42%; }
   70%, 100% { left: 118%; }
+}
+
+@keyframes laolao-chat-progress-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-chat-confetti {
+  from { background-position: 0 0; }
+  to { background-position: 70px 0; }
+}
+
+@keyframes laolao-thinking-progress-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-thinking-bubbles {
+  from { background-position: 0 8px; }
+  to { background-position: 90px -8px; }
 }
 
 @keyframes laolao-mode-scene-enter {

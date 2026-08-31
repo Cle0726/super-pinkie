@@ -31,24 +31,32 @@ apply_ui_skin() {
   for asset in \
     laolao-avatar.png \
     laolao-mode-chat.png \
+    laolao-mode-project.png \
     laolao-mode-thinking.png \
     laolao-mode-unrestricted.png \
     laolao-mode-chat-hd.png \
+    laolao-mode-project-hd.png \
     laolao-mode-thinking-hd.png \
     laolao-mode-unrestricted-hd.png \
     laolao-mode-transition-chat.png \
+    laolao-mode-transition-project.png \
     laolao-mode-transition-thinking.png \
     laolao-mode-transition-unrestricted.png \
     laolao-mode-chat.svg \
+    laolao-mode-project.svg \
     laolao-mode-thinking.svg \
     laolao-mode-unrestricted.svg \
     laolao-wallpaper.png \
+    laolao-wallpaper-project.png \
     laolao-wallpaper-thinking.png \
     laolao-wallpaper-unrestricted.png \
     laolao-splash.png \
     laolao-theme.css \
     laolao-sidebar.css \
     laolao-sidebar.js \
+    laolao-usage-stats.css \
+    laolao-usage-stats.js \
+    laolao-quota.json \
     laolao-splash.css \
     laolao-splash.js \
     laolao-handoff-bootstrap.js \
@@ -86,12 +94,23 @@ apply_ui_skin() {
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar2"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar6"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-sidebar.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar2">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar6">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # 顶栏用量统计胶囊：JS 必须紧跟 sidebar.js（依赖其 __laolaoSidebar.gwRequest 句柄）
+  if ! grep -Fq './laolao-usage-stats.js' "$index_file"; then
+    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats7"></script>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  if ! grep -Fq './laolao-usage-stats.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -146,35 +165,47 @@ apply_ui_skin() {
   # This synchronous bootstrap runs immediately after the splash markup, so
   # the new document's first painted frame already shows the carried progress.
   if ! grep -Fq './laolao-handoff-bootstrap.js' "$index_file"; then
-    perl -0pi -e 's{(<openclaw-app>)}{    <script src="./laolao-handoff-bootstrap.js?v=handoff1"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<openclaw-app>)}{    <script src="./laolao-handoff-bootstrap.js?v=handoff2"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   # Custom assets keep stable filenames so upgrades can restore them. Bump the
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
-  if ! grep -Fq './laolao-theme.css?v=theme15' "$index_file"; then
-    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme15}g' "$index_file"
+  if ! grep -Fq './laolao-theme.css?v=theme17' "$index_file"; then
+    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme17}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.js?v=sidebar2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar2}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.js?v=sidebar6' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar6}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.css?v=sidebar2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar2}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.css?v=sidebar6' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar6}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.css?v=splash14' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash14}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats7' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats7}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-mode-switcher.js?v=mode17' "$index_file"; then
-    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode17}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.css(?:\?v=[^"]*)?}{./laolao-usage-stats.css?v=stats7}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.js?v=splash15' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash15}g' "$index_file"
+  if ! grep -Fq './laolao-splash.css?v=splash15' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash15}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-mode-switcher.js?v=mode21' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode21}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-splash.js?v=splash17' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash17}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff2' "$index_file"; then
+    perl -0pi -e 's{\./laolao-handoff-bootstrap\.js(?:\?v=[^"]*)?}{./laolao-handoff-bootstrap.js?v=handoff2}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -234,9 +265,11 @@ rebuild_launcher_if_needed() {
 sync_agent_avatars() {
   mkdir -p \
     "$USER_HOME/.openclaw/workspace/avatars" \
+    "$USER_HOME/.openclaw/workspace-project/avatars" \
     "$USER_HOME/.openclaw/workspace-thinking/avatars" \
     "$USER_HOME/.openclaw/workspace-unrestricted/avatars"
   copy_if_changed "$ASSET_ROOT/laolao-mode-chat-hd.png" "$USER_HOME/.openclaw/workspace/avatars/pinkie-pie.png"
+  copy_if_changed "$ASSET_ROOT/laolao-mode-project-hd.png" "$USER_HOME/.openclaw/workspace-project/avatars/pinkie-pie.png"
   copy_if_changed "$ASSET_ROOT/laolao-mode-thinking-hd.png" "$USER_HOME/.openclaw/workspace-thinking/avatars/pinkie-pie.png"
   copy_if_changed "$ASSET_ROOT/laolao-mode-unrestricted-hd.png" "$USER_HOME/.openclaw/workspace-unrestricted/avatars/unrestricted-mode.png"
 }
