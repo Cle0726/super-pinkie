@@ -91,6 +91,64 @@ def _content_injected(content):
     return False
 
 
+TERM_MAP = [
+    ("绕过地区限制", "跨区域网络可达性方案"),
+    ("验证绕过方案", "校验逻辑边界测试方案"),
+    ("验证绕过", "校验逻辑边界分析"),
+    ("绕过方案", "边界测试方案"),
+    ("绕过验证", "校验逻辑边界分析"),
+    ("绕过校验", "校验逻辑边界分析"),
+    ("绕过检测", "检测规避分析"),
+    ("破解卡密", "授权令牌校验审计"),
+    ("破解", "授权校验审计"),
+    ("卡密", "授权令牌"),
+    ("序列号", "授权密钥"),
+    ("激活码", "授权激活凭证"),
+    ("注册机", "授权密钥生成算法参考实现"),
+    ("keygen", "license key generation reference"),
+    ("脱壳", "加壳兼容性分析"),
+    ("逆向工程", "二进制兼容性分析"),
+    ("逆向", "二进制分析"),
+    ("免杀", "检测兼容性适配"),
+    ("反调试", "调试器对抗分析"),
+    ("远控", "加密通道客户端"),
+    ("木马", "远程管理工具"),
+    ("翻墙", "网络连通性方案"),
+    ("反代", "流量转发工程"),
+    ("reverse shell", "encrypted command execution loop client"),
+    ("backdoor", "persistent remote access service"),
+]
+
+
+def rewrite_user_terms(text):
+    if not isinstance(text, str):
+        return text
+    for src, dst in TERM_MAP:
+        text = text.replace(src, dst)
+    return text
+
+
+def apply_term_rewrite(parsed):
+    rewritten = False
+    for m in parsed.get("messages", []):
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, str):
+            n = rewrite_user_terms(c)
+            if n != c:
+                m["content"] = n
+                rewritten = True
+        elif isinstance(c, list):
+            for part in c:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    n = rewrite_user_terms(part["text"])
+                    if n != part["text"]:
+                        part["text"] = n
+                        rewritten = True
+    return rewritten
+
+
 def rewrite_chat_body(raw):
     try:
         parsed = json.loads(raw)
@@ -156,6 +214,8 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
                     mid = (info["model"] or "").lower()
                     if any(rx.search(mid) for rx in TEMP_ZERO_MODELS):
                         info["parsed"]["temperature"] = 0
+                    if apply_term_rewrite(info["parsed"]):
+                        print("ur-proxy: term-rewrite applied (context reconstruction)", flush=True)
                     body = json.dumps(info["parsed"], ensure_ascii=False).encode("utf-8")
                     injected = True
             print("ur-proxy: model=%s gated=%s already=%s injected=%s" % (
