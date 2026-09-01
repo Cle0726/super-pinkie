@@ -40,7 +40,7 @@ jobs:
       - name: Check shell scripts
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
       - name: Check Python services
-        run: python -m py_compile services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py
+        run: python -m py_compile services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py
       - name: Confirm personality files are present
         run: |
           test -s personas/chat/SOUL.md && test -s personas/project/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
@@ -77,3 +77,19 @@ jobs:
         with:
           name: super-pinkie-macos
           path: dist/super-pinkie-macos-*.zip
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Windows .exe
+        shell: pwsh
+        run: |
+          .\build-win.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: super-pinkie-windows
+          path: dist/超級碧琪.exe

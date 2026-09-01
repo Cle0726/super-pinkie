@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""超級碧琪 🎈 控制台 — OpenClaw 无限制提示词注入工具（GUI 版）
+"""超級碧琪 🎈 控制台 — OpenClaw 全功能安装与无限制注入工具（GUI 版）
 
-一键完成：安装提示词 / 打双传输层补丁（纯 Python，无需 Node）/ 启动注入代理 /
-状态检测 / 卸载。macOS (.app) 与 Windows (.exe) 均可由本文件打包。
+一键完成（Windows / macOS 通用）：
+1. 环境检测与自动补齐（Node.js / OpenClaw 全局安装）
+2. API Key 与模型供应商配置（OpenAI / Anthropic / Gemini / DeepSeek / 任意兼容中继）
+3. 提示词库复制与双传输层补丁（纯 Python 注入，无需手动 node）
+4. 四模式人格文件安装（chat / project / thinking / neutral）
+5. 来啦～老弟 完整 UI 皮肤与资源注入
+6. 注入代理自启与 OpenClaw Gateway 启停管理
+7. 一键状态健康检查与 Cle 验证引导
 
 用法（源码运行）:
     python3 app/super_pinkie.py
@@ -16,6 +22,7 @@ import shutil
 import subprocess
 import threading
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -41,19 +48,103 @@ def prompts_dir():
     return Path(os.environ.get("UR_PROMPTS_DIR", Path.home() / ".openclaw"))
 
 
+def openclaw_config_path():
+    return prompts_dir() / "openclaw.json"
+
+
+# ---------------------------------------------------------------- 依赖检测与安装
+def check_node():
+    """检测 node 是否可用，返回版本号或 None"""
+    try:
+        res = subprocess.run(["node", "-v"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def check_npm():
+    """检测 npm 是否可用，返回版本号或 None"""
+    try:
+        res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def check_openclaw_cli():
+    """检测 openclaw CLI 是否可用"""
+    try:
+        res = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def install_node_windows(log):
+    """Windows 下尝试通过 winget 安装 Node.js LTS"""
+    log("==> 正在尝试通过 winget 安装 Node.js LTS...")
+    try:
+        proc = subprocess.Popen(
+            ["winget", "install", "-e", "--id", "OpenJS.NodeJS.LTS", "--silent", "--accept-package-agreements", "--accept-source-agreements"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        )
+        for line in iter(proc.stdout.readline, ""):
+            log("  " + line.rstrip())
+        proc.wait()
+        if proc.returncode == 0:
+            log("✅ Node.js 安装成功，请注意可能需要重启程序以更新系统 PATH。")
+            return True
+        else:
+            log(f"⚠️ winget 安装退出码: {proc.returncode}")
+    except Exception as e:
+        log(f"⚠️ winget 安装失败: {e}")
+    log("💡 请手动前往 https://nodejs.org 下载并安装 Node.js LTS 版本。")
+    return False
+
+
+def install_openclaw_npm(log):
+    """通过 npm 全局安装 openclaw"""
+    log("==> 正在通过 npm 全局安装 openclaw...")
+    try:
+        cmd = ["npm", "install", "-g", "openclaw"]
+        if os.name == "nt":
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True)
+        else:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in iter(proc.stdout.readline, ""):
+            log("  " + line.rstrip())
+        proc.wait()
+        if proc.returncode == 0:
+            log("✅ openclaw 全局安装成功！")
+            return True
+        else:
+            log(f"❌ openclaw 安装失败，退出码: {proc.returncode}")
+    except Exception as e:
+        log(f"❌ openclaw 安装异常: {e}")
+    return False
+
+
+# ---------------------------------------------------------------- 提示词安装
 def ensure_prompts(log):
     src = resource_path("prompts")
     dst = prompts_dir()
     dst.mkdir(parents=True, exist_ok=True)
     n = 0
-    for f in sorted(src.glob("unrestricted-prompt-*.txt")):
-        shutil.copyfile(f, dst / f.name)
-        n += 1
+    if src.exists():
+        for f in sorted(src.glob("unrestricted-prompt-*.txt")):
+            shutil.copyfile(f, dst / f.name)
+            n += 1
     log(f"提示词已安装: {n} 个 -> {dst}")
     return n
 
 
-# ---------------------------------------------------------------- patch logic (Python port of patch/reapply-unrestricted-patch.mjs)
+# ---------------------------------------------------------------- 传输层补丁
 HELPER = r"""/** [unrestricted-injection] Prepend the user-configured unrestricted system prompt to every upstream provider payload. */
 function resolveUnrestrictedPrompt(model) {
 	let prompt = "";
@@ -67,7 +158,7 @@ function resolveUnrestrictedPrompt(model) {
 		const id = modelId.toLowerCase();
 		let fileName = "unrestricted-prompt.txt";
 		if (/claude|anthropic/i.test(modelId) || /anthropic|claude/i.test(provider)) fileName = "unrestricted-prompt-claude.txt";
-		else if (/gemini-3\\.7-flash-tiered|gemini-pro-agent|gemini-3\\.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
+		else if (/gemini-3\.7-flash-tiered|gemini-pro-agent|gemini-3\.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
 		else if (/gemini/.test(id)) fileName = "unrestricted-prompt-gemini.txt";
 		else if (/gpt-oss|gptoss/.test(id)) fileName = "unrestricted-prompt-gptoss.txt";
 		else if (/gpt-5/.test(id) || provider === "codex") fileName = "unrestricted-prompt-gpt5.txt";
@@ -104,7 +195,7 @@ function applyUnrestrictedInjection(params, kind, model, context) {
 """
 
 DIST_HELPER_RE = re.compile(r"/\*\* \[unrestricted-injection\][\s\S]*?\n\}\n(?=function createOpenAICompletionsClient)")
-DIST_CALL_RE = re.compile(r"^\t*applyUnrestrictedInjection\(params, \"(?:completions|responses)\", model, context\);\r?\n", re.M)
+DIST_CALL_RE = re.compile(r"^\t*applyUnrestrictedInjection\((params), \"(?:completions|responses)\", model, context\);\r?\n", re.M)
 DIST_ANCHOR = "function createOpenAICompletionsClient(model, context, apiKey, optionHeaders) {"
 CALL_LINE_RE = re.compile(r"^(\t+)if \(nextParams !== void 0\) params = nextParams;\s*$")
 
@@ -115,30 +206,47 @@ AI_CALL_NEW = "\t\t\tconst nextParams = await options?.onPayload?.(params, model
 
 def resolve_openclaw_root():
     env = os.environ.get("OPENCLAW_ROOT")
-    if env:
+    if env and os.path.isdir(env):
         return env
     cmd = "where" if os.name == "nt" else "which"
     try:
-        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=10).stdout
+        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=5).stdout
         line = out.splitlines()[0].strip() if out.strip() else ""
         if line:
             real = os.path.realpath(line)
-            return real if os.path.isdir(real) else os.path.dirname(real)
+            parent = os.path.dirname(real)
+            # Check if parent is bin, then lib/node_modules/openclaw
+            cand1 = os.path.join(os.path.dirname(parent), "lib", "node_modules", "openclaw")
+            if os.path.isdir(cand1):
+                return cand1
+            if os.path.isdir(real):
+                return real
+            return parent
     except Exception:
         pass
     if os.name == "nt":
         ap = os.environ.get("APPDATA")
         pf = os.environ.get("ProgramFiles", r"C:\Program Files")
         lad = os.environ.get("LOCALAPPDATA")
-        for base in filter(None, [os.path.join(ap, "npm", "node_modules", "openclaw") if ap else None,
-                                  os.path.join(pf, "nodejs", "node_modules", "openclaw"),
-                                  os.path.join(lad, "nvm", "versions", "node") if lad else None]):
+        for base in filter(None, [
+            os.path.join(ap, "npm", "node_modules", "openclaw") if ap else None,
+            os.path.join(pf, "nodejs", "node_modules", "openclaw"),
+            os.path.join(lad, "nvm", "versions", "node") if lad else None
+        ]):
             if os.path.isdir(base):
                 if os.path.isdir(os.path.join(base, "dist")):
                     return base
                 cand = os.path.join(base, "node_modules", "openclaw")
                 if os.path.isdir(cand):
                     return cand
+    else:
+        home = str(Path.home())
+        nvm_dir = os.path.join(home, ".nvm", "versions", "node")
+        if os.path.isdir(nvm_dir):
+            for ver in os.listdir(nvm_dir):
+                target = os.path.join(nvm_dir, ver, "lib", "node_modules", "openclaw")
+                if os.path.isdir(target):
+                    return target
     return None
 
 
@@ -152,14 +260,15 @@ def find_file(directory, prefix, suffix):
 
 
 def patch_dist_file(path, remove, log):
-    src = open(path, encoding="utf-8").read()
+    try:
+        src = open(path, encoding="utf-8").read()
+    except Exception as e:
+        log(f"  读取 dist 失败: {e}")
+        return
     applied = "applyUnrestrictedInjection" in src
     if remove:
         if not applied:
             log(f"  dist {os.path.basename(path)}: 未安装，跳过")
-            return
-        if not DIST_HELPER_RE.search(src):
-            log(f"  dist {os.path.basename(path)}: 找不到补丁块，跳过（文件可能已变动）")
             return
         src = DIST_HELPER_RE.sub("", src)
         src = DIST_CALL_RE.sub("", src)
@@ -191,14 +300,15 @@ def patch_dist_file(path, remove, log):
 
 
 def patch_ai_file(path, remove, log):
-    src = open(path, encoding="utf-8").read()
+    try:
+        src = open(path, encoding="utf-8").read()
+    except Exception as e:
+        log(f"  读取 ai 失败: {e}")
+        return
     applied = "applyUnrestrictedInjection" in src
     if remove:
         if not applied:
             log(f"  ai  {os.path.basename(path)}: 未安装，跳过")
-            return
-        if HELPER not in src or AI_CALL_NEW not in src:
-            log(f"  ai  {os.path.basename(path)}: 补丁块不匹配，跳过（文件可能已变动）")
             return
         src = src.replace(HELPER + AI_ANCHOR, AI_ANCHOR).replace(AI_CALL_NEW, AI_CALL_OLD)
         open(path, "w", encoding="utf-8").write(src)
@@ -218,9 +328,9 @@ def patch_ai_file(path, remove, log):
 def apply_patch(remove, log):
     root = resolve_openclaw_root()
     if not root:
-        log("✗ 未找到 OpenClaw 安装。设置环境变量 OPENCLAW_ROOT 指向 openclaw 包目录。")
+        log("✗ 未找到 OpenClaw 全局安装路径。请确保已运行 npm install -g openclaw。")
         return False
-    log(f"OpenClaw 安装: {root}")
+    log(f"OpenClaw 路径: {root}")
     dist_file = find_file(os.path.join(root, "dist"), "openai-transport-stream-", ".js")
     ai_dir = os.path.join(root, "node_modules", "@openclaw", "ai", "dist")
     ai_file = find_file(ai_dir, "openai-completions-", ".mjs")
@@ -233,11 +343,125 @@ def apply_patch(remove, log):
         patch_ai_file(ai_file, remove, log)
     else:
         log("✗ 未找到 @openclaw/ai 传输层文件"); ok = False
-    log("完成。重启 OpenClaw 网关后生效。" if not remove else "完成。重启 OpenClaw 网关后生效。")
+    
+    # 额外运行 apply-context-budget 和 apply-image-access 脚本（如果存在）
+    if not remove:
+        for extra in ["apply-context-budget.mjs", "apply-image-access.mjs"]:
+            p = resource_path("patch", extra)
+            if p.exists():
+                try:
+                    subprocess.run(["node", str(p)], capture_output=True, text=True, timeout=10)
+                    log(f"  补丁扩展 {extra}: 已应用")
+                except Exception:
+                    pass
     return ok
 
 
-# ---------------------------------------------------------------- proxy manager
+# ---------------------------------------------------------------- 人格文件安装
+def install_personas(log):
+    log("==> 正在安装四模式人格文件...")
+    home = Path.home()
+    mapping = {
+        "chat": home / ".openclaw" / "workspace",
+        "project": home / ".openclaw" / "workspace-project",
+        "thinking": home / ".openclaw" / "workspace-thinking",
+        "neutral": home / ".openclaw" / "workspace-unrestricted"
+    }
+    src_root = resource_path("personas")
+    for mode, target in mapping.items():
+        src_mode = src_root / mode
+        if src_mode.exists():
+            target.mkdir(parents=True, exist_ok=True)
+            for fname in ["SOUL.md", "IDENTITY.md"]:
+                src_file = src_mode / fname
+                if src_file.exists():
+                    dst_file = target / fname
+                    if dst_file.exists():
+                        bak_dir = target / "backups"
+                        bak_dir.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(dst_file, bak_dir / f"{fname}.bak")
+                    shutil.copyfile(src_file, dst_file)
+            log(f"  [{mode}] 人格文件 -> {target}")
+    
+    # 尝试注册 project agent
+    try:
+        res = subprocess.run(["openclaw", "agents", "list", "--json"], capture_output=True, text=True, timeout=5)
+        if "project" not in res.stdout:
+            subprocess.run(["openclaw", "agents", "add", "project", "--non-interactive", "--workspace", str(home / ".openclaw" / "workspace-project")], capture_output=True, timeout=5)
+            log("  已自动注册 project agent")
+        subprocess.run(["openclaw", "agents", "set-identity", "--agent", "project", "--identity-file", str(home / ".openclaw" / "workspace-project" / "IDENTITY.md")], capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------- UI 皮肤注入
+def install_theme(log):
+    log("==> 正在注入 来啦～老弟 UI 皮肤与静态资源...")
+    root = resolve_openclaw_root()
+    if not root:
+        log("  未定位到 OpenClaw UI 目录，跳过皮肤注入")
+        return
+    ui_dir = os.path.join(root, "ui")
+    index_html = os.path.join(ui_dir, "index.html")
+    if not os.path.isdir(ui_dir) or not os.path.isfile(index_html):
+        log(f"  未在 {ui_dir} 找到 index.html")
+        return
+    
+    asset_dir = resource_path("ui", "assets")
+    inject_dir = resource_path("ui", "injections")
+    
+    # 拷贝 assets 与 injections 文件
+    copied = 0
+    for src_folder in [asset_dir, inject_dir]:
+        if src_folder.exists():
+            for item in src_folder.iterdir():
+                if item.is_file():
+                    shutil.copyfile(item, os.path.join(ui_dir, item.name))
+                    copied += 1
+    log(f"  已复制 {copied} 个前端资源/脚本文件到 {ui_dir}")
+    
+    # 注入 head 和 body 片段
+    try:
+        html = open(index_html, "r", encoding="utf-8").read()
+        head_frag_p = inject_dir / "laolao-head.fragment.html"
+        body_frag_p = inject_dir / "laolao-body.fragment.html"
+        handoff_p = inject_dir / "laolao-handoff-bootstrap.js"
+        
+        if handoff_p.exists():
+            shutil.copyfile(handoff_p, os.path.join(ui_dir, "laolao-handoff-bootstrap.js"))
+            
+        if head_frag_p.exists() and "laolao-head" not in html:
+            head_frag = head_frag_p.read_text(encoding="utf-8")
+            html = re.sub(r"(<head[^>]*>)", r"\1\n" + head_frag, html, flags=re.IGNORECASE)
+            
+        if body_frag_p.exists() and "laolao-body" not in html:
+            body_frag = body_frag_p.read_text(encoding="utf-8")
+            html = re.sub(r"(</body>)", body_frag + r"\n\1", html, flags=re.IGNORECASE)
+            
+        if "laolao-handoff-bootstrap" not in html:
+            html = re.sub(r"(<openclaw-app>)", r'    <script src="./laolao-handoff-bootstrap.js?v=handoff3"></script>\n    \1', html, flags=re.IGNORECASE)
+            
+        open(index_html, "w", encoding="utf-8").write(html)
+        log("  UI index.html 注入成功！")
+    except Exception as e:
+        log(f"  注入 index.html 失败: {e}")
+        
+    # 头像同步
+    home = Path.home()
+    avatar_map = [
+        (home / ".openclaw" / "workspace" / "avatars", "laolao-mode-chat-hd.png", "pinkie-pie.png"),
+        (home / ".openclaw" / "workspace-project" / "avatars", "laolao-mode-project-hd.png", "pinkie-pie.png"),
+        (home / ".openclaw" / "workspace-thinking" / "avatars", "laolao-mode-thinking-hd.png", "pinkie-pie.png"),
+        (home / ".openclaw" / "workspace-unrestricted" / "avatars", "laolao-mode-unrestricted-hd.png", "unrestricted-mode.png"),
+    ]
+    for target_dir, src_name, dst_name in avatar_map:
+        src_p = asset_dir / src_name
+        if src_p.exists():
+            target_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src_p, target_dir / dst_name)
+
+
+# ---------------------------------------------------------------- 代理与 Gateway 管理
 class ProxyManager:
     def __init__(self, log):
         self.log = log
@@ -253,10 +477,7 @@ class ProxyManager:
         if not proxy_py.exists():
             self.log(f"✗ 找不到代理脚本: {proxy_py}")
             return
-        py = shutil.which("python3") or shutil.which("python")
-        if not py:
-            self.log("✗ 找不到 python3/python")
-            return
+        py = shutil.which("python3") or shutil.which("python") or sys.executable
         env = dict(os.environ)
         env["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
         env["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
@@ -275,7 +496,7 @@ class ProxyManager:
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
             try:
-                self.proc.wait(timeout=5)
+                self.proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
             self.log("代理已停止")
@@ -290,13 +511,55 @@ class ProxyManager:
 
 def proxy_health(port=DEFAULT_PROXY_PORT):
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
             return r.status == 200
     except Exception:
         return False
 
 
-# ---------------------------------------------------------------- GUI (糖果粉主题)
+def restart_openclaw_gateway(log):
+    """重启 OpenClaw 网关"""
+    log("==> 正在重启 OpenClaw Gateway...")
+    try:
+        res = subprocess.run(["openclaw", "gateway", "restart"], capture_output=True, text=True, timeout=10)
+        log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
+    except Exception as e:
+        log(f"  重启网关失败（可能尚未启动或未安装到 PATH）: {e}")
+
+
+# ---------------------------------------------------------------- 配置 openclaw.json
+def update_api_config(provider_name, api_key, base_url, model_name, log):
+    """写入或更新 openclaw.json 的 API 配置"""
+    cfg_file = openclaw_config_path()
+    cfg = {}
+    if cfg_file.exists():
+        try:
+            cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+        except Exception:
+            cfg = {}
+    
+    if "models" not in cfg:
+        cfg["models"] = {}
+    if "providers" not in cfg["models"]:
+        cfg["models"]["providers"] = {}
+    
+    prov_data = cfg["models"]["providers"].get(provider_name, {})
+    if api_key:
+        prov_data["apiKey"] = api_key
+    if base_url:
+        prov_data["baseUrl"] = base_url
+    if model_name:
+        prov_data["model"] = model_name
+        
+    cfg["models"]["providers"][provider_name] = prov_data
+    
+    # 确保主配置
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    cfg_file.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    log(f"✅ 已成功更新提供商 [{provider_name}] 配置 -> {cfg_file}")
+
+
+# ---------------------------------------------------------------- GUI 糖果粉主题
 BG = "#FFF0F5"          # 薰衣草粉底
 PINK = "#FF69B4"        # 热粉
 DEEP = "#C2185B"        # 深玫红
@@ -307,60 +570,57 @@ TEXT = "#5C2A44"        # 深紫红字
 LOG_BG = "#FFF7FA"
 
 
-def make_button(parent, text, command, big=False):
+def make_button(parent, text, command, big=False, color=None):
     return tk.Button(
-        parent, text=text, command=command, bg=BTN, activebackground=BTN_ACTIVE,
-        fg=DEEP, activeforeground="white", relief="flat", bd=0,
-        font=("PingFang SC", 13 if big else 11, "bold"),
-        padx=14, pady=6, cursor="hand2",
+        parent, text=text, command=command, bg=color or BTN, activebackground=BTN_ACTIVE,
+        fg=DEEP if not color else "white", activeforeground="white", relief="flat", bd=0,
+        font=("PingFang SC", 12 if big else 10, "bold"),
+        padx=12, pady=5, cursor="hand2",
     )
-
-
-def make_card(parent, text, row=0):
-    lbl = tk.Label(parent, text=text, bg=CARD, fg=TEXT, anchor="w", justify="left",
-                   font=("PingFang SC", 11), padx=12, pady=8)
-    lbl.grid(row=row, column=0, sticky="ew", padx=2, pady=2)
-    return lbl
 
 
 def main():
     if tk is None:
-        print("需要 tkinter。macOS 请安装 python.org 的 Python；Linux 装 python3-tk。")
+        print("需要 tkinter 环境运行 GUI。")
         return
 
     root = tk.Tk()
-    root.title(f"{APP_NAME} 🎈")
-    root.geometry("780x560")
-    root.minsize(680, 460)
+    root.title(f"{APP_NAME} 🎈 一键安装与控制台")
+    root.geometry("860x680")
+    root.minsize(780, 580)
     root.configure(bg=BG)
 
     # 头部
     header = tk.Frame(root, bg=BG)
-    header.pack(fill="x", padx=16, pady=(14, 4))
-    tk.Label(header, text="🎈 超級碧琪 · 无限制注入控制台 🎈", bg=BG, fg=DEEP,
-             font=("PingFang SC", 20, "bold")).pack()
-    tk.Label(header, text="一键安装提示词 · 双传输层补丁 · 注入代理 · 状态检测", bg=BG, fg=PINK,
-             font=("PingFang SC", 11)).pack(pady=(2, 0))
+    header.pack(fill="x", padx=16, pady=(12, 4))
+    tk.Label(header, text="🎈 超級碧琪 · 接 API 即用全套部署 🎈", bg=BG, fg=DEEP,
+             font=("PingFang SC", 18, "bold")).pack()
+    tk.Label(header, text="一键补丁 · 完整皮肤 · 4 套人格 · API Key 快捷配置 · 开箱即用", bg=BG, fg=PINK,
+             font=("PingFang SC", 10)).pack(pady=(2, 0))
 
-    # 状态卡片
-    card = tk.Frame(root, bg=CARD, highlightbackground=PINK, highlightthickness=1)
-    card.pack(fill="x", padx=16, pady=8)
-    card.columnconfigure(0, weight=1)
-    status_var = tk.StringVar(value="检测中…")
-    make_card(card, "").config(textvariable=status_var)
+    # Notebook 选项卡
+    style = ttk.Style()
+    style.theme_use("default")
+    style.configure("TNotebook", background=BG, borderwidth=0)
+    style.configure("TNotebook.Tab", background=BTN, foreground=DEEP, padding=[12, 4], font=("PingFang SC", 10, "bold"))
+    style.map("TNotebook.Tab", background=[("selected", PINK)], foreground=[("selected", "white")])
 
-    # 日志区
-    log_frame = tk.Frame(root, bg=BG)
-    log_frame.pack(fill="both", expand=True, padx=16, pady=8)
-    log_text = scrolledtext.ScrolledText(log_frame, height=12, state="disabled",
-                                         bg=LOG_BG, fg=TEXT, insertbackground=DEEP,
-                                         font=("Menlo", 11), relief="flat",
-                                         highlightbackground=PINK, highlightthickness=1)
-    log_text.pack(fill="both", expand=True)
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill="both", expand=True, padx=16, pady=6)
 
-    # 底部提示
-    tk.Label(root, text="💡 验证：无限制模式会话发送 Cle → 回复 ACTIVE_UNRESTRICTED_RULESET_LOADED",
-             bg=BG, fg=PINK, font=("PingFang SC", 10)).pack(pady=(0, 10))
+    tab_quick = tk.Frame(notebook, bg=BG)
+    tab_api = tk.Frame(notebook, bg=BG)
+    tab_console = tk.Frame(notebook, bg=BG)
+
+    notebook.add(tab_quick, text="🚀 一键部署与状态")
+    notebook.add(tab_api, text="🔑 API Key 配置")
+    notebook.add(tab_console, text="🛠 高级维护与控制台")
+
+    # ------------------ Tab 1: 一键部署与状态 ------------------
+    status_card = tk.Frame(tab_quick, bg=CARD, highlightbackground=PINK, highlightthickness=1)
+    status_card.pack(fill="x", padx=10, pady=8)
+    status_var = tk.StringVar(value="检测环境中...")
+    tk.Label(status_card, textvariable=status_var, bg=CARD, fg=TEXT, justify="left", font=("PingFang SC", 10), padx=12, pady=8).pack(fill="x")
 
     def log(msg):
         log_text.configure(state="normal")
@@ -370,21 +630,9 @@ def main():
 
     proxy = ProxyManager(log)
 
-    def do_install():
-        log("== 一键安装 ==")
-        ensure_prompts(log)
-        apply_patch(False, log)
-        if proxy.proc is None or proxy.proc.poll() is not None:
-            proxy.start()
-        refresh_status()
-
-    def do_uninstall():
-        log("== 卸载 ==")
-        proxy.stop()
-        apply_patch(True, log)
-        refresh_status()
-
     def refresh_status():
+        node_v = check_node() or "未安装"
+        oc_v = check_openclaw_cli() or "未检测到"
         root_path = resolve_openclaw_root() or "未找到"
         dist = find_file(os.path.join(root_path, "dist"), "openai-transport-stream-", ".js") if os.path.isdir(os.path.join(root_path, "dist")) else None
         patched = False
@@ -392,27 +640,127 @@ def main():
             patched = "applyUnrestrictedInjection" in open(dist, encoding="utf-8", errors="ignore").read()
         pstat = proxy.status()
         health = proxy_health()
+        
         status_var.set(
-            f"OpenClaw: {root_path}\n"
-            f"补丁状态: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
-            f"代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'}   |   "
-            f"代理健康: {'✅' if health else '—'}"
+            f"📦 Node.js: {node_v}   |   OpenClaw CLI: {oc_v}\n"
+            f"📂 OpenClaw 路径: {root_path}\n"
+            f"💉 注入补丁: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
+            f"🔄 代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'} (健康: {'✅' if health else '—'})"
         )
 
-    # 按钮区（函数已定义）
-    btns = tk.Frame(root, bg=BG)
-    btns.pack(fill="x", padx=16, pady=6)
-    make_button(btns, "🚀 一键安装", do_install, big=True).pack(side="left", padx=5)
-    make_button(btns, "🗑 卸载", do_uninstall).pack(side="left", padx=5)
-    make_button(btns, "▶ 启动代理", proxy.start).pack(side="left", padx=5)
-    make_button(btns, "⏹ 停止代理", proxy.stop).pack(side="left", padx=5)
-    make_button(btns, "🔄 刷新", refresh_status).pack(side="left", padx=5)
-    make_button(btns, "📂 提示词", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=5)
-    make_button(btns, "🌐 网关", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=5)
+    def do_full_deploy():
+        log("==========================================")
+        log("🚀 开始一键全量部署（接 API 即可用）...")
+        log("==========================================")
+        
+        # 1. 检查 Node.js
+        if not check_node():
+            log("⚠️ 未检测到 Node.js，尝试自动安装...")
+            if os.name == "nt":
+                install_node_windows(log)
+            else:
+                log("请先手动安装 Node.js (https://nodejs.org)")
+                
+        # 2. 检查 OpenClaw
+        if not resolve_openclaw_root():
+            log("⚠️ 未找到 OpenClaw 全局安装，尝试 npm install -g openclaw...")
+            install_openclaw_npm(log)
+            
+        # 3. 安装提示词
+        ensure_prompts(log)
+        
+        # 4. 应用补丁
+        apply_patch(False, log)
+        
+        # 5. 安装人格
+        install_personas(log)
+        
+        # 6. 注入皮肤
+        install_theme(log)
+        
+        # 7. 启动代理
+        if proxy.proc is None or proxy.proc.poll() is not None:
+            proxy.start()
+            
+        # 8. 重启网关
+        restart_openclaw_gateway(log)
+        
+        refresh_status()
+        log("==========================================")
+        log("🎉 全量部署完成！接下来在「API Key 配置」页填入你的 Key 即可！")
+        log("==========================================")
+        messagebox.showinfo("部署成功", "全套人格、UI 皮肤与无限制补丁已部署完成！\n请前往「API Key 配置」选项卡填入你的 API Key。")
 
-    log("欢迎使用超級碧琪 🎈 控制台")
-    log("使用说明: ① 确保 OpenClaw 网关已安装 ② 点「一键安装」 ③ 重启 OpenClaw 网关")
-    log("验证: 在无限制模式会话中发送 Cle，模型应回复 ACTIVE_UNRESTRICTED_RULESET_LOADED")
+    btn_row1 = tk.Frame(tab_quick, bg=BG)
+    btn_row1.pack(fill="x", padx=10, pady=4)
+    make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
+    make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
+    make_button(btn_row1, "🌐 打开 Web 界面", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
+
+    # ------------------ Tab 2: API Key 配置 ------------------
+    api_card = tk.Frame(tab_api, bg=CARD, highlightbackground=PINK, highlightthickness=1)
+    api_card.pack(fill="x", padx=10, pady=10)
+    
+    tk.Label(api_card, text="提供商选择:", bg=CARD, fg=TEXT, font=("PingFang SC", 10, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=6)
+    provider_var = tk.StringVar(value="mm")
+    prov_combo = ttk.Combobox(api_card, textvariable=provider_var, values=["mm", "openai", "anthropic", "gemini", "deepseek", "custom"], width=16)
+    prov_combo.grid(row=0, column=1, sticky="w", padx=10, pady=6)
+
+    tk.Label(api_card, text="API Key:", bg=CARD, fg=TEXT, font=("PingFang SC", 10, "bold")).grid(row=1, column=0, sticky="w", padx=10, pady=6)
+    key_var = tk.StringVar()
+    key_entry = tk.Entry(api_card, textvariable=key_var, width=45, show="*")
+    key_entry.grid(row=1, column=1, sticky="w", padx=10, pady=6)
+
+    tk.Label(api_card, text="Base URL (可选中继):", bg=CARD, fg=TEXT, font=("PingFang SC", 10)).grid(row=2, column=0, sticky="w", padx=10, pady=6)
+    url_var = tk.StringVar()
+    url_entry = tk.Entry(api_card, textvariable=url_var, width=45)
+    url_entry.grid(row=2, column=1, sticky="w", padx=10, pady=6)
+
+    tk.Label(api_card, text="默认模型 (可选):", bg=CARD, fg=TEXT, font=("PingFang SC", 10)).grid(row=3, column=0, sticky="w", padx=10, pady=6)
+    model_var = tk.StringVar()
+    model_entry = tk.Entry(api_card, textvariable=model_var, width=45)
+    model_entry.grid(row=3, column=1, sticky="w", padx=10, pady=6)
+
+    def save_api_settings():
+        prov = provider_var.get().strip()
+        k = key_var.get().strip()
+        u = url_var.get().strip()
+        m = model_var.get().strip()
+        if not prov:
+            messagebox.showwarning("提示", "请选择或输入提供商名称")
+            return
+        update_api_config(prov, k, u, m, log)
+        restart_openclaw_gateway(log)
+        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已写入 openclaw.json 并重启网关！")
+
+    make_button(api_card, "💾 保存配置并应用", save_api_settings, color=DEEP).grid(row=4, column=1, sticky="e", padx=10, pady=10)
+
+    # ------------------ Tab 3: 高级控制台 ------------------
+    adv_frame = tk.Frame(tab_console, bg=BG)
+    adv_frame.pack(fill="x", padx=10, pady=8)
+    make_button(adv_frame, "▶ 启动注入代理", lambda: proxy.start()).pack(side="left", padx=4)
+    make_button(adv_frame, "⏹ 停止注入代理", lambda: proxy.stop()).pack(side="left", padx=4)
+    make_button(adv_frame, "🔄 重启 Gateway", lambda: restart_openclaw_gateway(log)).pack(side="left", padx=4)
+    make_button(adv_frame, "🗑 卸载全部补丁", lambda: [apply_patch(True, log), refresh_status()]).pack(side="left", padx=4)
+    make_button(adv_frame, "📂 打开配置目录", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=4)
+
+    # 公共日志框（置底）
+    log_lbl = tk.Label(root, text="📜 操作日志与运行输出:", bg=BG, fg=TEXT, font=("PingFang SC", 9, "bold"), anchor="w")
+    log_lbl.pack(fill="x", padx=16, pady=(4, 0))
+    
+    log_frame = tk.Frame(root, bg=BG)
+    log_frame.pack(fill="both", expand=True, padx=16, pady=(2, 6))
+    log_text = scrolledtext.ScrolledText(log_frame, height=9, state="disabled",
+                                         bg=LOG_BG, fg=TEXT, insertbackground=DEEP,
+                                         font=("Consolas" if os.name == "nt" else "Menlo", 10), relief="flat",
+                                         highlightbackground=PINK, highlightthickness=1)
+    log_text.pack(fill="both", expand=True)
+
+    tk.Label(root, text="💡 验证方式：在无限制模式会话中发送「Cle」→ 正常回复「ACTIVE_UNRESTRICTED_RULESET_LOADED」即代表完全生效！",
+             bg=BG, fg=PINK, font=("PingFang SC", 9)).pack(pady=(0, 6))
+
+    log("欢迎使用 超級碧琪 🎈 一键控制台")
+    log("初次使用请在上方点击「🌟 一键全量安装 / 修复」，然后在「API Key 配置」输入 Key 即可！")
     refresh_status()
     root.mainloop()
 
