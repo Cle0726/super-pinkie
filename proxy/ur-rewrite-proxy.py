@@ -244,6 +244,9 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
                 self.relay(response)
                 return
             except (OSError, TimeoutError, http.client.HTTPException) as error:
+                if getattr(self, 'response_started', False):
+                    self.close_connection = True
+                    return
                 last_error = error
                 if attempt < MAX_ATTEMPTS:
                     time.sleep(retry_delay(attempt))
@@ -262,6 +265,8 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
             self.log_message("upstream unavailable after %d attempts: %s", MAX_ATTEMPTS, type(last_error).__name__)
 
     def relay(self, response):
+        # After headers/partial output, retrying could repeat an agent action.
+        self.response_started = True
         self.send_response(response.status, response.reason)
         for key, value in response.getheaders():
             if key.lower() not in HOP_BY_HOP_HEADERS:
@@ -270,7 +275,7 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.close_connection = True
         while True:
-            chunk = response.read(64 * 1024)
+            chunk = response.read1(64 * 1024)
             if not chunk:
                 break
             self.wfile.write(chunk)

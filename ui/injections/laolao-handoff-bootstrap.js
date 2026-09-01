@@ -34,8 +34,6 @@
   if (title) title.textContent = details.label;
 
   fill.style.transition = "none";
-  fill.style.width = `${carriedProgress}%`;
-  percentage.textContent = `${carriedProgress}%`;
+  window.PinkieMotion.progress(fill, percentage, progressbar, carriedProgress);
   message.textContent = details.waiting;
-  progressbar?.setAttribute("aria-valuenow", String(carriedProgress));
 })();

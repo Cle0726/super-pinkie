@@ -95,6 +95,7 @@ body::before {
    place instead of appearing in a single hard frame. */
 html[data-laolao-mode-enter="1"] body::before {
   animation: laolao-wallpaper-enter 980ms ease-out both;
+  will-change: transform, opacity;
 }
 
 html[data-laolao-mode-enter="1"] .agent-chat__welcome,
@@ -107,8 +108,8 @@ html[data-laolao-mode-enter="1"] [data-laolao-mode-avatar] {
 }
 
 @keyframes laolao-wallpaper-enter {
-  0% { opacity: 0; transform: scale(1.018); filter: saturate(0.90) brightness(1.04); }
-  100% { opacity: 0.52; transform: scale(1); filter: saturate(1) brightness(1); }
+  0% { opacity: 0.38; transform: scale(1.012); }
+  100% { opacity: 0.52; transform: scale(1); }
 }
 
 @keyframes laolao-glass-enter {
@@ -119,6 +120,34 @@ html[data-laolao-mode-enter="1"] [data-laolao-mode-avatar] {
 @keyframes laolao-avatar-enter {
   0% { opacity: 0; transform: scale(0.88) rotate(-2deg); }
   100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* The standalone App already has a transparent native window. Keep the glass
+   density fixed while WebKit restores or recomposites its remote layer tree.
+   Movement remains, but no full wallpaper/panel opacity pulse is allowed. */
+html[data-pinkie-native-glass="1"][data-laolao-mode-enter="1"] body::before {
+  animation-name: laolao-native-wallpaper-enter;
+  will-change: transform;
+}
+
+html[data-pinkie-native-glass="1"][data-laolao-mode-enter="1"] .agent-chat__welcome,
+html[data-pinkie-native-glass="1"][data-laolao-mode-enter="1"] .agent-chat__input {
+  animation-name: laolao-native-glass-enter;
+}
+
+html[data-pinkie-native-glass="1"] .shell,
+html[data-pinkie-native-glass="1"] .card.chat {
+  animation: none !important;
+}
+
+@keyframes laolao-native-wallpaper-enter {
+  0% { opacity: 0.52; transform: scale(1.012); }
+  100% { opacity: 0.52; transform: scale(1); }
+}
+
+@keyframes laolao-native-glass-enter {
+  0% { opacity: 1; transform: translateY(9px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -144,9 +173,14 @@ html[data-laolao-mode-enter="1"] [data-laolao-mode-avatar] {
 .topbar,
 .sidebar,
 .chat-workspace-rail {
-  background: rgba(255, 252, 253, 0.46) !important;
+  /* 0.46 在壁纸复杂的区域会"消失"，尤其 WKWebView backdrop-filter 不稳时。
+     提到 0.82 保留玻璃感的同时确保 session 文字始终可读。 */
+  background: rgba(255, 252, 253, 0.82) !important;
   backdrop-filter: blur(24px) saturate(118%);
   -webkit-backdrop-filter: blur(24px) saturate(118%);
+  /* 防止 wallpaper 装饰层在某些模式下覆盖到侧栏上方 */
+  position: relative;
+  z-index: 2;
 }
 
 .topbar {
@@ -177,10 +211,10 @@ html[data-laolao-mode-enter="1"] [data-laolao-mode-avatar] {
 .agent-chat__input {
   border: 1px solid rgba(217, 89, 143, 0.25) !important;
   border-radius: 20px !important;
-  background: rgba(255, 253, 253, 0.58) !important;
+  background: rgba(255, 253, 253, 0.34) !important;
   box-shadow: 0 12px 32px rgba(149, 54, 93, 0.1) !important;
-  backdrop-filter: blur(24px) saturate(118%);
-  -webkit-backdrop-filter: blur(24px) saturate(118%);
+  backdrop-filter: blur(3px) saturate(108%);
+  -webkit-backdrop-filter: blur(3px) saturate(108%);
 }
 
 .agent-chat__suggestion,
@@ -371,26 +405,50 @@ img.chat-avatar.assistant {
   display: none !important;
 }
 
-.laolao-mode-switcher {
+.laolao-mode-switcher,
+.laolao-mode-menu__option {
   position: relative;
-  width: 144px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 150px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid rgba(255,255,255,.72);
+  border-radius: 18px;
+  color: var(--mode-button-ink, #ad4f7f);
   cursor: pointer;
   overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.laolao-mode-switcher img {
+.laolao-mode-switcher img,
+.laolao-mode-menu__option img {
   display: block;
-  width: 144px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  image-rendering: auto;
+  box-shadow: 0 2px 9px #c06a9930;
   pointer-events: none;
+  -webkit-user-drag: none;
+  transition: transform .25s ease;
 }
 
-.laolao-mode-switcher:hover img {
-  filter: saturate(1.06) brightness(1.015);
+.laolao-mode-button__label { font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; letter-spacing: .3px; white-space: nowrap; }
+.laolao-mode-button__arrow { margin-left: auto; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: .6; transition: transform .2s; }
+.laolao-mode-switcher[aria-expanded="true"] .laolao-mode-button__arrow { transform: rotate(225deg); }
+[data-mode="project"] { --mode-button-ink: #3e8584; }
+[data-mode="thinking"] { --mode-button-ink: #965b98; }
+[data-mode="unrestricted"] { --mode-button-ink: #b15c86; }
+
+@media (hover: hover) and (pointer: fine) {
+  .laolao-mode-switcher:hover img,
+  .laolao-mode-menu__option:hover img { transform: translateY(-2px) rotate(-5deg); }
 }
 
 .laolao-mode-switcher:focus-visible {
@@ -403,37 +461,22 @@ img.chat-avatar.assistant {
   position: fixed;
   z-index: 10020;
   display: grid;
-  gap: 4px;
-  min-width: 156px;
-  padding: 6px;
-  border: 1px solid rgba(206, 92, 145, 0.26);
-  border-radius: 15px;
-  background: rgba(255, 248, 252, 0.90);
-  box-shadow: 0 12px 30px rgba(98, 30, 64, 0.18);
-  backdrop-filter: blur(16px) saturate(1.12);
-  -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  gap: 6px;
+  min-width: 150px;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.78);
+  border-radius: 23px;
+  background: linear-gradient(180deg,#fffafcd9,#fcecf3a6);
+  box-shadow: 0 12px 30px rgba(98, 30, 64, 0.10), inset 0 1px 0 #fff;
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
 }
 
-.laolao-mode-menu__option {
-  width: 144px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 18px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.laolao-mode-menu__option:hover,
-.laolao-mode-menu__option[aria-checked="true"] {
-  background: rgba(229, 114, 164, 0.10);
-}
-
-.laolao-mode-menu__option img {
-  display: block;
-  width: 144px;
-  height: 36px;
-  pointer-events: none;
+.laolao-mode-menu__option[aria-checked="true"] .laolao-mode-button__arrow {
+  width: 4px;
+  height: 8px;
+  transform: rotate(45deg) translateY(-1px);
+  opacity: 1;
 }
 
 /* Tactile glass controls: restrained macOS-like lift, press and focus feedback
@@ -646,6 +689,64 @@ img.chat-avatar.assistant {
   }
 }
 
+/* Party-entry material shared by all four modes. Inputs/messages are excluded.
+   No overlay layer: the editor and native window drag targets stay clickable. */
+:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger) {
+  background: linear-gradient(180deg,rgba(255,250,253,.78),rgba(255,245,251,.60) 40%,rgba(251,220,241,.33)) !important;
+  border-color: rgba(255,255,255,.72) !important;
+  color: var(--mode-button-ink, #ad4f7f) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.84), inset 0 -1px 0 rgba(199,139,174,.10), 0 3px 10px rgba(134,75,112,.06) !important;
+  backdrop-filter: blur(8px) saturate(1.08);
+  -webkit-backdrop-filter: blur(8px) saturate(1.08);
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):hover {
+    background: linear-gradient(180deg,#fffafdee,#fff5fbc9 60%,#fbe5f1a6) !important;
+    border-color: rgba(255,255,255,.94) !important;
+    box-shadow: inset 0 1px 0 #fff, 0 5px 15px rgba(152,73,115,.11) !important;
+    transform: translateY(-1px);
+  }
+}
+:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):active {
+  background: linear-gradient(180deg,#f8e7f1a6,#fff5fbbd) !important;
+  box-shadow: inset 0 1px 3px rgba(141,77,113,.10), 0 1px 4px rgba(152,73,115,.05) !important;
+  transform: translateY(1px) scale(.985);
+}
+:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):focus-visible {
+  outline: 2px solid rgba(204,117,163,.65) !important;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger), .laolao-mode-switcher img, .laolao-mode-menu__option img, .laolao-mode-button__arrow {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Quiet utility controls: keep the icon, reveal the glass edge on interaction.
+   Mode selectors/party entrance retain their artwork; recording/stop/danger
+   states retain their status treatment. No overlay or pointer tracking. */
+:is(.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.sidebar-session-sort,.sidebar-recent-sessions__all,.laolao-group__toggle,.laolao-group__action,.laolao-row-btn,.session-action,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):not(.chat-send-btn--stop) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.sidebar-session-sort,.sidebar-recent-sessions__all,.laolao-group__toggle,.laolao-group__action,.laolao-row-btn,.session-action,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):not(.chat-send-btn--stop):hover {
+    background: rgba(255,250,253,.18) !important;
+    border-color: rgba(255,255,255,.58) !important;
+    box-shadow: inset 0 0 0 1px rgba(217,131,175,.20) !important;
+    transform: none !important;
+  }
+}
+:is(.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.sidebar-session-sort,.sidebar-recent-sessions__all,.laolao-group__toggle,.laolao-group__action,.laolao-row-btn,.session-action,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):not(.chat-send-btn--stop):focus-visible {
+  outline: 2px solid rgba(204,117,163,.65) !important;
+  outline-offset: 2px;
+  background: rgba(255,250,253,.18) !important;
+}
+
 ::selection {
   background: #f9b9d2;
   color: #3f1d30;
@@ -657,6 +758,88 @@ img.chat-avatar.assistant {
 .chat-tool-card__preview-image,
 .cm-image img {
   cursor: zoom-in !important;
+}
+
+/* Real public work stream. These selectors decorate OpenClaw's native
+   incremental text, tool lifecycle and media nodes; no fake steps are added. */
+.pinkie-public-progress .chat-bubble.streaming {
+  position: relative;
+  animation: none !important;
+  border-color: rgba(214, 93, 151, 0.32) !important;
+  box-shadow: inset 3px 0 0 rgba(220, 91, 151, 0.54), 0 8px 25px rgba(122, 54, 91, 0.05) !important;
+}
+
+.pinkie-public-progress .chat-bubble.streaming::after {
+  content: "实时输出中";
+  display: inline-flex;
+  align-items: center;
+  margin-top: 9px;
+  padding: 2px 8px;
+  border: 1px solid rgba(216, 105, 158, 0.20);
+  border-radius: 999px;
+  color: #ad6086;
+  background: rgba(255, 247, 251, 0.32);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.pinkie-public-progress .chat-group.assistant:has(+ .chat-group--activity) .chat-bubble:not(.streaming)::before {
+  content: "阶段说明";
+  display: block;
+  margin-bottom: 6px;
+  color: #a86b89;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+}
+
+.pinkie-public-progress .chat-activity-group,
+.pinkie-public-progress .chat-tool-msg-collapse {
+  overflow: hidden;
+  border: 1px solid rgba(210, 116, 163, 0.20);
+  border-radius: 16px;
+  background: rgba(255, 250, 253, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
+}
+
+.pinkie-public-progress .chat-activity-group__summary,
+.pinkie-public-progress .chat-tool-msg-summary {
+  min-height: 38px;
+  padding-inline: 12px;
+  background: transparent !important;
+}
+
+.pinkie-public-progress .chat-activity-group__body,
+.pinkie-public-progress .chat-tool-msg-body {
+  border-top: 1px solid rgba(210, 116, 163, 0.14);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.pinkie-public-progress .chat-tool-msg-summary--error,
+.pinkie-public-progress .chat-activity-group__summary--error {
+  color: var(--danger, #bd5169) !important;
+  background: rgba(196, 74, 104, 0.06) !important;
+}
+
+.pinkie-public-progress .chat-tool-card__preview[data-kind="image"] {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 14px;
+  background: rgba(255, 252, 253, 0.20);
+}
+
+.pinkie-public-progress .chat-tool-card__preview-image,
+.pinkie-public-progress .chat-message-image,
+.pinkie-public-progress .cm-image img {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pinkie-public-progress .chat-tool-card__preview-image:hover,
+  .pinkie-public-progress .chat-message-image:hover,
+  .pinkie-public-progress .cm-image img:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px rgba(74, 30, 54, 0.18);
+  }
 }
 
 .laolao-image-viewer {
@@ -718,7 +901,7 @@ img.chat-avatar.assistant {
   background: #fff8f3;
   opacity: 0;
   pointer-events: all;
-  transition: opacity 420ms ease;
+  transition: opacity 520ms cubic-bezier(.22,.61,.36,1);
 }
 
 .laolao-mode-transition::before {
@@ -742,6 +925,7 @@ img.chat-avatar.assistant {
 
 .laolao-mode-transition.is-visible .laolao-mode-transition__scene {
   animation: laolao-mode-scene-enter 3.8s ease-out both;
+  will-change: transform, opacity;
 }
 
 .laolao-mode-transition__sweep {
@@ -826,11 +1010,15 @@ img.chat-avatar.assistant {
   position: absolute;
   z-index: 1;
   inset: 0 auto 0 0;
-  width: 8%;
+  width: 100%;
+  transform: scaleX(.08);
+  transform-origin: left center;
+  overflow: hidden;
   border-radius: inherit;
   background: linear-gradient(90deg, #ef5d9c, #f791bf);
   box-shadow: 0 4px 14px rgba(231, 77, 145, 0.24);
-  transition: width 100ms linear;
+  transition: transform 140ms linear;
+  will-change: transform;
 }
 
 /* 唠嗑模式：糖果彩带在进度里自然流动，保留轻快感但不做廉价霓虹。 */
@@ -880,7 +1068,7 @@ img.chat-avatar.assistant {
 
 .laolao-mode-transition__fill::after {
   position: absolute;
-  inset: 0 auto 0 -42%;
+  inset: 0 auto 0 0;
   width: 36%;
   content: "";
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
@@ -917,8 +1105,8 @@ img.chat-avatar.assistant {
 }
 
 @keyframes laolao-mode-transition-shine {
-  0% { left: -42%; }
-  70%, 100% { left: 118%; }
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  70%, 100% { transform: translateX(330%) skewX(-18deg); }
 }
 
 @keyframes laolao-chat-progress-flow {
@@ -929,6 +1117,16 @@ img.chat-avatar.assistant {
 @keyframes laolao-chat-confetti {
   from { background-position: 0 0; }
   to { background-position: 70px 0; }
+}
+
+/* A gateway failure is UI feedback, not another in-character model reply. */
+.chat-bubble[data-pinkie-runtime-error="true"]::before {
+  content: "系统提示";
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted, #9d6e88);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 @keyframes laolao-thinking-progress-flow {
@@ -974,6 +1172,13 @@ img.chat-avatar.assistant {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .laolao-mode-transition, .laolao-mode-transition__fill {
+    transition: none !important;
+  }
+  .laolao-mode-transition__fill, .laolao-mode-transition__fill::before, .laolao-mode-transition__fill::after {
+    animation: none !important;
+    will-change: auto;
+  }
   .laolao-mode-transition__scene,
   .laolao-mode-transition__content {
     animation: none !important;
@@ -983,5 +1188,263 @@ img.chat-avatar.assistant {
 
   .laolao-mode-transition__sweep {
     display: none !important;
+  }
+}
+
+/* =========================================================
+   来啦～老弟：流式输出视觉增强 v3
+   配套脚本：ui/injections/laolao-stream-fx.js
+
+   v1（340ms fade-in + translateY + JS reflow）：太长太重，OpenClaw
+   每个 chunk 重建 markdown，所有元素都重新淡入，看起来像 PPT 逐张
+   切换。
+   v2（完全去掉过渡，只留光标）：文字直接弹出来，更生硬，用户反馈
+   "跟 PPT 有什么区别"。
+
+   v3 正解：保留过渡但做得快、做得轻——纯 CSS 自动触发（不用 JS 加
+   class），120ms 短到不会堆叠，只动 opacity 不动 transform（不产
+   生"幻灯片上推"感）。用 CSS 选择器自动作用于流式气泡的直接子
+   元素，元素创建时自动触发，不需要 JS 干预。
+   ========================================================= */
+
+/* 新内容快速淡入：opacity 0→1，120ms，ease-out。
+   120ms = 60fps 下 7 帧，快到不会堆叠（chunk 间隔 200-500ms），
+   但慢到肉眼能感知"有过渡"，不是硬弹出。
+   不用 transform/translateY——那个"上推"才是 v1 的 PPT 感来源。 */
+@keyframes pinkieStreamIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* CSS 选择器自动作用于流式气泡的直接子元素（段落、代码块、列表等）。
+   元素创建时自动触发动画，不需要 JS 加 class——避免 v1 的
+   remove→reflow→add 强制回流造成的卡顿。
+   排除光标本身，避免光标也被淡入。 */
+.chat-bubble[data-pinkie-streaming="true"] > *:not(.pinkie-stream-cursor) {
+  animation: pinkieStreamIn 120ms ease-out;
+}
+
+/* 光标柔和呼吸：正弦波，不是硬开关。
+   opacity 在 0.35 ~ 1.0 之间循环，1.2s 一个周期——
+   比 steps(1) 的硬闪烁更不打断阅读，但仍然清晰可见"还在写"。 */
+@keyframes pinkieCursorPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* 闪烁光标：贴在流式气泡末尾，跟随最后一个文本节点。
+   用 inline-block + translateZ(0) 强制独立合成层，避免文字
+   抖动。颜色取 --accent（粉色），与现有主色一致。 */
+.pinkie-stream-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  margin-left: 3px;
+  background: var(--accent, #e94f91);
+  border-radius: 2px;
+  vertical-align: text-bottom;
+  animation: pinkieCursorPulse 1.2s ease-in-out infinite;
+  transform: translateZ(0);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 偏好减弱动效的用户：淡入跳到终态，光标保持半透明静态。 */
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble[data-pinkie-streaming="true"] > *:not(.pinkie-stream-cursor) {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .pinkie-stream-cursor {
+    animation: none !important;
+    opacity: 0.6 !important;
+  }
+}
+
+/* =========================================================
+   来啦～老弟：聊天内链接就地预览（in-app link viewer）
+   配套脚本：ui/injections/laolao-link-viewer.js
+   解决 OpenClaw 给外链加 target="_blank" 但 WKUIDelegate 没实现
+   createWebView 导致点击被静默吞掉的问题。
+   ========================================================= */
+
+.laolao-link-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10001; /* 比 image-viewer 高一档，避免叠加时被遮 */
+  display: flex;
+  flex-direction: column;
+  background: rgba(54, 23, 42, 0.55);
+  opacity: 0;
+  backdrop-filter: blur(10px) saturate(110%);
+  -webkit-backdrop-filter: blur(10px) saturate(110%);
+  transition: opacity 180ms ease;
+}
+
+.laolao-link-viewer.is-open {
+  opacity: 1;
+}
+
+.laolao-link-viewer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 252, 253, 0.92);
+  border-bottom: 1px solid var(--border, rgba(217, 89, 143, 0.22));
+  flex-shrink: 0;
+}
+
+.laolao-link-viewer__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-strong, #805269);
+  font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  direction: ltr; /* URL 从左往右显示，避免阿拉伯/希伯来断字 */
+}
+
+.laolao-link-viewer__external,
+.laolao-link-viewer__close {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong, rgba(205, 70, 127, 0.38));
+  border-radius: 999px;
+  background: var(--accent-subtle, #ffe6f0);
+  color: var(--accent, #e94f91);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.laolao-link-viewer__external {
+  padding: 6px 14px;
+  font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+.laolao-link-viewer__external:hover {
+  background: var(--accent, #e94f91);
+  color: var(--accent-foreground, #ffffff);
+}
+
+.laolao-link-viewer__close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font: 500 22px/24px -apple-system, BlinkMacSystemFont, sans-serif;
+  display: grid;
+  place-items: center;
+}
+
+.laolao-link-viewer__close:hover {
+  background: var(--accent, #e94f91);
+  color: var(--accent-foreground, #ffffff);
+}
+
+.laolao-link-viewer__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  background: rgba(255, 253, 253, 0.96);
+}
+
+.laolao-link-viewer__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted-strong, #805269);
+  font: 500 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  pointer-events: none;
+}
+
+.laolao-link-viewer__loading::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  border: 2px solid var(--accent-muted, #f9b8d1);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: pinkieLinkSpinner 0.8s linear infinite;
+}
+
+@keyframes pinkieLinkSpinner {
+  to { transform: rotate(360deg); }
+}
+
+.laolao-link-viewer__iframe {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(255, 253, 253, 0.96);
+  display: none; /* load 事件触发后才显示 */
+}
+
+.laolao-link-viewer__fallback {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 28px;
+  text-align: center;
+  color: var(--muted-strong, #805269);
+  flex: 1 1 auto;
+}
+
+.laolao-link-viewer__fallback-icon {
+  font-size: 44px;
+  opacity: 0.85;
+}
+
+.laolao-link-viewer__fallback-title {
+  color: var(--text-strong, #3f1d30);
+  font: 600 17px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+.laolao-link-viewer__fallback-hint {
+  max-width: 460px;
+  font: 400 13px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  color: var(--muted, #a36b82);
+}
+
+.laolao-link-viewer__fallback-url {
+  width: min(560px, 90%);
+  padding: 9px 12px;
+  border: 1px solid var(--border, rgba(217, 89, 143, 0.22));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text, #623247);
+  font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  direction: ltr;
+  text-align: left;
+}
+
+.laolao-link-viewer__fallback-copy {
+  padding: 8px 22px;
+  border: 1px solid var(--accent, #e94f91);
+  border-radius: 999px;
+  background: var(--accent, #e94f91);
+  color: var(--accent-foreground, #ffffff);
+  cursor: pointer;
+  font: 500 13px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  transition: background 120ms ease;
+}
+
+.laolao-link-viewer__fallback-copy:hover {
+  background: var(--accent-hover, #d83f7f);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-link-viewer {
+    transition: none !important;
+  }
+  .laolao-link-viewer__loading::before {
+    animation: none !important;
   }
 }

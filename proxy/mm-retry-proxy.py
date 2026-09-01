@@ -463,6 +463,9 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                 self.relay(response)
                 return
             except (OSError, TimeoutError, http.client.HTTPException) as error:
+                if getattr(self, 'response_started', False):
+                    self.close_connection = True
+                    return
                 last_error = error
                 if attempt < MAX_ATTEMPTS:
                     time.sleep(retry_delay(attempt))
@@ -578,6 +581,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         return json.dumps(parsed, ensure_ascii=False).encode("utf-8")
 
     def relay_with_prefix(self, response, prefix):
+        self.response_started = True
         self.send_response(response.status, response.reason)
         for key, value in response.getheaders():
             if key.lower() not in HOP_BY_HOP_HEADERS:
@@ -589,7 +593,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
             self.wfile.write(prefix)
             self.wfile.flush()
         while True:
-            chunk = response.read(64 * 1024)
+            chunk = response.read1(64 * 1024)
             if not chunk:
                 break
             self.wfile.write(chunk)
@@ -618,6 +622,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def relay(self, response):
+        self.response_started = True
         self.send_response(response.status, response.reason)
         for key, value in response.getheaders():
             if key.lower() not in HOP_BY_HOP_HEADERS:
@@ -626,7 +631,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.close_connection = True
         while True:
-            chunk = response.read(64 * 1024)
+            chunk = response.read1(64 * 1024)
             if not chunk:
                 break
             self.wfile.write(chunk)

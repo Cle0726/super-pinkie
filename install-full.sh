@@ -138,6 +138,8 @@ else
 fi
 
 echo "==> 4/6 构建并安装超級碧琪.app"
+/usr/bin/python3 "$REPO_ROOT/services/party/setup.py"
+/usr/bin/python3 "$REPO_ROOT/services/project-scope/setup.py"
 chmod +x "$REPO_ROOT/desktop/macos/build.sh"
 PINKIE_BUILD_DIR="$STATE_ROOT/build" "$REPO_ROOT/desktop/macos/build.sh" >/dev/null
 SOURCE_APP="$STATE_ROOT/build/超級碧琪.app"

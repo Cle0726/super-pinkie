@@ -69,6 +69,8 @@ apply_ui_skin() {
     laolao-image-viewer.js \
     laolao-stream-fx.js \
     laolao-link-viewer.js \
+    laolao-tool-stream.js \
+    laolao-tool-stream.css \
     laolao-party-entry.js \
     laolao-party-avatar-v1.png \
     laolao-roundtable-entry.js \
@@ -173,6 +175,17 @@ apply_ui_skin() {
   # in-app 预览层，X-Frame-Options 拒绝嵌入时回退到复制网址。
   if ! grep -Fq './laolao-link-viewer.js' "$index_file"; then
     perl -0pi -e 's{</head>}{    <script defer src="./laolao-link-viewer.js?v=link1"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # Tool-stream：工具进度组自动展开成可见输出流 + 进行中指示 + 底部汇总。
+  # 纯 DOM 观察（不需抢在模块包之前），defer 即可；用户手动折叠后不再自动展开。
+  if ! grep -Fq './laolao-tool-stream.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-tool-stream.js?v=toolstream1"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-tool-stream.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 

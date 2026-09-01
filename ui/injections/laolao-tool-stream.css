@@ -1,0 +1,133 @@
+/* 工具流可见化：展开的工具进度组 → 可读输出流 */
+
+/* 组容器：去掉卡片感，变成一条流 */
+.chat-activity-group {
+  margin: 2px 0;
+}
+.chat-activity-group__summary {
+  opacity: 0.85;
+}
+.chat-activity-group__body {
+  margin: 4px 0 2px 15px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid rgba(217, 80, 141, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* 每条工具一行，去掉气泡外壳的厚重感 */
+.chat-activity-group__body .chat-bubble--tool-shell {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+.chat-activity-group__body .chat-tools-inline {
+  margin: 0 !important;
+}
+.chat-activity-group__body .chat-tool-msg-summary {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+.chat-activity-group__body .chat-tool-msg-summary:hover {
+  background: rgba(217, 80, 141, 0.07);
+}
+
+/* 工具类型色点 */
+.laolao-tool-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-radius: 50%;
+  background: #8b8b94;
+  align-self: center;
+}
+.laolao-tool-dot[data-kind="read"]    { background: #4f8fce; }
+.laolao-tool-dot[data-kind="write"]   { background: #9a6dd7; }
+.laolao-tool-dot[data-kind="edit"]    { background: #d9863d; }
+.laolao-tool-dot[data-kind="exec"]    { background: #3d9b83; }
+.laolao-tool-dot[data-kind="process"] { background: #6b9e4f; }
+.laolao-tool-dot[data-kind="search"]  { background: #c95c8e; }
+.laolao-tool-dot[data-kind="fetch"]   { background: #5aa3c9; }
+.laolao-tool-dot[data-kind="browser"] { background: #7d8fe0; }
+.laolao-tool-dot[data-kind="cron"]    { background: #b0893d; }
+.laolao-tool-dot[data-kind="image"]   { background: #cf6fb7; }
+.laolao-tool-dot[data-kind="memory"]  { background: #a276ac; }
+
+/* 详情（路径/命令）：等宽 + 省略 */
+.chat-activity-group__body .chat-tool-msg-summary__names {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 进行中：最后一项高亮 + 呼吸徽标 */
+.chat-tool-msg-summary.laolao-tool-active {
+  background: rgba(217, 80, 141, 0.1) !important;
+  box-shadow: inset 0 0 0 1px rgba(217, 80, 141, 0.18);
+}
+.laolao-tool-live-badge {
+  flex: none;
+  align-self: center;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(217, 80, 141, 0.14);
+  color: #d9508d;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  animation: laolaoToolLivePulse 1.1s ease-in-out infinite;
+}
+@keyframes laolaoToolLivePulse {
+  50% { opacity: 0.4; }
+}
+
+/* 底部汇总胶囊 */
+.laolao-tool-stream-footer {
+  align-self: center;
+  margin: 7px 0 3px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.12);
+  color: inherit;
+  font-size: 10.5px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.laolao-tool-stream-footer--live {
+  background: rgba(217, 80, 141, 0.12);
+  color: #c1467f;
+  opacity: 1;
+}
+
+/* 暗色模式微调 */
+html[data-theme-mode="dark"] .chat-activity-group__body {
+  border-left-color: rgba(230, 120, 170, 0.3);
+}
+html[data-theme-mode="dark"] .chat-activity-group__body .chat-tool-msg-summary:hover {
+  background: rgba(230, 120, 170, 0.12);
+}
+html[data-theme-mode="dark"] .chat-tool-msg-summary.laolao-tool-active {
+  background: rgba(230, 120, 170, 0.16) !important;
+}
+html[data-theme-mode="dark"] .laolao-tool-stream-footer {
+  background: rgba(255, 255, 255, 0.1);
+}
+html[data-theme-mode="dark"] .laolao-tool-stream-footer--live {
+  background: rgba(230, 120, 170, 0.18);
+  color: #eb9ec2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-tool-live-badge { animation: none; }
+  .chat-activity-group__body .chat-tool-msg-summary { transition: none; }
+}

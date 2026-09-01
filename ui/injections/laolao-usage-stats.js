@@ -1,14 +1,11 @@
-/* 来啦～老弟 · 顶栏用量统计（右上角迷你胶囊组）
-   数据源优先级：
-     1. ./laolao-stats.json —— 由 ~/.openclaw/laolao-stats-sync.py 每 60s 从
-        C.le 控制台本地统计/配额缓存同步（今日口径：输入/输出/缓存读/额度/请求数）
-     2. sessions.list 累计 + ./laolao-quota.json（同步脚本不存在时的兜底）
+/* 超級碧琪 · 四模式与派对共用的累计用量胶囊
+   派对 /api/usage 与四模式 laolao-stats.json 共用本机 SQLite 累计计数。
+   配额来自接口本地缓存；累计估算费用不是账户余额。旧版数据保留兼容读取。
    特效：任一数值上涨时对应胶囊脉冲一次。 */
 (() => {
   "use strict";
 
-  /* 模型单价（美元/百万 tokens）。会话返回 cost 字段时优先用实报金额。
-     当前为装饰性定价（主打好看），想换成真实单价改这里即可。 */
+  /* 仅兼容旧版统计的展示系数，不是模型真实单价；新版优先显示统计源估算。 */
   const PRICING = {
     default: { input: 0.2, output: 1.5, cacheRead: 0.02, cacheWrite: 0 },
   };
@@ -51,17 +48,23 @@
     if (refreshing) return;
     refreshing = true;
     try {
-      const stats = await fetchJson("./laolao-stats.json");
-      if (stats && Number.isFinite(stats.input)) {
+      const stats = await fetchJson(document.getElementById('party-usage') ? '/api/usage' : './laolao-stats.json');
+      if (stats && (stats.scope === 'lifetime' || Number.isFinite(stats.input))) {
         view = {
-          input: num(stats.input),
-          output: num(stats.output),
+          input: Number.isFinite(stats.input) ? stats.input : null,
+          output: Number.isFinite(stats.output) ? stats.output : null,
           cacheRead: Number.isFinite(stats.cacheRead) ? stats.cacheRead : null,
+          cacheWrite: Number.isFinite(stats.cacheWrite) ? stats.cacheWrite : null,
+          cost: Number.isFinite(stats.cost) ? stats.cost : null,
+          persistent: stats.scope === 'lifetime',
+          costNote: stats.costNote || '按内置展示系数估算，不是实际账单或余额',
+          stale: !!stats.stale,
+          sourceUpdatedAt: stats.sourceUpdatedAt,
           quota: stats.quota || null,
           quotaNote: stats.quotaNote || "",
           requests: stats.requests || null,
           successRate: stats.successRate ?? null,
-          source: stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计",
+          source: stats.source || (stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计"),
         };
       } else {
         const [quotaFile, payload] = await Promise.all([
@@ -80,7 +83,7 @@
         view = {
           input, output,
           cacheRead: hasCache ? cacheRead : null,
-          quota: quotaFile && quotaFile.value ? String(quotaFile.value) : null,
+          quota: quotaFile && quotaFile.value && !/示例/.test(quotaFile.note || '') ? String(quotaFile.value) : null,
           quotaNote: (quotaFile && quotaFile.note) || "",
           requests: null, successRate: null,
           source: "累计 · 网关会话",
@@ -91,6 +94,8 @@
   }
 
   function costOf(v) {
+    if (v.persistent) return v.cost;
+    if (Number.isFinite(v.cost)) return v.cost;
     if (!pricingEnabled) return null;
     const p = PRICING.default;
     return (v.input / 1e6) * p.input + (v.output / 1e6) * p.output
@@ -104,7 +109,7 @@
   const prevRaw = {};
 
   function syncLive() {
-    const live = Boolean(document.querySelector(".chat-send-btn--stop"));
+    const live = Boolean(document.querySelector(".chat-send-btn--stop, #jobs .job"));
     if (live === liveActive) return;
     liveActive = live;
     if (wrap) wrap.classList.toggle("laolao-usage--live", live);
@@ -116,11 +121,11 @@
     { key: "cacheRead", label: "缓存读", naWhenNull: true },
     { key: "cacheWrite", label: "缓存写", naWhenNull: true },
     { key: "quota", label: "额度", cls: "laolao-usage__chip--quota", naWhenNull: true },
-    { key: "cost", label: "", cls: "laolao-usage__chip--cost" },
+    { key: "cost", label: "累计估算", cls: "laolao-usage__chip--cost", naWhenNull: true },
   ];
 
   function ensureChips() {
-    const header = document.querySelector(".dashboard-header");
+    const header = document.getElementById('party-usage') || document.querySelector(".dashboard-header");
     if (!header) return null;
     if (wrap && wrap.isConnected && header.contains(wrap) && chips) return chips;
     wrap = document.createElement("div");
@@ -145,9 +150,21 @@
   }
 
   function pulse(el) {
-    el.classList.remove("laolao-usage__chip--pulse");
-    void el.offsetWidth; // 强制重排，让动画能重复触发
-    el.classList.add("laolao-usage__chip--pulse");
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (el.closest?.(".laolao-usage--live")) return;
+    el.__pinkieUsagePulse?.cancel?.();
+    if (typeof el.animate !== "function") return;
+    el.__pinkieUsagePulse = el.animate([
+      { transform: "scale(1)" },
+      {
+        transform: "scale(1.18)",
+        background: "var(--accent, #e94f91)",
+        color: "#ffffff",
+        boxShadow: "0 0 0 4px var(--accent-glow, rgba(233, 79, 145, 0.2))",
+        offset: 0.35,
+      },
+      { transform: "scale(1)" },
+    ], { duration: 600, easing: "ease-out" });
   }
 
   function render() {
@@ -159,9 +176,9 @@
       input: { text: fmtTok(view.input), raw: view.input },
       output: { text: fmtTok(view.output), raw: view.output },
       cacheRead: { text: view.cacheRead != null ? fmtTok(view.cacheRead) : "—", raw: view.cacheRead },
-      cacheWrite: { text: "—", raw: null },
+      cacheWrite: { text: fmtTok(view.cacheWrite), raw: view.cacheWrite },
       quota: { text: view.quota || "—", raw: view.quota },
-      cost: { text: cost != null ? fmtCost(cost) : "$0.00", raw: cost },
+      cost: { text: cost != null ? fmtCost(cost) : "—", raw: cost },
     };
 
     for (const c of list) {
@@ -188,7 +205,10 @@
         ? `请求 ${view.requests} 次` + (view.successRate != null ? ` · 成功率 ${view.successRate}%` : "")
         : null,
       view.quota ? `上游额度 ${view.quota}${view.quotaNote ? "（" + view.quotaNote + "）" : ""}` : "上游额度未知",
-      cost != null ? `估算费用 ${fmtCost(cost)}（按内置装饰单价）` : "金额仅为装饰",
+      cost != null ? `累计估算 ${fmtCost(cost)}（${view.costNote || '按内置展示系数计算，不是实际账单'}）` : "费用未知，不虚构金额",
+      view.persistent ? '累计记录保存在本机，重启不清零；重复刷新不重复累加。' : null,
+      view.stale ? '统计源暂不可用，显示最后保存的累计值。' : null,
+      view.sourceUpdatedAt ? '统计源更新时间：'+new Date(view.sourceUpdatedAt).toLocaleString() : null,
     ].filter(Boolean).join("\n");
   }
 
@@ -201,7 +221,7 @@
   };
 
   function boot() {
-    if (!$sidebar()) return setTimeout(boot, 500);
+    if (!document.getElementById('party-usage') && !$sidebar()) return setTimeout(boot, 500);
 
     setInterval(refresh, REFRESH_MS);
     document.addEventListener("visibilitychange", () => {

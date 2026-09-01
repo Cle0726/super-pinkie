@@ -1,0 +1,42 @@
+<!doctype html><html lang="zh-CN" data-laolao-mode="chat"><head><meta charset="utf-8"><base href="/ui/assets/">
+<title>碧琪动画验收</title>
+<link rel="stylesheet" href="/ui/injections/laolao-theme.css"><link rel="stylesheet" href="/ui/injections/laolao-splash.css">
+<script src="/ui/injections/laolao-motion.js"></script>
+<style>body{font:14px -apple-system,sans-serif}.shell{padding:30px}.sidebar-brand__identity{min-height:64px}.content{padding:40px}.agent-chat__welcome{padding:30px}.agent-chat__welcome img{width:120px;height:120px}.agent-chat__input{padding:20px;border:1px solid #fff8;border-radius:24px}textarea{width:70%;height:70px}#qa{position:fixed;bottom:0;background:#fff9;font:11px monospace;max-height:150px;overflow:auto;z-index:1}</style>
+</head><body>
+<section id="laolao-splash" class="laolao-splash"><div class="laolao-splash__content"><p class="laolao-splash__eyebrow">碧琪的小屋</p><h1 class="laolao-splash__title">准备好了吗？</h1><div class="laolao-splash__progress-shell" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"><div id="laolao-splash-fill" class="laolao-splash__progress-fill"></div><span id="laolao-splash-message" class="laolao-splash__message"></span><span id="laolao-splash-percentage" class="laolao-splash__percentage">8%</span></div></div></section>
+<openclaw-app><openclaw-app-shell><div class="shell"><div class="sidebar-brand__identity"></div><main class="content"><div class="chat-loading-skeleton">正在准备验收页面</div></main></div></openclaw-app-shell></openclaw-app>
+<pre id="qa" aria-label="动画验收结果"></pre>
+<script>
+(() => {
+  const params=new URLSearchParams(location.search), scenario=params.get('scenario')||'normal';
+  if(!params.has('session')){params.set('session','agent:main:main');history.replaceState({},'',location.pathname+'?'+params);}
+  const initial=params.get('session'),mode=initial.split(':')[1]==='main'?'chat':initial.split(':')[1];
+  document.documentElement.dataset.laolaoMode=mode;
+  if(scenario==='handoff')sessionStorage.setItem('laolao:mode-handoff',JSON.stringify({mode,progress:93}));
+  const content=document.querySelector('.content'),report={scenario,progressions:[],errors:[],complete:false};
+  let serial=0,lastOverlay=null,record=null;
+  const draw=(key,delay)=>{
+    const epoch=++serial,id=key.split(':')[1]==='main'?'chat':key.split(':')[1];
+    content.innerHTML='<div class="chat-loading-skeleton">正在准备目标聊天</div>';
+    setTimeout(()=>{if(epoch!==serial)return;content.innerHTML='<div class="agent-chat__welcome"><img src="./laolao-mode-'+id+'-hd.png?v=avatars6" alt="碧琪"><h2>'+id+' 聊天已就位</h2></div><div class="agent-chat__input"><textarea aria-label="验收输入框" placeholder="输入测试，不会调用模型"></textarea></div>';},delay);
+  };
+  const shell=document.querySelector('openclaw-app-shell');
+  shell.context={gateway:{snapshot:{sessionKey:initial},setSessionKey(key){this.snapshot.sessionKey=key;}},navigate(page,{search}){
+    history.pushState({},'',location.pathname+search);draw(new URLSearchParams(search).get('session'),Number(params.get('delay')||800));
+  }};
+  if(scenario==='login')content.innerHTML='<div class="login-gate"><form class="login-gate__form"><label>验收登录框<input aria-label="验收登录框"></label></form></div>';
+  else if(scenario!=='blocked')draw(initial,Number(params.get('delay')||900));
+  function sample(){
+    const overlay=document.querySelector('#laolao-splash,.laolao-mode-transition');
+    if(overlay!==lastOverlay){if(overlay){record={values:[],premature:false,backwards:false};report.progressions.push(record);}lastOverlay=overlay;}
+    if(overlay){const p=Number(overlay.querySelector('[role=progressbar]').getAttribute('aria-valuenow'));const prev=record.values.at(-1);if(prev!==p)record.values.push(p);if(prev>p)record.backwards=true;if(p===100&&document.querySelector('.chat-loading-skeleton'))record.premature=true;}
+    report.complete=!overlay;report.mode=document.documentElement.dataset.laolaoMode;
+    const next=JSON.stringify(report);if(document.querySelector('#qa').textContent!==next)document.querySelector('#qa').textContent=next;
+    requestAnimationFrame(sample);
+  }
+  addEventListener('error',event=>report.errors.push(event.message));sample();
+})();
+</script>
+<script src="/ui/injections/laolao-handoff-bootstrap.js"></script><script src="/ui/injections/laolao-mode-switcher.js"></script><script src="/ui/injections/laolao-splash.js"></script>
+</body></html>

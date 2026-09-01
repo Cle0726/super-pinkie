@@ -690,7 +690,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let requestId = body["requestId"] as? String ?? UUID().uuidString
             let panel = NSOpenPanel()
             panel.title = "选择项目文件夹"
-            panel.message = body["context"] as? String == "party" ? "选择派对项目的位置，也可以点“新建文件夹”。不同群聊各自管理项目。" : "选择一个文件夹，碧琪会把它放进左侧项目栏。"
+            switch body["context"] as? String {
+            case "party":
+                panel.message = "选择派对项目的位置，也可以点“新建文件夹”。不同群聊各自管理项目。"
+            case "roundtable":
+                panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
+            default:
+                panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
+            }
             panel.prompt = "选择"
             panel.canChooseFiles = false
             panel.canChooseDirectories = true

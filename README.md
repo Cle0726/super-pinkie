@@ -21,6 +21,39 @@
 - GitHub Actions 自动构建本机签名的 macOS App 与完整源码包
 - macOS「派对空间」独立群聊：碧琪主持、Codex 任务执行、OpenClaw 文本咨询，公开派工并逐项确认（[说明与边界](docs/PARTY-SPACE.md)）
 
+## 一键安装（Windows）— 接入 API 即用
+
+> **前置条件**：Python 3.10+（安装时勾选「Add to PATH」）、Node.js 20+、Git、已安装并启动过 OpenClaw
+
+```powershell
+# 1. 克隆仓库
+git clone https://github.com/Cle0726/super-pinkie.git
+cd super-pinkie
+
+# 2. 一键安装（PowerShell，以管理员身份运行）
+.\install.ps1
+
+# 如果想同时把 mm 提供商指向代理
+.\install.ps1 -Provider mm
+```
+
+安装完成后：
+1. 打开 `%USERPROFILE%\.openclaw\openclaw.json`，在对应 `providers` 下填入你的 API Key
+2. 重启 OpenClaw Gateway：`openclaw gateway restart`
+3. 在无限制模式会话发送验证令牌确认注入生效（见下方说明）
+
+如果只想手动应用皮肤（不重新安装补丁）：
+```powershell
+.\installer\windows\apply-theme.ps1
+```
+
+拉取更新：
+```powershell
+.\update.ps1
+```
+
+---
+
 ## 一键安装完整 App（macOS）
 
 ```bash

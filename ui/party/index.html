@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>碧琪的派对空间</title>
+  <link rel="stylesheet" href="/party.css">
+  <link rel="stylesheet" href="/party-art.css">
+  <link rel="stylesheet" href="/usage-stats.css">
+  <script src="/usage-stats.js" defer></script>
+  <script src="/party-drafts.js" defer></script>
+  <script src="/party-motion.js" defer></script>
+  <script src="/party-room-art.js" defer></script>
+  <script src="/party.js" defer></script>
+</head>
+<body>
+  <section id="party-splash" aria-label="正在准备派对空间">
+    <img class="splash-art" src="/entrance.png" alt="碧琪公主邀请伙伴进入派对">
+    <div class="splash-copy"><span class="eyebrow">碧琪公主的邀请</span><h1>派对空间</h1><p id="splash-phrase" role="status">铲屎官，碧琪正在给伙伴们留座位。</p><div class="splash-progress"><div id="party-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8" aria-label="派对准备进度"><span id="party-progress-fill"></span></div><span id="party-percent">8%</span></div><a id="splash-back" href="http://127.0.0.1:18789/">‹ 返回聊天</a></div>
+  </section>
+  <div class="party-shell" data-members-collapsed="true" inert>
+    <aside class="rooms-panel">
+      <div class="brand"><img src="/brand.png" alt="派对空间" draggable="false"><small>碧琪和她的小马伙伴</small></div>
+      <button id="new-room" class="new-room" type="button"><span>＋</span> 发起一场派对</button>
+      <label class="room-search"><span>⌕</span><input id="room-filter" placeholder="找一个群聊" aria-label="搜索群聊"></label>
+      <div class="section-label">我的群聊 <span id="room-count">0</span></div>
+      <div class="room-tabs" aria-label="群聊分类"><button id="active-rooms" aria-pressed="true">进行中</button><button id="archived-rooms" aria-pressed="false">已归档</button></div>
+      <nav id="rooms" aria-label="派对群聊列表"></nav>
+      <div class="room-footer"><span class="local-dot"></span><span>群聊记录保存在本机</span></div>
+      <a id="back-app" class="back-link" href="http://127.0.0.1:18789/">‹ 返回四模式聊天</a>
+    </aside>
+    <main id="conversation" class="conversation" aria-label="派对群聊">
+      <div id="party-usage" aria-label="累计用量与费用"></div>
+      <div id="search-row" class="message-search" hidden><input id="message-query" placeholder="搜索这个群的全部聊天记录" aria-label="搜索聊天记录"><button id="close-search">关闭</button></div>
+      <div id="connection" role="status" hidden></div>
+      <div id="archive-notice" hidden><span>这个群已归档，记录和项目文件都还在。</span><button id="restore-room">恢复群聊</button></div>
+      <section id="timeline" class="timeline" aria-label="群聊消息">
+        <button id="older" class="older" hidden>查看更早的消息</button>
+        <div id="messages"></div>
+        <div id="empty" class="welcome">
+          <div class="welcome-invitation"><img src="/room-invitation.png" alt="一封派对邀请函" draggable="false"></div>
+          <span class="eyebrow">一张圆桌 · 各有所长</span>
+          <h2>好啦，伙伴们都在这里。</h2>
+          <p>建一个群，选好项目文件夹。<br>跟碧琪说目标，或直接 @ 一位伙伴。</p>
+          <button id="welcome-new" class="primary">建立我的第一个群聊</button>
+          <small>公开派工 · 逐项确认 · 独立记录</small>
+        </div>
+      </section>
+      <div id="jobs" class="jobs" aria-label="当前派工"></div>
+      <details id="task-history"><summary>任务记录 <span id="task-count"></span></summary><div id="past-jobs"></div></details>
+      <div class="compose-wrap">
+        <div id="reply-preview" class="reply-preview" hidden><span></span><button aria-label="取消引用">×</button></div>
+        <form id="composer" class="composer">
+          <div class="compose-toolbar"><label>发给 <select id="recipient" aria-label="选择接收成员"></select></label><label class="model-label">模型 <select id="model" aria-label="选择回复模型"><option value="">跟随本机默认</option></select></label><button id="refresh-models" type="button" title="刷新可用模型">刷新模型</button><label id="permission-label">权限 <select id="permission" aria-label="执行权限"><option value="read-only">只读检查</option><option value="workspace-write">允许修改项目（需确认）</option></select></label></div>
+          <p id="model-note" class="model-note" role="status"></p>
+          <div class="compose-main"><textarea id="draft" rows="2" maxlength="12000" placeholder="铲屎官，把想做的事告诉碧琪，也可以 @紫悦…" aria-label="群聊消息"></textarea><button id="send" class="send" type="submit" aria-label="发送消息">↑</button></div>
+        </form>
+        <div class="compose-note"><span>Enter 发送 · Shift + Enter 换行</span><span>修改文件前需要你的确认</span></div>
+      </div>
+    </main>
+    <aside id="members-panel" class="members-panel">
+      <div class="members-heading"><div class="section-label expanded-only">派对成员 <span id="member-count"></span></div><button id="toggle-members" class="icon-btn" type="button" aria-controls="members-panel" aria-expanded="false" aria-label="展开成员栏" title="展开成员栏">‹</button></div>
+      <div class="member-tools expanded-only"><button id="refresh-members" class="text-btn">刷新连接状态</button><button id="find-message" class="icon-btn" title="查找当前群的消息" aria-label="查找当前群的消息">⌕</button><button id="room-settings" class="icon-btn" title="群聊设置" aria-label="群聊设置">⋯</button></div>
+      <div id="members"></div>
+      <div class="expanded-only project-info">
+      <div class="divider"></div>
+      <div class="section-label">当前项目</div>
+      <p id="project-path" class="project-path">每个群单独绑定一个文件夹。</p>
+      <button id="copy-path" class="text-btn" hidden>复制文件夹路径</button>
+      <button id="show-project" class="text-btn" hidden>在访达打开项目</button>
+      <p class="privacy-note">只传入本群上下文，不导入私人聊天。模型请求仍会发往成员配置的服务商；文件访问受执行权限约束。</p>
+      </div>
+    </aside>
+  </div>
+  <dialog id="create-dialog">
+    <form id="create-form"><div class="dialog-heading"><img class="dialog-prop" src="/room-giftbox.png" alt="" draggable="false"><h2>发起一场新派对</h2><button type="button" id="close-create" class="icon-btn" aria-label="取消新建群聊">×</button></div>
+      <label>群聊名称<input id="create-name" required maxlength="60" placeholder="例如：一起把 App 做好"></label>
+      <label>项目文件夹 <small>可留空，自动建立独立目录</small><div class="folder-field"><input id="create-path" placeholder="粘贴项目的完整路径"><button type="button" id="choose-folder">选择…</button></div></label>
+      <button id="new-project" class="new-project-btn" type="button">＋ 新建项目文件夹</button>
+      <fieldset><legend>邀请伙伴</legend><div id="invite-members"></div></fieldset>
+      <p class="dialog-note">碧琪负责主持和派工。每项建议先由你确认，再让成员开始工作。</p>
+      <button class="primary" type="submit">开门，让伙伴们进来</button>
+    </form>
+  </dialog>
+  <dialog id="approve-dialog"><h2>确认这次派工</h2><p id="approval-desc"></p><pre id="approval-prompt"></pre><p id="approval-warning" class="dialog-note"></p><div class="dialog-actions"><button id="approve-cancel" type="button">再想一下</button><button id="approve-confirm" type="button" class="primary">确认派发</button></div></dialog>
+  <dialog id="project-dialog"><form id="project-form">
+    <div class="dialog-heading"><img class="dialog-prop" src="/room-toolbox.png" alt="" draggable="false"><h2>给新项目安个家</h2><button id="close-project" type="button" class="icon-btn" aria-label="关闭新建项目">×</button></div>
+    <label>文件夹名称<input id="project-name" required maxlength="80" placeholder="例如：我的小马网站"></label>
+    <label>保存位置<div class="folder-field"><input id="project-parent" placeholder="留空，放到派对的项目目录"><button id="choose-project-parent" type="button">选择位置…</button></div></label>
+    <p class="dialog-note">只创建这个空文件夹，不覆盖已有文件。创建后会自动填入新群聊；取消建群也不会删除文件夹。</p>
+    <button type="submit" class="primary">创建并选择这个文件夹</button>
+  </form></dialog>
+  <dialog id="settings-dialog"><form id="settings-form">
+    <div class="dialog-heading"><h2>群聊设置</h2><button id="close-settings" type="button" class="icon-btn" aria-label="关闭群聊设置">×</button></div>
+    <label>修改群名<input id="settings-name" required maxlength="60"></label>
+    <fieldset><legend>群聊成员</legend><div id="settings-members"></div></fieldset>
+    <p class="dialog-note">新成员收到任务时，会获得本群上下文。调整成员前需先处理完待办；离群不会删除旧消息。</p>
+    <p id="settings-path" class="project-path"></p><p class="dialog-note">项目目录固定不变。换项目请另建群，避免历史记录和文件混用。</p>
+    <div class="dialog-actions"><button id="archive-room" type="button">归档群聊</button><button class="primary" type="submit">保存设置</button></div>
+  </form></dialog>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>

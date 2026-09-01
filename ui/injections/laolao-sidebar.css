@@ -1,4 +1,6 @@
 /* 来啦～老弟 · 侧边栏分组管理（置顶 / 项目 / 最近 + 一键清理） */
+#laolao-project-scope { padding:8px 14px 0; font-size:10px; line-height:1.5; color:#966b84; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none; }
+#laolao-project-scope[data-error="true"] { color:#b46362; }
 
 /* 隐藏原生置顶按钮，避免与本插件的置顶分组重复（原生 ⋯ 菜单保留） */
 .session-action--pin { display: none; }
@@ -6,16 +8,35 @@
 /* 隐藏会话列表头部的 agent 筛选下拉（与左上角模式切换重复） */
 .sidebar-agent-scope { display: none; }
 
-/* 当前选中会话：玫粉描边 + 淡粉底，选中态一眼可辨 */
-.sidebar-recent-session.sidebar-recent-session--active {
+/* No idle pills: selected text remains identifiable without a permanent frame.
+   极淡的背景（白 8%），确保侧栏背景万一失效时 session 文字依然可读——
+   比完全透明多一层兜底，但远弱于 hover/active，不会破坏无框设计。 */
+html .sidebar-recent-session {
   border-radius: 10px !important;
-  background: var(--accent-subtle, #ffe6f0) !important;
-  box-shadow: inset 0 0 0 1.5px var(--accent, #e94f91) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
-
-html[data-theme-mode="dark"] .sidebar-recent-session.sidebar-recent-session--active {
-  background: rgba(233, 79, 145, 0.16) !important;
-  box-shadow: inset 0 0 0 1.5px #ed93b1 !important;
+html .sidebar-recent-session.sidebar-recent-session--active {
+  background: rgba(221,114,165,.065) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--accent, #d9508d) !important;
+  font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) {
+  html .sidebar-recent-session:hover {
+    background: rgba(255,250,253,.18) !important;
+    border-color: rgba(217,131,175,.26) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+}
+html .sidebar-recent-session:focus-visible {
+  outline: 2px solid rgba(204,117,163,.65) !important;
+  outline-offset: -2px;
 }
 
 /* 模式隔离：非当前模式 agent 的会话行整体隐藏 */
@@ -128,6 +149,7 @@ html[data-theme-mode="dark"] .sidebar-recent-session.sidebar-recent-session--act
 }
 
 .sidebar-recent-session:hover .laolao-row-actions,
+.sidebar-recent-session:focus-within .laolao-row-actions,
 .laolao-row-actions.laolao-row-actions--pinned {
   opacity: 1;
 }
@@ -336,3 +358,32 @@ html[data-theme-mode="dark"] .laolao-toast {
 .sidebar-recent-session.laolao-mode-hidden {
   display: none !important;
 }
+.laolao-managed-sessions .sidebar-recent-sessions{display:none!important}
+.laolao-managed-sessions>#laolao-projects,.laolao-managed-sessions>[data-laolao-group]{display:none!important}
+#laolao-session-manager{min-width:0;padding-top:5px}
+.laolao-session-controls{display:flex;align-items:center;gap:5px;margin:4px 10px 10px}
+.laolao-session-search{width:0;min-width:0;flex:1;font:inherit;font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid transparent;background:rgba(255,255,255,.08);color:inherit;outline:none}
+.laolao-session-search:hover,.laolao-session-search:focus{border-color:rgba(204,117,163,.45);background:rgba(255,250,253,.25)}
+.laolao-managed-button{font:inherit;color:inherit;cursor:pointer;border:1px solid transparent;background:transparent;border-radius:7px;padding:3px 5px;font-size:11px;white-space:nowrap}
+.laolao-managed-button:hover{border-color:rgba(204,117,163,.32);background:rgba(255,250,253,.25)}
+.laolao-managed-button:focus-visible{outline:2px solid rgba(204,117,163,.6);outline-offset:1px}
+.laolao-managed-button:disabled{opacity:.4;cursor:wait}
+.laolao-group__action.laolao-group__add-project{width:auto;padding:3px 7px;color:#b84878;opacity:.88;border:1px solid rgba(204,117,163,.24);background:rgba(255,250,253,.12)}
+.laolao-group__action.laolao-group__open{width:auto;padding:2px 5px;color:#a85b7a;opacity:.75;font-size:9px}
+#laolao-session-manager .sidebar-recent-session__link{min-width:0;flex:1;text-decoration:none;color:inherit}
+#laolao-session-manager .sidebar-recent-session__name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#laolao-session-manager .session-row-aside{display:flex;align-items:center;gap:3px;flex-shrink:0}
+#laolao-session-manager .laolao-group__label{cursor:pointer}
+
+/* 侧栏折叠成窄图标栏时，补丁自建容器必须一并隐藏。
+   原生折叠只隐藏自己的子节点：#laolao-session-manager 保持约 787px 宽、
+   x=-355 偏移，右缘探进聊天区（选中会话行/时间/归档按钮全部漏出）；
+   laolao-mode-switcher 也会从品牌区左缘探出。窄栏里原生 footer 已有
+   模式切换入口，隐藏补丁副本不影响功能。 */
+.sidebar--collapsed #laolao-session-manager{display:none!important}
+.sidebar--collapsed .laolao-mode-switcher{display:none!important}
+
+/* marquee 溢出修复：原生 .hover-marquee--scrolling 用 text-overflow:clip + text-indent 平移，
+   WKWebView 合成层裁剪失效时滚动中的文字会画出侧栏、盖到聊天区（用户截图证实）。
+   滚动期间保持 ellipsis，文字始终裁剪在行内；视觉效果无差异（滚动时末尾本来就在变）。 */
+.hover-marquee--scrolling{text-overflow:ellipsis!important}

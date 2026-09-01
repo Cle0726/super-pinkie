@@ -1,7 +1,11 @@
 (() => {
   "use strict";
 
-  // Presentation only: never changes replies, command output, file content, or typed text.
+  // Presentation only: replies/tool output stay intact. The reserved gateway
+  // failure sentinel is localized as a system notice, not a character reply.
+  const failureSentinel='The agent run failed before producing a reply.';
+  const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
+  const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
   const exactPhrases = new Map([
     ["Loading…", "先生稍等，碧琪在找派对用品…"],
     ["Loading...", "先生稍等，碧琪在找派对用品…"],
@@ -32,7 +36,7 @@
     ["Aborted", "碧琪先停在这里等先生"],
     ["Error rendering content", "这块内容被奶油糊住啦"],
     ["An error occurred:", "哎呀，碧琪碰到一点小意外："],
-    ["The agent run failed before producing a reply.", "噢不，碧琪踩到纸屑滑了一跤！这次还没来得及回话，先生再喊我一次好不好？"],
+    [failureSentinel, failureNotice],
     ["No agents found.", "碧琪暂时没找到小伙伴。"],
     ["Nothing waiting today", "今天没有待办派对啦。"],
   ]);
@@ -64,11 +68,30 @@
   };
 
   const isProtectedContent = (node) => Boolean(
-    node.parentElement?.closest("pre, code, textarea, input, select, [contenteditable='true'], .cm-preview")
+    node.parentElement?.closest("pre, code, textarea, input, select, [contenteditable='true'], .cm-preview, .chat-text, .chat-tool-card__detail, .chat-tool-msg-summary__names")
   );
 
   const localizeText = (node) => {
-    if (node.nodeType !== Node.TEXT_NODE || isProtectedContent(node)) return;
+    if (node.nodeType !== Node.TEXT_NODE) return;
+    const parent=node.parentElement;
+    const core=(node.nodeValue||'').trim();
+    // Only the exact, unquoted gateway failure in an assistant bubble. Never
+    // translate a user's text, a code sample, or normal assistant prose.
+    if(core===failureSentinel && parent?.closest('.chat-group.assistant') && !parent.closest('pre, code, blockquote, textarea, input, [contenteditable="true"]')){
+      const text=parent.closest('.chat-text'),bubble=parent.closest('.chat-bubble');
+      if(text?.textContent.trim()===failureSentinel && bubble?.getAttribute('data-message-text')===failureSentinel){
+        node.nodeValue=node.nodeValue.replace(failureSentinel,failureNotice);
+        bubble.setAttribute('data-pinkie-runtime-error','true');
+        bubble.setAttribute('title','系统运行提示；原始信息：'+failureSentinel);
+        return;
+      }
+    }
+    if(isProtectedContent(node))return;
+    if(fallbackName.test(core) && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
+      node.nodeValue=node.nodeValue.replace(core,'碧琪');
+      if(parent.hasAttribute('title'))parent.setAttribute('title','碧琪');
+      return;
+    }
     const localized = translate(node.nodeValue ?? "");
     if (localized !== node.nodeValue) node.nodeValue = localized;
   };
@@ -77,6 +100,16 @@
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) localizeText(node);
+  };
+
+  const syncFailureCards = () => {
+    document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]').forEach(bubble=>{
+      const content=bubble.querySelector('.chat-text')?.textContent.trim();
+      if(bubble.getAttribute('data-message-text')!==failureSentinel || ![failureSentinel,failureNotice].includes(content)){
+        bubble.removeAttribute('data-pinkie-runtime-error');
+        if(bubble.getAttribute('title')==='系统运行提示；原始信息：'+failureSentinel)bubble.removeAttribute('title');
+      }
+    });
   };
 
   const phraseIndex = (seed, length) => {
@@ -170,11 +203,13 @@
     const itemSeed = `${groupLabel}:${group?.textContent || ""}:${index}:${rawToolName}:${rawDetail}`;
 
     if (toolLabel && !toolLabel.dataset.laolaoLocalized) {
-      toolLabel.textContent = toolPhrase(rawToolName, itemSeed);
+      const labels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
+      const label=labels[rawToolName.trim().toLowerCase()];
+      if(label)toolLabel.textContent=label+' · '+rawToolName;
       toolLabel.dataset.laolaoLocalized = "1";
     }
     if (detail && !detail.dataset.laolaoLocalized) {
-      detail.textContent = detailPhrase(itemSeed);
+      // Paths, commands and actual tool results must remain visible.
       detail.dataset.laolaoLocalized = "1";
     }
   };
@@ -187,7 +222,7 @@
       const groupSeed = `${label?.textContent || ""}:${group.textContent || ""}`;
       if (label && !label.dataset.laolaoLocalized) {
         const count = (label.textContent || "").match(/\d+/)?.[0] || "几";
-        label.textContent = activityPhrase(count, groupSeed);
+        label.textContent = `工具进度 · ${count} 项`;
         label.dataset.laolaoLocalized = "1";
         if (summary) summary.setAttribute("aria-label", "碧琪的工具小帮手行动记录");
       }
@@ -211,7 +246,7 @@
 
     scope.querySelectorAll?.(".chat-tool-card__detail").forEach((detail, index) => {
       if (detail.dataset.laolaoLocalized) return;
-      detail.textContent = cardDetailPhrase(`${index}:${detail.textContent || ""}`);
+      // Do not replace real progress with an invented activity sentence.
       detail.dataset.laolaoLocalized = "1";
     });
   };
@@ -231,6 +266,7 @@
         }
       }
       localizeToolActivity(document);
+      syncFailureCards();
     }).observe(document.body, { childList: true, characterData: true, subtree: true });
   };
 

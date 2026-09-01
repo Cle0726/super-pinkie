@@ -1,0 +1,8 @@
+/* Workroom V3: stable alpha surfaces only. No backdrop-filter means the room
+   never flashes between opaque and transparent compositing states. */
+.history,.seats,.composer,.welcome-copy,.project-guard{backdrop-filter:none;-webkit-backdrop-filter:none}
+.discussion:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 56%,transparent 15%,rgba(12,7,14,.12) 78%)}
+.timeline::-webkit-scrollbar,#sessions::-webkit-scrollbar,.seats::-webkit-scrollbar{width:5px}.timeline::-webkit-scrollbar-thumb,#sessions::-webkit-scrollbar-thumb,.seats::-webkit-scrollbar-thumb{border-radius:9px;background:rgba(238,157,190,.19)}
+.message,.scene,.project-guard{animation:work-enter .24s ease-out both}@keyframes work-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.shell[data-has-session="false"] .composer-wrap{display:none}.bubble[data-collapsed="true"] .bubble-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;mask-image:linear-gradient(#000 72%,transparent)}
+.shell[data-seats-collapsed="true"] .seat img{display:none}.shell[data-seats-collapsed="true"] .seat:before{content:"";width:15px;height:20px;clip-path:polygon(50% 0,88% 28%,72% 84%,50% 100%,28% 84%,12% 28%);background:linear-gradient(145deg,#ffeaf5,#df85ad 48%,#744b91);opacity:.58;box-shadow:0 0 13px rgba(229,124,169,.28)}.shell[data-seats-collapsed="true"] .seat.active:before{opacity:1;filter:brightness(1.15);box-shadow:0 0 18px rgba(242,155,192,.72)}

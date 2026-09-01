@@ -62,4 +62,11 @@ if [[ ! -f "$MARKER" ]]; then
   touch "$MARKER"
 fi
 
+# Dedicated group agents only; never rewrite the four existing personas here.
+if [[ -f "$REPO_ROOT/services/party/setup.py" ]]; then
+  /usr/bin/python3 "$REPO_ROOT/services/party/setup.py"
+fi
 PINKIE_SKIP_APP_BUNDLES=1 "$SCRIPT_DIR/apply-theme.sh"
+if [[ -f "$REPO_ROOT/services/project-scope/setup.py" ]]; then
+  /usr/bin/python3 "$REPO_ROOT/services/project-scope/setup.py"
+fi

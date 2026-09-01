@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const motion = window.PinkieMotion;
 
   const storageKey = "laolao:active-mode";
   const skipEntrySplashKey = "laolao:skip-entry-splash";
@@ -71,7 +72,7 @@
   let menu = null;
   let trigger = null;
   let switching = false;
-  const transitionPreloads = [];
+  let preloading = false;
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(window.location.search).get("session") || "";
@@ -95,14 +96,18 @@
 
   const syncModePresentation = (mode) => {
     const previousMode = document.documentElement.getAttribute("data-laolao-mode");
-    document.documentElement.setAttribute("data-laolao-mode", mode.id);
     if (previousMode !== mode.id) {
+      document.documentElement.setAttribute("data-laolao-mode", mode.id);
       window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
     }
 
     document.querySelectorAll(".dashboard-header__breadcrumb-link").forEach((element) => {
-      element.setAttribute("data-laolao-mode-label", mode.label);
-      element.setAttribute("aria-label", mode.label);
+      if (element.getAttribute("data-laolao-mode-label") !== mode.label) {
+        element.setAttribute("data-laolao-mode-label", mode.label);
+      }
+      if (element.getAttribute("aria-label") !== mode.label) {
+        element.setAttribute("aria-label", mode.label);
+      }
     });
 
     document.querySelectorAll([
@@ -114,8 +119,12 @@
       if (avatar.getAttribute("src") !== mode.avatar) {
         avatar.setAttribute("src", mode.avatar);
       }
-      avatar.setAttribute("data-laolao-mode-avatar", mode.id);
-      avatar.setAttribute("alt", `碧琪·${mode.label}`);
+      if (avatar.getAttribute("data-laolao-mode-avatar") !== mode.id) {
+        avatar.setAttribute("data-laolao-mode-avatar", mode.id);
+      }
+      if (avatar.getAttribute("alt") !== `碧琪·${mode.label}`) {
+        avatar.setAttribute("alt", `碧琪·${mode.label}`);
+      }
     });
   };
 
@@ -125,15 +134,15 @@
     trigger?.setAttribute("aria-expanded", "false");
   };
 
-  const preloadTransitions = () => {
-    if (transitionPreloads.length) return;
-    modes.forEach((mode) => {
-      [mode.transition, mode.asset, mode.avatar].forEach((source) => {
-        const image = new Image();
-        image.src = source;
-        transitionPreloads.push(image);
-      });
-    });
+  const preloadTransitions = async () => {
+    if (preloading) return;
+    preloading = true;
+    // Decode one mode at a time, after startup, rather than twelve large images
+    // competing with the first screen's rendering and gateway connection.
+    for (const mode of modes) {
+      await motion.modeAssets(mode.id);
+      await new Promise(resolve => window.setTimeout(resolve, 180));
+    }
   };
 
   const playModeTransition = (mode) => new Promise((resolve) => {
@@ -183,19 +192,20 @@
     content.append(eyebrow, title, progress);
     overlay.append(scene, sweep, content);
     document.body.append(overlay);
-    window.requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    motion.progress(fill, percentage, progress, 8);
+    const assets = motion.modeAssets(mode.id);
+    // Keep the current page visible until the transition artwork is decoded.
+    motion.preload(mode.transition).then(() => motion.frames()).then(() => overlay.classList.add("is-visible"));
 
-    const startedAt = performance.now();
-    const runDuration = 2400;
+    let startedAt = performance.now();
+    const runDuration = motion.reduced() ? 400 : 2400;
     let handedOff = false;
     const handoff = () => {
       if (handedOff) return;
       handedOff = true;
-      fill.style.width = "68%";
-      percentage.textContent = "68%";
+      motion.progress(fill, percentage, progress, 68);
       message.textContent = `模式小屋正在开门，${mode.address}稍等…`;
-      progress.setAttribute("aria-valuenow", "68");
-      resolve({ overlay, progress, fill, message, percentage });
+      resolve({ overlay, progress, fill, message, percentage, assets });
     };
 
     const tick = () => {
@@ -203,14 +213,16 @@
       const ratio = Math.min(1, elapsed / runDuration);
       const value = Math.min(68, Math.round(8 + ratio * 60));
       const phraseIndex = Math.min(mode.phrases.length - 1, Math.floor(ratio * mode.phrases.length));
-      fill.style.width = `${value}%`;
-      percentage.textContent = `${value}%`;
-      message.textContent = mode.phrases[phraseIndex];
-      progress.setAttribute("aria-valuenow", String(value));
+      motion.progress(fill, percentage, progress, value);
+      motion.text(message, mode.phrases[phraseIndex]);
       if (ratio >= 1) handoff();
       else window.requestAnimationFrame(tick);
     };
-    window.requestAnimationFrame(tick);
+    // Start the timeline with the decoded scene, not with the network request.
+    motion.preload(mode.transition).then(() => {
+      startedAt = performance.now();
+      window.requestAnimationFrame(tick);
+    });
   });
 
   const navigateWithinApp = (mode, next) => {
@@ -233,53 +245,47 @@
     const startedAt = performance.now();
     let completed = false;
     let fallbackStarted = false;
+    let assetsReady = false;
+    ui.assets.then(() => { assetsReady = true; });
 
-    const destinationReady = () => {
+    const destinationReady = motion.stable(() => {
       const session = currentSessionKey();
-      const modeReady = document.documentElement.getAttribute("data-laolao-mode") === mode.id;
-      const inputReady = Boolean(document.querySelector(".agent-chat__input"));
-      const avatarReady = Boolean(document.querySelector(`[data-laolao-mode-avatar="${mode.id}"]`));
-      return session === mode.sessionKey && modeReady && inputReady && avatarReady;
-    };
+      return assetsReady && session === mode.sessionKey && motion.chatReady(mode.id);
+    }, 300);
 
-    const complete = () => {
+    const complete = async () => {
       if (completed) return;
       completed = true;
-      ui.fill.style.width = "100%";
-      ui.percentage.textContent = "100%";
       ui.message.textContent = mode.readyPhrase;
-      ui.progress.setAttribute("aria-valuenow", "100");
-      document.documentElement.setAttribute("data-laolao-mode-enter", "1");
-      window.setTimeout(() => document.documentElement.removeAttribute("data-laolao-mode-enter"), 1250);
+      await motion.finishProgress(ui.fill, ui.percentage, ui.progress);
       window.setTimeout(() => {
+        motion.enter();
         ui.overlay.classList.add("is-leaving");
         window.setTimeout(() => {
           ui.overlay.remove();
           switching = false;
           resolve();
         }, 560);
-      }, 420);
+      }, motion.reduced() ? 0 : 160);
     };
 
     const tick = () => {
       if (completed) return;
       const elapsed = performance.now() - startedAt;
       const value = Math.min(96, Math.round(68 + elapsed / 92));
-      ui.fill.style.width = `${value}%`;
-      ui.percentage.textContent = `${value}%`;
-      ui.progress.setAttribute("aria-valuenow", String(value));
-      ui.message.textContent = elapsed < 1200
+      motion.progress(ui.fill, ui.percentage, ui.progress, value);
+      motion.text(ui.message, elapsed < 1200
         ? `模式小屋正在开门，${mode.address}稍等…`
-        : mode.phrases.at(-1);
+        : mode.phrases.at(-1));
 
-      if (destinationReady() && elapsed >= 700) {
+      if (destinationReady(performance.now()) && elapsed >= 700) {
         complete();
         return;
       }
 
       // A future upstream build may hide its router internals. Only then fall
       // back to a normal reload instead of leaving the user stuck forever.
-      if (!fallbackStarted && elapsed >= 6000) {
+      if (!fallbackStarted && elapsed >= 12000) {
         fallbackStarted = true;
         sessionStorage.setItem(skipEntrySplashKey, "1");
         sessionStorage.setItem(modeHandoffKey, JSON.stringify({
@@ -319,6 +325,24 @@
     await finishModeTransition(mode, transition);
   };
 
+  // Keep the surface live: the old SVG banners baked text and an opaque pill
+  // into one image. Use the original HD portraits and native text instead.
+  const renderModeButton = (button, mode) => {
+    if (button.dataset.mode === mode.id && button.querySelector('.laolao-mode-button__label')) return;
+    button.dataset.mode = mode.id;
+    const portrait = document.createElement('img');
+    portrait.src = mode.avatar;
+    portrait.alt = '';
+    portrait.draggable = false;
+    const label = document.createElement('span');
+    label.className = 'laolao-mode-button__label';
+    label.textContent = mode.label;
+    const arrow = document.createElement('span');
+    arrow.className = 'laolao-mode-button__arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    button.replaceChildren(portrait, label, arrow);
+  };
+
   const openMenu = () => {
     if (!trigger) return;
     if (menu) {
@@ -336,7 +360,7 @@
       option.className = "laolao-mode-menu__option";
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", String(mode.id === current));
-      option.innerHTML = `<img src="${mode.asset}" alt="${mode.label}" />`;
+      renderModeButton(option, mode);
       option.addEventListener("click", () => switchMode(mode));
       menu.append(option);
     });
@@ -363,10 +387,7 @@
       identity.append(trigger);
     }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
-    const image = trigger.querySelector("img");
-    if (image?.getAttribute("src") !== mode.asset) {
-      trigger.innerHTML = `<img src="${mode.asset}" alt="${mode.label}" />`;
-    }
+    renderModeButton(trigger, mode);
   };
 
   document.addEventListener("pointerdown", (event) => {
@@ -376,13 +397,18 @@
     if (event.key === "Escape") closeMenu();
   });
   window.addEventListener("popstate", render);
-  new MutationObserver(render).observe(document.documentElement, {
+  let renderQueued = false;
+  new MutationObserver(() => {
+    if (renderQueued) return;
+    renderQueued = true;
+    window.requestAnimationFrame(() => { renderQueued = false; render(); });
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ["src"],
   });
-  window.addEventListener("load", () => window.setTimeout(preloadTransitions, 420), { once: true });
+  window.addEventListener("load", () => window.setTimeout(preloadTransitions, 3600), { once: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render, { once: true });
   else render();
 })();

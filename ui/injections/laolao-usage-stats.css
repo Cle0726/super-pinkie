@@ -139,3 +139,11 @@ html[data-theme-mode="dark"] .laolao-usage__chip--quota:hover {
 .laolao-usage--live .laolao-usage__chip:nth-child(4) { animation-delay: 0.36s; }
 .laolao-usage--live .laolao-usage__chip:nth-child(5) { animation-delay: 0.48s; }
 .laolao-usage--live .laolao-usage__chip:nth-child(6) { animation-delay: 0.6s; }
+
+/* Light chips, not a replacement for the removed room header. */
+#party-usage { display:flex;justify-content:flex-end;flex:none;padding:8px 20px 0;min-height:28px;background:transparent; }
+#party-usage .laolao-usage { padding-left:0;flex-wrap:wrap;justify-content:flex-end;gap:5px;max-width:100%;-webkit-user-select:none; }
+#party-usage .laolao-usage__chip { background:#efb4ce85;color:#975173;padding:2px 8px;font-size:10px; }
+#party-usage .laolao-usage__chip--cost { background:#dc6199cf;color:white; }
+#party-usage .laolao-usage__chip--quota { background:transparent;box-shadow:inset 0 0 0 1px #dc619970;color:#bd658e; }
+@media(prefers-reduced-motion:reduce){.laolao-usage,.laolao-usage__chip{transition:none}.laolao-usage--live .laolao-usage__chip,.laolao-usage__chip--pulse{animation:none}}

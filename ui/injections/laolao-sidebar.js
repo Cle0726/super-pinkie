@@ -1,5 +1,5 @@
 /* 来啦～老弟 · 侧边栏分组管理
-   功能：置顶 / 项目 / 最近 分组 + 一键清理会话记录。
+   功能：置顶 / 文件夹项目 / 最近会话 / 搜索与归档恢复。
    必须在应用模块包之前加载（包装 WebSocket 以复用已认证的网关连接）。 */
 (() => {
   "use strict";
@@ -13,6 +13,9 @@
     ws.addEventListener("message", (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      if(msg?.type==='event' && (String(msg.event).startsWith('sessions.') || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
+        window.dispatchEvent(new Event('laolao:sessions-changed'));
+      }
       if (!msg || msg.type !== "res" || !msg.id) return;
       const entry = pending.get(msg.id);
       if (!entry) return;
@@ -29,6 +32,28 @@
       if (/18789/.test(String(url))) {
         gwSocket = ws;
         sniff(ws);
+        const send = ws.send.bind(ws);
+        let sendQueue = Promise.resolve();
+        const abortVersions=new Map();
+        ws.send = function(data) {
+          let request;try { request=JSON.parse(data); } catch { return send(data); }
+          if(request.type==='req'&&['chat.abort','sessions.abort'].includes(request.method)){
+            const key=request.params?.sessionKey||request.params?.key;
+            abortVersions.set(key,(abortVersions.get(key)||0)+1);return send(data);
+          }
+          if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
+          const key=request.params?.sessionKey||request.params?.key;
+          const version=abortVersions.get(key)||0;
+          // Finish the authenticated binding before the model can receive this
+          // message. A failed binding returns an ordinary RPC error to the UI.
+          sendQueue=sendQueue.catch(()=>{}).then(async()=>{
+            try { await ensureProjectScope(key);if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');send(data); }
+            catch(error) {
+              toast('没有发送：'+error.message);
+              ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message:'项目目录尚未确认：'+error.message}})}));
+            }
+          });
+        };
       }
     } catch {}
     return ws;
@@ -183,6 +208,43 @@
     return null;
   };
 
+  let scopeLabelSignature='';
+  const scopeBindings=new Map();
+  const scopeErrors=new Map();
+  async function ensureProjectScope(key) {
+    const mode=modeForSession(key);if(!mode)return null;
+    const snapshot=readModeState(mode);
+    const name=Object.keys(snapshot.projects).find(n=>snapshot.projects[n].includes(key));
+    const folder=name?snapshot.projectFolders[name]:null;
+    if(name&&!folder) throw new Error('「'+name+'」还只是会话分组，请先选择项目文件夹。');
+    if(!folder&&!scopeBindings.has(key))return null;
+    const result=await gwRequest('pinkie.project.bind',{key,path:folder||null,name:name||''},15000);
+    scopeBindings.set(key,result.binding);scopeErrors.delete(key);showScope(key,result.binding);return result.binding;
+  }
+  function showScope(key,binding,error='') {
+    if(pageSessionKey()!==key)return;
+    const host=document.querySelector('.agent-chat__input');if(!host)return;
+    const text=error?'项目未就绪 · '+error:binding?'当前项目 · '+binding.root:'未绑定项目文件夹';
+    const signature=key+'|'+text;
+    let label=document.getElementById('laolao-project-scope');
+    if(label&&label.parentElement===host&&scopeLabelSignature===signature)return;
+    if(!label){label=document.createElement('div');label.id='laolao-project-scope';label.setAttribute('role','status');}
+    label.textContent=text;label.title=text;label.dataset.error=error?'true':'false';
+    if(label.parentElement!==host)host.prepend(label);scopeLabelSignature=signature;
+  }
+  let checkedScope='';
+  let scopeRetryAt=0;
+  function refreshScopeLabel() {
+    const key=pageSessionKey();if(!modeForSession(key))return;
+    const project=projectOf(key);const folder=project&&state.projectFolders[project];
+    const signature=key+'|'+(folder||'');
+    if(checkedScope===signature){showScope(key,scopeBindings.get(key),scopeErrors.get(key));if(!scopeErrors.has(key)||Date.now()<scopeRetryAt)return;}
+    checkedScope=signature;
+    gwRequest('pinkie.project.bind',{key,path:folder||null,name:project||''},15000)
+      .then(result=>{scopeBindings.set(key,result.binding);scopeErrors.delete(key);showScope(key,result.binding);})
+      .catch(error=>{scopeErrors.set(key,'目录保护未连接，请重新打开 App');scopeRetryAt=Date.now()+15000;showScope(key,null,scopeErrors.get(key));});
+  }
+
   /* 原生 agentSelection 先过滤，class 隐藏再兜底，避免任何一帧串出
      其他模式的会话。 */
 
@@ -335,8 +397,7 @@
   function requestNativeFolder(path) {
     const bridge = window.webkit?.messageHandlers?.laolaoProjectFolder;
     if (!bridge) {
-      toast("请在“来啦～老弟”本机 App 中选择项目文件夹");
-      return Promise.resolve(null);
+      return window.PinkieSessionList?.chooseFolder(path,gwRequest) || Promise.resolve(null);
     }
     const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     return new Promise((resolve) => {
@@ -365,22 +426,29 @@
   }
 
   async function addFolderProject(existingName) {
+    const ownerMode=stateMode;
+    if(existingName&&state.projectFolders[existingName]&&state.projects[existingName]?.length){toast('已有会话的项目目录固定不变。换目录请新建项目，避免混用记录。');return;}
     const currentPath = existingName ? state.projectFolders[existingName] : "";
     const result = await requestNativeFolder(currentPath);
     if (!result || result.cancelled || !result.path) return;
+    if(stateMode!==ownerMode){toast('模式已切换，未把文件夹添加到其他模式');return;}
+    try{const validated=await gwRequest('pinkie.project.validate',{path:result.path});result.path=validated.path;}catch(error){toast('文件夹未添加：'+error.message);return;}
+    if(stateMode!==ownerMode){toast('模式已切换，未把文件夹添加到其他模式');return;}
 
     const duplicate = Object.entries(state.projectFolders)
       .find(([name, path]) => path === result.path && name !== existingName);
     if (duplicate) {
       toast(`这个文件夹已经是「${duplicate[0]}」`);
-      return;
+      return duplicate[0];
     }
 
+    let projectName=existingName;
     if (existingName) {
       state.projectFolders[existingName] = result.path;
       toast(`「${existingName}」已换成新的文件夹`);
     } else {
       const name = uniqueProjectName(result.name || result.path.split("/").filter(Boolean).pop());
+      projectName=name;
       state.projects[name] = [];
       state.projectFolders[name] = result.path;
       state.collapsed.__projects = false;
@@ -388,6 +456,7 @@
     }
     save();
     schedule();
+    return projectName;
   }
 
   async function copyProjectPath(name) {
@@ -485,34 +554,93 @@
     });
   }
 
+  const creatingSessions=new Map();
   async function createProjectSession(name) {
+    if(name&&!state.projectFolders[name]){toast('请先为「'+name+'」选择项目文件夹');return;}
     const agentId = currentModeAgent();
+    const ownerMode=stateMode,ownerState=state;
+    const operation=ownerMode+'|'+(name||'');
+    if(creatingSessions.has(operation))return creatingSessions.get(operation);
+    const promise=(async()=>{
     try {
-      const result = await gwRequest("sessions.create", { agentId, label: `${name} · 新会话` }, 20000);
+      if(name)await gwRequest('pinkie.project.validate',{path:ownerState.projectFolders[name]});
+      const listed=await gwRequest('sessions.list',{agentId,limit:1000});
+      const labels=new Set((listed.sessions||[]).map(s=>s.label));
+      const base=name?`${name} · 新会话`:'新会话';
+      let number=1,label=base;
+      while(labels.has(label))label=base+' '+(++number);
+      const requestedKey=`agent:${agentId}:dashboard:${window.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(16).slice(2)}`;
+      let result;
+      for(let attempt=0;attempt<5;attempt++){
+        try{result=await gwRequest('sessions.create',{agentId,key:requestedKey,label},20000);break;}
+        catch(error){if(!/label already in use/i.test(error.message))throw error;label=base+' '+(++number);}
+      }
+      if(!result)throw new Error('名称正在被使用，请稍后再试');
       const key = result?.key;
       if (!key) throw new Error("missing session key");
-      if (!state.projects[name]) state.projects[name] = [];
-      if (!state.projects[name].includes(key)) state.projects[name].push(key);
-      save();
+      if(name){
+        await gwRequest('pinkie.project.bind',{key,path:ownerState.projectFolders[name],name});
+        if (!ownerState.projects[name]) ownerState.projects[name] = [];
+        if (!ownerState.projects[name].includes(key)) ownerState.projects[name].push(key);
+      }
+      writeModeState(ownerMode,ownerState);
+      window.PinkieSessionList?.invalidate();
+      if(stateMode!==ownerMode){toast('项目会话已在原模式建立');return;}
       sessionIndex = null;
       schedule();
-      gwRequest("sessions.patch", { key, agentId, category: name }).catch(() => {});
-
-      const search = `?session=${encodeURIComponent(key)}`;
-      const shell = document.querySelector("openclaw-app-shell");
-      if (typeof shell?.context?.navigate === "function") {
-        shell.context.gateway?.setSessionKey?.(key);
-        shell.context.navigate("chat", { search });
-      } else {
-        window.location.assign(`/chat${search}`);
-      }
-      toast(`已在「${name}」中新建会话`);
+      navigateSession(key);
+      toast(name?`已在「${name}」中新建会话`:'已新建会话');
     } catch (error) {
       toast(`新建失败：${error?.message || "请稍后再试"}`);
     }
+    })();
+    creatingSessions.set(operation,promise);
+    try{return await promise;}finally{creatingSessions.delete(operation);}
+  }
+
+  function navigateSession(key){
+    if(modeForSession(key)!==stateMode)return;
+    const current=new URL(window.location.href).searchParams.get('session');
+    if(current===key)return;
+    const search=`?session=${encodeURIComponent(key)}`;
+    const shell=document.querySelector('openclaw-app-shell');
+    if(typeof shell?.context?.navigate==='function'){
+      shell.context.gateway?.setSessionKey?.(key);shell.context.navigate('chat',{search});
+    }else{
+      // Newer OpenClaw builds keep router context private. A normal location
+      // assignment reloads the whole document and wrongly replays the App
+      // entrance. Popstate changes only the session inside the current mode.
+      window.history.pushState(window.history.state,'','/chat'+search);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    schedule();
+  }
+
+  async function patchSession(key,changes){
+    const mode=modeForSession(key);if(mode!==stateMode)throw new Error('请回到该会话所属模式再操作');
+    const result=await gwRequest('sessions.patch',{key,agentId:MODE_AGENT[mode],...changes});
+    window.PinkieSessionList?.invalidate();sessionIndex=null;schedule();return result;
+  }
+
+  function sessionMenu(anchor,key,title){
+    openMenu(anchor,menu=>{
+      menuItem(menu,ICONS.plus,'重命名会话…',()=>showNameInput(menu,{value:title,placeholder:'会话名称，回车保存',onSubmit:async name=>{
+        try{await patchSession(key,{label:name});toast('会话名称已保存');}catch(error){toast(/label already in use/i.test(error.message)?'已有同名会话，请换一个名称':error.message);}
+      }}));
+      menuItem(menu,ICONS.pin,state.pins.includes(key)?'取消置顶':'置顶会话',()=>{closeMenu();togglePin(key);});
+      menuItem(menu,ICONS.folder,'归入项目…',()=>openProjectMenu(anchor,key));
+      menuItem(menu,ICONS.close,'归档会话（保留记录）',async()=>{closeMenu();try{await patchSession(key,{archived:true});toast('已归档，可在归档列表恢复');}catch(error){toast(error.message);}});
+    });
   }
 
   /* ---------- 4. 分组 UI ---------- */
+  // When already inside a folder project, the familiar New chat button should
+  // create another conversation in that project, not silently leave it.
+  document.addEventListener('click',event=>{
+    if(!event.target?.closest?.('.sidebar-new-session'))return;
+    const name=projectOf(pageSessionKey());
+    event.preventDefault();event.stopImmediatePropagation();createProjectSession(name&&state.projectFolders[name]?name:null);
+  },true);
   function makeGroup(id, labelText, actions) {
     const group = document.createElement("div");
     group.className = "laolao-group";
@@ -713,7 +841,7 @@
       const names = Object.keys(state.projects);
       for (const name of names) {
         menuItem(menu, ICONS.folder, name === current ? `${name}（当前）` : name, () => {
-          assignToProject(key, name === current ? null : name);
+          if(name!==current)assignToProject(key,name);
           closeMenu();
         });
       }
@@ -722,33 +850,27 @@
         div.className = "laolao-menu__divider";
         menu.appendChild(div);
       }
-      menuItem(menu, ICONS.plus, "新建项目…", () => {
-        menu.innerHTML = "";
-        const input = document.createElement("input");
-        input.className = "laolao-menu__input";
-        input.placeholder = "项目名称，回车确认";
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            const name = input.value.trim();
-            if (name) {
-              if (!state.projects[name]) state.projects[name] = [];
-              assignToProject(key, name);
-            }
-            closeMenu();
-          }
-          if (e.key === "Escape") closeMenu();
-        });
-        menu.appendChild(input);
-        input.focus();
+      menuItem(menu, ICONS.plus, "添加文件夹项目…", async () => {
+        const ownerMode=stateMode;
+        closeMenu();
+        const name=await addFolderProject();
+        if(name&&stateMode===ownerMode)await assignToProject(key,name);
       });
     });
   }
 
-  function assignToProject(key, name) {
+  async function assignToProject(key, name) {
     if (modeForSession(key) !== stateMode) {
       toast("这个会话属于其他模式，不能放进当前项目");
       return;
     }
+    const ownerMode=stateMode,ownerState=state;
+    try {
+      const current=await gwRequest('pinkie.project.bind',{key,path:null});
+      if(current.binding&&(!name||ownerState.projectFolders[name]!==current.binding.root))throw new Error('这个会话已有固定项目。请在目标项目中新建会话。');
+      if(name){if(!ownerState.projectFolders[name])throw new Error('请先给这个分组选择文件夹');await gwRequest('pinkie.project.bind',{key,path:ownerState.projectFolders[name],name});}
+      if(stateMode!==ownerMode){toast('模式已切换，请回原模式重新操作');return;}
+    } catch(error){toast(error.message);return;}
     for (const keys of Object.values(state.projects)) {
       const i = keys.indexOf(key);
       if (i >= 0) keys.splice(i, 1);
@@ -760,15 +882,17 @@
     } else {
       toast("已移出项目");
     }
-    for (const [n, keys] of Object.entries(state.projects)) {
-      if (!keys.length) delete state.projects[n];
-    }
+    // Empty folder projects remain available for their next conversation.
     save();
     schedule();
   }
 
-  function togglePin(key) {
+  async function togglePin(key) {
     if (modeForSession(key) !== stateMode) return;
+    const ownerMode=stateMode,ownerState=state;
+    const pinned=!ownerState.pins.includes(key);
+    try{await patchSession(key,{pinned});}catch(error){toast('置顶未保存：'+error.message);return;}
+    if(stateMode!==ownerMode){const i=ownerState.pins.indexOf(key);if(pinned&&i<0)ownerState.pins.push(key);else if(!pinned&&i>=0)ownerState.pins.splice(i,1);writeModeState(ownerMode,ownerState);return;}
     const i = state.pins.indexOf(key);
     if (i >= 0) { state.pins.splice(i, 1); toast("已取消置顶"); }
     else { state.pins.push(key); toast("已置顶"); }
@@ -1047,10 +1171,17 @@
     applying = true;
     try {
       syncModeState();
+      if(window.PinkieSessionList){
+        window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,toast,
+          toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
+        refreshScopeLabel();return;
+      }
       const ui = ensureUI(section);
       if (ui) {
         applyLayout(section, ui);
         applyModeFilter(section);
+        refreshScopeLabel();
       }
     } finally {
       applying = false;
