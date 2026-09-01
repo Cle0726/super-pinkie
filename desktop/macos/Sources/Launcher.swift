@@ -279,6 +279,80 @@ private enum Gateway {
     }
 }
 
+private final class PartyService {
+    static let url = URL(string: "http://127.0.0.1:18889/")!
+    private var process: Process?
+
+    func start() {
+        guard process?.isRunning != true,
+              let root = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie") else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        task.arguments = [root.appendingPathComponent("services/party/server.py").path]
+        var environment = ProcessInfo.processInfo.environment
+        environment["PINKIE_GATEWAY_URL"] = Gateway.url.absoluteString
+        task.environment = environment
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do { try task.run(); process = task } catch { NSLog("派对服务无法启动：%@", error.localizedDescription) }
+    }
+
+    func stop() { if process?.isRunning == true { process?.terminate() } }
+
+    func ready(attempt: Int = 0, completion: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: Self.url.appendingPathComponent("api/health"))
+        request.timeoutInterval = 1
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            let object = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let ready = object?["service"] as? String == "super-pinkie-party" && object?["protocol"] as? Int == 1
+            DispatchQueue.main.async {
+                if ready || attempt >= 12 { completion(ready); return }
+                self?.start()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.ready(attempt: attempt + 1, completion: completion)
+                }
+            }
+        }.resume()
+    }
+}
+
+private final class RoundtableService {
+    static let url = URL(string: "http://127.0.0.1:18891/")!
+    private var process: Process?
+
+    func start() {
+        guard process?.isRunning != true,
+              let root = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie") else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        task.arguments = [root.appendingPathComponent("services/roundtable/server.py").path]
+        var environment = ProcessInfo.processInfo.environment
+        environment["PINKIE_GATEWAY_URL"] = Gateway.url.absoluteString
+        task.environment = environment
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do { try task.run(); process = task } catch { NSLog("灵感圆桌服务无法启动：%@", error.localizedDescription) }
+    }
+
+    func stop() { if process?.isRunning == true { process?.terminate() } }
+
+    func ready(attempt: Int = 0, completion: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: Self.url.appendingPathComponent("api/health"))
+        request.timeoutInterval = 1
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            let object = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let ready = object?["service"] as? String == "super-pinkie-roundtable" && object?["protocol"] as? Int == 1
+            DispatchQueue.main.async {
+                if ready || attempt >= 12 { completion(ready); return }
+                self?.start()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.ready(attempt: attempt + 1, completion: completion)
+                }
+            }
+        }.resume()
+    }
+}
+
 private enum BundledSetup {
     static func apply() {
         guard let resources = Bundle.main.resourceURL else { return }
@@ -325,6 +399,10 @@ struct LauncherMain {
         )
         updateItem.target = delegate
         appMenu.addItem(.separator())
+        let partyItem = appMenu.addItem(withTitle: "打开派对空间", action: #selector(AppDelegate.openParty(_:)), keyEquivalent: "p")
+        partyItem.target = delegate
+        let roundtableItem = appMenu.addItem(withTitle: "打开灵感圆桌", action: #selector(AppDelegate.openRoundtable(_:)), keyEquivalent: "r")
+        roundtableItem.target = delegate
         appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
@@ -354,6 +432,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let liveSpeech = NativeLiveSpeechController()
     private let liveSpeechHandlerName = "laolaoLiveVoice"
     private let projectFolderHandlerName = "laolaoProjectFolder"
+    private let party = PartyService()
+    private let roundtable = RoundtableService()
+
+    @objc func openParty(_ sender: Any?) {
+        party.ready { [weak self] ready in
+            if ready {
+                self?.dictation.stop()
+                self?.liveSpeech.stop()
+                self?.webView?.load(URLRequest(url: PartyService.url))
+            } else {
+                let alert = NSAlert()
+                alert.messageText = "派对服务还没准备好"
+                alert.informativeText = "请确认本机安装了 Python 3，且端口 18889 没有被其他程序占用。原来的四模式聊天不受影响。"
+                alert.runModal()
+            }
+        }
+    }
+
+    @objc func openRoundtable(_ sender: Any?) {
+        roundtable.ready { [weak self] ready in
+            if ready {
+                self?.dictation.stop()
+                self?.liveSpeech.stop()
+                self?.webView?.load(URLRequest(url: RoundtableService.url))
+            } else {
+                let alert = NSAlert()
+                alert.messageText = "灵感圆桌还没准备好"
+                alert.informativeText = "请确认本机安装了 Python 3，且端口 18891 没有被其他程序占用。其他聊天不会受影响。"
+                alert.runModal()
+            }
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) { party.stop(); roundtable.stop() }
+
+    // 前后台通知: WKWebView 切后台会被 macOS 挂起 JS/网络, 网关 websocket
+    // 悄悄断开 (1006), "回复完成"事件丢失, 前端动画永久转圈。
+    // 主动通知前端, 让它回前台时重拉会话并复位"生成中"状态。
+    func applicationDidResignActive(_ notification: Notification) {
+        notifyWebView("pinkie:app-background")
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        notifyWebView("pinkie:app-foreground")
+    }
+
+    private func notifyWebView(_ event: String) {
+        let script = "window.dispatchEvent(new CustomEvent('\(event)'));"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView?.evaluateJavaScript(script) { _, error in
+                if let error = error {
+                    NSLog("[laolao] \(event) notify failed: %@", error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func trustedFrame(_ frame: WKFrameInfo) -> Bool {
+        guard frame.isMainFrame, let url = frame.request.url else { return false }
+        return [Gateway.url, PartyService.url, RoundtableService.url].contains { allowed in
+            url.scheme == allowed.scheme && url.host == allowed.host && url.port == allowed.port
+        }
+    }
 
     @objc func checkForUpdates(_ sender: Any?) {
         let task = Process()
@@ -387,6 +528,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         BundledSetup.apply()
+        party.ready { _ in }
+        roundtable.ready { _ in }
         let rect = NSRect(x: 0, y: 0, width: 1280, height: 800)
         let window = LauncherWindow(
             contentRect: rect,
@@ -408,9 +551,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: dictationHandlerName)
         configuration.userContentController.add(self, name: liveSpeechHandlerName)
         configuration.userContentController.add(self, name: projectFolderHandlerName)
+        configuration.userContentController.add(self, name: "laolaoParty")
+        configuration.userContentController.add(self, name: "laolaoRoundtable")
         configuration.userContentController.addUserScript(WKUserScript(
             source: nativeDictationBridge,
             injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        // Mark only the native shell. The web UI uses this to avoid whole-page
+        // opacity animation while keeping its decorative motion intact.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: "document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
+            injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -418,6 +570,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.0, *) {
+            // Do not let WebKit derive a temporary opaque under-page colour
+            // while its remote layer tree is being restored.
+            webView.underPageBackgroundColor = .clear
+        }
 
         guard let contentView = window.contentView else { return }
         contentView.wantsLayer = true
@@ -457,10 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self?.window?.close()
                 return nil
             }
-            if event.keyCode == 53 { // Escape
-                NSApp.terminate(nil)
-                return nil
-            }
+            // Escape belongs to the web page (dialogs, search), not app termination.
             return event
         }
         window.makeKeyAndOrderFront(nil)
@@ -490,10 +644,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(type == .microphone ? .grant : .deny)
+        decisionHandler(type == .microphone && trustedFrame(frame) ? .grant : .deny)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard trustedFrame(message.frameInfo) else { return }
+        if message.name == "laolaoParty" { openParty(nil); return }
+        if message.name == "laolaoRoundtable" { openRoundtable(nil); return }
         if message.name == projectFolderHandlerName,
            let body = message.body as? [String: Any],
            let action = body["action"] as? String {
@@ -533,7 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let requestId = body["requestId"] as? String ?? UUID().uuidString
             let panel = NSOpenPanel()
             panel.title = "选择项目文件夹"
-            panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
+            panel.message = body["context"] as? String == "party" ? "选择派对项目的位置，也可以点“新建文件夹”。不同群聊各自管理项目。" : "选择一个文件夹，碧琪会把它放进左侧项目栏。"
             panel.prompt = "选择"
             panel.canChooseFiles = false
             panel.canChooseDirectories = true
