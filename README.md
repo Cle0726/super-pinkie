@@ -21,36 +21,36 @@
 - GitHub Actions 自动构建本机签名的 macOS App 与完整源码包
 - macOS「派对空间」独立群聊：碧琪主持、Codex 任务执行、OpenClaw 文本咨询，公开派工并逐项确认（[说明与边界](docs/PARTY-SPACE.md)）
 
-## 一键安装（Windows）— 接入 API 即用
+## Windows 快速使用 — 接 API 即可开箱即用 🚀
 
-> **前置条件**：Python 3.10+（安装时勾选「Add to PATH」）、Node.js 20+、Git、已安装并启动过 OpenClaw
+超级碧琪在 Windows 下提供 **图形化控制台 (`超級碧琪.exe`)** 与 **PowerShell 自动化脚本** 两种方式：
+
+### 方式 A：双击运行 `超級碧琪.exe`（推荐，零命令行）
+
+从 [GitHub Releases](../../releases) 直接下载 `超級碧琪.exe`：
+1. **一键全量部署**：点击主界面「🌟 一键全量安装 / 修复」，程序会自动检查 Node.js / OpenClaw 环境（未安装将自动调用 winget / npm 完成补齐），并一次性安装 4 模式人格、来啦～老弟 UI 全套皮肤、双传输层补丁并启动代理。
+2. **图形化配置 Key**：切换到「🔑 API Key 配置」选项卡，选择提供商（如 `mm`、`openai`、`anthropic`、`deepseek` 或自定义中继），填入 API Key 与 Base URL，点击保存即可自动写入配置并重启 Gateway。
+3. **开箱即用**：点击「🌐 打开 Web 界面」即可直接在浏览器畅享来啦～老弟糖果玻璃 UI！
+
+### 方式 B：PowerShell 一键脚本
+
+适合开发者或自动化部署（以管理员身份打开 PowerShell）：
 
 ```powershell
 # 1. 克隆仓库
 git clone https://github.com/Cle0726/super-pinkie.git
 cd super-pinkie
 
-# 2. 一键安装（PowerShell，以管理员身份运行）
-.\install.ps1
-
-# 如果想同时把 mm 提供商指向代理
+# 2. 一键安装（自动完成：提示词 + 补丁 + 人格 + 皮肤 + 代理服务）
 .\install.ps1 -Provider mm
+
+# 3. 在 openclaw.json 填入 API Key，然后重启 Gateway：
+openclaw gateway restart
 ```
 
-安装完成后：
-1. 打开 `%USERPROFILE%\.openclaw\openclaw.json`，在对应 `providers` 下填入你的 API Key
-2. 重启 OpenClaw Gateway：`openclaw gateway restart`
-3. 在无限制模式会话发送验证令牌确认注入生效（见下方说明）
-
-如果只想手动应用皮肤（不重新安装补丁）：
-```powershell
-.\installer\windows\apply-theme.ps1
-```
-
-拉取更新：
-```powershell
-.\update.ps1
-```
+- **手动重打皮肤**：`.\installer\windows\apply-theme.ps1`
+- **一键更新拉取**：`.\update.ps1`
+- **本机打包 .exe**：`.\build-win.ps1`
 
 ---
 
