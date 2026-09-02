@@ -86,14 +86,12 @@ function Apply-UISkin {
     $IndexFile = Join-Path $UiRoot "index.html"
     if (-not (Test-Path $IndexFile)) { return }
 
-    foreach ($asset in $Assets) {
-        $injectSrc = Join-Path $InjectRoot $asset
-        $assetSrc  = Join-Path $AssetRoot  $asset
-        $dst       = Join-Path $UiRoot $asset
-        if (Test-Path $injectSrc) {
-            Copy-IfChanged $injectSrc $dst
-        } elseif (Test-Path $assetSrc) {
-            Copy-IfChanged $assetSrc $dst
+    # 新旧 OpenClaw 的 UI 目录名不同，但它们都可以直接承载同一套静态
+    # 覆盖文件。复制完整资源，避免 Windows 发行版漏掉后来增加的圆桌、
+    # 流式工具和会话管理素材。
+    foreach ($sourceRoot in @($AssetRoot, $InjectRoot)) {
+        Get-ChildItem $sourceRoot -File | ForEach-Object {
+            Copy-IfChanged $_.FullName (Join-Path $UiRoot $_.Name)
         }
     }
 
@@ -108,41 +106,83 @@ function Apply-UISkin {
     Copy-IfChanged $handoff (Join-Path $UiRoot "laolao-handoff-bootstrap.js")
 
     $html = Get-Content $IndexFile -Raw -Encoding UTF8
-    if ((Test-Path $headFrag) -and -not ($html -match "laolao-head")) {
+    if ((Test-Path $headFrag) -and -not ($html -match "laolao-theme\.css")) {
         $frag = Get-Content $headFrag -Raw -Encoding UTF8
         $html = $html -replace "(?i)(<head[^>]*>)", "`$1`n$frag"
     }
-    if ((Test-Path $bodyFrag) -and -not ($html -match "laolao-body")) {
+    if ((Test-Path $bodyFrag) -and -not ($html -match 'id="laolao-splash"')) {
         $frag = Get-Content $bodyFrag -Raw -Encoding UTF8
-        $html = $html -replace "(?i)(</body>)", "$frag`n`$1"
+        $html = $html -replace "(?i)(<body[^>]*>)", "`$1`n$frag"
     }
     if ($html -notmatch "laolao-handoff-bootstrap") {
-        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff3""></script>`n    `$1"
+        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
     }
+
+    # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
+    $headTags = @(
+        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar13">',
+        '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
+        '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
+        '<script src="./laolao-sidebar.js?v=sidebar10"></script>',
+        '<script src="./laolao-usage-stats.js?v=stats10"></script>',
+        '<script defer src="./laolao-party-entry.js?v=party4"></script>',
+        '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
+        '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
+        '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
+        '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
+        '<script defer src="./laolao-resume.js?v=resume3"></script>'
+    )
+    foreach ($tag in $headTags) {
+        $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
+        if ($fileName -and $html -notmatch [regex]::Escape($fileName)) {
+            $html = $html -replace "(?i)(</head>)", "    $tag`n`$1"
+        }
+    }
+
+    $versions = @{
+        'laolao-theme.css' = 'theme29'; 'laolao-sidebar.css' = 'sidebar13';
+        'laolao-sidebar.js' = 'sidebar10'; 'laolao-usage-stats.js' = 'stats10';
+        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash19';
+        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'
+    }
+    foreach ($entry in $versions.GetEnumerator()) {
+        $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'
+        $html = [regex]::Replace($html, $pattern, "./$($entry.Key)?v=$($entry.Value)")
+    }
+
+    # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
+    # /settings/laolao-*，从而避免黑屏、裂图和透明度闪一下。
+    $html = $html.Replace('"./laolao-', '"/laolao-')
     $html | Set-Content $IndexFile -Encoding UTF8
     Write-Host "  patched: $IndexFile"
 }
 
-# ── 1. 注入 nvm 管理的 OpenClaw UI ────────────────────────────────────────
+# ── 1. 定位当前 OpenClaw（新版 dist/control-ui + 旧版 ui）──────────────
 $didAny = $false
+$packageRoots = [System.Collections.Generic.List[string]]::new()
+if ($env:OPENCLAW_ROOT) { $packageRoots.Add($env:OPENCLAW_ROOT) }
+try {
+    $npmRoot = (& npm root -g 2>$null | Select-Object -First 1).Trim()
+    if ($npmRoot) { $packageRoots.Add((Join-Path $npmRoot 'openclaw')) }
+} catch {}
+$packageRoots.Add((Join-Path $env:APPDATA 'npm\node_modules\openclaw'))
 if (Test-Path $NvmRoot) {
     Get-ChildItem $NvmRoot -Directory | ForEach-Object {
-        $uiRoot = Join-Path $_.FullName "lib\node_modules\openclaw\ui"
-        if (Test-Path $uiRoot) {
+        $packageRoots.Add((Join-Path $_.FullName 'lib\node_modules\openclaw'))
+        $packageRoots.Add((Join-Path $_.FullName 'node_modules\openclaw'))
+    }
+}
+
+$seenUi = @{}
+foreach ($packageRoot in $packageRoots) {
+    foreach ($relativeUi in @('dist\control-ui', 'ui')) {
+        $uiRoot = Join-Path $packageRoot $relativeUi
+        if ((Test-Path (Join-Path $uiRoot 'index.html')) -and -not $seenUi.ContainsKey($uiRoot)) {
+            $seenUi[$uiRoot] = $true
             Write-Host "==> applying skin to $uiRoot"
             Apply-UISkin $uiRoot
             $didAny = $true
         }
-    }
-}
-
-if (-not $didAny) {
-    # fallback：搜索 AppData\Roaming\npm\node_modules\openclaw
-    $npm = Join-Path $env:APPDATA "npm\node_modules\openclaw\ui"
-    if (Test-Path $npm) {
-        Write-Host "==> applying skin to $npm"
-        Apply-UISkin $npm
-        $didAny = $true
     }
 }
 

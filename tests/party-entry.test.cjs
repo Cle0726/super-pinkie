@@ -21,7 +21,8 @@ function fixture(){
   const native=[];
   vm.runInNewContext(source,{document,location:{href:'http://127.0.0.1:18789/'},URL,
     window:{webkit:{messageHandlers:{laolaoParty:{postMessage:v=>native.push(v)}}}},
-    requestAnimationFrame:fn=>fn(),MutationObserver:class{constructor(fn){observer=fn;}observe(){}}});
+    requestAnimationFrame:fn=>fn(),setInterval:fn=>{observer=fn;return 0;},
+    MutationObserver:class{constructor(fn){observer=fn;}observe(){}}});
   return{document,sidebar,native,observer,rail:()=>rail,replaceRail(){rail.remove();rail=new Element('aside');root.append(rail);observer();},removeRail(){rail.remove();rail=null;observer();}};
 }
 test('entry moves from old sidebar to right rail with real princess asset',()=>{

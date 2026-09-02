@@ -67,10 +67,20 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install bundled runtime inputs
+        run: |
+          npm install -g openclaw@2026.7.1-2
+          python -m pip install --upgrade pip aiohttp edge-tts
       - name: Build local-signed app
         run: |
           chmod +x desktop/macos/build.sh
-          desktop/macos/build.sh
+          PINKIE_PYTHON_BIN="$(command -v python3)" desktop/macos/build.sh
       - name: Verify signature
         run: codesign --verify --deep --strict 'dist/超級碧琪.app'
       - uses: actions/upload-artifact@v4
@@ -88,6 +98,14 @@ jobs:
       - name: Build Windows .exe
         shell: pwsh
         run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\installer\windows\apply-theme.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
           .\build-win.ps1
       - uses: actions/upload-artifact@v4
         with:

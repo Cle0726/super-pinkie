@@ -13,7 +13,7 @@
    比完全透明多一层兜底，但远弱于 hover/active，不会破坏无框设计。 */
 html .sidebar-recent-session {
   border-radius: 10px !important;
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
@@ -360,7 +360,8 @@ html[data-theme-mode="dark"] .laolao-toast {
 }
 .laolao-managed-sessions .sidebar-recent-sessions{display:none!important}
 .laolao-managed-sessions>#laolao-projects,.laolao-managed-sessions>[data-laolao-group]{display:none!important}
-#laolao-session-manager{min-width:0;padding-top:5px}
+.laolao-managed-sessions{overflow:hidden!important}
+#laolao-session-manager{min-width:0;min-height:0;flex:1 1 auto;overflow-x:hidden;overflow-y:auto;padding:5px 0 10px;scrollbar-gutter:stable}
 .laolao-session-controls{display:flex;align-items:center;gap:5px;margin:4px 10px 10px}
 .laolao-session-search{width:0;min-width:0;flex:1;font:inherit;font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid transparent;background:rgba(255,255,255,.08);color:inherit;outline:none}
 .laolao-session-search:hover,.laolao-session-search:focus{border-color:rgba(204,117,163,.45);background:rgba(255,250,253,.25)}

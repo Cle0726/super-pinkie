@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>灵感圆桌</title>
-  <link rel="stylesheet" href="/roundtable.css?v=workroom4">
-  <link rel="stylesheet" href="/roundtable-scene.css?v=workroom4">
-  <script src="/roundtable.js?v=workroom4" defer></script>
+  <link rel="stylesheet" href="/roundtable.css?v=workroom5">
+  <link rel="stylesheet" href="/roundtable-scene.css?v=workroom5">
+  <script src="/roundtable.js?v=workroom5" defer></script>
 </head>
 <body>
   <div class="workroom-art" aria-hidden="true"></div><div class="workroom-light" aria-hidden="true"></div>
-  <section id="splash" class="splash" aria-label="正在进入圆桌工作室"><img class="splash-crest" src="/crest.png" alt=""><div class="splash-line"></div><span>ROUND TABLE STUDIO</span><h1>灵感圆桌</h1><p>模型入席，项目工具正在就位。</p></section>
+  <section id="splash" class="splash" aria-label="正在进入圆桌工作室"><span class="splash-sigil" aria-hidden="true"></span><div class="splash-line"></div><span>ROUND TABLE STUDIO</span><h1>灵感圆桌</h1><p>模型入席，项目工具正在就位。</p></section>
   <div id="app" class="shell" data-seats-collapsed="true" data-has-session="false" inert>
     <aside class="history" aria-label="圆桌项目和记录">
-      <div class="wordmark"><img src="/crest.png" alt=""><div><strong>灵感圆桌</strong><small>ROUND TABLE STUDIO</small></div></div>
+      <div class="wordmark"><span class="brand-sigil" aria-hidden="true"></span><div><strong>灵感圆桌</strong><small>ROUND TABLE STUDIO</small></div></div>
       <button id="new-session" class="new-session" type="button"><span aria-hidden="true"></span><b>新建工作圆桌</b><small>选择项目，再让模型开工</small></button>
-      <section id="project-card" class="project-card" hidden><img class="project-emblem" src="/project-emblem.png" alt=""><div><span class="eyebrow">当前项目</span><strong id="project-name">尚未绑定</strong><code id="project-path"></code><div class="project-actions"><button id="project-open" type="button">在 Finder 打开</button><button id="project-bind" type="button">选择文件夹</button></div></div></section>
+      <section id="project-card" class="project-card" hidden><div><span class="eyebrow">当前项目</span><strong id="project-name">尚未绑定</strong><code id="project-path"></code><div class="project-actions"><button id="project-open" type="button">在 Finder 打开</button><button id="project-bind" type="button">选择文件夹</button></div></div></section>
       <label class="search"><span aria-hidden="true"></span><input id="session-filter" placeholder="搜索工作记录" aria-label="搜索圆桌工作记录"></label>
       <div class="section-title"><span>工作记录</span><b id="session-count">0</b></div><nav id="sessions" aria-label="圆桌工作记录"></nav>
       <div class="history-foot"><i></i><span>记录与项目一一绑定</span></div><a id="back-app" href="http://127.0.0.1:18789/">返回四模式聊天</a>
@@ -24,7 +24,7 @@
       <div id="connection" class="connection" role="status" hidden></div>
       <section id="timeline" class="timeline" aria-live="polite">
         <div id="empty" class="welcome"><div class="welcome-copy"><span class="eyebrow">七席判断 · 一席执行 · 真实项目</span><h2>不是开会，是把活干完。</h2><p>选择一个项目文件夹。模型会先把方案说短、互相检查，再由本机执行席读取文件、调用工具、修改并验证。</p><button id="welcome-new" class="primary" type="button">建立第一张工作圆桌</button><ul><li>项目目录固定，不会乱跑</li><li>命令和文件变化全程可见</li><li>最后只留一份大白话总结</li></ul></div></div>
-        <div id="project-guard" class="project-guard" hidden><img class="guard-project" src="/project-emblem.png" alt=""><div><strong>这张旧圆桌还没有项目目录</strong><p>先选择文件夹，执行席才能读取、修改和验证真实文件。</p></div><button id="guard-bind" type="button">选择项目文件夹</button></div>
+        <div id="project-guard" class="project-guard" hidden><span class="guard-line" aria-hidden="true"></span><div><strong>这张旧圆桌还没有项目目录</strong><p>先选择文件夹，执行席才能读取、修改和验证真实文件。</p></div><button id="guard-bind" type="button">选择项目文件夹</button></div>
         <div id="messages"></div>
       </section>
       <button id="jump-latest" class="jump-latest" type="button" hidden>回到最新工作 ↓</button>
@@ -36,13 +36,13 @@
     </main>
     <aside id="seats-panel" class="seats" aria-label="圆桌席位与进度">
       <button id="toggle-seats" class="seat-toggle" type="button" aria-label="展开圆桌席位" title="展开圆桌席位"><span></span></button>
-      <div class="stage-column" id="stage-track" aria-label="工作阶段"><span data-stage="ideas"><i aria-hidden="true"></i><b>出主意</b></span><span data-stage="challenge"><i aria-hidden="true"></i><b>挑问题</b></span><span data-stage="consensus"><i aria-hidden="true"></i><b>说人话</b></span><span data-stage="execute"><i aria-hidden="true"></i><b>真执行</b></span></div>
+      <div class="stage-column" id="stage-track" aria-label="工作阶段"><span data-stage="ideas"><i data-step="1" aria-hidden="true"></i><b>出主意</b></span><span data-stage="challenge"><i data-step="2" aria-hidden="true"></i><b>挑问题</b></span><span data-stage="consensus"><i data-step="3" aria-hidden="true"></i><b>说人话</b></span><span data-stage="execute"><i data-step="4" aria-hidden="true"></i><b>真执行</b></span></div>
       <div class="seats-copy expanded-only"><span class="eyebrow">圆桌席位</span><strong id="seat-summary">等待入席</strong><div class="model-tools"><span id="model-status">正在读取模型…</span><button id="refresh-models" type="button">刷新</button></div></div>
       <div id="seats"></div><p class="privacy expanded-only">模型全部由你选择；系统只负责分好判断、复核、总结和执行的工作。每个项目、记录和工具过程彼此隔离。</p>
     </aside>
   </div>
   <dialog id="create-dialog"><form id="create-form"><button id="close-create" class="dialog-close" type="button" aria-label="关闭">×</button><span class="eyebrow">建立工作圆桌</span><h2>先确定项目，再邀请模型</h2><label>工作名称<input id="create-title" required maxlength="60" placeholder="例如：把登录切换闪屏彻底修好"></label>
-    <section class="folder-picker"><img class="folder-picker-emblem" src="/project-emblem.png" alt=""><div><span>项目文件夹</span><strong id="create-project-name">尚未选择</strong><code id="create-project-path">执行席只会在这里工作</code></div><button id="choose-project" type="button">选择已有文件夹</button><button id="create-project" type="button">新建空项目</button></section>
+    <section class="folder-picker"><div><span>项目文件夹</span><strong id="create-project-name">尚未选择</strong><code id="create-project-path">执行席只会在这里工作</code></div><button id="choose-project" type="button">选择已有文件夹</button><button id="create-project" type="button">新建空项目</button></section>
     <fieldset><legend>模型席位 <small>至少三位</small></legend><div id="invite-list"></div></fieldset><p>每个席位的模型都由你选择；系统只分工，不偷偷指定模型。负责执行的那一席会读取文件、调用工具并验证结果。</p><button class="primary" type="submit">建立并进入</button></form></dialog>
   <div id="toast" role="status" hidden></div>
 </body>

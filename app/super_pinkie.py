@@ -401,7 +401,26 @@ def install_theme(log):
     if not root:
         log("  未定位到 OpenClaw UI 目录，跳过皮肤注入")
         return
-    ui_dir = os.path.join(root, "ui")
+    if os.name == "nt":
+        windows_installer = resource_path("installer", "windows", "apply-theme.ps1")
+        if windows_installer.exists():
+            env = dict(os.environ)
+            env["OPENCLAW_ROOT"] = str(root)
+            env["PINKIE_SKIP_APP_BUNDLES"] = "1"
+            try:
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(windows_installer)],
+                    capture_output=True, text=True, timeout=90, env=env,
+                )
+                if result.returncode == 0:
+                    log("  Windows 当前版 control-ui 已完成全量注入")
+                    return
+                log("  PowerShell 注入失败，改用内置兼容路径：" + (result.stderr.strip() or str(result.returncode)))
+            except Exception as exc:
+                log(f"  PowerShell 注入不可用，改用内置兼容路径：{exc}")
+
+    ui_candidates = [os.path.join(root, "dist", "control-ui"), os.path.join(root, "ui")]
+    ui_dir = next((path for path in ui_candidates if os.path.isfile(os.path.join(path, "index.html"))), ui_candidates[0])
     index_html = os.path.join(ui_dir, "index.html")
     if not os.path.isdir(ui_dir) or not os.path.isfile(index_html):
         log(f"  未在 {ui_dir} 找到 index.html")

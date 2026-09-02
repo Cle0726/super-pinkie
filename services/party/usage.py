@@ -1,5 +1,6 @@
 """Persistent aggregate counters only; never import prompts, accounts or API keys."""
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 import math
 import os
@@ -21,6 +22,12 @@ def read_json(path):
     except (OSError,ValueError):return {}
 
 
+def parse_reset(value):
+    if not isinstance(value,str):return None
+    try:return datetime.fromisoformat(value.replace('Z','+00:00'))
+    except ValueError:return None
+
+
 def snapshot(home=None):
     home=Path(home or Path.home())
     raw=read_json(home/'.antigravity_cle/codex_local_access_stats.json')
@@ -39,16 +46,24 @@ def snapshot(home=None):
     if cost is not None:counters['cost']=cost
     epoch=str((raw.get('daily') or {}).get('since','daily') if daily else raw.get('since','total'))
     stamp=number((raw.get('daily') or {}).get('updatedAt')) if daily else number(raw.get('updatedAt'))
-    quota=[]
+    daily=[];weekly=[]
     for path in (home/'.antigravity_cle/cache/quota_api_v1_desktop/authorized').glob('*.json'):
         models=read_json(path).get('payload',{}).get('models') or {}
         for key,model in models.items():
             if not key.startswith(('gemini','claude','gpt')) or not isinstance(model,dict):continue
-            value=number((model.get('quotaInfo') or {}).get('remainingFraction'))
-            if value is not None and value<=1:quota.append(value)
+            qi=model.get('quotaInfo') or {}
+            value=number(qi.get('remainingFraction'))
+            if value is None or value>1:continue
+            reset=parse_reset(qi.get('resetTime'))
+            horizon=(reset-datetime.now(timezone.utc)).total_seconds() if reset else 0
+            # 重置周期超过 36 小时的视为周配额池，否则为日配额池。
+            (weekly if horizon>129600 else daily).append(value)
+    parts=[]
+    if daily:parts.append(f'日{min(daily):.0%}')
+    if weekly:parts.append(f'周{min(weekly):.0%}')
     return {'counters':counters,'epoch':epoch,'stamp':stamp or 0,'costNote':cost_note,
-            'quota':f'{min(quota):.0%}' if quota else None,
-            'quotaNote':'本机配额缓存：相关模型中最低剩余比例；不是美元余额' if quota else '未取得上游剩余额度'}
+            'quota':' · '.join(parts) if parts else None,
+            'quotaNote':'本机配额缓存：日=每日重置池最低剩余，周=每周重置池最低剩余；不是美元余额' if parts else '未取得上游剩余额度'}
 
 
 def collect(home=None):

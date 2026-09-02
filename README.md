@@ -84,10 +84,11 @@ App 菜单选择“检查并安装更新…”，或运行：
 
 GitHub Releases 提供：
 
-- `super-pinkie-macos-<版本>.zip`：本机签名的「超級碧琪.app」
+- `super-pinkie-macos-<版本>.zip`：自包含的「超級碧琪.app」，内置网关、Node.js、Python 与本项目服务
+- `super-pinkie-windows-<版本>.zip` / `超級碧琪.exe`：Windows 图形化部署与维护程序
 - `super-pinkie-full-<版本>.zip`：完整源码、安装器、资源与文档
 
-macOS App 需要本机已安装并配置 OpenClaw；完整功能首次使用建议运行 `install-full.sh`。
+macOS App 不再依赖本机预装 OpenClaw 或 Python；模型 Key、会话、项目目录和个人配置仍保存在用户目录，升级 App 不会覆盖。Windows EXE 会检查并补齐所需环境，再注入本仓库的完整 UI 与工作模式。
 
 > 本项目仅供模型能力评估、安全研究与个人自动化使用。使用本工具产生的任何后果由使用者自行承担。上游模型服务商仍保留其服务端的内容审核权利。
 

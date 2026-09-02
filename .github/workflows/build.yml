@@ -1,8 +1,8 @@
 name: build-apps
 
 on:
-  push:
-    tags: ["v*"]
+  # Legacy lightweight control-app build. Production releases are created by
+  # release.yml so two workflows never race to publish different macOS apps.
   workflow_dispatch:
 
 permissions:

@@ -30,7 +30,7 @@
   const initial = switching ? Math.max(68, Math.min(96, Number(handoff?.progress) || 68)) : 8;
   if (switching) {
     splash.classList.add('is-mode-progress', `is-mode-progress--${mode}`);
-    splash.style.setProperty('--laolao-mode-progress-image', `url("./laolao-mode-transition-${mode}.png?v=transition2")`);
+    splash.style.setProperty('--laolao-mode-progress-image', `url("/laolao-mode-transition-${mode}.png?v=transition2")`);
     motion.text(splash.querySelector('.laolao-splash__eyebrow'), '碧琪的模式切换');
     motion.text(splash.querySelector('.laolao-splash__title'), details.label);
   }
@@ -38,7 +38,7 @@
   // settle too, so a failed image can never hold the user behind this screen.
   let assetsReady = false;
   Promise.all([motion.modeAssets(mode), motion.preload(switching
-    ? `./laolao-mode-transition-${mode}.png?v=transition2` : './laolao-splash.png')])
+    ? `/laolao-mode-transition-${mode}.png?v=transition2` : '/laolao-splash.png')])
     .then(() => { assetsReady = true; splash.classList.add('is-art-ready'); });
   const started = performance.now();
   const minimum = motion.reduced() ? 400 : switching ? 700 : 2600;

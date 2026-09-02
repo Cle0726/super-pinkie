@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>超級碧琪正在准备</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; background: transparent; }
+    body {
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      color: #76465f;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 44%, rgba(255,244,249,.82), rgba(244,210,228,.48) 44%, rgba(180,125,159,.20));
+      content: "";
+    }
+    main {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+    }
+    .mark {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      margin-bottom: 3px;
+      filter: drop-shadow(0 10px 22px rgba(151,65,111,.16));
+    }
+    .mark::before {
+      position: absolute;
+      inset: 18px;
+      border: 1px solid rgba(205,79,137,.58);
+      box-shadow: inset 0 0 0 8px rgba(255,249,252,.14), 0 0 22px rgba(221,91,151,.18);
+      content: "";
+      transform: rotate(45deg);
+      animation: breathe 2.2s ease-in-out infinite;
+    }
+    .mark::after {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #dc679b;
+      box-shadow: 0 0 0 8px rgba(255,255,255,.20), 0 0 20px rgba(214,75,139,.42);
+      content: "";
+      transform: translate(-50%,-50%);
+    }
+    .mark span,
+    .mark span::before,
+    .mark span::after {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(226,102,157,.62);
+      content: "";
+    }
+    .mark span { left: 7px; top: 16px; animation: glint 1.9s ease-in-out infinite; }
+    .mark span::before { left: 54px; top: 10px; animation: glint 1.9s .35s ease-in-out infinite; }
+    .mark span::after { left: 42px; top: 45px; animation: glint 1.9s .7s ease-in-out infinite; }
+    h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: .04em; }
+    p { margin: 0; font-size: 12px; line-height: 1.8; opacity: .72; }
+    .dots { display: flex; gap: 6px; margin-top: 4px; }
+    .dots i { width: 5px; height: 5px; border-radius: 50%; background: #d85c96; animation: dot 1.25s ease-in-out infinite; }
+    .dots i:nth-child(2) { animation-delay: .15s; }
+    .dots i:nth-child(3) { animation-delay: .3s; }
+    @keyframes breathe { 50% { transform: rotate(45deg) scale(1.08); border-color: rgba(205,79,137,.82); } }
+    @keyframes glint { 0%,70%,100% { opacity: .22; transform: scale(.75); } 35% { opacity: .9; transform: scale(1.2); } }
+    @keyframes dot { 0%,70%,100% { opacity: .22; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+    @media (prefers-reduced-motion: reduce) { .mark::before, .mark span, .mark span::before, .mark span::after, .dots i { animation: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true"><span></span></div>
+    <h1>超級碧琪正在准备</h1>
+    <p>整理模型、工具和工作空间中<br>第一次打开会稍慢，已有资料不会被改动</p>
+    <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+  </main>
+</body>
+</html>

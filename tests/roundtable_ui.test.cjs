@@ -21,18 +21,18 @@ test('roundtable remains an independent workspace entry', () => {
 test('generated visual suite is shipped and actually routed into the UI', () => {
   const assets = [
     'laolao-roundtable-workroom-v3.png',
-    'laolao-roundtable-crest-v1.png',
-    'laolao-roundtable-project-v1.png',
-    'laolao-roundtable-stages-v1.png',
-    'laolao-roundtable-tools-v1.png',
+    'laolao-roundtable-crest-alpha-v2.png',
+    'laolao-roundtable-project-alpha-v2.png',
+    'laolao-roundtable-stages-alpha-v2.png',
+    'laolao-roundtable-tools-alpha-v2.png',
   ];
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, 'ui/assets', asset)), asset);
   for (const route of ['/workroom.png','/crest.png','/project-emblem.png','/stage-totems.png','/tool-totems.png']) {
     assert.match(server, new RegExp(route.replaceAll('/', '\\/')));
   }
-  assert.match(css, /url\('\/stage-totems\.png'\)/);
-  assert.match(css, /url\('\/tool-totems\.png'\)/);
-  assert.match(html, /src="\/project-emblem\.png"/);
+  assert.match(sceneCss, /brand-sigil/);
+  assert.match(sceneCss, /background-image:none!important/);
+  assert.doesNotMatch(html, /src="\/(?:crest|project-emblem)\.png"/);
 });
 
 test('workspace can choose, create, bind and reveal a real project folder', () => {
@@ -81,6 +81,14 @@ test('streaming work, tools and plain-language summary have separate UI states',
   assert.match(html, /id="jump-latest"/);
   assert.match(server, /完成了什么：/);
   assert.match(server, /验证结果：/);
+});
+
+test('assistant markdown is rendered as readable UI without allowing raw HTML', () => {
+  assert.match(js, /function renderRichText/);
+  assert.match(js, /document\.createTextNode/);
+  assert.match(js, /md-table/);
+  assert.match(sceneCss, /\.md-heading/);
+  assert.doesNotMatch(js, /innerHTML\s*=/);
 });
 
 test('roundtable names agree with Party Space for shared ponies', () => {

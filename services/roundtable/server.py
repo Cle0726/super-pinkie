@@ -556,7 +556,7 @@ class Roundtable:
     def worker_sandbox(project, temp, binary):
         if not Path('/usr/bin/sandbox-exec').is_file():
             raise ValueError('当前系统没有项目隔离器，执行席已停止，绝不会退回无限制访问')
-        runtime = next((parent for parent in Path(binary).resolve().parents if parent.name.startswith('v') and (parent/'bin/node').is_file()),
+        runtime = next((parent for parent in Path(binary).resolve().parents if (parent/'bin/node').is_file()),
                        Path(binary).resolve().parent)
         roots = [Path(project), Path(temp), ROOT, runtime, Path('/System'), Path('/usr'), Path('/bin'), Path('/sbin'),
                  Path('/Library'), Path('/dev'), Path('/private/etc'), Path('/opt/homebrew')]
@@ -842,10 +842,10 @@ class Handler(BaseHTTPRequestHandler):
                 '/roundtable-scene.css': ROOT/'ui/roundtable/roundtable-scene.css',
                 '/roundtable.js': ROOT/'ui/roundtable/roundtable.js',
                 '/workroom.png': ROOT/'ui/assets/laolao-roundtable-workroom-v3.png',
-                '/crest.png': ROOT/'ui/assets/laolao-roundtable-crest-v1.png',
-                '/project-emblem.png': ROOT/'ui/assets/laolao-roundtable-project-v1.png',
-                '/stage-totems.png': ROOT/'ui/assets/laolao-roundtable-stages-v1.png',
-                '/tool-totems.png': ROOT/'ui/assets/laolao-roundtable-tools-v1.png',
+                '/crest.png': ROOT/'ui/assets/laolao-roundtable-crest-alpha-v2.png',
+                '/project-emblem.png': ROOT/'ui/assets/laolao-roundtable-project-alpha-v2.png',
+                '/stage-totems.png': ROOT/'ui/assets/laolao-roundtable-stages-alpha-v2.png',
+                '/tool-totems.png': ROOT/'ui/assets/laolao-roundtable-tools-alpha-v2.png',
                 '/brand-clean.png': ROOT/'ui/assets/laolao-roundtable-brand-v1-clean.png',
                 '/entry-clean.png': ROOT/'ui/assets/laolao-roundtable-entry-v2-clean.png',
                 '/bg-morning.png': ROOT/'ui/assets/laolao-roundtable-wallpaper-morning-v2.png',

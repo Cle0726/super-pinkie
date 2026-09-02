@@ -11,7 +11,7 @@ test('native streaming display enabled once for all four modes without model/con
     const messages=[{role:'assistant',content:'我将检查系统中可用的 OCR 工具。'}];
     const pane={classList:{add(){}},state:{sessionKey:`agent:${mode}:test`,assistantName:'助手',messages,settings,applySettings(v){this.settings=v;}}};
     let observer;
-    const ctx={document:{body:{},querySelectorAll:()=>[pane],readyState:'complete'},window:{addEventListener(){}},localStorage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},requestAnimationFrame:fn=>fn(),MutationObserver:class{constructor(fn){observer=fn}observe(){}}};
+    const ctx={document:{body:{},querySelectorAll:()=>[pane],readyState:'complete'},window:{addEventListener(){}},localStorage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},requestAnimationFrame:fn=>fn(),setInterval:fn=>{observer=fn;return 0;},MutationObserver:class{constructor(fn){observer=fn}observe(){}}};
     vm.runInNewContext(read('ui/injections/laolao-progress.js'),ctx);
     assert.equal(pane.state.settings.chatShowToolCalls,true);assert.equal(pane.state.settings.chatPersistCommentary,true);
     assert.equal(pane.state.settings.chatShowThinking,false);assert.equal(pane.state.settings.contextTokens,987654);assert.equal(pane.state.settings.model,'user-model');

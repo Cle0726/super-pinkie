@@ -11,6 +11,8 @@ LAUNCHER_SOURCE="$REPO_ROOT/desktop/macos/Sources/Launcher.swift"
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
+BUNDLE_BUILD_ONLY="${PINKIE_BUNDLE_BUILD_ONLY:-0}"
+PYTHON_BIN="${PINKIE_PYTHON_BIN:-/usr/bin/python3}"
 
 copy_if_changed() {
   local source_file="$1"
@@ -27,6 +29,11 @@ apply_ui_skin() {
   local asset
 
   [[ -f "$index_file" ]] || return 0
+
+  # Work on one canonical relative form while patching. The final form is
+  # root-relative, so nested SPA routes such as /settings/general never look
+  # for the skin under /settings/ and briefly fall back to stock dark UI.
+  perl -0pi -e 's{"/laolao-}{"./laolao-}g' "$index_file"
 
   for asset in \
     laolao-avatar.png \
@@ -143,7 +150,7 @@ apply_ui_skin() {
 
   # 顶栏用量统计胶囊：JS 必须紧跟 sidebar.js（依赖其 __laolaoSidebar.gwRequest 句柄）
   if ! grep -Fq './laolao-usage-stats.js' "$index_file"; then
-    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats9"></script>}' "$index_file"
+    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats10"></script>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -283,12 +290,12 @@ apply_ui_skin() {
   # This synchronous bootstrap runs immediately after the splash markup, so
   # the new document's first painted frame already shows the carried progress.
   if ! grep -Fq './laolao-handoff-bootstrap.js' "$index_file"; then
-    perl -0pi -e 's{(<openclaw-app>)}{    <script src="./laolao-handoff-bootstrap.js?v=handoff3"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<openclaw-app>)}{    <script src="./laolao-handoff-bootstrap.js?v=handoff4"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-motion.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script src="./laolao-motion.js?v=motion1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script src="./laolao-motion.js?v=motion2"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -303,12 +310,12 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar10}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.css?v=sidebar12' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar12}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.css?v=sidebar13' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar13}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-usage-stats.js?v=stats9' "$index_file"; then
-    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats9}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats10' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats10}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then
@@ -319,21 +326,30 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash16}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-mode-switcher.js?v=mode24' "$index_file"; then
-    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode24}g' "$index_file"
+  if ! grep -Fq './laolao-mode-switcher.js?v=mode25' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode25}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.js?v=splash18' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash18}g' "$index_file"
+  if ! grep -Fq './laolao-splash.js?v=splash19' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash19}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-handoff-bootstrap\.js(?:\?v=[^"]*)?}{./laolao-handoff-bootstrap.js?v=handoff3}g' "$index_file"
+  if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-handoff-bootstrap\.js(?:\?v=[^"]*)?}{./laolao-handoff-bootstrap.js?v=handoff4}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-motion.js?v=motion2' "$index_file"; then
+    perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion2}g' "$index_file"
     DID_CHANGE=1
   fi
 
   if grep -Fq '<title>OpenClaw Control</title>' "$index_file"; then
     perl -0pi -e 's{<title>OpenClaw Control</title>}{<title>来啦～老弟</title>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  if grep -Fq '"./laolao-' "$index_file"; then
+    perl -0pi -e 's{"\./laolao-}{"/laolao-}g' "$index_file"
     DID_CHANGE=1
   fi
 }
@@ -417,10 +433,12 @@ if [[ -z "$OPENCLAW_ROOT" ]]; then
 fi
 
 DID_CHANGE=0
-sync_agent_avatars
+if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
+  sync_agent_avatars
+fi
 if [[ -n "$OPENCLAW_ROOT" ]]; then
   apply_ui_skin "$OPENCLAW_ROOT/dist/control-ui"
-  if [[ -f "$REPO_ROOT/services/party/usage.py" ]]; then
+  if [[ "$BUNDLE_BUILD_ONLY" != "1" && -f "$REPO_ROOT/services/party/usage.py" ]]; then
     # Reuse the existing stats scheduler; don't add another background job.
     if [[ -f "$USER_HOME/.openclaw/laolao-stats-sync.py" ]]; then
       if ! cmp -s "$REPO_ROOT/services/party/usage.py" "$USER_HOME/.openclaw/laolao-stats-sync.py"; then
@@ -430,7 +448,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
       fi
       copy_if_changed "$REPO_ROOT/services/party/usage.py" "$USER_HOME/.openclaw/laolao-stats-sync.py"
     fi
-    OPENCLAW_ROOT="$OPENCLAW_ROOT" /usr/bin/python3 "$REPO_ROOT/services/party/usage.py"
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$PYTHON_BIN" "$REPO_ROOT/services/party/usage.py"
   fi
   if [[ -f "$REPO_ROOT/patch/apply-context-budget.mjs" ]]; then
     CONTEXT_NODE="$(command -v node 2>/dev/null || true)"
@@ -442,7 +460,9 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
       exit 1
     fi
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-context-budget.mjs"
-    /usr/bin/python3 "$REPO_ROOT/services/context/setup.py"
+    if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
+      "$PYTHON_BIN" "$REPO_ROOT/services/context/setup.py"
+    fi
     # 图片白名单扩展：让 ~/Desktop, ~/Downloads, ~/Documents, ~/.workbuddy,
     # ~/WorkBuddy 下的本地文件可以在控制界面里正常显示，不再报
     # "Outside allowed folders"。和 context-budget 一样幂等、可重复执行。

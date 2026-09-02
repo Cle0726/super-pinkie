@@ -59,9 +59,9 @@
     root.requestAnimationFrame(tick);
   });
   const modeAssets = id => Promise.all([
-    `./laolao-mode-transition-${id}.png?v=transition2`,
-    `./laolao-mode-${id}-hd.png?v=avatars6`,
-    id === 'chat' ? './laolao-wallpaper.png' : `./laolao-wallpaper-${id}.png`,
+    `/laolao-mode-transition-${id}.png?v=transition2`,
+    `/laolao-mode-${id}-hd.png?v=avatars6`,
+    id === 'chat' ? '/laolao-wallpaper.png' : `/laolao-wallpaper-${id}.png`,
   ].map(preload));
   function chatReady(id) {
     const doc = root.document;

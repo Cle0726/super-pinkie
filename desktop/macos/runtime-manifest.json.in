@@ -1,0 +1,8 @@
+{
+  "architecture": "@ARCH@",
+  "node": "@NODE_VERSION@",
+  "npm": "@NPM_VERSION@",
+  "openclaw": "@OPENCLAW_VERSION@",
+  "python": "@PYTHON_VERSION@",
+  "configuration": "external-user-state"
+}

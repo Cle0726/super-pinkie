@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 STATE_ROOT="${PINKIE_STATE_ROOT:-$HOME/Library/Application Support/SuperPinkie}"
 MARKER="$STATE_ROOT/bundled-personas-$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+PYTHON_BIN="${PINKIE_PYTHON_BIN:-/usr/bin/python3}"
 
 mkdir -p "$STATE_ROOT"
 
@@ -39,7 +40,7 @@ if [[ ! -f "$MARKER" ]]; then
   install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
   install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
   install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
-  OPENCLAW_BIN="$(command -v openclaw 2>/dev/null || true)"
+  OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
   if [[ -z "$OPENCLAW_BIN" ]]; then
     for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do
       if [[ -x "$candidate" ]]; then
@@ -55,7 +56,7 @@ if [[ ! -f "$MARKER" ]]; then
       PROJECT_AGENT_ADDED=1
     fi
     "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
-    if [[ "$PROJECT_AGENT_ADDED" == "1" ]]; then
+    if [[ "$PROJECT_AGENT_ADDED" == "1" && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
       "$OPENCLAW_BIN" gateway restart >/dev/null 2>&1 || true
     fi
   fi
@@ -64,9 +65,9 @@ fi
 
 # Dedicated group agents only; never rewrite the four existing personas here.
 if [[ -f "$REPO_ROOT/services/party/setup.py" ]]; then
-  /usr/bin/python3 "$REPO_ROOT/services/party/setup.py"
+  "$PYTHON_BIN" "$REPO_ROOT/services/party/setup.py"
 fi
 PINKIE_SKIP_APP_BUNDLES=1 "$SCRIPT_DIR/apply-theme.sh"
 if [[ -f "$REPO_ROOT/services/project-scope/setup.py" ]]; then
-  /usr/bin/python3 "$REPO_ROOT/services/project-scope/setup.py"
+  "$PYTHON_BIN" "$REPO_ROOT/services/project-scope/setup.py"
 fi

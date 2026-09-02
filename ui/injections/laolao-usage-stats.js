@@ -48,7 +48,7 @@
     if (refreshing) return;
     refreshing = true;
     try {
-      const stats = await fetchJson(document.getElementById('party-usage') ? '/api/usage' : './laolao-stats.json');
+      const stats = await fetchJson(document.getElementById('party-usage') ? '/api/usage' : '/laolao-stats.json');
       if (stats && (stats.scope === 'lifetime' || Number.isFinite(stats.input))) {
         view = {
           input: Number.isFinite(stats.input) ? stats.input : null,
@@ -68,7 +68,7 @@
         };
       } else {
         const [quotaFile, payload] = await Promise.all([
-          fetchJson("./laolao-quota.json"),
+          fetchJson("/laolao-quota.json"),
           $sidebar() ? $sidebar().gwRequest("sessions.list", { limit: 1000 }) : null,
         ]);
         const arr = (payload && (payload.sessions || payload.items)) || [];

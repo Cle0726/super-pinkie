@@ -26,7 +26,7 @@
   splash.classList.add("is-mode-progress", `is-mode-progress--${handoff.mode}`);
   splash.style.setProperty(
     "--laolao-mode-progress-image",
-    `url("./laolao-mode-transition-${handoff.mode}.png?v=transition2")`,
+    `url("/laolao-mode-transition-${handoff.mode}.png?v=transition2")`,
   );
   const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
   const title = splash.querySelector(".laolao-splash__title");

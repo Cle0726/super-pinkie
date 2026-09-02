@@ -8,6 +8,43 @@
   const node=(tag,cls='',text='')=>{const value=document.createElement(tag);value.className=cls;value.textContent=text;return value;};
   const toast=text=>{$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,3300);};
 
+  function renderInline(target,text){
+    const source=String(text||''),pattern=/(\*\*[^*\n]+\*\*|__[^_\n]+__|`[^`\n]+`)/g;let start=0,match;
+    while((match=pattern.exec(source))){
+      if(match.index>start)target.append(document.createTextNode(source.slice(start,match.index)));
+      const token=match[0],element=token[0]==='`'?node('code','md-code'):node('strong','md-strong');
+      element.textContent=token.slice(token[0]==='`'?1:2,token[0]==='`'?-1:-2);target.append(element);start=match.index+token.length;
+    }
+    if(start<source.length)target.append(document.createTextNode(source.slice(start)));
+  }
+  function renderRichText(target,text){
+    const lines=String(text||'').replace(/\r\n?/g,'\n').split('\n');let index=0;
+    target.replaceChildren();target.classList.add('md');
+    while(index<lines.length){
+      const line=lines[index];
+      if(!line.trim()){index++;continue;}
+      if(/^\s*```/.test(line)){
+        const language=line.trim().slice(3).trim(),parts=[];index++;
+        while(index<lines.length&&!/^\s*```/.test(lines[index]))parts.push(lines[index++]);
+        if(index<lines.length)index++;
+        const pre=node('pre','md-pre'),code=node('code','md-code-block',parts.join('\n'));if(language)code.dataset.language=language;pre.append(code);target.append(pre);continue;
+      }
+      const heading=line.match(/^\s*(#{1,4})\s+(.+)$/);
+      if(heading){const h=node('h'+Math.min(heading[1].length+2,6),'md-heading');renderInline(h,heading[2]);target.append(h);index++;continue;}
+      const list=line.match(/^\s*([-*]|\d+\.)\s+(.+)$/);
+      if(list){const ordered=/\d/.test(list[1]),group=node(ordered?'ol':'ul','md-list');while(index<lines.length){const item=lines[index].match(/^\s*([-*]|\d+\.)\s+(.+)$/);if(!item||(/\d/.test(item[1]))!==ordered)break;const li=node('li');renderInline(li,item[2]);group.append(li);index++;}target.append(group);continue;}
+      const quote=line.match(/^\s*>\s?(.*)$/);
+      if(quote){const block=node('blockquote','md-quote');while(index<lines.length){const item=lines[index].match(/^\s*>\s?(.*)$/);if(!item)break;const part=node('div');renderInline(part,item[1]);block.append(part);index++;}target.append(block);continue;}
+      const tableNext=lines[index+1]||'';
+      if(line.includes('|')&&/^\s*\|?\s*:?-{3,}/.test(tableNext)){
+        const split=value=>value.trim().replace(/^\||\|$/g,'').split('|').map(cell=>cell.trim()),table=node('table','md-table'),head=node('thead'),headRow=node('tr');
+        for(const cell of split(line)){const th=node('th');renderInline(th,cell);headRow.append(th);}head.append(headRow);table.append(head);index+=2;const body=node('tbody');
+        while(index<lines.length&&lines[index].includes('|')&&lines[index].trim()){const row=node('tr');for(const cell of split(lines[index])){const td=node('td');renderInline(td,cell);row.append(td);}body.append(row);index++;}table.append(body);target.append(table);continue;
+      }
+      const paragraph=node('p','md-paragraph');renderInline(paragraph,line.trim());target.append(paragraph);index++;
+    }
+  }
+
   async function api(path,data){
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),path.startsWith('/api/models')?25000:15000);
     try{const response=await fetch(path,{method:data?'POST':'GET',cache:'no-store',signal:controller.signal,headers:data?{'Content-Type':'application/json','X-Roundtable-Token':state.token}:{},body:data?JSON.stringify(data):undefined});const value=await response.json();if(!response.ok)throw new Error(value.error||'圆桌连接暂时中断');return value;}
@@ -40,7 +77,7 @@
   }
   function toolCard(message){const details=node('details','tool-card');if(message.status==='running')details.open=true;const lines=String(message.body||'').split('\n'),title=lines.shift()||'工具',kind=/write|edit|patch|file|read|文件|读取|写入|修改/i.test(title)?'file':message.status==='done'?'verify':'run',summary=node('summary');summary.append(node('i','tool-icon '+kind),node('b','',title));if(message.status==='running')summary.append(node('span','','正在运行'));else if(message.status==='failed')summary.append(node('span','','未完成'));else summary.append(node('span','','已完成'));const pre=node('pre','',lines.join('\n')||'这一步已经完成');details.append(summary,pre);return details;}
   function renderMessages(scroll=false){
-    const container=$('messages'),ordered=[...state.messages.values()].sort((a,b)=>a.id-b.id),present=new Map([...container.children].map(item=>[Number(item.dataset.id),item]));
+    const container=$('messages'),all=[...state.messages.values()].sort((a,b)=>a.id-b.id),finals=new Set(all.filter(item=>item.kind==='summary').map(item=>item.run+'\u0000'+item.body.trim())),ordered=all.filter(item=>!(item.kind==='progress'&&finals.has(item.run+'\u0000'+item.body.trim()))),present=new Map([...container.children].map(item=>[Number(item.dataset.id),item]));
     for(const message of ordered){let row=present.get(message.id);const expanded=row?.querySelector('.bubble')?.dataset.collapsed==='false';if(!row){row=node('article');row.dataset.id=message.id;container.append(row);}row.className='';row.replaceChildren();
       if(message.kind==='scene'){row.className='scene';row.textContent=message.body;continue;}
       if(message.sender==='user'){row.className='message user';row.append(node('div','bubble',message.body));continue;}
@@ -49,7 +86,7 @@
       row.className='message '+message.status+(isError?' error':'')+(message.kind==='progress'?' progress':'')+(message.kind==='summary'?' summary':'');
       if(portraits[message.sender]){const image=node('img','portrait');image.src=portraits[message.sender];image.alt='';image.draggable=false;row.append(image);}else row.append(node('span','system-crystal','◇'));
       const main=node('div','message-main'),meta=node('div','meta');meta.append(node('strong','',info.name||message.sender),node('span','',formatTime(message.created)));if(message.stage&&stageNames[message.stage])meta.append(node('span','stage-label',stageNames[message.stage]));if(message.status==='running')meta.append(node('span','speaking','处理中'));
-      const bubble=node('div','bubble'),visible=isError?friendlyError(message.body,info.name||'这一席'):message.body,text=node('div','bubble-text',visible);if(message.kind==='summary')bubble.append(node('i','summary-mark'));bubble.append(text);
+      const bubble=node('div','bubble'),visible=isError?friendlyError(message.body,info.name||'这一席'):message.body,text=node('div','bubble-text');if(isError)text.textContent=visible;else renderRichText(text,visible);if(message.kind==='summary')bubble.append(node('i','summary-mark'));bubble.append(text);
       if(isError&&visible!==message.body){const details=node('details','error-details');details.append(node('summary','','技术详情'),node('pre','',message.body));bubble.append(details);}
       if(!isError&&message.kind!=='summary'&&message.body.length>520){bubble.dataset.collapsed=expanded?'false':'true';const more=node('button','message-expand',expanded?'收起':'展开完整内容');more.type='button';more.onclick=()=>{const open=bubble.dataset.collapsed==='true';bubble.dataset.collapsed=String(!open);more.textContent=open?'收起':'展开完整内容';};bubble.append(more);}
       main.append(meta,bubble);row.append(main);

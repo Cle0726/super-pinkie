@@ -29,6 +29,65 @@ private enum RuntimeConfig {
     ))!
 }
 
+private enum BundledRuntime {
+    static let resourceRoot = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie")
+    static let runtimeRoot = resourceRoot?.appendingPathComponent("runtime")
+    static let binRoot = runtimeRoot?.appendingPathComponent("bin")
+    static let nodeURL = binRoot?.appendingPathComponent("node")
+    static let openClawURL = binRoot?.appendingPathComponent("openclaw")
+    static let openClawEntryURL = runtimeRoot?.appendingPathComponent("openclaw/openclaw.mjs")
+    static let pythonURL = runtimeRoot?.appendingPathComponent("python/bin/python3")
+
+    static func exists(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        return FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
+    static func environment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let fallbackPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        if let binRoot {
+            environment["PATH"] = binRoot.path + ":" + fallbackPath
+        }
+        if exists(openClawURL) {
+            environment["PINKIE_OPENCLAW_BIN"] = openClawURL?.path
+        }
+        if let openClawRoot = runtimeRoot?.appendingPathComponent("openclaw"),
+           FileManager.default.fileExists(atPath: openClawRoot.path) {
+            environment["OPENCLAW_ROOT"] = openClawRoot.path
+        }
+        if exists(pythonURL) {
+            environment["PINKIE_PYTHON_BIN"] = pythonURL?.path
+        }
+        environment["PINKIE_MANAGED_GATEWAY"] = "1"
+        environment["PINKIE_GATEWAY_URL"] = RuntimeConfig.gatewayURL.absoluteString
+        return environment
+    }
+
+    static func pythonExecutable() -> URL? {
+        if exists(pythonURL) { return pythonURL }
+        let system = URL(fileURLWithPath: "/usr/bin/python3")
+        return exists(system) ? system : nil
+    }
+
+    static func logHandle(named name: String) -> FileHandle? {
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie/logs", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent(name + ".log")
+            if !FileManager.default.fileExists(atPath: file.path) {
+                FileManager.default.createFile(atPath: file.path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: file)
+            handle.seekToEndOfFile()
+            return handle
+        } catch {
+            return nil
+        }
+    }
+}
+
 private final class LauncherWindow: NSWindow {
     // Borderless NSWindow instances are not key windows by default. The
     // dashboard contains text inputs, so it must be able to receive focus.
@@ -262,6 +321,9 @@ private final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate 
 
 private enum Gateway {
     static let url = RuntimeConfig.gatewayURL
+    private static var process: Process?
+    private static var logHandle: FileHandle?
+    private(set) static var lastError: String?
 
     static func isRunning(completion: @escaping (Bool) -> Void) {
         var request = URLRequest(url: url)
@@ -272,10 +334,61 @@ private enum Gateway {
     }
 
     static func start() {
+        guard process?.isRunning != true else { return }
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        task.arguments = ["-lc", #"openclaw_bin="$(command -v openclaw 2>/dev/null || true)"; if [ -z "$openclaw_bin" ]; then for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do if [ -x "$candidate" ]; then openclaw_bin="$candidate"; break; fi; done; fi; if [ -n "$openclaw_bin" ]; then nohup "$openclaw_bin" gateway run > "${TMPDIR:-/tmp}/super-pinkie-gateway.log" 2>&1 & fi"#]
-        try? task.run()
+        if BundledRuntime.exists(BundledRuntime.nodeURL),
+           let node = BundledRuntime.nodeURL,
+           let entry = BundledRuntime.openClawEntryURL,
+           FileManager.default.fileExists(atPath: entry.path) {
+            task.executableURL = node
+            task.arguments = [entry.path, "gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
+        } else if let external = ["/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw"]
+            .map(URL.init(fileURLWithPath:))
+            .first(where: { BundledRuntime.exists($0) }) {
+            task.executableURL = external
+            task.arguments = ["gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
+        } else {
+            lastError = "App 包内的网关运行时不完整。"
+            return
+        }
+        task.environment = BundledRuntime.environment()
+        let output = BundledRuntime.logHandle(named: "gateway")
+        task.standardOutput = output ?? FileHandle.nullDevice
+        task.standardError = output ?? FileHandle.nullDevice
+        task.terminationHandler = { stopped in
+            if stopped.terminationStatus != 0 {
+                lastError = "网关退出，状态码 \(stopped.terminationStatus)。详情保存在 SuperPinkie/logs/gateway.log。"
+            }
+        }
+        do {
+            try task.run()
+            process = task
+            logHandle = output
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    static func ready(attempt: Int = 0, completion: @escaping (Bool) -> Void) {
+        isRunning { running in
+            DispatchQueue.main.async {
+                if running || attempt >= 360 {
+                    completion(running)
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    ready(attempt: attempt + 1, completion: completion)
+                }
+            }
+        }
+    }
+
+    static func stop() {
+        if process?.isRunning == true { process?.terminate() }
+        process = nil
+        try? logHandle?.close()
+        logHandle = nil
     }
 }
 
@@ -285,11 +398,12 @@ private final class PartyService {
 
     func start() {
         guard process?.isRunning != true,
-              let root = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie") else { return }
+              let root = BundledRuntime.resourceRoot,
+              let python = BundledRuntime.pythonExecutable() else { return }
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        task.executableURL = python
         task.arguments = [root.appendingPathComponent("services/party/server.py").path]
-        var environment = ProcessInfo.processInfo.environment
+        var environment = BundledRuntime.environment()
         environment["PINKIE_GATEWAY_URL"] = Gateway.url.absoluteString
         task.environment = environment
         task.standardOutput = FileHandle.nullDevice
@@ -322,11 +436,12 @@ private final class RoundtableService {
 
     func start() {
         guard process?.isRunning != true,
-              let root = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie") else { return }
+              let root = BundledRuntime.resourceRoot,
+              let python = BundledRuntime.pythonExecutable() else { return }
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        task.executableURL = python
         task.arguments = [root.appendingPathComponent("services/roundtable/server.py").path]
-        var environment = ProcessInfo.processInfo.environment
+        var environment = BundledRuntime.environment()
         environment["PINKIE_GATEWAY_URL"] = Gateway.url.absoluteString
         task.environment = environment
         task.standardOutput = FileHandle.nullDevice
@@ -353,6 +468,41 @@ private final class RoundtableService {
     }
 }
 
+private final class TTSService {
+    static let healthURL = URL(string: "http://127.0.0.1:18888/health")!
+    private var process: Process?
+
+    func start() {
+        guard process?.isRunning != true,
+              let root = BundledRuntime.resourceRoot,
+              let python = BundledRuntime.pythonExecutable() else { return }
+        let task = Process()
+        task.executableURL = python
+        task.arguments = [root.appendingPathComponent("services/tts/edge_tts_server.py").path]
+        task.environment = BundledRuntime.environment()
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do { try task.run(); process = task } catch { NSLog("语音服务无法启动：%@", error.localizedDescription) }
+    }
+
+    func stop() { if process?.isRunning == true { process?.terminate() } }
+
+    func ready(attempt: Int = 0, completion: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: Self.healthURL)
+        request.timeoutInterval = 1
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            let ready = (response as? HTTPURLResponse)?.statusCode == 200
+            DispatchQueue.main.async {
+                if ready || attempt >= 12 { completion(ready); return }
+                self?.start()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.ready(attempt: attempt + 1, completion: completion)
+                }
+            }
+        }.resume()
+    }
+}
+
 private enum BundledSetup {
     static func apply() {
         guard let resources = Bundle.main.resourceURL else { return }
@@ -363,7 +513,7 @@ private enum BundledSetup {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
         task.arguments = [script.path]
-        var environment = ProcessInfo.processInfo.environment
+        var environment = BundledRuntime.environment()
         environment["PINKIE_SKIP_APP_BUNDLES"] = "1"
         task.environment = environment
         task.standardOutput = FileHandle.nullDevice
@@ -434,6 +584,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let projectFolderHandlerName = "laolaoProjectFolder"
     private let party = PartyService()
     private let roundtable = RoundtableService()
+    private let tts = TTSService()
 
     @objc func openParty(_ sender: Any?) {
         party.ready { [weak self] ready in
@@ -444,7 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else {
                 let alert = NSAlert()
                 alert.messageText = "派对服务还没准备好"
-                alert.informativeText = "请确认本机安装了 Python 3，且端口 18889 没有被其他程序占用。原来的四模式聊天不受影响。"
+                alert.informativeText = "App 内置服务没有启动成功，请确认端口 18889 没有被其他程序占用。原来的四模式聊天不受影响。"
                 alert.runModal()
             }
         }
@@ -459,13 +610,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else {
                 let alert = NSAlert()
                 alert.messageText = "灵感圆桌还没准备好"
-                alert.informativeText = "请确认本机安装了 Python 3，且端口 18891 没有被其他程序占用。其他聊天不会受影响。"
+                alert.informativeText = "App 内置服务没有启动成功，请确认端口 18891 没有被其他程序占用。其他聊天不会受影响。"
                 alert.runModal()
             }
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) { party.stop(); roundtable.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        tts.stop()
+        party.stop()
+        roundtable.stop()
+        Gateway.stop()
+    }
 
     // 前后台通知: WKWebView 切后台会被 macOS 挂起 JS/网络, 网关 websocket
     // 悄悄断开 (1006), "回复完成"事件丢失, 前端动画永久转圈。
@@ -527,9 +683,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        BundledSetup.apply()
-        party.ready { _ in }
-        roundtable.ready { _ in }
         let rect = NSRect(x: 0, y: 0, width: 1280, height: 800)
         let window = LauncherWindow(
             contentRect: rect,
@@ -620,10 +773,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
+        showStartupScreen()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            BundledSetup.apply()
+            DispatchQueue.main.async {
+                self?.startBundledServices()
+            }
+        }
+    }
+
+    private func showStartupScreen() {
+        if let root = BundledRuntime.resourceRoot {
+            let page = root.appendingPathComponent("ui/launcher-loading.html")
+            if FileManager.default.fileExists(atPath: page.path) {
+                webView?.loadFileURL(page, allowingReadAccessTo: root)
+                return
+            }
+        }
+        webView?.loadHTMLString("<html lang=\"zh-CN\"><body style=\"display:grid;place-items:center;height:100%;margin:0;background:transparent;color:#76465f;font:14px -apple-system\">超級碧琪正在准备</body></html>", baseURL: nil)
+    }
+
+    private func startBundledServices() {
+        tts.ready { _ in }
+        party.ready { _ in }
+        roundtable.ready { _ in }
+
         Gateway.isRunning { [weak self] running in
-            if !running { Gateway.start() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + (running ? 0.2 : 1.2)) {
-                self?.loadDashboard()
+            DispatchQueue.main.async {
+                if running {
+                    self?.loadDashboard()
+                    return
+                }
+                Gateway.start()
+                Gateway.ready { ready in
+                    if ready {
+                        self?.loadDashboard()
+                        return
+                    }
+                    let alert = NSAlert()
+                    alert.messageText = "超級碧琪的网关没有启动成功"
+                    alert.informativeText = Gateway.lastError ?? "现有资料没有被改动。请查看 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
             }
         }
     }

@@ -13,10 +13,20 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install bundled runtime inputs
+        run: |
+          npm install -g openclaw@2026.7.1-2
+          python -m pip install --upgrade pip aiohttp edge-tts
       - name: Build macOS app
         run: |
           chmod +x desktop/macos/build.sh
-          desktop/macos/build.sh
+          PINKIE_PYTHON_BIN="$(command -v python3)" desktop/macos/build.sh
       - name: Pack full installer source
         run: |
           git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
@@ -26,3 +36,34 @@ jobs:
           files: |
             dist/super-pinkie-macos-*.zip
             dist/super-pinkie-full-*.zip
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate Windows installer syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\installer\windows\apply-theme.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
+      - name: Build Windows exe
+        shell: pwsh
+        run: .\build-win.ps1
+      - name: Pack Windows exe
+        shell: pwsh
+        run: Compress-Archive -LiteralPath 'dist\超級碧琪.exe' -DestinationPath "dist\super-pinkie-windows-$((Get-Content VERSION).Trim()).zip" -Force
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/超級碧琪.exe
+            dist/super-pinkie-windows-*.zip

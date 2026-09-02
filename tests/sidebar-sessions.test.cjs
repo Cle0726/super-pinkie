@@ -52,6 +52,11 @@ test('session sidebar uses independent DOM and only queries the current agent',(
   assert.match(src,/archived:false/);assert.doesNotMatch(src,/sessions\.delete|deleteTranscript/);
   assert.match(src,/entry\.stale=true/);assert.doesNotMatch(src,/cache\.clear\(\)/);
 });
+test('managed sessions scroll inside the sidebar instead of covering its footer',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-sidebar.css'),'utf8');
+  assert.match(css,/\.laolao-managed-sessions\{overflow:hidden!important\}/);
+  assert.match(css,/#laolao-session-manager\{[^}]*min-height:0;[^}]*flex:1 1 auto;[^}]*overflow-y:auto/);
+});
 test('folder project stores validated canonical path and returns the existing project on duplicate',async()=>{
   const state={projects:{},projectFolders:{},collapsed:{}};
   const ctx={state,stateMode:'project',requestNativeFolder:async()=>({path:'/tmp/project',name:'Demo'}),gwRequest:async()=>({path:'/private/tmp/project'}),uniqueProjectName:x=>x,toast(){},save(){},schedule(){}};
