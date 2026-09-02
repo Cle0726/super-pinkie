@@ -7,7 +7,7 @@
 - 全面检查四模式、概览、设置、派对空间和灵感圆桌，修复嵌套路由皮肤丢失、模式头像裂图、侧栏会话覆盖底栏和横向溢出。
 - 四模式素材、用量统计和切换动画改用站点根路径，设置页与概览页不再错误请求 `/settings/laolao-*`。
 - 灵感圆桌增加安全的 Markdown 展示，标题、清单、表格和代码正常排版，不再显示成一大段原始符号。
-- Windows 注入器兼容当前 `dist/control-ui` 与旧版 `ui` 目录，GitHub Release 同时构建 Windows EXE、macOS App 和完整源码包。
+- Windows 注入器兼容当前 `dist/control-ui` 与旧版 `ui` 目录，GitHub Release 同时提供 Windows EXE、自包含 macOS App 和完整源码包。
 - 完整 UI 与运行逻辑测试扩展到 74 项，并在发布前全部通过。
 
 ## 2.1.0

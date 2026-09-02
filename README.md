@@ -18,7 +18,7 @@
 - 麦克风听写、仅语音输入时朗读回复、长回复摘要朗读
 - 图片点击放大、复制粘贴与无标题栏拖动
 - 上游超时/断线多次重试、提示词代理与双传输层补丁
-- GitHub Actions 自动构建本机签名的 macOS App 与完整源码包
+- GitHub Actions 校验 macOS 原生壳、构建 Windows EXE 与完整源码包；Release 附带已验证机器产出的自包含 macOS App
 - macOS「派对空间」独立群聊：碧琪主持、Codex 任务执行、OpenClaw 文本咨询，公开派工并逐项确认（[说明与边界](docs/PARTY-SPACE.md)）
 
 ## Windows 快速使用 — 接 API 即可开箱即用 🚀

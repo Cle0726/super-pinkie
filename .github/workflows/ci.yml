@@ -63,30 +63,18 @@ jobs:
           }
           NODE
 
-  macos-build:
+  macos-check:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - name: Install bundled runtime inputs
+      - name: Type-check native launcher
         run: |
-          npm install -g openclaw@2026.7.1-2
-          python -m pip install --upgrade pip aiohttp edge-tts
-      - name: Build local-signed app
-        run: |
-          chmod +x desktop/macos/build.sh
-          PINKIE_PYTHON_BIN="$(command -v python3)" desktop/macos/build.sh
-      - name: Verify signature
-        run: codesign --verify --deep --strict 'dist/超級碧琪.app'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: super-pinkie-macos
-          path: dist/super-pinkie-macos-*.zip
+          xcrun swiftc -parse-as-library -typecheck \
+            desktop/macos/Sources/Launcher.swift \
+            -framework AppKit -framework AVFoundation -framework Foundation \
+            -framework Speech -framework WebKit
+      - name: Verify self-contained bundle contract
+        run: node --test tests/self-contained-app.test.cjs tests/native-glass.test.cjs
 
   windows-build:
     runs-on: windows-latest
