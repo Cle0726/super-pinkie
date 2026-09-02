@@ -45,8 +45,12 @@
     },
   ];
 
-  // 当前模式 (与 mode-switcher 的 session 判断一致)
+  // 当前模式 (优先读 mode-switcher 写在 <html> 上的 data-laolao-mode)
   const currentMode = () => {
+    const attr = document.documentElement.getAttribute("data-laolao-mode");
+    if (attr && ["chat", "project", "thinking", "unrestricted"].includes(attr)) {
+      return attr;
+    }
     const routed = new URLSearchParams(window.location.search).get("session") || "";
     if (routed.startsWith("agent:project:")) return "project";
     if (routed.startsWith("agent:thinking:")) return "thinking";
@@ -60,6 +64,30 @@
     if (key.startsWith("agent:thinking:")) return "thinking";
     if (key.startsWith("agent:unrestricted:")) return "unrestricted";
     return "chat";
+  };
+
+  // 轻量 toast (不依赖可能不存在的 __laolaoToast, 避免静默失败)
+  let toastTimer = null;
+  const toast = (msg) => {
+    let el = document.getElementById("laolao-deep-think-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "laolao-deep-think-toast";
+      el.setAttribute("role", "status");
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:72px;transform:translateX(-50%);" +
+        "background:rgba(30,27,46,.95);color:#fff;padding:8px 14px;border-radius:999px;" +
+        "font-size:13px;z-index:2147483647;box-shadow:0 4px 20px rgba(0,0,0,.4);" +
+        "max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = "1";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.style.transition = "opacity .3s";
+      el.style.opacity = "0";
+    }, 2600);
   };
 
   // 取当前输入或上一轮用户问题
@@ -81,7 +109,7 @@
   const sendDeepThink = (tier) => {
     const question = gatherQuestion();
     if (!question) {
-      window.__laolaoToast?.("先在输入框写问题，或先聊一句再点极致思考", "info");
+      toast("先在输入框写问题，或先聊一句再点极致思考");
       return;
     }
     const mode = currentMode();
@@ -92,31 +120,67 @@
       `按档位要求跑审议流水线后直接给出结论。`;
 
     const ta = $(".agent-chat__composer-combobox > textarea");
-    if (!ta) return;
-    // Lit 组件监听 input 事件更新 draft 状态
+    if (!ta) {
+      toast("没找到输入框，请稍后再试");
+      return;
+    }
+    // Lit 组件监听 input 事件更新 draft 状态:
+    // 用原型上的原生 setter 赋值, 绕过 Lit 对 .value 的劫持, 再派发 input
     const setter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value"
     )?.set;
-    setter?.call(ta, instruction);
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    if (setter) setter.call(ta, instruction);
+    else ta.value = instruction;
+    ta.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     ta.focus();
-    // 等 Lit 状态提交后点发送
-    window.setTimeout(() => {
-      const sendBtn = $(".chat-send-btn:not([disabled])") || $(".chat-send-btn");
+
+    // 轮询等待发送按钮可用 (Lit 提交 draft 后才会启用), 最多 ~2.4s
+    // 注意: .chat-send-btn 有 stop/voice 变体, 必须排除; queue 按钮语义不同也排除
+    let attempts = 0;
+    const findSendBtn = () => {
+      const all = $$(".chat-send-btn");
+      return all.find(
+        (b) =>
+          !b.classList.contains("chat-send-btn--stop") &&
+          !b.classList.contains("chat-send-btn--voice") &&
+          !b.classList.contains("chat-send-btn--queue") &&
+          !b.disabled &&
+          !b.hasAttribute("disabled") &&
+          b.getAttribute("aria-label") &&
+          /send|发送/i.test(b.getAttribute("aria-label"))
+      );
+    };
+    const trySend = () => {
+      const sendBtn = findSendBtn();
       if (sendBtn) {
         sendBtn.click();
-      } else {
-        // 兜底: 模拟回车
-        ta.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "Enter",
-            code: "Enter",
-            bubbles: true,
-          })
-        );
+        return;
       }
-    }, 80);
+      // 按钮不可用但输入框有值 → 再等一帧 (Lit 异步更新)
+      if (attempts++ < 24) {
+        window.setTimeout(trySend, 100);
+        return;
+      }
+      // 兜底: 模拟回车 (keydown Enter, 组件一般监听此键发送)
+      ta.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          composed: true,
+        })
+      );
+      // 若 1s 后仍未发送 (输入框内容还在), 提示用户手动按回车
+      window.setTimeout(() => {
+        if (ta.value && ta.value.trim() === instruction.trim()) {
+          toast("已填入极致思考指令，请按回车发送（或点发送按钮）");
+        }
+      }, 1000);
+    };
+    window.setTimeout(trySend, 120);
   };
 
   const closeMenu = () => {
@@ -159,11 +223,15 @@
     btn.setAttribute("aria-expanded", "true");
   };
 
-  // 渲染按钮 (幂等: 已存在则跳过)
+  // 渲染按钮 (幂等: 已存在则跳过; 只挂到可见 composer)
   const render = () => {
+    // Lit 重渲染会替换 composer-actions 节点: 每次先清掉脱离文档的孤儿按钮
+    $$("." + BTN_CLASS).forEach((orphan) => {
+      if (!orphan.isConnected) orphan.remove();
+    });
     const actions = $(".agent-chat__composer-actions");
-    if (!actions) return;
-    if ($("." + BTN_CLASS, actions)) return;
+    if (!actions || !actions.isConnected) return;
+    if (actions.querySelector("." + BTN_CLASS)) return;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = BTN_CLASS;
