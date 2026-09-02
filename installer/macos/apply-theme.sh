@@ -81,6 +81,7 @@ apply_ui_skin() {
     laolao-party-entry.js \
     laolao-party-avatar-v1.png \
     laolao-roundtable-entry.js \
+    laolao-deep-think.js \
     laolao-resume.js \
     laolao-roundtable-entry-v2.png \
     laolao-roundtable-entry-v2-clean.png \
@@ -256,6 +257,12 @@ apply_ui_skin() {
     DID_CHANGE=1
   elif ! grep -Fq './laolao-resume.js?v=resume3' "$index_file"; then
     perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume3}g' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # 极致思考三档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
+  if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink1"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
