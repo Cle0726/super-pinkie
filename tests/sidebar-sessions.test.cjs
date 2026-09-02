@@ -50,7 +50,16 @@ test('session sidebar uses independent DOM and only queries the current agent',(
   assert.match(src,/agentId:api\.agentId,archived:archiveView/);
   assert.match(src,/s\.key\?\.startsWith\('agent:'\+api\.agentId\+':'\)/);
   assert.match(src,/archived:false/);assert.doesNotMatch(src,/sessions\.delete|deleteTranscript/);
+  assert.match(src,/管理已归档会话/);assert.match(src,/sessionMenu\(e\.currentTarget,s\.key,title\(s\),true\)/);
   assert.match(src,/entry\.stale=true/);assert.doesNotMatch(src,/cache\.clear\(\)/);
+});
+test('single-session menu supports safe archive, restore and permanent deletion',()=>{
+  assert.match(source,/sessions\.delete/);
+  assert.match(source,/deleteTranscript:true/);
+  assert.match(source,/askDeleteSession/);
+  assert.match(source,/followAfterSessionLeaves/);
+  assert.match(source,/项目文件夹里的真实文件不会被动/);
+  assert.match(source,/busyText:'删除中…'/);
 });
 test('managed sessions scroll inside the sidebar instead of covering its footer',()=>{
   const css=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-sidebar.css'),'utf8');

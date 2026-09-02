@@ -120,16 +120,18 @@ function Apply-UISkin {
 
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
     $headTags = @(
-        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar13">',
+        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar14">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar10"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar11"></script>',
+        '<script src="./laolao-session-list.js?v=sessions2"></script>',
         '<script src="./laolao-usage-stats.js?v=stats10"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink4"></script>',
         '<script defer src="./laolao-resume.js?v=resume3"></script>'
     )
     foreach ($tag in $headTags) {
@@ -140,10 +142,11 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme29'; 'laolao-sidebar.css' = 'sidebar13';
-        'laolao-sidebar.js' = 'sidebar10'; 'laolao-usage-stats.js' = 'stats10';
+        'laolao-theme.css' = 'theme29'; 'laolao-sidebar.css' = 'sidebar14';
+        'laolao-sidebar.js' = 'sidebar11'; 'laolao-session-list.js' = 'sessions2'; 'laolao-usage-stats.js' = 'stats10';
         'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash19';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'
+        'laolao-deep-think.js' = 'deepthink4'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

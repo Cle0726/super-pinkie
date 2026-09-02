@@ -43,13 +43,24 @@ test('patch destinations, delegation, elevated exec and foreign processes cannot
   const patch='*** Begin Patch\n*** Update File: a.txt\n@@\n-project A\n+changed\n*** End Patch';
   assert.ok(guard.before({toolName:'apply_patch',params:{input:patch}},ctx).params.input.includes(a));
   assert.equal(guard.before({toolName:'apply_patch',params:{input:patch.replace('a.txt',b+'/b.txt')}},ctx).block,true);
-  for(const toolName of ['sessions_spawn','sessions_send','browser','gateway','memory_search'])assert.equal(guard.before({toolName,params:{}},ctx).block,true);
+  const derived=guard.before({toolName:'sessions_spawn',params:{task:'check',label:'批评者',agentId:'other',cwd:b,model:'other/model'}},ctx);
+  assert.equal(derived.params.context,'fork');assert.equal(derived.params.runtime,'subagent');assert.equal(derived.params.label,'批评者');
+  for(const key of ['agentId','cwd','model'])assert.equal(key in derived.params,false);
+  for(const toolName of ['sessions_send','browser','gateway','memory_search'])assert.equal(guard.before({toolName,params:{}},ctx).block,true);
   assert.equal(guard.before({toolName:'exec',params:{command:'pwd',elevated:true}},ctx).block,true);
   assert.equal(guard.before({toolName:'process',params:{action:'list'}},ctx).block,true);
   guard.after({toolName:'exec',result:{details:{sessionId:'own-process'}}},ctx);
   assert.equal(guard.before({toolName:'process',params:{action:'poll',sessionId:'own-process'}},ctx),undefined);
   guard.bind('agent:thinking:b',b,'乙');
   assert.equal(guard.before({toolName:'process',params:{action:'poll',sessionId:'own-process'}},{sessionKey:'agent:thinking:b'}).block,true);
+});
+test('derived child session inherits the exact parent project binding',t=>{
+  const {guard,ctx,a}=fixture(t);const child='agent:project:subagent:child-1';
+  assert.equal(guard.inherit(child,ctx.sessionKey),true);
+  assert.equal(guard.before({toolName:'read',params:{path:'a.txt'}},{sessionKey:child}).params.path,path.join(a,'a.txt'));
+  guard.release(child);
+  assert.equal(guard.before({toolName:'read',params:{path:'/elsewhere'}},{sessionKey:child}),undefined);
+  assert.equal(guard.inherit('agent:thinking:subagent:bad',ctx.sessionKey),false);
 });
 test('plain chats and unrelated agents are not commandeered; prompt names the bound project',t=>{
   const {guard,ctx,a}=fixture(t);
@@ -72,5 +83,5 @@ test('macOS actual shell reads/writes project but cannot read or write sibling p
 test('registration uses authenticated RPC and official execution hooks',()=>{
   const hooks=new Map(),methods=new Map();plugin.register({on:(name,fn)=>hooks.set(name,fn),registerGatewayMethod:(name,fn,opts)=>methods.set(name,opts)});
   assert.equal(methods.get('pinkie.project.bind').scope,'operator.admin');
-  for(const name of ['before_prompt_build','before_tool_call','after_tool_call'])assert.ok(hooks.has(name));
+  for(const name of ['before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended'])assert.ok(hooks.has(name));
 });

@@ -71,3 +71,6 @@ PINKIE_SKIP_APP_BUNDLES=1 "$SCRIPT_DIR/apply-theme.sh"
 if [[ -f "$REPO_ROOT/services/project-scope/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/project-scope/setup.py"
 fi
+if [[ -f "$REPO_ROOT/services/mode-architecture/setup.py" ]]; then
+  "$PYTHON_BIN" "$REPO_ROOT/services/mode-architecture/setup.py"
+fi

@@ -1,0 +1,1 @@
+{"id":"pinkie-mode-architecture","name":"超級碧琪四模式运行层","version":"1.0.0","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}

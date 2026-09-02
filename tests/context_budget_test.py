@@ -35,6 +35,13 @@ class ContextBudgetTests(unittest.TestCase):
         provider=after['models']['providers']['a'];self.assertEqual('keep-secret',provider['apiKey']);self.assertEqual('http://example.test',provider['baseUrl'])
         self.assertEqual(64000,provider['models'][0]['contextWindow']);self.assertEqual(1000000,provider['models'][1]['contextWindow'])
         self.assertNotIn('reserveTokens',after['agents']['defaults']['compaction'])
+        compaction=after['agents']['defaults']['compaction']
+        self.assertEqual(40000,compaction['keepRecentTokens'])
+        self.assertEqual('safeguard',compaction['mode'])
+        self.assertEqual(8,compaction['recentTurnsPreserve'])
+        self.assertEqual(.9,compaction['maxHistoryShare'])
+        self.assertTrue(compaction['qualityGuard']['enabled'])
+        self.assertIn('memory/context/active.md',compaction['memoryFlush']['prompt'])
         self.assertFalse(setup['install'](self.home));self.assertTrue(list((self.home/'Library/Application Support/SuperPinkie/backups').glob('context-config-*/openclaw.json')))
     def test_history_summary_keeps_every_old_chunk_and_latest_message(self):
         rows=[{'id':1,'sender':'user','body':'早期重要目标。'*4000},{'id':2,'sender':'codex','body':'已检查文件。'*3000},{'id':3,'sender':'user','body':'继续处理'}]
@@ -47,6 +54,7 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertGreater(len(calls),1);self.assertTrue(all(budget['estimate_tokens'](x)<limits['threshold'] for x in calls))
         self.assertEqual(original,json.dumps(rows,ensure_ascii=False))
         self.assertIn('早期重要目标',calls[0]);self.assertIn('已检查文件',calls[-1])
+        self.assertIn('不追求极短',calls[0]);self.assertIn('文件路径与实际变更',calls[0])
     def test_agent_cap_does_not_overwrite_provider_capacity_and_override_is_effective(self):
         p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
         cfg={'models':{'providers':{'a':{'models':[{'id':'known','contextWindow':128000,'contextTokens':64000}]}}},'agents':{'defaults':{'contextTokens':16000}}}

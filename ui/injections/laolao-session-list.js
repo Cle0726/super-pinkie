@@ -28,8 +28,12 @@
     link.onclick=e=>{if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();api.navigateSession(s.key);};
     const aside=el('span','session-row-aside');aside.append(el('span','session-row-trail',timeLabel(s.updatedAt)));
     const actions=el('span','laolao-row-actions');
-    if(archived){actions.append(button('↶','恢复会话：'+title(s),async()=>{try{await api.patchSession(s.key,{archived:false});api.toast('会话已恢复，记录和项目绑定都保留');}catch(e){api.toast(e.message);}}));}
-    else actions.append(button('⋯','管理会话：'+title(s),e=>api.sessionMenu(e.currentTarget,s.key,title(s))));
+    if(archived){
+      actions.append(
+        button('↶','恢复会话：'+title(s),async e=>{const b=e.currentTarget;b.disabled=true;try{await api.patchSession(s.key,{archived:false});api.toast('会话已恢复，记录和项目绑定都保留');}catch(error){api.toast(error.message);}finally{b.disabled=false;}}),
+        button('⋯','管理已归档会话：'+title(s),e=>api.sessionMenu(e.currentTarget,s.key,title(s),true))
+      );
+    } else actions.append(button('⋯','管理会话：'+title(s),e=>api.sessionMenu(e.currentTarget,s.key,title(s),false)));
     aside.append(actions);n.append(link,aside);return n;
   }
   function group(id,name,rows,api,project){

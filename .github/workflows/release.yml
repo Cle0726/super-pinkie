@@ -45,10 +45,13 @@ jobs:
         run: .\build-win.ps1
       - name: Pack Windows exe
         shell: pwsh
-        run: Compress-Archive -LiteralPath 'dist\超級碧琪.exe' -DestinationPath "dist\super-pinkie-windows-$((Get-Content VERSION).Trim()).zip" -Force
+        run: |
+          $version = (Get-Content VERSION).Trim()
+          Copy-Item -LiteralPath 'dist\超級碧琪.exe' -Destination "dist\super-pinkie-windows-$version.exe" -Force
+          Compress-Archive -LiteralPath 'dist\超級碧琪.exe' -DestinationPath "dist\super-pinkie-windows-$version.zip" -Force
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            dist/超級碧琪.exe
+            dist/super-pinkie-windows-*.exe
             dist/super-pinkie-windows-*.zip

@@ -192,10 +192,10 @@ html .sidebar-recent-session:focus-visible {
 }
 
 html[data-theme-mode="dark"] .laolao-menu {
-  background: rgba(24, 25, 26, 0.92);
-  color: #f7f8f8;
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  background: rgba(250, 237, 244, 0.84);
+  color: #57364a;
+  border-color: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 30px rgba(84, 42, 65, 0.18), inset 0 1px rgba(255, 255, 255, 0.62);
 }
 
 .laolao-menu__item {
@@ -215,6 +215,8 @@ html[data-theme-mode="dark"] .laolao-menu {
 
 .laolao-menu__item:hover { background: rgba(127, 127, 127, 0.14); }
 .laolao-menu__item svg { width: 13px; height: 13px; flex: none; opacity: 0.7; }
+.laolao-menu__item--danger { color: #b72f67; }
+.laolao-menu__item--danger:hover { background: rgba(214, 67, 126, 0.1); }
 
 .laolao-menu__divider {
   height: 1px;
@@ -277,9 +279,10 @@ html[data-theme-mode="dark"] .laolao-menu {
 }
 
 html[data-theme-mode="dark"] .laolao-modal {
-  background: rgba(24, 25, 26, 0.95);
-  color: #f7f8f8;
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(250, 237, 244, 0.9);
+  color: #57364a;
+  border-color: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 24px 64px rgba(84, 42, 65, 0.22), inset 0 1px rgba(255, 255, 255, 0.62);
 }
 
 .laolao-modal__title {
@@ -293,6 +296,13 @@ html[data-theme-mode="dark"] .laolao-modal {
   font-size: 13px;
   line-height: 1.7;
   opacity: 0.75;
+}
+
+.laolao-modal__error {
+  margin: -8px 0 14px;
+  color: #b72f67;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .laolao-modal__buttons {

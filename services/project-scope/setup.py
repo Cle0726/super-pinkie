@@ -7,6 +7,21 @@ import tempfile
 import time
 
 
+def replace_preserving_file_flags(temp_name, target):
+    """Atomic replace that preserves macOS user-immutable config protection."""
+    target_stat = target.stat()
+    flags = getattr(target_stat, 'st_flags', 0)
+    immutable = getattr(__import__('stat'), 'UF_IMMUTABLE', 0)
+    if immutable and flags & immutable:
+        os.chflags(target, flags & ~immutable)
+    try:
+        os.replace(temp_name, target)
+        os.chmod(target, target_stat.st_mode & 0o777)
+    finally:
+        if flags and target.exists() and hasattr(os, 'chflags'):
+            os.chflags(target, flags)
+
+
 def install(home=None):
     home = Path(home or Path.home())
     config = home / '.openclaw/openclaw.json'
@@ -51,7 +66,7 @@ def install(home=None):
                 json.dump(data, handle, ensure_ascii=False, indent=2)
                 handle.write('\n')
             os.chmod(tmp, 0o600)
-            os.replace(tmp, config)
+            replace_preserving_file_flags(tmp, config)
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)

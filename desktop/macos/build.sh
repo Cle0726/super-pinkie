@@ -88,6 +88,12 @@ mkdir -p "$CONTENTS/Resources/SuperPinkie/services/project-scope"
 for scope_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/project-scope/$scope_file" "$CONTENTS/Resources/SuperPinkie/services/project-scope/"
 done
+mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
+for architecture_file in index.mjs setup.py package.json openclaw.plugin.json; do
+  cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
+done
+mkdir -p "$CONTENTS/Resources/SuperPinkie/skills/deep-think"
+cp "$REPO_ROOT/skills/deep-think/SKILL.md" "$CONTENTS/Resources/SuperPinkie/skills/deep-think/SKILL.md"
 
 # The shipped App owns its runtime. User configuration, model keys, history and
 # workspaces remain in ~/.openclaw and are deliberately not copied into it.

@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import json
+import importlib.util
 import shutil
 import subprocess
 import threading
@@ -394,6 +395,25 @@ def install_personas(log):
         pass
 
 
+def install_runtime_service(service_name, log):
+    """Run a bundled stdlib-only service setup inside source or PyInstaller builds."""
+    setup_file = resource_path("services", service_name, "setup.py")
+    if not setup_file.is_file():
+        log(f"  [{service_name}] 安装脚本不存在，跳过")
+        return False
+    try:
+        module_name = "pinkie_setup_" + service_name.replace("-", "_")
+        spec = importlib.util.spec_from_file_location(module_name, setup_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        changed = bool(module.install())
+        log(f"  [{service_name}] {'已安装/更新' if changed else '已是最新'}")
+        return changed
+    except Exception as exc:
+        log(f"  [{service_name}] 安装失败：{exc}")
+        return False
+
+
 # ---------------------------------------------------------------- UI 皮肤注入
 def install_theme(log):
     log("==> 正在注入 来啦～老弟 UI 皮肤与静态资源...")
@@ -693,6 +713,10 @@ def main():
         
         # 5. 安装人格
         install_personas(log)
+
+        # 5.1 安装项目目录继承与四模式隔离运行层（不覆盖用户上下文）
+        install_runtime_service("project-scope", log)
+        install_runtime_service("mode-architecture", log)
         
         # 6. 注入皮肤
         install_theme(log)

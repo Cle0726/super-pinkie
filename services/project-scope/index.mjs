@@ -24,6 +24,7 @@ export class ProjectScope {
     this.stateRoot=stateRoot || path.join(home,'Library/Application Support/SuperPinkie/project-scope');
     this.file=path.join(this.stateRoot,'bindings.json');
     this.processes=new Map();
+    this.inheritedBindings=new Map();
     this.skillRoots=['.openclaw/skills','.agents/skills','.codex/skills',...['workspace','workspace-project','workspace-thinking','workspace-unrestricted'].map(p=>'.openclaw/'+p+'/skills')].map(p=>canonical(path.join(home,p)));
     this.skillRoots.push(canonical(path.resolve(path.dirname(process.execPath),'../lib/node_modules/openclaw/skills')));
   }
@@ -54,11 +55,21 @@ export class ProjectScope {
     return entry;
   }
   binding(ctx) {
-    if(!modes.test(ctx.sessionKey||'')) return null;
-    const binding=this.load()[ctx.sessionKey];
+    const key=ctx.sessionKey||'';
+    if(!modes.test(key)&&!this.inheritedBindings.has(key)) return null;
+    const binding=this.load()[key]||this.inheritedBindings.get(key);
     if(binding && this.validateRoot(binding.root)!==binding.root) throw new Error('项目目录发生变化，请检查原目录，不能自动跳到其他位置');
     return binding||null;
   }
+  inherit(childSessionKey,requesterSessionKey) {
+    if(typeof childSessionKey!=='string'||typeof requesterSessionKey!=='string')return false;
+    const childAgent=/^agent:([^:]+):subagent:/.exec(childSessionKey)?.[1];
+    const parentAgent=/^agent:([^:]+):/.exec(requesterSessionKey)?.[1];
+    const binding=this.binding({sessionKey:requesterSessionKey});
+    if(!binding||!childAgent||childAgent!==parentAgent)return false;
+    this.inheritedBindings.set(childSessionKey,binding);return true;
+  }
+  release(sessionKey){this.inheritedBindings.delete(sessionKey);}
   resolve(binding,raw,read=false) {
     if(typeof raw!=='string'||!raw||raw.includes('\0')) throw new Error('工具缺少有效路径');
     const expanded=raw==='~'?this.home:raw.startsWith('~/')?path.join(this.home,raw.slice(2)):raw;
@@ -89,6 +100,13 @@ export class ProjectScope {
       const b=this.binding(ctx);if(!b)return;
       const p={...event.params};const name=event.toolName;
       if(['web_search','web_fetch','session_status','tts'].includes(name)) return;
+      if(name==='sessions_spawn') {
+        if(p.runtime&&p.runtime!=='subagent')throw new Error('项目子任务只允许当前会话的标准派生，不切到外部运行时');
+        delete p.agentId;delete p.cwd;delete p.model;delete p.thinking;delete p.resumeSessionId;delete p.streamTo;
+        p.runtime='subagent';p.context='fork';p.mode='run';p.thread=false;
+        return {params:p};
+      }
+      if(['sessions_yield','subagents'].includes(name))return;
       if(['read','write','edit'].includes(name)) {
         const key=typeof p.path==='string'?'path':'file_path';
         const target=this.resolve(b,p[key],name==='read');
@@ -139,5 +157,7 @@ export default {
     },{priority:-10000});
     api.on('before_tool_call',(event,ctx)=>guard.before(event,ctx),{priority:-10000});
     api.on('after_tool_call',(event,ctx)=>guard.after(event,ctx));
+    api.on('subagent_spawned',(event,ctx)=>guard.inherit(event.childSessionKey,ctx.requesterSessionKey));
+    api.on('subagent_ended',event=>guard.release(event.targetSessionKey));
   }
 };

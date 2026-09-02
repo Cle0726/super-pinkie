@@ -304,6 +304,8 @@
     folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     plus: svg('<path d="M12 5v14M5 12h14"/>'),
     trash: svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/>'),
+    archive: svg('<path d="M4 7h16v12H4z"/><path d="M3 4h18v3H3zM9 11h6"/>'),
+    restore: svg('<path d="M4 11a8 8 0 1 0 2-5.3L4 8"/><path d="M4 3v5h5"/>'),
     chevron: svg('<path d="M6 9l6 6 6-6"/>'),
     close: svg('<path d="M18 6L6 18M6 6l12 12"/>'),
     external: svg('<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/>'),
@@ -326,8 +328,14 @@
     build(menu);
     document.body.appendChild(menu);
     const rect = anchor.getBoundingClientRect();
-    menu.style.left = Math.min(rect.left, window.innerWidth - 260) + "px";
-    menu.style.top = rect.bottom + 6 + "px";
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.max(8, Math.min(rect.right - menuRect.width, window.innerWidth - menuRect.width - 8));
+    const below = rect.bottom + 6;
+    const top = below + menuRect.height <= window.innerHeight - 8
+      ? below
+      : Math.max(8, rect.top - menuRect.height - 6);
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
     activeMenu = menu;
   }
 
@@ -342,13 +350,14 @@
     return btn;
   }
 
-  function showModal({ title, body, dangerText, onConfirm }) {
+  function showModal({ title, body, dangerText, busyText = "处理中…", onConfirm }) {
     const mask = document.createElement("div");
     mask.className = "laolao-modal-mask";
     mask.innerHTML = `
       <div class="laolao-modal" role="dialog" aria-modal="true">
         <h3 class="laolao-modal__title"></h3>
         <p class="laolao-modal__body"></p>
+        <p class="laolao-modal__error" role="status" hidden></p>
         <div class="laolao-modal__buttons">
           <button type="button" class="laolao-modal__btn" data-act="cancel">取消</button>
           <button type="button" class="laolao-modal__btn laolao-modal__btn--danger" data-act="ok"></button>
@@ -357,13 +366,23 @@
     mask.querySelector(".laolao-modal__title").textContent = title;
     mask.querySelector(".laolao-modal__body").textContent = body;
     const okBtn = mask.querySelector('[data-act="ok"]');
+    const errorEl = mask.querySelector('.laolao-modal__error');
     okBtn.textContent = dangerText;
     mask.querySelector('[data-act="cancel"]').addEventListener("click", () => mask.remove());
     mask.addEventListener("pointerdown", (e) => { if (e.target === mask) mask.remove(); });
     okBtn.addEventListener("click", async () => {
       okBtn.disabled = true;
-      okBtn.textContent = "清理中…";
-      try { await onConfirm(); } finally { mask.remove(); }
+      okBtn.textContent = busyText;
+      errorEl.hidden = true;
+      try {
+        await onConfirm();
+        mask.remove();
+      } catch (error) {
+        errorEl.textContent = error?.message || "操作失败，请稍后再试";
+        errorEl.hidden = false;
+        okBtn.disabled = false;
+        okBtn.textContent = dangerText;
+      }
     });
     document.body.appendChild(mask);
   }
@@ -476,11 +495,14 @@
     input.className = "laolao-menu__input";
     input.placeholder = placeholder;
     input.value = value;
-    input.addEventListener("keydown", (event) => {
+    input.addEventListener("keydown", async (event) => {
       if (event.key === "Enter") {
+        event.preventDefault();
         const name = input.value.trim();
-        if (name) onSubmit(name);
-        closeMenu();
+        if (!name || input.disabled) return;
+        input.disabled = true;
+        input.setAttribute("aria-busy", "true");
+        try { await onSubmit(name); } finally { closeMenu(); }
       }
       if (event.key === "Escape") closeMenu();
     });
@@ -622,14 +644,73 @@
     window.PinkieSessionList?.invalidate();sessionIndex=null;schedule();return result;
   }
 
-  function sessionMenu(anchor,key,title){
+  function removeSessionFromLocalState(key){
+    state.pins=state.pins.filter(item=>item!==key);
+    for(const name of Object.keys(state.projects))state.projects[name]=(state.projects[name]||[]).filter(item=>item!==key);
+    save();
+  }
+
+  async function followAfterSessionLeaves(key,projectName){
+    if(pageSessionKey()!==key)return;
+    const project=projectName===undefined?projectOf(key):projectName;
+    try{
+      await createProjectSession(project&&state.projectFolders[project]?project:null);
+    }catch(error){
+      toast('记录已处理，但新会话创建失败：'+(error?.message||'请手动点新会话'));
+    }
+  }
+
+  async function archiveSession(key){
+    await patchSession(key,{archived:true});
+    await followAfterSessionLeaves(key);
+    toast('已归档；记录、项目绑定和文件都保留');
+  }
+
+  async function restoreSession(key){
+    await patchSession(key,{archived:false});
+    toast('会话已恢复，原记录和项目绑定都保留');
+  }
+
+  async function deleteSession(key){
+    const mode=modeForSession(key);
+    if(mode!==stateMode)throw new Error('请回到该会话所属模式再删除');
+    const project=projectOf(key);
+    await gwRequest('sessions.delete',{key,agentId:MODE_AGENT[mode],deleteTranscript:true});
+    removeSessionFromLocalState(key);
+    window.PinkieSessionList?.invalidate();sessionIndex=null;schedule();
+    await followAfterSessionLeaves(key,project);
+    toast('会话和聊天记录已删除');
+  }
+
+  function askDeleteSession(key,title){
+    closeMenu();
+    showModal({
+      title:'删除会话',
+      body:`确定删除「${title}」吗？聊天记录会一起删除，项目文件夹里的真实文件不会被动。此操作不可撤销。`,
+      dangerText:'确认删除',
+      busyText:'删除中…',
+      onConfirm:()=>deleteSession(key),
+    });
+  }
+
+  function sessionMenu(anchor,key,title,archived=false){
     openMenu(anchor,menu=>{
+      if(archived){
+        menuItem(menu,ICONS.restore,'恢复会话',async()=>{closeMenu();try{await restoreSession(key);}catch(error){toast(error.message);}});
+        const divider=document.createElement('div');divider.className='laolao-menu__divider';menu.appendChild(divider);
+        const remove=menuItem(menu,ICONS.trash,'永久删除…',()=>askDeleteSession(key,title));
+        remove.classList.add('laolao-menu__item--danger');
+        return;
+      }
       menuItem(menu,ICONS.plus,'重命名会话…',()=>showNameInput(menu,{value:title,placeholder:'会话名称，回车保存',onSubmit:async name=>{
         try{await patchSession(key,{label:name});toast('会话名称已保存');}catch(error){toast(/label already in use/i.test(error.message)?'已有同名会话，请换一个名称':error.message);}
       }}));
       menuItem(menu,ICONS.pin,state.pins.includes(key)?'取消置顶':'置顶会话',()=>{closeMenu();togglePin(key);});
       menuItem(menu,ICONS.folder,'归入项目…',()=>openProjectMenu(anchor,key));
-      menuItem(menu,ICONS.close,'归档会话（保留记录）',async()=>{closeMenu();try{await patchSession(key,{archived:true});toast('已归档，可在归档列表恢复');}catch(error){toast(error.message);}});
+      menuItem(menu,ICONS.archive,'归档会话（保留记录）',async()=>{closeMenu();try{await archiveSession(key);}catch(error){toast(error.message);}});
+      const divider=document.createElement('div');divider.className='laolao-menu__divider';menu.appendChild(divider);
+      const remove=menuItem(menu,ICONS.trash,'删除会话和记录…',()=>askDeleteSession(key,title));
+      remove.classList.add('laolao-menu__item--danger');
     });
   }
 
@@ -822,6 +903,7 @@
       title: "一键清理会话记录",
       body: "只清理当前模式中未整理的会话及聊天记录；其他三个模式不会受影响。当前打开、置顶和项目内会话都会保留。此操作不可撤销，确定继续吗？",
       dangerText: "确认清理",
+      busyText: "清理中…",
       onConfirm: cleanupSessions,
     });
   }
