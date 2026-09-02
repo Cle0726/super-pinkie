@@ -5,10 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import {compactionBudget} from '../services/context/budget.mjs';
 import {apply,transform} from '../patch/apply-context-budget.mjs';
+const policyHome=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-native-budget-'));
+const policyPath=path.join(policyHome,'Library/Application Support/SuperPinkie/context-policy.json');
+fs.mkdirSync(path.dirname(policyPath),{recursive:true});
+const installedPolicy=JSON.parse(fs.readFileSync(new URL('../services/context/policy.json',import.meta.url),'utf8'));
+fs.writeFileSync(policyPath,JSON.stringify(installedPolicy));
+process.env.HOME=policyHome;
 const settings=`function settings(params){
 const compactionCfg=params.cfg?.agents?.defaults?.compaction;
 const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);
-const configuredKeepRecentTokens=40000,currentKeepRecentTokens=40000;
+const configuredKeepRecentTokens=900000,currentKeepRecentTokens=900000;
 let reserveTokensFloor = resolveCompactionReserveTokensFloor(params.cfg);
 const targetKeepRecentTokens = configuredKeepRecentTokens ?? currentKeepRecentTokens;
 return {reserve:configuredReserveTokens,floor:reserveTokensFloor,recent:targetKeepRecentTokens};
@@ -20,26 +26,30 @@ function pre(contextWindowTokens,reserveTokensFloor,softThresholdTokens,serverCo
 const threshold = Math.max(contextWindowTokens - reserveTokensFloor - softThresholdTokens, serverCompactionThreshold ?? 0);
 return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
-test('reserve scales with each model and has an inclusive 70-percent boundary',()=>{
+test('ultra-long retention follows the installed large-window policy',()=>{
   for(const window of [4096,16000,32768,128000,258400,1000000]){
-    const b=compactionBudget(window);assert.equal(b.threshold,Math.floor(window*.7));
-    assert.equal(window-b.reserve,b.threshold);assert.ok(b.keepRecent<=window*.2);
+    const resolved=Math.max(window,installedPolicy.minWindowTokens);
+    const b=compactionBudget(window);assert.equal(b.window,resolved);
+    assert.equal(b.threshold,Math.floor(resolved*installedPolicy.triggerRatio));
+    assert.equal(resolved-b.reserve,b.threshold);
+    assert.equal(b.keepRecent,Math.floor(resolved*installedPolicy.keepRecentRatio));
     assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
 });
 test('native compaction settings no longer use a fixed 60k reserve or 40k tail',()=>{
   const run=executable(transform('settings',settings),'settings');
   for(const contextTokenBudget of [16000,128000,1000000]){
-    const actual=run({contextTokenBudget});
-    assert.equal(actual.reserve,contextTokenBudget-Math.floor(contextTokenBudget*.7));
-    assert.equal(actual.floor,actual.reserve);assert.ok(actual.recent<=contextTokenBudget*.2);
+    const expected=compactionBudget(contextTokenBudget),actual=run({contextTokenBudget});
+    assert.equal(actual.reserve,expected.reserve);
+    assert.equal(actual.floor,actual.reserve);assert.equal(actual.recent,expected.keepRecent);
   }
 });
-test('preflight uses the same 70-percent threshold even with server-side compaction',()=>{
+test('preflight uses the same configured threshold even with server-side compaction',()=>{
   const code=transform('preflight',preflight),gate=executable(code,'gate'),pre=executable(code,'pre');
   for(const w of [16000,128000,1000000]){
-    assert.equal(gate(w,60000,4000,{minimumThresholdTokens:w*.9}),Math.floor(w*.7));
-    assert.equal(pre(w,20000,4000,w*.9),Math.floor(w*.7));
+    const expected=compactionBudget(w).threshold;
+    assert.equal(gate(w,60000,4000,{minimumThresholdTokens:w*.9}),expected);
+    assert.equal(pre(w,20000,4000,w*.9),expected);
   }
 });
 test('patch is idempotent and validates every target before writing; backups preserve original files',()=>{
