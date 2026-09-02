@@ -78,13 +78,26 @@
   // 始终跟在最新文本后面。不碰任何内容节点的样式——这是和上一
   // 版的关键差别，上一版给每个新节点加 fade-in 反而制造了 PPT
   // 感。
+  // v3：rAF 节流。流式每个 chunk 产生一批 childList record，
+  // 每条都 appendChild 会造成布局颠簸；合并到每帧最多一次。
+  let cursorQueued = false;
+  const pendingCursorBubbles = new Set();
   const subtreeObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type !== "childList") continue;
       const bubble = m.target.closest ? m.target.closest(STREAM_BUBBLE_SEL) : null;
       if (!bubble) continue;
-      ensureCursor(bubble);
+      pendingCursorBubbles.add(bubble);
     }
+    if (cursorQueued || pendingCursorBubbles.size === 0) return;
+    cursorQueued = true;
+    requestAnimationFrame(() => {
+      cursorQueued = false;
+      pendingCursorBubbles.forEach((bubble) => {
+        if (bubble.isConnected) ensureCursor(bubble);
+      });
+      pendingCursorBubbles.clear();
+    });
   });
 
   function attachToBubble(bubble) {
@@ -116,36 +129,39 @@
   // Top-level observer on the chat thread: catches brand new bubbles
   // entering the scroll area, plus bubbles whose .streaming class was
   // just added or removed.
+  // v3：回调里禁止 querySelectorAll（2026-09-01 第三次冻结实抓：
+  // 观察者回调里的 NodeList 工厂是 GC 雪崩主凶）。新增节点的挂接
+  // 统一交给 rAF 节流的 scanForBubbles；class 翻转用 classList
+  // 直接判断（零分配），保持摘光标的及时性。
+  let scanQueued = false;
+  const scheduleScan = () => {
+    if (scanQueued) return;
+    scanQueued = true;
+    requestAnimationFrame(() => {
+      scanQueued = false;
+      const root = document.querySelector(ROOT_SEL);
+      if (root) scanForBubbles(root);
+    });
+  };
   const rootObserver = new MutationObserver((mutations) => {
-    const root = document.querySelector(ROOT_SEL);
-    if (!root) return;
-
+    let needScan = false;
     for (const m of mutations) {
-      if (m.type !== "childList") continue;
-
-      // New nodes added to the tree — wire up any streaming bubbles
-      // they contain.
-      for (const node of m.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        if (node.matches && node.matches(STREAM_BUBBLE_SEL)) attachToBubble(node);
-        const inner = node.querySelectorAll ? node.querySelectorAll(STREAM_BUBBLE_SEL) : [];
-        inner.forEach(attachToBubble);
+      if (m.type === "childList") {
+        // 有元素增删就约一次帧级扫描，不在回调里逐个 qSA。
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1) { needScan = true; break; }
+        }
+        continue;
       }
-
       // Attribute mutations on existing bubbles: a bubble that just
       // gained .streaming should be wired; one that just lost it should
-      // be cleaned up. We see these because the subtree:true above
-      // already covers attribute changes when wired; but for bubbles
-      // we haven't wired yet we need to scan once now.
+      // be cleaned up. classList 检查零分配，可以留在回调里。
       if (m.target && m.target.classList && m.target.classList.contains("chat-bubble")) {
         if (m.target.classList.contains("streaming")) attachToBubble(m.target);
         else if (m.target.hasAttribute(STREAMING_ATTR)) detachFromBubble(m.target);
       }
     }
-
-    // Cheap periodic reconciliation: catches streaming class flips that
-    // didn't come with a structural mutation in the same batch.
-    scanForBubbles(root);
+    if (needScan) scheduleScan();
   });
 
   function start() {

@@ -90,6 +90,31 @@ apply_ui_skin() {
   copy_if_changed "$ASSET_ROOT/laolao-avatar.png" "$ui_root/apple-touch-icon.png"
   copy_if_changed "$ASSET_ROOT/manifest.webmanifest" "$ui_root/manifest.webmanifest"
 
+  # 雪崩 lint（2026-09-01 冻结根因：12 个 subtree 观察者 × 全量 mutation
+  # record 拷贝 → GC 打满主线程）。部署前静态扫描，防止新补丁把问题写回来：
+  #  1) 禁止在 document.body/documentElement 上观察 characterData
+  #     （phrases.js 是唯一豁免：措辞中文化刚需，且已 600ms 防抖）；
+  #  2) 凡使用 MutationObserver 的文件，必须带节流/断开机制
+  #     （requestAnimationFrame / setTimeout / disconnect 任一）。
+  local lint_failed=0 js_file
+  for js_file in "$ui_root"/laolao-*.js; do
+    [[ -f "$js_file" ]] || continue
+    if grep -qE 'characterData\s*:\s*true' "$js_file" \
+       && grep -qE 'observe\(document\.(body|documentElement)' "$js_file" \
+       && [[ "$(basename "$js_file")" != "laolao-phrases.js" ]]; then
+      echo "【雪崩lint】禁止: $(basename "$js_file") 在 document 根上观察 characterData（文本节点变异是 mutation record 雪崩大头）" >&2
+      lint_failed=1
+    fi
+    if grep -q 'MutationObserver' "$js_file" \
+       && ! grep -qE 'requestAnimationFrame|setTimeout|setInterval|disconnect' "$js_file"; then
+      echo "【雪崩lint】警告: $(basename "$js_file") 的 MutationObserver 缺少节流或断开机制" >&2
+      lint_failed=1
+    fi
+  done
+  if [[ "$lint_failed" -eq 1 ]]; then
+    echo "【雪崩lint】存在高风险观察者模式，已继续部署，但请修正后再发版。" >&2
+  fi
+
   if ! grep -Fq './laolao-theme.css' "$index_file"; then
     local temp_index
     temp_index="$(mktemp "$ui_root/.laolao-head.XXXXXX")"
@@ -118,7 +143,7 @@ apply_ui_skin() {
 
   # 顶栏用量统计胶囊：JS 必须紧跟 sidebar.js（依赖其 __laolaoSidebar.gwRequest 句柄）
   if ! grep -Fq './laolao-usage-stats.js' "$index_file"; then
-    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats8"></script>}' "$index_file"
+    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats9"></script>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -128,27 +153,32 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-phrases.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases3"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-progress.js?v=progress3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-progress.js?v=progress4"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-session-list.js' "$index_file"; then
     perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions1"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-phrases.js?v=progress2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=progress2}g' "$index_file"
+  if ! grep -Fq './laolao-phrases.js?v=phrases3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases3}g' "$index_file"
   fi
-  if ! grep -Fq './laolao-progress.js?v=progress3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress3}g' "$index_file"
+  if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
     DID_CHANGE=1
   fi
 
+  # live-voice v2: 去掉 characterData 观察（文本节点变异是 mutation record
+  # 雪崩的大头）；childList 在流式重建整块 DOM 时仍会触发，功能不受影响。
   if ! grep -Fq './laolao-live-voice.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-live-voice.js"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-live-voice.js?v=voice3"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-live-voice.js?v=voice3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-live-voice\.js(?:\?v=[^"]*)?}{./laolao-live-voice.js?v=voice3}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -165,8 +195,8 @@ apply_ui_skin() {
   # Stream-fx（v2：去掉 chunk 淡入，只留光标柔和呼吸）— 必须在
   # image-viewer 之后、party-entry 之前加载；它只对 .chat-bubble.streaming
   # 生效，与其它脚本互不干扰。
-  if ! grep -Fq './laolao-stream-fx.js?v=stream2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-stream-fx\.js(?:\?v=[^"]*)?}{./laolao-stream-fx.js?v=stream2}g' "$index_file"
+  if ! grep -Fq './laolao-stream-fx.js?v=stream3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-stream-fx\.js(?:\?v=[^"]*)?}{./laolao-stream-fx.js?v=stream3}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -178,10 +208,14 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
-  # Tool-stream：工具进度组自动展开成可见输出流 + 进行中指示 + 底部汇总。
-  # 纯 DOM 观察（不需抢在模块包之前），defer 即可；用户手动折叠后不再自动展开。
+  # Tool-stream v3：MutationObserver 改成 1s 轮询（subtree 观察者在流式
+  # 重建 DOM 时会收到每条 mutation record 的副本，叠加 12 个观察者造成
+  # GC 雪崩把主线程打满）。v2 只自动展开最后一组；用户手动折叠后不再自动展开。
   if ! grep -Fq './laolao-tool-stream.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-tool-stream.js?v=toolstream1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-tool-stream.js?v=toolstream3"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-tool-stream.js?v=toolstream3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-tool-stream\.js\?v=[^"]*}{./laolao-tool-stream.js?v=toolstream3}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-tool-stream.css' "$index_file"; then
@@ -189,30 +223,32 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
+  # party-entry v4：MutationObserver 改成 1.5s 轮询（同 tool-stream v3 的
+  # mutation record 雪崩问题）。mount() 幂等，轮询足够。
   if ! grep -Fq './laolao-party-entry.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-party-entry.js?v=party3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-party-entry.js?v=party4"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-party-entry.js?v=party4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-party-entry\.js\?v=[^"]*}{./laolao-party-entry.js?v=party4}g' "$index_file"
     DID_CHANGE=1
   fi
-  if grep -Fq 'laolao-party-entry.js?v=party1' "$index_file"; then
-    perl -0pi -e 's{laolao-party-entry\.js\?v=party1}{laolao-party-entry.js?v=party3}g' "$index_file"
-    DID_CHANGE=1
-  fi
-  if grep -Fq 'laolao-party-entry.js?v=party2' "$index_file"; then
-    perl -0pi -e 's{laolao-party-entry\.js\?v=party2}{laolao-party-entry.js?v=party3}g' "$index_file"
-    DID_CHANGE=1
-  fi
+  # roundtable-entry v3：同 party-entry v4，轮询替代 subtree 观察者。
   if ! grep -Fq './laolao-roundtable-entry.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-roundtable-entry.js?v=roundtable2"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-roundtable-entry.js?v=roundtable3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-roundtable-entry\.js\?v=[^"]*}{./laolao-roundtable-entry.js?v=roundtable3}g' "$index_file"
     DID_CHANGE=1
   fi
 
   # 前后台断线恢复: 监听原生前后台事件 + visibilitychange, 回前台时重拉会话
+  # v2 修复 TDZ ReferenceError (wasBusy 引用越作用域, 导致恢复流程从未执行)
+  # v3 观察者在 hook 网关成功后 disconnect（雪崩治理，见 tool-stream v3）
   if ! grep -Fq './laolao-resume.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume3"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  fi
-  if grep -Fq 'laolao-roundtable-entry.js?v=roundtable1' "$index_file"; then
-    perl -0pi -e 's{laolao-roundtable-entry\.js\?v=roundtable1}{laolao-roundtable-entry.js?v=roundtable2}g' "$index_file"
+  elif ! grep -Fq './laolao-resume.js?v=resume3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume3}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -271,8 +307,8 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar12}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-usage-stats.js?v=stats8' "$index_file"; then
-    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats8}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats9' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats9}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then

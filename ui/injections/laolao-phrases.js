@@ -3,6 +3,13 @@
 
   // Presentation only: replies/tool output stay intact. The reserved gateway
   // failure sentinel is localized as a system notice, not a character reply.
+  //
+  // v2 性能修复（2026-09-01，大会话流式期间整页冻结的根因）：
+  // 1. 删掉每轮回调里的全文档 localizeToolActivity(document) + syncFailureCards()，
+  //    改为 600ms 防抖（原来每个 mutation 批次都全文档扫 4 个 querySelectorAll）。
+  // 2. 删掉死代码：itemSeed/groupSeed 会在守卫判断之前读取整组 textContent
+  //    （每组工具输出可达数百 KB），且计算结果从未被使用；连带删除不再被调用的
+  //    措辞抽取函数组（toolPhrase/activityPhrase/detailPhrase 等）。
   const failureSentinel='The agent run failed before producing a reply.';
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
@@ -112,97 +119,12 @@
     });
   };
 
-  const phraseIndex = (seed, length) => {
-    let value = 0;
-    for (const character of String(seed)) value = ((value * 31) + character.charCodeAt(0)) >>> 0;
-    return value % length;
-  };
-
-  const pickPhrase = (phrases, seed) => phrases[phraseIndex(seed, phrases.length)];
-
-  const toolPhrase = (name, seed) => {
-    const key = name.trim().toLowerCase();
-    const phrases = {
-      exec: [
-        "碧琪在翻小抽屉找线索…",
-        "派对清单飞起来啦，碧琪正一张张接住…",
-        "碧琪卷起袖子，马上把这一步办妥…",
-        "这点小活交给碧琪的蹄子，马上有消息…",
-      ],
-      process: [
-        "小帮手正在跑，碧琪踮着脚等回信…",
-        "碧琪把耳朵竖起来，正听它有没有好消息…",
-        "计时开始！碧琪盯着进度不眨眼…",
-        "这台小机器忙着呢，碧琪在旁边加油…",
-      ],
-      read: [
-        "碧琪正在展开小纸条看看…",
-        "让我悄悄读一下这里藏着什么…",
-        "碧琪戴上侦探帽，正翻看线索…",
-      ],
-      write: [
-        "碧琪正在写一张亮晶晶的便签…",
-        "这份小纸条由碧琪认真落笔中…",
-        "碧琪把答案装进信封，马上封好…",
-      ],
-      edit: [
-        "碧琪正在给这张小纸条修修边…",
-        "这儿稍微挪一下，碧琪马上整理好…",
-        "碧琪拿着彩笔，正把细节补齐…",
-      ],
-      search: [
-        "碧琪正四处转转找线索…",
-        "让我把放大镜拿出来找找看…",
-        "碧琪已经小跑出去搜寻啦…",
-      ],
-      browser: [
-        "碧琪打开小望远镜看看那边…",
-        "让我探头瞧一眼，马上回来报告…",
-        "碧琪正顺着网页上的小箭头找路…",
-      ],
-      default: [
-        "碧琪请了一位工具小帮手来搭把手…",
-        "这一步交给碧琪的可靠小伙伴啦…",
-        "小帮手已经出发，碧琪在旁边盯着呢…",
-      ],
-    };
-    const family = key === "web_search" ? "search" : (phrases[key] ? key : "default");
-    return pickPhrase(phrases[family], `${family}:${seed}`);
-  };
-
-  const activityPhrase = (count, seed) => pickPhrase([
-    `先生稍等，碧琪正安排 ${count} 位工具小帮手…`,
-    `派对行动队出发：${count} 位小帮手正忙着呢…`,
-    `碧琪把 ${count} 个小任务排成队啦…`,
-    `这回有 ${count} 位小帮手一起跑腿，热闹起来啦！`,
-  ], seed);
-
-  const detailPhrase = (seed) => pickPhrase([
-    "先生稍等，纸屑飞飞，碧琪马上带着结果回来！",
-    "碧琪已经小跑出去了，答案马上送到！",
-    "先别眨眼，这一步快完成啦！",
-    "小帮手正忙，碧琪在旁边举着小旗子加油！",
-    "碧琪把这件小事放进惊喜盒子里处理啦…",
-  ], seed);
-
-  const cardDetailPhrase = (seed) => pickPhrase([
-    "碧琪正在给这一步系上彩带…",
-    "小帮手在忙，碧琪负责盯进度！",
-    "这张小任务卡正在处理，马上就好…",
-    "碧琪正在把结果装进惊喜盒子…",
-    "这一步正在咔嗒咔嗒往前走呢…",
-  ], seed);
-
-  const localizeToolSummary = (item, index) => {
+  const localizeToolSummary = (item) => {
     const toolLabel = item.querySelector(".chat-tool-msg-summary__label");
     const detail = item.querySelector(".chat-tool-msg-summary__names");
-    const rawToolName = toolLabel?.textContent || "";
-    const rawDetail = detail?.textContent || "";
-    const group = item.closest(".chat-group");
-    const groupLabel = group?.querySelector(".chat-activity-group__label")?.textContent || "";
-    const itemSeed = `${groupLabel}:${group?.textContent || ""}:${index}:${rawToolName}:${rawDetail}`;
 
     if (toolLabel && !toolLabel.dataset.laolaoLocalized) {
+      const rawToolName = toolLabel.textContent || "";
       const labels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
       const label=labels[rawToolName.trim().toLowerCase()];
       if(label)toolLabel.textContent=label+' · '+rawToolName;
@@ -219,7 +141,6 @@
     scope.querySelectorAll?.(".chat-activity-group").forEach((group) => {
       const summary = group.querySelector(".chat-activity-group__summary");
       const label = group.querySelector(".chat-activity-group__label");
-      const groupSeed = `${label?.textContent || ""}:${group.textContent || ""}`;
       if (label && !label.dataset.laolaoLocalized) {
         const count = (label.textContent || "").match(/\d+/)?.[0] || "几";
         label.textContent = `工具进度 · ${count} 项`;
@@ -244,7 +165,7 @@
       sender.dataset.laolaoLocalized = "1";
     });
 
-    scope.querySelectorAll?.(".chat-tool-card__detail").forEach((detail, index) => {
+    scope.querySelectorAll?.(".chat-tool-card__detail").forEach((detail) => {
       if (detail.dataset.laolaoLocalized) return;
       // Do not replace real progress with an invented activity sentence.
       detail.dataset.laolaoLocalized = "1";
@@ -254,19 +175,33 @@
   const start = () => {
     localizeTree(document.body);
     localizeToolActivity(document);
+
+    /* 全文档补扫做 600ms 防抖：Lit 有时就地复用节点（不触发 addedNodes），
+       需要定期兜底；但绝不能每个 mutation 批次都全扫。
+       v3：新增元素的语言树/工具条本地化也全部并入这次防抖扫描——
+       观察者回调里跑 querySelectorAll 会疯狂制造 NodeList 包装对象，
+       是 2026-09-01 第三次冻结实抓到的 GC 雪崩主凶。 */
+    let fullScanScheduled = false;
+    const scheduleFullScan = () => {
+      if (fullScanScheduled) return;
+      fullScanScheduled = true;
+      setTimeout(() => {
+        fullScanScheduled = false;
+        localizeTree(document.body);
+        localizeToolActivity(document);
+        syncFailureCards();
+      }, 600);
+    };
+
     new MutationObserver((records) => {
       for (const record of records) {
+        // 回调里只做零分配的纯文本替换；元素级扫描全部交给防抖。
         if (record.type === "characterData") localizeText(record.target);
         for (const node of record.addedNodes) {
           if (node.nodeType === Node.TEXT_NODE) localizeText(node);
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            localizeTree(node);
-            localizeToolActivity(node);
-          }
         }
       }
-      localizeToolActivity(document);
-      syncFailureCards();
+      scheduleFullScan();
     }).observe(document.body, { childList: true, characterData: true, subtree: true });
   };
 

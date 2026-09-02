@@ -1,10 +1,19 @@
-/* 工具流可见化：自动展开工具进度组 + 进行中指示 + 底部汇总。
-   只读 DOM 与 chat-pane state，不改消息数据；全部幂等，可被 Lit 重渲染后自愈。 */
+/* 工具流可见化 v2：自动展开"最后一组"工具进度 + 进行中指示 + 底部汇总。
+   只读 DOM 与 chat-pane state，不改消息数据；全部幂等，可被 Lit 重渲染后自愈。
+
+   v2 安全约束（v1 在大会话/流式中会把主线程打满）：
+   1. 只自动展开最后一组（正在运行/最近一轮），历史组保持折叠——
+      避免 600+ 消息会话一次性展开全部工具组造成 DOM 爆炸。
+   2. 展开判断用 is-open class + aria-expanded 双重确认（原生两个都会渲染）。
+   3. WeakSet 记录已自动点过的组元素：同一元素终身只自动点击一次，
+      从机制上杜绝"点开→重渲染→再点→点开"的乒乓循环。
+   4. 用户手动折叠过的组永不再自动展开。 */
 (() => {
   'use strict';
 
   let scheduled = false;
   let applying = false;
+  const autoExpanded = new WeakSet();
 
   const KIND_RULES = [
     [/读取文件|read/i, 'read', '读取'],
@@ -37,6 +46,13 @@
     return !!(st && (st.chatRunStatus === 'running' || st.chatRunStatus === 'streaming' || st.chatStream));
   }
 
+  /* 原生展开态：is-open class 与 aria-expanded 任一表示已展开即视为已展开 */
+  function isOpen(group) {
+    if (group.classList.contains('is-open')) return true;
+    const summary = $('.chat-activity-group__summary', group);
+    return summary ? summary.getAttribute('aria-expanded') === 'true' : false;
+  }
+
   /* 真实用户手动折叠后不再自动展开（isTrusted 区分程序点击） */
   function armToggleListener(group) {
     if (group.dataset.laolaoTsListener) return;
@@ -49,11 +65,15 @@
     }, true);
   }
 
-  function expandGroup(group) {
-    const summary = $('.chat-activity-group__summary', group);
+  /* 只自动展开最后一组；每个元素终身最多自动点一次 */
+  function expandLastGroup(lastGroup) {
+    if (!lastGroup) return;
+    if (isOpen(lastGroup)) return;
+    if (lastGroup.dataset.laolaoUserToggled === '1') return;
+    if (autoExpanded.has(lastGroup)) return;
+    const summary = $('.chat-activity-group__summary', lastGroup);
     if (!summary) return;
-    if (summary.getAttribute('aria-expanded') === 'true') return;
-    if (group.dataset.laolaoUserToggled === '1') return;
+    autoExpanded.add(lastGroup);
     summary.click(); /* 交给 Lit 自己渲染 body，不手搓 DOM */
   }
 
@@ -72,7 +92,7 @@
         if (icon && icon.parentNode === btn) btn.insertBefore(dot, icon);
         else btn.insertBefore(dot, btn.firstChild);
       }
-      dot.dataset.kind = kind;
+      if (dot.dataset.kind !== kind) dot.dataset.kind = kind;
 
       /* 进行中徽标：只挂在运行中那一组的最后一项 */
       const isLast = i === summaries.length - 1;
@@ -124,9 +144,10 @@
       const active = runActive();
       const groups = $$('.chat-activity-group');
       const lastGroup = groups.length ? groups[groups.length - 1] : null;
+      expandLastGroup(lastGroup);
       for (const group of groups) {
         armToggleListener(group);
-        expandGroup(group);
+        if (!isOpen(group)) continue; /* 折叠的组没有 body，跳过装饰 */
         const n = decorateItems(group, group === lastGroup, active);
         updateFooter(group, n, active && group === lastGroup);
       }
@@ -141,19 +162,13 @@
     setTimeout(prepare, 80);
   }
 
+  /* v3: MutationObserver 换成 1s 轮询。
+     子树观察器在大会话流式期间是 mutation 记录雪崩的放大器
+     （每条记录为每个观察器单独包装 JS 对象 → GC 死亡螺旋）。
+     prepare 本身幂等且便宜，1s 延迟对工具流展示无感知。 */
   function start() {
     schedule();
-    new MutationObserver((muts) => {
-      if (applying) return;
-      for (const m of muts) {
-        if (m.type === 'childList' || m.type === 'attributes') { schedule(); return; }
-      }
-    }).observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'aria-expanded'],
-    });
+    setInterval(schedule, 1000);
   }
 
   if (document.readyState === 'loading') {

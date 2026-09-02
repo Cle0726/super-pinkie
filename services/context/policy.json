@@ -1,8 +1,9 @@
 {
-  "triggerRatio": 0.85,
-  "targetRatio": 0.6,
-  "keepRecentRatio": 0.35,
-  "unknownContextWindow": 256000,
+  "triggerRatio": 0.98,
+  "targetRatio": 0.9,
+  "keepRecentRatio": 0.85,
+  "unknownContextWindow": 1000000,
+  "minWindowTokens": 500000,
   "modelLimits": {
     "codex/gpt-5.5": 272000,
     "codex/gpt-5.4": 272000,

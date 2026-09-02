@@ -1448,3 +1448,14 @@ img.chat-avatar.assistant {
     animation: none !important;
   }
 }
+
+
+/* 保证长会话聊天记录平滑滚动并完整保留 */
+.chat-scroll-container,
+.chat-messages-container,
+[data-element="chat-container"],
+openclaw-chat-log {
+  scroll-behavior: smooth !important;
+  overscroll-behavior-y: contain !important;
+  contain: none !important;
+}

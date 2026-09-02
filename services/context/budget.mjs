@@ -1,18 +1,28 @@
-/** Shared relative policy for native OpenClaw compaction; no prompts or history. */
+/** Shared relative policy for native OpenClaw compaction; ultra-long retention mode. */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 export function compactionBudget(window) {
-  let policy={};
-  try { policy=JSON.parse(fs.readFileSync(path.join(os.homedir(),'Library/Application Support/SuperPinkie/context-policy.json'),'utf8')); } catch {}
-  // Upper bound 0.85 lets power users push compaction late (e.g. 0.8) without
-  // being silently clamped back to 0.7. Lower bound 0.3 still prevents a
-  // self-DOS from a misconfigured near-zero ratio.
-  const ratio=Number.isFinite(policy.triggerRatio)&&policy.triggerRatio>=.3&&policy.triggerRatio<=.85?policy.triggerRatio:.8;
-  const tokens=Number.isFinite(window)&&window>0?Math.floor(window):256000;
-  // Default 256000 is generous on purpose: an unknown provider that did not
-  // declare a contextWindow should not be compacted after a single exchange.
-  const keepRatio=Number.isFinite(policy.keepRecentRatio)&&policy.keepRecentRatio>=.05&&policy.keepRecentRatio<=.5?policy.keepRecentRatio:.25;
-  const threshold=Math.max(1,Math.floor(tokens*ratio));
-  return {window:tokens,threshold,reserve:tokens-threshold,keepRecent:Math.max(1,Math.floor(tokens*keepRatio))};
+  let policy = {};
+  try {
+    policy = JSON.parse(fs.readFileSync(path.join(os.homedir(), 'Library/Application Support/SuperPinkie/context-policy.json'), 'utf8'));
+  } catch {}
+
+  // 放宽 triggerRatio 限制，允许高达 0.98，默认 0.95
+  const ratio = Number.isFinite(policy.triggerRatio) && policy.triggerRatio >= 0.3 && policy.triggerRatio <= 0.99 ? policy.triggerRatio : 0.95;
+  // 最小窗口保底 500,000
+  const floor = Number.isFinite(policy.minWindowTokens) && policy.minWindowTokens >= 32768 ? Math.floor(policy.minWindowTokens) : 500000;
+  const resolved = Number.isFinite(window) && window > 0 ? Math.floor(window) : 1000000;
+  const tokens = Math.max(resolved, floor);
+  // 放宽 keepRecentRatio 限制，允许高达 0.95，默认 0.85（保留绝大部分历史）
+  const keepRatio = Number.isFinite(policy.keepRecentRatio) && policy.keepRecentRatio >= 0.05 && policy.keepRecentRatio <= 0.98 ? policy.keepRecentRatio : 0.85;
+  const threshold = Math.max(1, Math.floor(tokens * ratio));
+
+  return {
+    window: tokens,
+    threshold: threshold,
+    reserve: tokens - threshold,
+    keepRecent: Math.max(1, Math.floor(tokens * keepRatio))
+  };
 }

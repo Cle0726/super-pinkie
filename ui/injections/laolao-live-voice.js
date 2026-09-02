@@ -126,9 +126,26 @@
   const collectGroups = (node, groups) => {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     if (!element) return;
+    // v3：只用 closest/matches（零分配的指针攀爬），禁止 querySelectorAll——
+    // 观察者回调里的 NodeList 工厂是 2026-09-01 冻结实抓的 GC 雪崩主凶。
+    // 新增子树里的组由 record.target 的祖先链覆盖；整组新增时组元素本身
+    // 就在 addedNodes 里，matches 直接命中。
     const own = element.closest(".chat-group.assistant");
     if (own) groups.add(own);
-    element.querySelectorAll?.(".chat-group.assistant").forEach((group) => groups.add(group));
+    if (element.matches?.(".chat-group.assistant")) groups.add(element);
+  };
+
+  const dirtyGroups = new Set();
+  let processTimer = 0;
+  const scheduleProcess = () => {
+    if (processTimer) return;
+    processTimer = window.setTimeout(() => {
+      processTimer = 0;
+      dirtyGroups.forEach((group) => {
+        if (group.isConnected) processGroup(group);
+      });
+      dirtyGroups.clear();
+    }, 300);
   };
 
   const armForReply = (fromVoice) => {
@@ -172,11 +189,13 @@
   }, true);
 
   new MutationObserver((records) => {
-    const groups = new Set();
     for (const record of records) {
-      collectGroups(record.target, groups);
-      record.addedNodes.forEach((node) => collectGroups(node, groups));
+      collectGroups(record.target, dirtyGroups);
+      record.addedNodes.forEach((node) => collectGroups(node, dirtyGroups));
     }
-    groups.forEach(processGroup);
-  }).observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+    if (dirtyGroups.size) scheduleProcess();
+  // No characterData: streaming rebuilds whole elements anyway (childList
+  // still fires), and text-node mutations are the bulk of the mutation record
+  // avalanche that pegged the main thread during long sessions.
+  }).observe(document.documentElement, { childList: true, subtree: true });
 })();

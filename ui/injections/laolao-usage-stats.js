@@ -231,7 +231,14 @@
     // header 可能被 Lit 重渲染掉：observer 调 render 重建并回填数值。
     // render 只在内容变化时写 DOM，写完后 mutation 再触发 render 也是空操作，不会死循环。
     // class 变化也要盯：发送键 ⇄ 停止键的切换是流式状态信号（syncLive）。
-    new MutationObserver(() => { render(); syncLive(); }).observe(document.documentElement, {
+    // v9：rAF 节流。流式期间 mutation 批次极密，回调必须与帧率对齐，
+    // 不能每批次都跑（雪崩教训：回调频率 × 成本 才是主线程杀手）。
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; render(); syncLive(); });
+    }).observe(document.documentElement, {
       childList: true, subtree: true,
       attributes: true, attributeFilter: ["class"],
     });

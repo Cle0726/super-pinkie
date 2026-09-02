@@ -22,5 +22,9 @@
     const art=document.createElement('img');art.src=assetURL;art.alt='';art.draggable=false;const label=document.createElement('span');label.textContent='灵感圆桌';link.append(art,label);
     link.onclick=event=>{const native=window.webkit?.messageHandlers?.laolaoRoundtable;if(native){event.preventDefault();native.postMessage({action:'open'});}};rail.append(link);
   };
-  new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(mount);}}).observe(document.documentElement,{childList:true,subtree:true});mount();
+  // Poll instead of a subtree-wide MutationObserver: during streaming every
+  // markdown chunk rebuilds the DOM, and each observer receives its own copy
+  // of every mutation record (the GC "record avalanche" that froze the page).
+  // mount() is idempotent, so a slow 1.5s poll is more than enough here.
+  setInterval(mount,1500);mount();
 })();

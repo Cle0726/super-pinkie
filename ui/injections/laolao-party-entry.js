@@ -28,6 +28,10 @@
     link.onclick = event => {const native = window.webkit?.messageHandlers?.laolaoParty;if (native) {event.preventDefault();native.postMessage({action:'open'});}};
     rail.append(link);
   };
-  new MutationObserver(() => {if (!scheduled) {scheduled = true;requestAnimationFrame(mount);}}).observe(document.documentElement,{childList:true,subtree:true});
+  // Poll instead of a subtree-wide MutationObserver: during streaming every
+  // markdown chunk rebuilds the DOM, and each observer receives its own copy
+  // of every mutation record (the GC "record avalanche" that froze the page).
+  // mount() is idempotent, so a slow 1.5s poll is more than enough here.
+  setInterval(mount, 1500);
   mount();
 })();
