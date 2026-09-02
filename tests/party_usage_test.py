@@ -43,7 +43,7 @@ class UsageTests(unittest.TestCase):
     def test_quota_is_actual_cached_percentage_not_spend_or_sample_balance(self):
         self.put();cache=self.home/'.antigravity_cle/cache/quota_api_v1_desktop/authorized/q.json';cache.parent.mkdir(parents=True)
         cache.write_text(json.dumps({'payload':{'models':{'gemini-a':{'quotaInfo':{'remainingFraction':.97}},'gpt-b':{'quotaInfo':{'remainingFraction':.8}},'tab-internal':{'quotaInfo':{'remainingFraction':0}}}}}))
-        result=self.collect();self.assertEqual('80%',result['quota']);self.assertEqual(1.25,result['cost'])
+        result=self.collect();self.assertEqual('日80%',result['quota']);self.assertEqual(1.25,result['cost'])
 
 
 if __name__=='__main__':unittest.main()
