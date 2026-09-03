@@ -38,8 +38,8 @@ test('installer cache-busts the native glass assets',()=>{
   assert.match(installer,/laolao-sidebar\.js\?v=sidebar13/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions3/);
   assert.match(installer,/laolao-deep-think\.js\?v=deepthink10/);
-  assert.match(installer,/laolao-splash\.css\?v=splash17/);
-  assert.match(installer,/laolao-splash\.js\?v=splash20/);
+  assert.match(installer,/laolao-splash\.css\?v=splash18/);
+  assert.match(installer,/laolao-splash\.js\?v=splash21/);
   assert.match(installer,/laolao-mode-switcher\.js\?v=mode25/);
   assert.match(installer,/laolao-usage-stats\.js\?v=stats11/);
   assert.match(installer,/s\{\"\\\.\/laolao-\}\{\"\/laolao-\}g/);

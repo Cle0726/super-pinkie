@@ -29,6 +29,17 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(loading, /background: #efcbd3/);
   assert.doesNotMatch(loading, /background:\s*transparent/);
   assert.doesNotMatch(loading, /<main\b|超級碧琪正在准备<\/p>/);
+  assert.match(launcher, /let remaining = 6\.1 - Date\(\)\.timeIntervalSince\(started\)/);
+  assert.match(launcher, /contentView\.layer\?\.backgroundColor = NSColor\(/);
+  assert.match(launcher, /didFinish navigation:[\s\S]*NSColor\.clear\.cgColor/);
+});
+
+test('the web stage keeps the original 来啦～老弟 entrance after the native movie', () => {
+  const body = read('ui/injections/laolao-body.fragment.html');
+  const splash = read('ui/injections/laolao-splash.css');
+  assert.match(body, /class="laolao-splash__title">来啦～老弟/);
+  assert.doesNotMatch(body, /laolao-splash__video|laolao-splash\.mp4/);
+  assert.match(splash, /url\("\.\/laolao-splash\.png"\)/);
 });
 
 test('bundle keeps user state external and first launch uses bundled executables', () => {

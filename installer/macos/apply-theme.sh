@@ -58,8 +58,6 @@ apply_ui_skin() {
     laolao-wallpaper-thinking.png \
     laolao-wallpaper-unrestricted.png \
     laolao-splash.png \
-    laolao-splash.mp4 \
-    laolao-splash-video-poster.png \
     laolao-theme.css \
     laolao-motion.js \
     laolao-sidebar.css \
@@ -300,11 +298,11 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
-  # Existing installations already contain the splash section, so copying the
-  # new assets alone would leave them on the poster frame. Add the generated
-  # mascot video in place without replacing the user's index or app state.
-  if ! grep -Fq 'laolao-splash__video' "$index_file"; then
-    perl -0pi -e 's{(<section id="laolao-splash"[^>]*>)}{$1\n      <video class="laolao-splash__video" muted loop autoplay playsinline preload="auto" poster="./laolao-splash-video-poster.png?v=splashvideo1" aria-hidden="true">\n        <source src="./laolao-splash.mp4?v=splashvideo1" type="video/mp4" />\n      </video>}g' "$index_file"
+  # v2.4.0 briefly inserted the native launcher movie into the web entrance.
+  # Keep the two stages separate: native startup is pure video, then the
+  # original "来啦～老弟" web entrance takes over.
+  if grep -Fq 'laolao-splash__video' "$index_file"; then
+    perl -0pi -e 's{\s*<video class="laolao-splash__video"(?:(?!</video>)[\s\S])*?</video>}{}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -354,16 +352,16 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-usage-stats\.css(?:\?v=[^"]*)?}{./laolao-usage-stats.css?v=stats7}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.css?v=splash17' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash17}g' "$index_file"
+  if ! grep -Fq './laolao-splash.css?v=splash18' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash18}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-mode-switcher.js?v=mode25' "$index_file"; then
     perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode25}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.js?v=splash20' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash20}g' "$index_file"
+  if ! grep -Fq './laolao-splash.js?v=splash21' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash21}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff4' "$index_file"; then

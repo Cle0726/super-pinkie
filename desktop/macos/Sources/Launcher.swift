@@ -577,6 +577,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var window: NSWindow?
     private var webView: WKWebView?
     private var retries = 0
+    private var startupVideoStartedAt: Date?
+    private var dashboardLoadPending = false
     private let dictation = NativeDictationController()
     private let dictationHandlerName = "laolaoNativeDictation"
     private let liveSpeech = NativeLiveSpeechController()
@@ -731,6 +733,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         guard let contentView = window.contentView else { return }
         contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor(
+            srgbRed: 239.0 / 255.0,
+            green: 203.0 / 255.0,
+            blue: 211.0 / 255.0,
+            alpha: 1
+        ).cgColor
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
         contentView.layer?.masksToBounds = true
@@ -783,6 +791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func showStartupScreen() {
+        startupVideoStartedAt = Date()
         if let root = BundledRuntime.resourceRoot {
             let page = root.appendingPathComponent("ui/launcher-loading.html")
             if FileManager.default.fileExists(atPath: page.path) {
@@ -825,7 +834,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func loadDashboard() {
+        if let started = startupVideoStartedAt {
+            let remaining = 6.1 - Date().timeIntervalSince(started)
+            if remaining > 0 {
+                guard !dashboardLoadPending else { return }
+                dashboardLoadPending = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
+                    self?.dashboardLoadPending = false
+                    self?.loadDashboard()
+                }
+                return
+            }
+            startupVideoStartedAt = nil
+        }
         webView?.load(URLRequest(url: Gateway.url))
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
+        window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     @available(macOS 12.0, *)

@@ -40,8 +40,6 @@ $Assets = @(
     "laolao-wallpaper-thinking.png",
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
-    "laolao-splash.mp4",
-    "laolao-splash-video-poster.png",
     "laolao-theme.css",
     "laolao-motion.js",
     "laolao-sidebar.css",
@@ -124,13 +122,12 @@ function Apply-UISkin {
         $frag = Get-Content $bodyFrag -Raw -Encoding UTF8
         $html = $html -replace "(?i)(<body[^>]*>)", "`$1`n$frag"
     }
-    if ($html -notmatch 'laolao-splash__video') {
-        $videoMarkup = @"
-      <video class="laolao-splash__video" muted loop autoplay playsinline preload="auto" poster="./laolao-splash-video-poster.png?v=splashvideo1" aria-hidden="true">
-        <source src="./laolao-splash.mp4?v=splashvideo1" type="video/mp4" />
-      </video>
-"@
-        $html = $html -replace '(<section id="laolao-splash"[^>]*>)', "`$1`n$videoMarkup"
+    if ($html -match 'laolao-splash__video') {
+        $html = [regex]::Replace(
+            $html,
+            '\s*<video class="laolao-splash__video"(?:(?!</video>)[\s\S])*?</video>',
+            ''
+        )
     }
     if ($html -notmatch "laolao-handoff-bootstrap") {
         $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
@@ -160,10 +157,10 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme30'; 'laolao-splash.css' = 'splash17'; 'laolao-sidebar.css' = 'sidebar16';
+        'laolao-theme.css' = 'theme30'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar16';
         'laolao-sidebar.js' = 'sidebar13'; 'laolao-session-list.js' = 'sessions3'; 'laolao-usage-stats.js' = 'stats11';
         'laolao-phrases.js' = 'phrases8';
-        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash20';
+        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume5'
         'laolao-deep-think.js' = 'deepthink10'
     }
