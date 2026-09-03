@@ -164,7 +164,12 @@ def control_roots(home=None):
         parent=Path(binary).resolve().parent
         roots.extend([parent/'dist/control-ui',parent/'node_modules/openclaw/dist/control-ui'])
     roots.extend((home/'.nvm/versions/node').glob('*/lib/node_modules/openclaw/dist/control-ui'))
-    return list(dict.fromkeys(p for p in roots if p.is_dir()))
+    # A running macOS App must never rewrite files inside its signed bundle.
+    # The live gateway RPC supplies current counters to that UI instead.
+    return list(dict.fromkeys(
+        p for p in roots
+        if p.is_dir() and not any(part.lower().endswith('.app') for part in p.parts)
+    ))
 
 
 def publish(home=None):

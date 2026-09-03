@@ -10,7 +10,7 @@ test('an upstream failure restores the real composer without fabricating an inpu
   assert.match(phrases,/pinkie:run-failed/);
   assert.match(phrases,/session file changed while embedded prompt lock was released/);
   assert.match(resume,/addEventListener\("pinkie:run-failed"/);
-  assert.match(resume,/resetBusyState\(\)/);
+  assert.match(resume,/clearVisualBusyState\(\)/);
   assert.match(resume,/sessions\.list/);
   assert.match(resume,/agent-chat__composer-combobox textarea/);
   assert.doesNotMatch(resume,/createElement\(["'](?:textarea|input)["']\)/);
@@ -23,12 +23,13 @@ test('composer recovery is low-frequency and voice implementation stays separate
   assert.ok(fs.existsSync(path.join(__dirname,'../ui/injections/laolao-live-voice.js')));
 });
 
-test('manual stop cancels only the next watchdog retry while synthetic recovery does not',()=>{
+test('foreground recovery never clicks stop and only a real manual stop cancels watchdog retry',()=>{
   const resume=read('ui/injections/laolao-resume.js');
   assert.match(resume,/\.chat-send-btn--stop/);
   assert.match(resume,/pinkie\.watchdog\.cancel/);
-  assert.match(resume,/syntheticStop = true/);
-  assert.match(resume,/syntheticStop \|\|/);
+  assert.match(resume,/await refreshSession\(\)/);
+  assert.doesNotMatch(resume,/stopBtn\.click\(\)/);
+  assert.doesNotMatch(resume,/syntheticStop/);
 });
 
 test('internal watchdog, tier controller and gateway-restart turns stay in the transcript but are hidden from the chat UI',()=>{

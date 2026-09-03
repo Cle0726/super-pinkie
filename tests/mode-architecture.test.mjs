@@ -269,6 +269,83 @@ test('upstream watchdog retries transient failures invisibly and ignores explici
   assert.equal(isTransientFailure('user aborted'),false);
 });
 
+test('watchdog recovers an aborted provider run even when agent_end has no top-level error',async()=>{
+  const scheduled=[],injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async value=>{scheduled.push(value);return {id:'retry'};},
+  }}});
+  watchdog.modelEnded({runId:'provider-abort',outcome:'aborted',stopReason:'aborted'});
+  const retried=await watchdog.agentEnded({runId:'provider-abort',success:false},{agentId:'project',sessionKey:'agent:project:provider-abort'});
+  assert.equal(retried,true);assert.equal(injected.length,1);assert.equal(scheduled.length,1);
+
+  const messageOnly=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async value=>{scheduled.push(value);return {id:'retry-2'};},
+  }}});
+  const fromMessage=await messageOnly.agentEnded({success:false,messages:[{
+    role:'assistant',content:[],stopReason:'aborted',errorMessage:'Request was aborted.',
+  }]},{agentId:'unrestricted',sessionKey:'agent:unrestricted:message-abort'});
+  assert.equal(fromMessage,true);assert.equal(injected.length,2);assert.equal(scheduled.length,2);
+});
+
+test('watchdog resumes a failed tool-use turn that has no top-level error text',async()=>{
+  const scheduled=[],injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async value=>{scheduled.push(value);return {id:'retry'};},
+  }}});
+  const retried=await watchdog.agentEnded({success:false,messages:[
+    {role:'assistant',content:[{type:'toolCall',name:'write'}],stopReason:'toolUse'},
+    {role:'toolResult',toolName:'write',content:[{type:'text',text:'Successfully wrote file'}]},
+  ]},{agentId:'project',sessionKey:'agent:project:tool-use-gap'});
+  assert.equal(retried,true);assert.equal(injected.length,1);assert.equal(scheduled.length,1);
+  assert.match(injected[0].text,/工具结果已经返回/);assert.match(injected[0].text,/禁止重复/);
+});
+
+test('watchdog reads structured incomplete-turn errors from agent_end',async()=>{
+  const injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async()=>({id:'retry'}),
+  }}});
+  const retried=await watchdog.agentEnded({success:false,error:{
+    kind:'incomplete_turn',message:"Agent couldn't generate a response.",
+  }},{agentId:'thinking',sessionKey:'agent:thinking:structured-gap'});
+  assert.equal(retried,true);assert.equal(injected.length,1);
+});
+
+test('watchdog defaults unknown failed turns and context overflow to recovery',async()=>{
+  const injected=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),scheduleSessionTurn:async()=>({id:'retry'}),
+  };
+  const watchdog=new UpstreamWatchdog({session:{workflow}});
+  assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
+    {agentId:'main',sessionKey:'agent:main:unknown'}),true);
+  assert.equal(await watchdog.agentEnded({success:false,error:'Context overflow: prompt too large for the model'},
+    {agentId:'project',sessionKey:'agent:project:overflow'}),true);
+  assert.equal(injected.length,2);
+});
+
+test('watchdog never loops permanent configuration failures',async()=>{
+  const injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),scheduleSessionTurn:async()=>({id:'retry'}),
+  }}});
+  assert.equal(await watchdog.agentEnded({success:false,error:'Unknown model: removed/model'},
+    {agentId:'main',sessionKey:'agent:main:bad-model'}),false);
+  assert.equal(await watchdog.agentEnded({success:false,error:'invalid API key'},
+    {agentId:'main',sessionKey:'agent:main:bad-key'}),false);
+  assert.equal(injected.length,0);
+});
+
 test('marathon watchdog keeps a delayed cron fallback while manual cancellation still wins',async()=>{
   const scheduled=[];
   const api={session:{workflow:{

@@ -890,8 +890,8 @@ def run_control_center():
 
 def main():
     if os.name == "nt" and getattr(sys, "frozen", False) and bundled_runtime_root() and "--control-center" not in sys.argv:
-        from windows_desktop import run_desktop
-        run_desktop(resource_path(), prepare_bundled_desktop)
+        from windows_desktop import run_desktop, update_health_token_from_argv
+        run_desktop(resource_path(), prepare_bundled_desktop, update_health_token_from_argv())
         return
     run_control_center()
 

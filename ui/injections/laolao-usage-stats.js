@@ -49,12 +49,31 @@
     refreshing = true;
     try {
       const partyPage = Boolean(document.getElementById('party-usage'));
-      const [stats, liveRuntime] = await Promise.all([
+      const [fileStats, liveRuntime] = await Promise.all([
         fetchJson(partyPage ? '/api/usage' : '/laolao-stats.json'),
         !partyPage && $sidebar()?.gwRequest
           ? $sidebar().gwRequest('pinkie.usage.get', {}, 5000).catch(()=>null)
           : null,
       ]);
+      // A packaged macOS App cannot rewrite JSON inside its signed bundle.
+      // Keep its build-time aggregate as a floor and merge newer live RPC
+      // counters without double counting them.
+      const stats = !partyPage && fileStats && liveRuntime
+        ? {
+            ...fileStats,
+            ...Object.fromEntries(['input','output','cacheRead','cacheWrite','requests','cost'].map(key => [
+              key,
+              Number.isFinite(fileStats[key]) || Number.isFinite(liveRuntime[key])
+                ? Math.max(Number(fileStats[key]) || 0, Number(liveRuntime[key]) || 0)
+                : null,
+            ])),
+            quota: fileStats.quota || liveRuntime.quota || null,
+            quotaNote: fileStats.quotaNote || liveRuntime.quotaNote || '',
+            updatedAt: Math.max(Number(fileStats.updatedAt) || 0, Number(liveRuntime.updatedAt) || 0),
+            sourceUpdatedAt: Math.max(Number(fileStats.sourceUpdatedAt) || 0, Number(liveRuntime.updatedAt) || 0),
+            runtimeIncluded: true,
+          }
+        : (fileStats || liveRuntime);
       if (stats && (stats.scope === 'lifetime' || Number.isFinite(stats.input))) {
         const runtime = stats.runtimeIncluded ? null : liveRuntime;
         const merged = (key) => {

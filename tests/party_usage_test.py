@@ -4,6 +4,7 @@ from pathlib import Path
 import runpy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 usage=runpy.run_path(str(Path(__file__).resolve().parents[1]/'services/party/usage.py'))
 
@@ -59,6 +60,16 @@ class UsageTests(unittest.TestCase):
         usage['record_model_output']('relay/a','继续',100,20,self.home)
         saved=json.loads(path.read_text());self.assertEqual(19,saved['requests']);self.assertEqual(2,saved['pricingVersion'])
         self.assertGreater(saved['cost'],before['cost']);self.assertLess(saved['cost'],.4)
+
+    def test_signed_macos_app_resources_are_never_runtime_publish_targets(self):
+        app_root=self.home/'Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui'
+        normal_root=self.home/'.openclaw/runtime/openclaw/dist/control-ui'
+        app_root.mkdir(parents=True);normal_root.mkdir(parents=True)
+        with patch.dict('os.environ',{'OPENCLAW_ROOT':str(app_root.parents[1])},clear=True), \
+             patch('shutil.which',return_value=None), \
+             patch.object(Path,'home',return_value=self.home):
+            roots=usage['control_roots'](self.home)
+        self.assertNotIn(app_root,roots)
 
 
 if __name__=='__main__':unittest.main()

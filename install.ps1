@@ -81,13 +81,11 @@ foreach ($mode in $personaMap.Keys) {
       $src = Join-Path $srcDir $f
       $dst = Join-Path $dstDir $f
       if (Test-Path $src) {
-        # 备份旧文件
         if (Test-Path $dst) {
-          $bakDir = Join-Path $dstDir "backups"
-          New-Item -ItemType Directory -Force -Path $bakDir | Out-Null
-          Copy-Item $dst (Join-Path $bakDir "$f.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')") -Force
+          Write-Host "    [$mode] keeping existing $f"
+          continue
         }
-        Copy-Item $src $dst -Force
+        Copy-Item $src $dst
       }
     }
     Write-Host "    [$mode] -> $dstDir"

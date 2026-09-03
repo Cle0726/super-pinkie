@@ -6,12 +6,13 @@
   // 悄悄断开 (code=1006)。"回复完成"等事件在断线窗口内丢失, 前端状态
   // 停在"生成中", 动画永远转。
   //
-  // 方案: 监听前后台事件 + visibilitychange + pageshow + gateway 断线,
-  // 回到前台时重新拉取当前会话消息, 并把"生成中"状态复位为真实状态。
+  // 方案: 监听前后台事件 + visibilitychange + pageshow + gateway 断线，
+  // 回到前台时只重新拉取当前会话消息。绝不能通过点击原生停止按钮来
+  // “复位”界面：工具把 App 切到后台时，模型通常仍在正常运行，合成点击
+  // 会把健康请求真的变成 aborted。
 
   const $ = (sel) => document.querySelector(sel);
   const STOP_SELECTOR = '[aria-label*="停止"], [aria-label*="Stop"], [data-testid*="stop"], .chat-composer__stop, .chat-send-btn--stop';
-  let syntheticStop = false;
 
   // 从 gateway 客户端拿当前会话 key (与 sidebar 一致)
   const currentSessionKey = () => {
@@ -39,14 +40,9 @@
     return false;
   };
 
-  // 复位前端"生成中"状态: 触发停止按钮点击(若有), 恢复输入框可用
-  const resetBusyState = () => {
-    const stopBtn = document.querySelector(STOP_SELECTOR);
-    if (stopBtn && stopBtn.offsetParent !== null) {
-      // 点击停止按钮让前端自身状态机收敛
-      syntheticStop = true;
-      try { stopBtn.click(); } finally { syntheticStop = false; }
-    }
+  // 只清除我们自己的视觉标记。原生生成状态只能靠网关快照收敛；任何
+  // 自动 stop/cancel 都可能终止仍在跑的模型或工具链。
+  const clearVisualBusyState = () => {
     document.documentElement.removeAttribute("data-laolao-streaming");
   };
 
@@ -69,28 +65,21 @@
 
   // 回前台主流程
   const onForeground = () => {
-    // 延迟策略: 当前 busy → 等重连窗口再刷新; 否则快速刷新
-    // (v2 修复: 原实现引用 setTimeout 回调内的 wasBusy, TDZ ReferenceError 导致整个恢复流程从未执行)
+    // 延迟策略: 当前 busy → 等重连窗口再刷新; 否则快速刷新。
     const delay = isBusy() ? 1800 : 400;
-    // 给网关前端自己的重连逻辑一点时间 (指数退避最大 15s)
+    // 给网关前端自己的重连逻辑一点时间。只读同步，不发送 chat.abort。
     window.setTimeout(async () => {
-      // 若仍显示"生成中"但没有流式事件, 说明事件丢了 → 复位 + 重新同步
-      const wasBusy = isBusy();
-      if (wasBusy) {
-        resetBusyState();
-      }
       await refreshSession();
       window.dispatchEvent(new CustomEvent("pinkie:session-resynced"));
     }, delay);
   };
 
-  // 上游失败卡出现时，原生状态机偶尔仍保留“生成中”并卸下输入区。
-  // 先结束已经失败的旧状态，再让网关快照把真正的 composer 装回来；
-  // 看门狗的新一轮会在稍后独立启动，不会依赖这个前端状态。
+  // 上游失败卡出现时，清理自定义动画并重拉权威快照。失败续接完全交给
+  // 网关看门狗，前端不再模拟停止。
   let failureRecoveryTimer = null;
   const onRunFailure = () => {
     clearTimeout(failureRecoveryTimer);
-    resetBusyState();
+    clearVisualBusyState();
     void refreshSession();
     failureRecoveryTimer = window.setTimeout(async () => {
       await refreshSession();
@@ -99,10 +88,9 @@
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
 
-  // 用户主动点停止时，只取消这一轮自动续接。故障恢复流程内部为了复位
-  // 状态机触发的合成点击不会误伤看门狗。
+  // 只有用户真实点击停止，才取消这一轮自动续接。
   document.addEventListener('click', (event) => {
-    if (syntheticStop || !(event.target instanceof Element)) return;
+    if (!(event.target instanceof Element)) return;
     if (!event.target.closest(STOP_SELECTOR)) return;
     const sessionKey = currentSessionKey();
     const rpc = window.__laolaoSidebar?.gwRequest;
@@ -151,8 +139,8 @@
     if (orig && !gateway._laolaoHooked) {
       gateway._laolaoHooked = true;
       gateway.onClose = (info) => {
-        // 断线时立刻复位"生成中"动画, 避免回前台前一直空转
-        resetBusyState();
+        // WebSocket 断开时只清除自定义动画；不要排队发送停止请求。
+        clearVisualBusyState();
         try {
           orig?.(info);
         } catch {}

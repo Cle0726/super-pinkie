@@ -18,6 +18,14 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /python\/bin\/python3/);
   assert.match(launcher, /task\.executableURL = node/);
   assert.match(launcher, /Gateway\.stop\(\)/);
+  assert.match(launcher, /startGatewayMonitor\(\)/);
+  assert.match(launcher, /withTimeInterval: 2\.0/);
+  assert.match(launcher, /gatewayProbeFailures >= 2/);
+  assert.match(launcher, /gatewayRepairGraceUntil/);
+  assert.match(launcher, /Date\(\) < graceUntil/);
+  assert.match(launcher, /Date\(\)\.addingTimeInterval\(20\)/);
+  assert.match(launcher, /Gateway\.repair\(\)/);
+  assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
 });
 
 test('native startup uses the bundled opaque mascot video instead of exposing the desktop', () => {
@@ -63,6 +71,24 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_OPENCLAW_BIN/);
   assert.match(setup, /PINKIE_PYTHON_BIN/);
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
+  assert.match(setup, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
+});
+
+test('source updaters preserve every existing user persona and context file', () => {
+  const mac = read('install-full.sh');
+  const windows = read('install.ps1');
+  assert.match(mac, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
+  assert.match(mac, /保留已有 \$filename/);
+  assert.match(windows, /if \(Test-Path \$dst\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
+  assert.doesNotMatch(windows, /Copy-Item \$src \$dst -Force/);
+});
+
+test('release workflow publishes both desktop formats from self-contained builders', () => {
+  const release = read('.github/workflows/release.yml');
+  assert.match(release, /\.\/desktop\/macos\/build\.sh/);
+  assert.match(release, /dist\/super-pinkie-macos-\*\.zip/);
+  assert.match(release, /\.\\build-win\.ps1/);
+  assert.match(release, /dist\/super-pinkie-windows-\*\.exe/);
 });
 
 test('roundtable uses its project as cwd without turning it into an access sandbox', () => {

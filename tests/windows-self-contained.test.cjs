@@ -31,6 +31,20 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /frameless=True/);
 });
 
+test('Windows exe checks signed release assets and can roll back a failed update', () => {
+  const launcher = read('app/windows_desktop.py');
+  const release = read('.github/workflows/release.yml');
+  assert.match(launcher, /api\.github\.com\/repos\/Cle0726\/super-pinkie\/releases\/latest/);
+  assert.match(launcher, /super-pinkie-windows-/);
+  assert.match(launcher, /\.sha256/);
+  assert.match(launcher, /Restore-PreviousVersion/);
+  assert.match(launcher, /--update-health-token/);
+  assert.match(launcher, /check_for_updates/);
+  assert.match(launcher, /prepare_update/);
+  assert.match(release, /Get-FileHash/);
+  assert.match(release, /windows-\*\.exe\.sha256/);
+});
+
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
   const launcher = read('app/windows_desktop.py');
   const entry = read('app/super_pinkie.py');

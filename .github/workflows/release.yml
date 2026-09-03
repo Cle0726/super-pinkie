@@ -22,6 +22,28 @@ jobs:
           generate_release_notes: true
           files: dist/super-pinkie-full-*.zip
 
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bundled runtime inputs
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("desktop/windows/runtime-manifest.json"))["openclaw"])')"
+          npm install -g "openclaw@$version"
+          python3 -m pip install --disable-pip-version-check edge-tts aiohttp
+      - name: Build self-contained macOS app
+        run: ./desktop/macos/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/super-pinkie-macos-*.zip
+
   windows:
     runs-on: windows-latest
     steps:
@@ -50,11 +72,15 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content VERSION).Trim()
-          Copy-Item -LiteralPath 'dist\超級碧琪.exe' -Destination "dist\super-pinkie-windows-$version.exe" -Force
+          $file = "super-pinkie-windows-$version.exe"
+          Copy-Item -LiteralPath 'dist\超級碧琪.exe' -Destination "dist\$file" -Force
+          $hash = (Get-FileHash -LiteralPath "dist\$file" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $file" | Set-Content -LiteralPath "dist\$file.sha256" -Encoding ascii -NoNewline
           Compress-Archive -LiteralPath 'dist\超級碧琪.exe' -DestinationPath "dist\super-pinkie-windows-$version.zip" -Force
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             dist/super-pinkie-windows-*.exe
+            dist/super-pinkie-windows-*.exe.sha256
             dist/super-pinkie-windows-*.zip

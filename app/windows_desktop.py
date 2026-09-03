@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 import webbrowser
 
 
@@ -19,6 +23,61 @@ GATEWAY_URL = "http://127.0.0.1:18789/"
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
 TTS_URL = "http://127.0.0.1:18888/health"
+UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
+UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
+TRUSTED_UPDATE_HOSTS = {
+    "api.github.com",
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+}
+
+
+def version_tuple(value):
+    """Return a stable four-part key for the release versions used by this app."""
+    match = re.fullmatch(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?", str(value).strip())
+    if not match:
+        raise ValueError("invalid release version")
+    return tuple(int(part or 0) for part in match.groups())
+
+
+def trusted_update_url(value):
+    parsed = urllib.parse.urlparse(str(value))
+    return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
+
+
+def release_update(release, current_version):
+    """Validate latest-release metadata and select its EXE/checksum pair."""
+    if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+        return None
+    version = str(release.get("tag_name", "")).strip().removeprefix("v")
+    if version_tuple(version) <= version_tuple(current_version):
+        return None
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}.exe"
+    checksum_name = expected_name + ".sha256"
+    assets = {
+        str(asset.get("name", "")): str(asset.get("browser_download_url", ""))
+        for asset in release.get("assets", []) if isinstance(asset, dict)
+    }
+    executable_url = assets.get(expected_name, "")
+    checksum_url = assets.get(checksum_name, "")
+    if not trusted_update_url(executable_url) or not trusted_update_url(checksum_url):
+        return None
+    return {
+        "available": True,
+        "version": version,
+        "name": expected_name,
+        "executableUrl": executable_url,
+        "checksumUrl": checksum_url,
+        "releaseUrl": str(release.get("html_url", "")),
+    }
+
+
+def app_version(resource_root):
+    try:
+        return (Path(resource_root) / "VERSION").read_text(encoding="utf-8-sig").strip()
+    except OSError:
+        return "0.0.0"
 
 
 def state_root():
@@ -46,6 +105,242 @@ def http_alive(url, expected_service=None):
         return not expected_service and error.code is not None
     except (OSError, ValueError, urllib.error.URLError):
         return False
+
+
+class WindowsUpdater:
+    """Release updater for the frozen EXE; user state is never part of the swap."""
+
+    def __init__(self, resource_root, opener=None, executable=None):
+        self.current_version = app_version(resource_root)
+        self.opener = opener or urllib.request.urlopen
+        self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
+        self.enabled = self.executable.suffix.lower() == ".exe" and (
+            bool(getattr(sys, "frozen", False)) or bool(os.environ.get("PINKIE_EXECUTABLE_PATH")) or executable is not None
+        )
+        self.lock = threading.RLock()
+        self.last_checked = 0.0
+        self.latest = None
+        self.prepared = None
+
+    @staticmethod
+    def _request(url):
+        if not trusted_update_url(url):
+            raise ValueError("untrusted update address")
+        return urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "SuperPinkie-Windows-Updater",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+
+    def _read(self, url, limit):
+        with self.opener(self._request(url), timeout=20) as response:
+            value = response.read(limit + 1)
+        if len(value) > limit:
+            raise ValueError("update metadata is too large")
+        return value
+
+    def check(self, force=False):
+        if not self.enabled:
+            return {"available": False, "supported": False, "currentVersion": self.current_version}
+        with self.lock:
+            if not force and self.latest is not None and time.monotonic() - self.last_checked < 21600:
+                return dict(self.latest)
+            self.last_checked = time.monotonic()
+            try:
+                release = json.loads(self._read(UPDATE_API_URL, 1024 * 1024).decode("utf-8"))
+                selected = release_update(release, self.current_version)
+                self.latest = selected or {
+                    "available": False,
+                    "supported": True,
+                    "currentVersion": self.current_version,
+                }
+            except Exception as error:
+                append_log("updater", f"update check failed: {error}")
+                self.latest = {
+                    "available": False,
+                    "supported": True,
+                    "currentVersion": self.current_version,
+                    "temporaryError": True,
+                }
+            return dict(self.latest)
+
+    @staticmethod
+    def _checksum(value, expected_name):
+        line = value.decode("ascii", errors="strict").strip().splitlines()[0]
+        match = re.fullmatch(r"([0-9a-fA-F]{64})(?:\s+\*?(.+))?", line)
+        if not match or (match.group(2) and match.group(2).strip() != expected_name):
+            raise ValueError("invalid checksum file")
+        return match.group(1).lower()
+
+    @staticmethod
+    def _file_hash(path):
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024):
+        temporary = destination.with_suffix(destination.suffix + ".download")
+        temporary.unlink(missing_ok=True)
+        received = 0
+        try:
+            with self.opener(self._request(url), timeout=30) as response, temporary.open("wb") as handle:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > maximum:
+                        raise ValueError("update package is too large")
+                    handle.write(chunk)
+            if received < 1024 * 1024:
+                raise ValueError("update package is incomplete")
+            os.replace(temporary, destination)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+
+    def prepare(self):
+        with self.lock:
+            metadata = self.check(force=True)
+            if not metadata.get("available"):
+                return {**metadata, "ready": False}
+            directory = state_root() / "updates" / metadata["version"]
+            directory.mkdir(parents=True, exist_ok=True)
+            payload = directory / metadata["name"]
+            expected = self._checksum(
+                self._read(metadata["checksumUrl"], 4096), metadata["name"]
+            )
+            if not payload.is_file() or self._file_hash(payload) != expected:
+                payload.unlink(missing_ok=True)
+                self._download(metadata["executableUrl"], payload)
+            if self._file_hash(payload) != expected:
+                payload.unlink(missing_ok=True)
+                raise ValueError("downloaded update checksum mismatch")
+            self.prepared = {
+                "version": metadata["version"],
+                "payload": payload,
+                "sha256": expected,
+            }
+            append_log("updater", f"update {metadata['version']} verified and ready")
+            return {"available": True, "ready": True, "version": metadata["version"]}
+
+    @staticmethod
+    def _helper_source():
+        return r'''param(
+  [Parameter(Mandatory=$true)][string]$Target,
+  [Parameter(Mandatory=$true)][string]$Payload,
+  [Parameter(Mandatory=$true)][string]$Backup,
+  [Parameter(Mandatory=$true)][int]$CurrentPid,
+  [Parameter(Mandatory=$true)][string]$ExpectedHash,
+  [Parameter(Mandatory=$true)][string]$HealthMarker,
+  [Parameter(Mandatory=$true)][string]$Token,
+  [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+function Write-UpdateLog([string]$Message) {
+  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+}
+function Restore-PreviousVersion {
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    try {
+      if (Test-Path -LiteralPath $Backup) {
+        if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Force }
+        Move-Item -LiteralPath $Backup -Destination $Target -Force
+      }
+      break
+    } catch {
+      if ($attempt -eq 39) { throw }
+      Start-Sleep -Milliseconds 250
+    }
+  }
+  if (Test-Path -LiteralPath $Target) { Start-Process -FilePath $Target | Out-Null }
+}
+try {
+  $deadline = (Get-Date).AddSeconds(120)
+  while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+  Move-Item -LiteralPath $Target -Destination $Backup -Force
+  Move-Item -LiteralPath $Payload -Destination $Target -Force
+  $actual = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
+  $launched = Start-Process -FilePath $Target -ArgumentList "--update-health-token=$Token" -PassThru
+  $healthDeadline = (Get-Date).AddSeconds(120)
+  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
+    Start-Sleep -Milliseconds 500
+    $launched.Refresh()
+  }
+  if (-not (Test-Path -LiteralPath $HealthMarker)) {
+    if (-not $launched.HasExited) {
+      & taskkill.exe /PID $launched.Id /T /F | Out-Null
+      try { Wait-Process -Id $launched.Id -Timeout 10 -ErrorAction SilentlyContinue } catch {}
+    }
+    throw 'new version did not become healthy'
+  }
+  Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Write-UpdateLog 'update completed'
+} catch {
+  Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
+  try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+}
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'''
+
+    def launch_replacer(self):
+        with self.lock:
+            if not self.prepared:
+                return {"started": False, "message": "新版还没有准备好"}
+            payload = Path(self.prepared["payload"])
+            expected = self.prepared["sha256"]
+            if not payload.is_file() or self._file_hash(payload) != expected:
+                return {"started": False, "message": "新版校验失效，请重新下载"}
+            token = uuid.uuid4().hex
+            update_root = state_root() / "updates"
+            health_root = update_root / "health"
+            health_root.mkdir(parents=True, exist_ok=True)
+            helper = update_root / f"apply-{token}.ps1"
+            marker = health_root / f"{token}.ready"
+            backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
+            helper.write_text(self._helper_source(), encoding="utf-8")
+            command = [
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", str(helper),
+                "-Target", str(self.executable),
+                "-Payload", str(payload),
+                "-Backup", str(backup),
+                "-CurrentPid", str(os.getpid()),
+                "-ExpectedHash", expected,
+                "-HealthMarker", str(marker),
+                "-Token", token,
+                "-LogPath", str(state_root() / "logs/updater.log"),
+            ]
+            try:
+                subprocess.Popen(
+                    command,
+                    cwd=str(update_root),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    **hidden_process_kwargs(),
+                )
+            except OSError as error:
+                append_log("updater", f"cannot launch update helper: {error}")
+                return {"started": False, "message": "更新程序没有启动，请稍后再试"}
+            append_log("updater", f"switching to {self.prepared['version']}")
+            return {"started": True, "version": self.prepared["version"]}
 
 
 def hidden_process_kwargs():
@@ -220,7 +515,8 @@ class LocalServices:
 
 
 class NativeBridge:
-    def __init__(self):
+    def __init__(self, updater):
+        self.updater = updater
         self.window = None
         self.maximized = False
         self.dictation_stop = threading.Event()
@@ -348,6 +644,22 @@ class NativeBridge:
     def control_center(self):
         subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs())
 
+    def check_for_updates(self):
+        return self.updater.check(force=True)
+
+    def prepare_update(self):
+        try:
+            return self.updater.prepare()
+        except Exception as error:
+            append_log("updater", f"update preparation failed: {error}")
+            return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
+
+    def apply_update(self):
+        result = self.updater.launch_replacer()
+        if result.get("started"):
+            threading.Timer(.6, self.window.destroy).start()
+        return result
+
 
 BRIDGE_SCRIPT = r"""
 (() => {
@@ -425,17 +737,56 @@ BRIDGE_SCRIPT = r"""
     document.body.append(drag);
     const controls = document.createElement('div');
     controls.id = 'pinkie-native-window-controls';
-    controls.innerHTML = '<button data-act="min" aria-label="最小化"></button><button data-act="max" aria-label="最大化"></button><button data-act="close" aria-label="关闭"></button>';
-    controls.onclick = event => {
+    controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="检查更新"><span>✦</span></button><button data-act="min" aria-label="最小化"></button><button data-act="max" aria-label="最大化"></button><button data-act="close" aria-label="关闭"></button>';
+    const toast = message => {
+      let node = document.getElementById('pinkie-update-toast');
+      if (!node) { node = document.createElement('div'); node.id = 'pinkie-update-toast'; document.body.append(node); }
+      node.textContent = message; node.classList.add('is-visible');
+      clearTimeout(node._timer); node._timer = setTimeout(() => node.classList.remove('is-visible'), 2600);
+    };
+    window.__pinkieUpdateAvailable = info => {
+      if (!info?.available) return;
+      controls.querySelector('[data-act="update"]')?.classList.add('has-update');
+    };
+    const updateDialog = info => {
+      document.getElementById('pinkie-update-dialog')?.remove();
+      const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
+      const card = document.createElement('section'); card.className = 'pinkie-update-card';
+      const mark = document.createElement('span'); mark.className = 'pinkie-update-mark'; mark.textContent = '✦';
+      const title = document.createElement('h3'); title.textContent = '碧琪找到新衣服啦';
+      const copy = document.createElement('p'); copy.textContent = `新版本 ${info.version} 已经准备好发布。更新只替换 App，不会碰人格、会话、项目和上下文。`;
+      const status = document.createElement('p'); status.className = 'pinkie-update-status'; status.textContent = '更新完成后会自动回来。';
+      const actions = document.createElement('div');
+      const later = document.createElement('button'); later.textContent = '晚点再说'; later.onclick = () => shade.remove();
+      const install = document.createElement('button'); install.className = 'primary'; install.textContent = '更新并重启';
+      install.onclick = async () => {
+        install.disabled = true; later.disabled = true; status.textContent = '正在把新版安全地收好…'; card.classList.add('is-working');
+        const ready = await call('prepare_update');
+        if (!ready?.ready) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = ready?.message || '网络有点晃，稍后再试就好。'; return; }
+        status.textContent = '校验完成，正在重启…';
+        const applied = await call('apply_update');
+        if (!applied?.started) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = applied?.message || '还没有完成，稍后再试。'; }
+      };
+      actions.append(later, install); card.append(mark, title, copy, status, actions); shade.append(card); document.body.append(shade);
+    };
+    const inspectUpdate = async manual => {
+      const button = controls.querySelector('[data-act="update"]'); button?.classList.add('is-checking');
+      const info = await call('check_for_updates'); button?.classList.remove('is-checking');
+      if (info?.available) { window.__pinkieUpdateAvailable(info); updateDialog(info); }
+      else if (manual) toast(info?.temporaryError ? '现在没连上更新站，稍后再试～' : '已经是最新版啦');
+    };
+    controls.onclick = async event => {
       const action = event.target.closest('button')?.dataset.act;
+      if (action === 'update') await inspectUpdate(true);
       if (action === 'min') call('minimize');
       if (action === 'max') call('toggle_maximize');
       if (action === 'close') call('window_close');
     };
     document.body.append(controls);
     const style = document.createElement('style');
-    style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147482000;left:0;right:0;top:0;height:8px;background:transparent}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px)}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}';
+    style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147482000;left:0;right:0;top:0;height:8px;background:transparent}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px)}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}#pinkie-native-window-controls .pinkie-update-control{width:21px;height:21px;margin:-5px 1px -5px -4px;color:#b73974;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(250,199,222,.78));box-shadow:0 3px 10px rgba(169,48,103,.16);opacity:.82;font:11px/21px system-ui}#pinkie-native-window-controls .pinkie-update-control span{display:block;transition:transform .35s ease}.pinkie-update-control.is-checking span{animation:pinkieUpdateSpin .8s linear infinite}.pinkie-update-control.has-update{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.72),0 0 15px rgba(229,73,142,.65);animation:pinkieUpdateGlow 1.8s ease-in-out infinite}#pinkie-update-toast{position:fixed;z-index:2147483647;top:48px;right:14px;padding:9px 14px;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#773b5a;background:rgba(255,239,247,.9);box-shadow:0 12px 30px rgba(92,39,65,.16);backdrop-filter:blur(18px);font:12px system-ui;opacity:0;transform:translateY(-7px);pointer-events:none;transition:.22s ease}#pinkie-update-toast.is-visible{opacity:1;transform:none}#pinkie-update-dialog{position:fixed;z-index:2147483646;inset:0;display:grid;place-items:center;background:rgba(63,30,48,.16);backdrop-filter:blur(8px)}.pinkie-update-card{width:min(390px,calc(100vw - 42px));padding:26px;border:1px solid rgba(255,255,255,.78);border-radius:28px;text-align:center;color:#713d58;background:linear-gradient(145deg,rgba(255,247,251,.95),rgba(247,211,228,.91));box-shadow:0 28px 80px rgba(67,28,49,.25)}.pinkie-update-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border-radius:15px;color:#c13678;background:rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(190,50,112,.18)}.pinkie-update-card h3{margin:0;font:600 18px/1.4 system-ui}.pinkie-update-card p{margin:9px 0;font:13px/1.65 system-ui}.pinkie-update-card .pinkie-update-status{min-height:20px;color:#9c607e;font-size:12px}.pinkie-update-card>div{display:flex;justify-content:center;gap:10px;margin-top:17px}.pinkie-update-card button{min-width:100px;padding:9px 16px;border:1px solid rgba(192,64,120,.22);border-radius:16px;color:#824866;background:rgba(255,255,255,.64);font:13px system-ui}.pinkie-update-card button.primary{color:#fff;background:linear-gradient(135deg,#de6299,#ba3674);box-shadow:0 8px 20px rgba(186,54,116,.23)}.pinkie-update-card button:disabled{opacity:.52}.pinkie-update-card.is-working .pinkie-update-mark{animation:pinkieUpdateSpin 1.1s linear infinite}@keyframes pinkieUpdateSpin{to{transform:rotate(360deg)}}@keyframes pinkieUpdateGlow{50%{transform:translateY(-1px);filter:saturate(1.3)}}';
     document.head.append(style);
+    window.__pinkieCheckForUpdates = () => inspectUpdate(false);
   }
   document.addEventListener('click', event => {
     const link = event.target.closest('a[href]');
@@ -457,14 +808,23 @@ def show_startup_error(window):
     """)
 
 
-def run_desktop(resource_root, prepare):
+def update_health_token_from_argv(arguments=None):
+    for argument in arguments if arguments is not None else sys.argv[1:]:
+        match = re.fullmatch(r"--update-health-token=([0-9a-f]{32})", str(argument))
+        if match:
+            return match.group(1)
+    return None
+
+
+def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
 
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
         raise RuntimeError("Windows bundled runtime is incomplete")
     os.environ.update(runtime.environment())
-    bridge = NativeBridge()
+    updater = WindowsUpdater(resource_root)
+    bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
     window = webview.create_window(
         "超級碧琪", loading, js_api=bridge, width=1280, height=800,
@@ -479,6 +839,24 @@ def run_desktop(resource_root, prepare):
     def loaded(*_):
         try:
             window.evaluate_js(BRIDGE_SCRIPT)
+            current_url = str(window.get_current_url() or "")
+            if current_url.startswith(GATEWAY_URL):
+                if update_health_token:
+                    health = state_root() / "updates/health" / f"{update_health_token}.ready"
+                    health.parent.mkdir(parents=True, exist_ok=True)
+                    health.write_text("ready\n", encoding="ascii")
+
+                def announce_update():
+                    info = updater.check()
+                    if info.get("available"):
+                        try:
+                            window.evaluate_js(
+                                "window.__pinkieUpdateAvailable?.(" + json.dumps(info, ensure_ascii=False) + ")"
+                            )
+                        except Exception:
+                            pass
+
+                threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
         except Exception:
             pass
 

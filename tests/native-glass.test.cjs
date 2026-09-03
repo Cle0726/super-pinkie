@@ -29,6 +29,8 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
   assert.match(mode,/if \(previousMode !== mode\.id\) \{\s*document\.documentElement\.setAttribute/);
   assert.doesNotMatch(usage,/offsetWidth|offsetHeight|getBoundingClientRect/);
   assert.match(usage,/el\.animate\(\[/);
+  assert.match(usage,/Math\.max\(Number\(fileStats\[key\]\)/);
+  assert.match(usage,/runtimeIncluded: true/);
 });
 
 test('installer cache-busts the native glass assets',()=>{

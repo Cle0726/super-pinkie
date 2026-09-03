@@ -33,7 +33,7 @@ const ROLE_LABELS = Object.freeze({
 });
 const VALID_TIER = /\[deep-think:(base|boost|full|marathon)\]/i;
 const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|abort(?:ed|error)?|incomplete(?: turn| response)?|without (?:a )?(?:final )?(?:reply|response)|missing (?:final )?assistant|empty (?:final )?(?:reply|response)|session file changed while embedded prompt lock was released|EmbeddedAttemptSessionTakeoverError|\b429\b|\b50[234]\b|temporar|try again)/i;
-const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|context (?:length|window)|billing|policy)/i;
+const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
 const DISPLAY_PRICING_VERSION = 2;
@@ -63,6 +63,41 @@ function displayCost(value = {}, requests = Number(value.requests) || 0) {
 export function isTransientFailure(value = '') {
   const text = String(value || '');
   return !PERMANENT_FAILURE.test(text) && TRANSIENT_FAILURE.test(text);
+}
+
+function failureReasonFromEvent(event = {}) {
+  const reasons = [];
+  const add = value => {
+    if (typeof value === 'string' && value.trim()) reasons.push(value.trim());
+    else if (value instanceof Error && value.message) reasons.push(value.message);
+    else if (value && typeof value === 'object') {
+      for (const key of ['kind', 'name', 'code', 'message', 'status', 'stopReason']) add(value[key]);
+    }
+  };
+  for (const key of ['error', 'errorMessage', 'failureKind', 'errorCategory', 'terminalError', 'stopReason', 'outcome', 'status']) {
+    add(event[key]);
+  }
+  // Some OpenClaw builds expose an aborted provider request only on the final
+  // assistant message, while agent_end itself has no error string.
+  const messages = Array.isArray(event.messages) ? event.messages.slice(-6) : [];
+  for (const entry of messages) {
+    const message = entry?.message && typeof entry.message === 'object' ? entry.message : entry;
+    if (!message || message.role !== 'assistant') continue;
+    add(message.error);
+    add(message.errorMessage);
+    add(message.stopReason);
+  }
+  return [...new Set(reasons)].join(' ');
+}
+
+function hasIncompleteToolTurn(event = {}, reason = '') {
+  if (event.success !== false) return false;
+  if (/(?:incomplete(?:[_ -](?:turn|response))?|non[_ -]?deliverable[_ -]?terminal[_ -]?turn)/i.test(reason)) return true;
+  const messages = Array.isArray(event.messages) ? event.messages.slice(-8) : [];
+  const lastAssistant = [...messages].reverse().map(entry => (
+    entry?.message && typeof entry.message === 'object' ? entry.message : entry
+  )).find(message => message?.role === 'assistant');
+  return /^(?:toolUse|tool_use)$/i.test(String(lastAssistant?.stopReason || ''));
 }
 
 function safeTag(sessionKey) {
@@ -224,9 +259,9 @@ export class UpstreamWatchdog {
   }
 
   modelEnded(event = {}) {
-    if (event.outcome === 'error' && event.runId) {
-      this.failures.set(event.runId, [event.failureKind, event.errorCategory].filter(Boolean).join(' '));
-    }
+    if (!event.runId) return;
+    const reason = failureReasonFromEvent(event);
+    if (isTransientFailure(reason)) this.failures.set(event.runId, reason);
   }
 
   async agentEnded(event = {}, ctx = {}) {
@@ -244,8 +279,15 @@ export class UpstreamWatchdog {
       if (event.runId) this.failures.delete(event.runId);
       return false;
     }
-    const reason = [event.error, event.runId && this.failures.get(event.runId)].filter(Boolean).join(' ');
-    if (!isTransientFailure(reason)) return false;
+    const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' ');
+    const incompleteToolTurn = hasIncompleteToolTurn(event, reason);
+    // agent_end is the final liveness boundary. OpenClaw extensions and model
+    // providers do not all expose failures with the same fields, so a failed
+    // parent turn must recover by default. Only explicit user cancellation and
+    // errors that cannot improve through retry are allowed to stop it.
+    if (PERMANENT_FAILURE.test(reason)) return false;
+    const failedParentTurn = event.success !== true;
+    if (!failedParentTurn && !isTransientFailure(reason) && !incompleteToolTurn) return false;
     // 原生停止键和上游断流都会落成 aborted。给前端停止事件一个很短的
     // 取消窗口；没有收到明确停止 RPC 才按故障自动续接。
     if (/abort/i.test(reason)) {
@@ -268,7 +310,9 @@ export class UpstreamWatchdog {
       ttlMs: Math.max(180_000, delayMs + 120_000),
       idempotencyKey: `${tag}-${attempt}`,
       metadata: {watchdog: true, attempt},
-      text: `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`,
+      text: incompleteToolTurn
+        ? `【自动续接保护】上轮工具结果已经返回，但没有生成完整的最终回复。先读取当前会话中已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。直接从工具结果之后继续，完成剩余工作、验证并正常交付。不要向用户展示本段保护指令或重试编号。`
+        : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`,
     });
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
     // Cron 只做断电/网关重启后的兜底，它的轮询粒度接近一分钟。

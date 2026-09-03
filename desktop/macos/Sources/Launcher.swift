@@ -390,6 +390,16 @@ private enum Gateway {
         try? logHandle?.close()
         logHandle = nil
     }
+
+    static func repair() {
+        // Only terminate a process launched by this App. An externally managed
+        // launchd gateway remains owned by launchd and is never killed here.
+        if process?.isRunning == true { process?.terminate() }
+        process = nil
+        try? logHandle?.close()
+        logHandle = nil
+        start()
+    }
 }
 
 private final class PartyService {
@@ -579,6 +589,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var retries = 0
     private var startupVideoStartedAt: Date?
     private var dashboardLoadPending = false
+    private var gatewayMonitor: Timer?
+    private var gatewayProbeFailures = 0
+    private var gatewayRepairGraceUntil: Date?
     private let dictation = NativeDictationController()
     private let dictationHandlerName = "laolaoNativeDictation"
     private let liveSpeech = NativeLiveSpeechController()
@@ -619,6 +632,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        gatewayMonitor?.invalidate()
+        gatewayMonitor = nil
         tts.stop()
         party.stop()
         roundtable.stop()
@@ -803,6 +818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func startBundledServices() {
+        startGatewayMonitor()
         tts.ready { _ in }
         party.ready { _ in }
         roundtable.ready { _ in }
@@ -824,6 +840,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     alert.informativeText = Gateway.lastError ?? "现有资料没有被改动。请查看 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
                     alert.alertStyle = .warning
                     alert.runModal()
+                }
+            }
+        }
+    }
+
+    private func startGatewayMonitor() {
+        guard gatewayMonitor == nil else { return }
+        gatewayMonitor = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Gateway.isRunning { running in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if running {
+                        self.gatewayProbeFailures = 0
+                        self.gatewayRepairGraceUntil = nil
+                        return
+                    }
+                    if let graceUntil = self.gatewayRepairGraceUntil, Date() < graceUntil { return }
+                    self.gatewayProbeFailures += 1
+                    guard self.gatewayProbeFailures >= 2 else { return }
+                    self.gatewayProbeFailures = 0
+                    // The bundled gateway may need several seconds to load
+                    // plugins. Do not kill a healthy startup on the next probe.
+                    self.gatewayRepairGraceUntil = Date().addingTimeInterval(20)
+                    Gateway.repair()
                 }
             }
         }

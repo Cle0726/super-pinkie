@@ -29,9 +29,8 @@ if [[ ! -f "$MARKER" ]]; then
     local label="$3"
     mkdir -p "$target_dir"
     for filename in SOUL.md IDENTITY.md; do
-      if [[ -f "$target_dir/$filename" ]]; then
-        mkdir -p "$BACKUP_ROOT/$label"
-        cp "$target_dir/$filename" "$BACKUP_ROOT/$label/$filename"
+      if [[ -e "$target_dir/$filename" || -L "$target_dir/$filename" ]]; then
+        continue
       fi
       cp "$source_dir/$filename" "$target_dir/$filename"
     done
