@@ -1,5 +1,6 @@
 # build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪.exe
 $ErrorActionPreference = "Stop"
+$env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
@@ -30,7 +31,7 @@ if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
 $env:OPENCLAW_ROOT = $openclawRoot
 $env:PINKIE_SKIP_APP_BUNDLES = "1"
 & ".\installer\windows\apply-theme.ps1"
-python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, print) else 1)"
+python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
 if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
 Remove-Item Env:OPENCLAW_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
