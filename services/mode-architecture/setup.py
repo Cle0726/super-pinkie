@@ -130,6 +130,7 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     entry = plugins.setdefault("entries", {}).setdefault(plugin_id, {})
     entry["enabled"] = True
     entry.setdefault("hooks", {})["allowPromptInjection"] = True
+    entry.setdefault("hooks", {})["allowConversationAccess"] = True
     paths = plugins.setdefault("load", {}).setdefault("paths", [])
     if str(target) not in paths:
         paths.append(str(target))
@@ -138,11 +139,16 @@ def _configure_plugin(data: dict, target: Path) -> bool:
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+    timeout = defaults.get("timeoutSeconds")
+    if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
+        defaults["timeoutSeconds"] = 43_200
     subagents = defaults.setdefault("subagents", {})
     subagents.setdefault("maxSpawnDepth", 2)
     subagents.setdefault("maxChildrenPerAgent", 5)
     subagents.setdefault("maxConcurrent", 8)
-    subagents.setdefault("runTimeoutSeconds", 900)
+    child_timeout = subagents.get("runTimeoutSeconds")
+    if child_timeout != 0 and (not isinstance(child_timeout, (int, float)) or child_timeout < 43_200):
+        subagents["runTimeoutSeconds"] = 43_200
     return before != json.dumps(data, ensure_ascii=False, sort_keys=True)
 
 

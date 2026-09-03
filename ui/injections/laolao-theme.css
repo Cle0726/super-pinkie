@@ -723,6 +723,139 @@ img.chat-avatar.assistant {
   }
 }
 
+/* Immersive control sheets: native popovers and injected menus share one
+   warm glass material. Rows stay quiet until hover/selection, avoiding the
+   pasted stack-of-white-cards look. */
+.laolao-mode-menu,
+.agent-chat__attach-menu-popover,
+.agent-chat__talk-select-menu,
+.chat-settings-popover,
+.popover {
+  border: 1px solid rgba(255, 255, 255, 0.76) !important;
+  background: linear-gradient(145deg, rgba(255, 252, 253, 0.84), rgba(250, 226, 239, 0.70)) !important;
+  box-shadow: 0 18px 44px rgba(96, 41, 71, 0.15), inset 0 1px rgba(255, 255, 255, 0.80) !important;
+  backdrop-filter: blur(26px) saturate(116%) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(116%) !important;
+}
+
+.laolao-mode-menu {
+  gap: 2px;
+  padding: 8px;
+  border-radius: 21px;
+}
+
+.laolao-mode-menu__option {
+  height: 40px;
+  border-color: transparent !important;
+  border-radius: 14px;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.laolao-mode-menu__option[aria-checked="true"] {
+  border-color: rgba(255, 255, 255, 0.62) !important;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0.58), rgba(236, 169, 207, 0.18)) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.62), 0 5px 15px rgba(132, 55, 91, 0.08) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .laolao-mode-menu__option:hover {
+    border-color: rgba(218, 101, 153, 0.20) !important;
+    background: rgba(255, 250, 253, 0.42) !important;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.52) !important;
+  }
+}
+
+.agent-chat__attach-menu-popover,
+.agent-chat__talk-select-menu {
+  overflow: hidden;
+  padding: 7px !important;
+  border-radius: 17px !important;
+}
+
+.agent-chat__attach-menu-option,
+.agent-chat__talk-select-option {
+  border: 1px solid transparent !important;
+  border-radius: 11px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .agent-chat__attach-menu-option:hover,
+  .agent-chat__talk-select-option:hover {
+    border-color: rgba(218, 101, 153, 0.20) !important;
+    background: rgba(255, 250, 253, 0.46) !important;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.54) !important;
+  }
+}
+
+.chat-settings-popover {
+  overflow: hidden;
+  padding: 13px !important;
+  border-radius: 22px !important;
+  background: linear-gradient(145deg, rgba(255, 252, 253, 0.92), rgba(250, 226, 239, 0.86)) !important;
+  color: #603249 !important;
+}
+
+.chat-settings-popover__section + .chat-settings-popover__section {
+  border-top-color: rgba(188, 103, 143, 0.13) !important;
+}
+
+.chat-settings-popover__label {
+  color: rgba(100, 52, 75, 0.66) !important;
+  letter-spacing: 0.08em;
+}
+
+.chat-settings-popover .chat-settings-action {
+  min-height: 34px;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.10) !important;
+  color: #9a4d72 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.chat-settings-popover .chat-settings-action.active,
+.chat-settings-popover .chat-settings-action[aria-pressed="true"] {
+  border-color: rgba(211, 87, 143, 0.25) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.52), rgba(235, 158, 196, 0.18)) !important;
+  color: #bd4b7f !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.60), 0 4px 12px rgba(140, 58, 97, 0.07) !important;
+}
+
+.chat-settings-popover select,
+.chat-settings-popover input {
+  min-height: 32px;
+  border: 1px solid rgba(208, 105, 151, 0.22) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 252, 253, 0.28) !important;
+  color: #603249 !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.46) !important;
+}
+
+.chat-settings-popover select:hover,
+.chat-settings-popover input:hover,
+.chat-settings-popover select:focus,
+.chat-settings-popover input:focus {
+  border-color: rgba(205, 76, 135, 0.38) !important;
+  background: rgba(255, 250, 253, 0.48) !important;
+  outline: none !important;
+}
+
+.chat-settings-popover .agent-chat__talk-input-refresh,
+.chat-settings-popover .agent-chat__talk-settings-link {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 /* Quiet utility controls: keep the icon, reveal the glass edge on interaction.
    Mode selectors/party entrance retain their artwork; recording/stop/danger
    states retain their status treatment. No overlay or pointer tracking. */

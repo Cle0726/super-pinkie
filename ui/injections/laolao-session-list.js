@@ -75,6 +75,8 @@
     if(!controls){controls=el('div','laolao-session-controls');controls.append(search);host.append(controls);}
     for(const n of [...controls.children])if(n!==search)n.remove();
     controls.append(button(archived?'‹ 返回':'归档',archived?'返回进行中的会话':'查看已归档会话',()=>{archived=!archived;limit=30;signature='';render(section,api);}));
+    const deleteAll=button('全部删除','删除当前模式的全部普通会话和聊天记录',()=>api.askDeleteAllSessions());
+    deleteAll.classList.add('laolao-managed-button--danger');controls.append(deleteAll);
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     const filtered=rows.filter(s=>title(s).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     if(archived)groups.append(group('__archive','已归档',filtered,api));

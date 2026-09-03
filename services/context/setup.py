@@ -88,9 +88,30 @@ def install(home=None):
         'Update memory/context/active.md with a structured handoff: current user goal; exact constraints and preferences; selected mode/model/project root; decisions and reasons; files changed; commands and tool results; verified results; errors; unfinished work and the next concrete action. Keep exact identifiers and paths. Do not delete unrelated existing notes. Reply with exactly NO_REPLY after writing, or NO_REPLY if nothing durable changed.'
     )
     changed = config != json.loads(raw)
+    policy_changed = False
     state.mkdir(parents=True,exist_ok=True,mode=0o700)
-    if not policy_file.exists():
+    if policy_file.exists():
+        policy_raw = policy_file.read_bytes()
+        policy_data = budget['read_json'](policy_file)
+        if policy_data.get('triggerRatio') != .85:
+            backup=state/'backups'/('context-policy-'+str(time.time_ns()))
+            backup.mkdir(parents=True,mode=0o700)
+            shutil.copy2(policy_file,backup/'context-policy.json')
+            policy_data['triggerRatio'] = .85
+            fd,tmp=tempfile.mkstemp(dir=policy_file.parent,prefix='.context-policy-')
+            try:
+                with os.fdopen(fd,'w',encoding='utf-8') as handle:
+                    json.dump(policy_data,handle,ensure_ascii=False,indent=2);handle.write('\n')
+                os.chmod(tmp,0o600)
+                if policy_file.read_bytes()!=policy_raw:
+                    raise RuntimeError('上下文策略正在变化，未覆盖，请重试')
+                replace_preserving_file_flags(tmp,policy_file)
+            finally:
+                if os.path.exists(tmp):os.unlink(tmp)
+            policy_changed = True
+    else:
         policy_file.write_text(json.dumps(rules,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        policy_changed = True
     if changed:
         backup=state/'backups'/('context-config-'+str(time.time_ns()))
         backup.mkdir(parents=True,mode=0o700)
@@ -106,7 +127,7 @@ def install(home=None):
             if os.path.exists(tmp):os.unlink(tmp)
     (state/'context-limits.json').write_text(json.dumps(limits,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('模型上下文策略已准备；未知接口上限使用保守值，详情见 context-limits.json。')
-    return changed
+    return changed or policy_changed
 
 
 if __name__=='__main__':

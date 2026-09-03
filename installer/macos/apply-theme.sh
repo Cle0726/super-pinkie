@@ -58,6 +58,8 @@ apply_ui_skin() {
     laolao-wallpaper-thinking.png \
     laolao-wallpaper-unrestricted.png \
     laolao-splash.png \
+    laolao-splash.mp4 \
+    laolao-splash-video-poster.png \
     laolao-theme.css \
     laolao-motion.js \
     laolao-sidebar.css \
@@ -80,6 +82,14 @@ apply_ui_skin() {
     laolao-tool-stream.css \
     laolao-party-entry.js \
     laolao-party-avatar-v1.png \
+    laolao-deep-think-base.png \
+    laolao-deep-think-boost.png \
+    laolao-deep-think-full.png \
+    laolao-deep-think-marathon.png \
+    laolao-deep-think-base.webm \
+    laolao-deep-think-boost.webm \
+    laolao-deep-think-full.webm \
+    laolao-deep-think-marathon.webm \
     laolao-roundtable-entry.js \
     laolao-deep-think.js \
     laolao-resume.js \
@@ -140,18 +150,18 @@ apply_ui_skin() {
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar11"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar13"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-sidebar.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar14">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar16">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
   # 顶栏用量统计胶囊：JS 必须紧跟 sidebar.js（依赖其 __laolaoSidebar.gwRequest 句柄）
   if ! grep -Fq './laolao-usage-stats.js' "$index_file"; then
-    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats10"></script>}' "$index_file"
+    perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats11"></script>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -161,7 +171,7 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-phrases.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases9"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
@@ -169,11 +179,11 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-session-list.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions2"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions3"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-phrases.js?v=phrases3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases3}g' "$index_file"
+  if ! grep -Fq './laolao-phrases.js?v=phrases9' "$index_file"; then
+    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases9}g' "$index_file"
   fi
   if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
     perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
@@ -253,19 +263,19 @@ apply_ui_skin() {
   # v2 修复 TDZ ReferenceError (wasBusy 引用越作用域, 导致恢复流程从未执行)
   # v3 观察者在 hook 网关成功后 disconnect（雪崩治理，见 tool-stream v3）
   if ! grep -Fq './laolao-resume.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume5"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-resume.js?v=resume3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume3}g' "$index_file"
+  elif ! grep -Fq './laolao-resume.js?v=resume5' "$index_file"; then
+    perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume5}g' "$index_file"
     DID_CHANGE=1
   fi
 
-  # 极致思考三档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
+  # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink10"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink4}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink10' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink10}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -287,6 +297,14 @@ apply_ui_skin() {
       { print }
     ' "$index_file" > "$temp_index"
     mv "$temp_index" "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # Existing installations already contain the splash section, so copying the
+  # new assets alone would leave them on the poster frame. Add the generated
+  # mascot video in place without replacing the user's index or app state.
+  if ! grep -Fq 'laolao-splash__video' "$index_file"; then
+    perl -0pi -e 's{(<section id="laolao-splash"[^>]*>)}{$1\n      <video class="laolao-splash__video" muted loop autoplay playsinline preload="auto" poster="./laolao-splash-video-poster.png?v=splashvideo1" aria-hidden="true">\n        <source src="./laolao-splash.mp4?v=splashvideo1" type="video/mp4" />\n      </video>}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -312,40 +330,40 @@ apply_ui_skin() {
   # Custom assets keep stable filenames so upgrades can restore them. Bump the
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
-  if ! grep -Fq './laolao-theme.css?v=theme29' "$index_file"; then
-    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme29}g' "$index_file"
+  if ! grep -Fq './laolao-theme.css?v=theme30' "$index_file"; then
+    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme30}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.js?v=sidebar11' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar11}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.js?v=sidebar13' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar13}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.css?v=sidebar14' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar14}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.css?v=sidebar16' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar16}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-session-list.js?v=sessions2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions2}g' "$index_file"
+  if ! grep -Fq './laolao-session-list.js?v=sessions3' "$index_file"; then
+    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions3}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-usage-stats.js?v=stats10' "$index_file"; then
-    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats10}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats11' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats11}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then
     perl -0pi -e 's{\./laolao-usage-stats\.css(?:\?v=[^"]*)?}{./laolao-usage-stats.css?v=stats7}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.css?v=splash16' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash16}g' "$index_file"
+  if ! grep -Fq './laolao-splash.css?v=splash17' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash17}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-mode-switcher.js?v=mode25' "$index_file"; then
     perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode25}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.js?v=splash19' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash19}g' "$index_file"
+  if ! grep -Fq './laolao-splash.js?v=splash20' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash20}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff4' "$index_file"; then

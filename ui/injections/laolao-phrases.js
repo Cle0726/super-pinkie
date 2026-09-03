@@ -11,6 +11,10 @@
   //    （每组工具输出可达数百 KB），且计算结果从未被使用；连带删除不再被调用的
   //    措辞抽取函数组（toolPhrase/activityPhrase/detailPhrase 等）。
   const failureSentinel='The agent run failed before producing a reply.';
+  const watchdogSentinel='\u2063';
+  const tierControlPrefix='[pinkie-tier-control]';
+  const restartRecoveryNotice='[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
+  const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
   const exactPhrases = new Map([
@@ -90,6 +94,9 @@
         node.nodeValue=node.nodeValue.replace(failureSentinel,failureNotice);
         bubble.setAttribute('data-pinkie-runtime-error','true');
         bubble.setAttribute('title','系统运行提示；原始信息：'+failureSentinel);
+        if(typeof window!=='undefined' && typeof window.dispatchEvent==='function' && typeof CustomEvent==='function'){
+          window.dispatchEvent(new CustomEvent('pinkie:run-failed'));
+        }
         return;
       }
     }
@@ -116,6 +123,81 @@
         bubble.removeAttribute('data-pinkie-runtime-error');
         if(bubble.getAttribute('title')==='系统运行提示；原始信息：'+failureSentinel)bubble.removeAttribute('title');
       }
+    });
+  };
+
+  const hideInternalRecoveryTurns = () => {
+    document.querySelectorAll('.chat-group.user').forEach(group=>{
+      const bubbles=[...group.querySelectorAll('.chat-group-messages > .chat-bubble')];
+      let hiddenCount=0;
+      for(const bubble of bubbles){
+        const raw=bubble.getAttribute('data-message-text');
+        const internal=raw===watchdogSentinel || raw===restartRecoveryNotice || raw?.startsWith(tierControlPrefix);
+        if(internal){
+          bubble.hidden=true;
+          bubble.dataset.pinkieInternalRecovery='true';
+          bubble.style.setProperty('display','none','important');
+          hiddenCount+=1;
+        }else if(bubble.dataset.pinkieInternalRecovery){
+          bubble.hidden=false;
+          bubble.style.removeProperty('display');
+          delete bubble.dataset.pinkieInternalRecovery;
+        }
+      }
+      if(bubbles.length>0 && hiddenCount===bubbles.length){
+        group.hidden=true;
+        group.dataset.pinkieInternalOnly='true';
+        group.style.setProperty('display','none','important');
+      }else if(group.dataset.pinkieInternalOnly){
+        group.hidden=false;
+        group.style.removeProperty('display');
+        delete group.dataset.pinkieInternalOnly;
+      }
+    });
+    document.querySelectorAll('.chat-group.assistant').forEach(group=>{
+      const bubbles=[...group.querySelectorAll('.chat-group-messages > .chat-bubble')];
+      let hiddenCount=0;
+      for(const bubble of bubbles){
+        const raw=bubble.getAttribute('data-message-text')||'';
+        if(sessionFenceRecovery.test(raw)){
+          bubble.hidden=true;
+          bubble.dataset.pinkieInternalRecovery='true';
+          bubble.style.setProperty('display','none','important');
+          hiddenCount+=1;
+          if(!bubble.dataset.pinkieRecoveryNotified){
+            bubble.dataset.pinkieRecoveryNotified='true';
+            window.dispatchEvent(new CustomEvent('pinkie:run-failed'));
+          }
+        }else if(bubble.dataset.pinkieInternalRecovery){
+          bubble.hidden=false;
+          bubble.style.removeProperty('display');
+          delete bubble.dataset.pinkieInternalRecovery;
+        }
+      }
+      if(bubbles.length>0 && hiddenCount===bubbles.length){
+        group.hidden=true;
+        group.dataset.pinkieInternalOnly='true';
+        group.style.setProperty('display','none','important');
+      }else if(group.dataset.pinkieInternalOnly){
+        group.hidden=false;
+        group.style.removeProperty('display');
+        delete group.dataset.pinkieInternalOnly;
+      }
+    });
+  };
+
+  const hideLegacyThinkPrefixes = () => {
+    document.querySelectorAll('.chat-group.user .chat-bubble[data-message-text]').forEach(bubble=>{
+      const raw=bubble.getAttribute('data-message-text')||'';
+      const match=raw.match(/^\[deep-think:(?:base|boost|full|marathon)\]\s*/i);
+      if(!match)return;
+      const text=bubble.querySelector('.chat-text');
+      if(!text||text.dataset.pinkieThinkPrefixHidden)return;
+      const walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);let node;
+      while((node=walker.nextNode())){
+        if(node.nodeValue?.includes(match[0])){node.nodeValue=node.nodeValue.replace(match[0],'');break;}
+      }
+      text.dataset.pinkieThinkPrefixHidden='true';
     });
   };
 
@@ -175,6 +257,9 @@
   const start = () => {
     localizeTree(document.body);
     localizeToolActivity(document);
+    syncFailureCards();
+    hideInternalRecoveryTurns();
+    hideLegacyThinkPrefixes();
 
     /* 全文档补扫做 600ms 防抖：Lit 有时就地复用节点（不触发 addedNodes），
        需要定期兜底；但绝不能每个 mutation 批次都全扫。
@@ -190,6 +275,8 @@
         localizeTree(document.body);
         localizeToolActivity(document);
         syncFailureCards();
+        hideInternalRecoveryTurns();
+        hideLegacyThinkPrefixes();
       }, 600);
     };
 

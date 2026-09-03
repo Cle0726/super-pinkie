@@ -1,5 +1,5 @@
 {
-  "triggerRatio": 0.98,
+  "triggerRatio": 0.85,
   "targetRatio": 0.9,
   "keepRecentRatio": 0.85,
   "unknownContextWindow": 1000000,

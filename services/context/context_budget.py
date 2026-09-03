@@ -20,11 +20,10 @@ def policy(home=None):
     home = Path(home or Path.home())
     base = read_json(Path(__file__).with_name('policy.json'))
     base.update(read_json(home/'Library/Application Support/SuperPinkie/context-policy.json'))
-    ratio = base.get('triggerRatio')
-    # Upper bound 0.85 lets power users push compaction late (e.g. 0.8) without
-    # being silently clamped back to 0.7. Lower bound 0.3 still prevents a
-    # self-DOS from a misconfigured near-zero ratio.
-    base['triggerRatio'] = min(.85, max(.3, ratio)) if isinstance(ratio, (int, float)) and not isinstance(ratio, bool) and math.isfinite(ratio) else .8
+    # One global boundary: never compact a healthy conversation before 85%.
+    # Local policy can still tune retention and known model windows, but it
+    # cannot silently move the trigger earlier or later than this boundary.
+    base['triggerRatio'] = .85
     # unknownContextWindow is the fallback for providers that do not declare a
     # contextWindow. Keep it generous so a single short exchange does not push
     # an unknown model past the trigger ratio and start an avoidable compaction.
@@ -32,7 +31,7 @@ def policy(home=None):
     target_ratio = base.get('targetRatio')
     base['targetRatio'] = min(.9, max(.3, target_ratio)) if isinstance(target_ratio, (int, float)) and not isinstance(target_ratio, bool) and math.isfinite(target_ratio) else .6
     keep_ratio = base.get('keepRecentRatio')
-    base['keepRecentRatio'] = min(.5, max(.05, keep_ratio)) if isinstance(keep_ratio, (int, float)) and not isinstance(keep_ratio, bool) and math.isfinite(keep_ratio) else .25
+    base['keepRecentRatio'] = min(.85, max(.05, keep_ratio)) if isinstance(keep_ratio, (int, float)) and not isinstance(keep_ratio, bool) and math.isfinite(keep_ratio) else .85
     if not isinstance(base.get('modelLimits'), dict):
         base['modelLimits'] = {}
     return base
@@ -92,7 +91,11 @@ def model_budget(ref, config=None, home=None):
     # target and keepRecent now honor policy ratios so a wider keepRecentRatio
     # actually preserves more recent messages instead of being capped at 1/5.
     target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-1024))
-    keep_recent = max(1, math.floor(limit*rules['keepRecentRatio']))
+    requested_keep = max(1, math.floor(limit*rules['keepRecentRatio']))
+    # The saved preference remains untouched. At runtime leave five percent of
+    # the real model window below the 85% trigger so the next reply has room.
+    working_headroom = max(1024, math.floor(limit*.05))
+    keep_recent = min(requested_keep, max(1, threshold-working_headroom))
     return {'model':ref, 'window':limit, 'threshold':threshold, 'reserve':limit-threshold,
             'target':target, 'keepRecent':keep_recent, 'source':source}
 

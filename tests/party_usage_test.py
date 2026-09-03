@@ -44,6 +44,21 @@ class UsageTests(unittest.TestCase):
         self.put();cache=self.home/'.antigravity_cle/cache/quota_api_v1_desktop/authorized/q.json';cache.parent.mkdir(parents=True)
         cache.write_text(json.dumps({'payload':{'models':{'gemini-a':{'quotaInfo':{'remainingFraction':.97}},'gpt-b':{'quotaInfo':{'remainingFraction':.8}},'tab-internal':{'quotaInfo':{'remainingFraction':0}}}}}))
         result=self.collect();self.assertEqual('日80%',result['quota']);self.assertEqual(1.25,result['cost'])
+    def test_every_model_output_adds_a_persistent_display_estimate(self):
+        usage['record_model_output']('relay/a','第一条回复',100,20,self.home)
+        first=self.collect();self.assertEqual(1,first['requests']);self.assertGreater(first['cost'],.01);self.assertLess(first['cost'],.02)
+        usage['record_model_output']('relay/b','第二条回复',50,10,self.home)
+        second=self.collect();self.assertEqual(2,second['requests']);self.assertGreater(second['cost'],first['cost'])
+        self.assertIn('展示估算',second['source']);self.assertIn('真实单价',second['costNote'])
+
+    def test_old_exaggerated_display_cost_is_migrated_without_clearing_usage(self):
+        state=self.home/'Library/Application Support/SuperPinkie';state.mkdir(parents=True)
+        path=state/'model-usage.json'
+        path.write_text(json.dumps({'input':284825,'output':13434,'cacheRead':874265,'requests':18,'cost':113.49}))
+        before=self.collect();self.assertGreater(before['cost'],.18);self.assertLess(before['cost'],.3)
+        usage['record_model_output']('relay/a','继续',100,20,self.home)
+        saved=json.loads(path.read_text());self.assertEqual(19,saved['requests']);self.assertEqual(2,saved['pricingVersion'])
+        self.assertGreater(saved['cost'],before['cost']);self.assertLess(saved['cost'],.4)
 
 
 if __name__=='__main__':unittest.main()

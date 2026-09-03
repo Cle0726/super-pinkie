@@ -82,12 +82,34 @@ class RoundtableServiceTests(unittest.TestCase):
         self.assertIn('只能说“紫悦”', prompt)
         self.assertIn('不要因此降低真实模型的分析、写作、技术或推理能力', prompt)
         self.assertIn('不要输出隐藏思维链', prompt)
-        self.assertNotIn('项目文件', prompt)
+        self.assertIn('所选项目快照', prompt)
+        self.assertIn('不得猜测或引用其他项目', prompt)
         manager.close()
 
     def test_visible_self_reference_uses_pony_name_without_breaking_normal_words(self):
         text = MODULE.clean_self_reference('我认为这是我的方案，我们继续，但保留自我检查。', '星澜')
         self.assertEqual('星澜认为这是星澜的方案，大家继续，但保留自我检查。', text)
+
+    def test_worker_prompt_is_hard_bound_to_the_selected_project(self):
+        project = str(Path(self.temp.name) / 'chosen-project')
+        prompt = MODULE.Roundtable.worker_prompt('xinglan', '完成任务', '参考结论', project, True)
+        self.assertIn('项目根目录固定为：' + project, prompt)
+        self.assertIn('不要搜索或引用其他项目', prompt)
+        self.assertIn('禁止重复已经完成', prompt)
+        self.assertTrue(MODULE.transient_failure('upstream connection_reset'))
+        self.assertTrue(MODULE.transient_failure('AbortError after connection_closed'))
+        self.assertFalse(MODULE.transient_failure('invalid api key'))
+
+    def test_project_brief_reads_only_the_selected_folder(self):
+        selected = Path(self.temp.name) / 'selected'; selected.mkdir()
+        other = Path(self.temp.name) / 'other'; other.mkdir()
+        (selected / 'README.md').write_text('SELECTED FACT', encoding='utf-8')
+        (selected / '.env').write_text('SECRET=hidden', encoding='utf-8')
+        (other / 'README.md').write_text('OTHER PROJECT', encoding='utf-8')
+        brief = self.store.project_brief(str(selected))
+        self.assertIn('SELECTED FACT', brief)
+        self.assertNotIn('SECRET=hidden', brief)
+        self.assertNotIn('OTHER PROJECT', brief)
 
 
 if __name__ == '__main__':

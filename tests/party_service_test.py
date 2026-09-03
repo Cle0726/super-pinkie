@@ -237,6 +237,21 @@ class PartyTests(unittest.TestCase):
         self.assertEqual(1,len(self.store.rows('SELECT id FROM tasks WHERE room=?',(self.a['id'],))))
         self.assertEqual(['云宝在这里。'],[m['body'] for m in self.store.messages(self.a['id']) if m['sender']=='openclaw'])
 
+    def test_watchdog_retries_transient_upstream_failure_and_not_permanent_errors(self):
+        self.assertTrue(party.transient_failure('upstream 502 connection closed'))
+        self.assertTrue(party.transient_failure('AbortError after connection_closed'))
+        self.assertFalse(party.transient_failure('invalid api key'))
+        self.assertFalse(party.transient_failure('cancelled by user'))
+        task_id=self.manager.new_task(self.a['id'],'openclaw','继续未完成工作',approval=True)
+        with patch.object(self.manager,'execute',side_effect=[ValueError('upstream 502'), '恢复后的结果']) as execute, \
+                patch.object(party.time,'monotonic',side_effect=[0,3]), \
+                patch.object(party.time,'sleep'), \
+                patch.dict(party.USAGE,{'record_model_output':Mock()}):
+            self.manager.run(task_id)
+        self.assertEqual('done',self.store.task(task_id)['status'])
+        self.assertEqual([False,True],[call.kwargs['recovering'] for call in execute.call_args_list])
+        self.assertIn('恢复后的结果',[m['body'] for m in self.store.messages(self.a['id'])])
+
     def test_old_quotes_hidden_and_dispatch_names_fixed_without_rewriting_storage(self):
         user=self.store.message(self.a['id'],'user','hi')
         direct=self.manager.new_task(self.a['id'],'openclaw','hi',reply=user,approval=True)

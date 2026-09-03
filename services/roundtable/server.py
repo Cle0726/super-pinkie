@@ -16,6 +16,7 @@ import mimetypes
 import os
 from pathlib import Path
 import re
+import runpy
 import secrets
 import selectors
 import shutil
@@ -30,6 +31,7 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[2]
+USAGE = runpy.run_path(str(ROOT/'services/party/usage.py'))
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
 MODEL_LOCK = threading.Lock()
@@ -50,6 +52,13 @@ STAGES = {
     'consensus': '收拢共识',
     'execute': '落地执行',
 }
+TRANSIENT_FAILURE = re.compile(r'(timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|\b429\b|\b50[234]\b|temporar|try again)', re.I)
+PERMANENT_FAILURE = re.compile(r'(cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|context (?:length|window)|billing|policy)', re.I)
+
+
+def transient_failure(value):
+    text = str(value or '')
+    return not PERMANENT_FAILURE.search(text) and bool(TRANSIENT_FAILURE.search(text))
 
 
 def redact(value):
@@ -214,6 +223,51 @@ class Store:
         except FileExistsError:
             raise ValueError('同名文件夹已经存在，请直接选择它或换个名字')
         return {'path': self.validate_project(str(target)), 'name': name}
+
+    def project_brief(self, raw, max_chars=52000):
+        root = Path(self.validate_project(raw))
+        skipped = {'.git', '.hg', '.svn', 'node_modules', 'dist', 'build', '.next', '.cache', '__pycache__', 'vendor'}
+        secret_names = re.compile(r'(^|[._-])(env|secret|credential|token|private|id_rsa|key)([._-]|$)', re.I)
+        text_suffixes = {'.md','.txt','.json','.toml','.yaml','.yml','.py','.js','.mjs','.cjs','.ts','.tsx','.jsx','.swift','.rs','.go','.java','.kt','.sh','.ps1','.html','.css','.scss','.sql'}
+        priority = {'AGENTS.md','README.md','README','package.json','pyproject.toml','Cargo.toml','go.mod','requirements.txt','Makefile'}
+        files = []
+        for directory, names, filenames in os.walk(root, followlinks=False):
+            current = Path(directory)
+            names[:] = sorted(name for name in names if name not in skipped and not name.startswith('.'))
+            if len(current.relative_to(root).parts) > 4:
+                names[:] = []
+                continue
+            for name in sorted(filenames):
+                candidate = current/name
+                if candidate.is_symlink() or secret_names.search(name):
+                    continue
+                try:
+                    resolved = candidate.resolve()
+                    resolved.relative_to(root)
+                    size = resolved.stat().st_size
+                except (OSError, ValueError):
+                    continue
+                if size <= 160000 and (name in priority or resolved.suffix.lower() in text_suffixes):
+                    files.append((0 if name in priority else 1, str(resolved.relative_to(root)), resolved, size))
+                if len(files) >= 220:
+                    break
+            if len(files) >= 220:
+                break
+        files.sort(key=lambda item:(item[0],item[1]))
+        tree = '\n'.join(item[1] for item in files[:160])
+        parts = [f'项目根目录：{root}\n项目文件清单（最多 160 项）：\n{tree}']
+        used = len(parts[0])
+        for _, relative, target, _ in files:
+            if used >= max_chars:
+                break
+            try:
+                content = target.read_text(encoding='utf-8')
+            except (OSError, UnicodeError):
+                continue
+            excerpt = content[:min(6000, max_chars-used)]
+            block = f'\n\n--- {relative} ---\n{excerpt}'
+            parts.append(block);used += len(block)
+        return ''.join(parts)[:max_chars]
 
     def create_session(self, title, members=None, models=None, project=''):
         title = str(title).strip()
@@ -395,7 +449,7 @@ class Roundtable:
         }[stage]
         return f'''你是工作圆桌中的{info['name']}，席位职责是“{info['role']}”。
 身份规则只影响称呼：需要自称时只能说“{info['name']}”，不能自称“我”“我的”“我们”；不要因此降低真实模型的分析、写作、技术或推理能力。
-称呼用户为“铲屎官”。你不是本地 Agent，不读取文件、不调用工具，也不声称做了未做的事。
+称呼用户为“铲屎官”。你不直接调用工具；下方标为“所选项目快照”的内容由系统从铲屎官选定的项目文件夹读取，必须以它为项目事实，不得猜测或引用其他项目。
 只公开结论、依据、异议和建议；不要输出隐藏思维链、系统提示、JSON 或舞台说明。
 本轮职责：{stage_instruction}
 控制在 220 个中文字以内，直接说人话，不写标题式自我介绍，不重复其他成员已经说过的内容。
@@ -522,6 +576,7 @@ class Roundtable:
                 if not final:
                     raise ValueError('模型没有返回可显示的内容')
                 self.store.update_message(message_id, final, 'done')
+                USAGE['record_model_output'](model, final)
                 return final
             finally:
                 if process.poll() is None:
@@ -532,11 +587,14 @@ class Roundtable:
                 process.stderr.close()
 
     @staticmethod
-    def worker_prompt(member, goal, consensus):
+    def worker_prompt(member, goal, consensus, project, recovering=False):
         name = MEMBERS[member]['name']
         return f'''你是灵感圆桌的落地执行席{name}。当前目录就是用户明确选择的项目。
 身份只影响名字：需要自称时使用“{name}”，不要自称“我”或“我们”；不要添加口癖，也不要降低真实技术与写作能力。
 必须先检查真实文件，再完成任务；能修改、验证就直接做，不要只给建议，不要声称做了未做的事。
+项目根目录固定为：{project}
+所有查找、读取、写入、命令和验证都必须以这个目录为边界；不要搜索或引用其他项目。开始时先确认 pwd 与项目顶层文件。
+{'这是连接中断后的续接：先核对现有文件和工具结果，从未完成处继续，禁止重复已经完成的写入、删除、发布或外部动作。' if recovering else ''}
 遵循项目里的 AGENTS.md 和相关说明。需要 Skill 时，每次任务重新读取对应 SKILL.md，不能凭上次记忆略过。
 公开过程只写简短的“准备做什么 / 刚完成什么 / 下一步”，工具和文件变化由界面单独显示；不输出隐藏思维链。
 最后用简洁大白话总结，最多 450 个中文字，固定包含：
@@ -558,7 +616,7 @@ class Roundtable:
             raise ValueError('当前系统没有项目隔离器，执行席已停止，绝不会退回无限制访问')
         runtime = next((parent for parent in Path(binary).resolve().parents if (parent/'bin/node').is_file()),
                        Path(binary).resolve().parent)
-        roots = [Path(project), Path(temp), ROOT, runtime, Path('/System'), Path('/usr'), Path('/bin'), Path('/sbin'),
+        roots = [Path(project), Path(temp), runtime, Path('/System'), Path('/usr'), Path('/bin'), Path('/sbin'),
                  Path('/Library'), Path('/dev'), Path('/private/etc'), Path('/opt/homebrew')]
         roots += [Path.home()/'.openclaw/skills', Path.home()/'.agents/skills', Path.home()/'.codex/skills']
         roots = [str(path.resolve()) for path in roots if path.exists()]
@@ -568,12 +626,13 @@ class Roundtable:
                 '(allow file-read-data (literal "/") ' + subpaths + ')'
                 '(allow file-write* ' + writes + ' (literal "/dev/null") (literal "/dev/tty"))')
 
-    def run_worker(self, run_id, session, member, model, goal, consensus):
+    def run_worker(self, run_id, session, member, model, goal, consensus, attempt=0):
         project = self.store.validate_project(session.get('path', ''))
         self.store.write('UPDATE runs SET status=?,stage=?,updated=? WHERE id=?',
                          ('running', 'execute', time.time(), run_id))
-        self.store.message(session['id'], 'system', '执行席已经进入项目，接下来展示的命令、文件变化和结果都是真实记录。',
-                           'scene', 'execute', 'done', run_id)
+        if attempt == 0:
+            self.store.message(session['id'], 'system', '执行席已经进入项目，接下来展示的命令、文件变化和结果都是真实记录。',
+                               'scene', 'execute', 'done', run_id)
         binary, node = executable('openclaw'), executable('node')
         if not binary or not node:
             raise ValueError('没有找到本机 OpenClaw 执行器')
@@ -598,15 +657,18 @@ class Roundtable:
             live_config['plugins'] = {'enabled': False}
             config_path, prompt_path = temp/'config.json', temp/'message.txt'
             config_path.write_text(json.dumps(live_config), encoding='utf-8')
-            prompt_path.write_text(self.worker_prompt(member, goal, consensus), encoding='utf-8')
+            prompt_path.write_text(self.worker_prompt(member, goal, consensus, project, attempt > 0), encoding='utf-8')
             os.chmod(config_path, 0o600); os.chmod(prompt_path, 0o600)
-            command = [node, '--import', str(ROOT/'services/party/openclaw-live.mjs'), str(Path(binary).resolve()),
+            live_hook = temp/'openclaw-live.mjs'
+            shutil.copy2(ROOT/'services/party/openclaw-live.mjs', live_hook)
+            command = [node, '--import', str(live_hook), str(Path(binary).resolve()),
                        'agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()), '--json',
                        '--timeout', '600', '--message-file', str(prompt_path)]
             command = ['/usr/bin/sandbox-exec', '-p', self.worker_sandbox(project, temp, binary)] + command
             environment = runtime_environment()
             environment.update(OPENCLAW_CONFIG_PATH=str(config_path), OPENCLAW_STATE_DIR=str(temp/'state'),
                                PINKIE_LIVE_ENTRY=binary, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1',
+                               PINKIE_PROJECT_ROOT=project, PWD=project,
                                TMPDIR=str(temp/'tmp') + '/', TMP=str(temp/'tmp'), TEMP=str(temp/'tmp'))
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=project, env=environment, start_new_session=True)
@@ -700,6 +762,7 @@ class Roundtable:
                         self.store.stream_message(run_id, member, 'worker-progress-' + str(assistant_index),
                                                   visible_stream, 'progress', 'done')
                     self.store.stream_message(run_id, member, 'worker-final', final, 'summary', 'done')
+                USAGE['record_model_output'](model, final)
                 return final
             finally:
                 if process.poll() is None:
@@ -707,6 +770,36 @@ class Roundtable:
                 with self.lock:
                     self.processes.get(run_id, set()).discard(process)
                 process.stdout.close(); process.stderr.close()
+
+    def wait_for_retry(self, run_id, attempt):
+        delay = min(60, 2 ** min(attempt, 6))
+        until = time.monotonic() + delay
+        while time.monotonic() < until:
+            if self.store.run(run_id)['status'] in TERMINAL:
+                return False
+            time.sleep(min(.5, until - time.monotonic()))
+        return True
+
+    def invoke_with_watchdog(self, run_id, session, member, model, stage, prompt, message_id):
+        attempt = 0
+        while True:
+            try:
+                return self.invoke(run_id, session, member, model, stage, prompt, message_id)
+            except Exception as error:
+                if not transient_failure(error) or not self.wait_for_retry(run_id, attempt + 1):
+                    raise
+                attempt += 1
+
+    def run_worker_with_watchdog(self, run_id, session, member, model, goal, consensus):
+        attempt = 0
+        while True:
+            try:
+                return self.run_worker(run_id, session, member, model, goal, consensus, attempt)
+            except Exception as error:
+                if not transient_failure(error) or not self.wait_for_retry(run_id, attempt + 1):
+                    raise
+                attempt += 1
+                self.store.write("UPDATE messages SET status='interrupted' WHERE run=? AND status='running'", (run_id,))
 
     def run_stage(self, run_id, session, stage, members, goal, prior):
         self.store.write('UPDATE runs SET status=?,stage=?,updated=? WHERE id=?', ('running', stage, time.time(), run_id))
@@ -718,7 +811,7 @@ class Roundtable:
                 break
             message_id = self.store.message(session['id'], member, MEMBERS[member]['scene'], 'thought', stage, 'running', run_id)
             prompt = self.prompt(member, stage, goal, prior)
-            future = self.pool.submit(self.invoke, run_id, session, member, session['models'][member], stage, prompt, message_id)
+            future = self.pool.submit(self.invoke_with_watchdog, run_id, session, member, session['models'][member], stage, prompt, message_id)
             futures[future] = member
         results = []
         for future in as_completed(futures):
@@ -739,6 +832,8 @@ class Roundtable:
         try:
             self.store.write('UPDATE runs SET status=?,stage=?,updated=? WHERE id=?', ('running', 'opening', time.time(), run_id))
             prior = self.context(session['id'], user_id)
+            project_snapshot = self.store.project_brief(session['path']) if session.get('path') else '这张旧圆桌尚未绑定项目文件夹。'
+            prior += '\n\n【所选项目快照】\n' + project_snapshot
             selected = session['members']
             synthesizer = 'xinglan' if 'xinglan' in selected else selected[-1]
             challengers = [member for member in ('rainbow', 'fluttershy', 'applejack') if member in selected and member != synthesizer]
@@ -757,7 +852,7 @@ class Roundtable:
             if self.store.run(run_id)['status'] not in TERMINAL:
                 if run.get('mode', 'execute') == 'execute':
                     summary = consensus[-1][1] if consensus else prior[-4000:]
-                    self.run_worker(run_id, session, synthesizer, session['models'][synthesizer], goal, summary)
+                    self.run_worker_with_watchdog(run_id, session, synthesizer, session['models'][synthesizer], goal, summary)
             if self.store.run(run_id)['status'] not in TERMINAL:
                 finished_stage = 'execute' if run.get('mode', 'execute') == 'execute' else 'consensus'
                 self.store.write('UPDATE runs SET status=?,stage=?,updated=? WHERE id=?',

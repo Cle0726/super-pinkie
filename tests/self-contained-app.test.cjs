@@ -19,12 +19,16 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /Gateway\.stop\(\)/);
 });
 
-test('native startup uses a code-native loading mark instead of a pasted scene image', () => {
+test('native startup uses the bundled opaque mascot video instead of exposing the desktop', () => {
   const launcher = read('desktop/macos/Sources/Launcher.swift');
   const loading = read('ui/launcher-loading.html');
   assert.match(launcher, /ui\/launcher-loading\.html/);
-  assert.match(loading, /class="mark"/);
-  assert.doesNotMatch(loading, /<img\b|laolao-splash\.png/);
+  assert.match(loading, /<video class="scene"/);
+  assert.match(loading, /assets\/laolao-splash\.mp4/);
+  assert.match(loading, /assets\/laolao-splash-video-poster\.png/);
+  assert.match(loading, /background: #efcbd3/);
+  assert.doesNotMatch(loading, /background:\s*transparent/);
+  assert.doesNotMatch(loading, /<main\b|超級碧琪正在准备<\/p>/);
 });
 
 test('bundle keeps user state external and first launch uses bundled executables', () => {

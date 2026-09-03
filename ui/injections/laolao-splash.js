@@ -5,6 +5,7 @@
   const message = document.getElementById('laolao-splash-message');
   const percentage = document.getElementById('laolao-splash-percentage');
   const bar = splash?.querySelector('[role="progressbar"]');
+  const splashVideo = splash?.querySelector('.laolao-splash__video');
   if (!splash || !fill || !message || !percentage) return;
   const url = new URL(window.location.href);
   const switching = url.searchParams.get('laolao-switch') === '1' || sessionStorage.getItem('laolao:skip-entry-splash') === '1';
@@ -34,11 +35,35 @@
     motion.text(splash.querySelector('.laolao-splash__eyebrow'), '碧琪的模式切换');
     motion.text(splash.querySelector('.laolao-splash__title'), details.label);
   }
-  // Decode both scene and destination wallpaper. Missing decorative files
-  // settle too, so a failed image can never hold the user behind this screen.
+  const waitForEntryVideo = () => {
+    if (switching || !splashVideo || motion.reduced()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ready) => {
+        if (settled) return;
+        settled = true;
+        splashVideo.removeEventListener('loadeddata', onReady);
+        splashVideo.removeEventListener('error', onError);
+        if (ready) {
+          splash.classList.add('is-video-ready');
+          void splashVideo.play?.().catch(() => {});
+        }
+        resolve(ready);
+      };
+      const onReady = () => finish(true);
+      const onError = () => finish(false);
+      if (splashVideo.readyState >= 2) return onReady();
+      splashVideo.addEventListener('loadeddata', onReady, { once: true });
+      splashVideo.addEventListener('error', onError, { once: true });
+      window.setTimeout(onError, 3200);
+    });
+  };
+  // Decode the selected scene and destination wallpaper. Missing decorative
+  // files settle too, so a failed video can never hold the user behind it.
   let assetsReady = false;
-  Promise.all([motion.modeAssets(mode), motion.preload(switching
-    ? `/laolao-mode-transition-${mode}.png?v=transition2` : '/laolao-splash.png')])
+  Promise.all([motion.modeAssets(mode), switching
+    ? motion.preload(`/laolao-mode-transition-${mode}.png?v=transition2`)
+    : Promise.all([motion.preload('/laolao-splash-video-poster.png?v=splashvideo1'), waitForEntryVideo()])])
     .then(() => { assetsReady = true; splash.classList.add('is-art-ready'); });
   const started = performance.now();
   const minimum = motion.reduced() ? 400 : switching ? 700 : 2600;
@@ -85,6 +110,7 @@
   };
   window.setTimeout(() => {
     if (completed) return;
+    splash.classList.add('has-recovery');
     const actions = document.createElement('div');
     actions.className = 'laolao-splash__recovery';
     for (const [label, action] of [['重新连接', () => window.location.reload()], ['查看当前页面', () => leave(false)]]) {

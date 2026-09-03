@@ -61,6 +61,9 @@ test('four visible stages end in real project execution', () => {
   assert.match(server, /openclaw-live\.mjs/);
   assert.match(server, /worker_sandbox/);
   assert.match(server, /cwd=project/);
+  assert.match(server, /PINKIE_PROJECT_ROOT=project/);
+  assert.match(server, /不要搜索或引用其他项目/);
+  assert.doesNotMatch(server, /roots = \[Path\(project\), Path\(temp\), ROOT,/);
   assert.match(server, /stream_message/);
 });
 

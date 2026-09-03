@@ -48,14 +48,26 @@
     if (refreshing) return;
     refreshing = true;
     try {
-      const stats = await fetchJson(document.getElementById('party-usage') ? '/api/usage' : '/laolao-stats.json');
+      const partyPage = Boolean(document.getElementById('party-usage'));
+      const [stats, liveRuntime] = await Promise.all([
+        fetchJson(partyPage ? '/api/usage' : '/laolao-stats.json'),
+        !partyPage && $sidebar()?.gwRequest
+          ? $sidebar().gwRequest('pinkie.usage.get', {}, 5000).catch(()=>null)
+          : null,
+      ]);
       if (stats && (stats.scope === 'lifetime' || Number.isFinite(stats.input))) {
+        const runtime = stats.runtimeIncluded ? null : liveRuntime;
+        const merged = (key) => {
+          const base = Number.isFinite(stats[key]) ? stats[key] : null;
+          const extra = Number.isFinite(runtime?.[key]) ? runtime[key] : null;
+          return base == null ? extra : base + (extra || 0);
+        };
         view = {
-          input: Number.isFinite(stats.input) ? stats.input : null,
-          output: Number.isFinite(stats.output) ? stats.output : null,
-          cacheRead: Number.isFinite(stats.cacheRead) ? stats.cacheRead : null,
-          cacheWrite: Number.isFinite(stats.cacheWrite) ? stats.cacheWrite : null,
-          cost: Number.isFinite(stats.cost) ? stats.cost : null,
+          input: merged('input'),
+          output: merged('output'),
+          cacheRead: merged('cacheRead'),
+          cacheWrite: merged('cacheWrite'),
+          cost: merged('cost'),
           persistent: stats.scope === 'lifetime',
           costNote: stats.costNote || '按内置展示系数估算，不是实际账单或余额',
           stale: !!stats.stale,
@@ -64,7 +76,7 @@
           quotaNote: stats.quotaNote || "",
           requests: stats.requests || null,
           successRate: stats.successRate ?? null,
-          source: stats.source || (stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计"),
+          source: runtime ? '本机全模型累计 · 展示估算' : (stats.source || (stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计")),
         };
       } else {
         const [quotaFile, payload] = await Promise.all([
@@ -226,6 +238,10 @@
     setInterval(refresh, REFRESH_MS);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refresh();
+    });
+    let eventRefresh;
+    window.addEventListener('laolao:sessions-changed',()=>{
+      clearTimeout(eventRefresh);eventRefresh=setTimeout(refresh,500);
     });
 
     // header 可能被 Lit 重渲染掉：observer 调 render 重建并回填数值。

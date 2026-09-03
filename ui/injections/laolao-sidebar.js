@@ -908,6 +908,54 @@
     });
   }
 
+  async function deleteAllSessions() {
+    const agentId = currentModeAgent();
+    const currentKey = pageSessionKey();
+    const currentProject = projectOf(currentKey);
+    const [active, archivedRows] = await Promise.all([
+      gwRequest('sessions.list', {agentId, archived:false, limit:1000}),
+      gwRequest('sessions.list', {agentId, archived:true, limit:1000}),
+    ]);
+    const all = new Map();
+    for (const item of [...extractSessions(active), ...extractSessions(archivedRows)]) {
+      if (item.agentId === agentId && item.key !== `agent:${agentId}:main`) all.set(item.key, item);
+    }
+    const targets = [...all.values()];
+    if (!targets.length) {
+      toast('当前模式没有可删除的普通会话');
+      return;
+    }
+    const deleted = [];
+    let failed = 0;
+    for (let offset = 0; offset < targets.length; offset += 5) {
+      const results = await Promise.all(targets.slice(offset, offset + 5).map(async (item) => {
+        try {
+          await gwRequest('sessions.delete', {key:item.key, agentId, deleteTranscript:true}, 30000);
+          return item.key;
+        } catch { failed += 1; return ''; }
+      }));
+      deleted.push(...results.filter(Boolean));
+    }
+    for (const key of deleted) removeSessionFromLocalState(key);
+    window.PinkieSessionList?.invalidate();
+    sessionIndex = null;
+    schedule();
+    if (deleted.includes(currentKey)) {
+      await createProjectSession(currentProject && state.projectFolders[currentProject] ? currentProject : null);
+    }
+    toast(`已删除 ${deleted.length} 个会话和记录${failed ? `，${failed} 个未能删除` : ''}`);
+  }
+
+  function askDeleteAllSessions() {
+    showModal({
+      title:'删除当前模式全部会话',
+      body:'普通会话和聊天记录会一次删除；其他模式、主会话以及项目文件夹里的真实文件不会被动。此操作不可撤销。',
+      dangerText:'全部删除',
+      busyText:'正在批量删除…',
+      onConfirm:deleteAllSessions,
+    });
+  }
+
   /* ---------- 6. 行内按钮与项目菜单 ---------- */
   function keyOfRow(row) {
     const link = row.querySelector("a.sidebar-recent-session__link");
@@ -1255,7 +1303,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }
@@ -1292,6 +1340,7 @@
   /* 调试句柄（只读排查用） */
   window.__laolaoSidebar = {
     gwRequest,
+    askDeleteAllSessions,
     get mode() { return stateMode; },
     get state() { return state; },
   };

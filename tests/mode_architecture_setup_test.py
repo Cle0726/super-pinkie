@@ -29,6 +29,11 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual([x['id'] for x in installed['agents']['list']], ['main','project','thinking','unrestricted'])
             self.assertEqual(installed['agents']['defaults']['compaction']['keepRecentTokens'], 800000)
             self.assertEqual(installed['agents']['defaults']['subagents']['maxSpawnDepth'], 2)
+            self.assertEqual(installed['agents']['defaults']['timeoutSeconds'], 43200)
+            self.assertEqual(installed['agents']['defaults']['subagents']['runTimeoutSeconds'], 43200)
+            plugin = installed['plugins']['entries']['pinkie-mode-architecture']
+            self.assertTrue(plugin['hooks']['allowPromptInjection'])
+            self.assertTrue(plugin['hooks']['allowConversationAccess'])
             for mode, relative in setup.MODE_WORKSPACES.items():
                 ws = home / relative
                 self.assertEqual((ws / 'SOUL.md').read_text(), 'USER CUSTOM CONTEXT\n')

@@ -20,6 +20,17 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertEqual(13600,a['threshold']);self.assertEqual(108800,b['threshold'])
         unknown=budget['model_budget']('other/same',cfg,self.home)
         self.assertEqual('conservative-fallback',unknown['source']);self.assertEqual(1000000,unknown['window'])
+        self.assertEqual(850000,unknown['threshold'])
+        self.assertEqual(800000,unknown['keepRecent'])
+
+    def test_existing_policy_is_forced_to_exactly_eighty_five_percent_without_losing_other_values(self):
+        config=self.home/'.openclaw/openclaw.json';config.parent.mkdir();config.write_text('{}')
+        policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json';policy.parent.mkdir(parents=True)
+        policy.write_text(json.dumps({'triggerRatio':.96,'targetRatio':.9,'keepRecentRatio':.85,'unknownContextWindow':1000000,'custom':'keep'}))
+        self.assertTrue(setup['install'](self.home))
+        saved=json.loads(policy.read_text())
+        self.assertEqual(.85,saved['triggerRatio']);self.assertEqual('keep',saved['custom'])
+        self.assertFalse(setup['install'](self.home))
     def test_codex_metadata_and_explicit_override(self):
         cache=self.home/'.codex/models_cache.json';cache.parent.mkdir()
         cache.write_text(json.dumps({'models':[{'slug':'model-a','context_window':200000,'effective_context_window_percent':95}]}))

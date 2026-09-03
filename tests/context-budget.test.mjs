@@ -28,11 +28,14 @@ return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
 test('ultra-long retention follows the installed large-window policy',()=>{
   for(const window of [4096,16000,32768,128000,258400,1000000]){
-    const resolved=Math.max(window,installedPolicy.minWindowTokens);
+    const resolved=window;
     const b=compactionBudget(window);assert.equal(b.window,resolved);
-    assert.equal(b.threshold,Math.floor(resolved*installedPolicy.triggerRatio));
+    assert.equal(installedPolicy.triggerRatio,.85);
+    assert.equal(b.threshold,Math.floor(resolved*.85));
     assert.equal(resolved-b.reserve,b.threshold);
-    assert.equal(b.keepRecent,Math.floor(resolved*installedPolicy.keepRecentRatio));
+    const requestedKeep=Math.floor(resolved*installedPolicy.keepRecentRatio);
+    const workingHeadroom=Math.max(1024,Math.floor(resolved*.05));
+    assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
     assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
 });

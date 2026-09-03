@@ -61,6 +61,15 @@ test('single-session menu supports safe archive, restore and permanent deletion'
   assert.match(source,/项目文件夹里的真实文件不会被动/);
   assert.match(source,/busyText:'删除中…'/);
 });
+test('session manager exposes one confirmed bulk delete for the current mode',()=>{
+  const list=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-session-list.js'),'utf8');
+  assert.match(list,/全部删除/);
+  assert.match(source,/askDeleteAllSessions/);
+  assert.match(source,/patchSession,askDeleteAllSessions,toast/);
+  assert.match(source,/archived:true/);
+  assert.match(source,/targets\.slice\(offset, offset \+ 5\)/);
+  assert.match(source,/项目文件夹里的真实文件不会被动/);
+});
 test('managed sessions scroll inside the sidebar instead of covering its footer',()=>{
   const css=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-sidebar.css'),'utf8');
   assert.match(css,/\.laolao-managed-sessions\{overflow:hidden!important\}/);

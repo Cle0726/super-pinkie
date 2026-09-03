@@ -35,6 +35,13 @@ IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(en
 CHARACTERS = IDENTITIES['names']
 MODEL_CACHE = {'until': 0, 'data': None}
 MODEL_LOCK = threading.Lock()
+TRANSIENT_FAILURE = re.compile(r'(timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|\b429\b|\b50[234]\b|temporar|try again|实时连接中断)', re.I)
+PERMANENT_FAILURE = re.compile(r'(cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|context (?:length|window)|billing|policy)', re.I)
+
+
+def transient_failure(value):
+    text=str(value or '')
+    return not PERMANENT_FAILURE.search(text) and bool(TRANSIENT_FAILURE.search(text))
 
 
 def codex_models():
@@ -691,7 +698,21 @@ class Manager:
                 self.store.write("UPDATE tasks SET status='running',updated=? WHERE id=?", (time.time(), task_id))
             self.store.message(room['id'], 'system', LABELS[task['agent']] + ' 已开始处理。', 'notice', task_id)
             try:
-                output = self.execute(task, room)
+                attempt = 0
+                while True:
+                    try:
+                        output = self.execute(task, room, recovering=attempt > 0)
+                        break
+                    except Exception as error:
+                        if not transient_failure(error):
+                            raise
+                        attempt += 1
+                        delay = min(60, 2 ** min(attempt, 6))
+                        until = time.monotonic() + delay
+                        while time.monotonic() < until:
+                            if self.store.task(task_id)['status'] in TERMINAL:
+                                return
+                            time.sleep(min(.5, until - time.monotonic()))
                 with self.lock:
                     if self.store.task(task_id)['status'] in TERMINAL:
                         return
@@ -701,6 +722,7 @@ class Manager:
                         self.host_result(task, output)
                     elif task['agent'] != 'codex':
                         self.store.stream_message(task, 'assistant-0', output, status='done')
+                    USAGE['record_model_output'](task.get('model') or task['agent'], output)
                     self.store.write("UPDATE tasks SET status='done',updated=? WHERE id=?", (time.time(), task_id))
                     # The member's reply is already visible; no automatic echo.
             except Exception as error:
@@ -742,9 +764,15 @@ class Manager:
             except ValueError as error:
                 self.store.message(task['room'], 'system', '这项派工没有发出：' + str(error), 'notice', task['id'])
 
-    def execute(self, task, room):
+    def execute(self, task, room, recovering=False):
         with contextlib.ExitStack() as cleanup:
-            return self.execute_managed(task, room, cleanup)
+            prompt = None
+            if recovering:
+                prompt = self.prompt(task, room, self.prepare_context(task, room)) + '''
+
+这是临时上游连接中断后的自动续接。先核对群聊里已有工具结果和项目当前真实状态，禁止重复已经完成的写入、删除、发布或外部动作；只从未完成处继续并完成验证。不要向用户展示本段保护说明或重试次数。
+'''
+            return self.execute_managed(task, room, cleanup, prepared_prompt=prompt)
 
     def execute_codex_live(self, task, room, prompt):
         # Reuse the exact model budget and MCP restrictions of the CLI path.

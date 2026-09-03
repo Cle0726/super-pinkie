@@ -33,12 +33,14 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme29/);
-  assert.match(installer,/laolao-sidebar\.css\?v=sidebar14/);
-  assert.match(installer,/laolao-sidebar\.js\?v=sidebar11/);
-  assert.match(installer,/laolao-session-list\.js\?v=sessions2/);
-  assert.match(installer,/laolao-deep-think\.js\?v=deepthink4/);
+  assert.match(installer,/laolao-theme\.css\?v=theme30/);
+  assert.match(installer,/laolao-sidebar\.css\?v=sidebar16/);
+  assert.match(installer,/laolao-sidebar\.js\?v=sidebar13/);
+  assert.match(installer,/laolao-session-list\.js\?v=sessions3/);
+  assert.match(installer,/laolao-deep-think\.js\?v=deepthink10/);
+  assert.match(installer,/laolao-splash\.css\?v=splash17/);
+  assert.match(installer,/laolao-splash\.js\?v=splash20/);
   assert.match(installer,/laolao-mode-switcher\.js\?v=mode25/);
-  assert.match(installer,/laolao-usage-stats\.js\?v=stats10/);
+  assert.match(installer,/laolao-usage-stats\.js\?v=stats11/);
   assert.match(installer,/s\{\"\\\.\/laolao-\}\{\"\/laolao-\}g/);
 });

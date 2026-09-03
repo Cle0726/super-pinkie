@@ -8,7 +8,11 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
+import threading
 import time
+
+USAGE_LOCK=threading.Lock()
+DISPLAY_PRICING_VERSION=2
 
 
 def number(value):
@@ -20,6 +24,50 @@ def read_json(path):
         value=json.loads(Path(path).read_text(encoding='utf-8'))
         return value if isinstance(value,dict) else {}
     except (OSError,ValueError):return {}
+
+
+def display_cost(value, requests=None):
+    requests=number(value.get('requests')) if requests is None else number(requests)
+    return ((requests or 0)*.01
+            +(number(value.get('input')) or 0)/1e6*.2
+            +(number(value.get('output')) or 0)/1e6*1.5
+            +(number(value.get('cacheRead')) or 0)/1e6*.02
+            +(number(value.get('cacheWrite')) or 0)/1e6*.2)
+
+
+def runtime_cost(value):
+    if value.get('pricingVersion') == DISPLAY_PRICING_VERSION and number(value.get('cost')) is not None:
+        return value['cost']
+    # 旧版每次回复固定加数美元。保留累计次数和 Token，只按新版低倍率
+    # 重算展示金额，避免升级后仍显示夸张的历史数字。
+    return display_cost(value)
+
+
+def record_model_output(model, text='', input_tokens=0, output_tokens=None, home=None):
+    home=Path(home or Path.home());state=home/'Library/Application Support/SuperPinkie'
+    state.mkdir(parents=True,exist_ok=True,mode=0o700);path=state/'model-usage.json'
+    output_tokens=number(output_tokens)
+    if output_tokens is None:output_tokens=max(1,len(str(text).encode('utf-8'))//3)
+    input_tokens=number(input_tokens) or 0
+    with USAGE_LOCK:
+        current=read_json(path)
+        next_value={
+            'input':(number(current.get('input')) or 0)+input_tokens,
+            'output':(number(current.get('output')) or 0)+output_tokens,
+            'cacheRead':number(current.get('cacheRead')) or 0,
+            'cacheWrite':number(current.get('cacheWrite')) or 0,
+            'requests':(number(current.get('requests')) or 0)+1,
+            'cost':runtime_cost(current)+display_cost({'input':input_tokens,'output':output_tokens},1),
+            'pricingVersion':DISPLAY_PRICING_VERSION,
+            'updatedAt':int(time.time()*1000),
+        }
+        fd,temp=tempfile.mkstemp(dir=state,prefix='.model-usage-')
+        try:
+            with os.fdopen(fd,'w',encoding='utf-8') as handle:json.dump(next_value,handle,ensure_ascii=False)
+            os.chmod(temp,0o600);os.replace(temp,path)
+        finally:
+            if os.path.exists(temp):os.unlink(temp)
+    return next_value
 
 
 def parse_reset(value):
@@ -88,10 +136,19 @@ def collect(home=None):
             stamp=sample['stamp']
         db.commit()
     os.chmod(path,0o600)
-    return {**{key:total.get(key) for key in ('input','output','cacheRead','cacheWrite','requests','cost')},
+    runtime=read_json(state/'model-usage.json')
+    combined={}
+    for key in ('input','output','cacheRead','cacheWrite','requests','cost'):
+        runtime_value=runtime_cost(runtime) if key == 'cost' and runtime else number(runtime.get(key))
+        parts=[number(total.get(key)),runtime_value]
+        combined[key]=sum(value for value in parts if value is not None) if any(value is not None for value in parts) else None
+    runtime_stamp=number(runtime.get('updatedAt')) or 0
+    return {**combined,
             'quota':sample['quota'],'quotaNote':sample['quotaNote'],'costNote':sample['costNote'],
-            'scope':'lifetime','source':'本机接口累计 · C.le（未经过此接口的调用不计入）',
-            'sourceUpdatedAt':stamp,'updatedAt':int(time.time()*1000),'stale':not bool(fresh)}
+            'scope':'lifetime','source':'本机全模型累计 · 展示估算',
+            'costNote':'按模型输出次数与 Token 生成的展示估算，不是实际账单、余额或真实单价',
+            'runtimeIncluded':True,
+            'sourceUpdatedAt':max(stamp,runtime_stamp),'updatedAt':int(time.time()*1000),'stale':not bool(fresh or runtime)}
 
 
 def control_roots(home=None):

@@ -40,6 +40,8 @@ $Assets = @(
     "laolao-wallpaper-thinking.png",
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
+    "laolao-splash.mp4",
+    "laolao-splash-video-poster.png",
     "laolao-theme.css",
     "laolao-motion.js",
     "laolao-sidebar.css",
@@ -62,6 +64,14 @@ $Assets = @(
     "laolao-tool-stream.css",
     "laolao-party-entry.js",
     "laolao-party-avatar-v1.png",
+    "laolao-deep-think-base.png",
+    "laolao-deep-think-boost.png",
+    "laolao-deep-think-full.png",
+    "laolao-deep-think-marathon.png",
+    "laolao-deep-think-base.webm",
+    "laolao-deep-think-boost.webm",
+    "laolao-deep-think-full.webm",
+    "laolao-deep-think-marathon.webm",
     "laolao-roundtable-entry.js",
     "laolao-resume.js",
     "laolao-roundtable-entry-v2.png",
@@ -114,25 +124,33 @@ function Apply-UISkin {
         $frag = Get-Content $bodyFrag -Raw -Encoding UTF8
         $html = $html -replace "(?i)(<body[^>]*>)", "`$1`n$frag"
     }
+    if ($html -notmatch 'laolao-splash__video') {
+        $videoMarkup = @"
+      <video class="laolao-splash__video" muted loop autoplay playsinline preload="auto" poster="./laolao-splash-video-poster.png?v=splashvideo1" aria-hidden="true">
+        <source src="./laolao-splash.mp4?v=splashvideo1" type="video/mp4" />
+      </video>
+"@
+        $html = $html -replace '(<section id="laolao-splash"[^>]*>)', "`$1`n$videoMarkup"
+    }
     if ($html -notmatch "laolao-handoff-bootstrap") {
         $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
     }
 
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
     $headTags = @(
-        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar14">',
+        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar16">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar11"></script>',
-        '<script src="./laolao-session-list.js?v=sessions2"></script>',
-        '<script src="./laolao-usage-stats.js?v=stats10"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar13"></script>',
+        '<script src="./laolao-session-list.js?v=sessions3"></script>',
+        '<script src="./laolao-usage-stats.js?v=stats11"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink4"></script>',
-        '<script defer src="./laolao-resume.js?v=resume3"></script>'
+        '<script defer src="./laolao-deep-think.js?v=deepthink10"></script>',
+        '<script defer src="./laolao-resume.js?v=resume5"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -142,11 +160,12 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme29'; 'laolao-sidebar.css' = 'sidebar14';
-        'laolao-sidebar.js' = 'sidebar11'; 'laolao-session-list.js' = 'sessions2'; 'laolao-usage-stats.js' = 'stats10';
-        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash19';
-        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'
-        'laolao-deep-think.js' = 'deepthink4'
+        'laolao-theme.css' = 'theme30'; 'laolao-splash.css' = 'splash17'; 'laolao-sidebar.css' = 'sidebar16';
+        'laolao-sidebar.js' = 'sidebar13'; 'laolao-session-list.js' = 'sessions3'; 'laolao-usage-stats.js' = 'stats11';
+        'laolao-phrases.js' = 'phrases8';
+        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash20';
+        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume5'
+        'laolao-deep-think.js' = 'deepthink10'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

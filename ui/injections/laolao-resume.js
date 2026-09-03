@@ -10,6 +10,8 @@
   // 回到前台时重新拉取当前会话消息, 并把"生成中"状态复位为真实状态。
 
   const $ = (sel) => document.querySelector(sel);
+  const STOP_SELECTOR = '[aria-label*="停止"], [aria-label*="Stop"], [data-testid*="stop"], .chat-composer__stop, .chat-send-btn--stop';
+  let syntheticStop = false;
 
   // 从 gateway 客户端拿当前会话 key (与 sidebar 一致)
   const currentSessionKey = () => {
@@ -28,9 +30,7 @@
   // 正在生成中的判定: 发送按钮禁用 / 停止按钮可见 / 流式进行中
   const isBusy = () => {
     if (document.querySelector('[data-laolao-streaming="true"]')) return true;
-    const stopBtn = document.querySelector(
-      '[aria-label*="停止"], [aria-label*="Stop"], [data-testid*="stop"], .chat-composer__stop'
-    );
+    const stopBtn = document.querySelector(STOP_SELECTOR);
     if (stopBtn && stopBtn.offsetParent !== null) return true;
     const sendBtn = document.querySelector(
       '[aria-label*="发送"], [aria-label*="Send"], [data-testid*="send"]'
@@ -41,12 +41,11 @@
 
   // 复位前端"生成中"状态: 触发停止按钮点击(若有), 恢复输入框可用
   const resetBusyState = () => {
-    const stopBtn = document.querySelector(
-      '[aria-label*="停止"], [aria-label*="Stop"], [data-testid*="stop"], .chat-composer__stop'
-    );
+    const stopBtn = document.querySelector(STOP_SELECTOR);
     if (stopBtn && stopBtn.offsetParent !== null) {
       // 点击停止按钮让前端自身状态机收敛
-      stopBtn.click();
+      syntheticStop = true;
+      try { stopBtn.click(); } finally { syntheticStop = false; }
     }
     document.documentElement.removeAttribute("data-laolao-streaming");
   };
@@ -63,7 +62,7 @@
       } else if (typeof gateway.snapshot?.refresh === "function") {
         await gateway.snapshot.refresh();
       } else {
-        await gateway.request?.("session.list", {});
+        await gateway.request?.("sessions.list", {});
       }
     } catch {}
   };
@@ -84,6 +83,42 @@
       window.dispatchEvent(new CustomEvent("pinkie:session-resynced"));
     }, delay);
   };
+
+  // 上游失败卡出现时，原生状态机偶尔仍保留“生成中”并卸下输入区。
+  // 先结束已经失败的旧状态，再让网关快照把真正的 composer 装回来；
+  // 看门狗的新一轮会在稍后独立启动，不会依赖这个前端状态。
+  let failureRecoveryTimer = null;
+  const onRunFailure = () => {
+    clearTimeout(failureRecoveryTimer);
+    resetBusyState();
+    void refreshSession();
+    failureRecoveryTimer = window.setTimeout(async () => {
+      await refreshSession();
+      window.dispatchEvent(new CustomEvent("pinkie:session-resynced"));
+    }, 700);
+  };
+  window.addEventListener("pinkie:run-failed", onRunFailure);
+
+  // 用户主动点停止时，只取消这一轮自动续接。故障恢复流程内部为了复位
+  // 状态机触发的合成点击不会误伤看门狗。
+  document.addEventListener('click', (event) => {
+    if (syntheticStop || !(event.target instanceof Element)) return;
+    if (!event.target.closest(STOP_SELECTOR)) return;
+    const sessionKey = currentSessionKey();
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (sessionKey && typeof rpc === 'function') {
+      void rpc('pinkie.watchdog.cancel', {sessionKey}, 5000).catch(()=>{});
+    }
+  }, true);
+
+  // 不造一个假的输入框；只要聊天路由的真实 composer 意外掉线，就低频
+  // 请求原生界面重新同步。这样发送、录音、附件和模型选择仍是原功能。
+  window.setTimeout(() => {
+    window.setInterval(() => {
+      if (document.hidden || !location.pathname.startsWith("/chat")) return;
+      if (!document.querySelector(".agent-chat__composer-combobox textarea")) void refreshSession();
+    }, 2500);
+  }, 8000);
 
   // 标记流式状态 (由其它注入或页面事件维护)
   document.addEventListener("laolao:streaming", (e) => {
