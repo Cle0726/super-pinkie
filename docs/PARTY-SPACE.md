@@ -74,7 +74,7 @@ python3 services/party/server.py --port 18889
 ```
 
 开发预览可以使用其他端口及 `--state-dir` 临时目录，以免污染正式记录。
-当前原生打包入口限 macOS；Windows 桌面壳尚未接入派对服务，不能把本版称为 Windows 功能已完成。
+macOS App 与 Windows EXE 都会随桌面壳启动派对服务；Windows 版使用内置运行时和本机独立记录目录，不要求全局安装 OpenClaw。
 
 角色图以用户选定的原图为基础：原图另外保留，三件套不改变小皇冠、无项链和蹄饰的设定。
 

@@ -37,6 +37,7 @@ const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelle
 const WATCHDOG_MESSAGE = '\u2063';
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
 const DISPLAY_PRICING_VERSION = 2;
+const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
 
 function tierControlMessage(status = {}) {
   if (status.complete) {
@@ -168,7 +169,7 @@ export class FileRunStore {
 }
 
 export class ModelUsageLedger {
-  constructor(file = path.join(os.homedir(), 'Library/Application Support/SuperPinkie/model-usage.json')) {
+  constructor(file = path.join(pinkieStateRoot(), 'model-usage.json')) {
     this.file = file;
   }
 

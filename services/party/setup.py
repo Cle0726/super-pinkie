@@ -9,6 +9,10 @@ import time
 IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(encoding='utf-8'))
 
 
+def state_root(home):
+    return Path(os.environ.get('PINKIE_STATE_ROOT', home / 'Library/Application Support/SuperPinkie'))
+
+
 def party_soul(name, address='铲屎官'):
     return (f'# {name} · 派对群聊\n\n' + IDENTITIES['instruction'].format(name=name) +
             f'\n称呼用户为{address}。\n')
@@ -32,7 +36,7 @@ def migrate_file(home, agent_id, target, known, replacement):
     original = target.read_text(encoding='utf-8')
     if original == replacement or original not in known:
         return False
-    backup = home / 'Library/Application Support/SuperPinkie/backups' / ('party-identity-' + str(time.time_ns()))
+    backup = state_root(home) / 'backups' / ('party-identity-' + str(time.time_ns()))
     backup.mkdir(parents=True, mode=0o700)
     shutil.copy2(target, backup / (agent_id + '-' + target.name))
     if target.read_text(encoding='utf-8') != original:
@@ -87,7 +91,7 @@ def install(home=None):
         changed = True
     if not changed:
         return migrated
-    backup = home / 'Library/Application Support/SuperPinkie/backups' / ('party-' + str(time.time_ns()))
+    backup = state_root(home) / 'backups' / ('party-' + str(time.time_ns()))
     backup.mkdir(parents=True, mode=0o700)
     shutil.copy2(config, backup / 'openclaw.json')
     # Do not overwrite a simultaneous config edit.

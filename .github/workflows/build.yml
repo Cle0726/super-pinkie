@@ -34,20 +34,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
       - name: Build .exe
-        run: pyinstaller --noconfirm --windowed --onefile --name "超級碧琪" --add-data "prompts;prompts" --add-data "proxy/ur-rewrite-proxy.py;proxy" app/super_pinkie.py
+        shell: pwsh
+        run: .\build-win.ps1
       - name: Pack .exe
         shell: pwsh
         run: Compress-Archive -LiteralPath "dist/超級碧琪.exe" -DestinationPath "dist/super-pinkie-control-windows.zip" -Force
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 超級碧琪-windows
+          name: 超級碧琪-windows-self-contained
           path: |
             dist/超級碧琪.exe
             dist/super-pinkie-control-windows.zip

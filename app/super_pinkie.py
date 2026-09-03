@@ -22,6 +22,7 @@ import importlib.util
 import shutil
 import subprocess
 import threading
+import time
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -45,8 +46,33 @@ def resource_path(*parts):
     return Path(__file__).resolve().parent.parent.joinpath(*parts)
 
 
+def bundled_runtime_root():
+    root = resource_path("runtime")
+    return root if (root / "bin/node.exe").is_file() and (root / "node_modules/openclaw/openclaw.mjs").is_file() else None
+
+
+def node_command(*arguments):
+    runtime = bundled_runtime_root()
+    binary = runtime / "bin/node.exe" if runtime else Path(shutil.which("node") or "node")
+    return [str(binary), *map(str, arguments)]
+
+
+def openclaw_command(*arguments):
+    runtime = bundled_runtime_root()
+    if runtime:
+        return [str(runtime / "bin/node.exe"), str(runtime / "node_modules/openclaw/openclaw.mjs"), *map(str, arguments)]
+    return ["openclaw", *map(str, arguments)]
+
+
 def prompts_dir():
     return Path(os.environ.get("UR_PROMPTS_DIR", Path.home() / ".openclaw"))
+
+
+def windows_state_root():
+    base = os.environ.get("LOCALAPPDATA")
+    if base:
+        return Path(base) / "SuperPinkie"
+    return Path.home() / "Library/Application Support/SuperPinkie"
 
 
 def openclaw_config_path():
@@ -57,7 +83,7 @@ def openclaw_config_path():
 def check_node():
     """检测 node 是否可用，返回版本号或 None"""
     try:
-        res = subprocess.run(["node", "-v"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run(node_command("-v"), capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -67,6 +93,8 @@ def check_node():
 
 def check_npm():
     """检测 npm 是否可用，返回版本号或 None"""
+    if bundled_runtime_root():
+        return "内置运行时"
     try:
         res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
@@ -79,7 +107,7 @@ def check_npm():
 def check_openclaw_cli():
     """检测 openclaw CLI 是否可用"""
     try:
-        res = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run(openclaw_command("--version"), capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -132,14 +160,26 @@ def install_openclaw_npm(log):
 
 
 # ---------------------------------------------------------------- 提示词安装
-def ensure_prompts(log):
+def ensure_prompts(log, preserve_existing=False):
     src = resource_path("prompts")
     dst = prompts_dir()
     dst.mkdir(parents=True, exist_ok=True)
     n = 0
     if src.exists():
         for f in sorted(src.glob("unrestricted-prompt-*.txt")):
-            shutil.copyfile(f, dst / f.name)
+            target = dst / f.name
+            if target.exists() and target.read_bytes() == f.read_bytes():
+                n += 1
+                continue
+            if preserve_existing and target.exists():
+                log(f"  保留已有提示词: {target.name}")
+                n += 1
+                continue
+            if target.exists():
+                backup = windows_state_root() / "backups" / ("prompts-" + time.strftime("%Y%m%d-%H%M%S"))
+                backup.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(target, backup / target.name)
+            shutil.copyfile(f, target)
             n += 1
     log(f"提示词已安装: {n} 个 -> {dst}")
     return n
@@ -206,6 +246,9 @@ AI_CALL_NEW = "\t\t\tconst nextParams = await options?.onPayload?.(params, model
 
 
 def resolve_openclaw_root():
+    runtime = bundled_runtime_root()
+    if runtime:
+        return str(runtime / "node_modules/openclaw")
     env = os.environ.get("OPENCLAW_ROOT")
     if env and os.path.isdir(env):
         return env
@@ -351,7 +394,7 @@ def apply_patch(remove, log):
             p = resource_path("patch", extra)
             if p.exists():
                 try:
-                    subprocess.run(["node", str(p)], capture_output=True, text=True, timeout=10)
+                    subprocess.run(node_command(str(p)), capture_output=True, text=True, timeout=10)
                     log(f"  补丁扩展 {extra}: 已应用")
                 except Exception:
                     pass
@@ -359,7 +402,7 @@ def apply_patch(remove, log):
 
 
 # ---------------------------------------------------------------- 人格文件安装
-def install_personas(log):
+def install_personas(log, preserve_existing=False):
     log("==> 正在安装四模式人格文件...")
     home = Path.home()
     mapping = {
@@ -369,6 +412,7 @@ def install_personas(log):
         "neutral": home / ".openclaw" / "workspace-unrestricted"
     }
     src_root = resource_path("personas")
+    backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
     for mode, target in mapping.items():
         src_mode = src_root / mode
         if src_mode.exists():
@@ -377,20 +421,30 @@ def install_personas(log):
                 src_file = src_mode / fname
                 if src_file.exists():
                     dst_file = target / fname
+                    if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
+                        continue
+                    if preserve_existing and dst_file.exists():
+                        continue
                     if dst_file.exists():
-                        bak_dir = target / "backups"
+                        bak_dir = backup_root / mode
                         bak_dir.mkdir(parents=True, exist_ok=True)
-                        shutil.copyfile(dst_file, bak_dir / f"{fname}.bak")
+                        shutil.copy2(dst_file, bak_dir / fname)
                     shutil.copyfile(src_file, dst_file)
             log(f"  [{mode}] 人格文件 -> {target}")
     
-    # 尝试注册 project agent
+    # 固定保留既有 agent id；只补齐缺少的三个模式，不改现有模型与工作区。
     try:
-        res = subprocess.run(["openclaw", "agents", "list", "--json"], capture_output=True, text=True, timeout=5)
-        if "project" not in res.stdout:
-            subprocess.run(["openclaw", "agents", "add", "project", "--non-interactive", "--workspace", str(home / ".openclaw" / "workspace-project")], capture_output=True, timeout=5)
-            log("  已自动注册 project agent")
-        subprocess.run(["openclaw", "agents", "set-identity", "--agent", "project", "--identity-file", str(home / ".openclaw" / "workspace-project" / "IDENTITY.md")], capture_output=True, timeout=5)
+        res = subprocess.run(openclaw_command("agents", "list", "--json"), capture_output=True, text=True, timeout=12)
+        existing = {item.get("id") for item in json.loads(res.stdout or "[]") if isinstance(item, dict)}
+        for agent_id, workspace in {
+            "project": home / ".openclaw/workspace-project",
+            "thinking": home / ".openclaw/workspace-thinking",
+            "unrestricted": home / ".openclaw/workspace-unrestricted",
+        }.items():
+            if agent_id not in existing:
+                subprocess.run(openclaw_command("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), capture_output=True, timeout=15)
+                log(f"  已补齐 {agent_id} 模式")
+            subprocess.run(openclaw_command("agents", "set-identity", "--agent", agent_id, "--identity-file", workspace / "IDENTITY.md"), capture_output=True, timeout=12)
     except Exception:
         pass
 
@@ -560,7 +614,7 @@ def restart_openclaw_gateway(log):
     """重启 OpenClaw 网关"""
     log("==> 正在重启 OpenClaw Gateway...")
     try:
-        res = subprocess.run(["openclaw", "gateway", "restart"], capture_output=True, text=True, timeout=10)
+        res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10)
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
     except Exception as e:
         log(f"  重启网关失败（可能尚未启动或未安装到 PATH）: {e}")
@@ -618,7 +672,33 @@ def make_button(parent, text, command, big=False, color=None):
     )
 
 
-def main():
+def prepare_bundled_desktop(log):
+    state = windows_state_root()
+    state.mkdir(parents=True, exist_ok=True)
+    config = openclaw_config_path()
+    if not config.exists():
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text("{}\n", encoding="utf-8")
+        try:
+            os.chmod(config, 0o600)
+        except OSError:
+            pass
+
+    version_file = resource_path("VERSION")
+    version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else "current"
+    marker = state / f"bundled-setup-{version}"
+    if not marker.exists():
+        # Packaged App only fills missing defaults. Existing user-authored
+        # prompts/personas are valuable state and are never reverted on launch.
+        ensure_prompts(log, preserve_existing=True)
+        install_personas(log, preserve_existing=True)
+        marker.write_text("preserved\n", encoding="utf-8")
+
+    for service in ("party", "context", "project-scope", "mode-architecture"):
+        install_runtime_service(service, log)
+
+
+def run_control_center():
     if tk is None:
         print("需要 tkinter 环境运行 GUI。")
         return
@@ -806,6 +886,14 @@ def main():
     log("初次使用请在上方点击「🌟 一键全量安装 / 修复」，然后在「API Key 配置」输入 Key 即可！")
     refresh_status()
     root.mainloop()
+
+
+def main():
+    if os.name == "nt" and getattr(sys, "frozen", False) and bundled_runtime_root() and "--control-center" not in sys.argv:
+        from windows_desktop import run_desktop
+        run_desktop(resource_path(), prepare_bundled_desktop)
+        return
+    run_control_center()
 
 
 if __name__ == "__main__":

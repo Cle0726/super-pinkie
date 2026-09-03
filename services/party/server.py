@@ -12,7 +12,6 @@ from pathlib import Path
 import re
 import runpy
 import secrets
-import selectors
 import shutil
 import signal
 import sqlite3
@@ -27,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTEXT = runpy.run_path(str(ROOT/'services/context/context_budget.py'))
 USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
+PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'OpenClaw',
           'claude': 'Claude', 'gemini': 'Gemini', 'ollama': 'Ollama'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
@@ -50,7 +50,7 @@ def codex_models():
     if not binary:
         raise ValueError('Codex 尚未安装')
     process = subprocess.Popen([binary, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, env=runtime_environment(), start_new_session=True)
+                               stderr=subprocess.DEVNULL, env=runtime_environment(), **PROCESS['popen_group_kwargs']())
     def send(value):
         process.stdin.write((json.dumps(value) + '\n').encode())
         process.stdin.flush()
@@ -58,25 +58,23 @@ def codex_models():
         send({'id': 1, 'method': 'initialize', 'params': {'clientInfo': {'name': 'super_pinkie', 'version': '2.1.0'}}})
         deadline = time.monotonic() + 8
         buffer = b''
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            while time.monotonic() < deadline:
-                for key, _ in selector.select(.2):
-                    chunk = os.read(key.fileobj.fileno(), 65536)
-                    if not chunk:
-                        raise ValueError('Codex 模型服务已断开')
-                    buffer += chunk
-                    while b'\n' in buffer:
-                        line, buffer = buffer.split(b'\n', 1)
-                        event = json.loads(line)
-                        if event.get('error'):
-                            raise ValueError('Codex 模型列表暂时不可用')
-                        if event.get('id') == 1:
-                            send({'method': 'initialized', 'params': {}})
-                            send({'id': 2, 'method': 'model/list', 'params': {'limit': 100, 'includeHidden': False}})
-                        if event.get('id') == 2:
-                            return [{'id': item['model'], 'name': item.get('displayName', item['model'])}
-                                    for item in event['result']['data'] if not item.get('hidden')]
+        for _, chunk in PROCESS['iter_process_output'](process, {'out': process.stdout}, .2):
+            if time.monotonic() >= deadline:
+                break
+            if not chunk:
+                continue
+            buffer += chunk
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                event = json.loads(line)
+                if event.get('error'):
+                    raise ValueError('Codex 模型列表暂时不可用')
+                if event.get('id') == 1:
+                    send({'method': 'initialized', 'params': {}})
+                    send({'id': 2, 'method': 'model/list', 'params': {'limit': 100, 'includeHidden': False}})
+                if event.get('id') == 2:
+                    return [{'id': item['model'], 'name': item.get('displayName', item['model'])}
+                            for item in event['result']['data'] if not item.get('hidden')]
         raise ValueError('Codex 模型列表读取超时')
     finally:
         if process.poll() is None:
@@ -103,7 +101,7 @@ def model_catalog(force=False):
             binary = executable('openclaw')
             if not binary:
                 raise ValueError('未安装')
-            response = subprocess.run([binary, 'models', 'list', '--json'], capture_output=True,
+            response = subprocess.run(openclaw_command('models', 'list', '--json'), capture_output=True,
                                       text=True, timeout=10, env=runtime_environment(), check=True)
             parsed = json.loads(response.stdout)
             config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
@@ -126,6 +124,14 @@ def redact(text):
 
 
 def executable(name):
+    if name == 'openclaw':
+        bundled = os.environ.get('PINKIE_OPENCLAW_ENTRY', '')
+        if bundled and Path(bundled).is_file():
+            return bundled
+    if name == 'node':
+        bundled = os.environ.get('PINKIE_NODE_BIN', '')
+        if bundled and Path(bundled).is_file():
+            return bundled
     found = shutil.which(name)
     if found:
         return found
@@ -146,6 +152,24 @@ def runtime_environment():
         environment['PATH'] = str(Path(node).parent) + os.pathsep + environment.get('PATH', '/usr/bin:/bin:/usr/sbin:/sbin')
     environment.pop('CLAUDECODE', None)
     return environment
+
+
+def openclaw_command(*arguments):
+    entry = executable('openclaw')
+    if not entry:
+        return []
+    bundled = os.environ.get('PINKIE_OPENCLAW_ENTRY', '')
+    if bundled and Path(bundled).is_file():
+        node = executable('node')
+        if not node:
+            return []
+        return [node, bundled, *arguments]
+    return [entry, *arguments]
+
+
+def is_openclaw_command(command):
+    entry = executable('openclaw')
+    return bool(command and entry and (command[0] == entry or entry in command[:3]))
 
 
 def openclaw_ready(agent_id):
@@ -565,15 +589,7 @@ class Manager:
 
     @staticmethod
     def kill(process):
-        with contextlib.suppress(ProcessLookupError, OSError):
-            os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            with contextlib.suppress(ProcessLookupError, OSError):
-                os.killpg(process.pid, signal.SIGKILL)
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=2)
+        PROCESS['stop_process_tree'](process, 2)
 
     def command(self, task, room):
         if task['agent'] == 'codex':
@@ -592,8 +608,8 @@ class Manager:
         agent_id = 'pinkie-party' if task['agent'] == 'pinkie' else 'party-openclaw'
         if not openclaw_ready(agent_id):
             raise ValueError('群聊 Agent 的工具隔离配置不符合要求，已停止执行')
-        return [executable('openclaw'), 'agent', '--local', '--agent', agent_id,
-                '--session-id', str(uuid.uuid4()), '--json', '--timeout', '180', '--message-file']
+        return openclaw_command('agent', '--local', '--agent', agent_id,
+                                '--session-id', str(uuid.uuid4()), '--json', '--timeout', '180', '--message-file')
 
     def prompt(self, task, room, context=None):
         common = IDENTITIES['instruction'].format(name=CHARACTERS[task['agent']]) + '\n'
@@ -632,7 +648,7 @@ class Manager:
         away, plus the prior checkpoint state, indexed by room/model/time.
         """
         try:
-            base=Path.home()/'Library/Application Support/SuperPinkie/context-archives'
+            base=Path(os.environ.get('PINKIE_STATE_ROOT', Path.home()/'Library/Application Support/SuperPinkie'))/'context-archives'
             base.mkdir(parents=True,exist_ok=True,mode=0o700)
             safe=lambda s:re.sub(r'[^A-Za-z0-9._-]','_',str(s))[:64] or 'unknown'
             name=f"{safe(room['id'])}_{safe(model)}_{time.time_ns()}.json"
@@ -772,7 +788,7 @@ class Manager:
             if value=='-c':command += ['-c',previous[i+1]]
         command += ['-c','project_doc_max_bytes=0','-c','features.multi_agent=false']
         process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-                                 cwd=room['path'],env=runtime_environment(),start_new_session=True)
+                                 cwd=room['path'],env=runtime_environment(),**PROCESS['popen_group_kwargs']())
         live=LIVE['LiveItems'](self.store,task,redact)
         thread_id=None
         def send(value):
@@ -784,18 +800,12 @@ class Manager:
             send({'id':1,'method':'initialize','params':{'clientInfo':{'name':'super_pinkie_party','version':'2.2.0'}}})
             deadline=time.monotonic()+240
             buffer=b'';errors=b'';received=0
-            with selectors.DefaultSelector() as selector:
-                selector.register(process.stdout,selectors.EVENT_READ,'out')
-                selector.register(process.stderr,selectors.EVENT_READ,'err')
-                while time.monotonic()<deadline:
+            for stream,chunk in PROCESS['iter_process_output'](process, {'out':process.stdout,'err':process.stderr}, .15):
+                    if time.monotonic()>=deadline:break
                     if self.store.task(task['id'])['status'] in TERMINAL:return ''
-                    for key,_ in selector.select(.15):
-                        chunk=os.read(key.fileobj.fileno(),65536)
-                        if not chunk:
-                            selector.unregister(key.fileobj)
-                            if key.data=='out':raise ValueError('实时连接中断；已有输出保留，没有重复执行任务。')
-                            continue
-                        if key.data=='err':errors=(errors+chunk)[-5000:];continue
+                    if not chunk:continue
+                    if stream=='err':errors=(errors+chunk)[-5000:];continue
+                    if stream=='out':
                         received+=len(chunk)
                         if received>8000000:raise ValueError('工具输出过大，已停止，现有记录保留。')
                         buffer+=chunk
@@ -833,7 +843,7 @@ class Manager:
                                         raise ValueError((turn.get('error') or {}).get('message') or '任务没有完成；已有输出保留。')
                                     live.finish()
                                     return live.final
-                raise ValueError('等待超过 4 分钟，已停止；没有自动重复执行。')
+            raise ValueError('等待超过 4 分钟，已停止；没有自动重复执行。')
         finally:
             if process.poll() is None:self.kill(process)
             for handle in (process.stdin,process.stdout,process.stderr):handle.close()
@@ -848,9 +858,10 @@ class Manager:
             return self.execute_codex_live(task,room,prompt)
         environment = runtime_environment()
         live = None if internal else LIVE['LiveItems'](self.store,task,redact)
-        if task['agent']!='codex' and not internal and Path(command[0]).stem=='openclaw':
-            entry=command[0]
-            command=[executable('node'),'--import',str(Path(__file__).with_name('openclaw-live.mjs')),str(Path(entry).resolve())]+command[1:]
+        if task['agent']!='codex' and not internal and is_openclaw_command(command):
+            entry=executable('openclaw')
+            prefix=openclaw_command()
+            command=[executable('node'),'--import',str(Path(__file__).with_name('openclaw-live.mjs')),str(Path(entry).resolve())]+command[len(prefix):]
             environment['PINKIE_LIVE_ENTRY']=entry
         # OpenClaw's message-file path keeps private group messages out of argv/ps listings.
         input_path = None
@@ -877,7 +888,7 @@ class Manager:
         process = None
         try:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       cwd=room['path'], env=environment, start_new_session=True)
+                                       cwd=room['path'], env=environment, **PROCESS['popen_group_kwargs']())
             with self.lock:
                 self.processes[task['id']] = process
                 if self.store.task(task['id'])['status'] in TERMINAL:
@@ -889,24 +900,17 @@ class Manager:
             decoders = {key: codecs.getincrementaldecoder('utf-8')(errors='replace') for key in ('out', 'err')}
             received = 0
             deadline = time.monotonic() + 240
-            with selectors.DefaultSelector() as selector:
-                selector.register(process.stdout, selectors.EVENT_READ, 'out')
-                selector.register(process.stderr, selectors.EVENT_READ, 'err')
-                while selector.get_map():
+            for stream, chunk in PROCESS['iter_process_output'](process, {'out':process.stdout,'err':process.stderr}, .3):
                     if self.store.task(task['id'])['status'] in TERMINAL:
                         self.kill(process)
                         return ''
                     if time.monotonic() > deadline:
                         self.kill(process)
                         raise ValueError('等待超过 4 分钟，已停止；可重新发送，避免重复执行有副作用的任务')
-                    for key, _ in selector.select(timeout=.3):
-                        chunk = os.read(key.fileobj.fileno(), 65536)
-                        if not chunk:
-                            selector.unregister(key.fileobj)
-                            continue
+                    if chunk:
                         # Decode at JSON line boundaries to preserve multibyte Chinese chunks.
-                        decoded = decoders[key.data].decode(chunk)
-                        if key.data == 'err':
+                        decoded = decoders[stream].decode(chunk)
+                        if stream == 'err':
                             errors = (errors + decoded)[-5000:]
                         else:
                             received += len(chunk)
@@ -930,7 +934,7 @@ class Manager:
                             if received > 2000000:
                                 self.kill(process)
                                 raise ValueError('工具输出过大，已停止')
-                process.wait(timeout=5)
+            process.wait(timeout=5)
             if process.returncode != 0:
                 raise ValueError(redact(errors[-1200:] or output[-1200:] or '进程异常退出'))
             if task['agent'] == 'codex':
@@ -1134,17 +1138,20 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(503, {'error': '本机记录暂时无法保存，请检查磁盘空间后重试。'})
 
 
-def serve(port, state_dir):
+def serve(port, state_dir, on_ready=None):
     os.umask(0o077)
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     server.token = secrets.token_urlsafe(32)
     server.store = Store(state_dir)
     server.manager = Manager(server.store)
+    if on_ready:
+        on_ready(server)
     def shutdown(*_):
         server.manager.close()
         threading.Thread(target=server.shutdown, daemon=True).start()
-    signal.signal(signal.SIGTERM, shutdown)
-    signal.signal(signal.SIGINT, shutdown)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, shutdown)
+        signal.signal(signal.SIGINT, shutdown)
     print('派对服务已启动：http://127.0.0.1:' + str(server.server_port), flush=True)
     try:
         server.serve_forever()
@@ -1156,6 +1163,6 @@ def serve(port, state_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18889)
-    parser.add_argument('--state-dir', default=str(Path.home() / 'Library/Application Support/SuperPinkie/party'))
+    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT', Path.home() / 'Library/Application Support/SuperPinkie')) / 'party'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)

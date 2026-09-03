@@ -78,6 +78,7 @@ for service in party roundtable tts; do
   mkdir -p "$CONTENTS/Resources/SuperPinkie/services/$service"
   cp "$REPO_ROOT/services/$service/"*.py "$CONTENTS/Resources/SuperPinkie/services/$service/"
 done
+cp "$REPO_ROOT/services/process_io.py" "$CONTENTS/Resources/SuperPinkie/services/process_io.py"
 cp "$REPO_ROOT/services/party/identities.json" "$CONTENTS/Resources/SuperPinkie/services/party/identities.json"
 cp "$REPO_ROOT/services/party/openclaw-live.mjs" "$CONTENTS/Resources/SuperPinkie/services/party/openclaw-live.mjs"
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/context"

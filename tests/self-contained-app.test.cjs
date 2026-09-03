@@ -13,6 +13,7 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(build, /RUNTIME_ROOT\/python/);
   assert.match(build, /RUNTIME_ROOT\/bin\/node/);
   assert.match(build, /RUNTIME_ROOT\/bin\/npm/);
+  assert.match(build, /services\/process_io\.py/);
   assert.match(launcher, /openclaw\/openclaw\.mjs/);
   assert.match(launcher, /python\/bin\/python3/);
   assert.match(launcher, /task\.executableURL = node/);

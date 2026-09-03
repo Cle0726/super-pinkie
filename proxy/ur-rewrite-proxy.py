@@ -295,12 +295,21 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
         print("ur-proxy:", format_string % args, flush=True)
 
 
-def main():
+def serve(port=LISTEN_PORT, on_ready=None):
     global LISTEN_PORT
-    if len(sys.argv) > 1:
-        LISTEN_PORT = int(sys.argv[1])
+    LISTEN_PORT = int(port)
+    server = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), UrRewriteProxyHandler)
+    if on_ready:
+        on_ready(server)
     print(f"ur-rewrite-proxy listening on {LISTEN_HOST}:{LISTEN_PORT} -> {UPSTREAM_HOST}:{UPSTREAM_PORT}", flush=True)
-    ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), UrRewriteProxyHandler).serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+def main():
+    serve(sys.argv[1] if len(sys.argv) > 1 else LISTEN_PORT)
 
 
 if __name__ == "__main__":

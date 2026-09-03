@@ -15,6 +15,11 @@ USAGE_LOCK=threading.Lock()
 DISPLAY_PRICING_VERSION=2
 
 
+def state_root(home=None):
+    configured=os.environ.get('PINKIE_STATE_ROOT')
+    return Path(configured) if configured else Path(home or Path.home())/'Library/Application Support/SuperPinkie'
+
+
 def number(value):
     return value if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and value>=0 else None
 
@@ -44,7 +49,7 @@ def runtime_cost(value):
 
 
 def record_model_output(model, text='', input_tokens=0, output_tokens=None, home=None):
-    home=Path(home or Path.home());state=home/'Library/Application Support/SuperPinkie'
+    home=Path(home or Path.home());state=state_root(home)
     state.mkdir(parents=True,exist_ok=True,mode=0o700);path=state/'model-usage.json'
     output_tokens=number(output_tokens)
     if output_tokens is None:output_tokens=max(1,len(str(text).encode('utf-8'))//3)
@@ -115,7 +120,7 @@ def snapshot(home=None):
 
 
 def collect(home=None):
-    home=Path(home or Path.home());state=home/'Library/Application Support/SuperPinkie'
+    home=Path(home or Path.home());state=state_root(home)
     state.mkdir(parents=True,exist_ok=True,mode=0o700)
     path=state/'usage.sqlite3';sample=snapshot(home)
     with closing(sqlite3.connect(str(path),timeout=10)) as db:

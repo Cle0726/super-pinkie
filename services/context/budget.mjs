@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const stateRoot = process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
+
 export function compactionBudget(window) {
   let policy = {};
   try {
-    policy = JSON.parse(fs.readFileSync(path.join(os.homedir(), 'Library/Application Support/SuperPinkie/context-policy.json'), 'utf8'));
+    policy = JSON.parse(fs.readFileSync(path.join(stateRoot, 'context-policy.json'), 'utf8'));
   } catch {}
 
   // 所有模式使用同一条硬边界：实际窗口到 85% 才允许压缩。

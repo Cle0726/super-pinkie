@@ -162,7 +162,8 @@ def install(home=None) -> bool:
     source = Path(__file__).resolve().parent
     repo_root = source.parents[1]
     extension = home / ".openclaw/extensions/pinkie-mode-architecture"
-    backup_root = home / "Library/Application Support/SuperPinkie/backups" / ("mode-architecture-" + str(time.time_ns()))
+    state = Path(os.environ.get("PINKIE_STATE_ROOT", home / "Library/Application Support/SuperPinkie"))
+    backup_root = state / "backups" / ("mode-architecture-" + str(time.time_ns()))
     changed = False
 
     for name in ("index.mjs", "package.json", "openclaw.plugin.json"):

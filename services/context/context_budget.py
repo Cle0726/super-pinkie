@@ -1,6 +1,7 @@
 """Model-scoped context limits. Never infer a provider's limit from a name alone."""
 import json
 import math
+import os
 from pathlib import Path
 import re
 
@@ -16,10 +17,15 @@ def read_json(path, default=None):
         return {} if default is None else default
 
 
+def state_root(home=None):
+    configured = os.environ.get('PINKIE_STATE_ROOT')
+    return Path(configured) if configured else Path(home or Path.home())/'Library/Application Support/SuperPinkie'
+
+
 def policy(home=None):
     home = Path(home or Path.home())
     base = read_json(Path(__file__).with_name('policy.json'))
-    base.update(read_json(home/'Library/Application Support/SuperPinkie/context-policy.json'))
+    base.update(read_json(state_root(home)/'context-policy.json'))
     # One global boundary: never compact a healthy conversation before 85%.
     # Local policy can still tune retention and known model windows, but it
     # cannot silently move the trigger earlier or later than this boundary.
@@ -70,7 +76,7 @@ def model_budget(ref, config=None, home=None):
     override = positive(rules['modelLimits'].get(ref))
     configured = positive(entry.get('contextTokens')) or positive(entry.get('contextWindow'))
     limit, source = (override, 'override') if override else (configured, 'provider-config')
-    installed = read_json(home/'Library/Application Support/SuperPinkie/context-limits.json').get(ref,{})
+    installed = read_json(state_root(home)/'context-limits.json').get(ref,{})
     if not override and configured == installed.get('window') and installed.get('source') == 'conservative-fallback':
         source = 'conservative-fallback'
     # Only the actual local Codex CLI uses its account-specific metadata. A

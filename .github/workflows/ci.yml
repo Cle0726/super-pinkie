@@ -20,6 +20,8 @@ jobs:
         run: find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Check sidebar mode isolation
         run: node tests/sidebar-mode-isolation.test.mjs
+      - name: Check self-contained Windows desktop contract
+        run: node --test tests/windows-self-contained.test.cjs
       - name: Check party chat isolation and execution lifecycle
         run: |
           python -m unittest discover -s tests -p '*_test.py' -v
@@ -40,7 +42,7 @@ jobs:
       - name: Check shell scripts
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
       - name: Check Python services
-        run: python -m py_compile services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py
+        run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
       - name: Confirm personality files are present
         run: |
           test -s personas/chat/SOUL.md && test -s personas/project/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
@@ -80,6 +82,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

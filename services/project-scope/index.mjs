@@ -5,6 +5,9 @@ import crypto from 'node:crypto';
 
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
 const modes = /^agent:(main|project|thinking|unrestricted):[^\s]+$/;
+const defaultStateRoot = (home, useEnvironment) => useEnvironment && process.env.PINKIE_STATE_ROOT
+  ? process.env.PINKIE_STATE_ROOT
+  : path.join(home, 'Library/Application Support/SuperPinkie');
 export const progressInstruction = '\n【工作过程展示】\n遇到需要多步执行或调用工具的任务，先用一两句说明准备做什么；实际完成关键步骤后，用一句话说明发现和下一步，然后继续工作。普通聊天和简短问答直接回答，不硬加计划或总结。说明只包含可公开的行动、证据和结果，不输出隐藏思维链，不假装调用工具，不编造进度。不要每次工具调用都复述，不重复已经给出的最终答案。保持当前模式原有身份、称呼、文风和用户要求；本规则不增加工具权限，也不改变上下文设置。';
 export function canonical(raw) {
   let current = path.resolve(raw), suffix = [];
@@ -18,9 +21,10 @@ export function canonical(raw) {
   return path.join(fs.realpathSync(current), ...suffix);
 }
 export class ProjectScope {
-  constructor({home=os.homedir(), stateRoot, platform=process.platform}={}) {
+  constructor(options={}) {
+    const home=options.home || os.homedir(), stateRoot=options.stateRoot, platform=options.platform || process.platform;
     this.home=home; this.platform=platform;
-    this.stateRoot=stateRoot || path.join(home,'Library/Application Support/SuperPinkie/project-scope');
+    this.stateRoot=stateRoot || path.join(defaultStateRoot(home,!Object.hasOwn(options,'home')),'project-scope');
     this.file=path.join(this.stateRoot,'bindings.json');
     this.inheritedBindings=new Map();
   }

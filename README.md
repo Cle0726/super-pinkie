@@ -18,21 +18,21 @@
 - 麦克风听写、仅语音输入时朗读回复、长回复摘要朗读
 - 图片点击放大、复制粘贴与无标题栏拖动
 - 上游超时/断线多次重试、提示词代理与双传输层补丁
-- GitHub Actions 校验 macOS 原生壳、构建 Windows EXE 与完整源码包；Release 附带已验证机器产出的自包含 macOS App
+- GitHub Actions 校验并构建自包含 macOS App、Windows EXE 与完整源码包
 - macOS「派对空间」独立群聊：碧琪主持、Codex 任务执行、OpenClaw 文本咨询，公开派工并逐项确认（[说明与边界](docs/PARTY-SPACE.md)）
 
-## Windows 快速使用 — 接 API 即可开箱即用 🚀
+## Windows 快速使用 — 双击就是完整 App 🚀
 
-超级碧琪在 Windows 下提供 **图形化控制台 (`超級碧琪.exe`)** 与 **PowerShell 自动化脚本** 两种方式：
+从 [GitHub Releases](../../releases) 下载 `超級碧琪.exe` 后直接双击。它不是安装控制台，也不要求另装 Node.js、OpenClaw 或 Python：
 
-### 方式 A：双击运行 `超級碧琪.exe`（推荐，零命令行）
+1. 先完整播放一次小马开屏视频；后台同时启动内置网关和本机服务，较慢时停在视频尾帧等待。
+2. 准备好后直接进入内嵌聊天窗口，不再另外打开浏览器。
+3. 四模式、项目目录、派对空间、灵感圆桌、语音、流式工具过程和网关看门狗都在同一个 EXE 内。
+4. 模型 Key、聊天记录、项目、人格和自定义上下文仍放在 Windows 用户目录；双击启动只补缺失默认文件，已有内容不会被新版 EXE 改回去。
 
-从 [GitHub Releases](../../releases) 直接下载 `超級碧琪.exe`：
-1. **一键全量部署**：点击主界面「🌟 一键全量安装 / 修复」，程序会自动检查 Node.js / OpenClaw 环境（未安装将自动调用 winget / npm 完成补齐），并一次性安装 4 模式人格、来啦～老弟 UI 全套皮肤、双传输层补丁并启动代理。
-2. **图形化配置 Key**：切换到「🔑 API Key 配置」选项卡，选择提供商（如 `mm`、`openai`、`anthropic`、`deepseek` 或自定义中继），填入 API Key 与 Base URL，点击保存即可自动写入配置并重启 Gateway。
-3. **开箱即用**：点击「🌐 打开 Web 界面」即可直接在浏览器畅享来啦～老弟糖果玻璃 UI！
+需要维护旧环境时，可从命令行运行 `超級碧琪.exe --control-center` 打开保留的旧控制台。
 
-### 方式 B：PowerShell 一键脚本
+### 源码脚本（开发者可选）
 
 适合开发者或自动化部署（以管理员身份打开 PowerShell）：
 
@@ -85,10 +85,10 @@ App 菜单选择“检查并安装更新…”，或运行：
 GitHub Releases 提供：
 
 - `super-pinkie-macos-<版本>.zip`：自包含的「超級碧琪.app」，内置网关、Node.js、Python 与本项目服务
-- `super-pinkie-windows-<版本>.zip` / `超級碧琪.exe`：Windows 图形化部署与维护程序
+- `super-pinkie-windows-<版本>.zip` / `超級碧琪.exe`：自包含 Windows 桌面 App
 - `super-pinkie-full-<版本>.zip`：完整源码、安装器、资源与文档
 
-macOS App 不再依赖本机预装 OpenClaw 或 Python；模型 Key、会话、项目目录和个人配置仍保存在用户目录，升级 App 不会覆盖。Windows EXE 会检查并补齐所需环境，再注入本仓库的完整 UI 与工作模式。
+macOS App 与 Windows EXE 都自带运行时；模型 Key、会话、项目目录和个人配置仍保存在用户目录，升级 App 不会覆盖。
 
 > 本项目仅供模型能力评估、安全研究与个人自动化使用。使用本工具产生的任何后果由使用者自行承担。上游模型服务商仍保留其服务端的内容审核权利。
 
@@ -105,6 +105,7 @@ OpenClaw 网关 ──▶ mm-retry-proxy (HTTP 层注入 + 重试 + 拒绝降级
 ```text
 ui/                 全部样式、脚本、头像、壁纸与转场素材
 desktop/macos/      原生 WKWebView 桌面 App 与构建脚本
+desktop/windows/    Windows 内置运行时清单与第三方组件说明
 personas/           四模式人格文件（原有三套保持原样）
 services/tts/       晓伊语音服务
 installer/macos/    UI 重应用与开机服务模板
@@ -134,10 +135,10 @@ installer/macos/    UI 重应用与开机服务模板
 
 ## App 版（图形界面，无需命令行）
 
-macOS `.app` / Windows `.exe` 控制台：一键安装提示词、打补丁、启停代理、状态检测。
+macOS `.app` / Windows `.exe` 均为可直接进入聊天的完整桌面版；Windows 仍可用 `--control-center` 打开旧维护界面。
 
 - 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `.exe`）。
-- 自己构建：macOS 运行 `pyinstaller --noconfirm --windowed --name "超級碧琪" --add-data "prompts:prompts" --add-data "proxy/ur-rewrite-proxy.py:proxy" app/super_pinkie.py`；Windows 运行 `.\\build-win.ps1`。生成的桌面成品分别为 `超級碧琪.app` 和 `超級碧琪.exe`。
+- 自己构建：macOS 运行 `desktop/macos/build.sh`；Windows 在安装了构建工具的机器上运行 `.\\build-win.ps1`。生成的桌面成品分别为 `超級碧琪.app` 和 `超級碧琪.exe`；最终用户不需要这些构建工具。
 - 推送 `v*` tag 会自动触发 GitHub Actions 构建两个平台的成品并挂到 Release。
 
 ## 安装

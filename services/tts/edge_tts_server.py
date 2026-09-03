@@ -3,7 +3,7 @@
 
 import json
 import os
-import subprocess
+import asyncio
 import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,31 +17,12 @@ DEFAULT_VOLUME = os.environ.get("PINKIE_TTS_VOLUME", "+0%")
 
 
 def synthesize(voice, text, rate=DEFAULT_RATE, pitch=DEFAULT_PITCH, volume=DEFAULT_VOLUME):
+    import edge_tts
+
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as output:
         output_path = output.name
     try:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "edge_tts",
-                "--voice",
-                voice,
-                "--text",
-                text,
-                "--rate",
-                rate,
-                "--pitch",
-                pitch,
-                "--volume",
-                volume,
-                "--write-media",
-                output_path,
-            ],
-            check=True,
-            capture_output=True,
-            timeout=60,
-        )
+        asyncio.run(edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch).save(output_path))
         with open(output_path, "rb") as media:
             return media.read()
     finally:
@@ -112,5 +93,16 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
-print(f"pinkie edge-tts server listening on {HOST}:{PORT}", flush=True)
-ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+def serve(port=PORT, on_ready=None):
+    server = ThreadingHTTPServer((HOST, int(port)), Handler)
+    if on_ready:
+        on_ready(server)
+    print(f"pinkie edge-tts server listening on {HOST}:{server.server_port}", flush=True)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    serve()

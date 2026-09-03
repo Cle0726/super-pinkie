@@ -18,7 +18,6 @@ from pathlib import Path
 import re
 import runpy
 import secrets
-import selectors
 import shutil
 import signal
 import sqlite3
@@ -31,6 +30,7 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[2]
+PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 USAGE = runpy.run_path(str(ROOT/'services/party/usage.py'))
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
@@ -67,6 +67,14 @@ def redact(value):
 
 
 def executable(name):
+    if name == 'openclaw':
+        bundled = os.environ.get('PINKIE_OPENCLAW_ENTRY', '')
+        if bundled and Path(bundled).is_file():
+            return bundled
+    if name == 'node':
+        bundled = os.environ.get('PINKIE_NODE_BIN', '')
+        if bundled and Path(bundled).is_file():
+            return bundled
     found = shutil.which(name)
     if found:
         return found
@@ -85,6 +93,19 @@ def runtime_environment():
     return env
 
 
+def openclaw_command(*arguments):
+    entry = executable('openclaw')
+    if not entry:
+        return []
+    bundled = os.environ.get('PINKIE_OPENCLAW_ENTRY', '')
+    if bundled and Path(bundled).is_file():
+        node = executable('node')
+        if not node:
+            return []
+        return [node, bundled, *arguments]
+    return [entry, *arguments]
+
+
 def available_models(force=False):
     """Only relay/provider models. Local CLI and image backends are excluded."""
     with MODEL_LOCK:
@@ -94,7 +115,7 @@ def available_models(force=False):
         if not binary:
             return []
         try:
-            result = subprocess.run([binary, 'models', 'list', '--json'], capture_output=True,
+            result = subprocess.run(openclaw_command('models', 'list', '--json'), capture_output=True,
                                     text=True, timeout=12, env=runtime_environment(), check=True)
             parsed = json.loads(result.stdout)
             config = json.loads((Path.home()/'.openclaw/openclaw.json').read_text(encoding='utf-8'))
@@ -420,13 +441,7 @@ class Roundtable:
 
     @staticmethod
     def kill(process):
-        with contextlib.suppress(ProcessLookupError, OSError):
-            os.killpg(process.pid, signal.SIGTERM)
-        with contextlib.suppress(subprocess.TimeoutExpired):
-            process.wait(timeout=1.5)
-        if process.poll() is None:
-            with contextlib.suppress(ProcessLookupError, OSError):
-                os.killpg(process.pid, signal.SIGKILL)
+        PROCESS['stop_process_tree'](process, 1.5)
 
     def context(self, session_id, user_id):
         rows = self.store.rows('SELECT sender,body,kind FROM messages WHERE session=? AND id<=? ORDER BY id DESC LIMIT 80',
@@ -500,16 +515,16 @@ class Roundtable:
             prompt_path.write_text(prompt, encoding='utf-8')
             os.chmod(config_path, 0o600)
             os.chmod(prompt_path, 0o600)
-            command = [binary, 'agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()),
-                       '--json', '--timeout', '180', '--message-file', str(prompt_path)]
+            command = openclaw_command('agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()),
+                                       '--json', '--timeout', '180', '--message-file', str(prompt_path))
             environment = runtime_environment()
             hook = ROOT/'services/party/openclaw-live.mjs'
             if node and hook.is_file():
-                command = [node, '--import', str(hook), str(Path(binary).resolve())] + command[1:]
+                command = [node, '--import', str(hook), str(Path(binary).resolve())] + command[len(openclaw_command()):]
                 environment['PINKIE_LIVE_ENTRY'] = binary
             environment['OPENCLAW_CONFIG_PATH'] = str(config_path)
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       cwd=self.store.root, env=environment, start_new_session=True)
+                                       cwd=self.store.root, env=environment, **PROCESS['popen_group_kwargs']())
             with self.lock:
                 self.processes.setdefault(run_id, set()).add(process)
             output = ''
@@ -519,41 +534,37 @@ class Roundtable:
             deadline = time.monotonic() + 210
             decoders = {key: codecs.getincrementaldecoder('utf-8')(errors='replace') for key in ('out', 'err')}
             try:
-                with selectors.DefaultSelector() as selector:
-                    selector.register(process.stdout, selectors.EVENT_READ, 'out')
-                    selector.register(process.stderr, selectors.EVENT_READ, 'err')
-                    while selector.get_map():
-                        if self.store.run(run_id)['status'] in TERMINAL:
-                            self.kill(process)
-                            return ''
-                        if time.monotonic() > deadline:
-                            self.kill(process)
-                            raise ValueError('模型响应超时')
-                        for key, _ in selector.select(.2):
-                            chunk = os.read(key.fileobj.fileno(), 65536)
-                            if not chunk:
-                                selector.unregister(key.fileobj)
-                                continue
-                            decoded = decoders[key.data].decode(chunk)
-                            if key.data == 'err':
-                                errors = (errors + decoded)[-3000:]
-                                continue
-                            buffer += decoded
-                            while '\n' in buffer:
-                                line, buffer = buffer.split('\n', 1)
-                                try:
-                                    event = json.loads(line)
-                                except ValueError:
-                                    output += line + '\n'
-                                    continue
-                                live = event.get('pinkieLive') if isinstance(event, dict) else None
-                                if live and live.get('stream') == 'assistant':
-                                    data = live.get('data', {})
-                                    streamed = data.get('text') if isinstance(data.get('text'), str) else streamed + str(data.get('delta', ''))
-                                    if streamed:
-                                        self.store.update_message(message_id, clean_self_reference(streamed, MEMBERS[member]['name']))
-                                else:
-                                    output += line + '\n'
+                for stream, chunk in PROCESS['iter_process_output'](
+                    process, {'out': process.stdout, 'err': process.stderr}, .2
+                ):
+                    if self.store.run(run_id)['status'] in TERMINAL:
+                        self.kill(process)
+                        return ''
+                    if time.monotonic() > deadline:
+                        self.kill(process)
+                        raise ValueError('模型响应超时')
+                    if not chunk:
+                        continue
+                    decoded = decoders[stream].decode(chunk)
+                    if stream == 'err':
+                        errors = (errors + decoded)[-3000:]
+                        continue
+                    buffer += decoded
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        try:
+                            event = json.loads(line)
+                        except ValueError:
+                            output += line + '\n'
+                            continue
+                        live = event.get('pinkieLive') if isinstance(event, dict) else None
+                        if live and live.get('stream') == 'assistant':
+                            data = live.get('data', {})
+                            streamed = data.get('text') if isinstance(data.get('text'), str) else streamed + str(data.get('delta', ''))
+                            if streamed:
+                                self.store.update_message(message_id, clean_self_reference(streamed, MEMBERS[member]['name']))
+                        else:
+                            output += line + '\n'
                 process.wait(timeout=5)
                 if process.returncode:
                     raise ValueError(redact(errors[-1000:] or output[-1000:] or '模型连接异常'))
@@ -646,15 +657,15 @@ class Roundtable:
             live_hook = temp/'openclaw-live.mjs'
             shutil.copy2(ROOT/'services/party/openclaw-live.mjs', live_hook)
             command = [node, '--import', str(live_hook), str(Path(binary).resolve()),
-                       'agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()), '--json',
-                       '--timeout', '600', '--message-file', str(prompt_path)]
+                       *openclaw_command('agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()), '--json',
+                                            '--timeout', '600', '--message-file', str(prompt_path))[len(openclaw_command()):]]
             environment = runtime_environment()
             environment.update(OPENCLAW_CONFIG_PATH=str(config_path), OPENCLAW_STATE_DIR=str(temp/'state'),
-                               PINKIE_LIVE_ENTRY=binary, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1',
+                               PINKIE_LIVE_ENTRY=binary, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1',
                                PINKIE_PROJECT_ROOT=project, PWD=project,
                                TMPDIR=str(temp/'tmp') + '/', TMP=str(temp/'tmp'), TEMP=str(temp/'tmp'))
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       cwd=project, env=environment, start_new_session=True)
+                                       cwd=project, env=environment, **PROCESS['popen_group_kwargs']())
             with self.lock:
                 self.processes.setdefault(run_id, set()).add(process)
             buffer, output, errors, streamed, final = '', '', '', '', ''
@@ -663,62 +674,58 @@ class Roundtable:
             deadline = time.monotonic() + 630
             decoders = {key: codecs.getincrementaldecoder('utf-8')(errors='replace') for key in ('out', 'err')}
             try:
-                with selectors.DefaultSelector() as selector:
-                    selector.register(process.stdout, selectors.EVENT_READ, 'out')
-                    selector.register(process.stderr, selectors.EVENT_READ, 'err')
-                    while selector.get_map():
-                        if self.store.run(run_id)['status'] in TERMINAL:
-                            self.kill(process)
-                            return ''
-                        if time.monotonic() > deadline:
-                            self.kill(process)
-                            raise ValueError('执行超过 10 分钟，已停止；已经完成的文件变化不会自动撤销')
-                        for selected, _ in selector.select(.15):
-                            chunk = os.read(selected.fileobj.fileno(), 65536)
-                            if not chunk:
-                                selector.unregister(selected.fileobj)
-                                continue
-                            received += len(chunk)
-                            if received > 12000000:
-                                self.kill(process)
-                                raise ValueError('工具输出过大，已停止；现有记录和文件保留')
-                            decoded = decoders[selected.data].decode(chunk)
-                            if selected.data == 'err':
-                                errors = (errors + decoded)[-6000:]
-                                continue
-                            buffer += decoded
-                            while '\n' in buffer:
-                                line, buffer = buffer.split('\n', 1)
-                                try:
-                                    event = json.loads(line)
-                                except json.JSONDecodeError:
-                                    output += line + '\n'
-                                    continue
-                                live = event.get('pinkieLive') if isinstance(event, dict) else None
-                                if not live:
-                                    output += line + '\n'
-                                    continue
-                                stream, data = live.get('stream'), live.get('data', {})
-                                if stream == 'assistant':
-                                    streamed = (data.get('text') if isinstance(data.get('text'), str)
-                                                else streamed + str(data.get('delta', '')))
-                                    if streamed:
-                                        self.store.stream_message(run_id, member, 'worker-progress-' + str(assistant_index),
-                                                                  clean_self_reference(streamed, MEMBERS[member]['name']), 'progress')
-                                elif stream == 'tool' and data.get('toolCallId'):
-                                    if data.get('phase') == 'start' and streamed:
-                                        self.store.stream_message(run_id, member, 'worker-progress-' + str(assistant_index),
-                                                                  clean_self_reference(streamed, MEMBERS[member]['name']), 'progress', 'done')
-                                        assistant_index += 1
-                                        streamed = ''
-                                    detail = (data.get('args') if data.get('phase') == 'start'
-                                              else data.get('result', data.get('partialResult', '')))
-                                    if not isinstance(detail, str):
-                                        detail = json.dumps(detail, ensure_ascii=False)
-                                    status = ('failed' if data.get('isError')
-                                              else ('done' if data.get('phase') == 'result' else 'running'))
-                                    self.store.stream_message(run_id, member, data['toolCallId'],
-                                                              data.get('name', '工具') + '\n' + detail[-5000:], 'tool', status)
+                for stream_name, chunk in PROCESS['iter_process_output'](
+                    process, {'out': process.stdout, 'err': process.stderr}, .15
+                ):
+                    if self.store.run(run_id)['status'] in TERMINAL:
+                        self.kill(process)
+                        return ''
+                    if time.monotonic() > deadline:
+                        self.kill(process)
+                        raise ValueError('执行超过 10 分钟，已停止；已经完成的文件变化不会自动撤销')
+                    if not chunk:
+                        continue
+                    received += len(chunk)
+                    if received > 12000000:
+                        self.kill(process)
+                        raise ValueError('工具输出过大，已停止；现有记录和文件保留')
+                    decoded = decoders[stream_name].decode(chunk)
+                    if stream_name == 'err':
+                        errors = (errors + decoded)[-6000:]
+                        continue
+                    buffer += decoded
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        try:
+                            event = json.loads(line)
+                        except json.JSONDecodeError:
+                            output += line + '\n'
+                            continue
+                        live = event.get('pinkieLive') if isinstance(event, dict) else None
+                        if not live:
+                            output += line + '\n'
+                            continue
+                        stream, data = live.get('stream'), live.get('data', {})
+                        if stream == 'assistant':
+                            streamed = (data.get('text') if isinstance(data.get('text'), str)
+                                        else streamed + str(data.get('delta', '')))
+                            if streamed:
+                                self.store.stream_message(run_id, member, 'worker-progress-' + str(assistant_index),
+                                                          clean_self_reference(streamed, MEMBERS[member]['name']), 'progress')
+                        elif stream == 'tool' and data.get('toolCallId'):
+                            if data.get('phase') == 'start' and streamed:
+                                self.store.stream_message(run_id, member, 'worker-progress-' + str(assistant_index),
+                                                          clean_self_reference(streamed, MEMBERS[member]['name']), 'progress', 'done')
+                                assistant_index += 1
+                                streamed = ''
+                            detail = (data.get('args') if data.get('phase') == 'start'
+                                      else data.get('result', data.get('partialResult', '')))
+                            if not isinstance(detail, str):
+                                detail = json.dumps(detail, ensure_ascii=False)
+                            status = ('failed' if data.get('isError')
+                                      else ('done' if data.get('phase') == 'result' else 'running'))
+                            self.store.stream_message(run_id, member, data['toolCallId'],
+                                                      data.get('name', '工具') + '\n' + detail[-5000:], 'tool', status)
                 process.wait(timeout=5)
                 if process.returncode:
                     raise ValueError(redact(errors[-1600:] or '执行席异常退出'))
@@ -1011,17 +1018,20 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(503, {'error': '本机圆桌记录暂时无法保存'})
 
 
-def serve(port, state_dir):
+def serve(port, state_dir, on_ready=None):
     os.umask(0o077)
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     server.token = secrets.token_urlsafe(32)
     server.store = Store(state_dir)
     server.roundtable = Roundtable(server.store)
+    if on_ready:
+        on_ready(server)
     def shutdown(*_):
         server.roundtable.close()
         threading.Thread(target=server.shutdown, daemon=True).start()
-    signal.signal(signal.SIGTERM, shutdown)
-    signal.signal(signal.SIGINT, shutdown)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, shutdown)
+        signal.signal(signal.SIGINT, shutdown)
     print('灵感圆桌已启动：http://127.0.0.1:' + str(server.server_port), flush=True)
     try:
         server.serve_forever()
@@ -1033,6 +1043,6 @@ def serve(port, state_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18891)
-    parser.add_argument('--state-dir', default=str(Path.home()/'Library/Application Support/SuperPinkie/roundtable'))
+    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT', Path.home()/'Library/Application Support/SuperPinkie'))/'roundtable'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)
