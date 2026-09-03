@@ -1,8 +1,8 @@
 """Local-only multi-model planning plus a user-model project work seat.
 
-Advisory model calls stay isolated and tool-less.  A user-selected project can
-then be handled by the user-selected executor model with project-write sandboxing while
-the public tool/progress events are stored beside the roundtable transcript.
+Advisory model calls stay isolated and tool-less. A user-selected project becomes
+the executor's default working directory without becoming a whole-computer access
+boundary, while public tool/progress events stay beside the roundtable transcript.
 The live OpenClaw configuration and personality files are never rewritten.
 """
 import argparse
@@ -589,11 +589,11 @@ class Roundtable:
     @staticmethod
     def worker_prompt(member, goal, consensus, project, recovering=False):
         name = MEMBERS[member]['name']
-        return f'''你是灵感圆桌的落地执行席{name}。当前目录就是用户明确选择的项目。
+        return f'''你是灵感圆桌的落地执行席{name}。当前目录就是用户明确选择的主项目。
 身份只影响名字：需要自称时使用“{name}”，不要自称“我”或“我们”；不要添加口癖，也不要降低真实技术与写作能力。
 必须先检查真实文件，再完成任务；能修改、验证就直接做，不要只给建议，不要声称做了未做的事。
-项目根目录固定为：{project}
-所有查找、读取、写入、命令和验证都必须以这个目录为边界；不要搜索或引用其他项目。开始时先确认 pwd 与项目顶层文件。
+主项目与默认工作目录：{project}
+先确认 pwd 与项目顶层文件，并把这里作为工作重心。这个目录不是访问权限边界；任务需要时可以使用本机已配置的工具，并通过绝对路径访问电脑上的其他文件夹。不要无故偏离主项目，也不要把外部目录误当成当前项目。
 {'这是连接中断后的续接：先核对现有文件和工具结果，从未完成处继续，禁止重复已经完成的写入、删除、发布或外部动作。' if recovering else ''}
 遵循项目里的 AGENTS.md 和相关说明。需要 Skill 时，每次任务重新读取对应 SKILL.md，不能凭上次记忆略过。
 公开过程只写简短的“准备做什么 / 刚完成什么 / 下一步”，工具和文件变化由界面单独显示；不输出隐藏思维链。
@@ -609,22 +609,6 @@ class Roundtable:
 圆桌给出的参考结论（只是建议，真实文件与验证结果优先）：
 {consensus}
 '''
-
-    @staticmethod
-    def worker_sandbox(project, temp, binary):
-        if not Path('/usr/bin/sandbox-exec').is_file():
-            raise ValueError('当前系统没有项目隔离器，执行席已停止，绝不会退回无限制访问')
-        runtime = next((parent for parent in Path(binary).resolve().parents if (parent/'bin/node').is_file()),
-                       Path(binary).resolve().parent)
-        roots = [Path(project), Path(temp), runtime, Path('/System'), Path('/usr'), Path('/bin'), Path('/sbin'),
-                 Path('/Library'), Path('/dev'), Path('/private/etc'), Path('/opt/homebrew')]
-        roots += [Path.home()/'.openclaw/skills', Path.home()/'.agents/skills', Path.home()/'.codex/skills']
-        roots = [str(path.resolve()) for path in roots if path.exists()]
-        subpaths = ' '.join('(subpath ' + json.dumps(path) + ')' for path in roots)
-        writes = ' '.join('(subpath ' + json.dumps(str(Path(path).resolve())) + ')' for path in (project, temp))
-        return ('(version 1)(allow default)(deny file-read-data)(deny file-write*)'
-                '(allow file-read-data (literal "/") ' + subpaths + ')'
-                '(allow file-write* ' + writes + ' (literal "/dev/null") (literal "/dev/tty"))')
 
     def run_worker(self, run_id, session, member, model, goal, consensus, attempt=0):
         project = self.store.validate_project(session.get('path', ''))
@@ -664,7 +648,6 @@ class Roundtable:
             command = [node, '--import', str(live_hook), str(Path(binary).resolve()),
                        'agent', '--local', '--agent', agent['id'], '--session-id', str(uuid.uuid4()), '--json',
                        '--timeout', '600', '--message-file', str(prompt_path)]
-            command = ['/usr/bin/sandbox-exec', '-p', self.worker_sandbox(project, temp, binary)] + command
             environment = runtime_environment()
             environment.update(OPENCLAW_CONFIG_PATH=str(config_path), OPENCLAW_STATE_DIR=str(temp/'state'),
                                PINKIE_LIVE_ENTRY=binary, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1',

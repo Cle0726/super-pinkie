@@ -93,6 +93,12 @@ class PartyTests(unittest.TestCase):
         self.assertIn('model_auto_compact_token_limit=22937',command)
         self.assertIn('model_auto_compact_token_limit_scope="total"',command)
         self.assertIn('test-model',command)
+        self.assertIn('read-only', command)
+        self.assertNotIn('sandbox_workspace_write.network_access=false', command)
+        self.assertNotIn('--ignore-rules', command)
+        write_task=dict(task, permission='workspace-write')
+        with patch.object(self.manager,'context_budget',return_value=limits):write_command=self.manager.command(write_task,self.a)
+        self.assertIn('danger-full-access', write_command)
 
     def test_write_and_host_dispatch_require_approval(self):
         result = self.manager.send(self.a['id'], dict(requestId='request001', agent='codex', text='改测试文件', permission='workspace-write'))
@@ -380,9 +386,10 @@ class PartyTests(unittest.TestCase):
             self.assertTrue(prompt.endswith(task_text))
             for style in ('俏皮但克制', '爽快、自信', '喜欢把难题拆开', '用简洁中文', '中文、简洁、自然', '中文回复', '你在派对里扮演'):
                 self.assertNotIn(style, prompt)
-            # Operational boundaries are not personality/style instructions.
+            # Operational focus is not a personality/style instruction.
             self.assertIn('不得沿用上次记忆或假装读取', prompt)
-            self.assertIn('只处理当前群和所选项目', prompt)
+            self.assertIn('所选项目是默认工作目录和任务重心，不是访问边界', prompt)
+            self.assertIn('绝对路径访问电脑上的其他文件夹', prompt)
         host = self.manager.prompt({'agent':'pinkie', 'prompt':'hi'}, self.a)
         self.assertIn('输出且只输出JSON对象', host)
         self.assertIn('派工必须先经铲屎官确认', host)

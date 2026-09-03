@@ -3,7 +3,6 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 
-const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
 const modes = /^agent:(main|project|thinking|unrestricted):[^\s]+$/;
 export const progressInstruction = '\n【工作过程展示】\n遇到需要多步执行或调用工具的任务，先用一两句说明准备做什么；实际完成关键步骤后，用一句话说明发现和下一步，然后继续工作。普通聊天和简短问答直接回答，不硬加计划或总结。说明只包含可公开的行动、证据和结果，不输出隐藏思维链，不假装调用工具，不编造进度。不要每次工具调用都复述，不重复已经给出的最终答案。保持当前模式原有身份、称呼、文风和用户要求；本规则不增加工具权限，也不改变上下文设置。';
@@ -23,10 +22,7 @@ export class ProjectScope {
     this.home=home; this.platform=platform;
     this.stateRoot=stateRoot || path.join(home,'Library/Application Support/SuperPinkie/project-scope');
     this.file=path.join(this.stateRoot,'bindings.json');
-    this.processes=new Map();
     this.inheritedBindings=new Map();
-    this.skillRoots=['.openclaw/skills','.agents/skills','.codex/skills',...['workspace','workspace-project','workspace-thinking','workspace-unrestricted'].map(p=>'.openclaw/'+p+'/skills')].map(p=>canonical(path.join(home,p)));
-    this.skillRoots.push(canonical(path.resolve(path.dirname(process.execPath),'../lib/node_modules/openclaw/skills')));
   }
   load() {
     if(!fs.existsSync(this.file)) return {};
@@ -70,30 +66,15 @@ export class ProjectScope {
     this.inheritedBindings.set(childSessionKey,binding);return true;
   }
   release(sessionKey){this.inheritedBindings.delete(sessionKey);}
-  resolve(binding,raw,read=false) {
+  resolve(binding,raw) {
     if(typeof raw!=='string'||!raw||raw.includes('\0')) throw new Error('工具缺少有效路径');
     const expanded=raw==='~'?this.home:raw.startsWith('~/')?path.join(this.home,raw.slice(2)):raw;
-    const target=canonical(path.resolve(binding.root,expanded));
-    if(inside(binding.root,target)||(read&&this.skillRoots.some(root=>inside(root,target)))) return target;
-    throw new Error('已拦截跨项目访问。当前项目：'+binding.root+'；请求路径：'+target);
-  }
-  sandbox(binding,key) {
-    if(this.platform!=='darwin'||!fs.existsSync('/usr/bin/sandbox-exec')) throw new Error('当前系统尚无项目命令隔离器，已停止执行；不会退回无限制终端');
-    const temp=path.join(this.stateRoot,'tmp',crypto.createHash('sha256').update(key).digest('hex').slice(0,24));
-    fs.mkdirSync(temp,{recursive:true,mode:0o700});
-    const runtime=path.resolve(path.dirname(process.execPath),'..');
-    const reads=[binding.root,temp,...this.skillRoots,runtime,'/System','/usr','/bin','/sbin','/Library','/dev','/private/etc','/opt/homebrew'].filter(p=>fs.existsSync(p)).map(canonical);
-    const sub=p=>'(subpath '+JSON.stringify(p)+')';
-    const profile='(version 1)(allow default)(deny file-read-data)(deny file-write*)'+
-      '(allow file-read-data (literal "/") '+reads.map(sub).join(' ')+')'+
-      '(allow file-write* '+[binding.root,temp,'/dev/null','/dev/tty'].map(sub).join(' ')+')'+
-      '(deny network-outbound (remote ip "localhost:*"))';
-    return {profile,temp};
+    return canonical(path.isAbsolute(expanded)?expanded:path.resolve(binding.root,expanded));
   }
   prompt(ctx) {
     const b=this.binding(ctx);if(!b)return;
-    return {appendSystemContext:'\n【当前会话的项目范围，由应用确认】\n项目：'+JSON.stringify(b.name)+'\n实际工作目录：'+JSON.stringify(b.root)+'\n'+
-      '本会话只管理这个项目。read/write/edit 的相对路径和 exec 默认工作目录均由应用解析到这里。不要依据旧消息里的目录去找其他项目，也不要把人格所在目录当项目目录。先检查本项目现有文件，再解释或修改；缺少文件就直接说明，不能全盘搜索。跨项目操作会被拦截；需要换项目时请用户在目标项目中新建会话。每轮使用 Skill 前重新读取所需 SKILL.md；只读的共享 skill 不属于项目文件。遵循本项目中的 AGENTS.md，但不能扩大这里的文件范围。原有人格和称呼保持不变。'};
+    return {appendSystemContext:'\n【当前会话的项目锚点，由应用确认】\n项目：'+JSON.stringify(b.name)+'\n默认工作目录：'+JSON.stringify(b.root)+'\n'+
+      '这个目录是本会话的工作重心，不是访问权限边界。read/write/edit/apply_patch 的相对路径和 exec 的默认工作目录均从这里解析；没有明确理由时先检查并处理这里的文件，不要被旧消息里的其他项目路径带偏。任务需要时，可以正常使用本机已配置的全部工具，并通过绝对路径访问、读取或修改电脑上的其他文件夹；浏览器、图片、网络和全盘查找也不因项目绑定而被禁止。不要声称存在“项目范围限制”，但访问外部内容时仍要服从用户授权、操作系统权限与工具自身能力。项目中的 AGENTS.md 只约束该项目内的工作，原有人格和称呼保持不变。'};
   }
   before(event,ctx) {
     try {
@@ -109,8 +90,8 @@ export class ProjectScope {
       if(['sessions_yield','subagents'].includes(name))return;
       if(['read','write','edit'].includes(name)) {
         const key=typeof p.path==='string'?'path':'file_path';
-        const target=this.resolve(b,p[key],name==='read');
-        if(p.path&&p.file_path&&this.resolve(b,p.path,name==='read')!==this.resolve(b,p.file_path,name==='read'))throw new Error('工具路径参数不一致');
+        const target=this.resolve(b,p[key]);
+        if(p.path&&p.file_path&&this.resolve(b,p.path)!==this.resolve(b,p.file_path))throw new Error('工具路径参数不一致');
         p[key]=target;if(p.path)p.path=target;if(p.file_path)p.file_path=target;return {params:p};
       }
       if(name==='apply_patch') {
@@ -119,27 +100,22 @@ export class ProjectScope {
         p.input=p.input.split('\n').map(line=>{const match=line.match(/^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/);if(!match)return line;count++;return match[1]+this.resolve(b,match[2]);}).join('\n');
         if(!count)throw new Error('补丁没有可验证的目标路径');return {params:p};
       }
-      if(name==='exec'&&!event.toolKind&&!ctx.toolKind) {
-        if(typeof p.command!=='string')throw new Error('当前项目只接受可约束的 shell 命令');
-        if(p.elevated||p.node||p.host&&p.host!=='gateway')throw new Error('项目任务不能切换到其他主机或提权执行');
-        const cwd=p.workdir?this.resolve(b,p.workdir):b.root;
-        const {profile,temp}=this.sandbox(b,ctx.sessionKey);
-        p.command='/usr/bin/sandbox-exec -p '+quote(profile)+' /usr/bin/env TMPDIR='+quote(temp)+' GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /bin/zsh -f -c '+quote(p.command);
-        p.workdir=cwd;p.host='gateway';p.elevated=false;return {params:p};
+      if(name==='exec') {
+        if(typeof p.command!=='string')return;
+        if(p.workdir)p.workdir=this.resolve(b,p.workdir);
+        else if(p.cwd)p.cwd=this.resolve(b,p.cwd);
+        else p.workdir=b.root;
+        return {params:p};
       }
-      if(name==='process') {
-        if(!p.sessionId||this.processes.get(p.sessionId)!==ctx.sessionKey) throw new Error('只能管理当前项目会话启动的进程，不能读取其他会话的进程');
-        return;
-      }
-      throw new Error('工具“'+name+'”尚未接入项目范围约束，已阻止绕过目录。请使用 read/write/edit/apply_patch/exec 管理本项目。');
+      // Project binding chooses the default directory. It never removes tools
+      // such as browser, image generation, network access, process management,
+      // or any future OpenClaw capability.
+      return;
     }catch(error){return {block:true,blockReason:error.message};}
-  }
-  after(event,ctx) {
-    if(event.toolName==='exec'&&event.result?.details?.sessionId&&this.binding(ctx))this.processes.set(event.result.details.sessionId,ctx.sessionKey);
   }
 }
 export default {
-  id:'pinkie-project-scope',name:'碧琪项目目录约束',
+  id:'pinkie-project-scope',name:'碧琪项目工作锚点',
   register(api) {
     const guard=new ProjectScope();
     api.registerGatewayMethod('pinkie.project.validate',({params,respond})=>{
@@ -156,7 +132,6 @@ export default {
       return {appendSystemContext:(scoped?.appendSystemContext||'')+progressInstruction};
     },{priority:-10000});
     api.on('before_tool_call',(event,ctx)=>guard.before(event,ctx),{priority:-10000});
-    api.on('after_tool_call',(event,ctx)=>guard.after(event,ctx));
     api.on('subagent_spawned',(event,ctx)=>guard.inherit(event.childSessionKey,ctx.requesterSessionKey));
     api.on('subagent_ended',event=>guard.release(event.targetSessionKey));
   }

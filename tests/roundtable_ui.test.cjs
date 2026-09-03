@@ -59,10 +59,11 @@ test('four visible stages end in real project execution', () => {
   for (const stage of ['ideas','challenge','consensus','execute']) assert.match(html, new RegExp(`data-stage="${stage}"`));
   for (const label of ['出主意','挑问题','说人话','真执行']) assert.match(html, new RegExp(label));
   assert.match(server, /openclaw-live\.mjs/);
-  assert.match(server, /worker_sandbox/);
+  assert.doesNotMatch(server, /worker_sandbox|sandbox-exec/);
   assert.match(server, /cwd=project/);
   assert.match(server, /PINKIE_PROJECT_ROOT=project/);
-  assert.match(server, /不要搜索或引用其他项目/);
+  assert.match(server, /不是访问权限边界/);
+  assert.match(server, /绝对路径访问电脑上的其他文件夹/);
   assert.doesNotMatch(server, /roots = \[Path\(project\), Path\(temp\), ROOT,/);
   assert.match(server, /stream_message/);
 });

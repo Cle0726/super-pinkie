@@ -90,11 +90,12 @@ class RoundtableServiceTests(unittest.TestCase):
         text = MODULE.clean_self_reference('我认为这是我的方案，我们继续，但保留自我检查。', '星澜')
         self.assertEqual('星澜认为这是星澜的方案，大家继续，但保留自我检查。', text)
 
-    def test_worker_prompt_is_hard_bound_to_the_selected_project(self):
+    def test_worker_prompt_anchors_to_selected_project_without_blocking_other_folders(self):
         project = str(Path(self.temp.name) / 'chosen-project')
         prompt = MODULE.Roundtable.worker_prompt('xinglan', '完成任务', '参考结论', project, True)
-        self.assertIn('项目根目录固定为：' + project, prompt)
-        self.assertIn('不要搜索或引用其他项目', prompt)
+        self.assertIn('主项目与默认工作目录：' + project, prompt)
+        self.assertIn('不是访问权限边界', prompt)
+        self.assertIn('绝对路径访问电脑上的其他文件夹', prompt)
         self.assertIn('禁止重复已经完成', prompt)
         self.assertTrue(MODULE.transient_failure('upstream connection_reset'))
         self.assertTrue(MODULE.transient_failure('AbortError after connection_closed'))

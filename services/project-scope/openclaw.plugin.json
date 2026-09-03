@@ -1,1 +1,1 @@
-{"id":"pinkie-project-scope","name":"碧琪项目目录约束","version":"1.0.0","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}
+{"id":"pinkie-project-scope","name":"碧琪项目工作锚点","version":"1.1.0","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}

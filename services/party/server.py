@@ -546,7 +546,7 @@ class Manager:
                 raise ValueError('成员连接已不可用')
             self.store.write("UPDATE tasks SET status='queued',updated=? WHERE id=?", (time.time(), task_id))
             self.store.message(room_id, 'system', '铲屎官已确认派发给 ' + LABELS[task['agent']] +
-                               ('，允许修改所选项目文件。' if task['permission'] == 'workspace-write' else '，按只读权限执行。'), 'notice', task_id)
+                               ('，允许按任务修改本机文件。' if task['permission'] == 'workspace-write' else '，按全机只读权限执行。'), 'notice', task_id)
             self.pool.submit(self.run, task_id)
 
     def cancel(self, room_id, task_id):
@@ -577,20 +577,10 @@ class Manager:
 
     def command(self, task, room):
         if task['agent'] == 'codex':
+            sandbox = 'danger-full-access' if task['permission'] == 'workspace-write' else 'read-only'
             command = [executable('codex'), 'exec', '--json', '--ephemeral', '--skip-git-repo-check',
-                       '--color', 'never', '-s', task['permission'], '-c', 'approval_policy="never"',
-                       '-c', 'sandbox_workspace_write.network_access=false', '-C', room['path']]
-            # Disable configured MCP bridges: a filesystem sandbox alone cannot constrain external tools.
-            config = Path.home() / '.codex/config.toml'
-            if config.is_file():
-                for header in re.findall(r'^\s*\[([^\n]+)\]', config.read_text(), re.M):
-                    if header.startswith('mcp_servers.'):
-                        name = re.match(r'mcp_servers\.("[^"]+"|\x27[^\x27]+\x27|[A-Za-z0-9_-]+)(?:\.|$)', header)
-                        if not name:
-                            raise ValueError('无法安全识别本机 MCP 配置，暂不执行')
-                        command += ['-c', 'mcp_servers.' + name.group(1) + '.enabled=false']
-            # Do not inherit unrelated personality/rules from the project's parent directories.
-            command += ['--ignore-rules']
+                       '--color', 'never', '-s', sandbox, '-c', 'approval_policy="never"',
+                       '-C', room['path']]
             budget=self.context_budget(task)
             command += ['-c','model_context_window='+str(budget['window']),
                         '-c','model_auto_compact_token_limit='+str(budget['threshold']),
@@ -608,7 +598,7 @@ class Manager:
     def prompt(self, task, room, context=None):
         common = IDENTITIES['instruction'].format(name=CHARACTERS[task['agent']]) + '\n'
         common += ('这是本机派对群聊的新一次执行。称呼用户为铲屎官。'
-                  '只处理当前群和所选项目，不要访问其他模式、私人聊天、凭据或无关目录。'
+                  '只处理当前群授权的任务。所选项目是默认工作目录和任务重心，不是访问边界；先检查项目，任务需要时可使用本机已配置工具，并通过绝对路径访问电脑上的其他文件夹。不要无故查看私人聊天、凭据或无关目录。'
                   '涉及 Skill 时，必须在本次执行重新完整读取所需 SKILL.md 和必需引用，不得沿用上次记忆或假装读取。'
                   '如权限不允许读取，明确说明。禁止发布、支付、发外部消息、修改授权或绕过安全措施。'
                   '不要声称完成未做过的工作，不输出隐藏思维链。\n')
@@ -775,7 +765,7 @@ class Manager:
             return self.execute_managed(task, room, cleanup, prepared_prompt=prompt)
 
     def execute_codex_live(self, task, room, prompt):
-        # Reuse the exact model budget and MCP restrictions of the CLI path.
+        # Reuse the exact model budget and filesystem permission of the CLI path.
         previous=self.command(task,room)
         command=[previous[0],'app-server']
         for i,value in enumerate(previous[:-1]):
@@ -817,15 +807,15 @@ class Manager:
                                 raise ValueError(redact(event['error'].get('message','实时接口不可用')))
                             if event.get('id')==1 and 'result' in event:
                                 send({'method':'initialized','params':{}})
-                                params={'cwd':room['path'],'approvalPolicy':'never','sandbox':task['permission'],
+                                sandbox_mode='danger-full-access' if task['permission']=='workspace-write' else 'read-only'
+                                params={'cwd':room['path'],'approvalPolicy':'never','sandbox':sandbox_mode,
                                         'ephemeral':True,'developerInstructions':'仅处理本次派对任务；公开简短工作进度，不输出隐藏思维链。'}
                                 if task.get('model'):params['model']=task['model']
                                 send({'id':2,'method':'thread/start','params':params})
                             elif event.get('id')==2 and 'result' in event:
                                 thread_id=event['result']['thread']['id']
-                                sandbox={'type':'readOnly','networkAccess':False} if task['permission']=='read-only' else {
-                                    'type':'workspaceWrite','writableRoots':[room['path']],'networkAccess':False,
-                                    'excludeTmpdirEnvVar':True,'excludeSlashTmp':True}
+                                sandbox={'type':'readOnly','networkAccess':True} if task['permission']=='read-only' else {
+                                    'type':'dangerFullAccess'}
                                 send({'id':3,'method':'turn/start','params':{'threadId':thread_id,'cwd':room['path'],
                                      'approvalPolicy':'never','sandboxPolicy':sandbox,'input':[{'type':'text','text':prompt}]}})
                             elif 'method' in event and 'id' in event:

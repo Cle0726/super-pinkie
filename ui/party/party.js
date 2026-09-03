@@ -156,7 +156,7 @@
   }
   function confirmJob(job){
     const dialog=$('approve-dialog');$('approval-desc').textContent=`接收成员：${names[job.agent]} · ${engines[job.agent]}\n回复模型：${job.model||'本机默认'}\n项目目录：${state.room.path}`;
-    $('approval-prompt').textContent=job.prompt;$('approval-warning').textContent=job.permission==='workspace-write'?'这次允许 Codex 修改上面的项目目录。不会自动授权发布、支付或其他外部操作。已写入的文件不随“停止”回滚。':'按只读权限执行。模型请求仍会发往该 Agent 已配置的服务商。';
+    $('approval-prompt').textContent=job.prompt;$('approval-warning').textContent=job.permission==='workspace-write'?'这次允许执行席按任务修改本机文件，所选项目仍是默认工作目录。不会自动授权发布、支付或其他外部操作。已写入的文件不随“停止”回滚。':'按全机只读权限执行，所选项目仍是默认工作目录。模型请求会发往该 Agent 已配置的服务商。';
     const roomId=job.room;const confirm=$('approve-confirm');confirm.disabled=false;
     $('approve-cancel').onclick=()=>dialog.close();
     confirm.onclick=async()=>{if(confirm.disabled)return;confirm.disabled=true;try{await api(`/api/rooms/${roomId}/approve`,{taskId:job.id});dialog.close();if(state.room?.id===roomId)await refresh();}catch(e){toast(e.message);}finally{confirm.disabled=false;}};dialog.showModal();

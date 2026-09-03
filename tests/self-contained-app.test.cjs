@@ -52,8 +52,9 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
 });
 
-test('roundtable sandbox admits an app-bundled runtime root', () => {
+test('roundtable uses its project as cwd without turning it into an access sandbox', () => {
   const server = read('services/roundtable/server.py');
-  assert.match(server, /for parent in Path\(binary\)\.resolve\(\)\.parents if \(parent\/'bin\/node'\)\.is_file\(\)/);
-  assert.doesNotMatch(server, /parent\.name\.startswith\('v'\)/);
+  assert.match(server, /cwd=project/);
+  assert.match(server, /不是访问权限边界/);
+  assert.doesNotMatch(server, /worker_sandbox|sandbox-exec/);
 });

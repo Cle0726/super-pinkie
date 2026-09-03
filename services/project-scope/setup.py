@@ -32,7 +32,7 @@ def install(home=None):
     plugins = data.setdefault('plugins', {})
     plugin_id = 'pinkie-project-scope'
     if plugins.get('enabled') is False or plugin_id in plugins.get('deny', []):
-        raise RuntimeError('插件被配置禁用；未绕过限制，请先启用项目目录保护。')
+        raise RuntimeError('项目工作锚点插件被配置禁用，请先启用。')
     target = home / '.openclaw/extensions' / plugin_id
     source = Path(__file__).resolve().parent
     names = ('index.mjs', 'package.json', 'openclaw.plugin.json')
@@ -70,7 +70,7 @@ def install(home=None):
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
-    print('项目目录保护已安装，网关重新加载后生效；原人格文件未修改。')
+    print('项目工作锚点已安装：项目作为默认目录，不限制访问电脑上的其他位置；原人格文件未修改。')
     return True
 
 
