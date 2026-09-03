@@ -71,6 +71,7 @@ $Assets = @(
     "laolao-deep-think-full.webm",
     "laolao-deep-think-marathon.webm",
     "laolao-roundtable-entry.js",
+    "laolao-context-compact.js",
     "laolao-resume.js",
     "laolao-roundtable-entry-v2.png",
     "laolao-roundtable-entry-v2-clean.png",
@@ -135,18 +136,19 @@ function Apply-UISkin {
 
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
     $headTags = @(
-        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar16">',
+        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar13"></script>',
-        '<script src="./laolao-session-list.js?v=sessions3"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar14"></script>',
+        '<script src="./laolao-session-list.js?v=sessions4"></script>',
         '<script src="./laolao-usage-stats.js?v=stats11"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink10"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink12"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact1"></script>',
         '<script defer src="./laolao-resume.js?v=resume5"></script>'
     )
     foreach ($tag in $headTags) {
@@ -157,12 +159,12 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme30'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar16';
-        'laolao-sidebar.js' = 'sidebar13'; 'laolao-session-list.js' = 'sessions3'; 'laolao-usage-stats.js' = 'stats11';
+        'laolao-theme.css' = 'theme31'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats11';
         'laolao-phrases.js' = 'phrases8';
         'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume5'
-        'laolao-deep-think.js' = 'deepthink10'
+        'laolao-deep-think.js' = 'deepthink12'; 'laolao-context-compact.js' = 'contextcompact1'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

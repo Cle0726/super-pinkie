@@ -9,6 +9,7 @@ test('extreme-think selection persists and arms every send without rewriting the
   for(const tier of ['base','boost','full','marathon'])assert.match(src,new RegExp(`id: "${tier}"`));
   assert.match(src,/pinkie\.deepThink\.arm/);
   assert.match(src,/pinkie\.deepThink\.disarm/);
+  assert.match(src,/pinkie\.deepThink\.status/);
   assert.match(src,/laolao:deep-think-tier/);
   assert.match(src,/localStorage\.setItem/);
   assert.match(src,/afterArm/);
@@ -16,6 +17,19 @@ test('extreme-think selection persists and arms every send without rewriting the
   assert.match(src,/继承当前模式与项目/);
   assert.doesNotMatch(src,/deep-think:base|deep-think:boost|deep-think:full|<<<问题开始>>>/);
   assert.doesNotMatch(src,/先在输入框写问题/);
+});
+
+test('main chat shows aggregate worker progress without exposing child chats',()=>{
+  const src=read('ui/injections/laolao-deep-think.js');
+  assert.match(src,/laolao-deep-think-status/);
+  assert.match(src,/协作处理中/);
+  assert.match(src,/全部完成，正在汇总/);
+  assert.match(src,/status\.roles/);
+  assert.match(src,/completed.*required/s);
+  assert.match(src,/laolao-status-flow/);
+  assert.match(src,/fill\.style\.transform = `scaleX/);
+  assert.doesNotMatch(src,/details\.replaceChildren/);
+  assert.match(src,/window\.setInterval\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
 });
 
 test('tier menu uses compact self-drawn pink glass controls and avoids a root mutation observer',()=>{

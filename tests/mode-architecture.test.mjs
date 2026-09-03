@@ -92,6 +92,8 @@ test('child completion reconciliation is idempotent when both lifecycle events a
   runtime.ended({targetSessionKey:child,outcome:'ok'});
   const status=runtime.status(ctx.sessionKey);
   assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
+  assert.equal(status.required,7);assert.equal(status.completed,1);
+  assert.equal(status.phase,'waiting');assert.equal(status.roles.find(role=>role.role==='planner').label,'规划');
 });
 
 test('child results are collected once and returned to the parent as candidate evidence',t=>{
@@ -124,6 +126,7 @@ test('completed tier audit remains queryable after the parent turn ends',()=>{
   runtime.finishTurn(ctx);
   const status=runtime.status(ctx.sessionKey);
   assert.equal(status.active,false);assert.equal(status.complete,true);assert.equal(status.completedRoles.solver,3);
+  assert.equal(status.completed,status.required);assert.equal(status.phase,'done');assert.ok(status.endedAt>0);
 });
 
 test('tier audit survives separate plugin instances through the durable store',t=>{

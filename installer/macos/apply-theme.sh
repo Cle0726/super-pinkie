@@ -90,6 +90,7 @@ apply_ui_skin() {
     laolao-deep-think-marathon.webm \
     laolao-roundtable-entry.js \
     laolao-deep-think.js \
+    laolao-context-compact.js \
     laolao-resume.js \
     laolao-roundtable-entry-v2.png \
     laolao-roundtable-entry-v2-clean.png \
@@ -148,12 +149,12 @@ apply_ui_skin() {
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar13"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar14"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-sidebar.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar16">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -177,7 +178,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-session-list.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions4"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-phrases.js?v=phrases9' "$index_file"; then
@@ -270,10 +271,19 @@ apply_ui_skin() {
 
   # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink10"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink12"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink10' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink10}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink12' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink12}g' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # 全模式手动上下文整理；直接调用原生 sessions.compact，不往聊天里塞命令。
+  if ! grep -Fq './laolao-context-compact.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-context-compact.js?v=contextcompact1"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-context-compact.js?v=contextcompact1' "$index_file"; then
+    perl -0pi -e 's{\./laolao-context-compact\.js\?v=[^"]*}{./laolao-context-compact.js?v=contextcompact1}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -328,20 +338,20 @@ apply_ui_skin() {
   # Custom assets keep stable filenames so upgrades can restore them. Bump the
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
-  if ! grep -Fq './laolao-theme.css?v=theme30' "$index_file"; then
-    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme30}g' "$index_file"
+  if ! grep -Fq './laolao-theme.css?v=theme31' "$index_file"; then
+    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme31}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.js?v=sidebar13' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar13}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.js?v=sidebar14' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar14}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.css?v=sidebar16' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar16}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.css?v=sidebar17' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar17}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-session-list.js?v=sessions3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions3}g' "$index_file"
+  if ! grep -Fq './laolao-session-list.js?v=sessions4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions4}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.js?v=stats11' "$index_file"; then
@@ -432,6 +442,20 @@ rebuild_launcher_if_needed() {
   DID_CHANGE=1
 }
 
+sync_launcher_resources() {
+  local app_path="$1"
+  local bundled_root="$app_path/Contents/Resources/SuperPinkie"
+  local bundled_ui="$bundled_root/runtime/openclaw/dist/control-ui"
+
+  [[ -d "$bundled_root/ui/assets" ]] || return 0
+  copy_if_changed "$REPO_ROOT/ui/launcher-loading.html" "$bundled_root/ui/launcher-loading.html"
+  copy_if_changed "$ASSET_ROOT/laolao-splash.mp4" "$bundled_root/ui/assets/laolao-splash.mp4"
+  copy_if_changed "$ASSET_ROOT/laolao-splash-video-poster.png" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
+  if [[ -f "$bundled_ui/index.html" ]]; then
+    apply_ui_skin "$bundled_ui"
+  fi
+}
+
 sync_agent_avatars() {
   mkdir -p \
     "$USER_HOME/.openclaw/workspace/avatars" \
@@ -442,6 +466,32 @@ sync_agent_avatars() {
   copy_if_changed "$ASSET_ROOT/laolao-mode-project-hd.png" "$USER_HOME/.openclaw/workspace-project/avatars/pinkie-pie.png"
   copy_if_changed "$ASSET_ROOT/laolao-mode-thinking-hd.png" "$USER_HOME/.openclaw/workspace-thinking/avatars/pinkie-pie.png"
   copy_if_changed "$ASSET_ROOT/laolao-mode-unrestricted-hd.png" "$USER_HOME/.openclaw/workspace-unrestricted/avatars/unrestricted-mode.png"
+}
+
+install_relay_watchdog() {
+  local source_script="$REPO_ROOT/services/watchdog/cle-watchdog.sh"
+  local source_plist="$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in"
+  local target_script="$USER_HOME/.openclaw/scripts/cle_watchdog.sh"
+  local target_plist="$USER_HOME/Library/LaunchAgents/ai.openclaw.watchdog.plist"
+  local backup_root
+
+  [[ -f "$source_script" && -f "$source_plist" ]] || return 0
+  mkdir -p "$(dirname "$target_script")" "$(dirname "$target_plist")"
+  if [[ -f "$target_script" ]] && ! cmp -s "$source_script" "$target_script"; then
+    backup_root="$USER_HOME/Library/Application Support/SuperPinkie/backups/relay-watchdog-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_root"
+    cp -p "$target_script" "$backup_root/cle_watchdog.sh"
+  fi
+  copy_if_changed "$source_script" "$target_script"
+  chmod 755 "$target_script"
+  sed "s|@SCRIPT@|$target_script|g" "$source_plist" > "$target_plist.tmp"
+  if [[ ! -f "$target_plist" ]] || ! cmp -s "$target_plist.tmp" "$target_plist"; then
+    mv "$target_plist.tmp" "$target_plist"
+  else
+    rm -f "$target_plist.tmp"
+  fi
+  launchctl bootout "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$target_plist"
 }
 
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}"
@@ -465,6 +515,7 @@ fi
 DID_CHANGE=0
 if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
   sync_agent_avatars
+  install_relay_watchdog
 fi
 if [[ -n "$OPENCLAW_ROOT" ]]; then
   apply_ui_skin "$OPENCLAW_ROOT/dist/control-ui"
@@ -504,6 +555,7 @@ else
 fi
 
 if [[ "$SKIP_APP_BUNDLES" != "1" ]]; then
+  sync_launcher_resources "$LAUNCHER_APP_PATH"
   rebuild_launcher_if_needed "$LAUNCHER_APP_PATH"
   apply_bundle_icon "$LAUNCHER_APP_PATH" "PinkieAppIcon"
 

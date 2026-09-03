@@ -49,9 +49,15 @@ test('session sidebar uses independent DOM and only queries the current agent',(
   const src=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-session-list.js'),'utf8');
   assert.match(src,/agentId:api\.agentId,archived:archiveView/);
   assert.match(src,/s\.key\?\.startsWith\('agent:'\+api\.agentId\+':'\)/);
+  assert.match(src,/!s\.key\.includes\(':subagent:'\)/);
   assert.match(src,/archived:false/);assert.doesNotMatch(src,/sessions\.delete|deleteTranscript/);
   assert.match(src,/管理已归档会话/);assert.match(src,/sessionMenu\(e\.currentTarget,s\.key,title\(s\),true\)/);
   assert.match(src,/entry\.stale=true/);assert.doesNotMatch(src,/cache\.clear\(\)/);
+});
+test('derived worker sessions stay out of every user-facing sidebar path',()=>{
+  assert.match(source,/!s\.key\.includes\(":subagent:"\)/);
+  const css=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-sidebar.css'),'utf8');
+  assert.match(css,/data-session-key\*=":subagent:"/);
 });
 test('single-session menu supports safe archive, restore and permanent deletion',()=>{
   assert.match(source,/sessions\.delete/);

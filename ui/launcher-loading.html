@@ -26,8 +26,17 @@
   </style>
 </head>
 <body>
-  <video class="scene" muted loop autoplay playsinline preload="auto" poster="assets/laolao-splash-video-poster.png" aria-label="粉色小马吉祥物开屏动画">
+  <video class="scene" muted autoplay playsinline preload="auto" poster="assets/laolao-splash-video-poster.png" aria-label="粉色小马吉祥物开屏动画">
     <source src="assets/laolao-splash.mp4" type="video/mp4">
   </video>
+  <script>
+    const scene = document.querySelector(".scene");
+    scene.addEventListener("ended", () => {
+      scene.pause();
+      if (Number.isFinite(scene.duration) && scene.duration > 0.04) {
+        scene.currentTime = scene.duration - 0.04;
+      }
+    }, { once: true });
+  </script>
 </body>
 </html>

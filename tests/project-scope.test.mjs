@@ -79,7 +79,7 @@ test('plain chats are untouched and the prompt describes a project anchor, not a
 test('real commands start in the project and can access a sibling folder',t=>{
   const {guard,ctx,a,b}=fixture(t);
   const run=guard.before({toolName:'exec',params:{command:'/bin/cat '+JSON.stringify(path.join(b,'b.txt'))}},ctx).params;
-  const result=spawnSync('/bin/zsh',['-f','-c',run.command],{cwd:run.workdir,encoding:'utf8'});
+  const result=spawnSync('/bin/sh',['-c',run.command],{cwd:run.workdir,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'project B');assert.equal(run.workdir,a);
 });
 

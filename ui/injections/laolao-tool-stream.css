@@ -3,6 +3,14 @@
 /* 组容器：去掉卡片感，变成一条流 */
 .chat-activity-group {
   margin: 2px 0;
+  animation: none !important;
+}
+.chat-group--activity,
+.chat-activity-group__body,
+.chat-activity-group__body .chat-bubble--tool-shell,
+.chat-activity-group__body .chat-tools-inline,
+.chat-activity-group__body .chat-tool-msg-summary {
+  animation: none !important;
 }
 .chat-activity-group__summary {
   opacity: 0.85;

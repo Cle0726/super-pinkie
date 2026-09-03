@@ -1325,7 +1325,7 @@ img.chat-avatar.assistant {
 }
 
 /* =========================================================
-   来啦～老弟：流式输出视觉增强 v3
+   来啦～老弟：流式输出视觉增强 v4
    配套脚本：ui/injections/laolao-stream-fx.js
 
    v1（340ms fade-in + translateY + JS reflow）：太长太重，OpenClaw
@@ -1334,27 +1334,16 @@ img.chat-avatar.assistant {
    v2（完全去掉过渡，只留光标）：文字直接弹出来，更生硬，用户反馈
    "跟 PPT 有什么区别"。
 
-   v3 正解：保留过渡但做得快、做得轻——纯 CSS 自动触发（不用 JS 加
-   class），120ms 短到不会堆叠，只动 opacity 不动 transform（不产
-   生"幻灯片上推"感）。用 CSS 选择器自动作用于流式气泡的直接子
-   元素，元素创建时自动触发，不需要 JS 干预。
+   v4：OpenClaw 每个 chunk 会重建 markdown 子树，因此哪怕 120ms
+   的淡入也会让旧段落反复闪动。流式期间彻底禁用内容节点入场动画，
+   让文字按原生增量直接延伸；只保留一个合成层光标提示仍在输出。
    ========================================================= */
 
-/* 新内容快速淡入：opacity 0→1，120ms，ease-out。
-   120ms = 60fps 下 7 帧，快到不会堆叠（chunk 间隔 200-500ms），
-   但慢到肉眼能感知"有过渡"，不是硬弹出。
-   不用 transform/translateY——那个"上推"才是 v1 的 PPT 感来源。 */
-@keyframes pinkieStreamIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* CSS 选择器自动作用于流式气泡的直接子元素（段落、代码块、列表等）。
-   元素创建时自动触发动画，不需要 JS 加 class——避免 v1 的
-   remove→reflow→add 强制回流造成的卡顿。
-   排除光标本身，避免光标也被淡入。 */
+/* markdown 子树会被重复创建；禁止它们重复执行 native fade/rise。 */
 .chat-bubble[data-pinkie-streaming="true"] > *:not(.pinkie-stream-cursor) {
-  animation: pinkieStreamIn 120ms ease-out;
+  animation: none !important;
+  transition: none !important;
+  opacity: 1 !important;
 }
 
 /* 光标柔和呼吸：正弦波，不是硬开关。

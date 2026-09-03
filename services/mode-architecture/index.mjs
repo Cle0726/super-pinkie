@@ -575,6 +575,47 @@ function auditDeliberation(state) {
   return {complete: missing.length === 0, missing};
 }
 
+function deliberationProgress(state) {
+  const requirement = deliberationRequirements(state.tier, state.mode);
+  const pendingByRole = new Map();
+  for (const child of state.pendingChildren) {
+    const role = state.childRoles.get(child) || '';
+    if (role) pendingByRole.set(role, (pendingByRole.get(role) || 0) + 1);
+  }
+  const reservedByRole = new Map();
+  for (const reservation of state.reservations.values()) {
+    const role = reservation?.role || '';
+    if (role) reservedByRole.set(role, (reservedByRole.get(role) || 0) + 1);
+  }
+  const roles = Object.entries(requirement.roles).map(([role, required]) => ({
+    role,
+    label: ROLE_LABELS[role] || role,
+    completed: state.completedRoles.get(role) || 0,
+    pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
+    required,
+  }));
+  let required = roles.reduce((sum, entry) => sum + entry.required, 0);
+  let completed = roles.reduce((sum, entry) => sum + Math.min(entry.completed, entry.required), 0);
+  if (requirement.dynamicUpgradeKinds) {
+    const dynamic = UPGRADE_ROLES.map(role => ({
+      role,
+      label: ROLE_LABELS[role] || role,
+      completed: state.completedRoles.get(role) || 0,
+      pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
+      required: requirement.dynamicUpgradeEach,
+    })).filter(entry => entry.completed || entry.pending)
+      .sort((a, b) => (b.completed + b.pending) - (a.completed + a.pending))
+      .slice(0, requirement.dynamicUpgradeKinds);
+    while (dynamic.length < requirement.dynamicUpgradeKinds) {
+      dynamic.push({role: `upgrade-${dynamic.length + 1}`, label: `升级协作 ${dynamic.length + 1}`, completed: 0, pending: 0, required: requirement.dynamicUpgradeEach});
+    }
+    roles.push(...dynamic);
+    required += requirement.dynamicUpgradeKinds * requirement.dynamicUpgradeEach;
+    completed += dynamic.reduce((sum, entry) => sum + Math.min(entry.completed, entry.required), 0);
+  }
+  return {roles, required, completed};
+}
+
 function requirementSummary(tier, mode) {
   const requirement = deliberationRequirements(tier, mode);
   const fixed = Object.entries(requirement.roles)
@@ -738,10 +779,26 @@ export class ModeArchitecture {
     const state = this.getRun(sessionKey);
     if (!state) return this.lastRuns.get(sessionKey) || {active: false};
     const audit = auditDeliberation(state);
+    const progress = deliberationProgress(state);
+    const active = state.active !== false;
+    const phase = !active
+      ? (audit.complete ? 'done' : 'stopped')
+      : audit.complete
+        ? 'summarizing'
+        : state.pendingChildren.size
+          ? 'working'
+          : state.reservations.size
+            ? 'dispatching'
+            : state.parentRunning && state.count === 0
+              ? 'planning'
+              : state.parentRunning
+                ? 'coordinating'
+                : 'waiting';
     return {
-      active: state.active !== false,
+      active,
       tier: state.tier,
       mode: state.mode,
+      phase,
       spawned: state.count,
       pending: state.pendingChildren.size,
       reserved: state.reservations.size,
@@ -754,6 +811,11 @@ export class ModeArchitecture {
       failedChildren: state.failedChildren,
       complete: audit.complete,
       missing: audit.missing,
+      required: progress.required,
+      completed: progress.completed,
+      roles: progress.roles,
+      updatedAt: Number(state.lastEventAt) || 0,
+      endedAt: Number(state.endedAt) || 0,
     };
   }
 
@@ -1008,25 +1070,9 @@ export class ModeArchitecture {
       if (!audit.complete) return;
       state.active = false;
       state.lastEventAt = Date.now();
+      state.endedAt = state.lastEventAt;
       this.setRun(sessionKey, state);
-      this.lastRuns.set(sessionKey, {
-        active: false,
-        tier: state.tier,
-        mode: state.mode,
-        spawned: state.count,
-        pending: state.pendingChildren.size,
-        reserved: state.reservations.size,
-        parentRunning: false,
-        expectedModel: state.model || '',
-        childModels: Object.fromEntries(state.modelCounts),
-        modelMismatches: [...state.childModels.values()].filter(model => state.model && model && model !== state.model).length,
-        collectedResults: state.childResults.size,
-        completedRoles: Object.fromEntries(state.completedRoles),
-        failedChildren: state.failedChildren,
-        complete: audit.complete,
-        missing: audit.missing,
-        endedAt: Date.now(),
-      });
+      this.lastRuns.set(sessionKey, this.status(sessionKey));
     }
     if (sessionKey) this.active.delete(sessionKey);
   }

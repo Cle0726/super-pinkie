@@ -865,7 +865,7 @@
           updatedAt: it && (it.updatedAt || it.lastActivityAt || it.createdAt),
         };
       })
-      .filter((s) => typeof s.key === "string" && s.key);
+      .filter((s) => typeof s.key === "string" && s.key && !s.key.includes(":subagent:"));
   }
 
   async function cleanupSessions() {

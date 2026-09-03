@@ -16,10 +16,25 @@
 
   const MENU_ID = "laolao-deep-think-menu";
   const BTN_CLASS = "laolao-deep-think-btn";
+  const STATUS_ID = "laolao-deep-think-status";
   const STORAGE_KEY = "laolao:deep-think-tier";
   let menu = null;
   let bypassSend = false;
   let arming = null;
+  let statusRequest = null;
+  let statusExpanded = false;
+  let statusFailures = 0;
+
+  const PHASE_LABELS = Object.freeze({
+    planning: "正在规划",
+    dispatching: "正在分配",
+    working: "协作处理中",
+    coordinating: "正在整理结果",
+    waiting: "等待下一批",
+    summarizing: "全部完成，正在汇总",
+    done: "本轮协作已完成",
+    stopped: "本轮协作已停止",
+  });
 
   // 四档预设 (文案与架构文档五、六节对齐)
   const TIERS = [
@@ -138,6 +153,7 @@
       arming = rpc("pinkie.deepThink.arm", { sessionKey, tier: tier.id }, 12_000)
         .then((result) => {
           if (!result?.armed) throw new Error("思考档位没有挂载成功");
+          void refreshStatus();
           return true;
         })
         .finally(() => { arming = null; });
@@ -150,6 +166,135 @@
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (!sessionKey || typeof rpc !== "function") return;
     try { await rpc("pinkie.deepThink.disarm", { sessionKey }, 12_000); } catch {}
+    hideStatus();
+  };
+
+  const statusElement = () => document.getElementById(STATUS_ID);
+
+  const hideStatus = () => {
+    const panel = statusElement();
+    if (panel) panel.hidden = true;
+  };
+
+  const ensureStatus = () => {
+    let panel = statusElement();
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = STATUS_ID;
+    panel.hidden = true;
+    panel.setAttribute("aria-live", "polite");
+    panel.innerHTML =
+      "<button class='laolao-deep-think-status__summary' type='button' aria-expanded='false'>" +
+      "<span class='laolao-deep-think-status__pulse' aria-hidden='true'></span>" +
+      "<span class='laolao-deep-think-status__phase'></span>" +
+      "<span class='laolao-deep-think-status__count'></span>" +
+      "<span class='laolao-deep-think-status__chevron' aria-hidden='true'>⌄</span></button>" +
+      "<div class='laolao-deep-think-status__track' aria-hidden='true'><span></span></div>" +
+      "<div class='laolao-deep-think-status__details' hidden></div>";
+    panel.querySelector(".laolao-deep-think-status__summary").addEventListener("click", () => {
+      statusExpanded = !statusExpanded;
+      panel.classList.toggle("is-expanded", statusExpanded);
+      panel.querySelector(".laolao-deep-think-status__summary").setAttribute("aria-expanded", String(statusExpanded));
+      panel.querySelector(".laolao-deep-think-status__details").hidden = !statusExpanded;
+      requestAnimationFrame(positionStatus);
+    });
+    document.body.appendChild(panel);
+    return panel;
+  };
+
+  const positionStatus = () => {
+    const panel = statusElement();
+    const actions = $(".agent-chat__composer-actions");
+    if (!panel || panel.hidden || !actions?.isConnected) return;
+    const rect = actions.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    panel.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
+    panel.style.top = `${Math.max(12, rect.top - height - 9)}px`;
+  };
+
+  const setText = (node, value) => {
+    if (node && node.textContent !== value) node.textContent = value;
+  };
+
+  const renderRoleDetails = (details, roles, failedChildren) => {
+    const existing = new Map(
+      Array.from(details.querySelectorAll(".laolao-deep-think-status__role"))
+        .map((row) => [row.dataset.role || "", row])
+    );
+    const seen = new Set();
+    for (const role of roles) {
+      const key = String(role.role || role.label || "协作");
+      seen.add(key);
+      let row = existing.get(key);
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "laolao-deep-think-status__role";
+        row.dataset.role = key;
+        row.append(document.createElement("span"), document.createElement("span"));
+        details.append(row);
+      }
+      setText(row.children[0], role.label || role.role || "协作");
+      setText(row.children[1], `${Math.min(Number(role.completed) || 0, Number(role.required) || 0)}/${Number(role.required) || 0}${role.pending ? ` · ${role.pending} 进行中` : ""}`);
+    }
+    for (const [key, row] of existing) if (!seen.has(key)) row.remove();
+    let retry = details.querySelector(".laolao-deep-think-status__retry");
+    if (failedChildren) {
+      if (!retry) {
+        retry = document.createElement("div");
+        retry.className = "laolao-deep-think-status__retry";
+        details.append(retry);
+      }
+      setText(retry, `${failedChildren} 项已自动补位重试`);
+    } else {
+      retry?.remove();
+    }
+  };
+
+  const renderStatus = (status = {}) => {
+    const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
+    if (!status.active && !endedRecently) { hideStatus(); return; }
+    const panel = ensureStatus();
+    const required = Math.max(0, Number(status.required) || 0);
+    const completed = Math.min(required || Infinity, Math.max(0, Number(status.completed) || 0));
+    const underway = Math.max(0, (Number(status.pending) || 0) + (Number(status.reserved) || 0));
+    panel.hidden = false;
+    panel.dataset.phase = status.phase || "working";
+    panel.dataset.tier = status.tier || "";
+    panel.classList.toggle("is-active", Boolean(status.active && !status.complete));
+    setText(panel.querySelector(".laolao-deep-think-status__phase"), PHASE_LABELS[status.phase] || "协作处理中");
+    setText(panel.querySelector(".laolao-deep-think-status__count"), required
+      ? `${completed}/${required}${underway ? ` · ${underway} 项进行中` : ""}`
+      : `${Number(status.spawned) || 0} 项协作`);
+    const progress = required ? Math.round(completed / required * 1000) / 1000 : 0;
+    const fill = panel.querySelector(".laolao-deep-think-status__track span");
+    if (fill.dataset.progress !== String(progress)) {
+      fill.dataset.progress = String(progress);
+      fill.style.transform = `scaleX(${progress})`;
+    }
+    const details = panel.querySelector(".laolao-deep-think-status__details");
+    renderRoleDetails(details, Array.isArray(status.roles) ? status.roles : [], Number(status.failedChildren) || 0);
+    details.hidden = !statusExpanded;
+    requestAnimationFrame(positionStatus);
+  };
+
+  const refreshStatus = async () => {
+    const sessionKey = currentSessionKey();
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!sessionKey || sessionKey.includes(":subagent:") || typeof rpc !== "function" || statusRequest) return;
+    const requestedSession = sessionKey;
+    statusRequest = rpc("pinkie.deepThink.status", {sessionKey}, 8_000);
+    try {
+      const status = await statusRequest;
+      if (requestedSession !== currentSessionKey()) return;
+      statusFailures = 0;
+      renderStatus(status);
+    } catch {
+      statusFailures += 1;
+      if (statusFailures >= 3) hideStatus();
+    } finally {
+      statusRequest = null;
+    }
   };
 
   const afterArm = async (send) => {
@@ -268,7 +413,7 @@
     });
     const actions = $(".agent-chat__composer-actions");
     if (!actions || !actions.isConnected) return;
-    if (actions.querySelector("." + BTN_CLASS)) { syncSelectionUi(); return; }
+    if (actions.querySelector("." + BTN_CLASS)) { syncSelectionUi(); positionStatus(); return; }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = BTN_CLASS;
@@ -289,6 +434,7 @@
     });
     actions.appendChild(btn);
     syncSelectionUi();
+    positionStatus();
   };
 
   function syncSelectionUi() {
@@ -374,6 +520,7 @@
 .laolao-deep-think-menu__hint{min-height:15px;padding:0 4px;color:rgba(87,54,74,.62);font-size:10.5px;line-height:1.35;text-align:center}
 .laolao-deep-think-menu__footer { padding:4px 4px 0;border-top:1px solid rgba(176,95,131,.1);text-align:center;font-size:9.5px;color:rgba(87,54,74,.43); }
 #laolao-deep-think-toast{position:fixed;left:50%;bottom:72px;z-index:2147483647;max-width:80vw;padding:8px 14px;overflow:hidden;border:1px solid rgba(255,255,255,.72);border-radius:999px;background:linear-gradient(135deg,rgba(255,252,253,.88),rgba(250,224,238,.78));color:#6d3650;-webkit-backdrop-filter:blur(22px) saturate(1.14);backdrop-filter:blur(22px) saturate(1.14);box-shadow:0 10px 28px rgba(106,48,79,.16),inset 0 1px rgba(255,255,255,.8);font-size:12px;opacity:0;pointer-events:none;text-overflow:ellipsis;transform:translate(-50%,7px) scale(.98);transition:opacity .22s ease,transform .22s ease;white-space:nowrap}#laolao-deep-think-toast.is-visible{opacity:1;transform:translate(-50%,0) scale(1)}
+#laolao-deep-think-status{position:fixed;z-index:2147482800;width:min(360px,calc(100vw - 24px));overflow:hidden;contain:layout paint style;border:1px solid rgba(255,255,255,.72);border-radius:16px;background:linear-gradient(145deg,rgba(255,252,253,.9),rgba(249,226,239,.84));color:#633a50;box-shadow:0 12px 32px rgba(97,48,73,.14),inset 0 1px rgba(255,255,255,.78);animation:laolao-status-in .22s cubic-bezier(.2,.78,.28,1) both}#laolao-deep-think-status[hidden]{display:none!important}.laolao-deep-think-status__summary{display:grid;grid-template-columns:10px 1fr auto 12px;align-items:center;gap:7px;width:100%;padding:9px 11px 7px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.laolao-deep-think-status__pulse{width:7px;height:7px;border-radius:50%;background:#d85b91;box-shadow:0 0 0 0 rgba(216,91,145,.28);animation:laolao-status-pulse 1.55s ease-out infinite}#laolao-deep-think-status[data-phase="done"] .laolao-deep-think-status__pulse,#laolao-deep-think-status[data-phase="summarizing"] .laolao-deep-think-status__pulse{background:#62b493}#laolao-deep-think-status[data-phase="done"] .laolao-deep-think-status__pulse{animation:none}.laolao-deep-think-status__phase{min-width:0;overflow:hidden;font-size:11.5px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.laolao-deep-think-status__count{font-size:10px;color:rgba(99,58,80,.62);white-space:nowrap}.laolao-deep-think-status__chevron{font-size:10px;transition:transform .2s cubic-bezier(.2,.78,.28,1)}.is-expanded .laolao-deep-think-status__chevron{transform:rotate(180deg)}.laolao-deep-think-status__track{position:relative;height:3px;margin:0 11px 8px;overflow:hidden;border-radius:999px;background:rgba(165,91,125,.13)}.laolao-deep-think-status__track span{display:block;width:100%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#dc6ca0 0%,#d85b91 48%,#9f74c6 100%);transform:scaleX(0);transform-origin:left center;transition:transform .72s cubic-bezier(.18,.82,.24,1);will-change:transform}.laolao-deep-think-status__track::after{content:"";position:absolute;inset:0 auto 0 -45%;width:42%;border-radius:inherit;background:linear-gradient(90deg,transparent,rgba(255,255,255,.76),transparent);opacity:0;transform:translate3d(0,0,0)}#laolao-deep-think-status.is-active .laolao-deep-think-status__track::after{opacity:.85;animation:laolao-status-flow 1.65s ease-in-out infinite}.laolao-deep-think-status__details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 10px;padding:0 11px 10px;border-top:1px solid rgba(159,82,119,.09)}.laolao-deep-think-status__details[hidden]{display:none}.laolao-deep-think-status__role{display:flex;justify-content:space-between;gap:8px;padding-top:7px;font-size:9.5px;color:rgba(88,52,70,.7)}.laolao-deep-think-status__role span:last-child{color:rgba(88,52,70,.48);white-space:nowrap}.laolao-deep-think-status__retry{grid-column:1/-1;padding-top:6px;color:#b36b4f;font-size:9px}
 html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:linear-gradient(145deg,rgba(255,249,252,.84),rgba(245,218,234,.72));border-color:rgba(255,255,255,.62);box-shadow:0 18px 44px rgba(84,42,65,.18),inset 0 1px rgba(255,255,255,.66)}
 @keyframes laolao-think-menu-in{from{opacity:0;transform:translateY(6px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes laolao-tier-item-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -381,8 +528,11 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
 @keyframes laolao-tier-breathe{50%{box-shadow:inset 0 1px rgba(255,255,255,.72),0 0 0 4px color-mix(in srgb,var(--tier-accent) 10%,transparent)}}
 @keyframes laolao-tier-twinkle{50%{opacity:1;transform:rotate(45deg) scale(.82)}}
 @keyframes laolao-tier-orbit{to{transform:rotate(360deg)}}
+@keyframes laolao-status-in{from{opacity:0;transform:translateY(5px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes laolao-status-pulse{70%{box-shadow:0 0 0 6px rgba(216,91,145,0)}100%{box-shadow:0 0 0 0 rgba(216,91,145,0)}}
+@keyframes laolao-status-flow{0%{transform:translate3d(0,0,0)}65%,100%{transform:translate3d(345%,0,0)}}
 @media(max-width:600px){.laolao-deep-think-menu{width:min(310px,calc(100vw - 16px))}.laolao-deep-think-menu__item{grid-template-columns:28px 1fr;padding:5px 6px}.laolao-deep-think-menu__icon{width:27px;height:27px}}
-@media (prefers-reduced-motion: reduce){.laolao-deep-think-btn,.laolao-deep-think-menu,.laolao-deep-think-menu__item,.laolao-deep-think-menu__icon,.laolao-deep-think-menu__orbit,#laolao-deep-think-toast{animation:none!important;transition:none!important}.laolao-deep-think-menu__art,.laolao-deep-think-btn__art{display:none!important}}
+@media (prefers-reduced-motion: reduce){.laolao-deep-think-btn,.laolao-deep-think-menu,.laolao-deep-think-menu__item,.laolao-deep-think-menu__icon,.laolao-deep-think-menu__orbit,#laolao-deep-think-toast,#laolao-deep-think-status,.laolao-deep-think-status__pulse,.laolao-deep-think-status__track span,.laolao-deep-think-status__track::after{animation:none!important;transition:none!important}.laolao-deep-think-menu__art,.laolao-deep-think-btn__art{display:none!important}}
 `;
     document.head.appendChild(style);
   };
@@ -396,6 +546,9 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   };
   // 输入区由 Lit 重建；低频轮询足够且不会在流式输出时制造 MutationObserver 风暴。
   window.setInterval(scheduleRender, 700);
+  window.setInterval(() => { if (!document.hidden) void refreshStatus(); }, 900);
+  window.addEventListener("resize", positionStatus, {passive: true});
+  window.addEventListener("popstate", () => { hideStatus(); void refreshStatus(); });
   document.addEventListener("pointerdown", (e) => {
     if (menu && !menu.contains(e.target) && !e.target.closest?.("." + BTN_CLASS)) {
       closeMenu();

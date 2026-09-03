@@ -39,8 +39,9 @@
   function ensureCursor(bubble) {
     const existing = cursorByBubble.get(bubble);
     if (existing && existing.isConnected) {
-      // Re-append moves it to the very end of the bubble's current children.
-      bubble.appendChild(existing);
+      // appendChild on an already-last cursor still emits a mutation record.
+      // Guard it or the observer schedules another append every frame forever.
+      if (bubble.lastChild !== existing) bubble.appendChild(existing);
       return existing;
     }
     const cursor = document.createElement("span");

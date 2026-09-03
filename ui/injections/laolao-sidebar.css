@@ -414,3 +414,5 @@ html[data-theme-mode="dark"] .laolao-toast {
    WKWebView 合成层裁剪失效时滚动中的文字会画出侧栏、盖到聊天区（用户截图证实）。
    滚动期间保持 ellipsis，文字始终裁剪在行内；视觉效果无差异（滚动时末尾本来就在变）。 */
 .hover-marquee--scrolling{text-overflow:ellipsis!important}
+/* Derived workers stay attached to their parent transcript, not the user's chat list. */
+.sidebar-recent-session[data-session-key*=":subagent:"]{display:none!important}

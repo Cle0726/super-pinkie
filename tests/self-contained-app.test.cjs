@@ -24,6 +24,9 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   const loading = read('ui/launcher-loading.html');
   assert.match(launcher, /ui\/launcher-loading\.html/);
   assert.match(loading, /<video class="scene"/);
+  assert.doesNotMatch(loading, /<video class="scene"[^>]*\bloop\b/);
+  assert.match(loading, /addEventListener\("ended"/);
+  assert.match(loading, /scene\.duration - 0\.04/);
   assert.match(loading, /assets\/laolao-splash\.mp4/);
   assert.match(loading, /assets\/laolao-splash-video-poster\.png/);
   assert.match(loading, /background: #efcbd3/);
@@ -32,6 +35,15 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(launcher, /let remaining = 6\.1 - Date\(\)\.timeIntervalSince\(started\)/);
   assert.match(launcher, /contentView\.layer\?\.backgroundColor = NSColor\(/);
   assert.match(launcher, /didFinish navigation:[\s\S]*NSColor\.clear\.cgColor/);
+  const updater = read('installer/macos/apply-theme.sh');
+  assert.match(updater, /copy_if_changed "\$REPO_ROOT\/ui\/launcher-loading\.html"/);
+  assert.match(updater, /install_relay_watchdog/);
+  const watchdog = read('services/watchdog/cle-watchdog.sh');
+  assert.match(watchdog, /status" != "000"/);
+  assert.match(watchdog, /FAILURE_THRESHOLD/);
+  assert.doesNotMatch(watchdog, /STATUS" != "200"/);
+  assert.match(updater, /copy_if_changed "\$ASSET_ROOT\/laolao-splash\.mp4"/);
+  assert.match(updater, /apply_ui_skin "\$bundled_ui"/);
 });
 
 test('the web stage keeps the original 来啦～老弟 entrance after the native movie', () => {

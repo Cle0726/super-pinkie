@@ -92,6 +92,9 @@ mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
 for architecture_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
+mkdir -p "$CONTENTS/Resources/SuperPinkie/services/watchdog"
+cp "$REPO_ROOT/services/watchdog/cle-watchdog.sh" "$CONTENTS/Resources/SuperPinkie/services/watchdog/cle-watchdog.sh"
+cp "$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in" "$CONTENTS/Resources/SuperPinkie/services/watchdog/ai.openclaw.watchdog.plist.in"
 mkdir -p "$CONTENTS/Resources/SuperPinkie/skills/deep-think"
 cp "$REPO_ROOT/skills/deep-think/SKILL.md" "$CONTENTS/Resources/SuperPinkie/skills/deep-think/SKILL.md"
 

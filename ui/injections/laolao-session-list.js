@@ -13,7 +13,7 @@
     const job=api.gwRequest('sessions.list',{agentId:api.agentId,archived:archiveView,includeDerivedTitles:true,limit:1000});loading.set(key,job);
     try{
       const data=await job;if(version!==revision)return;
-      const rows=(data.sessions||[]).filter(s=>s.key?.startsWith('agent:'+api.agentId+':'));
+      const rows=(data.sessions||[]).filter(s=>s.key?.startsWith('agent:'+api.agentId+':')&&!s.key.includes(':subagent:'));
       cache.set(key,{rows,at:Date.now()});
     }catch(error){cache.set(key,{rows:cache.get(key)?.rows||[],error:error.message,at:Date.now()});if(current?.api.mode===api.mode)api.toast('会话列表暂未刷新：'+error.message);}
     finally{if(loading.get(key)===job)loading.delete(key);signature='';if(current)render(current.section,current.api);}
