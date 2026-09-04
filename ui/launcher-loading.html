@@ -29,8 +29,13 @@
   <video class="scene" muted autoplay playsinline preload="auto" poster="assets/laolao-splash-video-poster.png" aria-label="粉色小马吉祥物开屏动画">
     <source src="assets/laolao-splash.mp4" type="video/mp4">
   </video>
+  <div id="status" style="position:fixed;left:50%;bottom:7%;transform:translateX(-50%);padding:9px 15px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22">正在启动本机服务…</div>
   <script>
     const scene = document.querySelector(".scene");
+    window.__pinkieStartupStatus = (message) => {
+      const status = document.getElementById("status");
+      if (status) status.textContent = message;
+    };
     scene.addEventListener("ended", () => {
       scene.pause();
       if (Number.isFinite(scene.duration) && scene.duration > 0.04) {
