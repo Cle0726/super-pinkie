@@ -3,7 +3,10 @@
 param(
     # onedir avoids PyInstaller's onefile self-extraction (hundreds of MB) on every launch.
     # Pass -LegacyOneFile when a standalone compatibility EXE is also required for releases.
-    [switch]$LegacyOneFile
+    [switch]$LegacyOneFile,
+    # Local developers may use a compatible Node 24.x patch release. CI keeps
+    # the manifest's exact version for reproducible release artifacts.
+    [switch]$AllowLocalNodeVersion
 )
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
@@ -16,13 +19,17 @@ $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
 python -m pip install --disable-pip-version-check --upgrade pip pyinstaller pywebview pywin32 edge-tts aiohttp
+if ($LASTEXITCODE -ne 0) { throw "Python 构建依赖安装失败，请检查本机网络或 Python 3.12 环境" }
 python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $nodeVersion = (& $node --version).TrimStart('v')
 if ($nodeVersion -ne $manifest.node) {
-    throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion"
+    if (-not $AllowLocalNodeVersion -or $nodeVersion -notmatch '^24\.') {
+        throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
+    }
+    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($manifest.node)）"
 }
 
 if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
