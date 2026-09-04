@@ -1025,16 +1025,6 @@ def show_startup_error(window):
     """)
 
 
-def show_startup_status(window, message):
-    """Keep the splash page informative while services start in the background."""
-    try:
-        window.evaluate_js(
-            "window.__pinkieStartupStatus?.(" + json.dumps(str(message), ensure_ascii=False) + ")"
-        )
-    except Exception:
-        pass
-
-
 def update_health_token_from_argv(arguments=None):
     for argument in arguments if arguments is not None else sys.argv[1:]:
         match = re.fullmatch(r"--update-health-token=([0-9a-f]{32})", str(argument))
@@ -1090,28 +1080,15 @@ def run_desktop(resource_root, prepare, update_health_token=None):
 
     def bootstrap():
         try:
-            show_startup_status(window, "正在准备本机服务…")
             prepare(lambda message: append_log("setup", message))
             services.start()
-            show_startup_status(window, "正在启动本地网关…")
             gateway.start()
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
-
-            # Do not hold the GUI/bootstrap thread on a cold OpenClaw start.
-            # The splash stays responsive and is replaced automatically as soon
-            # as the gateway answers; a slow gateway can no longer make the
-            # window look frozen or prevent the page from opening.
-            def await_gateway():
-                ready = gateway.wait_ready()
-                if ready:
-                    window.load_url(gateway_ui_url())
-                else:
-                    show_startup_error(window)
-
-            threading.Thread(target=await_gateway, name="pinkie-gateway-ready", daemon=True).start()
+            # The splash page polls the local gateway itself.  Do not call
+            # pywebview window APIs from this worker thread: WebView2 can block
+            # its GUI message pump when load_url/evaluate_js crosses threads.
         except Exception as error:
             append_log("launcher", f"startup failed: {error}")
-            show_startup_error(window)
 
     def shown(*_):
         threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
