@@ -124,6 +124,14 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
   }
 });
 
+test('Windows bundled watchdog has a dedicated task installer', () => {
+  const installer = read('installer/windows/register-bundled-watchdog.ps1');
+  assert.match(installer, /SuperPinkieGatewayWatchdog/);
+  assert.match(installer, /windows-gateway-watchdog\.ps1/);
+  assert.match(installer, /New-ScheduledTaskTrigger/);
+  assert.match(installer, /RunLevel Limited/);
+});
+
 test('PowerShell entrypoints are UTF-8 with BOM for Windows PowerShell 5.1', () => {
   for (const name of ['install.ps1', 'installer/windows/apply-theme.ps1', 'services/watchdog/windows-gateway-watchdog.ps1']) {
     const bytes = fs.readFileSync(path.join(root, name));

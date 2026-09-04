@@ -6,6 +6,17 @@
 
 Release 中仍提供 `super-pinkie-windows-<版本>.exe` 兼容版；它便于单文件分发，但每次启动都需要解压内置运行时，启动较慢。
 
+### 可选：后台网关看门狗
+
+App 打开时已经自带看门狗。如果希望关闭窗口后仍自动检查内置 Gateway，可在程序目录执行一次：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+& "F:\SuperPinkie\_internal\installer\windows\register-bundled-watchdog.ps1" -InstallRoot "F:\SuperPinkie"
+```
+
+它注册的是独立的 `SuperPinkieGatewayWatchdog` 任务，只在监听缺失时启动内置网关，不会终止正在冷启动的进程，也不会复用旧的 `OpenClaw Gateway` 任务。
+
 首次打开会完整播放一次开屏视频，并在后台准备网关；如果准备时间较长，画面会停在视频尾帧而不是循环。准备好后直接进入 App 内的聊天页面。
 
 用户自己的模型 Key、配置、聊天记录和工作区仍保存在 `%USERPROFILE%\.openclaw`，派对和圆桌记录保存在 `%LOCALAPPDATA%\SuperPinkie`。替换程序目录（兼容版则替换 EXE）不会删除这些资料；桌面 App 只补缺少的默认人格和提示词，已有内容（包括手动修改）不会被改回去。配置层发生必要的兼容迁移时仍会先备份到 `%LOCALAPPDATA%\SuperPinkie\backups`。
