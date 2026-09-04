@@ -81,6 +81,8 @@ test('source updaters preserve every existing user persona and context file', ()
   assert.match(mac, /保留已有 \$filename/);
   assert.match(windows, /if \(Test-Path \$dst\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
   assert.doesNotMatch(windows, /Copy-Item \$src \$dst -Force/);
+  assert.match(mac, /restore_app_on_failure/);
+  assert.match(mac, /已恢复上一版超級碧琪\.app/);
 });
 
 test('release workflow publishes both desktop formats from self-contained builders', () => {

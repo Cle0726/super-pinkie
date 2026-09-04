@@ -154,6 +154,22 @@ else
 fi
 TARGET_APP="$APP_ROOT/超級碧琪.app"
 LEGACY_APP="$APP_ROOT/来啦～老弟.app"
+
+# App 本体替换是事务式的：构建或复制失败时恢复上一版；用户状态始终在
+# STATE_ROOT 和 ~/.openclaw 外置目录，不参与这次替换。
+APP_SWAP_ACTIVE=1
+restore_app_on_failure() {
+  local status=$?
+  if [[ "$status" -ne 0 && "$APP_SWAP_ACTIVE" == "1" ]]; then
+    rm -rf "$TARGET_APP"
+    if [[ -d "$BACKUP_ROOT/app/超級碧琪.app" ]]; then
+      ditto "$BACKUP_ROOT/app/超級碧琪.app" "$TARGET_APP" || true
+      echo "安装失败，已恢复上一版超級碧琪.app；用户资料未改动。" >&2
+    fi
+  fi
+  exit "$status"
+}
+trap restore_app_on_failure EXIT
 if [[ -d "$TARGET_APP" ]]; then
   mkdir -p "$BACKUP_ROOT/app"
   ditto "$TARGET_APP" "$BACKUP_ROOT/app/超級碧琪.app"
@@ -192,6 +208,9 @@ fi
 printf 'PINKIE_REPO=%q\n' "$REPO_ROOT" > "$CONFIG_ROOT/install.env"
 printf 'PINKIE_PROVIDER=%q\n' "$PROVIDER" >> "$CONFIG_ROOT/install.env"
 printf 'PINKIE_APP_PATH=%q\n' "$TARGET_APP" >> "$CONFIG_ROOT/install.env"
+
+APP_SWAP_ACTIVE=0
+trap - EXIT
 
 echo
 echo "安装完成：$TARGET_APP"
