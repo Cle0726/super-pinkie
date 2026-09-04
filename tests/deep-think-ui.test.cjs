@@ -9,6 +9,10 @@ test('extreme-think selection persists and arms every send without rewriting the
   for(const tier of ['base','boost','full','marathon'])assert.match(src,new RegExp(`id: "${tier}"`));
   assert.match(src,/pinkie\.deepThink\.arm/);
   assert.match(src,/pinkie\.deepThink\.disarm/);
+  assert.match(src,/chat\.abort/);
+  assert.match(src,/preserveSideRuns: false/);
+  assert.match(src,/status\.active && !selectedTier/);
+  assert.match(src,/当前档位已停止，恢复普通发送/);
   assert.match(src,/pinkie\.deepThink\.status/);
   assert.match(src,/laolao:deep-think-tier/);
   assert.match(src,/localStorage\.setItem/);

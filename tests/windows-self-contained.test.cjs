@@ -63,6 +63,16 @@ test('Windows shell keeps all local spaces, project picker, voice and startup mo
   assert.match(launcher, /laolaoNativeDictation/);
   assert.match(launcher, /SAPI\.SpSharedRecognizer/);
   assert.match(launcher, /pywebview-drag-region/);
+  assert.match(launcher, /min_size=\(760, 500\), resizable=True/);
+  assert.match(launcher, /shadow=True/);
+  assert.match(launcher, /pinkie-native-resize-handles/);
+  for (const edge of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']) {
+    assert.match(launcher, new RegExp(`data-edge=\\"?${edge}|['\"]${edge}['\"]`));
+  }
+  assert.match(launcher, /begin_resize/);
+  assert.match(launcher, /window\.events\.maximized/);
+  assert.match(launcher, /window\.events\.restored/);
+  assert.match(launcher, /data-pinkie-maximized/);
   assert.match(launcher, /launcher-loading\.html/);
   assert.match(launcher, /PINKIE_STATE_ROOT/);
   assert.match(launcher, /storage_path=/);

@@ -52,6 +52,8 @@ test('deep-think tiers are bounded and mode-aware',()=>{
   assert.match(base,/后端硬验收/);assert.match(full,/真实验证×2/);assert.match(marathon,/反批评×3/);
   assert.match(base,/交付契约/);assert.match(base,/不得把两者一律写成研究报告/);
   assert.match(full,/主代理必须继续调用真实工具完成修改\/产物并运行验证/);
+  assert.match(base,/不得汇报角色数量、流水线、打回轮次或审议过程/);
+  assert.doesNotMatch(base,/报告实际使用的角色数/);
   assert.deepEqual(deliberationRequirements('base','project').roles,{planner:1,solver:3,critic:2,judge:1});
   assert.equal(deliberationRequirements('boost','none').dynamicUpgradeKinds,2);
 });
@@ -148,6 +150,18 @@ test('arming cannot overwrite a tier run that is still active',()=>{
   runtime.arm(sessionKey,'base');
   assert.throws(()=>runtime.arm(sessionKey,'full'),/上一轮档位任务仍在执行/);
   assert.equal(runtime.status(sessionKey).tier,'base');
+});
+
+test('a late tier fallback becomes silent after the real final was delivered',t=>{
+  const root=workspace(t,'stale-control');
+  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:stale-control'};
+  runtime.arm(ctx.sessionKey,'base');
+  for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
+  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'成品已交付。'});
+  const prompt=runtime.prompt({prompt:'[pinkie-tier-control] 迟到的内部续跑'}, {...ctx,workspaceDir:root});
+  assert.match(prompt.appendSystemContext,/过期内部续跑指令/);
+  assert.match(prompt.appendSystemContext,/只输出 NO_REPLY/);
+  assert.doesNotMatch(prompt.appendSystemContext,/极致思考运行单/);
 });
 
 test('tier audit survives separate plugin instances through the durable store',t=>{

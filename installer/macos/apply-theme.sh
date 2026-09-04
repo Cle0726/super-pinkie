@@ -271,10 +271,10 @@ apply_ui_skin() {
 
   # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink13"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink14"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink13' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink13}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink14' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink14}g' "$index_file"
     DID_CHANGE=1
   fi
 

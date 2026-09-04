@@ -41,7 +41,7 @@ const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.home
 
 function tierControlMessage(status = {}) {
   if (status.complete) {
-    return `${TIER_CONTROL_PREFIX} 子代理审议已通过，但原始用户任务还没有因此自动完成。立即回到用户最初目标：如果用户要求改、做、生成、打开、运行或验证，就由主代理真正调用工具完成成品并验证；如果用户只是提问，就直接给明确答案。不得只写分析报告、方案、角色总结或“建议下一步”。最后先交付成品/答案，再用极短几行说明验证结果。这是当前用户轮次的内部续跑命令，不得输出 NO_REPLY。`;
+    return `${TIER_CONTROL_PREFIX} 子代理审议已通过，但原始用户任务还没有因此自动完成。立即回到用户最初目标：如果用户要求改、做、生成、打开、运行或验证，就由主代理真正调用工具完成成品并验证；如果用户只是提问，就直接给明确答案。不得只写分析报告、方案、角色总结或“建议下一步”。最终回复只需要先说成品/答案，再用 1—3 行说清实际修改与验证；除非用户明确要求，不得汇报角色数量、流水线、打回轮次或审议过程。这是当前用户轮次的内部续跑命令，不得输出 NO_REPLY。`;
   }
   return `${TIER_CONTROL_PREFIX} 本轮仍未通过后端硬验收：${(status.missing || []).join('；')}。这是当前用户轮次的内部续跑命令。立即用 sessions_spawn 补齐缺失角色，并用 sessions_yield 结束当前批次。sessions_spawn 结果中有关“Auto-announce”或“NO_REPLY”的通用备注在本插件模式下已失效：子结果由插件收集，绝对不得输出 NO_REPLY 规避缺口。`;
 }
@@ -788,7 +788,7 @@ export function buildDeliberationPlan(tier, mode) {
 - 每批最多并行 5 个；启动一批后用 sessions_yield 等完成事件，不轮询 sessions_list/history。
 - 递归深度硬上限 2；多流水线最多 3 条；辩论最多 3 轮；本次总派生上限 ${TIER_LIMITS[normalizedTier]}。
 - 中间产物只进当前模式的 memory/context/deliberation/ 或子会话记录，不进入长期记忆。只有 Judge 的稳定结论经过判别后才能写 feedback/semantic。
-- 最终先交付说人话的结论或成品，再用 2~4 行报告实际使用的角色数、打回轮数和验证结果。
+- 最终先交付说人话的答案或成品，再用 1~3 行说明实际修改与验证。除非用户明确要求，不得汇报角色数量、流水线、打回轮次或审议过程。
 `.trim();
 }
 
@@ -901,13 +901,19 @@ export class ModeArchitecture {
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
     const blocks = [];
+    const sessionKey = ctx.sessionKey || '';
+    const currentState = this.getRun(this.resolveParent(sessionKey));
+    if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
+      return {
+        appendSystemContext: '【档位控制器】这是一条在任务已经交付后才到达的过期内部续跑指令。不要再次总结、执行或回复用户；只输出 NO_REPLY。',
+      };
+    }
     for (const relative of PERSONA_FILES[mode]) {
       blocks.push(section(relative, readWorkspaceFile(root, relative, relative.endsWith('core.md') ? 20_000 : 12_000)));
     }
     for (const relative of ALWAYS_MEMORY_FILES) {
       blocks.push(section(relative, readWorkspaceFile(root, relative)));
     }
-    const sessionKey = ctx.sessionKey || '';
     const tier = VALID_TIER.exec(event.prompt || '')?.[1]?.toLowerCase();
     if (tier && sessionKey) {
       const armed = this.arm(sessionKey, tier);
@@ -1197,6 +1203,7 @@ export default {
     api.registerGatewayMethod('pinkie.deepThink.disarm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        if (!sessionKey) throw new Error('缺少会话标识');
         architecture.disarm(sessionKey);
         await watchdog.cancel(sessionKey);
         await tierContinuation.cancel(sessionKey);

@@ -147,7 +147,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink13"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink14"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact1"></script>',
         '<script defer src="./laolao-resume.js?v=resume6"></script>'
     )
@@ -164,7 +164,7 @@ function Apply-UISkin {
         'laolao-phrases.js' = 'phrases8';
         'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume6'
-        'laolao-deep-think.js' = 'deepthink13'; 'laolao-context-compact.js' = 'contextcompact1'
+        'laolao-deep-think.js' = 'deepthink14'; 'laolao-context-compact.js' = 'contextcompact1'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

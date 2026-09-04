@@ -697,12 +697,47 @@ class NativeBridge:
     def minimize(self):
         self.window.minimize()
 
+    def _native_window_handle(self):
+        """Return the Win32 HWND exposed by pywebview's WinForms backend."""
+        if os.name != "nt" or not self.window:
+            return None
+        try:
+            handle = self.window.native.Handle
+            return int(handle.ToInt64()) if hasattr(handle, "ToInt64") else int(handle)
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    def _begin_nonclient_action(self, hit_test):
+        """Hand the current pointer gesture to Windows for native drag/resize."""
+        handle = self._native_window_handle()
+        if not handle:
+            return False
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            user32.ReleaseCapture()
+            user32.SendMessageW(handle, 0x00A1, int(hit_test), 0)
+            return True
+        except (AttributeError, OSError, TypeError, ValueError):
+            return False
+
+    def begin_resize(self, direction):
+        hit_tests = {
+            "w": 10, "e": 11, "n": 12, "nw": 13,
+            "ne": 14, "s": 15, "sw": 16, "se": 17,
+        }
+        return self._begin_nonclient_action(hit_tests.get(str(direction).lower(), 0))
+
     def toggle_maximize(self):
         if self.maximized:
             self.window.restore()
         else:
             self.window.maximize()
+        # The native maximized/restored events are the source of truth. This
+        # optimistic value keeps double-clicks correct before that event lands.
         self.maximized = not self.maximized
+        return {"maximized": self.maximized}
 
     def window_close(self):
         self.window.destroy()
@@ -800,7 +835,20 @@ BRIDGE_SCRIPT = r"""
     const drag = document.createElement('div');
     drag.className = 'pywebview-drag-region';
     drag.id = 'pinkie-native-drag-strip';
+    drag.setAttribute('aria-label','拖动窗口；双击可最大化');
+    drag.addEventListener('dblclick', event => {
+      event.preventDefault(); call('toggle_maximize');
+    });
     document.body.append(drag);
+    const resize = document.createElement('div');
+    resize.id = 'pinkie-native-resize-handles';
+    resize.innerHTML = ['n','ne','e','se','s','sw','w','nw']
+      .map(edge => `<i data-edge="${edge}" aria-hidden="true"></i>`).join('');
+    resize.addEventListener('pointerdown', event => {
+      const edge = event.target.closest('[data-edge]')?.dataset.edge;
+      if (event.button === 0 && edge) { event.preventDefault(); call('begin_resize', edge); }
+    });
+    document.body.append(resize);
     const controls = document.createElement('div');
     controls.id = 'pinkie-native-window-controls';
     controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="检查更新"><span>✦</span></button><button data-act="min" aria-label="最小化"></button><button data-act="max" aria-label="最大化"></button><button data-act="close" aria-label="关闭"></button>';
@@ -841,16 +889,24 @@ BRIDGE_SCRIPT = r"""
       if (info?.available) { window.__pinkieUpdateAvailable(info); updateDialog(info); }
       else if (manual) toast(info?.temporaryError ? '现在没连上更新站，稍后再试～' : '已经是最新版啦');
     };
+    window.__pinkieNativeWindowState = state => {
+      const maximized = Boolean(state?.maximized);
+      document.documentElement.toggleAttribute('data-pinkie-maximized', maximized);
+      controls.querySelector('[data-act="max"]')?.setAttribute('aria-label', maximized ? '还原窗口' : '最大化');
+    };
     controls.onclick = async event => {
       const action = event.target.closest('button')?.dataset.act;
       if (action === 'update') await inspectUpdate(true);
       if (action === 'min') call('minimize');
-      if (action === 'max') call('toggle_maximize');
+      if (action === 'max') {
+        const state = await call('toggle_maximize');
+        window.__pinkieNativeWindowState(state);
+      }
       if (action === 'close') call('window_close');
     };
     document.body.append(controls);
     const style = document.createElement('style');
-    style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147482000;left:0;right:0;top:0;height:8px;background:transparent}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px)}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}#pinkie-native-window-controls .pinkie-update-control{width:21px;height:21px;margin:-5px 1px -5px -4px;color:#b73974;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(250,199,222,.78));box-shadow:0 3px 10px rgba(169,48,103,.16);opacity:.82;font:11px/21px system-ui}#pinkie-native-window-controls .pinkie-update-control span{display:block;transition:transform .35s ease}.pinkie-update-control.is-checking span{animation:pinkieUpdateSpin .8s linear infinite}.pinkie-update-control.has-update{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.72),0 0 15px rgba(229,73,142,.65);animation:pinkieUpdateGlow 1.8s ease-in-out infinite}#pinkie-update-toast{position:fixed;z-index:2147483647;top:48px;right:14px;padding:9px 14px;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#773b5a;background:rgba(255,239,247,.9);box-shadow:0 12px 30px rgba(92,39,65,.16);backdrop-filter:blur(18px);font:12px system-ui;opacity:0;transform:translateY(-7px);pointer-events:none;transition:.22s ease}#pinkie-update-toast.is-visible{opacity:1;transform:none}#pinkie-update-dialog{position:fixed;z-index:2147483646;inset:0;display:grid;place-items:center;background:rgba(63,30,48,.16);backdrop-filter:blur(8px)}.pinkie-update-card{width:min(390px,calc(100vw - 42px));padding:26px;border:1px solid rgba(255,255,255,.78);border-radius:28px;text-align:center;color:#713d58;background:linear-gradient(145deg,rgba(255,247,251,.95),rgba(247,211,228,.91));box-shadow:0 28px 80px rgba(67,28,49,.25)}.pinkie-update-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border-radius:15px;color:#c13678;background:rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(190,50,112,.18)}.pinkie-update-card h3{margin:0;font:600 18px/1.4 system-ui}.pinkie-update-card p{margin:9px 0;font:13px/1.65 system-ui}.pinkie-update-card .pinkie-update-status{min-height:20px;color:#9c607e;font-size:12px}.pinkie-update-card>div{display:flex;justify-content:center;gap:10px;margin-top:17px}.pinkie-update-card button{min-width:100px;padding:9px 16px;border:1px solid rgba(192,64,120,.22);border-radius:16px;color:#824866;background:rgba(255,255,255,.64);font:13px system-ui}.pinkie-update-card button.primary{color:#fff;background:linear-gradient(135deg,#de6299,#ba3674);box-shadow:0 8px 20px rgba(186,54,116,.23)}.pinkie-update-card button:disabled{opacity:.52}.pinkie-update-card.is-working .pinkie-update-mark{animation:pinkieUpdateSpin 1.1s linear infinite}@keyframes pinkieUpdateSpin{to{transform:rotate(360deg)}}@keyframes pinkieUpdateGlow{50%{transform:translateY(-1px);filter:saturate(1.3)}}';
+    style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147483000;top:7px;right:112px;width:74px;height:27px;background:rgba(255,242,248,.14);border:1px solid rgba(255,255,255,.18);border-radius:999px;box-sizing:border-box;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}#pinkie-native-drag-strip:active{cursor:grabbing}#pinkie-native-drag-strip::after{position:absolute;top:11px;left:50%;width:28px;height:3px;border-radius:999px;background:rgba(179,79,125,.22);content:"";transform:translateX(-50%);transition:background .16s ease,transform .16s ease}#pinkie-native-drag-strip:hover::after{background:rgba(179,79,125,.42);transform:translateX(-50%) scaleX(1.12)}#pinkie-native-resize-handles{position:fixed;z-index:2147483647;inset:0;pointer-events:none}#pinkie-native-resize-handles i{position:absolute;display:block;pointer-events:auto;touch-action:none}#pinkie-native-resize-handles [data-edge="n"],#pinkie-native-resize-handles [data-edge="s"]{left:12px;right:12px;height:7px}#pinkie-native-resize-handles [data-edge="n"]{top:0;cursor:n-resize}#pinkie-native-resize-handles [data-edge="s"]{bottom:0;cursor:s-resize}#pinkie-native-resize-handles [data-edge="e"],#pinkie-native-resize-handles [data-edge="w"]{top:12px;bottom:12px;width:7px}#pinkie-native-resize-handles [data-edge="e"]{right:0;cursor:e-resize}#pinkie-native-resize-handles [data-edge="w"]{left:0;cursor:w-resize}#pinkie-native-resize-handles [data-edge="ne"],#pinkie-native-resize-handles [data-edge="se"],#pinkie-native-resize-handles [data-edge="sw"],#pinkie-native-resize-handles [data-edge="nw"]{width:14px;height:14px}#pinkie-native-resize-handles [data-edge="ne"]{top:0;right:0;cursor:ne-resize}#pinkie-native-resize-handles [data-edge="se"]{right:0;bottom:0;cursor:se-resize}#pinkie-native-resize-handles [data-edge="sw"]{bottom:0;left:0;cursor:sw-resize}#pinkie-native-resize-handles [data-edge="nw"]{top:0;left:0;cursor:nw-resize}html[data-pinkie-maximized] #pinkie-native-resize-handles{display:none}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px);-webkit-app-region:no-drag}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button[data-act="max"]::after{position:absolute;inset:3px;border:1px solid rgba(105,55,78,.48);border-radius:1px;content:""}html[data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"]::after{inset:2px 4px 4px 2px;box-shadow:2px 2px 0 -1px #dca0bb,2px 2px 0 0 rgba(105,55,78,.48)}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}#pinkie-native-window-controls .pinkie-update-control{width:21px;height:21px;margin:-5px 1px -5px -4px;color:#b73974;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(250,199,222,.78));box-shadow:0 3px 10px rgba(169,48,103,.16);opacity:.82;font:11px/21px system-ui}#pinkie-native-window-controls .pinkie-update-control span{display:block;transition:transform .35s ease}.pinkie-update-control.is-checking span{animation:pinkieUpdateSpin .8s linear infinite}.pinkie-update-control.has-update{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.72),0 0 15px rgba(229,73,142,.65);animation:pinkieUpdateGlow 1.8s ease-in-out infinite}#pinkie-update-toast{position:fixed;z-index:2147483647;top:48px;right:14px;padding:9px 14px;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#773b5a;background:rgba(255,239,247,.9);box-shadow:0 12px 30px rgba(92,39,65,.16);backdrop-filter:blur(18px);font:12px system-ui;opacity:0;transform:translateY(-7px);pointer-events:none;transition:.22s ease}#pinkie-update-toast.is-visible{opacity:1;transform:none}#pinkie-update-dialog{position:fixed;z-index:2147483646;inset:0;display:grid;place-items:center;background:rgba(63,30,48,.16);backdrop-filter:blur(8px)}.pinkie-update-card{width:min(390px,calc(100vw - 42px));max-height:calc(100vh - 42px);box-sizing:border-box;overflow:auto;padding:clamp(18px,4vw,26px);border:1px solid rgba(255,255,255,.78);border-radius:28px;text-align:center;color:#713d58;background:linear-gradient(145deg,rgba(255,247,251,.95),rgba(247,211,228,.91));box-shadow:0 28px 80px rgba(67,28,49,.25)}.pinkie-update-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border-radius:15px;color:#c13678;background:rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(190,50,112,.18)}.pinkie-update-card h3{margin:0;font:600 18px/1.4 system-ui}.pinkie-update-card p{margin:9px 0;font:13px/1.65 system-ui}.pinkie-update-card .pinkie-update-status{min-height:20px;color:#9c607e;font-size:12px}.pinkie-update-card>div{display:flex;justify-content:center;gap:10px;margin-top:17px}.pinkie-update-card button{min-width:100px;padding:9px 16px;border:1px solid rgba(192,64,120,.22);border-radius:16px;color:#824866;background:rgba(255,255,255,.64);font:13px system-ui}.pinkie-update-card button.primary{color:#fff;background:linear-gradient(135deg,#de6299,#ba3674);box-shadow:0 8px 20px rgba(186,54,116,.23)}.pinkie-update-card button:disabled{opacity:.52}.pinkie-update-card.is-working .pinkie-update-mark{animation:pinkieUpdateSpin 1.1s linear infinite}@media(max-width:900px){#pinkie-native-drag-strip{right:105px;width:56px}#pinkie-native-window-controls{top:6px;right:7px;gap:6px}}@media(max-height:620px){#pinkie-update-toast{top:42px}.pinkie-update-card{padding:16px;border-radius:22px}.pinkie-update-mark{width:34px;height:34px;margin-bottom:7px}.pinkie-update-card p{margin:6px 0;line-height:1.45}.pinkie-update-card>div{margin-top:10px}}@keyframes pinkieUpdateSpin{to{transform:rotate(360deg)}}@keyframes pinkieUpdateGlow{50%{transform:translateY(-1px);filter:saturate(1.3)}}';
     document.head.append(style);
     window.__pinkieCheckForUpdates = () => inspectUpdate(false);
   }
@@ -896,8 +952,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
     window = webview.create_window(
         "超級碧琪", loading, js_api=bridge, width=1280, height=800,
-        min_size=(860, 580), frameless=True, easy_drag=False,
-        background_color="#efcbd3",
+        min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
+        shadow=True, background_color="#efcbd3",
     )
     bridge.attach(window)
     gateway = GatewaySupervisor(runtime)
@@ -949,6 +1005,22 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def shown(*_):
         threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
 
+    def sync_window_state(maximized):
+        bridge.maximized = bool(maximized)
+        try:
+            window.evaluate_js(
+                "window.__pinkieNativeWindowState?.(" +
+                json.dumps({"maximized": bridge.maximized}) + ")"
+            )
+        except Exception:
+            pass
+
+    def maximized(*_):
+        sync_window_state(True)
+
+    def restored(*_):
+        sync_window_state(False)
+
     def closed(*_):
         bridge.stop_dictation()
         services.close()
@@ -956,6 +1028,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
 
     window.events.loaded += loaded
     window.events.shown += shown
+    window.events.maximized += maximized
+    window.events.restored += restored
     window.events.closed += closed
     webview.start(
         gui="edgechromium", debug=False, private_mode=False,

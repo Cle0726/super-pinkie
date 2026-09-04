@@ -21,10 +21,12 @@
   let menu = null;
   let bypassSend = false;
   let arming = null;
+  let disarming = null;
   let statusRequest = null;
   let statusExpanded = false;
   let statusFailures = 0;
   let latestStatus = { active: false };
+  let latestStatusSessionKey = "";
   const refreshedCompletions = new Map();
 
   const PHASE_LABELS = Object.freeze({
@@ -163,12 +165,30 @@
     return arming;
   };
 
-  const disarmCurrent = async () => {
-    const sessionKey = currentSessionKey();
+  const disarmCurrent = async (preferredSessionKey = "") => {
+    const sessionKey = preferredSessionKey || currentSessionKey() || latestStatusSessionKey;
     const rpc = window.__laolaoSidebar?.gwRequest;
-    if (!sessionKey || typeof rpc !== "function") return;
-    try { await rpc("pinkie.deepThink.disarm", { sessionKey }, 12_000); } catch {}
-    hideStatus();
+    if (!sessionKey || typeof rpc !== "function") throw new Error("没有找到当前会话");
+    if (!disarming) {
+      disarming = (async () => {
+        // 先撤掉档位与续跑器，再终止宿主仍在执行的父轮次/子任务。
+        // 否则按钮虽然熄灭，OpenClaw 仍会把输入框保持在运行锁中。
+        await rpc("pinkie.deepThink.disarm", { sessionKey }, 12_000);
+        try {
+          await rpc("chat.abort", { sessionKey, preserveSideRuns: false }, 12_000);
+        } catch (error) {
+          const nativeStop = $(".chat-send-btn--stop");
+          if (nativeStop && !nativeStop.disabled) nativeStop.click();
+          else throw error;
+        }
+        latestStatus = { active: false };
+        latestStatusSessionKey = sessionKey;
+        hideStatus();
+        window.dispatchEvent(new Event("laolao:sessions-changed"));
+        return true;
+      })().finally(() => { disarming = null; });
+    }
+    return disarming;
   };
 
   const statusElement = () => document.getElementById(STATUS_ID);
@@ -255,6 +275,13 @@
 
   const renderStatus = (status = {}) => {
     latestStatus = status;
+    if (status.active && !selectedTier && !disarming) {
+      void disarmCurrent(latestStatusSessionKey).then(() => {
+        toast("遗留档位已停止，恢复普通发送");
+      }).catch((error) => {
+        toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
+      });
+    }
     const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
     const sessionKey = currentSessionKey();
     const endedAt = Number(status.endedAt) || 0;
@@ -297,6 +324,7 @@
       const status = await statusRequest;
       if (requestedSession !== currentSessionKey()) return;
       statusFailures = 0;
+      latestStatusSessionKey = requestedSession;
       renderStatus(status);
     } catch {
       statusFailures += 1;
@@ -383,19 +411,27 @@
       item.addEventListener("focus", explain);
       item.classList.toggle("is-selected", selectedTier === tier.id);
       item.setAttribute("aria-checked", String(selectedTier === tier.id));
-      item.addEventListener("click", () => {
+      item.addEventListener("click", async () => {
         const disabling = selectedTier === tier.id;
-        writeTier(disabling ? "" : tier.id);
-        if (disabling) void disarmCurrent();
-        if (!disabling) {
-          for (const trigger of $$("." + BTN_CLASS)) {
-            trigger.classList.remove("is-tier-enter");
-            requestAnimationFrame(() => trigger.classList.add("is-tier-enter"));
-            window.setTimeout(() => trigger.classList.remove("is-tier-enter"), 760);
+        item.disabled = true;
+        try {
+          if (disabling) {
+            await disarmCurrent();
+            writeTier("");
+          } else {
+            writeTier(tier.id);
+            for (const trigger of $$("." + BTN_CLASS)) {
+              trigger.classList.remove("is-tier-enter");
+              requestAnimationFrame(() => trigger.classList.add("is-tier-enter"));
+              window.setTimeout(() => trigger.classList.remove("is-tier-enter"), 760);
+            }
           }
+          toast(disabling ? "当前档位已停止，恢复普通发送" : `${tier.label}已固定，之后发送都会使用`);
+          closeMenu();
+        } catch (error) {
+          toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
+          item.disabled = false;
         }
-        toast(disabling ? "已恢复普通发送" : `${tier.label}已固定，之后发送都会使用`);
-        closeMenu();
       });
       choices.append(item);
     });
