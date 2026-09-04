@@ -14,7 +14,9 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /openclaw@\$\(\$manifest\.openclaw\)/);
   assert.match(build, /node\.exe'\);runtime\\bin/);
   assert.match(build, /runtime\\node_modules/);
+  assert.match(build, /--onedir/, 'Windows builds must use the fast-starting onedir layout');
   assert.match(build, /--onefile/);
+  assert.match(build, /LegacyOneFile/);
   assert.match(build, /pywebview/);
   assert.match(build, /pywin32/);
   assert.match(build, /sqlite3/);
@@ -51,6 +53,8 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(launcher, /prepare_update/);
   assert.match(release, /Get-FileHash/);
   assert.match(release, /windows-\*\.exe\.sha256/);
+  assert.match(release, /portable\.zip/);
+  assert.match(release, /portable\.zip\.sha256/);
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {

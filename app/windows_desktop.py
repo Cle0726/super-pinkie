@@ -46,14 +46,15 @@ def trusted_update_url(value):
     return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
 
 
-def release_update(release, current_version):
-    """Validate latest-release metadata and select its EXE/checksum pair."""
+def release_update(release, current_version, portable=False):
+    """Validate latest-release metadata and select the matching package."""
     if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
         return None
     version = str(release.get("tag_name", "")).strip().removeprefix("v")
     if version_tuple(version) <= version_tuple(current_version):
         return None
-    expected_name = f"{UPDATE_ASSET_PREFIX}{version}.exe"
+    suffix = "-portable.zip" if portable else ".exe"
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}{suffix}"
     checksum_name = expected_name + ".sha256"
     assets = {
         str(asset.get("name", "")): str(asset.get("browser_download_url", ""))
@@ -68,6 +69,7 @@ def release_update(release, current_version):
         "version": version,
         "name": expected_name,
         "executableUrl": executable_url,
+        "portable": portable,
         "checksumUrl": checksum_url,
         "releaseUrl": str(release.get("html_url", "")),
     }
@@ -156,12 +158,16 @@ def cleanup_orphan_webview(storage):
 
 
 class WindowsUpdater:
-    """Release updater for the frozen EXE; user state is never part of the swap."""
+    """Release updater for a frozen EXE or PyInstaller onedir directory."""
 
     def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
         self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
+        self.portable = self.executable.parent.name == "超級碧琪" and (
+            (self.executable.parent / "runtime").is_dir()
+            or (self.executable.parent / "_internal").is_dir()
+        )
         self.enabled = self.executable.suffix.lower() == ".exe" and (
             bool(getattr(sys, "frozen", False)) or bool(os.environ.get("PINKIE_EXECUTABLE_PATH")) or executable is not None
         )
@@ -199,7 +205,7 @@ class WindowsUpdater:
             self.last_checked = time.monotonic()
             try:
                 release = json.loads(self._read(UPDATE_API_URL, 1024 * 1024).decode("utf-8"))
-                selected = release_update(release, self.current_version)
+                selected = release_update(release, self.current_version, portable=self.portable)
                 self.latest = selected or {
                     "available": False,
                     "supported": True,
@@ -346,6 +352,77 @@ try {
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
+    @staticmethod
+    def _directory_helper_source():
+        """PowerShell replacer for the portable onedir package."""
+        return r'''param(
+  [Parameter(Mandatory=$true)][string]$TargetDir,
+  [Parameter(Mandatory=$true)][string]$Payload,
+  [Parameter(Mandatory=$true)][string]$Backup,
+  [Parameter(Mandatory=$true)][string]$TargetExe,
+  [Parameter(Mandatory=$true)][int]$CurrentPid,
+  [Parameter(Mandatory=$true)][string]$ExpectedHash,
+  [Parameter(Mandatory=$true)][string]$HealthMarker,
+  [Parameter(Mandatory=$true)][string]$Token,
+  [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+function Write-UpdateLog([string]$Message) {
+  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+}
+function Restore-PreviousVersion {
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    try {
+      if (Test-Path -LiteralPath $Backup) {
+        if (Test-Path -LiteralPath $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+        Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
+      }
+      break
+    } catch {
+      if ($attempt -eq 39) { throw }
+      Start-Sleep -Milliseconds 250
+    }
+  }
+  if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
+}
+try {
+  $deadline = (Get-Date).AddSeconds(120)
+  while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+  $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  $newDir = Join-Path $stage '超級碧琪'
+  if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
+  Move-Item -LiteralPath $TargetDir -Destination $Backup -Force
+  Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
+  $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
+  $healthDeadline = (Get-Date).AddSeconds(120)
+  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
+    Start-Sleep -Milliseconds 500
+    $launched.Refresh()
+  }
+  if (-not (Test-Path -LiteralPath $HealthMarker)) {
+    if (-not $launched.HasExited) { & taskkill.exe /PID $launched.Id /T /F | Out-Null }
+    throw 'new version did not become healthy'
+  }
+  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Write-UpdateLog 'portable update completed'
+} catch {
+  Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
+  try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+}
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'''
+
     def launch_replacer(self):
         with self.lock:
             if not self.prepared:
@@ -360,9 +437,27 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             health_root.mkdir(parents=True, exist_ok=True)
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
-            backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
-            helper.write_text(self._helper_source(), encoding="utf-8")
-            command = [
+            if self.portable:
+                target_dir = self.executable.parent
+                backup = target_dir.with_name(target_dir.name + ".previous")
+                helper.write_text(self._directory_helper_source(), encoding="utf-8")
+                command = [
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", str(helper),
+                    "-TargetDir", str(target_dir),
+                    "-Payload", str(payload),
+                    "-Backup", str(backup),
+                    "-TargetExe", str(self.executable),
+                    "-CurrentPid", str(os.getpid()),
+                    "-ExpectedHash", expected,
+                    "-HealthMarker", str(marker),
+                    "-Token", token,
+                    "-LogPath", str(state_root() / "logs/updater.log"),
+                ]
+            else:
+                backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
+                helper.write_text(self._helper_source(), encoding="utf-8")
+                command = [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                 "-File", str(helper),
                 "-Target", str(self.executable),
@@ -373,7 +468,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
-            ]
+                ]
             try:
                 subprocess.Popen(
                     command,

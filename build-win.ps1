@@ -1,4 +1,10 @@
-# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪.exe
+# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪 Windows App
+[CmdletBinding()]
+param(
+    # onedir avoids PyInstaller's onefile self-extraction (hundreds of MB) on every launch.
+    # Pass -LegacyOneFile when a standalone compatibility EXE is also required for releases.
+    [switch]$LegacyOneFile
+)
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -47,8 +53,8 @@ $runtimeInfo = @{
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
-$pyInstallerArgs = @(
-    "--noconfirm", "--clean", "--windowed", "--onefile",
+$pyInstallerCommonArgs = @(
+    "--noconfirm", "--clean", "--windowed",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
@@ -82,7 +88,23 @@ $pyInstallerArgs = @(
     "--add-data", "config.example.json;.",
     "app\super_pinkie.py"
 )
-pyinstaller @pyInstallerArgs
-if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
 
-Write-Host "构建完成: dist\超級碧琪.exe"
+# Build the fast-starting directory layout by default.  PyInstaller keeps all
+# resources next to the launcher, so Windows no longer has to unpack ~700 MB
+# into a temporary _MEI directory before showing the window.
+pyinstaller @pyInstallerCommonArgs --onedir
+if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
+if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
+    throw "Windows onedir 构建产物缺失"
+}
+
+if ($LegacyOneFile) {
+    pyinstaller @pyInstallerCommonArgs --onefile
+    if ($LASTEXITCODE -ne 0) { throw "Windows 兼容 EXE 构建失败" }
+    if (-not (Test-Path -LiteralPath 'dist\超級碧琪.exe')) {
+        throw "Windows onefile 构建产物缺失"
+    }
+}
+
+Write-Host "构建完成: dist\超級碧琪\超級碧琪.exe"
+if ($LegacyOneFile) { Write-Host "兼容构建完成: dist\超級碧琪.exe" }

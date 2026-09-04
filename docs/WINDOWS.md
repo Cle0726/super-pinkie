@@ -1,12 +1,14 @@
 # Windows 10/11 使用指南
 
-## 推荐：直接使用完整 EXE
+## 推荐：使用快速启动版（onedir）
 
-从 GitHub Releases 下载 `超級碧琪.exe`，双击即可。成品已内置固定版本的 Node.js、OpenClaw、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或 OpenClaw。
+从 GitHub Releases 下载并解压 `super-pinkie-windows-<版本>-portable.zip`，运行 `超級碧琪\\超級碧琪.exe`。成品已内置固定版本的 Node.js、OpenClaw、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或 OpenClaw。onedir 版本把运行时放在程序目录旁，不会像旧单文件 EXE 那样在每次启动时把数百 MB 解压到 `_MEI*` 临时目录，因此启动明显更快。
+
+Release 中仍提供 `super-pinkie-windows-<版本>.exe` 兼容版；它便于单文件分发，但每次启动都需要解压内置运行时，启动较慢。
 
 首次打开会完整播放一次开屏视频，并在后台准备网关；如果准备时间较长，画面会停在视频尾帧而不是循环。准备好后直接进入 App 内的聊天页面。
 
-用户自己的模型 Key、配置、聊天记录和工作区仍保存在 `%USERPROFILE%\.openclaw`，派对和圆桌记录保存在 `%LOCALAPPDATA%\SuperPinkie`。替换 EXE 不会删除这些资料；桌面 App 只补缺少的默认人格和提示词，已有内容（包括手动修改）不会被改回去。配置层发生必要的兼容迁移时仍会先备份到 `%LOCALAPPDATA%\SuperPinkie\backups`。
+用户自己的模型 Key、配置、聊天记录和工作区仍保存在 `%USERPROFILE%\.openclaw`，派对和圆桌记录保存在 `%LOCALAPPDATA%\SuperPinkie`。替换程序目录（兼容版则替换 EXE）不会删除这些资料；桌面 App 只补缺少的默认人格和提示词，已有内容（包括手动修改）不会被改回去。配置层发生必要的兼容迁移时仍会先备份到 `%LOCALAPPDATA%\SuperPinkie\backups`。
 
 若 Windows 缺少 WebView2 Runtime，安装微软 WebView2 Runtime 后重新打开；Windows 11 通常已预装。
 
