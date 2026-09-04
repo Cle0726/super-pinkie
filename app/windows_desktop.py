@@ -677,24 +677,28 @@ class LocalServices:
 
 class NativeBridge:
     def __init__(self, updater):
-        self.updater = updater
-        self.window = None
+        # pywebview recursively exposes public js_api attributes. Keeping a
+        # public reference to Window makes it walk Window.native/WebView2 COM
+        # objects, producing thousands of cross-thread errors and sometimes
+        # freezing startup. Private fields are intentionally not exported.
+        self._updater = updater
+        self._window = None
         self.maximized = False
         self.dictation_stop = threading.Event()
         self.dictation_thread = None
         self.dictation_text = ""
 
     def attach(self, window):
-        self.window = window
+        self._window = window
 
     def open_chat(self):
-        self.window.load_url(gateway_ui_url())
+        self._window.load_url(gateway_ui_url())
 
     def open_party(self):
-        self.window.load_url(PARTY_URL)
+        self._window.load_url(PARTY_URL)
 
     def open_roundtable(self):
-        self.window.load_url(ROUNDTABLE_URL)
+        self._window.load_url(ROUNDTABLE_URL)
 
     def project_folder(self, payload):
         payload = payload if isinstance(payload, dict) else {}
@@ -710,7 +714,7 @@ class NativeBridge:
 
         initial = Path(str(payload.get("path", "")))
         directory = str(initial if initial.is_dir() else Path.home())
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FOLDER_DIALOG, directory=directory, allow_multiple=False
         )
         if not selected:
@@ -734,7 +738,7 @@ class NativeBridge:
         if message:
             payload["message"] = message
         try:
-            self.window.evaluate_js(
+            self._window.evaluate_js(
                 "window.__laolaoNativeDictationUpdate?.(" + json.dumps(payload, ensure_ascii=False) + ")"
             )
         except Exception:
@@ -790,14 +794,14 @@ class NativeBridge:
         self.dictation_stop.set()
 
     def minimize(self):
-        self.window.minimize()
+        self._window.minimize()
 
     def _native_window_handle(self):
         """Return the Win32 HWND exposed by pywebview's WinForms backend."""
-        if os.name != "nt" or not self.window:
+        if os.name != "nt" or not self._window:
             return None
         try:
-            handle = self.window.native.Handle
+            handle = self._window.native.Handle
             return int(handle.ToInt64()) if hasattr(handle, "ToInt64") else int(handle)
         except (AttributeError, TypeError, ValueError):
             return None
@@ -826,34 +830,34 @@ class NativeBridge:
 
     def toggle_maximize(self):
         if self.maximized:
-            self.window.restore()
+            self._window.restore()
         else:
-            self.window.maximize()
+            self._window.maximize()
         # The native maximized/restored events are the source of truth. This
         # optimistic value keeps double-clicks correct before that event lands.
         self.maximized = not self.maximized
         return {"maximized": self.maximized}
 
     def window_close(self):
-        self.window.destroy()
+        self._window.destroy()
 
     def control_center(self):
         subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs())
 
     def check_for_updates(self):
-        return self.updater.check(force=True)
+        return self._updater.check(force=True)
 
     def prepare_update(self):
         try:
-            return self.updater.prepare()
+            return self._updater.prepare()
         except Exception as error:
             append_log("updater", f"update preparation failed: {error}")
             return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
 
     def apply_update(self):
-        result = self.updater.launch_replacer()
+        result = self._updater.launch_replacer()
         if result.get("started"):
-            threading.Timer(.6, self.window.destroy).start()
+            threading.Timer(.6, self._window.destroy).start()
         return result
 
 
@@ -1045,8 +1049,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    # A warm Gateway can be shown directly. This avoids flashing or waiting on
+    # the launcher page on the common second-start path.
+    initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
     window = webview.create_window(
-        "超級碧琪", loading, js_api=bridge, width=1280, height=800,
+        "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
         shadow=True, background_color="#efcbd3",
     )
@@ -1055,10 +1062,16 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     services = LocalServices(runtime)
 
     def loaded(*_):
-        try:
-            window.evaluate_js(BRIDGE_SCRIPT)
-            current_url = str(window.get_current_url() or "")
-            if current_url.startswith(GATEWAY_URL):
+        # pywebview fires `loaded` on WebView2's GUI thread. Calling its
+        # synchronous evaluate_js there deadlocks: ExecuteScriptAsync needs the
+        # very same GUI thread to complete. Return from the event immediately
+        # and do all synchronous window calls from a worker instead.
+        def install_bridge():
+            try:
+                current_url = str(window.get_current_url() or "")
+                if not current_url.startswith(GATEWAY_URL):
+                    return
+                window.evaluate_js(BRIDGE_SCRIPT)
                 if update_health_token:
                     health = state_root() / "updates/health" / f"{update_health_token}.ready"
                     health.parent.mkdir(parents=True, exist_ok=True)
@@ -1075,8 +1088,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
                             pass
 
                 threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
-        except Exception:
-            pass
+            except Exception as error:
+                append_log("launcher", f"native bridge setup skipped: {error}")
+
+        threading.Thread(target=install_bridge, name="pinkie-native-bridge", daemon=True).start()
 
     def bootstrap():
         try:
@@ -1089,9 +1104,6 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             # its GUI message pump when load_url/evaluate_js crosses threads.
         except Exception as error:
             append_log("launcher", f"startup failed: {error}")
-
-    def shown(*_):
-        threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
 
     def sync_window_state(maximized):
         bridge.maximized = bool(maximized)
@@ -1121,10 +1133,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             append_log("launcher", "window closed; keeping gateway for background sessions")
 
     window.events.loaded += loaded
-    window.events.shown += shown
     window.events.maximized += maximized
     window.events.restored += restored
     window.events.closed += closed
+    # Start local services independently of WebView2. A broken/slow renderer
+    # must never prevent the Gateway from being launched.
+    threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
         gui="edgechromium", debug=False, private_mode=False,
         storage_path=str(webview_storage),

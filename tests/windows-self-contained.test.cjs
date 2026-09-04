@@ -40,7 +40,13 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /PINKIE_KEEP_GATEWAY/);
   assert.match(launcher, /keeping gateway for background sessions/);
   assert.match(launcher, /pywebview window APIs from this worker thread/);
-  assert.match(read('ui/launcher-loading.html'), /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
+  assert.match(launcher, /synchronous evaluate_js there deadlocks/);
+  assert.doesNotMatch(launcher, /self\.window\s*=/, 'js_api must not expose the recursive pywebview Window object');
+  assert.match(launcher, /self\._window\s*=/);
+  assert.match(launcher, /threading\.Thread\(target=bootstrap/);
+  const loading = read('ui/launcher-loading.html');
+  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
+  assert.match(loading, /mode: "no-cors"/);
   assert.match(launcher, /frameless=True/);
 });
 

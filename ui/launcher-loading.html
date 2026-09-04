@@ -39,7 +39,9 @@
         // Any HTTP response (including an auth response) means the listener
         // exists. Navigation happens inside WebView2's own UI thread, avoiding
         // cross-thread load_url calls that can make the window appear hung.
-        await fetch("http://127.0.0.1:18789/", { cache: "no-store" });
+        // file:// -> http:// is cross-origin. Without no-cors, a healthy
+        // Gateway response is rejected by CORS and the splash waits forever.
+        await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors" });
         location.replace("http://127.0.0.1:18789/");
         return;
       } catch (_) {
