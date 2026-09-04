@@ -523,8 +523,6 @@ class GatewaySupervisor:
         self.closing = threading.Event()
         self.lock = threading.RLock()
         self.last_restart = 0.0
-        self.started_at = 0.0
-        self.startup_grace = 90.0
         self.failure_limit = 3
 
     def start(self):
@@ -553,7 +551,6 @@ class GatewaySupervisor:
                     stderr=output,
                     **hidden_process_kwargs(),
                 )
-                self.started_at = time.monotonic()
                 append_log("launcher", f"gateway started pid={self.process.pid}")
             except OSError as error:
                 output.close()
@@ -574,13 +571,15 @@ class GatewaySupervisor:
             with self.lock:
                 process = self.process
                 alive = bool(process and process.poll() is None)
-                age = time.monotonic() - self.started_at if self.started_at else 0
             if http_ready(GATEWAY_URL):
                 failures = 0
                 continue
-            # Cold bundled OpenClaw startup can spend tens of seconds loading.
-            # Never taskkill a live process in this grace period.
-            if alive and age < self.startup_grace:
+            # A freshly copied onedir runtime may be scanned by Defender while
+            # Node imports thousands of files. On slower disks this can exceed
+            # any fixed grace period. Never kill a still-live Gateway merely
+            # because HTTP is not ready: doing so at 90s restarted cold startup
+            # from zero and made Windows appear much slower than macOS.
+            if alive:
                 failures = 0
                 continue
             failures += 1

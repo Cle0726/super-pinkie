@@ -33,7 +33,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /while not self\.closing\.wait\(2\)/);
   assert.match(launcher, /self\.failure_limit = 3/);
   assert.match(launcher, /failures >= self\.failure_limit/);
-  assert.match(launcher, /age < self\.startup_grace/);
+  assert.doesNotMatch(launcher, /age < self\.startup_grace/);
   assert.match(launcher, /--auth", "none/);
   assert.match(launcher, /--bind", "loopback/);
   assert.match(launcher, /cleanup_orphan_webview/);
@@ -44,6 +44,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.doesNotMatch(launcher, /self\.window\s*=/, 'js_api must not expose the recursive pywebview Window object');
   assert.match(launcher, /self\._window\s*=/);
   assert.match(launcher, /threading\.Thread\(target=bootstrap/);
+  assert.match(launcher, /Never kill a still-live Gateway/);
   const loading = read('ui/launcher-loading.html');
   assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
   assert.match(loading, /mode: "no-cors"/);
