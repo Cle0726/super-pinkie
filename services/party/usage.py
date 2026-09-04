@@ -17,7 +17,11 @@ DISPLAY_PRICING_VERSION=2
 
 def state_root(home=None):
     configured=os.environ.get('PINKIE_STATE_ROOT')
-    return Path(configured) if configured else Path(home or Path.home())/'Library/Application Support/SuperPinkie'
+    if configured:
+        return Path(configured)
+    home = Path(home or Path.home())
+    return (Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+            if os.name == 'nt' else home/'Library/Application Support/SuperPinkie')
 
 
 def number(value):

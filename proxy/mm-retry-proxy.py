@@ -16,7 +16,8 @@ unrestricted-mode agent (agent=unrestricted / OPENCLAW_UR_INJECT), it:
    streams are passed through untouched once started.
 
 Prompt files are read per request (edit without restart).
-Config via argv[1] (listen port, default 1467); upstream 127.0.0.1:1466.
+Config via UR_PROXY_* environment variables (argv[1]/argv[2] override listen/upstream
+ports). Defaults are listen 1467 and upstream 127.0.0.1:1466.
 """
 
 import http.client
@@ -29,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # --- unrestricted-prompt injection (added) ---
 import os
 
-PROMPT_DIR = os.path.expanduser("~/.openclaw")
+PROMPT_DIR = os.environ.get("UR_PROXY_PROMPTS_DIR", os.path.expanduser("~/.openclaw"))
 
 
 def resolve_prompt_for_model(model_id, provider=""):
@@ -269,10 +270,10 @@ def looks_refused(text):
 
 
 
-LISTEN_HOST = "127.0.0.1"
-LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 1467
-UPSTREAM_HOST = "127.0.0.1"
-UPSTREAM_PORT = 1466
+LISTEN_HOST = os.environ.get("UR_PROXY_LISTEN_HOST", "127.0.0.1")
+LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("UR_PROXY_LISTEN", "1467"))
+UPSTREAM_HOST = os.environ.get("UR_PROXY_UPSTREAM_HOST", "127.0.0.1")
+UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466"))
 MAX_ATTEMPTS = 8
 FIRST_BYTE_TIMEOUT_SECONDS = 30
 STREAM_IDLE_TIMEOUT_SECONDS = 300

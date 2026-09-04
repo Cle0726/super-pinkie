@@ -10,6 +10,8 @@ $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
 python -m pip install --disable-pip-version-check --upgrade pip pyinstaller pywebview pywin32 edge-tts aiohttp
+python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"
+if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $nodeVersion = (& $node --version).TrimStart('v')
@@ -54,6 +56,8 @@ $pyInstallerArgs = @(
     "--hidden-import", "win32com.client",
     "--hidden-import", "pythoncom",
     "--hidden-import", "pywintypes",
+    "--hidden-import", "sqlite3",
+    "--hidden-import", "_sqlite3",
     "--collect-all", "webview",
     "--collect-all", "edge_tts",
     "--collect-all", "aiohttp",

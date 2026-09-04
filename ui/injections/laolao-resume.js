@@ -63,6 +63,21 @@
     } catch {}
   };
 
+  // 档位控制器的续跑由本机网关发起，结束事件有时不经过当前 WKWebView
+  // 的 websocket。直接触发原生聊天页自己的“刷新”动作，既不重载页面，
+  // 也不会重播开屏或丢失输入框草稿。
+  const refreshVisibleChat = async () => {
+    await refreshSession();
+    const buttons = Array.from(document.querySelectorAll(
+      "openclaw-chat-pane button.chat-settings-action"
+    ));
+    const refresh = buttons.find((button) =>
+      /刷新|refresh/i.test(`${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`)
+    );
+    if (refresh && !refresh.disabled) refresh.click();
+  };
+  window.__laolaoRefreshCurrentChat = refreshVisibleChat;
+
   // 回前台主流程
   const onForeground = () => {
     // 延迟策略: 当前 busy → 等重连窗口再刷新; 否则快速刷新。
@@ -87,6 +102,10 @@
     }, 700);
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
+  window.addEventListener("pinkie:tier-complete", () => {
+    void refreshVisibleChat();
+    window.setTimeout(() => void refreshVisibleChat(), 900);
+  });
 
   // 只有用户真实点击停止，才取消这一轮自动续接。
   document.addEventListener('click', (event) => {

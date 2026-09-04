@@ -24,6 +24,8 @@
   let statusRequest = null;
   let statusExpanded = false;
   let statusFailures = 0;
+  let latestStatus = { active: false };
+  const refreshedCompletions = new Map();
 
   const PHASE_LABELS = Object.freeze({
     planning: "正在规划",
@@ -252,7 +254,14 @@
   };
 
   const renderStatus = (status = {}) => {
+    latestStatus = status;
     const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
+    const sessionKey = currentSessionKey();
+    const endedAt = Number(status.endedAt) || 0;
+    if (!status.active && status.complete && endedAt && refreshedCompletions.get(sessionKey) !== endedAt) {
+      refreshedCompletions.set(sessionKey, endedAt);
+      window.dispatchEvent(new CustomEvent("pinkie:tier-complete", {detail: {sessionKey, endedAt}}));
+    }
     if (!status.active && !endedRecently) { hideStatus(); return; }
     const panel = ensureStatus();
     const required = Math.max(0, Number(status.required) || 0);
@@ -299,6 +308,7 @@
 
   const afterArm = async (send) => {
     try {
+      if (latestStatus?.active) throw new Error("上一轮还在执行，完成后会自动显示终稿");
       await armSelected();
       bypassSend = true;
       send();

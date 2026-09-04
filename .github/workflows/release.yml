@@ -59,11 +59,9 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path '.\installer\windows\apply-theme.ps1'),
-            [ref]$tokens,
-            [ref]$errors
-          )
+          foreach ($script in @('.\installer\windows\apply-theme.ps1', '.\install.ps1', '.\services\watchdog\windows-gateway-watchdog.ps1')) {
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
+          }
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
       - name: Build Windows exe
         shell: pwsh

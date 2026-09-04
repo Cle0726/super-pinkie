@@ -10,7 +10,9 @@ IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(en
 
 
 def state_root(home):
-    return Path(os.environ.get('PINKIE_STATE_ROOT', home / 'Library/Application Support/SuperPinkie'))
+    return Path(os.environ.get('PINKIE_STATE_ROOT',
+                               (Path(os.environ.get('LOCALAPPDATA', home / 'AppData/Local')) / 'SuperPinkie'
+                                if os.name == 'nt' else home / 'Library/Application Support/SuperPinkie')))
 
 
 def party_soul(name, address='铲屎官'):

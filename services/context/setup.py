@@ -32,7 +32,9 @@ def install(home=None):
         return False
     raw = source.read_bytes()
     config = json.loads(raw)
-    state = Path(os.environ.get('PINKIE_STATE_ROOT', home/'Library/Application Support/SuperPinkie'))
+    state = Path(os.environ.get('PINKIE_STATE_ROOT',
+                                (Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+                                 if os.name == 'nt' else home/'Library/Application Support/SuperPinkie')))
     policy_file = state/'context-policy.json'
     rules = budget['policy'](home)
     provenance = budget['read_json'](state/'context-limits.json')

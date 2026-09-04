@@ -1,4 +1,4 @@
-# apply-theme.ps1 — Windows 版：把 来啦～老弟 皮肤注入 OpenClaw UI 目录
+﻿# apply-theme.ps1 — Windows 版：把 来啦～老弟 皮肤注入 OpenClaw UI 目录
 #
 # 用法：
 #   .\installer\windows\apply-theme.ps1
@@ -147,9 +147,9 @@ function Apply-UISkin {
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink12"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink13"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact1"></script>',
-        '<script defer src="./laolao-resume.js?v=resume5"></script>'
+        '<script defer src="./laolao-resume.js?v=resume6"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -163,8 +163,8 @@ function Apply-UISkin {
         'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats11';
         'laolao-phrases.js' = 'phrases8';
         'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
-        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume5'
-        'laolao-deep-think.js' = 'deepthink12'; 'laolao-context-compact.js' = 'contextcompact1'
+        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume6'
+        'laolao-deep-think.js' = 'deepthink13'; 'laolao-context-compact.js' = 'contextcompact1'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

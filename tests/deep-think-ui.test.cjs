@@ -24,12 +24,22 @@ test('main chat shows aggregate worker progress without exposing child chats',()
   assert.match(src,/laolao-deep-think-status/);
   assert.match(src,/协作处理中/);
   assert.match(src,/全部完成，正在汇总/);
+  assert.match(src,/pinkie:tier-complete/);
+  assert.match(src,/上一轮还在执行，完成后会自动显示终稿/);
   assert.match(src,/status\.roles/);
   assert.match(src,/completed.*required/s);
   assert.match(src,/laolao-status-flow/);
   assert.match(src,/fill\.style\.transform = `scaleX/);
   assert.doesNotMatch(src,/details\.replaceChildren/);
   assert.match(src,/window\.setInterval\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
+});
+
+test('tier completion refreshes native chat history without reloading the app',()=>{
+  const src=read('ui/injections/laolao-resume.js');
+  assert.match(src,/pinkie:tier-complete/);
+  assert.match(src,/refreshVisibleChat/);
+  assert.match(src,/button\.chat-settings-action/);
+  assert.doesNotMatch(src,/location\.reload/);
 });
 
 test('tier menu uses compact self-drawn pink glass controls and avoids a root mutation observer',()=>{

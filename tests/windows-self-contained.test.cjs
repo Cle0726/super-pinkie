@@ -17,6 +17,8 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /--onefile/);
   assert.match(build, /pywebview/);
   assert.match(build, /pywin32/);
+  assert.match(build, /sqlite3/);
+  assert.match(build, /_sqlite3/);
   assert.doesNotMatch(build, /winget/);
   assert.doesNotMatch(build, /openclaw\.json/);
 });
@@ -26,8 +28,13 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /node_modules\/openclaw\/openclaw\.mjs/);
   assert.match(launcher, /gateway", "run"/);
   assert.match(launcher, /while not self\.closing\.wait\(2\)/);
-  assert.match(launcher, /failures >= 2/);
-  assert.match(launcher, /window\.load_url\(GATEWAY_URL\)/);
+  assert.match(launcher, /self\.failure_limit = 3/);
+  assert.match(launcher, /failures >= self\.failure_limit/);
+  assert.match(launcher, /age < self\.startup_grace/);
+  assert.match(launcher, /--auth", "none/);
+  assert.match(launcher, /--bind", "loopback/);
+  assert.match(launcher, /cleanup_orphan_webview/);
+  assert.match(launcher, /window\.load_url\(gateway_ui_url\(\)\)/);
   assert.match(launcher, /frameless=True/);
 });
 
@@ -77,4 +84,31 @@ test('Windows subprocess streams use threads instead of unsupported pipe selecto
   assert.doesNotMatch(roundtable, /selectors\.DefaultSelector/);
   assert.match(party, /iter_process_output/);
   assert.match(roundtable, /iter_process_output/);
+});
+
+test('Windows deployment uses explicit ports, windowless Python and a safe gateway watchdog', () => {
+  const install = read('install.ps1');
+  const proxy = read('proxy/mm-retry-proxy.py');
+  const watchdog = read('services/watchdog/windows-gateway-watchdog.ps1');
+  assert.match(install, /pythonw\.exe/);
+  assert.match(install, /UR_PROXY_UPSTREAM_PORT/);
+  assert.match(install, /OpenClawGatewayWatchdog/);
+  assert.match(install, /auth\.mode = "none"/);
+  assert.match(proxy, /UR_PROXY_LISTEN/);
+  assert.match(proxy, /UR_PROXY_UPSTREAM_PORT/);
+  assert.match(proxy, /UR_PROXY_PROMPTS_DIR/);
+  assert.match(watchdog, /--auth.*none/);
+  assert.match(watchdog, /Invoke-WebRequest/);
+  assert.doesNotMatch(watchdog, /taskkill/);
+  for (const name of ['services/context/context_budget.py', 'services/context/setup.py', 'services/project-scope/setup.py', 'services/party/setup.py', 'services/roundtable/server.py']) {
+    assert.match(read(name), /LOCALAPPDATA/);
+    assert.match(read(name), /os\.name\s*==\s*['"]nt['"]|os\.name\s*!=\s*['"]nt['"]/);
+  }
+});
+
+test('PowerShell entrypoints are UTF-8 with BOM for Windows PowerShell 5.1', () => {
+  for (const name of ['install.ps1', 'installer/windows/apply-theme.ps1', 'services/watchdog/windows-gateway-watchdog.ps1']) {
+    const bytes = fs.readFileSync(path.join(root, name));
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], `${name} must have UTF-8 BOM`);
+  }
 });

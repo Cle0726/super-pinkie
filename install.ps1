@@ -1,4 +1,4 @@
-# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
+﻿# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
 #
 # 做了什么：
 #   1. 把 prompts\*.txt 复制到 %USERPROFILE%\.openclaw\（可用 UR_PROMPTS_DIR 覆盖）
@@ -16,7 +16,7 @@
 #   .\install.ps1 -Remove             # 卸载：移除补丁、停止代理、删除计划任务
 #
 # 环境变量覆盖：
-#   $env:UR_PROMPTS_DIR, $env:UR_PROXY_PORT, $env:UR_UPSTREAM_PORT, $env:OPENCLAW_ROOT
+#   $env:UR_PROMPTS_DIR, $env:UR_PROXY_LISTEN, $env:UR_PROXY_UPSTREAM_PORT, $env:OPENCLAW_ROOT
 
 param(
   [string]$Provider   = "",
@@ -27,12 +27,22 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PromptsDir   = if ($env:UR_PROMPTS_DIR) { $env:UR_PROMPTS_DIR } else { Join-Path $env:USERPROFILE ".openclaw" }
-$ProxyPort    = if ($env:UR_PROXY_PORT)    { $env:UR_PROXY_PORT }    else { "1467" }
-$UpstreamPort = if ($env:UR_UPSTREAM_PORT) { $env:UR_UPSTREAM_PORT } else { "1466" }
+$ProxyPort    = if ($env:UR_PROXY_LISTEN) { $env:UR_PROXY_LISTEN } elseif ($env:UR_PROXY_PORT) { $env:UR_PROXY_PORT } else { "1467" }
+$UpstreamPort = if ($env:UR_PROXY_UPSTREAM_PORT) { $env:UR_PROXY_UPSTREAM_PORT } elseif ($env:UR_UPSTREAM_PORT) { $env:UR_UPSTREAM_PORT } else { "1466" }
 $ProxyScript  = Join-Path $RepoDir "proxy\mm-retry-proxy.py"
 $PatchScript  = Join-Path $RepoDir "patch\reapply-unrestricted-patch.mjs"
 $TaskName     = "OpenClawURProxy"
+$GatewayWatchdogTask = "OpenClawGatewayWatchdog"
+$GatewayWatchdog = Join-Path $RepoDir "services\watchdog\windows-gateway-watchdog.ps1"
 $UserHome     = $env:USERPROFILE
+
+function Resolve-PythonWindowless {
+  $candidate = Get-Command "pythonw.exe" -ErrorAction SilentlyContinue
+  if ($candidate) { return $candidate.Source }
+  $candidate = Get-Command "python.exe" -ErrorAction SilentlyContinue
+  if ($candidate) { return $candidate.Source }
+  throw "找不到 Python（需要 pythonw.exe 或 python.exe）"
+}
 
 # ── 卸载模式 ──────────────────────────────────────────────────────────────
 if ($Remove) {
@@ -41,6 +51,8 @@ if ($Remove) {
   Write-Host "==> stopping proxy + removing scheduled task"
   Stop-ScheduledTask    -TaskName $TaskName -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+  Stop-ScheduledTask    -TaskName $GatewayWatchdogTask -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $GatewayWatchdogTask -Confirm:$false -ErrorAction SilentlyContinue
   Get-Process -Name "python*" -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $_.Path -like "*mm-retry-proxy*" } |
     Stop-Process -Force -ErrorAction SilentlyContinue
@@ -63,6 +75,27 @@ node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Context protection patch failed" }
 python (Join-Path $RepoDir "services\context\setup.py")
 if ($LASTEXITCODE -ne 0) { throw "Context policy setup failed" }
+
+# 本地回环网关不应被浏览器 token 欢迎页拦住；保留 token 字段，只收口启动方式。
+$ConfigPath = Join-Path $PromptsDir "openclaw.json"
+if (Test-Path $ConfigPath) {
+  $configRaw = Get-Content $ConfigPath -Raw -Encoding UTF8
+  $config = $configRaw | ConvertFrom-Json
+  $configChanged = $false
+  if (-not $config.gateway) { $config | Add-Member -NotePropertyName gateway -NotePropertyValue ([pscustomobject]@{}); $configChanged = $true }
+  if ($config.gateway.mode -ne "local") { $config.gateway.mode = "local"; $configChanged = $true }
+  if ($config.gateway.bind -ne "loopback") { $config.gateway.bind = "loopback"; $configChanged = $true }
+  if (-not $config.gateway.auth) { $config.gateway | Add-Member -NotePropertyName auth -NotePropertyValue ([pscustomobject]@{}); $configChanged = $true }
+  if ($config.gateway.auth.mode -eq "token" -or -not $config.gateway.auth.mode) { $config.gateway.auth.mode = "none"; $configChanged = $true }
+  if (-not $config.gateway.controlUi) { $config.gateway | Add-Member -NotePropertyName controlUi -NotePropertyValue ([pscustomobject]@{}); $configChanged = $true }
+  if ($config.gateway.controlUi.allowInsecureAuth -ne $true) { $config.gateway.controlUi.allowInsecureAuth = $true; $configChanged = $true }
+  if ($configChanged) {
+    $backupRoot = Join-Path $env:LOCALAPPDATA "SuperPinkie\backups"
+    New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
+    Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $backupRoot ("openclaw-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".json")) -Force
+    $config | ConvertTo-Json -Depth 100 | Set-Content $ConfigPath -Encoding UTF8
+  }
+}
 
 # ── 3/6  人格文件安装 ─────────────────────────────────────────────────────
 Write-Host "==> 3/6  installing personas"
@@ -118,7 +151,8 @@ if (-not $SkipTheme) {
 
 # ── 5/6  代理计划任务 ─────────────────────────────────────────────────────
 Write-Host "==> 5/6  installing proxy as scheduled task '$TaskName' (port $ProxyPort -> $UpstreamPort)"
-$action   = New-ScheduledTaskAction -Execute "python" -Argument "`"$ProxyScript`" $ProxyPort" -WorkingDirectory (Split-Path $ProxyScript)
+$pythonw   = Resolve-PythonWindowless
+$action   = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$ProxyScript`" $ProxyPort $UpstreamPort" -WorkingDirectory (Split-Path $ProxyScript)
 $trigger  = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
 $env2     = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
@@ -130,6 +164,20 @@ try {
   Write-Host "    proxy healthy: $($health | ConvertTo-Json -Compress)"
 } catch {
   Write-Host "    WARNING: proxy health check failed: $_"
+}
+
+# 网关冷启动可能超过半分钟；巡检脚本只拉起缺失监听，不 taskkill 正在冷启动的网关。
+if (Test-Path $GatewayWatchdog) {
+  $nodeBin = if ($env:PINKIE_NODE_BIN) { $env:PINKIE_NODE_BIN } else { (Get-Command node.exe -ErrorAction SilentlyContinue).Source }
+  $openclawEntry = if ($env:PINKIE_OPENCLAW_ENTRY) { $env:PINKIE_OPENCLAW_ENTRY } else { Join-Path $env:APPDATA "npm\node_modules\openclaw\openclaw.mjs" }
+  if ($nodeBin -and (Test-Path $nodeBin) -and (Test-Path $openclawEntry)) {
+    $ps = (Get-Command powershell.exe).Source
+    $watchAction = New-ScheduledTaskAction -Execute $ps -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$GatewayWatchdog`" -NodePath `"$nodeBin`" -OpenClawEntry `"$openclawEntry`" -Port 18789" -WorkingDirectory (Split-Path $GatewayWatchdog)
+    $watchTrigger = New-ScheduledTaskTrigger -AtLogOn
+    $watchTrigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ([TimeSpan]::MaxValue)
+    Register-ScheduledTask -TaskName $GatewayWatchdogTask -Action $watchAction -Trigger @($watchTrigger,$watchTrigger2) -Settings $settings -Principal $env2 -Force | Out-Null
+    Start-ScheduledTask -TaskName $GatewayWatchdogTask
+  } else { Write-Warning "找不到 node/openclaw，网关巡检任务暂不注册" }
 }
 
 # ── 6/6  Provider 指向代理（可选）────────────────────────────────────────

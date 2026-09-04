@@ -50,6 +50,8 @@ test('deep-think tiers are bounded and mode-aware',()=>{
   assert.match(marathon,/无人值守的长时任务/);assert.match(marathon,/主代理在子代理工作时继续/);
   assert.match(marathon,/pinkie-longrun-complete/);assert.match(marathon,/总派生上限 512/);
   assert.match(base,/后端硬验收/);assert.match(full,/真实验证×2/);assert.match(marathon,/反批评×3/);
+  assert.match(base,/交付契约/);assert.match(base,/不得把两者一律写成研究报告/);
+  assert.match(full,/主代理必须继续调用真实工具完成修改\/产物并运行验证/);
   assert.deepEqual(deliberationRequirements('base','project').roles,{planner:1,solver:3,critic:2,judge:1});
   assert.equal(deliberationRequirements('boost','none').dynamicUpgradeKinds,2);
 });
@@ -123,10 +125,29 @@ test('completed tier audit remains queryable after the parent turn ends',()=>{
   runtime.arm(ctx.sessionKey,'base');
   for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
   assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx);
+  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'成品已经完成并验证通过。'});
   const status=runtime.status(ctx.sessionKey);
   assert.equal(status.active,false);assert.equal(status.complete,true);assert.equal(status.completedRoles.solver,3);
   assert.equal(status.completed,status.required);assert.equal(status.phase,'done');assert.ok(status.endedAt>0);
+});
+
+test('a completed role audit cannot end on sessions_yield or an empty parent turn',()=>{
+  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:needs-final',runId:'needs-final'};
+  runtime.arm(ctx.sessionKey,'base');
+  for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
+  runtime.finishTurn(ctx,{success:true,messages:[{role:'assistant',stopReason:'toolUse',content:[{type:'text',text:'等待子任务完成。'}]}]});
+  assert.equal(runtime.status(ctx.sessionKey).active,true);
+  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:''});
+  assert.equal(runtime.status(ctx.sessionKey).active,true);
+  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'已完成实际交付。'});
+  assert.equal(runtime.status(ctx.sessionKey).active,false);
+});
+
+test('arming cannot overwrite a tier run that is still active',()=>{
+  const runtime=new ModeArchitecture();const sessionKey='agent:project:no-overlap';
+  runtime.arm(sessionKey,'base');
+  assert.throws(()=>runtime.arm(sessionKey,'full'),/上一轮档位任务仍在执行/);
+  assert.equal(runtime.status(sessionKey).tier,'base');
 });
 
 test('tier audit survives separate plugin instances through the durable store',t=>{

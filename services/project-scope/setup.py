@@ -49,7 +49,9 @@ def install(home=None):
     config_changed = old_plugins != json.dumps(plugins, sort_keys=True)
     if not assets_changed and not config_changed:
         return False
-    state = Path(os.environ.get('PINKIE_STATE_ROOT', home / 'Library/Application Support/SuperPinkie'))
+    state = Path(os.environ.get('PINKIE_STATE_ROOT',
+                                (Path(os.environ.get('LOCALAPPDATA', home / 'AppData/Local')) / 'SuperPinkie'
+                                 if os.name == 'nt' else home / 'Library/Application Support/SuperPinkie')))
     backup = state / 'backups' / ('project-scope-' + str(time.time_ns()))
     backup.mkdir(parents=True, mode=0o700)
     shutil.copy2(config, backup / 'openclaw.json')

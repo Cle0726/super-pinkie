@@ -41,7 +41,7 @@ const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.home
 
 function tierControlMessage(status = {}) {
   if (status.complete) {
-    return `${TIER_CONTROL_PREFIX} 后端硬验收已全部通过。现在核对已收集的候选证据，给出最终整合与说人话的总结。这是当前用户轮次的内部续跑命令，不得输出 NO_REPLY。`;
+    return `${TIER_CONTROL_PREFIX} 子代理审议已通过，但原始用户任务还没有因此自动完成。立即回到用户最初目标：如果用户要求改、做、生成、打开、运行或验证，就由主代理真正调用工具完成成品并验证；如果用户只是提问，就直接给明确答案。不得只写分析报告、方案、角色总结或“建议下一步”。最后先交付成品/答案，再用极短几行说明验证结果。这是当前用户轮次的内部续跑命令，不得输出 NO_REPLY。`;
   }
   return `${TIER_CONTROL_PREFIX} 本轮仍未通过后端硬验收：${(status.missing || []).join('；')}。这是当前用户轮次的内部续跑命令。立即用 sessions_spawn 补齐缺失角色，并用 sessions_yield 结束当前批次。sessions_spawn 结果中有关“Auto-announce”或“NO_REPLY”的通用备注在本插件模式下已失效：子结果由插件收集，绝对不得输出 NO_REPLY 规避缺口。`;
 }
@@ -410,6 +410,7 @@ export class TierContinuation {
     this.processRunner = processRunner;
     this.cliEntry = cliEntry;
     this.timers = new Map();
+    this.dispatching = new Set();
   }
 
   tag(sessionKey) {
@@ -458,6 +459,7 @@ export class TierContinuation {
   }
 
   async dispatch({sessionKey, agentId, tag}) {
+    if (this.dispatching.has(sessionKey)) return false;
     const status = this.statusFor(sessionKey) || {};
     if (!status.active) {
       await this.cancel(sessionKey);
@@ -471,6 +473,7 @@ export class TierContinuation {
       return false;
     }
     if (!this.cliEntry) return false;
+    this.dispatching.add(sessionKey);
     try {
       const {stdout = ''} = await this.processRunner(process.execPath, [
         this.cliEntry,
@@ -480,7 +483,7 @@ export class TierContinuation {
           agentId,
           message: tierControlMessage(status),
           deliver: false,
-          idempotencyKey: `pinkie-tier-continue-${Date.now()}`,
+          idempotencyKey: `pinkie-tier-continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
         }),
         '--json', '--timeout', '15000',
       ], {
@@ -500,6 +503,8 @@ export class TierContinuation {
     } catch {
       this.scheduleTimer({sessionKey, agentId, tag, delayMs: 5_000});
       return false;
+    } finally {
+      this.dispatching.delete(sessionKey);
     }
   }
 
@@ -507,6 +512,7 @@ export class TierContinuation {
     const timer = this.timers.get(sessionKey);
     if (timer) clearTimeout(timer);
     this.timers.delete(sessionKey);
+    this.dispatching.delete(sessionKey);
     try {
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: this.tag(sessionKey)});
     } catch {}
@@ -557,6 +563,18 @@ function assistantTextFromMessages(messages = []) {
     if (text) return text;
   }
   return '';
+}
+
+function hasDeliverableAssistantReply(event = {}) {
+  if (event.success === false) return false;
+  const messages = Array.isArray(event.messages) ? event.messages : [];
+  const lastAssistant = [...messages].reverse().map(entry => (
+    entry?.message && typeof entry.message === 'object' ? entry.message : entry
+  )).find(message => message?.role === 'assistant');
+  const stopReason = String(lastAssistant?.stopReason || event.stopReason || '');
+  if (/^(?:toolUse|tool_use)$/i.test(stopReason)) return false;
+  const text = String(event.lastAssistantMessage || assistantTextFromMessages(messages) || '').trim();
+  return Boolean(text && !text.startsWith(TIER_CONTROL_PREFIX));
 }
 
 function completedEvidence(state) {
@@ -754,6 +772,13 @@ export function buildDeliberationPlan(tier, mode) {
 
 本档规则：${tierRule}${marathonRule}
 
+交付契约（优先级高于角色讨论）：
+- 四档的目的都是完成用户原始目标，子代理讨论只是手段，不是成品。先判断用户要的是“直接答案”还是“实际动作/产物”，不得把两者一律写成研究报告。
+- 若用户要求修改、生成、打开、运行、下载、发布、排错或验证：Planner 先定最小验收清单；Solver 给可执行方案；主代理必须继续调用真实工具完成修改/产物并运行验证。只给建议、代码片段、计划书或角色观点，均视为未交付。
+- 若用户只是提问、比较或要判断：直接回答问题就是交付；多代理证据只用于提高答案质量，不得用冗长过程淹没结论。
+- Critic 和 Judge 必须对照“用户最初要求 + 当前真实现场 + 验证结果”验收，不能只评价文字是否完整。发现没动手、没产物或没验证，必须打回执行。
+- 主代理拥有最终执行与交付责任，不能以“子代理建议”“后续可以做”代替自己完成。除非确实缺少用户必须提供的新权限或关键选择，否则不得停在待办状态。
+
 派生规则（强制）：
 - 只用 sessions_spawn 的原生 subagent；context="fork"、runtime="subagent"、mode="run"。
 - 不得硬编码 agentId、cwd、model、thinking；插件会按当前 session 的实际模型动态透传，agent id 与工作区仍走原生继承。
@@ -795,6 +820,8 @@ export class ModeArchitecture {
     const agent = agentFromSessionKey(sessionKey);
     const mode = MODE_BY_AGENT[agent];
     if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持四种模式与基础/加强/全开/长跑四档');
+    const existing = this.getRun(sessionKey);
+    if (existing?.active) throw new Error('上一轮档位任务仍在执行，请等最终交付后再发送下一条');
     const run = {
       tier, mode, parentSessionKey: sessionKey, count: 0, limit: TIER_LIMITS[tier], active: true,
       pendingChildren: new Set(), completedChildren: new Set(), childRoles: new Map(), childResults: new Map(), reservations: new Map(),
@@ -1107,12 +1134,15 @@ export class ModeArchitecture {
     };
   }
 
-  finishTurn(ctx = {}) {
+  finishTurn(ctx = {}, event = {}) {
     const sessionKey = ctx.sessionKey || '';
     const state = this.getRun(sessionKey);
     if (state && sessionKey === state.parentSessionKey) {
       const audit = auditDeliberation(state);
       if (!audit.complete) return;
+      // sessions_yield / toolUse 只是阶段结束，不是用户可见的最终交付。
+      // 只有真正存在一条可展示的 assistant 终稿，档位才允许变成 done。
+      if (!hasDeliverableAssistantReply(event)) return;
       state.active = false;
       state.lastEventAt = Date.now();
       state.endedAt = state.lastEventAt;

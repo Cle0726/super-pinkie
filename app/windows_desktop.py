@@ -107,6 +107,54 @@ def http_alive(url, expected_service=None):
         return False
 
 
+def http_ready(url):
+    """A 2xx/3xx response means the gateway is ready; auth errors are not ready."""
+    try:
+        with urllib.request.urlopen(url, timeout=1.4) as response:
+            return 200 <= int(response.status) < 400
+    except urllib.error.HTTPError:
+        return False
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
+
+
+def gateway_ui_url():
+    """Return the local UI URL, including a legacy token when one is configured."""
+    config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
+    config_path = Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        auth = config.get("gateway", {}).get("auth", {})
+        token = auth.get("token") if auth.get("mode") == "token" else None
+        if isinstance(token, str) and token:
+            return GATEWAY_URL + "#token=" + urllib.parse.quote(token, safe="")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return GATEWAY_URL
+
+
+def cleanup_orphan_webview(storage):
+    """Remove only stale Edge WebView2 children owned by this app's storage path."""
+    if os.name != "nt":
+        return
+    path = str(Path(storage).resolve())
+    escaped = path.replace("'", "''")
+    script = (
+        "$root='" + escaped + "'; "
+        "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
+        "Where-Object { $_.CommandLine -and $_.CommandLine -like ('*--user-data-dir=*' + $root + '*') } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        append_log("launcher", "stale WebView2 cleanup skipped")
+
+
 class WindowsUpdater:
     """Release updater for the frozen EXE; user state is never part of the swap."""
 
@@ -380,10 +428,13 @@ class GatewaySupervisor:
         self.closing = threading.Event()
         self.lock = threading.RLock()
         self.last_restart = 0.0
+        self.started_at = 0.0
+        self.startup_grace = 90.0
+        self.failure_limit = 3
 
     def start(self):
         with self.lock:
-            if http_alive(GATEWAY_URL):
+            if http_ready(GATEWAY_URL):
                 return
             if self.process and self.process.poll() is None:
                 return
@@ -395,7 +446,7 @@ class GatewaySupervisor:
             output = (log_dir / "gateway.log").open("ab")
             command = [
                 str(self.runtime.node), str(self.runtime.openclaw),
-                "gateway", "run", "--port", "18789", "--allow-unconfigured",
+                "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
             ]
             try:
                 self.process = subprocess.Popen(
@@ -407,6 +458,7 @@ class GatewaySupervisor:
                     stderr=output,
                     **hidden_process_kwargs(),
                 )
+                self.started_at = time.monotonic()
                 append_log("launcher", f"gateway started pid={self.process.pid}")
             except OSError as error:
                 output.close()
@@ -415,7 +467,7 @@ class GatewaySupervisor:
     def wait_ready(self, seconds=126):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline and not self.closing.is_set():
-            if http_alive(GATEWAY_URL):
+            if http_ready(GATEWAY_URL):
                 return True
             self.start()
             time.sleep(.35)
@@ -424,13 +476,23 @@ class GatewaySupervisor:
     def monitor(self):
         failures = 0
         while not self.closing.wait(2):
-            if http_alive(GATEWAY_URL):
+            with self.lock:
+                process = self.process
+                alive = bool(process and process.poll() is None)
+                age = time.monotonic() - self.started_at if self.started_at else 0
+            if http_ready(GATEWAY_URL):
+                failures = 0
+                continue
+            # Cold bundled OpenClaw startup can spend tens of seconds loading.
+            # Never taskkill a live process in this grace period.
+            if alive and age < self.startup_grace:
                 failures = 0
                 continue
             failures += 1
-            if failures >= 2:
+            if failures >= self.failure_limit:
                 failures = 0
-                self.stop_process()
+                if alive:
+                    self.stop_process()
                 self.start()
 
     def stop_process(self):
@@ -504,7 +566,11 @@ class LocalServices:
             (18891, str(data / "roundtable")), ROUNDTABLE_URL + "api/health", "super-pinkie-roundtable",
         )
         self._start("tts", "services/tts/edge_tts_server.py", "serve", (18888,), TTS_URL)
-        self._start("relay", "proxy/ur-rewrite-proxy.py", "serve", (1467,), "http://127.0.0.1:1467/health")
+        relay_port = int(os.environ.get("UR_PROXY_LISTEN", "1467"))
+        self._start(
+            "relay", "proxy/ur-rewrite-proxy.py", "serve", (relay_port,),
+            f"http://127.0.0.1:{relay_port}/health",
+        )
 
     def close(self):
         for server in list(self.servers):
@@ -527,7 +593,7 @@ class NativeBridge:
         self.window = window
 
     def open_chat(self):
-        self.window.load_url(GATEWAY_URL)
+        self.window.load_url(gateway_ui_url())
 
     def open_party(self):
         self.window.load_url(PARTY_URL)
@@ -823,6 +889,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     if not runtime.valid():
         raise RuntimeError("Windows bundled runtime is incomplete")
     os.environ.update(runtime.environment())
+    webview_storage = state_root() / "webview"
+    cleanup_orphan_webview(webview_storage)
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
@@ -871,7 +939,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             if remaining > 0:
                 time.sleep(remaining)
             if ready:
-                window.load_url(GATEWAY_URL)
+                window.load_url(gateway_ui_url())
             else:
                 show_startup_error(window)
         except Exception as error:
@@ -891,5 +959,5 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     window.events.closed += closed
     webview.start(
         gui="edgechromium", debug=False, private_mode=False,
-        storage_path=str(state_root() / "webview"),
+        storage_path=str(webview_storage),
     )

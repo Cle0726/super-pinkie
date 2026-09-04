@@ -19,7 +19,12 @@ def read_json(path, default=None):
 
 def state_root(home=None):
     configured = os.environ.get('PINKIE_STATE_ROOT')
-    return Path(configured) if configured else Path(home or Path.home())/'Library/Application Support/SuperPinkie'
+    if configured:
+        return Path(configured)
+    home = Path(home or Path.home())
+    if os.name == 'nt':
+        return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+    return home/'Library/Application Support/SuperPinkie'
 
 
 def policy(home=None):

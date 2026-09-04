@@ -1043,6 +1043,8 @@ def serve(port, state_dir, on_ready=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18891)
-    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT', Path.home()/'Library/Application Support/SuperPinkie'))/'roundtable'))
+    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT',
+        (Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'SuperPinkie'
+         if os.name == 'nt' else Path.home()/'Library/Application Support/SuperPinkie'))) / 'roundtable'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)
