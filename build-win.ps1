@@ -58,6 +58,10 @@ $pyInstallerArgs = @(
     "--hidden-import", "pywintypes",
     "--hidden-import", "sqlite3",
     "--hidden-import", "_sqlite3",
+    # Explicitly collect the native extension and sqlite3.dll.  The service
+    # modules are loaded with importlib at runtime, so relying on module
+    # analysis alone is fragile on Windows Python builds.
+    "--collect-binaries", "sqlite3",
     "--collect-all", "webview",
     "--collect-all", "edge_tts",
     "--collect-all", "aiohttp",

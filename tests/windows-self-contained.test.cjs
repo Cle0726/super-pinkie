@@ -19,6 +19,7 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /pywin32/);
   assert.match(build, /sqlite3/);
   assert.match(build, /_sqlite3/);
+  assert.match(build, /--collect-binaries/, 'native sqlite binaries must be collected');
   assert.doesNotMatch(build, /winget/);
   assert.doesNotMatch(build, /openclaw\.json/);
 });
