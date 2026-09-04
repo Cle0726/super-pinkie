@@ -37,6 +37,8 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /--auth", "none/);
   assert.match(launcher, /--bind", "loopback/);
   assert.match(launcher, /cleanup_orphan_webview/);
+  assert.match(launcher, /PINKIE_KEEP_GATEWAY/);
+  assert.match(launcher, /keeping gateway for background sessions/);
   assert.match(launcher, /pywebview window APIs from this worker thread/);
   assert.match(read('ui/launcher-loading.html'), /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
   assert.match(launcher, /frameless=True/);

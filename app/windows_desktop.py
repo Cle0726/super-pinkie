@@ -1112,7 +1112,13 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def closed(*_):
         bridge.stop_dictation()
         services.close()
-        gateway.close()
+        # Keep the gateway alive after the window closes so in-flight sessions
+        # and background jobs are not terminated. The separate bundled
+        # watchdog owns recovery; it will restart the process only if it dies.
+        if os.environ.get("PINKIE_KEEP_GATEWAY", "1") != "1":
+            gateway.close()
+        else:
+            append_log("launcher", "window closed; keeping gateway for background sessions")
 
     window.events.loaded += loaded
     window.events.shown += shown

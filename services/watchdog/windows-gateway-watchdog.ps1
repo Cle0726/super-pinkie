@@ -7,6 +7,8 @@
 )
 
 $ErrorActionPreference = "SilentlyContinue"
+$mutex = New-Object System.Threading.Mutex($false, 'Local\SuperPinkieGatewayWatchdog')
+if (-not $mutex.WaitOne(0)) { exit 0 }
 if (-not $LogPath) {
   $base = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:USERPROFILE }
   $LogPath = Join-Path $base "SuperPinkie\logs\gateway-watchdog.log"
