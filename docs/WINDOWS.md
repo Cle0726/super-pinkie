@@ -1,12 +1,37 @@
 # Windows 10/11 使用指南
 
-## 推荐：直接使用完整 EXE
+## 推荐：使用快速启动版（onedir）
 
-从 GitHub Releases 下载 `超級碧琪.exe`，双击即可。成品已内置固定版本的 Node.js、OpenClaw、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或 OpenClaw。
+从 GitHub Releases 下载并解压 `super-pinkie-windows-<版本>-portable.zip`，运行 `超級碧琪\\超級碧琪.exe`。成品已内置固定版本的 Node.js、OpenClaw、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或 OpenClaw。onedir 版本把运行时放在程序目录旁，不会像旧单文件 EXE 那样在每次启动时把数百 MB 解压到 `_MEI*` 临时目录，因此启动明显更快。
+
+Release 中仍提供 `super-pinkie-windows-<版本>.exe` 兼容版；它便于单文件分发，但每次启动都需要解压内置运行时，启动较慢。
+
+### 可选：后台网关看门狗
+
+App 打开时已经自带看门狗。如果希望关闭窗口后仍自动检查内置 Gateway，可在程序目录执行一次：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+& "F:\SuperPinkie\_internal\installer\windows\register-bundled-watchdog.ps1" -InstallRoot "F:\SuperPinkie"
+```
+
+它注册的是独立的 `SuperPinkieGatewayWatchdog` 任务，只在监听缺失时启动内置网关，不会终止正在冷启动的进程，也不会复用旧的 `OpenClaw Gateway` 任务。
+
+### 会话中 API 断链的自动续接
+
+会话级看门狗与上面的进程看门狗是两层机制：模型请求在首字节前会由代理自动重试；
+如果流式响应中途断开，Gateway 会在父会话结束事件后自动注入隐藏的续接指令，并按约
+2 秒、4 秒、8 秒、12 秒的间隔高频重试。已经完成的工具写入不会因为续接而重复执行，
+成功或手动继续后，旧的重试定时器会自动取消，因此不需要反复发送“继续”。默认覆盖
+自定义 `agentId` 的普通会话；如需兼容旧的“仅四种模式”行为，可设置：
+
+```powershell
+$env:PINKIE_WATCHDOG_ALL = "0"
+```
 
 首次打开会完整播放一次开屏视频，并在后台准备网关；如果准备时间较长，画面会停在视频尾帧而不是循环。准备好后直接进入 App 内的聊天页面。
 
-用户自己的模型 Key、配置、聊天记录和工作区仍保存在 `%USERPROFILE%\.openclaw`，派对和圆桌记录保存在 `%LOCALAPPDATA%\SuperPinkie`。替换 EXE 不会删除这些资料；桌面 App 只补缺少的默认人格和提示词，已有内容（包括手动修改）不会被改回去。配置层发生必要的兼容迁移时仍会先备份到 `%LOCALAPPDATA%\SuperPinkie\backups`。
+用户自己的模型 Key、配置、聊天记录和工作区仍保存在 `%USERPROFILE%\.openclaw`，派对和圆桌记录保存在 `%LOCALAPPDATA%\SuperPinkie`。替换程序目录（兼容版则替换 EXE）不会删除这些资料；桌面 App 只补缺少的默认人格和提示词，已有内容（包括手动修改）不会被改回去。配置层发生必要的兼容迁移时仍会先备份到 `%LOCALAPPDATA%\SuperPinkie\backups`。
 
 若 Windows 缺少 WebView2 Runtime，安装微软 WebView2 Runtime 后重新打开；Windows 11 通常已预装。
 

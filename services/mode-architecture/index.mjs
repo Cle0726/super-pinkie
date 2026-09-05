@@ -129,6 +129,18 @@ function hasIncompleteToolTurn(event = {}, reason = '') {
   return /^(?:toolUse|tool_use)$/i.test(String(lastAssistant?.stopReason || ''));
 }
 
+// API 断链恢复属于会话层能力，不应只覆盖四个 UI 模式。实际运行时
+// OpenClaw 可能使用自定义 agentId（例如本地模型/工作区插件），但仍然
+// 会提供标准的 agent:<id>:<session> 会话键。只排除子代理，避免把同一
+// 次任务的内部子会话再次注入；可通过 PINKIE_WATCHDOG_ALL=0 回退到旧的
+// “仅四模式”行为，便于兼容需要自行管理重试的部署。
+function isWatchdogParentContext(ctx = {}) {
+  const sessionKey = String(ctx.sessionKey || '');
+  if (!sessionKey || /:subagent:/.test(sessionKey)) return false;
+  if (String(process.env.PINKIE_WATCHDOG_ALL || '1') === '0') return Boolean(modeForContext(ctx));
+  return Boolean(ctx.agentId || agentFromSessionKey(sessionKey));
+}
+
 function safeTag(sessionKey) {
   let hash = 2166136261;
   for (const char of sessionKey) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
@@ -2151,7 +2163,7 @@ export class UpstreamWatchdog {
 
   async agentEnded(event = {}, ctx = {}) {
     const sessionKey = ctx.sessionKey || '';
-    if (!modeForContext(ctx) || !sessionKey || /:subagent:/.test(sessionKey)) return false;
+    if (!isWatchdogParentContext(ctx)) return false;
     if (this.skipNextFailure.delete(sessionKey)) {
       if (event.runId) this.failures.delete(event.runId);
       return false;
@@ -2220,6 +2232,7 @@ export class UpstreamWatchdog {
       });
     }
     this.scheduleImmediate({sessionKey, agentId: ctx.agentId, runId: event.runId, attempt, delayMs, tag});
+    this.api.logger?.warn?.(`watchdog queued automatic session resume session=${sessionKey} attempt=${attempt} delayMs=${delayMs}`);
     return true;
   }
 

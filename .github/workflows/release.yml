@@ -97,8 +97,8 @@ jobs:
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
       - name: Build Windows exe
         shell: pwsh
-        run: .\build-win.ps1
-      - name: Pack Windows exe
+        run: .\build-win.ps1 -LegacyOneFile
+      - name: Pack Windows onedir and compatibility exe
         shell: pwsh
         run: |
           $version = (Get-Content VERSION).Trim()
@@ -106,7 +106,14 @@ jobs:
           Copy-Item -LiteralPath 'dist\超級碧琪.exe' -Destination "dist\$file" -Force
           $hash = (Get-FileHash -LiteralPath "dist\$file" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $file" | Set-Content -LiteralPath "dist\$file.sha256" -Encoding ascii -NoNewline
-          Compress-Archive -LiteralPath 'dist\超級碧琪.exe' -DestinationPath "dist\super-pinkie-windows-$version.zip" -Force
+
+          # The portable onedir package is the recommended download: it keeps
+          # the bundled runtime beside the launcher and starts without _MEI
+          # extraction.  Include the directory name in the archive root.
+          $portable = "super-pinkie-windows-$version-portable.zip"
+          Compress-Archive -Path 'dist\超級碧琪' -DestinationPath "dist\$portable" -Force
+          $portableHash = (Get-FileHash -LiteralPath "dist\$portable" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$portableHash  $portable" | Set-Content -LiteralPath "dist\$portable.sha256" -Encoding ascii -NoNewline
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -114,4 +121,5 @@ jobs:
           files: |
             dist/super-pinkie-windows-*.exe
             dist/super-pinkie-windows-*.exe.sha256
-            dist/super-pinkie-windows-*.zip
+            dist/super-pinkie-windows-*-portable.zip
+            dist/super-pinkie-windows-*-portable.zip.sha256

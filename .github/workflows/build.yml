@@ -42,17 +42,20 @@ jobs:
           python-version: "3.12"
       - name: Build .exe
         shell: pwsh
-        run: .\build-win.ps1
-      - name: Pack .exe
+        run: .\build-win.ps1 -LegacyOneFile
+      - name: Pack Windows builds
         shell: pwsh
-        run: Compress-Archive -LiteralPath "dist/超級碧琪.exe" -DestinationPath "dist/super-pinkie-control-windows.zip" -Force
+        run: |
+          Compress-Archive -Path "dist/超級碧琪" -DestinationPath "dist/super-pinkie-control-windows-portable.zip" -Force
+          Copy-Item -LiteralPath "dist/超級碧琪.exe" -Destination "dist/super-pinkie-control-windows.exe" -Force
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: 超級碧琪-windows-self-contained
           path: |
             dist/超級碧琪.exe
-            dist/super-pinkie-control-windows.zip
+            dist/super-pinkie-control-windows.exe
+            dist/super-pinkie-control-windows-portable.zip
 
   release:
     name: Attach to GitHub Release
@@ -67,4 +70,4 @@ jobs:
         with:
           files: |
             artifacts/**/super-pinkie-control-macos.zip
-            artifacts/**/super-pinkie-control-windows.zip
+            artifacts/**/super-pinkie-control-windows-portable.zip

@@ -14,11 +14,14 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /openclaw@\$\(\$manifest\.openclaw\)/);
   assert.match(build, /node\.exe'\);runtime\\bin/);
   assert.match(build, /runtime\\node_modules/);
+  assert.match(build, /--onedir/, 'Windows builds must use the fast-starting onedir layout');
   assert.match(build, /--onefile/);
+  assert.match(build, /LegacyOneFile/);
   assert.match(build, /pywebview/);
   assert.match(build, /pywin32/);
   assert.match(build, /sqlite3/);
   assert.match(build, /_sqlite3/);
+  assert.match(build, /--collect-binaries/, 'native sqlite binaries must be collected');
   assert.doesNotMatch(build, /winget/);
   assert.doesNotMatch(build, /openclaw\.json/);
 });
@@ -30,11 +33,21 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /while not self\.closing\.wait\(2\)/);
   assert.match(launcher, /self\.failure_limit = 3/);
   assert.match(launcher, /failures >= self\.failure_limit/);
-  assert.match(launcher, /age < self\.startup_grace/);
+  assert.doesNotMatch(launcher, /age < self\.startup_grace/);
   assert.match(launcher, /--auth", "none/);
   assert.match(launcher, /--bind", "loopback/);
   assert.match(launcher, /cleanup_orphan_webview/);
-  assert.match(launcher, /window\.load_url\(gateway_ui_url\(\)\)/);
+  assert.match(launcher, /PINKIE_KEEP_GATEWAY/);
+  assert.match(launcher, /keeping gateway for background sessions/);
+  assert.match(launcher, /pywebview window APIs from this worker thread/);
+  assert.match(launcher, /synchronous evaluate_js there deadlocks/);
+  assert.doesNotMatch(launcher, /self\.window\s*=/, 'js_api must not expose the recursive pywebview Window object');
+  assert.match(launcher, /self\._window\s*=/);
+  assert.match(launcher, /threading\.Thread\(target=bootstrap/);
+  assert.match(launcher, /Never kill a still-live Gateway/);
+  const loading = read('ui/launcher-loading.html');
+  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
+  assert.match(loading, /mode: "no-cors"/);
   assert.match(launcher, /frameless=True/);
 });
 
@@ -50,6 +63,8 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(launcher, /prepare_update/);
   assert.match(release, /Get-FileHash/);
   assert.match(release, /windows-\*\.exe\.sha256/);
+  assert.match(release, /portable\.zip/);
+  assert.match(release, /portable\.zip\.sha256/);
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
@@ -117,6 +132,14 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
     assert.match(read(name), /LOCALAPPDATA/);
     assert.match(read(name), /os\.name\s*==\s*['"]nt['"]|os\.name\s*!=\s*['"]nt['"]/);
   }
+});
+
+test('Windows bundled watchdog has a dedicated task installer', () => {
+  const installer = read('installer/windows/register-bundled-watchdog.ps1');
+  assert.match(installer, /SuperPinkieGatewayWatchdog/);
+  assert.match(installer, /windows-gateway-watchdog\.ps1/);
+  assert.match(installer, /New-ScheduledTaskTrigger/);
+  assert.match(installer, /RunLevel Limited/);
 });
 
 test('PowerShell entrypoints are UTF-8 with BOM for Windows PowerShell 5.1', () => {

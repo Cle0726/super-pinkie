@@ -29,8 +29,30 @@
   <video class="scene" muted autoplay playsinline preload="auto" poster="assets/laolao-splash-video-poster.png" aria-label="粉色小马吉祥物开屏动画">
     <source src="assets/laolao-splash.mp4" type="video/mp4">
   </video>
+  <div id="status" style="position:fixed;left:50%;bottom:7%;transform:translateX(-50%);padding:9px 15px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22">正在启动本机服务…</div>
   <script>
     const scene = document.querySelector(".scene");
+    const status = document.getElementById("status");
+    let elapsed = 0;
+    const probe = async () => {
+      try {
+        // Any HTTP response (including an auth response) means the listener
+        // exists. Navigation happens inside WebView2's own UI thread, avoiding
+        // cross-thread load_url calls that can make the window appear hung.
+        // file:// -> http:// is cross-origin. Without no-cors, a healthy
+        // Gateway response is rejected by CORS and the splash waits forever.
+        await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors" });
+        location.replace("http://127.0.0.1:18789/");
+        return;
+      } catch (_) {
+        elapsed += 1;
+        if (status) status.textContent = elapsed < 120
+          ? `正在启动本机网关… ${elapsed}s`
+          : "网关启动较慢，请稍候；窗口仍可正常操作";
+        setTimeout(probe, 1000);
+      }
+    };
+    setTimeout(probe, 300);
     scene.addEventListener("ended", () => {
       scene.pause();
       if (Number.isFinite(scene.duration) && scene.duration > 0.04) {

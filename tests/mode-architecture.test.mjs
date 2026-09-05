@@ -910,6 +910,27 @@ test('watchdog defaults unknown failed turns and context overflow to recovery',a
   assert.equal(injected.length,2);
 });
 
+test('watchdog resumes custom-agent sessions by default, with an opt-out for legacy mode-only hosts',async()=>{
+  const injected=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),scheduleSessionTurn:async()=>({id:'retry'}),
+  };
+  const watchdog=new UpstreamWatchdog({session:{workflow}});
+  const custom={agentId:'local-llm',sessionKey:'agent:local-llm:api-drop'};
+  assert.equal(await watchdog.agentEnded({success:false,error:'socket hang up'},custom),true);
+  assert.equal(injected.length,1);
+  const previous=process.env.PINKIE_WATCHDOG_ALL;
+  process.env.PINKIE_WATCHDOG_ALL='0';
+  try {
+    assert.equal(await watchdog.agentEnded({success:false,error:'socket hang up'},
+      {agentId:'local-llm',sessionKey:'agent:local-llm:legacy'}),false);
+  } finally {
+    if (previous === undefined) delete process.env.PINKIE_WATCHDOG_ALL;
+    else process.env.PINKIE_WATCHDOG_ALL=previous;
+  }
+});
+
 test('watchdog never loops permanent configuration failures',async()=>{
   const injected=[];
   const watchdog=new UpstreamWatchdog({session:{workflow:{

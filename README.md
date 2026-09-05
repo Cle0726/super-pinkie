@@ -23,13 +23,13 @@
 
 ## Windows 快速使用 — 双击就是完整 App 🚀
 
-从 [GitHub Releases](../../releases) 下载 `超級碧琪.exe` 后直接双击。它不是安装控制台，也不要求另装 Node.js、OpenClaw 或 Python：
+从 [GitHub Releases](../../releases) 下载并解压 `super-pinkie-windows-<版本>-portable.zip`，运行其中 `超級碧琪\\超級碧琪.exe`。这是推荐的快速启动版本：它不是安装控制台，也不要求另装 Node.js、OpenClaw 或 Python：
 
 1. 先完整播放一次小马开屏视频；后台同时启动内置网关和本机服务，较慢时停在视频尾帧等待。
 2. 准备好后直接进入内嵌聊天窗口，不再另外打开浏览器。
 3. 四模式、项目目录、派对空间、灵感圆桌、语音、流式工具过程和网关看门狗都在同一个 EXE 内。
 4. 模型 Key、聊天记录、项目、人格和自定义上下文仍放在 Windows 用户目录；双击启动只补缺失默认文件，已有内容不会被新版 EXE 改回去。
-5. App 会在后台检查 GitHub Release；右上角星光按钮亮起时可一键下载、校验、重启更新。若新版启动失败会自动恢复旧 EXE，用户资料不参与替换。
+5. App 会在后台检查 GitHub Release；右上角星光按钮亮起时可一键下载、校验、重启更新。若新版启动失败会自动恢复旧程序目录（兼容单文件版则恢复旧 EXE），用户资料不参与替换。
 6. 窗口右上角控制区旁的短横把手可拖动 App，双击可最大化/还原；四边和四角均可直接缩放，最小支持 760×500。
 
 需要维护旧环境时，可从命令行运行 `超級碧琪.exe --control-center` 打开保留的旧控制台。
@@ -87,10 +87,11 @@ App 菜单选择“检查并安装更新…”，或运行：
 GitHub Releases 提供：
 
 - `super-pinkie-macos-<版本>.zip`：自包含的「超級碧琪.app」，内置网关、Node.js、Python 与本项目服务
-- `super-pinkie-windows-<版本>.zip` / `超級碧琪.exe`：自包含 Windows 桌面 App
+- `super-pinkie-windows-<版本>-portable.zip`：推荐的自包含 Windows onedir 桌面 App（无需每次启动解压）
+- `super-pinkie-windows-<版本>.exe`：兼容旧习惯的单文件版本；首次启动需要解压内置运行时，启动速度较慢
 - `super-pinkie-full-<版本>.zip`：完整源码、安装器、资源与文档
 
-macOS App 与 Windows EXE 都自带运行时；模型 Key、会话、项目目录和个人配置仍保存在用户目录，升级 App 不会覆盖。
+macOS App 与 Windows 版本都自带运行时；模型 Key、会话、项目目录和个人配置仍保存在用户目录，升级 App 不会覆盖。
 
 > 本项目仅供模型能力评估、安全研究与个人自动化使用。使用本工具产生的任何后果由使用者自行承担。上游模型服务商仍保留其服务端的内容审核权利。
 
@@ -137,10 +138,10 @@ installer/macos/    UI 重应用与开机服务模板
 
 ## App 版（图形界面，无需命令行）
 
-macOS `.app` / Windows `.exe` 均为可直接进入聊天的完整桌面版；Windows 仍可用 `--control-center` 打开旧维护界面。
+macOS `.app` / Windows onedir `.exe` 均为可直接进入聊天的完整桌面版；Windows 仍可用 `--control-center` 打开旧维护界面。
 
-- 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `.exe`）。
-- 自己构建：macOS 运行 `desktop/macos/build.sh`；Windows 在安装了构建工具的机器上运行 `.\\build-win.ps1`。生成的桌面成品分别为 `超級碧琪.app` 和 `超級碧琪.exe`；最终用户不需要这些构建工具。
+- 已构建的成品：仓库 Releases 页面下载（macOS 版 `.app`，Windows 版 `*-portable.zip`）。
+- 自己构建：macOS 运行 `desktop/macos/build.sh`；Windows 在安装了构建工具的机器上运行 `.\\build-win.ps1`。默认生成快速启动的 `dist\\超級碧琪\\超級碧琪.exe`；发布兼容单文件版本时加上 `-LegacyOneFile`。最终用户不需要这些构建工具。
 - 推送 `v*` tag 会自动触发 GitHub Actions 构建两个平台的成品并挂到 Release。
 
 ## 安装

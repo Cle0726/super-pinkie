@@ -1,4 +1,13 @@
-# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪.exe
+# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪 Windows App
+[CmdletBinding()]
+param(
+    # onedir avoids PyInstaller's onefile self-extraction (hundreds of MB) on every launch.
+    # Pass -LegacyOneFile when a standalone compatibility EXE is also required for releases.
+    [switch]$LegacyOneFile,
+    # Local developers may use a compatible Node 24.x patch release. CI keeps
+    # the manifest's exact version for reproducible release artifacts.
+    [switch]$AllowLocalNodeVersion
+)
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -10,13 +19,17 @@ $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
 python -m pip install --disable-pip-version-check --upgrade pip pyinstaller pywebview pywin32 edge-tts aiohttp
+if ($LASTEXITCODE -ne 0) { throw "Python 构建依赖安装失败，请检查本机网络或 Python 3.12 环境" }
 python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $nodeVersion = (& $node --version).TrimStart('v')
 if ($nodeVersion -ne $manifest.node) {
-    throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion"
+    if (-not $AllowLocalNodeVersion -or $nodeVersion -notmatch '^24\.') {
+        throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
+    }
+    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($manifest.node)）"
 }
 
 if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
@@ -47,8 +60,8 @@ $runtimeInfo = @{
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
-$pyInstallerArgs = @(
-    "--noconfirm", "--clean", "--windowed", "--onefile",
+$pyInstallerCommonArgs = @(
+    "--noconfirm", "--clean", "--windowed",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
@@ -58,6 +71,10 @@ $pyInstallerArgs = @(
     "--hidden-import", "pywintypes",
     "--hidden-import", "sqlite3",
     "--hidden-import", "_sqlite3",
+    # Explicitly collect the native extension and sqlite3.dll.  The service
+    # modules are loaded with importlib at runtime, so relying on module
+    # analysis alone is fragile on Windows Python builds.
+    "--collect-binaries", "sqlite3",
     "--collect-all", "webview",
     "--collect-all", "edge_tts",
     "--collect-all", "aiohttp",
@@ -78,7 +95,23 @@ $pyInstallerArgs = @(
     "--add-data", "config.example.json;.",
     "app\super_pinkie.py"
 )
-pyinstaller @pyInstallerArgs
-if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
 
-Write-Host "构建完成: dist\超級碧琪.exe"
+# Build the fast-starting directory layout by default.  PyInstaller keeps all
+# resources next to the launcher, so Windows no longer has to unpack ~700 MB
+# into a temporary _MEI directory before showing the window.
+pyinstaller @pyInstallerCommonArgs --onedir
+if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
+if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
+    throw "Windows onedir 构建产物缺失"
+}
+
+if ($LegacyOneFile) {
+    pyinstaller @pyInstallerCommonArgs --onefile
+    if ($LASTEXITCODE -ne 0) { throw "Windows 兼容 EXE 构建失败" }
+    if (-not (Test-Path -LiteralPath 'dist\超級碧琪.exe')) {
+        throw "Windows onefile 构建产物缺失"
+    }
+}
+
+Write-Host "构建完成: dist\超級碧琪\超級碧琪.exe"
+if ($LegacyOneFile) { Write-Host "兼容构建完成: dist\超級碧琪.exe" }

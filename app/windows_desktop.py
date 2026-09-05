@@ -46,14 +46,15 @@ def trusted_update_url(value):
     return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
 
 
-def release_update(release, current_version):
-    """Validate latest-release metadata and select its EXE/checksum pair."""
+def release_update(release, current_version, portable=False):
+    """Validate latest-release metadata and select the matching package."""
     if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
         return None
     version = str(release.get("tag_name", "")).strip().removeprefix("v")
     if version_tuple(version) <= version_tuple(current_version):
         return None
-    expected_name = f"{UPDATE_ASSET_PREFIX}{version}.exe"
+    suffix = "-portable.zip" if portable else ".exe"
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}{suffix}"
     checksum_name = expected_name + ".sha256"
     assets = {
         str(asset.get("name", "")): str(asset.get("browser_download_url", ""))
@@ -68,6 +69,7 @@ def release_update(release, current_version):
         "version": version,
         "name": expected_name,
         "executableUrl": executable_url,
+        "portable": portable,
         "checksumUrl": checksum_url,
         "releaseUrl": str(release.get("html_url", "")),
     }
@@ -156,12 +158,16 @@ def cleanup_orphan_webview(storage):
 
 
 class WindowsUpdater:
-    """Release updater for the frozen EXE; user state is never part of the swap."""
+    """Release updater for a frozen EXE or PyInstaller onedir directory."""
 
     def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
         self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
+        self.portable = self.executable.parent.name == "超級碧琪" and (
+            (self.executable.parent / "runtime").is_dir()
+            or (self.executable.parent / "_internal").is_dir()
+        )
         self.enabled = self.executable.suffix.lower() == ".exe" and (
             bool(getattr(sys, "frozen", False)) or bool(os.environ.get("PINKIE_EXECUTABLE_PATH")) or executable is not None
         )
@@ -199,7 +205,7 @@ class WindowsUpdater:
             self.last_checked = time.monotonic()
             try:
                 release = json.loads(self._read(UPDATE_API_URL, 1024 * 1024).decode("utf-8"))
-                selected = release_update(release, self.current_version)
+                selected = release_update(release, self.current_version, portable=self.portable)
                 self.latest = selected or {
                     "available": False,
                     "supported": True,
@@ -346,6 +352,77 @@ try {
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
+    @staticmethod
+    def _directory_helper_source():
+        """PowerShell replacer for the portable onedir package."""
+        return r'''param(
+  [Parameter(Mandatory=$true)][string]$TargetDir,
+  [Parameter(Mandatory=$true)][string]$Payload,
+  [Parameter(Mandatory=$true)][string]$Backup,
+  [Parameter(Mandatory=$true)][string]$TargetExe,
+  [Parameter(Mandatory=$true)][int]$CurrentPid,
+  [Parameter(Mandatory=$true)][string]$ExpectedHash,
+  [Parameter(Mandatory=$true)][string]$HealthMarker,
+  [Parameter(Mandatory=$true)][string]$Token,
+  [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+function Write-UpdateLog([string]$Message) {
+  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+}
+function Restore-PreviousVersion {
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    try {
+      if (Test-Path -LiteralPath $Backup) {
+        if (Test-Path -LiteralPath $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+        Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
+      }
+      break
+    } catch {
+      if ($attempt -eq 39) { throw }
+      Start-Sleep -Milliseconds 250
+    }
+  }
+  if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
+}
+try {
+  $deadline = (Get-Date).AddSeconds(120)
+  while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+  $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  $newDir = Join-Path $stage '超級碧琪'
+  if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
+  Move-Item -LiteralPath $TargetDir -Destination $Backup -Force
+  Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
+  $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
+  $healthDeadline = (Get-Date).AddSeconds(120)
+  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
+    Start-Sleep -Milliseconds 500
+    $launched.Refresh()
+  }
+  if (-not (Test-Path -LiteralPath $HealthMarker)) {
+    if (-not $launched.HasExited) { & taskkill.exe /PID $launched.Id /T /F | Out-Null }
+    throw 'new version did not become healthy'
+  }
+  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Write-UpdateLog 'portable update completed'
+} catch {
+  Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
+  try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+}
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'''
+
     def launch_replacer(self):
         with self.lock:
             if not self.prepared:
@@ -360,9 +437,27 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             health_root.mkdir(parents=True, exist_ok=True)
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
-            backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
-            helper.write_text(self._helper_source(), encoding="utf-8")
-            command = [
+            if self.portable:
+                target_dir = self.executable.parent
+                backup = target_dir.with_name(target_dir.name + ".previous")
+                helper.write_text(self._directory_helper_source(), encoding="utf-8")
+                command = [
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", str(helper),
+                    "-TargetDir", str(target_dir),
+                    "-Payload", str(payload),
+                    "-Backup", str(backup),
+                    "-TargetExe", str(self.executable),
+                    "-CurrentPid", str(os.getpid()),
+                    "-ExpectedHash", expected,
+                    "-HealthMarker", str(marker),
+                    "-Token", token,
+                    "-LogPath", str(state_root() / "logs/updater.log"),
+                ]
+            else:
+                backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
+                helper.write_text(self._helper_source(), encoding="utf-8")
+                command = [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                 "-File", str(helper),
                 "-Target", str(self.executable),
@@ -373,7 +468,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
-            ]
+                ]
             try:
                 subprocess.Popen(
                     command,
@@ -428,8 +523,6 @@ class GatewaySupervisor:
         self.closing = threading.Event()
         self.lock = threading.RLock()
         self.last_restart = 0.0
-        self.started_at = 0.0
-        self.startup_grace = 90.0
         self.failure_limit = 3
 
     def start(self):
@@ -458,7 +551,6 @@ class GatewaySupervisor:
                     stderr=output,
                     **hidden_process_kwargs(),
                 )
-                self.started_at = time.monotonic()
                 append_log("launcher", f"gateway started pid={self.process.pid}")
             except OSError as error:
                 output.close()
@@ -479,13 +571,15 @@ class GatewaySupervisor:
             with self.lock:
                 process = self.process
                 alive = bool(process and process.poll() is None)
-                age = time.monotonic() - self.started_at if self.started_at else 0
             if http_ready(GATEWAY_URL):
                 failures = 0
                 continue
-            # Cold bundled OpenClaw startup can spend tens of seconds loading.
-            # Never taskkill a live process in this grace period.
-            if alive and age < self.startup_grace:
+            # A freshly copied onedir runtime may be scanned by Defender while
+            # Node imports thousands of files. On slower disks this can exceed
+            # any fixed grace period. Never kill a still-live Gateway merely
+            # because HTTP is not ready: doing so at 90s restarted cold startup
+            # from zero and made Windows appear much slower than macOS.
+            if alive:
                 failures = 0
                 continue
             failures += 1
@@ -582,24 +676,28 @@ class LocalServices:
 
 class NativeBridge:
     def __init__(self, updater):
-        self.updater = updater
-        self.window = None
+        # pywebview recursively exposes public js_api attributes. Keeping a
+        # public reference to Window makes it walk Window.native/WebView2 COM
+        # objects, producing thousands of cross-thread errors and sometimes
+        # freezing startup. Private fields are intentionally not exported.
+        self._updater = updater
+        self._window = None
         self.maximized = False
         self.dictation_stop = threading.Event()
         self.dictation_thread = None
         self.dictation_text = ""
 
     def attach(self, window):
-        self.window = window
+        self._window = window
 
     def open_chat(self):
-        self.window.load_url(gateway_ui_url())
+        self._window.load_url(gateway_ui_url())
 
     def open_party(self):
-        self.window.load_url(PARTY_URL)
+        self._window.load_url(PARTY_URL)
 
     def open_roundtable(self):
-        self.window.load_url(ROUNDTABLE_URL)
+        self._window.load_url(ROUNDTABLE_URL)
 
     def project_folder(self, payload):
         payload = payload if isinstance(payload, dict) else {}
@@ -615,7 +713,7 @@ class NativeBridge:
 
         initial = Path(str(payload.get("path", "")))
         directory = str(initial if initial.is_dir() else Path.home())
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FOLDER_DIALOG, directory=directory, allow_multiple=False
         )
         if not selected:
@@ -639,7 +737,7 @@ class NativeBridge:
         if message:
             payload["message"] = message
         try:
-            self.window.evaluate_js(
+            self._window.evaluate_js(
                 "window.__laolaoNativeDictationUpdate?.(" + json.dumps(payload, ensure_ascii=False) + ")"
             )
         except Exception:
@@ -695,14 +793,14 @@ class NativeBridge:
         self.dictation_stop.set()
 
     def minimize(self):
-        self.window.minimize()
+        self._window.minimize()
 
     def _native_window_handle(self):
         """Return the Win32 HWND exposed by pywebview's WinForms backend."""
-        if os.name != "nt" or not self.window:
+        if os.name != "nt" or not self._window:
             return None
         try:
-            handle = self.window.native.Handle
+            handle = self._window.native.Handle
             return int(handle.ToInt64()) if hasattr(handle, "ToInt64") else int(handle)
         except (AttributeError, TypeError, ValueError):
             return None
@@ -731,34 +829,34 @@ class NativeBridge:
 
     def toggle_maximize(self):
         if self.maximized:
-            self.window.restore()
+            self._window.restore()
         else:
-            self.window.maximize()
+            self._window.maximize()
         # The native maximized/restored events are the source of truth. This
         # optimistic value keeps double-clicks correct before that event lands.
         self.maximized = not self.maximized
         return {"maximized": self.maximized}
 
     def window_close(self):
-        self.window.destroy()
+        self._window.destroy()
 
     def control_center(self):
         subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs())
 
     def check_for_updates(self):
-        return self.updater.check(force=True)
+        return self._updater.check(force=True)
 
     def prepare_update(self):
         try:
-            return self.updater.prepare()
+            return self._updater.prepare()
         except Exception as error:
             append_log("updater", f"update preparation failed: {error}")
             return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
 
     def apply_update(self):
-        result = self.updater.launch_replacer()
+        result = self._updater.launch_replacer()
         if result.get("started"):
-            threading.Timer(.6, self.window.destroy).start()
+            threading.Timer(.6, self._window.destroy).start()
         return result
 
 
@@ -952,21 +1050,29 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    # A warm Gateway can be shown directly. This avoids flashing or waiting on
+    # the launcher page on the common second-start path.
+    initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
     window = webview.create_window(
-        "超級碧琪", loading, js_api=bridge, width=1280, height=800,
+        "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
         shadow=True, background_color="#efcbd3",
     )
     bridge.attach(window)
     gateway = GatewaySupervisor(runtime)
     services = LocalServices(runtime)
-    started = time.monotonic()
 
     def loaded(*_):
-        try:
-            window.evaluate_js(BRIDGE_SCRIPT)
-            current_url = str(window.get_current_url() or "")
-            if current_url.startswith(GATEWAY_URL):
+        # pywebview fires `loaded` on WebView2's GUI thread. Calling its
+        # synchronous evaluate_js there deadlocks: ExecuteScriptAsync needs the
+        # very same GUI thread to complete. Return from the event immediately
+        # and do all synchronous window calls from a worker instead.
+        def install_bridge():
+            try:
+                current_url = str(window.get_current_url() or "")
+                if not current_url.startswith(GATEWAY_URL):
+                    return
+                window.evaluate_js(BRIDGE_SCRIPT)
                 if update_health_token:
                     health = state_root() / "updates/health" / f"{update_health_token}.ready"
                     health.parent.mkdir(parents=True, exist_ok=True)
@@ -983,8 +1089,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
                             pass
 
                 threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
-        except Exception:
-            pass
+            except Exception as error:
+                append_log("launcher", f"native bridge setup skipped: {error}")
+
+        threading.Thread(target=install_bridge, name="pinkie-native-bridge", daemon=True).start()
 
     def bootstrap():
         try:
@@ -992,20 +1100,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             services.start()
             gateway.start()
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
-            ready = gateway.wait_ready()
-            remaining = 6.1 - (time.monotonic() - started)
-            if remaining > 0:
-                time.sleep(remaining)
-            if ready:
-                window.load_url(gateway_ui_url())
-            else:
-                show_startup_error(window)
+            # The splash page polls the local gateway itself.  Do not call
+            # pywebview window APIs from this worker thread: WebView2 can block
+            # its GUI message pump when load_url/evaluate_js crosses threads.
         except Exception as error:
             append_log("launcher", f"startup failed: {error}")
-            show_startup_error(window)
-
-    def shown(*_):
-        threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
 
     def sync_window_state(maximized):
         bridge.maximized = bool(maximized)
@@ -1026,13 +1125,21 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def closed(*_):
         bridge.stop_dictation()
         services.close()
-        gateway.close()
+        # Keep the gateway alive after the window closes so in-flight sessions
+        # and background jobs are not terminated. The separate bundled
+        # watchdog owns recovery; it will restart the process only if it dies.
+        if os.environ.get("PINKIE_KEEP_GATEWAY", "1") != "1":
+            gateway.close()
+        else:
+            append_log("launcher", "window closed; keeping gateway for background sessions")
 
     window.events.loaded += loaded
-    window.events.shown += shown
     window.events.maximized += maximized
     window.events.restored += restored
     window.events.closed += closed
+    # Start local services independently of WebView2. A broken/slow renderer
+    # must never prevent the Gateway from being launched.
+    threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
         gui="edgechromium", debug=False, private_mode=False,
         storage_path=str(webview_storage),
