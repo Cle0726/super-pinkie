@@ -1,1 +1,1 @@
-{"id":"pinkie-mode-architecture","name":"超級碧琪四模式运行层","version":"1.5.3","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}
+{"id":"pinkie-mode-architecture","name":"CLE Kk · 超級碧琪执行控制层","version":"1.6.0","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}

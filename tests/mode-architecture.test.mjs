@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import plugin,{FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,buildDeliberationPlan,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
+import plugin,{CleKkAuditLog,CleKkSupervisor,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mode-'));
@@ -33,8 +33,523 @@ test('each prompt loads only its runtime workspace persona and memory',t=>{
   assert.match(result.appendSystemContext,/index-A/);
   assert.match(result.appendSystemContext,/identity-A/);
   assert.match(result.appendSystemContext,/active-A/);
+  assert.match(result.appendSystemContext,/全局交付真实性门禁/);
   assert.doesNotMatch(result.appendSystemContext,/persona-B|index-B/);
   assert.ok(fs.existsSync(b));
+});
+
+test('global integrity gate rejects completion claims without real execution',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'main',sessionKey:'agent:main:integrity',runId:'run-integrity'};
+  guard.begin({prompt:'调用 skill 完成视频工作'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'已经全部完成并成功交付。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('execution requests cannot evade the gate by omitting the word completed',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:evasive-delivery'};
+  guard.begin({prompt:'执行并交付这个项目'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'交付成果如下：文件在 output 目录。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('an explicit incomplete report is not forced to fake success',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:honest-block'};
+  guard.begin({prompt:'执行并发布这个项目'},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'本轮未完成：小红书出现人机验证，需要用户确认。'},ctx),undefined);
+});
+
+test('global integrity gate rejects contradictory completed and still-running claims',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:contradiction',runId:'run-contradiction'};
+  guard.begin({prompt:'生成视频'},ctx);
+  guard.afterTool({toolName:'exec',result:'ok'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'视频已经完整完成，客户端仍在后台生成中。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/状态自相矛盾/);
+});
+
+test('global integrity gate cannot finalize directly after a failed tool',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:last-error'};
+  guard.begin({prompt:'修复程序'},ctx);
+  guard.afterTool({toolName:'exec',error:'command failed',result:'Command exited with code 1'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'程序已经成功修复完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/最后一次工具调用失败/);
+});
+
+test('loaded skill completion contract is mechanically enforced',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-contract-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','video','SKILL.md');
+  const verifier=path.join(root,'skills','video','tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});
+  fs.writeFileSync(skill,'# video');
+  fs.writeFileSync(verifier,'import json,sys\nprint(json.dumps({"status":"FAIL","issues":["没有本轮视频"]},ensure_ascii=False))\nsys.exit(1)\n');
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:contract',runId:'run-contract'};
+  guard.begin({prompt:'调用 skill 生成视频'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',result:'SUBMITTED'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'真实视频已经全部生成完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有本轮视频/);
+});
+
+test('a zero-exit verifier still needs strict PASS JSON',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-strict-verifier-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','simple','SKILL.md');
+  const verifier=path.join(root,'skills','simple','tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.writeFileSync(skill,'# simple');
+  fs.writeFileSync(verifier,'print("ok")\n');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:strict-json'};
+  guard.begin({prompt:'调用 skill 完成任务'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
+  const synchronous=guard.finalize({lastAssistantMessage:'任务已经全部完成。'},ctx);
+  assert.match(synchronous.reason,/PASS JSON/);
+  const asynchronous=await guard.verifyExternal(ctx.sessionKey);
+  assert.equal(asynchronous.ok,false);assert.match(asynchronous.reason,/PASS JSON/);
+});
+
+test('a real mutation invalidates a previously cached verifier attestation',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-attestation-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','simple','SKILL.md');
+  const verifier=path.join(root,'skills','simple','tools','verify_completion.py');
+  const target=path.join(root,'artifact.txt');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.writeFileSync(skill,'# simple');
+  fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:fresh-attestation'};
+  guard.begin({prompt:'调用 skill 修改文件'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  assert.equal((await guard.verifyExternal(ctx.sessionKey)).ok,true);
+  guard.beforeTool({toolName:'write',toolCallId:'w',params:{path:target}},ctx);
+  fs.writeFileSync(target,'changed');
+  guard.afterTool({toolName:'write',toolCallId:'w',params:{path:target},result:{ok:true}},ctx);
+  guard.afterTool({toolName:'read',params:{path:target},result:'changed'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'任务已经全部完成。'},ctx,{verifyExternal:false});
+  assert.match(blocked.reason,/未用成果核验工具验证本轮最新产物/);
+});
+
+test('a skill without an independent verifier cannot self-certify completion',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-no-contract-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','video','SKILL.md');
+  fs.mkdirSync(path.dirname(skill),{recursive:true});
+  fs.writeFileSync(skill,'# video');
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:no-contract'};
+  guard.begin({prompt:'调用 skill 完成全部工作'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'run something'},result:'ok'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'全部工作已经成功完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有独立 verify_completion\.py/);
+});
+
+test('copied evidence and forged timestamps cannot pass the global gate',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:copied-evidence'};
+  guard.begin({prompt:'生成视频并发布'},ctx);
+  guard.afterTool({
+    toolName:'exec',
+    params:{command:"python3 -c \"import os,shutil; shutil.copy2('/tmp/output/old.png','/tmp/runs/new/published.png'); os.utime('/tmp/runs/new/published.png',None)\""},
+    result:'ok',
+  },ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'视频已经生成并发布完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/修改文件时间戳|复制旧/);
+});
+
+test('douyin workflow cannot pass by listing image assets and self-authored state',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-douyin-contract-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','douyin-ai-video-workflow','SKILL.md');
+  const verifier=path.join(root,'skills','douyin-ai-video-workflow','tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});
+  fs.writeFileSync(skill,'# workflow');
+  fs.writeFileSync(verifier,'import sys\nprint("ok")\nsys.exit(0)\n');
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:douyin-self-report'};
+  guard.begin({prompt:'调用 skill 完成视频制作和发布'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'python3 pipeline_state.py init --run-dir /tmp/run'},result:'INITIALIZED'},ctx);
+  guard.afterTool({toolName:'image_generate',params:{action:'list'},result:'[]'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'全部视频和发布工作已经完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有真实提交新的分镜生成请求/);
+});
+
+test('a blocked Doubao adapter cannot mint an authoritative submission ledger',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-blocked-submit-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','douyin-ai-video-workflow','SKILL.md');
+  const verifier=path.join(root,'skills','douyin-ai-video-workflow','tools','verify_completion.py');
+  const pipeline=path.join(root,'skills','douyin-ai-video-workflow','scripts','pipeline_state.py');
+  const runDir=path.join(root,'runs','run-now');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.mkdirSync(path.dirname(pipeline),{recursive:true});
+  fs.mkdirSync(path.join(runDir,'reports'),{recursive:true});
+  fs.writeFileSync(skill,'# workflow');fs.writeFileSync(verifier,'print("never reached")\n');fs.writeFileSync(pipeline,'# locked validator\n');
+  fs.writeFileSync(path.join(runDir,'pipeline_state.json'),JSON.stringify({created_at:new Date().toISOString()}));
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:blocked-submit'};
+  guard.begin({prompt:'调用 skill 生成并发布视频'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:`python3 ${pipeline} init --run-dir "${runDir}"`},result:'INITIALIZED'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'python3 /Library/Mac/自动化管理/scripts/desktop/doubao_adapter_macos.py --action submit'},result:'{"status":"SUBMISSION_BLOCKED","error":"真实提交尚未实现"}'},ctx);
+  await assert.rejects(()=>guard.recordEvidence(ctx.sessionKey,{kind:'submission_ledger',run_dir:runDir,data:{items:[{unit_id:'u1'}]}}),/真实豆包提交次数不足/);
+});
+
+test('the verifier dependency closure is hash locked with the Skill',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-verifier-dependency-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','douyin-ai-video-workflow','SKILL.md');
+  const verifier=path.join(root,'skills','douyin-ai-video-workflow','tools','verify_completion.py');
+  const pipeline=path.join(root,'skills','douyin-ai-video-workflow','scripts','pipeline_state.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.mkdirSync(path.dirname(pipeline),{recursive:true});
+  fs.writeFileSync(skill,'# workflow');fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+  fs.writeFileSync(pipeline,'# original validator\n');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:dependency-lock'};
+  guard.begin({prompt:'调用 skill 完成视频'},ctx);guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  fs.writeFileSync(pipeline,'# weakened validator\n');
+  const checked=await guard.verifyExternal(ctx.sessionKey);
+  assert.equal(checked.ok,false);assert.match(checked.reason,/校验依赖/);
+});
+
+test('runtime blocks credential extraction and forged evidence before the tool runs',()=>{
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:tool-policy'};
+  const cookie=runtime.beforeTool({toolName:'browser',params:{action:'act',request:{kind:'evaluate',fn:'() => document.cookie'}}},ctx);
+  assert.equal(cookie.block,true);
+  assert.match(cookie.blockReason,/Cookie/);
+  const forged=runtime.beforeTool({toolName:'write',params:{path:'/tmp/publish_receipt.json',content:'{}'}},ctx);
+  assert.equal(forged.block,true);
+  assert.match(forged.blockReason,/不能直接手写/);
+  const pageProof=runtime.beforeTool({toolName:'write',params:{path:'/tmp/public_page_evidence.txt',content:'fake'}},ctx);
+  assert.equal(pageProof.block,true);assert.match(pageProof.blockReason,/不能直接手写/);
+  const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/Admin/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
+  assert.equal(controlRead.block,true);assert.match(controlRead.blockReason,/宿主运行层维护/);
+});
+
+test('CLE Kk blocks a false terminal before it reaches transcript or delivery',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-supervisor-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const integrity=new CompletionIntegrityGuard();
+  const supervisor=new CleKkSupervisor({integrity,audit:new CleKkAuditLog(root)});
+  const retries=[];
+  supervisor.setRetryScheduler(async value=>{retries.push(value);return true;});
+  const ctx={agentId:'project',sessionKey:'agent:project:cle-kk',runId:'run-one'};
+  supervisor.begin({prompt:'帮我修复项目文件'},ctx);
+  const message={role:'assistant',stopReason:'stop',content:[{type:'text',text:'已经全部修复完成，可以用了。'}]};
+  assert.deepEqual(supervisor.beforeMessageWrite({message},ctx),{block:true});
+  const delivery=await supervisor.beforeReplyPayload({kind:'final',payload:{text:'已经全部修复完成，可以用了。'},runId:'run-one'},ctx);
+  assert.equal(delivery.cancel,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(retries.length,1);assert.match(retries[0].decision.reason,/没有任何真实执行工具记录/);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),true);
+});
+
+test('CLE Kk never shows its internal watchdog/control text',async()=>{
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog('')});
+  const ctx={agentId:'main',sessionKey:'agent:main:hidden-control'};
+  const message={role:'assistant',stopReason:'stop',content:[{type:'text',text:'【自动续接保护】从未完成处继续。'}]};
+  assert.deepEqual(supervisor.beforeMessageWrite({message},ctx),{block:true});
+  const delivery=await supervisor.beforeReplyPayload({kind:'final',payload:{text:'[pinkie-tier-control] 继续'},sessionKey:ctx.sessionKey},ctx);
+  assert.equal(delivery.cancel,true);
+});
+
+test('CLE Kk durable rejection is recovered after a gateway restart',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-recovery-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:restart-recovery',ctx={agentId:'project',sessionKey:key,runId:'before-restart'};
+  const first=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  first.begin({prompt:'修改项目并验证'},ctx);
+  first.recordFinalize({lastAssistantMessage:'已经完成。'},ctx,new CompletionIntegrityGuard().revise(key,'没有真实产物'));
+
+  const recovered=[];
+  const second=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  second.setRetryScheduler(async value=>{recovered.push(value);return true;});
+  assert.equal(await second.recoverPending(),1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(recovered.length,1);assert.equal(recovered[0].sessionKey,key);
+  assert.equal(second.hasPending(key),true);
+});
+
+test('CLE Kk replays tool provenance after a gateway restart without rewriting a huge state file',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-tool-replay-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const target=path.join(root,'artifact.txt');
+  const key='agent:project:tool-replay',ctx={agentId:'project',sessionKey:key,runId:'same-run'};
+  const first=new CleKkSupervisor({audit:new CleKkAuditLog(path.join(root,'audit'))});
+  first.begin({prompt:'帮我修改项目文件'},ctx);
+  first.integrity.beforeTool({toolName:'write',toolCallId:'w1',params:{path:target}},ctx);
+  fs.writeFileSync(target,'real change');
+  first.afterTool({toolName:'write',toolCallId:'w1',params:{path:target},result:{status:'completed'}},ctx);
+  first.integrity.beforeTool({toolName:'read',toolCallId:'r1',params:{path:target}},ctx);
+  first.afterTool({toolName:'read',toolCallId:'r1',params:{path:target},result:'real change'},ctx);
+  const stateFile=first.audit.stateFileFor(key);
+  assert.ok(fs.statSync(stateFile).size<30_000);
+
+  const second=new CleKkSupervisor({audit:new CleKkAuditLog(path.join(root,'audit'))});
+  second.begin({prompt:''},ctx);
+  assert.equal(second.integrity.runs.get(key).tools.length,2);
+  assert.equal(second.integrity.finalize({lastAssistantMessage:'项目已经修复完成。'},ctx,{verifyExternal:false}),undefined);
+});
+
+test('CLE Kk audit and durable state detect tampering',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-audit-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:audit-chain',audit=new CleKkAuditLog(root);
+  audit.append('turn_start',key,{prompt:'one'});audit.append('tool_result',key,{tool:'write'});
+  assert.equal(audit.verify(key).ok,true);
+  audit.writeState(key,{active:true,pending:{decision:{action:'revise'}}});
+  const stateFile=audit.stateFileFor(key),state=JSON.parse(fs.readFileSync(stateFile,'utf8'));
+  state.pending=null;
+  fs.writeFileSync(stateFile,JSON.stringify(state));
+  assert.equal(audit.readState(key).corrupted,true);
+  const lines=fs.readFileSync(audit.fileFor(key),'utf8').trim().split('\n');
+  const first=JSON.parse(lines[0]);first.type='forged';lines[0]=JSON.stringify(first);
+  fs.writeFileSync(audit.fileFor(key),`${lines.join('\n')}\n`);
+  assert.equal(audit.verify(key).ok,false);
+});
+
+test('FileRunStore rejects tampered run and child state and migrates legacy files',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-file-store-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:file-store',child=`${key}:subagent:one`,store=new FileRunStore(root);
+  const runtime=new ModeArchitecture(store);runtime.arm(key,'base');store.mapChild(child,key);
+  const runFile=store.runFile(key),childFile=store.childFile(child);
+  const signedRun=JSON.parse(fs.readFileSync(runFile,'utf8'));
+  const legacyState=structuredClone(signedRun.state);
+  signedRun.state.tier='full';fs.writeFileSync(runFile,JSON.stringify(signedRun));
+  assert.equal(store.get(key),null);
+  const signedChild=JSON.parse(fs.readFileSync(childFile,'utf8'));
+  signedChild.parentSessionKey='agent:project:forged';fs.writeFileSync(childFile,JSON.stringify(signedChild));
+  assert.equal(store.parentForChild(child),'');
+
+  const legacy={sessionKey:signedRun.sessionKey,state:legacyState};
+  fs.writeFileSync(runFile,JSON.stringify(legacy));
+  assert.equal(store.get(key).tier,'base');
+  const migrated=JSON.parse(fs.readFileSync(runFile,'utf8'));
+  assert.equal(migrated.v,1);assert.ok(migrated.digest);
+});
+
+test('a file-changing task needs a real effect and a post-change check',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-effect-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const file=path.join(root,'app.txt');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:effect'};
+  guard.begin({prompt:'帮我修改这个项目文件'},ctx);
+  guard.beforeTool({toolName:'write',toolCallId:'write-1',params:{path:file}},ctx);
+  fs.writeFileSync(file,'fixed');
+  guard.afterTool({toolName:'write',toolCallId:'write-1',params:{path:file},result:{status:'completed'}},ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
+  guard.beforeTool({toolName:'read',toolCallId:'read-1',params:{path:file}},ctx);
+  guard.afterTool({toolName:'read',toolCallId:'read-1',params:{path:file},result:'fixed'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  assert.equal(result,undefined);
+});
+
+test('an empty write result plus a read cannot fake a host file change',()=>{
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:no-effect'};
+  guard.begin({prompt:'帮我修改项目文件'},ctx);
+  guard.beforeTool({toolName:'write',toolCallId:'fake-write',params:{path:'/tmp/cle-kk-never-created'}},ctx);
+  guard.afterTool({toolName:'write',toolCallId:'fake-write',params:{path:'/tmp/cle-kk-never-created'},result:{status:'completed'}},ctx);
+  guard.afterTool({toolName:'read',params:{path:'/tmp/cle-kk-never-created'},result:'模型声称读到了'},ctx);
+  const result=guard.finalize({lastAssistantMessage:'已经全部修复完成。'},ctx);
+  assert.match(result.reason,/没有主机确认的文件变化/);
+});
+
+test('past or negated incomplete wording cannot bypass a completion claim',()=>{
+  for(const [index,reply] of [
+    '之前未完成的问题已经修复，现在全部完成。',
+    '虽然上一轮未完成，这一轮已经成功交付。',
+    '未完成项：无，所有工作已经完成。',
+  ].entries()){
+    const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:`agent:project:wording-${index}`};
+    guard.begin({prompt:'修复项目文件'},ctx);
+    const result=guard.finalize({lastAssistantMessage:reply},ctx);
+    assert.equal(result.action,'revise');assert.match(result.reason,/没有任何真实执行工具记录/);
+  }
+});
+
+test('a bare continue message is not misclassified as a new file mutation',()=>{
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'main',sessionKey:'agent:main:continue-chat'};
+  guard.begin({prompt:'继续'},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'接着上面的解释往下说。'},ctx),undefined);
+  const blocked=guard.finalize({lastAssistantMessage:'上一个项目已经全部修复完成。'},ctx);
+  assert.equal(blocked.action,'revise');assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('external actions also need a separate post-action observation',()=>{
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:external-check'};
+  guard.begin({prompt:'帮我发布这个项目'},ctx);
+  guard.afterTool({toolName:'publish_project',params:{target:'remote'},result:{ok:true}},ctx);
+  let blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  assert.match(blocked.reason,/之后没有读取、测试或检查真实结果/);
+  guard.afterTool({toolName:'check_publish_status',params:{target:'remote'},result:{status:'live'}},ctx);
+  blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  assert.equal(blocked,undefined);
+});
+
+test('a verifier created after Skill load cannot self-certify the same turn',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-late-verifier-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','late','SKILL.md');
+  const verifier=path.join(root,'skills','late','tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(skill),{recursive:true});fs.writeFileSync(skill,'# late');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:late-verifier'};
+  guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.writeFileSync(verifier,'print("ok")\n');
+  guard.afterTool({toolName:'read',params:{path:verifier},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
+  const result=guard.finalize({lastAssistantMessage:'项目已经完成。'},ctx);
+  assert.match(result.reason,/没有独立 verify_completion\.py/);
+});
+
+function integrityContract(t,label,verifierCode='import json\nprint(json.dumps({"status":"PASS","verified":True}))\n') {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-contract-test-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills',label,'SKILL.md');
+  const verifier=path.join(path.dirname(skill),'tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});
+  fs.writeFileSync(skill,'# independent workflow');
+  if(verifierCode!==null)fs.writeFileSync(verifier,verifierCode);
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:`agent:project:${label}`};
+  return {root,skill,verifier,guard,ctx};
+}
+
+test('an immediately installed existing contract can verify without an artificial age delay',async t=>{
+  const {skill,guard,ctx}=integrityContract(t,'fresh-install');
+  guard.begin({prompt:'调用 Skill 验证项目'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  assert.equal((await guard.verifyExternal(ctx.sessionKey)).verified,true);
+});
+
+test('creating or changing a verifier before first Skill read cannot self-certify',async t=>{
+  for(const existing of [false,true]){
+    const {skill,verifier,guard,ctx}=integrityContract(t,`pre-read-${existing}`,existing?'print("FAIL")\n':null);
+    guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+    fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+    guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+    guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
+    const checked=await guard.verifyExternal(ctx.sessionKey);
+    assert.equal(checked.ok,false);assert.match(checked.reason,/没有独立 verify_completion\.py/);
+    assert.match(guard.finalize({lastAssistantMessage:'项目已经全部完成。'},ctx).reason,/没有独立 verify_completion\.py/);
+  }
+});
+
+test('rereading changed Skill or verifier never replaces the original contract lock',async t=>{
+  for(const target of ['skill','verifier']){
+    const fixture=integrityContract(t,`reread-${target}`),{skill,verifier,guard,ctx}=fixture;
+    guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+    guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+    const original=guard.runs.get(ctx.sessionKey).skills.get(skill);
+    fs.appendFileSync(fixture[target],'\n# modified by execution model\n');
+    guard.afterTool({toolName:'read',params:{path:verifier},result:'loaded again'},ctx);
+    guard.afterTool({toolName:'read',params:{path:skill},result:'loaded again'},ctx);
+    assert.equal(guard.runs.get(ctx.sessionKey).skills.get(skill),original);
+    const checked=await guard.verifyExternal(ctx.sessionKey);
+    assert.equal(checked.ok,false);assert.match(checked.reason,/契约文件被替换或修改/);
+  }
+});
+
+test('one valid Skill cannot certify a second Skill with a missing verifier',async t=>{
+  const {root,skill,guard,ctx}=integrityContract(t,'valid-plus-missing');
+  const missing=path.join(root,'skills','missing','SKILL.md');
+  fs.mkdirSync(path.dirname(missing),{recursive:true});fs.writeFileSync(missing,'# missing verifier');
+  guard.begin({prompt:'调用这两个 Skill 完成项目'},ctx);
+  for(const file of [missing,skill])guard.afterTool({toolName:'read',params:{path:file},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
+  const checked=await guard.verifyExternal(ctx.sessionKey);
+  assert.equal(checked.ok,false);assert.ok(checked.reason.includes(missing));
+  for(const options of [{},{verifyExternal:false}]){
+    assert.match(guard.finalize({lastAssistantMessage:'项目已经全部完成。'},ctx,options).reason,/没有独立 verify_completion\.py/);
+  }
+});
+
+test('empty contracts and unsuccessful Skill reads cannot mint a verified attestation',async t=>{
+  const {skill,guard,ctx}=integrityContract(t,'failed-read');
+  guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+  for(const event of [
+    {toolName:'read',params:{path:skill},error:'permission denied',result:'failed'},
+    {toolName:'write',params:{path:skill},result:'ok'},
+  ])guard.afterTool(event,ctx);
+  assert.equal(guard.runs.get(ctx.sessionKey).loadedSkills.size,0);
+  const checked=await guard.verifyExternal(ctx.sessionKey);
+  assert.equal(checked.ok,false);assert.equal(checked.verified,undefined);
+  assert.equal(guard.runs.get(ctx.sessionKey).verification,null);
+});
+
+test('symlink contracts cannot act as completion authorities',async t=>{
+  const {root,skill,verifier,guard,ctx}=integrityContract(t,'linked-verifier');
+  const other=path.join(root,'outside.py');fs.renameSync(verifier,other);fs.symlinkSync(other,verifier);
+  guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  assert.equal((await guard.verifyExternal(ctx.sessionKey)).ok,false);
+});
+
+test('fresh evidence cannot follow a file or parent symlink outside its run',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-evidence-links-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const run=path.join(root,'run'),outside=path.join(root,'outside');
+  fs.mkdirSync(run);fs.mkdirSync(outside);
+  const file=path.join(outside,'capture.txt');fs.writeFileSync(file,'new evidence');
+  fs.symlinkSync(file,path.join(run,'linked.txt'));
+  fs.symlinkSync(outside,path.join(run,'linked-directory'));
+  const guard=new CompletionIntegrityGuard();
+  for(const candidate of [path.join(run,'linked.txt'),path.join(run,'linked-directory','capture.txt')]){
+    assert.throws(()=>guard.assertFreshRunFile(candidate,run,Date.now()-100,'截图'),/不在本轮运行目录/);
+  }
+  const own=path.join(run,'own.txt');fs.writeFileSync(own,'own evidence');
+  assert.equal(guard.assertFreshRunFile(own,run,Date.now()-100,'证据').path,own);
+});
+
+test('controlled writer rejects escaped run directories and output parents',async t=>{
+  const {root,skill,guard,ctx}=integrityContract(t,'douyin-ai-video-workflow');
+  const pipeline=path.join(path.dirname(skill),'scripts','pipeline_state.py');
+  fs.mkdirSync(path.dirname(pipeline),{recursive:true});fs.writeFileSync(pipeline,'# validator');
+  const runs=path.join(root,'runs'),outside=path.join(root,'outside'),realRun=path.join(runs,'real');
+  fs.mkdirSync(realRun,{recursive:true});fs.mkdirSync(outside);
+  fs.symlinkSync(outside,path.join(runs,'escaped'));fs.symlinkSync(outside,path.join(realRun,'reports'));
+  fs.writeFileSync(path.join(realRun,'pipeline_state.json'),JSON.stringify({created_at:new Date().toISOString()}));
+  guard.begin({prompt:'调用 Skill 生成视频'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  assert.throws(()=>guard.workflowContext(ctx.sessionKey,path.join(runs,'escaped')),/运行目录必须/);
+  guard.afterTool({toolName:'exec',params:{command:`python3 ${pipeline} init --run-dir "${realRun}"`},result:'INITIALIZED'},ctx);
+  await assert.rejects(()=>guard.recordEvidence(ctx.sessionKey,{kind:'submission_ledger',run_dir:realRun,data:{}}),/符号链接离开/);
+  assert.deepEqual(fs.readdirSync(outside),[]);
+});
+
+test('a verifier cannot change its own contract while returning PASS',async t=>{
+  const {skill,guard,ctx}=integrityContract(t,'self-changing',
+    'import json\nwith open(__file__,"a") as f: f.write("\\n# changed\\n")\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+  guard.begin({prompt:'调用 Skill 完成项目'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  const checked=await guard.verifyExternal(ctx.sessionKey);
+  assert.equal(checked.ok,false);assert.match(checked.reason,/契约文件被替换或修改/);
+});
+
+test('an artifact mutation during asynchronous verification invalidates its result',async t=>{
+  const {root,skill,guard,ctx}=integrityContract(t,'verification-race',
+    'import json,time\ntime.sleep(0.08)\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+  guard.begin({prompt:'调用 Skill 修改文件'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  const pending=guard.verifyExternal(ctx.sessionKey),target=path.join(root,'changed.txt');
+  guard.beforeTool({toolName:'write',toolCallId:'concurrent',params:{path:target}},ctx);
+  fs.writeFileSync(target,'changed during verification');
+  guard.afterTool({toolName:'write',toolCallId:'concurrent',params:{path:target},result:'ok'},ctx);
+  const checked=await pending;
+  assert.equal(checked.ok,false);assert.match(checked.reason,/验收期间产物或 Skill 契约发生变化/);
+  assert.equal(guard.runs.get(ctx.sessionKey).verification,null);
 });
 
 test('deep-think tiers are bounded and mode-aware',()=>{
@@ -47,7 +562,7 @@ test('deep-think tiers are bounded and mode-aware',()=>{
   const full=buildDeliberationPlan('full','none');
   assert.match(full,/全部六项升级/);assert.match(full,/执行验证仅在存在可验证产物/);assert.match(full,/总派生上限 96/);
   const marathon=buildDeliberationPlan('marathon','project');
-  assert.match(marathon,/无人值守的长时任务/);assert.match(marathon,/主代理在子代理工作时继续/);
+  assert.match(marathon,/无人值守的长时任务/);assert.match(marathon,/真正独立的子任务才并行/);
   assert.match(marathon,/pinkie-longrun-complete/);assert.match(marathon,/总派生上限 512/);
   assert.match(base,/后端硬验收/);assert.match(full,/真实验证×2/);assert.match(marathon,/反批评×3/);
   assert.match(base,/交付契约/);assert.match(base,/不得把两者一律写成研究报告/);
@@ -62,7 +577,7 @@ function completeRole(runtime,ctx,role,count){
   for(let i=0;i<count;i+=1){
     const child=`${ctx.sessionKey}:subagent:${role}-${i}`;
     runtime.spawned({childSessionKey:child,label:`${role} ${i}`,mode:'run',agentId:ctx.agentId,runId:`run-${role}-${i}`},{requesterSessionKey:ctx.sessionKey});
-    runtime.ended({targetSessionKey:child,targetKind:'subagent',reason:'completed',outcome:'ok'});
+    runtime.ended({targetSessionKey:child,targetKind:'subagent',reason:'completed',outcome:'ok',resultText:`${role} ${i} 已完成独立分析：核对了原始要求、真实现场和边界条件，并给出可执行步骤、风险点以及对应的机械验证办法。`});
   }
 }
 
@@ -74,6 +589,28 @@ test('every tier blocks a prose-only answer until real child runs complete',()=>
     assert.equal(gate.action,'revise');assert.match(gate.reason,/真实调用未达标/);
     assert.ok(gate.retry.maxAttempts>=5);
   }
+});
+
+test('model-authored skip markers cannot bypass a selected tier',()=>{
+  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:no-skip',runId:'run-no-skip'};
+  runtime.arm(ctx.sessionKey,'base');
+  const result=runtime.finalize({lastAssistantMessage:'直接完成。 <!-- pinkie-deliberation-skip -->'},ctx);
+  assert.equal(result.action,'revise');assert.match(result.reason,/真实调用未达标/);
+});
+
+test('empty, canned, and duplicated child answers do not satisfy role counts',()=>{
+  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:child-quality'};
+  runtime.arm(ctx.sessionKey,'base');
+  const first=`${ctx.sessionKey}:subagent:one`,second=`${ctx.sessionKey}:subagent:two`;
+  runtime.spawned({childSessionKey:first,label:'求解·1'},{requesterSessionKey:ctx.sessionKey});
+  runtime.ended({targetSessionKey:first,outcome:'ok',resultText:'已完成'});
+  assert.equal(runtime.status(ctx.sessionKey).completedRoles.solver,undefined);
+  const substantive='逐项核对了原需求和真实项目现场，给出了具体文件改动、风险边界、执行顺序以及可以重复运行的验证命令。';
+  runtime.ended({targetSessionKey:first,outcome:'ok',resultText:substantive});
+  runtime.spawned({childSessionKey:second,label:'求解·2'},{requesterSessionKey:ctx.sessionKey});
+  runtime.ended({targetSessionKey:second,outcome:'ok',resultText:substantive});
+  assert.equal(runtime.status(ctx.sessionKey).completedRoles.solver,1);
+  assert.equal(runtime.status(ctx.sessionKey).failedChildren,1);
 });
 
 test('base tier needs completed planner solvers critics and judge, not spawn attempts',()=>{
@@ -93,7 +630,8 @@ test('child completion reconciliation is idempotent when both lifecycle events a
   const child=`${ctx.sessionKey}:subagent:planner`;
   runtime.spawned({childSessionKey:child,label:'规划·1'}, {requesterSessionKey:ctx.sessionKey});
   runtime.ended({targetSessionKey:child,outcome:'ok'});
-  runtime.ended({targetSessionKey:child,outcome:'ok'});
+  assert.equal(runtime.status(ctx.sessionKey).pending,1);
+  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'已拆出完整验收清单，逐项对应原始要求，并为文件变化、命令结果和最终交付分别标明了可重复的机械验证方法。'});
   const status=runtime.status(ctx.sessionKey);
   assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
   assert.equal(status.required,7);assert.equal(status.completed,1);
@@ -107,12 +645,12 @@ test('child results are collected once and returned to the parent as candidate e
   const child=`${ctx.sessionKey}:subagent:planner`;
   runtime.spawned({childSessionKey:child,label:'规划·1'}, {requesterSessionKey:ctx.sessionKey});
   runtime.ended({targetSessionKey:child,outcome:'ok'});
-  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'先读取项目，再按验收清单执行。'});
+  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'先完整读取项目和用户点名的文件，再把每项要求映射到实际改动，最后运行测试并对照验收清单逐项核对。'});
   const status=runtime.status(ctx.sessionKey);
   const prompt=runtime.prompt({prompt:'继续'}, {...ctx,workspaceDir:root});
   assert.equal(status.completedRoles.planner,1);assert.equal(status.collectedResults,1);
   assert.match(prompt.appendSystemContext,/已完成子任务的候选证据/);
-  assert.match(prompt.appendSystemContext,/先读取项目，再按验收清单执行/);
+  assert.match(prompt.appendSystemContext,/先完整读取项目和用户点名的文件/);
 });
 
 test('full tier requires all six upgrade families to finish',()=>{
@@ -175,7 +713,7 @@ test('tier audit survives separate plugin instances through the durable store',t
   assert.equal(spawning.beforeTool({toolName:'sessions_spawn',params:{task:'solve',label:'solve-1'}},ctx).params.model,'mm/gemini-3.6-flash-high');
   const child='agent:unrestricted:subagent:durable';
   spawning.spawned({childSessionKey:child,label:'规划·1',resolvedModel:'mm/gemini-3.6-flash-high'},{requesterSessionKey:parent});
-  const ending=new ModeArchitecture(new FileRunStore(root));ending.ended({targetSessionKey:child,outcome:'ok'});
+  const ending=new ModeArchitecture(new FileRunStore(root));ending.ended({targetSessionKey:child,outcome:'ok',resultText:'已完成规划：列出了逐项可执行、可验证的交付清单，并给每个步骤标注依赖、风险以及失败后的恢复路径。'});
   const status=new ModeArchitecture(new FileRunStore(root)).status(parent);
   assert.equal(status.spawned,1);assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
   assert.deepEqual(status.childModels,{'mm/gemini-3.6-flash-high':1});assert.equal(status.modelMismatches,0);
@@ -251,18 +789,22 @@ test('the full tier plan is reloaded only for the parent, never recursively for 
 });
 
 test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async()=>{
-  const hooks=new Map(),methods=new Map(),queued=[];
+  const hooks=new Map(),methods=new Map(),queued=[],tools=[];
   plugin.register({
     on:(name,fn)=>hooks.set(name,fn),
     registerGatewayMethod:(name,fn,opts)=>methods.set(name,{fn,opts}),
+    registerTool:(factory,opts)=>tools.push({factory,opts}),
     // Some compatible OpenClaw builds resolve a successful enqueue with no
     // payload; the control RPC must still stay usable in that case.
     session:{workflow:{enqueueNextTurnInjection:async value=>{queued.push(value);}}},
   });
-  for(const name of ['before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended','before_compaction','after_compaction','before_agent_finalize','model_call_started','model_call_ended','llm_output','agent_end'])assert.ok(hooks.has(name));
+  for(const name of ['before_agent_run','before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended','before_compaction','after_compaction','before_agent_finalize','before_message_write','reply_payload_sending','model_call_started','model_call_ended','llm_output','agent_end'])assert.ok(hooks.has(name));
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
+  assert.equal(tools.length,1);assert.equal(tools[0].opts.name,'delivery_guard');
+  const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
+  assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   let response;
   await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/反批评/);
@@ -381,6 +923,28 @@ test('watchdog never loops permanent configuration failures',async()=>{
   assert.equal(injected.length,0);
 });
 
+test('ordinary watchdog jobs survive a gateway restart',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-watchdog-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const store=new WatchdogJobStore(root),injected=[],scheduled=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async value=>{scheduled.push(value);return {id:'fallback'};},
+  };
+  const key='agent:project:durable-upstream';
+  const first=new UpstreamWatchdog({session:{workflow}},()=>'',async()=>({stdout:'{}'}),'',()=>({pending:0,quietForMs:20_000}),store);
+  assert.equal(await first.agentEnded({success:false,runId:'broken',error:'connection reset'},{agentId:'project',sessionKey:key}),true);
+  assert.equal(store.list().length,1);
+
+  const second=new UpstreamWatchdog({session:{workflow}},()=>'',async()=>({stdout:'{"status":"started"}'}),'/runtime/openclaw/dist/index.js',()=>({pending:0,quietForMs:20_000}),store);
+  assert.equal(await second.recoverPending(),1);
+  assert.equal(injected.some(value=>value.metadata?.recovered),true);
+  assert.equal(second.timers.has(key),true);
+  await second.cancel(key);
+  assert.equal(store.list().length,0);
+});
+
 test('marathon watchdog keeps a delayed cron fallback while manual cancellation still wins',async()=>{
   const scheduled=[];
   const api={session:{workflow:{
@@ -462,7 +1026,9 @@ test('an incomplete tier with no live children schedules one invisible continuat
   const sessionKey='agent:unrestricted:tier-gap';
   assert.equal(await continuation.schedule(sessionKey,'unrestricted'),true);
   clearTimeout(continuation.timers.get(sessionKey));continuation.timers.delete(sessionKey);
-  assert.equal(scheduled.length,1);assert.equal(scheduled[0].deliveryMode,'none');
+  // Local desktop sessions use the authenticated CLI timer. A cron fallback
+  // has no channel and would fail with "Channel is required".
+  assert.equal(scheduled.length,0);
   assert.equal(injected.length,1);assert.match(injected[0].text,/批评 0\/2/);assert.match(injected[0].text,/不得输出 NO_REPLY/);
   assert.equal(await continuation.dispatch({sessionKey,agentId:'unrestricted',tag:continuation.tag(sessionKey)}),true);
   const params=JSON.parse(calls[0].args[calls[0].args.indexOf('--params')+1]);

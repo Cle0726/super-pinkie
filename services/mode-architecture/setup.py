@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
+import re
 
 
 MODE_WORKSPACES = {
@@ -100,6 +101,18 @@ def _copy_if_changed(source: Path, target: Path) -> bool:
     return True
 
 
+def _version_key(value: str) -> tuple[int, ...]:
+    numbers = [int(item) for item in re.findall(r"\d+", str(value or ""))]
+    return tuple((numbers + [0, 0, 0])[:3])
+
+
+def _package_version(directory: Path) -> tuple[int, ...]:
+    try:
+        return _version_key(json.loads((directory / "package.json").read_text(encoding="utf-8"))["version"])
+    except Exception:
+        return (0, 0, 0)
+
+
 def _replace_preserving_file_flags(temp_name: str, target: Path) -> None:
     """Replace an atomic config while keeping macOS user-immutable protection."""
     target_stat = target.stat()
@@ -179,8 +192,14 @@ def install(home=None) -> bool:
     backup_root = state / "backups" / ("mode-architecture-" + str(time.time_ns()))
     changed = False
 
-    for name in ("index.mjs", "package.json", "openclaw.plugin.json"):
-        changed |= _copy_if_changed(source / name, extension / name)
+    # A previously installed newer runtime must never be silently downgraded by
+    # launching an older App bundle.  This was the reason source fixes appeared
+    # correct in Git while the gateway kept loading an older completion gate.
+    source_version = _package_version(source)
+    installed_version = _package_version(extension)
+    if installed_version <= source_version:
+        for name in ("index.mjs", "package.json", "openclaw.plugin.json"):
+            changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative

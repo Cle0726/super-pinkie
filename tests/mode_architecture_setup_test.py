@@ -56,6 +56,18 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(data['agents']['defaults']['subagents']['maxConcurrent'],12)
             self.assertEqual((none/'IDENTITY.md').read_text(),'OPENCLAW_UR_INJECT CUSTOM\n')
 
+    def test_older_app_bundle_cannot_downgrade_a_newer_live_runtime(self):
+        with tempfile.TemporaryDirectory(prefix='pinkie-mode-no-downgrade-') as temp:
+            home=Path(temp);config=home/'.openclaw/openclaw.json';config.parent.mkdir()
+            config.write_text('{}\n')
+            extension=home/'.openclaw/extensions/pinkie-mode-architecture';extension.mkdir(parents=True)
+            (extension/'package.json').write_text(json.dumps({'version':'99.0.0'}))
+            (extension/'index.mjs').write_text('NEWER LIVE RUNTIME\n')
+            (extension/'openclaw.plugin.json').write_text('{}\n')
+            setup.install(home)
+            self.assertEqual((extension/'index.mjs').read_text(),'NEWER LIVE RUNTIME\n')
+            self.assertEqual(json.loads((extension/'package.json').read_text())['version'],'99.0.0')
+
 
 if __name__ == '__main__':
     unittest.main()

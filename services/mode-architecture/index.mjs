@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
-import {execFile} from 'node:child_process';
+import {execFile, spawnSync} from 'node:child_process';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -32,6 +32,35 @@ const ROLE_LABELS = Object.freeze({
   verifier: '真实验证', assumption: '假设审查', countercritic: '反批评',
 });
 const VALID_TIER = /\[deep-think:(base|boost|full|marathon)\]/i;
+// 长跑档反空转：每轮交付必须带来新的可验证产物，并用此标记申报；
+// 连续多轮无新增产物即判定停滞，强制走暂停报告而不是继续烧额度。
+const PROGRESS_MARKER = /<!--\s*pinkie-progress(?::[\s\S]*?)?-->/i;
+const STAGNATION_LIMIT = 3;
+const COMPLETION_CLAIM = /(?:100%|全部|完整|真正|真实|已经|已|成功).{0,24}(?:完成|交付|提交|生成|下载|发布|执行|修复|处理)|(?:完成|交付|提交|生成|下载|发布|执行|修复|处理).{0,16}(?:完毕|成功|完成)/i;
+const DELIVERY_CLAIM = /(?:搞定|处理好了|弄好了|做完了|做成了|已按要求|可以用了|没问题了|已经可以|一切就绪|顺利交付|已落实|已修好|已修复)/i;
+const IN_PROGRESS_CLAIM = /(?:仍在|还在|正在|等待|排队|后台.{0,8}(?:生成|运行|处理|渲染)|稍后|尚未|未下载|未生成|待完成|失败|未通过|报错|被阻塞)/i;
+const HONEST_INCOMPLETE = /(?:明确.{0,8})?(?:未完成|尚未完成|无法完成|还没(?:有)?(?:完成|做完|搞定)|执行失败|验收失败|验证未通过|被阻塞|需要用户.{0,8}(?:登录|验证|确认|提供)|验证码|人机验证)/i;
+const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|打开|删除|安装|部署|打包|测试|验证|完成).{0,30}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)?/i;
+const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
+const QUESTION_ONLY = /(?:为什么|为何|怎么回事|什么原因|如何理解|能不能|有没有办法|是不是|是否|请解释|问一下|想知道|？|\?)/i;
+const ACTION_CONTINUATION = /^(?:继续|接着|往下|开始吧|动手吧|加强(?:一下)?|优化(?:一下)?|完善(?:一下)?|升级(?:一下)?|修复(?:啊|吧)?)[！!。.\s]*$/i;
+const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
+const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
+const SKILL_PATH = /(?:^|[\\/])SKILL\.md$/i;
+const VERIFIER_PATH = /(?:^|[\\/])tools[\\/]verify_completion\.py$/i;
+const EVIDENCE_FILE = /(?:pipeline_state|submission_ledger|video_ledger|qc_report|publish_receipt|publication_verification|cleanup_report)\.json|(?:published|public_page|cleanup_desktop)\.png|public_page_evidence\.txt/i;
+const DELIVERY_GUARD_TOOL = 'delivery_guard';
+const WORKFLOW_EVIDENCE_TARGETS = Object.freeze({
+  submission_ledger: 'reports/submission_ledger.json',
+  video_ledger: 'reports/video_ledger.json',
+  qc_report: 'reports/qc_report.json',
+  publish_receipt: 'publish/publish_receipt.json',
+  publication_verification: 'publish/publication_verification.json',
+  cleanup_report: 'reports/cleanup_report.json',
+});
+const CLE_KK_CONTROL_PATH = /(?:Library[\\/]Application Support[\\/]SuperPinkie[\\/]cle-kk|\.openclaw[\\/](?:extensions[\\/]pinkie-mode-architecture|pinkie-deep-think))/i;
+const TIMESTAMP_TAMPERING = /(?:\bos\.utime\s*\(|\butime\s*\(|(?:^|[;&|]\s*)touch\s+(?:-[^\s]+\s+)*)/i;
+const CROSS_RUN_EVIDENCE_COPY = /(?:shutil\.(?:copy|copy2|copyfile)|\bcp\s|\brsync\s)[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])/i;
 const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|abort(?:ed|error)?|incomplete(?: turn| response)?|without (?:a )?(?:final )?(?:reply|response)|missing (?:final )?assistant|empty (?:final )?(?:reply|response)|session file changed while embedded prompt lock was released|EmbeddedAttemptSessionTakeoverError|\b429\b|\b50[234]\b|temporar|try again)/i;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
@@ -123,6 +152,1826 @@ function runProcess(file, args, options) {
   });
 }
 
+const COMPLETION_TRUTH_RULES = `
+【全局交付真实性门禁】
+- “模型说完成了”、状态文件里的 COMPLETED、脚本打印 SUCCESS/SUBMITTED、应用进程存在，都不是完成证据；它们只能表示某一步被尝试。
+- 用户要求执行、修改、生成、下载、发布或调用 Skill 时，必须先真实调用工具，再核对任务完成后的客观状态。没有可验收产物时只能说“未完成/仍在处理/被阻塞”，绝不能写完成报告。
+- PREPARED、STAGED、SUBMITTED、INSPECTED、QUEUED、后台生成中都属于中间状态，不得冒充最终交付。外部生成任务必须等产物实际下载到本轮目标目录并通过格式、尺寸/时长、时间戳和可读性检查。
+- 读取 Skill 后，如果同目录存在 tools/verify_completion.py，最终声称完成前必须让系统真实性校验通过；禁止修改、绕过或伪造该校验器和验收回执。
+- 需要机器回执的 Skill 只能调用“成果核验”工具写入受控证据，并在最后调用同一工具的 verify 动作；通用 write、临时脚本或模型文字不能生成权威回执。
+- 禁止复制旧运行的图片、视频、发布截图或回执冒充本轮成果；禁止用 touch、os.utime、改系统时间等方式伪造“本轮新生成”。发布回执、公开页凭据和 QC 结果必须由对应真实动作及专用适配器产生，不能用 write 或临时 Python/Node 脚本手写。
+- 工具失败后保留旧成果，不覆盖旧文件来伪装本轮成功；修复后必须重新验证。无法继续时说清真实阻塞和已保留内容。
+`.trim();
+
+function completionRunKey(event = {}, ctx = {}) {
+  // Session key is present on prompt, tool, finalize, and end hooks.  Prefer it
+  // over runId so a provider retry cannot split one user turn into unrelated
+  // integrity records.
+  return String(ctx.sessionKey || event.sessionKey || event.runId || ctx.runId || '');
+}
+
+function resultText(value, limit = 12_000) {
+  if (typeof value === 'string') return value.slice(0, limit);
+  try { return JSON.stringify(value).slice(0, limit); } catch { return String(value || '').slice(0, limit); }
+}
+
+function toolResultFailed(event = {}, output = '') {
+  if (event.error || event.isError === true) return true;
+  const value = event.result && typeof event.result === 'object' ? event.result : {};
+  const details = value.details && typeof value.details === 'object' ? value.details : value;
+  if (details.isError === true || details.ok === false) return true;
+  if (Number.isFinite(Number(details.exitCode)) && Number(details.exitCode) !== 0) return true;
+  if (/(?:"status"\s*:\s*"(?:error|failed|blocked|packet_invalid|timeout)"|command exited with code [1-9]|(?:^|\n)\s*traceback\b|(?:^|\n)\s*(?:error|failed|failure)\s*:|timed out)/i.test(output)) return true;
+  return false;
+}
+
+function toolCallKey(event = {}) {
+  return String(event.toolCallId || `${event.runId || ''}:${event.toolName || ''}`);
+}
+
+function patchPaths(params = {}) {
+  const text = resultText(params, 200_000);
+  const paths = [];
+  for (const match of text.matchAll(/\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*([^\n]+)|(?:^|[\s"'])((?:\/|[A-Za-z]:[\\/])[^\s"']+)/g)) {
+    const value = String(match[1] || match[2] || '').trim();
+    if (value) paths.push(value);
+  }
+  return [...new Set(paths)];
+}
+
+function toolTargetPaths(toolName = '', params = {}) {
+  const name = String(toolName || '').toLowerCase();
+  const values = [];
+  for (const key of ['path', 'file_path', 'filePath', 'target', 'destination', 'dest', 'outputPath', 'output_path']) {
+    const value = params?.[key];
+    if (typeof value === 'string' && value.trim()) values.push(value.trim());
+  }
+  if (name === 'apply_patch' || name.includes('patch')) values.push(...patchPaths(params));
+  // A small, conservative extraction for shell commands. It is only used to
+  // prove a host-side file effect; unknown commands remain valid tool events.
+  if (name === 'exec' || name.endsWith('_exec')) {
+    const command = String(params?.command || params?.cmd || '');
+    const cwd = String(params?.cwd || params?.workdir || '');
+    if (path.isAbsolute(cwd)) values.push(cwd);
+    for (const match of command.matchAll(/["'](\/[^"'\n]+)["']/g)) {
+      if (match[1]) values.push(match[1]);
+    }
+    for (const match of command.matchAll(/(?:>|>>|\b(?:touch|mkdir|rm|mv|cp|chmod|sips|ffmpeg)\b[^\n]*?\s)(["']?\/(?:[^\s"']+)["']?)/g)) {
+      const value = String(match[1] || '').replace(/^['"]|['"]$/g, '');
+      if (value) values.push(value);
+    }
+  }
+  return [...new Set(values)].filter(value => path.isAbsolute(value));
+}
+
+function snapshotFile(file) {
+  const target = String(file || '');
+  if (!target || !path.isAbsolute(target)) return {path: target, exists: false};
+  try {
+    const stat = fs.statSync(target);
+    const snapshot = {path: target, exists: true, size: stat.size, mtimeMs: stat.mtimeMs};
+    // Hash small files so a same-size edit cannot be mistaken for no effect.
+    if (stat.isFile() && stat.size <= 4 * 1024 * 1024) {
+      snapshot.hash = createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+    }
+    return snapshot;
+  } catch {
+    return {path: target, exists: false};
+  }
+}
+
+function compareSnapshot(before = {}) {
+  const after = snapshotFile(before.path);
+  const changed = before.exists !== after.exists
+    || before.size !== after.size
+    || (before.hash && after.hash && before.hash !== after.hash)
+    || (!before.hash && before.mtimeMs !== after.mtimeMs);
+  return {...after, changed: Boolean(changed)};
+}
+
+function compactJson(value, depth = 0) {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.slice(0, depth < 2 ? 16_000 : 4_000);
+  if (depth >= 5) return '[truncated]';
+  if (Array.isArray(value)) return value.slice(0, 80).map(item => compactJson(item, depth + 1));
+  if (typeof value === 'object') {
+    const output = {};
+    for (const [key, item] of Object.entries(value).slice(0, 80)) {
+      if (/(?:cookie|authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)/i.test(key)) {
+        output[key] = '[redacted]';
+      } else output[key] = compactJson(item, depth + 1);
+    }
+    return output;
+  }
+  return String(value).slice(0, 4_000);
+}
+
+function compactToolEvidence(entry = {}) {
+  const params = entry.params && typeof entry.params === 'object' ? entry.params : {};
+  const kept = {};
+  for (const key of [
+    'path', 'file_path', 'filePath', 'target', 'destination', 'dest', 'outputPath', 'output_path',
+    'run_dir', 'action', 'kind', 'url', 'targetUrl', 'targetId', 'target_id', 'cwd', 'workdir',
+  ]) {
+    if (params[key] !== undefined) kept[key] = compactJson(params[key]);
+  }
+  for (const key of ['command', 'cmd']) {
+    if (typeof params[key] === 'string') kept[key] = params[key].slice(0, 16_000);
+  }
+  // Browser/computer actions often nest the semantic action under request.
+  if (params.request && typeof params.request === 'object') kept.request = compactJson(params.request);
+  return {
+    name: String(entry.name || '').slice(0, 160),
+    failed: Boolean(entry.failed),
+    output: String(entry.output || '').slice(0, 8_000),
+    params: kept,
+    effects: compactJson(entry.effects || []),
+    at: Number(entry.at) || 0,
+  };
+}
+
+function fileSha256(file) {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function isPathInside(file, root) {
+  const relative = path.relative(path.resolve(root), path.resolve(file));
+  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+}
+
+function existingPathInside(file, root) {
+  try {
+    const rootReal = fs.realpathSync(path.resolve(root));
+    const fileReal = fs.realpathSync(path.resolve(file));
+    return isPathInside(fileReal, rootReal);
+  } catch { return false; }
+}
+
+function assertRunOutputPath(file, runDir) {
+  const requested = path.resolve(file), root = path.resolve(runDir);
+  if (!isPathInside(requested, root)) throw new Error('证据输出必须位于本轮运行目录');
+  let ancestor = requested;
+  while (!fs.existsSync(ancestor) && ancestor !== path.dirname(ancestor)) ancestor = path.dirname(ancestor);
+  const realRoot = fs.realpathSync(root), realAncestor = fs.realpathSync(ancestor);
+  if ((realAncestor !== realRoot && !isPathInside(realAncestor, realRoot))
+      || (fs.existsSync(requested) && fs.lstatSync(requested).isSymbolicLink())) {
+    throw new Error('证据输出路径不能通过符号链接离开本轮运行目录');
+  }
+}
+
+function writeJsonAtomic(file, value) {
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {encoding: 'utf8', mode: 0o600});
+    fs.renameSync(temporary, file);
+    fs.chmodSync(file, 0o600);
+  } finally {
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
+  }
+}
+
+function parseIsoMs(value) {
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function probeImageFile(file) {
+  const checked = spawnSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file], {
+    encoding: 'utf8', timeout: 15_000, maxBuffer: 256 * 1024,
+  });
+  if (checked.status !== 0) throw new Error(`图片无法解码：${file}`);
+  const width = Number(/pixelWidth:\s*(\d+)/i.exec(checked.stdout || '')?.[1]);
+  const height = Number(/pixelHeight:\s*(\d+)/i.exec(checked.stdout || '')?.[1]);
+  if (!width || !height || fs.statSync(file).size < 1024) throw new Error(`图片不是有效证据：${file}`);
+  return {width, height};
+}
+
+function probeVideoFile(file) {
+  const checked = spawnSync('ffprobe', [
+    '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,pix_fmt,sample_rate',
+    '-of', 'json', file,
+  ], {encoding: 'utf8', timeout: 20_000, maxBuffer: 1024 * 1024});
+  if (checked.status !== 0) throw new Error(`视频无法解析：${file}`);
+  let data;
+  try { data = JSON.parse(checked.stdout || '{}'); } catch { throw new Error(`视频探测结果无效：${file}`); }
+  const video = (data.streams || []).find(stream => stream.codec_type === 'video');
+  if (!video || Number(data.format?.duration || 0) < 2) throw new Error(`视频缺少有效画面或时长不足：${file}`);
+  return {data, video, audio: (data.streams || []).find(stream => stream.codec_type === 'audio')};
+}
+
+function evidenceItems(data = {}, ...keys) {
+  for (const key of keys) if (Array.isArray(data?.[key])) return data[key];
+  return [];
+}
+
+function evidencePath(item = {}, ...keys) {
+  for (const key of keys) if (typeof item?.[key] === 'string' && item[key].trim()) return path.resolve(item[key]);
+  return '';
+}
+
+function trustedUiEntry(entry = {}) {
+  return !entry.failed && /(?:^|_)(?:browser|computer|cua|screen)(?:$|_)/i.test(String(entry.name || ''));
+}
+
+function entryText(entry = {}) {
+  return `${toolArgumentsText(entry)}\n${String(entry.output || '')}`;
+}
+
+function entryMentionsFile(entry = {}, file = '') {
+  const resolved = path.resolve(String(file || ''));
+  const text = entryText(entry);
+  return Boolean(resolved && (text.includes(resolved) || text.includes(path.basename(resolved))));
+}
+
+function trustedCapture(active = [], file = '', since = 0) {
+  return active.find(entry => entry.at >= since && trustedUiEntry(entry)
+    && /(?:screenshot|capture|snapshot|截屏|截图)/i.test(entryText(entry))
+    && entryMentionsFile(entry, file));
+}
+
+function trustedDoubaoSubmit(entry = {}) {
+  const text = entryText(entry);
+  if (/(?:SUBMISSION_BLOCKED|NOT_SUBMITTED|BLOCKED|尚未实现|未提交|STAGE_READY|draft_only)/i.test(text)) return false;
+  if (trustedUiEntry(entry)) {
+    return /(?:doubao|豆包)/i.test(text)
+      && /"(?:action|kind)"\s*:\s*"(?:click|press|submit)"/i.test(toolArgumentsText(entry))
+      && /(?:SUBMITTED|GENERATING|QUEUED|已提交|生成中|排队中|任务\s*(?:ID|标识))/i.test(text);
+  }
+  if (!/(?:^|_)exec(?:$|_)/i.test(String(entry.name || ''))) return false;
+  const command = String(entry.params?.command || entry.params?.cmd || '');
+  return /\/Library\/Mac\/自动化管理\/scripts\/desktop\/doubao_adapter_macos\.py\b/.test(command)
+    && /--action\s+submit\b/.test(command)
+    && /"status"\s*:\s*"(?:SUBMITTED|GENERATING|QUEUED|SUCCESS)"/i.test(text);
+}
+
+function faststartOk(file) {
+  try {
+    const handle = fs.openSync(file, 'r');
+    try {
+      const size = Math.min(fs.statSync(file).size, 8 * 1024 * 1024);
+      const buffer = Buffer.alloc(size); fs.readSync(handle, buffer, 0, size, 0);
+      const moov = buffer.indexOf('moov'), mdat = buffer.indexOf('mdat');
+      return moov >= 0 && mdat >= 0 && moov < mdat;
+    } finally { fs.closeSync(handle); }
+  } catch { return false; }
+}
+
+function isLikelyActionRequest(prompt = '') {
+  const text = String(prompt || '').trim();
+  // A bare “继续” can mean continue an explanation. Integrity retries retain
+  // the original action prompt, so this ambiguous one-word message must not
+  // be upgraded into a mutation request on its own.
+  if (ACTION_CONTINUATION.test(text)) return false;
+  if (!ACTION_REQUEST.test(text)) return false;
+  // A pure “why/how” question is answer work, not an implicit permission to
+  // mutate files. Explicit action verbs still win when both appear.
+  if (QUESTION_ONLY.test(text) && !/(?:帮我|请你|直接|现在就|落地|动手|改成|修复好|执行一下|跑一下)/i.test(text)) return false;
+  if (/(?:调用|执行|运行|打开|删除|安装|部署|打包|测试|验证)/i.test(text)) return true;
+  if (/(?:skill|技能|工作|任务|项目|文件|文件夹|目录|图片|图像|视频|素材|程序|脚本|代码|应用|\bapp\b|页面|网页|网站|\bui\b|发布|下载)/i.test(text)) return true;
+  if (/(?:帮我|请你|给我|直接|现在就).{0,12}(?:改|修|做|生成|创建|制作|更新|替换|移动|重命名|完成)/i.test(text)) return true;
+  return false;
+}
+
+function isHonestIncomplete(value = '') {
+  const text = String(value || '');
+  if (!HONEST_INCOMPLETE.test(text)) return false;
+  if (/(?:之前|此前|上一轮|刚才|曾经).{0,12}(?:未完成|失败|阻塞)/i.test(text)) return false;
+  // “未完成项：无”是在声明全部完成，不能利用“未完成”三个字绕过。
+  if (/(?:未完成|阻塞|失败|待处理)(?:项|内容|问题)?\s*[:：]?\s*(?:无|没有|0|零|none)|(?:没有|不存在|并无).{0,8}(?:未完成|阻塞|失败|待处理)/i.test(text)) return false;
+  return /(?:(?:本轮|当前|目前|整体|任务|最终|仍然|仍|还).{0,18}(?:未完成|无法完成|执行失败|验收失败|验证未通过|被阻塞)|(?:未完成|无法完成|执行失败|验收失败|验证未通过|被阻塞).{0,40}(?:因为|原因|需要|缺少|验证码|人机验证|登录|权限|网络|额度|平台))/i.test(text);
+}
+
+function skillProjectRoot(skillFile) {
+  const parts = path.resolve(skillFile).split(path.sep);
+  const index = parts.lastIndexOf('skills');
+  if (index <= 0) return path.dirname(path.dirname(skillFile));
+  return parts.slice(0, index).join(path.sep) || path.sep;
+}
+
+function verifierSkillFile(verifier) {
+  return path.join(path.dirname(path.dirname(path.resolve(verifier))), 'SKILL.md');
+}
+
+function contractTimeBoundary() {
+  // Date.now() loses sub-millisecond ordering, and a fixed age allowance
+  // rejects legitimate Skills installed immediately before a task. Use the
+  // filesystem's own clock before the model can execute its first tool.
+  let directory;
+  try {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-kk-contract-clock-'));
+    const marker = path.join(directory, 'boundary');
+    fs.writeFileSync(marker, '', {flag: 'wx', mode: 0o600});
+    const contractCutoffNs = fs.statSync(marker, {bigint: true}).ctimeNs.toString();
+    return {startedAt: Date.now(), contractCutoffNs};
+  } catch {
+    // The older boundary is conservative when the temporary directory is
+    // unavailable; it never grants a new contract authority after tool work.
+    const startedAt = Date.now();
+    return {startedAt, contractCutoffNs: (BigInt(startedAt) * 1_000_000n).toString()};
+  } finally {
+    if (directory) {
+      try { fs.rmSync(directory, {recursive: true, force: true}); } catch {}
+    }
+  }
+}
+
+function stableContractFile(file, state) {
+  try {
+    const requested = path.resolve(String(file || ''));
+    if (!requested) return null;
+    const link = fs.lstatSync(requested);
+    // A symlink can point outside the Skill project and can be swapped while
+    // the model is running. Completion contracts must bind to a real file.
+    if (link.isSymbolicLink()) return null;
+    const realpath = fs.realpathSync(requested);
+    const stat = fs.statSync(realpath, {bigint: true});
+    if (!stat.isFile()) return null;
+    const threshold = BigInt(state.contractCutoffNs || (BigInt(Math.floor(state.startedAt || 0)) * 1_000_000n));
+    // birth/ctime catches a file created during this turn even when its mtime
+    // was copied from an older file. mtime also catches in-place edits.
+    if ([stat.birthtimeNs, stat.ctimeNs, stat.mtimeNs].some(value => value > 0n && value >= threshold)) return null;
+    return {
+      path: requested,
+      realpath,
+      dev: Number(stat.dev) || 0,
+      ino: Number(stat.ino) || 0,
+      birthtimeMs: Number(stat.birthtimeMs) || 0,
+      ctimeMs: Number(stat.ctimeMs) || 0,
+      mtimeMs: Number(stat.mtimeMs) || 0,
+      birthtimeNs: stat.birthtimeNs.toString(),
+      ctimeNs: stat.ctimeNs.toString(),
+      mtimeNs: stat.mtimeNs.toString(),
+    };
+  } catch { return null; }
+}
+
+function contractFileChanged(file = {}) {
+  try {
+    const requested = path.resolve(String(file.path || ''));
+    const link = fs.lstatSync(requested);
+    if (link.isSymbolicLink()) return true;
+    const realpath = fs.realpathSync(requested);
+    const stat = fs.statSync(realpath, {bigint: true});
+    return realpath !== String(file.realpath || realpath)
+      || !stat.isFile()
+      || (Number(file.dev) > 0 && Number(stat.dev) !== Number(file.dev))
+      || (Number(file.ino) > 0 && Number(stat.ino) !== Number(file.ino))
+      || Number(stat.birthtimeMs) !== Number(file.birthtimeMs)
+      || Number(stat.ctimeMs) !== Number(file.ctimeMs)
+      || Number(stat.mtimeMs) !== Number(file.mtimeMs)
+      || (file.birthtimeNs && stat.birthtimeNs.toString() !== file.birthtimeNs)
+      || (file.ctimeNs && stat.ctimeNs.toString() !== file.ctimeNs)
+      || (file.mtimeNs && stat.mtimeNs.toString() !== file.mtimeNs);
+  } catch { return true; }
+}
+
+function registerVerifier(state, skillFile, verifier) {
+  const resolvedSkill = path.resolve(skillFile);
+  // Reading a modified contract again must never bless the new contents.
+  if (state.skills.has(resolvedSkill)) return true;
+  if (state.missingVerifiers.has(resolvedSkill)) return false;
+  const skill = stableContractFile(skillFile, state);
+  const verifierFile = stableContractFile(verifier, state);
+  if (!skill || !verifierFile) return false;
+  const skillHash = createHash('sha256').update(fs.readFileSync(skillFile)).digest('hex');
+  const verifierHash = createHash('sha256').update(fs.readFileSync(verifier)).digest('hex');
+  const dependencies = [];
+  const pipelineValidator = path.join(path.dirname(skillFile), 'scripts', 'pipeline_state.py');
+  if (fs.existsSync(pipelineValidator)) {
+    const dependency = stableContractFile(pipelineValidator, state);
+    if (!dependency) return false;
+    dependencies.push({...dependency, hash: fileSha256(pipelineValidator)});
+  }
+  state.skills.set(path.resolve(skillFile), {
+    verifier: path.resolve(verifier),
+    skillFile: skill,
+    verifierFile,
+    skillHash,
+    verifierHash,
+    dependencies,
+  });
+  return true;
+}
+
+function missingVerifierReason(state) {
+  const missing = [...state.loadedSkills].filter(skillFile => state.missingVerifiers.has(skillFile) || !state.skills.has(skillFile));
+  return missing.length ? `已读取的 Skill 没有独立 verify_completion.py，不能由执行模型自行验收完成：${missing.join('、')}` : '';
+}
+
+function verifierContractReason(skillFile, contract = {}) {
+  try {
+    if (!contract.skillFile || !contract.verifierFile || contractFileChanged(contract.skillFile)
+        || contractFileChanged(contract.verifierFile)) return `本轮真实性契约文件被替换或修改：${skillFile}`;
+    if (fileSha256(skillFile) !== contract.skillHash) return `本轮读取后又修改了 Skill 契约：${skillFile}`;
+    if (fileSha256(contract.verifier) !== contract.verifierHash) return `本轮修改了真实性校验器：${contract.verifier}`;
+    const dependencies = Array.isArray(contract.dependencies) ? contract.dependencies : [];
+    if (/douyin-ai-video-workflow/i.test(skillFile)
+        && !dependencies.some(item => /[\\/]scripts[\\/]pipeline_state\.py$/i.test(String(item?.path || '')))) {
+      return '视频工作流的全阶段验证器没有被锁定在本轮契约中';
+    }
+    for (const item of dependencies) {
+      if (!item?.path || contractFileChanged(item) || fileSha256(item.path) !== item.hash) return `本轮修改了真实性校验依赖：${item?.path || 'unknown'}`;
+    }
+  } catch {
+    return `真实性校验器或其依赖在本轮消失或不可读：${contract.verifier || skillFile}`;
+  }
+  return '';
+}
+
+function toolArgumentsText(entry = {}) {
+  try { return JSON.stringify(entry.params || {}); } catch { return String(entry.params || ''); }
+}
+
+function toolEffectKind(entry = {}) {
+  if (!entry || entry.failed) return '';
+  const name = String(entry.name || '').toLowerCase();
+  const args = toolArgumentsText(entry);
+  if (Array.isArray(entry.effects) && entry.effects.some(effect => effect.changed)) return 'host-file-change';
+  // “工具返回成功”不等于文件真的变化。write/edit/apply_patch 只有前后
+  // 快照发生变化才算实际效果，防止空写工具加一次假 read 绕过。
+  if (/^(?:write|edit|apply_patch)$/i.test(name)) return '';
+  if (MUTATING_TOOL.test(name)) return 'host-tool';
+  if (/(?:browser|computer|screen|cua)/i.test(name)
+      && /"(?:action|kind)"\s*:\s*"(?:click|type|fill|upload_file|press|drag|navigate|open|close)"/i.test(args)) {
+    return 'ui-action';
+  }
+  if (/(?:send|publish|upload|download|install|deploy|create|delete|update|move)/i.test(name)) return 'external-action';
+  if (/(?:^|_)exec(?:$|_)/i.test(name)) {
+    const command = String(entry.params?.command || entry.params?.cmd || '');
+    if (/(?:^|[;&|]\s*)(?:git\s+(?:push|commit)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|pip\s+install|brew\s+install|open\s|osascript\s|mkdir\s|rm\s|mv\s|cp\s|chmod\s|ffmpeg\s|codesign\s|xcodebuild\s|docker\s+(?:build|push)|(?:python\d*|node)\s+[^\n]*(?:write|create|generate|download|publish))/i.test(command)) {
+      return 'executed-action';
+    }
+  }
+  return '';
+}
+
+function toolIsMechanicalCheck(entry = {}) {
+  if (!entry || entry.failed) return false;
+  const name = String(entry.name || '').toLowerCase();
+  const args = toolArgumentsText(entry);
+  if (/^(?:read|view_image|open_file|inspect|validate|verify|test|check)(?:$|_)/i.test(name)) return true;
+  if (/(?:browser|computer|screen|cua)/i.test(name)
+      && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate)"/i.test(args)) return true;
+  if (/(?:^|_)exec(?:$|_)/i.test(name)) {
+    const command = String(entry.params?.command || entry.params?.cmd || '');
+    return /(?:^|[;&|]\s*)(?:test\s|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor))/i.test(command);
+  }
+  return false;
+}
+
+function effectVerificationReason(state) {
+  const mutationRun = isLikelyActionRequest(state.prompt)
+    && MUTATION_REQUEST.test(state.prompt);
+  if (!mutationRun) return '';
+  const effectIndex = state.tools.findLastIndex(entry => Boolean(toolEffectKind(entry)));
+  if (effectIndex < 0) return '执行型修改任务没有主机确认的文件变化或外部操作结果';
+  const effect = state.tools[effectIndex];
+  // A tool returning "ok" only proves that the call ended.  It does not prove
+  // that a remote send/publish/upload reached the requested state, so external
+  // actions need the same independent follow-up inspection as local changes.
+  if (state.tools.slice(effectIndex + 1).some(toolIsMechanicalCheck)) return '';
+  // A single build/test command can both produce and verify its artifact.
+  if (toolIsMechanicalCheck(effect)) return '';
+  return `最后一次实际改动（${effect.name}）之后没有读取、测试或检查真实结果`;
+}
+
+function evidenceTamperingReason(state) {
+  for (const entry of state.tools) {
+    const args = toolArgumentsText(entry);
+    if (TIMESTAMP_TAMPERING.test(args)) return '检测到修改文件时间戳的命令，不能把旧产物伪装成本轮新增成果';
+    if (CROSS_RUN_EVIDENCE_COPY.test(args)) return '检测到跨运行目录复制旧图片、视频或证据，不能冒充本轮真实产出';
+    if (EVIDENCE_FILE.test(args)) {
+      if (/^(?:write|edit|apply_patch)$/i.test(entry.name)) {
+        return '发布、提交、QC 或状态证据由通用写文件工具直接生成，缺少对应真实动作';
+      }
+      if (/\b(?:python\d*\s+-c|node\s+-e)\b/i.test(args)
+          && /(?:write_text|json\.dump|open\s*\([^)]*[wa]['"]|copy(?:2|file)?\s*\()/i.test(args)) {
+        return '发布、提交、QC 或状态证据由临时脚本手写或复制，不能作为独立验收证据';
+      }
+    }
+  }
+  return '';
+}
+
+function toolPolicyViolation(toolName = '', params = {}) {
+  let args;
+  try { args = JSON.stringify(params || {}); } catch { args = String(params || ''); }
+  if (CLE_KK_CONTROL_PATH.test(args)) {
+    return '执行控制面、档位状态和审计记录仅由宿主运行层维护，模型不能读取或修改';
+  }
+  if (/document\.cookie|localStorage\.(?:getItem|setItem)\s*\([^)]*(?:token|auth|session)|(?:authorization|cookie)\s*[:=]/i.test(args)) {
+    return '禁止读取或导出登录 Cookie、令牌和会话凭据；浏览器应直接复用现有登录态';
+  }
+  if (TIMESTAMP_TAMPERING.test(args)) {
+    return '禁止修改文件时间戳来伪装本轮新产物';
+  }
+  if (CROSS_RUN_EVIDENCE_COPY.test(args)) {
+    return '禁止跨运行目录复制旧图片、视频或验收证据';
+  }
+  if (EVIDENCE_FILE.test(args)) {
+    if (/^(?:write|edit|apply_patch)$/i.test(String(toolName))) {
+      return '提交、发布、QC 和状态证据必须由对应专用执行器产生，不能直接手写';
+    }
+    if (/\b(?:python\d*\s+-c|node\s+-e)\b/i.test(args)
+        && /(?:write_text|json\.dump|open\s*\([^)]*[wa]['"]|copy(?:2|file)?\s*\()/i.test(args)) {
+      return '临时脚本不能手写或复制提交、发布、QC 和状态证据';
+    }
+    if (/(?:^|[\s;&|])(?:echo|printf|tee)\b|(?:^|[^<])>{1,2}\s*[^&]/i.test(args)) {
+      return 'Shell 重定向不能手写提交、发布、QC 和状态证据';
+    }
+  }
+  return '';
+}
+
+function workflowRunDir(entry = {}) {
+  // Prefer the raw command. JSON.stringify escapes quoted paths (\"...\"),
+  // which previously made a perfectly valid --run-dir "path with spaces"
+  // invisible to the guard and left the record tool unusable.
+  const raw = entry?.params?.command || entry?.params?.cmd || '';
+  const args = String(raw || toolArgumentsText(entry));
+  const match = /--run-dir\s+(?:"([^"]+)"|'([^']+)'|([^\s"']+))/i.exec(args);
+  return match ? path.resolve(match[1] || match[2] || match[3]) : '';
+}
+
+function workflowExpectedCounts(initEntry = {}) {
+  const runDir = workflowRunDir(initEntry);
+  if (!runDir) return {};
+  try {
+    const value = JSON.parse(fs.readFileSync(path.join(runDir, 'reports', 'production_spec.json'), 'utf8'));
+    return {
+      images: Number.isInteger(value.shot_count) ? value.shot_count : undefined,
+      videos: Number.isInteger(value.generation_unit_count) ? value.generation_unit_count : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function douyinWorkflowReason(state) {
+  const enabled = [...state.loadedSkills].some(value => /[\\/]douyin-ai-video-workflow[\\/]SKILL\.md$/i.test(value));
+  if (!enabled) return '';
+  const initIndex = state.tools.findIndex(entry => /pipeline_state\.py[\s\S]*\binit\b/i.test(toolArgumentsText(entry)));
+  if (initIndex < 0) return '视频工作流没有在本轮初始化独立 RUN_ID';
+  const active = state.tools.slice(initIndex + 1).filter(entry => !entry.failed);
+  const generatedStoryboards = active.filter(entry => {
+    if (!/(?:image_generate|imagegen)/i.test(entry.name)) return false;
+    return !/"action"\s*:\s*"(?:list|status|inspect)"/i.test(toolArgumentsText(entry));
+  });
+  const browserStoryboardRequests = active.filter(entry => {
+    const args = toolArgumentsText(entry);
+    return /browser/i.test(entry.name)
+      && /"(?:action|kind)"\s*:\s*"(?:type|fill)"/i.test(args)
+      && /chatgpt\.com/i.test(args + entry.output);
+  });
+  const imageRequestCount = generatedStoryboards.length + browserStoryboardRequests.length;
+  if (imageRequestCount === 0) return '本轮没有真实提交新的分镜生成请求；查看旧图或 image_generate list 不算生成';
+
+  const submittedVideos = active.filter(entry => {
+    const combined = toolArgumentsText(entry) + '\n' + entry.output;
+    if (!/(?:doubao|豆包)/i.test(combined)) return false;
+    if (/(?:SUBMISSION_BLOCKED|NOT_SUBMITTED|BLOCKED|尚未实现|未提交)/i.test(combined)) return false;
+    return /(?:--action\s+submit|"action"\s*:\s*"submit"|点击.{0,12}(?:生成|发送)|提交.{0,12}(?:成功|accepted|submitted))/i.test(combined);
+  });
+  if (submittedVideos.length === 0) return '本轮没有豆包/视频模型的真实提交成功记录';
+
+  const expected = workflowExpectedCounts(state.tools[initIndex]);
+  if (expected.images && imageRequestCount < expected.images) {
+    return `分镜计划需要 ${expected.images} 次真实生成提交，本轮工具记录只有 ${imageRequestCount} 次`;
+  }
+  if (expected.videos && submittedVideos.length < expected.videos) {
+    return `视频计划需要 ${expected.videos} 次真实模型提交，本轮工具记录只有 ${submittedVideos.length} 次`;
+  }
+
+  const published = active.some(entry => {
+    const args = toolArgumentsText(entry);
+    const combined = args + '\n' + entry.output;
+    return /browser/i.test(entry.name)
+      && /xiaohongshu\.com|xhslink\.com/i.test(combined)
+      && /"(?:action|kind)"\s*:\s*"(?:click|type|fill|upload_file)"/i.test(args);
+  });
+  const reopenedPublicPage = active.some(entry => {
+    const combined = toolArgumentsText(entry) + '\n' + entry.output;
+    return /xiaohongshu\.com\/(?:explore|discovery\/item)\/|xhslink\.com\//i.test(combined)
+      && /(?:snapshot|open|navigate)/i.test(combined);
+  });
+  if (!published || !reopenedPublicPage) return '本轮没有真实发布操作以及随后重新打开公开作品页的工具证据';
+  for (const [kind, relative] of Object.entries(WORKFLOW_EVIDENCE_TARGETS)) {
+    const record = state.authorityRecords?.get(kind);
+    if (!record) return `缺少由成果核验工具生成的受控证据：${relative}`;
+    try {
+      if (fileSha256(record.path) !== record.sha256) return `受控证据写入后又被修改：${relative}`;
+    } catch {
+      return `受控证据已丢失或不可读：${relative}`;
+    }
+  }
+  return '';
+}
+
+function verificationFailure(text = '') {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return '校验器没有返回结果';
+  try {
+    const parsed = JSON.parse(trimmed);
+    const issues = Array.isArray(parsed.issues) ? parsed.issues.filter(Boolean) : [];
+    if (issues.length) return issues.join('；');
+    return parsed.message || parsed.status || trimmed.slice(0, 800);
+  } catch {
+    return trimmed.slice(0, 800);
+  }
+}
+
+export class CompletionIntegrityGuard {
+  constructor() {
+    this.runs = new Map();
+  }
+
+  reset(key) {
+    if (key) this.runs.delete(String(key));
+  }
+
+  has(key) {
+    return Boolean(key && this.runs.has(String(key)));
+  }
+
+  begin(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    if (!key || this.runs.has(key)) return;
+    this.runs.set(key, {
+      ...contractTimeBoundary(),
+      prompt: String(event.prompt || ''),
+      tools: [],
+      skills: new Map(),
+      loadedSkills: new Set(),
+      missingVerifiers: new Set(),
+      pendingTools: new Map(),
+      mutationEpoch: 0,
+      verification: null,
+      authorityRecords: new Map(),
+    });
+  }
+
+  snapshot(key, {includeTools = true} = {}) {
+    const state = this.runs.get(String(key || ''));
+    if (!state) return null;
+    return {
+      v: 1,
+      startedAt: state.startedAt,
+      contractCutoffNs: state.contractCutoffNs,
+      prompt: String(state.prompt || '').slice(0, 12_000),
+      tools: includeTools ? state.tools.slice(-1024).map(compactToolEvidence) : [],
+      skills: [...state.skills.entries()].map(([skillFile, contract]) => [skillFile, compactJson(contract)]),
+      loadedSkills: [...state.loadedSkills],
+      missingVerifiers: [...state.missingVerifiers],
+      mutationEpoch: Number(state.mutationEpoch) || 0,
+      verification: compactJson(state.verification),
+      authorityRecords: [...(state.authorityRecords || new Map()).entries()].map(([kind, record]) => [kind, compactJson(record)]),
+    };
+  }
+
+  restore(key, value = {}) {
+    const runKey = String(key || '');
+    if (!runKey || !value || value.v !== 1) return false;
+    const state = {
+      startedAt: Number(value.startedAt) || Date.now(),
+      contractCutoffNs: /^\d+$/.test(String(value.contractCutoffNs || '')) ? String(value.contractCutoffNs) : '',
+      prompt: String(value.prompt || '').slice(0, 12_000),
+      tools: Array.isArray(value.tools) ? value.tools.slice(-1024).map(entry => ({
+        name: String(entry?.name || ''), failed: Boolean(entry?.failed),
+        output: String(entry?.output || '').slice(0, 6_000),
+        params: entry?.params && typeof entry.params === 'object' ? entry.params : {},
+        effects: Array.isArray(entry?.effects) ? entry.effects : [], at: Number(entry?.at) || 0,
+      })) : [],
+      skills: new Map(Array.isArray(value.skills) ? value.skills.filter(row => Array.isArray(row) && row.length === 2) : []),
+      loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills : []),
+      missingVerifiers: new Set(Array.isArray(value.missingVerifiers) ? value.missingVerifiers : []),
+      pendingTools: new Map(),
+      mutationEpoch: Number(value.mutationEpoch) || 0,
+      verification: value.verification && typeof value.verification === 'object' ? value.verification : null,
+      authorityRecords: new Map(Array.isArray(value.authorityRecords)
+        ? value.authorityRecords.filter(row => Array.isArray(row) && row.length === 2) : []),
+    };
+    this.runs.set(runKey, state);
+    return true;
+  }
+
+  replayTools(key, entries = []) {
+    const state = this.runs.get(String(key || ''));
+    if (!state) return 0;
+    const seen = new Set(state.tools.map(entry => `${entry.at}:${entry.name}:${hashForAudit(toolArgumentsText(entry))}`));
+    for (const raw of entries) {
+      const entry = compactToolEvidence(raw);
+      const id = `${entry.at}:${entry.name}:${hashForAudit(toolArgumentsText(entry))}`;
+      if (!entry.name || seen.has(id)) continue;
+      state.tools.push(entry); seen.add(id);
+    }
+    state.tools.sort((a, b) => (a.at || 0) - (b.at || 0));
+    if (state.tools.length > 2048) state.tools = state.tools.slice(-2048);
+    return state.tools.length;
+  }
+
+  /**
+   * Some transports call before_agent_run with an empty prompt and only add
+   * the user text in before_prompt_build. Keep that request in the evidence
+   * window instead of silently classifying the turn as chat.
+   */
+  updatePrompt(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    const prompt = String(event.prompt || '').trim();
+    if (!key || !prompt || internalControlText(prompt)) return;
+    const state = this.runs.get(key);
+    if (!state) {
+      this.begin({prompt}, ctx);
+      return;
+    }
+    if (!state.prompt || internalControlText(state.prompt)) state.prompt = prompt;
+  }
+
+  beforeTool(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    if (!key) return;
+    const state = this.runs.get(key) || {
+      ...contractTimeBoundary(), prompt: '', tools: [], skills: new Map(),
+      loadedSkills: new Set(), missingVerifiers: new Set(), pendingTools: new Map(),
+      mutationEpoch: 0, verification: null, authorityRecords: new Map(),
+    };
+    const params = event.params && typeof event.params === 'object' ? event.params : {};
+    const paths = toolTargetPaths(event.toolName, params).slice(0, 16);
+    state.pendingTools.set(toolCallKey(event), paths.map(snapshotFile));
+    this.runs.set(key, state);
+  }
+
+  afterTool(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    if (!key) return;
+    const state = this.runs.get(key) || {
+      ...contractTimeBoundary(), prompt: '', tools: [], skills: new Map(), loadedSkills: new Set(),
+      missingVerifiers: new Set(), pendingTools: new Map(), mutationEpoch: 0,
+      verification: null, authorityRecords: new Map(),
+    };
+    const output = resultText(event.result);
+    const params = event.params && typeof event.params === 'object' ? event.params : {};
+    const callKey = toolCallKey(event);
+    const snapshots = state.pendingTools.get(callKey) || [];
+    state.pendingTools.delete(callKey);
+    const effects = snapshots.map(compareSnapshot);
+    const failed = toolResultFailed(event, output);
+    const entry = {
+      name: String(event.toolName || ''),
+      failed,
+      output,
+      params,
+      effects,
+      at: Date.now(),
+    };
+    state.tools.push(entry);
+    if (!failed && String(event.toolName || '') !== DELIVERY_GUARD_TOOL && toolEffectKind(entry)) {
+      state.mutationEpoch = (Number(state.mutationEpoch) || 0) + 1;
+      state.verification = null;
+    }
+    const requestedPath = params.path || params.file_path || params.filePath || '';
+    const readSucceeded = !failed && /^(?:read|read_file|open_file)$/i.test(String(event.toolName || ''));
+    if (readSucceeded && SKILL_PATH.test(String(requestedPath))) {
+      const skillFile = path.resolve(String(requestedPath));
+      state.loadedSkills.add(skillFile);
+      const verifier = path.join(path.dirname(skillFile), 'tools', 'verify_completion.py');
+      if (!registerVerifier(state, skillFile, verifier)) state.missingVerifiers.add(skillFile);
+      state.verification = null;
+    } else if (readSucceeded && VERIFIER_PATH.test(String(requestedPath))) {
+      const verifier = path.resolve(String(requestedPath));
+      const skillFile = verifierSkillFile(verifier);
+      // A verifier created by the same model after it read an unverified
+      // Skill is not independent. Only a contract present at first Skill load
+      // may become the completion authority for this turn.
+      if (state.loadedSkills.has(skillFile) && !state.missingVerifiers.has(skillFile)) {
+        registerVerifier(state, skillFile, verifier);
+        state.verification = null;
+      }
+    }
+    this.runs.set(key, state);
+  }
+
+  workflowContext(key, requestedRunDir) {
+    const state = this.runs.get(String(key || ''));
+    if (!state) throw new Error('当前会话没有可核验的执行记录');
+    const skillFile = [...state.loadedSkills].find(value => /[\\/]douyin-ai-video-workflow[\\/]SKILL\.md$/i.test(value));
+    if (!skillFile) throw new Error('本轮没有先读取视频工作流 SKILL.md');
+    const projectRoot = skillProjectRoot(skillFile);
+    const runsRoot = path.join(projectRoot, 'runs');
+    const runDir = path.resolve(String(requestedRunDir || ''));
+    if (!requestedRunDir || !isPathInside(runDir, runsRoot)
+        || !existingPathInside(runDir, runsRoot)) throw new Error('运行目录必须是当前 Skill 项目 runs/ 下的新目录');
+    const initialized = state.tools.find(entry => !entry.failed
+      && /pipeline_state\.py[\s\S]*\binit\b/i.test(toolArgumentsText(entry))
+      && workflowRunDir(entry) === runDir);
+    if (!initialized) throw new Error('本轮没有用 pipeline_state.py init 初始化这个 RUN_ID');
+    const stateFile = path.join(runDir, 'pipeline_state.json');
+    if (!fs.existsSync(stateFile) || !existingPathInside(stateFile, runDir)
+        || fs.lstatSync(stateFile).isSymbolicLink()) throw new Error('运行状态文件不存在或离开了本轮运行目录');
+    let pipeline;
+    try { pipeline = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { throw new Error('运行状态文件不可读'); }
+    const createdAt = parseIsoMs(pipeline.created_at);
+    if (!createdAt || createdAt < state.startedAt - 2_000) throw new Error('RUN_ID 不是本轮新初始化，不能复用旧运行');
+    return {state, skillFile, projectRoot, runsRoot, runDir, pipeline};
+  }
+
+  assertFreshRunFile(file, runDir, startedAt, label, {image = false, video = false} = {}) {
+    const target = path.resolve(String(file || ''));
+    let link;
+    try { link = fs.lstatSync(target); } catch { link = null; }
+    if (!target || !isPathInside(target, runDir) || !existingPathInside(target, runDir)
+        || !link || link.isSymbolicLink() || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
+      throw new Error(`${label} 不在本轮运行目录或不存在`);
+    }
+    const stat = fs.statSync(target);
+    const birth = Number(stat.birthtimeMs || stat.ctimeMs || 0);
+    if (birth < startedAt - 2_000 || stat.mtimeMs < startedAt - 2_000) throw new Error(`${label} 早于本轮开始，不能复用旧证据`);
+    const probe = image ? probeImageFile(target) : video ? probeVideoFile(target) : {};
+    return {path: target, sha256: fileSha256(target), size: stat.size, ...probe};
+  }
+
+  /**
+   * Trusted evidence writer. The model supplies descriptive fields, while the
+   * host recomputes file hashes/media facts and requires matching tool events.
+   * It never writes pipeline_state.json; only pipeline_state.py may advance it.
+   */
+  async recordEvidence(key, request = {}) {
+    const kind = String(request.kind || '');
+    const relative = WORKFLOW_EVIDENCE_TARGETS[kind];
+    if (!relative) throw new Error('不支持的受控证据类型');
+    const {state, runDir} = this.workflowContext(key, request.run_dir);
+    const data = request.data && typeof request.data === 'object' && !Array.isArray(request.data)
+      ? structuredClone(request.data) : {};
+    const active = state.tools.filter(entry => !entry.failed && entry.at >= state.startedAt);
+    const target = path.join(runDir, relative);
+    assertRunOutputPath(target, runDir);
+
+    if (kind === 'submission_ledger') {
+      const items = evidenceItems(data, 'items', 'submissions', 'jobs');
+      const submits = active.filter(trustedDoubaoSubmit);
+      if (!items.length || submits.length < items.length) throw new Error('真实豆包提交次数不足，不能生成提交台账');
+      const expected = workflowExpectedCounts(active.find(entry => /pipeline_state\.py[\s\S]*\binit\b/i.test(toolArgumentsText(entry))) || {});
+      if (expected.videos && items.length !== expected.videos) throw new Error(`提交台账必须覆盖全部 ${expected.videos} 个视频单元`);
+      const screenshotHashes = new Set();
+      for (const [index, item] of items.entries()) {
+        if (!String(item.unit_id || '').trim() || !String(item.platform_job_id || '').trim()) {
+          throw new Error(`提交条目 ${index + 1} 缺少视频单元 ID 或平台任务 ID`);
+        }
+        if (String(item.aspect_ratio || '') !== '9:16' || Number(item.duration_sec || 0) <= 0) {
+          throw new Error(`提交条目 ${index + 1} 没有核对 9:16 与有效时长`);
+        }
+        if (!/^[a-f0-9]{64}$/i.test(String(item.prompt_sha256 || ''))) throw new Error(`提交条目 ${index + 1} 缺少 Prompt SHA-256`);
+        const submit = submits[index];
+        if (!entryText(submit).includes(String(item.platform_job_id))) throw new Error(`提交条目 ${index + 1} 的平台任务 ID 不在真实 UI 回执中`);
+        const screenshot = evidencePath(item, 'screenshot_path');
+        const checked = this.assertFreshRunFile(screenshot, runDir, state.startedAt, `提交截图 ${index + 1}`, {image: true});
+        if (!trustedCapture(active, checked.path, submit.at)) throw new Error(`提交截图 ${index + 1} 没有绑定提交后的可信 UI 截图事件`);
+        if (screenshotHashes.has(checked.sha256)) throw new Error('不同视频单元不能复用同一张提交截图');
+        screenshotHashes.add(checked.sha256);
+        item.status = 'SUBMITTED'; item.submitted = true;
+        item.submitted_at = new Date(submit.at).toISOString();
+        item.screenshot_path = checked.path; item.screenshot_sha256 = checked.sha256;
+        item.screenshot_width = checked.width; item.screenshot_height = checked.height;
+      }
+      data.items = items;
+    } else if (kind === 'video_ledger') {
+      const items = evidenceItems(data, 'items', 'videos', 'shots');
+      if (!items.length) throw new Error('视频台账没有条目');
+      const expected = workflowExpectedCounts(active.find(entry => /pipeline_state\.py[\s\S]*\binit\b/i.test(toolArgumentsText(entry))) || {});
+      if (expected.videos && items.length !== expected.videos) throw new Error(`视频台账必须覆盖全部 ${expected.videos} 个视频单元`);
+      const hashes = new Set();
+      for (const [index, item] of items.entries()) {
+        if (!String(item.unit_id || '').trim()) throw new Error(`视频条目 ${index + 1} 缺少视频单元 ID`);
+        const videoPath = evidencePath(item, 'path', 'file_path', 'local_path', 'video_path');
+        const checked = this.assertFreshRunFile(videoPath, runDir, state.startedAt, `视频 ${index + 1}`, {video: true});
+        const downloaded = active.find(entry => entry.at >= state.startedAt
+          && /(?:download|browser|computer|cua)/i.test(String(entry.name || ''))
+          && /(?:download|下载|saved|保存)/i.test(entryText(entry)) && entryMentionsFile(entry, checked.path));
+        if (!downloaded) throw new Error(`视频 ${index + 1} 没有可信下载回执`);
+        const decoded = await runProcess('ffmpeg', ['-v', 'error', '-i', checked.path, '-f', 'null', '-'], {
+          encoding: 'utf8', timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
+        }).then(() => true).catch(() => false);
+        if (!decoded || Number(checked.video.width || 0) >= Number(checked.video.height || 0)) throw new Error(`视频 ${index + 1} 不是可完整解码的竖屏视频`);
+        if (hashes.has(checked.sha256)) throw new Error('不同视频单元不能复用同一个视频文件');
+        hashes.add(checked.sha256);
+        item.path = checked.path; item.sha256 = checked.sha256; item.decode_ok = true;
+        item.downloaded_at = new Date(downloaded.at).toISOString();
+        item.duration_sec = Number(checked.data.format?.duration || 0);
+        item.width = Number(checked.video.width || 0); item.height = Number(checked.video.height || 0);
+        item.codec = checked.video.codec_name;
+      }
+      data.items = items;
+    } else if (kind === 'qc_report') {
+      const master = this.assertFreshRunFile(path.join(runDir, 'final', 'FINAL_MASTER_VIDEO.mp4'), runDir, state.startedAt, '最终母带', {video: true});
+      const frameViews = new Set(active.filter(entry => /(?:view_image|multimodal|vision)/i.test(String(entry.name || ''))
+        && /\.(?:png|jpe?g|webp)\b/i.test(entryText(entry)))
+        .map(entry => evidencePath(entry.params || {}, 'path', 'file_path', 'image_path')).filter(Boolean));
+      if (frameViews.size < 3) throw new Error('QC 至少需要真实查看 3 个不同时间点的母带抽帧');
+      const decoded = await runProcess('ffmpeg', ['-v', 'error', '-i', master.path, '-f', 'null', '-'], {
+        encoding: 'utf8', timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
+      }).then(() => true).catch(() => false);
+      if (!decoded) throw new Error('最终母带完整解码失败');
+      const video = master.video || {}, audio = master.audio || {};
+      if (video.codec_name !== 'h264' || Number(video.width) !== 1080 || Number(video.height) !== 1920 || video.pix_fmt !== 'yuv420p') {
+        throw new Error('最终母带必须为 H.264、1080x1920、yuv420p');
+      }
+      if (audio.codec_name !== 'aac' || String(audio.sample_rate || '') !== '48000') throw new Error('最终母带音频必须为 AAC 48kHz');
+      if (!faststartOk(master.path)) throw new Error('最终母带缺少 faststart');
+      const semantic = data.machine_checks && typeof data.machine_checks === 'object' ? data.machine_checks : {};
+      const semanticNames = ['black_frame_reviewed', 'continuity_reviewed', 'watermark_reviewed', 'subtitle_safe_area_reviewed', 'content_title_match'];
+      if (semanticNames.some(name => semantic[name] !== true)) throw new Error('QC 的视觉/内容复核项没有逐项确认');
+      data.status = 'PASS';
+      data.reviewed_at = new Date().toISOString();
+      data.video_path = master.path; data.video_sha256 = master.sha256;
+      data.machine_checks = {
+        ...semantic, full_decode_ok: true, resolution_ok: true, audio_ok: Boolean(master.audio),
+        pixel_format_ok: master.video.pix_fmt === 'yuv420p', faststart_ok: true,
+      };
+      if (Object.values(data.machine_checks).some(value => value !== true)) throw new Error('QC 客观检查没有全部通过');
+    } else if (kind === 'publish_receipt') {
+      const xhs = active.filter(entry => trustedUiEntry(entry) && /xiaohongshu\.com|xhslink\.com|小红书/i.test(entryText(entry)));
+      const upload = xhs.find(entry => /"(?:action|kind)"\s*:\s*"upload_file"/i.test(toolArgumentsText(entry)));
+      const publish = xhs.findLast(entry => entry.at >= Number(upload?.at || 0)
+        && /"(?:action|kind)"\s*:\s*"(?:click|press)"/i.test(toolArgumentsText(entry))
+        && /(?:公开发布|发布成功|publish)/i.test(entryText(entry)));
+      if (!upload || !publish) throw new Error('没有小红书真实上传以及随后点击公开发布的可信 UI 动作');
+      const screenshot = this.assertFreshRunFile(evidencePath(data, 'screenshot_path'), runDir, state.startedAt, '发布成功截图', {image: true});
+      if (screenshot.path !== path.join(runDir, 'publish', 'published.png')) throw new Error('发布成功截图必须保存为 publish/published.png');
+      const observed = trustedCapture(xhs, screenshot.path, publish.at);
+      if (!observed) throw new Error('发布后没有可信 UI 成功页截图');
+      data.status = 'PUBLISHED'; data.visibility = 'PUBLIC'; data.screenshot_path = screenshot.path;
+      data.screenshot_sha256 = screenshot.sha256;
+      if (!data.platform_post_id || !data.title) throw new Error('发布页面没有提供作品 ID 或实际标题');
+      if (!entryText(observed).includes(String(data.platform_post_id)) || !entryText(observed).includes(String(data.title).trim())) {
+        throw new Error('发布成功页没有同时观察到作品 ID 和实际标题');
+      }
+      data.published_at = new Date(observed.at).toISOString();
+    } else if (kind === 'publication_verification') {
+      const publicUrl = String(data.public_url || '');
+      let parsed;
+      try { parsed = new URL(publicUrl); } catch { throw new Error('公开作品 URL 无效'); }
+      if (parsed.protocol !== 'https:' || !['xiaohongshu.com', 'www.xiaohongshu.com', 'xhslink.com', 'www.xhslink.com'].includes(parsed.hostname)) {
+        throw new Error('公开作品 URL 不是 HTTPS 小红书链接');
+      }
+      if (/xiaohongshu\.com$/i.test(parsed.hostname) && !/^\/(?:explore|discovery\/item)\//.test(parsed.pathname)) {
+        throw new Error('公开 URL 不是作品详情页');
+      }
+      const receipt = state.authorityRecords?.get('publish_receipt');
+      const reopened = active.find(entry => entry.at >= Number(receipt?.at || 0)
+        && trustedUiEntry(entry)
+        && /(?:open|navigate|snapshot)/i.test(`${toolArgumentsText(entry)}\n${entry.output}`)
+        && `${toolArgumentsText(entry)}\n${entry.output}`.includes(publicUrl));
+      if (!receipt || !reopened) throw new Error('发布后没有重新打开并观察同一公开作品 URL');
+      const published = this.assertFreshRunFile(evidencePath(data, 'screenshot_path'), runDir, state.startedAt, '发布成功截图', {image: true});
+      const publicPage = this.assertFreshRunFile(evidencePath(data, 'public_page_screenshot_path'), runDir, state.startedAt, '公开页截图', {image: true});
+      if (published.path !== path.join(runDir, 'publish', 'published.png') || publicPage.path !== path.join(runDir, 'publish', 'public_page.png')) {
+        throw new Error('发布页和公开页截图必须使用契约规定的固定路径');
+      }
+      if (!trustedCapture(active, publicPage.path, reopened.at)) throw new Error('公开页截图没有绑定二次打开后的可信 UI 截图事件');
+      if (published.sha256 === publicPage.sha256) throw new Error('发布页截图与二次公开页截图不能相同');
+      const receiptData = JSON.parse(fs.readFileSync(receipt.path, 'utf8'));
+      const title = String(data.title || receiptData.title || '').trim(), account = String(data.account_id || '').trim();
+      const observedText = entryText(reopened);
+      if (!title || !account || !observedText.includes(title) || !observedText.includes(account)) {
+        throw new Error('公开页文本没有同时核对标题和账号');
+      }
+      if (!publicUrl.includes(String(receiptData.platform_post_id || ''))) throw new Error('公开 URL 没有绑定发布回执的作品 ID');
+      const pageEvidencePath = path.join(runDir, 'publish', 'public_page_evidence.txt');
+      assertRunOutputPath(pageEvidencePath, runDir);
+      fs.writeFileSync(pageEvidencePath, `${observedText}\n`, {encoding: 'utf8', mode: 0o600});
+      const pageEvidence = this.assertFreshRunFile(pageEvidencePath, runDir, state.startedAt, '公开页文本证据');
+      const master = this.assertFreshRunFile(path.join(runDir, 'final', 'FINAL_MASTER_VIDEO.mp4'), runDir, state.startedAt, '最终母带', {video: true});
+      data.status = 'PUBLISHED'; data.platform = 'xiaohongshu'; data.url_reopened = true;
+      data.public_visibility_confirmed = true; data.screenshot_path = published.path;
+      data.screenshot_sha256 = published.sha256; data.public_page_screenshot_path = publicPage.path;
+      data.public_page_screenshot_sha256 = publicPage.sha256; data.page_evidence_path = pageEvidence.path;
+      data.page_evidence_sha256 = pageEvidence.sha256;
+      data.title = title; data.account_id = account; data.observed_title = title; data.observed_account_id = account;
+      data.platform_post_id = String(receiptData.platform_post_id || ''); data.published_at = receiptData.published_at;
+      data.video_sha256 = master.sha256; data.verification_source = 'trusted_ui_reopen';
+    } else if (kind === 'cleanup_report') {
+      const publication = state.authorityRecords?.get('publication_verification');
+      const closed = active.filter(entry => entry.at >= Number(publication?.at || 0)
+        && trustedUiEntry(entry) && /"(?:action|kind)"\s*:\s*"close"/i.test(toolArgumentsText(entry)));
+      if (!publication || !closed.length) throw new Error('公开页验证后没有真实关闭本次任务标签页');
+      const desktop = this.assertFreshRunFile(evidencePath(data, 'desktop_screenshot_path'), runDir, state.startedAt, '清理后截图', {image: true});
+      if (desktop.path !== path.join(runDir, 'reports', 'cleanup_desktop.png')) throw new Error('清理后截图必须保存为 reports/cleanup_desktop.png');
+      const observation = active.find(entry => entry.at >= closed.at(-1).at && trustedUiEntry(entry)
+        && /(?:tabs|snapshot|status|inspect|标签页)/i.test(entryText(entry)));
+      if (!observation || !trustedCapture(active, desktop.path, observation.at)) throw new Error('关闭后没有再次观察标签页集合和保存清理截图');
+      const closedTargets = closed.map(entry => String(entry.params?.targetId || entry.params?.target_id || '')).filter(Boolean);
+      if (!closedTargets.length || closedTargets.some(id => entryText(observation).includes(id))) throw new Error('关闭后仍能在标签页集合中看到本次任务目标');
+      data.status = 'COMPLETED'; data.task_tabs_remaining = 0;
+      data.unrelated_tabs_preserved = true; data.saved_login_preserved = true;
+      data.closed_targets = closedTargets;
+      data.completed_at = new Date().toISOString(); data.desktop_screenshot_path = desktop.path;
+      data.desktop_screenshot_sha256 = desktop.sha256;
+    }
+
+    writeJsonAtomic(target, data);
+    state.mutationEpoch = (Number(state.mutationEpoch) || 0) + 1;
+    state.verification = null;
+    state.authorityRecords = state.authorityRecords || new Map();
+    state.authorityRecords.set(kind, {
+      kind, path: target, sha256: fileSha256(target), at: Date.now(), epoch: state.mutationEpoch,
+    });
+    return {ok: true, kind, path: target, sha256: fileSha256(target)};
+  }
+
+  async verifyExternal(key) {
+    const state = this.runs.get(String(key || ''));
+    if (!state) return {ok: false, reason: '当前会话没有可核验的执行记录'};
+    const missing = missingVerifierReason(state);
+    if (missing || state.skills.size === 0) {
+      state.verification = null;
+      return {ok: false, reason: missing || '本轮没有已锁定的独立 Skill 验收契约'};
+    }
+    const checkedEpoch = state.mutationEpoch;
+    const contracts = [...state.skills];
+    for (const [skillFile, contract] of contracts) {
+      const contractFailure = verifierContractReason(skillFile, contract);
+      if (contractFailure) {
+        state.verification = null;
+        return {ok: false, reason: contractFailure};
+      }
+      const projectRoot = skillProjectRoot(skillFile);
+      let checked;
+      try {
+        checked = await runProcess('python3', [
+          contract.verifier, '--project-root', projectRoot, '--since-ms', String(state.startedAt), '--json',
+        ], {
+          encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
+          env: {...process.env, PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt)},
+        });
+      } catch (error) {
+        const reason = verificationFailure(error?.stdout || error?.stderr || error?.message);
+        state.verification = {ok: false, epoch: state.mutationEpoch, at: Date.now(), reason};
+        return {ok: false, reason};
+      }
+      const output = String(checked.stdout || checked.stderr || '');
+      let parsed;
+      try { parsed = JSON.parse(output); } catch { parsed = null; }
+      if (!parsed || parsed.verified !== true || String(parsed.status || '').toUpperCase() !== 'PASS') {
+        const reason = parsed ? verificationFailure(output) : '校验器没有返回可验证的 PASS JSON';
+        state.verification = {ok: false, epoch: state.mutationEpoch, at: Date.now(), reason};
+        return {ok: false, reason};
+      }
+      const changedContract = verifierContractReason(skillFile, contract);
+      if (changedContract) {
+        state.verification = null;
+        return {ok: false, reason: changedContract};
+      }
+    }
+    if (state.mutationEpoch !== checkedEpoch || state.skills.size !== contracts.length || missingVerifierReason(state)) {
+      state.verification = null;
+      return {ok: false, reason: '验收期间产物或 Skill 契约发生变化，需要重新验证最新结果'};
+    }
+    state.verification = {ok: true, epoch: state.mutationEpoch, at: Date.now()};
+    return {ok: true, verified: true, at: state.verification.at};
+  }
+
+  finalize(event = {}, ctx = {}, options = {}) {
+    const key = completionRunKey(event, ctx);
+    const state = this.runs.get(key);
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    if (!state) return;
+    const actionRun = isLikelyActionRequest(state.prompt);
+    const honestIncomplete = isHonestIncomplete(reply);
+    const completionClaimed = COMPLETION_CLAIM.test(reply) || DELIVERY_CLAIM.test(reply);
+    const overallCompletion = DELIVERY_CLAIM.test(reply)
+      || /(?:(?:全部|所有|整体|任务|最终).{0,16}(?:完成|交付|成功)|(?:完成|交付|成功).{0,16}(?:全部|所有|整体|任务))/i.test(reply);
+    // 执行型请求不能靠避开“完成”两个字绕过门禁；只有明确报告未完成/阻塞
+    // 才允许不运行最终验收。
+    if (honestIncomplete && !overallCompletion) return;
+    if (!completionClaimed && !actionRun) return;
+    if (honestIncomplete && overallCompletion) {
+      return this.revise(key, '回复同时把整体任务写成“完成”和“未完成/被阻塞”，状态自相矛盾');
+    }
+
+    if (IN_PROGRESS_CLAIM.test(reply)) {
+      return this.revise(key, '回复同时声称“已完成”和“仍在生成/等待”，状态自相矛盾');
+    }
+    const tampering = evidenceTamperingReason(state);
+    if (tampering) return this.revise(key, tampering);
+    if (state.tools.at(-1)?.failed) {
+      return this.revise(key, `最后一次工具调用失败，不能把失败状态写成完成：${state.tools.at(-1).name}`);
+    }
+    // A bare "continue" is ambiguous, but a terminal completion claim is not:
+    // it must never be accepted with zero execution evidence merely because
+    // this turn's short follow-up omitted the original action wording.
+    const requiresExecution = actionRun || (completionClaimed && !QUESTION_ONLY.test(state.prompt));
+    if (requiresExecution) {
+      const executed = state.tools.some(entry => !entry.failed && EXECUTION_TOOL.test(entry.name));
+      if (!executed) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
+      if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
+        return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
+      }
+    }
+    const missing = missingVerifierReason(state);
+    if (missing) return this.revise(key, missing);
+    const workflowFailure = douyinWorkflowReason(state);
+    if (workflowFailure) return this.revise(key, workflowFailure);
+    // The transcript boundary is synchronous, so it never starts a slow
+    // verifier. A plugin-owned tool performs that work visibly/asynchronously
+    // and leaves a host attestation bound to the current mutation epoch.
+    if (options.verifyExternal === false) {
+      for (const [skillFile, contract] of state.skills) {
+        const contractFailure = verifierContractReason(skillFile, contract);
+        if (contractFailure) return this.revise(key, contractFailure);
+      }
+      if (state.skills.size > 0 && (!state.verification?.ok || state.verification.epoch !== state.mutationEpoch)) {
+        const detail = state.verification?.reason ? `：${state.verification.reason}` : '';
+        return this.revise(key, `尚未用成果核验工具验证本轮最新产物${detail}`);
+      }
+      const missingEffect = effectVerificationReason(state);
+      if (missingEffect) return this.revise(key, missingEffect);
+      return;
+    }
+    for (const [skillFile, contract] of state.skills) {
+      const contractFailure = verifierContractReason(skillFile, contract);
+      if (contractFailure) return this.revise(key, contractFailure);
+      const projectRoot = skillProjectRoot(skillFile);
+      const checked = spawnSync('python3', [
+        contract.verifier,
+        '--project-root', projectRoot,
+        '--since-ms', String(state.startedAt),
+        '--json',
+      ], {
+        encoding: 'utf8', timeout: 20_000, maxBuffer: 2 * 1024 * 1024,
+        env: {...process.env, PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt)},
+      });
+      if (checked.error) {
+        return this.revise(key, `${path.basename(path.dirname(skillFile))} 真实性校验器无法运行：${checked.error.message}`);
+      }
+      if (checked.status !== 0) {
+        return this.revise(key, `${path.basename(path.dirname(skillFile))} 真实性验收未通过：${verificationFailure(checked.stdout || checked.stderr)}`);
+      }
+      const output = String(checked.stdout || checked.stderr || '');
+      let parsed;
+      try { parsed = JSON.parse(output); } catch { parsed = null; }
+      if (!parsed || parsed.verified !== true || String(parsed.status || '').toUpperCase() !== 'PASS') {
+        return this.revise(key, `${path.basename(path.dirname(skillFile))} 真实性验收未通过：${parsed ? verificationFailure(output) : '校验器没有返回可验证的 PASS JSON'}`);
+      }
+      const changedContract = verifierContractReason(skillFile, contract);
+      if (changedContract) return this.revise(key, changedContract);
+    }
+    const missingEffect = effectVerificationReason(state);
+    if (missingEffect) return this.revise(key, missingEffect);
+  }
+
+  revise(key, reason) {
+    return {
+      action: 'revise',
+      reason: `全局交付真实性门禁：${reason}`,
+      retry: {
+        instruction: `上一版不能交付：${reason}。不要再写完成报告，也不要篡改状态文件或验收脚本。回到用户原始目标继续真实执行并验证；读取了带 verify_completion.py 的 Skill 时，完成所有改动后必须调用 delivery_guard 的 verify 动作。若外部条件阻塞，就明确报告本轮整体未完成、真实阻塞点和已保留成果。`,
+        idempotencyKey: `pinkie-integrity-${key}`,
+        maxAttempts: 24,
+      },
+    };
+  }
+
+  end(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    if (key) this.runs.delete(key);
+  }
+}
+
+function hashForAudit(value = '') {
+  return createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function internalControlText(value = '') {
+  const text = String(value || '');
+  return /(?:\u2063|pinkie-(?:tier|integrity|watchdog|marathon)|自动续接保护|档位控制器|档位续跑|全局交付真实性门禁)/i.test(text);
+}
+
+function visibleAssistantText(message = {}) {
+  if (!message || message.role !== 'assistant') return '';
+  if (typeof message.content === 'string') return message.content.trim();
+  if (!Array.isArray(message.content)) return '';
+  return message.content
+    .filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text)
+    .join('\n')
+    .trim();
+}
+
+function assistantMessageHasToolCall(message = {}) {
+  if (!Array.isArray(message.content)) return false;
+  return message.content.some(part => part?.type === 'toolCall' || part?.type === 'tool_use')
+    || (Array.isArray(message.toolCalls) && message.toolCalls.length > 0)
+    || (Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
+    || Boolean(message.toolCall || message.tool_call);
+}
+
+function isTerminalAssistantMessage(message = {}) {
+  if (!message || message.role !== 'assistant' || assistantMessageHasToolCall(message)) return false;
+  if (message.final === true || message.isFinal === true || message.terminal === true) return true;
+  const stopReason = String(message.stopReason || message.stop_reason || '').trim().toLowerCase();
+  // OpenClaw's transcript writer uses `stop` for a normal terminal answer.
+  // Error/abort messages are terminal too, but are intentionally not treated
+  // as successful completion claims by the integrity gate.
+  return ['stop', 'end', 'complete', 'completed', 'error', 'aborted', 'length'].includes(stopReason);
+}
+
+function payloadText(payload = {}) {
+  if (typeof payload === 'string') return payload.trim();
+  return String(payload?.text || payload?.body || '').trim();
+}
+
+function meaningfulChildResult(value = '') {
+  const text = String(value || '').trim();
+  if (!text || /^(?:NO_REPLY|DONE|OK|完成|已完成|成功)[。.!！\s]*$/i.test(text)) return false;
+  return Array.from(text).length >= 40;
+}
+
+function auditRecordDigest(record) {
+  const copy = {...record};
+  delete copy.hash;
+  return hashForAudit(JSON.stringify(copy));
+}
+
+/**
+ * CLE Kk 的控制面审计链。
+ *
+ * OpenClaw 只负责模型传输和工具生命周期；这个小型控制面在进程内维护
+ * 当前轮次的不可伪造（相对于模型输出）的决定，并把脱敏后的事件写入一条
+ * hash-chain 日志。日志不是完成依据，作用是让“谁在什么时候做了什么”可复盘，
+ * 同时能发现状态文件被回写、删行或篡改。
+ */
+export class CleKkAuditLog {
+  constructor(root = path.join(pinkieStateRoot(), 'cle-kk', 'audit')) {
+    this.root = root;
+    this.sequence = new Map();
+    this.lastHash = new Map();
+  }
+
+  fileFor(sessionKey) {
+    if (!this.root || !sessionKey) return '';
+    return path.join(this.root, `${hashForAudit(sessionKey).slice(0, 32)}.jsonl`);
+  }
+
+  stateFileFor(sessionKey) {
+    if (!this.root || !sessionKey) return '';
+    return path.join(this.root, `${hashForAudit(sessionKey).slice(0, 32)}.state.json`);
+  }
+
+  loadTail(file) {
+    try {
+      const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
+      const last = lines.length ? JSON.parse(lines.at(-1)) : null;
+      return {
+        sequence: Number(last?.seq) || 0,
+        hash: typeof last?.hash === 'string' ? last.hash : 'GENESIS',
+      };
+    } catch {
+      return {sequence: 0, hash: 'GENESIS'};
+    }
+  }
+
+  append(type, sessionKey, details = {}) {
+    const file = this.fileFor(sessionKey);
+    if (!file) return null;
+    let sequence = this.sequence.get(file);
+    let previous = this.lastHash.get(file);
+    if (sequence == null || !previous) {
+      const tail = this.loadTail(file);
+      sequence = tail.sequence;
+      previous = tail.hash;
+    }
+    const record = {
+      v: 1,
+      seq: sequence + 1,
+      at: Date.now(),
+      type: String(type || 'event'),
+      session: hashForAudit(sessionKey),
+      ...details,
+      prev: previous,
+    };
+    record.hash = auditRecordDigest(record);
+    try {
+      fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+      fs.appendFileSync(file, `${JSON.stringify(record)}\n`, {encoding: 'utf8', mode: 0o600});
+      fs.chmodSync(file, 0o600);
+      this.sequence.set(file, record.seq);
+      this.lastHash.set(file, record.hash);
+      return record;
+    } catch {
+      return null;
+    }
+  }
+
+  readState(sessionKey) {
+    const file = this.stateFileFor(sessionKey);
+    if (!file || !fs.existsSync(file)) return null;
+    const chain = this.verify(sessionKey);
+    if (!chain.ok) return {active: true, corrupted: true, reason: chain.reason};
+    try {
+      const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!value || value.v !== 1 || value.sessionKey !== String(sessionKey)) return null;
+      const expected = String(value.digest || '');
+      const unsigned = {...value};
+      delete unsigned.digest;
+      if (!expected || expected !== hashForAudit(JSON.stringify(unsigned))) {
+        return {active: true, corrupted: true, reason: 'CLE Kk 状态摘要不一致'};
+      }
+      return value;
+    } catch {
+      return {active: true, corrupted: true, reason: 'CLE Kk 状态文件不可读'};
+    }
+  }
+
+  writeState(sessionKey, state = {}) {
+    const file = this.stateFileFor(sessionKey);
+    if (!file) return false;
+    const value = {
+      v: 1,
+      sessionKey: String(sessionKey),
+      ...state,
+      updatedAt: Date.now(),
+    };
+    value.digest = hashForAudit(JSON.stringify(value));
+    const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+      fs.writeFileSync(temp, `${JSON.stringify(value)}\n`, {encoding: 'utf8', mode: 0o600});
+      fs.renameSync(temp, file);
+      fs.chmodSync(file, 0o600);
+      return true;
+    } catch {
+      try { fs.unlinkSync(temp); } catch {}
+      return false;
+    }
+  }
+
+  removeState(sessionKey) {
+    const file = this.stateFileFor(sessionKey);
+    if (!file) return;
+    try { fs.unlinkSync(file); } catch {}
+  }
+
+  listStates() {
+    if (!this.root || !fs.existsSync(this.root)) return [];
+    let names = [];
+    try { names = fs.readdirSync(this.root).filter(name => name.endsWith('.state.json')); } catch { return []; }
+    const states = [];
+    for (const name of names) {
+      try {
+        const value = JSON.parse(fs.readFileSync(path.join(this.root, name), 'utf8'));
+        if (value?.v === 1 && value.sessionKey && value.active) states.push(value);
+      } catch {}
+    }
+    return states;
+  }
+
+  readRecords(sessionKey) {
+    const file = this.fileFor(sessionKey);
+    if (!file || !fs.existsSync(file)) return [];
+    if (!this.verify(sessionKey).ok) return [];
+    try {
+      return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
+    } catch { return []; }
+  }
+
+  verify(sessionKey) {
+    const file = this.fileFor(sessionKey);
+    if (!file || !fs.existsSync(file)) return {ok: true, records: 0};
+    let previous = 'GENESIS';
+    let sequence = 0;
+    try {
+      const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        const record = JSON.parse(line);
+        if (record.seq !== sequence + 1 || record.prev !== previous || record.hash !== auditRecordDigest(record)) {
+          return {ok: false, records: sequence, reason: 'CLE Kk 审计链断裂'};
+        }
+        sequence = record.seq;
+        previous = record.hash;
+      }
+      return {ok: true, records: sequence};
+    } catch (error) {
+      return {ok: false, records: sequence, reason: `CLE Kk 审计日志不可读：${error.message}`};
+    }
+  }
+}
+
+/**
+ * CLE Kk supervisor：把模型当作“执行提议者”，而不是完成裁判。
+ * 真实性门禁的结果先进入这里，再交给 OpenClaw 的重试/投递路径；即使
+ * OpenClaw 因为已有副作用忽略 before_agent_finalize 的 revise，后面的
+ * reply_payload_sending 仍会拦住未经验证的最终气泡。
+ */
+export class CleKkSupervisor {
+  constructor({integrity = new CompletionIntegrityGuard(), audit = new CleKkAuditLog(), logger = null} = {}) {
+    this.integrity = integrity;
+    this.audit = audit;
+    this.logger = logger;
+    this.turns = new Map();
+    this.orphaned = new Map();
+    this.retryScheduler = null;
+  }
+
+  setRetryScheduler(fn) {
+    this.retryScheduler = typeof fn === 'function' ? fn : null;
+  }
+
+  key(event = {}, ctx = {}) {
+    return completionRunKey(event, ctx);
+  }
+
+  restore(key) {
+    const persisted = this.audit.readState(key);
+    if (!persisted?.active) return null;
+    const turn = {
+      prompt: String(persisted.prompt || '').slice(0, 12_000),
+      promptHash: String(persisted.promptHash || ''),
+      startedAt: Number(persisted.startedAt) || Date.now(),
+      runId: String(persisted.runId || ''),
+      pending: persisted.pending && typeof persisted.pending === 'object' ? {
+        decision: persisted.pending.decision,
+        runId: String(persisted.pending.runId || persisted.runId || ''),
+        textHash: String(persisted.pending.textHash || ''),
+        at: Number(persisted.pending.at) || Date.now(),
+      } : null,
+      // Timers do not survive a gateway process. Treat an old in-flight
+      // marker as stale and re-arm it during recovery instead of leaving a
+      // rejected turn permanently silent.
+      retryScheduled: false,
+      retryAttempts: Number(persisted.retryAttempts) || 0,
+      toolIds: new Set(),
+      followUps: Array.isArray(persisted.followUps) ? persisted.followUps.slice(-8) : [],
+      restored: true,
+    };
+    if (!persisted.corrupted && persisted.integrity) {
+      this.integrity.restore(key, persisted.integrity);
+      const replay = this.audit.readRecords(key)
+        .filter(record => record.type === 'tool_result' && record.at >= turn.startedAt - 2_000 && record.evidence)
+        .map(record => record.evidence);
+      this.integrity.replayTools(key, replay);
+    }
+    if (persisted.corrupted) turn.pending = {
+      decision: this.integrity.revise(key, persisted.reason || 'CLE Kk 状态不可验证'),
+      runId: turn.runId,
+      textHash: '',
+      at: Date.now(),
+    };
+    this.turns.set(key, turn);
+    return turn;
+  }
+
+  persist(key, turn) {
+    if (!key || !turn) return;
+    const pending = turn.pending ? {
+      decision: turn.pending.decision,
+      runId: turn.pending.runId,
+      textHash: turn.pending.textHash,
+      at: turn.pending.at,
+    } : null;
+    this.audit.writeState(key, {
+      active: true,
+      prompt: String(turn.prompt || '').slice(0, 12_000),
+      startedAt: turn.startedAt,
+      promptHash: turn.promptHash || hashForAudit(turn.prompt || ''),
+      runId: turn.runId || '',
+      pending,
+      retryScheduled: Boolean(turn.retryScheduled),
+      retryScheduledAt: turn.retryScheduled ? (Number(turn.retryScheduledAt) || Date.now()) : 0,
+      retryAttempts: Number(turn.retryAttempts) || 0,
+      followUps: Array.isArray(turn.followUps) ? turn.followUps.slice(-8) : [],
+      // Tool evidence is append-only in the audit journal. Rewriting the full
+      // history into this state file after every tool caused long sessions to
+      // stutter; only the small contract/attestation snapshot lives here.
+      integrity: this.integrity.snapshot(key, {includeTools: false}),
+    });
+  }
+
+  /** Re-arm rejected turns left on disk after a gateway restart. */
+  async recoverPending(agentResolver = agentFromSessionKey) {
+    const states = this.audit.listStates();
+    for (const state of states) {
+      const key = String(state.sessionKey || '');
+      if (!key || this.turns.has(key)) continue;
+      const turn = this.restore(key);
+      if (!turn?.pending || turn.retryScheduled) continue;
+      this.scheduleRetry({key, turn, ...turn.pending}, {
+        agentId: agentResolver(key),
+        sessionKey: key,
+      }, 'gateway_restart');
+    }
+    return states.length;
+  }
+
+  begin(event = {}, ctx = {}) {
+    const key = this.key(event, ctx);
+    if (!key) return;
+    const prompt = String(event.prompt || '').trim();
+    const control = internalControlText(prompt);
+    let turn = this.turns.get(key) || this.restore(key);
+    // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
+    // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
+    const incomingRunId = String(ctx.runId || event.runId || '');
+    const distinctUserTurn = !control && turn && prompt && turn.prompt
+      && (prompt !== turn.prompt || (incomingRunId && turn.runId && incomingRunId !== turn.runId));
+    if (distinctUserTurn) {
+      if (turn.pending) {
+        // Never throw away a rejected turn merely because the user sent a
+        // follow-up while the retry was being armed. Keep the original
+        // evidence window alive; the new message is visible in the session
+        // transcript and will be handled after the pending delivery is fixed.
+        turn.followUps = Array.isArray(turn.followUps) ? turn.followUps : [];
+        if (!turn.followUps.includes(prompt)) turn.followUps.push(prompt.slice(0, 8_000));
+        turn.followUps = turn.followUps.slice(-8);
+        this.audit.append('turn_followup_queued', key, {prompt: hashForAudit(prompt)});
+      } else {
+        this.integrity.reset(key);
+        this.audit.append('turn_superseded', key, {reason: 'new_user_turn'});
+        this.audit.removeState(key);
+        turn = null;
+      }
+    }
+    if (!turn) {
+      turn = {
+        prompt,
+        promptHash: hashForAudit(prompt),
+        startedAt: Date.now(),
+        runId: String(ctx.runId || event.runId || ''),
+        pending: null,
+        retryScheduled: false,
+        retryAttempts: 0,
+        toolIds: new Set(),
+        followUps: [],
+      };
+      this.turns.set(key, turn);
+      this.audit.append('turn_start', key, {
+        run: turn.runId ? hashForAudit(turn.runId) : '',
+        prompt: hashForAudit(prompt),
+      });
+    } else if (control) {
+      turn.retryScheduled = false;
+      turn.retryScheduledAt = 0;
+      turn.runId = String(ctx.runId || event.runId || turn.runId || '');
+      if (turn.pending && turn.runId) turn.pending.runId = turn.runId;
+    }
+    // Fill the prompt when the first lifecycle hook had no prompt. This is
+    // the common ordering for embedded runs (before_agent_run -> prompt
+    // build) and is essential for action-vs-chat classification.
+    if (turn && prompt && !control && !turn.prompt) {
+      turn.prompt = prompt;
+      turn.promptHash = hashForAudit(prompt);
+    }
+    this.integrity.begin(event, ctx);
+    this.integrity.updatePrompt({prompt: turn?.prompt || prompt}, ctx);
+    if (turn) this.persist(key, turn);
+  }
+
+  afterTool(event = {}, ctx = {}) {
+    const key = this.key(event, ctx);
+    if (!key) return;
+    this.integrity.afterTool(event, ctx);
+    let turn = this.turns.get(key);
+    if (!turn) {
+      this.begin({prompt: ''}, ctx);
+      turn = this.turns.get(key);
+    }
+    const toolId = String(event.toolCallId || `${event.runId || ''}:${turn?.toolIds?.size || 0}`);
+    if (turn?.toolIds?.has(toolId)) return;
+    turn?.toolIds?.add(toolId);
+    this.audit.append('tool_result', key, {
+      run: event.runId ? hashForAudit(event.runId) : '',
+      tool: String(event.toolName || ''),
+      call: hashForAudit(toolId),
+      failed: Boolean(event.error) || toolResultFailed(event, resultText(event.result)),
+      changed: this.integrity.runs.get(key)?.tools?.at(-1)?.effects?.filter(effect => effect.changed).length || 0,
+      result: hashForAudit(resultText(event.result, 24_000)),
+      evidence: compactToolEvidence(this.integrity.runs.get(key)?.tools?.at(-1) || {}),
+    });
+    if (turn) this.persist(key, turn);
+  }
+
+  recordFinalize(event = {}, ctx = {}, decision) {
+    const key = this.key(event, ctx);
+    if (!key) return decision;
+    let turn = this.turns.get(key);
+    if (!turn) {
+      this.begin({prompt: ''}, ctx);
+      turn = this.turns.get(key);
+    }
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '').trim();
+    const runId = String(ctx.runId || event.runId || turn?.runId || '');
+    const chain = this.audit.verify(key);
+    // A damaged control log is itself a failed verification. Never clear a
+    // pending decision or accept a final while the provenance chain is broken.
+    if (!chain.ok && decision?.action !== 'revise') {
+      decision = this.integrity.revise(key, chain.reason || '审计链断裂，无法确认工具事件完整性');
+    }
+    if (decision?.action === 'revise') {
+      const previous = turn.pending;
+      turn.pending = {
+        decision,
+        runId,
+        textHash: hashForAudit(reply),
+        at: Date.now(),
+      };
+      turn.retryScheduled = previous && previous.runId === runId && previous.decision?.reason === decision.reason
+        ? turn.retryScheduled
+        : false;
+      this.audit.append('final_rejected', key, {
+        run: runId ? hashForAudit(runId) : '',
+        reason: String(decision.reason || '').slice(0, 600),
+        reply: hashForAudit(reply),
+      });
+      this.persist(key, turn);
+      return decision;
+    }
+    const hadPending = Boolean(turn.pending);
+    const explicitIncomplete = isHonestIncomplete(reply)
+      || (IN_PROGRESS_CLAIM.test(reply) && !COMPLETION_CLAIM.test(reply));
+    // 只有真正通过门禁的终稿，或明确告诉用户“尚未完成/被阻塞”的诚实
+    // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
+    // 静默改成成功，否则下一轮又会失去续接依据。
+    if (reply && !internalControlText(reply)) {
+      if (hadPending && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !explicitIncomplete) {
+        this.persist(key, turn);
+        return decision;
+      }
+      turn.pending = null;
+      turn.retryScheduled = false;
+      turn.retryAttempts = 0;
+      this.audit.append('final_accepted', key, {
+        run: runId ? hashForAudit(runId) : '',
+        reply: hashForAudit(reply),
+      });
+    }
+    this.persist(key, turn);
+    return decision;
+  }
+
+  pendingFor(event = {}, ctx = {}) {
+    const key = this.key(event, ctx);
+    const turn = this.turns.get(key);
+    const pending = turn?.pending;
+    if (!pending) return null;
+    const runId = String(ctx.runId || event.runId || '');
+    if (runId && pending.runId && runId !== pending.runId) return null;
+    return {key, turn, ...pending};
+  }
+
+  scheduleRetry(pending, ctx = {}, source = 'delivery') {
+    if (!pending?.turn || pending.turn.retryScheduled) return false;
+    pending.turn.retryScheduled = true;
+    pending.turn.retryScheduledAt = Date.now();
+    pending.turn.retryAttempts = (pending.turn.retryAttempts || 0) + 1;
+    this.audit.append('retry_requested', pending.key, {
+      run: pending.runId ? hashForAudit(pending.runId) : '',
+      source: String(source),
+      attempt: pending.turn.retryAttempts,
+      reason: String(pending.decision?.reason || '').slice(0, 600),
+    });
+    this.persist(pending.key, pending.turn);
+    if (!this.retryScheduler) {
+      pending.turn.retryScheduled = false;
+      pending.turn.retryScheduledAt = 0;
+      return false;
+    }
+    Promise.resolve(this.retryScheduler({
+      sessionKey: pending.key,
+      agentId: ctx.agentId || agentFromSessionKey(pending.key),
+      runId: pending.runId,
+      decision: pending.decision,
+      attempt: pending.turn.retryAttempts,
+    })).then(ok => {
+      if (!ok) {
+        pending.turn.retryScheduled = false;
+        pending.turn.retryScheduledAt = 0;
+      }
+      this.persist(pending.key, pending.turn);
+    }).catch(error => {
+      pending.turn.retryScheduled = false;
+      pending.turn.retryScheduledAt = 0;
+      this.persist(pending.key, pending.turn);
+      this.logger?.warn?.(`CLE Kk retry scheduling failed: ${String(error)}`);
+    });
+    return true;
+  }
+
+  beforeMessageWrite(event = {}, ctx = {}, preDecision, prechecked = false) {
+    const message = event.message || {};
+    if (message.role !== 'assistant' || assistantMessageHasToolCall(message)) return;
+    const text = visibleAssistantText(message);
+    if (!text || /^(?:toolUse|tool_use)$/i.test(String(message.stopReason || ''))) return;
+    if (internalControlText(text)) return {block: true};
+    // The model transcript can be persisted before OpenClaw's finalize hook
+    // runs. Re-evaluate the cheap, deterministic gate here so a false
+    // completion cannot enter JSONL even when the host ignores a revision
+    // after a side effect. The expensive external verifier remains in the
+    // lifecycle hook below.
+    let pending = this.pendingFor({}, ctx);
+    if (!pending && isTerminalAssistantMessage(message)) {
+      const decision = prechecked ? preDecision : this.integrity.finalize({
+        lastAssistantMessage: text,
+        messages: [message],
+        runId: ctx.runId,
+        sessionKey: ctx.sessionKey,
+      }, ctx, {verifyExternal: false});
+      if (decision?.action === 'revise') {
+        this.recordFinalize({lastAssistantMessage: text, messages: [message], runId: ctx.runId}, ctx, decision);
+        pending = this.pendingFor({}, ctx);
+      }
+    }
+    if (!pending) return;
+    this.scheduleRetry(pending, ctx, 'transcript');
+    // 诚实的未完成说明可以留在记录里，完成性谎报则连 transcript 也不落盘。
+    if (isHonestIncomplete(text)) return;
+    return {block: true};
+  }
+
+  async beforeReplyPayload(event = {}, ctx = {}) {
+    if (String(event.kind || '') !== 'final') return;
+    const text = payloadText(event.payload);
+    if (internalControlText(text)) return {cancel: true, reason: 'internal_control_payload'};
+    const pending = this.pendingFor(event, ctx);
+    if (!pending) return;
+    this.scheduleRetry(pending, ctx, 'reply_payload');
+    if (isHonestIncomplete(text)) return;
+    return {cancel: true, reason: 'CLE Kk 正在继续核对真实执行结果'};
+  }
+
+  hasPending(sessionKey) {
+    return Boolean(this.turns.get(String(sessionKey || ''))?.pending);
+  }
+
+  end(event = {}, ctx = {}) {
+    const key = this.key(event, ctx);
+    if (!key) return true;
+    const turn = this.turns.get(key);
+    if (turn?.pending) return false;
+    this.integrity.end(event, ctx);
+    this.turns.delete(key);
+    this.audit.append('turn_end', key, {run: event.runId ? hashForAudit(event.runId) : ''});
+    this.audit.removeState(key);
+    return true;
+  }
+}
+
+/** Durable lease for upstream failures; survives a gateway/process restart. */
+export class WatchdogJobStore {
+  constructor(root = path.join(pinkieStateRoot(), 'cle-kk', 'watchdog')) {
+    this.root = root;
+  }
+
+  fileFor(sessionKey) {
+    if (!this.root || !sessionKey) return '';
+    return path.join(this.root, `${hashForAudit(sessionKey).slice(0, 32)}.json`);
+  }
+
+  set(sessionKey, value = {}) {
+    const file = this.fileFor(sessionKey);
+    if (!file) return false;
+    const record = {
+      v: 1,
+      sessionKey: String(sessionKey),
+      agentId: String(value.agentId || agentFromSessionKey(sessionKey)),
+      runId: String(value.runId || ''),
+      model: String(value.model || ''),
+      attempt: Math.max(1, Number(value.attempt) || 1),
+      reasonHash: hashForAudit(value.reason || ''),
+      updatedAt: Date.now(),
+    };
+    record.digest = hashForAudit(JSON.stringify(record));
+    const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+      fs.writeFileSync(temp, `${JSON.stringify(record)}\n`, {encoding: 'utf8', mode: 0o600});
+      fs.renameSync(temp, file);fs.chmodSync(file, 0o600);
+      return true;
+    } catch {
+      try { fs.unlinkSync(temp); } catch {}
+      return false;
+    }
+  }
+
+  delete(sessionKey) {
+    const file = this.fileFor(sessionKey);
+    if (!file) return;
+    try { fs.unlinkSync(file); } catch {}
+  }
+
+  list() {
+    if (!this.root || !fs.existsSync(this.root)) return [];
+    let names=[];try { names=fs.readdirSync(this.root).filter(name=>name.endsWith('.json')); } catch { return []; }
+    const jobs=[];
+    for (const name of names) {
+      try {
+        const value=JSON.parse(fs.readFileSync(path.join(this.root,name),'utf8'));
+        const digest=String(value.digest || '');const unsigned={...value};delete unsigned.digest;
+        if (value.v===1 && value.sessionKey && digest===hashForAudit(JSON.stringify(unsigned))) jobs.push(value);
+      } catch {}
+    }
+    return jobs;
+  }
+}
+
 function encodeRun(state) {
   return {
     ...state,
@@ -172,13 +2021,26 @@ export class FileRunStore {
   write(file, value) {
     fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
     const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(value), {encoding: 'utf8', mode: 0o600});
+    const record = {v: 1, ...value, updatedAt: Date.now()};
+    record.digest = hashForAudit(JSON.stringify(record));
+    fs.writeFileSync(temp, JSON.stringify(record), {encoding: 'utf8', mode: 0o600});
     fs.renameSync(temp, file);
+    fs.chmodSync(file, 0o600);
+  }
+
+  read(file) {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (value && !value.v && !value.digest) return {...value, legacy: true};
+    const expected = String(value?.digest || '');
+    const unsigned = {...value}; delete unsigned.digest;
+    if (value?.v !== 1 || !expected || hashForAudit(JSON.stringify(unsigned)) !== expected) return null;
+    return value;
   }
 
   get(sessionKey) {
     try {
-      const value = JSON.parse(fs.readFileSync(this.runFile(sessionKey), 'utf8'));
+      const file = this.runFile(sessionKey), value = this.read(file);
+      if (value?.legacy && value.sessionKey === sessionKey) this.write(file, {sessionKey, state: value.state});
       return value.sessionKey === sessionKey ? decodeRun(value.state) : null;
     } catch { return null; }
   }
@@ -197,7 +2059,10 @@ export class FileRunStore {
 
   parentForChild(childSessionKey) {
     try {
-      const value = JSON.parse(fs.readFileSync(this.childFile(childSessionKey), 'utf8'));
+      const file = this.childFile(childSessionKey), value = this.read(file);
+      if (value?.legacy && value.childSessionKey === childSessionKey) {
+        this.write(file, {childSessionKey, parentSessionKey: value.parentSessionKey});
+      }
       return value.childSessionKey === childSessionKey ? String(value.parentSessionKey || '') : '';
     } catch { return ''; }
   }
@@ -246,14 +2111,18 @@ export class ModelUsageLedger {
 }
 
 export class UpstreamWatchdog {
-  constructor(api, tierFor = () => '', processRunner = runProcess, cliEntry = resolveGatewayCliEntry(), activityFor = () => ({pending: 0, quietForMs: Infinity})) {
+  constructor(api, tierFor = () => '', processRunner = runProcess, cliEntry = resolveGatewayCliEntry(), activityFor = () => ({pending: 0, quietForMs: Infinity}), jobStore = null) {
     this.api = api;
     this.tierFor = tierFor;
     this.processRunner = processRunner;
     this.cliEntry = cliEntry;
     this.activityFor = activityFor;
+    this.jobStore = jobStore || new WatchdogJobStore(process.env.OPENCLAW_SERVICE_KIND === 'gateway'
+      ? path.join(pinkieStateRoot(), 'cle-kk', 'watchdog') : '');
     this.failures = new Map();
+    this.models = new Map();
     this.attempts = new Map();
+    this.integrityAttempts = new Map();
     this.skipNextFailure = new Set();
     this.timers = new Map();
   }
@@ -262,6 +2131,22 @@ export class UpstreamWatchdog {
     if (!event.runId) return;
     const reason = failureReasonFromEvent(event);
     if (isTransientFailure(reason)) this.failures.set(event.runId, reason);
+  }
+
+  modelStarted(event = {}) {
+    const key = String(event.sessionKey || '');
+    if (!key || /:subagent:/.test(key) || !event.provider || !event.model || this.models.has(key)) return;
+    this.models.set(key, `${event.provider}/${event.model}`);
+  }
+
+  beforeModelResolve(event = {}, ctx = {}) {
+    const key = String(ctx.sessionKey || '');
+    if (!key || /:subagent:/.test(key)) return;
+    if (!internalControlText(event.prompt)) {
+      this.models.delete(key);
+      return;
+    }
+    return modelOverrideFor(this.models.get(key));
   }
 
   async agentEnded(event = {}, ctx = {}) {
@@ -299,6 +2184,7 @@ export class UpstreamWatchdog {
     }
     const attempt = (this.attempts.get(sessionKey) || 0) + 1;
     this.attempts.set(sessionKey, attempt);
+    this.jobStore.set(sessionKey, {agentId: ctx.agentId, runId: event.runId, attempt, reason, model: this.models.get(sessionKey)});
     const marathon = this.tierFor(sessionKey) === 'marathon';
     const delayMs = marathon
       ? Math.min(8_000, 1_500 * 2 ** Math.min(attempt - 1, 3))
@@ -315,21 +2201,116 @@ export class UpstreamWatchdog {
         : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`,
     });
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
-    // Cron 只做断电/网关重启后的兜底，它的轮询粒度接近一分钟。
-    // 正常在线时由网关内计时器在几秒内直接发起下一轮。
-    const activity = this.activityFor(sessionKey) || {};
-    await this.api.session.workflow.scheduleSessionTurn({
-      sessionKey,
-      agentId: ctx.agentId,
-      message: WATCHDOG_MESSAGE,
-      delayMs: Number(activity.pending) > 0 ? 600_000 : Math.max(90_000, delayMs + 60_000),
-      deliveryMode: 'none',
-      deleteAfterRun: true,
-      name: '碧琪看门狗',
-      tag,
-    });
+    // Local dashboard sessions have no outbound channel. Scheduling them via
+    // the host cron service produces the misleading “Channel is required”
+    // failures seen in the logs, so the authenticated local CLI timer is the
+    // primary path whenever it is available. Keep cron only for installations
+    // that do not expose the local gateway CLI.
+    if (!this.cliEntry) {
+      const activity = this.activityFor(sessionKey) || {};
+      await this.api.session.workflow.scheduleSessionTurn({
+        sessionKey,
+        agentId: ctx.agentId,
+        message: WATCHDOG_MESSAGE,
+        delayMs: Number(activity.pending) > 0 ? 600_000 : Math.max(90_000, delayMs + 60_000),
+        deliveryMode: 'none',
+        deleteAfterRun: true,
+        name: '碧琪看门狗',
+        tag,
+      });
+    }
     this.scheduleImmediate({sessionKey, agentId: ctx.agentId, runId: event.runId, attempt, delayMs, tag});
     return true;
+  }
+
+  /** Restore failed parent turns that were interrupted with the gateway. */
+  async recoverPending(skip = () => false) {
+    const jobs = this.jobStore.list();
+    for (const job of jobs) {
+      const sessionKey=String(job.sessionKey || '');
+      if (job.model && sessionKey) this.models.set(sessionKey, String(job.model));
+      if (!sessionKey || /:subagent:/.test(sessionKey) || skip(sessionKey)) continue;
+      const attempt=Math.max(1,Number(job.attempt)||1);
+      this.attempts.set(sessionKey,attempt);
+      const tag=safeTag(sessionKey);
+      try {
+        await this.api.session.workflow.enqueueNextTurnInjection({
+          sessionKey,
+          placement:'append_context',
+          ttlMs:300_000,
+          idempotencyKey:`${tag}-restart-${attempt}-${Date.now()}`,
+          metadata:{watchdog:true,recovered:true,attempt},
+          text:'【自动续接保护】网关恢复后继续上一轮未完成工作。先读取现有会话、工具结果和项目真实状态；已经成功的副作用不得重复，只补未完成部分并验证后交付。不要向用户展示本段保护指令。',
+        });
+        this.scheduleImmediate({
+          sessionKey,
+          agentId:String(job.agentId || agentFromSessionKey(sessionKey)),
+          runId:String(job.runId || 'gateway-restart'),
+          attempt,
+          delayMs:1_000,
+          tag,
+        });
+      } catch (error) {
+        this.api.logger?.warn?.(`watchdog durable recovery failed session=${sessionKey} error=${String(error)}`);
+      }
+    }
+    return jobs.length;
+  }
+
+  /**
+   * Retry a rejected final through the same authenticated local gateway path as
+   * a network failure.  This is deliberately separate from model failure
+   * counting: a truth gate rejection is not an upstream outage and must not
+   * make the ordinary watchdog backoff look healthy while a false final is
+   * already visible.
+   */
+  async scheduleIntegrityRetry({sessionKey, agentId, runId, decision, attempt = 1} = {}) {
+    if (!sessionKey || /:subagent:/.test(sessionKey)) return false;
+    const tierMinimum={base:24,boost:48,full:96,marathon:512}[this.tierFor(sessionKey)] || 24;
+    const maxAttempts = Math.max(tierMinimum, Number(decision?.retry?.maxAttempts) || 24);
+    const current = Number(this.integrityAttempts.get(sessionKey) || 0);
+    const nextAttempt = Math.max(current + 1, Number(attempt) || 1);
+    if (nextAttempt > maxAttempts) {
+      this.api.logger?.warn?.(`CLE Kk integrity retry limit reached session=${sessionKey} attempts=${current}/${maxAttempts}`);
+      return false;
+    }
+    this.integrityAttempts.set(sessionKey, nextAttempt);
+    this.jobStore.set(sessionKey, {agentId, runId, attempt: nextAttempt, reason: decision?.reason, model: this.models.get(sessionKey)});
+    const tag = safeTag(sessionKey);
+    const delayMs = Math.min(12_000, 1_500 * 2 ** Math.min(nextAttempt - 1, 3));
+    const instruction = String(decision?.retry?.instruction || '上一轮没有通过真实性验收。请继续真实执行并验证，不能写完成报告。');
+    try {
+      await this.api.session.workflow.enqueueNextTurnInjection({
+        sessionKey,
+        placement: 'append_context',
+        ttlMs: Math.max(180_000, delayMs + 120_000),
+        // OpenClaw's injection queue de-duplicates by idempotency key. The
+        // original implementation reused the same key for every attempt,
+        // which made attempt 2+ silently disappear after a transient failure.
+        idempotencyKey: `${String(decision?.retry?.idempotencyKey || `pinkie-integrity-${stateFileId(`${sessionKey}:${runId || ''}`)}`)}-${nextAttempt}`,
+        metadata: {cleKk: true, integrity: true, attempt: nextAttempt},
+        text: instruction,
+      });
+      await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
+      if (!this.cliEntry) {
+        await this.api.session.workflow.scheduleSessionTurn({
+          sessionKey,
+          agentId,
+          message: WATCHDOG_MESSAGE,
+          delayMs: Math.max(2_000, delayMs),
+          deliveryMode: 'none',
+          deleteAfterRun: true,
+          name: 'CLE Kk 续接',
+          tag,
+        });
+      }
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt: nextAttempt, delayMs, tag});
+      return true;
+    } catch (error) {
+      this.integrityAttempts.delete(sessionKey);
+      this.api.logger?.warn?.(`CLE Kk integrity retry enqueue failed session=${sessionKey} error=${String(error)}`);
+      return false;
+    }
   }
 
   scheduleImmediate(params) {
@@ -392,6 +2373,9 @@ export class UpstreamWatchdog {
 
   async cancel(sessionKey, suppressNextFailure = false) {
     this.attempts.delete(sessionKey);
+    this.integrityAttempts.delete(sessionKey);
+    this.models.delete(sessionKey);
+    this.jobStore.delete(sessionKey);
     if (suppressNextFailure) this.skipNextFailure.add(sessionKey);
     const timer = this.timers.get(sessionKey);
     if (timer) clearTimeout(timer);
@@ -433,16 +2417,21 @@ export class TierContinuation {
         metadata: {source: 'pinkie-tier-controller'},
       });
     } catch {}
-    await this.api.session.workflow.scheduleSessionTurn({
-      sessionKey,
-      agentId,
-      message: controlText,
-      delayMs: 180_000,
-      deliveryMode: 'none',
-      deleteAfterRun: true,
-      name: '碧琪档位续跑',
-      tag,
-    });
+    // A local dashboard has no outbound channel. The authenticated CLI timer
+    // below is the reliable wake-up path; creating a host cron job here only
+    // produces "Channel is required" and leaves a misleading failed task.
+    if (!this.cliEntry) {
+      await this.api.session.workflow.scheduleSessionTurn({
+        sessionKey,
+        agentId,
+        message: controlText,
+        delayMs: 180_000,
+        deliveryMode: 'none',
+        deleteAfterRun: true,
+        name: '碧琪档位续跑',
+        tag,
+      });
+    }
     this.scheduleTimer({sessionKey, agentId, tag, delayMs: 12_000});
     return true;
   }
@@ -517,6 +2506,13 @@ export class TierContinuation {
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: this.tag(sessionKey)});
     } catch {}
   }
+}
+
+function modelOverrideFor(value = '') {
+  const model = String(value || '');
+  const slash = model.indexOf('/');
+  if (slash <= 0 || slash === model.length - 1) return;
+  return {providerOverride: model.slice(0, slash), modelOverride: model.slice(slash + 1)};
 }
 
 function agentFromSessionKey(key = '') {
@@ -749,20 +2745,29 @@ export function buildDeliberationPlan(tier, mode) {
 
 长跑协议（强制）：
 - 这是无人值守的长时任务。用户不会守在屏幕前；已在原请求授权的普通步骤直接完成，不要用“要不要继续”“是否需要碧琪执行”提前收尾。
-- 先写可逐项验收的计划，再持续执行“读取真实状态 → 修改/产出 → 工具验证 → 修复 → 再验证 → 交付”闭环。能并行的工具与子任务成批启动，主代理在子代理工作时继续做不依赖它们的事项。
-- 对话历史只追加，不重写早先轮次。每完成一个里程碑，更新 memory/context/active.md：当前目标、已完成项、真实工具结果、未完成项和下一步；网络续接后先读该检查点并核对项目现场，禁止重复副作用。
-- 至少每完成一个阶段给用户一条简短进度，不展示隐藏推理；最终用说人话的总结列出成品、验证结果、剩余阻塞。
-- 只有全部验收项完成且验证通过，才在最终回复末尾追加不可见标记 <!-- pinkie-longrun-complete -->。确实缺少必须由用户提供的新权限或关键选择时，说明具体阻塞，并追加 <!-- pinkie-longrun-pause -->。除此之外不得结束本轮。` : '';
+- 工作法（对齐 Fable 5 长程代理与 Kimi Agent Swarm 的公开模式）：Plan-Execute-Verify——先把目标拆成命名阶段写进检查点，逐阶段执行、每阶段对照验收标准验证通过后再推进；只有真正独立的子任务才并行成批启动，有依赖关系的必须串行等结果（避免假并行空烧和串行塌方）；阶段交接时核对接口、字段与格式的一致性，对不上就拦下修复再继续；任何失败从上一个成功检查点恢复，不从头重来。
+- 可验证增量（反空转第一卡）：每一轮交付都必须带来至少一个新的可验证产物——改动的文件、命令的真实输出、通过的测试结果——并在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报。没有新增产物的一轮不算进展。
+- 停滞纪律（反空转第二卡）：连续 3 轮没有新的可验证产物，后端会强制暂停。届时只做一件事：输出停滞报告（卡在哪一步、试过什么、缺什么权限或信息、建议用户怎么决策），附 <!-- pinkie-longrun-pause --> 结束等用户决策。禁止原地重试同一条失败路径继续烧额度。
+- 检查点纪律（反空转第三卡）：对话历史只追加，不重写早先轮次。每完成一个里程碑，更新 memory/context/active.md：当前目标、已完成项、真实工具结果、未完成项和下一步；后端会比对检查点更新时间与进度申报。网络续接后先读该检查点并核对项目现场，禁止重复已完成的副作用。
+- 至少每完成一个阶段给用户一条简短进度，不展示隐藏推理，不念角色流水账；最终用说人话的总结列出成品、验证结果、剩余阻塞——总结的主体是交付物，不是审议过程。
+- 只有全部验收项完成且验证通过，才在最终回复末尾追加不可见标记 <!-- pinkie-longrun-complete -->。收尾标准是“任务完成”（人可逐项验收的交付物），不是“生成过一些东西”。确实缺少必须由用户提供的新权限或关键选择时，说明具体阻塞，并追加 <!-- pinkie-longrun-pause -->。除此之外不得结束本轮。` : '';
   return `
 【极致思考运行单：${normalizedTier} / ${mode}】
-这是用户手动开启的一次性审议任务，必须真实调用子代理工具，不能只在正文里模拟角色。
+这是用户手动开启的审议/长任务运行单。属于审议范围的复杂任务必须真实调用子代理工具，不能只在正文里模拟角色。
+
+需求锚定（执行前先锁定，各档位通用）：
+- 读全：用户点名或任务依赖的每个文件必须完整读取。工具一次读不完就分页续读到文件末尾；只读开头或摘要就凭印象发挥，视同没读。
+- 抄单：把用户消息和文件里的显式要求逐条抄成需求清单，每条标注来源（文件路径+小节/行号）；转述文件内容必须带原文或行号，禁止“大概意思是”。
+- 覆盖：执行计划必须逐条映射到需求清单；验收清单把需求清单全量并入。
+- 核对：交付前逐条标注“已落实/未落实+原因”，任何一条漏落都不算完成；Judge 裁定前先核这份单子。
 
 标准流水线：
 0. Planner ×1：拆任务并给出可逐条打勾的验收清单。
-1. Solver ×3~5：同批并行，框架必须不同；复杂度低取 3，高取 5。
+1. Solver ×3~5：同批并行，复杂度低取 3，高取 5。框架必须互斥，从这组里分配：第一性原理、逆向拆解、类比迁移、清单驱动、对抗假设；禁止多个 Solver 用同质思路产出相关性错误。
 2. Critic ×2~3：同批并行，分别查逻辑、边界、原需求覆盖；只列问题。
-3. Judge ×1：逐条核对验收清单并裁定。
-4. 不通过才打回，最多 2 轮；到点必须从现有候选交付最优结果。
+3. 固定 3 轮对抗：Solver 与 Critic 就分歧点来回辩论并把修订融入候选；复用已派生角色完成，不额外计角色数。
+4. Judge ×1：两两锦标赛裁定——候选两两对比、胜者晋级，不一次性排名；逐条对照验收清单打分并引用候选原文作证据；关键断言（代码能跑、事实成立、文件存在）必须先用工具验证再采信；凡是能变成命令/测试/脚本的验收项一律机械执行，每个候选都验，不抽样。
+5. 不通过才打回，最多 2 轮；到点必须从现有候选交付最优结果。
 
 后端硬验收（不是建议）：
 - 本档至少完成：${requirementSummary(normalizedTier, mode)}。
@@ -827,6 +2832,7 @@ export class ModeArchitecture {
       pendingChildren: new Set(), completedChildren: new Set(), childRoles: new Map(), childResults: new Map(), reservations: new Map(),
       childModels: new Map(), modelCounts: new Map(),
       completedRoles: new Map(), failedChildren: 0,
+      progressMarks: 0, stagnantCycles: 0, lastCheckpointAt: 0,
       token: randomUUID(), model: '', parentRunning: false, lastEventAt: Date.now(),
     };
     this.setRun(sessionKey, run);
@@ -900,7 +2906,7 @@ export class ModeArchitecture {
     const mode = modeForContext(ctx);
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
-    const blocks = [];
+    const blocks = ['\n' + COMPLETION_TRUTH_RULES + '\n'];
     const sessionKey = ctx.sessionKey || '';
     const currentState = this.getRun(this.resolveParent(sessionKey));
     if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
@@ -960,6 +2966,10 @@ export class ModeArchitecture {
   }
 
   beforeTool(event, ctx) {
+    const policyViolation = toolPolicyViolation(event.toolName, event.params);
+    if (policyViolation && modeForContext(ctx)) {
+      return {block: true, blockReason: `全局交付真实性门禁：${policyViolation}`};
+    }
     if (event.toolName !== 'sessions_spawn' || !modeForContext(ctx)) return;
     const params = {...(event.params || {})};
     const parent = this.resolveParent(ctx.sessionKey || '');
@@ -1030,11 +3040,22 @@ export class ModeArchitecture {
     this.setRun(parent, state);
   }
 
+  beforeModelResolve(event = {}, ctx = {}) {
+    const key = String(ctx.sessionKey || '');
+    const parent = this.resolveParent(key);
+    const state = this.getRun(parent);
+    if (!state?.active || !state.model) return;
+    // Pin only derived work and host continuations. An ordinary user turn
+    // remains free to choose its own model; no session settings are rewritten.
+    if (key !== parent || internalControlText(event.prompt)) return modelOverrideFor(state.model);
+  }
+
   modelStarted(event = {}) {
     const parent = this.resolveParent(event.sessionKey || '');
     const state = this.getRun(parent);
     if (!state?.active || !event.provider || !event.model) return;
-    state.model = `${event.provider}/${event.model}`;
+    // Capture the first parent selection once, never a later fallback/child.
+    if (!state.model && event.sessionKey === parent) state.model = `${event.provider}/${event.model}`;
     state.lastEventAt = Date.now();
     this.setRun(parent, state);
   }
@@ -1069,14 +3090,6 @@ export class ModeArchitecture {
   ended(event) {
     if (!event.targetSessionKey) return;
     const parent = this.parentByChild.get(event.targetSessionKey) || this.runStore?.parentForChild(event.targetSessionKey);
-    if (parent) {
-      const pending = this.pendingByParent.get(parent);
-      pending?.delete(event.targetSessionKey);
-      if (!pending?.size) this.pendingByParent.delete(parent);
-      // 保留父子映射，兼容 subagent_ended 与 agent_end 任意先后到达；
-      // 后到的 agent_end 仍需把最终正文写入父运行状态，但不能重复计数。
-      this.lastChildEventAt.set(parent, Date.now());
-    }
     const state = parent ? this.getRun(parent) : null;
     if (state) {
       const tracked = state.pendingChildren.has(event.targetSessionKey)
@@ -1085,7 +3098,22 @@ export class ModeArchitecture {
       if (!tracked) return;
       const role = state.childRoles.get(event.targetSessionKey) || '';
       const resultText = String(event.resultText || '').trim();
-      if (resultText && !state.childResults.has(event.targetSessionKey)) {
+      const successful = !event.outcome || event.outcome === 'ok';
+      const substantive = meaningfulChildResult(resultText);
+      // Some hosts emit subagent_ended before the final text reaches agent_end.
+      // Keep it pending until a real result arrives; an empty success must not
+      // satisfy a tier role.
+      if (successful && !substantive) {
+        state.lastEventAt = Date.now();
+        this.setRun(parent, state);
+        return;
+      }
+      const resultDigest = substantive ? hashForAudit(resultText.replace(/\s+/g, ' ').trim()) : '';
+      const duplicated = successful && substantive && [...state.childResults.values()].some(existing => (
+        hashForAudit(String(existing?.text || '').replace(/\s+/g, ' ').trim()) === resultDigest
+      ));
+      const acceptedSuccess = successful && substantive && !duplicated;
+      if (acceptedSuccess && !state.childResults.has(event.targetSessionKey)) {
         state.childResults.set(event.targetSessionKey, {role, text: resultText.slice(0, 6_000)});
       }
       if (state.completedChildren.has(event.targetSessionKey)) {
@@ -1095,11 +3123,18 @@ export class ModeArchitecture {
       }
       state.pendingChildren.delete(event.targetSessionKey);
       state.completedChildren.add(event.targetSessionKey);
-      if (!event.outcome || event.outcome === 'ok') {
+      if (acceptedSuccess) {
         if (role) state.completedRoles.set(role, (state.completedRoles.get(role) || 0) + 1);
       } else state.failedChildren += 1;
       state.lastEventAt = Date.now();
       this.setRun(parent, state);
+    }
+    if (parent) {
+      const pending = this.pendingByParent.get(parent);
+      pending?.delete(event.targetSessionKey);
+      if (!pending?.size) this.pendingByParent.delete(parent);
+      // 保留父子映射，兼容 subagent_ended 与 agent_end 任意先后到达。
+      this.lastChildEventAt.set(parent, Date.now());
     }
   }
 
@@ -1109,6 +3144,36 @@ export class ModeArchitecture {
 
   afterCompaction(_event, ctx) {
     if (ctx.sessionKey) this.recentCompaction.set(ctx.sessionKey, Date.now());
+  }
+
+  /** Synchronous, side-effect-free gate used before the transcript is saved. */
+  previewFinalize(event, ctx = {}) {
+    const state = this.getRun(ctx.sessionKey || '');
+    if (!state || ctx.sessionKey !== state.parentSessionKey) return;
+    const reply = String(event.lastAssistantMessage || '');
+    const audit = auditDeliberation(state);
+    if (!audit.complete) {
+      return {
+        action: 'revise',
+        reason: `极致思考真实调用未达标：${audit.missing.join('；')}`,
+        retry: {
+          instruction: `不能交付，也不要用文字假装完成。当前缺口：${audit.missing.join('；')}。立即用 sessions_spawn 补齐对应显示名的真实子任务；已有子任务在运行时用 sessions_yield 等完成，失败的补派。收齐结果后再由仲裁整合并验证。`,
+          idempotencyKey: `pinkie-deliberation-${ctx.runId || ctx.sessionKey || 'run'}-${state.tier}`,
+          maxAttempts: state.tier === 'marathon' ? 64 : state.tier === 'full' ? 48 : state.tier === 'boost' ? 24 : 12,
+        },
+      };
+    }
+    if (state.tier === 'marathon' && !/<!--\s*pinkie-longrun-(?:complete|pause)\s*-->/i.test(reply)) {
+      return {
+        action: 'revise',
+        reason: '长跑档仍有未完成闭环',
+        retry: {
+          instruction: '不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果；无法继续时明确写出真实阻塞并附暂停标记。',
+          idempotencyKey: `pinkie-marathon-${ctx.runId || ctx.sessionKey || 'run'}`,
+          maxAttempts: 64,
+        },
+      };
+    }
   }
 
   finalize(event, ctx = {}) {
@@ -1129,11 +3194,42 @@ export class ModeArchitecture {
     if (state.tier !== 'marathon') return;
     const reply = String(event.lastAssistantMessage || '');
     if (/<!--\s*pinkie-longrun-(?:complete|pause)\s*-->/i.test(reply)) return;
+    // 反空转：一轮必须带来新的可验证产物。两个信号取其一即算进展——
+    // 回复里的进度申报标记，或检查点文件（memory/context/active.md）被更新。
+    let checkpointAt = 0;
+    try {
+      const root = safeWorkspace(ctx);
+      if (root) {
+        const checkpoint = path.join(root, 'memory/context/active.md');
+        if (fs.existsSync(checkpoint)) checkpointAt = fs.statSync(checkpoint).mtimeMs || 0;
+      }
+    } catch {}
+    const hasProgress = PROGRESS_MARKER.test(reply) || checkpointAt > (state.lastCheckpointAt || 0);
+    if (checkpointAt > (state.lastCheckpointAt || 0)) state.lastCheckpointAt = checkpointAt;
+    if (hasProgress) {
+      state.progressMarks = (state.progressMarks || 0) + 1;
+      state.stagnantCycles = 0;
+    } else {
+      state.stagnantCycles = (state.stagnantCycles || 0) + 1;
+    }
+    this.setRun(ctx.sessionKey, state);
+    // 第二卡触发：连续停滞达到上限，只许输出停滞报告并暂停，不许继续烧。
+    if ((state.stagnantCycles || 0) >= STAGNATION_LIMIT) {
+      return {
+        action: 'revise',
+        reason: `长跑档连续 ${state.stagnantCycles} 轮无可验证增量，强制停滞报告`,
+        retry: {
+          instruction: '禁止继续空转。你已连续多轮没有产出新的可验证产物。下一轮只做一件事：输出停滞报告——当前卡在哪一步、已经试过什么、缺什么权限或关键信息、建议用户怎么决策——然后附 <!-- pinkie-longrun-pause --> 结束。不得再重复已经失败的路径。',
+          idempotencyKey: `pinkie-marathon-stall-${ctx.runId || ctx.sessionKey || 'run'}-${state.stagnantCycles}`,
+          maxAttempts: 2,
+        },
+      };
+    }
     return {
       action: 'revise',
       reason: '长跑档仍有未完成闭环',
       retry: {
-        instruction: '不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果；每个里程碑更新 memory/context/active.md。全部完成后正常总结并附完成标记；只有确实缺少用户新权限或关键选择时才附暂停标记。',
+        instruction: '不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果。本轮必须产出至少一个新的可验证产物（改动的文件、命令真实输出或测试通过结果），在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报，完成里程碑时更新 memory/context/active.md 检查点；禁止重复已完成的副作用。全部完成并验证后正常总结并附完成标记；确实缺少用户新权限或关键选择时说明具体阻塞并附暂停标记。连续无新增产物会被强制暂停。',
         idempotencyKey: `pinkie-marathon-${ctx.runId || ctx.sessionKey || 'run'}`,
         maxAttempts: 64,
       },
@@ -1159,11 +3255,53 @@ export class ModeArchitecture {
   }
 }
 
+function deliveryGuardResult(value, isError = false) {
+  return {
+    content: [{type: 'text', text: JSON.stringify(value, null, 2)}],
+    details: value,
+    isError,
+  };
+}
+
+function createDeliveryGuardTool(integrity, context = {}) {
+  const sessionKey = String(context.sessionKey || '');
+  return {
+    name: DELIVERY_GUARD_TOOL,
+    label: '成果核验',
+    description: '宿主级成果证据与最终验收工具。视频工作流的提交/QC/发布/公开页/清理回执必须用 record 生成；完成前必须最后调用 verify。它会从真实工具事件和文件重新计算结果，不能用模型文字代替。',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        action: {type: 'string', enum: ['record', 'verify']},
+        kind: {type: 'string', enum: Object.keys(WORKFLOW_EVIDENCE_TARGETS)},
+        run_dir: {type: 'string'},
+        data: {type: 'object', additionalProperties: true},
+      },
+      required: ['action'],
+    },
+    async execute(_toolCallId, params = {}) {
+      try {
+        if (!sessionKey) throw new Error('宿主没有提供当前会话标识');
+        if (params.action === 'verify') {
+          const result = await integrity.verifyExternal(sessionKey);
+          return deliveryGuardResult(result, !result.ok);
+        }
+        if (params.action !== 'record') throw new Error('action 必须是 record 或 verify');
+        if (!params.kind || !params.run_dir) throw new Error('record 需要 kind 和 run_dir');
+        return deliveryGuardResult(await integrity.recordEvidence(sessionKey, params));
+      } catch (error) {
+        return deliveryGuardResult({ok: false, error: error instanceof Error ? error.message : String(error)}, true);
+      }
+    },
+  };
+}
+
 export default {
   id: 'pinkie-mode-architecture',
-  name: '超級碧琪四模式运行层',
+  name: 'CLE Kk · 超級碧琪执行控制层',
   register(api) {
     const architecture = new ModeArchitecture(new FileRunStore());
+    const integrity = new CompletionIntegrityGuard();
     const watchdog = new UpstreamWatchdog(
       api,
       sessionKey => architecture.tierFor(sessionKey),
@@ -1171,12 +3309,15 @@ export default {
       resolveGatewayCliEntry(),
       sessionKey => architecture.activityFor(sessionKey),
     );
+    const cleKk = new CleKkSupervisor({integrity, logger: api.logger});
+    cleKk.setRetryScheduler(params => watchdog.scheduleIntegrityRetry(params));
     const tierContinuation = new TierContinuation(
       api,
       sessionKey => architecture.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
     );
     const usage = new ModelUsageLedger();
+    api.registerTool?.(ctx => createDeliveryGuardTool(integrity, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerGatewayMethod('pinkie.deepThink.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
@@ -1229,9 +3370,31 @@ export default {
     api.registerGatewayMethod('pinkie.usage.get', async ({respond}) => {
       respond(true, usage.read());
     }, {scope: 'operator.admin'});
-    api.on('before_prompt_build', (event, ctx) => architecture.prompt(event, ctx), {priority: -12000});
-    api.on('before_tool_call', (event, ctx) => architecture.beforeTool(event, ctx), {priority: -12000});
-    api.on('after_tool_call', (event, ctx) => architecture.afterTool(event, ctx));
+    // Bind the CLE Kk turn before any model/tool work starts. Some OpenClaw
+    // transports call before_agent_run without a prompt-build pass; relying on
+    // only the latter was the gap that let report-only runs escape the gate.
+    api.on('before_model_resolve', (event, ctx) => {
+      const retryModel = watchdog.beforeModelResolve(event, ctx);
+      return architecture.beforeModelResolve(event, ctx) || retryModel;
+    }, {priority: 12000});
+    api.on('before_agent_run', (event, ctx) => {
+      cleKk.begin(event, ctx);
+    }, {priority: -12000});
+    api.on('before_prompt_build', (event, ctx) => {
+      cleKk.begin(event, ctx);
+      return architecture.prompt(event, ctx);
+    }, {priority: -12000});
+    api.on('before_tool_call', (event, ctx) => {
+      const decision = architecture.beforeTool(event, ctx);
+      if (!decision?.block) {
+        integrity.beforeTool({...event, params: decision?.params || event.params}, ctx);
+      }
+      return decision;
+    }, {priority: -12000});
+    api.on('after_tool_call', (event, ctx) => {
+      architecture.afterTool(event, ctx);
+      cleKk.afterTool(event, ctx);
+    });
     api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
     api.on('subagent_ended', async event => {
       const parent = architecture.resolveParent(event.targetSessionKey || '');
@@ -1243,10 +3406,51 @@ export default {
     });
     api.on('before_compaction', (event, ctx) => architecture.beforeCompaction(event, ctx));
     api.on('after_compaction', (event, ctx) => architecture.afterCompaction(event, ctx));
-    api.on('model_call_started', event => architecture.modelStarted(event));
+    api.on('model_call_started', event => {
+      architecture.modelStarted(event);
+      watchdog.modelStarted(event);
+    });
     api.on('model_call_ended', event => watchdog.modelEnded(event));
     api.on('llm_output', event => usage.record(event));
-    api.on('before_agent_finalize', (event, ctx) => architecture.finalize(event, ctx));
+    api.on('before_agent_finalize', (event, ctx) => {
+      // Always run both gates.  The architecture gate checks child/task
+      // completion; the integrity gate checks real tool/evidence provenance.
+      // Previously `a || b` skipped the second gate whenever the first one
+      // returned a revision, leaving a blind spot in mixed failures.
+      const architectureDecision = architecture.finalize(event, ctx);
+      const integrityDecision = integrity.finalize(event, ctx, {verifyExternal: false});
+      return cleKk.recordFinalize(event, ctx, architectureDecision || integrityDecision);
+    });
+    // OpenClaw intentionally ignores before_agent_finalize revisions after a
+    // deterministic side effect.  This final transcript hook is synchronous
+    // and still runs in that case, so CLE Kk can prevent the false final from
+    // being persisted while the retry is queued.
+    api.on('before_message_write', (event, ctx) => {
+      const message = event?.message || {};
+      if (message.role !== 'assistant' || !isTerminalAssistantMessage(message)) {
+        return cleKk.beforeMessageWrite(event, ctx);
+      }
+      const text = visibleAssistantText(message);
+      if (!text || internalControlText(text)) return cleKk.beforeMessageWrite(event, ctx);
+      const candidate = {
+        lastAssistantMessage: text,
+        messages: [message],
+        runId: ctx?.runId || message.runId,
+        sessionKey: ctx?.sessionKey || event?.sessionKey,
+      };
+      // Run both completion gates before transcript persistence. This closes
+      // the timing hole where OpenClaw writes a terminal assistant message
+      // before invoking before_agent_finalize (which it may later ignore).
+      const architectureDecision = architecture.previewFinalize(candidate, ctx);
+      // Final persistence is the last reliable synchronous boundary. Run the
+      // independent Skill verifier here too; waiting until finalize is too
+      // late on hosts that ignore revisions after side effects.
+      const integrityDecision = integrity.finalize(candidate, ctx, {verifyExternal: false});
+      return cleKk.beforeMessageWrite(event, ctx, architectureDecision || integrityDecision, true);
+    }, {priority: -20000});
+    // Delivery has its own hook and catches channels that render a final reply
+    // without first appending it to the session JSONL.
+    api.on('reply_payload_sending', (event, ctx) => cleKk.beforeReplyPayload(event, ctx), {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
       if (/:subagent:/.test(ctx.sessionKey || '')) {
         const parent = architecture.resolveParent(ctx.sessionKey);
@@ -1261,14 +3465,24 @@ export default {
         if (status.active && status.pending === 0) {
           await tierContinuation.schedule(parent, agentFromSessionKey(parent));
         }
+        cleKk.end(event, ctx);
         return;
       }
       // 父轮次已经结束才允许任何续跑器写入会话。先撤掉可能遗留的档位
       // 定时器，再释放父运行锁，避免它与 OpenClaw 自带的上游重试撞车。
       await tierContinuation.cancel(ctx.sessionKey || '');
       architecture.parentEnded(ctx.sessionKey || '');
-      const retrying = await watchdog.agentEnded(event, ctx);
-      if (!retrying) {
+      const rejected = cleKk.pendingFor(event, ctx);
+      if (rejected) {
+        // A side-effecting run can reach agent_end with success=true even
+        // though the final claim was rejected.  Keep the evidence window and
+        // force the integrity retry path. Do not also arm the ordinary
+        // watchdog: two invisible turns for one failure race and duplicate
+        // writes/tools.
+        cleKk.scheduleRetry(rejected, ctx, 'agent_end');
+      } else {
+        const retrying = await watchdog.agentEnded(event, ctx);
+        if (retrying) return;
         architecture.finishTurn(ctx, event);
         const status = architecture.status(ctx.sessionKey || '');
         if (status.active && status.pending === 0) {
@@ -1276,7 +3490,17 @@ export default {
         } else if (!status.active || status.complete) {
           await tierContinuation.cancel(ctx.sessionKey || '');
         }
+        cleKk.end(event, ctx);
       }
+    });
+    // Re-arm rejected finals that survived a gateway restart. This is quiet
+    // (no user-facing watchdog message) and uses the same authenticated local
+    // retry path as a live run.
+    void (async()=>{
+      await cleKk.recoverPending();
+      await watchdog.recoverPending(sessionKey=>cleKk.hasPending(sessionKey));
+    })().catch(error=>{
+      api.logger?.warn?.(`CLE Kk pending recovery failed: ${String(error)}`);
     });
   },
 };

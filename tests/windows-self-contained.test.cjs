@@ -73,6 +73,9 @@ test('Windows shell keeps all local spaces, project picker, voice and startup mo
   assert.match(launcher, /window\.events\.maximized/);
   assert.match(launcher, /window\.events\.restored/);
   assert.match(launcher, /data-pinkie-maximized/);
+  assert.match(launcher, /data-pinkie-platform', 'windows/);
+  assert.match(launcher, /data-act="close"\] span::before/);
+  assert.match(launcher, /width:42px;height:32px/);
   assert.match(launcher, /launcher-loading\.html/);
   assert.match(launcher, /PINKIE_STATE_ROOT/);
   assert.match(launcher, /storage_path=/);

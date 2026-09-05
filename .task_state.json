@@ -1,0 +1,24 @@
+{
+  "status": "IN_PROGRESS",
+  "task": "CLE Kk 根因修复、四档真实验证、Mac/Windows 2.5.5 打包发布",
+  "preserve": [
+    "ui/assets 全部图片、视频与图标",
+    "四个档位视频与六秒启动视频",
+    "来啦～老弟 Web 入场",
+    "用户会话、项目、人格和上下文",
+    "none 工作区 OPENCLAW_UR_INJECT 标记"
+  ],
+  "completed": [
+    "UI 素材清单与 SHA-256 基线已写入 /tmp/super-pinkie-assets-before.sha256",
+    "续跑和看门狗保留用户所选模型的代码与针对性单测",
+    "独立验收脚本、证据路径和 symlink 防伪加固",
+    "2.5.5 发布测试门槛"
+  ],
+  "next": [
+    "完成全部本地测试",
+    "同步插件与 App 后运行 Gemini 3.6 四档真实验证",
+    "合并 origin/main 的 Windows 重连修复并复测",
+    "逐项复核 UI 素材哈希与入口行为",
+    "打包 Mac、推送 Git、等待 CI 与 Windows Release，核验产物"
+  ]
+}
