@@ -303,6 +303,17 @@ def find_file(directory, prefix, suffix):
     return None
 
 
+def find_ai_transport_file(directory):
+    """Pick the executable completions module, not the stream/type shim."""
+    if not os.path.isdir(directory):
+        return None
+    names = sorted(os.listdir(directory))
+    candidates = [name for name in names
+                  if name.startswith("openai-completions-") and name.endswith(".mjs")
+                  and "-stream-" not in name and "-compat-" not in name]
+    return os.path.join(directory, candidates[0]) if candidates else None
+
+
 def patch_dist_file(path, remove, log):
     try:
         src = open(path, encoding="utf-8").read()
@@ -375,9 +386,15 @@ def apply_patch(remove, log):
         log("✗ 未找到 CLE Kk 兼容内核。请先运行一键安装 / 修复。")
         return False
     log(f"CLE Kk 内核路径: {root}")
+    # 2026.9 moved the executable provider transport into @openclaw/ai and
+    # leaves a small openai-transport-stream shim in the root dist. Keep the
+    # legacy name for older installs, then fall back to the current transport
+    # chunk; the AI module below is the authoritative current hook point.
     dist_file = find_file(os.path.join(root, "dist"), "openai-transport-stream-", ".js")
+    if not dist_file:
+        dist_file = find_file(os.path.join(root, "dist"), "transport-stream-", ".js")
     ai_dir = os.path.join(root, "node_modules", "@openclaw", "ai", "dist")
-    ai_file = find_file(ai_dir, "openai-completions-", ".mjs")
+    ai_file = find_ai_transport_file(ai_dir)
     ok = True
     if dist_file:
         patch_dist_file(dist_file, remove, log)

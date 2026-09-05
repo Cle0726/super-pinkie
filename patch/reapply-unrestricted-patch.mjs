@@ -66,6 +66,15 @@ function findFile(dir, prefix, suffix) {
   return null;
 }
 
+function findAiTransportFile(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const names = fs.readdirSync(dir).filter((name) =>
+    name.startsWith("openai-completions-") && name.endsWith(".mjs")
+      && !name.includes("-stream-") && !name.includes("-compat-")
+  ).sort();
+  return names.length ? path.join(dir, names[0]) : null;
+}
+
 const PROMPTS_DIR = process.env.UR_PROMPTS_DIR || path.join(os.homedir(), ".openclaw");
 
 const HELPER = `/** [unrestricted-injection] Prepend the user-configured unrestricted system prompt to every upstream provider payload. */
@@ -180,10 +189,11 @@ if (!root) {
 }
 console.log(`openclaw root: ${root}`);
 
-const distFile = findFile(path.join(root, "dist"), "openai-transport-stream-", ".js");
+const distFile = findFile(path.join(root, "dist"), "openai-transport-stream-", ".js")
+  || findFile(path.join(root, "dist"), "transport-stream-", ".js");
 if (!distFile) { console.error("dist transport chunk not found; cannot patch."); process.exit(1); }
 patchDistFile(distFile, remove);
 
-const aiFile = findFile(path.join(root, "node_modules", "@openclaw", "ai", "dist"), "openai-completions-", ".mjs");
+const aiFile = findAiTransportFile(path.join(root, "node_modules", "@openclaw", "ai", "dist"));
 if (!aiFile) { console.error("@openclaw/ai completions chunk not found; cannot patch."); process.exit(1); }
 patchAiFile(aiFile, remove);
