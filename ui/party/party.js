@@ -2,7 +2,9 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const names = {pinkie:'碧琪',codex:'紫悦',openclaw:'云宝',claude:'珍奇',gemini:'柔柔',ollama:'苹果嘉儿',user:'铲屎官',system:'派对记录'};
-  const engines={pinkie:'主持',codex:'Codex',openclaw:'OpenClaw',claude:'Claude',gemini:'Gemini',ollama:'Ollama'};
+  // Keep the stable `openclaw` dispatch id for stored rooms and compatibility,
+  // but never expose the upstream runtime name as this App's agent brand.
+  const engines={pinkie:'主持',codex:'Codex',openclaw:'CLE Kk',claude:'Claude',gemini:'Gemini',ollama:'Ollama'};
   const portraits={pinkie:'/avatar.png',codex:'/twilight.png',openclaw:'/rainbow.png',claude:'/rarity.png',gemini:'/fluttershy.png',ollama:'/applejack.png'};
   const state = {token:'',agents:[],rooms:[],room:null,messages:new Map(),tasks:[],reply:null,query:'',signature:'',polling:false,epoch:0,requests:new Map(),sending:new Set(),hasOlder:false,archived:false,loadingRoom:false,metadataAt:0};
   const drafts=window.PartyDrafts;
@@ -82,7 +84,7 @@
   function messageNode(message){
     if(message.sender==='system'){
       if(message.kind==='error'){const details=element('details','notice error');details.append(element('summary','','这次没有完成，点开查看原因'),element('pre','',message.body));return details;}
-      return element('div','notice',message.body.replace(/Codex/g,'紫悦').replace(/OpenClaw/g,'云宝'));
+      return element('div','notice',message.body.replace(/Codex/g,'紫悦').replace(/OpenClaw/g,'CLE Kk'));
     }
     const row=element('article','message '+(message.sender==='user'?'user':''));row.dataset.id=String(message.id);row.append(avatar(message.sender));
     const body=element('div','message-body');const meta=element('div','message-meta');
@@ -232,7 +234,7 @@
   $('draft').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();if(!$('send').disabled)$('composer').requestSubmit();}};
   $('composer').onsubmit=async event=>{
     event.preventDefault();if(!state.room||state.room.archived||state.loadingRoom||state.modelSaving||!$('draft').value.trim()||state.sending.has(state.room.id))return;const text=$('draft').value.trim();const roomId=state.room.id;const draftRecipient=$('recipient').value;saveDraft();
-    const mention=text.match(/^@(碧琪|紫悦|云宝|Codex|OpenClaw)\s+/i);let agent=$('recipient').value;
+    const mention=text.match(/^@(碧琪|紫悦|云宝|Codex|CLE\s*Kk|OpenClaw)\s+/i);let agent=$('recipient').value;
     if(mention)agent=Object.keys(names).find(id=>names[id].toLowerCase()===mention[1].toLowerCase()||engines[id]?.toLowerCase()===mention[1].toLowerCase())||agent;
     const payload={agent,text,model:state.room.models?.[agent]||'',permission:agent==='codex'?$('permission').value:'read-only',reply:state.reply?.id||null};const key=roomId+JSON.stringify(payload);
     if(!state.requests.has(key)){try{state.requests.set(key,drafts.requestId(localStorage,roomId,payload,()=>crypto.randomUUID()));}catch{state.requests.set(key,crypto.randomUUID());}}

@@ -497,6 +497,28 @@ class PartyTests(unittest.TestCase):
         self.assertEqual(['*'], actual['agents']['list'][1]['tools']['deny'])
         self.assertFalse(setup.install(home))
 
+    def test_setup_uses_keyed_agents_and_repairs_mixed_schema_without_overwriting(self):
+        home = Path(self.temp.name) / 'keyed-home'
+        config = home / '.openclaw/openclaw.json'
+        config.parent.mkdir(parents=True)
+        main = {'workspace':'/keep-main', 'name':'用户主代理', 'custom':{'keep':True}}
+        existing_party = {'name':'云宝', 'workspace':str(home/'.openclaw/workspace-party-openclaw'),
+                          'tools':{'deny':['*']}, 'memory':{'enabled':False}, 'custom':'keep'}
+        config.write_text(json.dumps({'agents':{'entries':{'main':main, 'party-openclaw':existing_party},
+                                                         'list':[{'id':'party-openclaw','name':'不能覆盖'},
+                                                                 {'id':'legacy-extra','workspace':'/legacy'}]},
+                                      'untouched':42}))
+        self.assertTrue(setup.install(home))
+        actual = json.loads(config.read_text())
+        self.assertNotIn('list', actual['agents'])
+        self.assertEqual(main, actual['agents']['entries']['main'])
+        self.assertEqual(existing_party, actual['agents']['entries']['party-openclaw'])
+        self.assertEqual('/legacy', actual['agents']['entries']['legacy-extra']['workspace'])
+        self.assertEqual(['*'], actual['agents']['entries']['pinkie-party']['tools']['deny'])
+        self.assertEqual({'enabled':False}, actual['agents']['entries']['pinkie-party']['memory'])
+        self.assertEqual(42, actual['untouched'])
+        self.assertFalse(setup.install(home))
+
     def test_address_migration_only_changes_exact_owned_party_template(self):
         home = Path(self.temp.name) / 'address-home'
         config = home / '.openclaw/openclaw.json'

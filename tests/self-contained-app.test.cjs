@@ -85,6 +85,21 @@ test('source updaters preserve every existing user persona and context file', ()
   assert.match(mac, /已恢复上一版超級碧琪\.app/);
 });
 
+test('macOS manual update leaves the gateway page before replacing the App', () => {
+  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const updater = read('installer/macos/detached-update.sh');
+  assert.match(launcher, /laolaoUpdate/);
+  assert.match(launcher, /主动拉取更新/);
+  assert.match(launcher, /copyItem\(at: bundledScript, to: helper\)/);
+  assert.match(launcher, /NSApp\.terminate\(nil\)/);
+  assert.doesNotMatch(launcher, /terminationHandler[\s\S]{0,500}更新完成/);
+  assert.match(updater, /while .*kill -0.*CURRENT_PID/);
+  assert.match(updater, /git -C "\$REPO" pull --ff-only/);
+  assert.match(updater, /"\$REPO\/update-full\.sh"/);
+  assert.match(updater, /reopen_app/);
+  assert.match(updater, /旧版没有被改动|保留或恢复旧版/);
+});
+
 test('release workflow publishes both desktop formats from self-contained builders', () => {
   const release = read('.github/workflows/release.yml');
   assert.match(release, /\.\/desktop\/macos\/build\.sh/);

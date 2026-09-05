@@ -480,17 +480,17 @@ class Roundtable:
         binary = executable('openclaw')
         node = executable('node')
         if not binary:
-            raise ValueError('没有找到 OpenClaw 模型连接器')
+            raise ValueError('没有找到 CLE Kk 模型连接器')
         live_config = Path.home()/'.openclaw/openclaw.json'
         config = json.loads(live_config.read_text(encoding='utf-8'))
-        candidates = [agent for agent in config.get('agents', {}).get('list', [])
+        candidates = [agent for agent in CONTEXT['agent_entries'](config)
                       if '*' in agent.get('tools', {}).get('deny', [])]
         if not candidates:
             raise ValueError('没有可用于隔离调用的无工具连接器')
         agent = json.loads(json.dumps(candidates[0]))
         agent['model'] = {'primary': model, 'fallbacks': []}
         config['tools'] = {'deny': ['*']}
-        config.setdefault('agents', {})['list'] = [agent]
+        CONTEXT['replace_agent_entries'](config, [agent])
         with tempfile.TemporaryDirectory(prefix='roundtable-', dir=self.store.root) as temp:
             temp = Path(temp)
             workspace = temp/'workspace'
@@ -508,7 +508,7 @@ class Roundtable:
             agent['agentDir'] = str(agent_dir)
             agent['tools'] = {'deny': ['*']}
             agent['memorySearch'] = {'enabled': False}
-            config.setdefault('agents', {})['list'] = [agent]
+            CONTEXT['replace_agent_entries'](config, [agent])
             config_path = temp/'config.json'
             prompt_path = temp/'message.txt'
             config_path.write_text(json.dumps(config), encoding='utf-8')
@@ -630,9 +630,9 @@ class Roundtable:
                                'scene', 'execute', 'done', run_id)
         binary, node = executable('openclaw'), executable('node')
         if not binary or not node:
-            raise ValueError('没有找到本机 OpenClaw 执行器')
+            raise ValueError('没有找到本机 CLE Kk 执行器')
         live_config = json.loads((Path.home()/'.openclaw/openclaw.json').read_text(encoding='utf-8'))
-        candidates = [agent for agent in live_config.get('agents', {}).get('list', [])
+        candidates = [agent for agent in CONTEXT['agent_entries'](live_config)
                       if '*' not in agent.get('tools', {}).get('deny', [])]
         if not candidates:
             raise ValueError('没有可用于工具执行的本机 Agent 配置')
@@ -648,7 +648,7 @@ class Roundtable:
             agent['memorySearch'] = {'enabled': False}
             (temp/'agent').mkdir(mode=0o700)
             (temp/'tmp').mkdir(mode=0o700)
-            live_config.setdefault('agents', {})['list'] = [agent]
+            CONTEXT['replace_agent_entries'](live_config, [agent])
             live_config['plugins'] = {'enabled': False}
             config_path, prompt_path = temp/'config.json', temp/'message.txt'
             config_path.write_text(json.dumps(live_config), encoding='utf-8')

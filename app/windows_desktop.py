@@ -950,7 +950,7 @@ BRIDGE_SCRIPT = r"""
     document.body.append(resize);
     const controls = document.createElement('div');
     controls.id = 'pinkie-native-window-controls';
-    controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="检查更新"><span>✦</span></button><button data-act="min" aria-label="最小化"><span aria-hidden="true"></span></button><button data-act="max" aria-label="最大化"><span aria-hidden="true"></span></button><button data-act="close" aria-label="关闭"><span aria-hidden="true"></span></button>';
+    controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="主动拉取更新"><span>✦</span></button><button data-act="min" aria-label="最小化"><span aria-hidden="true"></span></button><button data-act="max" aria-label="最大化"><span aria-hidden="true"></span></button><button data-act="close" aria-label="关闭"><span aria-hidden="true"></span></button>';
     const toast = message => {
       let node = document.getElementById('pinkie-update-toast');
       if (!node) { node = document.createElement('div'); node.id = 'pinkie-update-toast'; document.body.append(node); }

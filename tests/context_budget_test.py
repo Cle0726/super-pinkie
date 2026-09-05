@@ -38,6 +38,16 @@ class ContextBudgetTests(unittest.TestCase):
         policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json';policy.parent.mkdir(parents=True)
         policy.write_text(json.dumps({'modelLimits':{'codex-cli/model-a':64000}}))
         self.assertEqual(54400,budget['model_budget']('codex-cli/model-a',{},self.home)['threshold'])
+    def test_keyed_agent_schema_resolves_models_and_private_snapshots_stay_valid(self):
+        config={'agents':{'entries':{'main':{'workspace':'/keep'},
+                                    'party-openclaw':{'model':{'primary':'relay/keyed'},'tools':{'deny':['*']}}},
+                          'list':[{'id':'legacy-invalid','workspace':'/old'}]}}
+        self.assertEqual('relay/keyed',budget['model_ref'](config,'openclaw',home=self.home))
+        selected=[agent for agent in budget['agent_entries'](config) if agent['id']=='party-openclaw']
+        budget['replace_agent_entries'](config,selected)
+        self.assertNotIn('list',config['agents'])
+        self.assertEqual(['party-openclaw'],list(config['agents']['entries']))
+        self.assertNotIn('id',config['agents']['entries']['party-openclaw'])
     def test_setup_preserves_personas_auth_and_explicit_values_and_is_idempotent(self):
         p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
         cfg={'models':{'providers':{'a':{'apiKey':'keep-secret','baseUrl':'http://example.test','models':[{'id':'known','contextWindow':64000},{'id':'unknown'}]}}},'agents':{'list':[{'id':'main','workspace':'/preserved'}],'defaults':{'compaction':{'reserveTokens':60000,'keepRecentTokens':40000}}}}
@@ -50,10 +60,27 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertEqual(40000,compaction['keepRecentTokens'])
         self.assertEqual('safeguard',compaction['mode'])
         self.assertEqual(8,compaction['recentTurnsPreserve'])
-        self.assertEqual(.9,compaction['maxHistoryShare'])
+        self.assertEqual('strict',compaction['identifierPolicy'])
+        self.assertNotIn('maxHistoryShare',compaction)
+        self.assertNotIn('identifierInstructions',compaction)
         self.assertTrue(compaction['qualityGuard']['enabled'])
-        self.assertIn('memory/context/active.md',compaction['memoryFlush']['prompt'])
+        self.assertEqual({'enabled':True},compaction['memoryFlush'])
         self.assertFalse(setup['install'](self.home));self.assertTrue(list((self.home/'Library/Application Support/SuperPinkie/backups').glob('context-config-*/openclaw.json')))
+
+    def test_retired_compaction_fields_are_migrated_without_touching_supported_values(self):
+        p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
+        p.write_text(json.dumps({'agents':{'defaults':{'compaction':{
+            'mode':'safeguard','keepRecentTokens':77777,'identifierPolicy':'custom',
+            'maxHistoryShare':.9,'identifierInstructions':'old custom guidance',
+            'memoryFlush':{'enabled':True,'model':'a/b','systemPrompt':'old','prompt':'old'},
+        }}}}))
+        self.assertTrue(setup['install'](self.home))
+        compaction=json.loads(p.read_text())['agents']['defaults']['compaction']
+        self.assertEqual(77777,compaction['keepRecentTokens'])
+        self.assertEqual('strict',compaction['identifierPolicy'])
+        self.assertEqual({'enabled':True,'model':'a/b'},compaction['memoryFlush'])
+        self.assertNotIn('maxHistoryShare',compaction)
+        self.assertNotIn('identifierInstructions',compaction)
     def test_history_summary_keeps_every_old_chunk_and_latest_message(self):
         rows=[{'id':1,'sender':'user','body':'早期重要目标。'*4000},{'id':2,'sender':'codex','body':'已检查文件。'*3000},{'id':3,'sender':'user','body':'继续处理'}]
         original=json.dumps(rows,ensure_ascii=False);calls=[]

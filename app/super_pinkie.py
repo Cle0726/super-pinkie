@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""超級碧琪 🎈 控制台 — OpenClaw 全功能安装与无限制注入工具（GUI 版）
+"""超級碧琪 🎈 控制台 — CLE Kk 全功能安装与无限制注入工具（GUI 版）
 
 一键完成（Windows / macOS 通用）：
-1. 环境检测与自动补齐（Node.js / OpenClaw 全局安装）
+1. 环境检测与自动补齐（Node.js / CLE Kk 兼容内核）
 2. API Key 与模型供应商配置（OpenAI / Anthropic / Gemini / DeepSeek / 任意兼容中继）
 3. 提示词库复制与双传输层补丁（纯 Python 注入，无需手动 node）
 4. 四模式人格文件安装（chat / project / thinking / neutral）
 5. 来啦～老弟 完整 UI 皮肤与资源注入
-6. 注入代理自启与 OpenClaw Gateway 启停管理
+6. 注入代理自启与 CLE Kk 网关启停管理
 7. 一键状态健康检查与 Cle 验证引导
 
 用法（源码运行）:
@@ -139,7 +139,7 @@ def install_node_windows(log):
 
 def install_openclaw_npm(log):
     """通过 npm 全局安装 openclaw"""
-    log("==> 正在通过 npm 全局安装 openclaw...")
+    log("==> 正在安装 CLE Kk 兼容内核...")
     try:
         cmd = ["npm", "install", "-g", "openclaw"]
         if os.name == "nt":
@@ -150,12 +150,12 @@ def install_openclaw_npm(log):
             log("  " + line.rstrip())
         proc.wait()
         if proc.returncode == 0:
-            log("✅ openclaw 全局安装成功！")
+            log("✅ CLE Kk 兼容内核安装成功！")
             return True
         else:
-            log(f"❌ openclaw 安装失败，退出码: {proc.returncode}")
+            log(f"❌ CLE Kk 兼容内核安装失败，退出码: {proc.returncode}")
     except Exception as e:
-        log(f"❌ openclaw 安装异常: {e}")
+        log(f"❌ CLE Kk 兼容内核安装异常: {e}")
     return False
 
 
@@ -372,9 +372,9 @@ def patch_ai_file(path, remove, log):
 def apply_patch(remove, log):
     root = resolve_openclaw_root()
     if not root:
-        log("✗ 未找到 OpenClaw 全局安装路径。请确保已运行 npm install -g openclaw。")
+        log("✗ 未找到 CLE Kk 兼容内核。请先运行一键安装 / 修复。")
         return False
-    log(f"OpenClaw 路径: {root}")
+    log(f"CLE Kk 内核路径: {root}")
     dist_file = find_file(os.path.join(root, "dist"), "openai-transport-stream-", ".js")
     ai_dir = os.path.join(root, "node_modules", "@openclaw", "ai", "dist")
     ai_file = find_file(ai_dir, "openai-completions-", ".mjs")
@@ -386,7 +386,7 @@ def apply_patch(remove, log):
     if ai_file:
         patch_ai_file(ai_file, remove, log)
     else:
-        log("✗ 未找到 @openclaw/ai 传输层文件"); ok = False
+        log("✗ 未找到 CLE Kk 兼容传输层文件"); ok = False
     
     # 额外运行 apply-context-budget 和 apply-image-access 脚本（如果存在）
     if not remove:
@@ -473,7 +473,7 @@ def install_theme(log):
     log("==> 正在注入 来啦～老弟 UI 皮肤与静态资源...")
     root = resolve_openclaw_root()
     if not root:
-        log("  未定位到 OpenClaw UI 目录，跳过皮肤注入")
+        log("  未定位到 CLE Kk UI 目录，跳过皮肤注入")
         return
     if os.name == "nt":
         windows_installer = resource_path("installer", "windows", "apply-theme.ps1")
@@ -611,8 +611,8 @@ def proxy_health(port=DEFAULT_PROXY_PORT):
 
 
 def restart_openclaw_gateway(log):
-    """重启 OpenClaw 网关"""
-    log("==> 正在重启 OpenClaw Gateway...")
+    """重启 CLE Kk 网关"""
+    log("==> 正在重启 CLE Kk 网关...")
     try:
         res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10)
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
@@ -761,8 +761,8 @@ def run_control_center():
         health = proxy_health()
         
         status_var.set(
-            f"📦 Node.js: {node_v}   |   OpenClaw CLI: {oc_v}\n"
-            f"📂 OpenClaw 路径: {root_path}\n"
+            f"📦 Node.js: {node_v}   |   CLE Kk 内核: {oc_v}\n"
+            f"📂 CLE Kk 路径: {root_path}\n"
             f"💉 注入补丁: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
             f"🔄 代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'} (健康: {'✅' if health else '—'})"
         )
@@ -780,9 +780,9 @@ def run_control_center():
             else:
                 log("请先手动安装 Node.js (https://nodejs.org)")
                 
-        # 2. 检查 OpenClaw
+        # 2. 检查 CLE Kk 兼容内核
         if not resolve_openclaw_root():
-            log("⚠️ 未找到 OpenClaw 全局安装，尝试 npm install -g openclaw...")
+            log("⚠️ 未找到 CLE Kk 兼容内核，正在自动补齐...")
             install_openclaw_npm(log)
             
         # 3. 安装提示词
@@ -854,7 +854,7 @@ def run_control_center():
             return
         update_api_config(prov, k, u, m, log)
         restart_openclaw_gateway(log)
-        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已写入 openclaw.json 并重启网关！")
+        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已保存，并已重启 CLE Kk 网关！")
 
     make_button(api_card, "💾 保存配置并应用", save_api_settings, color=DEEP).grid(row=4, column=1, sticky="e", padx=10, pady=10)
 

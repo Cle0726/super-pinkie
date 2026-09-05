@@ -4,6 +4,14 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const read=n=>fs.readFileSync(path.join(__dirname,'../ui/party',n),'utf8');
+test('built-in consultation agent is branded CLE Kk without changing its stored id',()=>{
+  const js=read('party.js');
+  const server=fs.readFileSync(path.join(__dirname,'../services/party/server.py'),'utf8');
+  assert.match(js,/openclaw:'CLE Kk'/);
+  assert.match(server,/'openclaw': 'CLE Kk'/);
+  assert.doesNotMatch(js,/openclaw:'OpenClaw'/);
+  assert.match(js,/\['codex','openclaw'\]/);
+});
 test('member rail defaults collapsed, expands and persists, survives unavailable storage',()=>{
   for(const unavailable of [false,true]){
     const shell={dataset:{}},toggle={attrs:{},setAttribute(k,v){this.attrs[k]=v},getAttribute(k){return this.attrs[k]}};

@@ -2,7 +2,7 @@
 
 ## 推荐：使用快速启动版（onedir）
 
-从 GitHub Releases 下载并解压 `super-pinkie-windows-<版本>-portable.zip`，运行 `超級碧琪\\超級碧琪.exe`。成品已内置固定版本的 Node.js、OpenClaw、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或 OpenClaw。onedir 版本把运行时放在程序目录旁，不会像旧单文件 EXE 那样在每次启动时把数百 MB 解压到 `_MEI*` 临时目录，因此启动明显更快。
+从 GitHub Releases 下载并解压 `super-pinkie-windows-<版本>-portable.zip`，运行 `超級碧琪\\超級碧琪.exe`。成品已内置固定版本的 Node.js、CLE Kk 兼容内核、Python 依赖、网关和全部本机服务，不需要安装 Git、Node.js、Python 或额外 Agent 内核。onedir 版本把运行时放在程序目录旁，不会像旧单文件 EXE 那样在每次启动时把数百 MB 解压到 `_MEI*` 临时目录，因此启动明显更快。
 
 Release 中仍提供 `super-pinkie-windows-<版本>.exe` 兼容版；它便于单文件分发，但每次启动都需要解压内置运行时，启动较慢。
 
@@ -15,7 +15,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 & "F:\SuperPinkie\_internal\installer\windows\register-bundled-watchdog.ps1" -InstallRoot "F:\SuperPinkie"
 ```
 
-它注册的是独立的 `SuperPinkieGatewayWatchdog` 任务，只在监听缺失时启动内置网关，不会终止正在冷启动的进程，也不会复用旧的 `OpenClaw Gateway` 任务。
+它注册的是独立的 `SuperPinkieGatewayWatchdog` 任务，只在监听缺失时启动内置网关，不会终止正在冷启动的进程，也不会复用旧网关任务。
 
 ### 会话中 API 断链的自动续接
 
@@ -62,7 +62,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ## 部署后
 
-1. **重启 openclaw 网关**（`openclaw gateway restart` 或重启服务）
+1. **重启 CLE Kk 网关**（兼容命令仍为 `openclaw gateway restart`，或直接重启 App）
 2. 打开网页聊天，进入无限制模式（agent 名为 `unrestricted` 的那个），**开新会话**
 3. 发送验证口令：
    ```
@@ -93,4 +93,4 @@ cd $HOME\super-pinkie
 - 代理日志在计划任务输出里：任务计划程序 → OpenClawURProxy → 操作 → 查看日志；或 `Get-ScheduledTask -TaskName OpenClawURProxy | Get-ScheduledTaskInfo`。
 - 防火墙弹窗询问 python 联网时**允许**（代理要访问 127.0.0.1，本机回环一般不会弹）。
 - `install.ps1 -Remove` 一键卸载（撤补丁、停代理、删计划任务）。
-- 升级 OpenClaw 后补丁会失效，重跑一次 `.\install.ps1` 即可（幂等）。
+- 升级 CLE Kk 内核后补丁会失效，重跑一次 `.\install.ps1` 即可（幂等）。

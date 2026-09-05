@@ -32,6 +32,26 @@ def identity_file(name):
     return f'# IDENTITY.md\n\n- **Name:** {name}\n'
 
 
+def agent_store(data):
+    """Use the runtime's keyed schema when present; keep legacy-only configs valid."""
+    agents = data.setdefault('agents', {})
+    entries = agents.get('entries')
+    if isinstance(entries, dict):
+        changed = False
+        legacy = agents.pop('list', None)
+        if legacy is not None:
+            changed = True
+            if isinstance(legacy, list):
+                for item in legacy:
+                    if not isinstance(item, dict) or not item.get('id'):
+                        continue
+                    agent_id = item['id']
+                    entries.setdefault(agent_id, {key: value for key, value in item.items() if key != 'id'})
+        return 'entries', entries, changed
+    listed = agents.setdefault('list', [])
+    return 'list', listed, False
+
+
 def migrate_file(home, agent_id, target, known, replacement):
     if not target.is_file() or target.is_symlink():
         return False
@@ -54,13 +74,12 @@ def install(home=None):
         return False
     raw = config.read_bytes()
     data = json.loads(raw)
-    agents = data.setdefault('agents', {}).setdefault('list', [])
-    changed = False
+    schema, agents, changed = agent_store(data)
     migrated = False
     for agent_id, member, old_name in [('pinkie-party', 'pinkie', '碧琪'), ('party-openclaw', 'openclaw', 'OpenClaw')]:
         name = IDENTITIES['names'][member]
         workspace = home / '.openclaw' / ('workspace-' + agent_id)
-        existing = next((a for a in agents if a.get('id') == agent_id), None)
+        existing = agents.get(agent_id) if schema == 'entries' else next((a for a in agents if a.get('id') == agent_id), None)
         if existing:
             # Only migrate our exact old template in our own isolated workspace.
             # Never alter custom personas or another agent sharing this id.
@@ -88,8 +107,13 @@ def install(home=None):
             target = workspace / filename
             if not target.exists():
                 target.write_text(content, encoding='utf-8')
-        agents.append({'id': agent_id, 'name': name, 'workspace': str(workspace),
-                       'tools': {'deny': ['*']}, 'memorySearch': {'enabled': False}})
+        agent = {'name': name, 'workspace': str(workspace),
+                 'tools': {'deny': ['*']},
+                 ('memory' if schema == 'entries' else 'memorySearch'): {'enabled': False}}
+        if schema == 'entries':
+            agents[agent_id] = agent
+        else:
+            agents.append({'id': agent_id, **agent})
         changed = True
     if not changed:
         return migrated
@@ -113,4 +137,4 @@ def install(home=None):
 
 
 if __name__ == '__main__':
-    print('派对专属 Agent 已安装。' if install() else '派对配置已就绪，或尚未配置 OpenClaw。')
+    print('派对专属 Agent 已安装。' if install() else '派对配置已就绪，或尚未配置 CLE Kk 内核。')

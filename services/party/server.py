@@ -27,7 +27,7 @@ CONTEXT = runpy.run_path(str(ROOT/'services/context/context_budget.py'))
 USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
-LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'OpenClaw',
+LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'CLE Kk',
           'claude': 'Claude', 'gemini': 'Gemini', 'ollama': 'Ollama'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MAX_MESSAGE = 12000
@@ -175,7 +175,7 @@ def is_openclaw_command(command):
 def openclaw_ready(agent_id):
     try:
         config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
-        agent = next(a for a in config['agents']['list'] if a['id'] == agent_id)
+        agent = next(a for a in CONTEXT['agent_entries'](config) if a['id'] == agent_id)
         # Fail closed if someone later removes the tool restriction.
         return '*' in agent.get('tools', {}).get('deny', [])
     except (OSError, KeyError, ValueError, StopIteration):
@@ -625,7 +625,7 @@ class Manager:
                        '只提议当前群可用成员，不能向自己派工。派工必须先经铲屎官确认，绝不能说成员已经执行。'
                        '输出且只输出JSON对象：{"message":"要发到群里的回复","tasks":'
                        '[{"agent":"codex或openclaw","instruction":"完整的具体任务","permission":"read-only或workspace-write"}]}。'
-                       '普通回复tasks用[]；OpenClaw只支持群内文本咨询，没有文件/联网工具。'
+                       '普通回复tasks用[]；CLE Kk 咨询席只支持群内文本咨询，没有文件/联网工具。'
                        '铲屎官要求改文件时只给Codex建议workspace-write。\n')
         else:
             common += '实际执行连接为 ' + LABELS[task['agent']] + '。只执行收到的任务，不冒充其他成员或铲屎官。\n'
@@ -879,9 +879,11 @@ class Manager:
             config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
             config['tools'] = {'deny': ['*']}
             dedicated = 'pinkie-party' if task['agent'] == 'pinkie' else 'party-openclaw'
-            config['agents']['list'] = [a for a in config['agents']['list'] if a['id'] == dedicated]
+            selected = [a for a in CONTEXT['agent_entries'](config) if a['id'] == dedicated]
+            CONTEXT['replace_agent_entries'](config, selected)
             if task.get('model'):
-                config['agents']['list'][0]['model'] = {'primary': task['model'], 'fallbacks': []}
+                selected[0]['model'] = {'primary': task['model'], 'fallbacks': []}
+                CONTEXT['replace_agent_entries'](config, selected)
             config_path = self.store.root / ('.config-' + task['id'] + '.json')
             cleanup.callback(config_path.unlink, missing_ok=True)
             config_path.write_text(json.dumps(config), encoding='utf-8')
@@ -930,7 +932,7 @@ class Manager:
                                     if isinstance(event,dict) and 'pinkieLive' in event:
                                         live.openclaw(event['pinkieLive'])
                                         if event['pinkieLive'].get('stream')=='capability':
-                                            self.store.message(task['room'],'system','此 OpenClaw 版本暂不提供实时事件，本次会在完成后显示回复。','notice',task['id'])
+                                            self.store.message(task['room'],'system','当前 CLE Kk 内核暂不提供实时事件，本次会在完成后显示回复。','notice',task['id'])
                                     else:output += line+'\n'
                             else:output += decoded
                             if received > 2000000:
@@ -956,7 +958,7 @@ class Manager:
                 except ValueError:
                     continue
             if parsed is None:
-                raise ValueError('OpenClaw 没有返回有效结果：' + redact(errors[-500:] or output[-500:]))
+                raise ValueError('CLE Kk 没有返回有效结果：' + redact(errors[-500:] or output[-500:]))
             result = parsed.get('result', parsed)
             return '\n\n'.join(p['text'] for p in result.get('payloads', []) if isinstance(p.get('text'), str))
         finally:

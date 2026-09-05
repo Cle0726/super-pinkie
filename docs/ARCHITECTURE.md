@@ -8,7 +8,7 @@
   └─ 首次启动应用 UI 与人格
            │
            ▼
-OpenClaw Control UI
+CLE Kk Control UI
   ├─ laolao-theme.css             透明玻璃与交互
   ├─ laolao-sidebar.js            置顶、项目、目录管理
   ├─ laolao-mode-switcher.js      四模式无缝切换
@@ -18,7 +18,7 @@ OpenClaw Control UI
   └─ splash / transition assets   启动与切换动画
            │
            ▼
-OpenClaw Gateway ── mm-retry-proxy ── 模型上游
+CLE Kk Gateway ── mm-retry-proxy ── 模型上游
            └────── transport patch ─────┘
 ```
 
@@ -26,6 +26,6 @@ OpenClaw Gateway ── mm-retry-proxy ── 模型上游
 
 - Git 仓库是发布源。
 - `update-full.sh` 拉取源码并重新安装。
-- LaunchAgent 每 15 分钟检查一次本机 OpenClaw UI，官方更新覆盖 UI 后会自动重新应用。
+- LaunchAgent 每 15 分钟检查一次本机 CLE Kk UI，内核更新覆盖 UI 后会自动重新应用。
 - 人格文件不经过模板、变量替换或构建转换。
 - 本机路径只存在于安装后生成的 `install.env` 和 LaunchAgent，不进入仓库。

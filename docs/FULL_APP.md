@@ -3,7 +3,7 @@
 ## 运行条件
 
 - macOS 13 或更高版本
-- 已安装并能正常运行的 OpenClaw
+- 已安装并能正常运行的 CLE Kk 兼容内核
 - Git、Node.js、Python 3、Xcode Command Line Tools
 - 首次安装语音依赖时需要联网
 

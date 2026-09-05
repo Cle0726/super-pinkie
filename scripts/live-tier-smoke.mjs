@@ -45,6 +45,14 @@ async function scenario(tier) {
   fs.writeFileSync(path.join(directory,'case.json'),JSON.stringify({sessionKey,agentId,tier,model,target,expected,skill},null,2));
   let passed=false;
   try {
+    const created = await rpc('sessions.create',{
+      agentId,
+      key:sessionKey,
+      displayName:`CLE Kk ${tier} release validation`,
+      model,
+      thinkingLevel:'high',
+    });
+    if (!created?.ok || created?.key !== sessionKey) throw new Error('Test session not created');
     const armed = await rpc('pinkie.deepThink.arm',{sessionKey,tier});
     if (!armed.armed) throw new Error('Tier not armed');
     console.log(JSON.stringify({tier,stage:'started',sessionKey}));
@@ -82,6 +90,7 @@ async function scenario(tier) {
   } finally {
     if(!passed) await rpc('pinkie.deepThink.disarm',{sessionKey}).catch(()=>{});
     fs.writeFileSync(path.join(root,'results.json'),JSON.stringify({model,results},null,2));
+    await exec(cli,['sessions','delete',sessionKey,'--agent',agentId,'--yes','--json','--timeout','20000'],{timeout:30_000,maxBuffer:2*1024*1024}).catch(()=>{});
   }
 }
 // Two isolated sessions at a time keep the host responsive during a full-tier test.

@@ -53,6 +53,32 @@ def estimate_tokens(text):
     return math.ceil(sum(2 if ord(c) > 127 else 1/3 for c in str(text))) + 16
 
 
+def agent_entries(config):
+    """Return one normalized list for both legacy and keyed agent schemas."""
+    agents = config.get('agents', {}) if isinstance(config, dict) else {}
+    keyed = agents.get('entries')
+    if isinstance(keyed, dict):
+        return [dict(value, id=agent_id) for agent_id, value in keyed.items()
+                if isinstance(value, dict)]
+    listed = agents.get('list', [])
+    return [dict(value) for value in listed if isinstance(value, dict)] if isinstance(listed, list) else []
+
+
+def replace_agent_entries(config, selected):
+    """Replace agents in a private per-run snapshot without changing its schema."""
+    agents = config.setdefault('agents', {})
+    if isinstance(agents.get('entries'), dict):
+        agents['entries'] = {
+            entry['id']: {key: value for key, value in entry.items() if key != 'id'}
+            for entry in selected if isinstance(entry, dict) and entry.get('id')
+        }
+        # Mixed keyed/list configs are invalid on the current runtime.
+        agents.pop('list', None)
+    else:
+        agents['list'] = [dict(entry) for entry in selected]
+    return config
+
+
 def model_ref(config, member, selected='', home=None):
     if selected:
         return selected if member != 'codex' else 'codex-cli/' + selected
@@ -66,7 +92,7 @@ def model_ref(config, member, selected='', home=None):
         except OSError:
             return 'codex-cli/default'
     agent_id = 'pinkie-party' if member == 'pinkie' else 'party-openclaw'
-    agent = next((a for a in config.get('agents', {}).get('list', []) if a.get('id') == agent_id), {})
+    agent = next((a for a in agent_entries(config) if a.get('id') == agent_id), {})
     model = agent.get('model') or config.get('agents', {}).get('defaults', {}).get('model', '')
     return (model.get('primary', '') if isinstance(model, dict) else model) or 'unknown/default'
 

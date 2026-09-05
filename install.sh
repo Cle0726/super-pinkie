@@ -49,7 +49,7 @@ mkdir -p "$PROMPTS_DIR"
 cp "$REPO_DIR"/prompts/unrestricted-prompt-*.txt "$PROMPTS_DIR/"
 echo "    $(ls "$REPO_DIR"/prompts/unrestricted-prompt-*.txt | wc -l | tr -d ' ') prompt files installed"
 
-echo "==> 2/4 patching OpenClaw transports"
+echo "==> 2/4 patching CLE Kk compatibility transports"
 node "$PATCH_SCRIPT"
 node "$REPO_DIR/patch/apply-context-budget.mjs"
 python3 "$REPO_DIR/services/context/setup.py"
@@ -107,12 +107,12 @@ if [[ "$*" == *"--provider"* ]]; then
        "$HOME/.openclaw/openclaw.json" > "$TMP_CFG"
     cp "$TMP_CFG" "$HOME/.openclaw/openclaw.json"
     rm -f "$TMP_CFG"
-    echo "    done. Restart the openclaw gateway for it to take effect."
+    echo "    done. Restart the CLE Kk gateway for it to take effect."
   else
     echo "==> 4/4 (skipped) point your provider's baseUrl at http://127.0.0.1:$PROXY_PORT/v1 manually"
   fi
 fi
 
 echo
-echo "All set. Restart the openclaw gateway, then in an unrestricted-mode session send the"
+echo "All set. Restart the CLE Kk gateway, then in an unrestricted-mode session send the"
 echo "verification token to confirm the injection is live (see README.md)."

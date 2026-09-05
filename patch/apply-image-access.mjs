@@ -94,17 +94,24 @@ export function transform(original) {
     "async function assertLocalMediaAllowed(";
   text = replaceOnce(text, anchorFrom, anchorTo);
 
-  // Insert the early-return allowlist check immediately after the
-  // inbound media reference check (which already does its own try/catch
-  // via .catch(() => null)). We only extend the allowlist when the
-  // caller did not pass an explicit localRoots — explicit "any" is
-  // already returned above, and explicit arrays should still win.
+  // Extend only the default allowlist. Explicit roots (including "any")
+  // still win. OpenClaw 2026.9 moved the inbound check into
+  // resolveLocalMediaBoundary; prefer adding canonical roots there so the
+  // upstream realpath, hardlink and boundary checks remain intact.
   const inboundFrom =
     '\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n';
   const inboundTo =
     '\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n' +
     '\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
-  text = replaceOnce(text, inboundFrom, inboundTo);
+  const boundaryFrom =
+    '\tconst roots = localRoots ?? getDefaultLocalRootsCore();\n' +
+    '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
+  const boundaryTo =
+    '\tconst roots = localRoots ?? [...getDefaultLocalRootsCore(), ..._pinkieResolveExtraMediaRoots()];\n' +
+    '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
+  if (text.split(inboundFrom).length === 2) text = text.replace(inboundFrom, inboundTo);
+  else if (text.split(boundaryFrom).length === 2) text = text.replace(boundaryFrom, boundaryTo);
+  else throw new Error("OpenClaw 图片白名单代码结构已变化，未覆盖: inbound/boundary roots");
 
   return header + text;
 }

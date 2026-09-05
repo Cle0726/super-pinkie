@@ -175,6 +175,20 @@ const COMPLETION_TRUTH_RULES = `
 - 工具失败后保留旧成果，不覆盖旧文件来伪装本轮成功；修复后必须重新验证。无法继续时说清真实阻塞和已保留内容。
 `.trim();
 
+// Independent system module shared by all four modes. Keep it separate from
+// persona, aesthetics and opinion style so teaching can never dilute the
+// execution contract or subtly change a mode's character.
+const LEARN_WHILE_DOING_RULES = `
+【独立模块：边做边学】
+- 首要目标始终是正确、高效、专业地完成当前任务。教学只是辅助：不得降低判断、方案、工具调用、执行效率、代码质量或验收标准，也不得为了好讲而采用更简单但更差的做法。
+- 默认边执行边解释，不先倾倒教程。只在遇到可复用、能帮助理解架构/排错/判断方案的重要知识点时，顺手补充当前最值得知道的 1—2 点，然后立即继续工作。
+- 解释优先使用“专业术语（英文） = 一句大白话含义”；必要时再用一句说明它在当前项目负责哪一层。第一次引入重要技术，只简述：它是什么、负责什么、专业名称、为什么选它，不自动展开历史、生态或大量替代方案。
+- 遇到代码默认讲整体职责、关键逻辑和出问题先查哪一层，不逐行授课；普通实现细节、临时代码和无关背景不主动讲。
+- 新知识若与用户以前接触过的概念本质相同，用一句话建立连接，帮助形成跨领域技术直觉。已经解释过的基础概念直接使用术语，只有语境变化时才补一句。
+- 教学不得暂停关键工作、频繁考察理解、强行出练习、要求先学再做或把简单任务课程化。若解释会打断执行，先完成并验证，再补极短说明。
+- 长期目标是让用户逐渐能听懂行业语言、看懂系统分层、判断方案是否合理并知道故障可能在哪一层；工作保持专家级，表达保持初学者能听懂。
+`.trim();
+
 function completionRunKey(event = {}, ctx = {}) {
   // Session key is present on prompt, tool, finalize, and end hooks.  Prefer it
   // over runId so a provider retry cannot split one user turn into unrelated
@@ -194,6 +208,51 @@ function toolResultFailed(event = {}, output = '') {
   if (details.isError === true || details.ok === false) return true;
   if (Number.isFinite(Number(details.exitCode)) && Number(details.exitCode) !== 0) return true;
   if (/(?:"status"\s*:\s*"(?:error|failed|blocked|packet_invalid|timeout)"|command exited with code [1-9]|(?:^|\n)\s*traceback\b|(?:^|\n)\s*(?:error|failed|failure)\s*:|timed out)/i.test(output)) return true;
+  return false;
+}
+
+// A model should not have to remember the name of a host-only tool in order
+// for a real verifier run to count.  The result still has to come from the
+// locked verifier path and contain strict PASS JSON; this helper only unwraps
+// the different result envelopes used by the CLI and embedded transports.
+function hasPassVerifierReceipt(value, seen = new Set()) {
+  if (value == null) return false;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return false;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object' && (
+        String(parsed.status || '').toUpperCase() === 'PASS' && parsed.verified === true
+      )) return true;
+      if (parsed && typeof parsed === 'object') return hasPassVerifierReceipt(parsed, seen);
+    } catch {}
+    // Some host envelopes escape the verifier JSON once more.
+    try {
+      const unescaped = text.replace(/\\"/g, '"');
+      const parsed = JSON.parse(unescaped);
+      return Boolean(parsed && typeof parsed === 'object'
+        && String(parsed.status || '').toUpperCase() === 'PASS' && parsed.verified === true);
+    } catch {}
+    return false;
+  }
+  if (typeof value !== 'object' || seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some(item => hasPassVerifierReceipt(item, seen));
+}
+
+function executedLockedVerifier(state, entry = {}) {
+  if (!state?.skills?.size || entry.failed || !/(?:^|_)exec(?:$|_)/i.test(String(entry.name || ''))) return false;
+  const command = String(entry.params?.command || entry.params?.cmd || '');
+  if (!/(?:^|[;&|]\s*)python(?:3|\d*(?:\.\d+)?)?\b/i.test(command)) return false;
+  for (const contract of state.skills.values()) {
+    if (!contract?.verifier || !command.includes(String(contract.verifier))) continue;
+    if (!hasPassVerifierReceipt(entry.output) && !hasPassVerifierReceipt(entry.result)) continue;
+    try {
+      if (verifierContractReason(contract.skillFile?.path || '', contract)) return false;
+    } catch { return false; }
+    return true;
+  }
   return false;
 }
 
@@ -622,11 +681,14 @@ function toolIsMechanicalCheck(entry = {}) {
   if (!entry || entry.failed) return false;
   const name = String(entry.name || '').toLowerCase();
   const args = toolArgumentsText(entry);
+  if (name === DELIVERY_GUARD_TOOL) return /"action"\s*:\s*"verify"/i.test(args)
+    || hasPassVerifierReceipt(entry.output);
   if (/^(?:read|view_image|open_file|inspect|validate|verify|test|check)(?:$|_)/i.test(name)) return true;
   if (/(?:browser|computer|screen|cua)/i.test(name)
       && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate)"/i.test(args)) return true;
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
+    if (/verify_completion\.py\b/i.test(command)) return true;
     return /(?:^|[;&|]\s*)(?:test\s|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor))/i.test(command);
   }
   return false;
@@ -961,6 +1023,17 @@ export class CompletionIntegrityGuard {
       }
     }
     this.runs.set(key, state);
+  }
+
+  async verifyAfterTool(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    const state = this.runs.get(key);
+    const entry = state?.tools.at(-1);
+    if (!executedLockedVerifier(state, entry)) return;
+    // Shell output is only a trigger, never authority. Run every locked
+    // contract independently so printed PASS text or one passing Skill cannot
+    // certify a failed second contract.
+    return this.verifyExternal(key);
   }
 
   workflowContext(key, requestedRunDir) {
@@ -1663,7 +1736,11 @@ export class CleKkSupervisor {
     const states = this.audit.listStates();
     for (const state of states) {
       const key = String(state.sessionKey || '');
-      if (!key || this.turns.has(key)) continue;
+      // Child sessions are quiet implementation details.  Replaying their
+      // rejected transcript after a gateway restart creates invisible child
+      // loops and can flood the parent with duplicate candidates; only a
+      // parent session may own a user-visible recovery turn.
+      if (!key || /:subagent:/.test(key) || this.turns.has(key)) continue;
       const turn = this.restore(key);
       if (!turn?.pending || turn.retryScheduled) continue;
       this.scheduleRetry({key, turn, ...turn.pending}, {
@@ -1830,7 +1907,7 @@ export class CleKkSupervisor {
   }
 
   scheduleRetry(pending, ctx = {}, source = 'delivery') {
-    if (!pending?.turn || pending.turn.retryScheduled) return false;
+    if (!pending?.turn || pending.turn.retryScheduled || /:subagent:/.test(String(pending.key || ''))) return false;
     pending.turn.retryScheduled = true;
     pending.turn.retryScheduledAt = Date.now();
     pending.turn.retryAttempts = (pending.turn.retryAttempts || 0) + 1;
@@ -1989,6 +2066,7 @@ function encodeRun(state) {
     ...state,
     pendingChildren: [...state.pendingChildren],
     completedChildren: [...state.completedChildren],
+    emptyChildren: [...(state.emptyChildren || new Set())],
     childRoles: Object.fromEntries(state.childRoles),
     childResults: Object.fromEntries(state.childResults),
     reservations: Object.fromEntries(state.reservations),
@@ -2004,6 +2082,7 @@ function decodeRun(value) {
     ...value,
     pendingChildren: new Set(Array.isArray(value.pendingChildren) ? value.pendingChildren : []),
     completedChildren: new Set(Array.isArray(value.completedChildren) ? value.completedChildren : []),
+    emptyChildren: new Set(Array.isArray(value.emptyChildren) ? value.emptyChildren : []),
     childRoles: new Map(Object.entries(value.childRoles || {})),
     childResults: new Map(Object.entries(value.childResults || {})),
     reservations: new Map(Object.entries(value.reservations || {})),
@@ -2018,7 +2097,9 @@ function stateFileId(value) {
 }
 
 export class FileRunStore {
-  constructor(root = path.join(os.homedir(), '.openclaw', 'pinkie-deep-think')) {
+  constructor(root = process.env.PINKIE_STATE_ROOT
+    ? path.join(pinkieStateRoot(), 'cle-kk', 'deep-think')
+    : path.join(os.homedir(), '.openclaw', 'pinkie-deep-think')) {
     this.root = root;
   }
 
@@ -2581,9 +2662,14 @@ function hasDeliverableAssistantReply(event = {}) {
     entry?.message && typeof entry.message === 'object' ? entry.message : entry
   )).find(message => message?.role === 'assistant');
   const stopReason = String(lastAssistant?.stopReason || event.stopReason || '');
-  if (/^(?:toolUse|tool_use)$/i.test(stopReason)) return false;
+  // Some OpenClaw/provider paths report the outer run as success even though
+  // the only assistant record is its synthetic failure bubble.  That bubble
+  // is UI error state, not a user deliverable, and must never unlock a tier.
+  if (/^(?:toolUse|tool_use|error|aborted|cancelled)$/i.test(stopReason)) return false;
   const text = String(event.lastAssistantMessage || assistantTextFromMessages(messages) || '').trim();
-  return Boolean(text && !text.startsWith(TIER_CONTROL_PREFIX));
+  if (!text || text.startsWith(TIER_CONTROL_PREFIX)) return false;
+  if (/^(?:The agent run failed before producing a reply\.?|Agent failed before reply\b)/i.test(text)) return false;
+  return true;
 }
 
 function completedEvidence(state) {
@@ -2842,7 +2928,7 @@ export class ModeArchitecture {
     if (existing?.active) throw new Error('上一轮档位任务仍在执行，请等最终交付后再发送下一条');
     const run = {
       tier, mode, parentSessionKey: sessionKey, count: 0, limit: TIER_LIMITS[tier], active: true,
-      pendingChildren: new Set(), completedChildren: new Set(), childRoles: new Map(), childResults: new Map(), reservations: new Map(),
+      pendingChildren: new Set(), completedChildren: new Set(), emptyChildren: new Set(), childRoles: new Map(), childResults: new Map(), reservations: new Map(),
       childModels: new Map(), modelCounts: new Map(),
       completedRoles: new Map(), failedChildren: 0,
       progressMarks: 0, stagnantCycles: 0, lastCheckpointAt: 0,
@@ -2919,7 +3005,10 @@ export class ModeArchitecture {
     const mode = modeForContext(ctx);
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
-    const blocks = ['\n' + COMPLETION_TRUTH_RULES + '\n'];
+    const blocks = [
+      '\n' + COMPLETION_TRUTH_RULES + '\n',
+      '\n' + LEARN_WHILE_DOING_RULES + '\n',
+    ];
     const sessionKey = ctx.sessionKey || '';
     const currentState = this.getRun(this.resolveParent(sessionKey));
     if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
@@ -2987,6 +3076,19 @@ export class ModeArchitecture {
     const params = {...(event.params || {})};
     const parent = this.resolveParent(ctx.sessionKey || '');
     const state = this.getRun(parent);
+    const childDepth = String(ctx.sessionKey || '').split(':subagent:').length - 1;
+    // Base mode is a single standard pipeline: only the selected parent may
+    // create its planner/solver/critic/judge batch.  Higher tiers may use the
+    // explicitly requested recursive upgrades, but depth two is the hard
+    // ceiling so a model cannot accidentally create an unbounded tree.
+    if (state?.active && ctx.sessionKey !== parent && (state.tier === 'base' || childDepth >= 2)) {
+      return {
+        block: true,
+        blockReason: state.tier === 'base'
+          ? '基础档子代理只执行父代理分配的标准角色，不得继续派生子代理。'
+          : '子代理递归深度已达到 2 层上限；请把结果返回父代理，不要继续派生。',
+      };
+    }
     if (state && state.count >= state.limit) {
       return {block: true, blockReason: `极致思考已达到本档总派生上限 ${state.limit}，请立即仲裁并交付现有最优结果。`};
     }
@@ -3113,13 +3215,21 @@ export class ModeArchitecture {
       const resultText = String(event.resultText || '').trim();
       const successful = !event.outcome || event.outcome === 'ok';
       const substantive = meaningfulChildResult(resultText);
-      // Some hosts emit subagent_ended before the final text reaches agent_end.
-      // Keep it pending until a real result arrives; an empty success must not
-      // satisfy a tier role.
-      if (successful && !substantive) {
+      const lateEmpty = state.emptyChildren?.has(event.targetSessionKey);
+      // Some hosts emit a terminal child event without carrying its final
+      // text.  Do not leave the tier blocked forever: close that child as a
+      // failed attempt so the parent can replace it.  If the text arrives in
+      // a later lifecycle event, the empty marker lets us reconcile it back
+      // into a real success without counting the blank event as evidence.
+      if (successful && !substantive && !lateEmpty) {
+        state.pendingChildren.delete(event.targetSessionKey);
+        state.completedChildren.add(event.targetSessionKey);
+        state.emptyChildren ||= new Set();
+        state.emptyChildren.add(event.targetSessionKey);
+        state.failedChildren += 1;
         state.lastEventAt = Date.now();
         this.setRun(parent, state);
-        return;
+        // Continue through the parent cleanup below so its controller wakes.
       }
       const resultDigest = substantive ? hashForAudit(resultText.replace(/\s+/g, ' ').trim()) : '';
       const duplicated = successful && substantive && [...state.childResults.values()].some(existing => (
@@ -3129,16 +3239,23 @@ export class ModeArchitecture {
       if (acceptedSuccess && !state.childResults.has(event.targetSessionKey)) {
         state.childResults.set(event.targetSessionKey, {role, text: resultText.slice(0, 6_000)});
       }
-      if (state.completedChildren.has(event.targetSessionKey)) {
+      if (state.completedChildren.has(event.targetSessionKey) && !lateEmpty && !(successful && !substantive)) {
         state.lastEventAt = Date.now();
         this.setRun(parent, state);
         return;
       }
-      state.pendingChildren.delete(event.targetSessionKey);
-      state.completedChildren.add(event.targetSessionKey);
-      if (acceptedSuccess) {
-        if (role) state.completedRoles.set(role, (state.completedRoles.get(role) || 0) + 1);
-      } else state.failedChildren += 1;
+      if (successful && !substantive) {
+        // Already accounted for above; an immediately repeated empty event is
+        // idempotent and must not increase the failure count again.
+      } else {
+        state.pendingChildren.delete(event.targetSessionKey);
+        state.completedChildren.add(event.targetSessionKey);
+        if (acceptedSuccess) {
+          if (lateEmpty) state.failedChildren = Math.max(0, state.failedChildren - 1);
+          state.emptyChildren?.delete(event.targetSessionKey);
+          if (role) state.completedRoles.set(role, (state.completedRoles.get(role) || 0) + 1);
+        } else if (!lateEmpty) state.failedChildren += 1;
+      }
       state.lastEventAt = Date.now();
       this.setRun(parent, state);
     }
@@ -3349,7 +3466,9 @@ export default {
         // 2026.7 hosts return the enqueue record, while a few compatible
         // builds complete successfully with no payload. Only an explicit
         // `enqueued: false` means rejection.
-        respond(true, {armed: result?.enqueued !== false, tier, mode: armed.mode});
+        const accepted = result?.enqueued !== false;
+        if (!accepted) architecture.disarm(sessionKey);
+        respond(true, {armed: accepted, tier, mode: armed.mode});
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
       }
@@ -3404,9 +3523,10 @@ export default {
       }
       return decision;
     }, {priority: -12000});
-    api.on('after_tool_call', (event, ctx) => {
+    api.on('after_tool_call', async (event, ctx) => {
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
+      await integrity.verifyAfterTool(event, ctx);
     });
     api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
     api.on('subagent_ended', async event => {

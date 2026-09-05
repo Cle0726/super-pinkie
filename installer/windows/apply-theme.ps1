@@ -161,7 +161,7 @@ function Apply-UISkin {
     $versions = @{
         'laolao-theme.css' = 'theme31'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
         'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats11';
-        'laolao-phrases.js' = 'phrases8';
+        'laolao-phrases.js' = 'phrases10';
         'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume6'
         'laolao-deep-think.js' = 'deepthink14'; 'laolao-context-compact.js' = 'contextcompact1'
@@ -174,7 +174,13 @@ function Apply-UISkin {
     # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
     # /settings/laolao-*，从而避免黑屏、裂图和透明度闪一下。
     $html = $html.Replace('"./laolao-', '"/laolao-')
+    $html = $html.Replace('OpenClaw', 'CLE Kk')
     $html | Set-Content $IndexFile -Encoding UTF8
+    $serviceWorker = Join-Path $UiRoot 'sw.js'
+    if (Test-Path $serviceWorker) {
+        $worker = Get-Content $serviceWorker -Raw -Encoding UTF8
+        $worker.Replace('OpenClaw', 'CLE Kk') | Set-Content $serviceWorker -Encoding UTF8
+    }
     Write-Host "  patched: $IndexFile"
 }
 
@@ -208,7 +214,7 @@ foreach ($packageRoot in $packageRoots) {
 }
 
 if (-not $didAny) {
-    Write-Warning "找不到 OpenClaw UI 目录，皮肤注入跳过。请确认 OpenClaw 已全局安装。"
+    Write-Warning "找不到 CLE Kk UI 目录，皮肤注入跳过。请先运行一键安装 / 修复。"
 }
 
 # ── 2. 写入头像到各工作区 ────────────────────────────────────────────────
@@ -227,4 +233,4 @@ foreach ($ws in $workspaces) {
 }
 
 Write-Host ""
-Write-Host "皮肤注入完成。如果 OpenClaw 正在运行，请重启 Gateway 使更改生效。"
+Write-Host "皮肤注入完成。如果 CLE Kk 正在运行，请重启网关使更改生效。"

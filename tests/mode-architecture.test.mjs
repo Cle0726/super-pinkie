@@ -34,8 +34,21 @@ test('each prompt loads only its runtime workspace persona and memory',t=>{
   assert.match(result.appendSystemContext,/identity-A/);
   assert.match(result.appendSystemContext,/active-A/);
   assert.match(result.appendSystemContext,/全局交付真实性门禁/);
+  assert.match(result.appendSystemContext,/独立模块：边做边学/);
+  assert.ok(result.appendSystemContext.indexOf('独立模块：边做边学')<result.appendSystemContext.indexOf('persona-A'));
   assert.doesNotMatch(result.appendSystemContext,/persona-B|index-B/);
   assert.ok(fs.existsSync(b));
+});
+
+test('learn while doing is one separate system module in every mode',t=>{
+  for(const [agentId,mode] of [['main','chat'],['project','project'],['thinking','ideas'],['unrestricted','none']]){
+    const root=workspace(t,mode);
+    const result=new ModeArchitecture().prompt({prompt:'开始工作'},{agentId,sessionKey:`agent:${agentId}:learning`,workspaceDir:root});
+    assert.equal((result.appendSystemContext.match(/独立模块：边做边学/g)||[]).length,1);
+    assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
+    assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
+    if(mode==='none')assert.doesNotMatch(result.appendSystemContext,/persona-none|voice-none/);
+  }
 });
 
 test('global integrity gate rejects completion claims without real execution',()=>{
@@ -279,6 +292,17 @@ test('CLE Kk durable rejection is recovered after a gateway restart',async t=>{
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(recovered.length,1);assert.equal(recovered[0].sessionKey,key);
   assert.equal(second.hasPending(key),true);
+});
+
+test('gateway recovery never replays rejected child sessions as invisible parent turns',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-child-recovery-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const audit=new CleKkAuditLog(root), child='agent:project:subagent:child-rejected';
+  audit.writeState(child,{active:true,prompt:'执行子任务',startedAt:Date.now()-1000,promptHash:'x',runId:'child-run',pending:{decision:{action:'revise',reason:'bad'},runId:'child-run',textHash:'',at:Date.now()}});
+  const queued=[];
+  const supervisor=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  supervisor.setRetryScheduler(async value=>{queued.push(value);return true;});
+  await supervisor.recoverPending();
+  assert.equal(queued.length,0);
 });
 
 test('CLE Kk replays tool provenance after a gateway restart without rewriting a huge state file',t=>{
@@ -630,7 +654,8 @@ test('child completion reconciliation is idempotent when both lifecycle events a
   const child=`${ctx.sessionKey}:subagent:planner`;
   runtime.spawned({childSessionKey:child,label:'规划·1'}, {requesterSessionKey:ctx.sessionKey});
   runtime.ended({targetSessionKey:child,outcome:'ok'});
-  assert.equal(runtime.status(ctx.sessionKey).pending,1);
+  assert.equal(runtime.status(ctx.sessionKey).pending,0);
+  assert.equal(runtime.status(ctx.sessionKey).failedChildren,1);
   runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'已拆出完整验收清单，逐项对应原始要求，并为文件变化、命令结果和最终交付分别标明了可重复的机械验证方法。'});
   const status=runtime.status(ctx.sessionKey);
   assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
@@ -678,6 +703,10 @@ test('a completed role audit cannot end on sessions_yield or an empty parent tur
   runtime.finishTurn(ctx,{success:true,messages:[{role:'assistant',stopReason:'toolUse',content:[{type:'text',text:'等待子任务完成。'}]}]});
   assert.equal(runtime.status(ctx.sessionKey).active,true);
   runtime.finishTurn(ctx,{success:true,lastAssistantMessage:''});
+  assert.equal(runtime.status(ctx.sessionKey).active,true);
+  runtime.finishTurn(ctx,{success:true,messages:[{role:'assistant',stopReason:'error',content:[{type:'text',text:'The agent run failed before producing a reply.'}]}]});
+  assert.equal(runtime.status(ctx.sessionKey).active,true);
+  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'Agent failed before reply: temporary upstream error'});
   assert.equal(runtime.status(ctx.sessionKey).active,true);
   runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'已完成实际交付。'});
   assert.equal(runtime.status(ctx.sessionKey).active,false);
@@ -727,6 +756,51 @@ test('native derivation inherits agent/workspace and only passes the current res
   assert.equal(result.params.expectsCompletionMessage,false);
   assert.equal(result.params.label,'求解·1');assert.equal(result.params.taskName,'solver_1');
   for(const key of ['agentId','cwd','model','thinking'])assert.equal(key in result.params,false);
+});
+
+test('base child agents cannot create an unbounded nested tree',()=>{
+  const runtime=new ModeArchitecture();
+  const parent='agent:unrestricted:base-parent',child=`${parent}:subagent:solver-1`;
+  runtime.arm(parent,'base');
+  runtime.spawned({childSessionKey:child,label:'求解·1'},{requesterSessionKey:parent});
+  const blocked=runtime.beforeTool({toolName:'sessions_spawn',params:{label:'批评·递归',task:'继续派生'}},{sessionKey:child,agentId:'unrestricted'});
+  assert.equal(blocked.block,true);
+  assert.match(blocked.blockReason,/基础档子代理/);
+});
+
+test('a locked verifier executed through exec counts as its machine attestation',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-exec-verifier-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','delivery','SKILL.md');
+  const verifier=path.join(root,'skills','delivery','tools','verify_completion.py');
+  const target=path.join(root,'result.txt');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});
+  fs.writeFileSync(skill,'# delivery');
+  fs.writeFileSync(verifier,'import json; print(json.dumps({"status":"PASS","verified":True,"issues":[]}))');
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:exec-verifier'};
+  guard.begin({prompt:'调用 skill 完成任务'},ctx);
+  guard.beforeTool({toolName:'read',params:{path:skill}},ctx);guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.beforeTool({toolName:'write',params:{path:target}},ctx);fs.writeFileSync(target,'done');guard.afterTool({toolName:'write',params:{path:target},result:'ok'},ctx);
+  guard.beforeTool({toolName:'exec',params:{command:`python3 ${verifier}`}},ctx);
+  guard.afterTool({toolName:'exec',params:{command:`python3 ${verifier}`},result:{content:[{type:'text',text:'{"status":"PASS","verified":true,"issues":[]}'}]}},ctx);
+  assert.equal((await guard.verifyAfterTool({},ctx)).ok,true);
+  assert.equal(guard.finalize({lastAssistantMessage:'任务已经完成并交付。'},ctx,{verifyExternal:false}),undefined);
+});
+
+test('printed PASS cannot replace the independently executed verifier',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-false-pass-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const skill=path.join(root,'skills','delivery','SKILL.md');
+  const verifier=path.join(path.dirname(skill),'tools','verify_completion.py');
+  fs.mkdirSync(path.dirname(verifier),{recursive:true});
+  fs.writeFileSync(skill,'# delivery');
+  fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"FAIL","verified":False,"issues":["missing artifact"]}))\n');
+  const guard=new CompletionIntegrityGuard(),ctx={sessionKey:'agent:project:false-pass'};
+  guard.begin({prompt:'调用 skill 完成任务'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  guard.afterTool({toolName:'exec',params:{command:`python3 -c 'print("PASS")' # ${verifier}`},result:'{"status":"PASS","verified":true}'},ctx);
+  assert.equal((await guard.verifyAfterTool({},ctx)).ok,false);
+  assert.equal(guard.finalize({lastAssistantMessage:'任务已经完成。'},ctx,{verifyExternal:false}).action,'revise');
 });
 
 test('explicit role label wins over role words mentioned inside the task body',()=>{
@@ -788,7 +862,18 @@ test('the full tier plan is reloaded only for the parent, never recursively for 
   assert.doesNotMatch(childPrompt.appendSystemContext,/极致思考运行单/);
 });
 
-test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async()=>{
+test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
+  // Plugin registration performs durable recovery immediately. Keep this
+  // unit test away from the operator's real CLE Kk watchdog/run state so a
+  // live desktop session cannot add unrelated recovery injections here.
+  const priorStateRoot=process.env.PINKIE_STATE_ROOT;
+  const isolatedStateRoot=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-plugin-register-'));
+  process.env.PINKIE_STATE_ROOT=isolatedStateRoot;
+  t.after(()=>{
+    if(priorStateRoot===undefined)delete process.env.PINKIE_STATE_ROOT;
+    else process.env.PINKIE_STATE_ROOT=priorStateRoot;
+    fs.rmSync(isolatedStateRoot,{recursive:true,force:true});
+  });
   const hooks=new Map(),methods=new Map(),queued=[],tools=[];
   plugin.register({
     on:(name,fn)=>hooks.set(name,fn),
@@ -810,6 +895,20 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async()=>{
   assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/反批评/);
   await methods.get('pinkie.deepThink.disarm').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
+});
+
+test('a rejected next-turn injection cannot leave a ghost tier lock',async()=>{
+  const methods=new Map();
+  plugin.register({
+    on:()=>{},registerGatewayMethod:(name,fn)=>methods.set(name,fn),registerTool:()=>{},
+    session:{workflow:{enqueueNextTurnInjection:async()=>({enqueued:false})}},
+  });
+  let response;
+  const key='agent:main:missing-session';
+  await methods.get('pinkie.deepThink.arm')({params:{sessionKey:key,tier:'base'},respond:(...args)=>{response=args;}});
+  assert.equal(response[0],true);assert.equal(response[1].armed,false);
+  await methods.get('pinkie.deepThink.status')({params:{sessionKey:key},respond:(...args)=>{response=args;}});
+  assert.equal(response[1].active,false);
 });
 
 test('marathon tier keeps revising until it completes or genuinely needs user input',()=>{

@@ -170,7 +170,7 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-phrases.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases9"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases10"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
@@ -181,8 +181,8 @@ apply_ui_skin() {
     perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions4"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-phrases.js?v=phrases9' "$index_file"; then
-    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases9}g' "$index_file"
+  if ! grep -Fq './laolao-phrases.js?v=phrases10' "$index_file"; then
+    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases10}g' "$index_file"
   fi
   if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
     perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
@@ -388,6 +388,19 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
+  # Static fallback/connection copy can render before the app component. Keep
+  # every visible brand surface on CLE Kk; custom-element tag names stay lower
+  # case and are therefore untouched.
+  if grep -Fq 'OpenClaw' "$index_file"; then
+    perl -0pi -e 's{OpenClaw}{CLE Kk}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  local service_worker="$ui_root/sw.js"
+  if [[ -f "$service_worker" ]] && grep -Fq 'OpenClaw' "$service_worker"; then
+    perl -0pi -e 's{OpenClaw}{CLE Kk}g' "$service_worker"
+    DID_CHANGE=1
+  fi
+
   if grep -Fq '"./laolao-' "$index_file"; then
     perl -0pi -e 's{"\./laolao-}{"/laolao-}g' "$index_file"
     DID_CHANGE=1
@@ -550,7 +563,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-image-access.mjs"
   fi
 else
-  echo "error: OpenClaw installation not found; set OPENCLAW_ROOT and retry" >&2
+  echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
   exit 1
 fi
 

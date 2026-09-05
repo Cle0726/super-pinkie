@@ -597,6 +597,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let liveSpeech = NativeLiveSpeechController()
     private let liveSpeechHandlerName = "laolaoLiveVoice"
     private let projectFolderHandlerName = "laolaoProjectFolder"
+    private let updateHandlerName = "laolaoUpdate"
+    private var updateLaunchInProgress = false
     private let party = PartyService()
     private let roundtable = RoundtableService()
     private let tts = TTSService()
@@ -670,29 +672,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc func checkForUpdates(_ sender: Any?) {
+        guard !updateLaunchInProgress else { return }
+        let confirmation = NSAlert()
+        confirmation.messageText = "主动拉取 CLE Kk 更新？"
+        confirmation.informativeText = "确认后旧 App 会退出。独立更新程序会继续拉取、安装并重新打开；期间网关重启或页面断开都不会中止更新。人格、会话、项目、图片和视频不会参与替换。"
+        confirmation.alertStyle = .informational
+        confirmation.addButton(withTitle: "拉取并更新")
+        confirmation.addButton(withTitle: "取消")
+        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+
+        guard let root = BundledRuntime.resourceRoot else { return }
+        let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
+        let stateRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
+        let updateRoot = stateRoot.appendingPathComponent("updates", isDirectory: true)
+        let helper = updateRoot.appendingPathComponent("manual-update.sh")
         let task = Process()
-        let output = Pipe()
-        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        task.arguments = ["-lc", #"config="$HOME/.config/super-pinkie/install.env"; if [ ! -f "$config" ]; then repo="$HOME/Library/Application Support/SuperPinkie/repository"; mkdir -p "$(dirname "$repo")"; if [ -d "$repo/.git" ]; then git -C "$repo" pull --ff-only origin main || exit $?; else git clone --branch main https://github.com/Cle0726/super-pinkie.git "$repo" || exit $?; fi; exec "$repo/install-full.sh"; fi; source "$config"; exec "$PINKIE_REPO/update-full.sh""#]
-        task.standardOutput = output
-        task.standardError = output
-        task.terminationHandler = { process in
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                ?? "更新程序没有返回消息。"
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = process.terminationStatus == 0 ? "碧琪更新完成啦" : "更新没有完成"
-                alert.informativeText = process.terminationStatus == 0
-                    ? "\(message)\n\n退出并重新打开 App 后使用新版本。"
-                    : message
-                alert.alertStyle = process.terminationStatus == 0 ? .informational : .warning
-                alert.addButton(withTitle: "知道了")
-                alert.runModal()
+        do {
+            try FileManager.default.createDirectory(at: updateRoot, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: helper.path) {
+                try FileManager.default.removeItem(at: helper)
             }
+            try FileManager.default.copyItem(at: bundledScript, to: helper)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+            return
         }
+
+        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        task.arguments = [helper.path, String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
+        task.environment = BundledRuntime.environment()
+        task.standardInput = FileHandle.nullDevice
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            updateLaunchInProgress = true
+            notifyWebView("pinkie:update-detached")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSApp.terminate(nil)
+            }
         } catch {
             let alert = NSAlert(error: error)
             alert.runModal()
@@ -721,6 +742,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: dictationHandlerName)
         configuration.userContentController.add(self, name: liveSpeechHandlerName)
         configuration.userContentController.add(self, name: projectFolderHandlerName)
+        configuration.userContentController.add(self, name: updateHandlerName)
         configuration.userContentController.add(self, name: "laolaoParty")
         configuration.userContentController.add(self, name: "laolaoRoundtable")
         configuration.userContentController.addUserScript(WKUserScript(
@@ -910,6 +932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard trustedFrame(message.frameInfo) else { return }
         if message.name == "laolaoParty" { openParty(nil); return }
         if message.name == "laolaoRoundtable" { openRoundtable(nil); return }
+        if message.name == updateHandlerName { checkForUpdates(nil); return }
         if message.name == projectFolderHandlerName,
            let body = message.body as? [String: Any],
            let action = body["action"] as? String {
@@ -1071,6 +1094,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             updateButton();
           };
 
+          const ensureUpdateButton = () => {
+            const actions = document.querySelector(".sidebar-footer-actions");
+            if (!actions || document.getElementById("pinkie-manual-update")) return;
+            const button = document.createElement("button");
+            button.id = "pinkie-manual-update";
+            button.type = "button";
+            button.className = "sidebar-brand__icon sidebar-footer-icon";
+            button.setAttribute("aria-label", "主动拉取更新");
+            button.title = "主动拉取更新";
+            button.textContent = "↻";
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.webkit?.messageHandlers?.laolaoUpdate?.postMessage({ action: "pull" });
+            });
+            actions.prepend(button);
+          };
+
           window.__laolaoNativeDictationUpdate = (payload) => {
             if (!payload || typeof payload !== "object") return;
             if (typeof payload.transcript === "string") setDraft(payload.transcript);
@@ -1081,7 +1122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
           };
 
           ensureButton();
-          new MutationObserver(ensureButton).observe(document.documentElement, { childList: true, subtree: true });
+          ensureUpdateButton();
+          new MutationObserver(() => { ensureButton(); ensureUpdateButton(); })
+            .observe(document.documentElement, { childList: true, subtree: true });
         })();
         """#
     }

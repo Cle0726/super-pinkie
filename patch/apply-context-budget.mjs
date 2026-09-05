@@ -11,29 +11,56 @@ function replaceOnce(text,from,to){
   if(text.split(from).length!==2)throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：'+from.slice(0,90));
   return text.replace(from,to);
 }
+function hasOnce(text,value){return text.split(value).length===2;}
 export function transform(kind,original){
   if(original.includes(marker))return original;
   let text=original;
   if(kind==='settings'){
-    text=replaceOnce(text,'const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);',
-      'const pinkieBudget = pinkieContextBudget(params.contextTokenBudget);\n\tconst configuredReserveTokens = pinkieBudget.reserve;');
-    text=replaceOnce(text,'let reserveTokensFloor = resolveCompactionReserveTokensFloor(params.cfg);','let reserveTokensFloor = pinkieBudget.reserve;');
+    const legacyReserve='const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);';
+    const currentBudget='const contextTokenBudget = toPositiveInt(params.contextTokenBudget);';
+    if(hasOnce(text,legacyReserve)){
+      text=replaceOnce(text,legacyReserve,
+        'const pinkieBudget = pinkieContextBudget(params.contextTokenBudget);\n\tconst configuredReserveTokens = pinkieBudget.reserve;');
+      text=replaceOnce(text,'let reserveTokensFloor = resolveCompactionReserveTokensFloor(params.cfg);','let reserveTokensFloor = pinkieBudget.reserve;');
+    }else if(hasOnce(text,currentBudget)){
+      text=replaceOnce(text,currentBudget,currentBudget+'\n\tconst pinkieBudget = pinkieContextBudget(params.contextTokenBudget);');
+      text=replaceOnce(text,`const requestedReserveTokens = Math.max(currentReserveTokens, DEFAULT_AGENT_COMPACTION_RESERVE_TOKENS_FLOOR);
+\tconst targetReserveTokens = contextTokenBudget === void 0 ? requestedReserveTokens : resolveEffectiveCompactionReserveTokens({
+\t\tcontextTokenBudget,
+\t\treserveTokens: requestedReserveTokens
+\t});`,'const targetReserveTokens = pinkieBudget.reserve;');
+    }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：agent settings reserve budget');
     text=replaceOnce(text,'const targetKeepRecentTokens = configuredKeepRecentTokens ?? currentKeepRecentTokens;',
       'const targetKeepRecentTokens = Math.min(configuredKeepRecentTokens ?? currentKeepRecentTokens, pinkieBudget.keepRecent);');
   }else if(kind==='preflight'){
-    text=replaceOnce(text,'const threshold = Math.max(0, contextWindow - reserveTokens - softThreshold, Math.floor(params.minimumThresholdTokens ?? 0));',
-      'const threshold = pinkieContextBudget(contextWindow).threshold;');
-    text=replaceOnce(text,'const threshold = Math.max(contextWindowTokens - reserveTokensFloor - softThresholdTokens, serverCompactionThreshold ?? 0);',
-      'const threshold = pinkieContextBudget(contextWindowTokens).threshold;');
+    const legacyA='const threshold = Math.max(0, contextWindow - reserveTokens - softThreshold, Math.floor(params.minimumThresholdTokens ?? 0));';
+    const legacyB='const threshold = Math.max(contextWindowTokens - reserveTokensFloor - softThresholdTokens, serverCompactionThreshold ?? 0);';
+    const current=`const threshold = resolveCompactionThreshold({
+\t\tcontextWindowTokens,
+\t\treserveTokensFloor,
+\t\tminimumThresholdTokens: responsesServerCompactionThreshold
+\t});`;
+    if(hasOnce(text,legacyA)){
+      text=replaceOnce(text,legacyA,'const threshold = pinkieContextBudget(contextWindow).threshold;');
+      text=replaceOnce(text,legacyB,'const threshold = pinkieContextBudget(contextWindowTokens).threshold;');
+    }else if(hasOnce(text,current)){
+      text=replaceOnce(text,current,'const threshold = pinkieContextBudget(contextWindowTokens).threshold;');
+    }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：preflight threshold');
   }else throw new Error('Unknown patch target');
   return header+text;
 }
 export function apply(root,{backupRoot}={}){
   const dist=path.join(root,'dist');
   const candidates=fs.readdirSync(dist).filter(n=>n.endsWith('.js'));
-  const targets=[['settings','agent-settings-'],['preflight','agent-runner.runtime-']].map(([kind,prefix])=>{
-    const names=candidates.filter(n=>n.startsWith(prefix));
-    if(names.length!==1)throw new Error('无法唯一确认压缩模块：'+prefix);
+  const targets=[
+    ['settings',['agent-settings-'],['configuredReserveTokens','targetReserveTokens']],
+    ['preflight',['agent-runner.runtime-','agent-runner-memory-'],['minimumThresholdTokens','responsesServerCompactionThreshold']],
+  ].map(([kind,prefixes,needles])=>{
+    const names=candidates.filter(name=>prefixes.some(prefix=>name.startsWith(prefix))).filter(name=>{
+      const source=fs.readFileSync(path.join(dist,name),'utf8');
+      return source.includes(marker)||needles.some(needle=>source.includes(needle));
+    });
+    if(names.length!==1)throw new Error('OpenClaw 压缩代码结构已变化，无法唯一确认压缩模块：'+prefixes.join(' / '));
     const file=path.join(dist,names[0]),original=fs.readFileSync(file,'utf8');
     return {file,original,next:transform(kind,original)};
   });

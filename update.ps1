@@ -35,5 +35,5 @@ Write-Host ""
 Write-Host "==> 重新应用提示词、补丁、人格与皮肤"
 & .\install.ps1
 Write-Host ""
-Write-Host "更新完成。如果 OpenClaw Gateway 正在运行，请重启："
+Write-Host "更新完成。如果 CLE Kk 网关正在运行，请重启："
 Write-Host "    openclaw gateway restart"

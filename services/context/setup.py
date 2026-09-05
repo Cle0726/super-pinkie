@@ -63,17 +63,16 @@ def install(home=None):
     compaction = config.setdefault('agents', {}).setdefault('defaults', {}).setdefault('compaction', {})
     compaction.pop('reserveTokens', None)
     compaction.pop('reserveTokensFloor', None)
-    # Keep user-set windows and keepRecentTokens exactly as-is. These additions
-    # improve what survives a compaction instead of making compaction happen
-    # earlier or discarding a larger recent tail.
+    # Keep user-set windows and keepRecentTokens exactly as-is. These supported
+    # additions improve what survives compaction without moving its threshold.
+    # Current CLE Kk runtimes reject the retired free-form instruction fields;
+    # remove only those known retired keys so a re-install cannot brick config.
     compaction.setdefault('mode', 'safeguard')
     compaction.setdefault('recentTurnsPreserve', 8)
-    compaction.setdefault('maxHistoryShare', 0.9)
-    compaction.setdefault('identifierPolicy', 'custom')
-    compaction.setdefault(
-        'identifierInstructions',
-        'Preserve exact file paths, project roots, session IDs, agent IDs, commands, URLs, model names, error text, user constraints, decisions, tool outcomes, verification results, and unfinished work.'
-    )
+    compaction.pop('maxHistoryShare', None)
+    compaction.pop('identifierInstructions', None)
+    if compaction.get('identifierPolicy') not in ('strict', 'off'):
+        compaction['identifierPolicy'] = 'strict'
     quality = compaction.setdefault('qualityGuard', {})
     quality.setdefault('enabled', True)
     quality.setdefault('maxRetries', 2)
@@ -81,14 +80,8 @@ def install(home=None):
     compaction.setdefault('postIndexSync', 'await')
     memory_flush = compaction.setdefault('memoryFlush', {})
     memory_flush.setdefault('enabled', True)
-    memory_flush.setdefault(
-        'systemPrompt',
-        'The session is nearing compaction. Save a loss-resistant work checkpoint without changing persona, workspace, agent identity, or user-authored context. Finish with the exact token NO_REPLY.'
-    )
-    memory_flush.setdefault(
-        'prompt',
-        'Update memory/context/active.md with a structured handoff: current user goal; exact constraints and preferences; selected mode/model/project root; decisions and reasons; files changed; commands and tool results; verified results; errors; unfinished work and the next concrete action. Keep exact identifiers and paths. Do not delete unrelated existing notes. Reply with exactly NO_REPLY after writing, or NO_REPLY if nothing durable changed.'
-    )
+    memory_flush.pop('systemPrompt', None)
+    memory_flush.pop('prompt', None)
     changed = config != json.loads(raw)
     policy_changed = False
     state.mkdir(parents=True,exist_ok=True,mode=0o700)

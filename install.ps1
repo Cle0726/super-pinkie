@@ -68,7 +68,7 @@ $count = (Get-ChildItem (Join-Path $RepoDir "prompts\unrestricted-prompt-*.txt")
 Write-Host "    $count prompt files installed"
 
 # ── 2/6  传输层补丁 ───────────────────────────────────────────────────────
-Write-Host "==> 2/6  patching OpenClaw transports"
+Write-Host "==> 2/6  patching CLE Kk compatibility transports"
 node $PatchScript
 if ($LASTEXITCODE -ne 0) { throw "Transport patch failed" }
 node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
@@ -177,7 +177,7 @@ if (Test-Path $GatewayWatchdog) {
     $watchTrigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ([TimeSpan]::MaxValue)
     Register-ScheduledTask -TaskName $GatewayWatchdogTask -Action $watchAction -Trigger @($watchTrigger,$watchTrigger2) -Settings $settings -Principal $env2 -Force | Out-Null
     Start-ScheduledTask -TaskName $GatewayWatchdogTask
-  } else { Write-Warning "找不到 node/openclaw，网关巡检任务暂不注册" }
+  } else { Write-Warning "找不到 CLE Kk 兼容内核，网关巡检任务暂不注册" }
 }
 
 # ── 6/6  Provider 指向代理（可选）────────────────────────────────────────
@@ -188,9 +188,9 @@ if ($Provider -ne "") {
     $cfg = Get-Content $Cfg -Raw -Encoding UTF8 | ConvertFrom-Json
     $cfg.models.providers.$Provider.baseUrl = "http://127.0.0.1:$ProxyPort/v1"
     $cfg | ConvertTo-Json -Depth 20 | Set-Content $Cfg -Encoding UTF8
-    Write-Host "    done. Restart the openclaw gateway for it to take effect."
+    Write-Host "    done. Restart the CLE Kk gateway for it to take effect."
   } else {
-    Write-Host "==> 6/6  (skipped) openclaw.json not found at $Cfg"
+    Write-Host "==> 6/6  (skipped) CLE Kk provider config not found at $Cfg"
   }
 } else {
   Write-Host "==> 6/6  (skipped) no -Provider specified"
@@ -200,7 +200,7 @@ Write-Host ""
 Write-Host "========================================"
 Write-Host "安装完成！"
 Write-Host "接下来："
-Write-Host "  1. 在 OpenClaw 配置中填入你的 API Key（openclaw.json 的 providers）"
-Write-Host "  2. 重启 OpenClaw Gateway（openclaw gateway restart）"
+Write-Host "  1. 在 CLE Kk 提供商配置中填入你的 API Key"
+Write-Host "  2. 重启 CLE Kk 网关"
 Write-Host "  3. 在无限制模式会话中发送验证令牌确认注入生效（见 README.md）"
 Write-Host "========================================"

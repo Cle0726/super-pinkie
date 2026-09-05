@@ -61,6 +61,9 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(launcher, /--update-health-token/);
   assert.match(launcher, /check_for_updates/);
   assert.match(launcher, /prepare_update/);
+  assert.match(launcher, /aria-label="主动拉取更新"/);
+  assert.match(launcher, /subprocess\.Popen\([\s\S]*?close_fds=True/);
+  assert.match(launcher, /threading\.Timer\(\.6, self\._window\.destroy\)/);
   assert.match(release, /Get-FileHash/);
   assert.match(release, /windows-\*\.exe\.sha256/);
   assert.match(release, /portable\.zip/);

@@ -25,6 +25,26 @@ return threshold;}
 function pre(contextWindowTokens,reserveTokensFloor,softThresholdTokens,serverCompactionThreshold){
 const threshold = Math.max(contextWindowTokens - reserveTokensFloor - softThresholdTokens, serverCompactionThreshold ?? 0);
 return threshold;}`;
+const currentSettings=`function toPositiveInt(value){return value;}
+function settings(params){
+const currentReserveTokens=16384,currentKeepRecentTokens=20000;
+const compactionCfg=params.cfg?.agents?.defaults?.compaction;
+const configuredKeepRecentTokens=toPositiveInt(compactionCfg?.keepRecentTokens);
+const contextTokenBudget = toPositiveInt(params.contextTokenBudget);
+const requestedReserveTokens = Math.max(currentReserveTokens, DEFAULT_AGENT_COMPACTION_RESERVE_TOKENS_FLOOR);
+\tconst targetReserveTokens = contextTokenBudget === void 0 ? requestedReserveTokens : resolveEffectiveCompactionReserveTokens({
+\t\tcontextTokenBudget,
+\t\treserveTokens: requestedReserveTokens
+\t});
+const targetKeepRecentTokens = configuredKeepRecentTokens ?? currentKeepRecentTokens;
+return {reserve:targetReserveTokens,recent:targetKeepRecentTokens};}`;
+const currentPreflight=`function pre(contextWindowTokens,reserveTokensFloor,responsesServerCompactionThreshold){
+const threshold = resolveCompactionThreshold({
+\t\tcontextWindowTokens,
+\t\treserveTokensFloor,
+\t\tminimumThresholdTokens: responsesServerCompactionThreshold
+\t});
+return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
 test('ultra-long retention follows the installed large-window policy',()=>{
   for(const window of [4096,16000,32768,128000,258400,1000000]){
@@ -53,6 +73,16 @@ test('preflight uses the same configured threshold even with server-side compact
     const expected=compactionBudget(w).threshold;
     assert.equal(gate(w,60000,4000,{minimumThresholdTokens:w*.9}),expected);
     assert.equal(pre(w,20000,4000,w*.9),expected);
+  }
+});
+test('current OpenClaw settings and preflight structures keep the same 85 percent policy',()=>{
+  const runSettings=executable(transform('settings',currentSettings),'settings');
+  const runPreflight=executable(transform('preflight',currentPreflight),'pre');
+  for(const contextTokenBudget of [16000,128000,1000000]){
+    const expected=compactionBudget(contextTokenBudget);
+    const actual=runSettings({contextTokenBudget,cfg:{agents:{defaults:{compaction:{keepRecentTokens:900000}}}}});
+    assert.equal(actual.reserve,expected.reserve);assert.equal(actual.recent,expected.keepRecent);
+    assert.equal(runPreflight(contextTokenBudget,20000,contextTokenBudget*.9),expected.threshold);
   }
 });
 test('patch is idempotent and validates every target before writing; backups preserve original files',()=>{

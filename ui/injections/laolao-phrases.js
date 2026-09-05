@@ -18,6 +18,14 @@
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
   const exactPhrases = new Map([
+    ["网关仪表盘", "CLE Kk 本地工作台"],
+    ["WebSocket URL", "CLE Kk 连接地址"],
+    ["Gateway 令牌", "CLE Kk 访问令牌"],
+    ["需要认证", "需要连接验证"],
+    ["Gateway 可以访问，但此浏览器连接前需要匹配的令牌或密码。", "CLE Kk 已启动，这个窗口需要匹配的访问令牌或密码。"],
+    ["粘贴来自", "粘贴 CLE Kk 的访问令牌；需要时可复制"],
+    ["如果未配置令牌，请在 Gateway 主机上运行", "还没有访问令牌时，可在本机终端运行"],
+    ["更新凭据后再次点击 Connect。", "填好后再次点击“连接”。"],
     ["Loading…", "先生稍等，碧琪在找派对用品…"],
     ["Loading...", "先生稍等，碧琪在找派对用品…"],
     ["Loading config schema…", "碧琪正在整理配置小卡片…"],
@@ -75,6 +83,11 @@
     if (activity) return `${leading}碧琪请了 ${activity[1]} 位工具小帮手${trailing}`;
     const toolCount = core.match(/^(\d+)\s*(Enabled |Live )?Tools?$/i);
     if (toolCount) return `${leading}${toolCount[1]} 位工具小帮手${trailing}`;
+    // Brand chrome only. Chat messages/code are filtered by
+    // isProtectedContent before translate() is called.
+    if (/\bOpenClaw\b/.test(core)) {
+      return `${leading}${core.replace(/\bOpenClaw\b/g,"CLE Kk")}${trailing}`;
+    }
     return text;
   };
 
@@ -114,6 +127,25 @@
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) localizeText(node);
+  };
+
+  const syncBrandChrome = () => {
+    if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'CLE Kk');
+    document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(control=>{
+      const value=control.getAttribute('placeholder')||'';
+      const next=value
+        .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
+        .replace(/OpenClaw/g,'CLE Kk');
+      if(next!==value)control.setAttribute('placeholder',next);
+    });
+    document.querySelectorAll('[title], [aria-label], img[alt]').forEach(element=>{
+      for(const name of ['title','aria-label','alt']){
+        if(!element.hasAttribute(name))continue;
+        const value=element.getAttribute(name)||'';
+        const next=value.replace(/OpenClaw/g,'CLE Kk');
+        if(next!==value)element.setAttribute(name,next);
+      }
+    });
   };
 
   const syncFailureCards = () => {
@@ -256,6 +288,7 @@
 
   const start = () => {
     localizeTree(document.body);
+    syncBrandChrome();
     localizeToolActivity(document);
     syncFailureCards();
     hideInternalRecoveryTurns();
@@ -273,6 +306,7 @@
       setTimeout(() => {
         fullScanScheduled = false;
         localizeTree(document.body);
+        syncBrandChrome();
         localizeToolActivity(document);
         syncFailureCards();
         hideInternalRecoveryTurns();
