@@ -561,7 +561,12 @@ function stableContractFile(file, state) {
     const threshold = BigInt(state.contractCutoffNs || (BigInt(Math.floor(state.startedAt || 0)) * 1_000_000n));
     // birth/ctime catches a file created during this turn even when its mtime
     // was copied from an older file. mtime also catches in-place edits.
-    if ([stat.birthtimeNs, stat.ctimeNs, stat.mtimeNs].some(value => value > 0n && value >= threshold)) return null;
+    // Some Linux CI filesystems quantize ctime/birthtime to the same tick for
+    // a fixture created immediately before the boundary marker. Equality is
+    // therefore not evidence that the model created the contract this turn;
+    // only a timestamp strictly after the boundary is rejected. Hashes and
+    // full identity snapshots below still detect any later replacement.
+    if ([stat.birthtimeNs, stat.ctimeNs, stat.mtimeNs].some(value => value > 0n && value > threshold)) return null;
     return {
       path: requested,
       realpath,
