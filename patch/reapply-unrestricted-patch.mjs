@@ -194,6 +194,12 @@ const distFile = findFile(path.join(root, "dist"), "openai-transport-stream-", "
 if (!distFile) { console.error("dist transport chunk not found; cannot patch."); process.exit(1); }
 patchDistFile(distFile, remove);
 
-const aiFile = findAiTransportFile(path.join(root, "node_modules", "@openclaw", "ai", "dist"));
+// npm hoists @openclaw/ai next to openclaw in a self-contained prefix on
+// Windows, while global installs may keep it nested below openclaw.
+const aiDirs = [
+  path.join(root, "node_modules", "@openclaw", "ai", "dist"),
+  path.join(path.dirname(root), "@openclaw", "ai", "dist"),
+];
+const aiFile = aiDirs.map(findAiTransportFile).find(Boolean) || null;
 if (!aiFile) { console.error("@openclaw/ai completions chunk not found; cannot patch."); process.exit(1); }
 patchAiFile(aiFile, remove);

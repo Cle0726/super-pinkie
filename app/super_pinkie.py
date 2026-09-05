@@ -393,8 +393,17 @@ def apply_patch(remove, log):
     dist_file = find_file(os.path.join(root, "dist"), "openai-transport-stream-", ".js")
     if not dist_file:
         dist_file = find_file(os.path.join(root, "dist"), "transport-stream-", ".js")
-    ai_dir = os.path.join(root, "node_modules", "@openclaw", "ai", "dist")
-    ai_file = find_ai_transport_file(ai_dir)
+    # npm hoists @openclaw/ai next to openclaw in a self-contained prefix on
+    # Windows, while global installs may keep it nested below openclaw.
+    ai_dirs = [
+        os.path.join(root, "node_modules", "@openclaw", "ai", "dist"),
+        os.path.join(os.path.dirname(root), "@openclaw", "ai", "dist"),
+    ]
+    ai_file = None
+    for directory in ai_dirs:
+        ai_file = find_ai_transport_file(directory)
+        if ai_file:
+            break
     ok = True
     if dist_file:
         patch_dist_file(dist_file, remove, log)
