@@ -12,8 +12,8 @@ unrestricted-mode agent (agent=unrestricted / OPENCLAW_UR_INJECT), it:
 3. On refusal detection (regex), appends an AFL nudge message and retries
    once; if still refusing, downgrades to a verified substitute model with
    that model's own prompt (拒绝才降级).
-4. Retries transient upstream failures before the first byte arrives;
-   streams are passed through untouched once started.
+4. Buffers one model SSE response until its terminal marker, so an upstream
+   disconnect can be retried without leaking a partial tool call downstream.
 
 Prompt files are read per request (edit without restart).
 Config via UR_PROXY_* environment variables (argv[1]/argv[2] override listen/upstream
@@ -37,7 +37,7 @@ def resolve_prompt_for_model(model_id, provider=""):
     mid = (model_id or "").lower()
     if "claude" in mid or "anthropic" in (provider or ""):
         fname = "unrestricted-prompt-claude.txt"
-    elif "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
+    elif "gemini-3.8-flash-tiered" in mid or "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
         fname = "unrestricted-prompt-gemini-hard.txt"
     elif "gemini" in mid:
         fname = "unrestricted-prompt-gemini.txt"
@@ -172,6 +172,7 @@ def restore_terms(text, pairs):
 
 # --- 招1: 铁拒模型降级表 (仅 gated 请求, 拒绝时才切换) ---
 FALLBACK_MODELS = {
+    "gemini-3.8-flash-tiered": "gemini-3.7-flash-tiered",
     "gemini-3.7-flash-tiered": "gemini-3.6-flash-tiered",
     "claude-sonnet-4-6": "gpt-oss-120b-medium",
     "claude-opus-4-6-thinking": "gemini-pro-agent",
@@ -274,9 +275,9 @@ LISTEN_HOST = os.environ.get("UR_PROXY_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("UR_PROXY_LISTEN", "1467"))
 UPSTREAM_HOST = os.environ.get("UR_PROXY_UPSTREAM_HOST", "127.0.0.1")
 UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466"))
-MAX_ATTEMPTS = 8
-FIRST_BYTE_TIMEOUT_SECONDS = 30
-STREAM_IDLE_TIMEOUT_SECONDS = 300
+MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "24")))
+FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "18")))
+STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "18")))
 RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 HOP_BY_HOP_HEADERS = {
     "connection",
@@ -295,14 +296,43 @@ def retry_delay(attempt, response=None):
     """Use a short backoff, honoring a small server-supplied retry hint."""
     # Keep transient network recovery active without hammering an unhealthy
     # upstream: frequent early retries, then a modestly longer gap.
-    fallback = (1.0, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0)[min(attempt - 1, 6)]
+    fallback = min(3.0, 0.35 + max(0, attempt - 1) * 0.2)
     if response is None:
         return fallback
     raw = response.getheader("Retry-After")
     try:
-        return min(max(float(raw), fallback), 12.0)
+        return min(max(float(raw), fallback), 5.0)
     except (TypeError, ValueError):
         return fallback
+
+
+class IncompleteUpstreamStream(http.client.HTTPException):
+    """The relay closed an SSE response before a terminal model event."""
+
+
+def stream_payload_complete(payload):
+    """Accept the standard [DONE] event or a final non-null finish_reason."""
+    if b"data: [DONE]" in payload or b"data:[DONE]" in payload:
+        return True
+    return re.search(rb'"finish_reason"\s*:\s*"(?:stop|tool_calls|function_call|length|content_filter)"', payload) is not None
+
+
+def stream_payload_error(payload):
+    """Return a relay error event without mistaking assistant text for one."""
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(b"data:"):
+            continue
+        data = line[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            event = json.loads(data.decode("utf-8", "replace"))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(event, dict) and event.get("error"):
+            return str(event.get("error"))[:500]
+    return ""
 
 
 class RetryProxyHandler(BaseHTTPRequestHandler):
@@ -321,6 +351,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def proxy(self):
+        self.response_started = False
         if self.path == "/health":
             self.respond_json(200, {"ok": True, "attempts": MAX_ATTEMPTS})
             return
@@ -347,7 +378,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                         prompt = prompt + "\n\n" + afl
                     info["parsed"]["messages"].insert(0, {"role": "system", "content": prompt})
                     mid = (info["model"] or "").lower()
-                    if "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
+                    if "gemini-3.8-flash-tiered" in mid or "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
                         info["parsed"]["temperature"] = 0
                     # 招3 入站: 术语改写, 记录实际改写对
                     _, term_pairs = apply_term_rewrite(info["parsed"])
@@ -425,10 +456,30 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                                 headers["Content-Length"] = str(len(body))
                                 response.close()
                                 continue
-                        # 未拒绝(或无法重试): 已读 prefix + 剩余流一起透传
+                        # Do not expose a partial model/tool-call stream. Buffer
+                        # to a terminal marker; a mid-stream network break then
+                        # remains replay-safe and can use the normal retry loop.
                         if connection.sock is not None:
                             connection.sock.settimeout(STREAM_IDLE_TIMEOUT_SECONDS)
-                        self.relay_with_prefix(response, prefix)
+                        payload = self.read_complete_sse(response, prefix)
+                        text = payload.decode("utf-8", "replace")
+                        if looks_refused(text):
+                            if not afl_probed:
+                                print("ur-proxy: refusal detected (complete stream) -> AFL nudge", flush=True)
+                                afl_probed = True
+                                body = self.append_afl_nudge(body)
+                                headers["Content-Length"] = str(len(body))
+                                response.close()
+                                continue
+                            target = self.refusal_target(fallback_model, body)
+                            if target:
+                                print("ur-proxy: refusal persists (complete stream) -> retry with %s" % target, flush=True)
+                                refusal_retried = True
+                                body = self.swap_model(body, target)
+                                headers["Content-Length"] = str(len(body))
+                                response.close()
+                                continue
+                        self.respond_bytes(response.status, response.getheaders(), payload, ctype)
                         return
                     else:
                         # 非流式: 缓冲完整响应后检测
@@ -461,7 +512,11 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
 
                 if connection.sock is not None:
                     connection.sock.settimeout(STREAM_IDLE_TIMEOUT_SECONDS)
-                self.relay(response)
+                if is_stream and response.status == 200:
+                    payload = self.read_complete_sse(response)
+                    self.respond_bytes(response.status, response.getheaders(), payload, ctype)
+                else:
+                    self.relay(response)
                 return
             except (OSError, TimeoutError, http.client.HTTPException) as error:
                 if getattr(self, 'response_started', False):
@@ -469,7 +524,10 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                     return
                 last_error = error
                 if attempt < MAX_ATTEMPTS:
-                    time.sleep(retry_delay(attempt))
+                    delay = retry_delay(attempt)
+                    print("retry-proxy: transient %s attempt=%d/%d retry-in=%.2fs" % (
+                        type(error).__name__, attempt, MAX_ATTEMPTS, delay), flush=True)
+                    time.sleep(delay)
                     continue
             finally:
                 connection.close()
@@ -498,6 +556,25 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                 break
             chunks.append(chunk)
         return b"".join(chunks)
+
+    def read_complete_sse(self, response, prefix=b""):
+        chunks = [prefix] if prefix else []
+        total = len(prefix)
+        while True:
+            chunk = response.read1(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_BUFFER_BYTES:
+                raise IncompleteUpstreamStream("SSE response exceeded replay buffer")
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        relay_error = stream_payload_error(payload)
+        if relay_error:
+            raise IncompleteUpstreamStream("relay SSE error: " + relay_error)
+        if not stream_payload_complete(payload):
+            raise IncompleteUpstreamStream("SSE ended before terminal model event")
+        return payload
 
     def peek_sse(self, response, max_events=8, max_bytes=256 * 1024):
         """预读 SSE 流前缀, 读到首个含 content 的事件或达到上限.
@@ -601,6 +678,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
     def respond_bytes(self, status, headers, payload, ctype):
+        self.response_started = True
         self.send_response(status)
         sent_cl = False
         for key, value in headers:

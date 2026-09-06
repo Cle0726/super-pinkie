@@ -268,6 +268,31 @@ test('CLE Kk blocks a false terminal before it reaches transcript or delivery',a
   assert.equal(supervisor.hasPending(ctx.sessionKey),true);
 });
 
+test('a valid retry final clears the old rejection before transcript persistence',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-valid-retry-final-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const target=path.join(root,'artifact.txt');
+  const integrity=new CompletionIntegrityGuard();
+  const supervisor=new CleKkSupervisor({integrity,audit:new CleKkAuditLog(path.join(root,'audit'))});
+  supervisor.setRetryScheduler(async()=>true);
+  const ctx={agentId:'project',sessionKey:'agent:project:valid-retry-final',runId:'retry-run'};
+  supervisor.begin({prompt:'帮我创建项目文件'},ctx);
+  const falseFinal={role:'assistant',stopReason:'stop',content:[{type:'text',text:'已经创建完成。'}]};
+  assert.deepEqual(supervisor.beforeMessageWrite({message:falseFinal},ctx),{block:true});
+  assert.equal(supervisor.hasPending(ctx.sessionKey),true);
+
+  fs.writeFileSync(target,'real host write');
+  supervisor.afterTool({
+    toolName:'write',toolCallId:'write-after-retry',params:{path:target},
+    result:{details:{changed:true,created:true}},
+  },ctx);
+  supervisor.afterTool({toolName:'read',toolCallId:'read-after-retry',params:{path:target},result:'real host write'},ctx);
+  const validFinal={role:'assistant',stopReason:'stop',content:[{type:'text',text:'项目文件已经创建完成。'}]};
+  assert.equal(supervisor.beforeMessageWrite({message:validFinal},ctx,undefined,true),undefined);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),false);
+  assert.equal(await supervisor.beforeReplyPayload({kind:'final',payload:{text:'项目文件已经创建完成。'}},ctx),undefined);
+});
+
 test('CLE Kk never shows its internal watchdog/control text',async()=>{
   const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog('')});
   const ctx={agentId:'main',sessionKey:'agent:main:hidden-control'};
@@ -324,6 +349,25 @@ test('CLE Kk replays tool provenance after a gateway restart without rewriting a
   second.begin({prompt:''},ctx);
   assert.equal(second.integrity.runs.get(key).tools.length,2);
   assert.equal(second.integrity.finalize({lastAssistantMessage:'项目已经修复完成。'},ctx,{verifyExternal:false}),undefined);
+});
+
+test('CLE Kk binds tool hooks without sessionKey back to their parent run',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-run-binding-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const target=path.join(root,'artifact.txt');
+  const key='agent:project:run-binding',runId='provider-run-one';
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(path.join(root,'audit'))});
+  supervisor.begin({prompt:'创建并核验项目文件',runId},{agentId:'project',sessionKey:key,runId});
+  supervisor.beforeTool({toolName:'write',toolCallId:'w',runId,params:{path:target}},{agentId:'project',runId});
+  fs.writeFileSync(target,'real result');
+  supervisor.afterTool({toolName:'write',toolCallId:'w',runId,params:{path:target},result:{ok:true}},{agentId:'project',runId});
+  supervisor.beforeTool({toolName:'read',toolCallId:'r',runId,params:{path:target}},{agentId:'project',runId});
+  supervisor.afterTool({toolName:'read',toolCallId:'r',runId,params:{path:target},result:'real result'},{agentId:'project',runId});
+  const state=supervisor.integrity.runs.get(key);
+  assert.equal(state.tools.length,2);
+  assert.equal(state.mutationEpoch,1);
+  assert.equal(supervisor.integrity.runs.has(runId),false);
+  assert.equal(supervisor.integrity.finalize({lastAssistantMessage:'项目已经完成。'},{sessionKey:key},{verifyExternal:false}),undefined);
 });
 
 test('CLE Kk audit and durable state detect tampering',t=>{
@@ -389,6 +433,26 @@ test('an empty write result plus a read cannot fake a host file change',()=>{
   guard.afterTool({toolName:'read',params:{path:'/tmp/cle-kk-never-created'},result:'模型声称读到了'},ctx);
   const result=guard.finalize({lastAssistantMessage:'已经全部修复完成。'},ctx);
   assert.match(result.reason,/没有主机确认的文件变化/);
+});
+
+test('a structured host write receipt survives missing before-tool correlation',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-host-receipt-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const file=path.join(root,'created.txt');
+  fs.writeFileSync(file,'real host write');
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:host-receipt'};
+  guard.begin({prompt:'帮我创建项目文件'},ctx);
+  guard.afterTool({
+    toolName:'write',toolCallId:'after-only',params:{path:file},
+    result:{content:[{type:'text',text:'Successfully wrote file'}],details:{changed:true,created:true}},
+  },ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
+  guard.afterTool({toolName:'read',params:{path:file},result:'real host write'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  assert.equal(result,undefined);
+  const effect=guard.runs.get(ctx.sessionKey).tools[0].effects[0];
+  assert.equal(effect.changed,true);assert.equal(effect.hostReported,true);
 });
 
 test('past or negated incomplete wording cannot bypass a completion claim',()=>{
@@ -887,7 +951,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,1);assert.equal(tools[0].opts.name,'delivery_guard');
+  assert.equal(tools.length,2);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory']);
   const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
   assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   let response;
@@ -982,6 +1046,21 @@ test('watchdog resumes a failed tool-use turn that has no top-level error text',
   assert.match(injected[0].text,/工具结果已经返回/);assert.match(injected[0].text,/禁止重复/);
 });
 
+test('watchdog resumes a host-success turn that ended on a tool result without a final reply',async()=>{
+  const scheduled=[],injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async value=>{scheduled.push(value);return {id:'retry'};},
+  }}});
+  const retried=await watchdog.agentEnded({success:true,runId:'host-success-tool-gap',messages:[
+    {role:'assistant',content:[{type:'toolCall',name:'exec'}],stopReason:'toolUse'},
+    {role:'toolResult',toolName:'exec',content:[{type:'text',text:'verification failed'}]},
+  ]},{agentId:'project',sessionKey:'agent:project:host-success-tool-gap'});
+  assert.equal(retried,true);assert.equal(injected.length,1);assert.equal(scheduled.length,1);
+  assert.match(injected[0].text,/工具结果已经返回/);assert.match(injected[0].text,/正常交付/);
+});
+
 test('watchdog reads structured incomplete-turn errors from agent_end',async()=>{
   const injected=[];
   const watchdog=new UpstreamWatchdog({session:{workflow:{
@@ -1028,6 +1107,33 @@ test('watchdog resumes custom-agent sessions by default, with an opt-out for leg
     if (previous === undefined) delete process.env.PINKIE_WATCHDOG_ALL;
     else process.env.PINKIE_WATCHDOG_ALL=previous;
   }
+});
+
+test('internal Skill reviewers never recurse into their own integrity watchdog',async()=>{
+  const injected=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),scheduleSessionTurn:async()=>({id:'retry'}),
+  };
+  const watchdog=new UpstreamWatchdog({session:{workflow}});
+  const ctx={agentId:'project',sessionKey:'agent:project:internal-session-effects:skill-workshop-review_test'};
+  assert.equal(await watchdog.agentEnded({success:false,error:'connection reset'},ctx),false);
+  assert.equal(injected.length,0);
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog('')});
+  supervisor.begin({prompt:'检查任务是否完成'},ctx);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),false);
+  assert.equal(supervisor.beforeMessageWrite({message:{role:'assistant',stopReason:'stop',content:[{type:'text',text:'复核完成'}]}},ctx),undefined);
+});
+
+test('durable watchdog cleanup retires legacy internal reviewer jobs',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-internal-job-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const store=new WatchdogJobStore(root);
+  const key='agent:project:internal-session-effects:skill-workshop-review_old';
+  store.set(key,{agentId:'project',runId:'old',attempt:24});
+  const watchdog=new UpstreamWatchdog({session:{workflow:{}}},()=>'',async()=>({stdout:'{}'}),'',()=>({}),store);
+  assert.equal(await watchdog.recoverPending(),1);
+  assert.equal(store.list().length,0);
 });
 
 test('watchdog never loops permanent configuration failures',async()=>{
@@ -1205,6 +1311,8 @@ test('custom plugin never relies on OpenClaw trusted-only in-process gateway req
   const source=fs.readFileSync(new URL('../services/mode-architecture/index.mjs',import.meta.url),'utf8');
   assert.doesNotMatch(source,/runtime\.gateway\.request/);
   assert.match(source,/'gateway', 'call', 'chat\.send'/);
+  assert.match(source,/OPENCLAW_ROOT[\s\S]*openclaw\.mjs/);
+  assert.match(source,/PINKIE_MANAGED_GATEWAY/);
 });
 
 test('a completed turn cancels every pending watchdog fallback to prevent duplicate replies',async()=>{

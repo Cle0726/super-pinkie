@@ -163,6 +163,27 @@ def _configure_plugin(data: dict, target: Path) -> bool:
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+    # OpenClaw requires an explicit owner once more than one agent exists.
+    # Without these harmless defaults, an unscoped models.list/talk/heartbeat
+    # request is rejected and the model picker can remain stuck on loading.
+    system_agent = defaults.setdefault("systemAgent", {})
+    if not isinstance(system_agent, dict):
+        system_agent = defaults["systemAgent"] = {}
+    system_agent.setdefault("agentId", "main")
+    heartbeat = defaults.setdefault("heartbeat", {})
+    if not isinstance(heartbeat, dict):
+        heartbeat = defaults["heartbeat"] = {}
+    heartbeat.setdefault("agentId", "main")
+    talk = data.setdefault("talk", {})
+    if not isinstance(talk, dict):
+        talk = data["talk"] = {}
+    talk.setdefault("agentId", "main")
+    # CLE Kk ships a patched, internally consistent runtime. Disable the
+    # upstream startup check so only CLE Kk's detached updater can replace it.
+    update = data.setdefault("update", {})
+    if not isinstance(update, dict):
+        update = data["update"] = {}
+    update["checkOnStart"] = False
     timeout = defaults.get("timeoutSeconds")
     if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
         defaults["timeoutSeconds"] = 43_200
@@ -198,7 +219,7 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "package.json", "openclaw.plugin.json"):
+        for name in ("index.mjs", "memory.mjs", "package.json", "openclaw.plugin.json"):
             changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():

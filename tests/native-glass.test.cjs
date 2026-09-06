@@ -35,14 +35,26 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme31/);
+  assert.match(installer,/laolao-theme\.css\?v=theme34/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar17/);
   assert.match(installer,/laolao-sidebar\.js\?v=sidebar14/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions4/);
   assert.match(installer,/laolao-deep-think\.js\?v=deepthink14/);
   assert.match(installer,/laolao-splash\.css\?v=splash18/);
-  assert.match(installer,/laolao-splash\.js\?v=splash21/);
-  assert.match(installer,/laolao-mode-switcher\.js\?v=mode25/);
-  assert.match(installer,/laolao-usage-stats\.js\?v=stats11/);
+  assert.match(installer,/laolao-splash\.js\?v=splash22/);
+  assert.match(installer,/laolao-mode-switcher\.js\?v=mode28/);
+  assert.match(installer,/laolao-usage-stats\.js\?v=stats12/);
+  assert.match(installer,/laolao-classic-shell\.css\?v=classic4/);
+  assert.match(installer,/laolao-classic-shell\.js\?v=classic4/);
+  assert.match(installer,/laolao-memory\.css\?v=memory1/);
+  assert.match(installer,/laolao-memory\.js\?v=memory1/);
   assert.match(installer,/s\{\"\\\.\/laolao-\}\{\"\/laolao-\}g/);
+});
+
+test('assistant replies get a subtle readable surface without slowing streams',()=>{
+  const css=read('ui/injections/laolao-theme.css');
+  const bubbleBlock=css.match(/chat-group\.assistant:not\(\.chat-group--forwarded\)[\s\S]*?\{([\s\S]*?)\}/)?.[1]||'';
+  assert.match(bubbleBlock,/background: rgba\(255, 250, 252, 0\.58\)/);
+  assert.match(css,/chat-bubble:not\(\.chat-bubble--tool-shell\):not\(\.chat-reading-indicator\)/);
+  assert.doesNotMatch(bubbleBlock,/backdrop-filter/);
 });

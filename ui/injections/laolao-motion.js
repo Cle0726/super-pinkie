@@ -46,13 +46,13 @@
   }
   const frames = () => new Promise(resolve => root.requestAnimationFrame(() => root.requestAnimationFrame(resolve)));
   const reduced = () => Boolean(root.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-  const finishProgress = (fill, label, bar) => new Promise(resolve => {
+  const finishProgress = (fill, label, bar, duration = 300) => new Promise(resolve => {
     const start = progressValues.get(fill) ?? 0;
     if (reduced()) { progress(fill, label, bar, 100); resolve(); return; }
     let started;
     const tick = now => {
       started ??= now;
-      const ratio = Math.min(1, (now - started) / 300);
+      const ratio = Math.min(1, (now - started) / Math.max(1, duration));
       progress(fill, label, bar, start + (100 - start) * (1 - Math.pow(1 - ratio, 2)));
       if (ratio === 1) resolve(); else root.requestAnimationFrame(tick);
     };
@@ -69,9 +69,14 @@
     // portrait yet. Its decoded mode-button portrait is a valid fallback.
     const avatar = doc.querySelector(`[data-laolao-mode-avatar="${id}"]`) ||
       doc.querySelector(`.laolao-mode-switcher[data-mode="${id}"] img`);
+    const input = doc.querySelector('.agent-chat__input') ||
+      doc.querySelector('textarea[placeholder], [contenteditable="true"]');
+    // A brand-new chat can render before its portrait exists. Missing art is
+    // not a reason to block the whole app; if an image exists, wait only while
+    // it is actually loading.
+    const avatarReady = !avatar || avatar.complete !== false;
     return doc.documentElement.getAttribute('data-laolao-mode') === id &&
-      Boolean(doc.querySelector('.agent-chat__input')) &&
-      !doc.querySelector('.chat-loading-skeleton') && Boolean(avatar?.complete);
+      Boolean(input) && !doc.querySelector('.chat-loading-skeleton') && avatarReady;
   }
   function enter() {
     root.document.documentElement.setAttribute('data-laolao-mode-enter', '1');

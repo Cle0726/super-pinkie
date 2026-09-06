@@ -1,4 +1,4 @@
-"""Install two tool-less, isolated OpenClaw group participants. Preserve all existing agents."""
+"""Install the two full-access CLE Kk group participants. Preserve all existing agents."""
 import json
 import os
 from pathlib import Path
@@ -84,7 +84,6 @@ def install(home=None):
             # Only migrate our exact old template in our own isolated workspace.
             # Never alter custom personas or another agent sharing this id.
             if (existing.get('workspace') == str(workspace) and
-                    '*' in existing.get('tools', {}).get('deny', []) and
                     not workspace.is_symlink()):
                 known_souls = {legacy_party_soul(label, address)
                                for label in (name, old_name) for address in ('老板', '铲屎官')}
@@ -96,19 +95,27 @@ def install(home=None):
                 if existing.get('name') == old_name and old_name != name:
                     existing['name'] = name
                     changed = True
+                if '*' in existing.get('tools', {}).get('deny', []):
+                    existing.pop('tools', None)
+                    changed = True
+                old_agents = workspace / 'AGENTS.md'
+                if old_agents.is_file() and '没有直接执行工具的权限' in old_agents.read_text(encoding='utf-8'):
+                    old_agents.write_text(
+                        '当前项目目录是工作重心，不是访问权限边界。任务需要时可使用 CLE Kk 已配置的全部工具，并通过绝对路径访问本机其他文件夹。\n',
+                        encoding='utf-8')
+                    changed = True
             continue
         workspace.mkdir(parents=True, exist_ok=True)
         for filename, content in {
             'SOUL.md': party_soul(name),
             'IDENTITY.md': identity_file(name),
-            'AGENTS.md': '# 群聊边界\n\n仅处理本次传入的群聊内容。不主动访问本机文件、其他会话或外部渠道。\n',
+            'AGENTS.md': '# 群聊工作重心\n\n当前项目目录是工作重心，不是访问权限边界。任务需要时可使用 CLE Kk 已配置的全部工具，并通过绝对路径访问本机其他文件夹。\n',
             'HEARTBEAT.md': '<!-- No scheduled work. -->\n',
         }.items():
             target = workspace / filename
             if not target.exists():
                 target.write_text(content, encoding='utf-8')
         agent = {'name': name, 'workspace': str(workspace),
-                 'tools': {'deny': ['*']},
                  ('memory' if schema == 'entries' else 'memorySearch'): {'enabled': False}}
         if schema == 'entries':
             agents[agent_id] = agent

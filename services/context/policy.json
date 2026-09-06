@@ -26,6 +26,7 @@
     "mm/gemini-3.6-flash-medium": 1000000,
     "mm/gemini-3.6-flash-tiered": 1000000,
     "mm/gemini-3.7-flash-tiered": 1000000,
+    "mm/gemini-3.8-flash-tiered": 1000000,
     "mm/gemini-pro-agent": 1000000,
     "mm/claude-opus-4-6-thinking": 200000,
     "mm/claude-sonnet-4-6": 200000,

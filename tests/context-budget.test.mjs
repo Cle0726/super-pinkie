@@ -47,6 +47,7 @@ const threshold = resolveCompactionThreshold({
 return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
 test('ultra-long retention follows the installed large-window policy',()=>{
+  assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
     const b=compactionBudget(window);assert.equal(b.window,resolved);

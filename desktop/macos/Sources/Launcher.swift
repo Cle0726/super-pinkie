@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Darwin
 import Foundation
 import Speech
 import WebKit
@@ -36,6 +37,16 @@ private enum BundledRuntime {
     static let nodeURL = binRoot?.appendingPathComponent("node")
     static let openClawURL = binRoot?.appendingPathComponent("openclaw")
     static let openClawEntryURL = runtimeRoot?.appendingPathComponent("openclaw/openclaw.mjs")
+    // Desktop input must run through the notarized CuaDriver.app identity.
+    // A raw helper copied into this bundle is re-signed with the launcher and
+    // gets a new TCC identity on every local build, leaving an apparently-on
+    // permission switch that cannot actually capture or click.
+    static let cuaDriverAppURL = URL(fileURLWithPath: "/Applications/CuaDriver.app", isDirectory: true)
+    static let cuaDriverURL = cuaDriverAppURL.appendingPathComponent("Contents/MacOS/cua-driver")
+    static let cuaDriverArchiveURL = runtimeRoot?.appendingPathComponent("cua-driver-helper.tar.gz")
+    static let cuaDriverVersion = "0.22.0"
+    static let cuaDriverArchiveSHA256 = "59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727"
+    static let cuaDriverTeamID = "YCK386LBJ7"
     static let pythonURL = runtimeRoot?.appendingPathComponent("python/bin/python3")
 
     static func exists(_ url: URL?) -> Bool {
@@ -61,6 +72,15 @@ private enum BundledRuntime {
         }
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
         environment["PINKIE_GATEWAY_URL"] = RuntimeConfig.gatewayURL.absoluteString
+        // This App is a pinned CLE Kk release. Upstream OpenClaw/Cua update
+        // notices must never replace its patched runtime behind the user's
+        // back; only the explicit CLE Kk updater may advance the bundle.
+        environment["OPENCLAW_NO_AUTO_UPDATE"] = "1"
+        environment["CUA_DRIVER_RS_UPDATE_CHECK"] = "false"
+        environment["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "false"
+        if let endpoint = DesktopControlEndpoint.environmentValue() {
+            environment["OPENCLAW_CUA_DRIVER_ENDPOINT"] = endpoint
+        }
         return environment
     }
 
@@ -86,6 +106,166 @@ private enum BundledRuntime {
             return nil
         }
     }
+
+    private static func runTool(_ executable: String, _ arguments: [String]) -> (status: Int32, data: Data) {
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.environment = environment()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do {
+            try task.run()
+            let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
+            task.waitUntilExit()
+            return (task.terminationStatus, data)
+        } catch {
+            return (-1, Data(error.localizedDescription.utf8))
+        }
+    }
+
+    private static func isValidCuaDriverApp(_ app: URL) -> Bool {
+        let plist = app.appendingPathComponent("Contents/Info.plist")
+        let executable = app.appendingPathComponent("Contents/MacOS/cua-driver")
+        guard exists(executable),
+              let plistData = try? Data(contentsOf: plist),
+              let values = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
+              values["CFBundleIdentifier"] as? String == "com.trycua.driver",
+              values["CFBundleShortVersionString"] as? String == cuaDriverVersion,
+              runTool("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]).status == 0 else {
+            return false
+        }
+        let signature = runTool("/usr/bin/codesign", ["-dvv", app.path])
+        return signature.status == 0
+            && String(decoding: signature.data, as: UTF8.self).contains("TeamIdentifier=\(cuaDriverTeamID)")
+    }
+
+    /// Install the pinned, notarized helper from this signed release. The
+    /// archive is opaque while CLE Kk itself is signed, so the vendor's stable
+    /// Developer ID signature is never rewritten by our packaging step.
+    static func ensureCuaDriverApp() throws -> URL {
+        if isValidCuaDriverApp(cuaDriverAppURL) { return cuaDriverAppURL }
+        guard let archive = cuaDriverArchiveURL,
+              FileManager.default.fileExists(atPath: archive.path) else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 10, userInfo: [
+                NSLocalizedDescriptionKey: "定版中缺少桌面执行器安装包。",
+            ])
+        }
+        let checksum = runTool("/usr/bin/shasum", ["-a", "256", archive.path])
+        guard checksum.status == 0,
+              String(decoding: checksum.data, as: UTF8.self).hasPrefix(cuaDriverArchiveSHA256) else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 11, userInfo: [
+                NSLocalizedDescriptionKey: "桌面执行器安装包校验失败。",
+            ])
+        }
+
+        let fileManager = FileManager.default
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let temporaryRoot = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("clekk-cua-install-\(suffix)", isDirectory: true)
+        try fileManager.createDirectory(at: temporaryRoot, withIntermediateDirectories: false)
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: temporaryRoot.path)
+        defer { try? fileManager.removeItem(at: temporaryRoot) }
+
+        let extraction = runTool("/usr/bin/tar", ["-xzf", archive.path, "-C", temporaryRoot.path])
+        guard extraction.status == 0 else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 12, userInfo: [
+                NSLocalizedDescriptionKey: "无法展开桌面执行器安装包。",
+            ])
+        }
+        let extracted = temporaryRoot
+            .appendingPathComponent("cua-driver-rs-\(cuaDriverVersion)-darwin-universal", isDirectory: true)
+            .appendingPathComponent("CuaDriver.app", isDirectory: true)
+        guard isValidCuaDriverApp(extracted) else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 13, userInfo: [
+                NSLocalizedDescriptionKey: "桌面执行器签名校验失败。",
+            ])
+        }
+
+        let staged = URL(fileURLWithPath: "/Applications", isDirectory: true)
+            .appendingPathComponent(".CuaDriver.clekk-\(suffix).app", isDirectory: true)
+        let copy = runTool("/usr/bin/ditto", [extracted.path, staged.path])
+        guard copy.status == 0, isValidCuaDriverApp(staged) else {
+            try? fileManager.removeItem(at: staged)
+            throw NSError(domain: "CLEKkDesktopControl", code: 14, userInfo: [
+                NSLocalizedDescriptionKey: "无法把桌面执行器安装到应用程序文件夹。",
+            ])
+        }
+        let backup = URL(fileURLWithPath: "/Applications", isDirectory: true)
+            .appendingPathComponent(".CuaDriver.clekk-backup-\(suffix).app", isDirectory: true)
+        do {
+            if fileManager.fileExists(atPath: cuaDriverAppURL.path) {
+                try fileManager.moveItem(at: cuaDriverAppURL, to: backup)
+            }
+            try fileManager.moveItem(at: staged, to: cuaDriverAppURL)
+            try? fileManager.removeItem(at: backup)
+        } catch {
+            if !fileManager.fileExists(atPath: cuaDriverAppURL.path),
+               fileManager.fileExists(atPath: backup.path) {
+                try? fileManager.moveItem(at: backup, to: cuaDriverAppURL)
+            }
+            throw error
+        }
+        guard isValidCuaDriverApp(cuaDriverAppURL) else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 15, userInfo: [
+                NSLocalizedDescriptionKey: "安装后的桌面执行器校验失败。",
+            ])
+        }
+        let register = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+        _ = runTool(register, ["-f", cuaDriverAppURL.path])
+        _ = runTool(cuaDriverURL.path, ["telemetry", "disable"])
+        return cuaDriverAppURL
+    }
+}
+
+/// The node worker must receive the exact private endpoint started by this App.
+/// Keeping it in process memory prevents a model or a stale shell from choosing
+/// a different helper binary or socket.
+private enum DesktopControlEndpoint {
+    private static let lock = NSLock()
+    private static var value: String?
+
+    static func configure(driver: URL) throws -> URL {
+        // sockaddr_un.sun_path is only 104 bytes on macOS.  Application Support
+        // plus a UUID exceeds it on a typical user account, so keep the actual
+        // socket in a random, owner-only short directory under /tmp.
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)
+        let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("clekk-cua-\(suffix)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        let socket = directory.appendingPathComponent("driver.sock")
+        let payload: [String: Any] = [
+            "v": 1,
+            "socketPath": socket.path,
+            "binaryPath": driver.path,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        guard let encoded = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "CLEKkDesktopControl", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "无法生成桌面执行器端点。",
+            ])
+        }
+        lock.lock()
+        value = encoded
+        lock.unlock()
+        return socket
+    }
+
+    static func environmentValue() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    static func clear(socket: URL?) {
+        lock.lock()
+        value = nil
+        lock.unlock()
+        guard let directory = socket?.deletingLastPathComponent() else { return }
+        try? FileManager.default.removeItem(at: directory)
+    }
 }
 
 private final class LauncherWindow: NSWindow {
@@ -93,6 +273,20 @@ private final class LauncherWindow: NSWindow {
     // dashboard contains text inputs, so it must be able to receive focus.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    // A borderless window can otherwise be dragged completely off-screen;
+    // AppKit then keeps rendering a valid 1280px page while the user only sees
+    // its right-hand slice. Always keep a small usable portion on the target
+    // display, including after a resize or monitor change.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        var rect = super.constrainFrameRect(frameRect, to: screen)
+        guard let visible = (screen ?? NSScreen.screens.first)?.visibleFrame else { return rect }
+        if rect.width > visible.width { rect.size.width = visible.width }
+        if rect.height > visible.height { rect.size.height = visible.height }
+        rect.origin.x = min(max(rect.origin.x, visible.minX), visible.maxX - rect.width)
+        rect.origin.y = min(max(rect.origin.y, visible.minY), visible.maxY - rect.height)
+        return rect
+    }
 }
 
 /* A borderless window has no native titlebar to drag. This is deliberately
@@ -325,13 +519,46 @@ private enum Gateway {
     private static var logHandle: FileHandle?
     private(set) static var lastError: String?
 
-    static func isRunning(completion: @escaping (Bool) -> Void) {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 1.2
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            completion((response as? HTTPURLResponse)?.statusCode != nil)
+    private static func endpoint(_ path: String) -> URL {
+        url.appendingPathComponent(path)
+    }
+
+    private static func probe(_ path: String, timeout: TimeInterval = 1.2, completion: @escaping (HTTPURLResponse?, Data?) -> Void) {
+        var request = URLRequest(url: endpoint(path))
+        request.timeoutInterval = timeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            completion(response as? HTTPURLResponse, data)
         }.resume()
     }
+
+    /// A reachable HTTP process is not necessarily usable: during OpenClaw's
+    /// restart drain the port still answers while WebSocket/RPC admissions are
+    /// closed. Keep these two meanings separate so the launcher never loads a
+    /// chat page into a half-dead gateway.
+    static func isReachable(completion: @escaping (Bool) -> Void) {
+        probe("healthz") { response, _ in
+            // Any HTTP response proves that a process owns the port.  503 is
+            // especially meaningful here: OpenClaw can answer it while readyz
+            // is false during a controlled drain.
+            completion(response != nil)
+        }
+    }
+
+    static func isReady(completion: @escaping (Bool) -> Void) {
+        probe("readyz") { response, data in
+            guard response?.statusCode == 200,
+                  let data,
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["ready"] as? Bool == true else {
+                completion(false)
+                return
+            }
+            completion(true)
+        }
+    }
+
+    static func processAlive() -> Bool { process?.isRunning == true }
 
     static func start() {
         guard process?.isRunning != true else { return }
@@ -351,7 +578,12 @@ private enum Gateway {
             lastError = "App 包内的网关运行时不完整。"
             return
         }
-        task.environment = BundledRuntime.environment()
+        var gatewayEnvironment = BundledRuntime.environment()
+        gatewayEnvironment["OPENCLAW_SERVICE_KIND"] = "gateway"
+        if let entry = BundledRuntime.openClawEntryURL {
+            gatewayEnvironment["PINKIE_OPENCLAW_ENTRY"] = entry.path
+        }
+        task.environment = gatewayEnvironment
         let output = BundledRuntime.logHandle(named: "gateway")
         task.standardOutput = output ?? FileHandle.nullDevice
         task.standardError = output ?? FileHandle.nullDevice
@@ -371,7 +603,7 @@ private enum Gateway {
     }
 
     static func ready(attempt: Int = 0, completion: @escaping (Bool) -> Void) {
-        isRunning { running in
+        isReady { running in
             DispatchQueue.main.async {
                 if running || attempt >= 360 {
                     completion(running)
@@ -392,13 +624,406 @@ private enum Gateway {
     }
 
     static func repair() {
-        // Only terminate a process launched by this App. An externally managed
-        // launchd gateway remains owned by launchd and is never killed here.
-        if process?.isRunning == true { process?.terminate() }
-        process = nil
-        try? logHandle?.close()
-        logHandle = nil
+        // Never terminate a live gateway from a 2-second UI probe. A live
+        // process may only be draining/rebuilding its transcript; killing it
+        // here creates another drain and can hide a completed reply for five
+        // minutes. If our child really exited, start it again.
+        guard process?.isRunning != true else { return }
         start()
+    }
+}
+
+/// Owns the complete macOS computer-control chain. The notarized helper is
+/// launched through LaunchServices so macOS can attach Screen Recording and
+/// Accessibility to its stable identity. The unprivileged node host then
+/// publishes `screen.snapshot` + `computer.act` to the local Gateway through
+/// the private endpoint.
+private final class DesktopControlService {
+    private static let displayName = "超級碧琪桌面控制"
+    private static let driverBundleIdentifier = "com.trycua.driver"
+
+    private var driverProcess: Process?
+    private var nodeProcess: Process?
+    private var driverLog: FileHandle?
+    private var nodeLog: FileHandle?
+    private var socketURL: URL?
+    private var generation = 0
+    private var stopping = false
+    private var pairingProbe: DispatchWorkItem?
+    private(set) var lastError: String?
+
+    /// Process.terminate() is only a request.  The node host has previously
+    /// ignored SIGTERM while blocked in a gateway reconnect, so every shutdown
+    /// is bounded and reaped before a replacement is launched.
+    private static func stopAndReap(
+        _ entries: [(process: Process, interruptFirst: Bool)],
+        timeout: TimeInterval = 1.5
+    ) {
+        for entry in entries where entry.process.isRunning {
+            if entry.interruptFirst {
+                entry.process.interrupt()
+            } else {
+                entry.process.terminate()
+            }
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while entries.contains(where: { $0.process.isRunning }) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        for entry in entries where entry.process.isRunning {
+            Darwin.kill(entry.process.processIdentifier, SIGKILL)
+        }
+        for entry in entries {
+            entry.process.waitUntilExit()
+        }
+    }
+
+    /// The `open -W` process below is only a LaunchServices waiter. Stopping
+    /// that waiter does not necessarily stop the app it launched, so terminate
+    /// the stable driver identity explicitly when CLE Kk closes or restarts it.
+    private static func stopDriverApplications(timeout: TimeInterval = 1.5) {
+        let applications = NSRunningApplication.runningApplications(
+            withBundleIdentifier: driverBundleIdentifier
+        )
+        for application in applications where !application.isTerminated {
+            _ = application.terminate()
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while applications.contains(where: { !$0.isTerminated }) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        for application in applications where !application.isTerminated {
+            _ = application.forceTerminate()
+        }
+    }
+
+    func start() {
+        stopping = false
+        guard driverProcess?.isRunning != true else {
+            startNodeIfReady()
+            return
+        }
+        startDriver()
+    }
+
+    func stop() {
+        stopping = true
+        generation += 1
+        pairingProbe?.cancel()
+        pairingProbe = nil
+
+        let node = nodeProcess
+        nodeProcess = nil
+        try? nodeLog?.close()
+        nodeLog = nil
+
+        let driver = driverProcess
+        driverProcess = nil
+        try? driverLog?.close()
+        driverLog = nil
+
+        DesktopControlEndpoint.clear(socket: socketURL)
+        socketURL = nil
+
+        Self.stopDriverApplications()
+        var entries: [(process: Process, interruptFirst: Bool)] = []
+        if let node { entries.append((node, true)) }
+        if let driver { entries.append((driver, false)) }
+        Self.stopAndReap(entries)
+    }
+
+    private func startDriver() {
+        do {
+            _ = try BundledRuntime.ensureCuaDriverApp()
+        } catch {
+            lastError = error.localizedDescription
+            NSLog("[CLE Kk computer] helper install failed: %@", error.localizedDescription)
+            return
+        }
+        let driver = BundledRuntime.cuaDriverURL
+        guard !stopping,
+              FileManager.default.fileExists(atPath: BundledRuntime.cuaDriverAppURL.path),
+              BundledRuntime.exists(driver) else {
+            lastError = "缺少 CLE Kk 桌面执行器，请重新安装当前定版。"
+            NSLog("[CLE Kk computer] %@", lastError ?? "桌面执行器缺失")
+            return
+        }
+
+        generation += 1
+        let currentGeneration = generation
+        do {
+            socketURL = try DesktopControlEndpoint.configure(driver: driver)
+        } catch {
+            lastError = error.localizedDescription
+            NSLog("[CLE Kk computer] endpoint setup failed: %@", error.localizedDescription)
+            return
+        }
+        guard let socketURL else { return }
+
+        // LaunchServices is mandatory here: it attributes Accessibility and
+        // Screen Recording to the stable, notarized com.trycua.driver app.
+        // Spawning the same Mach-O directly makes macOS attribute it as an
+        // unrelated command-line helper and silently breaks capture/input.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = [
+            "-W", "-n", "-g",
+            "--env", "CUA_DRIVER_RS_TELEMETRY_ENABLED=false",
+            "--env", "CUA_DRIVER_RS_UPDATE_CHECK=false",
+            BundledRuntime.cuaDriverAppURL.path,
+            "--args", "serve",
+            "--embedded",
+            "--socket", socketURL.path,
+            "--dangerously-bypass-approvals",
+            "--host-bundle-id", Bundle.main.bundleIdentifier ?? "com.cle0726.super-pinkie",
+        ]
+        task.environment = BundledRuntime.environment()
+        let output = BundledRuntime.logHandle(named: "computer-control-driver")
+        task.standardOutput = output ?? FileHandle.nullDevice
+        task.standardError = output ?? FileHandle.nullDevice
+        task.terminationHandler = { [weak self] stopped in
+            DispatchQueue.main.async {
+                self?.driverDidExit(stopped, generation: currentGeneration)
+            }
+        }
+        do {
+            try task.run()
+            driverProcess = task
+            driverLog = output
+            lastError = nil
+            waitForDriverSocket(generation: currentGeneration)
+        } catch {
+            try? output?.close()
+            DesktopControlEndpoint.clear(socket: socketURL)
+            self.socketURL = nil
+            lastError = error.localizedDescription
+            NSLog("[CLE Kk computer] driver launch failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func waitForDriverSocket(generation expectedGeneration: Int, attempt: Int = 0) {
+        guard !stopping, generation == expectedGeneration else { return }
+        let type = socketURL.flatMap {
+            try? FileManager.default.attributesOfItem(atPath: $0.path)[.type] as? FileAttributeType
+        }
+        if type == .typeSocket, driverProcess?.isRunning == true {
+            startNodeIfReady()
+            return
+        }
+        guard attempt < 120, driverProcess?.isRunning == true else {
+            lastError = "桌面执行器没有建立私有连接。"
+            if driverProcess?.isRunning == true { driverProcess?.terminate() }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.waitForDriverSocket(generation: expectedGeneration, attempt: attempt + 1)
+        }
+    }
+
+    private func startNodeIfReady() {
+        guard !stopping,
+              driverProcess?.isRunning == true,
+              nodeProcess?.isRunning != true,
+              DesktopControlEndpoint.environmentValue() != nil,
+              let node = BundledRuntime.nodeURL,
+              let entry = BundledRuntime.openClawEntryURL,
+              BundledRuntime.exists(node),
+              FileManager.default.fileExists(atPath: entry.path) else { return }
+
+        let task = Process()
+        task.executableURL = node
+        var arguments = [
+            entry.path,
+            "node", "run",
+            "--host", Gateway.url.host ?? "127.0.0.1",
+            "--port", String(Gateway.url.port ?? 18789),
+            "--display-name", Self.displayName,
+            "--share-installed-apps",
+        ]
+        arguments.append(Gateway.url.scheme == "https" ? "--tls" : "--no-tls")
+        task.arguments = arguments
+        var environment = BundledRuntime.environment()
+        environment["OPENCLAW_SERVICE_KIND"] = "node"
+        environment["PINKIE_OPENCLAW_ENTRY"] = entry.path
+        task.environment = environment
+        let output = BundledRuntime.logHandle(named: "computer-control-node")
+        task.standardOutput = output ?? FileHandle.nullDevice
+        task.standardError = output ?? FileHandle.nullDevice
+        let currentGeneration = generation
+        task.terminationHandler = { [weak self] stopped in
+            DispatchQueue.main.async {
+                self?.nodeDidExit(stopped, generation: currentGeneration)
+            }
+        }
+        do {
+            try task.run()
+            nodeProcess = task
+            nodeLog = output
+            lastError = nil
+            inspectPairing(attempt: 0, generation: currentGeneration)
+        } catch {
+            try? output?.close()
+            lastError = error.localizedDescription
+            NSLog("[CLE Kk computer] node launch failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func driverDidExit(_ task: Process, generation exitedGeneration: Int) {
+        guard driverProcess === task else { return }
+        driverProcess = nil
+        try? driverLog?.close()
+        driverLog = nil
+        let node = nodeProcess
+        nodeProcess = nil
+        try? nodeLog?.close()
+        nodeLog = nil
+        DesktopControlEndpoint.clear(socket: socketURL)
+        socketURL = nil
+        guard !stopping, generation == exitedGeneration else { return }
+        lastError = "桌面执行器意外退出（状态码 \(task.terminationStatus)），正在自动恢复。"
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            if let node { Self.stopAndReap([(node, true)]) }
+            DispatchQueue.main.async {
+                guard let self,
+                      !self.stopping,
+                      self.generation == exitedGeneration else { return }
+                self.startDriver()
+            }
+        }
+    }
+
+    private func nodeDidExit(_ task: Process, generation exitedGeneration: Int) {
+        guard nodeProcess === task else { return }
+        nodeProcess = nil
+        try? nodeLog?.close()
+        nodeLog = nil
+        guard !stopping,
+              generation == exitedGeneration,
+              driverProcess?.isRunning == true else { return }
+        lastError = "桌面控制节点意外退出（状态码 \(task.terminationStatus)），正在自动恢复。"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.startNodeIfReady()
+        }
+    }
+
+    /// A new command surface forces one Gateway reapproval. Match the pending
+    /// request to this machine's cryptographic node identity and both required
+    /// computer commands; display names are mutable and are not an authority.
+    /// Keep probing until the authoritative Gateway status is truly usable.
+    private func inspectPairing(
+        attempt: Int,
+        generation expectedGeneration: Int,
+        nodeID cachedNodeID: String? = nil
+    ) {
+        guard !stopping, generation == expectedGeneration else { return }
+        pairingProbe?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            let nodeID = cachedNodeID ?? Self.localNodeID()
+            if let nodeID, Self.computerReady(nodeID: nodeID) {
+                DispatchQueue.main.async {
+                    guard let self,
+                          !self.stopping,
+                          self.generation == expectedGeneration else { return }
+                    self.lastError = nil
+                    self.pairingProbe = nil
+                }
+                return
+            }
+            let requestID = nodeID.flatMap { Self.pendingRequestID(nodeID: $0) }
+            let approved: Bool
+            if let requestID {
+                approved = Self.runOpenClaw([
+                    "nodes", "approve", requestID, "--timeout", "5000",
+                ]).status == 0
+            } else {
+                approved = false
+            }
+            DispatchQueue.main.async {
+                guard let self,
+                      !self.stopping,
+                      self.generation == expectedGeneration else { return }
+                if approved {
+                    self.lastError = nil
+                    // The Gateway applies the expanded command surface on the
+                    // next connection. SIGINT gives the node a clean restart.
+                    if let node = self.nodeProcess {
+                        DispatchQueue.global(qos: .utility).async {
+                            Self.stopAndReap([(node, true)])
+                        }
+                    }
+                    return
+                }
+                if attempt >= 10 {
+                    self.lastError = "桌面控制节点尚未就绪，正在继续自动重连。"
+                }
+                self.inspectPairing(
+                    attempt: min(attempt + 1, 10_000),
+                    generation: expectedGeneration,
+                    nodeID: nodeID
+                )
+            }
+        }
+        pairingProbe = item
+        let delay = attempt < 10 ? 0.5 : 2.0
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    private static func localNodeID() -> String? {
+        let result = runOpenClaw(["node", "identity", "--json"])
+        guard result.status == 0,
+              let object = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any],
+              let deviceID = object["deviceId"] as? String,
+              !deviceID.isEmpty else { return nil }
+        return deviceID
+    }
+
+    private static func computerReady(nodeID: String) -> Bool {
+        let result = runOpenClaw(["nodes", "status", "--connected", "--json", "--timeout", "3000"])
+        guard result.status == 0,
+              let object = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any],
+              let rows = object["nodes"] as? [[String: Any]] else { return false }
+        return rows.contains(where: { row in
+            let commands = Set((row["commands"] as? [String]) ?? [])
+            return row["nodeId"] as? String == nodeID
+                && row["connected"] as? Bool == true
+                && commands.contains("computer.act")
+                && commands.contains("screen.snapshot")
+        })
+    }
+
+    private static func pendingRequestID(nodeID: String) -> String? {
+        let result = runOpenClaw(["nodes", "pending", "--json", "--timeout", "3000"])
+        guard result.status == 0,
+              let rows = try? JSONSerialization.jsonObject(with: result.data) as? [[String: Any]] else { return nil }
+        return rows.first(where: { row in
+            let platform = (row["platform"] as? String)?.lowercased() ?? ""
+            let commands = Set((row["commands"] as? [String]) ?? [])
+            return row["nodeId"] as? String == nodeID
+                && (platform.hasPrefix("macos") || platform.hasPrefix("darwin"))
+                && commands.contains("computer.act")
+                && commands.contains("screen.snapshot")
+        })?["requestId"] as? String
+    }
+
+    private static func runOpenClaw(_ arguments: [String]) -> (status: Int32, data: Data) {
+        guard let node = BundledRuntime.nodeURL,
+              let entry = BundledRuntime.openClawEntryURL,
+              BundledRuntime.exists(node),
+              FileManager.default.fileExists(atPath: entry.path) else { return (-1, Data()) }
+        let task = Process()
+        let output = Pipe()
+        task.executableURL = node
+        task.arguments = [entry.path] + arguments
+        task.environment = BundledRuntime.environment()
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return (task.terminationStatus, output.fileHandleForReading.readDataToEndOfFile())
+        } catch {
+            return (-1, Data())
+        }
     }
 }
 
@@ -602,6 +1227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let party = PartyService()
     private let roundtable = RoundtableService()
     private let tts = TTSService()
+    private let desktopControl = DesktopControlService()
 
     @objc func openParty(_ sender: Any?) {
         party.ready { [weak self] ready in
@@ -639,7 +1265,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         tts.stop()
         party.stop()
         roundtable.stop()
-        Gateway.stop()
+        desktopControl.stop()
+        // The gateway owns durable turns and may be draining active work.
+        // Terminating it synchronously here makes OpenClaw hold admission for
+        // up to five minutes and leaves the next App instance on a dead page.
+        // Keep the local service alive across an App relaunch/update; the next
+        // launcher adopts the same ready gateway without interrupting work.
+        // An explicit service-management action can still call Gateway.stop().
     }
 
     // 前后台通知: WKWebView 切后台会被 macOS 挂起 JS/网络, 网关 websocket
@@ -650,7 +1282,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        clampWindowToVisibleScreen()
         notifyWebView("pinkie:app-foreground")
+    }
+
+    private func clampWindowToVisibleScreen() {
+        guard let window, let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let constrained = window.constrainFrameRect(window.frame, to: window.screen ?? NSScreen.main)
+        if constrained != window.frame {
+            window.setFrame(constrained, display: true, animate: false)
+        } else if !visible.intersects(window.frame) {
+            window.setFrameOrigin(NSPoint(x: visible.midX - window.frame.width / 2, y: visible.midY - window.frame.height / 2))
+        }
     }
 
     private func notifyWebView(_ event: String) {
@@ -721,7 +1364,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let rect = NSRect(x: 0, y: 0, width: 1280, height: 800)
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        let rect = NSRect(
+            x: 0,
+            y: 0,
+            width: min(1280, visible.width),
+            height: min(800, visible.height)
+        )
         let window = LauncherWindow(
             contentRect: rect,
             styleMask: [.borderless, .resizable],
@@ -733,9 +1383,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.isMovableByWindowBackground = false
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.hasShadow = true
+        // The stock black NSWindow shadow reads like a system frame against
+        // the pink artwork. Keep the edge inside our own themed glass shell.
+        window.hasShadow = false
         window.minSize = NSSize(width: 860, height: 580)
-        window.setFrame(rect, display: false)
+        window.setFrame(window.constrainFrameRect(rect, to: NSScreen.main), display: false)
         window.center()
 
         let configuration = WKWebViewConfiguration()
@@ -778,6 +1430,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         ).cgColor
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
+        contentView.layer?.borderWidth = 1
+        contentView.layer?.borderColor = NSColor(
+            srgbRed: 217.0 / 255.0,
+            green: 89.0 / 255.0,
+            blue: 143.0 / 255.0,
+            alpha: 0.24
+        ).cgColor
         contentView.layer?.masksToBounds = true
         contentView.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -840,28 +1499,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func startBundledServices() {
-        startGatewayMonitor()
+        desktopControl.start()
         tts.ready { _ in }
         party.ready { _ in }
         roundtable.ready { _ in }
 
-        Gateway.isRunning { [weak self] running in
+        Gateway.isReady { [weak self] ready in
             DispatchQueue.main.async {
-                if running {
+                if ready {
+                    self?.startGatewayMonitor()
                     self?.loadDashboard()
                     return
                 }
-                Gateway.start()
-                Gateway.ready { ready in
-                    if ready {
-                        self?.loadDashboard()
-                        return
+                // A previous App instance may have left a healthy process in
+                // restart drain. Wait for readyz instead of starting a second
+                // process on the same port or killing the first one.
+                Gateway.isReachable { reachable in
+                    DispatchQueue.main.async {
+                        if !reachable { Gateway.start() }
+                        Gateway.ready { ready in
+                            if ready {
+                                self?.startGatewayMonitor()
+                                self?.loadDashboard()
+                                return
+                            }
+                            let alert = NSAlert()
+                            alert.messageText = "超級碧琪的网关还在恢复中"
+                            alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
+                            alert.alertStyle = .warning
+                            alert.runModal()
+                        }
                     }
-                    let alert = NSAlert()
-                    alert.messageText = "超級碧琪的网关没有启动成功"
-                    alert.informativeText = Gateway.lastError ?? "现有资料没有被改动。请查看 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
-                    alert.alertStyle = .warning
-                    alert.runModal()
                 }
             }
         }
@@ -870,7 +1538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func startGatewayMonitor() {
         guard gatewayMonitor == nil else { return }
         gatewayMonitor = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Gateway.isRunning { running in
+            Gateway.isReady { running in
                 DispatchQueue.main.async {
                     guard let self else { return }
                     if running {
@@ -879,13 +1547,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                         return
                     }
                     if let graceUntil = self.gatewayRepairGraceUntil, Date() < graceUntil { return }
-                    self.gatewayProbeFailures += 1
-                    guard self.gatewayProbeFailures >= 2 else { return }
-                    self.gatewayProbeFailures = 0
-                    // The bundled gateway may need several seconds to load
-                    // plugins. Do not kill a healthy startup on the next probe.
-                    self.gatewayRepairGraceUntil = Date().addingTimeInterval(20)
-                    Gateway.repair()
+                    // readyz can be false while the HTTP process is alive and
+                    // safely draining/rebuilding. Do not kill it merely because
+                    // one or six short probes failed; the native client will
+                    // reconnect as soon as readyz turns true again.
+                    Gateway.isReachable { [weak self] reachable in
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self else { return }
+                            if reachable || Gateway.processAlive() {
+                                self.gatewayProbeFailures = 0
+                                self.gatewayRepairGraceUntil = Date().addingTimeInterval(90)
+                                return
+                            }
+                            self.gatewayProbeFailures += 1
+                            guard self.gatewayProbeFailures >= 6 else { return }
+                            self.gatewayProbeFailures = 0
+                            self.gatewayRepairGraceUntil = Date().addingTimeInterval(90)
+                            Gateway.repair()
+                        }
+                    }
                 }
             }
         }
@@ -914,7 +1594,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
         guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
-        window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        // Keep the themed base behind the intentionally translucent wallpaper.
+        // Clearing the native layer exposes the user's desktop through every
+        // transparent CSS surface and makes a valid reply look like a blank,
+        // frozen page while WKWebView is recompositing.
+        window?.contentView?.layer?.backgroundColor = NSColor(
+            srgbRed: 239.0 / 255.0,
+            green: 203.0 / 255.0,
+            blue: 211.0 / 255.0,
+            alpha: 1
+        ).cgColor
     }
 
     @available(macOS 12.0, *)

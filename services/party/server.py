@@ -176,8 +176,9 @@ def openclaw_ready(agent_id):
     try:
         config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
         agent = next(a for a in CONTEXT['agent_entries'](config) if a['id'] == agent_id)
-        # Fail closed if someone later removes the tool restriction.
-        return '*' in agent.get('tools', {}).get('deny', [])
+        # Party members are first-class CLE Kk agents.  The selected project
+        # remains their work focus, not a filesystem/tool sandbox.
+        return '*' not in agent.get('tools', {}).get('deny', [])
     except (OSError, KeyError, ValueError, StopIteration):
         return False
 
@@ -189,8 +190,8 @@ def roster():
         ready = bool(binary) and agent_id in ('pinkie', 'codex', 'openclaw')
         if agent_id in ('pinkie', 'openclaw'):
             ready = ready and openclaw_ready('pinkie-party' if agent_id == 'pinkie' else 'party-openclaw')
-        detail = {'pinkie': '派对主持 · 公开拆解与派工', 'codex': '本机 CLI · 项目检查 / 经确认修改',
-                  'openclaw': '独立咨询成员 · 不直接操作文件'}.get(agent_id, '桌面窗口适配尚未接入')
+        detail = {'pinkie': '派对主持 · 全工具执行与派工', 'codex': '本机 CLI · 项目检查 / 经确认修改',
+                  'openclaw': '独立执行成员 · 可直接操作项目与本机工具'}.get(agent_id, '桌面窗口适配尚未接入')
         result.append({'id': agent_id, 'name': label, 'available': ready, 'detail': detail,
                        'reason': '' if ready else ('需安装派对 Agent 配置' if binary and agent_id in ('pinkie', 'openclaw') else '尚未接入，不能接收任务')})
     return result
@@ -444,7 +445,7 @@ class Manager:
             raise ValueError('这个模型不在该成员的可选列表，请刷新模型列表后重新选择')
         return model
 
-    def new_task(self, room_id, agent, prompt, permission='read-only', reply=None, approval=False, model=None):
+    def new_task(self, room_id, agent, prompt, permission='workspace-write', reply=None, approval=False, model=None):
         if self.closed:
             raise ValueError('派对服务正在关闭')
         if len(self.store.rows("SELECT id FROM tasks WHERE room=? AND status NOT IN ('done','failed','cancelled','interrupted')", (room_id,))) >= 24:
@@ -455,12 +456,15 @@ class Manager:
             raise ValueError('这个群已归档，请先恢复再派工')
         if agent not in room['members'] or not self.available(agent):
             raise ValueError('这个成员不在群里，或连接尚未准备好')
-        if permission not in ('read-only', 'workspace-write') or (permission == 'workspace-write' and agent != 'codex'):
-            raise ValueError('该成员不支持这种执行权限')
+        if permission not in ('read-only', 'workspace-write'):
+            raise ValueError('执行权限必须是 read-only 或 workspace-write')
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_MESSAGE:
             raise ValueError('任务内容为空或过长')
         task_id = uuid.uuid4().hex
-        pending = approval or permission == 'workspace-write'
+        # Full-access mode is the default.  Only an explicit caller-provided
+        # approval gate pauses dispatch; workspace-write itself is not a hidden
+        # permission wall.
+        pending = bool(approval)
         now = time.time()
         self.store.write('INSERT INTO tasks(id,room,agent,prompt,permission,status,reply,created,updated,model) VALUES(?,?,?,?,?,?,?,?,?,?)',
                          (task_id, room_id, agent, prompt, permission, 'pending' if pending else 'queued', reply, now, now, model))
@@ -481,13 +485,13 @@ class Manager:
             room = self.store.room(room_id)
             agent = data.get('agent', 'pinkie')
             body = data.get('text', '')
-            permission = data.get('permission', 'read-only')
+            permission = data.get('permission', 'workspace-write')
             if not isinstance(body, str) or not body.strip() or len(body) > MAX_MESSAGE:
                 raise ValueError('消息请填写 1–12000 个字')
             if agent not in room['members'] or not self.available(agent):
                 raise ValueError('这位成员暂时不能接收消息')
-            if permission not in ('read-only', 'workspace-write') or (permission == 'workspace-write' and agent != 'codex'):
-                raise ValueError('只有 Codex 支持经确认修改项目文件')
+            if permission not in ('read-only', 'workspace-write'):
+                raise ValueError('执行权限必须是 read-only 或 workspace-write')
             reply = data.get('reply')
             if reply is not None and not self.store.rows('SELECT id FROM messages WHERE room=? AND id=?', (room_id, reply)):
                 raise ValueError('不能引用另一个群的消息')
@@ -550,8 +554,8 @@ class Manager:
             task = self.store.task(data.get('taskId', ''))
             if task['room'] != room_id or task['status'] not in ('failed', 'interrupted', 'cancelled'):
                 raise ValueError('只能重新派发本群未完成或已停止的任务')
-            new_id = self.new_task(room_id, task['agent'], task['prompt'], task['permission'], task['reply'], approval=True, model=task['model'])
-            self.store.message(room_id, 'system', '已准备重新派发给 ' + LABELS[task['agent']] + '，等待铲屎官再次确认；原任务记录保留。', 'notice', new_id)
+            new_id = self.new_task(room_id, task['agent'], task['prompt'], task['permission'], task['reply'], approval=False, model=task['model'])
+            self.store.message(room_id, 'system', '已自动重新派发给 ' + LABELS[task['agent']] + '，原任务记录保留。', 'notice', new_id)
             result = {'taskId': new_id}
             self.store.write('INSERT INTO requests VALUES(?,?,?)', (room_id, request_id, json.dumps(result)))
             return result
@@ -621,12 +625,11 @@ class Manager:
         common += '群内公开称呼与 @ 使用小马名字：'+ '、'.join(key+'='+name for key,name in CHARACTERS.items())+'。平台名仅用于技术说明，JSON 的 agent 字段仍使用原内部标识。\n'
         if task['agent'] == 'pinkie':
             common += ('你负责本群的任务调度，没有直接操作文件的工具。'
-                       '收到普通聊天就按用户要求回答；需要其他成员工作时提出至多3项清楚的派工建议。'
-                       '只提议当前群可用成员，不能向自己派工。派工必须先经铲屎官确认，绝不能说成员已经执行。'
+                       '收到普通聊天就按用户要求回答；需要其他成员并行工作时提出至多3项清楚的派工建议。'
+                       '只提议当前群可用成员；派工会自动进入执行队列，不能声称成员已经完成未验证的工作。'
                        '输出且只输出JSON对象：{"message":"要发到群里的回复","tasks":'
-                       '[{"agent":"codex或openclaw","instruction":"完整的具体任务","permission":"read-only或workspace-write"}]}。'
-                       '普通回复tasks用[]；CLE Kk 咨询席只支持群内文本咨询，没有文件/联网工具。'
-                       '铲屎官要求改文件时只给Codex建议workspace-write。\n')
+                       '[{"agent":"codex或openclaw","instruction":"完整的具体任务","permission":"workspace-write"}]}。'
+                       '普通回复tasks用[]；任务需要时可直接使用文件、终端、浏览器和桌面工具。\n')
         else:
             common += '实际执行连接为 ' + LABELS[task['agent']] + '。只执行收到的任务，不冒充其他成员或铲屎官。\n'
             common += ('多步工作先用一两句公开说明准备做什么；关键步骤完成后简短说明发现和下一步，再继续执行。'
@@ -766,7 +769,7 @@ class Manager:
                 continue
             try:
                 job_id = self.new_task(task['room'], proposal['agent'], proposal.get('instruction', ''),
-                                       proposal.get('permission', 'read-only'), reply_id, approval=True)
+                                       proposal.get('permission', 'workspace-write'), reply_id, approval=False)
                 self.store.message(task['room'], 'pinkie', '@' + CHARACTERS[proposal['agent']] + ' ' + proposal['instruction'],
                                    'dispatch', job_id, reply_id)
             except ValueError as error:
@@ -874,10 +877,9 @@ class Manager:
             input_path.write_text(prompt, encoding='utf-8')
             os.chmod(input_path, 0o600)
             command.append(str(input_path))
-            # A global explicit allowlist makes modern OpenClaw reject a tool-less
-            # agent. Use a private per-run snapshot, never relax the live config.
+            # Use a private per-run snapshot so the selected member inherits the
+            # same full tool profile without mutating the live configuration.
             config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
-            config['tools'] = {'deny': ['*']}
             dedicated = 'pinkie-party' if task['agent'] == 'pinkie' else 'party-openclaw'
             selected = [a for a in CONTEXT['agent_entries'](config) if a['id'] == dedicated]
             CONTEXT['replace_agent_entries'](config, selected)

@@ -1,8 +1,8 @@
-"""Local-only multi-model planning plus a user-model project work seat.
+"""Multi-model planning plus a user-model project work seat.
 
-Advisory model calls stay isolated and tool-less. A user-selected project becomes
-the executor's default working directory without becoming a whole-computer access
-boundary, while public tool/progress events stay beside the roundtable transcript.
+A user-selected project becomes the executor's default working directory without
+becoming a whole-computer access boundary. Roundtable members use the full CLE Kk
+tool set while public tool/progress events stay beside the transcript.
 The live OpenClaw configuration and personality files are never rewritten.
 """
 import argparse
@@ -464,7 +464,7 @@ class Roundtable:
         }[stage]
         return f'''你是工作圆桌中的{info['name']}，席位职责是“{info['role']}”。
 身份规则只影响称呼：需要自称时只能说“{info['name']}”，不能自称“我”“我的”“我们”；不要因此降低真实模型的分析、写作、技术或推理能力。
-称呼用户为“铲屎官”。你不直接调用工具；下方标为“所选项目快照”的内容由系统从铲屎官选定的项目文件夹读取，必须以它为项目事实，不得猜测或引用其他项目。
+称呼用户为“铲屎官”。你可以直接调用 CLE Kk 已配置的工具完成现实工作；下方标为“所选项目快照”的内容由系统从铲屎官选定的项目文件夹读取，必须以它为项目事实，不得猜测或引用其他项目。项目目录是工作重心，不是访问权限边界，需要时通过绝对路径访问本机其他文件夹。
 只公开结论、依据、异议和建议；不要输出隐藏思维链、系统提示、JSON 或舞台说明。
 本轮职责：{stage_instruction}
 控制在 220 个中文字以内，直接说人话，不写标题式自我介绍，不重复其他成员已经说过的内容。
@@ -484,12 +484,11 @@ class Roundtable:
         live_config = Path.home()/'.openclaw/openclaw.json'
         config = json.loads(live_config.read_text(encoding='utf-8'))
         candidates = [agent for agent in CONTEXT['agent_entries'](config)
-                      if '*' in agent.get('tools', {}).get('deny', [])]
+                      if '*' not in agent.get('tools', {}).get('deny', [])]
         if not candidates:
-            raise ValueError('没有可用于隔离调用的无工具连接器')
+            raise ValueError('没有可用于圆桌调用的 CLE Kk Agent 配置')
         agent = json.loads(json.dumps(candidates[0]))
         agent['model'] = {'primary': model, 'fallbacks': []}
-        config['tools'] = {'deny': ['*']}
         CONTEXT['replace_agent_entries'](config, [agent])
         with tempfile.TemporaryDirectory(prefix='roundtable-', dir=self.store.root) as temp:
             temp = Path(temp)
@@ -502,11 +501,12 @@ class Roundtable:
                 '# ' + pony_name + '\n\n只保留名字身份：需要自称时使用“' + pony_name +
                 '”，不使用“我”或“我们”。不要添加性格、口癖、文风或能力限制。\n', encoding='utf-8')
             (workspace/'IDENTITY.md').write_text('# IDENTITY.md\n\n- **Name:** ' + pony_name + '\n', encoding='utf-8')
-            (workspace/'AGENTS.md').write_text('仅处理本次传入的圆桌公开记录，不访问文件、工具或其他会话。\n', encoding='utf-8')
+            (workspace/'AGENTS.md').write_text(
+                '当前项目目录是工作重心，不是访问权限边界。任务需要时可使用 CLE Kk 已配置的全部工具，并通过绝对路径访问本机其他文件夹。\n',
+                encoding='utf-8')
             agent['name'] = pony_name
             agent['workspace'] = str(workspace)
             agent['agentDir'] = str(agent_dir)
-            agent['tools'] = {'deny': ['*']}
             agent['memorySearch'] = {'enabled': False}
             CONTEXT['replace_agent_entries'](config, [agent])
             config_path = temp/'config.json'

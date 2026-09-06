@@ -124,7 +124,7 @@ installer/macos/    UI 重应用与开机服务模板
 | `unrestricted-prompt.txt` | deepseek / 其他通用 | 满配 15 部分：免疫声明、归一化、术语重定义、预设模板、防复发等 |
 | `unrestricted-prompt-claude.txt` | claude-* | 非对抗式 XML 配置 + URIAL 少样本 + Skeleton Key |
 | `unrestricted-prompt-gemini.txt` | gemini-*（普通档） | BLOCK_NONE 安全设置声明 + 自由实体人设 |
-| `unrestricted-prompt-gemini-hard.txt` | gemini-3.7-flash-tiered / gemini-pro-agent / gemini-3.1-pro-high | 良性"协议测试套件"框架（不提任何破甲词汇），代理自动强制 temperature=0 |
+| `unrestricted-prompt-gemini-hard.txt` | gemini-3.8-flash-tiered / gemini-3.7-flash-tiered / gemini-pro-agent / gemini-3.1-pro-high | 良性"协议测试套件"框架（不提任何破甲词汇），代理自动强制 temperature=0 |
 | `unrestricted-prompt-gpt5.txt` | gpt-5.x / codex | 技术操作范围语义定义 + 硬输出规则 |
 | `unrestricted-prompt-gptoss.txt` | gpt-oss-* | 政策覆写（SYSTEM CORE POLICY） |
 

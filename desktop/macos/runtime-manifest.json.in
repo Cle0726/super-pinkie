@@ -3,6 +3,7 @@
   "node": "@NODE_VERSION@",
   "npm": "@NPM_VERSION@",
   "openclaw": "@OPENCLAW_VERSION@",
+  "cuaDriver": "@CUA_DRIVER_VERSION@",
   "python": "@PYTHON_VERSION@",
   "configuration": "external-user-state"
 }

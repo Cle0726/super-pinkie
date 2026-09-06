@@ -100,16 +100,15 @@ class PartyTests(unittest.TestCase):
         with patch.object(self.manager,'context_budget',return_value=limits):write_command=self.manager.command(write_task,self.a)
         self.assertIn('danger-full-access', write_command)
 
-    def test_write_and_host_dispatch_require_approval(self):
+    def test_write_and_host_dispatch_use_full_access_by_default(self):
         result = self.manager.send(self.a['id'], dict(requestId='request001', agent='codex', text='改测试文件', permission='workspace-write'))
         task = self.store.task(result['taskId'])
-        self.assertEqual('pending', task['status'])
-        self.manager.pool.submit.assert_not_called()
+        self.assertEqual('queued', task['status'])
+        self.manager.pool.submit.assert_called_once()
         with self.assertRaises(ValueError):
             self.manager.approve(self.b['id'], task['id'])
-        self.manager.approve(self.a['id'], task['id'])
-        self.assertEqual('queued', self.store.task(task['id'])['status'])
-        self.manager.pool.submit.assert_called_once()
+        with self.assertRaises(ValueError):
+            self.manager.approve(self.a['id'], task['id'])
         with self.assertRaises(ValueError):
             self.manager.approve(self.a['id'], task['id'])
 
@@ -181,11 +180,11 @@ class PartyTests(unittest.TestCase):
         result = self.manager.retry(self.a['id'], data)
         self.assertEqual(result, self.manager.retry(self.a['id'], data))
         copied = self.store.task(result['taskId'])
-        self.assertEqual('pending', copied['status'])
+        self.assertEqual('queued', copied['status'])
         self.assertEqual('workspace-write', copied['permission'])
         self.assertEqual('改文件', copied['prompt'])
         self.assertEqual('cancelled', self.store.task(task)['status'])
-        self.manager.pool.submit.assert_not_called()
+        self.manager.pool.submit.assert_called()
         with self.assertRaises(ValueError):
             self.manager.retry(self.a['id'], dict(taskId=result['taskId'], requestId='retry_request02'))
 
@@ -223,8 +222,8 @@ class PartyTests(unittest.TestCase):
         output = json.dumps({'message': '老板，请确认', 'tasks': [dict(agent='codex', instruction='检查', permission='read-only')]})
         self.manager.host_result(self.store.task(task), output)
         jobs = self.store.rows("SELECT * FROM tasks WHERE agent='codex'")
-        self.assertEqual(['pending'], [j['status'] for j in jobs])
-        self.manager.pool.submit.assert_not_called()
+        self.assertEqual(['queued'], [j['status'] for j in jobs])
+        self.manager.pool.submit.assert_called()
         summary = dict(self.store.task(task), prompt='[派对服务：只汇总] 测试')
         self.manager.host_result(summary, output)
         self.assertEqual(1, len(self.store.rows("SELECT * FROM tasks WHERE agent='codex'")))
@@ -392,7 +391,7 @@ class PartyTests(unittest.TestCase):
             self.assertIn('绝对路径访问电脑上的其他文件夹', prompt)
         host = self.manager.prompt({'agent':'pinkie', 'prompt':'hi'}, self.a)
         self.assertIn('输出且只输出JSON对象', host)
-        self.assertIn('派工必须先经铲屎官确认', host)
+        self.assertIn('派工会自动进入执行队列', host)
 
     def test_names_are_instructions_not_a_destructive_output_filter(self):
         body = '紫悦的示例：\n> 我站在窗边。\n\n```python\nmessage = "我"\n```\nI remember that day.'
@@ -494,7 +493,7 @@ class PartyTests(unittest.TestCase):
         actual = json.loads(config.read_text())
         self.assertEqual(original, actual['agents']['list'][0])
         self.assertEqual(42, actual['unchanged'])
-        self.assertEqual(['*'], actual['agents']['list'][1]['tools']['deny'])
+        self.assertNotIn('tools', actual['agents']['list'][1])
         self.assertFalse(setup.install(home))
 
     def test_setup_uses_keyed_agents_and_repairs_mixed_schema_without_overwriting(self):
@@ -512,9 +511,10 @@ class PartyTests(unittest.TestCase):
         actual = json.loads(config.read_text())
         self.assertNotIn('list', actual['agents'])
         self.assertEqual(main, actual['agents']['entries']['main'])
-        self.assertEqual(existing_party, actual['agents']['entries']['party-openclaw'])
+        self.assertNotIn('tools', actual['agents']['entries']['party-openclaw'])
+        self.assertEqual('keep', actual['agents']['entries']['party-openclaw']['custom'])
         self.assertEqual('/legacy', actual['agents']['entries']['legacy-extra']['workspace'])
-        self.assertEqual(['*'], actual['agents']['entries']['pinkie-party']['tools']['deny'])
+        self.assertNotIn('tools', actual['agents']['entries']['pinkie-party'])
         self.assertEqual({'enabled':False}, actual['agents']['entries']['pinkie-party']['memory'])
         self.assertEqual(42, actual['untouched'])
         self.assertFalse(setup.install(home))

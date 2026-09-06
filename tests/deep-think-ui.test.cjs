@@ -42,7 +42,10 @@ test('tier completion refreshes native chat history without reloading the app',(
   const src=read('ui/injections/laolao-resume.js');
   assert.match(src,/pinkie:tier-complete/);
   assert.match(src,/refreshVisibleChat/);
-  assert.match(src,/button\.chat-settings-action/);
+  assert.match(src,/typeof state\.refreshCurrentChat === "function"/);
+  assert.match(src,/client\.request\("chat\.history"/);
+  assert.match(src,/recoverCurrentChat\("tier-complete"/);
+  assert.doesNotMatch(src,/button\.chat-settings-action/);
   assert.doesNotMatch(src,/location\.reload/);
 });
 

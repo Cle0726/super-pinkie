@@ -75,6 +75,10 @@ node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Context protection patch failed" }
 python (Join-Path $RepoDir "services\context\setup.py")
 if ($LASTEXITCODE -ne 0) { throw "Context policy setup failed" }
+python (Join-Path $RepoDir "services\project-scope\setup.py")
+if ($LASTEXITCODE -ne 0) { throw "Project scope setup failed" }
+python (Join-Path $RepoDir "services\mode-architecture\setup.py")
+if ($LASTEXITCODE -ne 0) { throw "Mode architecture setup failed" }
 
 # 本地回环网关不应被浏览器 token 欢迎页拦住；保留 token 字段，只收口启动方式。
 $ConfigPath = Join-Path $PromptsDir "openclaw.json"

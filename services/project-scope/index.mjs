@@ -70,10 +70,21 @@ export class ProjectScope {
     this.inheritedBindings.set(childSessionKey,binding);return true;
   }
   release(sessionKey){this.inheritedBindings.delete(sessionKey);}
-  resolve(binding,raw) {
+  resolve(binding,raw,workspaceRoot='') {
     if(typeof raw!=='string'||!raw||raw.includes('\0')) throw new Error('工具缺少有效路径');
     const expanded=raw==='~'?this.home:raw.startsWith('~/')?path.join(this.home,raw.slice(2)):raw;
-    return canonical(path.isAbsolute(expanded)?expanded:path.resolve(binding.root,expanded));
+    if(!path.isAbsolute(expanded))return canonical(path.resolve(binding.root,expanded));
+    const target=canonical(expanded);
+    // The runtime expands relative tool paths against the agent's hidden
+    // workspace before hooks run.  For a bound project that hidden directory
+    // is infrastructure, not the user's chosen project.  Translate only that
+    // one prefix back to the visible project anchor; every other absolute path
+    // remains globally accessible.
+    if(typeof workspaceRoot==='string'&&path.isAbsolute(workspaceRoot)){
+      const runtimeRoot=canonical(workspaceRoot);
+      if(inside(runtimeRoot,target))return canonical(path.join(binding.root,path.relative(runtimeRoot,target)));
+    }
+    return target;
   }
   prompt(ctx) {
     const b=this.binding(ctx);if(!b)return;
@@ -94,20 +105,23 @@ export class ProjectScope {
       if(['sessions_yield','subagents'].includes(name))return;
       if(['read','write','edit'].includes(name)) {
         const key=typeof p.path==='string'?'path':'file_path';
-        const target=this.resolve(b,p[key]);
-        if(p.path&&p.file_path&&this.resolve(b,p.path)!==this.resolve(b,p.file_path))throw new Error('工具路径参数不一致');
+        const workspaceRoot=ctx?.workspaceDir||ctx?.workspace||'';
+        const target=this.resolve(b,p[key],workspaceRoot);
+        if(p.path&&p.file_path&&this.resolve(b,p.path,workspaceRoot)!==this.resolve(b,p.file_path,workspaceRoot))throw new Error('工具路径参数不一致');
         p[key]=target;if(p.path)p.path=target;if(p.file_path)p.file_path=target;return {params:p};
       }
       if(name==='apply_patch') {
         if(typeof p.input!=='string'||!p.input.startsWith('*** Begin Patch'))throw new Error('补丁格式无法验证，请使用 edit/write');
         let count=0;
-        p.input=p.input.split('\n').map(line=>{const match=line.match(/^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/);if(!match)return line;count++;return match[1]+this.resolve(b,match[2]);}).join('\n');
+        const workspaceRoot=ctx?.workspaceDir||ctx?.workspace||'';
+        p.input=p.input.split('\n').map(line=>{const match=line.match(/^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/);if(!match)return line;count++;return match[1]+this.resolve(b,match[2],workspaceRoot);}).join('\n');
         if(!count)throw new Error('补丁没有可验证的目标路径');return {params:p};
       }
       if(name==='exec') {
         if(typeof p.command!=='string')return;
-        if(p.workdir)p.workdir=this.resolve(b,p.workdir);
-        else if(p.cwd)p.cwd=this.resolve(b,p.cwd);
+        const workspaceRoot=ctx?.workspaceDir||ctx?.workspace||'';
+        if(p.workdir)p.workdir=this.resolve(b,p.workdir,workspaceRoot);
+        else if(p.cwd)p.cwd=this.resolve(b,p.cwd,workspaceRoot);
         else p.workdir=b.root;
         return {params:p};
       }

@@ -73,6 +73,17 @@ test('startup cannot force success on timeout; animation survives while error re
     const source=read(css);assert.match(source,/transform: scaleX\(\.08\)/);assert.doesNotMatch(source,/transition: width/);
   }
 });
+test('mode switching prewarms every local scene and has no old multi-second artificial gate',()=>{
+  const mode=read('ui/injections/laolao-mode-switcher.js');
+  assert.match(mode,/Promise\.all\(modes\.map\(mode => motion\.preload\(mode\.transition\)\)\)/);
+  assert.match(mode,/requestIdleCallback/);
+  assert.match(mode,/pointerenter/);
+  assert.match(mode,/runDuration = motion\.reduced\(\) \? 100 : 420/);
+  assert.match(mode,/elapsed >= 120/);
+  assert.match(mode,/finishProgress\(ui\.fill, ui\.percentage, ui\.progress, 160\)/);
+  assert.doesNotMatch(mode,/runDuration = motion\.reduced\(\) \? 400 : 2400/);
+  assert.doesNotMatch(mode,/setTimeout\(preloadTransitions, 3600\)/);
+});
 test('shared motion module is shipped for both app and party',()=>{
   assert.match(read('installer/macos/apply-theme.sh'),/laolao-motion\.js/);
   assert.match(read('services/party/server.py'),/'\/party-motion\.js': ROOT \/ 'ui\/injections\/laolao-motion\.js'/);

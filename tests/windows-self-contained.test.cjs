@@ -30,6 +30,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   const launcher = read('app/windows_desktop.py');
   assert.match(launcher, /node_modules\/openclaw\/openclaw\.mjs/);
   assert.match(launcher, /gateway", "run"/);
+  assert.match(launcher, /gateway_environment\["OPENCLAW_SERVICE_KIND"\] = "gateway"/);
   assert.match(launcher, /while not self\.closing\.wait\(2\)/);
   assert.match(launcher, /self\.failure_limit = 3/);
   assert.match(launcher, /failures >= self\.failure_limit/);
@@ -38,6 +39,8 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /--bind", "loopback/);
   assert.match(launcher, /cleanup_orphan_webview/);
   assert.match(launcher, /PINKIE_KEEP_GATEWAY/);
+  assert.match(launcher, /OPENCLAW_NO_AUTO_UPDATE/);
+  assert.match(launcher, /CUA_DRIVER_RS_UPDATE_CHECK/);
   assert.match(launcher, /keeping gateway for background sessions/);
   assert.match(launcher, /pywebview window APIs from this worker thread/);
   assert.match(launcher, /synchronous evaluate_js there deadlocks/);

@@ -511,6 +511,12 @@ class BundledRuntime:
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
         environment["PINKIE_GATEWAY_URL"] = GATEWAY_URL
         environment["PINKIE_STATE_ROOT"] = str(state_root())
+        # A packaged CLE Kk runtime is updated only by its signed release
+        # updater. Never let the embedded upstream runtime advertise or apply
+        # an unrelated OpenClaw/Cua update behind that boundary.
+        environment["OPENCLAW_NO_AUTO_UPDATE"] = "1"
+        environment["CUA_DRIVER_RS_UPDATE_CHECK"] = "false"
+        environment["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "false"
         environment["PYTHONUTF8"] = "1"
         environment.pop("CLAUDECODE", None)
         return environment
@@ -542,10 +548,12 @@ class GatewaySupervisor:
                 "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
             ]
             try:
+                gateway_environment = self.runtime.environment()
+                gateway_environment["OPENCLAW_SERVICE_KIND"] = "gateway"
                 self.process = subprocess.Popen(
                     command,
                     cwd=str(self.runtime.openclaw.parent),
-                    env=self.runtime.environment(),
+                    env=gateway_environment,
                     stdin=subprocess.DEVNULL,
                     stdout=output,
                     stderr=output,

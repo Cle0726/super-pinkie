@@ -58,6 +58,12 @@ test('reserved runtime failure gets a Chinese system label without changing stor
   assert.equal(f.attrs.get('data-pinkie-runtime-error'),'true');assert.equal(f.attrs.get('data-message-text'),raw);
   f.localizeText(f.node);assert.equal(f.node.nodeValue,'这次模型调用失败，碧琪暂时没能完成回复。');
 });
+test('a recovered runtime failure card is hidden after a later real assistant reply',()=>{
+  const phrases=read('ui/injections/laolao-phrases.js');
+  assert.match(phrases,/assistantGroups\.slice\(index\+1\)/);
+  assert.match(phrases,/data(?:set)?\.pinkieRecoveredError|dataset\.pinkieRecoveredError/);
+  assert.doesNotMatch(phrases,/pinkieRecoveredErrorGroup/);
+});
 test('UI localization leaves user messages, quotes, technical prose and tool output untouched',()=>{
   for(const [value,options] of [
     ['The agent run failed before producing a reply.',{role:'user'}],

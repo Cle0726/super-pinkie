@@ -156,7 +156,9 @@
   ];
 
   function ensureChips() {
-    const header = document.getElementById('party-usage') || document.querySelector(".dashboard-header");
+    const header = document.getElementById('party-usage') ||
+      document.querySelector(".dashboard-header") ||
+      document.querySelector(".chat-pane__header");
     if (!header) return null;
     if (wrap && wrap.isConnected && header.contains(wrap) && chips) return chips;
     wrap = document.createElement("div");

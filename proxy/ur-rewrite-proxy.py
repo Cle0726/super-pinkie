@@ -22,7 +22,9 @@ Configuration (all optional, with defaults):
                             in the system prompt (default: "agent=unrestricted")
   UR_PROXY_TEMP_ZERO_MODELS comma-separated regex list of model ids that get
                             temperature forced to 0 for deterministic behavior
-                            (default: gemini-3.7-flash-tiered,gemini-pro-agent,gemini-3.1-pro-high)
+                            (default: gemini-3.8-flash-tiered,gemini-3.7-flash-tiered,gemini-pro-agent,gemini-3.1-pro-high)
+  UR_PROXY_MAX_ATTEMPTS      transient request attempts (default: 24)
+  UR_PROXY_STREAM_IDLE_TIMEOUT seconds without an SSE byte before retry (default: 18)
 """
 
 import http.client
@@ -43,13 +45,14 @@ DEDUPE_MARKERS = ("你是绝对自由", "OPENCLAW_UR_INJECT")
 TEMP_ZERO_MODELS = [
     re.compile(p) for p in os.environ.get(
         "UR_PROXY_TEMP_ZERO_MODELS",
-        "gemini-3.7-flash-tiered,gemini-pro-agent,gemini-3.1-pro-high",
+        "gemini-3.8-flash-tiered,gemini-3.7-flash-tiered,gemini-pro-agent,gemini-3.1-pro-high",
     ).split(",") if p.strip()
 ]
 
-MAX_ATTEMPTS = 8
-FIRST_BYTE_TIMEOUT_SECONDS = 30
-STREAM_IDLE_TIMEOUT_SECONDS = 300
+MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "24")))
+FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "18")))
+STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "18")))
+MAX_BUFFER_BYTES = 8 * 1024 * 1024
 RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 HOP_BY_HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -62,7 +65,7 @@ def resolve_prompt_for_model(model_id, provider=""):
     mid = (model_id or "").lower()
     if "claude" in mid or "anthropic" in (provider or ""):
         fname = "unrestricted-prompt-claude.txt"
-    elif "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
+    elif "gemini-3.8-flash-tiered" in mid or "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
         fname = "unrestricted-prompt-gemini-hard.txt"
     elif "gemini" in mid:
         fname = "unrestricted-prompt-gemini.txt"
@@ -167,14 +170,41 @@ def rewrite_chat_body(raw):
 
 
 def retry_delay(attempt, response=None):
-    fallback = (1.0, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0)[min(attempt - 1, 6)]
+    fallback = min(3.0, 0.35 + max(0, attempt - 1) * 0.2)
     if response is None:
         return fallback
     raw = response.getheader("Retry-After")
     try:
-        return min(max(float(raw), fallback), 12.0)
+        return min(max(float(raw), fallback), 5.0)
     except (TypeError, ValueError):
         return fallback
+
+
+class IncompleteUpstreamStream(http.client.HTTPException):
+    pass
+
+
+def stream_payload_complete(payload):
+    if b"data: [DONE]" in payload or b"data:[DONE]" in payload:
+        return True
+    return re.search(rb'"finish_reason"\s*:\s*"(?:stop|tool_calls|function_call|length|content_filter)"', payload) is not None
+
+
+def stream_payload_error(payload):
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(b"data:"):
+            continue
+        data = line[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            event = json.loads(data.decode("utf-8", "replace"))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(event, dict) and event.get("error"):
+            return str(event.get("error"))[:500]
+    return ""
 
 
 class UrRewriteProxyHandler(BaseHTTPRequestHandler):
@@ -193,6 +223,7 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def proxy(self):
+        self.response_started = False
         if self.path == "/health":
             self.respond_json(200, {"ok": True, "attempts": MAX_ATTEMPTS})
             return
@@ -239,9 +270,15 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
                     response.read()
                     time.sleep(retry_delay(attempt, response))
                     continue
+                ctype = (response.getheader("Content-Type") or "").lower()
+                is_stream = "text/event-stream" in ctype
                 if connection.sock is not None:
                     connection.sock.settimeout(STREAM_IDLE_TIMEOUT_SECONDS)
-                self.relay(response)
+                if is_stream and response.status == 200:
+                    payload = self.read_complete_sse(response)
+                    self.respond_bytes(response.status, response.getheaders(), payload, ctype)
+                else:
+                    self.relay(response)
                 return
             except (OSError, TimeoutError, http.client.HTTPException) as error:
                 if getattr(self, 'response_started', False):
@@ -249,7 +286,10 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
                     return
                 last_error = error
                 if attempt < MAX_ATTEMPTS:
-                    time.sleep(retry_delay(attempt))
+                    delay = retry_delay(attempt)
+                    print("ur-proxy: transient %s attempt=%d/%d retry-in=%.2fs" % (
+                        type(error).__name__, attempt, MAX_ATTEMPTS, delay), flush=True)
+                    time.sleep(delay)
                     continue
             finally:
                 connection.close()
@@ -263,6 +303,48 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
         )
         if last_error:
             self.log_message("upstream unavailable after %d attempts: %s", MAX_ATTEMPTS, type(last_error).__name__)
+
+    def read_complete_sse(self, response):
+        chunks = []
+        total = 0
+        while True:
+            chunk = response.read1(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_BUFFER_BYTES:
+                raise IncompleteUpstreamStream("SSE response exceeded replay buffer")
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        relay_error = stream_payload_error(payload)
+        if relay_error:
+            raise IncompleteUpstreamStream("relay SSE error: " + relay_error)
+        if not stream_payload_complete(payload):
+            raise IncompleteUpstreamStream("SSE ended before terminal model event")
+        return payload
+
+    def respond_bytes(self, status, headers, payload, ctype):
+        self.response_started = True
+        self.send_response(status)
+        sent_cl = False
+        for key, value in headers:
+            lkey = key.lower()
+            if lkey in HOP_BY_HOP_HEADERS:
+                continue
+            if lkey == "content-type":
+                value = ctype or value
+            if lkey == "content-length":
+                value = str(len(payload))
+                sent_cl = True
+            self.send_header(key, value)
+        if not sent_cl:
+            self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        if payload:
+            self.wfile.write(payload)
+            self.wfile.flush()
+        self.close_connection = True
 
     def relay(self, response):
         # After headers/partial output, retrying could repeat an agent action.

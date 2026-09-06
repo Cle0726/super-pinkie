@@ -41,6 +41,10 @@ $Assets = @(
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
     "laolao-theme.css",
+    "laolao-classic-shell.css",
+    "laolao-classic-shell.js",
+    "laolao-memory.css",
+    "laolao-memory.js",
     "laolao-motion.js",
     "laolao-sidebar.css",
     "laolao-sidebar.js",
@@ -134,14 +138,26 @@ function Apply-UISkin {
         $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
     }
 
+    # One controller only. Older packages placed this script in both the head
+    # and body, which created duplicate timers and duplicate recovery buttons.
+    $html = [regex]::Replace(
+        $html,
+        '\s*<script\b[^>]*src="[^"]*laolao-splash\.js(?:\?[^"]*)?"[^>]*></script>\s*',
+        ''
+    )
+
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
+        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic4">',
+        '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
         '<script src="./laolao-sidebar.js?v=sidebar14"></script>',
         '<script src="./laolao-session-list.js?v=sessions4"></script>',
-        '<script src="./laolao-usage-stats.js?v=stats11"></script>',
+        '<script src="./laolao-usage-stats.js?v=stats12"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic4"></script>',
+        '<script defer src="./laolao-memory.js?v=memory1"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
@@ -149,7 +165,8 @@ function Apply-UISkin {
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
         '<script defer src="./laolao-deep-think.js?v=deepthink14"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact1"></script>',
-        '<script defer src="./laolao-resume.js?v=resume6"></script>'
+        '<script defer src="./laolao-resume.js?v=resume6"></script>',
+        '<script defer src="./laolao-splash.js?v=splash22"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -159,11 +176,13 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme31'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats11';
-        'laolao-phrases.js' = 'phrases10';
-        'laolao-mode-switcher.js' = 'mode25'; 'laolao-splash.js' = 'splash21';
-        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion2'; 'laolao-resume.js' = 'resume6'
+        'laolao-theme.css' = 'theme34'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats12';
+        'laolao-phrases.js' = 'phrases15';
+        'laolao-mode-switcher.js' = 'mode28'; 'laolao-splash.js' = 'splash22';
+        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion4'; 'laolao-resume.js' = 'resume6';
+        'laolao-classic-shell.css' = 'classic4'; 'laolao-classic-shell.js' = 'classic4';
+        'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory1';
         'laolao-deep-think.js' = 'deepthink14'; 'laolao-context-compact.js' = 'contextcompact1'
     }
     foreach ($entry in $versions.GetEnumerator()) {

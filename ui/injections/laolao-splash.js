@@ -6,6 +6,12 @@
   const percentage = document.getElementById('laolao-splash-percentage');
   const bar = splash?.querySelector('[role="progressbar"]');
   if (!splash || !fill || !message || !percentage) return;
+  // The installer mounts this controller in the document head. Older bundles
+  // also carried a second copy in the body fragment; make the controller
+  // idempotent so a stale upgraded document can never create two timers or two
+  // recovery button rows.
+  if (splash.dataset.laolaoSplashController === '1') return;
+  splash.dataset.laolaoSplashController = '1';
   const url = new URL(window.location.href);
   const switching = url.searchParams.get('laolao-switch') === '1' || sessionStorage.getItem('laolao:skip-entry-splash') === '1';
   let handoff = null;
@@ -48,8 +54,20 @@
     motion.text(message, phrase);
   };
   const ready = motion.stable(() => {
-    if (!assetsReady || !document.querySelector('openclaw-app .shell')) return false;
-    if (switching || document.querySelector('.agent-chat__input')) return motion.chatReady(mode);
+    // 2026.9.x exposes the mounted surface as <openclaw-app-shell>; the old
+    // `openclaw-app .shell` selector no longer matches and left the splash at
+    // 94% forever even though the gateway and composer were ready.
+    if (!assetsReady || !document.querySelector('openclaw-app-shell, openclaw-app .shell')) return false;
+    const chatSurface = switching || /\/chat(?:\/|$)/.test(url.pathname) ||
+      url.searchParams.has('session') || document.querySelector('.agent-chat__input');
+    if (chatSurface) {
+      // On a cold start the URL may still be `/` while the gateway restores
+      // the last-used agent. Follow that mounted mode instead of pinning the
+      // splash to the stale localStorage value captured before restoration.
+      const mountedMode = document.documentElement.getAttribute('data-laolao-mode');
+      const readyMode = !switching && ids.includes(mountedMode) ? mountedMode : mode;
+      return motion.chatReady(readyMode);
+    }
     // Non-chat pages may be opened directly. Wait for actual page content too.
     return Boolean(document.querySelector('.content > :not(:empty)')) && !document.querySelector('.login-gate, .chat-loading-skeleton');
   }, 300);

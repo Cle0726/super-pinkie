@@ -12,11 +12,18 @@
   //    措辞抽取函数组（toolPhrase/activityPhrase/detailPhrase 等）。
   const failureSentinel='The agent run failed before producing a reply.';
   const watchdogSentinel='\u2063';
+  const watchdogControlPrefix='[pinkie-watchdog]';
   const tierControlPrefix='[pinkie-tier-control]';
   const restartRecoveryNotice='[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
   const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
+  const askAssistantLabel=/(?:Ask|询问|问问).*(?:OpenClaw|CLE\s*Kk)/i;
+  // The compact toolbar gives the Home shortcut and the Ask shortcut a shared
+  // OpenClaw-flavoured title.  The Home aria-label is the reliable difference,
+  // so explicitly keep it out of the branded Ask treatment.
+  const homeAssistantLabel=/(?:Home\s*智能体|与你的\s*Home|主页|首页|home\s+agent)/i;
+  const modelStartup=/^正在启动模型(?:…|\.\.\.)?\s*(?:[·•]\s*)?(\d+)\s*秒$/;
   const exactPhrases = new Map([
     ["网关仪表盘", "CLE Kk 本地工作台"],
     ["WebSocket URL", "CLE Kk 连接地址"],
@@ -78,6 +85,9 @@
     if (/^.+\s+is working[.…]*$/i.test(core)) {
       return `${leading}碧琪正忙着把这件事办好呢…${trailing}`;
     }
+    if (/^(?:Ask|询问|问问)\s*(?:OpenClaw|CLE\s*Kk)$/i.test(core)) {
+      return `${leading}问问碧琪${trailing}`;
+    }
 
     const activity = core.match(/^Activity:\s*(\d+)\s*tools?$/i);
     if (activity) return `${leading}碧琪请了 ${activity[1]} 位工具小帮手${trailing}`;
@@ -99,6 +109,15 @@
     if (node.nodeType !== Node.TEXT_NODE) return;
     const parent=node.parentElement;
     const core=(node.nodeValue||'').trim();
+    const startup=core.match(modelStartup);
+    if(startup && parent && !isProtectedContent(node)){
+      const leading=(node.nodeValue||'').match(/^\s*/)?.[0]||'';
+      const trailing=(node.nodeValue||'').match(/\s*$/)?.[0]||'';
+      node.nodeValue=`${leading}碧琪正在把新模型请进派对… ${startup[1]}秒${trailing}`;
+      parent.dataset.pinkieModelStartup='true';
+      parent.setAttribute('aria-label',`碧琪正在启动模型，已等待 ${startup[1]} 秒`);
+      return;
+    }
     // Only the exact, unquoted gateway failure in an assistant bubble. Never
     // translate a user's text, a code sample, or normal assistant prose.
     if(core===failureSentinel && parent?.closest('.chat-group.assistant') && !parent.closest('pre, code, blockquote, textarea, input, [contenteditable="true"]')){
@@ -146,14 +165,63 @@
         if(next!==value)element.setAttribute(name,next);
       }
     });
+    document.querySelectorAll('button, [role="button"]').forEach(element=>{
+      const labels=[element.getAttribute('title'),element.getAttribute('aria-label')].filter(Boolean);
+      const label=labels.join(' ');
+      const isToolbarHome=element.classList.contains('shell-chrome-controls__home');
+      const isToolbarCustodian=element.classList.contains('shell-chrome-controls__custodian');
+      if(isToolbarHome||homeAssistantLabel.test(label)){
+        delete element.dataset.pinkieAskClekk;
+        return;
+      }
+      if(!isToolbarCustodian&&!askAssistantLabel.test(label))return;
+      element.dataset.pinkieAskClekk='true';
+      element.setAttribute('title','问问碧琪');
+      element.setAttribute('aria-label','问问碧琪');
+    });
+  };
+
+  // The upstream shell can replace <title> after the first gateway snapshot.
+  // Keep the document/AX title branded without polling the whole page or
+  // touching streamed message content.
+  const watchBrandTitle = () => {
+    const head = document.head;
+    if (!head || head.dataset.pinkieBrandTitleWatch === '1') return;
+    head.dataset.pinkieBrandTitleWatch = '1';
+    const observer = new MutationObserver(() => syncBrandChrome());
+    observer.observe(head, { subtree: true, childList: true, characterData: true });
+    syncBrandChrome();
   };
 
   const syncFailureCards = () => {
+    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
     document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]').forEach(bubble=>{
       const content=bubble.querySelector('.chat-text')?.textContent.trim();
       if(bubble.getAttribute('data-message-text')!==failureSentinel || ![failureSentinel,failureNotice].includes(content)){
         bubble.removeAttribute('data-pinkie-runtime-error');
         if(bubble.getAttribute('title')==='系统运行提示；原始信息：'+failureSentinel)bubble.removeAttribute('title');
+        bubble.hidden=false;
+        bubble.style.removeProperty('display');
+        delete bubble.dataset.pinkieRecoveredError;
+        return;
+      }
+      const group=bubble.closest('.chat-group.assistant');
+      const index=assistantGroups.indexOf(group);
+      const recovered=index>=0 && assistantGroups.slice(index+1).some(candidate=>
+        [...candidate.querySelectorAll('.chat-bubble')].some(item=>{
+          const raw=item.getAttribute('data-message-text');
+          const text=item.querySelector('.chat-text')?.textContent.trim();
+          return Boolean(text && raw!==failureSentinel && raw!==watchdogSentinel
+            && !raw?.startsWith(watchdogControlPrefix) && !raw?.startsWith(tierControlPrefix));
+        }));
+      if(recovered){
+        bubble.hidden=true;
+        bubble.dataset.pinkieRecoveredError='true';
+        bubble.style.setProperty('display','none','important');
+      }else if(bubble.dataset.pinkieRecoveredError){
+        bubble.hidden=false;
+        bubble.style.removeProperty('display');
+        delete bubble.dataset.pinkieRecoveredError;
       }
     });
   };
@@ -164,7 +232,7 @@
       let hiddenCount=0;
       for(const bubble of bubbles){
         const raw=bubble.getAttribute('data-message-text');
-        const internal=raw===watchdogSentinel || raw===restartRecoveryNotice || raw?.startsWith(tierControlPrefix);
+        const internal=raw===watchdogSentinel || raw===restartRecoveryNotice || raw?.startsWith(watchdogControlPrefix) || raw?.startsWith(tierControlPrefix);
         if(internal){
           bubble.hidden=true;
           bubble.dataset.pinkieInternalRecovery='true';
@@ -289,6 +357,7 @@
   const start = () => {
     localizeTree(document.body);
     syncBrandChrome();
+    watchBrandTitle();
     localizeToolActivity(document);
     syncFailureCards();
     hideInternalRecoveryTurns();
@@ -307,6 +376,7 @@
         fullScanScheduled = false;
         localizeTree(document.body);
         syncBrandChrome();
+        watchBrandTitle();
         localizeToolActivity(document);
         syncFailureCards();
         hideInternalRecoveryTurns();

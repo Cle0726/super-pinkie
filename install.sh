@@ -53,6 +53,8 @@ echo "==> 2/4 patching CLE Kk compatibility transports"
 node "$PATCH_SCRIPT"
 node "$REPO_DIR/patch/apply-context-budget.mjs"
 python3 "$REPO_DIR/services/context/setup.py"
+python3 "$REPO_DIR/services/project-scope/setup.py"
+python3 "$REPO_DIR/services/mode-architecture/setup.py"
 
 echo "==> 3/4 starting rewrite proxy on :$PROXY_PORT -> :$UPSTREAM_PORT"
 pkill -f "mm-retry-proxy.py" 2>/dev/null || true

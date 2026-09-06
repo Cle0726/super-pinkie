@@ -18,7 +18,7 @@ test('an upstream failure restores the real composer without fabricating an inpu
 
 test('composer recovery is low-frequency and voice implementation stays separate',()=>{
   const resume=read('ui/injections/laolao-resume.js');
-  assert.match(resume,/setInterval[\s\S]*2500/);
+  assert.match(resume,/setInterval[\s\S]*5000/);
   assert.match(resume,/document\.hidden/);
   assert.ok(fs.existsSync(path.join(__dirname,'../ui/injections/laolao-live-voice.js')));
 });
@@ -36,6 +36,7 @@ test('internal watchdog, tier controller and gateway-restart turns stay in the t
   const phrases=read('ui/injections/laolao-phrases.js');
   assert.match(phrases,/Your previous turn was interrupted by a gateway restart/);
   assert.match(phrases,/internal=raw===watchdogSentinel \|\| raw===restartRecoveryNotice/);
+  assert.match(phrases,/raw\?\.startsWith\(watchdogControlPrefix\)/);
   assert.match(phrases,/raw\?\.startsWith\(tierControlPrefix\)/);
   assert.match(phrases,/bubble\.hidden=true/);
   assert.match(phrases,/bubble\.style\.setProperty\('display','none','important'\)/);

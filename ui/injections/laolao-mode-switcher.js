@@ -126,6 +126,10 @@
         avatar.setAttribute("alt", `碧琪·${mode.label}`);
       }
     });
+
+    document.querySelectorAll(".laolao-classic-breadcrumb__mode").forEach((label) => {
+      if (label.textContent !== mode.label) label.textContent = mode.label;
+    });
   };
 
   const closeMenu = () => {
@@ -137,12 +141,11 @@
   const preloadTransitions = async () => {
     if (preloading) return;
     preloading = true;
-    // Decode one mode at a time, after startup, rather than twelve large images
-    // competing with the first screen's rendering and gateway connection.
-    for (const mode of modes) {
-      await motion.modeAssets(mode.id);
-      await new Promise(resolve => window.setTimeout(resolve, 180));
-    }
+    // All assets are local. Pre-decode them during the first idle window so a
+    // later mode switch does not wait behind a 3.6s timer plus four serial
+    // image groups. Promise deduplication in PinkieMotion keeps this cheap.
+    await Promise.all(modes.map(mode => motion.preload(mode.transition)));
+    await Promise.all(modes.map(mode => motion.modeAssets(mode.id)));
   };
 
   const playModeTransition = (mode) => new Promise((resolve) => {
@@ -198,7 +201,9 @@
     motion.preload(mode.transition).then(() => motion.frames()).then(() => overlay.classList.add("is-visible"));
 
     let startedAt = performance.now();
-    const runDuration = motion.reduced() ? 400 : 2400;
+    // Assets are already decoded in the background. Show a concise visual
+    // handoff, then start the real route instead of waiting on decoration.
+    const runDuration = motion.reduced() ? 100 : 420;
     let handedOff = false;
     const handoff = () => {
       if (handedOff) return;
@@ -251,13 +256,13 @@
     const destinationReady = motion.stable(() => {
       const session = currentSessionKey();
       return assetsReady && session === mode.sessionKey && motion.chatReady(mode.id);
-    }, 300);
+    }, 140);
 
     const complete = async () => {
       if (completed) return;
       completed = true;
       ui.message.textContent = mode.readyPhrase;
-      await motion.finishProgress(ui.fill, ui.percentage, ui.progress);
+      await motion.finishProgress(ui.fill, ui.percentage, ui.progress, 160);
       window.setTimeout(() => {
         motion.enter();
         ui.overlay.classList.add("is-leaving");
@@ -265,8 +270,8 @@
           ui.overlay.remove();
           switching = false;
           resolve();
-        }, 560);
-      }, motion.reduced() ? 0 : 160);
+        }, 240);
+      }, motion.reduced() ? 0 : 40);
     };
 
     const tick = () => {
@@ -278,7 +283,7 @@
         ? `模式小屋正在开门，${mode.address}稍等…`
         : mode.phrases.at(-1));
 
-      if (destinationReady(performance.now()) && elapsed >= 700) {
+      if (destinationReady(performance.now()) && elapsed >= 120) {
         complete();
         return;
       }
@@ -361,6 +366,9 @@
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", String(mode.id === current));
       renderModeButton(option, mode);
+      const warm = () => { void motion.modeAssets(mode.id); };
+      option.addEventListener("pointerenter", warm, {once: true});
+      option.addEventListener("focus", warm, {once: true});
       option.addEventListener("click", () => switchMode(mode));
       menu.append(option);
     });
@@ -374,7 +382,8 @@
   const render = () => {
     const mode = modeById(activeMode());
     syncModePresentation(mode);
-    const identity = document.querySelector(".sidebar-brand__identity");
+    const identity = document.querySelector(".sidebar-brand__identity") ||
+      document.querySelector(".sidebar-brand");
     if (!identity) return;
     trigger = identity.querySelector(".laolao-mode-switcher");
     if (!trigger) {
@@ -408,7 +417,14 @@
     attributes: true,
     attributeFilter: ["src"],
   });
-  window.addEventListener("load", () => window.setTimeout(preloadTransitions, 3600), { once: true });
+  const schedulePreload = () => window.setTimeout(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => { void preloadTransitions(); }, {timeout: 1200});
+    } else {
+      void preloadTransitions();
+    }
+  }, 120);
+  window.addEventListener("load", schedulePreload, { once: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render, { once: true });
   else render();
 })();

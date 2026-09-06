@@ -31,6 +31,10 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(installed['agents']['defaults']['subagents']['maxSpawnDepth'], 2)
             self.assertEqual(installed['agents']['defaults']['timeoutSeconds'], 43200)
             self.assertEqual(installed['agents']['defaults']['subagents']['runTimeoutSeconds'], 43200)
+            self.assertEqual(installed['agents']['defaults']['systemAgent']['agentId'], 'main')
+            self.assertEqual(installed['agents']['defaults']['heartbeat']['agentId'], 'main')
+            self.assertEqual(installed['talk']['agentId'], 'main')
+            self.assertFalse(installed['update']['checkOnStart'])
             plugin = installed['plugins']['entries']['pinkie-mode-architecture']
             self.assertTrue(plugin['hooks']['allowPromptInjection'])
             self.assertTrue(plugin['hooks']['allowConversationAccess'])

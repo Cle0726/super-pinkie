@@ -59,6 +59,10 @@ apply_ui_skin() {
     laolao-wallpaper-unrestricted.png \
     laolao-splash.png \
     laolao-theme.css \
+    laolao-classic-shell.css \
+    laolao-classic-shell.js \
+    laolao-memory.css \
+    laolao-memory.js \
     laolao-motion.js \
     laolao-sidebar.css \
     laolao-sidebar.js \
@@ -158,6 +162,16 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
+  if ! grep -Fq './laolao-classic-shell.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic4">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  if ! grep -Fq './laolao-memory.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-memory.css?v=memory1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
   # 顶栏用量统计胶囊：JS 必须紧跟 sidebar.js（依赖其 __laolaoSidebar.gwRequest 句柄）
   if ! grep -Fq './laolao-usage-stats.js' "$index_file"; then
     perl -0pi -e 's{(<script src="\./laolao-sidebar\.js[^"]*"></script>)}{$1\n    <script src="./laolao-usage-stats.js?v=stats11"></script>}' "$index_file"
@@ -170,7 +184,7 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-phrases.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases10"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases15"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
@@ -181,8 +195,8 @@ apply_ui_skin() {
     perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions4"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-phrases.js?v=phrases10' "$index_file"; then
-    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases10}g' "$index_file"
+  if ! grep -Fq './laolao-phrases.js?v=phrases15' "$index_file"; then
+    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases15}g' "$index_file"
   fi
   if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
     perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
@@ -201,6 +215,14 @@ apply_ui_skin() {
 
   if ! grep -Fq './laolao-mode-switcher.js' "$index_file"; then
     perl -0pi -e 's{</head>}{    <script defer src="./laolao-mode-switcher.js"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-classic-shell.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic4"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-memory.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-memory.js?v=memory1"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -338,8 +360,8 @@ apply_ui_skin() {
   # Custom assets keep stable filenames so upgrades can restore them. Bump the
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
-  if ! grep -Fq './laolao-theme.css?v=theme31' "$index_file"; then
-    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme31}g' "$index_file"
+  if ! grep -Fq './laolao-theme.css?v=theme34' "$index_file"; then
+    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme34}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-sidebar.js?v=sidebar14' "$index_file"; then
@@ -354,8 +376,8 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions4}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-usage-stats.js?v=stats11' "$index_file"; then
-    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats11}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats12' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats12}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then
@@ -366,22 +388,46 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash18}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-mode-switcher.js?v=mode25' "$index_file"; then
-    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode25}g' "$index_file"
+  if ! grep -Fq './laolao-mode-switcher.js?v=mode28' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode28}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-splash.js?v=splash21' "$index_file"; then
-    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash21}g' "$index_file"
+  if ! grep -Fq './laolao-splash.js?v=splash22' "$index_file"; then
+    perl -0pi -e 's{\./laolao-splash\.js(?:\?v=[^"]*)?}{./laolao-splash.js?v=splash22}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-handoff-bootstrap.js?v=handoff4' "$index_file"; then
     perl -0pi -e 's{\./laolao-handoff-bootstrap\.js(?:\?v=[^"]*)?}{./laolao-handoff-bootstrap.js?v=handoff4}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-motion.js?v=motion2' "$index_file"; then
-    perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion2}g' "$index_file"
+  if ! grep -Fq './laolao-motion.js?v=motion4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion4}g' "$index_file"
     DID_CHANGE=1
   fi
+  if ! grep -Fq './laolao-classic-shell.css?v=classic4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic4}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-classic-shell.js?v=classic4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic4}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-memory.css?v=memory1' "$index_file"; then
+    perl -0pi -e 's{\./laolao-memory\.css(?:\?v=[^"]*)?}{./laolao-memory.css?v=memory1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-memory.js?v=memory1' "$index_file"; then
+    perl -0pi -e 's{\./laolao-memory\.js(?:\?v=[^"]*)?}{./laolao-memory.js?v=memory1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  # Keep exactly one startup controller. A previous release put the script in
+  # both the head and body; on upgrade that produced duplicate timers and
+  # duplicate recovery button rows. Remove every copy, then mount the canonical
+  # cache-busted one in the head.
+  perl -0pi -e 's{[[:space:]]*<script\b[^>]*src="[^"]*laolao-splash\.js(?:\?[^" ]*)?"[^>]*></script>[[:space:]]*}{}g' "$index_file"
+  perl -0pi -e 's{</head>}{    <script defer src="./laolao-splash.js?v=splash22"></script>\n</head>}' "$index_file"
+  DID_CHANGE=1
 
   if grep -Fq '<title>OpenClaw Control</title>' "$index_file"; then
     perl -0pi -e 's{<title>OpenClaw Control</title>}{<title>来啦～老弟</title>}' "$index_file"
@@ -515,6 +561,13 @@ if [[ -z "$OPENCLAW_ROOT" ]]; then
     if [[ -f "$openclaw_entry" ]]; then
       OPENCLAW_ROOT="$(cd "$(dirname "$openclaw_entry")" && pwd)"
     fi
+  fi
+fi
+if [[ -z "$OPENCLAW_ROOT" ]]; then
+  # 1) bundled runtime inside the app (preferred — the running gateway loads from here)
+  BUNDLED_RUNTIME="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}/Contents/Resources/SuperPinkie/runtime/openclaw"
+  if [[ -f "$BUNDLED_RUNTIME/openclaw.mjs" ]]; then
+    OPENCLAW_ROOT="$BUNDLED_RUNTIME"
   fi
 fi
 if [[ -z "$OPENCLAW_ROOT" ]]; then

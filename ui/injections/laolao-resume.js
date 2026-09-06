@@ -14,8 +14,11 @@
   const $ = (sel) => document.querySelector(sel);
   const STOP_SELECTOR = '[aria-label*="停止"], [aria-label*="Stop"], [data-testid*="stop"], .chat-composer__stop, .chat-send-btn--stop';
 
-  // 从 gateway 客户端拿当前会话 key (与 sidebar 一致)
+  // 从原生 chat pane 优先拿当前会话 key。URL/侧边栏在 SPA 切换和网关
+  // 重连期间可能暂时还是上一轮；pane.state 才是当前真正订阅的会话。
   const currentSessionKey = () => {
+    const paneKey = document.querySelector("openclaw-chat-pane")?.state?.sessionKey;
+    if (typeof paneKey === "string" && paneKey.trim()) return paneKey.trim();
     const routed = new URLSearchParams(window.location.search).get("session") || "";
     if (routed) return routed;
     const activeRow = document.querySelector(
@@ -26,6 +29,48 @@
       document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot
         ?.sessionKey || ""
     );
+  };
+
+  const gatewayStore = () => document.querySelector("openclaw-app-shell")?.context?.gateway;
+  const gatewaySnapshot = () => gatewayStore()?.snapshot || null;
+  const gatewayClient = () => gatewaySnapshot()?.client || gatewayStore()?.client || null;
+  const gatewayConnected = () => Boolean(gatewaySnapshot()?.connected && gatewayClient());
+
+  const withTimeout = (promise, timeoutMs = 15000) => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error("gateway request timeout")), timeoutMs);
+    });
+    return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timer));
+  };
+
+  const assistantText = (message) => {
+    if (!message || String(message.role || "").toLowerCase() !== "assistant") return "";
+    if (typeof message.text === "string") return message.text.trim();
+    if (typeof message.content === "string") return message.content.trim();
+    if (Array.isArray(message.content)) {
+      return message.content
+        .filter((part) => part && (part.type === "text" || typeof part.text === "string"))
+        .map((part) => String(part.text || ""))
+        .join("\n")
+        .trim();
+    }
+    return "";
+  };
+
+  const hasAssistantReply = (messages) => Array.isArray(messages)
+    && messages.some((message) => assistantText(message));
+
+  const directHistory = async (sessionKey) => {
+    const client = gatewayClient();
+    if (!client || !gatewayConnected() || !sessionKey) return null;
+    const parsedAgent = String(sessionKey).match(/^agent:([^:]+):/);
+    const params = {
+      sessionKey,
+      limit: 1000,
+      ...(parsedAgent?.[1] ? {agentId: parsedAgent[1]} : {}),
+    };
+    return withTimeout(client.request("chat.history", params), 15000);
   };
 
   // 正在生成中的判定: 发送按钮禁用 / 停止按钮可见 / 流式进行中
@@ -46,35 +91,78 @@
     document.documentElement.removeAttribute("data-laolao-streaming");
   };
 
-  // 重新拉取会话: 通过 shell 的刷新入口; 失败时静默 (网关侧会话记录是权威)
+  // 只读刷新会话列表。正文恢复不能靠 sessions.list；正文必须走原生
+  // chat pane 的 refreshCurrentChat（内部会调用 chat.history）。
   const refreshSession = async () => {
-    const shell = document.querySelector("openclaw-app-shell");
-    const gateway = shell?.context?.gateway;
-    if (!gateway) return;
+    const client = gatewayClient();
+    if (!client || !gatewayConnected()) return;
     try {
-      // 有快照刷新接口就用, 否则发一个轻量请求触发状态同步
-      if (typeof gateway.refreshSessions === "function") {
-        await gateway.refreshSessions();
-      } else if (typeof gateway.snapshot?.refresh === "function") {
-        await gateway.snapshot.refresh();
-      } else {
-        await gateway.request?.("sessions.list", {});
-      }
+      await withTimeout(client.request("sessions.list", {limit: 1000}), 12000);
     } catch {}
   };
+
+  let recoveryInFlight = null;
+  let recoveryTimer = null;
+  let lastRecoveryAt = 0;
+  let recoveryGeneration = 0;
+
+  // 关键恢复路径：不要点击停止、不要伪造输入框、不要重载整个 App。
+  // 原生 pane.state.refreshCurrentChat 会合并持久化历史与当前流式状态，
+  // 并在内部调用 chat.history；这正好避开“结果已落盘但 DOM 没更新”的窗口。
+  const recoverCurrentChat = async (reason = "unknown", options = {}) => {
+    if (document.hidden || !location.pathname.startsWith("/chat")) return false;
+    const sessionKey = currentSessionKey();
+    const pane = document.querySelector("openclaw-chat-pane");
+    const state = pane?.state;
+    if (!sessionKey || !state || !gatewayConnected()) return false;
+    const now = Date.now();
+    if (!options.force && now - lastRecoveryAt < 1200) return false;
+    if (recoveryInFlight) return recoveryInFlight;
+    lastRecoveryAt = now;
+    const generation = ++recoveryGeneration;
+    recoveryInFlight = (async () => {
+      try {
+        if (typeof state.refreshCurrentChat === "function") {
+          await withTimeout(state.refreshCurrentChat(), 20000);
+        } else {
+          // 兼容旧版控制台：至少确认权威 history 已经可读；新版本会
+          // 通过上面的原生方法把它写回 Lit 状态。
+          await directHistory(sessionKey);
+        }
+        if (generation !== recoveryGeneration) return false;
+        state.requestUpdate?.();
+        // 历史已经恢复后才滚到底部；用户正在查看旧消息时不抢滚动位置。
+        if (!isBusy() && state.chatUserNearBottom !== false) {
+          state.scrollToBottom?.({smooth: false});
+        }
+        window.dispatchEvent(new CustomEvent("pinkie:session-resynced", {
+          detail: {sessionKey, reason},
+        }));
+        return true;
+      } catch {
+        return false;
+      } finally {
+        recoveryInFlight = null;
+      }
+    })();
+    return recoveryInFlight;
+  };
+
+  const scheduleRecovery = (reason, delayMs = 1200) => {
+    window.clearTimeout(recoveryTimer);
+    recoveryTimer = window.setTimeout(() => {
+      recoveryTimer = null;
+      void recoverCurrentChat(reason, {force: true});
+    }, delayMs);
+  };
+  window.__laolaoRecoverCurrentChat = recoverCurrentChat;
 
   // 档位控制器的续跑由本机网关发起，结束事件有时不经过当前 WKWebView
   // 的 websocket。直接触发原生聊天页自己的“刷新”动作，既不重载页面，
   // 也不会重播开屏或丢失输入框草稿。
   const refreshVisibleChat = async () => {
-    await refreshSession();
-    const buttons = Array.from(document.querySelectorAll(
-      "openclaw-chat-pane button.chat-settings-action"
-    ));
-    const refresh = buttons.find((button) =>
-      /刷新|refresh/i.test(`${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`)
-    );
-    if (refresh && !refresh.disabled) refresh.click();
+    await recoverCurrentChat("manual-refresh", {force: true});
+    if (!recoveryInFlight) await refreshSession();
   };
   window.__laolaoRefreshCurrentChat = refreshVisibleChat;
 
@@ -84,8 +172,8 @@
     const delay = isBusy() ? 1800 : 400;
     // 给网关前端自己的重连逻辑一点时间。只读同步，不发送 chat.abort。
     window.setTimeout(async () => {
-      await refreshSession();
-      window.dispatchEvent(new CustomEvent("pinkie:session-resynced"));
+      await recoverCurrentChat("foreground", {force: true});
+      if (!recoveryInFlight) await refreshSession();
     }, delay);
   };
 
@@ -95,16 +183,15 @@
   const onRunFailure = () => {
     clearTimeout(failureRecoveryTimer);
     clearVisualBusyState();
-    void refreshSession();
+    void recoverCurrentChat("run-failed", {force: true});
     failureRecoveryTimer = window.setTimeout(async () => {
-      await refreshSession();
-      window.dispatchEvent(new CustomEvent("pinkie:session-resynced"));
+      await recoverCurrentChat("run-failed-retry", {force: true});
     }, 700);
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   window.addEventListener("pinkie:tier-complete", () => {
-    void refreshVisibleChat();
-    window.setTimeout(() => void refreshVisibleChat(), 900);
+    void recoverCurrentChat("tier-complete", {force: true});
+    window.setTimeout(() => void recoverCurrentChat("tier-complete-retry", {force: true}), 900);
   });
 
   // 只有用户真实点击停止，才取消这一轮自动续接。
@@ -123,8 +210,8 @@
   window.setTimeout(() => {
     window.setInterval(() => {
       if (document.hidden || !location.pathname.startsWith("/chat")) return;
-      if (!document.querySelector(".agent-chat__composer-combobox textarea")) void refreshSession();
-    }, 2500);
+      if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 300);
+    }, 5000);
   }, 8000);
 
   // 标记流式状态 (由其它注入或页面事件维护)
@@ -149,22 +236,33 @@
     if (e.persisted) onForeground();
   });
 
-  // 4) gateway 客户端断线通知 (openclaw 前端自身的 onClose)
-  const tryHookGatewayClose = () => {
-    const shell = document.querySelector("openclaw-app-shell");
-    const gateway = shell?.context?.gateway;
-    if (!gateway) return;
-    const orig = gateway.onClose || gateway._laolaoOrigOnClose;
-    if (orig && !gateway._laolaoHooked) {
-      gateway._laolaoHooked = true;
-      gateway.onClose = (info) => {
-        // WebSocket 断开时只清除自定义动画；不要排队发送停止请求。
+  // 4) 监听原生 gateway store，而不是给 store 猜一个不存在的 onClose。
+  // 控制台自身会重连；这里在 connected 由 false -> true 或 client 换代后
+  // 重新拉当前 pane 的权威 history。
+  const hookGatewayStore = () => {
+    const gateway = gatewayStore();
+    if (!gateway || gateway._laolaoRecoverySubscribed || typeof gateway.subscribe !== "function") return false;
+    gateway._laolaoRecoverySubscribed = true;
+    let wasConnected = Boolean(gateway.snapshot?.connected);
+    let previousClient = gateway.snapshot?.client || null;
+    const unsubscribe = gateway.subscribe((snapshot) => {
+      const connected = Boolean(snapshot?.connected && snapshot?.client);
+      const clientChanged = Boolean(snapshot?.client && snapshot.client !== previousClient);
+      if (!connected) {
+        wasConnected = false;
+        previousClient = snapshot?.client || null;
         clearVisualBusyState();
-        try {
-          orig?.(info);
-        } catch {}
-      };
-    }
+        return;
+      }
+      if (!wasConnected || clientChanged) {
+        wasConnected = true;
+        previousClient = snapshot.client;
+        window.dispatchEvent(new CustomEvent("pinkie:gateway-reconnected"));
+        scheduleRecovery("gateway-reconnected", 250);
+      }
+    });
+    gateway._laolaoRecoveryUnsubscribe = typeof unsubscribe === "function" ? unsubscribe : null;
+    return true;
   };
 
   // 壳层/组件树就绪后再挂 gateway 钩子 (MutationObserver 等 shell 出现)
@@ -180,7 +278,7 @@
     if (shell?.context?.gateway) {
       hooked = true;
       readyObserver.disconnect();
-      tryHookGatewayClose();
+      hookGatewayStore();
     }
   };
   readyObserver.observe(document.documentElement, { childList: true, subtree: true });

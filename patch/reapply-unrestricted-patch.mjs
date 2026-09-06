@@ -90,7 +90,7 @@ function resolveUnrestrictedPrompt(model) {
 		const id = modelId.toLowerCase();
 		let fileName = "unrestricted-prompt.txt";
 		if (/claude|anthropic/i.test(modelId) || /anthropic|claude/i.test(provider)) fileName = "unrestricted-prompt-claude.txt";
-		else if (/gemini-3\\.7-flash-tiered|gemini-pro-agent|gemini-3\\.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
+		else if (/gemini-3\\.[78]-flash-tiered|gemini-pro-agent|gemini-3\\.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
 		else if (/gemini/.test(id)) fileName = "unrestricted-prompt-gemini.txt";
 		else if (/gpt-oss|gptoss/.test(id)) fileName = "unrestricted-prompt-gptoss.txt";
 		else if (/gpt-5/.test(id) || provider === "codex") fileName = "unrestricted-prompt-gpt5.txt";

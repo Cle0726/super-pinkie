@@ -9,11 +9,11 @@ import plugin,{ProjectScope} from '../services/project-scope/index.mjs';
 function fixture(t){
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-project-test-'));
   t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
-  const home=fs.realpathSync(temp),a=path.join(home,'project-a'),b=path.join(home,'project-b');
-  for(const dir of [a,b,path.join(home,'.openclaw/skills/demo')])fs.mkdirSync(dir,{recursive:true});
+  const home=fs.realpathSync(temp),a=path.join(home,'project-a'),b=path.join(home,'project-b'),workspace=path.join(home,'.openclaw/workspace-project');
+  for(const dir of [a,b,workspace,path.join(home,'.openclaw/skills/demo')])fs.mkdirSync(dir,{recursive:true});
   fs.writeFileSync(path.join(a,'a.txt'),'project A');fs.writeFileSync(path.join(b,'b.txt'),'project B');
-  const guard=new ProjectScope({home});const ctx={sessionKey:'agent:project:a'};
-  guard.bind(ctx.sessionKey,a,'甲');return {guard,ctx,a,b,home};
+  const guard=new ProjectScope({home});const ctx={sessionKey:'agent:project:a',workspaceDir:workspace};
+  guard.bind(ctx.sessionKey,a,'甲');return {guard,ctx,a,b,home,workspace};
 }
 
 test('bindings are independent for all four modes, persisted, immutable and reject broad roots',t=>{
@@ -33,6 +33,15 @@ test('relative paths use the project while absolute and symlinked paths may reac
   assert.equal(guard.before({toolName:'write',params:{path:path.join(b,'new.txt'),content:'x'}},ctx).params.path,path.join(b,'new.txt'));
   fs.symlinkSync(b,path.join(a,'external'));
   assert.equal(guard.before({toolName:'read',params:{path:'external/b.txt'}},ctx).params.path,path.join(b,'b.txt'));
+});
+
+test('runtime-expanded paths under the hidden agent workspace are remapped to the bound project',t=>{
+  const {guard,ctx,a,b,workspace}=fixture(t);
+  const internal=path.join(workspace,'nested/result.txt');
+  assert.equal(guard.before({toolName:'write',params:{path:internal,content:'x'}},ctx).params.path,path.join(a,'nested/result.txt'));
+  assert.equal(guard.before({toolName:'read',params:{path:path.join(b,'b.txt')}},ctx).params.path,path.join(b,'b.txt'));
+  const run=guard.before({toolName:'exec',params:{command:'pwd',workdir:workspace}},ctx).params;
+  assert.equal(run.workdir,a);
 });
 
 test('all configured tools pass through and exec only receives a default project directory',t=>{
