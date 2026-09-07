@@ -1907,6 +1907,10 @@ export class CleKkSupervisor {
   key(event = {}, ctx = {}) {
     const explicit = String(ctx.sessionKey || event.sessionKey || '');
     const runIds = [...new Set([ctx.runId, event.runId].filter(Boolean).map(String))];
+    // A rejected turn can still finish after the user has started a new turn.
+    // Fence those late hooks so they cannot attach old evidence to the new
+    // window and keep the new message blocked.
+    if (runIds.some(runId => this.orphaned.has(runId))) return '';
     if (explicit && !isInternalExecutionSession(explicit)) {
       for (const runId of runIds) this.sessionByRunId.set(runId, explicit);
       while (this.sessionByRunId.size > 2048) {
@@ -2068,24 +2072,30 @@ export class CleKkSupervisor {
       || (incomingRunId && turn.runId && incomingRunId !== turn.runId)
     );
     if (distinctUserTurn) {
-      if (turn.pending && !turn.retryExhausted) {
-        // Never throw away a rejected turn merely because the user sent a
-        // follow-up while the retry was being armed. Keep the original
-        // evidence window alive; the new message is visible in the session
-        // transcript and will be handled after the pending delivery is fixed.
+      // “继续/接着” explicitly belongs to the old task. Every other new
+      // request must remain usable even when the previous turn is pending:
+      // a stale retry lane must never monopolize the session or hide replies.
+      const continuesPreviousTurn = ACTION_CONTINUATION.test(prompt);
+      if (turn.pending && !turn.retryExhausted && continuesPreviousTurn) {
         turn.followUps = Array.isArray(turn.followUps) ? turn.followUps : [];
         if (!turn.followUps.includes(prompt)) turn.followUps.push(prompt.slice(0, 8_000));
         turn.followUps = turn.followUps.slice(-8);
         this.audit.append('turn_followup_queued', key, {prompt: hashForAudit(prompt)});
       } else {
-        // A corrupt audit chain or an exhausted retry must not poison every
-        // later user message in the same chat. Preserve the old chain, then
-        // begin a new evidence window for the new request.
-        if (turn.retryExhausted) this.retireRetry(key);
+        // Preserve the old append-only audit chain, retire its retry lease,
+        // and start a clean evidence window for the actual new message. Late
+        // hooks from the superseded run are fenced by `orphaned` above.
+        if (turn.runId && turn.runId !== incomingRunId) {
+          this.orphaned.set(String(turn.runId), key);
+          while (this.orphaned.size > 2048) this.orphaned.delete(this.orphaned.keys().next().value);
+        }
+        if (turn.pending) this.retireRetry(key);
         const chain = this.audit.verify(key);
         if (!chain.ok && !chain.busy) this.audit.quarantine(key, 'new-turn');
         this.integrity.reset(key);
-        this.audit.append('turn_superseded', key, {reason: 'new_user_turn'});
+        this.audit.append('turn_superseded', key, {
+          reason: continuesPreviousTurn ? 'new_turn_after_exhausted_retry' : 'new_user_turn',
+        });
         this.audit.removeState(key);
         turn = null;
       }

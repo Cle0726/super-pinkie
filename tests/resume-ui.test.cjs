@@ -32,6 +32,18 @@ test('foreground recovery never clicks stop and only a real manual stop cancels 
   assert.doesNotMatch(resume,/syntheticStop/);
 });
 
+test('history projection rebuilds are surfaced and retried with bounded backoff',()=>{
+  const resume=read('ui/injections/laolao-resume.js');
+  const sidebar=read('ui/injections/laolao-sidebar.js');
+  assert.match(resume,/session history is rebuilding/);
+  assert.match(resume,/historyRebuildRetryAttempt/);
+  assert.match(resume,/pinkie:session-history-rebuilding/);
+  assert.match(resume,/Math\.min\(8_000/);
+  assert.match(resume,/pinkie:history-rebuilding/);
+  assert.match(sidebar,/pinkie:history-rebuilding/);
+  assert.match(sidebar,/errorCode|errorText/);
+});
+
 test('internal watchdog, tier controller and gateway-restart turns stay in the transcript but are hidden from the chat UI',()=>{
   const phrases=read('ui/injections/laolao-phrases.js');
   assert.match(phrases,/Your previous turn was interrupted by a gateway restart/);

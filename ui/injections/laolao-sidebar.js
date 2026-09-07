@@ -16,6 +16,14 @@
       if(msg?.type==='event' && (String(msg.event).startsWith('sessions.') || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
         window.dispatchEvent(new Event('laolao:sessions-changed'));
       }
+      if (msg?.type === 'res' && !msg.ok) {
+        const errorText = String(msg.error?.message || msg.errorMessage || msg.error || '');
+        if (/session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(errorText)) {
+          window.dispatchEvent(new CustomEvent('pinkie:history-rebuilding', {
+            detail: {method: msg.method || '', message: errorText},
+          }));
+        }
+      }
       if (!msg || msg.type !== "res" || !msg.id) return;
       const entry = pending.get(msg.id);
       if (!entry) return;

@@ -224,11 +224,12 @@ html[data-pinkie-native-glass="1"] .card.chat {
    No backdrop-filter or per-frame animation here: streaming stays cheap. */
 .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
 .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
-  background: rgba(255, 250, 252, 0.58) !important;
-  border: 1px solid rgba(217, 89, 143, 0.18) !important;
+  /* 只给文字一层很淡的识别底，不改变沉浸式透明主背景。 */
+  background: rgba(255, 250, 252, 0.24) !important;
+  border: 1px solid rgba(217, 89, 143, 0.16) !important;
   border-radius: 18px !important;
   padding: 10px 14px !important;
-  box-shadow: 0 5px 18px rgba(111, 45, 74, 0.045) !important;
+  box-shadow: 0 4px 14px rgba(111, 45, 74, 0.028) !important;
 }
 
 .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >

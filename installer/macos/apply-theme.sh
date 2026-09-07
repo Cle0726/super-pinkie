@@ -34,6 +34,10 @@ apply_ui_skin() {
   # root-relative, so nested SPA routes such as /settings/general never look
   # for the skin under /settings/ and briefly fall back to stock dark UI.
   perl -0pi -e 's{"/laolao-}{"./laolao-}g' "$index_file"
+  # Force a fresh stylesheet URL when the visual skin changes. WebKit can keep
+  # the previous query-keyed CSS in memory across a gateway reload, which made
+  # a small bubble-only adjustment look like it had not been deployed.
+  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme35}g' "$index_file"
 
   for asset in \
     laolao-avatar.png \
@@ -614,6 +618,11 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # ~/WorkBuddy 下的本地文件可以在控制界面里正常显示，不再报
     # "Outside allowed folders"。和 context-budget 一样幂等、可重复执行。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-image-access.mjs"
+  fi
+  # apply-context-budget/apply-image-access may regenerate the control-ui
+  # entrypoint, so refresh the skin cache key after all runtime patches finish.
+  if [[ -f "$OPENCLAW_ROOT/dist/control-ui/index.html" ]]; then
+    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme35}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
   fi
 else
   echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2

@@ -1527,6 +1527,44 @@ test('mode architecture tracks child activity even outside a selected tier',()=>
   assert.equal(activity.pending,0);assert.ok(activity.quietForMs<100);
 });
 
+test('a new user request is not trapped behind a rejected retry turn',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-new-turn-while-pending-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:new-turn-while-pending',audit=new CleKkAuditLog(root);
+  const retired=[];
+  const supervisor=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  supervisor.setRetryCanceller(async sessionKey=>{retired.push(sessionKey);});
+  const oldCtx={agentId:'project',sessionKey:key,runId:'old-run'};
+  supervisor.begin({prompt:'修复旧项目'},oldCtx);
+  supervisor.recordFinalize({lastAssistantMessage:'已经完成。'},oldCtx,{action:'revise',reason:'旧轮次需要继续验证'});
+  assert.equal(supervisor.hasPending(key),true);
+
+  // A normal new request starts its own evidence window immediately. Only an
+  // explicit “继续” is allowed to remain attached to the old retry lane.
+  supervisor.begin({prompt:'请只回复 OK'}, {agentId:'project',sessionKey:key,runId:'new-run'});
+  assert.equal(supervisor.hasPending(key),false);
+  assert.deepEqual(retired,[key]);
+  assert.equal(supervisor.turns.get(key).prompt,'请只回复 OK');
+
+  // Late events from the superseded run must be ignored rather than poisoning
+  // the clean turn with the old rejection.
+  supervisor.recordFinalize({lastAssistantMessage:'旧任务仍未完成。'},oldCtx,{action:'revise',reason:'late old event'});
+  assert.equal(supervisor.hasPending(key),false);
+});
+
+test('继续 keeps an explicitly pending task on its retry lane',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-continue-pending-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:continue-pending',audit=new CleKkAuditLog(root);
+  const supervisor=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  const ctx={agentId:'project',sessionKey:key,runId:'run-1'};
+  supervisor.begin({prompt:'执行项目'},ctx);
+  supervisor.recordFinalize({lastAssistantMessage:'已经完成。'},ctx,{action:'revise',reason:'还需验证'});
+  supervisor.begin({prompt:'继续'}, {agentId:'project',sessionKey:key,runId:'run-2'});
+  assert.equal(supervisor.hasPending(key),true);
+  assert.deepEqual(supervisor.turns.get(key).followUps,['继续']);
+});
+
 test('custom plugin never relies on OpenClaw trusted-only in-process gateway requests',()=>{
   const source=fs.readFileSync(new URL('../services/mode-architecture/index.mjs',import.meta.url),'utf8');
   assert.doesNotMatch(source,/runtime\.gateway\.request/);

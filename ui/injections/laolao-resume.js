@@ -44,6 +44,11 @@
     return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timer));
   };
 
+  const isHistoryRebuildingError = (error) => {
+    const text = String(error?.message || error?.errorMessage || error || "");
+    return /session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(text);
+  };
+
   const assistantText = (message) => {
     if (!message || String(message.role || "").toLowerCase() !== "assistant") return "";
     if (typeof message.text === "string") return message.text.trim();
@@ -105,6 +110,15 @@
   let recoveryTimer = null;
   let lastRecoveryAt = 0;
   let recoveryGeneration = 0;
+  let historyRebuildRetryAttempt = 0;
+
+  const scheduleRecovery = (reason, delayMs = 1200) => {
+    if (recoveryTimer) return;
+    recoveryTimer = window.setTimeout(() => {
+      recoveryTimer = null;
+      void recoverCurrentChat(reason, {force: true});
+    }, Math.max(0, delayMs));
+  };
 
   // 关键恢复路径：不要点击停止、不要伪造输入框、不要重载整个 App。
   // 原生 pane.state.refreshCurrentChat 会合并持久化历史与当前流式状态，
@@ -130,6 +144,7 @@
           await directHistory(sessionKey);
         }
         if (generation !== recoveryGeneration) return false;
+        historyRebuildRetryAttempt = 0;
         state.requestUpdate?.();
         // 历史已经恢复后才滚到底部；用户正在查看旧消息时不抢滚动位置。
         if (!isBusy() && state.chatUserNearBottom !== false) {
@@ -139,7 +154,19 @@
           detail: {sessionKey, reason},
         }));
         return true;
-      } catch {
+      } catch (error) {
+        // chat.history intentionally returns UNAVAILABLE while OpenClaw is
+        // rebuilding its SQLite transcript projection. Do not swallow that
+        // state: retry with bounded backoff so the just-sent user message and
+        // the eventual assistant reply reappear without reloading the app.
+        if (isHistoryRebuildingError(error)) {
+          historyRebuildRetryAttempt = Math.min(historyRebuildRetryAttempt + 1, 6);
+          const delay = Math.min(8_000, 350 * (2 ** Math.max(0, historyRebuildRetryAttempt - 1)));
+          window.dispatchEvent(new CustomEvent("pinkie:session-history-rebuilding", {
+            detail: {sessionKey, reason, retryInMs: delay, attempt: historyRebuildRetryAttempt},
+          }));
+          scheduleRecovery("history-rebuilding", delay);
+        }
         return false;
       } finally {
         recoveryInFlight = null;
@@ -148,13 +175,6 @@
     return recoveryInFlight;
   };
 
-  const scheduleRecovery = (reason, delayMs = 1200) => {
-    window.clearTimeout(recoveryTimer);
-    recoveryTimer = window.setTimeout(() => {
-      recoveryTimer = null;
-      void recoverCurrentChat(reason, {force: true});
-    }, delayMs);
-  };
   window.__laolaoRecoverCurrentChat = recoverCurrentChat;
 
   // 档位控制器的续跑由本机网关发起，结束事件有时不经过当前 WKWebView
@@ -189,6 +209,12 @@
     }, 700);
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
+  // The native chat pane reports projection rebuilds as an RPC error. The
+  // sidebar WebSocket shim forwards that signal here so recovery is armed even
+  // when no gateway reconnect or foreground event occurred.
+  window.addEventListener("pinkie:history-rebuilding", () => {
+    if (!recoveryTimer && !recoveryInFlight) scheduleRecovery("history-rebuilding", 250);
+  });
   window.addEventListener("pinkie:tier-complete", () => {
     void recoverCurrentChat("tier-complete", {force: true});
     window.setTimeout(() => void recoverCurrentChat("tier-complete-retry", {force: true}), 900);
