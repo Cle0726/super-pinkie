@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.openclaw.mm-retry-proxy-codex-oc</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/Admin/bin/mm-retry-proxy.py</string>
+    <string>49685</string>
+    <string>49683</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>UR_GENERIC_FALLBACK</key>
+    <string>gpt-5.5</string>
+    <key>UR_PROXY_FIRST_BYTE_TIMEOUT</key>
+    <string>300</string>
+    <key>UR_PROXY_STREAM_IDLE_TIMEOUT</key>
+    <string>300</string>
+    <key>UR_PROXY_MAX_ATTEMPTS</key>
+    <string>4</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/openclaw-mm-retry-proxy-codex-oc.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/openclaw-mm-retry-proxy-codex-oc.log</string>
+</dict>
+</plist>
