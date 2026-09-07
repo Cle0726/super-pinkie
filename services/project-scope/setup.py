@@ -40,7 +40,14 @@ def install(home=None):
     old_plugins = json.dumps(plugins, sort_keys=True)
     entry = plugins.setdefault('entries', {}).setdefault(plugin_id, {})
     entry['enabled'] = True
-    entry.setdefault('hooks', {})['allowPromptInjection'] = True
+    hooks = entry.setdefault('hooks', {})
+    if not isinstance(hooks, dict):
+        hooks = entry['hooks'] = {}
+    # before_prompt_build needs both grants on current hosts: prompt injection
+    # supplies the project anchor and conversation access lets the hook inspect
+    # the active turn. Preserve any other user-authored hook grants.
+    hooks['allowPromptInjection'] = True
+    hooks['allowConversationAccess'] = True
     paths = plugins.setdefault('load', {}).setdefault('paths', [])
     if str(target) not in paths:
         paths.append(str(target))

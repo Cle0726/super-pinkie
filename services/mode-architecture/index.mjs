@@ -63,7 +63,8 @@ const CLE_KK_CONTROL_PATH = /(?:Library[\\/]Application Support[\\/]SuperPinkie[
 const TIMESTAMP_TAMPERING = /(?:\bos\.utime\s*\(|\butime\s*\(|(?:^|[;&|]\s*)touch\s+(?:-[^\s]+\s+)*)/i;
 const CROSS_RUN_EVIDENCE_COPY = /(?:shutil\.(?:copy|copy2|copyfile)|\bcp\s|\brsync\s)[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])/i;
 const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|abort(?:ed|error)?|incomplete(?: turn| response)?|without (?:a )?(?:final )?(?:reply|response)|missing (?:final )?assistant|empty (?:final )?(?:reply|response)|session file changed while embedded prompt lock was released|EmbeddedAttemptSessionTakeoverError|\b429\b|\b50[234]\b|temporar|try again)/i;
-const GATEWAY_RECOVERY_FAILURE = /(?:GatewayDrainingError|gateway is draining|restart drain|admission (?:is )?closed|session transcript projection is rebuilding|transcript projection is rebuilding|projection is rebuilding|gateway restarting|gateway not ready)/i;
+const GATEWAY_RECOVERY_FAILURE = /(?:GatewayDrainingError|gateway is draining|restart drain|admission (?:is )?closed|session transcript projection is rebuilding|transcript projection is rebuilding|projection is rebuilding|gateway restarting|gateway not ready|审计日志正被写入)/i;
+const AUDIT_CORRUPTION_FAILURE = /(?:审计链断裂|审计日志不可读|状态摘要不一致|状态文件不可读)/i;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
@@ -176,6 +177,12 @@ function runProcess(file, args, options) {
   return new Promise((resolve, reject) => {
     execFile(file, args, options, (error, stdout, stderr) => {
       if (error) {
+        // The bundled gateway CLI prints its structured failure (including
+        // GatewayDrainingError / projection-rebuilding details) to stdout and
+        // then exits non-zero.  Keep both streams on the Error so the retry
+        // loop can select its recovery backoff instead of hammering the
+        // draining gateway every few seconds.
+        error.stdout = stdout;
         error.stderr = stderr;
         reject(error);
       } else resolve({stdout, stderr});
@@ -1544,6 +1551,14 @@ export class CleKkAuditLog {
     this.root = root;
     this.sequence = new Map();
     this.lastHash = new Map();
+    // A full JSONL verification for every append makes a long session
+    // quadratic (and, under two gateway writers, can hold the sidecar lock
+    // long enough for the other writer to time out).  The append protocol is
+    // already serialized by withFileLock; verify the complete chain when a
+    // file is first seen and periodically thereafter, while each append still
+    // reloads the authoritative tail under the lock.
+    this.appendCounts = new Map();
+    this.fullVerifyEvery = 128;
   }
 
   fileFor(sessionKey) {
@@ -1556,48 +1571,174 @@ export class CleKkAuditLog {
     return path.join(this.root, `${hashForAudit(sessionKey).slice(0, 32)}.state.json`);
   }
 
-  loadTail(file) {
+  /**
+   * Audit records can be emitted by more than one gateway/plugin instance
+   * during an App update or a gateway handoff.  A per-session lock keeps two
+   * instances from reading the same tail and both appending the same seq.
+   * The lock is deliberately a tiny, recoverable sidecar rather than a
+   * process-local mutex; the latter cannot protect the external extension
+   * copy loaded by an older gateway.
+   */
+  withFileLock(file, action) {
+    if (!file || typeof action !== 'function') return null;
+    const lockFile = `${file}.lock`;
+    let descriptor = null;
+    const startedAt = Date.now();
     try {
-      const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
-      const last = lines.length ? JSON.parse(lines.at(-1)) : null;
+      fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+      while (descriptor === null) {
+        try {
+          descriptor = fs.openSync(lockFile, 'wx', 0o600);
+          fs.writeSync(descriptor, `${process.pid}\n`);
+        } catch (error) {
+          if (error?.code !== 'EEXIST' || Date.now() - startedAt > 5_000) return null;
+          // An interrupted gateway can leave the sidecar behind. Appends are
+          // short, so a lock older than this is safe to recover.
+          try {
+            const stat = fs.statSync(lockFile);
+            if (Date.now() - stat.mtimeMs > 15_000) {
+              let ownerAlive = false;
+              try {
+                const owner = Number(fs.readFileSync(lockFile, 'utf8').trim().split(/\s+/)[0]);
+                if (Number.isInteger(owner) && owner > 0) {
+                  process.kill(owner, 0);
+                  ownerAlive = true;
+                }
+              } catch (error) {
+                // ESRCH means the writer died; malformed/permission errors
+                // are treated as stale only after the same grace period.
+                ownerAlive = error?.code !== 'ESRCH' && error?.code !== 'ENOENT';
+              }
+              if (!ownerAlive) fs.unlinkSync(lockFile);
+            }
+          } catch {}
+          // Synchronous append is intentional here: it keeps the critical
+          // section indivisible even when two plugin instances share a file.
+          const wait = new Int32Array(new SharedArrayBuffer(4));
+          Atomics.wait(wait, 0, 0, 20);
+        }
+      }
+      return action();
+    } finally {
+      if (descriptor !== null) {
+        try { fs.closeSync(descriptor); } catch {}
+        try { fs.unlinkSync(lockFile); } catch {}
+      }
+    }
+  }
+
+  loadTail(file) {
+    if (!file || !fs.existsSync(file)) return {ok: true, sequence: 0, hash: 'GENESIS'};
+    let descriptor = null;
+    try {
+      descriptor = fs.openSync(file, 'r');
+      const size = fs.fstatSync(descriptor).size;
+      if (size === 0) return {ok: true, sequence: 0, hash: 'GENESIS'};
+      const chunks = [];
+      let position = size;
+      let total = 0;
+      let candidate = null;
+      // Read backwards until the complete final non-empty JSONL record is in
+      // memory.  Normal records need one 64 KiB read; exceptionally large
+      // evidence records remain supported without loading the whole journal.
+      while (position > 0 && candidate === null) {
+        const length = Math.min(64 * 1024, position);
+        position -= length;
+        const chunk = Buffer.alloc(length);
+        const bytesRead = fs.readSync(descriptor, chunk, 0, length, position);
+        if (bytesRead <= 0) return {ok: false, sequence: 0, hash: 'GENESIS'};
+        const actual = bytesRead === length ? chunk : chunk.subarray(0, bytesRead);
+        chunks.unshift(actual);
+        total += bytesRead;
+        const bytes = Buffer.concat(chunks, total);
+        let end = bytes.length;
+        while (end > 0 && (bytes[end - 1] === 0x09 || bytes[end - 1] === 0x0a
+          || bytes[end - 1] === 0x0d || bytes[end - 1] === 0x20)) end -= 1;
+        if (end === 0) {
+          if (position === 0) return {ok: true, sequence: 0, hash: 'GENESIS'};
+          continue;
+        }
+        const boundary = bytes.lastIndexOf(0x0a, end - 1);
+        if (boundary >= 0 || position === 0) {
+          const start = boundary >= 0 ? boundary + 1 : 0;
+          candidate = bytes.subarray(start, end).toString('utf8');
+        }
+      }
+      const last = candidate ? JSON.parse(candidate) : null;
+      if (!last || !Number.isInteger(last.seq) || last.seq < 1
+          || typeof last.hash !== 'string' || !last.hash) {
+        return {ok: false, sequence: 0, hash: 'GENESIS'};
+      }
       return {
+        ok: true,
         sequence: Number(last?.seq) || 0,
         hash: typeof last?.hash === 'string' ? last.hash : 'GENESIS',
       };
     } catch {
-      return {sequence: 0, hash: 'GENESIS'};
+      return {ok: false, sequence: 0, hash: 'GENESIS'};
+    } finally {
+      if (descriptor !== null) try { fs.closeSync(descriptor); } catch {}
     }
   }
 
   append(type, sessionKey, details = {}) {
     const file = this.fileFor(sessionKey);
     if (!file) return null;
-    let sequence = this.sequence.get(file);
-    let previous = this.lastHash.get(file);
-    if (sequence == null || !previous) {
-      const tail = this.loadTail(file);
-      sequence = tail.sequence;
-      previous = tail.hash;
-    }
-    const record = {
-      v: 1,
-      seq: sequence + 1,
-      at: Date.now(),
-      type: String(type || 'event'),
-      session: hashForAudit(sessionKey),
-      ...details,
-      prev: previous,
-    };
-    record.hash = auditRecordDigest(record);
     try {
-      fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
-      fs.appendFileSync(file, `${JSON.stringify(record)}\n`, {encoding: 'utf8', mode: 0o600});
-      fs.chmodSync(file, 0o600);
-      this.sequence.set(file, record.seq);
-      this.lastHash.set(file, record.hash);
-      return record;
+      return this.withFileLock(file, () => {
+        // The tail is always reread under the lock because another gateway
+        // instance may have appended since this object was created.  A full
+        // scan is intentionally periodic rather than per record: scanning a
+        // growing journal on every append is O(n²) and was enough to make
+        // concurrent writers lose records at the five-second lock timeout.
+        const count = Number(this.appendCounts.get(file) || 0);
+        const chain = count === 0 || count % this.fullVerifyEvery === 0
+          ? this.verifyFile(file)
+          : {ok: true};
+        if (!chain.ok) return null;
+        const tail = this.loadTail(file);
+        if (!tail.ok) return null;
+        const record = {
+          v: 1,
+          seq: tail.sequence + 1,
+          at: Date.now(),
+          type: String(type || 'event'),
+          session: hashForAudit(sessionKey),
+          ...details,
+          prev: tail.hash,
+        };
+        record.hash = auditRecordDigest(record);
+        fs.appendFileSync(file, `${JSON.stringify(record)}\n`, {encoding: 'utf8', mode: 0o600});
+        fs.chmodSync(file, 0o600);
+        this.sequence.set(file, record.seq);
+        this.lastHash.set(file, record.hash);
+        this.appendCounts.set(file, count + 1);
+        return record;
+      });
     } catch {
       return null;
+    }
+  }
+
+  /** Preserve a broken chain and start a clean chain for a genuinely new
+   * user turn.  We never delete the old evidence; it remains available for
+   * forensic inspection while stale retries are allowed to stop looping.
+   */
+  quarantine(sessionKey, reason = 'corrupt') {
+    const file = this.fileFor(sessionKey);
+    if (!file || !fs.existsSync(file)) return false;
+    try {
+      return Boolean(this.withFileLock(file, () => {
+        if (!fs.existsSync(file)) return false;
+        const suffix = `${String(reason).replace(/[^a-z0-9_-]+/gi, '-').slice(0, 32)}-${Date.now()}-${process.pid}`;
+        fs.renameSync(file, `${file}.${suffix}.jsonl`);
+        this.sequence.delete(file);
+        this.lastHash.delete(file);
+        this.appendCounts.delete(file);
+        return true;
+      }));
+    } catch {
+      return false;
     }
   }
 
@@ -1605,6 +1746,7 @@ export class CleKkAuditLog {
     const file = this.stateFileFor(sessionKey);
     if (!file || !fs.existsSync(file)) return null;
     const chain = this.verify(sessionKey);
+    if (chain.busy) return null;
     if (!chain.ok) return {active: true, corrupted: true, reason: chain.reason};
     try {
       const value = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -1676,6 +1818,26 @@ export class CleKkAuditLog {
   verify(sessionKey) {
     const file = this.fileFor(sessionKey);
     if (!file || !fs.existsSync(file)) return {ok: true, records: 0};
+    // Readers must use the same sidecar as writers.  Without this, a
+    // readState()/recordFinalize() call can parse the half-written last line
+    // of another gateway process and permanently classify a healthy turn as
+    // corrupt.  append() calls verifyFile directly while already holding the
+    // lock, so there is no recursive lock acquisition here.
+    const checked = this.withFileLock(file, () => this.verifyFile(file));
+    // Never fall back to an unlocked read: appendFileSync is atomic for our
+    // writer, but a crashed/foreign writer can still expose a partial final
+    // line.  Busy is retryable infrastructure state, not evidence corruption.
+    return checked || {
+      ok: false,
+      busy: true,
+      retryable: true,
+      records: 0,
+      reason: 'CLE Kk 审计日志正被写入，请稍后重试',
+    };
+  }
+
+  verifyFile(file) {
+    if (!file || !fs.existsSync(file)) return {ok: true, records: 0};
     let previous = 'GENESIS';
     let sequence = 0;
     try {
@@ -1714,10 +1876,32 @@ export class CleKkSupervisor {
     // pseudo key and then mistaken for "no work was performed".
     this.sessionByRunId = new Map();
     this.retryScheduler = null;
+    this.retryCanceller = null;
   }
 
   setRetryScheduler(fn) {
     this.retryScheduler = typeof fn === 'function' ? fn : null;
+  }
+
+  setRetryCanceller(fn) {
+    this.retryCanceller = typeof fn === 'function' ? fn : null;
+  }
+
+  retireRetry(key) {
+    if (!key || !this.retryCanceller) return;
+    try {
+      Promise.resolve(this.retryCanceller(key)).catch(error => {
+        this.logger?.warn?.(`CLE Kk retry retirement failed session=${key}: ${String(error)}`);
+      });
+    } catch (error) {
+      this.logger?.warn?.(`CLE Kk retry retirement failed session=${key}: ${String(error)}`);
+    }
+  }
+
+  retryRecoveryDisposition(sessionKey) {
+    const turn = this.turns.get(String(sessionKey || ''));
+    if (!turn?.pending) return '';
+    return turn.retryExhausted ? 'retire' : 'owned';
   }
 
   key(event = {}, ctx = {}) {
@@ -1779,6 +1963,12 @@ export class CleKkSupervisor {
       // rejected turn permanently silent.
       retryScheduled: false,
       retryAttempts: Number(persisted.retryAttempts) || 0,
+      // The timer itself is process-local, but an already accepted durable
+      // attempt must be resumed with the same ordinal after restart. Advancing
+      // 24 -> 25 here used to discard the final legal attempt silently.
+      retryResumeAttempt: Boolean(persisted.retryScheduled && Number(persisted.retryAttempts) > 0),
+      retryExhausted: Boolean(persisted.retryExhausted),
+      corrupted: Boolean(persisted.corrupted),
       toolIds: new Set(),
       followUps: Array.isArray(persisted.followUps) ? persisted.followUps.slice(-8) : [],
       restored: true,
@@ -1790,12 +1980,20 @@ export class CleKkSupervisor {
         .map(record => record.evidence);
       this.integrity.replayTools(key, replay);
     }
-    if (persisted.corrupted) turn.pending = {
-      decision: this.integrity.revise(key, persisted.reason || 'CLE Kk 状态不可验证'),
-      runId: turn.runId,
-      textHash: '',
-      at: Date.now(),
-    };
+    if (persisted.corrupted) {
+      // A damaged chain cannot be repaired by asking the model to retry: the
+      // next hook would fail the same provenance check and burn the entire
+      // retry budget. Keep the evidence and require a fresh user turn to
+      // quarantine it and start a clean chain.
+      turn.retryExhausted = true;
+      turn.pending = {
+        decision: this.integrity.revise(key, persisted.reason || 'CLE Kk 状态不可验证'),
+        runId: turn.runId,
+        textHash: '',
+        at: Date.now(),
+      };
+      this.retireRetry(key);
+    }
     this.turns.set(key, turn);
     return turn;
   }
@@ -1818,6 +2016,7 @@ export class CleKkSupervisor {
       retryScheduled: Boolean(turn.retryScheduled),
       retryScheduledAt: turn.retryScheduled ? (Number(turn.retryScheduledAt) || Date.now()) : 0,
       retryAttempts: Number(turn.retryAttempts) || 0,
+      retryExhausted: Boolean(turn.retryExhausted),
       followUps: Array.isArray(turn.followUps) ? turn.followUps.slice(-8) : [],
       // Tool evidence is append-only in the audit journal. Rewriting the full
       // history into this state file after every tool caused long sessions to
@@ -1862,10 +2061,14 @@ export class CleKkSupervisor {
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
     const incomingRunId = String(ctx.runId || event.runId || '');
-    const distinctUserTurn = !control && turn && prompt && turn.prompt
-      && (prompt !== turn.prompt || (incomingRunId && turn.runId && incomingRunId !== turn.runId));
+    const distinctUserTurn = !control && turn && prompt && (
+      turn.corrupted
+      || !turn.prompt
+      || prompt !== turn.prompt
+      || (incomingRunId && turn.runId && incomingRunId !== turn.runId)
+    );
     if (distinctUserTurn) {
-      if (turn.pending) {
+      if (turn.pending && !turn.retryExhausted) {
         // Never throw away a rejected turn merely because the user sent a
         // follow-up while the retry was being armed. Keep the original
         // evidence window alive; the new message is visible in the session
@@ -1875,6 +2078,12 @@ export class CleKkSupervisor {
         turn.followUps = turn.followUps.slice(-8);
         this.audit.append('turn_followup_queued', key, {prompt: hashForAudit(prompt)});
       } else {
+        // A corrupt audit chain or an exhausted retry must not poison every
+        // later user message in the same chat. Preserve the old chain, then
+        // begin a new evidence window for the new request.
+        if (turn.retryExhausted) this.retireRetry(key);
+        const chain = this.audit.verify(key);
+        if (!chain.ok && !chain.busy) this.audit.quarantine(key, 'new-turn');
         this.integrity.reset(key);
         this.audit.append('turn_superseded', key, {reason: 'new_user_turn'});
         this.audit.removeState(key);
@@ -1890,6 +2099,9 @@ export class CleKkSupervisor {
         pending: null,
         retryScheduled: false,
         retryAttempts: 0,
+        retryResumeAttempt: false,
+        retryExhausted: false,
+        corrupted: false,
         toolIds: new Set(),
         followUps: [],
       };
@@ -1954,7 +2166,12 @@ export class CleKkSupervisor {
     const chain = this.audit.verify(key);
     // A damaged control log is itself a failed verification. Never clear a
     // pending decision or accept a final while the provenance chain is broken.
-    if (!chain.ok && decision?.action !== 'revise') {
+    if (!chain.ok && (!decision || decision.action !== 'revise'
+      || !AUDIT_CORRUPTION_FAILURE.test(String(decision.reason || '')))) {
+      // A pre-existing revise decision (for example “no real tool effect”)
+      // must not hide a concurrently discovered journal break. Retrying the
+      // former reason would append nothing to the broken chain and loop until
+      // the entire integrity budget is burned.
       decision = this.integrity.revise(key, chain.reason || '审计链断裂，无法确认工具事件完整性');
     }
     if (decision?.action === 'revise') {
@@ -1965,6 +2182,13 @@ export class CleKkSupervisor {
         textHash: hashForAudit(reply),
         at: Date.now(),
       };
+      if (AUDIT_CORRUPTION_FAILURE.test(String(decision.reason || ''))) {
+        // Retrying cannot repair a provenance file that is already broken.
+        // Mark it terminal for this turn; a new user message will quarantine
+        // the old chain and open a fresh evidence window.
+        turn.retryExhausted = true;
+        this.retireRetry(key);
+      }
       turn.retryScheduled = previous && previous.runId === runId && previous.decision?.reason === decision.reason
         ? turn.retryScheduled
         : false;
@@ -1990,6 +2214,7 @@ export class CleKkSupervisor {
       turn.pending = null;
       turn.retryScheduled = false;
       turn.retryAttempts = 0;
+      turn.retryExhausted = false;
       this.audit.append('final_accepted', key, {
         run: runId ? hashForAudit(runId) : '',
         reply: hashForAudit(reply),
@@ -2010,10 +2235,22 @@ export class CleKkSupervisor {
   }
 
   scheduleRetry(pending, ctx = {}, source = 'delivery') {
-    if (!pending?.turn || pending.turn.retryScheduled || isInternalExecutionSession(pending.key)) return false;
+    if (!pending?.turn || pending.turn.retryScheduled || pending.turn.retryExhausted || isInternalExecutionSession(pending.key)) return false;
+    if (AUDIT_CORRUPTION_FAILURE.test(String(pending.decision?.reason || ''))) {
+      pending.turn.retryExhausted = true;
+      pending.turn.retryScheduled = false;
+      pending.turn.retryScheduledAt = 0;
+      this.retireRetry(pending.key);
+      this.persist(pending.key, pending.turn);
+      this.logger?.warn?.(`CLE Kk retry stopped because the audit chain is corrupt session=${pending.key}`);
+      return false;
+    }
     pending.turn.retryScheduled = true;
     pending.turn.retryScheduledAt = Date.now();
-    pending.turn.retryAttempts = (pending.turn.retryAttempts || 0) + 1;
+    const resumeAcceptedAttempt = source === 'gateway_restart'
+      && pending.turn.retryResumeAttempt && Number(pending.turn.retryAttempts) > 0;
+    pending.turn.retryResumeAttempt = false;
+    if (!resumeAcceptedAttempt) pending.turn.retryAttempts = (pending.turn.retryAttempts || 0) + 1;
     this.audit.append('retry_requested', pending.key, {
       run: pending.runId ? hashForAudit(pending.runId) : '',
       source: String(source),
@@ -2024,6 +2261,7 @@ export class CleKkSupervisor {
     if (!this.retryScheduler) {
       pending.turn.retryScheduled = false;
       pending.turn.retryScheduledAt = 0;
+      this.persist(pending.key, pending.turn);
       return false;
     }
     Promise.resolve(this.retryScheduler({
@@ -2032,10 +2270,19 @@ export class CleKkSupervisor {
       runId: pending.runId,
       decision: pending.decision,
       attempt: pending.turn.retryAttempts,
-    })).then(ok => {
-      if (!ok) {
+    })).then(result => {
+      const accepted = result === true || result?.ok === true || result?.accepted === true;
+      if (!accepted) {
         pending.turn.retryScheduled = false;
         pending.turn.retryScheduledAt = 0;
+        if (result?.exhausted === true) {
+          pending.turn.retryExhausted = true;
+          this.audit.append('retry_exhausted', pending.key, {
+            run: pending.runId ? hashForAudit(pending.runId) : '',
+            attempt: pending.turn.retryAttempts,
+            reason: String(pending.decision?.reason || '').slice(0, 600),
+          });
+        }
       }
       this.persist(pending.key, pending.turn);
     }).catch(error => {
@@ -2455,12 +2702,32 @@ export class UpstreamWatchdog {
         continue;
       }
       if (job.kind === 'integrity' && Number(job.maxAttempts) > 0
-          && Number(job.attempt) >= Number(job.maxAttempts)) {
+          && Number(job.attempt) > Number(job.maxAttempts)) {
         this.jobStore.delete(sessionKey);
         continue;
       }
-      if (skip(sessionKey)) continue;
+      const disposition = skip(sessionKey);
+      if (disposition === 'retire' || disposition?.retire === true) {
+        // This is only the invisible retry lease. The user transcript, task
+        // state and quarantined audit evidence remain untouched.
+        this.jobStore.delete(sessionKey);
+        const timer = this.timers.get(sessionKey);
+        if (timer) clearTimeout(timer);
+        this.timers.delete(sessionKey);
+        this.integrityAttempts.delete(sessionKey);
+        this.gatewayBackoff.delete(sessionKey);
+        continue;
+      }
+      if (disposition) continue;
       const attempt=Math.max(1,Number(job.attempt)||1);
+      if (job.kind === 'integrity') {
+        // Preserve the authenticity budget across a gateway restart. Without
+        // restoring this counter, a persisted attempt 24 could wake up with
+        // an empty in-memory map and be scheduled again as attempt 1.
+        this.integrityAttempts.set(sessionKey, Math.max(
+          Number(this.integrityAttempts.get(sessionKey) || 0), attempt,
+        ));
+      }
       this.attempts.set(sessionKey,attempt);
       const tag=safeTag(sessionKey);
       try {
@@ -2479,6 +2746,7 @@ export class UpstreamWatchdog {
           attempt,
           delayMs:1_000,
           tag,
+          kind: job.kind,
         });
       } catch (error) {
         this.api.logger?.warn?.(`watchdog durable recovery failed session=${sessionKey} error=${String(error)}`);
@@ -2495,7 +2763,7 @@ export class UpstreamWatchdog {
    * already visible.
    */
   async scheduleIntegrityRetry({sessionKey, agentId, runId, decision, attempt = 1} = {}) {
-    if (!sessionKey || isInternalExecutionSession(sessionKey)) return false;
+    if (!sessionKey || isInternalExecutionSession(sessionKey)) return {ok: false};
     const tierMinimum={base:24,boost:48,full:96,marathon:512}[this.tierFor(sessionKey)] || 24;
     const maxAttempts = Math.max(tierMinimum, Number(decision?.retry?.maxAttempts) || 24);
     const current = Number(this.integrityAttempts.get(sessionKey) || 0);
@@ -2506,7 +2774,7 @@ export class UpstreamWatchdog {
       if (timer) clearTimeout(timer);
       this.timers.delete(sessionKey);
       this.api.logger?.warn?.(`CLE Kk integrity retry limit reached session=${sessionKey} attempts=${current}/${maxAttempts}`);
-      return false;
+      return {ok: false, exhausted: true};
     }
     this.integrityAttempts.set(sessionKey, nextAttempt);
     this.jobStore.set(sessionKey, {
@@ -2514,7 +2782,8 @@ export class UpstreamWatchdog {
       model: this.models.get(sessionKey), kind: 'integrity', maxAttempts,
     });
     const tag = safeTag(sessionKey);
-    const delayMs = Math.min(3_000, 500 + nextAttempt * 200);
+    const recoveryDelay = this.recoveryDelay(sessionKey, decision?.reason || '');
+    const delayMs = recoveryDelay || Math.min(3_000, 500 + nextAttempt * 200);
     const instruction = String(decision?.retry?.instruction || '上一轮没有通过真实性验收。请继续真实执行并验证，不能写完成报告。');
     try {
       await this.api.session.workflow.enqueueNextTurnInjection({
@@ -2541,12 +2810,12 @@ export class UpstreamWatchdog {
           tag,
         });
       }
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt: nextAttempt, delayMs, tag});
-      return true;
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt: nextAttempt, delayMs, tag, kind: 'integrity'});
+      return {ok: true, accepted: true};
     } catch (error) {
       this.integrityAttempts.delete(sessionKey);
       this.api.logger?.warn?.(`CLE Kk integrity retry enqueue failed session=${sessionKey} error=${String(error)}`);
-      return false;
+      return {ok: false, retryable: true};
     }
   }
 
@@ -2566,7 +2835,7 @@ export class UpstreamWatchdog {
     return true;
   }
 
-  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag}) {
+  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind}) {
     if (!this.cliEntry) return false;
     if (this.dispatching.has(sessionKey)) return false;
     const activity = this.activityFor(sessionKey) || {};
@@ -2574,7 +2843,7 @@ export class UpstreamWatchdog {
     const quietForMs = Number.isFinite(activity.quietForMs) ? activity.quietForMs : Infinity;
     if (activity.parentRunning || pending > 0 || quietForMs < 3_500) {
       const delayMs = activity.parentRunning || pending > 0 ? 2_000 : Math.max(250, 3_500 - quietForMs);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind});
       return false;
     }
     this.dispatching.add(sessionKey);
@@ -2602,7 +2871,11 @@ export class UpstreamWatchdog {
       const output = `${stdout}\n${result?.error || result?.message || ''}`;
       if (result?.status === 'error' || result?.status === 'timeout') {
         const blockedDelay = this.recoveryDelay(sessionKey, output);
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag});
+        // This reschedules the same attempt ordinal. Gateway drain/projection
+        // rebuilds therefore neither increment nor decrement the integrity
+        // budget; repeated infrastructure probes cannot turn attempt 4 back
+        // into the misleading 0/24 seen in earlier logs.
+        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag, kind});
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
@@ -2611,8 +2884,9 @@ export class UpstreamWatchdog {
       return true;
     } catch (error) {
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
-      const blockedDelay = this.recoveryDelay(sessionKey, `${error?.message || ''} ${error?.stderr || ''}`);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag});
+      const blockedDelay = this.recoveryDelay(sessionKey,
+        `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag, kind});
       return false;
     } finally {
       this.dispatching.delete(sessionKey);
@@ -3651,6 +3925,7 @@ export default {
     );
     const cleKk = new CleKkSupervisor({integrity, logger: api.logger});
     cleKk.setRetryScheduler(params => watchdog.scheduleIntegrityRetry(params));
+    cleKk.setRetryCanceller(sessionKey => watchdog.cancel(sessionKey));
     const tierContinuation = new TierContinuation(
       api,
       sessionKey => architecture.status(sessionKey),
@@ -3875,7 +4150,7 @@ export default {
     // retry path as a live run.
     void (async()=>{
       await cleKk.recoverPending();
-      await watchdog.recoverPending(sessionKey=>cleKk.hasPending(sessionKey));
+      await watchdog.recoverPending(sessionKey=>cleKk.retryRecoveryDisposition(sessionKey));
     })().catch(error=>{
       api.logger?.warn?.(`CLE Kk pending recovery failed: ${String(error)}`);
     });

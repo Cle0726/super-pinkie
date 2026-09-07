@@ -514,10 +514,28 @@ private final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate 
 }
 
 private enum Gateway {
+    enum ReadyRuntimeResult {
+        case acceptExisting
+        case restarted
+        case failed
+    }
+
+    private struct ListenerProcess {
+        let pid: pid_t
+        let executablePath: String
+        let executableIdentity: ExecutableIdentity
+    }
+
+    private struct ExecutableIdentity: Equatable {
+        let device: UInt64
+        let inode: UInt64
+    }
+
     static let url = RuntimeConfig.gatewayURL
     private static var process: Process?
     private static var logHandle: FileHandle?
     private(set) static var lastError: String?
+    private static let bundledNodeSuffix = "/Contents/Resources/SuperPinkie/runtime/bin/node"
 
     private static func endpoint(_ path: String) -> URL {
         url.appendingPathComponent(path)
@@ -559,6 +577,185 @@ private enum Gateway {
     }
 
     static func processAlive() -> Bool { process?.isRunning == true }
+
+    private static func canonicalPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private static func executablePath(for pid: pid_t) -> String? {
+        // PROC_PIDPATHINFO_MAXSIZE is a C macro that Swift cannot import.
+        // 4096 is its documented macOS capacity (4 * MAXPATHLEN).
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let end = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private static func lsofOutput(_ arguments: [String]) -> String? {
+        let lsof = URL(fileURLWithPath: "/usr/sbin/lsof")
+        guard FileManager.default.isExecutableFile(atPath: lsof.path) else { return nil }
+        let task = Process()
+        let output = Pipe()
+        task.executableURL = lsof
+        task.arguments = arguments
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            let data = (try? output.fileHandleForReading.readToEnd()) ?? Data()
+            task.waitUntilExit()
+            guard task.terminationStatus == 0,
+                  let text = String(data: data, encoding: .utf8) else { return nil }
+            return text
+        } catch {
+            return nil
+        }
+    }
+
+    private static func listenerPIDs(port: Int) -> [pid_t] {
+        // -F p emits machine-readable records such as `p1234`. Restrict the
+        // query to listening TCP sockets so an ordinary client is never used.
+        guard let text = lsofOutput(["-nP", "-a", "-iTCP:\(port)", "-sTCP:LISTEN", "-Fp"]) else {
+            return []
+        }
+        return Array(Set(text.split(separator: "\n").compactMap { line -> pid_t? in
+            guard line.first == "p", let value = Int32(line.dropFirst()), value > 1 else { return nil }
+            return value
+        })).sorted()
+    }
+
+    private static func diskIdentity(for executablePath: String) -> ExecutableIdentity? {
+        var info = Darwin.stat()
+        let status = executablePath.withCString { Darwin.lstat($0, &info) }
+        guard status == 0 else { return nil }
+        return ExecutableIdentity(device: UInt64(info.st_dev), inode: UInt64(info.st_ino))
+    }
+
+    private static func mappedExecutableIdentity(for pid: pid_t, matching executablePath: String) -> ExecutableIdentity? {
+        // A bundle can be replaced at the same pathname while its old process
+        // keeps the old executable vnode mapped. proc_pidpath alone cannot see
+        // that difference, so read lsof's device + inode fields for the mapped
+        // text vnode and compare them with the file now on disk.
+        guard let text = lsofOutput(["-nP", "-a", "-p", String(pid), "-d", "txt", "-FDin"]) else {
+            return nil
+        }
+        var device: UInt64?
+        var inode: UInt64?
+        var name: String?
+
+        func matchedRecord() -> ExecutableIdentity? {
+            guard let device, let inode, let name,
+                  canonicalPath(name) == executablePath else { return nil }
+            return ExecutableIdentity(device: device, inode: inode)
+        }
+
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            switch line.first {
+            case "f":
+                if let identity = matchedRecord() { return identity }
+                device = nil
+                inode = nil
+                name = nil
+            case "D":
+                let raw = String(line.dropFirst())
+                if raw.lowercased().hasPrefix("0x") {
+                    device = UInt64(raw.dropFirst(2), radix: 16)
+                } else {
+                    device = UInt64(raw)
+                }
+            case "i":
+                inode = UInt64(line.dropFirst())
+            case "n":
+                name = String(line.dropFirst())
+            default:
+                continue
+            }
+        }
+        return matchedRecord()
+    }
+
+    private static func listenerProcesses() -> [ListenerProcess] {
+        let host = (url.host ?? "").lowercased()
+        guard host == "127.0.0.1" || host == "localhost" || host == "::1" else { return [] }
+        return listenerPIDs(port: url.port ?? 18789).compactMap { pid in
+            guard let executable = executablePath(for: pid) else { return nil }
+            let path = canonicalPath(executable)
+            guard let identity = mappedExecutableIdentity(for: pid, matching: path) else { return nil }
+            return ListenerProcess(pid: pid, executablePath: path, executableIdentity: identity)
+        }
+    }
+
+    private static func isCLEKkBundledNode(_ executablePath: String) -> Bool {
+        // This exact private bundle layout is the provenance marker. Never
+        // classify a system Node, Homebrew Node, or another product's helper
+        // as ours merely because its process title says `openclaw-gateway`.
+        executablePath.contains(".app" + bundledNodeSuffix)
+            && executablePath.hasSuffix(bundledNodeSuffix)
+    }
+
+    private static func stillSameProcess(_ listener: ListenerProcess) -> Bool {
+        guard let current = executablePath(for: listener.pid),
+              canonicalPath(current) == listener.executablePath,
+              let identity = mappedExecutableIdentity(for: listener.pid, matching: listener.executablePath) else {
+            return false
+        }
+        return identity == listener.executableIdentity
+    }
+
+    private static func stopStaleListener(_ listener: ListenerProcess) -> Bool {
+        // Re-check both the socket owner and executable immediately before the
+        // signal. This prevents PID reuse from ever targeting an unrelated app.
+        guard listenerPIDs(port: url.port ?? 18789).contains(listener.pid),
+              stillSameProcess(listener) else { return true }
+        guard Darwin.kill(listener.pid, SIGTERM) == 0 else { return false }
+        let gracefulDeadline = Date().addingTimeInterval(2.5)
+        while Date() < gracefulDeadline && stillSameProcess(listener) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if stillSameProcess(listener) {
+            // SIGKILL is allowed only after another exact executable check.
+            guard Darwin.kill(listener.pid, SIGKILL) == 0 else { return false }
+        }
+        let reapDeadline = Date().addingTimeInterval(1.5)
+        while Date() < reapDeadline && stillSameProcess(listener) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return !stillSameProcess(listener)
+    }
+
+    /// A previous release intentionally leaves its gateway alive across App
+    /// replacement. Reusing that process would keep old plugins and old retry
+    /// logic even though the visible App is new. Replace only a listener whose
+    /// executable proves it came from another CLE Kk App bundle; unknown
+    /// listeners are never signalled.
+    static func ensureCurrentRuntimeForReadyGateway(completion: @escaping (ReadyRuntimeResult) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let expectedNode = BundledRuntime.nodeURL.map({ canonicalPath($0.path) }),
+                  let expectedIdentity = diskIdentity(for: expectedNode) else {
+                DispatchQueue.main.async { completion(.acceptExisting) }
+                return
+            }
+            let stale = listenerProcesses().filter {
+                isCLEKkBundledNode($0.executablePath)
+                    && ($0.executablePath != expectedNode || $0.executableIdentity != expectedIdentity)
+            }
+            guard !stale.isEmpty else {
+                DispatchQueue.main.async { completion(.acceptExisting) }
+                return
+            }
+            guard stale.allSatisfy({ stopStaleListener($0) }) else {
+                lastError = "旧版 CLE Kk 网关仍占用端口，没有误杀其他进程。"
+                DispatchQueue.main.async { completion(.failed) }
+                return
+            }
+            DispatchQueue.main.async {
+                NSLog("[CLE Kk] replaced stale bundled gateway from: %@",
+                      stale.map(\.executablePath).joined(separator: ", "))
+                start()
+                completion(process?.isRunning == true ? .restarted : .failed)
+            }
+        }
+    }
 
     static func start() {
         guard process?.isRunning != true else { return }
@@ -1507,32 +1704,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         Gateway.isReady { [weak self] ready in
             DispatchQueue.main.async {
                 if ready {
-                    self?.startGatewayMonitor()
-                    self?.loadDashboard()
+                    self?.validateReadyGatewayAndLoad()
                     return
                 }
                 // A previous App instance may have left a healthy process in
                 // restart drain. Wait for readyz instead of starting a second
                 // process on the same port or killing the first one.
-                Gateway.isReachable { reachable in
+                Gateway.isReachable { [weak self] reachable in
                     DispatchQueue.main.async {
                         if !reachable { Gateway.start() }
-                        Gateway.ready { ready in
-                            if ready {
-                                self?.startGatewayMonitor()
-                                self?.loadDashboard()
-                                return
-                            }
-                            let alert = NSAlert()
-                            alert.messageText = "超級碧琪的网关还在恢复中"
-                            alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
-                            alert.alertStyle = .warning
-                            alert.runModal()
-                        }
+                        self?.awaitGatewayAndLoad()
                     }
                 }
             }
         }
+    }
+
+    private func activateGatewayDashboard() {
+        startGatewayMonitor()
+        loadDashboard()
+    }
+
+    private func validateReadyGatewayAndLoad() {
+        Gateway.ensureCurrentRuntimeForReadyGateway { [weak self] result in
+            switch result {
+            case .acceptExisting:
+                self?.activateGatewayDashboard()
+            case .restarted:
+                self?.awaitGatewayAndLoad()
+            case .failed:
+                self?.showGatewayRecoveryFailure()
+            }
+        }
+    }
+
+    private func awaitGatewayAndLoad() {
+        Gateway.ready { [weak self] ready in
+            if ready {
+                self?.validateReadyGatewayAndLoad()
+            } else {
+                self?.showGatewayRecoveryFailure()
+            }
+        }
+    }
+
+    private func showGatewayRecoveryFailure() {
+        let alert = NSAlert()
+        alert.messageText = "超級碧琪的网关还在恢复中"
+        alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     private func startGatewayMonitor() {

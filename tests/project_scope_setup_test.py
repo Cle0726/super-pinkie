@@ -27,8 +27,27 @@ class ScopeSetupTests(unittest.TestCase):
             self.assertEqual(original['plugins']['entries']['existing'], installed['plugins']['entries']['existing'])
             self.assertEqual(b'KEEP ORIGINAL PERSONA\n', persona.read_bytes())
             self.assertIn('pinkie-project-scope', installed['plugins']['allow'])
+            scope = installed['plugins']['entries']['pinkie-project-scope']
+            self.assertTrue(scope['hooks']['allowPromptInjection'])
+            self.assertTrue(scope['hooks']['allowConversationAccess'])
             self.assertTrue((config.parent / 'extensions/pinkie-project-scope/index.mjs').is_file())
             self.assertFalse(setup.install(home))
+
+    def test_required_conversation_grant_preserves_other_hook_permissions(self):
+        with tempfile.TemporaryDirectory(prefix='pinkie-scope-hooks-') as temp:
+            home = Path(temp)
+            config = home / '.openclaw/openclaw.json'
+            config.parent.mkdir()
+            config.write_text(json.dumps({'plugins': {'entries': {
+                'pinkie-project-scope': {'hooks': {'customGrant': True}}
+            }}}))
+            self.assertTrue(setup.install(home))
+            hooks = json.loads(config.read_text())['plugins']['entries']['pinkie-project-scope']['hooks']
+            self.assertEqual(hooks, {
+                'customGrant': True,
+                'allowPromptInjection': True,
+                'allowConversationAccess': True,
+            })
 
     def test_disabled_plugins_are_not_silently_bypassed(self):
         with tempfile.TemporaryDirectory(prefix='pinkie-scope-setup-') as temp:

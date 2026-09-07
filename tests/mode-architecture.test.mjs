@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {spawn} from 'node:child_process';
 import plugin,{CleKkAuditLog,CleKkSupervisor,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
@@ -319,6 +320,27 @@ test('CLE Kk durable rejection is recovered after a gateway restart',async t=>{
   assert.equal(second.hasPending(key),true);
 });
 
+test('gateway restart resumes the final accepted integrity attempt without advancing past its cap',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-last-attempt-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:last-attempt',audit=new CleKkAuditLog(root),now=Date.now();
+  const decision=new CompletionIntegrityGuard().revise(key,'仍需真实验收');
+  audit.append('turn_start',key,{prompt:'last'});
+  audit.writeState(key,{
+    active:true,prompt:'完成真实工作',startedAt:now,promptHash:'prompt',runId:'attempt-24',
+    pending:{decision,runId:'attempt-24',textHash:'',at:now},
+    retryScheduled:true,retryAttempts:24,
+  });
+  const calls=[];
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  supervisor.setRetryScheduler(async value=>{calls.push(value);return {ok:true,accepted:true};});
+  assert.equal(await supervisor.recoverPending(),1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].attempt,24);
+  assert.equal(supervisor.turns.get(key).retryExhausted,false);
+});
+
 test('gateway recovery never replays rejected child sessions as invisible parent turns',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-child-recovery-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const audit=new CleKkAuditLog(root), child='agent:project:subagent:child-rejected';
@@ -385,6 +407,178 @@ test('CLE Kk audit and durable state detect tampering',t=>{
   const first=JSON.parse(lines[0]);first.type='forged';lines[0]=JSON.stringify(first);
   fs.writeFileSync(audit.fileFor(key),`${lines.join('\n')}\n`);
   assert.equal(audit.verify(key).ok,false);
+});
+
+test('audit tail reads only the final block and a busy writer is not classified as corruption',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-tail-read-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:tail-read',audit=new CleKkAuditLog(root);
+  for(let index=0;index<300;index++)assert.ok(audit.append('tool_result',key,{index,payload:'x'.repeat(512)}));
+  const file=audit.fileFor(key);
+  assert.ok(fs.statSync(file).size>64*1024);
+  // Bypass this append's periodic full-chain checkpoint. If loadTail regresses
+  // to readFileSync, this test throws instead of silently reading the journal.
+  audit.appendCounts.set(file,1);
+  const originalRead=fs.readFileSync;
+  fs.readFileSync=(target,...args)=>{
+    if(path.resolve(String(target))===path.resolve(file))throw new Error('whole audit read forbidden');
+    return originalRead(target,...args);
+  };
+  try { assert.ok(audit.append('tail_probe',key)); } finally { fs.readFileSync=originalRead; }
+  assert.equal(audit.verify(key).ok,true);
+
+  const busyAudit=new CleKkAuditLog(root);
+  busyAudit.withFileLock=()=>null;
+  const busy=busyAudit.verify(key);
+  assert.equal(busy.ok,false);assert.equal(busy.busy,true);assert.equal(busy.retryable,true);
+  // readState must defer to the active writer, not manufacture a permanent
+  // corrupted state from a lock timeout.
+  assert.equal(busyAudit.readState(key),null);
+});
+
+test('cross-process audit writers preserve every record in one valid chain',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-audit-concurrent-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:concurrent-audit',worker=path.join(root,'writer.mjs');
+  const moduleUrl=new URL('../services/mode-architecture/index.mjs',import.meta.url).href;
+  fs.writeFileSync(worker,`
+    import {CleKkAuditLog} from ${JSON.stringify(moduleUrl)};
+    const audit=new CleKkAuditLog(process.argv[2]);
+    for(let index=0;index<150;index++)if(!audit.append('concurrent',process.argv[3],{index}))process.exit(2);
+  `);
+  const results=await Promise.all(Array.from({length:4},()=>new Promise(resolve=>{
+    const child=spawn(process.execPath,[worker,root,key],{stdio:['ignore','ignore','pipe']});
+    let error='';child.stderr.on('data',data=>{error+=data;});
+    child.on('close',code=>resolve({code,error}));
+  })));
+  assert.deepEqual(results.map(result=>result.code),[0,0,0,0],results.map(result=>result.error).join('\n'));
+  assert.deepEqual(new CleKkAuditLog(root).verify(key),{ok:true,records:600});
+});
+
+test('corrupt audit chains stop retry loops and recover on the next user turn',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-corrupt-recovery-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:corrupt-recovery',audit=new CleKkAuditLog(root);
+  audit.append('turn_start',key,{prompt:'old'});
+  const first=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  const oldCtx={agentId:'project',sessionKey:key,runId:'old-run'};
+  first.begin({prompt:'old'}, oldCtx);
+  first.recordFinalize({lastAssistantMessage:'已经完成。'}, oldCtx, {action:'revise',reason:'old rejection'});
+  const file=audit.fileFor(key);
+  const lines=fs.readFileSync(file,'utf8').trim().split('\n');
+  const forged=JSON.parse(lines[0]);forged.type='forged';lines[0]=JSON.stringify(forged);
+  fs.writeFileSync(file,`${lines.join('\n')}\n`);
+  const queued=[],retired=[];
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root),integrity:new CompletionIntegrityGuard()});
+  supervisor.setRetryScheduler(async value=>{queued.push(value);return true;});
+  supervisor.setRetryCanceller(async value=>{retired.push(value);});
+  assert.equal(await supervisor.recoverPending(),1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(queued.length,0);
+  assert.deepEqual(retired,[key]);
+  assert.equal(supervisor.retryRecoveryDisposition(key),'retire');
+  assert.equal(supervisor.hasPending(key),true);
+
+  // A fresh user request quarantines the broken evidence instead of inheriting
+  // the poisoned retry state. The new chain must be valid and writable.
+  supervisor.begin({prompt:'new request'}, {agentId:'project',sessionKey:key,runId:'new-run'});
+  assert.equal(supervisor.hasPending(key),false);
+  assert.equal(audit.verify(key).ok,true);
+  assert.ok(fs.readdirSync(root).some(name=>name.includes('.new-turn-')));
+});
+
+test('corrupt turns retire only their stale watchdog lease before a later restart',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-corrupt-lease-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:corrupt-lease',auditRoot=path.join(root,'audit');
+  const audit=new CleKkAuditLog(auditRoot),now=Date.now();
+  audit.append('turn_start',key,{prompt:'old'});
+  audit.writeState(key,{
+    active:true,prompt:'old',startedAt:now,promptHash:'old',runId:'old-run',retryAttempts:3,retryScheduled:true,
+    pending:{decision:new CompletionIntegrityGuard().revise(key,'old failure'),runId:'old-run',textHash:'',at:now},
+  });
+  const file=audit.fileFor(key),lines=fs.readFileSync(file,'utf8').trim().split('\n');
+  const forged=JSON.parse(lines[0]);forged.type='forged';lines[0]=JSON.stringify(forged);fs.writeFileSync(file,`${lines.join('\n')}\n`);
+  const store=new WatchdogJobStore(path.join(root,'jobs'));
+  store.set(key,{agentId:'project',runId:'old-run',kind:'integrity',attempt:3,maxAttempts:24});
+  const workflow={
+    enqueueNextTurnInjection:async()=>{throw new Error('stale lease must not replay');},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+  };
+  const watchdog=new UpstreamWatchdog({session:{workflow}},()=>'',async()=>({stdout:'{}'}),'',()=>({}),store);
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(auditRoot)});
+  supervisor.setRetryCanceller(sessionKey=>watchdog.cancel(sessionKey));
+  await supervisor.recoverPending();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(store.list().length,0);
+  assert.equal(await watchdog.recoverPending(sessionKey=>supervisor.retryRecoveryDisposition(sessionKey)),0);
+
+  // A separate ordinary upstream task is not owned by the corrupt integrity
+  // turn and therefore must remain recoverable.
+  const ordinary='agent:project:ordinary-valid-lease';
+  store.set(ordinary,{agentId:'project',runId:'network-run',kind:'upstream',attempt:2});
+  assert.equal(supervisor.retryRecoveryDisposition(ordinary),'');
+  assert.equal(store.list().length,1);
+});
+
+test('a live audit break overrides an unrelated revise reason',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-live-corrupt-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:live-corrupt',audit=new CleKkAuditLog(root);
+  const supervisor=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  const ctx={agentId:'project',sessionKey:key,runId:'live-corrupt-run'};
+  supervisor.begin({prompt:'修改并验证文件'},ctx);
+  const file=audit.fileFor(key),lines=fs.readFileSync(file,'utf8').trim().split('\n');
+  const forged=JSON.parse(lines[0]); forged.type='forged'; lines[0]=JSON.stringify(forged);
+  fs.writeFileSync(file,`${lines.join('\n')}\n`);
+  const decision=supervisor.recordFinalize(
+    {lastAssistantMessage:'已经完成。'},ctx,
+    {action:'revise',reason:'原始工具效果不足'},
+  );
+  assert.match(decision.reason,/审计链断裂/);
+  assert.equal(supervisor.turns.get(key).retryExhausted,true);
+});
+
+test('projection rebuild does not consume an integrity retry slot',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-projection-retry-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:projection-retry';
+  const workflow={
+    enqueueNextTurnInjection:async()=>({enqueued:true}),
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async()=>({id:'fallback'}),
+  };
+  const store=new WatchdogJobStore(path.join(root,'jobs'));
+  const watchdog=new UpstreamWatchdog(
+    {session:{workflow}},
+    ()=>'',
+    async()=>({stdout:JSON.stringify({status:'error',error:'Session transcript projection is rebuilding'})}),
+    'fake-cli',
+    ()=>({pending:0,quietForMs:Infinity}),
+    store,
+  );
+  watchdog.integrityAttempts.set(key,1);
+  await watchdog.dispatchImmediate({sessionKey:key,agentId:'project',runId:'r',attempt:1,tag:'pinkie-test',kind:'integrity'});
+  assert.equal(watchdog.integrityAttempts.get(key),1);
+  await watchdog.cancel(key);
+});
+
+test('nonzero gateway CLI stdout selects drain backoff instead of a hot retry loop',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-cli-drain-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const cli=path.join(root,'fake-gateway.mjs');
+  fs.writeFileSync(cli,'process.stdout.write(JSON.stringify({status:"error",error:"GatewayDrainingError: Gateway is draining"}));process.exit(1);\n');
+  const key='agent:project:cli-drain';
+  const watchdog=new UpstreamWatchdog(
+    {session:{workflow:{unscheduleSessionTurnsByTag:async()=>({removed:0})}}},
+    ()=>'',undefined,cli,()=>({pending:0,quietForMs:Infinity}),new WatchdogJobStore(path.join(root,'jobs')),
+  );
+  watchdog.integrityAttempts.set(key,1);
+  await watchdog.dispatchImmediate({sessionKey:key,agentId:'project',runId:'r',attempt:1,tag:'pinkie-drain',kind:'integrity'});
+  assert.equal(watchdog.gatewayBackoff.get(key),8_000);
+  assert.equal(watchdog.integrityAttempts.get(key),1);
+  assert.equal(watchdog.timers.has(key),true);
+  await watchdog.cancel(key);
 });
 
 test('FileRunStore rejects tampered run and child state and migrates legacy files',t=>{
@@ -961,6 +1155,11 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
 });
 
+test('plugin manifest declares every agent tool before registration',()=>{
+  const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
+  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','delivery_guard']);
+});
+
 test('a rejected next-turn injection cannot leave a ghost tier lock',async()=>{
   const methods=new Map();
   plugin.register({
@@ -1169,6 +1368,27 @@ test('ordinary watchdog jobs survive a gateway restart',async t=>{
   assert.equal(second.timers.has(key),true);
   await second.cancel(key);
   assert.equal(store.list().length,0);
+});
+
+test('the final legal integrity watchdog attempt survives a gateway restart',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-watchdog-last-attempt-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const store=new WatchdogJobStore(root),injected=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+  };
+  const key='agent:project:integrity-at-cap';
+  store.set(key,{agentId:'project',runId:'attempt-24',kind:'integrity',attempt:24,maxAttempts:24});
+  const watchdog=new UpstreamWatchdog(
+    {session:{workflow}},()=>'',async()=>({stdout:'{"status":"started"}'}),
+    '/runtime/openclaw/dist/index.js',()=>({pending:0,quietForMs:20_000}),store,
+  );
+  assert.equal(await watchdog.recoverPending(),1);
+  assert.equal(injected.length,1);
+  assert.equal(watchdog.integrityAttempts.get(key),24);
+  assert.equal(watchdog.timers.has(key),true);
+  await watchdog.cancel(key);
 });
 
 test('marathon watchdog keeps a delayed cron fallback while manual cancellation still wins',async()=>{

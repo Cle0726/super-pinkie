@@ -29,9 +29,35 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /Date\(\) < graceUntil/);
   assert.match(launcher, /Date\(\)\.addingTimeInterval\(90\)/);
   assert.match(launcher, /Gateway\.isReady/);
-  assert.match(launcher, /if ready \{\s+self\?\.startGatewayMonitor\(\)\s+self\?\.loadDashboard\(\)/);
+  assert.match(launcher, /if ready \{\s+self\?\.validateReadyGatewayAndLoad\(\)/);
   assert.match(launcher, /Gateway\.repair\(\)/);
   assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
+});
+
+test('macOS launcher replaces only a stale gateway proven to belong to an older CLE Kk app', () => {
+  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  assert.match(launcher, /private static let bundledNodeSuffix = "\/Contents\/Resources\/SuperPinkie\/runtime\/bin\/node"/);
+  assert.match(launcher, /task\.executableURL = lsof/);
+  assert.match(launcher, /"-sTCP:LISTEN", "-Fp"/);
+  assert.match(launcher, /proc_pidpath\(pid,/);
+  assert.match(launcher, /isCLEKkBundledNode\(\$0\.executablePath\)/);
+  assert.match(launcher, /listenerPIDs\(port: url\.port \?\? 18789\)\.contains\(listener\.pid\)/);
+  assert.match(launcher, /stillSameProcess\(listener\)/);
+  assert.match(launcher, /Darwin\.kill\(listener\.pid, SIGTERM\)/);
+  assert.match(launcher, /Darwin\.kill\(listener\.pid, SIGKILL\)/);
+  assert.match(launcher, /Gateway\.ensureCurrentRuntimeForReadyGateway/);
+  assert.doesNotMatch(launcher, /\b(?:killall|pkill)\b/);
+});
+
+test('macOS gateway provenance detects an old executable replaced at the same app path', () => {
+  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  assert.match(launcher, /private struct ExecutableIdentity: Equatable/);
+  assert.match(launcher, /let device: UInt64\s+let inode: UInt64/);
+  assert.match(launcher, /mappedExecutableIdentity\(for pid: pid_t, matching executablePath: String\)/);
+  assert.match(launcher, /"-d", "txt", "-FDin"/);
+  assert.match(launcher, /diskIdentity\(for: expectedNode\)/);
+  assert.match(launcher, /\$0\.executablePath != expectedNode \|\| \$0\.executableIdentity != expectedIdentity/);
+  assert.match(launcher, /identity == listener\.executableIdentity/);
 });
 
 test('macOS app owns an unrestricted computer-control driver and capable node', () => {
@@ -95,6 +121,7 @@ test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater
     assert.match(source, /CUA_DRIVER_RS_UPDATE_CHECK/);
   }
   assert.match(setup, /update\["checkOnStart"\] = False/);
+  assert.match(setup, /catalog_refresh\["enabled"\] = False/);
   assert.match(launcher, /主动拉取 CLE Kk 更新/);
   assert.match(windows, /Cle0726\/super-pinkie\/releases\/latest/);
 });

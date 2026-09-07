@@ -27,6 +27,70 @@ reopen_app() {
   fi
 }
 
+gateway_listener_pids() {
+  /usr/sbin/lsof -nP -a -iTCP:18789 -sTCP:LISTEN -Fp 2>/dev/null \
+    | sed -n 's/^p//p' | sort -u
+}
+
+gateway_executable_identity() {
+  local pid="$1"
+  # The first txt vnode is the process executable. Device + inode distinguish
+  # an old process from a new App binary installed at the exact same pathname.
+  /usr/sbin/lsof -nP -a -p "$pid" -d txt -FDin 2>/dev/null | awk '
+    /^f/ { if (started) exit; started=1; next }
+    started && /^D/ { device=substr($0,2); next }
+    started && /^i/ { inode=substr($0,2); next }
+    started && /^n/ { print device "|" inode "|" substr($0,2); exit }
+  '
+}
+
+gateway_listener_matches_identity() {
+  local pid="$1" expected="$2"
+  [[ "$(gateway_executable_identity "$pid")" == "$expected" ]] || return 1
+  gateway_listener_pids | grep -qx "$pid"
+}
+
+stop_exact_clekk_gateway() {
+  local pid identity executable deadline remaining=""
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] && (( pid > 1 )) || continue
+    identity="$(gateway_executable_identity "$pid")"
+    executable="${identity#*|}"
+    executable="${executable#*|}"
+    # Never signal a process merely because it owns port 18789. This exact
+    # private bundle layout proves that it is a CLE Kk/SuperPinkie gateway.
+    case "$executable" in
+      *.app/Contents/Resources/SuperPinkie/runtime/bin/node) ;;
+      *)
+        echo "refusing to stop non-CLE-Kk listener pid=$pid executable=$executable"
+        return 1
+        ;;
+    esac
+    gateway_listener_matches_identity "$pid" "$identity" || continue
+    echo "stopping exact CLE Kk gateway pid=$pid identity=$identity"
+    kill -TERM "$pid" 2>/dev/null || return 1
+    deadline=$((SECONDS + 8))
+    while gateway_listener_matches_identity "$pid" "$identity"; do
+      (( SECONDS < deadline )) || break
+      sleep 0.1
+    done
+    if gateway_listener_matches_identity "$pid" "$identity"; then
+      # Revalidate the mapped vnode immediately before the hard stop, so PID
+      # reuse or a new process at the same path can never be killed by mistake.
+      kill -KILL "$pid" 2>/dev/null || return 1
+      deadline=$((SECONDS + 3))
+      while gateway_listener_matches_identity "$pid" "$identity"; do
+        (( SECONDS < deadline )) || break
+        sleep 0.1
+      done
+    fi
+    gateway_listener_matches_identity "$pid" "$identity" && return 1
+  done < <(gateway_listener_pids)
+
+  remaining="$(gateway_listener_pids)"
+  [[ -z "$remaining" ]]
+}
+
 cleanup() {
   rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
 }
@@ -54,6 +118,16 @@ while [[ "$CURRENT_PID" =~ ^[0-9]+$ ]] && (( CURRENT_PID > 1 )) && kill -0 "$CUR
   fi
   sleep 0.25
 done
+
+# The gateway is intentionally detached from the native App during ordinary
+# relaunches. For an explicit update, stop its exact executable before any App
+# files are replaced; otherwise the new UI silently reconnects to old code.
+if ! stop_exact_clekk_gateway; then
+  echo "gateway could not be stopped without risking another process"
+  notify "旧网关无法安全停止，本次没有更新"
+  reopen_app
+  exit 1
+fi
 
 REPO=""
 if [[ -f "$CONFIG_FILE" ]]; then

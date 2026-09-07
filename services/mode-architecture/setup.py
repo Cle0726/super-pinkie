@@ -184,6 +184,19 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
+    # This pinned CLE Kk release owns its model list.  The upstream catalog is
+    # refreshed over the network by default and can both add unexpected model
+    # entries and stall startup when the upstream host is unavailable.  Keep
+    # the user's configured providers/models intact while opting out of that
+    # background feed; the explicit CLE Kk updater remains available from the
+    # App menu.
+    models = data.setdefault("models", {})
+    if not isinstance(models, dict):
+        models = data["models"] = {}
+    catalog_refresh = models.setdefault("catalogRefresh", {})
+    if not isinstance(catalog_refresh, dict):
+        catalog_refresh = models["catalogRefresh"] = {}
+    catalog_refresh["enabled"] = False
     timeout = defaults.get("timeoutSeconds")
     if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
         defaults["timeoutSeconds"] = 43_200
