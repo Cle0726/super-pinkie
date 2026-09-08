@@ -19,14 +19,13 @@
     finally{if(loading.get(key)===job)loading.delete(key);signature='';if(current)render(current.section,current.api);}
   }
   const title=s=>[s.label,s.derivedTitle,s.title,s.displayName,s.name].find(v=>typeof v==='string'&&v.trim()&&!/^agent:/.test(v))||(s.key?.endsWith(':main')?'主会话':'未命名会话');
-  function timeLabel(value){const minutes=Math.max(0,Math.floor((Date.now()-(Number(value)||0))/60000));return !value?'':minutes<1?'刚刚':minutes<60?minutes+'分':minutes<1440?Math.floor(minutes/60)+'小时':Math.floor(minutes/1440)+'天';}
   function row(s,api){
     const n=el('div','sidebar-recent-session session-row-host');n.dataset.sessionKey=s.key;
     n.classList.toggle('sidebar-recent-session--active',s.key===api.currentKey);
     const link=el('a','sidebar-recent-session__link');link.href='/chat?session='+encodeURIComponent(s.key);link.title=title(s);
     link.append(el('span','sidebar-recent-session__name',title(s)));
     link.onclick=e=>{if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();api.navigateSession(s.key);};
-    const aside=el('span','session-row-aside');aside.append(el('span','session-row-trail',timeLabel(s.updatedAt)));
+    const aside=el('span','session-row-aside');
     const actions=el('span','laolao-row-actions');
     if(archived){
       actions.append(

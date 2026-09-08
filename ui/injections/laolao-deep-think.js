@@ -126,23 +126,10 @@
     return /^agent:(main|project|thinking|unrestricted):/.test(key) ? key : "";
   };
 
-  // 轻量 toast (不依赖可能不存在的 __laolaoToast, 避免静默失败)
-  let toastTimer = null;
   const toast = (msg) => {
-    let el = document.getElementById("laolao-deep-think-toast");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "laolao-deep-think-toast";
-      el.setAttribute("role", "status");
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.classList.remove("is-visible");
-    requestAnimationFrame(() => el.classList.add("is-visible"));
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      el.classList.remove("is-visible");
-    }, 2600);
+    const shared = window.__laolaoToast;
+    if (typeof shared === "function") shared(msg);
+    else window.dispatchEvent(new CustomEvent("laolao:toast", {detail: {message: msg}}));
   };
 
   const selectedDefinition = () => TIERS.find((tier) => tier.id === selectedTier);

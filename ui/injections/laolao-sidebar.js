@@ -401,6 +401,8 @@
     if (!el) {
       el = document.createElement("div");
       el.className = "laolao-toast";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
       document.body.appendChild(el);
     }
     el.textContent = text;
@@ -408,6 +410,12 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove("laolao-toast--show"), 2600);
   }
+  // 全部注入功能共用一个通知出口，避免同一操作同时叠出多枚 toast。
+  window.__laolaoToast = toast;
+  window.addEventListener("laolao:toast", (event) => {
+    const message = event?.detail?.message;
+    if (typeof message === "string" && message.trim()) toast(message);
+  });
 
   /* ---------- 3.1 原生文件夹项目桥 ---------- */
   const folderRequests = new Map();
@@ -807,11 +815,9 @@
           const info = map.get(key);
           if (!info) continue;
           const nameSpan = row.querySelector(".sidebar-recent-session__name");
-          const trail = row.querySelector(".session-row-trail");
           const link = row.querySelector("a.sidebar-recent-session__link");
           if (nameSpan && info.name) nameSpan.textContent = info.name;
           if (link && info.name) link.title = info.name;
-          if (trail) trail.textContent = relTime(info.updatedAt);
         }
       })
       .catch(() => {})
@@ -819,18 +825,6 @@
         sessionIndexLoading = false;
         schedule();
       });
-  }
-
-  function relTime(ms) {
-    if (!ms) return "";
-    const diff = Date.now() - ms;
-    if (diff < 0) return "now";
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return "now";
-    if (m < 60) return m + "m";
-    const h = Math.floor(m / 60);
-    if (h < 24) return h + "h";
-    return Math.floor(h / 24) + "d";
   }
 
   function makeSyntheticRow(key) {
@@ -850,10 +844,6 @@
     link.appendChild(nameSpan);
     const aside = document.createElement("span");
     aside.className = "sidebar-recent-session__aside session-row-aside";
-    const trail = document.createElement("span");
-    trail.className = "session-row-trail";
-    trail.textContent = info ? relTime(info.updatedAt) : "";
-    aside.appendChild(trail);
     row.append(link, aside);
     return row;
   }

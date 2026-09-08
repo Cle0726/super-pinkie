@@ -1,0 +1,141 @@
+/* 超級碧琪 UI 减法层：不删能力，只压缩留白、重复元信息与分散工具栏。 */
+
+/* 4 + 5：侧栏保持所有入口，但减少行高、分组空隙和重复时间尾标。 */
+html[data-laolao-classic-shell="1"] .sidebar-brand {
+  min-height: 56px;
+  padding: 7px 9px 5px 12px;
+}
+html[data-laolao-classic-shell="1"] .sidebar-nav {
+  padding: 0 7px 5px !important;
+}
+html[data-laolao-classic-shell="1"] .sidebar-nav .nav-item--home,
+.laolao-classic-more {
+  min-height: 32px;
+  padding: 6px 8px !important;
+}
+html[data-laolao-classic-shell="1"] .sidebar-session-toolbar {
+  min-height: 40px;
+  padding: 2px 11px 1px;
+}
+html[data-laolao-classic-shell="1"] .sidebar-session-toolbar .sidebar-new-session {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+#laolao-session-manager {
+  padding: 2px 0 6px;
+}
+.laolao-session-controls {
+  gap: 4px;
+  margin: 2px 8px 5px;
+}
+.laolao-session-search {
+  padding: 5px 7px;
+}
+.laolao-group {
+  margin: 1px 0;
+}
+.laolao-group__head {
+  min-height: 26px;
+  padding: 2px 8px;
+}
+.laolao-group__empty {
+  padding: 2px 22px 4px;
+}
+#laolao-session-manager .sidebar-recent-session {
+  min-height: 32px !important;
+  margin: 0 5px !important;
+  padding-block: 2px !important;
+  border-radius: 8px !important;
+}
+#laolao-session-manager .sidebar-recent-session__link {
+  padding: 5px 6px !important;
+}
+#laolao-session-manager .session-row-trail {
+  display: none !important;
+}
+#laolao-session-manager .session-row-aside:empty {
+  display: none !important;
+}
+.laolao-project__path {
+  display: none;
+}
+
+/* 8：模式、档位、整理、附件、语音、模型与发送仍全部保留，但归到同一个 composer。 */
+.agent-chat__composer-shell {
+  width: min(960px, calc(100% - 28px)) !important;
+}
+.agent-chat__input {
+  padding: 7px 9px !important;
+  border-radius: 16px !important;
+}
+.agent-chat__composer-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  min-height: 32px !important;
+  margin-top: 3px !important;
+  padding-top: 3px !important;
+  border-top: 1px solid rgba(211, 111, 156, .12);
+  flex-wrap: wrap;
+}
+.agent-chat__composer-actions :is(button, .chat-settings-chip, .agent-chat__input-btn) {
+  min-height: 28px !important;
+  margin: 0 !important;
+}
+#laolao-project-scope {
+  order: 20;
+  max-width: 42%;
+  margin-left: auto;
+  padding: 0 4px !important;
+  font-size: 9px !important;
+}
+
+/* 9：启动/模式切换保留阶段动画，不再展示没有任务依据的精确百分比。 */
+.laolao-splash__percentage,
+.laolao-mode-transition__percentage {
+  display: none !important;
+}
+
+/* 10：只保留共享 .laolao-toast 通知出口。旧节点即使被缓存脚本创建也不显示。 */
+#laolao-deep-think-toast,
+#laolao-context-compact-toast {
+  display: none !important;
+}
+.laolao-toast {
+  bottom: 18px;
+  padding: 7px 13px;
+  font-size: 12px;
+}
+
+/* 12：释放横向工作空间；右侧轨道仍可用，但不再常驻占宽。 */
+html[data-laolao-classic-shell="1"] {
+  --laolao-classic-rail-width: 36px;
+}
+html[data-laolao-classic-shell="1"] .shell.shell--chat {
+  grid-template-columns: 238px minmax(0, 1fr) !important;
+}
+html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
+  margin-right: 0 !important;
+}
+.chat-workspace-rail.laolao-classic-workspace-rail {
+  width: 36px;
+  transform: translateX(29px);
+  transition: transform .16s ease;
+}
+.chat-workspace-rail.laolao-classic-workspace-rail:hover,
+.chat-workspace-rail.laolao-classic-workspace-rail:focus-within {
+  transform: translateX(0);
+}
+.laolao-classic-rail__toggle {
+  width: 28px;
+  height: 28px;
+}
+
+@media (max-width: 920px) {
+  html[data-laolao-classic-shell="1"] .shell.shell--chat {
+    grid-template-columns: min(220px, 29vw) minmax(0, 1fr) !important;
+  }
+  .agent-chat__composer-shell {
+    width: calc(100% - 18px) !important;
+  }
+}

@@ -64,6 +64,7 @@ apply_ui_skin() {
     laolao-splash.png \
     laolao-theme.css \
     laolao-classic-shell.css \
+    laolao-ui-subtraction.css \
     laolao-classic-shell.js \
     laolao-memory.css \
     laolao-memory.js \
@@ -158,6 +159,14 @@ apply_ui_skin() {
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
     perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar14"></script>\n    $1}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  if ! grep -Fq './laolao-ui-subtraction.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-ui-subtraction.css?v=subtraction1' "$index_file"; then
+    perl -0pi -e 's{\./laolao-ui-subtraction\.css\?v=[^"]*}{./laolao-ui-subtraction.css?v=subtraction1}g' "$index_file"
     DID_CHANGE=1
   fi
 

@@ -7,7 +7,6 @@
   const POPOVER_ID = "laolao-context-compact-popover";
   let busy = false;
   let popover = null;
-  let toastTimer = null;
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(location.search).get("session") || "";
@@ -17,18 +16,9 @@
   };
 
   const toast = (message) => {
-    let node = document.getElementById("laolao-context-compact-toast");
-    if (!node) {
-      node = document.createElement("div");
-      node.id = "laolao-context-compact-toast";
-      node.setAttribute("role", "status");
-      document.body.append(node);
-    }
-    node.textContent = message;
-    node.classList.remove("is-visible");
-    requestAnimationFrame(() => node.classList.add("is-visible"));
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => node.classList.remove("is-visible"), 3600);
+    const shared = window.__laolaoToast;
+    if (typeof shared === "function") shared(message);
+    else window.dispatchEvent(new CustomEvent("laolao:toast", {detail: {message}}));
   };
 
   const closePopover = () => {
