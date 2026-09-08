@@ -30,9 +30,11 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   const launcher = read('app/windows_desktop.py');
   assert.match(launcher, /node_modules\/openclaw\/openclaw\.mjs/);
   assert.match(launcher, /gateway", "run"/);
+  assert.match(launcher, /GATEWAY_CHAT_URL = urllib\.parse\.urljoin\(GATEWAY_URL, "chat"\)/);
+  assert.match(launcher, /return GATEWAY_CHAT_URL/);
   assert.match(launcher, /gateway_environment\["OPENCLAW_SERVICE_KIND"\] = "gateway"/);
-  assert.match(launcher, /while not self\.closing\.wait\(2\)/);
-  assert.match(launcher, /self\.failure_limit = 3/);
+  assert.match(launcher, /while not self\.closing\.wait\(\.75\)/);
+  assert.match(launcher, /self\.failure_limit = 2/);
   assert.match(launcher, /failures >= self\.failure_limit/);
   assert.doesNotMatch(launcher, /age < self\.startup_grace/);
   assert.match(launcher, /--auth", "none/);
@@ -50,6 +52,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /Never kill a still-live Gateway/);
   const loading = read('ui/launcher-loading.html');
   assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
+  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
   assert.match(loading, /mode: "no-cors"/);
   assert.match(launcher, /frameless=True/);
 });
@@ -67,6 +70,9 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(launcher, /aria-label="主动拉取更新"/);
   assert.match(launcher, /subprocess\.Popen\([\s\S]*?close_fds=True/);
   assert.match(launcher, /threading\.Timer\(\.6, self\._window\.destroy\)/);
+  assert.match(launcher, /UpdateRoot/);
+  assert.match(launcher, /Get-ChildItem -LiteralPath \$UpdateRoot/);
+  assert.match(launcher, /Where-Object \{ \$_.Name -match '\^\[vV\]\?/);
   assert.match(release, /Get-FileHash/);
   assert.match(release, /windows-\*\.exe\.sha256/);
   assert.match(release, /portable\.zip/);
@@ -133,6 +139,8 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
   assert.match(proxy, /UR_PROXY_PROMPTS_DIR/);
   assert.match(watchdog, /--auth.*none/);
   assert.match(watchdog, /Invoke-WebRequest/);
+  assert.match(watchdog, /Start-Sleep -Milliseconds 2000/);
+  assert.match(watchdog, /TotalSeconds -lt 8/);
   assert.doesNotMatch(watchdog, /taskkill/);
   for (const name of ['services/context/context_budget.py', 'services/context/setup.py', 'services/project-scope/setup.py', 'services/party/setup.py', 'services/roundtable/server.py']) {
     assert.match(read(name), /LOCALAPPDATA/);
@@ -144,6 +152,7 @@ test('Windows bundled watchdog has a dedicated task installer', () => {
   const installer = read('installer/windows/register-bundled-watchdog.ps1');
   assert.match(installer, /SuperPinkieGatewayWatchdog/);
   assert.match(installer, /windows-gateway-watchdog\.ps1/);
+  assert.match(installer, /-Port 18789 -Loop/);
   assert.match(installer, /New-ScheduledTaskTrigger/);
   assert.match(installer, /RunLevel Limited/);
 });

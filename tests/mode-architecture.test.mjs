@@ -48,7 +48,10 @@ test('learn while doing is one separate system module in every mode',t=>{
     assert.equal((result.appendSystemContext.match(/独立模块：边做边学/g)||[]).length,1);
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
-    if(mode==='none')assert.doesNotMatch(result.appendSystemContext,/persona-none|voice-none/);
+    if(mode==='none'){
+      assert.doesNotMatch(result.appendSystemContext,/persona-none|voice-none|index-none|identity-none|active-none/);
+      assert.doesNotMatch(result.appendSystemContext,/四模式记忆运行规则/);
+    }
   }
 });
 
@@ -575,10 +578,20 @@ test('nonzero gateway CLI stdout selects drain backoff instead of a hot retry lo
   );
   watchdog.integrityAttempts.set(key,1);
   await watchdog.dispatchImmediate({sessionKey:key,agentId:'project',runId:'r',attempt:1,tag:'pinkie-drain',kind:'integrity'});
-  assert.equal(watchdog.gatewayBackoff.get(key),8_000);
+  assert.equal(watchdog.gatewayBackoff.get(key),500);
   assert.equal(watchdog.integrityAttempts.get(key),1);
   assert.equal(watchdog.timers.has(key),true);
   await watchdog.cancel(key);
+});
+
+test('gateway recovery backoff remains available for a long upstream outage',async t=>{
+  const key='agent:project:long-drain';
+  const watchdog=new UpstreamWatchdog({session:{workflow:{}}});
+  t.after(()=>void watchdog.cancel(key));
+  const delays=[];
+  for(let i=0;i<8;i++) delays.push(watchdog.recoveryDelay(key,'GatewayDrainingError: Gateway is draining'));
+  assert.deepEqual(delays.slice(0,4),[500,800,1280,2048]);
+  assert.equal(delays.at(-1),5_000);
 });
 
 test('FileRunStore rejects tampered run and child state and migrates legacy files',t=>{
@@ -1260,6 +1273,21 @@ test('watchdog resumes a host-success turn that ended on a tool result without a
   assert.match(injected[0].text,/工具结果已经返回/);assert.match(injected[0].text,/正常交付/);
 });
 
+test('watchdog immediately resumes a structured failed tool result even without toolUse stopReason',async()=>{
+  const injected=[];
+  const workflow={
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),scheduleSessionTurn:async()=>({id:'retry'}),
+  };
+  const watchdog=new UpstreamWatchdog({session:{workflow}});
+  const retried=await watchdog.agentEnded({success:true,messages:[
+    {role:'assistant',content:[{type:'toolCall',name:'computer'}],stopReason:'stop'},
+    {role:'toolResult',toolName:'computer',isError:true,content:[{type:'text',text:'connection reset'}]},
+  ]},{agentId:'unrestricted',sessionKey:'agent:unrestricted:failed-tool-result'});
+  assert.equal(retried,true);assert.equal(injected.length,1);
+  assert.match(injected[0].text,/工具结果已经返回/);
+});
+
 test('watchdog reads structured incomplete-turn errors from agent_end',async()=>{
   const injected=[];
   const watchdog=new UpstreamWatchdog({session:{workflow:{
@@ -1399,7 +1427,7 @@ test('marathon watchdog keeps a delayed cron fallback while manual cancellation 
   }}};
   const watchdog=new UpstreamWatchdog(api,()=> 'marathon');
   await watchdog.agentEnded({success:false,error:'network timeout'},{agentId:'main',sessionKey:'agent:main:cron:night'});
-  assert.equal(scheduled[0].delayMs,90000);
+  assert.equal(scheduled[0].delayMs,3000);
   await watchdog.cancel('agent:main:cron:night',true);
   await watchdog.agentEnded({success:false,error:'This operation was aborted'},{agentId:'main',sessionKey:'agent:main:cron:night'});
   assert.equal(scheduled.length,1);
@@ -1418,7 +1446,7 @@ test('online watchdog uses the authenticated local CLI and removes its cron fall
   const params=JSON.parse(calls[0].args[calls[0].args.indexOf('--params')+1]);
   assert.equal(params.sessionKey,'agent:project:one');assert.equal(params.agentId,'project');
   assert.equal(params.message,'\u2063');assert.equal(params.deliver,false);
-  assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,20000);
+  assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,7000);
   assert.deepEqual(removed,[{sessionKey:'agent:project:one',tag:'pinkie-watchdog-test'}]);
 });
 

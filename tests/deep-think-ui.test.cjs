@@ -38,7 +38,7 @@ test('main chat shows aggregate worker progress without exposing child chats',()
   assert.match(src,/window\.setInterval\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
 });
 
-test('tier completion refreshes native chat history without reloading the app',()=>{
+test('tier completion refreshes history directly while reload stays a guarded offline-only fallback',()=>{
   const src=read('ui/injections/laolao-resume.js');
   assert.match(src,/pinkie:tier-complete/);
   assert.match(src,/refreshVisibleChat/);
@@ -46,7 +46,8 @@ test('tier completion refreshes native chat history without reloading the app',(
   assert.match(src,/client\.request\("chat\.history"/);
   assert.match(src,/recoverCurrentChat\("tier-complete"/);
   assert.doesNotMatch(src,/button\.chat-settings-action/);
-  assert.doesNotMatch(src,/location\.reload/);
+  assert.match(src,/if \(body\?\.ready === true && !gatewayConnected\(\)\) reloadRecoveredGateway\(\)/);
+  assert.match(src,/now - previous < 8_000/);
 });
 
 test('tier menu uses compact self-drawn pink glass controls and avoids a root mutation observer',()=>{

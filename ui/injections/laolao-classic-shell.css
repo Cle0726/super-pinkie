@@ -80,6 +80,10 @@ html[data-laolao-classic-shell="1"] .sidebar-nav .nav-section__items {
   display: block !important;
 }
 
+html[data-laolao-classic-shell="1"] .sidebar-nav .nav-section--collapsed > .nav-section__items {
+  display: none !important;
+}
+
 html[data-laolao-classic-shell="1"] .sidebar-nav .nav-item--home {
   display: flex !important;
   min-height: 36px;
@@ -112,20 +116,11 @@ html[data-laolao-classic-shell="1"] .sidebar-nav[data-laolao-more-open="1"] .sid
   cursor: pointer;
 }
 
-.laolao-classic-more::after {
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-top: 1px solid currentColor;
-  border-right: 1px solid currentColor;
-  content: "";
-  opacity: .62;
-  transform: rotate(45deg);
-  transition: transform .18s ease;
-}
-
-.sidebar-nav[data-laolao-more-open="1"] .laolao-classic-more::after {
-  transform: rotate(135deg);
+/* The current runtime already renders and rotates .nav-section__chevron.
+   Do not draw a second pseudo-element arrow on the same native button. */
+.nav-section--more > .nav-section__label.laolao-classic-more::after {
+  display: none !important;
+  content: none !important;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-session-toolbar {
@@ -309,6 +304,11 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   background: rgba(255, 252, 253, 0.86);
   backdrop-filter: blur(22px) saturate(115%);
   -webkit-backdrop-filter: blur(22px) saturate(115%);
+}
+
+.chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
+  width: min(300px, 34vw);
+  align-items: stretch;
 }
 
 .chat-workspace-rail.laolao-classic-workspace-rail::before,

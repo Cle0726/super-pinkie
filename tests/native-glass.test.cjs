@@ -35,17 +35,22 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme34/);
+  assert.match(installer,/laolao-theme\.css\?v=theme35/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar17/);
-  assert.match(installer,/laolao-sidebar\.js\?v=sidebar14/);
-  assert.match(installer,/laolao-session-list\.js\?v=sessions4/);
-  assert.match(installer,/laolao-deep-think\.js\?v=deepthink14/);
+  assert.match(installer,/laolao-sidebar\.js\?v=sidebar15/);
+  assert.match(installer,/laolao-session-list\.js\?v=sessions5/);
+  assert.match(installer,/trap reseal_app_on_exit EXIT/);
+  assert.match(installer,/codesign --force --deep --sign -/);
+  assert.match(installer,/Computer Use v2 patch skipped/);
+  assert.match(installer,/laolao-deep-think\.js\?v=deepthink15/);
   assert.match(installer,/laolao-splash\.css\?v=splash18/);
   assert.match(installer,/laolao-splash\.js\?v=splash22/);
   assert.match(installer,/laolao-mode-switcher\.js\?v=mode28/);
-  assert.match(installer,/laolao-usage-stats\.js\?v=stats12/);
-  assert.match(installer,/laolao-classic-shell\.css\?v=classic4/);
-  assert.match(installer,/laolao-classic-shell\.js\?v=classic4/);
+  assert.match(installer,/laolao-usage-stats\.js\?v=stats15/);
+  assert.match(installer,/laolao-classic-shell\.css\?v=classic11/);
+  assert.match(installer,/laolao-classic-shell\.js\?v=classic11/);
+  assert.match(installer,/laolao-side-layout\.css\?v=side12/);
+  assert.match(installer,/laolao-side-layout\.js\?v=side12/);
   assert.match(installer,/laolao-memory\.css\?v=memory1/);
   assert.match(installer,/laolao-memory\.js\?v=memory1/);
   assert.match(installer,/s\{\"\\\.\/laolao-\}\{\"\/laolao-\}g/);
@@ -54,7 +59,17 @@ test('installer cache-busts the native glass assets',()=>{
 test('assistant replies get a subtle readable surface without slowing streams',()=>{
   const css=read('ui/injections/laolao-theme.css');
   const bubbleBlock=css.match(/chat-group\.assistant:not\(\.chat-group--forwarded\)[\s\S]*?\{([\s\S]*?)\}/)?.[1]||'';
-  assert.match(bubbleBlock,/background: rgba\(255, 250, 252, 0\.58\)/);
+  assert.match(bubbleBlock,/background: rgba\(255, 250, 252, 0\.24\)/);
   assert.match(css,/chat-bubble:not\(\.chat-bubble--tool-shell\):not\(\.chat-reading-indicator\)/);
   assert.doesNotMatch(bubbleBlock,/backdrop-filter/);
+});
+
+test('chat layout keeps both rails out of the message column',()=>{
+  const css=read('ui/injections/laolao-side-layout.css');
+  assert.match(css,/grid-template-columns: minmax\(0, 1fr\) var\(--laolao-window-rail-reserve\)/);
+  assert.match(css,/chat-workspace-rail\.laolao-classic-workspace-rail[\s\S]*position: relative !important/);
+  assert.match(css,/chat-workspace-rail\.laolao-classic-workspace-rail[\s\S]*grid-column: 2 !important/);
+  assert.match(css,/@media \(max-width: 1120px\)[\s\S]*display: none !important/);
+  assert.match(css,/chat-bubble :is\(p, li, blockquote, a\)[\s\S]*overflow-wrap: anywhere/);
+  assert.doesNotMatch(css,/padding-right: var\(--laolao-window-rail-reserve\)/);
 });

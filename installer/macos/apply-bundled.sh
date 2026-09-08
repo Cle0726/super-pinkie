@@ -66,7 +66,14 @@ fi
 if [[ -f "$REPO_ROOT/services/party/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/party/setup.py"
 fi
-PINKIE_SKIP_APP_BUNDLES=1 "$SCRIPT_DIR/apply-theme.sh"
+# A managed desktop build already contains the exact themed control UI that was
+# sealed into the app at build/update time. Reapplying the bundled source over
+# that same signed runtime on every launch both rolls newer hotfixes backward
+# and invalidates the app's resource signature. External/manual installs still
+# need the compatibility path below; the self-contained App must stay immutable.
+if [[ "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
+  PINKIE_SKIP_APP_BUNDLES=1 "$SCRIPT_DIR/apply-theme.sh"
+fi
 if [[ -f "$REPO_ROOT/services/project-scope/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/project-scope/setup.py"
 fi

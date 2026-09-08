@@ -67,6 +67,22 @@ const GATEWAY_RECOVERY_FAILURE = /(?:GatewayDrainingError|gateway is draining|re
 const AUDIT_CORRUPTION_FAILURE = /(?:审计链断裂|审计日志不可读|状态摘要不一致|状态文件不可读)/i;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
+// Upstream availability is intentionally handled as a long-lived recovery
+// lane.  Keep the first retry quick, then give a flapping provider more room
+// instead of exhausting the visible turn after only a few seconds.  Operators
+// can tune these without changing the mode or prompt configuration.
+const WATCHDOG_RETRY_MAX_DELAY_MS = Math.max(750,
+  Number(process.env.PINKIE_WATCHDOG_RETRY_MAX_DELAY_MS) || 3_000);
+const WATCHDOG_GATEWAY_BACKOFF_INITIAL_MS = Math.max(250,
+  Number(process.env.PINKIE_WATCHDOG_GATEWAY_BACKOFF_INITIAL_MS) || 500);
+const WATCHDOG_GATEWAY_BACKOFF_MAX_MS = Math.max(2_000,
+  Number(process.env.PINKIE_WATCHDOG_GATEWAY_BACKOFF_MAX_MS) || 5_000);
+const WATCHDOG_ACTIVITY_POLL_MS = Math.max(250,
+  Number(process.env.PINKIE_WATCHDOG_ACTIVITY_POLL_MS) || 500);
+const WATCHDOG_QUIET_FENCE_MS = Math.max(750,
+  Number(process.env.PINKIE_WATCHDOG_QUIET_FENCE_MS) || 1_500);
+const WATCHDOG_CLI_TIMEOUT_MS = Math.max(2_000,
+  Number(process.env.PINKIE_WATCHDOG_CLI_TIMEOUT_MS) || 5_000);
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
 const DISPLAY_PRICING_VERSION = 2;
 const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
@@ -124,10 +140,19 @@ function failureReasonFromEvent(event = {}) {
 
 function hasIncompleteToolTurn(event = {}, reason = '') {
   if (/(?:incomplete(?:[_ -](?:turn|response))?|non[_ -]?deliverable[_ -]?terminal[_ -]?turn)/i.test(reason)) return true;
-  const messages = Array.isArray(event.messages) ? event.messages.slice(-8) : [];
-  const lastAssistant = [...messages].reverse().map(entry => (
+  const messages = (Array.isArray(event.messages) ? event.messages.slice(-8) : []).map(entry => (
     entry?.message && typeof entry.message === 'object' ? entry.message : entry
-  )).find(message => message?.role === 'assistant');
+  ));
+  const lastAssistant = [...messages].reverse().find(message => message?.role === 'assistant');
+  const lastMessage = messages.at(-1);
+  // A transport can report success=true after returning a failed toolResult,
+  // without another assistant event or a useful top-level error. Treat that
+  // as an incomplete tool lane so the model immediately retries only the
+  // failed operation after checking existing effects.
+  if (/^(?:toolResult|tool_result)$/i.test(String(lastMessage?.role || ''))
+      && toolResultFailed(lastMessage, resultText(lastMessage?.content ?? lastMessage?.result))) {
+    return true;
+  }
   // Newer hosts may mark the outer run success=true after a tool result even
   // though the model never produced the required terminal assistant reply.
   // The transcript shape is authoritative here; transport success only means
@@ -2595,7 +2620,8 @@ export class UpstreamWatchdog {
   recoveryDelay(sessionKey, reason = '') {
     if (!GATEWAY_RECOVERY_FAILURE.test(String(reason || ''))) return 0;
     const previous = Number(this.gatewayBackoff.get(sessionKey) || 0);
-    const next = Math.min(60_000, previous > 0 ? previous * 2 : 8_000);
+    const next = Math.min(WATCHDOG_GATEWAY_BACKOFF_MAX_MS,
+      previous > 0 ? Math.ceil(previous * 1.6) : WATCHDOG_GATEWAY_BACKOFF_INITIAL_MS);
     this.gatewayBackoff.set(sessionKey, next);
     return next;
   }
@@ -2663,9 +2689,9 @@ export class UpstreamWatchdog {
     });
     const marathon = this.tierFor(sessionKey) === 'marathon';
     const recoveryDelay = this.recoveryDelay(sessionKey, reason);
-    const delayMs = recoveryDelay || (marathon
-      ? Math.min(2_000, 350 + attempt * 150)
-      : Math.min(3_000, 500 + attempt * 200));
+    const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, marathon
+      ? 200 + attempt * 75
+      : 250 + attempt * 100);
     const tag = safeTag(sessionKey);
     await this.api.session.workflow.enqueueNextTurnInjection({
       sessionKey,
@@ -2689,7 +2715,7 @@ export class UpstreamWatchdog {
         sessionKey,
         agentId: ctx.agentId,
         message: WATCHDOG_MESSAGE,
-        delayMs: Number(activity.pending) > 0 ? 600_000 : Math.max(90_000, delayMs + 60_000),
+        delayMs: Number(activity.pending) > 0 ? 15_000 : Math.max(3_000, delayMs + 1_000),
         deliveryMode: 'none',
         deleteAfterRun: true,
         name: '碧琪看门狗',
@@ -2754,7 +2780,7 @@ export class UpstreamWatchdog {
           agentId:String(job.agentId || agentFromSessionKey(sessionKey)),
           runId:String(job.runId || 'gateway-restart'),
           attempt,
-          delayMs:1_000,
+          delayMs:250,
           tag,
           kind: job.kind,
         });
@@ -2793,7 +2819,7 @@ export class UpstreamWatchdog {
     });
     const tag = safeTag(sessionKey);
     const recoveryDelay = this.recoveryDelay(sessionKey, decision?.reason || '');
-    const delayMs = recoveryDelay || Math.min(3_000, 500 + nextAttempt * 200);
+    const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + nextAttempt * 100);
     const instruction = String(decision?.retry?.instruction || '上一轮没有通过真实性验收。请继续真实执行并验证，不能写完成报告。');
     try {
       await this.api.session.workflow.enqueueNextTurnInjection({
@@ -2813,7 +2839,7 @@ export class UpstreamWatchdog {
           sessionKey,
           agentId,
           message: WATCHDOG_MESSAGE,
-          delayMs: Math.max(2_000, delayMs),
+          delayMs: Math.max(750, delayMs),
           deliveryMode: 'none',
           deleteAfterRun: true,
           name: 'CLE Kk 续接',
@@ -2851,8 +2877,9 @@ export class UpstreamWatchdog {
     const activity = this.activityFor(sessionKey) || {};
     const pending = Math.max(0, Number(activity.pending) || 0);
     const quietForMs = Number.isFinite(activity.quietForMs) ? activity.quietForMs : Infinity;
-    if (activity.parentRunning || pending > 0 || quietForMs < 3_500) {
-      const delayMs = activity.parentRunning || pending > 0 ? 2_000 : Math.max(250, 3_500 - quietForMs);
+    if (activity.parentRunning || pending > 0 || quietForMs < WATCHDOG_QUIET_FENCE_MS) {
+      const delayMs = activity.parentRunning || pending > 0
+        ? WATCHDOG_ACTIVITY_POLL_MS : Math.max(250, WATCHDOG_QUIET_FENCE_MS - quietForMs);
       this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind});
       return false;
     }
@@ -2869,9 +2896,9 @@ export class UpstreamWatchdog {
         this.cliEntry,
         'gateway', 'call', 'chat.send',
         '--params', JSON.stringify(request),
-        '--json', '--timeout', '15000',
+        '--json', '--timeout', String(WATCHDOG_CLI_TIMEOUT_MS),
       ], {
-        timeout: 20_000,
+        timeout: WATCHDOG_CLI_TIMEOUT_MS + 2_000,
         maxBuffer: 64 * 1024,
         windowsHide: true,
         env: process.env,
@@ -2885,7 +2912,7 @@ export class UpstreamWatchdog {
         // rebuilds therefore neither increment nor decrement the integrity
         // budget; repeated infrastructure probes cannot turn attempt 4 back
         // into the misleading 0/24 seen in earlier logs.
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag, kind});
+        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind});
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
@@ -2896,7 +2923,7 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
       const blockedDelay = this.recoveryDelay(sessionKey,
         `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(3_000, 600 + attempt * 200), tag, kind});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind});
       return false;
     } finally {
       this.dispatching.delete(sessionKey);
@@ -2958,14 +2985,14 @@ export class TierContinuation {
         sessionKey,
         agentId,
         message: controlText,
-        delayMs: 180_000,
+        delayMs: 5_000,
         deliveryMode: 'none',
         deleteAfterRun: true,
         name: '碧琪档位续跑',
         tag,
       });
     }
-    this.scheduleTimer({sessionKey, agentId, tag, delayMs: 12_000});
+    this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
     return true;
   }
 
@@ -2990,8 +3017,9 @@ export class TierContinuation {
     const activity = this.activityFor(sessionKey) || {};
     const pending = Math.max(Number(status.pending) || 0, Number(activity.pending) || 0);
     const quietForMs = Number.isFinite(activity.quietForMs) ? activity.quietForMs : Infinity;
-    if (status.parentRunning || activity.parentRunning || pending > 0 || quietForMs < 12_000) {
-      this.scheduleTimer({sessionKey, agentId, tag, delayMs: status.parentRunning || activity.parentRunning || pending > 0 ? 2_000 : Math.max(250, 12_000 - quietForMs)});
+    if (status.parentRunning || activity.parentRunning || pending > 0 || quietForMs < WATCHDOG_QUIET_FENCE_MS) {
+      this.scheduleTimer({sessionKey, agentId, tag, delayMs: status.parentRunning || activity.parentRunning || pending > 0
+        ? WATCHDOG_ACTIVITY_POLL_MS : Math.max(250, WATCHDOG_QUIET_FENCE_MS - quietForMs)});
       return false;
     }
     if (!this.cliEntry) return false;
@@ -3007,9 +3035,9 @@ export class TierContinuation {
           deliver: false,
           idempotencyKey: `pinkie-tier-continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
         }),
-        '--json', '--timeout', '15000',
+        '--json', '--timeout', String(WATCHDOG_CLI_TIMEOUT_MS),
       ], {
-        timeout: 20_000,
+        timeout: WATCHDOG_CLI_TIMEOUT_MS + 2_000,
         maxBuffer: 64 * 1024,
         windowsHide: true,
         env: process.env,
@@ -3017,13 +3045,13 @@ export class TierContinuation {
       let result;
       try { result = JSON.parse(stdout); } catch {}
       if (result?.status === 'error' || result?.status === 'timeout') {
-        this.scheduleTimer({sessionKey, agentId, tag, delayMs: 5_000});
+        this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
       return true;
     } catch {
-      this.scheduleTimer({sessionKey, agentId, tag, delayMs: 5_000});
+      this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
       return false;
     } finally {
       this.dispatching.delete(sessionKey);
@@ -3445,11 +3473,14 @@ export class ModeArchitecture {
     const mode = modeForContext(ctx);
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
+    /* “无限制模式”保留工具、档位和真实性门禁，但不把任何工作区
+       人格或记忆 Markdown 塞给模型。文件本身保留，不删除。 */
+    const injectWorkspaceMarkdown = mode !== 'none';
     const blocks = [
       '\n' + COMPLETION_TRUTH_RULES + '\n',
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
-    if (this.memory) {
+    if (injectWorkspaceMarkdown && this.memory) {
       try {
         this.memory.captureExplicit({...ctx, mode}, event.prompt || '');
         const recalled = this.memory.retrieve({...ctx, mode}, event.prompt || '', {limit: 8, maxCharacters: 6000});
@@ -3464,11 +3495,13 @@ export class ModeArchitecture {
         appendSystemContext: '【档位控制器】这是一条在任务已经交付后才到达的过期内部续跑指令。不要再次总结、执行或回复用户；只输出 NO_REPLY。',
       };
     }
-    for (const relative of PERSONA_FILES[mode]) {
-      blocks.push(section(relative, readWorkspaceFile(root, relative, relative.endsWith('core.md') ? 20_000 : 12_000)));
-    }
-    for (const relative of ALWAYS_MEMORY_FILES) {
-      blocks.push(section(relative, readWorkspaceFile(root, relative)));
+    if (injectWorkspaceMarkdown) {
+      for (const relative of PERSONA_FILES[mode]) {
+        blocks.push(section(relative, readWorkspaceFile(root, relative, relative.endsWith('core.md') ? 20_000 : 12_000)));
+      }
+      for (const relative of ALWAYS_MEMORY_FILES) {
+        blocks.push(section(relative, readWorkspaceFile(root, relative)));
+      }
     }
     const tier = VALID_TIER.exec(event.prompt || '')?.[1]?.toLowerCase();
     if (tier && sessionKey) {
@@ -3485,11 +3518,13 @@ export class ModeArchitecture {
       }
     }
     const reloaded = this.recentCompaction.get(sessionKey);
-    if (reloaded) {
+    if (reloaded && injectWorkspaceMarkdown) {
       blocks.push('\n【压缩后重载】上面的 persona/core、INDEX、identity、active 已从磁盘重新完整载入；不要依赖摘要中的旧副本。\n');
       this.recentCompaction.delete(sessionKey);
+    } else if (reloaded) {
+      this.recentCompaction.delete(sessionKey);
     }
-    blocks.push(`
+    if (injectWorkspaceMarkdown) blocks.push(`
 【四模式记忆运行规则：${mode}】
 - 只读写当前 workspace 下的 persona/ 与 memory/；不得读取其他三个模式的对应目录。
 - 用户明确说“记住”时写 memory/feedback/；普通信息先判重、判价值，不值得就不写。

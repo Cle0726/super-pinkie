@@ -19,19 +19,29 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /python\/bin\/python3/);
   assert.match(launcher, /\/Applications\/CuaDriver\.app/);
   assert.match(launcher, /task\.executableURL = node/);
+  assert.match(launcher, /static let defaultChatURL = url\.appendingPathComponent\("chat"\)/);
+  assert.match(launcher, /webView\?\.load\(URLRequest\(url: Gateway\.defaultChatURL\)\)/);
+  assert.match(launcher, /打开灵感圆桌[\s\S]{0,160}keyEquivalent: ""/);
   assert.match(launcher, /gatewayEnvironment\["OPENCLAW_SERVICE_KIND"\] = "gateway"/);
   assert.match(launcher, /gatewayEnvironment\["PINKIE_OPENCLAW_ENTRY"\] = entry\.path/);
   assert.match(launcher, /Gateway\.stop\(\)/);
   assert.match(launcher, /startGatewayMonitor\(\)/);
-  assert.match(launcher, /withTimeInterval: 2\.0/);
-  assert.match(launcher, /gatewayProbeFailures >= 6/);
-  assert.match(launcher, /gatewayRepairGraceUntil/);
-  assert.match(launcher, /Date\(\) < graceUntil/);
-  assert.match(launcher, /Date\(\)\.addingTimeInterval\(90\)/);
+  assert.match(launcher, /withTimeInterval: 0\.75/);
+  assert.match(launcher, /gatewayProbeFailures >= 2/);
+  assert.match(launcher, /gatewayProbeInFlight/);
+  assert.doesNotMatch(launcher, /gatewayRepairGraceUntil/);
   assert.match(launcher, /Gateway\.isReady/);
   assert.match(launcher, /if ready \{\s+self\?\.validateReadyGatewayAndLoad\(\)/);
   assert.match(launcher, /Gateway\.repair\(\)/);
   assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
+});
+
+test('macOS updater removes only its old app rollback copies after a healthy install', () => {
+  const installer = read('install-full.sh');
+  assert.match(installer, /APP_SWAP_ACTIVE=0[\s\S]*?old_app_backup/);
+  assert.match(installer, /STATE_ROOT["']?\/backups\/\*\/app/);
+  assert.match(installer, /rm -rf \"\$old_app_backup\"/);
+  assert.match(installer, /用户数据、配置、会话或素材/);
 });
 
 test('macOS launcher replaces only a stale gateway proven to belong to an older CLE Kk app', () => {
@@ -119,9 +129,9 @@ test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater
   for (const source of [launcher, windows]) {
     assert.match(source, /OPENCLAW_NO_AUTO_UPDATE/);
     assert.match(source, /CUA_DRIVER_RS_UPDATE_CHECK/);
+    assert.match(source, /PINKIE_RUNTIME_CONFIG_SCHEMA/);
   }
   assert.match(setup, /update\["checkOnStart"\] = False/);
-  assert.match(setup, /catalog_refresh\["enabled"\] = False/);
   assert.match(launcher, /主动拉取 CLE Kk 更新/);
   assert.match(windows, /Cle0726\/super-pinkie\/releases\/latest/);
 });
@@ -136,21 +146,26 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(loading, /scene\.duration - 0\.04/);
   assert.match(loading, /assets\/laolao-splash\.mp4/);
   assert.match(loading, /assets\/laolao-splash-video-poster\.png/);
+  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
+  assert.doesNotMatch(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/"\)/);
   assert.match(loading, /background: #efcbd3/);
   assert.doesNotMatch(loading, /background:\s*transparent/);
   assert.doesNotMatch(loading, /<main\b|超級碧琪正在准备<\/p>/);
   assert.match(launcher, /let remaining = 6\.1 - Date\(\)\.timeIntervalSince\(started\)/);
-  assert.match(launcher, /contentView\.layer\?\.backgroundColor = NSColor\(/);
+  // The native page starts with an opaque HTML video/poster, then the WKWebView
+  // keeps a clear backing layer so the user's desktop glass remains visible.
+  assert.match(launcher, /contentView\.layer\?\.backgroundColor = NSColor\.clear\.cgColor/);
   assert.match(launcher, /window\.hasShadow = false/);
   assert.match(launcher, /contentView\.layer\?\.borderColor = NSColor\(/);
-  assert.match(launcher, /didFinish navigation:[\s\S]*srgbRed: 239\.0 \/ 255\.0/);
-  assert.doesNotMatch(launcher, /didFinish navigation:[\s\S]{0,700}NSColor\.clear\.cgColor/);
+  assert.match(launcher, /didFinish navigation:[\s\S]{0,700}NSColor\.clear\.cgColor/);
   const updater = read('installer/macos/apply-theme.sh');
   assert.match(updater, /copy_if_changed "\$REPO_ROOT\/ui\/launcher-loading\.html"/);
   assert.match(updater, /install_relay_watchdog/);
   const watchdog = read('services/watchdog/cle-watchdog.sh');
   assert.match(watchdog, /status" != "000"/);
   assert.match(watchdog, /FAILURE_THRESHOLD/);
+  assert.match(watchdog, /PINKIE_RELAY_CHECK_INTERVAL:-0\.75/);
+  assert.match(watchdog, /PINKIE_RELAY_RESTART_COOLDOWN:-8/);
   assert.doesNotMatch(watchdog, /STATUS" != "200"/);
   assert.match(updater, /copy_if_changed "\$ASSET_ROOT\/laolao-splash\.mp4"/);
   assert.match(updater, /apply_ui_skin "\$bundled_ui"/);
@@ -179,6 +194,8 @@ test('startup splash controller is mounted once and tolerates the current app sh
 test('current runtime keeps the classic single-chat shell instead of the upstream control console', () => {
   const css = read('ui/injections/laolao-classic-shell.css');
   const js = read('ui/injections/laolao-classic-shell.js');
+  const sideCss = read('ui/injections/laolao-side-layout.css');
+  const sideJs = read('ui/injections/laolao-side-layout.js');
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   assert.match(css, /--oc-assistant-reserve-right: 0px/);
@@ -187,8 +204,30 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(css, /\.laolao-classic-workspace-rail/);
   assert.match(css, /\.chat-workspace-rail\.laolao-classic-workspace-rail \{[\s\S]*?top: 0;/);
   assert.match(css, /\.chat-workspace-rail\.laolao-classic-workspace-rail::after \{[\s\S]*?top: 45px;/);
+  assert.match(css, /\.nav-section--collapsed > \.nav-section__items \{[\s\S]*?display: none !important;/);
+  assert.match(css, /\.laolao-classic-workspace-rail:not\(\.chat-workspace-rail--collapsed\) \{[\s\S]*?width: min\(300px, 34vw\);/);
   assert.match(js, /laolao-classic-breadcrumb/);
   assert.match(js, /laolao-classic-more/);
+  assert.doesNotMatch(js, /document\.createElement\("button"\)[\s\S]{0,240}laolao-classic-more/);
+  assert.match(sideCss, /right: 0 !important/);
+  assert.match(sideCss, /grid-template-columns: minmax\(0, 1fr\) var\(--laolao-window-rail-reserve\) !important/);
+  assert.match(sideCss, /position: relative !important/);
+  assert.match(sideCss, /grid-column: 2 !important/);
+  assert.match(sideCss, /@media \(max-width: 1120px\)[\s\S]*display: none !important/);
+  assert.match(sideCss, /container-name: clekk-chat-header/);
+  assert.match(sideCss, /laolao-usage__chip\[data-fit-hidden\]/);
+  assert.match(sideCss, /chat-pane__header \*/);
+  assert.match(sideCss, /data-usage-key="cacheWrite"/);
+  const usageJs = read('ui/injections/laolao-usage-stats.js');
+  assert.match(usageJs, /el\.dataset\.usageKey = def\.key/);
+  assert.match(usageJs, /FIT_HIDE_ORDER = \["cacheWrite", "cacheRead", "output", "input", "quota"\]/);
+  assert.match(usageJs, /wrap\.scrollWidth > wrap\.clientWidth/);
+  assert.match(usageJs, /new ResizeObserver\(queueFit\)/);
+  assert.doesNotMatch(js, /document\.body\.append\(rail\)/);
+  assert.match(js, /rails\.find\(\(node\) => node\.parentElement !== document\.body\)/);
+  assert.match(js, /chat-workspace-rail__collapse-toggle/);
+  assert.match(sideJs, /nav-section--more/);
+  assert.match(sideJs, /requestAnimationFrame/);
   assert.match(js, /chat-workspace-rail--collapsed/);
   assert.match(js, /碧琪设置/);
   assert.match(js, /laolao-classic-account-avatar/);
@@ -197,8 +236,12 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(css, /\.laolao-splash, \.laolao-mode-transition/);
   assert.match(mac, /laolao-classic-shell\.css/);
   assert.match(mac, /laolao-classic-shell\.js/);
+  assert.match(mac, /laolao-side-layout\.css/);
+  assert.match(mac, /laolao-side-layout\.js/);
   assert.match(windows, /laolao-classic-shell\.css/);
   assert.match(windows, /laolao-classic-shell\.js/);
+  assert.match(windows, /laolao-side-layout\.css/);
+  assert.match(windows, /laolao-side-layout\.js/);
   assert.match(mac, /laolao-memory\.css/);
   assert.match(mac, /laolao-memory\.js/);
   assert.match(windows, /laolao-memory\.css/);
@@ -215,6 +258,14 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
   assert.match(setup, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
   assert.match(build, /index\.mjs memory\.mjs setup\.py package\.json openclaw\.plugin\.json/);
+});
+
+test('managed macOS startup never rewrites its own signed UI bundle', () => {
+  const bootstrap = read('installer/macos/apply-bundled.sh');
+  const themeInstaller = read('installer/macos/apply-theme.sh');
+
+  assert.match(bootstrap, /if \[\[ "\$\{PINKIE_MANAGED_GATEWAY:-0\}" != "1" \]\]; then[\s\S]*PINKIE_SKIP_APP_BUNDLES=1/);
+  assert.match(themeInstaller, /copy_if_changed "\$REPO_ROOT\/installer\/macos\/apply-bundled\.sh" "\$bundled_root\/installer\/macos\/apply-bundled\.sh"/);
 });
 
 test('source updaters preserve every existing user persona and context file', () => {
@@ -249,6 +300,24 @@ test('release workflow publishes both desktop formats from self-contained builde
   assert.match(release, /dist\/super-pinkie-macos-\*\.zip/);
   assert.match(release, /\.\\build-win\.ps1/);
   assert.match(release, /dist\/super-pinkie-windows-\*\.exe/);
+});
+
+test('macOS packaging atomically replaces an existing archive', () => {
+  const build = read('desktop/macos/build.sh');
+  assert.match(build, /ARCHIVE_TEMP=/);
+  assert.match(build, /ditto -c -k --sequesterRsrc --keepParent "\$APP_PATH" "\$ARCHIVE_TEMP"/);
+  assert.match(build, /mv -f "\$ARCHIVE_TEMP" "\$ARCHIVE_PATH"/);
+});
+
+test('old stable macOS runtime receives the Cua SDK in an isolated build stage', () => {
+  const build = read('desktop/macos/build.sh');
+  assert.match(build, /OPENCLAW_COMPAT_STAGE_ROOT=.*mktemp -d/);
+  assert.match(build, /ditto --norsrc --noextattr "\$OPENCLAW_ROOT" "\$STAGED_OPENCLAW_ROOT"/);
+  assert.match(build, /install_packed_package "@trycua\/cua-driver@\$CUA_DRIVER_VERSION"/);
+  assert.match(build, /install_packed_package "@ubjs\/core@0\.31\.0-3"/);
+  assert.match(build, /install_packed_package "@ubjs\/node@0\.31\.0-3"/);
+  assert.doesNotMatch(build, /npm-cli\.js" install/);
+  assert.match(build, /super-pinkie-openclaw\.\*/);
 });
 
 test('roundtable uses its project as cwd without turning it into an access sandbox', () => {

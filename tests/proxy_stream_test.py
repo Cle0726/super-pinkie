@@ -166,6 +166,17 @@ class ProxyStreamTests(unittest.TestCase):
             self.assertIn('UR_PROXY_STREAM_IDLE_TIMEOUT',source)
             self.assertIn('SSE ended before terminal model event',source)
 
+    def test_default_retry_window_tolerates_a_flapping_upstream(self):
+        """Defaults must wait long enough for a slow provider to recover."""
+        for filename in ('ur-rewrite-proxy.py', 'mm-retry-proxy.py'):
+            source = (ROOT / 'proxy' / filename).read_text()
+            self.assertRegex(source, r'UR_PROXY_MAX_ATTEMPTS[^\n]*"64"', filename)
+            self.assertRegex(source, r'UR_PROXY_FIRST_BYTE_TIMEOUT[^\n]*"35"', filename)
+            self.assertRegex(source, r'UR_PROXY_STREAM_IDLE_TIMEOUT[^\n]*"30"', filename)
+            self.assertRegex(source, r'UR_PROXY_RETRY_BASE_DELAY[^\n]*"0\.2"', filename)
+            self.assertRegex(source, r'UR_PROXY_RETRY_MAX_DELAY[^\n]*"3"', filename)
+            self.assertIn('RETRY_MAX_DELAY_SECONDS', source, filename)
+
     def test_gemini_38_uses_the_hard_prompt_route(self):
         for filename in ('ur-rewrite-proxy.py','mm-retry-proxy.py'):
             source=(ROOT/'proxy'/filename).read_text()

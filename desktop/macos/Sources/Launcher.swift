@@ -71,6 +71,11 @@ private enum BundledRuntime {
             environment["PINKIE_PYTHON_BIN"] = pythonURL?.path
         }
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
+        // The pinned 2026.7 runtime must ignore four configuration fields
+        // that a briefly installed 2026.9 build may have left behind.  The
+        // setup helper removes only those schema-incompatible keys and keeps
+        // every user model, prompt, memory and workspace setting intact.
+        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
         environment["PINKIE_GATEWAY_URL"] = RuntimeConfig.gatewayURL.absoluteString
         // This App is a pinned CLE Kk release. Upstream OpenClaw/Cua update
         // notices must never replace its patched runtime behind the user's
@@ -532,6 +537,10 @@ private enum Gateway {
     }
 
     static let url = RuntimeConfig.gatewayURL
+    // The gateway root is the upstream control-console landing page. CLE Kk
+    // should always open the classic chat surface instead, while keeping the
+    // root URL for health probes and service callbacks.
+    static let defaultChatURL = url.appendingPathComponent("chat")
     private static var process: Process?
     private static var logHandle: FileHandle?
     private(set) static var lastError: String?
@@ -806,7 +815,7 @@ private enum Gateway {
                     completion(running)
                     return
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     ready(attempt: attempt + 1, completion: completion)
                 }
             }
@@ -1383,7 +1392,10 @@ struct LauncherMain {
         appMenu.addItem(.separator())
         let partyItem = appMenu.addItem(withTitle: "打开派对空间", action: #selector(AppDelegate.openParty(_:)), keyEquivalent: "p")
         partyItem.target = delegate
-        let roundtableItem = appMenu.addItem(withTitle: "打开灵感圆桌", action: #selector(AppDelegate.openRoundtable(_:)), keyEquivalent: "r")
+        // Do not occupy ⌘R. Users naturally use it to reload a stuck chat;
+        // binding it to Roundtable made a normal refresh look like the App
+        // had started or jumped to the wrong page.
+        let roundtableItem = appMenu.addItem(withTitle: "打开灵感圆桌", action: #selector(AppDelegate.openRoundtable(_:)), keyEquivalent: "")
         roundtableItem.target = delegate
         appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -1413,7 +1425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var dashboardLoadPending = false
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
-    private var gatewayRepairGraceUntil: Date?
+    private var gatewayProbeInFlight = false
     private let dictation = NativeDictationController()
     private let dictationHandlerName = "laolaoNativeDictation"
     private let liveSpeech = NativeLiveSpeechController()
@@ -1619,12 +1631,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         guard let contentView = window.contentView else { return }
         contentView.wantsLayer = true
-        contentView.layer?.backgroundColor = NSColor(
-            srgbRed: 239.0 / 255.0,
-            green: 203.0 / 255.0,
-            blue: 211.0 / 255.0,
-            alpha: 1
-        ).cgColor
+        // 透明窗口的原生底层必须保持透明；聊天可读性由网页里的淡玻璃气泡负责。
+        // 若这里铺不透明底色，所有 CSS 透明面都会退化成整块粉色背景。
+        contentView.layer?.backgroundColor = NSColor.clear.cgColor
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
         contentView.layer?.borderWidth = 1
@@ -1758,32 +1767,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func startGatewayMonitor() {
         guard gatewayMonitor == nil else { return }
-        gatewayMonitor = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        gatewayMonitor = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
+            guard let self, !self.gatewayProbeInFlight else { return }
+            self.gatewayProbeInFlight = true
             Gateway.isReady { running in
                 DispatchQueue.main.async {
-                    guard let self else { return }
                     if running {
+                        self.gatewayProbeInFlight = false
                         self.gatewayProbeFailures = 0
-                        self.gatewayRepairGraceUntil = nil
                         return
                     }
-                    if let graceUntil = self.gatewayRepairGraceUntil, Date() < graceUntil { return }
                     // readyz can be false while the HTTP process is alive and
                     // safely draining/rebuilding. Do not kill it merely because
-                    // one or six short probes failed; the native client will
+                    // a short probe failed; the native client will
                     // reconnect as soon as readyz turns true again.
                     Gateway.isReachable { [weak self] reachable in
                         DispatchQueue.main.async { [weak self] in
                             guard let self else { return }
+                            self.gatewayProbeInFlight = false
                             if reachable || Gateway.processAlive() {
                                 self.gatewayProbeFailures = 0
-                                self.gatewayRepairGraceUntil = Date().addingTimeInterval(90)
                                 return
                             }
                             self.gatewayProbeFailures += 1
-                            guard self.gatewayProbeFailures >= 6 else { return }
+                            guard self.gatewayProbeFailures >= 2 else { return }
                             self.gatewayProbeFailures = 0
-                            self.gatewayRepairGraceUntil = Date().addingTimeInterval(90)
                             Gateway.repair()
                         }
                     }
@@ -1810,21 +1818,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             }
             startupVideoStartedAt = nil
         }
-        webView?.load(URLRequest(url: Gateway.url))
+        webView?.load(URLRequest(url: Gateway.defaultChatURL))
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
         guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
-        // Keep the themed base behind the intentionally translucent wallpaper.
-        // Clearing the native layer exposes the user's desktop through every
-        // transparent CSS surface and makes a valid reply look like a blank,
-        // frozen page while WKWebView is recompositing.
-        window?.contentView?.layer?.backgroundColor = NSColor(
-            srgbRed: 239.0 / 255.0,
-            green: 203.0 / 255.0,
-            blue: 211.0 / 255.0,
-            alpha: 1
-        ).cgColor
+        // WebKit 导航结束后仍保持透明，避免重新加载时把系统玻璃背景盖成实心粉色。
+        window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     @available(macOS 12.0, *)

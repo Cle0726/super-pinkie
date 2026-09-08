@@ -38,10 +38,50 @@ if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]
   echo "error: 无法确认 OpenClaw 包目录：$OPENCLAW_ROOT" >&2
   exit 1
 fi
+NODE_ROOT="$(cd "$(dirname "$NODE_BIN")/.." && pwd)"
+NPM_ROOT="$NODE_ROOT/lib/node_modules/npm"
+if [[ ! -f "$NPM_ROOT/bin/npm-cli.js" ]]; then
+  echo "error: 构建机的 Node.js 没有配套 npm" >&2
+  exit 1
+fi
+
+# The pinned 2026.7.1-2 runtime predates CLE Kk's separately versioned Cua
+# JavaScript bridge. Add that small SDK only inside an isolated build copy;
+# never mutate the developer's globally installed OpenClaw package.
+OPENCLAW_COMPAT_STAGE_ROOT=""
+CUA_VERIFY_DIR=""
+cleanup_build_temps() {
+  local target
+  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}"; do
+    [[ -n "$target" && -d "$target" ]] || continue
+    case "$(basename "$target")" in
+      super-pinkie-cua.*|super-pinkie-openclaw.*) rm -rf "$target" ;;
+    esac
+  done
+}
+trap cleanup_build_temps EXIT
 CUA_SDK_PACKAGE="$OPENCLAW_ROOT/node_modules/@trycua/cua-driver/package.json"
 if [[ ! -f "$CUA_SDK_PACKAGE" ]]; then
-  echo "error: OpenClaw 运行时缺少 @trycua/cua-driver SDK" >&2
-  exit 1
+  OPENCLAW_COMPAT_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-openclaw.XXXXXX")"
+  STAGED_OPENCLAW_ROOT="$OPENCLAW_COMPAT_STAGE_ROOT/openclaw"
+  ditto --norsrc --noextattr "$OPENCLAW_ROOT" "$STAGED_OPENCLAW_ROOT"
+  install_packed_package() {
+    local spec="$1" scope="$2" package_name="$3" archive target
+    archive="$("$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" pack "$spec" \
+      --pack-destination "$OPENCLAW_COMPAT_STAGE_ROOT" --silent | tail -n 1)"
+    [[ -n "$archive" && -f "$OPENCLAW_COMPAT_STAGE_ROOT/$archive" ]] || {
+      echo "error: 无法获取定版构建依赖 $spec" >&2
+      exit 1
+    }
+    target="$STAGED_OPENCLAW_ROOT/node_modules/$scope/$package_name"
+    mkdir -p "$target"
+    tar -xzf "$OPENCLAW_COMPAT_STAGE_ROOT/$archive" --strip-components=1 -C "$target"
+  }
+  install_packed_package "@trycua/cua-driver@$CUA_DRIVER_VERSION" "@trycua" "cua-driver"
+  install_packed_package "@ubjs/core@0.31.0-3" "@ubjs" "core"
+  install_packed_package "@ubjs/node@0.31.0-3" "@ubjs" "node"
+  OPENCLAW_ROOT="$STAGED_OPENCLAW_ROOT"
+  CUA_SDK_PACKAGE="$OPENCLAW_ROOT/node_modules/@trycua/cua-driver/package.json"
 fi
 CUA_SDK_VERSION="$("$NODE_BIN" -e 'process.stdout.write(require(process.argv[1]).version || "")' "$CUA_SDK_PACKAGE")"
 if [[ "$CUA_SDK_VERSION" != "$CUA_DRIVER_VERSION" ]]; then
@@ -73,7 +113,6 @@ fi
 # attached to this stable Developer ID identity; re-signing a copied binary
 # would make the user's Accessibility/Screen Recording toggles ineffective.
 CUA_VERIFY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-cua.XXXXXX")"
-trap 'rm -rf "$CUA_VERIFY_DIR"' EXIT
 tar -xzf "$CUA_DRIVER_ARCHIVE_SOURCE" -C "$CUA_VERIFY_DIR"
 CUA_DRIVER_APP_SOURCE="$CUA_VERIFY_DIR/cua-driver-rs-$CUA_DRIVER_VERSION-darwin-universal/CuaDriver.app"
 CUA_DRIVER_APP_BIN="$CUA_DRIVER_APP_SOURCE/Contents/MacOS/cua-driver"
@@ -104,12 +143,6 @@ fi
 PYTHON_BASE="$("$PYTHON_DRIVER" -c 'import sys; print(sys.base_prefix)')"
 PYTHON_SITE_PACKAGES="$("$PYTHON_DRIVER" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 PYTHON_LICENSE="$("$PYTHON_DRIVER" -c 'import pathlib,sysconfig; print(pathlib.Path(sysconfig.get_paths()["stdlib"])/"LICENSE.txt")')"
-NODE_ROOT="$(cd "$(dirname "$NODE_BIN")/.." && pwd)"
-NPM_ROOT="$NODE_ROOT/lib/node_modules/npm"
-if [[ ! -f "$NPM_ROOT/bin/npm-cli.js" ]]; then
-  echo "error: 构建机的 Node.js 没有配套 npm" >&2
-  exit 1
-fi
 NODE_VERSION="$("$NODE_BIN" --version | sed 's/^v//')"
 NPM_VERSION="$("$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" --version)"
 OPENCLAW_VERSION="$("$NODE_BIN" -e 'console.log(require(process.argv[1]).version)' "$OPENCLAW_ROOT/package.json")"
@@ -218,6 +251,12 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
     "$APP_PATH"
 fi
 codesign --verify --deep --strict "$APP_PATH"
-ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$OUTPUT_ROOT/super-pinkie-macos-$VERSION.zip"
+ARCHIVE_PATH="$OUTPUT_ROOT/super-pinkie-macos-$VERSION.zip"
+ARCHIVE_TEMP="$OUTPUT_ROOT/.super-pinkie-macos-$VERSION.zip.$$"
+# ditto does not reliably replace an existing archive. Build a complete new
+# archive beside it, then atomically swap it into place so releases can never
+# silently retain yesterday's ZIP.
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_TEMP"
+mv -f "$ARCHIVE_TEMP" "$ARCHIVE_PATH"
 
 echo "$APP_PATH"

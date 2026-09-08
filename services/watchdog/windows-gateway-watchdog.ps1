@@ -15,6 +15,7 @@ if (-not $LogPath) {
 }
 $logDir = Split-Path -Parent $LogPath
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$script:lastStart = [DateTime]::MinValue
 function Log([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
@@ -34,6 +35,11 @@ function Check-GatewayOnce {
     return
   }
 
+  # Probe every few seconds, but never launch parallel gateways while the last
+  # recovery process is still warming up under Defender.
+  if (((Get-Date) - $script:lastStart).TotalSeconds -lt 8) { return }
+  $script:lastStart = Get-Date
+
   $gatewayArgs = @($OpenClawEntry, "gateway", "run", "--port", "$Port", "--bind", "loopback", "--auth", "none", "--allow-unconfigured")
   try {
     Start-Process -FilePath $NodePath -ArgumentList $gatewayArgs -WorkingDirectory (Split-Path -Parent $OpenClawEntry) -WindowStyle Hidden | Out-Null
@@ -46,5 +52,5 @@ function Check-GatewayOnce {
 do {
   Check-GatewayOnce
   if (-not $Loop) { break }
-  Start-Sleep -Seconds 60
+  Start-Sleep -Milliseconds 2000
 } while ($true)

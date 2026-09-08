@@ -20,6 +20,7 @@ import webbrowser
 
 
 GATEWAY_URL = "http://127.0.0.1:18789/"
+GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
 TTS_URL = "http://127.0.0.1:18888/health"
@@ -98,7 +99,7 @@ def append_log(name, message):
 
 def http_alive(url, expected_service=None):
     try:
-        with urllib.request.urlopen(url, timeout=1.4) as response:
+        with urllib.request.urlopen(url, timeout=.8) as response:
             if expected_service:
                 value = json.loads(response.read().decode("utf-8"))
                 return value.get("service") == expected_service
@@ -112,7 +113,7 @@ def http_alive(url, expected_service=None):
 def http_ready(url):
     """A 2xx/3xx response means the gateway is ready; auth errors are not ready."""
     try:
-        with urllib.request.urlopen(url, timeout=1.4) as response:
+        with urllib.request.urlopen(url, timeout=.8) as response:
             return 200 <= int(response.status) < 400
     except urllib.error.HTTPError:
         return False
@@ -121,7 +122,7 @@ def http_ready(url):
 
 
 def gateway_ui_url():
-    """Return the local UI URL, including a legacy token when one is configured."""
+    """Return CLE Kk's chat route, including a legacy token when configured."""
     config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
     config_path = Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
     try:
@@ -129,10 +130,10 @@ def gateway_ui_url():
         auth = config.get("gateway", {}).get("auth", {})
         token = auth.get("token") if auth.get("mode") == "token" else None
         if isinstance(token, str) and token:
-            return GATEWAY_URL + "#token=" + urllib.parse.quote(token, safe="")
+            return GATEWAY_CHAT_URL + "#token=" + urllib.parse.quote(token, safe="")
     except (OSError, ValueError, AttributeError):
         pass
-    return GATEWAY_URL
+    return GATEWAY_CHAT_URL
 
 
 def cleanup_orphan_webview(storage):
@@ -294,6 +295,7 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$Backup,
   [Parameter(Mandatory=$true)][int]$CurrentPid,
   [Parameter(Mandatory=$true)][string]$ExpectedHash,
+  [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath
@@ -344,6 +346,9 @@ try {
   }
   Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'update completed'
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
@@ -362,6 +367,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$TargetExe,
   [Parameter(Mandatory=$true)][int]$CurrentPid,
   [Parameter(Mandatory=$true)][string]$ExpectedHash,
+  [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath
@@ -415,6 +421,9 @@ try {
   }
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'portable update completed'
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
@@ -450,6 +459,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-TargetExe", str(self.executable),
                     "-CurrentPid", str(os.getpid()),
                     "-ExpectedHash", expected,
+                    "-UpdateRoot", str(update_root),
                     "-HealthMarker", str(marker),
                     "-Token", token,
                     "-LogPath", str(state_root() / "logs/updater.log"),
@@ -465,6 +475,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-Backup", str(backup),
                 "-CurrentPid", str(os.getpid()),
                 "-ExpectedHash", expected,
+                "-UpdateRoot", str(update_root),
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
@@ -509,6 +520,7 @@ class BundledRuntime:
         environment["PINKIE_NODE_BIN"] = str(self.node)
         environment["PINKIE_OPENCLAW_ENTRY"] = str(self.openclaw)
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
+        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
         environment["PINKIE_GATEWAY_URL"] = GATEWAY_URL
         environment["PINKIE_STATE_ROOT"] = str(state_root())
         # A packaged CLE Kk runtime is updated only by its signed release
@@ -529,7 +541,7 @@ class GatewaySupervisor:
         self.closing = threading.Event()
         self.lock = threading.RLock()
         self.last_restart = 0.0
-        self.failure_limit = 3
+        self.failure_limit = 2
 
     def start(self):
         with self.lock:
@@ -537,7 +549,7 @@ class GatewaySupervisor:
                 return
             if self.process and self.process.poll() is None:
                 return
-            if time.monotonic() - self.last_restart < 4:
+            if time.monotonic() - self.last_restart < 2:
                 return
             self.last_restart = time.monotonic()
             log_dir = state_root() / "logs"
@@ -570,12 +582,12 @@ class GatewaySupervisor:
             if http_ready(GATEWAY_URL):
                 return True
             self.start()
-            time.sleep(.35)
+            time.sleep(.2)
         return False
 
     def monitor(self):
         failures = 0
-        while not self.closing.wait(2):
+        while not self.closing.wait(.75):
             with self.lock:
                 process = self.process
                 alive = bool(process and process.poll() is None)

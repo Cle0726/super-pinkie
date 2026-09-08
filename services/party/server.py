@@ -718,12 +718,14 @@ class Manager:
                         if not transient_failure(error):
                             raise
                         attempt += 1
-                        delay = min(60, 2 ** min(attempt, 6))
+                        # Retry transient model/tool transport failures quickly
+                        # while the room lock prevents duplicate workers.
+                        delay = min(3.0, .2 + attempt * .15)
                         until = time.monotonic() + delay
                         while time.monotonic() < until:
                             if self.store.task(task_id)['status'] in TERMINAL:
                                 return
-                            time.sleep(min(.5, until - time.monotonic()))
+                            time.sleep(min(.1, until - time.monotonic()))
                 with self.lock:
                     if self.store.task(task_id)['status'] in TERMINAL:
                         return

@@ -88,6 +88,8 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertIn("Restore-PreviousVersion", helper)
         self.assertIn("Get-FileHash", helper)
         self.assertIn("taskkill.exe", helper)
+        self.assertIn("UpdateRoot", helper)
+        self.assertIn("Get-ChildItem -LiteralPath $UpdateRoot", helper)
 
     def test_health_token_is_strictly_scoped(self):
         token = "a" * 32

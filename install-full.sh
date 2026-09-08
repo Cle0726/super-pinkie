@@ -212,6 +212,14 @@ printf 'PINKIE_APP_PATH=%q\n' "$TARGET_APP" >> "$CONFIG_ROOT/install.env"
 APP_SWAP_ACTIVE=0
 trap - EXIT
 
+# 成功切换后只保留当前安装，清理本安装器留下的旧版回滚副本。
+# 仅操作 updater 自己的 backups/*/app，不触碰用户数据、配置、会话或素材。
+for old_app_backup in "$STATE_ROOT"/backups/*/app; do
+  [[ -d "$old_app_backup" ]] || continue
+  rm -rf "$old_app_backup"
+  rmdir "$(dirname "$old_app_backup")" >/dev/null 2>&1 || true
+done
+
 echo
 echo "安装完成：$TARGET_APP"
 echo "更新命令：$REPO_ROOT/update-full.sh"

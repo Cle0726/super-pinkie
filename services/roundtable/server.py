@@ -762,12 +762,14 @@ class Roundtable:
                 process.stdout.close(); process.stderr.close()
 
     def wait_for_retry(self, run_id, attempt):
-        delay = min(60, 2 ** min(attempt, 6))
+        # Fast and persistent: a flapping provider is probed several times per
+        # second at first, then no slower than once every three seconds.
+        delay = min(3.0, .2 + max(1, attempt) * .15)
         until = time.monotonic() + delay
         while time.monotonic() < until:
             if self.store.run(run_id)['status'] in TERMINAL:
                 return False
-            time.sleep(min(.5, until - time.monotonic()))
+            time.sleep(min(.1, until - time.monotonic()))
         return True
 
     def invoke_with_watchdog(self, run_id, session, member, model, stage, prompt, message_id):

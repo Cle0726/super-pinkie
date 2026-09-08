@@ -36,7 +36,95 @@
   const gatewayClient = () => gatewaySnapshot()?.client || gatewayStore()?.client || null;
   const gatewayConnected = () => Boolean(gatewaySnapshot()?.connected && gatewayClient());
 
-  const withTimeout = (promise, timeoutMs = 15000) => {
+  // The classic 7.1 client can enter a poisoned reconnect state after the
+  // local gateway process is replaced: every automatic WebSocket attempt is
+  // rejected with "first request must be connect", even though /readyz is
+  // already healthy.  A fresh document creates a clean protocol client.  This
+  // is a last-resort reload of the current /chat URL only, so it never replays
+  // the native startup movie and never changes the selected session.
+  const RECONNECT_RELOAD_AT = "laolao:gateway-reload-at";
+  const RECONNECT_DRAFT = "laolao:gateway-reload-draft";
+  let gatewayOfflineSince = 0;
+  let gatewayWasEverConnected = gatewayConnected();
+
+  const composerTextarea = () => document.querySelector(
+    ".agent-chat__composer-combobox textarea"
+  );
+
+  const preserveComposerDraft = () => {
+    const textarea = composerTextarea();
+    const draft = typeof textarea?.value === "string" ? textarea.value : "";
+    if (!draft) return;
+    try {
+      window.sessionStorage.setItem(RECONNECT_DRAFT, JSON.stringify({
+        sessionKey: currentSessionKey(), draft,
+      }));
+    } catch {}
+  };
+
+  const restoreComposerDraft = (attempt = 0) => {
+    let saved;
+    try { saved = JSON.parse(window.sessionStorage.getItem(RECONNECT_DRAFT) || "null"); } catch {}
+    if (!saved?.draft || saved.sessionKey !== currentSessionKey()) return;
+    const textarea = composerTextarea();
+    if (!textarea && attempt < 24) {
+      window.setTimeout(() => restoreComposerDraft(attempt + 1), 250);
+      return;
+    }
+    if (!textarea) return;
+    if (!textarea.value) {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement?.prototype || {}, "value"
+      )?.set;
+      if (setter) setter.call(textarea, saved.draft);
+      else textarea.value = saved.draft;
+      textarea.dispatchEvent(new Event("input", {bubbles: true}));
+    }
+    try { window.sessionStorage.removeItem(RECONNECT_DRAFT); } catch {}
+  };
+
+  const reloadRecoveredGateway = () => {
+    const now = Date.now();
+    let previous = 0;
+    try { previous = Number(window.sessionStorage.getItem(RECONNECT_RELOAD_AT)) || 0; } catch {}
+    // One guarded reload per eight seconds. If a genuinely broken runtime
+    // remains unhealthy this prevents a reload storm while the native watchdog
+    // continues its own process-level recovery.
+    if (now - previous < 8_000) return false;
+    preserveComposerDraft();
+    try { window.sessionStorage.setItem(RECONNECT_RELOAD_AT, String(now)); } catch {}
+    window.location.reload();
+    return true;
+  };
+
+  const probeReadyForSocketRecovery = async () => {
+    if (document.hidden || !location.pathname.startsWith("/chat")) return;
+    if (gatewayConnected()) {
+      gatewayWasEverConnected = true;
+      gatewayOfflineSince = 0;
+      return;
+    }
+    if (!gatewayOfflineSince) gatewayOfflineSince = Date.now();
+    // A previously connected page gets a short native reconnect window. On a
+    // first load use a wider window so normal startup never reloads needlessly.
+    const graceMs = gatewayWasEverConnected ? 1_500 : 8_000;
+    if (Date.now() - gatewayOfflineSince < graceMs) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 700);
+    try {
+      const response = await fetch("/readyz", {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      const body = response.ok ? await response.json() : null;
+      if (body?.ready === true && !gatewayConnected()) reloadRecoveredGateway();
+    } catch {} finally {
+      window.clearTimeout(timer);
+    }
+  };
+
+  const withTimeout = (promise, timeoutMs = 8000) => {
     let timer;
     const timeout = new Promise((_, reject) => {
       timer = window.setTimeout(() => reject(new Error("gateway request timeout")), timeoutMs);
@@ -49,8 +137,9 @@
     return /session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(text);
   };
 
-  // 旧版控制台默认只拉取最近 100 条记录。使用旧版 Gateway 已支持的
-  // offset 分页逐页恢复完整历史，避免只补 DOM 却把更早消息永久留在窗口外。
+  // 7.1 原生聊天页只拉并缓存最近 100 条。这里使用网关已有的 offset
+  // 分页逐页取回，直到 hasMore=false；记录再多也不会被前端的 100 条窗口
+  // 静默截掉。每页 250 条能避开单次 JSON 字节预算，同时不会制造密集请求。
   const HISTORY_PAGE_SIZE = 250;
   const historyStatusBySession = new Map();
 
@@ -87,6 +176,8 @@
     return result;
   };
 
+  // 权威历史排在前面；只保留尚未落盘的本地 optimistic/stream 消息，避免
+  // 刷新时把用户刚发出的文字或正在生成的尾段吃掉。
   const mergeCompleteHistory = (history, localMessages) => {
     const result = uniqueMessages(Array.isArray(history) ? history : []);
     const seen = new Set(result.map(messageIdentity).filter(Boolean));
@@ -120,12 +211,13 @@
     const pages = [];
 
     for (;;) {
+      // 会话切换或 websocket 换代后，旧请求的结果绝不能写进新聊天。
       if (gatewayClient() !== client || currentSessionKey() !== sessionKey) return null;
       if (seenOffsets.has(offset)) throw new Error("chat.history pagination stalled");
       seenOffsets.add(offset);
       const page = await withTimeout(
         client.request("chat.history", historyParams(sessionKey, offset)),
-        20000
+      20000
       );
       if (gatewayClient() !== client || currentSessionKey() !== sessionKey) return null;
       const pageSessionId = String(page?.sessionInfo?.sessionId || page?.sessionId || "");
@@ -169,13 +261,42 @@
     document.documentElement.removeAttribute("data-laolao-streaming");
   };
 
+  // Keep a calm, user-facing recovery indicator visible for the whole retry
+  // window.  Previously a failed upstream turn only cleared the spinner, so
+  // the page looked idle even while the gateway watchdog was still retrying.
+  // This is deliberately a data attribute/CSS ribbon: no fake chat message is
+  // inserted and the internal watchdog control text never enters the transcript.
+  let watchdogStatusTimer = null;
+  const setWatchdogStatus = (state, message) => {
+    if (!location.pathname.startsWith("/chat")) return;
+    const root = document.documentElement;
+    root.setAttribute("data-laolao-watchdog-state", state);
+    root.setAttribute("data-laolao-watchdog-message", message);
+    if (document.body) {
+      document.body.setAttribute("data-laolao-watchdog-state", state);
+      document.body.setAttribute("data-laolao-watchdog-message", message);
+    }
+    window.dispatchEvent(new CustomEvent("pinkie:watchdog-status", {
+      detail: {state, message},
+    }));
+    if (watchdogStatusTimer) window.clearTimeout(watchdogStatusTimer);
+    if (state === "recovered") {
+      watchdogStatusTimer = window.setTimeout(() => {
+        root.removeAttribute("data-laolao-watchdog-state");
+        root.removeAttribute("data-laolao-watchdog-message");
+        document.body?.removeAttribute("data-laolao-watchdog-state");
+        document.body?.removeAttribute("data-laolao-watchdog-message");
+      }, 1800);
+    }
+  };
+
   // 只读刷新会话列表。正文恢复不能靠 sessions.list；正文必须走原生
   // chat pane 的 refreshCurrentChat（内部会调用 chat.history）。
   const refreshSession = async () => {
     const client = gatewayClient();
     if (!client || !gatewayConnected()) return;
     try {
-      await withTimeout(client.request("sessions.list", {limit: 1000}), 12000);
+      await withTimeout(client.request("sessions.list", {limit: 1000}), 5000);
     } catch {}
   };
 
@@ -185,7 +306,7 @@
   let recoveryGeneration = 0;
   let historyRebuildRetryAttempt = 0;
 
-  const scheduleRecovery = (reason, delayMs = 1200) => {
+  const scheduleRecovery = (reason, delayMs = 300) => {
     if (recoveryTimer) return;
     recoveryTimer = window.setTimeout(() => {
       recoveryTimer = null;
@@ -203,7 +324,7 @@
     const state = pane?.state;
     if (!sessionKey || !state || !gatewayConnected()) return false;
     const now = Date.now();
-    if (!options.force && now - lastRecoveryAt < 1200) return false;
+    if (!options.force && now - lastRecoveryAt < 300) return false;
     if (recoveryInFlight) return recoveryInFlight;
     lastRecoveryAt = now;
     const generation = ++recoveryGeneration;
@@ -219,6 +340,8 @@
             || currentSessionKey() !== sessionKey || gatewayClient() !== client) return false;
         const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
         state.chatMessages = mergeCompleteHistory(complete.messages, localMessages);
+        // 新版原生页认识此字段；旧版会忽略它。完整数据已经装入后明确标记
+        // hasMore=false，避免另一个滚动分页器重复拉同一批记录。
         if ("chatHistoryPagination" in state) {
           state.chatHistoryPagination = {
             hasMore: false,
@@ -245,6 +368,11 @@
         window.dispatchEvent(new CustomEvent("pinkie:session-resynced", {
           detail: {sessionKey, reason},
         }));
+        // Normal first-load/manual history sync is silent.  Only close the
+        // ribbon when a real offline/retry state was previously announced.
+        if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")) {
+          setWatchdogStatus("recovered", "连接已恢复，当前回复已同步");
+        }
         return true;
       } catch (error) {
         // chat.history intentionally returns UNAVAILABLE while OpenClaw is
@@ -252,8 +380,9 @@
         // state: retry with bounded backoff so the just-sent user message and
         // the eventual assistant reply reappear without reloading the app.
         if (isHistoryRebuildingError(error)) {
-          historyRebuildRetryAttempt = Math.min(historyRebuildRetryAttempt + 1, 6);
-          const delay = Math.min(8_000, 350 * (2 ** Math.max(0, historyRebuildRetryAttempt - 1)));
+          historyRebuildRetryAttempt = Math.min(historyRebuildRetryAttempt + 1, 12);
+          const delay = Math.min(1_500,
+            Math.ceil(200 * (1.5 ** Math.max(0, historyRebuildRetryAttempt - 1))));
           window.dispatchEvent(new CustomEvent("pinkie:session-history-rebuilding", {
             detail: {sessionKey, reason, retryInMs: delay, attempt: historyRebuildRetryAttempt},
           }));
@@ -272,6 +401,7 @@
     const key = currentSessionKey();
     return key ? {...(historyStatusBySession.get(key) || {}), sessionKey: key} : null;
   };
+  // 只暴露纯函数给离线回归测试，不包含 gateway/token 等运行数据。
   window.__laolaoHistoryTestHooks = {messageIdentity, uniqueMessages, mergeCompleteHistory};
 
   // 档位控制器的续跑由本机网关发起，结束事件有时不经过当前 WKWebView
@@ -286,7 +416,7 @@
   // 回前台主流程
   const onForeground = () => {
     // 延迟策略: 当前 busy → 等重连窗口再刷新; 否则快速刷新。
-    const delay = isBusy() ? 1800 : 400;
+    const delay = isBusy() ? 600 : 150;
     // 给网关前端自己的重连逻辑一点时间。只读同步，不发送 chat.abort。
     window.setTimeout(async () => {
       await recoverCurrentChat("foreground", {force: true});
@@ -300,10 +430,11 @@
   const onRunFailure = () => {
     clearTimeout(failureRecoveryTimer);
     clearVisualBusyState();
+    setWatchdogStatus("retrying", "上游波动，碧琪正在自动重试…");
     void recoverCurrentChat("run-failed", {force: true});
     failureRecoveryTimer = window.setTimeout(async () => {
       await recoverCurrentChat("run-failed-retry", {force: true});
-    }, 700);
+    }, 250);
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   // The native chat pane reports projection rebuilds as an RPC error. The
@@ -332,6 +463,7 @@
   // 请求原生界面重新同步。这样发送、录音、附件和模型选择仍是原功能。
   let observedSessionKey = "";
   window.setTimeout(() => {
+    restoreComposerDraft();
     observedSessionKey = currentSessionKey();
     scheduleRecovery("initial-history", 250);
     window.setInterval(() => {
@@ -342,6 +474,8 @@
         scheduleRecovery("session-changed", 350);
         return;
       }
+      // 原生 100 条缓存有时会在切页/重连后覆盖完整数组。只在数量确实
+      // 倒退时补回，正常流式追加不会触发额外请求。
       const state = document.querySelector("openclaw-chat-pane")?.state;
       const expected = historyStatusBySession.get(sessionKey)?.authorityCount;
       if (Number.isFinite(expected) && Array.isArray(state?.chatMessages)
@@ -349,13 +483,22 @@
         scheduleRecovery("history-count-regressed", 250);
         return;
       }
+      // 页面刚打开或网关刚恢复时，原生 pane 可能还没完成第一次历史同步。
+      // 之前只有一次 initial-history 尝试，若那一刻 gateway 尚未 ready，
+      // 后续就永远不会补齐。没有成功标记时持续低频重试；正在生成时让
+      // 原生流式状态先跑完，避免把未落盘的尾段覆盖掉。
       if (sessionKey && !historyStatusBySession.has(sessionKey) && !isBusy()) {
         scheduleRecovery("history-not-yet-synced", 300);
         return;
       }
       if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 300);
-    }, 5000);
-  }, 1200);
+    }, 1000);
+  }, 400);
+
+  // Process recovery and WebSocket recovery are separate layers. Poll the
+  // lightweight local ready endpoint frequently enough to catch a recovered
+  // gateway whose old page client is still stuck in an invalid handshake.
+  window.setInterval(() => void probeReadyForSocketRecovery(), 750);
 
   // 标记流式状态 (由其它注入或页面事件维护)
   document.addEventListener("laolao:streaming", (e) => {
@@ -392,15 +535,20 @@
       const connected = Boolean(snapshot?.connected && snapshot?.client);
       const clientChanged = Boolean(snapshot?.client && snapshot.client !== previousClient);
       if (!connected) {
+        if (!gatewayOfflineSince) gatewayOfflineSince = Date.now();
         wasConnected = false;
         previousClient = snapshot?.client || null;
         clearVisualBusyState();
+        setWatchdogStatus("offline", "连接暂时中断，碧琪正在等待上游恢复…");
         return;
       }
       if (!wasConnected || clientChanged) {
+        gatewayWasEverConnected = true;
+        gatewayOfflineSince = 0;
         wasConnected = true;
         previousClient = snapshot.client;
         window.dispatchEvent(new CustomEvent("pinkie:gateway-reconnected"));
+        setWatchdogStatus("retrying", "连接已恢复，正在继续当前工作…");
         scheduleRecovery("gateway-reconnected", 250);
       }
     });
@@ -425,10 +573,19 @@
     }
   };
   readyObserver.observe(document.documentElement, { childList: true, subtree: true });
-  // 30s 兜底：无论如何不再永久监听
-  window.setTimeout(() => readyObserver.disconnect(), 30000);
+  // 10s 兜底：无论如何不再永久监听
+  window.setTimeout(() => readyObserver.disconnect(), 10000);
+  // Context can be attached to an existing shell without a DOM mutation. A
+  // short high-frequency probe closes that race, then removes itself so it
+  // cannot become another permanent page observer.
+  let hookProbeAttempts = 0;
+  const hookProbeTimer = window.setInterval(() => {
+    hookProbeAttempts += 1;
+    hookWhenReady();
+    if (hooked || hookProbeAttempts >= 20) window.clearInterval(hookProbeTimer);
+  }, 500);
   hookWhenReady();
-  window.addEventListener("load", () => window.setTimeout(hookWhenReady, 500), {
+  window.addEventListener("load", () => window.setTimeout(hookWhenReady, 150), {
     once: true,
   });
 })();

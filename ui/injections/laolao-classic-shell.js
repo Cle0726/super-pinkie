@@ -43,19 +43,14 @@
     const homeLabel = nav.querySelector(".nav-item--home .nav-item__text");
     if (homeLabel && homeLabel.textContent !== "概览") homeLabel.textContent = "概览";
 
-    let more = nav.querySelector(":scope > .laolao-classic-more");
-    if (!more) {
-      more = document.createElement("button");
-      more.type = "button";
-      more.className = "laolao-classic-more";
-      more.textContent = "更多";
-      more.setAttribute("aria-expanded", "false");
-      more.addEventListener("click", () => {
-        const open = nav.getAttribute("data-laolao-more-open") !== "1";
-        nav.setAttribute("data-laolao-more-open", open ? "1" : "0");
-        more.setAttribute("aria-expanded", String(open));
-      });
-      nav.append(more);
+    /* Use the upstream More control as the single source of truth. */
+    nav.querySelectorAll(":scope > .laolao-classic-more").forEach((node) => {
+      if (!node.closest(".nav-section--more")) node.remove();
+    });
+    const more = nav.querySelector(":scope > .nav-section.nav-section--more > .nav-section__label");
+    if (more) {
+      more.classList.add("laolao-classic-more");
+      more.setAttribute("type", "button");
     }
 
     const create = document.querySelector(".sidebar-session-toolbar .sidebar-new-session");
@@ -102,15 +97,26 @@
 
   const ensureRail = () => {
     if (!document.querySelector(".shell.shell--chat")) return;
-    let rail = document.querySelector(".chat-workspace-rail");
+    const rails = [...document.querySelectorAll(".chat-workspace-rail")];
+    /* Prefer the runtime-owned rail still mounted in the chat workbench. An
+       older build moved one to body, which made Lit create a second rail. */
+    let rail = rails.find((node) => node.parentElement !== document.body) || rails[0];
+    rails.forEach((node) => {
+      if (node !== rail && node.parentElement === document.body) node.remove();
+    });
     if (!rail) {
       rail = document.createElement("aside");
       rail.className = "chat-workspace-rail chat-workspace-rail--collapsed laolao-classic-workspace-rail";
       rail.setAttribute("aria-label", "会话工作区");
-      document.querySelector(".shell.shell--chat")?.append(rail);
+      document.querySelector(".chat-workbench")?.append(rail);
     }
-    if (!rail.classList.contains("laolao-classic-workspace-rail")) return;
-    if (!rail.querySelector(".laolao-classic-rail__toggle")) {
+    /* The 2026.9 UI now creates its own workspace rail. Adopt that live node
+       instead of styling only the fallback rail created by this injection. */
+    rail.classList.add("laolao-classic-workspace-rail");
+    const injectedToggle = rail.querySelector(".laolao-classic-rail__toggle");
+    if (rail.querySelector(".chat-workspace-rail__collapse-toggle")) {
+      injectedToggle?.remove();
+    } else if (!injectedToggle) {
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "laolao-classic-rail__toggle";

@@ -7,9 +7,9 @@ set -u
 
 RELAY_HOST="${PINKIE_RELAY_HOST:-127.0.0.1}"
 RELAY_PORT="${PINKIE_RELAY_PORT:-1466}"
-CHECK_INTERVAL="${PINKIE_RELAY_CHECK_INTERVAL:-2}"
+CHECK_INTERVAL="${PINKIE_RELAY_CHECK_INTERVAL:-0.75}"
 FAILURE_THRESHOLD="${PINKIE_RELAY_FAILURE_THRESHOLD:-2}"
-RESTART_COOLDOWN="${PINKIE_RELAY_RESTART_COOLDOWN:-20}"
+RESTART_COOLDOWN="${PINKIE_RELAY_RESTART_COOLDOWN:-8}"
 RELAY_BIN="${PINKIE_RELAY_BIN:-/Applications/C.le.控制台.app/Contents/MacOS/cle-cliproxy}"
 RELAY_CONFIG="${PINKIE_RELAY_CONFIG:-$HOME/.antigravity_cle/multi_model_api_service/config.json}"
 RELAY_STATE="${PINKIE_RELAY_STATE:-$HOME/.antigravity_cle/multi_model_api_service/runtime_state.json}"
@@ -26,7 +26,7 @@ relay_is_reachable() {
   # 401/403 still prove that the HTTP listener is alive. The old watchdog
   # required 200 and therefore killed a healthy relay every eight seconds.
   local status
-  status="$(curl -sS --connect-timeout 1 --max-time 2 -o /dev/null -w '%{http_code}' \
+  status="$(curl -sS --connect-timeout 0.4 --max-time 0.8 -o /dev/null -w '%{http_code}' \
     "http://$RELAY_HOST:$RELAY_PORT/v1/models" 2>/dev/null || true)"
   [[ -n "$status" && "$status" != "000" ]]
 }

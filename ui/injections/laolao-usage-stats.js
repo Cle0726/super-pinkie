@@ -5,6 +5,15 @@
 (() => {
   "use strict";
 
+  // 页面资源被更新器重复注入时只允许一个统计控制器运行，避免额度条成倍出现。
+  if (window.__cleKkUsageStatsInitialized) {
+    document.querySelectorAll(".laolao-usage").forEach((node, index) => {
+      if (index > 0) node.remove();
+    });
+    return;
+  }
+  window.__cleKkUsageStatsInitialized = true;
+
   /* 仅兼容旧版统计的展示系数，不是模型真实单价；新版优先显示统计源估算。 */
   const PRICING = {
     default: { input: 0.2, output: 1.5, cacheRead: 0.02, cacheWrite: 0 },
@@ -138,6 +147,41 @@
   let chips = null; // [{el, labelEl, valueEl, key}]
   let liveActive = false; // 模型正在思考/输出（发送按钮变成停止键时为真）
   const prevRaw = {};
+  const FIT_HIDE_ORDER = ["cacheWrite", "cacheRead", "output", "input", "quota"];
+  let fitFrame = 0;
+  let fitObserver = null;
+  let fitHeader = null;
+
+  function fitChips() {
+    fitFrame = 0;
+    if (!wrap?.isConnected || !chips) return;
+    const header = wrap.closest(".chat-pane__header");
+    if (!header) return;
+
+    for (const chip of chips) chip.el.removeAttribute("data-fit-hidden");
+    const clipped = () =>
+      wrap.scrollWidth > wrap.clientWidth + 1 ||
+      header.scrollWidth > header.clientWidth + 1;
+    for (const key of FIT_HIDE_ORDER) {
+      if (!clipped()) break;
+      chips.find((chip) => chip.key === key)?.el.setAttribute("data-fit-hidden", "");
+    }
+  }
+
+  function queueFit() {
+    if (fitFrame) cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(fitChips);
+  }
+
+  function observeHeader(header) {
+    if (fitHeader === header) return;
+    fitObserver?.disconnect?.();
+    fitHeader = header;
+    if (typeof ResizeObserver === "function") {
+      fitObserver = new ResizeObserver(queueFit);
+      fitObserver.observe(header);
+    }
+  }
 
   function syncLive() {
     const live = Boolean(document.querySelector(".chat-send-btn--stop, #jobs .job"));
@@ -160,6 +204,7 @@
       document.querySelector(".dashboard-header") ||
       document.querySelector(".chat-pane__header");
     if (!header) return null;
+    observeHeader(header);
     if (wrap && wrap.isConnected && header.contains(wrap) && chips) return chips;
     wrap = document.createElement("div");
     wrap.className = "laolao-usage";
@@ -168,6 +213,7 @@
     chips = CHIP_DEFS.map((def) => {
       const el = document.createElement("span");
       el.className = "laolao-usage__chip" + (def.cls ? " " + def.cls : "");
+      el.dataset.usageKey = def.key;
       const labelEl = document.createElement("span");
       labelEl.className = "laolao-usage__label";
       labelEl.textContent = def.label;
@@ -231,6 +277,8 @@
       prevRaw[c.key] = v.raw;
     }
 
+    queueFit();
+
     wrap.title = [
       `${view.source}：输入 ${fmtTok(view.input)} · 输出 ${fmtTok(view.output)}` +
         (view.cacheRead != null ? ` · 缓存读 ${fmtTok(view.cacheRead)}` : ""),
@@ -264,6 +312,7 @@
     window.addEventListener('laolao:sessions-changed',()=>{
       clearTimeout(eventRefresh);eventRefresh=setTimeout(refresh,500);
     });
+    window.addEventListener("resize", queueFit, { passive: true });
 
     // header 可能被 Lit 重渲染掉：observer 调 render 重建并回填数值。
     // render 只在内容变化时写 DOM，写完后 mutation 再触发 render 也是空操作，不会死循环。

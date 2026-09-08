@@ -176,7 +176,7 @@ if (Test-Path $GatewayWatchdog) {
   $openclawEntry = if ($env:PINKIE_OPENCLAW_ENTRY) { $env:PINKIE_OPENCLAW_ENTRY } else { Join-Path $env:APPDATA "npm\node_modules\openclaw\openclaw.mjs" }
   if ($nodeBin -and (Test-Path $nodeBin) -and (Test-Path $openclawEntry)) {
     $ps = (Get-Command powershell.exe).Source
-    $watchAction = New-ScheduledTaskAction -Execute $ps -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$GatewayWatchdog`" -NodePath `"$nodeBin`" -OpenClawEntry `"$openclawEntry`" -Port 18789" -WorkingDirectory (Split-Path $GatewayWatchdog)
+    $watchAction = New-ScheduledTaskAction -Execute $ps -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$GatewayWatchdog`" -NodePath `"$nodeBin`" -OpenClawEntry `"$openclawEntry`" -Port 18789 -Loop" -WorkingDirectory (Split-Path $GatewayWatchdog)
     $watchTrigger = New-ScheduledTaskTrigger -AtLogOn
     $watchTrigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ([TimeSpan]::MaxValue)
     Register-ScheduledTask -TaskName $GatewayWatchdogTask -Action $watchAction -Trigger @($watchTrigger,$watchTrigger2) -Settings $settings -Principal $env2 -Force | Out-Null

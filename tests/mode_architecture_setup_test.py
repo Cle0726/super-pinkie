@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('mode_setup', ROOT / 'services/mode-architecture/setup.py')
@@ -31,11 +33,8 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(installed['agents']['defaults']['subagents']['maxSpawnDepth'], 2)
             self.assertEqual(installed['agents']['defaults']['timeoutSeconds'], 43200)
             self.assertEqual(installed['agents']['defaults']['subagents']['runTimeoutSeconds'], 43200)
-            self.assertEqual(installed['agents']['defaults']['systemAgent']['agentId'], 'main')
-            self.assertEqual(installed['agents']['defaults']['heartbeat']['agentId'], 'main')
-            self.assertEqual(installed['talk']['agentId'], 'main')
+            self.assertEqual(installed['agents']['list'][3]['contextInjection'], 'never')
             self.assertFalse(installed['update']['checkOnStart'])
-            self.assertFalse(installed['models']['catalogRefresh']['enabled'])
             plugin = installed['plugins']['entries']['pinkie-mode-architecture']
             self.assertTrue(plugin['hooks']['allowPromptInjection'])
             self.assertTrue(plugin['hooks']['allowConversationAccess'])
@@ -49,7 +48,7 @@ class ModeArchitectureSetupTests(unittest.TestCase):
                 self.assertTrue((ws / 'skills/deep-think/SKILL.md').is_file())
                 self.assertEqual((ws / 'persona').exists(), mode != 'none')
             none_identity = (home / setup.MODE_WORKSPACES['none'] / 'IDENTITY.md').read_text()
-            self.assertIn('OPENCLAW_UR_INJECT', none_identity)
+            self.assertEqual(none_identity, 'CUSTOM IDENTITY\n')
             self.assertFalse(setup.install(home))
 
     def test_existing_none_marker_and_custom_limits_are_preserved(self):
@@ -74,6 +73,40 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             setup.install(home)
             self.assertEqual((extension/'index.mjs').read_text(),'NEWER LIVE RUNTIME\n')
             self.assertEqual(json.loads((extension/'package.json').read_text())['version'],'99.0.0')
+
+    def test_pinned_2026_7_repairs_only_newer_schema_fields(self):
+        with tempfile.TemporaryDirectory(prefix='pinkie-mode-compat-') as temp:
+            home=Path(temp);config=home/'.openclaw/openclaw.json';config.parent.mkdir()
+            original={
+                'models': {'catalogRefresh': {'enabled': False}, 'providers': {'mm': {'baseUrl': 'local'}}},
+                'agents': {'defaults': {
+                    'systemAgent': {'agentId': 'main'},
+                    'heartbeat': {'agentId': 'main', 'every': '30m'},
+                    'thinkingDefault': 'high',
+                }},
+                'talk': {'agentId': 'main', 'silenceTimeoutMs': 800},
+            }
+            config.write_text(json.dumps(original))
+            with patch.dict(os.environ, {'PINKIE_RUNTIME_CONFIG_SCHEMA': '2026.7'}):
+                self.assertTrue(setup.install(home))
+            installed=json.loads(config.read_text())
+            self.assertNotIn('catalogRefresh',installed['models'])
+            self.assertEqual(installed['models']['providers'],original['models']['providers'])
+            self.assertNotIn('systemAgent',installed['agents']['defaults'])
+            self.assertEqual(installed['agents']['defaults']['heartbeat'],{'every':'30m'})
+            self.assertEqual(installed['agents']['defaults']['thinkingDefault'],'high')
+            self.assertNotIn('agentId',installed['talk'])
+            self.assertEqual(installed['talk']['silenceTimeoutMs'],800)
+
+    def test_newer_runtime_keeps_newer_schema_fields(self):
+        data={'models':{'catalogRefresh':{'enabled':False}},'agents':{'defaults':{
+            'systemAgent':{'agentId':'main'},'heartbeat':{'agentId':'main'}}},'talk':{'agentId':'main'}}
+        with patch.dict(os.environ, {}, clear=True):
+            setup._configure_plugin(data,Path('/tmp/pinkie-mode-test'))
+        self.assertIn('catalogRefresh',data['models'])
+        self.assertIn('systemAgent',data['agents']['defaults'])
+        self.assertEqual(data['agents']['defaults']['heartbeat']['agentId'],'main')
+        self.assertEqual(data['talk']['agentId'],'main')
 
 
 if __name__ == '__main__':

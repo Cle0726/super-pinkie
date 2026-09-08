@@ -23,8 +23,9 @@ Configuration (all optional, with defaults):
   UR_PROXY_TEMP_ZERO_MODELS comma-separated regex list of model ids that get
                             temperature forced to 0 for deterministic behavior
                             (default: gemini-3.8-flash-tiered,gemini-3.7-flash-tiered,gemini-pro-agent,gemini-3.1-pro-high)
-  UR_PROXY_MAX_ATTEMPTS      transient request attempts (default: 24)
-  UR_PROXY_STREAM_IDLE_TIMEOUT seconds without an SSE byte before retry (default: 18)
+  UR_PROXY_MAX_ATTEMPTS      transient request attempts (default: 64)
+  UR_PROXY_FIRST_BYTE_TIMEOUT seconds to wait for upstream headers (default: 35)
+  UR_PROXY_STREAM_IDLE_TIMEOUT seconds without an SSE byte before retry (default: 30)
 """
 
 import http.client
@@ -49,11 +50,14 @@ TEMP_ZERO_MODELS = [
     ).split(",") if p.strip()
 ]
 
-MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "24")))
-FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "18")))
-STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "18")))
+MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "64")))
+FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "35")))
+STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "30")))
+RETRY_BASE_DELAY_SECONDS = max(0.1, float(os.environ.get("UR_PROXY_RETRY_BASE_DELAY", "0.2")))
+RETRY_STEP_SECONDS = max(0.0, float(os.environ.get("UR_PROXY_RETRY_STEP", "0.1")))
+RETRY_MAX_DELAY_SECONDS = max(RETRY_BASE_DELAY_SECONDS, float(os.environ.get("UR_PROXY_RETRY_MAX_DELAY", "3")))
 MAX_BUFFER_BYTES = 8 * 1024 * 1024
-RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 529, 530}
 HOP_BY_HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade", "content-length",
@@ -170,12 +174,13 @@ def rewrite_chat_body(raw):
 
 
 def retry_delay(attempt, response=None):
-    fallback = min(3.0, 0.35 + max(0, attempt - 1) * 0.2)
+    fallback = min(RETRY_MAX_DELAY_SECONDS,
+                   RETRY_BASE_DELAY_SECONDS + max(0, attempt - 1) * RETRY_STEP_SECONDS)
     if response is None:
         return fallback
     raw = response.getheader("Retry-After")
     try:
-        return min(max(float(raw), fallback), 5.0)
+        return min(max(float(raw), fallback), RETRY_MAX_DELAY_SECONDS)
     except (TypeError, ValueError):
         return fallback
 

@@ -1,0 +1,193 @@
+/* CLE Kk 统一窗口布局：侧栏、聊天区和顶栏共用同一份宽度预算。 */
+html[data-laolao-classic-shell="1"] {
+  --laolao-window-rail-reserve: 44px;
+}
+
+/* Keep the workspace rail in the real workbench grid. The previous fixed
+   positioning was resolved against a transformed WebKit ancestor, leaving a
+   blank strip at the window edge while the rail covered the chat content. */
+html[data-laolao-classic-shell="1"] body .chat-workbench {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
+  gap: 0 !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding-right: 0 !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workbench:has(
+  > .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed)
+) {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 280px) !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workbench__main {
+  grid-column: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
+  /* The workbench owns the rail reservation. Keeping the shell margin clear
+     avoids counting the same fixed rail twice on upstream layouts that still
+     reserve their own assistant column. */
+  margin-right: 0 !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail {
+  position: relative !important;
+  inset: auto !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  align-self: stretch !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 100% !important;
+  margin: 0 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Message content must wrap inside the conversation column. Long paths,
+   markdown and tool summaries may scroll internally, but may never widen or
+   disappear behind either sidebar. */
+html[data-laolao-classic-shell="1"] body :is(
+  .chat-split-container,
+  .chat-main,
+  .chat-main__conversation-column,
+  .chat-main__conversation,
+  .chat-thread,
+  .chat-group
+) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html[data-laolao-classic-shell="1"] body :is(.chat-group-messages, .chat-bubble) {
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-bubble :is(p, li, blockquote, a) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-bubble :is(pre, table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* On the smallest supported desktop window the chat has priority. The
+   workspace entrances stay available again as soon as there is enough room. */
+@media (max-width: 1120px) {
+  html[data-laolao-classic-shell="1"] body .chat-workbench,
+  html[data-laolao-classic-shell="1"] body .chat-workbench:has(
+    > .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed)
+  ) {
+    display: flex !important;
+    grid-template-columns: none !important;
+  }
+
+  html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail {
+    display: none !important;
+  }
+}
+
+html[data-laolao-classic-shell="1"] .sidebar,
+html[data-laolao-classic-shell="1"] .sidebar-shell__content,
+html[data-laolao-classic-shell="1"] .sidebar-nav {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-shell__content {
+  overflow-x: hidden !important;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-nav :is(.nav-item, .sidebar-zone-entry, .laolao-classic-more) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* The title and usage chips live in one real flex row. Size decisions are
+   based on the header's available width (after both sidebars), not viewport
+   width, so the same rules work with either sidebar open or closed. */
+html[data-laolao-classic-shell="1"] .chat-pane__header {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  container-name: clekk-chat-header;
+  container-type: inline-size;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+html[data-laolao-classic-shell="1"] .chat-pane__header *,
+.chat-workspace-rail.laolao-classic-workspace-rail,
+.chat-workspace-rail.laolao-classic-workspace-rail * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+html[data-laolao-classic-shell="1"] .chat-pane__header-leading {
+  min-width: 112px !important;
+  overflow: hidden !important;
+}
+
+html[data-laolao-classic-shell="1"] .laolao-classic-breadcrumb {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis;
+}
+
+html[data-laolao-classic-shell="1"] .chat-pane__header > .laolao-usage,
+html[data-laolao-classic-shell="1"] .chat-pane__header .dashboard-header > .laolao-usage {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 128px) !important;
+  padding-left: 8px !important;
+  margin-right: 8px !important;
+  overflow: hidden !important;
+  justify-content: flex-end;
+}
+
+html[data-laolao-classic-shell="1"] .chat-pane__header > .laolao-usage > .laolao-usage__chip,
+html[data-laolao-classic-shell="1"] .chat-pane__header .dashboard-header > .laolao-usage > .laolao-usage__chip {
+  flex: 0 0 auto;
+}
+
+/* WebKit container queries are the first responsive layer. The usage
+   controller also measures the actual rendered row for narrow native windows. */
+html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-fit-hidden] {
+  display: none !important;
+}
+
+@container clekk-chat-header (max-width: 790px) {
+  .laolao-usage__chip:is([data-usage-key="cacheWrite"], :nth-child(4)) { display: none !important; }
+}
+
+@container clekk-chat-header (max-width: 690px) {
+  .laolao-usage__chip:is([data-usage-key="cacheRead"], :nth-child(3)) { display: none !important; }
+}
+
+@container clekk-chat-header (max-width: 570px) {
+  .laolao-usage__chip:is([data-usage-key="output"], :nth-child(2)) { display: none !important; }
+}
+
+@container clekk-chat-header (max-width: 470px) {
+  .laolao-usage__chip:is([data-usage-key="input"], :nth-child(1)) { display: none !important; }
+  .laolao-classic-breadcrumb__agent,
+  .laolao-classic-breadcrumb__sep,
+  .laolao-classic-breadcrumb em { display: none !important; }
+}
+
+@container clekk-chat-header (max-width: 360px) {
+  .laolao-usage__chip:is([data-usage-key="quota"], :nth-child(5)) { display: none !important; }
+}

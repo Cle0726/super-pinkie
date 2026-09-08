@@ -23,12 +23,36 @@ copy_if_changed() {
   fi
 }
 
+# 更新器可能遇到“/asset”与“./asset”两种等价路径。先统一路径并按资源名
+# 去重，避免重复运行主题安装后把同一份脚本执行两次。
+dedupe_laolao_asset_tags() {
+  local index_file="$1"
+  local temp_index
+  temp_index="$(mktemp "$(dirname "$index_file")/.laolao-dedupe.XXXXXX")"
+  perl -0pe '
+    BEGIN { %seen = (); }
+    s{(<script\b[^>]*\bsrc="(?:\./|/)?(laolao-[^"?]+)[^"]*"[^>]*>\s*</script>|<link\b[^>]*\bhref="(?:\./|/)?(laolao-[^"?]+)[^"]*"[^>]*>)}{
+      my $asset = defined($2) ? $2 : $3;
+      $seen{$asset}++ ? "" : $1;
+    }gise;
+    s{((?:src|href)=")/(laolao-)}{$1 . "./" . $2}ge;
+  ' "$index_file" > "$temp_index"
+  if cmp -s "$index_file" "$temp_index"; then
+    rm -f "$temp_index"
+  else
+    mv "$temp_index" "$index_file"
+    DID_CHANGE=1
+  fi
+}
+
 apply_ui_skin() {
   local ui_root="$1"
   local index_file="$ui_root/index.html"
   local asset
 
   [[ -f "$index_file" ]] || return 0
+
+  dedupe_laolao_asset_tags "$index_file"
 
   # Work on one canonical relative form while patching. The final form is
   # root-relative, so nested SPA routes such as /settings/general never look
@@ -66,6 +90,8 @@ apply_ui_skin() {
     laolao-classic-shell.css \
     laolao-ui-subtraction.css \
     laolao-classic-shell.js \
+    laolao-side-layout.css \
+    laolao-side-layout.js \
     laolao-memory.css \
     laolao-memory.js \
     laolao-motion.js \
@@ -176,7 +202,12 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-classic-shell.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic4">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic11">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+
+  if ! grep -Fq './laolao-side-layout.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-side-layout.css?v=side12">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -231,7 +262,11 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-classic-shell.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic11"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-side-layout.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script src="./laolao-side-layout.js?v=side12"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-memory.js' "$index_file"; then
@@ -297,10 +332,10 @@ apply_ui_skin() {
   # v2 修复 TDZ ReferenceError (wasBusy 引用越作用域, 导致恢复流程从未执行)
   # v3 观察者在 hook 网关成功后 disconnect（雪崩治理，见 tool-stream v3）
   if ! grep -Fq './laolao-resume.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume6"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume7"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-resume.js?v=resume6' "$index_file"; then
-    perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume6}g' "$index_file"
+  elif ! grep -Fq './laolao-resume.js?v=resume7' "$index_file"; then
+    perl -0pi -e 's{\./laolao-resume\.js\?v=[^"]*}{./laolao-resume.js?v=resume7}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -374,8 +409,8 @@ apply_ui_skin() {
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
   # 处理旧版 index.html 已经被规范化为 /laolao-* 的情况。
-  if ! grep -Fq '/laolao-theme.css?v=theme34' "$index_file"; then
-    perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme34}g' "$index_file"
+  if ! grep -Fq '/laolao-theme.css?v=theme35' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme35}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq '/laolao-sidebar.js?v=sidebar15' "$index_file"; then
@@ -390,8 +425,8 @@ apply_ui_skin() {
     perl -0pi -e 's{(?:\./|/)laolao-session-list\.js(?:\?v=[^"]*)?}{/laolao-session-list.js?v=sessions5}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-usage-stats.js?v=stats12' "$index_file"; then
-    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats12}g' "$index_file"
+  if ! grep -Fq './laolao-usage-stats.js?v=stats15' "$index_file"; then
+    perl -0pi -e 's{\./laolao-usage-stats\.js(?:\?v=[^"]*)?}{./laolao-usage-stats.js?v=stats15}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.css?v=stats7' "$index_file"; then
@@ -418,12 +453,20 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion4}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.css?v=classic4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic4}g' "$index_file"
+  if ! grep -Fq './laolao-classic-shell.css?v=classic11' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic11}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.js?v=classic4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic4}g' "$index_file"
+  if ! grep -Fq './laolao-side-layout.css?v=side12' "$index_file"; then
+    perl -0pi -e 's{\./laolao-side-layout\.css(?:\?v=[^"]*)?}{./laolao-side-layout.css?v=side12}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-classic-shell.js?v=classic11' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic11}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-side-layout.js?v=side12' "$index_file"; then
+    perl -0pi -e 's{\./laolao-side-layout\.js(?:\?v=[^"]*)?}{./laolao-side-layout.js?v=side12}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-memory.css?v=memory1' "$index_file"; then
@@ -524,12 +567,57 @@ sync_launcher_resources() {
   local bundled_ui="$bundled_root/runtime/openclaw/dist/control-ui"
 
   [[ -d "$bundled_root/ui/assets" ]] || return 0
+  # The launcher executes apply-bundled.sh from inside the app. Keep this
+  # bootstrap in sync with the source so an installed hotfix cannot be undone
+  # by an older self-mutating bootstrap on the next cold launch.
+  copy_if_changed "$REPO_ROOT/installer/macos/apply-bundled.sh" "$bundled_root/installer/macos/apply-bundled.sh"
   copy_if_changed "$REPO_ROOT/ui/launcher-loading.html" "$bundled_root/ui/launcher-loading.html"
   copy_if_changed "$ASSET_ROOT/laolao-splash.mp4" "$bundled_root/ui/assets/laolao-splash.mp4"
   copy_if_changed "$ASSET_ROOT/laolao-splash-video-poster.png" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
   if [[ -f "$bundled_ui/index.html" ]]; then
     apply_ui_skin "$bundled_ui"
   fi
+}
+
+# 主题注入会改动 App 包内资源；无论中途哪个可选补丁失败，都必须在
+# 退出前重新封装签名，否则 LaunchServices 会把整个 App 判定为损坏。
+reseal_app_on_exit() {
+  local exit_code=$?
+  trap - EXIT
+  local needs_reseal="${DID_CHANGE:-0}"
+  # Some bundled-runtime patches edit files directly and cannot update the
+  # shell-level DID_CHANGE flag. Check the envelope itself as a second guard;
+  # otherwise the next LaunchServices launch would see a stale sealed-resource
+  # hash even though the sync command reported success.
+  if [[ "$needs_reseal" != "1" && -d "$LAUNCHER_APP_PATH" ]] \
+      && ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+    needs_reseal=1
+  fi
+  if [[ "${SKIP_APP_BUNDLES:-0}" != "1" && "$needs_reseal" == "1" && -d "$LAUNCHER_APP_PATH" ]]; then
+    local preserved_ok=1
+    if ! codesign --force --deep --sign - --preserve-metadata=identifier,entitlements,flags,runtime "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+      preserved_ok=0
+    fi
+    # codesign can return success while retaining a stale nested
+    # CodeResources entry (for example after an optional roundtable asset was
+    # removed). Verify the resulting envelope, not only the signing command.
+    if [[ "$preserved_ok" != "1" ]] \
+        || ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+      # A replaced nested resource can make the old entitlement envelope
+      # impossible to preserve (macOS reports a sealed-resource mismatch).
+      # Fall back to a fresh ad-hoc envelope so a UI-only sync never leaves
+      # the installed App unlaunchable. The launcher keeps its bundle ID and
+      # runtime flags; the CUA helper remains separately signed.
+      if ! codesign --force --deep --sign - "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
+          || ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+        echo "error: failed to reseal $LAUNCHER_APP_PATH" >&2
+        [[ "$exit_code" -eq 0 ]] && exit_code=1
+      else
+        echo "warning: resealed $LAUNCHER_APP_PATH with a fresh local signature" >&2
+      fi
+    fi
+  fi
+  exit "$exit_code"
 }
 
 sync_agent_avatars() {
@@ -596,6 +684,7 @@ if [[ -z "$OPENCLAW_ROOT" ]]; then
 fi
 
 DID_CHANGE=0
+trap reseal_app_on_exit EXIT
 if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
   sync_agent_avatars
   install_relay_watchdog
@@ -631,6 +720,11 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # ~/WorkBuddy 下的本地文件可以在控制界面里正常显示，不再报
     # "Outside allowed folders"。和 context-budget 一样幂等、可重复执行。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-image-access.mjs"
+    # 首轮即向模型公开已配对节点的完整 Computer Use v2 动作；否则
+    # list_apps / accessibility / bring_to_front 会被旧版 v1 参数表隐藏。
+    if ! OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-computer-v2.mjs"; then
+      echo "warning: Computer Use v2 patch skipped because this runtime has no matching chunk" >&2
+    fi
   fi
   # apply-context-budget/apply-image-access may regenerate the control-ui
   # entrypoint, so refresh the skin cache key after all runtime patches finish.
@@ -648,8 +742,6 @@ if [[ "$SKIP_APP_BUNDLES" != "1" ]]; then
   apply_bundle_icon "$LAUNCHER_APP_PATH" "PinkieAppIcon"
 
   if [[ "$DID_CHANGE" == "1" ]]; then
-    # Reseal the standalone local launcher only; keep the official App signed by OpenClaw.
-    codesign --force --sign - --preserve-metadata=identifier,entitlements,flags,runtime "$LAUNCHER_APP_PATH" >/dev/null 2>&1 || true
     "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" -f "$LAUNCHER_APP_PATH"
     touch "$LAUNCHER_APP_PATH"
   fi

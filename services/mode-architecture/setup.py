@@ -147,6 +147,29 @@ def _ensure_none_marker(workspace: Path, backup_root: Path) -> bool:
 
 def _configure_plugin(data: dict, target: Path) -> bool:
     before = json.dumps(data, ensure_ascii=False, sort_keys=True)
+
+    # A short-lived 2026.9 installation can leave newer schema fields in the
+    # shared config.  The user's chosen 2026.7 runtime rejects the whole file
+    # before the gateway can start, so a watchdog can only loop forever.  When
+    # the pinned desktop bundle explicitly requests 2026.7 compatibility,
+    # remove only the four known incompatible leaves; preserve all actual user
+    # settings and do nothing for newer/external runtimes.
+    if os.environ.get("PINKIE_RUNTIME_CONFIG_SCHEMA") == "2026.7":
+        models = data.get("models")
+        if isinstance(models, dict):
+            models.pop("catalogRefresh", None)
+        defaults = data.get("agents", {}).get("defaults") if isinstance(data.get("agents"), dict) else None
+        if isinstance(defaults, dict):
+            defaults.pop("systemAgent", None)
+            heartbeat = defaults.get("heartbeat")
+            if isinstance(heartbeat, dict):
+                heartbeat.pop("agentId", None)
+                if not heartbeat:
+                    defaults.pop("heartbeat", None)
+        talk = data.get("talk")
+        if isinstance(talk, dict):
+            talk.pop("agentId", None)
+
     plugins = data.setdefault("plugins", {})
     plugin_id = "pinkie-mode-architecture"
     if plugins.get("enabled") is False or plugin_id in plugins.get("deny", []):
@@ -163,40 +186,18 @@ def _configure_plugin(data: dict, target: Path) -> bool:
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
-    # OpenClaw requires an explicit owner once more than one agent exists.
-    # Without these harmless defaults, an unscoped models.list/talk/heartbeat
-    # request is rejected and the model picker can remain stuck on loading.
-    system_agent = defaults.setdefault("systemAgent", {})
-    if not isinstance(system_agent, dict):
-        system_agent = defaults["systemAgent"] = {}
-    system_agent.setdefault("agentId", "main")
-    heartbeat = defaults.setdefault("heartbeat", {})
-    if not isinstance(heartbeat, dict):
-        heartbeat = defaults["heartbeat"] = {}
-    heartbeat.setdefault("agentId", "main")
-    talk = data.setdefault("talk", {})
-    if not isinstance(talk, dict):
-        talk = data["talk"] = {}
-    talk.setdefault("agentId", "main")
+    for agent in data["agents"].get("list", []):
+        if isinstance(agent, dict) and agent.get("id") == "unrestricted":
+            # Keep every workspace file on disk, but do not inject AGENTS.md,
+            # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
+            # into unrestricted-mode model requests.
+            agent["contextInjection"] = "never"
     # CLE Kk ships a patched, internally consistent runtime. Disable the
     # upstream startup check so only CLE Kk's detached updater can replace it.
     update = data.setdefault("update", {})
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
-    # This pinned CLE Kk release owns its model list.  The upstream catalog is
-    # refreshed over the network by default and can both add unexpected model
-    # entries and stall startup when the upstream host is unavailable.  Keep
-    # the user's configured providers/models intact while opting out of that
-    # background feed; the explicit CLE Kk updater remains available from the
-    # App menu.
-    models = data.setdefault("models", {})
-    if not isinstance(models, dict):
-        models = data["models"] = {}
-    catalog_refresh = models.setdefault("catalogRefresh", {})
-    if not isinstance(catalog_refresh, dict):
-        catalog_refresh = models["catalogRefresh"] = {}
-    catalog_refresh["enabled"] = False
     timeout = defaults.get("timeoutSeconds")
     if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
         defaults["timeoutSeconds"] = 43_200
@@ -257,7 +258,6 @@ def install(home=None) -> bool:
         if skill_source.is_file():
             changed |= _copy_if_changed(skill_source, workspace / "skills/deep-think/SKILL.md")
 
-    changed |= _ensure_none_marker(home / MODE_WORKSPACES["none"], backup_root)
     config_changed = _configure_plugin(data, extension)
     if config_changed:
         backup_root.mkdir(parents=True, exist_ok=True)

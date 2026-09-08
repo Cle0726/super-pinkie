@@ -29,5 +29,5 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(mac,/s\{OpenClaw\}\{CLE Kk\}g/);
   assert.match(windows,/Replace\('OpenClaw', 'CLE Kk'\)/);
   assert.match(mac,/phrases15/);assert.match(windows,/phrases15/);
-  assert.match(mac,/theme34/);assert.match(windows,/theme34/);
+  assert.match(mac,/theme35/);assert.match(windows,/theme35/);
 });

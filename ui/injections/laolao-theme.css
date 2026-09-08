@@ -1698,3 +1698,79 @@ openclaw-chat-log {
   overscroll-behavior-y: contain !important;
   contain: none !important;
 }
+
+/* CLE Kk 原生系统玻璃：主聊天层透出桌面，只让消息与输入框保留淡玻璃。 */
+html[data-pinkie-native-glass="1"] body {
+  background: rgba(255, 250, 249, 0.045) !important;
+}
+
+html[data-pinkie-native-glass="1"] body::before {
+  opacity: 0.34;
+}
+
+html[data-pinkie-native-glass="1"] :is(
+  .content,
+  .content--chat,
+  openclaw-chat-page,
+  .chat-split-view,
+  .chat-split-view__drop-container,
+  .chat-split-view__column,
+  .chat-split-view__cell,
+  .chat-split-view__pane,
+  .chat-pane-primary-column,
+  .chat-main,
+  .chat-main__conversation-column,
+  .chat-main__conversation,
+  .board-session-surface,
+  .board-session-surface__chat
+) {
+  --chat-surface: transparent !important;
+  background: transparent !important;
+}
+
+/* 上游断线/重试提示：状态持续到网关恢复并完成历史同步，不再只闪一下。 */
+html[data-laolao-watchdog-state="offline"] body::after,
+html[data-laolao-watchdog-state="retrying"] body::after,
+html[data-laolao-watchdog-state="recovered"] body::after {
+  content: attr(data-laolao-watchdog-message);
+  position: fixed;
+  z-index: 120;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(82vw, 520px);
+  padding: 7px 14px;
+  border: 1px solid rgba(244, 166, 198, .34);
+  border-radius: 999px;
+  background: linear-gradient(105deg, rgba(255, 247, 252, .94), rgba(255, 224, 239, .91));
+  box-shadow: 0 8px 24px rgba(164, 62, 117, .15), inset 0 1px rgba(255, 255, 255, .95);
+  color: #a83e70;
+  font: 600 12px/1.3 ui-rounded, "SF Pro Rounded", sans-serif;
+  text-align: center;
+  pointer-events: none;
+  animation: pinkieWatchdogRibbon 2.4s ease-in-out infinite;
+}
+
+html[data-laolao-watchdog-state="offline"] body::after {
+  border-color: rgba(222, 160, 185, .36);
+  color: #9e637d;
+}
+
+html[data-laolao-watchdog-state="recovered"] body::after {
+  animation: pinkieWatchdogRecovered 1.8s ease-out both;
+}
+
+@keyframes pinkieWatchdogRibbon {
+  0%, 100% { opacity: .82; box-shadow: 0 8px 24px rgba(164, 62, 117, .13), inset 0 1px rgba(255, 255, 255, .95); }
+  50% { opacity: 1; box-shadow: 0 10px 28px rgba(164, 62, 117, .23), inset 0 1px rgba(255, 255, 255, .98); }
+}
+
+@keyframes pinkieWatchdogRecovered {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-5px); }
+  22% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-watchdog-state] body::after { animation: none !important; }
+}

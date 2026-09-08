@@ -15,7 +15,9 @@ unrestricted-mode agent (agent=unrestricted / OPENCLAW_UR_INJECT), it:
 
 Prompt files are read per request (edit without restart).
 Config via UR_PROXY_* environment variables (argv[1]/argv[2] override listen/upstream
-ports). Defaults are listen 1467 and upstream 127.0.0.1:1466.
+ports). Defaults are listen 1467 and upstream 127.0.0.1:1466. The default
+timeouts leave a slow upstream enough room to recover instead of turning a
+short network wobble into a visible failed turn.
 """
 
 import http.client
@@ -303,10 +305,13 @@ LISTEN_HOST = os.environ.get("UR_PROXY_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("UR_PROXY_LISTEN", "1467"))
 UPSTREAM_HOST = os.environ.get("UR_PROXY_UPSTREAM_HOST", "127.0.0.1")
 UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466"))
-MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "24")))
-FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "18")))
-STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "18")))
-RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "64")))
+FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "35")))
+STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "30")))
+RETRY_BASE_DELAY_SECONDS = max(0.1, float(os.environ.get("UR_PROXY_RETRY_BASE_DELAY", "0.2")))
+RETRY_STEP_SECONDS = max(0.0, float(os.environ.get("UR_PROXY_RETRY_STEP", "0.1")))
+RETRY_MAX_DELAY_SECONDS = max(RETRY_BASE_DELAY_SECONDS, float(os.environ.get("UR_PROXY_RETRY_MAX_DELAY", "3")))
+RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 529, 530}
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -321,15 +326,14 @@ HOP_BY_HOP_HEADERS = {
 
 
 def retry_delay(attempt, response=None):
-    """Use a short backoff, honoring a small server-supplied retry hint."""
-    # Keep transient network recovery active without hammering an unhealthy
-    # upstream: frequent early retries, then a modestly longer gap.
-    fallback = min(3.0, 0.35 + max(0, attempt - 1) * 0.2)
+    """Use fast early retries, then a bounded longer recovery interval."""
+    fallback = min(RETRY_MAX_DELAY_SECONDS,
+                   RETRY_BASE_DELAY_SECONDS + max(0, attempt - 1) * RETRY_STEP_SECONDS)
     if response is None:
         return fallback
     raw = response.getheader("Retry-After")
     try:
-        return min(max(float(raw), fallback), 5.0)
+        return min(max(float(raw), fallback), RETRY_MAX_DELAY_SECONDS)
     except (TypeError, ValueError):
         return fallback
 

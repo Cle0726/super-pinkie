@@ -42,7 +42,9 @@
         // file:// -> http:// is cross-origin. Without no-cors, a healthy
         // Gateway response is rejected by CORS and the splash waits forever.
         await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors" });
-        location.replace("http://127.0.0.1:18789/");
+        // The gateway root is the upstream control-console overview. CLE Kk
+        // always enters through the themed chat route after the movie.
+        location.replace("http://127.0.0.1:18789/chat");
         return;
       } catch (_) {
         elapsed += 1;

@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $watchdog) -or -not (Test-Path -LiteralPath $no
     throw "找不到内置网关文件，请确认 InstallRoot 指向 onedir 程序目录"
 }
 $ps = (Get-Command powershell.exe).Source
-$args = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`" -NodePath `"$node`" -OpenClawEntry `"$openclaw`" -Port 18789"
+$args = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`" -NodePath `"$node`" -OpenClawEntry `"$openclaw`" -Port 18789 -Loop"
 $action = New-ScheduledTaskAction -Execute $ps -Argument $args -WorkingDirectory (Split-Path -Parent $watchdog)
 $triggers = @(
     (New-ScheduledTaskTrigger -AtLogOn),
@@ -22,7 +22,7 @@ $triggers = @(
     (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650))
 )
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
 try {
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
     Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
@@ -31,7 +31,7 @@ try {
     # Some managed Windows installs deny Task Scheduler writes to standard
     # users. Fall back to the per-user Run key with the same safe check loop.
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    $loopArgs = "$args -Loop"
+    $loopArgs = $args
     New-Item -Path $runKey -Force | Out-Null
     New-ItemProperty -Path $runKey -Name $taskName -PropertyType String -Value "`"$ps`" $loopArgs" -Force | Out-Null
     Start-Process -FilePath $ps -ArgumentList $loopArgs -WindowStyle Hidden | Out-Null
