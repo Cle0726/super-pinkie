@@ -49,33 +49,106 @@
     return /session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(text);
   };
 
-  const assistantText = (message) => {
-    if (!message || String(message.role || "").toLowerCase() !== "assistant") return "";
-    if (typeof message.text === "string") return message.text.trim();
-    if (typeof message.content === "string") return message.content.trim();
-    if (Array.isArray(message.content)) {
-      return message.content
-        .filter((part) => part && (part.type === "text" || typeof part.text === "string"))
-        .map((part) => String(part.text || ""))
-        .join("\n")
-        .trim();
+  // 旧版控制台默认只拉取最近 100 条记录。使用旧版 Gateway 已支持的
+  // offset 分页逐页恢复完整历史，避免只补 DOM 却把更早消息永久留在窗口外。
+  const HISTORY_PAGE_SIZE = 250;
+  const historyStatusBySession = new Map();
+
+  const messageIdentity = (message) => {
+    if (!message || typeof message !== "object") return "";
+    const metadata = message.__openclaw;
+    if (metadata && typeof metadata === "object") {
+      if (typeof metadata.id === "string" && metadata.id) return `id:${metadata.id}`;
+      if (Number.isSafeInteger(metadata.seq)) {
+        return `seq:${metadata.seq}:${String(message.role || "").toLowerCase()}`;
+      }
     }
-    return "";
+    if (typeof message.messageId === "string" && message.messageId) {
+      return `message:${message.messageId}`;
+    }
+    const timestamp = message.timestamp ?? message.ts ?? "";
+    try {
+      return `fallback:${String(message.role || "").toLowerCase()}:${timestamp}:${JSON.stringify(message.content ?? message.text ?? null)}`;
+    } catch {
+      return "";
+    }
   };
 
-  const hasAssistantReply = (messages) => Array.isArray(messages)
-    && messages.some((message) => assistantText(message));
+  const uniqueMessages = (messages) => {
+    const seen = new Set();
+    const result = [];
+    for (const message of messages) {
+      if (!message || typeof message !== "object") continue;
+      const identity = messageIdentity(message);
+      if (identity && seen.has(identity)) continue;
+      if (identity) seen.add(identity);
+      result.push(message);
+    }
+    return result;
+  };
 
-  const directHistory = async (sessionKey) => {
-    const client = gatewayClient();
-    if (!client || !gatewayConnected() || !sessionKey) return null;
+  const mergeCompleteHistory = (history, localMessages) => {
+    const result = uniqueMessages(Array.isArray(history) ? history : []);
+    const seen = new Set(result.map(messageIdentity).filter(Boolean));
+    for (const message of Array.isArray(localMessages) ? localMessages : []) {
+      const identity = messageIdentity(message);
+      if (identity && seen.has(identity)) continue;
+      if (identity) seen.add(identity);
+      result.push(message);
+    }
+    return result;
+  };
+
+  const historyParams = (sessionKey, offset) => {
     const parsedAgent = String(sessionKey).match(/^agent:([^:]+):/);
-    const params = {
+    return {
       sessionKey,
-      limit: 1000,
+      limit: HISTORY_PAGE_SIZE,
+      offset,
+      maxChars: 500000,
       ...(parsedAgent?.[1] ? {agentId: parsedAgent[1]} : {}),
     };
-    return withTimeout(client.request("chat.history", params), 15000);
+  };
+
+  const fetchCompleteHistory = async (sessionKey, expectedClient) => {
+    const client = expectedClient || gatewayClient();
+    if (!client || !gatewayConnected() || !sessionKey) return null;
+    let offset = 0;
+    let sessionId = "";
+    let totalMessages;
+    const seenOffsets = new Set();
+    const pages = [];
+
+    for (;;) {
+      if (gatewayClient() !== client || currentSessionKey() !== sessionKey) return null;
+      if (seenOffsets.has(offset)) throw new Error("chat.history pagination stalled");
+      seenOffsets.add(offset);
+      const page = await withTimeout(
+        client.request("chat.history", historyParams(sessionKey, offset)),
+        20000
+      );
+      if (gatewayClient() !== client || currentSessionKey() !== sessionKey) return null;
+      const pageSessionId = String(page?.sessionInfo?.sessionId || page?.sessionId || "");
+      if (sessionId && pageSessionId && sessionId !== pageSessionId) {
+        throw new Error("chat.history session changed during pagination");
+      }
+      if (pageSessionId) sessionId = pageSessionId;
+      if (Number.isFinite(page?.totalMessages)) totalMessages = page.totalMessages;
+      pages.unshift(Array.isArray(page?.messages) ? page.messages : []);
+      if (page?.hasMore !== true) break;
+      const nextOffset = Number(page?.nextOffset);
+      if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
+        throw new Error("chat.history pagination did not advance");
+      }
+      offset = nextOffset;
+    }
+
+    return {
+      messages: uniqueMessages(pages.flat()),
+      sessionId,
+      totalMessages,
+      pageCount: seenOffsets.size,
+    };
   };
 
   // 正在生成中的判定: 发送按钮禁用 / 停止按钮可见 / 流式进行中
@@ -136,14 +209,33 @@
     const generation = ++recoveryGeneration;
     recoveryInFlight = (async () => {
       try {
+        const client = gatewayClient();
         if (typeof state.refreshCurrentChat === "function") {
           await withTimeout(state.refreshCurrentChat(), 20000);
-        } else {
-          // 兼容旧版控制台：至少确认权威 history 已经可读；新版本会
-          // 通过上面的原生方法把它写回 Lit 状态。
-          await directHistory(sessionKey);
         }
         if (generation !== recoveryGeneration) return false;
+        const complete = await fetchCompleteHistory(sessionKey, client);
+        if (!complete || generation !== recoveryGeneration
+            || currentSessionKey() !== sessionKey || gatewayClient() !== client) return false;
+        const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+        state.chatMessages = mergeCompleteHistory(complete.messages, localMessages);
+        if ("chatHistoryPagination" in state) {
+          state.chatHistoryPagination = {
+            hasMore: false,
+            ...(Number.isFinite(complete.totalMessages)
+              ? {totalMessages: complete.totalMessages}
+              : {}),
+          };
+        }
+        historyStatusBySession.set(sessionKey, {
+          loadedCount: state.chatMessages.length,
+          authorityCount: complete.messages.length,
+          totalMessages: complete.totalMessages,
+          pageCount: complete.pageCount,
+          sessionId: complete.sessionId,
+          syncedAt: Date.now(),
+          complete: true,
+        });
         historyRebuildRetryAttempt = 0;
         state.requestUpdate?.();
         // 历史已经恢复后才滚到底部；用户正在查看旧消息时不抢滚动位置。
@@ -176,6 +268,11 @@
   };
 
   window.__laolaoRecoverCurrentChat = recoverCurrentChat;
+  window.__laolaoHistoryStatus = () => {
+    const key = currentSessionKey();
+    return key ? {...(historyStatusBySession.get(key) || {}), sessionKey: key} : null;
+  };
+  window.__laolaoHistoryTestHooks = {messageIdentity, uniqueMessages, mergeCompleteHistory};
 
   // 档位控制器的续跑由本机网关发起，结束事件有时不经过当前 WKWebView
   // 的 websocket。直接触发原生聊天页自己的“刷新”动作，既不重载页面，
@@ -233,12 +330,32 @@
 
   // 不造一个假的输入框；只要聊天路由的真实 composer 意外掉线，就低频
   // 请求原生界面重新同步。这样发送、录音、附件和模型选择仍是原功能。
+  let observedSessionKey = "";
   window.setTimeout(() => {
+    observedSessionKey = currentSessionKey();
+    scheduleRecovery("initial-history", 250);
     window.setInterval(() => {
       if (document.hidden || !location.pathname.startsWith("/chat")) return;
+      const sessionKey = currentSessionKey();
+      if (sessionKey && sessionKey !== observedSessionKey) {
+        observedSessionKey = sessionKey;
+        scheduleRecovery("session-changed", 350);
+        return;
+      }
+      const state = document.querySelector("openclaw-chat-pane")?.state;
+      const expected = historyStatusBySession.get(sessionKey)?.authorityCount;
+      if (Number.isFinite(expected) && Array.isArray(state?.chatMessages)
+          && state.chatMessages.length < expected && !isBusy()) {
+        scheduleRecovery("history-count-regressed", 250);
+        return;
+      }
+      if (sessionKey && !historyStatusBySession.has(sessionKey) && !isBusy()) {
+        scheduleRecovery("history-not-yet-synced", 300);
+        return;
+      }
       if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 300);
     }, 5000);
-  }, 8000);
+  }, 1200);
 
   // 标记流式状态 (由其它注入或页面事件维护)
   document.addEventListener("laolao:streaming", (e) => {

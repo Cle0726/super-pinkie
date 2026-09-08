@@ -44,6 +44,27 @@ test('history projection rebuilds are surfaced and retried with bounded backoff'
   assert.match(sidebar,/errorCode|errorText/);
 });
 
+test('history recovery paginates the legacy 100-message window and merges without duplicates',()=>{
+  const resume=read('ui/injections/laolao-resume.js');
+  assert.match(resume,/HISTORY_PAGE_SIZE = 250/);
+  assert.match(resume,/offset/);
+  assert.match(resume,/hasMore/);
+  assert.match(resume,/nextOffset/);
+  assert.match(resume,/chat\.history pagination did not advance/);
+  assert.match(resume,/mergeCompleteHistory/);
+  assert.match(resume,/chatHistoryPagination/);
+  assert.match(resume,/history-count-regressed/);
+  assert.match(resume,/session-changed/);
+});
+
+test('history recovery fences stale websocket results to the active session and client',()=>{
+  const resume=read('ui/injections/laolao-resume.js');
+  assert.match(resume,/gatewayClient\(\) !== client/);
+  assert.match(resume,/currentSessionKey\(\) !== sessionKey/);
+  assert.match(resume,/__laolaoHistoryStatus/);
+  assert.match(resume,/__laolaoHistoryTestHooks/);
+});
+
 test('internal watchdog, tier controller and gateway-restart turns stay in the transcript but are hidden from the chat UI',()=>{
   const phrases=read('ui/injections/laolao-phrases.js');
   assert.match(phrases,/Your previous turn was interrupted by a gateway restart/);
