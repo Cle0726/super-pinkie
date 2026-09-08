@@ -925,6 +925,7 @@ class Handler(BaseHTTPRequestHandler):
                 '/': ROOT/'ui/roundtable/index.html',
                 '/roundtable.css': ROOT/'ui/roundtable/roundtable.css',
                 '/roundtable-scene.css': ROOT/'ui/roundtable/roundtable-scene.css',
+                 '/roundtable-premium.css': ROOT/'ui/roundtable/roundtable-premium.css',
                 '/roundtable.js': ROOT/'ui/roundtable/roundtable.js',
                 '/workroom.png': ROOT/'ui/assets/laolao-roundtable-workroom-v3.png',
                 '/crest.png': ROOT/'ui/assets/laolao-roundtable-crest-alpha-v2.png',

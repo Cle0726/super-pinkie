@@ -42,6 +42,13 @@ test('session rows keep titles and actions but drop permanent relative timestamp
   assert.doesNotMatch(sidebar,/function relTime\(/);
 });
 
+test('welcome card stylesheet is wired into both installers',()=>{
+  const head=read('ui/injections/laolao-head.fragment.html');
+  assert.match(head,/laolao-welcome-card\.css\?v=welcome1/);
+  assert.match(read('installer/macos/apply-theme.sh'),/laolao-welcome-card\.css/);
+  assert.match(read('installer/windows/apply-theme.ps1'),/laolao-welcome-card\.css/);
+});
+
 test('installer ships the subtraction stylesheet without replacing the pink theme',()=>{
   const installer=read('installer/macos/apply-theme.sh');
   const head=read('ui/injections/laolao-head.fragment.html');

@@ -1,0 +1,31 @@
+/* ROUND TABLE STUDIO Premium Card layout.
+   The discussion remains functional; navigation and seats become edge drawers
+   so the visual center is the welcome/work card from the reference image. */
+:root{--premium-bg:#241923;--premium-card:rgba(255,247,252,.12);--premium-line:rgba(255,236,246,.38);--premium-pink:#f08ab4;--premium-muted:#d2b9c7}
+html,body{background:#1b111b!important}
+.workroom-art{filter:saturate(.72) brightness(.72);transform:scale(1.035)!important}
+.workroom-light{background:radial-gradient(ellipse at 50% 48%,rgba(255,187,218,.17),transparent 38%),linear-gradient(90deg,rgba(20,9,20,.86),rgba(24,10,22,.22) 48%,rgba(20,8,19,.76))!important;opacity:1!important}
+.shell{grid-template-columns:1fr!important;isolation:isolate}
+.history,.seats{position:fixed;z-index:30;top:18px;bottom:18px;width:280px!important;border:1px solid rgba(255,230,242,.18)!important;border-radius:22px!important;background:rgba(28,14,27,.68)!important;box-shadow:0 24px 70px rgba(7,2,8,.36),inset 0 1px rgba(255,255,255,.08)!important;backdrop-filter:blur(22px) saturate(125%)!important;-webkit-backdrop-filter:blur(22px) saturate(125%)!important;transition:transform .28s ease,opacity .2s ease}
+.history{left:18px;transform:translateX(calc(-100% - 28px));padding:24px 15px 16px!important}
+.seats{right:18px;transform:translateX(calc(100% + 28px));padding:20px 12px 14px!important}
+.history:focus-within,.history:hover{transform:translateX(0)}
+.seats:focus-within,.seats:hover{transform:translateX(0)}
+.history:before,.seats:before{content:"";position:absolute;top:50%;width:4px;height:72px;border-radius:99px;background:linear-gradient(#f2a2c3,rgba(242,162,195,.1));box-shadow:0 0 18px rgba(238,127,177,.58)}
+.history:before{right:-7px}.seats:before{left:-7px}
+.discussion{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:38px 24px!important}
+.discussion:after{content:"";position:absolute;z-index:-1;width:min(900px,88vw);height:min(680px,76vh);border-radius:42px;background:radial-gradient(circle at 25% 18%,rgba(255,188,219,.22),transparent 30%),radial-gradient(circle at 82% 78%,rgba(166,204,255,.18),transparent 26%),rgba(255,245,251,.08);filter:blur(1px);box-shadow:0 0 100px rgba(246,141,186,.14)}
+.timeline{position:relative;inset:auto!important;width:min(900px,calc(100vw - 120px));height:min(690px,calc(100vh - 120px));padding:40px clamp(32px,6vw,82px) 168px!important;overflow:auto;border:1px solid var(--premium-line);border-radius:38px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,225,241,.08));box-shadow:0 32px 100px rgba(8,2,10,.38),inset 0 1px rgba(255,255,255,.48);backdrop-filter:blur(30px) saturate(130%);-webkit-backdrop-filter:blur(30px) saturate(130%)}
+.timeline:before{content:"ROUND TABLE STUDIO";display:block;margin:0 0 28px;color:rgba(255,232,243,.62);font:9px ui-monospace,monospace;letter-spacing:.34em;text-align:center}
+.welcome{min-height:100%!important;align-items:center!important;justify-content:center!important}
+.welcome-copy{width:min(570px,100%)!important;margin:0!important;padding:42px 42px 38px!important;text-align:center;border:1px solid rgba(255,255,255,.42)!important;border-radius:30px!important;background:linear-gradient(145deg,rgba(255,255,255,.3),rgba(255,225,241,.11))!important;box-shadow:0 20px 60px rgba(37,8,28,.18),inset 0 1px rgba(255,255,255,.55)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
+.welcome-copy:before{content:"✦";display:block;margin:0 auto 15px;color:#f4b1cc;font-size:30px;text-shadow:0 0 22px rgba(245,137,187,.9)}
+.welcome h2{font-size:clamp(28px,4vw,42px)!important;letter-spacing:.08em!important;text-shadow:0 3px 18px rgba(33,8,24,.32)}
+.welcome p{margin:0 auto 24px!important;max-width:470px;color:#f1dce6!important;line-height:2!important}
+.welcome ul{justify-content:center!important;flex-wrap:wrap}
+.primary{border-radius:999px!important;padding:12px 25px!important;background:linear-gradient(135deg,#ef86b1,#bd609c)!important;box-shadow:0 9px 30px rgba(207,83,143,.35),inset 0 1px rgba(255,255,255,.52)!important}
+#messages{width:min(720px,100%)!important}
+.message-main{max-width:100%!important}.bubble{color:#fff2f7!important}.message.user .bubble{background:rgba(50,21,43,.54)!important;border-color:rgba(255,218,235,.24)!important}
+.composer-wrap{left:50%!important;right:auto!important;bottom:calc(50% - min(345px,38vh))!important;width:min(680px,calc(100vw - 180px))!important;max-width:none!important;transform:translateX(-50%);z-index:25}
+.composer{border:1px solid rgba(255,235,245,.38)!important;border-radius:22px!important;background:rgba(32,15,30,.72)!important;box-shadow:0 18px 48px rgba(8,2,10,.32),inset 0 1px rgba(255,255,255,.16)!important;backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important}
+@media(max-width:720px){.discussion{padding:18px 12px!important}.timeline{width:calc(100vw - 24px);height:calc(100vh - 36px);padding:28px 18px 150px!important;border-radius:26px}.welcome-copy{padding:30px 20px!important}.composer-wrap{width:calc(100vw - 42px)!important;bottom:28px!important}.history,.seats{top:10px;bottom:10px}.history{left:10px}.seats{right:10px}}
