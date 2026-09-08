@@ -151,7 +151,6 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
         '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic4">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">',
-        '<link rel="stylesheet" href="./laolao-welcome-card.css?v=welcome1">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
@@ -183,7 +182,7 @@ function Apply-UISkin {
         'laolao-phrases.js' = 'phrases15';
         'laolao-mode-switcher.js' = 'mode28'; 'laolao-splash.js' = 'splash22';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion4'; 'laolao-resume.js' = 'resume6';
-        'laolao-ui-subtraction.css' = 'subtraction1'; 'laolao-welcome-card.css' = 'welcome1';
+        'laolao-ui-subtraction.css' = 'subtraction1';
         'laolao-classic-shell.css' = 'classic4'; 'laolao-classic-shell.js' = 'classic4';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory1';
         'laolao-deep-think.js' = 'deepthink15'; 'laolao-context-compact.js' = 'contextcompact2'

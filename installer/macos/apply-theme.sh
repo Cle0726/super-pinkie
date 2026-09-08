@@ -100,7 +100,6 @@ apply_ui_skin() {
     laolao-roundtable-entry.js \
     laolao-deep-think.js \
     laolao-context-compact.js \
-    laolao-welcome-card.css \
     laolao-resume.js \
     laolao-roundtable-entry-v2.png \
     laolao-roundtable-entry-v2-clean.png \
@@ -160,14 +159,6 @@ apply_ui_skin() {
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
     perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar15"></script>\n    $1}' "$index_file"
-    DID_CHANGE=1
-  fi
-
-  if ! grep -Fq 'laolao-welcome-card.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-welcome-card.css?v=welcome1">\n</head>}' "$index_file"
-    DID_CHANGE=1
-  elif ! grep -Fq 'laolao-welcome-card.css?v=welcome1' "$index_file"; then
-    perl -0pi -e 's{\./laolao-welcome-card\.css\?v=[^"]*}{./laolao-welcome-card.css?v=welcome1}g' "$index_file"
     DID_CHANGE=1
   fi
 
