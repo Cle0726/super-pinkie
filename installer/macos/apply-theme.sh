@@ -373,20 +373,21 @@ apply_ui_skin() {
   # Custom assets keep stable filenames so upgrades can restore them. Bump the
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
-  if ! grep -Fq './laolao-theme.css?v=theme34' "$index_file"; then
-    perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme34}g' "$index_file"
+  # 处理旧版 index.html 已经被规范化为 /laolao-* 的情况。
+  if ! grep -Fq '/laolao-theme.css?v=theme34' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme34}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.js?v=sidebar15' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar15}g' "$index_file"
+  if ! grep -Fq '/laolao-sidebar.js?v=sidebar15' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^"]*)?}{/laolao-sidebar.js?v=sidebar15}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-sidebar.css?v=sidebar17' "$index_file"; then
     perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar17}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-session-list.js?v=sessions5' "$index_file"; then
-    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions5}g' "$index_file"
+  if ! grep -Fq '/laolao-session-list.js?v=sessions5' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-session-list\.js(?:\?v=[^"]*)?}{/laolao-session-list.js?v=sessions5}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.js?v=stats12' "$index_file"; then
@@ -464,6 +465,9 @@ apply_ui_skin() {
     perl -0pi -e 's{"\./laolao-}{"/laolao-}g' "$index_file"
     DID_CHANGE=1
   fi
+  # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
+  # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
+  perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar15}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions5}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink15}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact2}g' "$index_file"
 }
 
 apply_bundle_icon() {
