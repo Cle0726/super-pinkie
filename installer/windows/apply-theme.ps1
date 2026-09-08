@@ -1,4 +1,4 @@
-﻿# apply-theme.ps1 — Windows 版：把 来啦～老弟 皮肤注入 OpenClaw UI 目录
+# apply-theme.ps1 — Windows 版：把 来啦～老弟 皮肤注入 OpenClaw UI 目录
 #
 # 用法：
 #   .\installer\windows\apply-theme.ps1
@@ -150,11 +150,12 @@ function Apply-UISkin {
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
         '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic4">',
+        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar14"></script>',
-        '<script src="./laolao-session-list.js?v=sessions4"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar15"></script>',
+        '<script src="./laolao-session-list.js?v=sessions5"></script>',
         '<script src="./laolao-usage-stats.js?v=stats12"></script>',
         '<script defer src="./laolao-classic-shell.js?v=classic4"></script>',
         '<script defer src="./laolao-memory.js?v=memory1"></script>',
@@ -163,8 +164,8 @@ function Apply-UISkin {
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink14"></script>',
-        '<script defer src="./laolao-context-compact.js?v=contextcompact1"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink15"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact2"></script>',
         '<script defer src="./laolao-resume.js?v=resume6"></script>',
         '<script defer src="./laolao-splash.js?v=splash22"></script>'
     )
@@ -177,13 +178,14 @@ function Apply-UISkin {
 
     $versions = @{
         'laolao-theme.css' = 'theme34'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar14'; 'laolao-session-list.js' = 'sessions4'; 'laolao-usage-stats.js' = 'stats12';
+        'laolao-sidebar.js' = 'sidebar15'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats12';
         'laolao-phrases.js' = 'phrases15';
         'laolao-mode-switcher.js' = 'mode28'; 'laolao-splash.js' = 'splash22';
         'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion4'; 'laolao-resume.js' = 'resume6';
+        'laolao-ui-subtraction.css' = 'subtraction1';
         'laolao-classic-shell.css' = 'classic4'; 'laolao-classic-shell.js' = 'classic4';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory1';
-        'laolao-deep-think.js' = 'deepthink14'; 'laolao-context-compact.js' = 'contextcompact1'
+        'laolao-deep-think.js' = 'deepthink15'; 'laolao-context-compact.js' = 'contextcompact2'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'

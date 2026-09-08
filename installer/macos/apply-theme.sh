@@ -158,7 +158,7 @@ apply_ui_skin() {
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar14"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar15"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -205,7 +205,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-session-list.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions5"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-phrases.js?v=phrases15' "$index_file"; then
@@ -306,19 +306,19 @@ apply_ui_skin() {
 
   # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink14"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink15"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink14' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink14}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink15' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink15}g' "$index_file"
     DID_CHANGE=1
   fi
 
   # 全模式手动上下文整理；直接调用原生 sessions.compact，不往聊天里塞命令。
   if ! grep -Fq './laolao-context-compact.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-context-compact.js?v=contextcompact1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-context-compact.js?v=contextcompact2"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-context-compact.js?v=contextcompact1' "$index_file"; then
-    perl -0pi -e 's{\./laolao-context-compact\.js\?v=[^"]*}{./laolao-context-compact.js?v=contextcompact1}g' "$index_file"
+  elif ! grep -Fq './laolao-context-compact.js?v=contextcompact2' "$index_file"; then
+    perl -0pi -e 's{\./laolao-context-compact\.js\?v=[^"]*}{./laolao-context-compact.js?v=contextcompact2}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -377,16 +377,16 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-theme\.css(?:\?v=[^"]*)?}{./laolao-theme.css?v=theme34}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-sidebar.js?v=sidebar14' "$index_file"; then
-    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar14}g' "$index_file"
+  if ! grep -Fq './laolao-sidebar.js?v=sidebar15' "$index_file"; then
+    perl -0pi -e 's{\./laolao-sidebar\.js(?:\?v=[^"]*)?}{./laolao-sidebar.js?v=sidebar15}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-sidebar.css?v=sidebar17' "$index_file"; then
     perl -0pi -e 's{\./laolao-sidebar\.css(?:\?v=[^"]*)?}{./laolao-sidebar.css?v=sidebar17}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-session-list.js?v=sessions4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions4}g' "$index_file"
+  if ! grep -Fq './laolao-session-list.js?v=sessions5' "$index_file"; then
+    perl -0pi -e 's{\./laolao-session-list\.js(?:\?v=[^"]*)?}{./laolao-session-list.js?v=sessions5}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-usage-stats.js?v=stats12' "$index_file"; then
