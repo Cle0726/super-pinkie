@@ -305,11 +305,26 @@
   let lastRecoveryAt = 0;
   let recoveryGeneration = 0;
   let historyRebuildRetryAttempt = 0;
+  // 断联期间只登记待恢复，不刷新 pane，避免原生 composer 闪烁。
+  let recoveryPending = false;
+  let pendingRecoveryReason = "gateway-disconnected";
+  let lastFailureEventAt = 0;
 
-  const scheduleRecovery = (reason, delayMs = 300) => {
+  const scheduleRecovery = (reason, delayMs = 1200) => {
+    if (!gatewayConnected()) {
+      recoveryPending = true;
+      pendingRecoveryReason = reason || pendingRecoveryReason;
+      return;
+    }
     if (recoveryTimer) return;
+    if (recoveryInFlight) return recoveryInFlight;
     recoveryTimer = window.setTimeout(() => {
       recoveryTimer = null;
+      if (!gatewayConnected()) {
+        recoveryPending = true;
+        pendingRecoveryReason = reason || pendingRecoveryReason;
+        return;
+      }
       void recoverCurrentChat(reason, {force: true});
     }, Math.max(0, delayMs));
   };
@@ -322,7 +337,12 @@
     const sessionKey = currentSessionKey();
     const pane = document.querySelector("openclaw-chat-pane");
     const state = pane?.state;
-    if (!sessionKey || !state || !gatewayConnected()) return false;
+    if (!sessionKey || !state || !gatewayConnected()) {
+      recoveryPending = true;
+      pendingRecoveryReason = reason || pendingRecoveryReason;
+      return false;
+    }
+    recoveryPending = false;
     const now = Date.now();
     if (!options.force && now - lastRecoveryAt < 300) return false;
     if (recoveryInFlight) return recoveryInFlight;
@@ -426,26 +446,25 @@
 
   // 上游失败卡出现时，清理自定义动画并重拉权威快照。失败续接完全交给
   // 网关看门狗，前端不再模拟停止。
-  let failureRecoveryTimer = null;
   const onRunFailure = () => {
-    clearTimeout(failureRecoveryTimer);
+    const now = Date.now();
+    if (now - lastFailureEventAt < 3000) return;
+    lastFailureEventAt = now;
     clearVisualBusyState();
     setWatchdogStatus("retrying", "上游波动，碧琪正在自动重试…");
-    void recoverCurrentChat("run-failed", {force: true});
-    failureRecoveryTimer = window.setTimeout(async () => {
-      await recoverCurrentChat("run-failed-retry", {force: true});
-    }, 250);
+    scheduleRecovery("run-failed", 1200);
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   // The native chat pane reports projection rebuilds as an RPC error. The
   // sidebar WebSocket shim forwards that signal here so recovery is armed even
   // when no gateway reconnect or foreground event occurred.
   window.addEventListener("pinkie:history-rebuilding", () => {
-    if (!recoveryTimer && !recoveryInFlight) scheduleRecovery("history-rebuilding", 250);
+    recoveryPending = true;
+    pendingRecoveryReason = "history-rebuilding";
+    scheduleRecovery("history-rebuilding", Math.min(8000, 1000 * (2 ** Math.min(historyRebuildRetryAttempt, 3))));
   });
   window.addEventListener("pinkie:tier-complete", () => {
-    void recoverCurrentChat("tier-complete", {force: true});
-    window.setTimeout(() => void recoverCurrentChat("tier-complete-retry", {force: true}), 900);
+    scheduleRecovery("tier-complete", 1200);
   });
 
   // 只有用户真实点击停止，才取消这一轮自动续接。
@@ -491,7 +510,8 @@
         scheduleRecovery("history-not-yet-synced", 300);
         return;
       }
-      if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 300);
+      if (!gatewayConnected() || recoveryPending || recoveryInFlight) return;
+      if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 1200);
     }, 1000);
   }, 400);
 
@@ -536,6 +556,8 @@
       const clientChanged = Boolean(snapshot?.client && snapshot.client !== previousClient);
       if (!connected) {
         if (!gatewayOfflineSince) gatewayOfflineSince = Date.now();
+        recoveryPending = true;
+        pendingRecoveryReason = "gateway-disconnected";
         wasConnected = false;
         previousClient = snapshot?.client || null;
         clearVisualBusyState();
@@ -549,7 +571,10 @@
         previousClient = snapshot.client;
         window.dispatchEvent(new CustomEvent("pinkie:gateway-reconnected"));
         setWatchdogStatus("retrying", "连接已恢复，正在继续当前工作…");
-        scheduleRecovery("gateway-reconnected", 250);
+        if (recoveryPending) {
+          const reason = pendingRecoveryReason;
+          scheduleRecovery(reason, 1200);
+        }
       }
     });
     gateway._laolaoRecoveryUnsubscribe = typeof unsubscribe === "function" ? unsubscribe : null;

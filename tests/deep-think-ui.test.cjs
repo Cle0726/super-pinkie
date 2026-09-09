@@ -44,7 +44,7 @@ test('tier completion refreshes history directly while reload stays a guarded of
   assert.match(src,/refreshVisibleChat/);
   assert.match(src,/typeof state\.refreshCurrentChat === "function"/);
   assert.match(src,/client\.request\("chat\.history"/);
-  assert.match(src,/recoverCurrentChat\("tier-complete"/);
+  assert.match(src,/(?:recoverCurrentChat|scheduleRecovery)\("tier-complete"/);
   assert.doesNotMatch(src,/button\.chat-settings-action/);
   assert.match(src,/if \(body\?\.ready === true && !gatewayConnected\(\)\) reloadRecoveredGateway\(\)/);
   assert.match(src,/now - previous < 8_000/);
