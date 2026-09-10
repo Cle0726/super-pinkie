@@ -109,7 +109,7 @@ def install(home=None):
     if policy_file.exists():
         policy_raw = policy_file.read_bytes()
         policy_data = budget['read_json'](policy_file)
-        required_ratios = {'triggerRatio': .85, 'targetRatio': .6, 'keepRecentRatio': .6}
+        required_ratios = {'triggerRatio': .65, 'targetRatio': .45, 'keepRecentRatio': .45}
         if any(policy_data.get(key) != value for key, value in required_ratios.items()):
             backup=state/'backups'/('context-policy-'+str(time.time_ns()))
             backup.mkdir(parents=True,mode=0o700)

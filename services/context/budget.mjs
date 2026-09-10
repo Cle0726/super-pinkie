@@ -20,19 +20,21 @@ export function compactionBudget(window) {
   const fallback = Number.isFinite(policy.unknownContextWindow) && policy.unknownContextWindow > 0
     ? Math.floor(policy.unknownContextWindow) : 1000000;
   const tokens = Number.isFinite(window) && window > 0 ? Math.floor(window) : fallback;
-  // 放宽 keepRecentRatio 限制，允许高达 0.95，默认 0.85（保留绝大部分历史）
-  const keepRatio = Number.isFinite(policy.keepRecentRatio) && policy.keepRecentRatio >= 0.05 && policy.keepRecentRatio <= 0.98 ? policy.keepRecentRatio : 0.85;
+  const targetRatio = Number.isFinite(policy.targetRatio) && policy.targetRatio >= 0.35 && policy.targetRatio <= 0.75
+    ? policy.targetRatio : 0.45;
+  const keepRatio = Number.isFinite(policy.keepRecentRatio) && policy.keepRecentRatio >= 0.05 && policy.keepRecentRatio <= 0.75 ? policy.keepRecentRatio : 0.45;
   const threshold = Math.max(1, Math.floor(tokens * ratio));
   const requestedKeep = Math.max(1, Math.floor(tokens * keepRatio));
-  // 保留用户设定的高留存偏好，但压缩结果必须比触发线至少低 5%，
-  // 否则 85% 触发后会立刻再次压缩，甚至来不及生成下一段回复。
-  const workingHeadroom = Math.max(1024, Math.floor(tokens * 0.05));
+  // 压缩结果必须比触发线至少低 15%，为摘要、工具定义和下一次回复留空间。
+  const workingHeadroom = Math.max(4096, Math.floor(tokens * 0.15));
   const keepRecent = Math.min(requestedKeep, Math.max(1, threshold - workingHeadroom));
 
   return {
     window: tokens,
-    threshold: threshold,
+    threshold,
     reserve: tokens - threshold,
-    keepRecent
+    keepRecent,
+    targetRatio: Number.isFinite(policy.targetRatio) && policy.targetRatio >= 0.35 && policy.targetRatio <= 0.75
+      ? policy.targetRatio : 0.45
   };
 }

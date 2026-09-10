@@ -125,7 +125,7 @@ def model_budget(ref, config=None, home=None):
     if cap and provider != 'codex-cli' and cap < limit:
         limit, source = cap, source + '+agent-cap'
     threshold = max(1, math.floor(limit*rules['triggerRatio']))
-    # Trigger late, then compact far enough below it to leave room for the
+    # Trigger early, then compact far enough below it to leave room for the
     # generated checkpoint, fixed prompts, tool schemas and the next answer.
     target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-4096))
     requested_keep = max(1, math.floor(limit*rules['keepRecentRatio']))

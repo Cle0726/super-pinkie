@@ -46,7 +46,7 @@ const threshold = resolveCompactionThreshold({
 \t});
 return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
-test('compaction triggers late but leaves enough recovery headroom',()=>{
+test('compaction triggers early and leaves enough recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
@@ -57,7 +57,7 @@ test('compaction triggers late but leaves enough recovery headroom',()=>{
     const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
     const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
     assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
-    assert.equal(b.targetRatio,.6);
+    assert.equal(b.targetRatio,.45);
     assert.ok(b.keepRecent<b.threshold);
     assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
@@ -65,9 +65,9 @@ test('compaction triggers late but leaves enough recovery headroom',()=>{
 test('272k model compacts far enough that summary and prompt overhead cannot immediately re-overflow',()=>{
   const b=compactionBudget(272000);
   assert.deepEqual({threshold:b.threshold,reserve:b.reserve,keepRecent:b.keepRecent},{
-    threshold:231200,
-    reserve:40800,
-    keepRecent:163200
+    threshold:176800,
+    reserve:95200,
+    keepRecent:122400
   });
   // The failed production session added about 30k tokens of summary/system overhead.
   assert.ok(b.keepRecent+30000<b.threshold);
@@ -88,7 +88,7 @@ test('preflight uses the same configured threshold even with server-side compact
     assert.equal(pre(w,20000,4000,w*.9),expected);
   }
 });
-test('current OpenClaw settings and preflight structures keep the same 85 percent policy',()=>{
+test('current OpenClaw settings and preflight structures use the adaptive policy',()=>{
   const runSettings=executable(transform('settings',currentSettings),'settings');
   const runPreflight=executable(transform('preflight',currentPreflight),'pre');
   for(const contextTokenBudget of [16000,128000,1000000]){
