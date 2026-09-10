@@ -18,6 +18,7 @@ const replacements = [
 ];
 export function transform(source) {
   if (source.includes(marker)) return source;
+  if (source.includes('当前会话已保留。上下文压缩暂时未完成')) return marker + '\n' + source;
   let next = source;
   for (const [from, to] of replacements) {
     if (!next.includes(from)) throw new Error('OpenClaw recovery message structure changed');
