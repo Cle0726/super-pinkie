@@ -51,13 +51,13 @@ test('compaction triggers early and leaves enough recovery headroom',()=>{
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
     const b=compactionBudget(window);assert.equal(b.window,resolved);
-    assert.equal(installedPolicy.triggerRatio,.65);
-    assert.equal(b.threshold,Math.floor(resolved*.65));
+    const tier=installedPolicy.adaptiveTiers.find((item)=>resolved<=item.maxContextTokens) || installedPolicy.adaptiveTiers.at(-1);
+    assert.equal(b.threshold,Math.floor(resolved*tier.triggerRatio));
     assert.equal(resolved-b.reserve,b.threshold);
-    const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
-    const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
+    const requestedKeep=Math.floor(resolved*tier.keepRecentRatio);
+    const workingHeadroom=Math.max(4096,Math.floor(resolved*(resolved>=500000?.10:.15)));
     assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
-    assert.equal(b.targetRatio,.45);
+    assert.equal(b.targetRatio,tier.targetRatio);
     assert.ok(b.keepRecent<b.threshold);
     assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
@@ -65,8 +65,8 @@ test('compaction triggers early and leaves enough recovery headroom',()=>{
 test('272k model compacts far enough that summary and prompt overhead cannot immediately re-overflow',()=>{
   const b=compactionBudget(272000);
   assert.deepEqual({threshold:b.threshold,reserve:b.reserve,keepRecent:b.keepRecent},{
-    threshold:176800,
-    reserve:95200,
+    threshold:190400,
+    reserve:81600,
     keepRecent:122400
   });
   // The failed production session added about 30k tokens of summary/system overhead.

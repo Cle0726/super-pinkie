@@ -31,8 +31,7 @@ def policy(home=None):
     home = Path(home or Path.home())
     base = read_json(Path(__file__).with_name('policy.json'))
     base.update(read_json(state_root(home)/'context-policy.json'))
-    # Allow a persisted model-aware boundary. Long tool-heavy sessions need an
-    # earlier trigger so compaction can finish before 200K/272K fallbacks overflow.
+    # Keep legacy defaults, while model_budget selects adaptiveTiers by actual window.
     trigger_ratio = base.get('triggerRatio')
     base['triggerRatio'] = min(.9, max(.5, trigger_ratio)) if isinstance(trigger_ratio, (int, float)) and not isinstance(trigger_ratio, bool) and math.isfinite(trigger_ratio) else .65
     # unknownContextWindow is the fallback for providers that do not declare a
@@ -124,17 +123,21 @@ def model_budget(ref, config=None, home=None):
     cap = positive(config.get('agents', {}).get('defaults', {}).get('contextTokens'))
     if cap and provider != 'codex-cli' and cap < limit:
         limit, source = cap, source + '+agent-cap'
-    threshold = max(1, math.floor(limit*rules['triggerRatio']))
-    # Trigger early, then compact far enough below it to leave room for the
-    # generated checkpoint, fixed prompts, tool schemas and the next answer.
-    target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-4096))
-    requested_keep = max(1, math.floor(limit*rules['keepRecentRatio']))
-    # The checkpoint preserves compacted history. The raw tail must not consume
-    # nearly the whole trigger budget again or recovery will loop forever.
-    working_headroom = max(4096, math.floor(limit*.15))
+    tiers = sorted((item for item in rules.get('adaptiveTiers', [])
+                    if isinstance(item, dict) and positive(item.get('maxContextTokens'))),
+                   key=lambda item: item['maxContextTokens'])
+    tier = next((item for item in tiers if limit <= item['maxContextTokens']), tiers[-1] if tiers else {})
+    trigger = tier.get('triggerRatio', rules['triggerRatio'])
+    target_ratio = tier.get('targetRatio', rules['targetRatio'])
+    keep_ratio = tier.get('keepRecentRatio', rules['keepRecentRatio'])
+    threshold = max(1, math.floor(limit*trigger))
+    target = min(max(1, math.floor(limit*target_ratio)), max(1, threshold-4096))
+    requested_keep = max(1, math.floor(limit*keep_ratio))
+    working_headroom = max(4096, math.floor(limit*(.10 if limit >= 500000 else .15)))
     keep_recent = min(requested_keep, max(1, threshold-working_headroom))
     return {'model':ref, 'window':limit, 'threshold':threshold, 'reserve':limit-threshold,
-            'target':target, 'keepRecent':keep_recent, 'source':source}
+            'target':target, 'keepRecent':keep_recent, 'triggerRatio':trigger,
+            'targetRatio':target_ratio, 'source':source}
 
 
 def history_text(summary, rows):

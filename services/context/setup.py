@@ -110,7 +110,9 @@ def install(home=None):
         policy_raw = policy_file.read_bytes()
         policy_data = budget['read_json'](policy_file)
         required_ratios = {'triggerRatio': .65, 'targetRatio': .45, 'keepRecentRatio': .45}
-        if any(policy_data.get(key) != value for key, value in required_ratios.items()):
+        if not isinstance(policy_data.get('adaptiveTiers'), list):
+            policy_data['adaptiveTiers'] = budget['read_json'](Path(__file__).with_name('policy.json')).get('adaptiveTiers', [])
+        if any(policy_data.get(key) != value for key, value in required_ratios.items()) or not isinstance(policy_data.get('adaptiveTiers'), list):
             backup=state/'backups'/('context-policy-'+str(time.time_ns()))
             backup.mkdir(parents=True,mode=0o700)
             shutil.copy2(policy_file,backup/'context-policy.json')

@@ -2,6 +2,13 @@
   "triggerRatio": 0.65,
   "targetRatio": 0.45,
   "keepRecentRatio": 0.45,
+  "adaptiveTiers": [
+    {"maxContextTokens": 128000, "triggerRatio": 0.60, "targetRatio": 0.35, "keepRecentRatio": 0.35},
+    {"maxContextTokens": 200000, "triggerRatio": 0.65, "targetRatio": 0.40, "keepRecentRatio": 0.40},
+    {"maxContextTokens": 272000, "triggerRatio": 0.70, "targetRatio": 0.45, "keepRecentRatio": 0.45},
+    {"maxContextTokens": 500000, "triggerRatio": 0.78, "targetRatio": 0.50, "keepRecentRatio": 0.50},
+    {"maxContextTokens": 1000000, "triggerRatio": 0.85, "targetRatio": 0.60, "keepRecentRatio": 0.60}
+  ],
   "unknownContextWindow": 1000000,
   "minWindowTokens": 500000,
   "modelLimits": {
