@@ -827,6 +827,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     fi
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-context-budget.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-compaction-boundary-recovery.mjs"
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-same-session-recovery.mjs"
     if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
       "$PYTHON_BIN" "$REPO_ROOT/services/context/setup.py"
       # Update the live extensions too. A hotfix that changes only the App's

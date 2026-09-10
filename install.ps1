@@ -1,4 +1,4 @@
-﻿# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
+# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
 #
 # 做了什么：
 #   1. 把 prompts\*.txt 复制到 %USERPROFILE%\.openclaw\（可用 UR_PROMPTS_DIR 覆盖）
@@ -75,6 +75,8 @@ node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Context protection patch failed" }
 node (Join-Path $RepoDir "patch\apply-compaction-boundary-recovery.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Compaction boundary recovery patch failed" }
+node (Join-Path $RepoDir "patch\apply-same-session-recovery.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Same-session recovery patch failed" }
 node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Local unrestricted policy patch failed" }
 python (Join-Path $RepoDir "services\context\setup.py")

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {apply,transform} from '../patch/apply-compaction-boundary-recovery.mjs';
+import {transform as transformSameSession} from '../patch/apply-same-session-recovery.mjs';
 
 const fixture=`function sessionBranchEntryToMessage(entry) { return entry.message; }
 function collectSessionBranchMessages(sessionManager) {
@@ -52,6 +53,14 @@ test('repairs empty preparation with a recent-turn boundary and is idempotent',(
   assert.match(output,/effectiveFirstKeptEntryId = resolveRecoveryFirstKeptEntryId/);
   assert.equal((output.match(/firstKeptEntryId: effectiveFirstKeptEntryId,/g)||[]).length,3);
   assert.equal(transform(output),output);
+});
+
+test('same-session recovery messaging keeps /new as last-resort only',()=>{
+  const source='return `⚠️ Context is too large and auto-compaction could not recover this turn.${options?.includeDetails && reason ? ` Reason: ${reason}.` : ""} Try again, use /compact, or use /new to start a fresh session.`;\nconst prefix = params.preserveSessionMapping ? "⚠️ Auto-compaction could not recover this turn. I kept this conversation mapped to the current session. Please try again, use /compact, or use /new to start a fresh session." : params.duringCompaction ? "⚠️ Context limit exceeded during compaction. I\'ve reset our conversation to start fresh - please try again." : "⚠️ Context limit exceeded. I\'ve reset our conversation to start fresh - please try again.";';
+  const output=transformSameSession(source);
+  assert.match(output,/当前会话已保留/);
+  assert.match(output,/通常不需要使用 \/new/);
+  assert.doesNotMatch(output,/Try again, use \/compact/);
 });
 
 test('apply backs up and patches exactly one safeguard bundle',()=>{
