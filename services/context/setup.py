@@ -9,6 +9,15 @@ import time
 
 budget = runpy.run_path(str(Path(__file__).with_name('context_budget.py')))
 
+# Summarising a near-full GPT session with the same GPT route can deadlock the
+# session for the whole compaction timeout. Prefer a configured long-context
+# Gemini route for maintenance work while leaving the user's chat model alone.
+COMPACTION_MODEL_PREFERENCES = (
+    'mm/gemini-3.8-flash-tiered',
+    'mm/gemini-3.7-flash-tiered',
+    'mm/gemini-3.6-flash-tiered',
+)
+
 
 def replace_preserving_file_flags(temp_name, target):
     """Atomic replace without dropping macOS user-immutable protection."""
@@ -82,17 +91,29 @@ def install(home=None):
     memory_flush.setdefault('enabled', True)
     memory_flush.pop('systemPrompt', None)
     memory_flush.pop('prompt', None)
+    configured_refs = {
+        provider+'/'+str(model.get('id', ''))
+        for provider, entry in config.get('models', {}).get('providers', {}).items()
+        for model in entry.get('models', []) if model.get('id')
+    }
+    maintenance_model = next((ref for ref in COMPACTION_MODEL_PREFERENCES if ref in configured_refs), None)
+    if maintenance_model:
+        # setdefault preserves an explicit operator choice. The separate model
+        # affects only summaries/memory flushes, never normal user replies.
+        compaction.setdefault('model', maintenance_model)
+        memory_flush.setdefault('model', maintenance_model)
     changed = config != json.loads(raw)
     policy_changed = False
     state.mkdir(parents=True,exist_ok=True,mode=0o700)
     if policy_file.exists():
         policy_raw = policy_file.read_bytes()
         policy_data = budget['read_json'](policy_file)
-        if policy_data.get('triggerRatio') != .85:
+        required_ratios = {'triggerRatio': .85, 'targetRatio': .6, 'keepRecentRatio': .6}
+        if any(policy_data.get(key) != value for key, value in required_ratios.items()):
             backup=state/'backups'/('context-policy-'+str(time.time_ns()))
             backup.mkdir(parents=True,mode=0o700)
             shutil.copy2(policy_file,backup/'context-policy.json')
-            policy_data['triggerRatio'] = .85
+            policy_data.update(required_ratios)
             fd,tmp=tempfile.mkstemp(dir=policy_file.parent,prefix='.context-policy-')
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as handle:

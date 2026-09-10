@@ -10,7 +10,7 @@
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(location.search).get("session") || "";
-    if (/^agent:(main|project|thinking|unrestricted):/.test(routed)) return routed;
+    if (/^agent:(main|project|thinking|learning|unrestricted):/.test(routed)) return routed;
     const active = document.querySelector(".sidebar-recent-session--active[data-session-key]");
     return active?.dataset?.sessionKey || "";
   };

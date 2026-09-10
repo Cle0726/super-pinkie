@@ -53,6 +53,21 @@
       sessionKey: "agent:thinking:main",
     },
     {
+      id: "learning",
+      label: "学习模式",
+      address: "先生",
+      asset: "/laolao-mode-learning.svg?v=states1",
+      avatar: "/laolao-mode-learning-hd.png?v=avatars1",
+      transition: "/laolao-mode-transition-learning.png?v=transition1",
+      phrases: [
+        "先生稍等，碧琪把学习桌和笔记本摆好啦…",
+        "先找到最关键的那个概念，再把它弄懂弄会！",
+        "小实验准备好了，学会以后马上用起来…",
+      ],
+      readyPhrase: "学习小屋就位！",
+      sessionKey: "agent:learning:main",
+    },
+    {
       id: "unrestricted",
       label: "无限制模式",
       address: "先生",
@@ -74,6 +89,56 @@
   let switching = false;
   let preloading = false;
 
+  // A small, fixed particle field gives the empty-chat identity a one-shot
+  // materialisation effect without a continuous drawing loop. Every dot animates
+  // only on mount or mode entry, then becomes fully inert.
+  const WELCOME_PARTICLES = [
+    [-112, -34, 2, 0], [-99, 18, 3, 55], [-88, -4, 2, 110],
+    [-76, 42, 2, 25], [-68, -52, 3, 145], [-56, 28, 2, 75],
+    [-48, -18, 3, 180], [-37, 51, 2, 120], [-29, -42, 2, 210],
+    [-20, 17, 3, 155], [-12, -7, 2, 245], [-5, 39, 2, 195],
+    [7, -38, 2, 220], [15, 8, 3, 135], [24, 45, 2, 185],
+    [34, -17, 2, 90], [43, 30, 3, 235], [54, -48, 2, 40],
+    [63, 12, 2, 165], [74, 43, 3, 100], [83, -26, 2, 205],
+    [94, 4, 3, 65], [104, 32, 2, 150], [115, -14, 2, 15],
+  ];
+
+  const syncMinimalWelcome = (mode, replay = false) => {
+    document.querySelectorAll(".agent-chat__welcome").forEach((welcome) => {
+      welcome.setAttribute("data-laolao-minimal-welcome", "1");
+      let particles = welcome.querySelector(".laolao-welcome-particles");
+      const created = !particles;
+      if (!particles) {
+        particles = document.createElement("span");
+        particles.className = "laolao-welcome-particles";
+        particles.setAttribute("aria-hidden", "true");
+        for (const [x, y, size, delay] of WELCOME_PARTICLES) {
+          const dot = document.createElement("i");
+          dot.style.setProperty("--particle-x", `${x}px`);
+          dot.style.setProperty("--particle-y", `${y}px`);
+          dot.style.setProperty("--particle-size", `${size}px`);
+          dot.style.setProperty("--particle-delay", `${delay}ms`);
+          particles.append(dot);
+        }
+        welcome.append(particles);
+      }
+      const changed = welcome.getAttribute("data-laolao-welcome-mode") !== mode.id;
+      if (created || changed || replay) {
+        welcome.setAttribute("data-laolao-welcome-mode", mode.id);
+        if (replay) welcome.classList.remove("laolao-welcome--materializing");
+        window.requestAnimationFrame(() => {
+          if (welcome.getAttribute("data-laolao-welcome-mode") !== mode.id) return;
+          welcome.classList.add("laolao-welcome--materializing");
+          window.setTimeout(() => {
+            if (welcome.getAttribute("data-laolao-welcome-mode") === mode.id) {
+              welcome.classList.remove("laolao-welcome--materializing");
+            }
+          }, 1100);
+        });
+      }
+    });
+  };
+
   const currentSessionKey = () => {
     const routed = new URLSearchParams(window.location.search).get("session") || "";
     if (routed) return routed;
@@ -86,6 +151,7 @@
     const session = currentSessionKey();
     if (session.startsWith("agent:project:")) return "project";
     if (session.startsWith("agent:thinking:")) return "thinking";
+    if (session.startsWith("agent:learning:")) return "learning";
     if (session.startsWith("agent:unrestricted:")) return "unrestricted";
     if (session.startsWith("agent:main:")) return "chat";
     return null;
@@ -93,6 +159,12 @@
 
   const activeMode = () => modeFromSession() || localStorage.getItem(storageKey) || "chat";
   const modeById = (id) => modes.find((mode) => mode.id === id) || modes[0];
+
+  // The native startup movie sits above the mounted chat. Replay the short
+  // materialisation only after that cover is actually gone, so the user sees it.
+  window.addEventListener("laolao:splash-cleared", () => {
+    syncMinimalWelcome(modeById(activeMode()), true);
+  });
 
   const syncModePresentation = (mode) => {
     const previousMode = document.documentElement.getAttribute("data-laolao-mode");
@@ -126,6 +198,8 @@
         avatar.setAttribute("alt", `碧琪·${mode.label}`);
       }
     });
+
+    syncMinimalWelcome(mode);
 
     document.querySelectorAll(".laolao-classic-breadcrumb__mode").forEach((label) => {
       if (label.textContent !== mode.label) label.textContent = mode.label;

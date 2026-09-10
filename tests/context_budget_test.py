@@ -21,15 +21,17 @@ class ContextBudgetTests(unittest.TestCase):
         unknown=budget['model_budget']('other/same',cfg,self.home)
         self.assertEqual('conservative-fallback',unknown['source']);self.assertEqual(1000000,unknown['window'])
         self.assertEqual(850000,unknown['threshold'])
-        self.assertEqual(800000,unknown['keepRecent'])
+        self.assertEqual(600000,unknown['keepRecent'])
+        self.assertEqual(600000,unknown['target'])
 
-    def test_existing_policy_is_forced_to_exactly_eighty_five_percent_without_losing_other_values(self):
+    def test_existing_policy_is_migrated_to_safe_hysteresis_without_losing_other_values(self):
         config=self.home/'.openclaw/openclaw.json';config.parent.mkdir();config.write_text('{}')
         policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json';policy.parent.mkdir(parents=True)
         policy.write_text(json.dumps({'triggerRatio':.96,'targetRatio':.9,'keepRecentRatio':.85,'unknownContextWindow':1000000,'custom':'keep'}))
         self.assertTrue(setup['install'](self.home))
         saved=json.loads(policy.read_text())
-        self.assertEqual(.85,saved['triggerRatio']);self.assertEqual('keep',saved['custom'])
+        self.assertEqual(.85,saved['triggerRatio']);self.assertEqual(.6,saved['targetRatio'])
+        self.assertEqual(.6,saved['keepRecentRatio']);self.assertEqual('keep',saved['custom'])
         self.assertFalse(setup['install'](self.home))
     def test_codex_metadata_and_explicit_override(self):
         cache=self.home/'.codex/models_cache.json';cache.parent.mkdir()
@@ -81,6 +83,34 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertEqual({'enabled':True,'model':'a/b'},compaction['memoryFlush'])
         self.assertNotIn('maxHistoryShare',compaction)
         self.assertNotIn('identifierInstructions',compaction)
+    def test_long_context_maintenance_uses_configured_gemini_without_changing_chat_model(self):
+        p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
+        p.write_text(json.dumps({
+            'models':{'providers':{
+                'mm':{'models':[{'id':'gemini-3.8-flash-tiered','contextWindow':1000000}]},
+                'clekk':{'models':[{'id':'gpt-5.6-luna','contextWindow':272000}]},
+            }},
+            'agents':{'defaults':{'model':{'primary':'clekk/gpt-5.6-luna'}}},
+        }))
+        self.assertTrue(setup['install'](self.home))
+        saved=json.loads(p.read_text())
+        self.assertEqual({'primary':'clekk/gpt-5.6-luna'},saved['agents']['defaults']['model'])
+        compaction=saved['agents']['defaults']['compaction']
+        self.assertEqual('mm/gemini-3.8-flash-tiered',compaction['model'])
+        self.assertEqual('mm/gemini-3.8-flash-tiered',compaction['memoryFlush']['model'])
+
+    def test_explicit_compaction_models_are_preserved(self):
+        p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
+        p.write_text(json.dumps({
+            'models':{'providers':{'mm':{'models':[{'id':'gemini-3.8-flash-tiered'}]}}},
+            'agents':{'defaults':{'compaction':{
+                'model':'operator/summary','memoryFlush':{'model':'operator/memory'},
+            }}},
+        }))
+        self.assertTrue(setup['install'](self.home))
+        compaction=json.loads(p.read_text())['agents']['defaults']['compaction']
+        self.assertEqual('operator/summary',compaction['model'])
+        self.assertEqual('operator/memory',compaction['memoryFlush']['model'])
     def test_history_summary_keeps_every_old_chunk_and_latest_message(self):
         rows=[{'id':1,'sender':'user','body':'早期重要目标。'*4000},{'id':2,'sender':'codex','body':'已检查文件。'*3000},{'id':3,'sender':'user','body':'继续处理'}]
         original=json.dumps(rows,ensure_ascii=False);calls=[]

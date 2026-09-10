@@ -520,6 +520,10 @@ class BundledRuntime:
         environment["PINKIE_NODE_BIN"] = str(self.node)
         environment["PINKIE_OPENCLAW_ENTRY"] = str(self.openclaw)
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
+        # The private loopback gateway belongs to this desktop user. Keep all
+        # registered tools available in every CLE Kk mode; upstream's
+        # non-owner sender filter is intended for shared/public gateways.
+        environment["CLE_KK_LOCAL_UNRESTRICTED"] = "1"
         environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
         environment["PINKIE_GATEWAY_URL"] = GATEWAY_URL
         environment["PINKIE_STATE_ROOT"] = str(state_root())

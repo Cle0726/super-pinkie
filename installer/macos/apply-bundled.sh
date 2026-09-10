@@ -38,6 +38,7 @@ if [[ ! -f "$MARKER" ]]; then
   install_persona "$REPO_ROOT/personas/chat" "$HOME/.openclaw/workspace" chat
   install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
   install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
+  install_persona "$REPO_ROOT/personas/learning" "$HOME/.openclaw/workspace-learning" learning
   install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
   OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
   if [[ -z "$OPENCLAW_BIN" ]]; then
@@ -50,12 +51,18 @@ if [[ ! -f "$MARKER" ]]; then
   fi
   if [[ -n "$OPENCLAW_BIN" ]]; then
     PROJECT_AGENT_ADDED=0
+    LEARNING_AGENT_ADDED=0
     if ! "$OPENCLAW_BIN" agents list --json 2>/dev/null | grep -Eq '"id"[[:space:]]*:[[:space:]]*"project"'; then
       "$OPENCLAW_BIN" agents add project --non-interactive --workspace "$HOME/.openclaw/workspace-project"
       PROJECT_AGENT_ADDED=1
     fi
     "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
-    if [[ "$PROJECT_AGENT_ADDED" == "1" && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
+    if ! "$OPENCLAW_BIN" agents list --json 2>/dev/null | grep -Eq '"id"[[:space:]]*:[[:space:]]*"learning"'; then
+      "$OPENCLAW_BIN" agents add learning --non-interactive --workspace "$HOME/.openclaw/workspace-learning"
+      LEARNING_AGENT_ADDED=1
+    fi
+    "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
+    if [[ ("$PROJECT_AGENT_ADDED" == "1" || "$LEARNING_AGENT_ADDED" == "1") && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
       "$OPENCLAW_BIN" gateway restart >/dev/null 2>&1 || true
     fi
   fi

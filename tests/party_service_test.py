@@ -101,9 +101,12 @@ class PartyTests(unittest.TestCase):
         self.assertIn('danger-full-access', write_command)
 
     def test_write_and_host_dispatch_use_full_access_by_default(self):
-        result = self.manager.send(self.a['id'], dict(requestId='request001', agent='codex', text='改测试文件', permission='workspace-write'))
+        # A stale cached frontend may still send the retired read-only field;
+        # new user jobs must nevertheless receive the product's full access.
+        result = self.manager.send(self.a['id'], dict(requestId='request001', agent='codex', text='改测试文件', permission='read-only'))
         task = self.store.task(result['taskId'])
         self.assertEqual('queued', task['status'])
+        self.assertEqual('workspace-write', task['permission'])
         self.manager.pool.submit.assert_called_once()
         with self.assertRaises(ValueError):
             self.manager.approve(self.b['id'], task['id'])

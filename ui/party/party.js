@@ -58,12 +58,12 @@
       const row=element('div','member'+(!agent.available?' disabled':''));row.append(avatar(agent.id));
       const info=element('div','member-info');info.append(element('strong','',names[agent.id]),element('small','engine',engines[agent.id]),element('small','',agent.available?(selected.includes(agent.id)?'随时可以叫'+names[agent.id]:'还没有加入这个群'):'等待连接，暂不能派工'));
       row.append(info);row.title=names[agent.id]+' · '+(agent.reason||agent.detail);
-      const at=element('button','','@');at.type='button';at.title='发消息给'+names[agent.id];at.setAttribute('aria-label',at.title);at.disabled=!(agent.available&&selected.includes(agent.id)&&state.room&&!state.room.archived);at.onclick=()=>{$('recipient').value=agent.id;syncPermission();renderModels();saveDraft();$('draft').focus();};row.append(at);
+      const at=element('button','','@');at.type='button';at.title='发消息给'+names[agent.id];at.setAttribute('aria-label',at.title);at.disabled=!(agent.available&&selected.includes(agent.id)&&state.room&&!state.room.archived);at.onclick=()=>{$('recipient').value=agent.id;renderModels();saveDraft();$('draft').focus();};row.append(at);
       $('members').append(row);
     }
     const previous=$('recipient').value;$('recipient').replaceChildren();
     for(const id of selected){const option=element('option','',names[id]+' · '+engines[id]);option.value=id;option.disabled=!state.agents.find(a=>a.id===id)?.available;$('recipient').append(option);}
-    if(selected.includes(previous))$('recipient').value=previous;syncPermission();
+    if(selected.includes(previous))$('recipient').value=previous;
     $('project-path').textContent=state.room?.path||'每个群单独绑定一个文件夹。';$('copy-path').hidden=!state.room;$('show-project').hidden=!state.room||!window.webkit?.messageHandlers?.laolaoProjectFolder;renderModels();
   }
   function renderModels(){
@@ -79,7 +79,6 @@
   }
   $('refresh-models').onclick=()=>loadModels(true);
   $('model').onchange=async()=>{if(!state.room)return;const roomId=state.room.id;const agent=$('recipient').value;const value=$('model').value;state.modelSaving=true;$('model').disabled=true;renderJobs();try{await applyRoomSettings(roomId,{models:{...state.room.models,[agent]:value}});}catch(e){toast(e.message);}finally{state.modelSaving=false;renderModels();renderJobs();}};
-  function syncPermission(){const enabled=$('recipient').value==='codex';$('permission-label').hidden=!enabled;if(!enabled)$('permission').value='read-only';}
   function setReply(message){state.reply=message;$('reply-preview').hidden=!message;$('reply-preview').querySelector('span').textContent=message?(names[message.sender]||message.sender)+'：'+message.body:'';}
   function messageNode(message){
     if(message.sender==='system'){
@@ -181,7 +180,7 @@
     state.epoch++;state.hasOlder=false;state.room=state.rooms.find(r=>r.id===id)||null;state.messages.clear();state.tasks=[];state.signature='';state.query='';$('message-query').value='';
     let saved;try{saved=drafts.read(localStorage,id);}catch{saved=drafts.read(null,id);}setReply(saved.reply);$('draft').value=saved.text;
     const url=new URL(location.href);if(state.room)url.searchParams.set('room',id);else url.searchParams.delete('room');history.replaceState({},'',url);
-    roomHeader();renderRooms();renderMembers();if(state.room?.members.includes(saved.recipient))$('recipient').value=saved.recipient;$('permission').value='read-only';syncPermission();renderModels();renderMessages();renderJobs();
+    roomHeader();renderRooms();renderMembers();if(state.room?.members.includes(saved.recipient))$('recipient').value=saved.recipient;renderModels();renderMessages();renderJobs();
     const epoch=state.epoch;await refresh();if(state.epoch===epoch){state.loadingRoom=false;renderJobs();$('timeline').scrollTop=$('timeline').scrollHeight;connectLive();}
   }
   function createDialog(){
@@ -214,7 +213,7 @@
   $('restore-room').onclick=async()=>{if(!state.room)return;try{await applyRoomSettings(state.room.id,{archived:false});toast('群聊恢复了');}catch(e){toast(e.message);}};
   $('refresh-members').onclick=async()=>{$('refresh-members').disabled=true;try{await syncMetadata();toast('连接状态已刷新');}catch(e){toast(e.message);}finally{$('refresh-members').disabled=false;}};
   $('new-room').onclick=createDialog;$('welcome-new').onclick=createDialog;$('close-create').onclick=()=>$('create-dialog').close();$('room-filter').oninput=renderRooms;
-  $('recipient').onchange=()=>{syncPermission();renderModels();saveDraft();};$('reply-preview').querySelector('button').onclick=()=>{setReply(null);saveDraft();};
+  $('recipient').onchange=()=>{renderModels();saveDraft();};$('reply-preview').querySelector('button').onclick=()=>{setReply(null);saveDraft();};
   $('draft').oninput=saveDraft;window.addEventListener('pagehide',saveDraft);
   const memberRailKey='pinkie.party.members.collapsed.v1';
   function setMembersCollapsed(collapsed,persist=true){
@@ -236,7 +235,7 @@
     event.preventDefault();if(!state.room||state.room.archived||state.loadingRoom||state.modelSaving||!$('draft').value.trim()||state.sending.has(state.room.id))return;const text=$('draft').value.trim();const roomId=state.room.id;const draftRecipient=$('recipient').value;saveDraft();
     const mention=text.match(/^@(碧琪|紫悦|云宝|Codex|CLE\s*Kk|OpenClaw)\s+/i);let agent=$('recipient').value;
     if(mention)agent=Object.keys(names).find(id=>names[id].toLowerCase()===mention[1].toLowerCase()||engines[id]?.toLowerCase()===mention[1].toLowerCase())||agent;
-    const payload={agent,text,model:state.room.models?.[agent]||'',permission:agent==='codex'?$('permission').value:'read-only',reply:state.reply?.id||null};const key=roomId+JSON.stringify(payload);
+    const payload={agent,text,model:state.room.models?.[agent]||'',permission:'workspace-write',reply:state.reply?.id||null};const key=roomId+JSON.stringify(payload);
     if(!state.requests.has(key)){try{state.requests.set(key,drafts.requestId(localStorage,roomId,payload,()=>crypto.randomUUID()));}catch{state.requests.set(key,crypto.randomUUID());}}
     const requestId=state.requests.get(key);state.sending.add(roomId);renderJobs();
     try{await api(`/api/rooms/${roomId}/send`,{requestId,...payload});state.requests.delete(key);

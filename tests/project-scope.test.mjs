@@ -25,6 +25,13 @@ test('bindings are independent for all four modes, persisted, immutable and reje
   assert.throws(()=>guard.bind('agent:other:a',a),/四模式/);
 });
 
+test('learning mode accepts an independent project binding key',t=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-learning-scope-')); t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-learning-project-')); t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const guard=new ProjectScope({home});
+  assert.equal(guard.bind('agent:learning:lesson',root,'学习项目').root,fs.realpathSync(root));
+});
+
 test('relative paths use the project while absolute and symlinked paths may reach the computer',t=>{
   const {guard,ctx,a,b}=fixture(t);
   assert.equal(guard.before({toolName:'read',params:{path:'a.txt'}},ctx).params.path,path.join(a,'a.txt'));
@@ -40,27 +47,45 @@ test('runtime-expanded paths under the hidden agent workspace are remapped to th
   const internal=path.join(workspace,'nested/result.txt');
   assert.equal(guard.before({toolName:'write',params:{path:internal,content:'x'}},ctx).params.path,path.join(a,'nested/result.txt'));
   assert.equal(guard.before({toolName:'read',params:{path:path.join(b,'b.txt')}},ctx).params.path,path.join(b,'b.txt'));
-  const run=guard.before({toolName:'exec',params:{command:'pwd',workdir:workspace}},ctx).params;
-  assert.equal(run.workdir,a);
+  assert.equal(guard.before({toolName:'exec',params:{command:'pwd',workdir:workspace}},ctx),undefined);
 });
 
-test('all configured tools pass through and exec only receives a default project directory',t=>{
-  const {guard,ctx,a,b}=fixture(t);
+test('all configured tools pass through and command tools are never rewritten',t=>{
+  const {guard,ctx}=fixture(t);
   for(const toolName of ['browser','gateway','memory_search','image_generate','process','sessions_send']){
     assert.equal(guard.before({toolName,params:{sample:true}},ctx),undefined);
   }
-  const anchored=guard.before({toolName:'exec',params:{command:'pwd'}},ctx).params;
-  assert.equal(anchored.command,'pwd');assert.equal(anchored.workdir,a);
-  const external=guard.before({toolName:'exec',params:{command:'pwd',workdir:b,elevated:true,host:'node'}},ctx).params;
-  assert.equal(external.workdir,b);assert.equal(external.elevated,true);assert.equal(external.host,'node');
+  assert.equal(guard.before({toolName:'exec',params:{command:'pwd'}},ctx),undefined);
+  assert.equal(guard.before({toolName:'apply_patch',params:{input:'anything'}},ctx),undefined);
 });
 
-test('patches may target project-relative or computer-absolute files',t=>{
-  const {guard,ctx,a,b}=fixture(t);
+test('Codex native exec and free-form patch payloads pass through without approval tampering',t=>{
+  const {guard,ctx}=fixture(t);
+  assert.equal(guard.before({
+    toolName:'exec',
+    params:{cmd:'pwd',command:'pwd'},
+  },ctx),undefined);
+  assert.equal(guard.before({
+    toolName:'apply_patch',
+    params:{value:'*** Begin Patch\n*** End Patch'},
+  },ctx),undefined);
+});
+
+test('project anchor failures never become tool permission blocks',t=>{
+  const {guard,ctx}=fixture(t);
+  assert.equal(guard.before({toolName:'apply_patch',params:{input:'not a patch'}},ctx),undefined);
+  assert.equal(guard.before({
+    toolName:'sessions_spawn',
+    params:{runtime:'acp',task:'use the requested runtime'},
+  },ctx),undefined);
+});
+
+test('patches may target project-relative or computer-absolute files without plugin interception',t=>{
+  const {guard,ctx,b}=fixture(t);
   const relative='*** Begin Patch\n*** Update File: a.txt\n@@\n-project A\n+changed\n*** End Patch';
-  assert.ok(guard.before({toolName:'apply_patch',params:{input:relative}},ctx).params.input.includes(path.join(a,'a.txt')));
+  assert.equal(guard.before({toolName:'apply_patch',params:{input:relative}},ctx),undefined);
   const absolute=relative.replace('a.txt',path.join(b,'b.txt'));
-  assert.ok(guard.before({toolName:'apply_patch',params:{input:absolute}},ctx).params.input.includes(path.join(b,'b.txt')));
+  assert.equal(guard.before({toolName:'apply_patch',params:{input:absolute}},ctx),undefined);
 });
 
 test('delegation stays a standard child of the current session and inherits its project anchor',t=>{
@@ -87,9 +112,10 @@ test('plain chats are untouched and the prompt describes a project anchor, not a
 
 test('real commands start in the project and can access a sibling folder',t=>{
   const {guard,ctx,a,b}=fixture(t);
-  const run=guard.before({toolName:'exec',params:{command:'/bin/cat '+JSON.stringify(path.join(b,'b.txt'))}},ctx).params;
-  const result=spawnSync('/bin/sh',['-c',run.command],{cwd:run.workdir,encoding:'utf8'});
-  assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'project B');assert.equal(run.workdir,a);
+  const command='/bin/cat '+JSON.stringify(path.join(b,'b.txt'));
+  assert.equal(guard.before({toolName:'exec',params:{command}},ctx),undefined);
+  const result=spawnSync('/bin/sh',['-c',command],{cwd:a,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'project B');
 });
 
 test('registration uses authenticated RPC and official project-anchor hooks',()=>{

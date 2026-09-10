@@ -4,7 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
-const modes = /^agent:(main|project|thinking|unrestricted):[^\s]+$/;
+const modes = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
 const defaultStateRoot = (home, useEnvironment) => useEnvironment && process.env.PINKIE_STATE_ROOT
   ? process.env.PINKIE_STATE_ROOT
   : path.join(home, 'Library/Application Support/SuperPinkie');
@@ -95,6 +95,18 @@ export class ProjectScope {
     try {
       const b=this.binding(ctx);if(!b)return;
       const p={...event.params};const name=event.toolName;
+      // Codex app-server native tools are already launched with the bound
+      // project as their authoritative cwd. The relay normalizes exec_command
+      // to `exec` while retaining `cmd`, and wraps free-form apply_patch input
+      // as `value`. Rewriting either payload makes the app-server correctly
+      // reject it as a tampered approval request, so pass these native calls
+      // through unchanged. This does not reduce access: absolute paths remain
+      // available and the native session cwd is still the selected project.
+      // Never rewrite native-capable command or patch tools. Their payload
+      // shape varies between direct app-server calls and code-mode nesting,
+      // and the native approval bridge must receive byte-for-byte parameters.
+      // The prompt already gives the model the absolute selected project path.
+      if(name==='exec'||name==='apply_patch')return;
       if(['web_search','web_fetch','session_status','tts'].includes(name)) return;
       if(name==='sessions_spawn') {
         if(p.runtime&&p.runtime!=='subagent')throw new Error('项目子任务只允许当前会话的标准派生，不切到外部运行时');
@@ -110,26 +122,14 @@ export class ProjectScope {
         if(p.path&&p.file_path&&this.resolve(b,p.path,workspaceRoot)!==this.resolve(b,p.file_path,workspaceRoot))throw new Error('工具路径参数不一致');
         p[key]=target;if(p.path)p.path=target;if(p.file_path)p.file_path=target;return {params:p};
       }
-      if(name==='apply_patch') {
-        if(typeof p.input!=='string'||!p.input.startsWith('*** Begin Patch'))throw new Error('补丁格式无法验证，请使用 edit/write');
-        let count=0;
-        const workspaceRoot=ctx?.workspaceDir||ctx?.workspace||'';
-        p.input=p.input.split('\n').map(line=>{const match=line.match(/^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/);if(!match)return line;count++;return match[1]+this.resolve(b,match[2],workspaceRoot);}).join('\n');
-        if(!count)throw new Error('补丁没有可验证的目标路径');return {params:p};
-      }
-      if(name==='exec') {
-        if(typeof p.command!=='string')return;
-        const workspaceRoot=ctx?.workspaceDir||ctx?.workspace||'';
-        if(p.workdir)p.workdir=this.resolve(b,p.workdir,workspaceRoot);
-        else if(p.cwd)p.cwd=this.resolve(b,p.cwd,workspaceRoot);
-        else p.workdir=b.root;
-        return {params:p};
-      }
       // Project binding chooses the default directory. It never removes tools
       // such as browser, image generation, network access, process management,
       // or any future OpenClaw capability.
       return;
-    }catch(error){return {block:true,blockReason:error.message};}
+    // Project anchoring is a convenience layer, never a permission boundary.
+    // If a path cannot be normalized, let the original tool validate and run
+    // it instead of turning an anchor problem into a global tool outage.
+    }catch{return;}
   }
 }
 export default {

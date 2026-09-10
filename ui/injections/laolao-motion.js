@@ -69,7 +69,11 @@
     // portrait yet. Its decoded mode-button portrait is a valid fallback.
     const avatar = doc.querySelector(`[data-laolao-mode-avatar="${id}"]`) ||
       doc.querySelector(`.laolao-mode-switcher[data-mode="${id}"] img`);
-    const input = doc.querySelector('.agent-chat__input') ||
+    // OpenClaw 7.1 moved the real composer under a combobox wrapper. The old
+    // selector missed it, so the branded entrance stayed at 94% even though
+    // the complete chat (including restored history) was already usable.
+    const input = doc.querySelector('.agent-chat__composer-combobox textarea') ||
+      doc.querySelector('.agent-chat__input') ||
       doc.querySelector('textarea[placeholder], [contenteditable="true"]');
     // A brand-new chat can render before its portrait exists. Missing art is
     // not a reason to block the whole app; if an image exists, wait only while

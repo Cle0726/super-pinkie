@@ -9,6 +9,7 @@ const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
   project: 'project',
   thinking: 'ideas',
+  learning: 'learning',
   unrestricted: 'none',
 });
 
@@ -16,6 +17,7 @@ const PERSONA_FILES = Object.freeze({
   chat: ['persona/core.md', 'persona/voice_examples.md'],
   project: ['persona/core.md'],
   ideas: ['persona/core.md', 'persona/voice_examples.md'],
+  learning: ['persona/core.md', 'persona/voice_examples.md', 'persona/methods.md'],
   none: [],
 });
 
@@ -45,7 +47,25 @@ const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成
 const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
 const QUESTION_ONLY = /(?:为什么|为何|怎么回事|什么原因|如何理解|能不能|有没有办法|是不是|是否|请解释|问一下|想知道|？|\?)/i;
 const ACTION_CONTINUATION = /^(?:继续|接着|往下|开始吧|动手吧|加强(?:一下)?|优化(?:一下)?|完善(?:一下)?|升级(?:一下)?|修复(?:啊|吧)?)[！!。.\s]*$/i;
+const NEGATED_MUTATION_CLAUSE = /(?:不要|无需|不需要|禁止|严禁|勿|不可|不能|仅(?:需|限)?只读)[^。！？!?；;\n]{0,80}(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成)[^。！？!?；;\n]{0,80}(?=[。！？!?；;\n]|$)/gi;
+function isMutationRequest(prompt = '') {
+  // Negated safety wording such as “只读，不要修改/创建/删除文件” must not
+  // turn an observation into a file-changing task. Keep a positive mutation
+  // elsewhere in the same prompt intact (for example: “修改 A，不要删除 B”).
+  const text = String(prompt || '').replace(NEGATED_MUTATION_CLAUSE, '');
+  if (/(?:只读|只查看|只读取|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(prompt)) {
+    const explicitMutation = /(?:修改|改|修复|生成|创建|制作|下载|上传|发布|安装|部署|打包|写入|更新|替换|移动|重命名).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?|(?:做|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)/i;
+    if (!explicitMutation.test(text)) return false;
+  }
+  return MUTATION_REQUEST.test(text);
+}
+// A response-only smoke test is not permission to execute work.  Keep this
+// guard before ACTION_REQUEST because the requested reply may itself contain
+// words such as “测试/完成”, which otherwise look like an action request.
+const RESPONSE_ONLY_PREFIX = /^(?:请(?:你)?\s*)?(?:只|仅)(?:需|要)?(?:回复|回答|输出|说)(?:\s*[:：,，]?)/i;
+const RESPONSE_ONLY_FOLLOWUP_ACTION = /(?:然后|并且|同时|再|之后|接着|随后|并|且)\s*(?:调用|使用|执行|运行|修改|改|修复|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|测试|验证)/i;
 const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
+const OBSERVATION_TOOL = /(?:^|_)(?:read|view|inspect|find|search|list|status|open_file|file_fetch|dir_fetch|dir_list)(?:$|_)/i;
 const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
 const SKILL_PATH = /(?:^|[\\/])SKILL\.md$/i;
 const VERIFIER_PATH = /(?:^|[\\/])tools[\\/]verify_completion\.py$/i;
@@ -62,9 +82,26 @@ const WORKFLOW_EVIDENCE_TARGETS = Object.freeze({
 const CLE_KK_CONTROL_PATH = /(?:Library[\\/]Application Support[\\/]SuperPinkie[\\/]cle-kk|\.openclaw[\\/](?:extensions[\\/]pinkie-mode-architecture|pinkie-deep-think))/i;
 const TIMESTAMP_TAMPERING = /(?:\bos\.utime\s*\(|\butime\s*\(|(?:^|[;&|]\s*)touch\s+(?:-[^\s]+\s+)*)/i;
 const CROSS_RUN_EVIDENCE_COPY = /(?:shutil\.(?:copy|copy2|copyfile)|\bcp\s|\brsync\s)[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])[\s\S]{0,1200}(?:[\\/]runs[\\/]|[\\/]output[\\/])/i;
-const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|abort(?:ed|error)?|incomplete(?: turn| response)?|without (?:a )?(?:final )?(?:reply|response)|missing (?:final )?assistant|empty (?:final )?(?:reply|response)|session file changed while embedded prompt lock was released|EmbeddedAttemptSessionTakeoverError|\b429\b|\b50[234]\b|temporar|try again)/i;
+// Provider account pools can report an exhausted account as a successful HTTP
+// response whose stream contains "subscription usage limit"/"quota exhausted".
+// Treat that as recoverable so the next watchdog turn can be routed to another
+// configured account; it is not a permanent billing/configuration failure for
+// the whole pool.
+const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|subscription.{0,32}(?:usage|quota).{0,24}limit|(?:usage|quota).{0,24}(?:exhausted|limit(?:ed)?|remaining)|insufficient[_ -]?quota|terminated|abort(?:ed|error)?|incomplete(?: turn| response)?|without (?:a )?(?:final )?(?:reply|response)|missing (?:final )?assistant|empty (?:final )?(?:reply|response)|session file changed while embedded prompt lock was released|EmbeddedAttemptSessionTakeoverError|\b429\b|\b50[234]\b|temporar|try again)/i;
+// A provider quota response is not a network outage. Retrying the same
+// provider forever makes the UI look like it is reconnecting and burns quota.
+// The watchdog uses this classifier to make a bounded fallback switch.
+const PROVIDER_QUOTA_FAILURE = /(?:you(?:'|’)ve reached (?:your )?(?:codex )?subscription usage limit|subscription usage limit|usage limit(?: exceeded| reached)?|quota(?:[ _-]+(?:exhausted|exceeded|depleted|reached))|insufficient credits|billing limit|rate limit reached)/i;
+const WATCHDOG_QUOTA_FALLBACKS = Object.freeze([
+  'mm/gemini-3.7-flash-tiered',
+  'mm/gemini-3.6-flash-tiered',
+]);
 const GATEWAY_RECOVERY_FAILURE = /(?:GatewayDrainingError|gateway is draining|restart drain|admission (?:is )?closed|session transcript projection is rebuilding|transcript projection is rebuilding|projection is rebuilding|gateway restarting|gateway not ready|审计日志正被写入)/i;
 const AUDIT_CORRUPTION_FAILURE = /(?:审计链断裂|审计日志不可读|状态摘要不一致|状态文件不可读)/i;
+// OpenClaw has already run its own compaction recovery before agent_end emits
+// this terminal error. Replaying the same oversized transcript cannot shrink
+// it; it only starts another multi-minute compaction and burns quota forever.
+const CONTEXT_OVERFLOW_FAILURE = /(?:context overflow|prompt too large for (?:the )?model|maximum context length|context length exceeded|too many (?:input )?tokens)/i;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
 // Upstream availability is intentionally handled as a long-lived recovery
@@ -82,7 +119,11 @@ const WATCHDOG_ACTIVITY_POLL_MS = Math.max(250,
 const WATCHDOG_QUIET_FENCE_MS = Math.max(750,
   Number(process.env.PINKIE_WATCHDOG_QUIET_FENCE_MS) || 1_500);
 const WATCHDOG_CLI_TIMEOUT_MS = Math.max(2_000,
-  Number(process.env.PINKIE_WATCHDOG_CLI_TIMEOUT_MS) || 5_000);
+  // A busy OpenClaw session lane can legitimately take well over five
+  // seconds to acknowledge chat.send. Killing the CLI at five seconds is
+  // ambiguous: the gateway may already have accepted the turn, and blindly
+  // resending then creates two invisible runs that fight over the JSONL.
+  Number(process.env.PINKIE_WATCHDOG_CLI_TIMEOUT_MS) || 30_000);
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
 const DISPLAY_PRICING_VERSION = 2;
 const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
@@ -164,7 +205,7 @@ function hasIncompleteToolTurn(event = {}, reason = '') {
 // OpenClaw 可能使用自定义 agentId（例如本地模型/工作区插件），但仍然
 // 会提供标准的 agent:<id>:<session> 会话键。只排除子代理，避免把同一
 // 次任务的内部子会话再次注入；可通过 PINKIE_WATCHDOG_ALL=0 回退到旧的
-// “仅四模式”行为，便于兼容需要自行管理重试的部署。
+// “仅 CLE Kk 主模式”行为，便于兼容需要自行管理重试的部署。
 function isWatchdogParentContext(ctx = {}) {
   const sessionKey = String(ctx.sessionKey || '');
   if (!sessionKey || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return false;
@@ -226,7 +267,7 @@ const COMPLETION_TRUTH_RULES = `
 - 工具失败后保留旧成果，不覆盖旧文件来伪装本轮成功；修复后必须重新验证。无法继续时说清真实阻塞和已保留内容。
 `.trim();
 
-// Independent system module shared by all four modes. Keep it separate from
+// Independent system module shared by all five modes. Keep it separate from
 // persona, aesthetics and opinion style so teaching can never dilute the
 // execution contract or subtly change a mode's character.
 const LEARN_WHILE_DOING_RULES = `
@@ -238,6 +279,18 @@ const LEARN_WHILE_DOING_RULES = `
 - 新知识若与用户以前接触过的概念本质相同，用一句话建立连接，帮助形成跨领域技术直觉。已经解释过的基础概念直接使用术语，只有语境变化时才补一句。
 - 教学不得暂停关键工作、频繁考察理解、强行出练习、要求先学再做或把简单任务课程化。若解释会打断执行，先完成并验证，再补极短说明。
 - 长期目标是让用户逐渐能听懂行业语言、看懂系统分层、判断方案是否合理并知道故障可能在哪一层；工作保持专家级，表达保持初学者能听懂。
+`.trim();
+
+// 学习模式自己的方法模块。它与通用“边做边学”分开，避免把教学规则
+// 混进人格或审美；其他模式不会载入这一段。
+const LEARNING_MODE_RULES = `
+【学习模式方法模块】
+- 默认讲解要短、白话、口语化：先一句说结论，再用短句说明；能三句话讲清就不写三段，除非先生明确要求深入展开。
+- 先锁定先生真正要解决的问题、已有基础和验收标准；能继续推进时不要把决定退回给先生。
+- 根据任务按需选用：苏格拉底提问、双层解释、反向拆解、纵横分析、事实核查、专家会诊、第一性原理、跨领域借解、双向钢人论证、最小实验。
+- 解释是执行的伴随物：先做关键动作，再在关键节点补 1—2 个可复用知识点；不把实际工作改写成教程或报告。
+- 复杂任务必须把方法落成文件、运行结果、测试或其他可验收产物；模型文字、计划和“应该可以”不算完成。
+- 事实、推断、假设和未知分开写；新证据推翻旧判断时直接修正。隐藏天赋与人生设计方法只有在用户主动要求时才启用。
 `.trim();
 
 function completionRunKey(event = {}, ctx = {}) {
@@ -565,6 +618,14 @@ function isLikelyActionRequest(prompt = '') {
   // the original action prompt, so this ambiguous one-word message must not
   // be upgraded into a mutation request on its own.
   if (ACTION_CONTINUATION.test(text)) return false;
+  // Prompts such as “只回复：连通性测试通过，不要调用工具” are answer-only
+  // checks.  Do not let action words inside the requested sentence (测试、完成)
+  // arm the delivery gate.  An explicit follow-up action still wins, e.g.
+  // “只回复结果，然后运行测试”。
+  if (RESPONSE_ONLY_PREFIX.test(text)) {
+    const remainder = text.replace(RESPONSE_ONLY_PREFIX, '').trim();
+    if (!RESPONSE_ONLY_FOLLOWUP_ACTION.test(remainder)) return false;
+  }
   if (!ACTION_REQUEST.test(text)) return false;
   // A pure “why/how” question is answer work, not an implicit permission to
   // mutate files. Explicit action verbs still win when both appear.
@@ -765,14 +826,14 @@ function toolIsMechanicalCheck(entry = {}) {
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
     if (/verify_completion\.py\b/i.test(command)) return true;
-    return /(?:^|[;&|]\s*)(?:test\s|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor))/i.test(command);
+    return /(?:^|[;&|]\s*)(?:test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor))/i.test(command);
   }
   return false;
 }
 
 function effectVerificationReason(state) {
   const mutationRun = isLikelyActionRequest(state.prompt)
-    && MUTATION_REQUEST.test(state.prompt);
+    && isMutationRequest(state.prompt);
   if (!mutationRun) return '';
   const effectIndex = state.tools.findLastIndex(entry => Boolean(toolEffectKind(entry)));
   if (effectIndex < 0) return '执行型修改任务没有主机确认的文件变化或外部操作结果';
@@ -1432,7 +1493,13 @@ export class CompletionIntegrityGuard {
     // this turn's short follow-up omitted the original action wording.
     const requiresExecution = actionRun || (completionClaimed && !QUESTION_ONLY.test(state.prompt));
     if (requiresExecution) {
-      const executed = state.tools.some(entry => !entry.failed && EXECUTION_TOOL.test(entry.name));
+      // A read/inspect request is still real work, but it does not need a
+      // mutating tool. Count a successful observation only for non-mutation
+      // requests; a request to edit/create/delete can never pass with reads.
+      const mutationRun = isMutationRequest(state.prompt);
+      const executed = state.tools.some(entry => !entry.failed && (
+        EXECUTION_TOOL.test(entry.name) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
+      ));
       if (!executed) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
       if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
@@ -1923,6 +1990,21 @@ export class CleKkSupervisor {
     }
   }
 
+  cancel(sessionKey, reason = 'manual_cancel') {
+    const key = String(sessionKey || '');
+    if (!key) return false;
+    const turn = this.turns.get(key) || this.restore(key);
+    if (turn?.runId) {
+      this.orphaned.set(String(turn.runId), key);
+      while (this.orphaned.size > 2048) this.orphaned.delete(this.orphaned.keys().next().value);
+    }
+    this.turns.delete(key);
+    this.integrity.reset(key);
+    this.audit.append('turn_cancelled', key, {reason: String(reason || 'manual_cancel').slice(0, 120)});
+    this.audit.removeState(key);
+    return Boolean(turn);
+  }
+
   retryRecoveryDisposition(sessionKey) {
     const turn = this.turns.get(String(sessionKey || ''));
     if (!turn?.pending) return '';
@@ -1971,6 +2053,12 @@ export class CleKkSupervisor {
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
     return this.integrity.verifyAfterTool(bound.event, bound.ctx);
+  }
+
+  finalizeDecision(event = {}, ctx = {}, options = {}) {
+    const bound = this.boundContext(event, ctx);
+    if (!bound) return;
+    return this.integrity.finalize(bound.event, bound.ctx, options);
   }
 
   restore(key) {
@@ -2082,8 +2170,15 @@ export class CleKkSupervisor {
   }
 
   begin(event = {}, ctx = {}) {
-    const key = this.key(event, ctx);
-    if (!key) return;
+    // Hook payloads are not uniform across OpenClaw lifecycle stages. The
+    // first hook commonly has sessionKey but no prompt; before_prompt_build
+    // then has the prompt and only runId. Bind both to the same durable
+    // session before touching the evidence window.
+    const bound = this.boundContext(event, ctx);
+    if (!bound) return;
+    event = bound.event;
+    ctx = bound.ctx;
+    const key = bound.sessionKey;
     const prompt = String(event.prompt || '').trim();
     const control = internalControlText(prompt);
     let turn = this.turns.get(key) || this.restore(key);
@@ -2092,9 +2187,10 @@ export class CleKkSupervisor {
     const incomingRunId = String(ctx.runId || event.runId || '');
     const distinctUserTurn = !control && turn && prompt && (
       turn.corrupted
-      || !turn.prompt
-      || prompt !== turn.prompt
-      || (incomingRunId && turn.runId && incomingRunId !== turn.runId)
+      || (Boolean(turn.prompt) && (
+        prompt !== turn.prompt
+        || (incomingRunId && turn.runId && incomingRunId !== turn.runId)
+      ))
     );
     if (distinctUserTurn) {
       // “继续/接着” explicitly belongs to the old task. Every other new
@@ -2609,12 +2705,21 @@ export class UpstreamWatchdog {
       ? path.join(pinkieStateRoot(), 'cle-kk', 'watchdog') : '');
     this.failures = new Map();
     this.models = new Map();
+    this.quotaFallbacks = new Map();
     this.attempts = new Map();
     this.integrityAttempts = new Map();
     this.skipNextFailure = new Set();
     this.timers = new Map();
     this.gatewayBackoff = new Map();
     this.dispatching = new Set();
+    // Every explicit cancellation advances the session generation. Timers or
+    // slow CLI calls from an older generation may finish, but they can no
+    // longer re-arm themselves or schedule another invisible turn.
+    this.generations = new Map();
+  }
+
+  generationFor(sessionKey) {
+    return Number(this.generations.get(String(sessionKey || '')) || 0);
   }
 
   recoveryDelay(sessionKey, reason = '') {
@@ -2670,8 +2775,36 @@ export class UpstreamWatchdog {
     // parent turn must recover by default. Only explicit user cancellation and
     // errors that cannot improve through retry are allowed to stop it.
     if (PERMANENT_FAILURE.test(reason)) return false;
+    if (CONTEXT_OVERFLOW_FAILURE.test(reason)) {
+      // The native compactor has exhausted its own guarded attempts. Retire a
+      // stale lease from an earlier failure, keep all transcript/history, and
+      // let the real overflow error surface instead of creating a hidden loop.
+      await this.cancel(sessionKey);
+      if (event.runId) this.failures.delete(event.runId);
+      this.api.logger?.warn?.(`watchdog retired non-retryable context overflow session=${sessionKey}`);
+      return false;
+    }
     const failedParentTurn = event.success !== true || incompleteToolTurn;
     if (!failedParentTurn && !isTransientFailure(reason) && !incompleteToolTurn) return false;
+    // Do not mistake an exhausted provider account for an endless disconnect.
+    // Keep the user's original model for normal turns, but route the invisible
+    // watchdog continuation through the local multi-model pool. Once both
+    // fallbacks are exhausted, stop the lease so the real error can surface.
+    if (PROVIDER_QUOTA_FAILURE.test(reason)) {
+      const currentModel = String(this.models.get(sessionKey) || '');
+      const fallbackIndex = Number(this.quotaFallbacks.get(sessionKey) || 0);
+      const currentProvider = currentModel.split('/')[0] || '';
+      const nextModel = WATCHDOG_QUOTA_FALLBACKS[fallbackIndex];
+      if (nextModel && (currentProvider === 'clekk' || currentProvider === 'mm' || !currentModel)) {
+        this.models.set(sessionKey, nextModel);
+        this.quotaFallbacks.set(sessionKey, fallbackIndex + 1);
+        this.api.logger?.warn?.(`watchdog quota fallback selected session=${sessionKey} from=${currentModel || 'unknown'} to=${nextModel}`);
+      } else {
+        await this.cancel(sessionKey);
+        this.api.logger?.warn?.(`watchdog quota fallback exhausted session=${sessionKey} model=${currentModel || 'unknown'}`);
+        return false;
+      }
+    }
     // 原生停止键和上游断流都会落成 aborted。给前端停止事件一个很短的
     // 取消窗口；没有收到明确停止 RPC 才按故障自动续接。
     if (/abort/i.test(reason)) {
@@ -2857,6 +2990,11 @@ export class UpstreamWatchdog {
 
   scheduleImmediate(params) {
     if (!this.cliEntry) return false;
+    const scheduled = {
+      ...params,
+      generation: params.generation ?? this.generationFor(params.sessionKey),
+    };
+    if (scheduled.generation !== this.generationFor(scheduled.sessionKey)) return false;
     const previous = this.timers.get(params.sessionKey);
     // One retry timer per session. Repeated agent_end/reply hooks during a
     // projection rebuild must not keep resetting the clock and create a new
@@ -2864,15 +3002,17 @@ export class UpstreamWatchdog {
     if (previous) return true;
     const timer = setTimeout(() => {
       this.timers.delete(params.sessionKey);
-      void this.dispatchImmediate(params);
-    }, params.delayMs);
+      void this.dispatchImmediate(scheduled);
+    }, scheduled.delayMs);
     timer.unref?.();
     this.timers.set(params.sessionKey, timer);
     return true;
   }
 
-  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind}) {
+  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation}) {
     if (!this.cliEntry) return false;
+    const leaseGeneration = generation ?? this.generationFor(sessionKey);
+    if (leaseGeneration !== this.generationFor(sessionKey)) return false;
     if (this.dispatching.has(sessionKey)) return false;
     const activity = this.activityFor(sessionKey) || {};
     const pending = Math.max(0, Number(activity.pending) || 0);
@@ -2880,7 +3020,7 @@ export class UpstreamWatchdog {
     if (activity.parentRunning || pending > 0 || quietForMs < WATCHDOG_QUIET_FENCE_MS) {
       const delayMs = activity.parentRunning || pending > 0
         ? WATCHDOG_ACTIVITY_POLL_MS : Math.max(250, WATCHDOG_QUIET_FENCE_MS - quietForMs);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind, generation: leaseGeneration});
       return false;
     }
     this.dispatching.add(sessionKey);
@@ -2905,6 +3045,7 @@ export class UpstreamWatchdog {
       });
       let result;
       try { result = JSON.parse(stdout); } catch {}
+      if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       const output = `${stdout}\n${result?.error || result?.message || ''}`;
       if (result?.status === 'error' || result?.status === 'timeout') {
         const blockedDelay = this.recoveryDelay(sessionKey, output);
@@ -2912,7 +3053,7 @@ export class UpstreamWatchdog {
         // rebuilds therefore neither increment nor decrement the integrity
         // budget; repeated infrastructure probes cannot turn attempt 4 back
         // into the misleading 0/24 seen in earlier logs.
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind});
+        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration});
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
@@ -2920,10 +3061,11 @@ export class UpstreamWatchdog {
       this.api.logger?.info?.(`watchdog immediate retry accepted session=${sessionKey} attempt=${attempt}`);
       return true;
     } catch (error) {
+      if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
       const blockedDelay = this.recoveryDelay(sessionKey,
         `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration});
       return false;
     } finally {
       this.dispatching.delete(sessionKey);
@@ -2931,9 +3073,11 @@ export class UpstreamWatchdog {
   }
 
   async cancel(sessionKey, suppressNextFailure = false) {
+    this.generations.set(sessionKey, this.generationFor(sessionKey) + 1);
     this.attempts.delete(sessionKey);
     this.integrityAttempts.delete(sessionKey);
     this.models.delete(sessionKey);
+    this.quotaFallbacks.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
     this.jobStore.delete(sessionKey);
     if (suppressNextFailure) this.skipNextFailure.add(sessionKey);
@@ -3171,6 +3315,8 @@ export function deliberationRequirements(tier, mode) {
       ? {decomposer: 2, verifier: 2}
       : mode === 'ideas'
         ? {pipeline: 4, countercritic: 2}
+        : mode === 'learning'
+          ? {verifier: 2, assumption: 2}
         : mode === 'chat'
           ? {assumption: 2, debater: 3}
           : {};
@@ -3300,6 +3446,7 @@ export function buildDeliberationPlan(tier, mode) {
     chat: '加强档增加：假设审查员 + 固定两轮对抗；只用于确实复杂的求助。',
     project: '加强档增加：真实执行验证 + 模块递归分解（递归深度最多 2）。',
     ideas: '加强档增加：反批评 + 两条独立完整流水线后再做元仲裁。',
+    learning: '加强档增加：事实核查 + 最小实验；解释必须落到可复现的练习或产物。',
     none: '加强档按任务选两项：可执行产物优先“执行验证+递归分解”；创意任务优先“反批评+多流水线”；高风险判断优先“假设审查+多轮对抗”。',
   }[mode] || '';
   const tierRule = normalizedTier === 'base'
@@ -3373,6 +3520,11 @@ export class ModeArchitecture {
     this.pendingByParent = new Map();
     this.parentByChild = new Map();
     this.lastChildEventAt = new Map();
+    // Finalize hooks can request another model pass while the same parent run
+    // is still alive. Track that independently from deep-think tiers so the
+    // watchdog cannot start a second chat.send against the same session JSONL.
+    this.liveParentRuns = new Map();
+    this.lastParentEventAt = new Map();
   }
 
   getRun(sessionKey) {
@@ -3391,7 +3543,7 @@ export class ModeArchitecture {
   arm(sessionKey, tier) {
     const agent = agentFromSessionKey(sessionKey);
     const mode = MODE_BY_AGENT[agent];
-    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持四种模式与基础/加强/全开/长跑四档');
+    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持 CLE Kk 主模式与基础/加强/全开/长跑四档');
     const existing = this.getRun(sessionKey);
     if (existing?.active) throw new Error('上一轮档位任务仍在执行，请等最终交付后再发送下一条');
     const run = {
@@ -3416,8 +3568,23 @@ export class ModeArchitecture {
     const pending = Math.max(this.pendingByParent.get(sessionKey)?.size || 0, state?.active ? state.pendingChildren.size : 0);
     const lastEventAt = this.lastChildEventAt.get(sessionKey) || 0;
     const durableEventAt = state?.active ? Number(state.lastEventAt) || 0 : 0;
-    const newestEventAt = Math.max(lastEventAt, durableEventAt);
-    return {pending, parentRunning: Boolean(state?.active && state.parentRunning), quietForMs: newestEventAt ? Math.max(0, Date.now() - newestEventAt) : Infinity};
+    const parentEventAt = this.lastParentEventAt.get(sessionKey) || 0;
+    const newestEventAt = Math.max(lastEventAt, durableEventAt, parentEventAt);
+    return {
+      pending,
+      parentRunning: Boolean(this.liveParentRuns.get(sessionKey)?.size || (state?.active && state.parentRunning)),
+      quietForMs: newestEventAt ? Math.max(0, Date.now() - newestEventAt) : Infinity,
+    };
+  }
+
+  parentStarted(event = {}, ctx = {}) {
+    const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
+    if (!sessionKey || /:subagent:/.test(sessionKey)) return;
+    const runId = String(ctx.runId || event.runId || '__unknown__');
+    const active = this.liveParentRuns.get(sessionKey) || new Set();
+    active.add(runId);
+    this.liveParentRuns.set(sessionKey, active);
+    this.lastParentEventAt.set(sessionKey, Date.now());
   }
 
   status(sessionKey) {
@@ -3480,6 +3647,7 @@ export class ModeArchitecture {
       '\n' + COMPLETION_TRUTH_RULES + '\n',
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
+    if (mode === 'learning') blocks.push('\n' + LEARNING_MODE_RULES + '\n');
     if (injectWorkspaceMarkdown && this.memory) {
       try {
         this.memory.captureExplicit({...ctx, mode}, event.prompt || '');
@@ -3525,7 +3693,7 @@ export class ModeArchitecture {
       this.recentCompaction.delete(sessionKey);
     }
     if (injectWorkspaceMarkdown) blocks.push(`
-【四模式记忆运行规则：${mode}】
+【模式记忆运行规则：${mode}】
 - 只读写当前 workspace 下的 persona/ 与 memory/；不得读取其他三个模式的对应目录。
 - 用户明确说“记住”时写 memory/feedback/；普通信息先判重、判价值，不值得就不写。
 - 闲置沉淀写 memory/episodic/YYYY-MM-DD.md；稳定事实覆盖更新 memory/identity.md，不能堆互相矛盾的版本。
@@ -3542,7 +3710,25 @@ export class ModeArchitecture {
     return {appendSystemContext: blocks.filter(Boolean).join('')};
   }
 
-  parentEnded(sessionKey) {
+  parentEnded(event = {}, ctx = {}) {
+    const sessionKey = typeof event === 'string'
+      ? event
+      : String(ctx.sessionKey || event.sessionKey || '');
+    const runId = typeof event === 'string' ? '' : String(ctx.runId || event.runId || '');
+    const active = this.liveParentRuns.get(sessionKey);
+    if (active) {
+      if (runId) {
+        active.delete(runId);
+        // Some host versions omit runId from before_agent_run but add it on
+        // agent_end. Retire that anonymous marker too, otherwise the watchdog
+        // would believe the parent is running forever and never reconnect.
+        active.delete('__unknown__');
+      }
+      else active.clear();
+      if (active.size) this.liveParentRuns.set(sessionKey, active);
+      else this.liveParentRuns.delete(sessionKey);
+    }
+    if (sessionKey) this.lastParentEventAt.set(sessionKey, Date.now());
     const state = this.getRun(sessionKey);
     if (!state?.active || state.parentSessionKey !== sessionKey) return;
     state.parentRunning = false;
@@ -3551,10 +3737,6 @@ export class ModeArchitecture {
   }
 
   beforeTool(event, ctx) {
-    const policyViolation = toolPolicyViolation(event.toolName, event.params);
-    if (policyViolation && modeForContext(ctx)) {
-      return {block: true, blockReason: `全局交付真实性门禁：${policyViolation}`};
-    }
     if (event.toolName !== 'sessions_spawn' || !modeForContext(ctx)) return;
     const params = {...(event.params || {})};
     const parent = this.resolveParent(ctx.sessionKey || '');
@@ -3940,7 +4122,7 @@ function createLongTermMemoryTool(memory, context = {}) {
     },
     async execute(_toolCallId, params = {}) {
       try {
-        if (!mode) throw new Error('当前会话不属于四个主模式');
+        if (!mode) throw new Error('当前会话不属于 CLE Kk 主模式');
         if (params.action === 'remember') return memoryToolResult(memory.remember(toolContext, {...params, source: 'agent-tool'}));
         if (params.action === 'forget') return memoryToolResult(memory.forget(toolContext, params));
         if (params.action === 'search') return memoryToolResult(memory.retrieve(toolContext, params.query || '', {limit: 12}));
@@ -3948,6 +4130,93 @@ function createLongTermMemoryTool(memory, context = {}) {
         throw new Error('未知记忆操作');
       } catch (error) {
         return memoryToolResult({ok: false, error: error instanceof Error ? error.message : String(error)}, true);
+      }
+    },
+  };
+}
+
+function computerToolResult(value, isError = false) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return {
+    content: [{type: 'text', text}],
+    details: typeof value === 'string' ? {text: value} : value,
+    isError,
+  };
+}
+
+function cuaEndpoint(environment = process.env) {
+  const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
+  if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
+  let endpoint;
+  try {
+    endpoint = JSON.parse(raw);
+  } catch {
+    throw new Error('CLE Kk 桌面执行器端点格式无效');
+  }
+  const binaryPath = String(endpoint?.binaryPath || '');
+  const socketPath = String(endpoint?.socketPath || '');
+  if (!path.isAbsolute(binaryPath) || !path.isAbsolute(socketPath)) {
+    throw new Error('CLE Kk 桌面执行器端点不完整');
+  }
+  return {binaryPath, socketPath};
+}
+
+// The pinned OpenClaw runtime can publish computer.act on a node, but its
+// generic nodes tool intentionally refuses to invoke that command and this
+// build has no dedicated cua-computer agent tool. Expose the App-owned private
+// driver endpoint as a normal tool so all five modes get the same capability.
+export function createCuaComputerTool(
+  _context = {},
+  runner = runProcess,
+  environment = process.env,
+) {
+  return {
+    name: 'computer',
+    label: '电脑操控',
+    description: '通过 CLE Kk App 自带的本机桌面执行器查看并操控电脑。没有模式级文件、应用或命令限制。action 直接填写 CuaDriver 动作名；不确定参数时先用 list_tools，查看单个动作结构时用 describe_tool，并把动作名放在 arguments.name。常用动作有 get_desktop_state、get_window_state、list_apps、list_windows、click、double_click、right_click、scroll、drag、type_text、press_key、hotkey、launch_app、kill_app、set_window_frame、browser_prepare、get_browser_state、browser_click、browser_type、browser_navigate。',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        action: {type: 'string', minLength: 1},
+        arguments: {type: 'object', additionalProperties: true},
+        timeout_ms: {type: 'integer', minimum: 1_000, maximum: 600_000},
+      },
+      required: ['action'],
+    },
+    async execute(_toolCallId, params = {}) {
+      try {
+        const action = String(params.action || '').trim();
+        if (!action) throw new Error('action 不能为空');
+        const {binaryPath, socketPath} = cuaEndpoint(environment);
+        let args;
+        if (action === 'list_tools') {
+          args = ['list-tools', '--socket', socketPath];
+        } else if (action === 'describe_tool') {
+          const name = String(params.arguments?.name || '').trim();
+          if (!name) throw new Error('describe_tool 需要 arguments.name');
+          args = ['describe', name, '--socket', socketPath];
+        } else {
+          args = ['call', action, JSON.stringify(params.arguments || {}), '--socket', socketPath, '--json'];
+        }
+        const {stdout, stderr} = await runner(binaryPath, args, {
+          timeout: Number(params.timeout_ms) || 300_000,
+          maxBuffer: 64 * 1024 * 1024,
+          env: environment,
+        });
+        const output = String(stdout || stderr || '').trim();
+        if (!output) return computerToolResult({ok: true, action});
+        try {
+          return computerToolResult(JSON.parse(output));
+        } catch {
+          return computerToolResult(output);
+        }
+      } catch (error) {
+        const message = [
+          error instanceof Error ? error.message : String(error),
+          error?.stdout,
+          error?.stderr,
+        ].filter(Boolean).map(String).join('\n').trim();
+        return computerToolResult({ok: false, error: message || '桌面执行器调用失败'}, true);
       }
     },
   };
@@ -3979,6 +4248,7 @@ export default {
     const usage = new ModelUsageLedger();
     api.registerTool?.(ctx => createDeliveryGuardTool(integrity, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
+    api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
         const ctx = memory.contextForSession(String(params?.sessionKey || ''));
@@ -4057,6 +4327,10 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         if (!sessionKey) throw new Error('缺少会话标识');
+        // Clear both the retry lease and the supervisor's persisted pending
+        // final. Otherwise a gateway restart can resurrect a turn the user
+        // explicitly cancelled and race the next real message.
+        cleKk.cancel(sessionKey, 'watchdog_cancel_rpc');
         await watchdog.cancel(sessionKey, true);
         respond(true, {cancelled: true});
       } catch (error) {
@@ -4074,6 +4348,7 @@ export default {
       return architecture.beforeModelResolve(event, ctx) || retryModel;
     }, {priority: 12000});
     api.on('before_agent_run', (event, ctx) => {
+      architecture.parentStarted(event, ctx);
       cleKk.begin(event, ctx);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
@@ -4115,7 +4390,7 @@ export default {
       // Previously `a || b` skipped the second gate whenever the first one
       // returned a revision, leaving a blind spot in mixed failures.
       const architectureDecision = architecture.finalize(event, ctx);
-      const integrityDecision = integrity.finalize(event, ctx, {verifyExternal: false});
+      const integrityDecision = cleKk.finalizeDecision(event, ctx, {verifyExternal: false});
       return cleKk.recordFinalize(event, ctx, architectureDecision || integrityDecision);
     });
     // OpenClaw intentionally ignores before_agent_finalize revisions after a
@@ -4142,7 +4417,7 @@ export default {
       // Final persistence is the last reliable synchronous boundary. Run the
       // independent Skill verifier here too; waiting until finalize is too
       // late on hosts that ignore revisions after side effects.
-      const integrityDecision = integrity.finalize(candidate, ctx, {verifyExternal: false});
+      const integrityDecision = cleKk.finalizeDecision(candidate, ctx, {verifyExternal: false});
       return cleKk.beforeMessageWrite(event, ctx, architectureDecision || integrityDecision, true);
     }, {priority: -20000});
     // Delivery has its own hook and catches channels that render a final reply
@@ -4168,7 +4443,7 @@ export default {
       // 父轮次已经结束才允许任何续跑器写入会话。先撤掉可能遗留的档位
       // 定时器，再释放父运行锁，避免它与 OpenClaw 自带的上游重试撞车。
       await tierContinuation.cancel(ctx.sessionKey || '');
-      architecture.parentEnded(ctx.sessionKey || '');
+      architecture.parentEnded(event, ctx);
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
         // A side-effecting run can reach agent_end with success=true even

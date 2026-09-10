@@ -13,8 +13,8 @@ class Element{
   replaceChildren(...children){this.children=children;this.renders++;}
 }
 const draw=vm.runInNewContext(source.slice(start,end)+';renderModeButton',{document:{createElement:tag=>new Element(tag)}});
-test('four mode buttons use HD portraits and crisp native text, not opaque banner images',()=>{
-  for(const [id,label] of [['chat','唠嗑模式'],['project','项目模式'],['thinking','想法模式'],['unrestricted','无限制模式']]){
+test('five mode buttons use HD portraits and crisp native text, not opaque banner images',()=>{
+  for(const [id,label] of [['chat','唠嗑模式'],['project','项目模式'],['thinking','想法模式'],['learning','学习模式'],['unrestricted','无限制模式']]){
     const button=new Element('button');draw(button,{id,label,avatar:`./laolao-mode-${id}-hd.png`});
     assert.equal(button.dataset.mode,id);assert.match(button.children[0].src,/-hd\.png$/);
     assert.equal(button.children[0].alt,'');assert.equal(button.children[0].draggable,false);
@@ -27,4 +27,10 @@ test('mutation observer repaint stays idempotent and changes avatar only on mode
   draw(button,chat);draw(button,chat);assert.equal(button.renders,1);
   draw(button,{id:'project',label:'项目模式',avatar:'project-hd.png'});
   assert.equal(button.renders,2);assert.equal(button.children[0].src,'project-hd.png');
+});
+test('learning mode has its own session and visual asset keys',()=>{
+  assert.match(source,/id: "learning"/);
+  assert.match(source,/agent:learning:main/);
+  assert.match(source,/laolao-mode-learning-hd\.png/);
+  assert.match(source,/laolao-mode-transition-learning\.png/);
 });

@@ -100,12 +100,13 @@
   // 当前模式 (优先读 mode-switcher 写在 <html> 上的 data-laolao-mode)
   const currentMode = () => {
     const attr = document.documentElement.getAttribute("data-laolao-mode");
-    if (attr && ["chat", "project", "thinking", "unrestricted"].includes(attr)) {
+    if (attr && ["chat", "project", "thinking", "learning", "unrestricted"].includes(attr)) {
       return attr;
     }
     const routed = new URLSearchParams(window.location.search).get("session") || "";
     if (routed.startsWith("agent:project:")) return "project";
     if (routed.startsWith("agent:thinking:")) return "thinking";
+    if (routed.startsWith("agent:learning:")) return "learning";
     if (routed.startsWith("agent:unrestricted:")) return "unrestricted";
     if (routed.startsWith("agent:main:")) return "chat";
     const el = document.querySelector(
@@ -114,16 +115,17 @@
     const key = el?.dataset.sessionKey || "";
     if (key.startsWith("agent:project:")) return "project";
     if (key.startsWith("agent:thinking:")) return "thinking";
+    if (key.startsWith("agent:learning:")) return "learning";
     if (key.startsWith("agent:unrestricted:")) return "unrestricted";
     return "chat";
   };
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(window.location.search).get("session") || "";
-    if (/^agent:(main|project|thinking|unrestricted):/.test(routed)) return routed;
+    if (/^agent:(main|project|thinking|learning|unrestricted):/.test(routed)) return routed;
     const active = document.querySelector("[data-session-key].sidebar-recent-session--active");
     const key = active?.dataset?.sessionKey || "";
-    return /^agent:(main|project|thinking|unrestricted):/.test(key) ? key : "";
+    return /^agent:(main|project|thinking|learning|unrestricted):/.test(key) ? key : "";
   };
 
   const toast = (msg) => {

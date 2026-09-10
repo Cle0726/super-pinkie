@@ -83,19 +83,30 @@ html[data-laolao-classic-shell="1"] body .chat-bubble :is(pre, table) {
   overflow-x: auto;
 }
 
-/* On the smallest supported desktop window the chat has priority. The
-   workspace entrances stay available again as soon as there is enough room. */
+/* On the smallest supported desktop window the chat keeps priority, while the
+   collapsed space rail remains reachable. Expanding it becomes an overlay so
+   a deliberate click never squeezes the conversation down to an unusable sliver. */
 @media (max-width: 1120px) {
   html[data-laolao-classic-shell="1"] body .chat-workbench,
   html[data-laolao-classic-shell="1"] body .chat-workbench:has(
     > .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed)
   ) {
-    display: flex !important;
-    grid-template-columns: none !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
   }
 
   html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail {
-    display: none !important;
+    display: flex !important;
+  }
+
+  html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
+    position: absolute !important;
+    z-index: 24 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    width: min(280px, calc(100% - 48px)) !important;
   }
 }
 

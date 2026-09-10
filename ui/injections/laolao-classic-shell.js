@@ -5,6 +5,7 @@
     chat: { label: "唠嗑模式", agent: "main", avatar: "/laolao-mode-chat-hd.png?v=avatars6" },
     project: { label: "项目模式", agent: "project", avatar: "/laolao-mode-project-hd.png?v=avatars6" },
     thinking: { label: "想法模式", agent: "thinking", avatar: "/laolao-mode-thinking-hd.png?v=avatars6" },
+    learning: { label: "学习模式", agent: "learning", avatar: "/laolao-mode-learning-hd.png?v=avatars1" },
     unrestricted: { label: "无限制模式", agent: "unrestricted", avatar: "/laolao-mode-unrestricted-hd.png?v=avatars6" },
   };
 

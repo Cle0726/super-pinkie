@@ -44,6 +44,10 @@ test('workspace can choose, create, bind and reveal a real project folder', () =
   assert.match(js, /revealProject/);
   assert.match(server, /def validate_project/);
   assert.match(server, /def create_project/);
+  assert.match(html, /项目是工作重心，需要时可访问电脑其他位置/);
+  assert.match(html, /这里是工作重心，不是访问边界/);
+  assert.doesNotMatch(html, /执行席只会在这里工作|项目目录固定，不会乱跑/);
+  assert.match(js, /这里是工作重心，不是访问边界/);
 });
 
 test('all seat models are user selectable and the system only assigns roles', () => {

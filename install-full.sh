@@ -12,6 +12,7 @@ INSTALL_AGENTS=1
 INSTALL_TTS=1
 INSTALL_SERVICES=1
 PROJECT_AGENT_ADDED=0
+LEARNING_AGENT_ADDED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -92,11 +93,28 @@ ensure_project_agent() {
   fi
 }
 
+ensure_learning_agent() {
+  command -v openclaw >/dev/null 2>&1 || return 0
+  if ! openclaw agents list --json 2>/dev/null | node -e '
+    let source = "";
+    process.stdin.on("data", (chunk) => source += chunk);
+    process.stdin.on("end", () => {
+      try { process.exit(JSON.parse(source).some((agent) => agent.id === "learning") ? 0 : 1); }
+      catch { process.exit(1); }
+    });
+  '; then
+    openclaw agents add learning --non-interactive --workspace "$HOME/.openclaw/workspace-learning"
+    LEARNING_AGENT_ADDED=1
+  fi
+  openclaw agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
+}
+
 echo "==> 1/6 安装人格文件（原有三套保持原样）"
 if [[ "$INSTALL_AGENTS" == "1" ]]; then
   install_persona "$REPO_ROOT/personas/chat" "$HOME/.openclaw/workspace" chat
   install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
   install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
+  install_persona "$REPO_ROOT/personas/learning" "$HOME/.openclaw/workspace-learning" learning
   install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
 else
   echo "    已跳过"
@@ -115,6 +133,10 @@ fi
 
 if [[ "$INSTALL_AGENTS" == "1" ]]; then
   ensure_project_agent
+  ensure_learning_agent
+  if [[ "$LEARNING_AGENT_ADDED" == "1" && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
+    openclaw gateway restart >/dev/null 2>&1 || true
+  fi
 fi
 
 echo "==> 3/6 安装碧琪语音服务"

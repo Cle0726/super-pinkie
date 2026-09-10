@@ -73,6 +73,10 @@ node $PatchScript
 if ($LASTEXITCODE -ne 0) { throw "Transport patch failed" }
 node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Context protection patch failed" }
+node (Join-Path $RepoDir "patch\apply-compaction-boundary-recovery.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Compaction boundary recovery patch failed" }
+node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Local unrestricted policy patch failed" }
 python (Join-Path $RepoDir "services\context\setup.py")
 if ($LASTEXITCODE -ne 0) { throw "Context policy setup failed" }
 python (Join-Path $RepoDir "services\project-scope\setup.py")
@@ -107,6 +111,7 @@ $personaMap = @{
   "chat"      = "$UserHome\.openclaw\workspace"
   "project"   = "$UserHome\.openclaw\workspace-project"
   "thinking"  = "$UserHome\.openclaw\workspace-thinking"
+  "learning"  = "$UserHome\.openclaw\workspace-learning"
   "neutral"   = "$UserHome\.openclaw\workspace-unrestricted"
 }
 foreach ($mode in $personaMap.Keys) {
@@ -138,6 +143,11 @@ if ($null -ne $ocBin) {
     & openclaw agents add project --non-interactive --workspace "$UserHome\.openclaw\workspace-project" 2>$null
   }
   & openclaw agents set-identity --agent project --identity-file "$UserHome\.openclaw\workspace-project\IDENTITY.md" 2>$null
+  if ($agentList -notmatch '"id"\s*:\s*"learning"') {
+    Write-Host "    registering learning agent"
+    & openclaw agents add learning --non-interactive --workspace "$UserHome\.openclaw\workspace-learning" 2>$null
+  }
+  & openclaw agents set-identity --agent learning --identity-file "$UserHome\.openclaw\workspace-learning\IDENTITY.md" 2>$null
 }
 
 # ── 4/6  UI 皮肤注入 ──────────────────────────────────────────────────────

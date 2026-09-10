@@ -13,6 +13,7 @@ function fixture(t) {
     chat: path.join(home, '.openclaw/workspace'),
     project: path.join(home, '.openclaw/workspace-project'),
     ideas: path.join(home, '.openclaw/workspace-thinking'),
+    learning: path.join(home, '.openclaw/workspace-learning'),
     none: path.join(home, '.openclaw/workspace-unrestricted'),
   };
   for (const root of Object.values(roots)) fs.mkdirSync(path.join(root, 'memory'), {recursive: true});
@@ -21,7 +22,7 @@ function fixture(t) {
 }
 
 const context = (root, agent, suffix = 'main') => ({
-  mode: {main: 'chat', project: 'project', thinking: 'ideas', unrestricted: 'none'}[agent],
+  mode: {main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'}[agent],
   agentId: agent,
   sessionKey: `agent:${agent}:${suffix}`,
   workspaceDir: root,
@@ -42,6 +43,17 @@ test('four modes use four physical stores and never retrieve another mode sentin
     const found = memory.retrieve(context(roots[mode], agent), 'SENTINEL', {limit: 12}).records.map(record => record.text);
     assert.deepEqual(found, [expected]);
   }
+});
+
+test('learning mode has its own physical memory store', t => {
+  const {memory, roots} = fixture(t);
+  const learning = context(roots.learning, 'learning');
+  const thinking = context(roots.thinking, 'thinking');
+  memory.remember(learning, {text: 'LEARNING_ONLY_SENTINEL', pinned: true});
+  memory.remember(thinking, {text: 'THINKING_ONLY_SENTINEL', pinned: true});
+  assert.deepEqual(memory.retrieve(learning, 'SENTINEL').records.map(item => item.text), ['LEARNING_ONLY_SENTINEL']);
+  assert.equal(memory.list(thinking, {query: 'LEARNING_ONLY'}).records.length, 0);
+  assert.ok(fs.existsSync(path.join(roots.learning, 'memory/.clekk/records.json')));
 });
 
 test('project mode keeps different bound folders in separate namespaces', t => {

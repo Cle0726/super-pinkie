@@ -22,7 +22,7 @@
     url.searchParams.delete('laolao-switch');
     window.history.replaceState(window.history.state, '', url.href);
   }
-  const ids = ['chat', 'project', 'thinking', 'unrestricted'];
+  const ids = ['chat', 'project', 'thinking', 'learning', 'unrestricted'];
   const session = url.searchParams.get('session') || '';
   const routed = session.startsWith('agent:main:') ? 'chat' : ids.find(id => session.startsWith(`agent:${id}:`));
   const selected = switching && ids.includes(handoff?.mode) ? handoff.mode : routed || localStorage.getItem('laolao:active-mode');
@@ -31,6 +31,7 @@
     chat: { label: '唠嗑模式', address: '先生', waiting: '新聊天正在铺开彩带…', ready: '唠嗑小屋准备好啦！' },
     project: { label: '项目模式', address: '老板', waiting: '项目档案正在摊开…', ready: '项目工作台准备好啦！' },
     thinking: { label: '想法模式', address: '先生', waiting: '灵感房间正在亮灯…', ready: '想法小屋准备好啦！' },
+    learning: { label: '学习模式', address: '先生', waiting: '学习小屋正在亮灯…', ready: '学习小屋准备好啦！' },
     unrestricted: { label: '无限制模式', address: '先生', waiting: '彩虹力量正在接管房间…', ready: '彩虹力量准备好啦！' },
   }[mode];
   const initial = switching ? Math.max(68, Math.min(96, Number(handoff?.progress) || 68)) : 8;
@@ -82,7 +83,12 @@
     window.setTimeout(() => {
       if (success) motion.enter();
       splash.classList.add('is-leaving');
-      window.setTimeout(() => splash.remove(), motion.reduced() ? 0 : 560);
+      window.setTimeout(() => {
+        splash.remove();
+        window.dispatchEvent(new CustomEvent('laolao:splash-cleared', {
+          detail: { mode, switching },
+        }));
+      }, motion.reduced() ? 0 : 560);
     }, success && !motion.reduced() ? 160 : 0);
   };
   const phrases = [

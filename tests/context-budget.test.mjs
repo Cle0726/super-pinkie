@@ -46,7 +46,7 @@ const threshold = resolveCompactionThreshold({
 \t});
 return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
-test('ultra-long retention follows the installed large-window policy',()=>{
+test('compaction triggers late but leaves enough recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
@@ -54,11 +54,23 @@ test('ultra-long retention follows the installed large-window policy',()=>{
     assert.equal(installedPolicy.triggerRatio,.85);
     assert.equal(b.threshold,Math.floor(resolved*.85));
     assert.equal(resolved-b.reserve,b.threshold);
-    const requestedKeep=Math.floor(resolved*installedPolicy.keepRecentRatio);
-    const workingHeadroom=Math.max(1024,Math.floor(resolved*.05));
+    const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
+    const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
     assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
+    assert.equal(b.targetRatio,.6);
+    assert.ok(b.keepRecent<b.threshold);
     assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
+});
+test('272k model compacts far enough that summary and prompt overhead cannot immediately re-overflow',()=>{
+  const b=compactionBudget(272000);
+  assert.deepEqual({threshold:b.threshold,reserve:b.reserve,keepRecent:b.keepRecent},{
+    threshold:231200,
+    reserve:40800,
+    keepRecent:163200
+  });
+  // The failed production session added about 30k tokens of summary/system overhead.
+  assert.ok(b.keepRecent+30000<b.threshold);
 });
 test('native compaction settings no longer use a fixed 60k reserve or 40k tail',()=>{
   const run=executable(transform('settings',settings),'settings');

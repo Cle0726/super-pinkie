@@ -18,7 +18,7 @@ test('manual context control ships in both UI installers',()=>{
   for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']){
     const source=read(file);
     assert.match(source,/laolao-context-compact\.js/);
-    assert.match(source,/contextcompact[12]/);
+    assert.match(source,/contextcompact3/);
   }
 });
 

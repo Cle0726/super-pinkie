@@ -40,9 +40,9 @@ def policy(home=None):
     # an unknown model past the trigger ratio and start an avoidable compaction.
     base['unknownContextWindow'] = max(4096, positive(base.get('unknownContextWindow')) or 256000)
     target_ratio = base.get('targetRatio')
-    base['targetRatio'] = min(.9, max(.3, target_ratio)) if isinstance(target_ratio, (int, float)) and not isinstance(target_ratio, bool) and math.isfinite(target_ratio) else .6
+    base['targetRatio'] = min(.75, max(.35, target_ratio)) if isinstance(target_ratio, (int, float)) and not isinstance(target_ratio, bool) and math.isfinite(target_ratio) else .6
     keep_ratio = base.get('keepRecentRatio')
-    base['keepRecentRatio'] = min(.85, max(.05, keep_ratio)) if isinstance(keep_ratio, (int, float)) and not isinstance(keep_ratio, bool) and math.isfinite(keep_ratio) else .85
+    base['keepRecentRatio'] = min(.75, max(.05, keep_ratio)) if isinstance(keep_ratio, (int, float)) and not isinstance(keep_ratio, bool) and math.isfinite(keep_ratio) else .6
     if not isinstance(base.get('modelLimits'), dict):
         base['modelLimits'] = {}
     return base
@@ -125,13 +125,13 @@ def model_budget(ref, config=None, home=None):
     if cap and provider != 'codex-cli' and cap < limit:
         limit, source = cap, source + '+agent-cap'
     threshold = max(1, math.floor(limit*rules['triggerRatio']))
-    # target and keepRecent now honor policy ratios so a wider keepRecentRatio
-    # actually preserves more recent messages instead of being capped at 1/5.
-    target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-1024))
+    # Trigger late, then compact far enough below it to leave room for the
+    # generated checkpoint, fixed prompts, tool schemas and the next answer.
+    target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-4096))
     requested_keep = max(1, math.floor(limit*rules['keepRecentRatio']))
-    # The saved preference remains untouched. At runtime leave five percent of
-    # the real model window below the 85% trigger so the next reply has room.
-    working_headroom = max(1024, math.floor(limit*.05))
+    # The checkpoint preserves compacted history. The raw tail must not consume
+    # nearly the whole trigger budget again or recovery will loop forever.
+    working_headroom = max(4096, math.floor(limit*.15))
     keep_recent = min(requested_keep, max(1, threshold-working_headroom))
     return {'model':ref, 'window':limit, 'threshold':threshold, 'reserve':limit-threshold,
             'target':target, 'keepRecent':keep_recent, 'source':source}

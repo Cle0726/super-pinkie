@@ -44,10 +44,10 @@ test('tier completion refreshes history directly while reload stays a guarded of
   assert.match(src,/refreshVisibleChat/);
   assert.match(src,/typeof state\.refreshCurrentChat === "function"/);
   assert.match(src,/client\.request\("chat\.history"/);
-  assert.match(src,/(?:recoverCurrentChat|scheduleRecovery)\("tier-complete"/);
+  assert.match(src,/scheduleRecovery\("tier-complete"/);
   assert.doesNotMatch(src,/button\.chat-settings-action/);
-  assert.match(src,/if \(body\?\.ready === true && !gatewayConnected\(\)\) reloadRecoveredGateway\(\)/);
-  assert.match(src,/now - previous < 8_000/);
+  assert.match(src,/body\?\.ready === true && !gatewayConnected\(\) && !nativeGatewayConnected\(\)/);
+  assert.match(src,/now - previous < 30_000/);
 });
 
 test('tier menu uses compact self-drawn pink glass controls and avoids a root mutation observer',()=>{

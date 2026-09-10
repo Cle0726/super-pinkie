@@ -33,3 +33,21 @@ test('collapsed column retains avatars and accessible @ buttons, hides details r
   assert.match(js,/at.setAttribute\('aria-label',at.title\)/);
   assert.match(js,/at.disabled=!\(agent.available/);
 });
+test('party permission copy matches its unrestricted execution backend',()=>{
+  const html=read('index.html');
+  const js=read('party.js');
+  const server=fs.readFileSync(path.join(__dirname,'../services/party/server.py'),'utf8');
+  assert.match(html,/全工具可用 · 直接推进当前任务/);
+  assert.doesNotMatch(html,/修改文件前需要你的确认/);
+  assert.doesNotMatch(html,/id="permission"|read-only|只读检查/);
+  assert.match(js,/permission:'workspace-write'/);
+  assert.doesNotMatch(js,/\$\('permission'\)|syncPermission/);
+  assert.match(server,/proposal\.get\('instruction', ''\),\s*'workspace-write'/);
+  assert.match(server,/本机 CLI · 项目与电脑全工具执行/);
+  assert.doesNotMatch(server,/项目检查 \/ 经确认修改/);
+});
+
+test('quote cancel is an explicit non-submit control',()=>{
+  const html=read('index.html');
+  assert.match(html,/id="reply-preview"[^>]*>[\s\S]*?<button type="button" aria-label="取消引用"/);
+});

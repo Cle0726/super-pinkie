@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
-import plugin,{CleKkAuditLog,CleKkSupervisor,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
+import plugin,{CleKkAuditLog,CleKkSupervisor,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,createCuaComputerTool,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mode-'));
@@ -42,12 +42,18 @@ test('each prompt loads only its runtime workspace persona and memory',t=>{
 });
 
 test('learn while doing is one separate system module in every mode',t=>{
-  for(const [agentId,mode] of [['main','chat'],['project','project'],['thinking','ideas'],['unrestricted','none']]){
+  for(const [agentId,mode] of [['main','chat'],['project','project'],['thinking','ideas'],['learning','learning'],['unrestricted','none']]){
     const root=workspace(t,mode);
     const result=new ModeArchitecture().prompt({prompt:'开始工作'},{agentId,sessionKey:`agent:${agentId}:learning`,workspaceDir:root});
     assert.equal((result.appendSystemContext.match(/独立模块：边做边学/g)||[]).length,1);
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
+    if(mode==='learning'){
+      assert.match(result.appendSystemContext,/学习模式方法模块/);
+      assert.match(result.appendSystemContext,/默认讲解要短、白话、口语化/);
+      assert.match(result.appendSystemContext,/能三句话讲清就不写三段/);
+      assert.match(result.appendSystemContext,/最小实验/);
+    }
     if(mode==='none'){
       assert.doesNotMatch(result.appendSystemContext,/persona-none|voice-none|index-none|identity-none|active-none/);
       assert.doesNotMatch(result.appendSystemContext,/四模式记忆运行规则/);
@@ -62,6 +68,52 @@ test('global integrity gate rejects completion claims without real execution',()
   const blocked=guard.finalize({lastAssistantMessage:'已经全部完成并成功交付。'},ctx);
   assert.equal(blocked.action,'revise');
   assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('response-only smoke checks do not trigger execution retries',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:response-only',runId:'run-response-only'};
+  guard.begin({prompt:'只回复：CLE Kk Gemini 3.6 连通性测试通过。不要调用工具。'},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'CLE Kk Gemini 3.6 连通性测试通过。'},ctx),undefined);
+});
+
+test('response-only wording still allows an explicit follow-up action',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:response-followup',runId:'run-response-followup'};
+  guard.begin({prompt:'只回复结果，然后运行测试确认文件状态'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'测试完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('read-only work accepts real observation but file mutation still needs a mutating tool',t=>{
+  const root=workspace(t,'observation'),target=path.join(root,'README.md');
+  fs.writeFileSync(target,'learning-wallpaper-final.png');
+
+  const readGuard=new CompletionIntegrityGuard();
+  const readCtx={agentId:'learning',sessionKey:'agent:learning:real-read'};
+  readGuard.begin({prompt:'请调用工具读取 README.md 并告诉我文件名'},readCtx);
+  readGuard.beforeTool({toolName:'read',toolCallId:'r1',params:{path:target}},readCtx);
+  readGuard.afterTool({toolName:'read',toolCallId:'r1',params:{path:target},result:'learning-wallpaper-final.png'},readCtx);
+  assert.equal(readGuard.finalize({lastAssistantMessage:'文件名是 learning-wallpaper-final.png。'},readCtx),undefined);
+
+  const editGuard=new CompletionIntegrityGuard();
+  const editCtx={agentId:'learning',sessionKey:'agent:learning:read-cannot-fake-edit'};
+  editGuard.begin({prompt:'请修改 README.md 并保存'},editCtx);
+  editGuard.beforeTool({toolName:'read',toolCallId:'r2',params:{path:target}},editCtx);
+  editGuard.afterTool({toolName:'read',toolCallId:'r2',params:{path:target},result:'learning-wallpaper-final.png'},editCtx);
+  const blocked=editGuard.finalize({lastAssistantMessage:'文件已经修改完成。'},editCtx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
+test('negated mutation wording does not reject a successful read-only exec',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'learning',sessionKey:'agent:learning:read-only-exec',runId:'run-read-only-exec'};
+  guard.begin({prompt:'请做一次真实的只读工具调用：使用 exec 执行 pwd，不要修改、创建或删除任何文件；工具返回后只回复工具调用通过。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'exec-read-only',params:{command:'pwd'}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'exec-read-only',params:{command:'pwd'},result:{content:[{type:'text',text:'/tmp'}],details:{status:'completed',exitCode:0}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'工具调用通过。'},ctx),undefined);
 });
 
 test('execution requests cannot evade the gate by omitting the word completed',()=>{
@@ -239,19 +291,17 @@ test('the verifier dependency closure is hash locked with the Skill',async t=>{
   assert.equal(checked.ok,false);assert.match(checked.reason,/校验依赖/);
 });
 
-test('runtime blocks credential extraction and forged evidence before the tool runs',()=>{
+test('runtime never blocks tools up front while completion evidence stays independently verified',()=>{
   const runtime=new ModeArchitecture();
   const ctx={agentId:'project',sessionKey:'agent:project:tool-policy'};
   const cookie=runtime.beforeTool({toolName:'browser',params:{action:'act',request:{kind:'evaluate',fn:'() => document.cookie'}}},ctx);
-  assert.equal(cookie.block,true);
-  assert.match(cookie.blockReason,/Cookie/);
+  assert.equal(cookie,undefined);
   const forged=runtime.beforeTool({toolName:'write',params:{path:'/tmp/publish_receipt.json',content:'{}'}},ctx);
-  assert.equal(forged.block,true);
-  assert.match(forged.blockReason,/不能直接手写/);
+  assert.equal(forged,undefined);
   const pageProof=runtime.beforeTool({toolName:'write',params:{path:'/tmp/public_page_evidence.txt',content:'fake'}},ctx);
-  assert.equal(pageProof.block,true);assert.match(pageProof.blockReason,/不能直接手写/);
+  assert.equal(pageProof,undefined);
   const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/Admin/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
-  assert.equal(controlRead.block,true);assert.match(controlRead.blockReason,/宿主运行层维护/);
+  assert.equal(controlRead,undefined);
 });
 
 test('CLE Kk blocks a false terminal before it reaches transcript or delivery',async t=>{
@@ -393,6 +443,51 @@ test('CLE Kk binds tool hooks without sessionKey back to their parent run',t=>{
   assert.equal(state.mutationEpoch,1);
   assert.equal(supervisor.integrity.runs.has(runId),false);
   assert.equal(supervisor.integrity.finalize({lastAssistantMessage:'项目已经完成。'},{sessionKey:key},{verifyExternal:false}),undefined);
+});
+
+test('CLE Kk also binds finalize hooks without sessionKey back to their parent run',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-finalize-binding-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const target=path.join(root,'README.md');
+  fs.writeFileSync(target,'learning-wallpaper-final.png');
+  const key='agent:learning:finalize-binding',runId='provider-read-run';
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(path.join(root,'audit'))});
+  supervisor.begin({prompt:'请调用工具读取 README.md 并告诉我文件名',runId},{agentId:'learning',sessionKey:key,runId});
+  supervisor.beforeTool({toolName:'read',toolCallId:'r',runId,params:{path:target}},{agentId:'learning',runId});
+  supervisor.afterTool({toolName:'read',toolCallId:'r',runId,params:{path:target},result:'learning-wallpaper-final.png'},{agentId:'learning',runId});
+  assert.equal(supervisor.finalizeDecision(
+    {runId,lastAssistantMessage:'文件名是 learning-wallpaper-final.png。'},
+    {agentId:'learning',runId},
+    {verifyExternal:false},
+  ),undefined);
+  assert.equal(supervisor.integrity.runs.has(runId),false);
+});
+
+test('empty startup and prompt-build hooks share one evidence window',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-two-stage-begin-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const target=path.join(root,'README.md');
+  fs.writeFileSync(target,'learning-wallpaper-final.png');
+  const key='agent:learning:two-stage',runId='provider-two-stage-run';
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(path.join(root,'audit'))});
+
+  // This mirrors the live OpenClaw ordering: before_agent_run owns the
+  // sessionKey, while before_prompt_build and later hooks may expose runId.
+  supervisor.begin({runId,prompt:''},{agentId:'learning',sessionKey:key,runId});
+  supervisor.begin({runId,prompt:'请调用 read 工具读取 README.md'},{agentId:'learning',runId});
+  supervisor.beforeTool({toolName:'read',toolCallId:'r',runId,params:{path:target}},{agentId:'learning',runId});
+  supervisor.afterTool({toolName:'read',toolCallId:'r',runId,params:{path:target},result:'learning-wallpaper-final.png'},{agentId:'learning',runId});
+
+  const state=supervisor.integrity.runs.get(key);
+  assert.equal(state.prompt,'请调用 read 工具读取 README.md');
+  assert.equal(state.tools.length,1);
+  assert.equal(state.tools[0].name,'read');
+  assert.equal(supervisor.integrity.runs.has(runId),false);
+  assert.equal(supervisor.finalizeDecision(
+    {runId,lastAssistantMessage:'文件名是 learning-wallpaper-final.png。'},
+    {agentId:'learning',runId},
+    {verifyExternal:false},
+  ),undefined);
 });
 
 test('CLE Kk audit and durable state detect tampering',t=>{
@@ -630,6 +725,17 @@ test('a file-changing task needs a real effect and a post-change check',t=>{
   guard.afterTool({toolName:'read',toolCallId:'read-1',params:{path:file},result:'fixed'},ctx);
   result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
   assert.equal(result,undefined);
+});
+
+test('a mutating exec may verify its own cleanup with an explicit shell file predicate',()=>{
+  const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:self-checking-cleanup'};
+  guard.begin({prompt:'创建临时文件、核对后删除并确认清理完成'},ctx);
+  guard.afterTool({
+    toolName:'exec',toolCallId:'cleanup',
+    params:{command:'rm -f /tmp/clekk-probe && [ ! -e /tmp/clekk-probe ] && echo DELETED_CONFIRMED'},
+    result:'DELETED_CONFIRMED',
+  },ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'临时文件已经删除并确认完成。'},ctx),undefined);
 });
 
 test('an empty write result plus a read cannot fake a host file change',()=>{
@@ -1158,7 +1264,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,2);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory']);
+  assert.equal(tools.length,3);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer']);
   const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
   assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   let response;
@@ -1170,7 +1276,38 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
 
 test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
-  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','delivery_guard']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','computer','delivery_guard']);
+});
+
+test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
+  const calls=[];
+  const environment={OPENCLAW_CUA_DRIVER_ENDPOINT:JSON.stringify({
+    binaryPath:'/Applications/CuaDriver.app/Contents/MacOS/cua-driver',
+    socketPath:'/tmp/clekk-test/driver.sock',
+  })};
+  const runner=async(file,args,options)=>{
+    calls.push({file,args,options});
+    return {stdout:'{"accessibility":true,"screen_recording":true}',stderr:''};
+  };
+  const tool=createCuaComputerTool({agentId:'learning'},runner,environment);
+  const result=await tool.execute('call-1',{action:'check_permissions',arguments:{},timeout_ms:9000});
+  assert.equal(result.isError,false);
+  assert.equal(result.details.accessibility,true);
+  assert.equal(calls[0].file,'/Applications/CuaDriver.app/Contents/MacOS/cua-driver');
+  assert.deepEqual(calls[0].args,['call','check_permissions','{}','--socket','/tmp/clekk-test/driver.sock','--json']);
+  assert.equal(calls[0].options.timeout,9000);
+});
+
+test('computer tool discovers the complete driver surface and fails clearly before the App endpoint is ready',async()=>{
+  const calls=[];
+  const endpoint={OPENCLAW_CUA_DRIVER_ENDPOINT:JSON.stringify({binaryPath:'/driver',socketPath:'/tmp/driver.sock'})};
+  const tool=createCuaComputerTool({},async(file,args)=>{calls.push({file,args});return {stdout:'click: Click\nlist_apps: List apps\n',stderr:''};},endpoint);
+  const listed=await tool.execute('call-list',{action:'list_tools'});
+  assert.match(listed.content[0].text,/list_apps/);
+  assert.deepEqual(calls[0].args,['list-tools','--socket','/tmp/driver.sock']);
+  const unavailable=await createCuaComputerTool({},async()=>assert.fail('runner must not start'),{}).execute('call-2',{action:'list_apps'});
+  assert.equal(unavailable.isError,true);
+  assert.match(unavailable.content[0].text,/尚未连接/);
 });
 
 test('a rejected next-turn injection cannot leave a ghost tier lock',async()=>{
@@ -1212,6 +1349,8 @@ test('upstream watchdog retries transient failures invisibly and ignores explici
   await watchdog.agentEnded({runId:'r2',success:false,error:'user aborted'},{agentId:'project',sessionKey:'agent:project:one'});
   assert.equal(scheduled.length,1);
   assert.equal(isTransientFailure('connection_closed'),true);assert.equal(isTransientFailure('invalid api key'),false);
+  assert.equal(isTransientFailure("You've reached your Codex subscription usage limit. Next reset in 2 hours"),true);
+  assert.equal(isTransientFailure('quota_exhausted for this account; retry with another account'),true);
   assert.equal(isTransientFailure('AbortError after connection_closed'),true);
   assert.equal(isTransientFailure('This operation was aborted'),true);
   assert.equal(isTransientFailure('incomplete turn without a final reply'),true);
@@ -1219,6 +1358,25 @@ test('upstream watchdog retries transient failures invisibly and ignores explici
   assert.equal(isTransientFailure('EmbeddedAttemptSessionTakeoverError'),true);
   assert.equal(isTransientFailure('cancelled by user'),false);
   assert.equal(isTransientFailure('user aborted'),false);
+});
+
+test('quota failures switch the invisible watchdog turn to the local pool and stop after bounded fallbacks',async()=>{
+  const injected=[];
+  const watchdog=new UpstreamWatchdog({session:{workflow:{
+    enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
+    unscheduleSessionTurnsByTag:async()=>({removed:0}),
+    scheduleSessionTurn:async()=>({id:'retry'}),
+  }}});
+  const key='agent:project:quota-fallback';
+  watchdog.models.set(key,'clekk/gpt-5.6-sol');
+  assert.equal(await watchdog.agentEnded({success:false,error:"You've reached your Codex subscription usage limit. Next reset in 1 hour"},{agentId:'project',sessionKey:key}),true);
+  assert.equal(watchdog.models.get(key),'mm/gemini-3.7-flash-tiered');
+  assert.deepEqual(watchdog.beforeModelResolve({prompt:'\u2063'},{sessionKey:key}),{providerOverride:'mm',modelOverride:'gemini-3.7-flash-tiered'});
+  assert.equal(await watchdog.agentEnded({success:false,error:'quota exhausted for this account'},{agentId:'project',sessionKey:key}),true);
+  assert.equal(watchdog.models.get(key),'mm/gemini-3.6-flash-tiered');
+  assert.equal(await watchdog.agentEnded({success:false,error:'quota exhausted for this account'},{agentId:'project',sessionKey:key}),false);
+  assert.equal(watchdog.models.has(key),false);
+  assert.equal(injected.length,2);
 });
 
 test('watchdog recovers an aborted provider run even when agent_end has no top-level error',async()=>{
@@ -1301,7 +1459,7 @@ test('watchdog reads structured incomplete-turn errors from agent_end',async()=>
   assert.equal(retried,true);assert.equal(injected.length,1);
 });
 
-test('watchdog defaults unknown failed turns and context overflow to recovery',async()=>{
+test('watchdog retries unknown failures but retires context overflow after native compaction is exhausted',async()=>{
   const injected=[];
   const workflow={
     enqueueNextTurnInjection:async value=>{injected.push(value);return {enqueued:true};},
@@ -1311,8 +1469,8 @@ test('watchdog defaults unknown failed turns and context overflow to recovery',a
   assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
     {agentId:'main',sessionKey:'agent:main:unknown'}),true);
   assert.equal(await watchdog.agentEnded({success:false,error:'Context overflow: prompt too large for the model'},
-    {agentId:'project',sessionKey:'agent:project:overflow'}),true);
-  assert.equal(injected.length,2);
+    {agentId:'project',sessionKey:'agent:project:overflow'}),false);
+  assert.equal(injected.length,1);
 });
 
 test('watchdog resumes custom-agent sessions by default, with an opt-out for legacy mode-only hosts',async()=>{
@@ -1443,10 +1601,11 @@ test('online watchdog uses the authenticated local CLI and removes its cron fall
   }),true);
   assert.equal(calls.length,1);assert.equal(calls[0].file,process.execPath);
   assert.deepEqual(calls[0].args.slice(1,4),['gateway','call','chat.send']);
+  assert.ok(calls[0].options.timeout>=32_000);
   const params=JSON.parse(calls[0].args[calls[0].args.indexOf('--params')+1]);
   assert.equal(params.sessionKey,'agent:project:one');assert.equal(params.agentId,'project');
   assert.equal(params.message,'\u2063');assert.equal(params.deliver,false);
-  assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,7000);
+  assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,32_000);
   assert.deepEqual(removed,[{sessionKey:'agent:project:one',tag:'pinkie-watchdog-test'}]);
 });
 
@@ -1544,6 +1703,39 @@ test('online retry timers survive a temporary local gateway call failure',async 
   t.after(()=>void watchdog.cancel(sessionKey));
 });
 
+test('a cancelled slow CLI dispatch cannot resurrect its old retry generation',async()=>{
+  let rejectRunner;
+  const api={session:{workflow:{unscheduleSessionTurnsByTag:async()=>({removed:1})}}};
+  const runner=()=>new Promise((resolve,reject)=>{rejectRunner=reject;});
+  const watchdog=new UpstreamWatchdog(api,()=>'',runner,'/runtime/openclaw/dist/index.js',
+    ()=>({pending:0,quietForMs:20_000}));
+  const sessionKey='agent:project:cancel-slow-dispatch';
+  const dispatch=watchdog.dispatchImmediate({sessionKey,agentId:'project',runId:'old',attempt:7,tag:'old'});
+  await new Promise(resolve=>setImmediate(resolve));
+  await watchdog.cancel(sessionKey,true);
+  rejectRunner(new Error('late ambiguous CLI timeout'));
+  assert.equal(await dispatch,false);
+  assert.equal(watchdog.timers.has(sessionKey),false);
+  assert.equal(watchdog.generationFor(sessionKey),1);
+});
+
+test('explicit watchdog cancellation clears the persisted rejected final',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-cancel-pending-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:cancel-pending',audit=new CleKkAuditLog(root);
+  const supervisor=new CleKkSupervisor({audit,integrity:new CompletionIntegrityGuard()});
+  const ctx={agentId:'project',sessionKey:key,runId:'rejected-run'};
+  supervisor.begin({prompt:'修改项目并完成'},ctx);
+  supervisor.recordFinalize({lastAssistantMessage:'已经完成。'},ctx,
+    {action:'revise',reason:'缺少真实验收'});
+  assert.equal(supervisor.hasPending(key),true);
+  assert.ok(audit.readState(key));
+  assert.equal(supervisor.cancel(key,'watchdog_cancel_rpc'),true);
+  assert.equal(supervisor.hasPending(key),false);
+  assert.equal(audit.readState(key),null);
+  assert.equal(audit.readRecords(key).at(-1).type,'turn_cancelled');
+});
+
 test('mode architecture tracks child activity even outside a selected tier',()=>{
   const runtime=new ModeArchitecture();
   const parent='agent:main:plain',child=`${parent}:subagent:one`;
@@ -1553,6 +1745,21 @@ test('mode architecture tracks child activity even outside a selected tier',()=>
   runtime.ended({targetSessionKey:child,outcome:'ok'});
   const activity=runtime.activityFor(parent);
   assert.equal(activity.pending,0);assert.ok(activity.quietForMs<100);
+});
+
+test('mode architecture fences watchdog retries for every live parent run',()=>{
+  const runtime=new ModeArchitecture(),key='agent:learning:parent-fence';
+  runtime.parentStarted({},{sessionKey:key});
+  assert.equal(runtime.activityFor(key).parentRunning,true);
+  // Host variants may only reveal the concrete runId at agent_end. That must
+  // still clear the anonymous start marker instead of blocking retries forever.
+  runtime.parentEnded({runId:'late-provider-run'},{sessionKey:key,runId:'late-provider-run'});
+  assert.equal(runtime.activityFor(key).parentRunning,false);
+
+  runtime.parentStarted({runId:'known-run'},{sessionKey:key,runId:'known-run'});
+  assert.equal(runtime.activityFor(key).parentRunning,true);
+  runtime.parentEnded({runId:'known-run'},{sessionKey:key,runId:'known-run'});
+  assert.equal(runtime.activityFor(key).parentRunning,false);
 });
 
 test('a new user request is not trapped behind a rejected retry turn',async t=>{

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const modeLabels = {chat: "唠嗑模式", project: "项目模式", thinking: "想法模式", unrestricted: "无限制模式"};
+  const modeLabels = {chat: "唠嗑模式", project: "项目模式", thinking: "想法模式", learning: "学习模式", unrestricted: "无限制模式"};
   const kindLabels = {identity: "稳定身份", preference: "偏好", feedback: "纠正与默契", decision: "长期决策", fact: "稳定事实", reference: "参考位置"};
   let layer = null;
   let editorRecord = null;

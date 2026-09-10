@@ -22,22 +22,27 @@ $Assets = @(
     "laolao-mode-chat.png",
     "laolao-mode-project.png",
     "laolao-mode-thinking.png",
+    "laolao-mode-learning.png",
     "laolao-mode-unrestricted.png",
     "laolao-mode-chat-hd.png",
     "laolao-mode-project-hd.png",
     "laolao-mode-thinking-hd.png",
+    "laolao-mode-learning-hd.png",
     "laolao-mode-unrestricted-hd.png",
     "laolao-mode-transition-chat.png",
     "laolao-mode-transition-project.png",
     "laolao-mode-transition-thinking.png",
+    "laolao-mode-transition-learning.png",
     "laolao-mode-transition-unrestricted.png",
     "laolao-mode-chat.svg",
     "laolao-mode-project.svg",
     "laolao-mode-thinking.svg",
+    "laolao-mode-learning.svg",
     "laolao-mode-unrestricted.svg",
     "laolao-wallpaper.png",
     "laolao-wallpaper-project.png",
     "laolao-wallpaper-thinking.png",
+    "laolao-wallpaper-learning.png",
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
     "laolao-theme.css",
@@ -137,7 +142,7 @@ function Apply-UISkin {
         )
     }
     if ($html -notmatch "laolao-handoff-bootstrap") {
-        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
+        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff5""></script>`n    `$1"
     }
 
     # One controller only. Older packages placed this script in both the head
@@ -151,27 +156,27 @@ function Apply-UISkin {
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
-        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic11">',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side12">',
+        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic12">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side13">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar15"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar16"></script>',
         '<script src="./laolao-session-list.js?v=sessions5"></script>',
         '<script src="./laolao-usage-stats.js?v=stats15"></script>',
-        '<script defer src="./laolao-classic-shell.js?v=classic11"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic12"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
-        '<script defer src="./laolao-memory.js?v=memory1"></script>',
+        '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink15"></script>',
-        '<script defer src="./laolao-context-compact.js?v=contextcompact2"></script>',
-        '<script defer src="./laolao-resume.js?v=resume7"></script>',
-        '<script defer src="./laolao-splash.js?v=splash22"></script>'
+        '<script defer src="./laolao-deep-think.js?v=deepthink16"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
+        '<script defer src="./laolao-resume.js?v=resume14"></script>',
+        '<script defer src="./laolao-splash.js?v=splash25"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -181,20 +186,55 @@ function Apply-UISkin {
     }
 
     $versions = @{
-        'laolao-theme.css' = 'theme35'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar15'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats15';
-        'laolao-phrases.js' = 'phrases15';
-        'laolao-mode-switcher.js' = 'mode28'; 'laolao-splash.js' = 'splash22';
-        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion4'; 'laolao-resume.js' = 'resume7';
+        'laolao-theme.css' = 'theme39'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar16'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats15';
+        'laolao-phrases.js' = 'phrases20';
+        'laolao-mode-switcher.js' = 'mode31'; 'laolao-splash.js' = 'splash25';
+        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume14';
         'laolao-ui-subtraction.css' = 'subtraction1';
-        'laolao-classic-shell.css' = 'classic11'; 'laolao-classic-shell.js' = 'classic11';
-        'laolao-side-layout.css' = 'side12'; 'laolao-side-layout.js' = 'side12';
-        'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory1';
-        'laolao-deep-think.js' = 'deepthink15'; 'laolao-context-compact.js' = 'contextcompact2'
+        'laolao-classic-shell.css' = 'classic12'; 'laolao-classic-shell.js' = 'classic12';
+        'laolao-side-layout.css' = 'side13'; 'laolao-side-layout.js' = 'side12';
+        'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
+        'laolao-deep-think.js' = 'deepthink16'; 'laolao-context-compact.js' = 'contextcompact3'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'
         $html = [regex]::Replace($html, $pattern, "./$($entry.Key)?v=$($entry.Value)")
+    }
+
+    # 7.1 的历史接口会返回完整分页，但原生渲染层仍限制 100 条/24 万字符。
+    # 只放宽显示窗口；不改会话数据，也不展开工具调用正文。
+    Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'chat-page-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $chatBundle = Get-Content $_.FullName -Raw -Encoding UTF8
+        if (($chatBundle.Split('Showing last ${c} messages').Count - 1) -eq 1) {
+            $chatBundle = $chatBundle.Replace(
+                'function Zb(e){return typeof e!=`number`||!Number.isFinite(e)?100:Math.max(1,Math.min(100,Math.floor(e)))}',
+                'function Zb(e){return 5000}'
+            )
+            $chatBundle = $chatBundle.Replace(
+                'function Zb(e){return typeof e!=`number`||!Number.isFinite(e)?5000:Math.max(1,Math.min(5000,Math.floor(e)))}',
+                'function Zb(e){return 5000}'
+            )
+            $chatBundle = $chatBundle.Replace('i+c>24e4)break', 'i+c>16e6)break')
+            $chatBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
+        }
+    }
+
+    # Give both the entry module and its lazy chat chunk a revisioned URL.
+    # This bypasses an already-running cache-first worker immediately.
+    $html = [regex]::Replace(
+        $html,
+        '(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"',
+            '$1?v=clekk-history14"'
+    )
+    Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $entryBundle = Get-Content $_.FullName -Raw -Encoding UTF8
+        $entryBundle = [regex]::Replace(
+            $entryBundle,
+            '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'']*)?',
+            '$1?v=clekk-history14'
+        )
+        $entryBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
     }
 
     # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
@@ -205,7 +245,43 @@ function Apply-UISkin {
     $serviceWorker = Join-Path $UiRoot 'sw.js'
     if (Test-Path $serviceWorker) {
         $worker = Get-Content $serviceWorker -Raw -Encoding UTF8
-        $worker.Replace('OpenClaw', 'CLE Kk') | Set-Content $serviceWorker -Encoding UTF8
+        $worker = $worker.Replace('OpenClaw', 'CLE Kk')
+        $worker = [regex]::Replace($worker, '-clekk-history-render-[0-9]+', '')
+        $worker = [regex]::Replace(
+            $worker,
+            '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)',
+            '$1-clekk-history-render-14$2'
+        )
+        $worker = $worker.Replace(
+            '// Cache-first for hashed assets; network-first for HTML/other.',
+            '// Network-first for all UI files; cached copies remain an offline fallback.'
+        )
+        $cacheFirst = @'
+caches.match(event.request).then(
+        (cached) =>
+          cached ||
+          fetch(event.request).then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
+            return response;
+          }),
+      )
+'@
+        $networkFirst = @'
+fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+'@
+        $worker = $worker.Replace($cacheFirst.Trim(), $networkFirst.Trim())
+        $worker | Set-Content $serviceWorker -Encoding UTF8
     }
     Write-Host "  patched: $IndexFile"
 }
@@ -248,6 +324,7 @@ $workspaces = @(
     @{ Path = "$UserHome\.openclaw\workspace";             Asset = "laolao-mode-chat-hd.png";         Name = "pinkie-pie.png" },
     @{ Path = "$UserHome\.openclaw\workspace-project";     Asset = "laolao-mode-project-hd.png";      Name = "pinkie-pie.png" },
     @{ Path = "$UserHome\.openclaw\workspace-thinking";    Asset = "laolao-mode-thinking-hd.png";     Name = "pinkie-pie.png" },
+    @{ Path = "$UserHome\.openclaw\workspace-learning";    Asset = "laolao-mode-learning-hd.png";     Name = "pinkie-pie.png" },
     @{ Path = "$UserHome\.openclaw\workspace-unrestricted";Asset = "laolao-mode-unrestricted-hd.png"; Name = "unrestricted-mode.png" }
 )
 foreach ($ws in $workspaces) {

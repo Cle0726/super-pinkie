@@ -99,8 +99,8 @@
   /* ---------- 1. 状态与模式隔离（localStorage） ----------
      每个模式有独立 agent、会话、置顶、项目与文件夹绑定。旧版共享
      数据只迁移一次，并按会话所属 agent 拆开；旧 key 留着作为恢复副本。 */
-  const MODES = ["chat", "project", "thinking", "unrestricted"];
-  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", unrestricted: "unrestricted" };
+  const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
+  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted" };
   const AGENT_MODE = Object.fromEntries(Object.entries(MODE_AGENT).map(([mode, agent]) => [agent, mode]));
   const LEGACY_LS_KEY = "laolao.sidebar.v1";
   const MIGRATION_KEY = "laolao.sidebar.v2.migrated";

@@ -71,6 +71,11 @@ private enum BundledRuntime {
             environment["PINKIE_PYTHON_BIN"] = pythonURL?.path
         }
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
+        // CLE Kk is a private loopback desktop App. OpenClaw otherwise marks
+        // webchat turns as non-owner and silently removes gateway/nodes/cron
+        // tools from every mode. Keep the bypass scoped to this managed local
+        // gateway; public or externally launched OpenClaw keeps its defaults.
+        environment["CLE_KK_LOCAL_UNRESTRICTED"] = "1"
         // The pinned 2026.7 runtime must ignore four configuration fields
         // that a briefly installed 2026.9 build may have left behind.  The
         // setup helper removes only those schema-incompatible keys and keeps
@@ -823,10 +828,24 @@ private enum Gateway {
     }
 
     static func stop() {
-        if process?.isRunning == true { process?.terminate() }
+        // A gateway can spend minutes in restart drain after terminate(). If
+        // the Launcher exits first, that child is re-parented and the next App
+        // launch reconnects to a stale gateway carrying a dead CUA socket.
+        // Reap only the exact Process this App started, with a bounded grace.
+        let ownedProcess = process
         process = nil
         try? logHandle?.close()
         logHandle = nil
+        guard let ownedProcess else { return }
+        if ownedProcess.isRunning { ownedProcess.terminate() }
+        let deadline = Date().addingTimeInterval(2.0)
+        while ownedProcess.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if ownedProcess.isRunning {
+            Darwin.kill(ownedProcess.processIdentifier, SIGKILL)
+        }
+        ownedProcess.waitUntilExit()
     }
 
     static func repair() {
@@ -841,9 +860,9 @@ private enum Gateway {
 
 /// Owns the complete macOS computer-control chain. The notarized helper is
 /// launched through LaunchServices so macOS can attach Screen Recording and
-/// Accessibility to its stable identity. The unprivileged node host then
-/// publishes `screen.snapshot` + `computer.act` to the local Gateway through
-/// the private endpoint.
+/// Accessibility to its stable identity. The OpenClaw mode extension consumes
+/// this private endpoint directly as the `computer` tool; no extra node pairing
+/// or second gateway transport is required.
 private final class DesktopControlService {
     private static let displayName = "超級碧琪桌面控制"
     private static let driverBundleIdentifier = "com.trycua.driver"
@@ -905,10 +924,7 @@ private final class DesktopControlService {
 
     func start() {
         stopping = false
-        guard driverProcess?.isRunning != true else {
-            startNodeIfReady()
-            return
-        }
+        guard driverProcess?.isRunning != true else { return }
         startDriver()
     }
 
@@ -1013,7 +1029,12 @@ private final class DesktopControlService {
             try? FileManager.default.attributesOfItem(atPath: $0.path)[.type] as? FileAttributeType
         }
         if type == .typeSocket, driverProcess?.isRunning == true {
-            startNodeIfReady()
+            // OpenClaw 2026.7's node host does not publish computer.act from
+            // OPENCLAW_CUA_DRIVER_ENDPOINT and repeatedly asks for capability
+            // reapproval. The in-gateway computer tool uses this socket
+            // directly, so starting that legacy node would only add a failing
+            // reconnect loop.
+            lastError = nil
             return
         }
         guard attempt < 120, driverProcess?.isRunning == true else {
@@ -1044,9 +1065,11 @@ private final class DesktopControlService {
             "--host", Gateway.url.host ?? "127.0.0.1",
             "--port", String(Gateway.url.port ?? 18789),
             "--display-name", Self.displayName,
-            "--share-installed-apps",
         ]
-        arguments.append(Gateway.url.scheme == "https" ? "--tls" : "--no-tls")
+        // OpenClaw 2026.7 exposes installed apps automatically through the
+        // CUA endpoint. `--share-installed-apps` and `--no-tls` belong to a
+        // newer node CLI; either one makes this pinned node exit immediately.
+        if Gateway.url.scheme == "https" { arguments.append("--tls") }
         task.arguments = arguments
         var environment = BundledRuntime.environment()
         environment["OPENCLAW_SERVICE_KIND"] = "node"
@@ -1125,7 +1148,7 @@ private final class DesktopControlService {
         pairingProbe?.cancel()
         let item = DispatchWorkItem { [weak self] in
             let nodeID = cachedNodeID ?? Self.localNodeID()
-            if let nodeID, Self.computerReady(nodeID: nodeID) {
+            if Self.computerReady(nodeID: nodeID) {
                 DispatchQueue.main.async {
                     guard let self,
                           !self.stopping,
@@ -1135,9 +1158,18 @@ private final class DesktopControlService {
                 }
                 return
             }
-            let requestID = nodeID.flatMap { Self.pendingRequestID(nodeID: $0) }
+            let deviceRequestID = Self.pendingDeviceRequestID(nodeID: nodeID)
+            let nodeRequestID = Self.pendingNodeRequestID(nodeID: nodeID)
             let approved: Bool
-            if let requestID {
+            if let requestID = deviceRequestID {
+                // OpenClaw 2026.7 represents a node role upgrade in the
+                // device pairing queue, not in `nodes pending`.
+                approved = Self.runOpenClaw([
+                    "devices", "approve", requestID, "--timeout", "5000",
+                ]).status == 0
+            } else if let requestID = nodeRequestID {
+                // Keep compatibility with runtimes that expose the older node
+                // pairing queue and include command capabilities up front.
                 approved = Self.runOpenClaw([
                     "nodes", "approve", requestID, "--timeout", "5000",
                 ]).status == 0
@@ -1183,28 +1215,49 @@ private final class DesktopControlService {
         return deviceID
     }
 
-    private static func computerReady(nodeID: String) -> Bool {
+    private static func computerReady(nodeID: String?) -> Bool {
         let result = runOpenClaw(["nodes", "status", "--connected", "--json", "--timeout", "3000"])
         guard result.status == 0,
               let object = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any],
               let rows = object["nodes"] as? [[String: Any]] else { return false }
         return rows.contains(where: { row in
             let commands = Set((row["commands"] as? [String]) ?? [])
-            return row["nodeId"] as? String == nodeID
+            let sameNode = nodeID.map { row["nodeId"] as? String == $0 }
+                ?? (row["displayName"] as? String == displayName)
+            return sameNode
                 && row["connected"] as? Bool == true
                 && commands.contains("computer.act")
                 && commands.contains("screen.snapshot")
         })
     }
 
-    private static func pendingRequestID(nodeID: String) -> String? {
+    private static func pendingDeviceRequestID(nodeID: String?) -> String? {
+        let result = runOpenClaw(["devices", "list", "--json", "--timeout", "3000"])
+        guard result.status == 0,
+              let object = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any],
+              let rows = object["pending"] as? [[String: Any]] else { return nil }
+        return rows.first(where: { row in
+            let platform = (row["platform"] as? String)?.lowercased() ?? ""
+            let role = (row["role"] as? String)?.lowercased() ?? ""
+            let sameNode = nodeID.map { row["deviceId"] as? String == $0 }
+                ?? (row["displayName"] as? String == displayName
+                    && row["clientId"] as? String == "node-host")
+            return sameNode
+                && role == "node"
+                && (platform.hasPrefix("macos") || platform.hasPrefix("darwin"))
+        })?["requestId"] as? String
+    }
+
+    private static func pendingNodeRequestID(nodeID: String?) -> String? {
         let result = runOpenClaw(["nodes", "pending", "--json", "--timeout", "3000"])
         guard result.status == 0,
               let rows = try? JSONSerialization.jsonObject(with: result.data) as? [[String: Any]] else { return nil }
         return rows.first(where: { row in
             let platform = (row["platform"] as? String)?.lowercased() ?? ""
             let commands = Set((row["commands"] as? [String]) ?? [])
-            return row["nodeId"] as? String == nodeID
+            let sameNode = nodeID.map { row["nodeId"] as? String == $0 }
+                ?? (row["displayName"] as? String == displayName)
+            return sameNode
                 && (platform.hasPrefix("macos") || platform.hasPrefix("darwin"))
                 && commands.contains("computer.act")
                 && commands.contains("screen.snapshot")
@@ -1475,12 +1528,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         party.stop()
         roundtable.stop()
         desktopControl.stop()
-        // The gateway owns durable turns and may be draining active work.
-        // Terminating it synchronously here makes OpenClaw hold admission for
-        // up to five minutes and leaves the next App instance on a dead page.
-        // Keep the local service alive across an App relaunch/update; the next
-        // launcher adopts the same ready gateway without interrupting work.
-        // An explicit service-management action can still call Gateway.stop().
+        // CLE Kk owns this private loopback gateway. Leaving it alive preserves
+        // an expired desktop-driver socket and makes the next launch appear
+        // connected while tools cannot act. Gateway.stop() is now bounded and
+        // reaps only this Launcher's exact child process.
+        Gateway.stop()
     }
 
     // 前后台通知: WKWebView 切后台会被 macOS 挂起 JS/网络, 网关 websocket

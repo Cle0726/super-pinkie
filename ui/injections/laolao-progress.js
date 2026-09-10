@@ -14,7 +14,7 @@
       if(!state?.settings||typeof state.applySettings!=='function')continue;
       // UI alias only; never rewrite identity files or model messages. Keep the
       // native renderer in charge so names, composer and welcome stay in sync.
-      if(/^agent:(main|project|thinking|unrestricted):/.test(state.sessionKey||'') && /^(?:Assistant|助手|main|project|thinking|unrestricted)$/i.test(state.assistantName||'')){
+      if(/^agent:(main|project|thinking|learning|unrestricted):/.test(state.sessionKey||'') && /^(?:Assistant|助手|main|project|thinking|learning|unrestricted)$/i.test(state.assistantName||'')){
         state.assistantName='碧琪';state.requestUpdate?.();
       }
       if(!migrated){

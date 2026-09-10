@@ -17,7 +17,7 @@
   const restartRecoveryNotice='[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
   const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
-  const fallbackName=/^(?:Assistant|助手|main|project|thinking|unrestricted)$/i;
+  const fallbackName=/^(?:Assistant|助手|main|project|thinking|learning|unrestricted)$/i;
   const askAssistantLabel=/(?:Ask|询问|问问).*(?:OpenClaw|CLE\s*Kk)/i;
   // The compact toolbar gives the Home shortcut and the Ask shortcut a shared
   // OpenClaw-flavoured title.  The Home aria-label is the reliable difference,
@@ -65,6 +65,11 @@
     [failureSentinel, failureNotice],
     ["No agents found.", "碧琪暂时没找到小伙伴。"],
     ["Nothing waiting today", "今天没有待办派对啦。"],
+    ["Delete message", "删除消息"],
+    ["Open in canvas", "在画布中打开"],
+    ["Copy as markdown", "复制为 Markdown"],
+    ["Copied", "已复制"],
+    ["Copy failed", "复制失败"],
   ]);
 
   const translate = (text) => {
@@ -126,9 +131,6 @@
         node.nodeValue=node.nodeValue.replace(failureSentinel,failureNotice);
         bubble.setAttribute('data-pinkie-runtime-error','true');
         bubble.setAttribute('title','系统运行提示；原始信息：'+failureSentinel);
-        if(typeof window!=='undefined' && typeof window.dispatchEvent==='function' && typeof CustomEvent==='function'){
-          window.dispatchEvent(new CustomEvent('pinkie:run-failed'));
-        }
         return;
       }
     }
@@ -150,6 +152,12 @@
 
   const syncBrandChrome = () => {
     if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'CLE Kk');
+    // "You" is upstream message chrome, not user-authored content. Localize
+    // only the dedicated sender label so a real message containing that word
+    // is never rewritten.
+    document.querySelectorAll('.chat-group.user .chat-sender-name').forEach(sender=>{
+      if(sender.textContent.trim()==='You')sender.textContent='你';
+    });
     document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
       const next=value
@@ -161,7 +169,7 @@
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
-        const next=value.replace(/OpenClaw/g,'CLE Kk');
+        const next=(exactPhrases.get(value) || value).replace(/OpenClaw/g,'CLE Kk');
         if(next!==value)element.setAttribute(name,next);
       }
     });
@@ -193,6 +201,46 @@
     syncBrandChrome();
   };
 
+  const hasTerminalReplyAfter = (group, assistantGroups) => {
+    const index=assistantGroups.indexOf(group);
+    return index>=0 && assistantGroups.slice(index+1).some(candidate=>
+      [...candidate.querySelectorAll('.chat-bubble')].some(item=>{
+        const raw=item.getAttribute('data-message-text');
+        const text=item.querySelector('.chat-text')?.textContent.trim();
+        return Boolean(text && raw!==failureSentinel && raw!==watchdogSentinel
+          && !sessionFenceRecovery.test(raw||'')
+          && !raw?.startsWith(watchdogControlPrefix) && !raw?.startsWith(tierControlPrefix));
+      }));
+  };
+
+  const notifyUnrecoveredFailure = (bubble) => {
+    if(bubble.dataset.pinkieRecoveryNotified)return;
+    bubble.dataset.pinkieRecoveryNotified='true';
+    window.dispatchEvent(new CustomEvent('pinkie:run-failed'));
+  };
+
+  // Large histories mount in chunks. An old failure can appear one render
+  // before its later successful terminal reply, briefly arming the retry
+  // ribbon. Publish the reverse transition as soon as the full DOM proves
+  // every visible failure has already been superseded.
+  let lastFailureProjectionState='unknown';
+  const syncFailureProjectionState = () => {
+    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
+    const unresolvedRuntime=[...document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]')]
+      .some(bubble=>!hasTerminalReplyAfter(bubble.closest('.chat-group.assistant'),assistantGroups));
+    const unresolvedFence=assistantGroups.some(group=>
+      [...group.querySelectorAll('.chat-bubble[data-message-text]')].some(bubble=>
+        sessionFenceRecovery.test(bubble.getAttribute('data-message-text')||'') &&
+        !hasTerminalReplyAfter(group,assistantGroups)));
+    const next=unresolvedRuntime||unresolvedFence?'unrecovered':'clear';
+    if(next===lastFailureProjectionState)return;
+    const previous=lastFailureProjectionState;
+    lastFailureProjectionState=next;
+    if(next==='clear'&&previous==='unrecovered'){
+      window.dispatchEvent(new CustomEvent('pinkie:run-recovered'));
+    }
+  };
+
   const syncFailureCards = () => {
     const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
     document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]').forEach(bubble=>{
@@ -206,14 +254,7 @@
         return;
       }
       const group=bubble.closest('.chat-group.assistant');
-      const index=assistantGroups.indexOf(group);
-      const recovered=index>=0 && assistantGroups.slice(index+1).some(candidate=>
-        [...candidate.querySelectorAll('.chat-bubble')].some(item=>{
-          const raw=item.getAttribute('data-message-text');
-          const text=item.querySelector('.chat-text')?.textContent.trim();
-          return Boolean(text && raw!==failureSentinel && raw!==watchdogSentinel
-            && !raw?.startsWith(watchdogControlPrefix) && !raw?.startsWith(tierControlPrefix));
-        }));
+      const recovered=hasTerminalReplyAfter(group,assistantGroups);
       if(recovered){
         bubble.hidden=true;
         bubble.dataset.pinkieRecoveredError='true';
@@ -222,11 +263,15 @@
         bubble.hidden=false;
         bubble.style.removeProperty('display');
         delete bubble.dataset.pinkieRecoveredError;
+        notifyUnrecoveredFailure(bubble);
+      }else{
+        notifyUnrecoveredFailure(bubble);
       }
     });
   };
 
   const hideInternalRecoveryTurns = () => {
+    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
     document.querySelectorAll('.chat-group.user').forEach(group=>{
       const bubbles=[...group.querySelectorAll('.chat-group-messages > .chat-bubble')];
       let hiddenCount=0;
@@ -254,7 +299,7 @@
         delete group.dataset.pinkieInternalOnly;
       }
     });
-    document.querySelectorAll('.chat-group.assistant').forEach(group=>{
+    assistantGroups.forEach(group=>{
       const bubbles=[...group.querySelectorAll('.chat-group-messages > .chat-bubble')];
       let hiddenCount=0;
       for(const bubble of bubbles){
@@ -264,10 +309,7 @@
           bubble.dataset.pinkieInternalRecovery='true';
           bubble.style.setProperty('display','none','important');
           hiddenCount+=1;
-          if(!bubble.dataset.pinkieRecoveryNotified){
-            bubble.dataset.pinkieRecoveryNotified='true';
-            window.dispatchEvent(new CustomEvent('pinkie:run-failed'));
-          }
+          if(!hasTerminalReplyAfter(group,assistantGroups)) notifyUnrecoveredFailure(bubble);
         }else if(bubble.dataset.pinkieInternalRecovery){
           bubble.hidden=false;
           bubble.style.removeProperty('display');
@@ -361,6 +403,7 @@
     localizeToolActivity(document);
     syncFailureCards();
     hideInternalRecoveryTurns();
+    syncFailureProjectionState();
     hideLegacyThinkPrefixes();
 
     /* 全文档补扫做 600ms 防抖：Lit 有时就地复用节点（不触发 addedNodes），
@@ -380,6 +423,7 @@
         localizeToolActivity(document);
         syncFailureCards();
         hideInternalRecoveryTurns();
+        syncFailureProjectionState();
         hideLegacyThinkPrefixes();
       }, 600);
     };

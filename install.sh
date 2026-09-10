@@ -52,6 +52,8 @@ echo "    $(ls "$REPO_DIR"/prompts/unrestricted-prompt-*.txt | wc -l | tr -d ' '
 echo "==> 2/4 patching CLE Kk compatibility transports"
 node "$PATCH_SCRIPT"
 node "$REPO_DIR/patch/apply-context-budget.mjs"
+node "$REPO_DIR/patch/apply-compaction-boundary-recovery.mjs"
+OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-local-unrestricted-policy.mjs"
 python3 "$REPO_DIR/services/context/setup.py"
 python3 "$REPO_DIR/services/project-scope/setup.py"
 python3 "$REPO_DIR/services/mode-architecture/setup.py"

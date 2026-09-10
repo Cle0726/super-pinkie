@@ -429,12 +429,13 @@ def apply_patch(remove, log):
 
 # ---------------------------------------------------------------- 人格文件安装
 def install_personas(log, preserve_existing=False):
-    log("==> 正在安装四模式人格文件...")
+    log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
     mapping = {
         "chat": home / ".openclaw" / "workspace",
         "project": home / ".openclaw" / "workspace-project",
         "thinking": home / ".openclaw" / "workspace-thinking",
+        "learning": home / ".openclaw" / "workspace-learning",
         "neutral": home / ".openclaw" / "workspace-unrestricted"
     }
     src_root = resource_path("personas")
@@ -465,6 +466,7 @@ def install_personas(log, preserve_existing=False):
         for agent_id, workspace in {
             "project": home / ".openclaw/workspace-project",
             "thinking": home / ".openclaw/workspace-thinking",
+            "learning": home / ".openclaw/workspace-learning",
             "unrestricted": home / ".openclaw/workspace-unrestricted",
         }.items():
             if agent_id not in existing:
@@ -571,6 +573,7 @@ def install_theme(log):
         (home / ".openclaw" / "workspace" / "avatars", "laolao-mode-chat-hd.png", "pinkie-pie.png"),
         (home / ".openclaw" / "workspace-project" / "avatars", "laolao-mode-project-hd.png", "pinkie-pie.png"),
         (home / ".openclaw" / "workspace-thinking" / "avatars", "laolao-mode-thinking-hd.png", "pinkie-pie.png"),
+        (home / ".openclaw" / "workspace-learning" / "avatars", "laolao-mode-learning-hd.png", "pinkie-pie.png"),
         (home / ".openclaw" / "workspace-unrestricted" / "avatars", "laolao-mode-unrestricted-hd.png", "unrestricted-mode.png"),
     ]
     for target_dir, src_name, dst_name in avatar_map:

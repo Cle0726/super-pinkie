@@ -24,7 +24,13 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /打开灵感圆桌[\s\S]{0,160}keyEquivalent: ""/);
   assert.match(launcher, /gatewayEnvironment\["OPENCLAW_SERVICE_KIND"\] = "gateway"/);
   assert.match(launcher, /gatewayEnvironment\["PINKIE_OPENCLAW_ENTRY"\] = entry\.path/);
+  assert.match(launcher, /environment\["CLE_KK_LOCAL_UNRESTRICTED"\] = "1"/);
   assert.match(launcher, /Gateway\.stop\(\)/);
+  assert.match(launcher, /applicationWillTerminate[\s\S]{0,700}Gateway\.stop\(\)/);
+  assert.match(launcher, /let ownedProcess = process/);
+  assert.match(launcher, /Date\(\)\.addingTimeInterval\(2\.0\)/);
+  assert.match(launcher, /Darwin\.kill\(ownedProcess\.processIdentifier, SIGKILL\)/);
+  assert.match(launcher, /ownedProcess\.waitUntilExit\(\)/);
   assert.match(launcher, /startGatewayMonitor\(\)/);
   assert.match(launcher, /withTimeInterval: 0\.75/);
   assert.match(launcher, /gatewayProbeFailures >= 2/);
@@ -34,6 +40,23 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /if ready \{\s+self\?\.validateReadyGatewayAndLoad\(\)/);
   assert.match(launcher, /Gateway\.repair\(\)/);
   assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
+});
+
+test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
+  const mac = read('desktop/macos/Sources/Launcher.swift');
+  const windows = read('app/windows_desktop.py');
+  const patcher = read('patch/apply-local-unrestricted-policy.mjs');
+  const macTheme = read('installer/macos/apply-theme.sh');
+  const install = read('install.sh');
+  const installPs = read('install.ps1');
+  assert.match(mac, /environment\["CLE_KK_LOCAL_UNRESTRICTED"\] = "1"/);
+  assert.match(windows, /environment\["CLE_KK_LOCAL_UNRESTRICTED"\] = "1"/);
+  assert.match(patcher, /cle-kk-local-unrestricted-policy:v1/);
+  assert.match(patcher, /process\.env\.CLE_KK_LOCAL_UNRESTRICTED !== "1"/);
+  assert.match(patcher, /process\.execPath[\s\S]*openclaw/);
+  assert.match(macTheme, /apply-local-unrestricted-policy\.mjs/);
+  assert.match(install, /apply-local-unrestricted-policy\.mjs/);
+  assert.match(installPs, /apply-local-unrestricted-policy\.mjs/);
 });
 
 test('macOS updater removes only its old app rollback copies after a healthy install', () => {
@@ -90,6 +113,7 @@ test('macOS app owns an unrestricted computer-control driver and capable node', 
 
   assert.match(launcher, /OPENCLAW_CUA_DRIVER_ENDPOINT/);
   assert.match(launcher, /private final class DesktopControlService/);
+  assert.match(launcher, /mode extension consumes[\s\S]{0,120}`computer` tool/);
   assert.match(launcher, /URL\(fileURLWithPath: "\/tmp"/);
   assert.match(launcher, /clekk-cua-/);
   assert.match(launcher, /task\.executableURL = URL\(fileURLWithPath: "\/usr\/bin\/open"\)/);
@@ -107,9 +131,18 @@ test('macOS app owns an unrestricted computer-control driver and capable node', 
   assert.match(launcher, /cua-driver-helper\.tar\.gz/);
   assert.match(launcher, /"node", "run"/);
   assert.match(launcher, /"--display-name", Self\.displayName/);
+  assert.doesNotMatch(launcher, /"--share-installed-apps"/);
+  assert.doesNotMatch(launcher, /"--no-tls"/);
+  assert.match(launcher, /if Gateway\.url\.scheme == "https" \{ arguments\.append\("--tls"\) \}/);
   assert.match(launcher, /"node", "identity", "--json"/);
+  assert.match(launcher, /"devices", "list", "--json", "--timeout", "3000"/);
+  assert.match(launcher, /object\["pending"\] as\? \[\[String: Any\]\]/);
+  assert.match(launcher, /role == "node"/);
+  assert.match(launcher, /row\["displayName"\] as\? String == displayName/);
+  assert.match(launcher, /row\["clientId"\] as\? String == "node-host"/);
+  assert.match(launcher, /"devices", "approve", requestID, "--timeout", "5000"/);
   assert.match(launcher, /"nodes", "pending", "--json", "--timeout", "3000"/);
-  assert.match(launcher, /row\["nodeId"\] as\? String == nodeID/);
+  assert.match(launcher, /nodeID\.map \{ row\["nodeId"\] as\? String == \$0 \}/);
   assert.match(launcher, /commands\.contains\("computer\.act"\)/);
   assert.match(launcher, /commands\.contains\("screen\.snapshot"\)/);
   assert.match(launcher, /"nodes", "approve", requestID/);
@@ -120,6 +153,14 @@ test('macOS app owns an unrestricted computer-control driver and capable node', 
   assert.match(launcher, /desktopControl\.stop\(\)/);
   assert.match(launcher, /CUA_DRIVER_RS_UPDATE_CHECK=false/);
   assert.match(launcher, /CUA_DRIVER_RS_TELEMETRY_ENABLED=false/);
+  assert.match(launcher, /if type == \.typeSocket, driverProcess\?\.isRunning == true \{[\s\S]{0,400}lastError = nil[\s\S]{0,80}return/);
+});
+
+test('installed App keeps every runtime repair patch beside its cold-start bootstrap', () => {
+  const theme = read('installer/macos/apply-theme.sh');
+  assert.match(theme, /"\$bundled_root\/patch"/);
+  assert.match(theme, /for source_file in "\$REPO_ROOT\/patch"\/\*\.mjs/);
+  assert.match(theme, /"\$bundled_root\/patch\/\$\(basename "\$source_file"\)"/);
 });
 
 test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater', () => {
@@ -188,7 +229,7 @@ test('startup splash controller is mounted once and tolerates the current app sh
   assert.match(splash, /openclaw-app-shell, openclaw-app \.shell/);
   assert.match(splash, /readyMode = !switching && ids\.includes\(mountedMode\)/);
   assert.match(installer, /exactly one startup controller/);
-  assert.match(installer, /laolao-splash\.js\?v=splash22/);
+  assert.match(installer, /laolao-splash\.js\?v=splash25/);
 });
 
 test('current runtime keeps the classic single-chat shell instead of the upstream control console', () => {
@@ -266,6 +307,19 @@ test('managed macOS startup never rewrites its own signed UI bundle', () => {
 
   assert.match(bootstrap, /if \[\[ "\$\{PINKIE_MANAGED_GATEWAY:-0\}" != "1" \]\]; then[\s\S]*PINKIE_SKIP_APP_BUNDLES=1/);
   assert.match(themeInstaller, /copy_if_changed "\$REPO_ROOT\/installer\/macos\/apply-bundled\.sh" "\$bundled_root\/installer\/macos\/apply-bundled\.sh"/);
+});
+
+test('macOS hotfix keeps every bundled web surface and backend in sync', () => {
+  const themeInstaller = read('installer/macos/apply-theme.sh');
+
+  assert.match(themeInstaller, /for source_file in "\$INJECTION_ROOT"\/\*/);
+  assert.match(themeInstaller, /for source_file in "\$ASSET_ROOT"\/\*/);
+  assert.match(themeInstaller, /for source_file in "\$REPO_ROOT\/ui\/party"\/\*/);
+  assert.match(themeInstaller, /for source_file in "\$REPO_ROOT\/ui\/roundtable"\/\*/);
+  assert.match(themeInstaller, /"\$REPO_ROOT\/services\/party\/\$service_file"/);
+  assert.match(themeInstaller, /"\$REPO_ROOT\/services\/roundtable\/server\.py"/);
+  assert.match(themeInstaller, /"\$PYTHON_BIN" "\$REPO_ROOT\/services\/project-scope\/setup\.py"/);
+  assert.match(themeInstaller, /"\$PYTHON_BIN" "\$REPO_ROOT\/services\/mode-architecture\/setup\.py"/);
 });
 
 test('source updaters preserve every existing user persona and context file', () => {

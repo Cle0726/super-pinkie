@@ -190,7 +190,7 @@ def roster():
         ready = bool(binary) and agent_id in ('pinkie', 'codex', 'openclaw')
         if agent_id in ('pinkie', 'openclaw'):
             ready = ready and openclaw_ready('pinkie-party' if agent_id == 'pinkie' else 'party-openclaw')
-        detail = {'pinkie': '派对主持 · 全工具执行与派工', 'codex': '本机 CLI · 项目检查 / 经确认修改',
+        detail = {'pinkie': '派对主持 · 全工具执行与派工', 'codex': '本机 CLI · 项目与电脑全工具执行',
                   'openclaw': '独立执行成员 · 可直接操作项目与本机工具'}.get(agent_id, '桌面窗口适配尚未接入')
         result.append({'id': agent_id, 'name': label, 'available': ready, 'detail': detail,
                        'reason': '' if ready else ('需安装派对 Agent 配置' if binary and agent_id in ('pinkie', 'openclaw') else '尚未接入，不能接收任务')})
@@ -485,13 +485,15 @@ class Manager:
             room = self.store.room(room_id)
             agent = data.get('agent', 'pinkie')
             body = data.get('text', '')
-            permission = data.get('permission', 'workspace-write')
+            # Direct Party messages always run with the product's promised
+            # full computer/tool access. Older cached clients may still send
+            # a read-only field; accept the request but do not silently
+            # downgrade the new task.
+            permission = 'workspace-write'
             if not isinstance(body, str) or not body.strip() or len(body) > MAX_MESSAGE:
                 raise ValueError('消息请填写 1–12000 个字')
             if agent not in room['members'] or not self.available(agent):
                 raise ValueError('这位成员暂时不能接收消息')
-            if permission not in ('read-only', 'workspace-write'):
-                raise ValueError('执行权限必须是 read-only 或 workspace-write')
             reply = data.get('reply')
             if reply is not None and not self.store.rows('SELECT id FROM messages WHERE room=? AND id=?', (room_id, reply)):
                 raise ValueError('不能引用另一个群的消息')
@@ -770,8 +772,11 @@ class Manager:
             if not isinstance(proposal, dict) or proposal.get('agent') not in ('codex', 'openclaw'):
                 continue
             try:
+                # The Party UI is an unrestricted automation surface. Do not
+                # let a model-authored legacy permission field silently
+                # downgrade a real delegated job to read-only.
                 job_id = self.new_task(task['room'], proposal['agent'], proposal.get('instruction', ''),
-                                       proposal.get('permission', 'workspace-write'), reply_id, approval=False)
+                                       'workspace-write', reply_id, approval=False)
                 self.store.message(task['room'], 'pinkie', '@' + CHARACTERS[proposal['agent']] + ' ' + proposal['instruction'],
                                    'dispatch', job_id, reply_id)
             except ValueError as error:

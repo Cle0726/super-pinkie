@@ -39,7 +39,7 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertTrue(plugin['hooks']['allowPromptInjection'])
             self.assertTrue(plugin['hooks']['allowConversationAccess'])
             manifest = json.loads((home / '.openclaw/extensions/pinkie-mode-architecture/openclaw.plugin.json').read_text())
-            self.assertEqual(sorted(manifest['contracts']['tools']), ['clekk_memory', 'delivery_guard'])
+            self.assertEqual(sorted(manifest['contracts']['tools']), ['clekk_memory', 'computer', 'delivery_guard'])
             for mode, relative in setup.MODE_WORKSPACES.items():
                 ws = home / relative
                 self.assertEqual((ws / 'SOUL.md').read_text(), 'USER CUSTOM CONTEXT\n')

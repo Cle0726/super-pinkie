@@ -51,18 +51,52 @@ html[data-theme] {
 
 html[data-laolao-mode="chat"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper.png");
+  --text: #713550 !important;
+  --text-strong: #441d31 !important;
+  --chat-text: #5a2940 !important;
+  --muted: #a0647d !important;
+  --muted-strong: #815064 !important;
+  --accent: #e94f91 !important;
 }
 
 html[data-laolao-mode="project"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper-project.png");
+  --text: #2d666b !important;
+  --text-strong: #173f45 !important;
+  --chat-text: #23555a !important;
+  --muted: #648b8e !important;
+  --muted-strong: #4c7478 !important;
+  --accent: #3f8f92 !important;
 }
 
 html[data-laolao-mode="thinking"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper-thinking.png");
+  --text: #65427f !important;
+  --text-strong: #3e2853 !important;
+  --chat-text: #53366b !important;
+  --muted: #8d72a1 !important;
+  --muted-strong: #735a89 !important;
+  --accent: #9164ad !important;
+}
+
+html[data-laolao-mode="learning"] {
+  --laolao-wallpaper-image: url("./laolao-wallpaper-learning.png");
+  --text: #4f5688 !important;
+  --text-strong: #30365f !important;
+  --chat-text: #424a78 !important;
+  --muted: #7279a2 !important;
+  --muted-strong: #5e658e !important;
+  --accent: #7d76b5 !important;
 }
 
 html[data-laolao-mode="unrestricted"] {
   --laolao-wallpaper-image: url("./laolao-wallpaper-unrestricted.png");
+  --text: #7b304e !important;
+  --text-strong: #4a1a2d !important;
+  --chat-text: #65263f !important;
+  --muted: #9c6177 !important;
+  --muted-strong: #814a61 !important;
+  --accent: #d64f79 !important;
 }
 
 html,
@@ -157,6 +191,16 @@ html[data-pinkie-native-glass="1"] .card.chat {
   html[data-laolao-mode-enter="1"] [data-laolao-mode-avatar] {
     animation: none !important;
   }
+
+  .laolao-welcome-particles {
+    display: none !important;
+  }
+
+  .agent-chat__welcome[data-laolao-minimal-welcome="1"] > :is(img, .agent-chat__avatar, h2) {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 .shell,
@@ -201,11 +245,99 @@ html[data-pinkie-native-glass="1"] .card.chat {
 }
 
 .agent-chat__welcome {
-  padding: 24px !important;
-  border: 1px solid rgba(255, 255, 255, 0.74);
-  border-radius: 24px;
-  background: rgba(255, 252, 253, 0.30);
-  box-shadow: 0 12px 42px rgba(176, 75, 115, 0.08);
+  position: relative;
+  width: min(100%, 320px) !important;
+  padding: 16px 20px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible;
+}
+
+/* Empty chats are a character moment, not a control-panel tutorial. Keep only
+   the current mode portrait and name; the real composer remains unchanged. */
+.agent-chat__welcome > :is(.agent-chat__welcome-glow, .agent-chat__badges, .agent-chat__hint, .agent-chat__suggestions) {
+  display: none !important;
+}
+
+.agent-chat__welcome[data-laolao-minimal-welcome="1"] > img,
+.agent-chat__welcome[data-laolao-minimal-welcome="1"] > .agent-chat__avatar {
+  width: 68px !important;
+  height: 68px !important;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 5px 12px rgba(113, 44, 76, 0.16));
+}
+
+.agent-chat__welcome[data-laolao-minimal-welcome="1"] > h2 {
+  position: relative;
+  z-index: 2;
+  margin: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 18px !important;
+  letter-spacing: .12em;
+  text-shadow: 0 1px 8px rgba(255, 255, 255, .72);
+}
+
+.laolao-welcome-particles {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 1px;
+  height: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.laolao-welcome-particles > i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--particle-size);
+  height: var(--particle-size);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 58%, white);
+  opacity: 0;
+}
+
+.laolao-welcome-particles > i:nth-child(3n) {
+  background: rgba(255, 255, 255, .92);
+}
+
+.laolao-welcome-particles > i:nth-child(4n) {
+  background: var(--muted-strong);
+}
+
+html[data-laolao-mode-enter="1"] .laolao-welcome-particles > i,
+.agent-chat__welcome.laolao-welcome--materializing .laolao-welcome-particles > i {
+  animation: laolao-welcome-particle-gather 880ms var(--particle-delay) cubic-bezier(.2, .72, .24, 1) both;
+}
+
+html[data-laolao-mode-enter="1"] .agent-chat__welcome[data-laolao-minimal-welcome="1"] > :is(img, .agent-chat__avatar, h2),
+.agent-chat__welcome.laolao-welcome--materializing > :is(img, .agent-chat__avatar, h2) {
+  animation: laolao-welcome-materialize 760ms 160ms cubic-bezier(.2, .78, .25, 1) both;
+}
+
+@keyframes laolao-welcome-particle-gather {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--particle-x), var(--particle-y), 0) scale(.3);
+  }
+  22% { opacity: .86; }
+  72% { opacity: .68; }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.08);
+  }
+}
+
+@keyframes laolao-welcome-materialize {
+  0% { opacity: 0; transform: scale(.84); }
+  58% { opacity: .78; transform: scale(1.025); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .agent-chat__input {
@@ -462,9 +594,11 @@ img.chat-avatar.assistant {
 .laolao-mode-button__label { font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; letter-spacing: .3px; white-space: nowrap; }
 .laolao-mode-button__arrow { margin-left: auto; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: .6; transition: transform .2s; }
 .laolao-mode-switcher[aria-expanded="true"] .laolao-mode-button__arrow { transform: rotate(225deg); }
+[data-mode="chat"] { --mode-button-ink: #b34f7c; }
 [data-mode="project"] { --mode-button-ink: #3e8584; }
 [data-mode="thinking"] { --mode-button-ink: #965b98; }
-[data-mode="unrestricted"] { --mode-button-ink: #b15c86; }
+[data-mode="learning"] { --mode-button-ink: #615b9a; }
+[data-mode="unrestricted"] { --mode-button-ink: #ad4268; }
 
 @media (hover: hover) and (pointer: fine) {
   .laolao-mode-switcher:hover img,
@@ -1095,6 +1229,10 @@ img.chat-avatar.assistant {
   background: linear-gradient(100deg, transparent 39%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.80) 50%, rgba(190, 111, 204, 0.28) 54%, transparent 61%);
 }
 
+.laolao-mode-transition--learning .laolao-mode-transition__sweep {
+  background: linear-gradient(100deg, transparent 39%, rgba(255, 255, 255, 0.10) 45%, rgba(255, 255, 255, 0.84) 50%, rgba(155, 116, 201, 0.30) 54%, transparent 61%);
+}
+
 .laolao-mode-transition--project .laolao-mode-transition__sweep {
   background: linear-gradient(100deg, transparent 39%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.78) 50%, rgba(78, 166, 160, 0.26) 54%, transparent 61%);
 }
@@ -1211,6 +1349,24 @@ img.chat-avatar.assistant {
   animation: laolao-thinking-bubbles 2.5s linear infinite;
 }
 
+.laolao-mode-transition--learning .laolao-mode-transition__fill {
+  background: linear-gradient(90deg, #b277c7 0%, #df8fbd 46%, #f4c66d 100%);
+  background-size: 180% 100%;
+  animation: laolao-learning-progress-flow 2.4s ease-in-out infinite;
+}
+
+.laolao-mode-transition--learning .laolao-mode-transition__fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 16px 15px, rgba(255,255,255,.78) 0 1.8px, transparent 2.4px),
+    radial-gradient(circle at 48px 28px, rgba(255,244,180,.84) 0 2px, transparent 2.7px),
+    linear-gradient(45deg, transparent 42%, rgba(255,255,255,.35) 43% 57%, transparent 58%);
+  background-size: 82px 42px, 82px 42px, 82px 42px;
+  animation: laolao-learning-stars 2.2s linear infinite;
+}
+
 .laolao-mode-transition--project .laolao-mode-transition__fill {
   background: linear-gradient(90deg, #e75d9c 0%, #ef9ec1 45%, #59aaa5 100%);
 }
@@ -1285,6 +1441,16 @@ img.chat-avatar.assistant {
 @keyframes laolao-thinking-progress-flow {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-learning-progress-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes laolao-learning-stars {
+  from { transform: translateX(0); }
+  to { transform: translateX(82px); }
 }
 
 @keyframes laolao-thinking-bubbles {
@@ -1748,7 +1914,8 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   font: 600 12px/1.3 ui-rounded, "SF Pro Rounded", sans-serif;
   text-align: center;
   pointer-events: none;
-  animation: pinkieWatchdogRibbon 2.4s ease-in-out infinite;
+  /* 状态条保持稳定；断线期间的重复 RPC 不应让聊天框跟着闪烁。 */
+  animation: none;
 }
 
 html[data-laolao-watchdog-state="offline"] body::after {

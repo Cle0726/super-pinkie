@@ -57,6 +57,15 @@ test('a thread with no assistant messages can use the loaded mode portrait',()=>
   window.document={documentElement:{getAttribute:()=> 'chat'},querySelector:s=>s.startsWith('.laolao-mode-switcher')?{complete:true}:s==='.agent-chat__input'?{}:null};
   assert.equal(motion.chatReady('chat'),true);
 });
+test('OpenClaw 7.1 composer releases the entrance instead of leaving it at 94 percent',()=>{
+  const {window,motion}=setup();
+  window.document={
+    documentElement:{getAttribute:()=> 'project'},
+    querySelector:s=>s.startsWith('[data-laolao-mode-avatar')?{complete:true}:
+      s==='.agent-chat__composer-combobox textarea'?{}:null,
+  };
+  assert.equal(motion.chatReady('project'),true);
+});
 test('handoff first-frame bootstrap carries progress without a width reset',()=>{
   const {window,motion}=setup(),{fill,label,bar}=nodes();const message={};
   const splash={dataset:{},classList:{add(){}},style:{setProperty(){}},querySelector:s=>s.startsWith('[role')?bar:null};

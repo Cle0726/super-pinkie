@@ -23,7 +23,7 @@
     <main class="discussion">
       <div id="connection" class="connection" role="status" hidden></div>
       <section id="timeline" class="timeline" aria-live="polite">
-        <div id="empty" class="welcome"><div class="welcome-copy"><span class="eyebrow">七席判断 · 一席执行 · 真实项目</span><h2>不是开会，是把活干完。</h2><p>选择一个项目文件夹。模型会先把方案说短、互相检查，再由本机执行席读取文件、调用工具、修改并验证。</p><button id="welcome-new" class="primary" type="button">建立第一张工作圆桌</button><ul><li>项目目录固定，不会乱跑</li><li>命令和文件变化全程可见</li><li>最后只留一份大白话总结</li></ul></div></div>
+        <div id="empty" class="welcome"><div class="welcome-copy"><span class="eyebrow">七席判断 · 一席执行 · 真实项目</span><h2>不是开会，是把活干完。</h2><p>选择一个项目文件夹。模型会先把方案说短、互相检查，再由本机执行席读取文件、调用工具、修改并验证。</p><button id="welcome-new" class="primary" type="button">建立第一张工作圆桌</button><ul><li>项目是工作重心，需要时可访问电脑其他位置</li><li>命令和文件变化全程可见</li><li>最后只留一份大白话总结</li></ul></div></div>
         <div id="project-guard" class="project-guard" hidden><span class="guard-line" aria-hidden="true"></span><div><strong>这张旧圆桌还没有项目目录</strong><p>先选择文件夹，执行席才能读取、修改和验证真实文件。</p></div><button id="guard-bind" type="button">选择项目文件夹</button></div>
         <div id="messages"></div>
       </section>
@@ -42,7 +42,7 @@
     </aside>
   </div>
   <dialog id="create-dialog"><form id="create-form"><button id="close-create" class="dialog-close" type="button" aria-label="关闭">×</button><span class="eyebrow">建立工作圆桌</span><h2>先确定项目，再邀请模型</h2><label>工作名称<input id="create-title" required maxlength="60" placeholder="例如：把登录切换闪屏彻底修好"></label>
-    <section class="folder-picker"><div><span>项目文件夹</span><strong id="create-project-name">尚未选择</strong><code id="create-project-path">执行席只会在这里工作</code></div><button id="choose-project" type="button">选择已有文件夹</button><button id="create-project" type="button">新建空项目</button></section>
+    <section class="folder-picker"><div><span>项目文件夹</span><strong id="create-project-name">尚未选择</strong><code id="create-project-path">这里是工作重心，不是访问边界</code></div><button id="choose-project" type="button">选择已有文件夹</button><button id="create-project" type="button">新建空项目</button></section>
     <fieldset><legend>模型席位 <small>至少三位</small></legend><div id="invite-list"></div></fieldset><p>每个席位的模型都由你选择；系统只分工，不偷偷指定模型。负责执行的那一席会读取文件、调用工具并验证结果。</p><button class="primary" type="submit">建立并进入</button></form></dialog>
   <div id="toast" role="status" hidden></div>
 </body>

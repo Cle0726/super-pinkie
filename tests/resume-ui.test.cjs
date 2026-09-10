@@ -55,16 +55,20 @@ function loadResumeHarness(historyPages){
   class Element{}
   const context={window,document,location,MutationObserver,CustomEvent,Element,URLSearchParams,URL,Map,Set,Number,Array,JSON,Promise,Error,Date,console};
   vm.runInNewContext(source,context,{filename:'laolao-resume.js'});
-  return {window,state,requestedOffsets,client,pane};
+  return {window,state,requestedOffsets,client,pane,shell,gateway};
 }
 
 test('an upstream failure restores the real composer without fabricating an input box',()=>{
   const phrases=read('ui/injections/laolao-phrases.js');
   const resume=read('ui/injections/laolao-resume.js');
   assert.match(phrases,/pinkie:run-failed/);
+  assert.match(phrases,/hasTerminalReplyAfter/);
+  assert.match(phrases,/notifyUnrecoveredFailure/);
+  assert.match(phrases,/pinkie:run-recovered/);
+  assert.match(resume,/clearWatchdogStatus/);
   assert.match(phrases,/session file changed while embedded prompt lock was released/);
   assert.match(resume,/addEventListener\("pinkie:run-failed"/);
-  assert.match(resume,/clearVisualBusyState\(\)/);
+  assert.doesNotMatch(resume,/onRunFailure[\s\S]{0,500}clearVisualBusyState\(\)/);
   assert.match(resume,/sessions\.list/);
   assert.match(resume,/agent-chat__composer-combobox textarea/);
   assert.doesNotMatch(resume,/createElement\(["'](?:textarea|input)["']\)/);
@@ -75,6 +79,10 @@ test('composer recovery is frequent but request-deduplicated and voice stays sep
   assert.match(resume,/setInterval[\s\S]*1000/);
   assert.match(resume,/if \(recoveryTimer\) return/);
   assert.match(resume,/if \(recoveryInFlight\) return recoveryInFlight/);
+  assert.match(resume,/RECOVERY_THROTTLE_MS = 1_200/);
+  assert.match(resume,/if \(isBusy\(\) && !options\.manual\) return false/);
+  assert.match(resume,/sameMessageSequence/);
+  assert.match(resume,/onForeground\.timer/);
   assert.match(resume,/document\.hidden/);
   assert.ok(fs.existsSync(path.join(__dirname,'../ui/injections/laolao-live-voice.js')));
 });
@@ -82,13 +90,25 @@ test('composer recovery is frequent but request-deduplicated and voice stays sep
 test('a recovered gateway with a poisoned 7.1 websocket gets one guarded chat-only reload',()=>{
   const resume=read('ui/injections/laolao-resume.js');
   assert.match(resume,/fetch\("\/readyz"/);
-  assert.match(resume,/gatewayWasEverConnected \? 1_500 : 8_000/);
+  assert.match(resume,/gatewayWasEverConnected \? 6_000 : 12_000/);
   assert.match(resume,/RECONNECT_RELOAD_AT/);
-  assert.match(resume,/now - previous < 8_000/);
+  assert.match(resume,/now - previous < 30_000/);
+  assert.match(resume,/nativeGatewayConnected/);
+  assert.match(resume,/!gatewayConnected\(\) && !nativeGatewayConnected\(\)/);
   assert.match(resume,/preserveComposerDraft\(\)/);
   assert.match(resume,/restoreComposerDraft\(\)/);
   assert.match(resume,/window\.location\.reload\(\)/);
   assert.doesNotMatch(resume,/location\.(?:assign|replace)\([^)]*launcher-loading/);
+});
+
+test('native online state prevents stale injected snapshots from starting a reload storm',()=>{
+  const pages=new Map([[0,{sessionId:'s',totalMessages:0,hasMore:false,messages:[]}] ]);
+  const {window,shell,gateway}=loadResumeHarness(pages);
+  assert.equal(window.__laolaoGatewayTestHooks.nativeGatewayConnected(),false);
+  gateway.snapshot.connected=false;
+  shell.gatewayConnected=true;
+  assert.equal(window.__laolaoGatewayTestHooks.nativeGatewayConnected(),true);
+  assert.equal(window.__laolaoGatewayTestHooks.gatewayConnected(),true);
 });
 
 test('foreground recovery never clicks stop and only a real manual stop cancels watchdog retry',()=>{
@@ -109,6 +129,8 @@ test('watchdog disconnects stay visible until the gateway has resynced',()=>{
   assert.match(resume,/连接已恢复，当前回复已同步/);
   assert.match(theme,/pinkieWatchdogRibbon/);
   assert.match(theme,/data-laolao-watchdog-message/);
+  assert.match(theme,/状态条保持稳定/);
+  assert.match(theme,/animation: none;/);
 });
 
 test('history projection rebuilds are surfaced and retried with bounded backoff',()=>{
@@ -199,4 +221,33 @@ test('history recovery is session-scoped and guards against native 100-message r
   assert.match(resume,/pagination did not advance/);
   assert.match(resume,/HISTORY_PAGE_SIZE = 250/);
   assert.doesNotMatch(resume,/HISTORY_MAX_(?:PAGES|MESSAGES)/);
+});
+
+test('desktop installers also lift the legacy native 100-message render window',()=>{
+  const mac=read('installer/macos/apply-theme.sh');
+  const windows=read('installer/windows/apply-theme.ps1');
+  for(const installer of [mac,windows]){
+    assert.match(installer,/laolao-resume\.js\?v=resume14/);
+    assert.match(installer,/Showing last \$\{c\} messages/);
+    assert.match(installer,/5000/);
+    assert.match(installer,/16e6/);
+  }
+});
+
+test('patched hashed UI chunks replace stale service-worker cache exactly once',()=>{
+  const resume=read('ui/injections/laolao-resume.js');
+  const mac=read('installer/macos/apply-theme.sh');
+  const windows=read('installer/windows/apply-theme.ps1');
+  assert.match(resume,/UI_CACHE_REVISION = "history-render-14"/);
+  assert.match(resume,/startsWith\("openclaw-control-"\)/);
+  assert.match(resume,/UI_CACHE_REFRESH_ATTEMPTED/);
+  assert.match(resume,/window\.localStorage\.setItem\(UI_CACHE_REFRESHED, "1"\)/);
+  assert.match(resume,/registration\?\.update\?\.\(\)/);
+  assert.match(resume,/preserveComposerDraft\(\)/);
+  for(const installer of [mac,windows]){
+    assert.match(installer,/clekk-history-render-14/);
+    assert.match(installer,/clekk-history14/);
+    assert.match(installer,/Network-first for all UI files/);
+    assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
+  }
 });
