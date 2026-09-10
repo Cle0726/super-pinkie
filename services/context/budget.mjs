@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const stateRoot = process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
+const stateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
 const defaults = [
   {maxContextTokens:128000, triggerRatio:0.60, targetRatio:0.35, keepRecentRatio:0.35},
   {maxContextTokens:200000, triggerRatio:0.65, targetRatio:0.40, keepRecentRatio:0.40},
@@ -16,14 +16,16 @@ const validRatio = (value, min, max) => Number.isFinite(value) && value >= min &
 export function compactionBudget(window) {
   let policy = {};
   try {
-    policy = JSON.parse(fs.readFileSync(path.join(stateRoot, 'context-policy.json'), 'utf8'));
+    policy = JSON.parse(fs.readFileSync(path.join(stateRoot(), 'context-policy.json'), 'utf8'));
   } catch {}
+  // Unknown providers use the smallest supported tier; never assume an undeclared 1M window.
   const fallback = Number.isFinite(policy.unknownContextWindow) && policy.unknownContextWindow > 0
-    ? Math.floor(policy.unknownContextWindow) : 1000000;
+    ? Math.floor(policy.unknownContextWindow) : 128000;
   const tokens = Number.isFinite(window) && window > 0 ? Math.floor(window) : fallback;
-  const configured = Array.isArray(policy.adaptiveTiers) ? policy.adaptiveTiers : defaults;
-  const tiers = configured.filter((item) => Number.isFinite(item?.maxContextTokens) && item.maxContextTokens > 0)
+  const configured = Array.isArray(policy.adaptiveTiers) && policy.adaptiveTiers.length ? policy.adaptiveTiers : defaults;
+  let tiers = configured.filter((item) => Number.isFinite(item?.maxContextTokens) && item.maxContextTokens > 0)
     .sort((a,b) => a.maxContextTokens - b.maxContextTokens);
+  if (!tiers.length) tiers = defaults;
   const tier = tiers.find((item) => tokens <= item.maxContextTokens) || tiers.at(-1) || defaults.at(-1);
   const triggerRatio = validRatio(tier.triggerRatio, 0.5, 0.9) ? tier.triggerRatio : 0.65;
   const targetRatio = validRatio(tier.targetRatio, 0.30, 0.75) ? tier.targetRatio : 0.45;

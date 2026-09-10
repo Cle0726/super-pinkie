@@ -9,8 +9,8 @@
     {"maxContextTokens": 500000, "triggerRatio": 0.78, "targetRatio": 0.50, "keepRecentRatio": 0.50},
     {"maxContextTokens": 1000000, "triggerRatio": 0.85, "targetRatio": 0.60, "keepRecentRatio": 0.60}
   ],
-  "unknownContextWindow": 1000000,
-  "minWindowTokens": 500000,
+  "unknownContextWindow": 128000,
+  "minWindowTokens": 128000,
   "modelLimits": {
     "codex/gpt-5.5": 272000,
     "codex/gpt-5.4": 272000,

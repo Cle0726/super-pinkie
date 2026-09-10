@@ -34,10 +34,9 @@ def policy(home=None):
     # Keep legacy defaults, while model_budget selects adaptiveTiers by actual window.
     trigger_ratio = base.get('triggerRatio')
     base['triggerRatio'] = min(.9, max(.5, trigger_ratio)) if isinstance(trigger_ratio, (int, float)) and not isinstance(trigger_ratio, bool) and math.isfinite(trigger_ratio) else .65
-    # unknownContextWindow is the fallback for providers that do not declare a
-    # contextWindow. Keep it generous so a single short exchange does not push
-    # an unknown model past the trigger ratio and start an avoidable compaction.
-    base['unknownContextWindow'] = max(4096, positive(base.get('unknownContextWindow')) or 256000)
+    # Unknown providers use the smallest supported tier; never assume an
+    # undeclared model has a 1M context window.
+    base['unknownContextWindow'] = max(4096, positive(base.get('unknownContextWindow')) or 128000)
     target_ratio = base.get('targetRatio')
     base['targetRatio'] = min(.75, max(.35, target_ratio)) if isinstance(target_ratio, (int, float)) and not isinstance(target_ratio, bool) and math.isfinite(target_ratio) else .6
     keep_ratio = base.get('keepRecentRatio')
@@ -127,9 +126,11 @@ def model_budget(ref, config=None, home=None):
                     if isinstance(item, dict) and positive(item.get('maxContextTokens'))),
                    key=lambda item: item['maxContextTokens'])
     tier = next((item for item in tiers if limit <= item['maxContextTokens']), tiers[-1] if tiers else {})
-    trigger = tier.get('triggerRatio', rules['triggerRatio'])
-    target_ratio = tier.get('targetRatio', rules['targetRatio'])
-    keep_ratio = tier.get('keepRecentRatio', rules['keepRecentRatio'])
+    def bounded(value, fallback, lower, upper):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and lower <= value <= upper else fallback
+    trigger = bounded(tier.get('triggerRatio'), rules['triggerRatio'], .5, .9)
+    target_ratio = bounded(tier.get('targetRatio'), rules['targetRatio'], .3, .75)
+    keep_ratio = bounded(tier.get('keepRecentRatio'), target_ratio, .05, .75)
     threshold = max(1, math.floor(limit*trigger))
     target = min(max(1, math.floor(limit*target_ratio)), max(1, threshold-4096))
     requested_keep = max(1, math.floor(limit*keep_ratio))
