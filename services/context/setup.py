@@ -71,20 +71,21 @@ def install(home=None):
     # defaults. Keep unrelated compaction options (memory flush, instructions...).
     compaction = config.setdefault('agents', {}).setdefault('defaults', {}).setdefault('compaction', {})
     compaction.pop('reserveTokens', None)
-    compaction.pop('reserveTokensFloor', None)
+    compaction.setdefault('reserveTokensFloor', 100000)
+    compaction.setdefault('timeoutSeconds', 900)
     # Keep user-set windows and keepRecentTokens exactly as-is. These supported
     # additions improve what survives compaction without moving its threshold.
     # Current CLE Kk runtimes reject the retired free-form instruction fields;
     # remove only those known retired keys so a re-install cannot brick config.
     compaction.setdefault('mode', 'safeguard')
-    compaction.setdefault('recentTurnsPreserve', 8)
+    compaction.setdefault('recentTurnsPreserve', 12)
     compaction.pop('maxHistoryShare', None)
     compaction.pop('identifierInstructions', None)
     if compaction.get('identifierPolicy') not in ('strict', 'off'):
         compaction['identifierPolicy'] = 'strict'
     quality = compaction.setdefault('qualityGuard', {})
     quality.setdefault('enabled', True)
-    quality.setdefault('maxRetries', 2)
+    quality.setdefault('maxRetries', 4)
     compaction.setdefault('midTurnPrecheck', {}).setdefault('enabled', True)
     compaction.setdefault('postIndexSync', 'await')
     memory_flush = compaction.setdefault('memoryFlush', {})

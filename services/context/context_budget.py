@@ -31,10 +31,10 @@ def policy(home=None):
     home = Path(home or Path.home())
     base = read_json(Path(__file__).with_name('policy.json'))
     base.update(read_json(state_root(home)/'context-policy.json'))
-    # One global boundary: never compact a healthy conversation before 85%.
-    # Local policy can still tune retention and known model windows, but it
-    # cannot silently move the trigger earlier or later than this boundary.
-    base['triggerRatio'] = .85
+    # Allow a persisted model-aware boundary. Long tool-heavy sessions need an
+    # earlier trigger so compaction can finish before 200K/272K fallbacks overflow.
+    trigger_ratio = base.get('triggerRatio')
+    base['triggerRatio'] = min(.9, max(.5, trigger_ratio)) if isinstance(trigger_ratio, (int, float)) and not isinstance(trigger_ratio, bool) and math.isfinite(trigger_ratio) else .65
     # unknownContextWindow is the fallback for providers that do not declare a
     # contextWindow. Keep it generous so a single short exchange does not push
     # an unknown model past the trigger ratio and start an avoidable compaction.

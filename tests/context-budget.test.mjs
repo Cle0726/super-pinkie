@@ -51,8 +51,8 @@ test('compaction triggers late but leaves enough recovery headroom',()=>{
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
     const b=compactionBudget(window);assert.equal(b.window,resolved);
-    assert.equal(installedPolicy.triggerRatio,.85);
-    assert.equal(b.threshold,Math.floor(resolved*.85));
+    assert.equal(installedPolicy.triggerRatio,.65);
+    assert.equal(b.threshold,Math.floor(resolved*.65));
     assert.equal(resolved-b.reserve,b.threshold);
     const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
     const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
