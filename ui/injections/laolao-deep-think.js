@@ -155,9 +155,12 @@
   };
 
   const disarmCurrent = async (preferredSessionKey = "") => {
-    const sessionKey = preferredSessionKey || currentSessionKey() || latestStatusSessionKey;
+    const sessionKey = preferredSessionKey || currentSessionKey();
     const rpc = window.__laolaoSidebar?.gwRequest;
-    if (!sessionKey || typeof rpc !== "function") throw new Error("没有找到当前会话");
+    if (!sessionKey || typeof rpc !== "function") {
+      console.warn("[deep-think] disarmCurrent ignored: no valid sessionKey for current view");
+      return false;
+    }
     if (!disarming) {
       disarming = (async () => {
         // 先撤掉档位与续跑器，再终止宿主仍在执行的父轮次/子任务。
@@ -170,9 +173,10 @@
           if (nativeStop && !nativeStop.disabled) nativeStop.click();
           else throw error;
         }
-        latestStatus = { active: false };
-        latestStatusSessionKey = sessionKey;
-        hideStatus();
+        if (latestStatusSessionKey === sessionKey) {
+          latestStatus = { active: false };
+          hideStatus();
+        }
         window.dispatchEvent(new Event("laolao:sessions-changed"));
         return true;
       })().finally(() => { disarming = null; });
@@ -264,9 +268,12 @@
 
   const renderStatus = (status = {}) => {
     latestStatus = status;
-    if (status.active && !selectedTier && status.tier) {
-      selectedTier = status.tier;
-      render();
+    if (status.active && !selectedTier && !disarming) {
+      void disarmCurrent(latestStatusSessionKey).then(() => {
+        toast("遗留档位已停止，恢复普通发送");
+      }).catch((error) => {
+        toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
+      });
     }
     const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
     const sessionKey = currentSessionKey();
@@ -402,8 +409,11 @@
         item.disabled = true;
         try {
           if (disabling) {
-            await disarmCurrent();
-            writeTier("");
+            const currentSk = currentSessionKey();
+            if (currentSk) {
+              await disarmCurrent(currentSk);
+              writeTier("");
+            }
           } else {
             writeTier(tier.id);
             for (const trigger of $$("." + BTN_CLASS)) {
