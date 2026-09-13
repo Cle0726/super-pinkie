@@ -264,12 +264,9 @@
 
   const renderStatus = (status = {}) => {
     latestStatus = status;
-    if (status.active && !selectedTier && !disarming) {
-      void disarmCurrent(latestStatusSessionKey).then(() => {
-        toast("遗留档位已停止，恢复普通发送");
-      }).catch((error) => {
-        toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
-      });
+    if (status.active && !selectedTier && status.tier) {
+      selectedTier = status.tier;
+      render();
     }
     const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
     const sessionKey = currentSessionKey();
