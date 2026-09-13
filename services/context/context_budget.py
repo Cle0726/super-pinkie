@@ -31,12 +31,14 @@ def policy(home=None):
     home = Path(home or Path.home())
     base = read_json(Path(__file__).with_name('policy.json'))
     base.update(read_json(state_root(home)/'context-policy.json'))
-    # Keep legacy defaults, while model_budget selects adaptiveTiers by actual window.
-    trigger_ratio = base.get('triggerRatio')
-    base['triggerRatio'] = min(.9, max(.5, trigger_ratio)) if isinstance(trigger_ratio, (int, float)) and not isinstance(trigger_ratio, bool) and math.isfinite(trigger_ratio) else .65
-    # Unknown providers use the smallest supported tier; never assume an
-    # undeclared model has a 1M context window.
-    base['unknownContextWindow'] = max(4096, positive(base.get('unknownContextWindow')) or 128000)
+    # One global boundary: never compact a healthy conversation before 85%.
+    # Local policy can still tune retention and known model windows, but it
+    # cannot silently move the trigger earlier or later than this boundary.
+    base['triggerRatio'] = .85
+    # unknownContextWindow is the fallback for providers that do not declare a
+    # contextWindow. Keep it generous so a single short exchange does not push
+    # an unknown model past the trigger ratio and start an avoidable compaction.
+    base['unknownContextWindow'] = max(4096, positive(base.get('unknownContextWindow')) or 256000)
     target_ratio = base.get('targetRatio')
     base['targetRatio'] = min(.75, max(.35, target_ratio)) if isinstance(target_ratio, (int, float)) and not isinstance(target_ratio, bool) and math.isfinite(target_ratio) else .6
     keep_ratio = base.get('keepRecentRatio')
@@ -122,23 +124,17 @@ def model_budget(ref, config=None, home=None):
     cap = positive(config.get('agents', {}).get('defaults', {}).get('contextTokens'))
     if cap and provider != 'codex-cli' and cap < limit:
         limit, source = cap, source + '+agent-cap'
-    tiers = sorted((item for item in rules.get('adaptiveTiers', [])
-                    if isinstance(item, dict) and positive(item.get('maxContextTokens'))),
-                   key=lambda item: item['maxContextTokens'])
-    tier = next((item for item in tiers if limit <= item['maxContextTokens']), tiers[-1] if tiers else {})
-    def bounded(value, fallback, lower, upper):
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and lower <= value <= upper else fallback
-    trigger = bounded(tier.get('triggerRatio'), rules['triggerRatio'], .5, .9)
-    target_ratio = bounded(tier.get('targetRatio'), rules['targetRatio'], .3, .75)
-    keep_ratio = bounded(tier.get('keepRecentRatio'), target_ratio, .05, .75)
-    threshold = max(1, math.floor(limit*trigger))
-    target = min(max(1, math.floor(limit*target_ratio)), max(1, threshold-4096))
-    requested_keep = max(1, math.floor(limit*keep_ratio))
-    working_headroom = max(4096, math.floor(limit*(.10 if limit >= 500000 else .15)))
+    threshold = max(1, math.floor(limit*rules['triggerRatio']))
+    # Trigger late, then compact far enough below it to leave room for the
+    # generated checkpoint, fixed prompts, tool schemas and the next answer.
+    target = min(max(1, math.floor(limit*rules['targetRatio'])), max(1, threshold-4096))
+    requested_keep = max(1, math.floor(limit*rules['keepRecentRatio']))
+    # The checkpoint preserves compacted history. The raw tail must not consume
+    # nearly the whole trigger budget again or recovery will loop forever.
+    working_headroom = max(4096, math.floor(limit*.15))
     keep_recent = min(requested_keep, max(1, threshold-working_headroom))
     return {'model':ref, 'window':limit, 'threshold':threshold, 'reserve':limit-threshold,
-            'target':target, 'keepRecent':keep_recent, 'triggerRatio':trigger,
-            'targetRatio':target_ratio, 'source':source}
+            'target':target, 'keepRecent':keep_recent, 'source':source}
 
 
 def history_text(summary, rows):

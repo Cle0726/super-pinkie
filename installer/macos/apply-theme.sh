@@ -194,10 +194,10 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-ui-subtraction.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction2">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-ui-subtraction.css?v=subtraction1' "$index_file"; then
-    perl -0pi -e 's{\./laolao-ui-subtraction\.css\?v=[^"]*}{./laolao-ui-subtraction.css?v=subtraction1}g' "$index_file"
+  elif ! grep -Fq './laolao-ui-subtraction.css?v=subtraction2' "$index_file"; then
+    perl -0pi -e 's{\./laolao-ui-subtraction\.css\?v=[^"]*}{./laolao-ui-subtraction.css?v=subtraction2}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -207,12 +207,12 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-classic-shell.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic12">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic13">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-side-layout.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-side-layout.css?v=side13">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-side-layout.css?v=side16">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -267,7 +267,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-classic-shell.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic12"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic13"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-side-layout.js' "$index_file"; then
@@ -497,16 +497,16 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion5}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.css?v=classic12' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic12}g' "$index_file"
+  if ! grep -Fq './laolao-classic-shell.css?v=classic13' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic13}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-side-layout.css?v=side13' "$index_file"; then
-    perl -0pi -e 's{\./laolao-side-layout\.css(?:\?v=[^"]*)?}{./laolao-side-layout.css?v=side13}g' "$index_file"
+  if ! grep -Fq './laolao-side-layout.css?v=side16' "$index_file"; then
+    perl -0pi -e 's{\./laolao-side-layout\.css(?:\?v=[^"]*)?}{./laolao-side-layout.css?v=side16}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.js?v=classic12' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic12}g' "$index_file"
+  if ! grep -Fq './laolao-classic-shell.js?v=classic13' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic13}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-side-layout.js?v=side12' "$index_file"; then
@@ -554,7 +554,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme39}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar16}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions5}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink16}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact3}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction1}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme39}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar16}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions5}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink16}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact3}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction2}g' "$index_file"
 }
 
 apply_bundle_icon() {
@@ -616,6 +616,7 @@ sync_launcher_resources() {
   # bootstrap in sync with the source so an installed hotfix cannot be undone
   # by an older self-mutating bootstrap on the next cold launch.
   copy_if_changed "$REPO_ROOT/installer/macos/apply-bundled.sh" "$bundled_root/installer/macos/apply-bundled.sh"
+  copy_if_changed "$REPO_ROOT/installer/macos/apply-theme.sh" "$bundled_root/installer/macos/apply-theme.sh"
   copy_if_changed "$REPO_ROOT/ui/launcher-loading.html" "$bundled_root/ui/launcher-loading.html"
   copy_if_changed "$ASSET_ROOT/laolao-splash.mp4" "$bundled_root/ui/assets/laolao-splash.mp4"
   copy_if_changed "$ASSET_ROOT/laolao-splash-video-poster.png" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
@@ -706,7 +707,7 @@ reseal_app_on_exit() {
   fi
   if [[ "${SKIP_APP_BUNDLES:-0}" != "1" && "$needs_reseal" == "1" && -d "$LAUNCHER_APP_PATH" ]]; then
     local preserved_ok=1
-    if ! codesign --force --deep --sign - --preserve-metadata=identifier,entitlements,flags,runtime "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+    if ! codesign --force --deep --sign - --preserve-metadata=identifier,requirements,entitlements,flags,runtime "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
       preserved_ok=0
     fi
     # codesign can return success while retaining a stale nested
@@ -719,13 +720,32 @@ reseal_app_on_exit() {
       # Fall back to a fresh ad-hoc envelope so a UI-only sync never leaves
       # the installed App unlaunchable. The launcher keeps its bundle ID and
       # runtime flags; the CUA helper remains separately signed.
-      if ! codesign --force --deep --sign - "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
+      if ! codesign --force --deep --options runtime --sign - "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
           || ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
         echo "error: failed to reseal $LAUNCHER_APP_PATH" >&2
         [[ "$exit_code" -eq 0 ]] && exit_code=1
       else
         echo "warning: resealed $LAUNCHER_APP_PATH with a fresh local signature" >&2
       fi
+    fi
+    # Local builds are ad-hoc signed. Without an explicit designated
+    # requirement macOS derives identity from the CDHash, which changes after
+    # every hotfix and makes an already-enabled permission look ungranted.
+    # Re-sign only the outer App envelope with the same stable identity used by
+    # desktop/macos/build.sh; vendor-signed CuaDriver remains untouched.
+    if codesign -dvv "$LAUNCHER_APP_PATH" 2>&1 | grep -Fq 'Signature=adhoc'; then
+      if ! codesign --force --options runtime --sign - \
+          --requirements '=designated => identifier "com.cle0726.super-pinkie"' \
+          "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
+          || ! codesign -dr - "$LAUNCHER_APP_PATH" 2>&1 \
+            | grep -Fq 'designated => identifier "com.cle0726.super-pinkie"'; then
+        echo "error: failed to preserve CLE Kk's stable local permission identity" >&2
+        [[ "$exit_code" -eq 0 ]] && exit_code=1
+      fi
+    fi
+    if ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
+      echo "error: updated CLE Kk App signature did not verify" >&2
+      [[ "$exit_code" -eq 0 ]] && exit_code=1
     fi
   fi
   exit "$exit_code"
@@ -827,7 +847,6 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     fi
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-context-budget.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-compaction-boundary-recovery.mjs"
-    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-same-session-recovery.mjs"
     if [[ "$BUNDLE_BUILD_ONLY" != "1" ]]; then
       "$PYTHON_BIN" "$REPO_ROOT/services/context/setup.py"
       # Update the live extensions too. A hotfix that changes only the App's

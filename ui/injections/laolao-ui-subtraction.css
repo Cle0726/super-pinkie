@@ -117,13 +117,13 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat {
 html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   margin-right: 0 !important;
 }
-.chat-workspace-rail.laolao-classic-workspace-rail {
+.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed {
   width: 36px;
   transform: translateX(29px);
   transition: transform .16s ease;
 }
-.chat-workspace-rail.laolao-classic-workspace-rail:hover,
-.chat-workspace-rail.laolao-classic-workspace-rail:focus-within {
+.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed:hover,
+.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed:focus-within {
   transform: translateX(0);
 }
 .laolao-classic-rail__toggle {

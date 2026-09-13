@@ -17,12 +17,6 @@ html[data-laolao-classic-shell="1"] body .chat-workbench {
   padding-right: 0 !important;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workbench:has(
-  > .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed)
-) {
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 280px) !important;
-}
-
 html[data-laolao-classic-shell="1"] body .chat-workbench__main {
   grid-column: 1 !important;
   width: 100% !important;
@@ -50,6 +44,96 @@ html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-wor
   transform: none !important;
   border-radius: 0 !important;
   box-sizing: border-box !important;
+}
+
+/* The collapsed workspace rail is a control cluster, not a full-height panel.
+   Keeping `height: 100%` here produced the long empty white strip from the
+   screenshot, while Party Space's old auto margin pushed its button to the
+   very bottom.  Centre one compact glass capsule instead; the expanded file
+   workspace still uses the full-height rule above. */
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed {
+  align-self: center !important;
+  width: auto !important;
+  height: auto !important;
+  max-height: calc(100% - 24px) !important;
+  margin: 12px 4px !important;
+  padding: 7px 2px !important;
+  gap: 5px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  border: 1px solid rgba(217, 89, 143, 0.2) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 249, 252, 0.76) !important;
+  box-shadow: 0 9px 28px rgba(113, 45, 78, 0.13) !important;
+  backdrop-filter: blur(22px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(118%) !important;
+  scrollbar-width: none;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::before,
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::after {
+  display: none !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed > :is(
+  .chat-workspace-rail__collapse-toggle,
+  .chat-workspace-rail__collapsed-icon,
+  .chat-workspace-rail__terminal
+) {
+  flex: 0 0 auto !important;
+  margin: 0 auto !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed > :is(
+  #pinkie-roundtable-entry,
+  #pinkie-party-entry
+) {
+  width: 32px !important;
+  min-height: 92px !important;
+  margin: 1px auto !important;
+  padding: 6px 0 !important;
+}
+
+/* Expanding the native workspace must not resize and repaint hundreds of chat
+   messages. Keep the 44px grid reservation stable and open one isolated panel
+   over the right edge. This also prevents the legacy and native layouts from
+   appearing side-by-side during Lit's class transition. */
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
+  position: absolute !important;
+  z-index: 24 !important;
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  justify-self: end !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: auto !important;
+  align-self: stretch !important;
+  width: min(300px, calc(100% - var(--laolao-window-rail-reserve))) !important;
+  height: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-left: 1px solid rgba(217, 89, 143, 0.2) !important;
+  border-radius: 18px 0 0 18px !important;
+  background: rgba(255, 249, 252, 0.94) !important;
+  box-shadow: -14px 0 36px rgba(83, 35, 61, 0.16) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  contain: layout paint style;
+}
+
+/* These launchers belong to the compact rail. Hiding them while the file
+   workspace is open avoids mixing two different navigation surfaces. */
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) > :is(
+  #pinkie-roundtable-entry,
+  #pinkie-party-entry
+) {
+  display: none !important;
 }
 
 /* Message content must wrap inside the conversation column. Long paths,
@@ -87,10 +171,7 @@ html[data-laolao-classic-shell="1"] body .chat-bubble :is(pre, table) {
    collapsed space rail remains reachable. Expanding it becomes an overlay so
    a deliberate click never squeezes the conversation down to an unusable sliver. */
 @media (max-width: 1120px) {
-  html[data-laolao-classic-shell="1"] body .chat-workbench,
-  html[data-laolao-classic-shell="1"] body .chat-workbench:has(
-    > .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed)
-  ) {
+  html[data-laolao-classic-shell="1"] body .chat-workbench {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
   }
@@ -99,15 +180,6 @@ html[data-laolao-classic-shell="1"] body .chat-bubble :is(pre, table) {
     display: flex !important;
   }
 
-  html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
-    position: absolute !important;
-    z-index: 24 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    left: auto !important;
-    width: min(280px, calc(100% - 48px)) !important;
-  }
 }
 
 html[data-laolao-classic-shell="1"] .sidebar,

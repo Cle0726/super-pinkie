@@ -10,6 +10,31 @@ PYTHON_BIN="${PINKIE_PYTHON_BIN:-/usr/bin/python3}"
 
 mkdir -p "$STATE_ROOT"
 
+# Older CLE Kk builds installed OpenClaw's global KeepAlive LaunchAgent.  That
+# service survives the App, starts with a different Node executable identity,
+# and can take port 18789 before the self-contained Launcher gets a chance to
+# start its own gateway.  Besides keeping old runtime code alive, this makes
+# macOS show/recheck permissions for several indistinguishable "node" rows.
+# Migrate only the exact legacy job whose plist points back into this App's
+# private runtime; unrelated OpenClaw installations are deliberately ignored.
+migrate_legacy_managed_gateway() {
+  local legacy_plist="$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist"
+  local legacy_label legacy_args backup_root
+  [[ "${PINKIE_MANAGED_GATEWAY:-0}" == "1" && -f "$legacy_plist" ]] || return 0
+  legacy_label="$(/usr/libexec/PlistBuddy -c 'Print :Label' "$legacy_plist" 2>/dev/null || true)"
+  legacy_args="$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments' "$legacy_plist" 2>/dev/null || true)"
+  [[ "$legacy_label" == "ai.openclaw.gateway" ]] || return 0
+  [[ "$legacy_args" == *"$REPO_ROOT/runtime/openclaw/"* ]] || return 0
+  [[ "$legacy_args" == *"gateway"* ]] || return 0
+
+  backup_root="$STATE_ROOT/backups/legacy-launchagents-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$backup_root"
+  launchctl bootout "gui/$(id -u)/ai.openclaw.gateway" >/dev/null 2>&1 || true
+  mv "$legacy_plist" "$backup_root/ai.openclaw.gateway.plist"
+}
+
+migrate_legacy_managed_gateway
+
 # The pre-release skin used a watcher that restores its own stale three-mode
 # files whenever index.html changes. Disable and preserve it before applying
 # the bundled release so it cannot roll a fresh install backward.

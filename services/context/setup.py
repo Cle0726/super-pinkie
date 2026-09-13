@@ -49,12 +49,8 @@ def install(home=None):
     provenance = budget['read_json'](state/'context-limits.json')
     limits = {}
     for provider, entry in config.get('models', {}).get('providers', {}).items():
-        if not isinstance(entry, dict):
-            continue
         for model in entry.get('models', []):
-            if not isinstance(model, dict) or not model.get('id'):
-                continue
-            ref = provider+'/'+str(model['id'])
+            ref = provider+'/'+model['id']
             previous = provenance.get(ref, {})
             # Keep provenance while our conservative value is unchanged. Explicit
             # edits in OpenClaw or modelLimits take precedence on the next install.
@@ -74,28 +70,21 @@ def install(home=None):
     # The runtime patch supplies reserves as a percentage, not these old fixed
     # defaults. Keep unrelated compaction options (memory flush, instructions...).
     compaction = config.setdefault('agents', {}).setdefault('defaults', {}).setdefault('compaction', {})
-    # This is only an upper cap; the runtime tier still reduces the raw tail for smaller models.
-    if compaction.get('keepRecentTokens') == 160000:
-        compaction['keepRecentTokens'] = 600000
-    else:
-        compaction.setdefault('keepRecentTokens', 600000)
     compaction.pop('reserveTokens', None)
-    # The model tier supplies its own reserve; a fixed 100K floor would over-compress 128K models.
     compaction.pop('reserveTokensFloor', None)
-    compaction.setdefault('timeoutSeconds', 900)
     # Keep user-set windows and keepRecentTokens exactly as-is. These supported
     # additions improve what survives compaction without moving its threshold.
     # Current CLE Kk runtimes reject the retired free-form instruction fields;
     # remove only those known retired keys so a re-install cannot brick config.
     compaction.setdefault('mode', 'safeguard')
-    compaction.setdefault('recentTurnsPreserve', 12)
+    compaction.setdefault('recentTurnsPreserve', 8)
     compaction.pop('maxHistoryShare', None)
     compaction.pop('identifierInstructions', None)
     if compaction.get('identifierPolicy') not in ('strict', 'off'):
         compaction['identifierPolicy'] = 'strict'
     quality = compaction.setdefault('qualityGuard', {})
     quality.setdefault('enabled', True)
-    quality.setdefault('maxRetries', 4)
+    quality.setdefault('maxRetries', 2)
     compaction.setdefault('midTurnPrecheck', {}).setdefault('enabled', True)
     compaction.setdefault('postIndexSync', 'await')
     memory_flush = compaction.setdefault('memoryFlush', {})
@@ -119,18 +108,12 @@ def install(home=None):
     if policy_file.exists():
         policy_raw = policy_file.read_bytes()
         policy_data = budget['read_json'](policy_file)
-        required_ratios = {'triggerRatio': .65, 'targetRatio': .45, 'keepRecentRatio': .45,
-                           'unknownContextWindow': 128000, 'minWindowTokens': 128000}
-        policy_defaults = budget['read_json'](Path(__file__).with_name('policy.json'))
-        expected_tiers = policy_defaults.get('adaptiveTiers', [])
-        tiers_invalid = policy_data.get('adaptiveTiers') != expected_tiers
-        if any(policy_data.get(key) != value for key, value in required_ratios.items()) or tiers_invalid:
+        required_ratios = {'triggerRatio': .85, 'targetRatio': .6, 'keepRecentRatio': .6}
+        if any(policy_data.get(key) != value for key, value in required_ratios.items()):
             backup=state/'backups'/('context-policy-'+str(time.time_ns()))
             backup.mkdir(parents=True,mode=0o700)
             shutil.copy2(policy_file,backup/'context-policy.json')
             policy_data.update(required_ratios)
-            if tiers_invalid:
-                policy_data['adaptiveTiers'] = expected_tiers
             fd,tmp=tempfile.mkstemp(dir=policy_file.parent,prefix='.context-policy-')
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as handle:
@@ -158,17 +141,7 @@ def install(home=None):
             os.chmod(tmp,0o600);replace_preserving_file_flags(tmp,source)
         finally:
             if os.path.exists(tmp):os.unlink(tmp)
-    limits_file = state/'context-limits.json'
-    limits_content = json.dumps(limits,ensure_ascii=False,indent=2)+'\n'
-    if not limits_file.exists() or limits_file.read_text(encoding='utf-8') != limits_content:
-        fd,tmp=tempfile.mkstemp(dir=state,prefix='.context-limits-')
-        try:
-            with os.fdopen(fd,'w',encoding='utf-8') as handle:
-                handle.write(limits_content)
-            os.chmod(tmp,0o600)
-            os.replace(tmp,limits_file)
-        finally:
-            if os.path.exists(tmp):os.unlink(tmp)
+    (state/'context-limits.json').write_text(json.dumps(limits,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('模型上下文策略已准备；未知接口上限使用保守值，详情见 context-limits.json。')
     return changed or policy_changed
 

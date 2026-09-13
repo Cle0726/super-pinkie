@@ -99,15 +99,26 @@
   const ensureRail = () => {
     if (!document.querySelector(".shell.shell--chat")) return;
     const rails = [...document.querySelectorAll(".chat-workspace-rail")];
-    /* Prefer the runtime-owned rail still mounted in the chat workbench. An
-       older build moved one to body, which made Lit create a second rail. */
-    let rail = rails.find((node) => node.parentElement !== document.body) || rails[0];
+    /* A fallback can be created before Lit mounts the real 2026.9 workspace
+       rail. Prefer the node with native controls, then retire only our marked
+       fallback/legacy body node. Keeping both was the expanded-panel overlap. */
+    const nativeRail = rails.find((node) => node.querySelector(
+      ".chat-workspace-rail__collapse-toggle, .chat-workspace-rail__header"
+    ));
+    let rail = nativeRail || rails.find((node) => node.parentElement !== document.body) || rails[0];
     rails.forEach((node) => {
-      if (node !== rail && node.parentElement === document.body) node.remove();
+      if (node === rail) return;
+      const isFallback = node.dataset.laolaoFallbackRail === "1" ||
+        Boolean(node.querySelector(".laolao-classic-rail__toggle"));
+      if (!isFallback && node.parentElement !== document.body) return;
+      node.querySelectorAll(":scope > #pinkie-party-entry, :scope > #pinkie-roundtable-entry")
+        .forEach((entry) => rail?.append(entry));
+      node.remove();
     });
     if (!rail) {
       rail = document.createElement("aside");
       rail.className = "chat-workspace-rail chat-workspace-rail--collapsed laolao-classic-workspace-rail";
+      rail.dataset.laolaoFallbackRail = "1";
       rail.setAttribute("aria-label", "会话工作区");
       document.querySelector(".chat-workbench")?.append(rail);
     }

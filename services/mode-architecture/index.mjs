@@ -64,6 +64,8 @@ function isMutationRequest(prompt = '') {
 // words such as “测试/完成”, which otherwise look like an action request.
 const RESPONSE_ONLY_PREFIX = /^(?:请(?:你)?\s*)?(?:只|仅)(?:需|要)?(?:回复|回答|输出|说)(?:\s*[:：,，]?)/i;
 const RESPONSE_ONLY_FOLLOWUP_ACTION = /(?:然后|并且|同时|再|之后|接着|随后|并|且)\s*(?:调用|使用|执行|运行|修改|改|修复|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|测试|验证)/i;
+const READ_ONLY_DIAGNOSTIC_INTENT = /(?:只读|不要(?:进行)?(?:任何)?操作|不操作|不要(?:点击|输入|修改|改动|创建|删除|写入|更新)|(?:只|仅)(?:需|要)?(?:检查|查看|读取|返回|回复|输出))/i;
+const DIAGNOSTIC_TARGET = /(?:权限|辅助功能|屏幕录制|状态|连通|健康|网关|端口|进程|模型|额度|桌面|屏幕|尺寸|版本|签名|身份)/i;
 const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
 const OBSERVATION_TOOL = /(?:^|_)(?:read|view|inspect|find|search|list|status|open_file|file_fetch|dir_fetch|dir_list)(?:$|_)/i;
 const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
@@ -636,6 +638,13 @@ function isLikelyActionRequest(prompt = '') {
   return false;
 }
 
+function isReadOnlyDiagnosticRequest(prompt = '') {
+  const text = String(prompt || '').trim();
+  return Boolean(text && !isMutationRequest(text)
+    && READ_ONLY_DIAGNOSTIC_INTENT.test(text)
+    && DIAGNOSTIC_TARGET.test(text));
+}
+
 function isHonestIncomplete(value = '') {
   const text = String(value || '');
   if (!HONEST_INCOMPLETE.test(text)) return false;
@@ -822,7 +831,7 @@ function toolIsMechanicalCheck(entry = {}) {
     || hasPassVerifierReceipt(entry.output);
   if (/^(?:read|view_image|open_file|inspect|validate|verify|test|check)(?:$|_)/i.test(name)) return true;
   if (/(?:browser|computer|screen|cua)/i.test(name)
-      && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate)"/i.test(args)) return true;
+      && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate|check_permissions|get_(?:desktop|window)_state|get_screen_size|get_accessibility_tree)"/i.test(args)) return true;
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
     if (/verify_completion\.py\b/i.test(command)) return true;
@@ -1413,6 +1422,19 @@ export class CompletionIntegrityGuard {
   async verifyExternal(key) {
     const state = this.runs.get(String(key || ''));
     if (!state) return {ok: false, reason: '当前会话没有可核验的执行记录'};
+    // Permission/health/status probes have no artifact contract to satisfy.
+    // A model may still have read an unrelated SKILL.md while diagnosing the
+    // environment; do not turn that incidental read into a demand to execute
+    // the Skill's business workflow. Accept only a real, successful host-side
+    // mechanical observation, never model-authored prose.
+    if (isReadOnlyDiagnosticRequest(state.prompt)) {
+      const observed = state.tools.some(toolIsMechanicalCheck);
+      if (!observed) return {ok: false, reason: '只读诊断尚未取得真实的主机检查结果'};
+      state.verification = {
+        ok: true, epoch: state.mutationEpoch, at: Date.now(), scope: 'read-only-diagnostic',
+      };
+      return {ok: true, verified: true, scope: 'read-only-diagnostic', at: state.verification.at};
+    }
     const missing = missingVerifierReason(state);
     if (missing || state.skills.size === 0) {
       state.verification = null;
@@ -1504,6 +1526,12 @@ export class CompletionIntegrityGuard {
       if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
       }
+    }
+    if (isReadOnlyDiagnosticRequest(state.prompt)) {
+      if (!state.tools.some(toolIsMechanicalCheck)) {
+        return this.revise(key, '只读诊断尚未取得真实的主机检查结果');
+      }
+      return;
     }
     const missing = missingVerifierReason(state);
     if (missing) return this.revise(key, missing);
@@ -1967,6 +1995,17 @@ export class CleKkSupervisor {
     // parent session so real tool evidence is never stranded under a run-id
     // pseudo key and then mistaken for "no work was performed".
     this.sessionByRunId = new Map();
+    // Plugin tool factories receive an ephemeral conversation UUID in some
+    // OpenClaw transports, while lifecycle hooks use the durable
+    // `agent:<id>:...` session key. Keep a host-derived bridge between the two
+    // identities so a tool can verify evidence from its own turn without ever
+    // accepting a model-supplied session id.
+    this.sessionBySessionId = new Map();
+    // Some embedded tool factories receive no conversation identity at all.
+    // The host-generated call id is still present in before_tool_call and in
+    // execute(), so use it as the authoritative per-invocation bridge.
+    this.sessionByToolCallId = new Map();
+    this.pendingDeliverySessions = new Map();
     this.retryScheduler = null;
     this.retryCanceller = null;
   }
@@ -2014,23 +2053,73 @@ export class CleKkSupervisor {
   key(event = {}, ctx = {}) {
     const explicit = String(ctx.sessionKey || event.sessionKey || '');
     const runIds = [...new Set([ctx.runId, event.runId].filter(Boolean).map(String))];
+    const sessionIds = [...new Set([ctx.sessionId, event.sessionId].filter(Boolean).map(String))];
     // A rejected turn can still finish after the user has started a new turn.
     // Fence those late hooks so they cannot attach old evidence to the new
     // window and keep the new message blocked.
     if (runIds.some(runId => this.orphaned.has(runId))) return '';
-    if (explicit && !isInternalExecutionSession(explicit)) {
-      for (const runId of runIds) this.sessionByRunId.set(runId, explicit);
-      while (this.sessionByRunId.size > 2048) {
-        this.sessionByRunId.delete(this.sessionByRunId.keys().next().value);
+    const mapped = sessionIds.map(sessionId => this.sessionBySessionId.get(sessionId)).find(Boolean)
+      || (explicit ? this.sessionBySessionId.get(explicit) : '')
+      || runIds.map(runId => this.sessionByRunId.get(runId)).find(Boolean);
+    const key = (explicit && (this.turns.has(explicit) || this.integrity.has(explicit)))
+      ? explicit
+      : mapped || explicit
+      || completionRunKey(event, ctx);
+    if (key && !isInternalExecutionSession(key)) {
+      for (const runId of runIds) this.sessionByRunId.set(runId, key);
+      for (const sessionId of sessionIds) this.sessionBySessionId.set(sessionId, key);
+      // Affected runtime builds put the ephemeral UUID in the factory's
+      // `sessionKey` slot. Once another trusted hook has resolved the owner,
+      // retain that alias as well.
+      if (explicit && explicit !== key) this.sessionBySessionId.set(explicit, key);
+      for (const table of [this.sessionByRunId, this.sessionBySessionId]) {
+        while (table.size > 2048) table.delete(table.keys().next().value);
       }
     }
-    const key = explicit
-      || runIds.map(runId => this.sessionByRunId.get(runId)).find(Boolean)
-      || completionRunKey(event, ctx);
     // Internal Skill reviewers and child workers feed evidence back to a
     // parent. Blocking their own terminal message recursively creates another
     // internal reviewer and leaves the real parent silent forever.
     return isInternalExecutionSession(key) ? '' : key;
+  }
+
+  resolveToolSession(context = {}, toolCallId = '') {
+    const rawCallId = String(toolCallId || '');
+    const byCall = this.sessionByToolCallId.get(rawCallId)
+      || [...this.sessionByToolCallId.entries()].find(([candidate]) => rawCallId
+        && candidate.replace(/[^a-z0-9]/gi, '') === rawCallId.replace(/[^a-z0-9]/gi, ''))?.[1];
+    if (byCall && (this.integrity.has(byCall) || this.turns.has(byCall))) return byCall;
+    const direct = [context.sessionKey, context.sessionId]
+      .filter(Boolean).map(String)
+      .find(candidate => this.integrity.has(candidate) || this.turns.has(candidate));
+    if (direct) return direct;
+    const mapped = [context.sessionId, context.sessionKey]
+      .filter(Boolean).map(String)
+      .map(candidate => this.sessionBySessionId.get(candidate))
+      .find(candidate => candidate && (this.integrity.has(candidate) || this.turns.has(candidate)));
+    if (mapped) return mapped;
+    // Last-resort correlation for runtimes that omit every factory identity
+    // and also omit execute(toolCallId). Only accept one recent, host-observed
+    // pending delivery_guard call; ambiguity fails closed instead of crossing
+    // sessions.
+    const now = Date.now();
+    const agentPrefix = context.agentId ? `agent:${context.agentId}:` : '';
+    const pending = [...this.pendingDeliverySessions.entries()]
+      .filter(([key, value]) => now - value.at < 15_000
+        && (!agentPrefix || key.startsWith(agentPrefix))
+        && (this.integrity.has(key) || this.turns.has(key)));
+    return pending.length === 1 ? pending[0][0] : '';
+  }
+
+  bindToolInvocation(toolCallId = '', hookContext = {}) {
+    const callId = String(toolCallId || '');
+    if (!callId) return '';
+    const sessionKey = this.key({}, hookContext || {});
+    if (!sessionKey) return '';
+    this.sessionByToolCallId.set(callId, sessionKey);
+    while (this.sessionByToolCallId.size > 4096) {
+      this.sessionByToolCallId.delete(this.sessionByToolCallId.keys().next().value);
+    }
+    return sessionKey;
   }
 
   boundContext(event = {}, ctx = {}) {
@@ -2046,6 +2135,19 @@ export class CleKkSupervisor {
   beforeTool(event = {}, ctx = {}) {
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
+    const toolCallId = String(event.toolCallId || ctx.toolCallId || '');
+    if (toolCallId) {
+      this.sessionByToolCallId.set(toolCallId, bound.sessionKey);
+      while (this.sessionByToolCallId.size > 4096) {
+        this.sessionByToolCallId.delete(this.sessionByToolCallId.keys().next().value);
+      }
+    }
+    if (String(event.toolName || '') === DELIVERY_GUARD_TOOL) {
+      this.pendingDeliverySessions.set(bound.sessionKey, {toolCallId, at: Date.now()});
+      for (const [sessionKey, value] of this.pendingDeliverySessions) {
+        if (Date.now() - value.at >= 15_000) this.pendingDeliverySessions.delete(sessionKey);
+      }
+    }
     this.integrity.beforeTool(bound.event, bound.ctx);
   }
 
@@ -2931,12 +3033,21 @@ export class UpstreamWatchdog {
    * make the ordinary watchdog backoff look healthy while a false final is
    * already visible.
    */
-  async scheduleIntegrityRetry({sessionKey, agentId, runId, decision, attempt = 1} = {}) {
+  async scheduleIntegrityRetry({
+    sessionKey, agentId, runId, decision, attempt = 1, reuseAcceptedAttempt = false,
+  } = {}) {
     if (!sessionKey || isInternalExecutionSession(sessionKey)) return {ok: false};
     const tierMinimum={base:24,boost:48,full:96,marathon:512}[this.tierFor(sessionKey)] || 24;
     const maxAttempts = Math.max(tierMinimum, Number(decision?.retry?.maxAttempts) || 24);
     const current = Number(this.integrityAttempts.get(sessionKey) || 0);
-    const nextAttempt = Math.max(current + 1, Number(attempt) || 1);
+    // before_message_write can arm the durable lease while the parent model
+    // is still running. agent_end is the first boundary where chat.send is
+    // guaranteed not to race that parent. Re-arm the same accepted attempt
+    // there: incrementing it burns retry budget, while doing nothing leaves a
+    // lost runtime timer marked as "scheduled" forever.
+    const nextAttempt = reuseAcceptedAttempt
+      ? Math.max(1, current, Number(attempt) || 1)
+      : Math.max(current + 1, Number(attempt) || 1);
     if (nextAttempt > maxAttempts) {
       this.jobStore.delete(sessionKey);
       const timer = this.timers.get(sessionKey);
@@ -2986,6 +3097,10 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`CLE Kk integrity retry enqueue failed session=${sessionKey} error=${String(error)}`);
       return {ok: false, retryable: true};
     }
+  }
+
+  async ensureIntegrityRetry(params = {}) {
+    return this.scheduleIntegrityRetry({...params, reuseAcceptedAttempt: true});
   }
 
   scheduleImmediate(params) {
@@ -3717,16 +3832,13 @@ export class ModeArchitecture {
     const runId = typeof event === 'string' ? '' : String(ctx.runId || event.runId || '');
     const active = this.liveParentRuns.get(sessionKey);
     if (active) {
-      if (runId) {
-        active.delete(runId);
-        // Some host versions omit runId from before_agent_run but add it on
-        // agent_end. Retire that anonymous marker too, otherwise the watchdog
-        // would believe the parent is running forever and never reconnect.
-        active.delete('__unknown__');
-      }
-      else active.clear();
-      if (active.size) this.liveParentRuns.set(sessionKey, active);
-      else this.liveParentRuns.delete(sessionKey);
+      // Parent turns are serialized by OpenClaw's session lane, but lifecycle
+      // hook variants do not consistently use the same runId at start/end.
+      // An unmatched alias made activityFor() report parentRunning forever,
+      // so every watchdog timer only polled and never sent its request.
+      // agent_end is authoritative for the whole completed parent lane.
+      active.clear();
+      this.liveParentRuns.delete(sessionKey);
     }
     if (sessionKey) this.lastParentEventAt.set(sessionKey, Date.now());
     const state = this.getRun(sessionKey);
@@ -4058,8 +4170,7 @@ function deliveryGuardResult(value, isError = false) {
   };
 }
 
-function createDeliveryGuardTool(integrity, context = {}) {
-  const sessionKey = String(context.sessionKey || '');
+function createDeliveryGuardTool(supervisor, context = {}) {
   return {
     name: DELIVERY_GUARD_TOOL,
     label: '成果核验',
@@ -4074,16 +4185,27 @@ function createDeliveryGuardTool(integrity, context = {}) {
       },
       required: ['action'],
     },
-    async execute(_toolCallId, params = {}) {
+    // OpenClaw intentionally supplies trusted per-run context here even when
+    // the plugin tool factory itself is created without session identifiers.
+    // Bind it before the plugin's own tool executes; same-plugin hook
+    // recursion may be suppressed by the host.
+    prepareBeforeToolCallParams(params, meta = {}) {
+      supervisor.bindToolInvocation(meta.toolCallId, meta.hookContext || {});
+      return params;
+    },
+    async execute(toolCallId, params = {}) {
       try {
+        // Resolve at execution time: lifecycle hooks establish the trusted
+        // call-id/session-id -> durable-session mapping after tool construction.
+        const sessionKey = supervisor.resolveToolSession(context, toolCallId);
         if (!sessionKey) throw new Error('宿主没有提供当前会话标识');
         if (params.action === 'verify') {
-          const result = await integrity.verifyExternal(sessionKey);
+          const result = await supervisor.integrity.verifyExternal(sessionKey);
           return deliveryGuardResult(result, !result.ok);
         }
         if (params.action !== 'record') throw new Error('action 必须是 record 或 verify');
         if (!params.kind || !params.run_dir) throw new Error('record 需要 kind 和 run_dir');
-        return deliveryGuardResult(await integrity.recordEvidence(sessionKey, params));
+        return deliveryGuardResult(await supervisor.integrity.recordEvidence(sessionKey, params));
       } catch (error) {
         return deliveryGuardResult({ok: false, error: error instanceof Error ? error.message : String(error)}, true);
       }
@@ -4246,7 +4368,7 @@ export default {
       sessionKey => architecture.activityFor(sessionKey),
     );
     const usage = new ModelUsageLedger();
-    api.registerTool?.(ctx => createDeliveryGuardTool(integrity, ctx), {name: DELIVERY_GUARD_TOOL});
+    api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
@@ -4452,6 +4574,16 @@ export default {
         // watchdog: two invisible turns for one failure race and duplicate
         // writes/tools.
         cleKk.scheduleRetry(rejected, ctx, 'agent_end');
+        // "retryScheduled" is durable intent, not proof that the process-local
+        // dispatcher survived. At parent end, idempotently re-enqueue the same
+        // attempt and guarantee that one live dispatcher owns it.
+        await watchdog.ensureIntegrityRetry({
+          sessionKey: rejected.key,
+          agentId: ctx.agentId || agentFromSessionKey(rejected.key),
+          runId: rejected.runId || event.runId,
+          decision: rejected.decision,
+          attempt: Math.max(1, Number(rejected.turn?.retryAttempts) || 1),
+        });
       } else {
         const retrying = await watchdog.agentEnded(event, ctx);
         if (retrying) return;
