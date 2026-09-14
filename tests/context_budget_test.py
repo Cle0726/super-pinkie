@@ -62,7 +62,7 @@ class ContextBudgetTests(unittest.TestCase):
         compaction=after['agents']['defaults']['compaction']
         self.assertEqual(40000,compaction['keepRecentTokens'])
         self.assertEqual('safeguard',compaction['mode'])
-        self.assertEqual(12,compaction['recentTurnsPreserve'])
+        self.assertEqual(8,compaction['recentTurnsPreserve'])
         self.assertEqual('strict',compaction['identifierPolicy'])
         self.assertNotIn('maxHistoryShare',compaction)
         self.assertNotIn('identifierInstructions',compaction)
