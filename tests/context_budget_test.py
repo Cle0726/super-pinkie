@@ -26,7 +26,7 @@ class ContextBudgetTests(unittest.TestCase):
 
     def test_existing_policy_is_migrated_to_safe_hysteresis_without_losing_other_values(self):
         config=self.home/'.openclaw/openclaw.json';config.parent.mkdir();config.write_text('{}')
-        policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json';policy.parent.mkdir(parents=True)
+        policy=budget['state_root'](self.home)/'context-policy.json';policy.parent.mkdir(parents=True)
         policy.write_text(json.dumps({'triggerRatio':.96,'targetRatio':.9,'keepRecentRatio':.85,'unknownContextWindow':1000000,'custom':'keep'}))
         self.assertTrue(setup['install'](self.home))
         saved=json.loads(policy.read_text())
@@ -38,7 +38,7 @@ class ContextBudgetTests(unittest.TestCase):
         cache=self.home/'.codex/models_cache.json';cache.parent.mkdir()
         cache.write_text(json.dumps({'models':[{'slug':'model-a','context_window':200000,'effective_context_window_percent':95}]}))
         self.assertEqual(161500,budget['model_budget']('codex-cli/model-a',{},self.home)['threshold'])
-        policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json';policy.parent.mkdir(parents=True)
+        policy=budget['state_root'](self.home)/'context-policy.json';policy.parent.mkdir(parents=True)
         policy.write_text(json.dumps({'modelLimits':{'codex-cli/model-a':64000}}))
         self.assertEqual(54400,budget['model_budget']('codex-cli/model-a',{},self.home)['threshold'])
     def test_keyed_agent_schema_resolves_models_and_private_snapshots_stay_valid(self):
@@ -68,7 +68,7 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertNotIn('identifierInstructions',compaction)
         self.assertTrue(compaction['qualityGuard']['enabled'])
         self.assertEqual({'enabled':True},compaction['memoryFlush'])
-        self.assertFalse(setup['install'](self.home));self.assertTrue(list((self.home/'Library/Application Support/SuperPinkie/backups').glob('context-config-*/openclaw.json')))
+        self.assertFalse(setup['install'](self.home));self.assertTrue(list((budget['state_root'](self.home)/'backups').glob('context-config-*/openclaw.json')))
 
     def test_retired_compaction_fields_are_migrated_without_touching_supported_values(self):
         p=self.home/'.openclaw/openclaw.json';p.parent.mkdir()
@@ -130,7 +130,7 @@ class ContextBudgetTests(unittest.TestCase):
         p.write_text(json.dumps(cfg));setup['install'](self.home)
         saved=json.loads(p.read_text());self.assertEqual(cfg['models'],saved['models'])
         self.assertEqual(13600,budget['model_budget']('a/known',saved,self.home)['threshold'])
-        policy=self.home/'Library/Application Support/SuperPinkie/context-policy.json'
+        policy=budget['state_root'](self.home)/'context-policy.json'
         policy.write_text(json.dumps({'modelLimits':{'a/known':12000}}))
         setup['install'](self.home);saved=json.loads(p.read_text())
         self.assertEqual(12000,saved['models']['providers']['a']['models'][0]['contextTokens'])
