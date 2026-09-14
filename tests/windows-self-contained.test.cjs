@@ -85,7 +85,13 @@ test('Windows shell keeps all local spaces, project picker, voice and startup mo
   assert.match(launcher, /services\/party\/server\.py/);
   assert.match(launcher, /services\/roundtable\/server\.py/);
   assert.match(launcher, /services\/tts\/edge_tts_server\.py/);
-  assert.match(launcher, /proxy\/ur-rewrite-proxy\.py/);
+  // The relay is mm-retry-proxy.py (what install.ps1 and the docs use, with
+  // refusal-triggered fallback), not the older ur-rewrite-proxy.py. The frozen
+  // build ships no interpreter, so it is started by re-executing the app.
+  assert.match(launcher, /proxy\/mm-retry-proxy\.py/);
+  assert.doesNotMatch(launcher, /ur-rewrite-proxy/);
+  assert.match(launcher, /--ur-relay/);
+  assert.match(entry, /--ur-relay/);
   assert.match(launcher, /FOLDER_DIALOG/);
   assert.match(launcher, /laolaoNativeDictation/);
   assert.match(launcher, /SAPI\.SpSharedRecognizer/);

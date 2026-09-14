@@ -82,8 +82,8 @@ class RelayPortIdentityTests(unittest.TestCase):
     relay was already running, so it started nothing and said nothing.
     """
 
-    RELAY = Path(__file__).resolve().parents[1] / "proxy" / "ur-rewrite-proxy.py"
-    MM_RELAY = Path(__file__).resolve().parents[1] / "proxy" / "mm-retry-proxy.py"
+    ROOT = Path(__file__).resolve().parents[1]
+    RELAY = ROOT / "proxy" / "mm-retry-proxy.py"
 
     @staticmethod
     def free_port():
@@ -93,7 +93,7 @@ class RelayPortIdentityTests(unittest.TestCase):
         sock.close()
         return port
 
-    def wait_health(self, url, timeout=20):
+    def wait_health(self, url, timeout=30):
         deadline = time.time() + timeout
         while time.time() < deadline:
             identity = http_identity(url)
@@ -114,7 +114,7 @@ class RelayPortIdentityTests(unittest.TestCase):
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return port, f"http://127.0.0.1:{port}/health"
 
-    def start_relay_process(self, script, extra_args=()):
+    def start_relay_process(self, script, port=None, extra_args=()):
         """Launch a relay script on a free port and return its /health URL."""
 
         def stop(process):
@@ -125,7 +125,7 @@ class RelayPortIdentityTests(unittest.TestCase):
                 process.kill()
                 process.wait(timeout=5)
 
-        port = self.free_port()
+        port = port or self.free_port()
         relay = subprocess.Popen(
             [sys.executable, str(script), str(port), *extra_args],
             stdout=subprocess.DEVNULL,
@@ -136,31 +136,26 @@ class RelayPortIdentityTests(unittest.TestCase):
         self.wait_health(url)
         return url
 
-    def start_bundled_relay(self):
-        return self.start_relay_process(self.RELAY)
-
     def test_bundled_relay_identifies_itself_on_health(self):
-        url = self.start_bundled_relay()
+        url = self.start_relay_process(self.RELAY, extra_args=(str(self.free_port()),))
 
         identity = http_identity(url)
         self.assertEqual(identity.get("service"), RELAY_SERVICE, identity)
         self.assertIsInstance(identity.get("attempts"), int, identity)
         self.assertTrue(http_alive(url, RELAY_SERVICE))
 
-    def test_the_installers_relay_reports_the_same_identity(self):
-        """install.ps1 runs mm-retry-proxy.py, so both relays must be recognised.
+    def test_the_app_serves_the_same_relay_the_installer_does(self):
+        """install.ps1 and the app must not run two different relays.
 
-        Otherwise the app cannot tell the installer's relay apart from an
-        unrelated process and would keep trying to bind over it.
+        The installer has always run mm-retry-proxy.py; the app used to start
+        the older ur-rewrite-proxy.py on the same port, which silently decided
+        which features were in the path.
         """
-        url = self.start_relay_process(self.MM_RELAY, extra_args=(str(self.free_port()),))
-
-        identity = http_identity(url)
-        self.assertEqual(identity.get("service"), RELAY_SERVICE, identity)
-        self.assertTrue(
-            http_alive(url, RELAY_SERVICE),
-            "the app must defer to the installer's relay, not fight it for the port",
-        )
+        self.assertTrue(super_pinkie.resource_path("proxy", "mm-retry-proxy.py").is_file())
+        launcher = (self.ROOT / "app" / "windows_desktop.py").read_text(encoding="utf-8")
+        installer = (self.ROOT / "install.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("mm-retry-proxy.py", installer)
+        self.assertIn("proxy/mm-retry-proxy.py", launcher)
 
     def test_a_foreign_proxy_is_not_mistaken_for_the_bundled_relay(self):
         _port, url = self.start_foreign_proxy()
@@ -173,29 +168,55 @@ class RelayPortIdentityTests(unittest.TestCase):
         )
 
     def test_occupied_relay_port_is_reported_instead_of_silently_skipped(self):
-        port, url = self.start_foreign_proxy()
+        port, _url = self.start_foreign_proxy()
 
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.object(windows_desktop, "state_root", return_value=Path(directory)):
-                services = LocalServices(runtime=None)
-                services._start(
-                    "relay",
-                    "proxy/ur-rewrite-proxy.py",
-                    "serve",
-                    (port,),
-                    url,
-                    RELAY_SERVICE,
-                    hint="the bundled relay (the one that injects the unrestricted prompt) was not started",
-                )
+                services = LocalServices(runtime=mock.Mock(root=self.ROOT))
+                services._start_relay(port, self.free_port())
                 time.sleep(0.3)
 
-            self.assertEqual(services.threads, [], "the bundled relay must not be started")
+            self.assertIsNone(services.relay, "the bundled relay must not be started")
             log = (Path(directory) / "logs" / "launcher.log").read_text(encoding="utf-8")
 
         self.assertIn("relay port busy", log)
         self.assertIn('"attempts": 24', log)
         self.assertIn("was not started", log)
         self.assertIn("unrestricted prompt", log)
+
+    def test_relay_is_served_by_reexecuting_the_app_when_the_port_is_free(self):
+        """The frozen build has no interpreter, so the app re-executes itself.
+
+        This exercises the real path end to end: LocalServices spawns the app in
+        relay mode, and the relay that answers is mm-retry-proxy.py.
+        """
+        port = self.free_port()
+        upstream = self.free_port()
+
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(windows_desktop, "state_root", return_value=Path(directory)):
+                services = LocalServices(runtime=mock.Mock(root=self.ROOT))
+                services._start_relay(port, upstream)
+
+                self.assertIsNotNone(services.relay, "the relay process should have started")
+                pid = services.relay.pid
+                identity = self.wait_health(f"http://127.0.0.1:{port}/health")
+                log = (Path(directory) / "logs" / "launcher.log").read_text(encoding="utf-8")
+                # Stop the relay before the temporary directory goes away: its
+                # stdout handle keeps relay.log open otherwise.
+                services.close()
+
+        self.assertEqual(identity.get("service"), RELAY_SERVICE, identity)
+        self.assertIn(f"relay started pid={pid}", log)
+
+    def test_relay_command_reexecutes_the_app_not_a_bare_script(self):
+        command = windows_desktop.relay_command(1467, 1466)
+
+        self.assertEqual(command[0], sys.executable)
+        self.assertIn("--ur-relay", command)
+        self.assertEqual(command[-2:], ["1467", "1466"])
+        self.assertEqual(super_pinkie.relay_ports_from_argv(["--ur-relay", "1467", "1466"]), (1467, 1466))
+        self.assertIsNone(super_pinkie.relay_ports_from_argv(["--control-center"]))
 
     def test_super_pinkie_health_requires_the_bundled_relay(self):
         self.assertEqual(
@@ -210,7 +231,9 @@ class RelayPortIdentityTests(unittest.TestCase):
             "a foreign proxy must not read as a healthy bundled relay",
         )
 
-        relay_port = int(self.start_bundled_relay().split(":")[2].split("/")[0])
+        relay_port = int(
+            self.start_relay_process(self.RELAY, extra_args=(str(self.free_port()),)).split(":")[2].split("/")[0]
+        )
         self.assertTrue(super_pinkie.proxy_health(relay_port))
 
 
