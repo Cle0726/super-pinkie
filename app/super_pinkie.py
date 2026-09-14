@@ -27,6 +27,13 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 
+# A non-UTF-8 Windows locale gives this process a cp1252 stdout; the Chinese
+# status prints below (e.g. the tkinter prompt) then raise UnicodeEncodeError.
+# Reconfigure to UTF-8 (idempotent).  Under pythonw stdout may be None, and the
+# hasattr guard skips it safely.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 try:
     import tkinter as tk
     from tkinter import ttk, scrolledtext, messagebox

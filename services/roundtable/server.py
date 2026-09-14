@@ -28,6 +28,12 @@ import time
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+# See services/context/setup.py: cp1252 stdout on a non-UTF-8 Windows locale
+# would break the Chinese "started" print below.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 
 ROOT = Path(__file__).resolve().parents[2]
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
