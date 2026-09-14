@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
@@ -300,4 +301,59 @@ test('PowerShell entrypoints are UTF-8 with BOM for Windows PowerShell 5.1', () 
     const bytes = fs.readFileSync(path.join(root, name));
     assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], `${name} must have UTF-8 BOM`);
   }
+});
+
+test('the injected bridge waits for a document it can actually append to', () => {
+  // WebView2 reports the navigation as loaded while the document can still be
+  // mid-parse, so `document.body` may not exist yet when the shell injects its
+  // bridge.  `document.body.append(...)` threw there ("Cannot read properties of
+  // null (reading 'append')"), the shell logged "native bridge setup skipped",
+  // and the update health marker -- written after the injection at the time --
+  // never appeared, which is how a working build gets rolled back.
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  assert.ok(found, 'app/windows_desktop.py must keep a BRIDGE_SCRIPT');
+
+  const created = [];
+  const listeners = [];
+  const element = () => {
+    const node = {
+      id: '', className: '', textContent: '', innerHTML: '', children: [],
+      style: {}, dataset: {},
+      classList: { add() {}, remove() {}, toggle() {} },
+      setAttribute() {}, append(...kids) { node.children.push(...kids); }, prepend() {},
+      querySelector: () => null, remove() {}, addEventListener() {},
+    };
+    created.push(node);
+    return node;
+  };
+  const document = {
+    documentElement: element(),
+    body: null, // still parsing, which is the whole point
+    head: element(),
+    getElementById: () => null,
+    querySelector: () => null,
+    createElement: element,
+    addEventListener: (type, handler) => listeners.push([type, handler]),
+  };
+  const sandbox = {
+    document,
+    window: { addEventListener() {} },
+    location: { protocol: 'http:', href: 'http://127.0.0.1:18789/' },
+    setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
+  };
+
+  // The old script threw on `document.body.append(drag)` right here.
+  vm.runInNewContext(found[1], sandbox);
+  assert.equal(
+    created.filter(node => node.id === 'pinkie-native-window-controls').length, 0,
+    'nothing may be installed while the document cannot take it',
+  );
+  const waiting = listeners.find(([type]) => type === 'DOMContentLoaded');
+  assert.ok(waiting, 'the bridge must wait for DOMContentLoaded instead of guessing');
+
+  document.body = element();
+  waiting[1]();
+  const controls = created.find(node => node.id === 'pinkie-native-window-controls');
+  assert.ok(controls, 'the window controls must appear once the document can take them');
+  assert.ok(document.body.children.includes(controls), 'the controls must land in the body');
 });
