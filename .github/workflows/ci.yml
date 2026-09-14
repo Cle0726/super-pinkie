@@ -91,3 +91,38 @@ jobs:
           path: |
             dist/超級碧琪/
             dist/超級碧琪.exe
+
+  windows-checks:
+    # This app ships on Windows, but no job here used to run the suites there:
+    # portable-checks covers ubuntu and macos-check covers two node files, while
+    # windows-build only produces the artifact.  Windows-only defects were
+    # therefore invisible until a user hit them, and they are not theoretical:
+    # the audit lock reports EPERM on a lost `open(..., 'wx')` race where Linux
+    # reports EEXIST, so a concurrent writer dropped records, and the
+    # project-scope tests failed on Windows for POSIX-only reasons
+    # (/bin/sh, JSON-escaped paths).  Run the same suites a Windows user runs.
+    #
+    # Deliberately not gated behind the other jobs: the whole point is an early,
+    # unambiguous Windows signal, and waiting for two other runners plus a
+    # three-minute build before learning about a Windows failure defeats it.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the execution, recovery, UI and desktop suites on Windows
+        # bash keeps this step identical to portable-checks: the default shell
+        # here is PowerShell, which does not expand globs for native commands.
+        # Node expands them itself, but matching the ubuntu job exactly removes
+        # a whole class of "does this differ by shell" doubt.
+        shell: bash
+        run: |
+          node --test tests/*.test.cjs tests/*.test.mjs
+          python -m unittest discover -s tests -p '*_test.py' -v
+      - name: Check Python services
+        shell: bash
+        run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
