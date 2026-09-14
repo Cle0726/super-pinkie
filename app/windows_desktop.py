@@ -24,9 +24,9 @@ GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
 TTS_URL = "http://127.0.0.1:18888/health"
-# The bundled ur-rewrite relay identifies itself with this name on /health.
-# Port 1467 is a shared convention: the user may run their own retry proxy
-# there, and it answers {"ok": true} just like ours does.
+# The injection relay reports this name on /health. Port 1467 is a shared
+# convention: the user may run their own retry proxy there, and it answers
+# {"ok": true} just like ours does, so identity is what separates the two.
 RELAY_SERVICE = "super-pinkie-relay"
 UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
 UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
@@ -723,31 +723,45 @@ def load_file_module(name, path):
     return module
 
 
+def relay_command(port, upstream):
+    """The argv that re-runs this application as the relay process.
+
+    The frozen build ships no Python interpreter -- there is no python.exe
+    beside 超級碧琪.exe -- so the relay cannot be started as
+    `python proxy/mm-retry-proxy.py`. The app re-executes its own executable in
+    relay mode instead; from a source checkout the current interpreter runs the
+    launcher script, which handles the same flag.
+    """
+    arguments = ["--ur-relay", str(port), str(upstream)]
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *arguments]
+    return [sys.executable, str(Path(__file__).resolve().parent / "super_pinkie.py"), *arguments]
+
+
 class LocalServices:
     def __init__(self, runtime):
         self.runtime = runtime
         self.servers = []
         self.threads = []
+        self.relay = None
 
-    def _start(self, name, relative, target, arguments, health, expected=None, hint=None):
+    def _start(self, name, relative, target, arguments, health, expected=None):
         if http_alive(health, expected):
             return
         if expected:
             # Something is answering on this port but it is not our service --
-            # typically a user-run proxy on the shared 1467 convention, or a
+            # typically a user-run proxy on a shared convention port, or a
             # leftover from another install. Binding would just fail, so name the
             # occupant and say so out loud instead of silently starting nothing
             # and letting callers believe the bundled service is up.
             occupant = http_identity(health)
             if occupant:
-                message = (
+                append_log(
+                    "launcher",
                     f"{name} port busy: {health} is answered by a different service "
                     f"({json.dumps(occupant, ensure_ascii=False)}); "
-                    f"bundled {name} was not started"
+                    f"bundled {name} was not started",
                 )
-                if hint:
-                    message = f"{message} - {hint}"
-                append_log("launcher", message)
                 return
 
         def run():
@@ -768,6 +782,58 @@ class LocalServices:
         thread.start()
         self.threads.append(thread)
 
+    def _start_relay(self, port, upstream):
+        """Run the full-featured injection relay, deferring to one already up.
+
+        install.ps1 serves this same relay through the OpenClawURProxy task, so
+        the app only needs to provide it when that task is absent. Both report
+        the same relay identity, which is what lets the app tell "the relay role
+        is already covered" apart from "an unrelated process owns the port".
+        The relay runs as a separate process because mm-retry-proxy.py binds its
+        port at import time and exposes no serve() entry point.
+        """
+        health = f"http://127.0.0.1:{port}/health"
+        if http_alive(health, RELAY_SERVICE):
+            return
+        occupant = http_identity(health)
+        if occupant:
+            append_log(
+                "launcher",
+                f"relay port busy: {health} is answered by a different service "
+                f"({json.dumps(occupant, ensure_ascii=False)}); bundled relay was not "
+                f"started - it is the one that injects the unrestricted prompt, so stop "
+                f"the other proxy or point UR_PROXY_LISTEN at a free port to let it bind",
+            )
+            return
+        script = self.runtime.root / "proxy/mm-retry-proxy.py"
+        if not script.is_file():
+            append_log("launcher", f"relay script missing: {script}")
+            return
+
+        log_dir = state_root() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        output = (log_dir / "relay.log").open("ab")
+        environment = dict(os.environ)
+        environment["UR_PROXY_LISTEN"] = str(port)
+        environment["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+        try:
+            self.relay = subprocess.Popen(
+                relay_command(port, upstream),
+                cwd=str(self.runtime.root),
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=output,
+                **hidden_process_kwargs(),
+            )
+            append_log("launcher", f"relay started pid={self.relay.pid} on {port} -> {upstream}")
+        except OSError as error:
+            append_log("launcher", f"relay start failed: {error}")
+        finally:
+            # The child holds its own handle on the redirect target; keeping this
+            # one open would lock the log file against readers.
+            output.close()
+
     def start(self):
         os.environ.update(self.runtime.environment())
         data = state_root()
@@ -780,15 +846,9 @@ class LocalServices:
             (18891, str(data / "roundtable")), ROUNDTABLE_URL + "api/health", "super-pinkie-roundtable",
         )
         self._start("tts", "services/tts/edge_tts_server.py", "serve", (18888,), TTS_URL)
-        relay_port = int(os.environ.get("UR_PROXY_LISTEN", "1467"))
-        self._start(
-            "relay", "proxy/ur-rewrite-proxy.py", "serve", (relay_port,),
-            f"http://127.0.0.1:{relay_port}/health", RELAY_SERVICE,
-            hint=(
-                "the bundled relay (the one that injects the unrestricted prompt) was "
-                "not started; stop the other proxy or point UR_PROXY_LISTEN at a free "
-                "port to let the bundled relay bind"
-            ),
+        self._start_relay(
+            int(os.environ.get("UR_PROXY_LISTEN", "1467")),
+            int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466")),
         )
 
     def close(self):
@@ -797,6 +857,14 @@ class LocalServices:
                 server.shutdown()
             except Exception:
                 pass
+        process = self.relay
+        self.relay = None
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 class NativeBridge:

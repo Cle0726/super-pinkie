@@ -598,7 +598,7 @@ class ProxyManager:
             return
         port = port or DEFAULT_PROXY_PORT
         upstream = upstream or DEFAULT_UPSTREAM_PORT
-        proxy_py = resource_path("proxy", "ur-rewrite-proxy.py")
+        proxy_py = resource_path("proxy", "mm-retry-proxy.py")
         if not proxy_py.exists():
             self.log(f"✗ 找不到代理脚本: {proxy_py}")
             return
@@ -929,7 +929,44 @@ def run_control_center():
     root.mainloop()
 
 
+def relay_ports_from_argv(arguments=None):
+    """Read `--ur-relay <port> <upstream>` from argv, or None when absent."""
+    args = list(sys.argv[1:] if arguments is None else arguments)
+    if "--ur-relay" not in args:
+        return None
+    rest = args[args.index("--ur-relay") + 1:]
+    port = int(rest[0]) if len(rest) > 0 else DEFAULT_PROXY_PORT
+    upstream = int(rest[1]) if len(rest) > 1 else DEFAULT_UPSTREAM_PORT
+    return port, upstream
+
+
+def run_relay(port, upstream):
+    """Serve the injection relay in this process and never return.
+
+    mm-retry-proxy.py is the relay install.ps1 and the docs use: HTTP-layer
+    injection plus retries, AFL progressive deepening and refusal-triggered
+    fallback. It has no serve() function and binds its port at import time, so
+    it cannot be started like the other local services -- the app re-executes
+    itself with --ur-relay instead, which also keeps a relay crash away from the
+    window. argv is rewritten to the two-positional shape that script reads.
+    """
+    script = resource_path("proxy", "mm-retry-proxy.py")
+    if not script.is_file():
+        raise SystemExit(f"relay script missing: {script}")
+    os.environ["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
+    os.environ["UR_PROXY_LISTEN"] = str(port)
+    os.environ["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+    sys.argv = [sys.argv[0], str(port), str(upstream)]
+    spec = importlib.util.spec_from_file_location("pinkie_relay", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+
 def main():
+    ports = relay_ports_from_argv()
+    if ports:
+        run_relay(*ports)
+        return
     if os.name == "nt" and getattr(sys, "frozen", False) and bundled_runtime_root() and "--control-center" not in sys.argv:
         from windows_desktop import run_desktop, update_health_token_from_argv
         run_desktop(resource_path(), prepare_bundled_desktop, update_health_token_from_argv())
