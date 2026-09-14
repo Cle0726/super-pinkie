@@ -47,9 +47,9 @@ test('installer cache-busts the native glass assets',()=>{
   assert.match(installer,/laolao-splash\.js\?v=splash25/);
   assert.match(installer,/laolao-mode-switcher\.js\?v=mode31/);
   assert.match(installer,/laolao-usage-stats\.js\?v=stats15/);
-  assert.match(installer,/laolao-classic-shell\.css\?v=classic12/);
-  assert.match(installer,/laolao-classic-shell\.js\?v=classic12/);
-  assert.match(installer,/laolao-side-layout\.css\?v=side13/);
+  assert.match(installer,/laolao-classic-shell\.css\?v=classic13/);
+  assert.match(installer,/laolao-classic-shell\.js\?v=classic13/);
+  assert.match(installer,/laolao-side-layout\.css\?v=side16/);
   assert.match(installer,/laolao-side-layout\.js\?v=side12/);
   assert.match(installer,/laolao-memory\.css\?v=memory1/);
   assert.match(installer,/laolao-memory\.js\?v=memory2/);
@@ -70,7 +70,10 @@ test('chat layout keeps both rails out of the message column',()=>{
   assert.match(css,/chat-workspace-rail\.laolao-classic-workspace-rail[\s\S]*position: relative !important/);
   assert.match(css,/chat-workspace-rail\.laolao-classic-workspace-rail[\s\S]*grid-column: 2 !important/);
   assert.match(css,/@media \(max-width: 1120px\)[\s\S]*display: grid !important[\s\S]*display: flex !important/);
-  assert.match(css,/@media \(max-width: 1120px\)[\s\S]*not\(\.chat-workspace-rail--collapsed\)[\s\S]*position: absolute !important/);
+  // 窄窗口仍为轨道保留独立的栅格列；非折叠态的轨道用绝对定位浮在列外，
+  // 不把消息列挤走。这两条断言彼此独立，不依赖它们在文件里的先后顺序。
+  assert.match(css,/@media \(max-width: 1120px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\) var\(--laolao-window-rail-reserve\) !important/);
+  assert.match(css,/not\(\.chat-workspace-rail--collapsed\)[\s\S]*position: absolute !important/);
   assert.match(css,/chat-bubble :is\(p, li, blockquote, a\)[\s\S]*overflow-wrap: anywhere/);
   assert.doesNotMatch(css,/padding-right: var\(--laolao-window-rail-reserve\)/);
 });
