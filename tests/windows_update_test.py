@@ -166,7 +166,43 @@ class WindowsUpdateTests(unittest.TestCase):
                     updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, attempts=2)
             self.assertIn("cut short", str(caught.exception))
             self.assertFalse(destination.exists())
-            self.assertFalse((root / "payload.exe.download").exists())
+            # 半成品是故意留下的：它是下一次的续传起点。删掉它等于把「下到一半断了」
+            # 变成「下次从零再来」，而 404MB 的包经代理几乎不可能一口气跑完。
+            self.assertEqual(sent, (root / "payload.exe.download").stat().st_size)
+
+    def test_a_failed_download_keeps_its_resume_point_for_the_next_call(self):
+        """一次调用用尽重试后，已收到的字节必须留给下一次调用续传。
+
+        这是更新在本机能否成功的分水岭：包有 404MB，代理中途掐断，4 次重试跑不完。
+        """
+        payload = b"p" * (3 * 1024 * 1024)
+        first_chunk = 1024 * 1024
+        seen = []
+
+        def opener(request, timeout=0):
+            header = request.headers.get("Range")
+            seen.append(header)
+            if header:
+                start = int(header.split("=")[1].rstrip("-"))
+                return SizedResponse(payload[start:], status=206, content_length=len(payload) - start)
+            return SizedResponse(payload[:first_chunk], content_length=len(payload))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "超級碧琪.exe"
+            executable.write_bytes(b"old")
+            updater = WindowsUpdater(root, opener=opener, executable=executable)
+            destination = root / "payload.exe"
+            with mock.patch("time.sleep"):
+                with self.assertRaises(ValueError):
+                    updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, attempts=1)
+            self.assertFalse(destination.exists())
+            self.assertEqual(first_chunk, (root / "payload.exe.download").stat().st_size)
+            # 下次启动：必须接着已经收到的 1MB 往下拿，而不是从 0 开始。
+            with mock.patch("time.sleep"):
+                updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination)
+            self.assertEqual(payload, destination.read_bytes())
+        self.assertEqual([None, "bytes=1048576-"], seen)
 
     def test_interrupted_download_resumes_with_range(self):
         """第一次被掐断后，第二次必须带 Range 续传，而不是从零重下。"""

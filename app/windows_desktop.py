@@ -292,22 +292,33 @@ class WindowsUpdater:
         的文件」当成成功，最后在 prepare() 里报成 `downloaded update checksum mismatch`
         ——看起来像校验和写错了，其实是几百 MB 的包经代理中途断了。这里显式核对服务端声明
         的长度，并保留半成品做 Range 续传，避免每次重试都从零开始重下。
+
+        半成品在**最终失败时也要留下**：它就是下一次 prepare() 的续传起点。原先的
+        `temporary.unlink()` 只在一次调用内的 4 次重试之间保留了续传，一旦这 4 次都用完就
+        把已收到的字节删掉，于是「下到 380MB 断了」在下次启动时退化成「从零再来」——而经
+        代理的下行恰恰很少能一口气跑完 404MB，更新因此永远到不了终点。日志里带上已保留的
+        字节数，下次失败时能一眼看出进度到底有没有在累积。
         """
         temporary = destination.with_suffix(destination.suffix + ".download")
-        try:
-            for attempt in range(1, attempts + 1):
-                try:
-                    self._fetch(url, temporary, maximum)
-                    break
-                except Exception as error:
-                    if attempt >= attempts:
-                        raise
-                    append_log("updater", f"download attempt {attempt} interrupted: {error}")
-                    time.sleep(min(2 ** attempt, 10))
-            os.replace(temporary, destination)
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
+        for attempt in range(1, attempts + 1):
+            try:
+                self._fetch(url, temporary, maximum)
+                break
+            except Exception as error:
+                kept = temporary.stat().st_size if temporary.is_file() else 0
+                if attempt >= attempts:
+                    append_log(
+                        "updater",
+                        f"download gave up after {attempt} attempts, keeping {kept} bytes "
+                        f"to resume from: {error}",
+                    )
+                    raise
+                append_log(
+                    "updater",
+                    f"download attempt {attempt} interrupted at {kept} bytes: {error}",
+                )
+                time.sleep(min(2 ** attempt, 10))
+        os.replace(temporary, destination)
 
     def _fetch(self, url, temporary, maximum):
         offset = temporary.stat().st_size if temporary.is_file() else 0
