@@ -17,7 +17,7 @@
   const MENU_ID = "laolao-deep-think-menu";
   const BTN_CLASS = "laolao-deep-think-btn";
   const STATUS_ID = "laolao-deep-think-status";
-  const STORAGE_KEY = "laolao:deep-think-tier";
+  const STORAGE_KEY = (sk) => `laolao:deep-think-tier:${sk || "default"}`;
   let menu = null;
   let bypassSend = false;
   let arming = null;
@@ -82,7 +82,9 @@
 
   const readTier = () => {
     try {
-      const value = localStorage.getItem(STORAGE_KEY) || "";
+      const sk = typeof currentSessionKey === "function" ? currentSessionKey() : "";
+      const key = typeof STORAGE_KEY === "function" ? STORAGE_KEY(sk) : STORAGE_KEY;
+      const value = localStorage.getItem(key) || "";
       return TIERS.some((tier) => tier.id === value) ? value : "";
     } catch { return ""; }
   };
@@ -91,8 +93,10 @@
   const writeTier = (value) => {
     selectedTier = value;
     try {
-      if (value) localStorage.setItem(STORAGE_KEY, value);
-      else localStorage.removeItem(STORAGE_KEY);
+      const sk = typeof currentSessionKey === "function" ? currentSessionKey() : "";
+      const key = typeof STORAGE_KEY === "function" ? STORAGE_KEY(sk) : STORAGE_KEY;
+      if (value) localStorage.setItem(key, value);
+      else localStorage.removeItem(key);
     } catch {}
     syncSelectionUi();
   };
@@ -268,10 +272,11 @@
 
   const renderStatus = (status = {}) => {
     latestStatus = status;
-    if (status.active && !selectedTier && !disarming) {
-      void disarmCurrent(latestStatusSessionKey).then(() => {
-        toast("遗留档位已停止，恢复普通发送");
-      }).catch((error) => {
+    if (status.active && !selectedTier && status.tier) {
+      selectedTier = status.tier;
+      writeTier(status.tier);
+      render();
+    }).catch((error) => {
         toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
       });
     }
