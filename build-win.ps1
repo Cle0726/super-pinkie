@@ -1,4 +1,4 @@
-# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪 Windows App
+﻿# build-win.ps1 — 构建内置 Node.js、OpenClaw、网关和 WebView2 桌面壳的超級碧琪 Windows App
 [CmdletBinding()]
 param(
     # onedir avoids PyInstaller's onefile self-extraction (hundreds of MB) on every launch.
