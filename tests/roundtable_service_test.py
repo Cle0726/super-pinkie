@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +34,11 @@ class ImmediatePool:
 class RoundtableServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        # Same guard as party_service_test: the usage ledger resolves its state
+        # root from the environment and would otherwise accrue to the live
+        # profile as soon as a test drives a reply to completion.
+        self.state = mock.patch.dict(os.environ, {'PINKIE_STATE_ROOT': str(Path(self.temp.name)/'state')})
+        self.state.start()
         self.models = mock.patch.object(MODULE, 'available_models', return_value=MODELS)
         self.models.start()
         self.store = MODULE.Store(self.temp.name)
@@ -40,6 +46,7 @@ class RoundtableServiceTests(unittest.TestCase):
     def tearDown(self):
         self.store.db.close()
         self.models.stop()
+        self.state.stop()
         self.temp.cleanup()
 
     def create(self):
