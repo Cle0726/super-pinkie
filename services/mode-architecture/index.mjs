@@ -674,6 +674,15 @@ function contractTimeBoundary() {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-kk-contract-clock-'));
     const marker = path.join(directory, 'boundary');
     fs.writeFileSync(marker, '', {flag: 'wx', mode: 0o600});
+    // NTFS quantizes ctime to a ~100 ns tick, so a file written immediately
+    // after this marker can land on the SAME ctime as the marker (measured at
+    // ~14% on Windows).  stableContractFile rejects only timestamps strictly
+    // AFTER the boundary, so that collision let a verifier overwritten this
+    // turn pass as pre-existing -- a real hole, and the flaky source of the
+    // `creating or changing a verifier...` test.  Wait past the tick so every
+    // subsequent write is guaranteed to be strictly later.  One millisecond is
+    // ample and costs nothing next to a real turn.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
     const contractCutoffNs = fs.statSync(marker, {bigint: true}).ctimeNs.toString();
     return {startedAt: Date.now(), contractCutoffNs};
   } catch {
