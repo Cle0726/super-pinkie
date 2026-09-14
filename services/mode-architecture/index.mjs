@@ -1455,7 +1455,17 @@ export class CompletionIntegrityGuard {
           contract.verifier, '--project-root', projectRoot, '--since-ms', String(state.startedAt), '--json',
         ], {
           encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
-          env: {...process.env, PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt)},
+          // Same reason as the synchronous verify path: `encoding: 'utf8'`
+          // only controls how Node decodes the captured bytes, not the code
+          // page python uses to print.  A non-UTF-8 Windows locale makes the
+          // child print cp1252 and throw UnicodeEncodeError on Chinese, so pin
+          // the child's streams to UTF-8.
+          env: {
+            ...process.env,
+            PYTHONIOENCODING: 'utf-8',
+            PYTHONUTF8: '1',
+            PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt),
+          },
         });
       } catch (error) {
         const reason = verificationFailure(error?.stdout || error?.stderr || error?.message);
@@ -1564,7 +1574,20 @@ export class CompletionIntegrityGuard {
         '--json',
       ], {
         encoding: 'utf8', timeout: 20_000, maxBuffer: 2 * 1024 * 1024,
-        env: {...process.env, PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt)},
+        // `encoding: 'utf8'` only tells Node how to decode the bytes it
+        // captured; it does not decide the code page the child python uses to
+        // print.  On a Windows box whose locale is not UTF-8 (a stock GitHub
+        // runner, a fresh install), python's stdout defaults to cp1252 and a
+        // verifier that prints Chinese throws UnicodeEncodeError before Node
+        // ever sees the bytes.  Force UTF-8 on the child's streams so the
+        // verifier's output is locale-independent, exactly like it is on
+        // macOS/Linux where UTF-8 is the default.
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: 'utf-8',
+          PYTHONUTF8: '1',
+          PINKIE_INTEGRITY_STARTED_AT_MS: String(state.startedAt),
+        },
       });
       if (checked.error) {
         return this.revise(key, `${path.basename(path.dirname(skillFile))} 真实性校验器无法运行：${checked.error.message}`);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import plugin,{CleKkAuditLog,CleKkSupervisor,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,createCuaComputerTool,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
@@ -833,6 +833,28 @@ test('an immediately installed existing contract can verify without an artificia
   guard.begin({prompt:'调用 Skill 验证项目'},ctx);
   guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
   assert.equal((await guard.verifyExternal(ctx.sessionKey)).verified,true);
+});
+
+test('a verifier printing Chinese survives a non-UTF-8 Windows locale',async t=>{
+  // A verifier that prints Chinese threw UnicodeEncodeError on a Windows box
+  // whose locale is cp1252 (a stock GitHub runner, a fresh install): the
+  // child's stdout code page is independent of Node's `encoding: 'utf8'`
+  // capture option, so the shell never saw the JSON.  The shell must pin the
+  // child to UTF-8 itself.  Simulate the bad locale by poisoning the ambient
+  // encoding, then assert the shell still surfaces the Chinese reason rather
+  // than a cp1252 traceback.
+  const {skill,verifier,guard,ctx}=integrityContract(t,'cp1252-locale');
+  fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"FAIL","verified":False,"issues":["没有本轮视频"]},ensure_ascii=False))\nsys_exit = __import__("sys").exit\n');
+  guard.begin({prompt:'调用 Skill 生成视频'},ctx);
+  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+  const previous=process.env.PYTHONIOENCODING;
+  process.env.PYTHONIOENCODING='cp1252';
+  let reason='';
+  try{reason=(await guard.verifyExternal(ctx.sessionKey)).reason||'';}finally{
+    if(previous===undefined)delete process.env.PYTHONIOENCODING;else process.env.PYTHONIOENCODING=previous;
+  }
+  assert.match(reason,/没有本轮视频/,'the Chinese reason must survive, not collapse into a cp1252 traceback');
+  assert.doesNotMatch(reason,/UnicodeEncodeError|charmap/);
 });
 
 test('creating or changing a verifier before first Skill read cannot self-certify',async t=>{
