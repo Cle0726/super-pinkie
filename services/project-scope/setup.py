@@ -22,6 +22,25 @@ def replace_preserving_file_flags(temp_name, target):
             os.chflags(target, flags)
 
 
+def state_root(home):
+    """Where a given home keeps SuperPinkie state.
+
+    An explicit home that is not the live profile means a sandbox -- the test
+    suite and portable runs pass their own root -- so it is honoured instead of
+    reaching into the real user's state.  Only the actual profile resolves
+    through LOCALAPPDATA, which is where the app keeps its state on Windows.
+    """
+    configured = os.environ.get('PINKIE_STATE_ROOT')
+    if configured:
+        return Path(configured)
+    home = Path(home)
+    if os.name != 'nt':
+        return home/'Library/Application Support/SuperPinkie'
+    if home != Path.home():
+        return home/'AppData/Local/SuperPinkie'
+    return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+
+
 def install(home=None):
     home = Path(home or Path.home())
     config = home / '.openclaw/openclaw.json'
@@ -56,9 +75,7 @@ def install(home=None):
     config_changed = old_plugins != json.dumps(plugins, sort_keys=True)
     if not assets_changed and not config_changed:
         return False
-    state = Path(os.environ.get('PINKIE_STATE_ROOT',
-                                (Path(os.environ.get('LOCALAPPDATA', home / 'AppData/Local')) / 'SuperPinkie'
-                                 if os.name == 'nt' else home / 'Library/Application Support/SuperPinkie')))
+    state = Path(state_root(home))
     backup = state / 'backups' / ('project-scope-' + str(time.time_ns()))
     backup.mkdir(parents=True, mode=0o700)
     shutil.copy2(config, backup / 'openclaw.json')

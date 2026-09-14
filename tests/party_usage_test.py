@@ -24,7 +24,7 @@ class UsageTests(unittest.TestCase):
         self.assertTrue(all(r['cost']==first['cost']==1.25 for r in results))
         reloaded=runpy.run_path(str(Path(__file__).resolve().parents[1]/'services/party/usage.py'))
         self.assertEqual(1000,reloaded['collect'](self.home)['input'])
-        self.assertTrue((self.home/'Library/Application Support/SuperPinkie/usage.sqlite3').is_file())
+        self.assertTrue((usage['state_root'](self.home)/'usage.sqlite3').is_file())
     def test_only_deltas_are_added_and_new_source_epoch_does_not_clear_lifetime(self):
         self.put();self.collect()
         self.put(stamp=101,inputTokens=1500,estimatedCostUsd=2);self.assertEqual(2,self.collect()['cost'])
@@ -53,7 +53,7 @@ class UsageTests(unittest.TestCase):
         self.assertIn('展示估算',second['source']);self.assertIn('真实单价',second['costNote'])
 
     def test_old_exaggerated_display_cost_is_migrated_without_clearing_usage(self):
-        state=self.home/'Library/Application Support/SuperPinkie';state.mkdir(parents=True)
+        state=usage['state_root'](self.home);state.mkdir(parents=True)
         path=state/'model-usage.json'
         path.write_text(json.dumps({'input':284825,'output':13434,'cacheRead':874265,'requests':18,'cost':113.49}))
         before=self.collect();self.assertGreater(before['cost'],.18);self.assertLess(before['cost'],.3)

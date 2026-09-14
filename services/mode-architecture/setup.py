@@ -18,6 +18,25 @@ MODE_WORKSPACES = {
     "none": ".openclaw/workspace-unrestricted",
 }
 
+
+def state_root(home):
+    """Where a given home keeps SuperPinkie state.
+
+    An explicit home that is not the live profile means a sandbox -- the test
+    suite and portable runs pass their own root -- so it is honoured instead of
+    reaching into the real user's state.  Only the actual profile resolves
+    through LOCALAPPDATA, which is where the app keeps its state on Windows.
+    """
+    configured = os.environ.get("PINKIE_STATE_ROOT")
+    if configured:
+        return Path(configured)
+    home = Path(home)
+    if os.name != "nt":
+        return home / "Library/Application Support/SuperPinkie"
+    if home != Path.home():
+        return home / "AppData/Local/SuperPinkie"
+    return Path(os.environ.get("LOCALAPPDATA", home / "AppData/Local")) / "SuperPinkie"
+
 PERSONA = {
     "chat": {
         "core.md": """# 聊天模式核心人格
@@ -255,9 +274,7 @@ def install(home=None) -> bool:
     source = Path(__file__).resolve().parent
     repo_root = source.parents[1]
     extension = home / ".openclaw/extensions/pinkie-mode-architecture"
-    state = Path(os.environ.get("PINKIE_STATE_ROOT",
-                                (Path(os.environ.get("LOCALAPPDATA", home / "AppData/Local")) / "SuperPinkie"
-                                 if os.name == "nt" else home / "Library/Application Support/SuperPinkie")))
+    state = Path(state_root(home))
     backup_root = state / "backups" / ("mode-architecture-" + str(time.time_ns()))
     changed = False
 
