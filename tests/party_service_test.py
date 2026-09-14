@@ -1,5 +1,6 @@
 """Offline regression tests: python3 -m unittest discover -s tests -p '*_test.py'."""
 import concurrent.futures
+from contextlib import closing
 import importlib.util
 import json
 import os
@@ -28,6 +29,12 @@ setup_spec.loader.exec_module(setup)
 class PartyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='pinkie-party-unit-')
+        # A finished reply records model usage, and the usage ledger resolves
+        # the state root from the environment - by default the live profile.
+        # Without this, running the suite adds to the real user's request count
+        # and cost.  mode-architecture.test.mjs isolates itself the same way.
+        self.state = patch.dict(os.environ, {'PINKIE_STATE_ROOT': str(Path(self.temp.name) / 'state')})
+        self.state.start()
         self.store = party.Store(self.temp.name)
         self.manager = party.Manager(self.store)
         self.available = patch.object(self.manager, 'available', return_value=True)
@@ -42,6 +49,7 @@ class PartyTests(unittest.TestCase):
         self.manager.pool.shutdown(wait=True)
         self.submit.stop()
         self.available.stop()
+        self.state.stop()
         self.store.db.close()
         self.temp.cleanup()
 
@@ -203,14 +211,27 @@ class PartyTests(unittest.TestCase):
     def test_upgrade_old_database_backs_up_and_preserves_rows(self):
         root = Path(self.temp.name) / 'old-db'
         root.mkdir()
-        with sqlite3.connect(root/'party.sqlite3') as database:
+        # closing(), not `with sqlite3.connect(...)`: a connection is cyclic
+        # garbage, so the plain context manager leaves the file locked past this
+        # block and the TemporaryDirectory teardown then fails on Windows.
+        # closing() only closes, though - it does not commit the way the
+        # connection's own context manager did, so commit explicitly.
+        with closing(sqlite3.connect(root/'party.sqlite3')) as database:
             database.execute('CREATE TABLE rooms(id TEXT PRIMARY KEY,name TEXT NOT NULL,path TEXT NOT NULL,members TEXT NOT NULL,created REAL NOT NULL)')
             database.execute('INSERT INTO rooms VALUES(?,?,?,?,?)', ('old-id','旧群',self.a['path'],'["pinkie"]',1))
+            database.commit()
         migrated = party.Store(root)
         self.assertEqual('旧群', migrated.room('old-id')['name'])
         self.assertEqual(0, migrated.room('old-id')['archived'])
         migrated.db.close()
-        self.assertEqual(1, len(list(root.glob('before-room-management-*.sqlite3'))))
+        backups = list(root.glob('before-room-management-*.sqlite3'))
+        self.assertEqual(1, len(backups))
+        # The backup must hold the pre-migration rows, and the Store must not
+        # still be holding its handle: a leaked one shows up on Windows as
+        # WinError 32 the moment anything tries to remove the file.
+        with closing(sqlite3.connect(backups[0])) as copy:
+            self.assertEqual([('old-id','旧群')], copy.execute('SELECT id,name FROM rooms').fetchall())
+        os.remove(backups[0])
 
     def test_cancel_scope_and_no_restart(self):
         task = self.manager.new_task(self.a['id'], 'codex', '检查', approval=True)
@@ -360,7 +381,14 @@ class PartyTests(unittest.TestCase):
                 patch.object(party.subprocess, 'run', return_value=reply) as run:
             result = party.model_catalog()
             self.assertEqual(['provider/chat'], [m['id'] for m in result['models']['pinkie']])
-            self.assertEqual('/example/nvm/bin:/usr/bin:/bin', run.call_args.kwargs['env']['PATH'])
+            # The prepended directory and the separator are platform-dependent
+            # (on Windows the path normalises to backslashes and os.pathsep is
+            # ';'), so pin the shape - node's directory first, the inherited
+            # PATH untouched after it - instead of one platform's spelling.
+            path = run.call_args.kwargs['env']['PATH']
+            entries = path.split(os.pathsep)
+            self.assertEqual(str(party.Path(binaries['node']).parent), entries[0])
+            self.assertEqual('/usr/bin:/bin', os.pathsep.join(entries[1:]))
             self.assertNotIn('CLAUDECODE', run.call_args.kwargs['env'])
             party.model_catalog()
             self.assertEqual(1, run.call_count)
@@ -538,7 +566,7 @@ class PartyTests(unittest.TestCase):
         self.assertEqual('用户自定义人格：老板（不能改原文件）', custom.read_text())
         self.assertEqual(original_config, config.read_bytes())
         self.assertFalse(setup.install(home))
-        backups = list((home / 'Library/Application Support/SuperPinkie/backups').glob('party-identity-*/*SOUL.md'))
+        backups = list((setup.state_root(home) / 'backups').glob('party-identity-*/*SOUL.md'))
         self.assertEqual(1, len(backups))
         self.assertEqual(setup.party_soul('碧琪', '老板'), backups[0].read_text())
 
@@ -569,7 +597,7 @@ class PartyTests(unittest.TestCase):
             self.assertEqual(setup.party_soul(name), (workspace/'SOUL.md').read_text())
             self.assertEqual(setup.identity_file(name), (workspace/'IDENTITY.md').read_text())
             self.assertEqual('保留群聊的操作边界', (workspace/'AGENTS.md').read_text())
-        backups = list((home/'Library/Application Support/SuperPinkie/backups').glob('party-identity-*/*.md'))
+        backups = list((setup.state_root(home)/'backups').glob('party-identity-*/*.md'))
         self.assertEqual(4, len(backups))
         for backup in backups:
             self.assertEqual(originals[backup.name], backup.read_text())
