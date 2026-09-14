@@ -107,15 +107,36 @@ test('plain chats are untouched and the prompt describes a project anchor, not a
   assert.equal(guard.before({toolName:'read',params:{path:'/x'}},{sessionKey:'agent:other:a'}),undefined);
   assert.equal(guard.before({toolName:'read',params:{path:'/x'}},{sessionKey:'agent:main:unbound'}),undefined);
   const prompt=guard.prompt(ctx).appendSystemContext;
-  assert.ok(prompt.includes(a));assert.match(prompt,/工作重心/);assert.match(prompt,/不是访问权限边界/);assert.match(prompt,/浏览器/);
+  // The anchor embeds the root through JSON.stringify, so on Windows every
+  // separator in it is escaped (`C:\\...`) and the raw path never appears --
+  // this assertion used to fail there for a reason that had nothing to do with
+  // project scope.  Assert the encoded form the product actually writes, which
+  // is the same string on both platforms, and keep it anchored to its label so
+  // a prompt that merely mentioned the path somewhere would still fail.
+  assert.ok(prompt.includes('默认工作目录：'+JSON.stringify(a)));
+  assert.match(prompt,/工作重心/);assert.match(prompt,/不是访问权限边界/);assert.match(prompt,/浏览器/);
 });
 
 test('real commands start in the project and can access a sibling folder',t=>{
   const {guard,ctx,a,b}=fixture(t);
-  const command='/bin/cat '+JSON.stringify(path.join(b,'b.txt'));
+  // This used to shell out to /bin/sh + /bin/cat.  Neither exists on Windows,
+  // so spawnSync could not start the command at all and `status` came back
+  // null: the test failed for a platform reason unrelated to project scope.
+  // Drive the same real command through the Node already running this suite,
+  // so the property under test -- the command runs with the project as its
+  // working directory and a sibling folder is still reachable by absolute path
+  // -- is checked on every platform.
+  const target=path.join(b,'b.txt');
+  // Read one file by a relative path and one by an absolute path: the relative
+  // read only succeeds if the command really started in the project, which the
+  // old absolute-path-only version never actually checked.
+  const script='const fs=require("fs");process.stdout.write(fs.readFileSync("a.txt","utf8")+"|"+fs.readFileSync(process.argv[1],"utf8"))';
+  const argv=['-e',script,target];
+  const command=[process.execPath,...argv].join(' ');
   assert.equal(guard.before({toolName:'exec',params:{command}},ctx),undefined);
-  const result=spawnSync('/bin/sh',['-c',command],{cwd:a,encoding:'utf8'});
-  assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'project B');
+  const result=spawnSync(process.execPath,argv,{cwd:a,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.stdout,'project A|project B','the command must start in the project and still reach a sibling folder');
 });
 
 test('registration uses authenticated RPC and official project-anchor hooks',()=>{
