@@ -553,6 +553,35 @@ test('cross-process audit writers preserve every record in one valid chain',asyn
   assert.deepEqual(new CleKkAuditLog(root).verify(key),{ok:true,records:600});
 });
 
+test('a Windows refusal on the lock sidecar is retried, not mistaken for a broken lock',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-audit-refusal-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:lock-refusal',audit=new CleKkAuditLog(root);
+  assert.ok(audit.append('warm',key,{}));
+
+  // Windows reports a lost `open(..., 'wx')` race as EPERM/EACCES/EBUSY rather
+  // than EEXIST, because the winner unlinks the sidecar right after every
+  // append and opening a file with a pending delete is refused.  The four
+  // concurrent writers above hit this window at random, which is why they were
+  // blamed on a slow machine.  Reproduce it deterministically instead.
+  const realOpen=fs.openSync;let refused=0;
+  fs.openSync=(target,flags,...rest)=>{
+    if(String(target).endsWith('.jsonl.lock')&&refused<3){
+      refused+=1;
+      const error=new Error(`EPERM: operation not permitted, open '${target}'`);
+      error.code='EPERM';
+      throw error;
+    }
+    return realOpen(target,flags,...rest);
+  };
+  let record=null;
+  try{record=audit.append('after-refusal',key,{});}finally{fs.openSync=realOpen;}
+
+  assert.equal(refused,3,'the lock must be retried, not abandoned on the first refusal');
+  assert.ok(record,'a transient refusal must not drop the audit record');
+  assert.deepEqual(new CleKkAuditLog(root).verify(key),{ok:true,records:2});
+});
+
 test('corrupt audit chains stop retry loops and recover on the next user turn',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-corrupt-recovery-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
