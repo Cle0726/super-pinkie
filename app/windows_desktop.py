@@ -577,6 +577,14 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 
 
 def hidden_process_kwargs():
+    """Keep a helper's console out of sight, on the platforms that have one.
+
+    creationflags is Windows-only; CREATE_NO_WINDOW does not exist elsewhere, so
+    reading it unconditionally made every caller raise AttributeError off
+    Windows instead of simply launching the helper.
+    """
+    if os.name != "nt":
+        return {}
     return {
         "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
     }
