@@ -83,6 +83,7 @@ class RelayPortIdentityTests(unittest.TestCase):
     """
 
     RELAY = Path(__file__).resolve().parents[1] / "proxy" / "ur-rewrite-proxy.py"
+    MM_RELAY = Path(__file__).resolve().parents[1] / "proxy" / "mm-retry-proxy.py"
 
     @staticmethod
     def free_port():
@@ -113,8 +114,8 @@ class RelayPortIdentityTests(unittest.TestCase):
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return port, f"http://127.0.0.1:{port}/health"
 
-    def start_bundled_relay(self):
-        """Launch the real relay on a free port and return its /health URL."""
+    def start_relay_process(self, script, extra_args=()):
+        """Launch a relay script on a free port and return its /health URL."""
 
         def stop(process):
             process.terminate()
@@ -126,7 +127,7 @@ class RelayPortIdentityTests(unittest.TestCase):
 
         port = self.free_port()
         relay = subprocess.Popen(
-            [sys.executable, str(self.RELAY), str(port)],
+            [sys.executable, str(script), str(port), *extra_args],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -135,6 +136,9 @@ class RelayPortIdentityTests(unittest.TestCase):
         self.wait_health(url)
         return url
 
+    def start_bundled_relay(self):
+        return self.start_relay_process(self.RELAY)
+
     def test_bundled_relay_identifies_itself_on_health(self):
         url = self.start_bundled_relay()
 
@@ -142,6 +146,21 @@ class RelayPortIdentityTests(unittest.TestCase):
         self.assertEqual(identity.get("service"), RELAY_SERVICE, identity)
         self.assertIsInstance(identity.get("attempts"), int, identity)
         self.assertTrue(http_alive(url, RELAY_SERVICE))
+
+    def test_the_installers_relay_reports_the_same_identity(self):
+        """install.ps1 runs mm-retry-proxy.py, so both relays must be recognised.
+
+        Otherwise the app cannot tell the installer's relay apart from an
+        unrelated process and would keep trying to bind over it.
+        """
+        url = self.start_relay_process(self.MM_RELAY, extra_args=(str(self.free_port()),))
+
+        identity = http_identity(url)
+        self.assertEqual(identity.get("service"), RELAY_SERVICE, identity)
+        self.assertTrue(
+            http_alive(url, RELAY_SERVICE),
+            "the app must defer to the installer's relay, not fight it for the port",
+        )
 
     def test_a_foreign_proxy_is_not_mistaken_for_the_bundled_relay(self):
         _port, url = self.start_foreign_proxy()
