@@ -1711,7 +1711,19 @@ export class CleKkAuditLog {
           descriptor = fs.openSync(lockFile, 'wx', 0o600);
           fs.writeSync(descriptor, `${process.pid}\n`);
         } catch (error) {
-          if (error?.code !== 'EEXIST' || Date.now() - startedAt > 5_000) return null;
+          // `open(..., 'wx')` is the mutex, but Windows does not report a lost
+          // race as EEXIST.  While the winner is creating the sidecar -- or
+          // unlinking it, which happens right after every append -- a second
+          // writer is refused with EPERM/EACCES/EBUSY ("operation not
+          // permitted") because the file has a pending delete.  That window is
+          // hit constantly under contention, so treating it as fatal is how a
+          // concurrent writer silently loses an audit record.  It is ordinary
+          // contention, and it stays bounded by the same deadline.
+          const contention = error?.code === 'EEXIST'
+            || error?.code === 'EPERM'
+            || error?.code === 'EACCES'
+            || error?.code === 'EBUSY';
+          if (!contention || Date.now() - startedAt > 5_000) return null;
           // An interrupted gateway can leave the sidecar behind. Appends are
           // short, so a lock older than this is safe to recover.
           try {
