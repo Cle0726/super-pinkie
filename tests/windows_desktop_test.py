@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -235,6 +236,71 @@ class RelayPortIdentityTests(unittest.TestCase):
             self.start_relay_process(self.RELAY, extra_args=(str(self.free_port()),)).split(":")[2].split("/")[0]
         )
         self.assertTrue(super_pinkie.proxy_health(relay_port))
+
+
+class NativeBridgeHealthMarkerTests(unittest.TestCase):
+    """A failure to decorate the page must not read as an unhealthy build.
+
+    The update replacer launches the new version and waits up to 120 s for the
+    health marker.  The marker and the injected UI script used to share one try
+    block, so a script that threw also swallowed the marker and the replacer
+    rolled a working build back.
+    """
+
+    class FakeWindow:
+        def __init__(self, url, failure=None):
+            self.url = url
+            self.failure = failure
+            self.injected = []
+
+        def get_current_url(self):
+            return self.url
+
+        def evaluate_js(self, script):
+            if self.failure:
+                raise self.failure
+            self.injected.append(script)
+
+    class FakeUpdater:
+        def check(self):
+            return {"available": False}
+
+    def run_bridge(self, window, token):
+        """Run the bridge against a throwaway state root, returning what it left."""
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            with mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(state)}):
+                windows_desktop.install_native_bridge(window, self.FakeUpdater(), token)
+                marker = state / "updates/health" / f"{token}.ready"
+                return marker.is_file(), marker.read_text(encoding="ascii") if marker.is_file() else ""
+
+    def test_a_failed_bridge_script_still_confirms_the_new_version(self):
+        token = "ab" * 16
+        window = self.FakeWindow(
+            windows_desktop.GATEWAY_URL + "chat",
+            RuntimeError("Cannot read properties of null (reading 'append')"),
+        )
+        with mock.patch.object(windows_desktop, "append_log") as logged:
+            written, body = self.run_bridge(window, token)
+
+        self.assertTrue(written, "the health marker must not depend on the injected script")
+        self.assertEqual("ready\n", body)
+        self.assertEqual([], window.injected, "the fake window refuses every injection")
+
+        messages = [call.args[1] for call in logged.call_args_list if len(call.args) > 1]
+        self.assertTrue(
+            any("native bridge setup skipped" in message for message in messages),
+            f"the skipped bridge must still be reported: {messages}",
+        )
+
+    def test_a_page_that_is_not_the_gateway_confirms_nothing(self):
+        token = "cd" * 16
+        window = self.FakeWindow("file:///tmp/launcher-loading.html", RuntimeError("must not run"))
+        with mock.patch.object(windows_desktop, "append_log"):
+            written, _body = self.run_bridge(window, token)
+
+        self.assertFalse(written, "only the gateway page may confirm that an update is healthy")
+        self.assertEqual([], window.injected)
 
 
 if __name__ == "__main__":
