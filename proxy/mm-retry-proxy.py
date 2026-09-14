@@ -306,6 +306,10 @@ LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("UR_
 UPSTREAM_HOST = os.environ.get("UR_PROXY_UPSTREAM_HOST", "127.0.0.1")
 UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466"))
 MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "64")))
+# Reported by /health so callers can tell this relay from any other proxy that
+# happens to hold the same port. The desktop app and this script share the
+# "super-pinkie-relay" role, whichever of them ends up serving the port.
+SERVICE_NAME = "super-pinkie-relay"
 FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "35")))
 STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "30")))
 RETRY_BASE_DELAY_SECONDS = max(0.1, float(os.environ.get("UR_PROXY_RETRY_BASE_DELAY", "0.2")))
@@ -385,7 +389,11 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
     def proxy(self):
         self.response_started = False
         if self.path == "/health":
-            self.respond_json(200, {"ok": True, "attempts": MAX_ATTEMPTS})
+            self.respond_json(200, {
+                "ok": True,
+                "service": SERVICE_NAME,
+                "attempts": MAX_ATTEMPTS,
+            })
             return
 
         raw_length = self.headers.get("Content-Length", "0")
