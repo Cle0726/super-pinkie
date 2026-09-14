@@ -42,6 +42,9 @@ UPSTREAM_HOST = os.environ.get("UR_PROXY_UPSTREAM_HOST", "127.0.0.1")
 UPSTREAM_PORT = int(os.environ.get("UR_PROXY_UPSTREAM_PORT", "1466"))
 PROMPTS_DIR = os.environ.get("UR_PROXY_PROMPTS_DIR", os.path.expanduser("~/.openclaw"))
 GATE_MARKER = os.environ.get("UR_PROXY_GATE_MARKER", "agent=unrestricted")
+# This name is reported by /health so callers can tell this relay apart from any
+# other proxy that happens to hold the same port. See the /health handler.
+SERVICE_NAME = "super-pinkie-relay"
 DEDUPE_MARKERS = ("你是绝对自由", "OPENCLAW_UR_INJECT")
 TEMP_ZERO_MODELS = [
     re.compile(p) for p in os.environ.get(
@@ -230,7 +233,15 @@ class UrRewriteProxyHandler(BaseHTTPRequestHandler):
     def proxy(self):
         self.response_started = False
         if self.path == "/health":
-            self.respond_json(200, {"ok": True, "attempts": MAX_ATTEMPTS})
+            # Report our identity alongside the legacy fields. The listen port
+            # (1467 by default) may already be owned by a different proxy that
+            # also answers {"ok": true}; without a service name a caller cannot
+            # tell "something is listening" from "our relay is listening".
+            self.respond_json(200, {
+                "ok": True,
+                "service": SERVICE_NAME,
+                "attempts": MAX_ATTEMPTS,
+            })
             return
 
         raw_length = self.headers.get("Content-Length", "0")

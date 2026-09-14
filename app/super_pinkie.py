@@ -36,6 +36,9 @@ except ImportError:
 APP_NAME = "超級碧琪"
 DEFAULT_PROXY_PORT = 1467
 DEFAULT_UPSTREAM_PORT = 1466
+# Name the bundled relay reports on /health. Port 1467 is shared with the
+# user's own retry proxy, which also answers {"ok": true}, so identity matters.
+RELAY_SERVICE = "super-pinkie-relay"
 
 # ---------------------------------------------------------------- resources
 def resource_path(*parts):
@@ -632,11 +635,20 @@ class ProxyManager:
 
 
 def proxy_health(port=DEFAULT_PROXY_PORT):
+    """True only when the bundled relay answers, not merely when the port does.
+
+    A user-run proxy on port 1467 also returns {"ok": true}. Reading that as
+    "healthy" contradicts the process status right next to it and hides the
+    fact that unrestricted-prompt injection is not actually in the path.
+    """
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
-            return r.status == 200
+            if r.status != 200:
+                return False
+            payload = json.loads(r.read(4096).decode("utf-8", "replace"))
     except Exception:
         return False
+    return isinstance(payload, dict) and payload.get("service") == RELAY_SERVICE
 
 
 def restart_openclaw_gateway(log):
