@@ -1,4 +1,4 @@
-# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
+﻿# install.ps1 — Windows 一键安装脚本（超級碧琪 接 API 即用版）
 #
 # 做了什么：
 #   1. 把 prompts\*.txt 复制到 %USERPROFILE%\.openclaw\（可用 UR_PROMPTS_DIR 覆盖）
