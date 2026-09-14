@@ -24,6 +24,10 @@ GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
 PARTY_URL = "http://127.0.0.1:18889/"
 ROUNDTABLE_URL = "http://127.0.0.1:18891/"
 TTS_URL = "http://127.0.0.1:18888/health"
+# The bundled ur-rewrite relay identifies itself with this name on /health.
+# Port 1467 is a shared convention: the user may run their own retry proxy
+# there, and it answers {"ok": true} just like ours does.
+RELAY_SERVICE = "super-pinkie-relay"
 UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
 UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
 TRUSTED_UPDATE_HOSTS = {
@@ -119,6 +123,20 @@ def http_ready(url):
         return False
     except (OSError, ValueError, urllib.error.URLError):
         return False
+
+
+def http_identity(url):
+    """Read a health endpoint's JSON body for diagnostics.
+
+    Used to name whatever is actually listening on a port, so a foreign
+    process is reported by its own answer instead of being guessed at.
+    """
+    try:
+        with urllib.request.urlopen(url, timeout=.8) as response:
+            payload = json.loads(response.read(4096).decode("utf-8", "replace"))
+        return payload if isinstance(payload, dict) else {}
+    except (OSError, ValueError, urllib.error.URLError):
+        return {}
 
 
 def gateway_ui_url():
@@ -711,9 +729,26 @@ class LocalServices:
         self.servers = []
         self.threads = []
 
-    def _start(self, name, relative, target, arguments, health, expected=None):
+    def _start(self, name, relative, target, arguments, health, expected=None, hint=None):
         if http_alive(health, expected):
             return
+        if expected:
+            # Something is answering on this port but it is not our service --
+            # typically a user-run proxy on the shared 1467 convention, or a
+            # leftover from another install. Binding would just fail, so name the
+            # occupant and say so out loud instead of silently starting nothing
+            # and letting callers believe the bundled service is up.
+            occupant = http_identity(health)
+            if occupant:
+                message = (
+                    f"{name} port busy: {health} is answered by a different service "
+                    f"({json.dumps(occupant, ensure_ascii=False)}); "
+                    f"bundled {name} was not started"
+                )
+                if hint:
+                    message = f"{message} - {hint}"
+                append_log("launcher", message)
+                return
 
         def run():
             try:
@@ -748,7 +783,12 @@ class LocalServices:
         relay_port = int(os.environ.get("UR_PROXY_LISTEN", "1467"))
         self._start(
             "relay", "proxy/ur-rewrite-proxy.py", "serve", (relay_port,),
-            f"http://127.0.0.1:{relay_port}/health",
+            f"http://127.0.0.1:{relay_port}/health", RELAY_SERVICE,
+            hint=(
+                "the bundled relay (the one that injects the unrestricted prompt) was "
+                "not started; stop the other proxy or point UR_PROXY_LISTEN at a free "
+                "port to let the bundled relay bind"
+            ),
         )
 
     def close(self):
