@@ -7,6 +7,12 @@ import shutil
 import tempfile
 import time
 
+# See services/context/setup.py: cp1252 stdout on a non-UTF-8 Windows locale
+# would break the Chinese status print below.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(encoding='utf-8'))
 
 # One definition, shared with every other service that writes into the state

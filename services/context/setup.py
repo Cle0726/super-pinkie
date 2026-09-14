@@ -7,6 +7,14 @@ import shutil
 import tempfile
 import time
 
+# A non-UTF-8 Windows locale gives this process a cp1252 stdout; printing the
+# Chinese status line below then raises UnicodeEncodeError.  Reconfigure to
+# UTF-8 (idempotent) so the message survives on a stock Windows runner, the
+# same way every file write here already pins encoding='utf-8'.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 budget = runpy.run_path(str(Path(__file__).with_name('context_budget.py')))
 
 # Summarising a near-full GPT session with the same GPT route can deadlock the
