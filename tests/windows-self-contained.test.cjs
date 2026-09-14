@@ -221,9 +221,24 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
   assert.match(watchdog, /Start-Sleep -Milliseconds 2000/);
   assert.match(watchdog, /TotalSeconds -lt 8/);
   assert.doesNotMatch(watchdog, /taskkill/);
-  for (const name of ['services/context/context_budget.py', 'services/context/setup.py', 'services/project-scope/setup.py', 'services/party/setup.py', 'services/roundtable/server.py']) {
-    assert.match(read(name), /LOCALAPPDATA/);
-    assert.match(read(name), /os\.name\s*==\s*['"]nt['"]|os\.name\s*!=\s*['"]nt['"]/);
+  // State lives under LOCALAPPDATA on Windows, and only on Windows.  The rule
+  // may live inline or in the shared state_root() that a module delegates to,
+  // so accept either - requiring the literal per file is what kept the same
+  // rule copied into five modules.
+  const CANONICAL = 'services/context/context_budget.py';
+  assert.match(read(CANONICAL), /LOCALAPPDATA/,
+    `${CANONICAL} is the definition that must know about LOCALAPPDATA`);
+  assert.match(read(CANONICAL), /os\.name\s*!=\s*['"]nt['"]/,
+    `${CANONICAL} must keep the Windows-only branch`);
+  for (const name of [CANONICAL, 'services/context/setup.py', 'services/project-scope/setup.py', 'services/party/setup.py', 'services/roundtable/server.py']) {
+    const source = read(name);
+    const inline = /LOCALAPPDATA/.test(source) &&
+      /os\.name\s*==\s*['"]nt['"]|os\.name\s*!=\s*['"]nt['"]/.test(source);
+    // Also matches the subscript form, budget['state_root'](home), where the
+    // closing quote and bracket sit between the name and the call.
+    const delegated = /state_root['"]?\]?\s*\(/.test(source);
+    assert.ok(inline || delegated,
+      `${name} must resolve the Windows state root itself or through state_root()`);
   }
 });
 
