@@ -6,6 +6,79 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 
+// Cache-busting query versions, as `asset -> highest version number seen`.
+const cacheVersions = (text, tableForm) => {
+  const found = new Map();
+  const bump = (asset, version) => {
+    const number = Number(/(\d+)$/.exec(version)[1]);
+    if (!found.has(asset) || number > found.get(asset).number) found.set(asset, { number, version });
+  };
+  for (const [, asset, version] of text.matchAll(/laolao-([a-z-]+\.(?:js|css))\?v=([a-z]+\d+)/g)) bump(asset, version);
+  if (tableForm) {
+    for (const [, asset, version] of text.matchAll(/'laolao-([a-z-]+\.(?:js|css))'\s*=\s*'([a-z]+\d+)'/g)) bump(asset, version);
+  }
+  return found;
+};
+
+test('Windows injects the same asset versions as macOS, never older ones', () => {
+  // Both installers write into the same ui\injections assets. A version below
+  // the asset's actual generation lets WebView2 keep its cached copy, so an
+  // upgrade looks like it did nothing. macOS is the reference implementation.
+  const mac = cacheVersions(read('installer/macos/apply-theme.sh'));
+  const windows = cacheVersions(read('installer/windows/apply-theme.ps1'), true);
+  const fragment = cacheVersions(read('ui/injections/laolao-head.fragment.html'));
+
+  const stale = [];
+  for (const [asset, target] of mac) {
+    const current = windows.get(asset);
+    // Absent from the table is fine only when the fragment already carries the
+    // right version; the table runs afterwards and would otherwise rewrite it.
+    if (!current) {
+      const fromFragment = fragment.get(asset);
+      if (!fromFragment || fromFragment.number < target.number) stale.push(`${asset}: missing, macOS has ${target.version}`);
+      continue;
+    }
+    if (current.number < target.number) stale.push(`${asset}: ${current.version} < macOS ${target.version}`);
+  }
+  assert.deepEqual(stale, [], `Windows cache-bust versions are behind macOS:\n${stale.join('\n')}`);
+
+  const downgraded = [];
+  for (const [asset, fromFragment] of fragment) {
+    const current = windows.get(asset);
+    if (current && current.number < fromFragment.number) {
+      downgraded.push(`${asset}: table ${current.version} < fragment ${fromFragment.version}`);
+    }
+  }
+  assert.deepEqual(downgraded, [], `Windows lowers the version the shared head fragment injects:\n${downgraded.join('\n')}`);
+});
+
+test('the Windows installer pins one version per asset, not two', () => {
+  // $headTags adds tags to legacy fragments that lack them, then the $versions
+  // table normalises every reference.  When the two disagree the tag list wins
+  // for the tags it injects, so a lower number there keeps serving the stale
+  // cached copy even though the table looks correct.
+  const source = read('installer/windows/apply-theme.ps1');
+  const tags = source.slice(source.indexOf('$headTags = @('), source.indexOf('$versions = @{'));
+  const table = source.slice(source.indexOf('$versions = @{'), source.indexOf('foreach ($entry in $versions.GetEnumerator())'));
+  const pinned = (text, tableForm) => {
+    const found = new Map();
+    const collect = (asset, version) => { if (!found.has(asset)) found.set(asset, version); };
+    for (const [, asset, version] of text.matchAll(/laolao-([a-z-]+\.(?:js|css))\?v=([a-z]+\d+)/g)) collect(asset, version);
+    if (tableForm) {
+      for (const [, asset, version] of text.matchAll(/'laolao-([a-z-]+\.(?:js|css))'\s*=\s*'([a-z]+\d+)'/g)) collect(asset, version);
+    }
+    return found;
+  };
+  const fromTags = pinned(tags), fromTable = pinned(table, true);
+  const mismatched = [];
+  for (const [asset, version] of fromTags) {
+    const other = fromTable.get(asset);
+    if (other && other !== version) mismatched.push(`${asset}: $headTags ${version} vs $versions ${other}`);
+  }
+  assert.deepEqual(mismatched, [], `The Windows installer pins two versions for one asset:\n${mismatched.join('\n')}`);
+  assert.ok(fromTags.size >= 20, `the legacy-fragment tag list should still pin the shipped assets, saw ${fromTags.size}`);
+});
+
 test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   const build = read('build-win.ps1');
   const manifest = JSON.parse(read('desktop/windows/runtime-manifest.json'));

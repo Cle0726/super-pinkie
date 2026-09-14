@@ -96,6 +96,21 @@ function Copy-IfChanged {
     }
 }
 
+# Set-Content 每次写回都会再补一个行尾，重复应用会让文件不断变长；而 -Encoding
+# UTF8 在 Windows PowerShell 5.1 下又总是写 BOM。这里统一精确写回，BOM 由调用方
+# 决定：sw.js 和 minified JS 保持无 BOM（macOS 侧的 perl 同样原样保留），
+# index.html 保留 BOM（里面的中文靠它表意）。
+function Write-Utf8 {
+    param([string]$Path, [string]$Text, [bool]$WithBom = $false)
+    $encoding = New-Object System.Text.UTF8Encoding($WithBom)
+    [System.IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
+function Write-Utf8NoBom {
+    param([string]$Path, [string]$Text)
+    Write-Utf8 $Path $Text $false
+}
+
 function Apply-UISkin {
     param([string]$UiRoot)
     $IndexFile = Join-Path $UiRoot "index.html"
@@ -137,7 +152,7 @@ function Apply-UISkin {
         )
     }
     if ($html -notmatch "laolao-handoff-bootstrap") {
-        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff4""></script>`n    `$1"
+        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff5""></script>`n    `$1"
     }
 
     # One controller only. Older packages placed this script in both the head
@@ -149,29 +164,33 @@ function Apply-UISkin {
     )
 
     # 旧 fragment 只包含基础脚本；下面补齐工作流、派对、圆桌和恢复层。
+    # 这份列表里的 ?v= 必须与下面的 $versions 表逐条一致：它是给缺少这些标签
+    # 的旧 fragment 补票用的，若写成偏低的版本号，WebView2 会继续用旧的缓存
+    # 副本，界面看起来"升了级却没变化"。两端一致性由
+    # tests/windows-self-contained.test.cjs 守着。
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
-        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic11">',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side12">',
-        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction1">',
+        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic13">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side16">',
+        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction2">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar15"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar16"></script>',
         '<script src="./laolao-session-list.js?v=sessions5"></script>',
         '<script src="./laolao-usage-stats.js?v=stats15"></script>',
-        '<script defer src="./laolao-classic-shell.js?v=classic11"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic13"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
-        '<script defer src="./laolao-memory.js?v=memory1"></script>',
+        '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink15"></script>',
-        '<script defer src="./laolao-context-compact.js?v=contextcompact2"></script>',
-        '<script defer src="./laolao-resume.js?v=resume7"></script>',
-        '<script defer src="./laolao-splash.js?v=splash22"></script>'
+        '<script defer src="./laolao-deep-think.js?v=deepthink16"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
+        '<script defer src="./laolao-resume.js?v=resume14"></script>',
+        '<script defer src="./laolao-splash.js?v=splash25"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -180,32 +199,87 @@ function Apply-UISkin {
         }
     }
 
+    # 缓存击穿版本号。这些数字必须与 installer/macos/apply-theme.sh 保持一致：
+    # 两端注入的是同一份 ui\injections\ 资源，版本号低于资产的实际代次时，
+    # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
+    # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme35'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar15'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats15';
-        'laolao-phrases.js' = 'phrases15';
-        'laolao-mode-switcher.js' = 'mode28'; 'laolao-splash.js' = 'splash22';
-        'laolao-handoff-bootstrap.js' = 'handoff4'; 'laolao-motion.js' = 'motion4'; 'laolao-resume.js' = 'resume7';
-        'laolao-ui-subtraction.css' = 'subtraction1';
-        'laolao-classic-shell.css' = 'classic11'; 'laolao-classic-shell.js' = 'classic11';
-        'laolao-side-layout.css' = 'side12'; 'laolao-side-layout.js' = 'side12';
-        'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory1';
-        'laolao-deep-think.js' = 'deepthink15'; 'laolao-context-compact.js' = 'contextcompact2'
+        'laolao-theme.css' = 'theme39'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar16'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats15';
+        'laolao-phrases.js' = 'phrases20';
+        'laolao-mode-switcher.js' = 'mode31'; 'laolao-splash.js' = 'splash25';
+        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume14';
+        'laolao-ui-subtraction.css' = 'subtraction2';
+        'laolao-classic-shell.css' = 'classic13'; 'laolao-classic-shell.js' = 'classic13';
+        'laolao-side-layout.css' = 'side16'; 'laolao-side-layout.js' = 'side12';
+        'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
+        'laolao-deep-think.js' = 'deepthink16'; 'laolao-context-compact.js' = 'contextcompact3';
+        'laolao-live-voice.js' = 'voice3'
     }
     foreach ($entry in $versions.GetEnumerator()) {
-        $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[^"'']*)?'
+        # 版本号字符集收紧，避免第二次运行时贪婪越过版本号把后续内容吃掉。
+        $pattern = [regex]::Escape("./$($entry.Key)") + '(?:\?v=[A-Za-z0-9_.-]*)?'
         $html = [regex]::Replace($html, $pattern, "./$($entry.Key)?v=$($entry.Value)")
+    }
+
+    # ── 聊天渲染上限：与 installer/macos/apply-theme.sh 对齐 ──────────────────
+    # OpenClaw 7.1 的 history API 已能分页返回完整记录，但聊天渲染器又在最后一层
+    # 把可见消息硬截到 100 条 / 24 万字符，页面因此仍显示
+    # “Showing last 100 messages”。只放宽这两个纯展示上限；数据仍由
+    # laolao-resume 分页加载，工具结果照旧折叠，不改会话文件。
+    $chatBundles = @(Get-ChildItem -LiteralPath (Join-Path $UiRoot 'assets') -Filter 'chat-page-*.js' -File -ErrorAction SilentlyContinue)
+    foreach ($chatBundle in $chatBundles) {
+        $chat = Get-Content -LiteralPath $chatBundle.FullName -Raw -Encoding UTF8
+        if ([regex]::Matches($chat, [regex]::Escape('Showing last ${c} messages')).Count -ne 1) { continue }
+        $patchedChat = [regex]::Replace(
+            $chat,
+            'function Zb\(e\)\{return typeof e!=`number`\|\|!Number\.isFinite\(e\)\?(?:100|5000):Math\.max\(1,Math\.min\((?:100|5000),Math\.floor\(e\)\)\)\}',
+            'function Zb(e){return 5000}'
+        )
+        $patchedChat = $patchedChat.Replace('i+c>24e4)break', 'i+c>16e6)break')
+        if ($patchedChat -ne $chat) {
+            Write-Utf8NoBom $chatBundle.FullName $patchedChat
+        }
+    }
+
+    # 给入口与懒加载的聊天块打版本号。这是对仍被旧 cache-first worker 接管的
+    # WebView2 的硬保证：此前缓存过的 URL 不再能命中已打补丁的块。
+    # 版本号字符集收紧到 [A-Za-z0-9_.-]：用 "非引号" 这类宽字符集时，第二次运行时
+    # 贪婪匹配会越过版本号一直吃到下一个引号，把中间压缩过的 JS 整段删掉。
+    $html = [regex]::Replace($html, '(src="\./assets/index-[^"?]+\.js)(?:\?v=[A-Za-z0-9_.-]*)?"', '${1}?v=clekk-history14"')
+    $entryBundles = @(Get-ChildItem -LiteralPath (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue)
+    foreach ($entryBundle in $entryBundles) {
+        $entry = Get-Content -LiteralPath $entryBundle.FullName -Raw -Encoding UTF8
+        $patchedEntry = [regex]::Replace($entry, '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[A-Za-z0-9_.-]*)?', '${1}?v=clekk-history14')
+        if ($patchedEntry -ne $entry) {
+            Write-Utf8NoBom $entryBundle.FullName $patchedEntry
+        }
     }
 
     # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
     # /settings/laolao-*，从而避免黑屏、裂图和透明度闪一下。
     $html = $html.Replace('"./laolao-', '"/laolao-')
     $html = $html.Replace('OpenClaw', 'CLE Kk')
-    $html | Set-Content $IndexFile -Encoding UTF8
+    # 精确写回：Set-Content 每次都会再补一个行尾，重复应用会让文件不断长长。
+    # index.html 里全是中文，保留 BOM。
+    Write-Utf8 $IndexFile $html $true
     $serviceWorker = Join-Path $UiRoot 'sw.js'
     if (Test-Path $serviceWorker) {
         $worker = Get-Content $serviceWorker -Raw -Encoding UTF8
-        $worker.Replace('OpenClaw', 'CLE Kk') | Set-Content $serviceWorker -Encoding UTF8
+        $worker = $worker.Replace('OpenClaw', 'CLE Kk')
+        # 打了补丁的原生块沿用上游的哈希文件名，cache-first 会一直把补丁前的
+        # 渲染器喂回来。给本地 UI 改网络优先，并给它那份可丢弃的缓存打版本号；
+        # 离线回退仍然保留。
+        $worker = [regex]::Replace($worker, '-clekk-history-render-[0-9]+', '')
+        $worker = [regex]::Replace($worker, '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)', '${1}-clekk-history-render-14${2}')
+        $worker = $worker.Replace(
+            '// Cache-first for hashed assets; network-first for HTML/other.',
+            '// Network-first for all UI files; cached copies remain an offline fallback.'
+        )
+        $cacheFirst = "caches.match(event.request).then(`n        (cached) =>`n          cached ||`n          fetch(event.request).then((response) => {`n            if (response.ok) {`n              const clone = response.clone();`n              void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));`n            }`n            return response;`n          }),`n      )"
+        $networkFirst = "fetch(event.request)`n        .then((response) => {`n          if (response.ok) {`n            const clone = response.clone();`n            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));`n          }`n          return response;`n        })`n        .catch(() => caches.match(event.request))"
+        $worker = $worker.Replace($cacheFirst, $networkFirst)
+        Write-Utf8NoBom $serviceWorker $worker
     }
     Write-Host "  patched: $IndexFile"
 }
