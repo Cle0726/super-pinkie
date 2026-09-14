@@ -56,9 +56,13 @@ def _run_print_in_cp1252(module_path, call_name):
     env = dict(os.environ)
     env['PYTHONIOENCODING'] = 'cp1252'
     env['PINKIE_STATE_ROOT'] = str(Path(tempfile.mkdtemp()))
+    # Decode the child's (UTF-8) output explicitly: the child reconfigures its
+    # stdout to UTF-8, so the parent must not try to read those bytes as the
+    # locale's cp1252 or subprocess's reader thread dies with UnicodeDecodeError.
     return subprocess.run(
         [sys.executable, '-c', code, str(ROOT / module_path), call_name],
-        env=env, capture_output=True, text=True, timeout=60,
+        env=env, capture_output=True, text=True, encoding='utf-8',
+        errors='replace', timeout=60,
     )
 
 
@@ -69,7 +73,8 @@ def _run_usage_script_in_cp1252():
     env['PINKIE_STATE_ROOT'] = str(Path(tempfile.mkdtemp()))
     return subprocess.run(
         [sys.executable, str(ROOT / _USAGE_SCRIPT)],
-        env=env, capture_output=True, text=True, timeout=60,
+        env=env, capture_output=True, text=True, encoding='utf-8',
+        errors='replace', timeout=60,
     )
 
 
