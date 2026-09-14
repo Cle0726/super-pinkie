@@ -88,8 +88,18 @@ def app_version(resource_root):
 
 
 def state_root():
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData/Local")
-    root = Path(base) / "SuperPinkie"
+    # An explicit root wins outright, the same way every service resolves its
+    # own.  The shell keeps its logs, its staged update and its ledger here, and
+    # it exports this value to its children.  Without the override a suite could
+    # only shadow LOCALAPPDATA, which is a Windows-only accident, so a test that
+    # fails a download on purpose appended to the live profile's updater.log and
+    # the result read like a real outage.
+    configured = os.environ.get("PINKIE_STATE_ROOT")
+    if configured:
+        root = Path(configured)
+    else:
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData/Local")
+        root = Path(base) / "SuperPinkie"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
