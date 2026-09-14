@@ -32,6 +32,9 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 USAGE = runpy.run_path(str(ROOT/'services/party/usage.py'))
+# The one state-root rule; see services/state_root.py.  This entry point used to
+# carry its own copy, and it was the one that never learned about sandboxes.
+STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
 MODEL_LOCK = threading.Lock()
@@ -1045,8 +1048,6 @@ def serve(port, state_dir, on_ready=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18891)
-    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT',
-        (Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'SuperPinkie'
-         if os.name == 'nt' else Path.home()/'Library/Application Support/SuperPinkie'))) / 'roundtable'))
+    parser.add_argument('--state-dir', default=str(STATE['state_root']() / 'roundtable'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)
