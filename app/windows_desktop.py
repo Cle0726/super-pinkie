@@ -165,10 +165,7 @@ class WindowsUpdater:
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
         self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
-        self.portable = self.executable.parent.name == "超級碧琪" and (
-            (self.executable.parent / "runtime").is_dir()
-            or (self.executable.parent / "_internal").is_dir()
-        )
+        self.portable = self._is_onedir(self.executable)
         self.enabled = self.executable.suffix.lower() == ".exe" and (
             bool(getattr(sys, "frozen", False)) or bool(os.environ.get("PINKIE_EXECUTABLE_PATH")) or executable is not None
         )
@@ -176,6 +173,25 @@ class WindowsUpdater:
         self.last_checked = 0.0
         self.latest = None
         self.prepared = None
+
+    @staticmethod
+    def _is_onedir(executable):
+        """判断当前是不是 onedir（便携目录）构建。
+
+        旧实现要求父目录必须叫「超級碧琪」，于是把装在 `F:\\SuperPinkie` 这类自定义
+        目录里的 onedir 包误判成 onefile：更新时去下 `super-pinkie-windows-x.y.z.exe`
+        （单文件版），换上去之后同级 `_internal` 目录就变成没人管的孤儿，而且每次启动
+        都要重新解包几百 MB。这里只看目录结构，不看安装目录叫什么名字。
+        """
+        parent = Path(executable).parent
+        if (parent / "_internal").is_dir() or (parent / "runtime").is_dir():
+            return True
+        bundle = getattr(sys, "_MEIPASS", None)
+        if bundle:
+            bundle = Path(bundle)
+            if bundle.name in ("_internal", "runtime") and bundle.parent == parent:
+                return True
+        return False
 
     @staticmethod
     def _request(url):
@@ -241,12 +257,54 @@ class WindowsUpdater:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024):
+    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024, attempts=4):
+        """下载更新包，核对 Content-Length，被掐断时用 Range 续传重试。
+
+        urllib 的 read() 在连接提前关闭时只返回空串、并不抛错，所以旧实现会把「下了一半
+        的文件」当成成功，最后在 prepare() 里报成 `downloaded update checksum mismatch`
+        ——看起来像校验和写错了，其实是几百 MB 的包经代理中途断了。这里显式核对服务端声明
+        的长度，并保留半成品做 Range 续传，避免每次重试都从零开始重下。
+        """
         temporary = destination.with_suffix(destination.suffix + ".download")
-        temporary.unlink(missing_ok=True)
-        received = 0
         try:
-            with self.opener(self._request(url), timeout=30) as response, temporary.open("wb") as handle:
+            for attempt in range(1, attempts + 1):
+                try:
+                    self._fetch(url, temporary, maximum)
+                    break
+                except Exception as error:
+                    if attempt >= attempts:
+                        raise
+                    append_log("updater", f"download attempt {attempt} interrupted: {error}")
+                    time.sleep(min(2 ** attempt, 10))
+            os.replace(temporary, destination)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+
+    def _fetch(self, url, temporary, maximum):
+        offset = temporary.stat().st_size if temporary.is_file() else 0
+        request = self._request(url)
+        if offset:
+            request.add_header("Range", f"bytes={offset}-")
+        with self.opener(request, timeout=60) as response:
+            status = getattr(response, "status", None)
+            status = int(status) if status is not None else None
+            headers = getattr(response, "headers", None)
+            declared = headers.get("Content-Length") if headers is not None else None
+            declared = int(declared) if isinstance(declared, str) and declared.isdigit() else None
+            if status == 206 and offset:
+                start = offset
+            elif status == 416:
+                # 服务端认为续传起点已经越界：丢掉半成品，让下一次重试从头来。
+                temporary.unlink(missing_ok=True)
+                raise ValueError("update package resume was refused; restarting download")
+            else:
+                start = 0
+            if declared is not None and start + declared > maximum:
+                raise ValueError("update package is too large")
+            received = start
+            with temporary.open("r+b" if start else "wb") as handle:
+                handle.seek(start)
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
@@ -255,12 +313,10 @@ class WindowsUpdater:
                     if received > maximum:
                         raise ValueError("update package is too large")
                     handle.write(chunk)
-            if received < 1024 * 1024:
-                raise ValueError("update package is incomplete")
-            os.replace(temporary, destination)
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
+        if declared is not None and received != start + declared:
+            raise ValueError(f"update package download was cut short ({received} of {start + declared} bytes)")
+        if received < 1024 * 1024:
+            raise ValueError("update package is incomplete")
 
     def prepare(self):
         with self.lock:
@@ -278,7 +334,11 @@ class WindowsUpdater:
                 self._download(metadata["executableUrl"], payload)
             if self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
-                raise ValueError("downloaded update checksum mismatch")
+                # 走到这里说明字节数是够的（_download 已核对 Content-Length），
+                # 所以不是网络截断，而是发布产物和它的 .sha256 对不上——属于发版问题。
+                raise ValueError(
+                    "downloaded update checksum mismatch: the release asset and its .sha256 disagree"
+                )
             self.prepared = {
                 "version": metadata["version"],
                 "payload": payload,
@@ -399,6 +459,9 @@ try {
   if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+  # 先验包、再动安装目录：包一旦损坏，展开和替换都不该发生。
+  $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
   $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
@@ -407,8 +470,6 @@ try {
   Move-Item -LiteralPath $TargetDir -Destination $Backup -Force
   Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-  $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
   $healthDeadline = (Get-Date).AddSeconds(120)
   while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
