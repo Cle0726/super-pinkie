@@ -295,9 +295,32 @@ test('Windows bundled watchdog has a dedicated task installer', () => {
   assert.match(installer, /RunLevel Limited/);
 });
 
-test('PowerShell entrypoints are UTF-8 with BOM for Windows PowerShell 5.1', () => {
-  for (const name of ['install.ps1', 'installer/windows/apply-theme.ps1', 'services/watchdog/windows-gateway-watchdog.ps1']) {
+test('every PowerShell script carries the UTF-8 BOM Windows PowerShell needs', () => {
+  // Windows PowerShell 5.1 reads a BOM-less script with the machine's ANSI code
+  // page, so every Chinese literal in it turns into mojibake as soon as that
+  // code page is not UTF-8 -- which is the default on an English Windows.  CI
+  // never caught it because GitHub Actions runs `pwsh` (PowerShell 7), and PS7
+  // assumes UTF-8.  The costly one was `build-win.ps1`, which produced a build
+  // whose payload folder was literally named "è¶…ç´šç¢§çª".
+  //
+  // Enumerate the tree instead of naming files by hand: the hand-written list
+  // that used to live here is exactly why `build-win.ps1` and `update.ps1`
+  // slipped through.
+  const skipped = new Set(['.git', 'build', 'dist', 'node_modules', '__pycache__']);
+  const scripts = [];
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (skipped.has(entry.name)) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.ps1')) scripts.push(path.relative(root, full).split(path.sep).join('/'));
+    }
+  };
+  walk(root);
+  assert.ok(scripts.length >= 6, `expected the shipped PowerShell scripts, found ${scripts.length}`);
+
+  for (const name of scripts) {
     const bytes = fs.readFileSync(path.join(root, name));
-    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], `${name} must have UTF-8 BOM`);
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], `${name} must start with a UTF-8 BOM`);
   }
 });

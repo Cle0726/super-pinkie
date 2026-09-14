@@ -1,4 +1,4 @@
-# update.ps1 — 拉取最新 超級碧琪 并重新应用
+﻿# update.ps1 — 拉取最新 超級碧琪 并重新应用
 # 用法：.\update.ps1
 # 注意：需要是 git clone 的目录，不能是 zip 解压版
 $ErrorActionPreference = "Stop"
