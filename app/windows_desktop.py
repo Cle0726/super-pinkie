@@ -1152,7 +1152,15 @@ BRIDGE_SCRIPT = r"""
   installDictation();
   const dictationTimer = setInterval(installDictation, 900);
 
-  if (!document.getElementById('pinkie-native-window-controls')) {
+  // WebView2 reports the navigation as loaded while the document can still be
+  // mid-parse, so `document.body` is not guaranteed to exist yet.  The drag
+  // strip went in with `document.body.append(...)`, which threw
+  // "Cannot read properties of null (reading 'append')" whenever the app was
+  // still waiting for its gateway and the shell had only just started
+  // navigating.  Install the chrome only once the document can take it.
+  const installWindowChrome = () => {
+    if (!document.body || !document.head) return false;
+    if (document.getElementById('pinkie-native-window-controls')) return true;
     const drag = document.createElement('div');
     drag.className = 'pywebview-drag-region';
     drag.id = 'pinkie-native-drag-strip';
@@ -1231,6 +1239,10 @@ BRIDGE_SCRIPT = r"""
     style.textContent += 'html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{top:0;left:68px;right:176px;width:auto;height:33px;border:0;border-radius:0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after{display:none}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;height:33px;gap:0;padding:0;border:0;border-left:1px solid rgba(255,255,255,.26);border-bottom:1px solid rgba(202,117,157,.12);border-radius:0 16px 0 13px;background:linear-gradient(180deg,rgba(255,248,252,.62),rgba(250,224,237,.38));box-shadow:0 5px 18px rgba(105,47,75,.08);backdrop-filter:blur(16px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button{display:grid;place-items:center;width:42px;height:32px;margin:0;padding:0;border:0;border-radius:0;color:#7c5368;background:transparent;opacity:.76;transition:background .14s ease,color .14s ease,opacity .14s ease}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:hover{background:rgba(255,255,255,.52);opacity:1}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]{border-radius:0 16px 0 0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover{color:#fff;background:#d9578d}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="min"] span{width:10px;height:1px;background:currentColor}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="max"] span{width:9px;height:9px;border:1px solid currentColor;box-sizing:border-box}html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"] span{box-shadow:2px -2px 0 -1px rgba(255,255,255,.9),2px -2px 0 0 currentColor;transform:translate(-1px,1px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span{position:relative;width:11px;height:11px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before,html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{position:absolute;top:5px;left:0;width:11px;height:1px;background:currentColor;content:""}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before{transform:rotate(45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{transform:rotate(-45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control{width:36px;height:32px;margin:0;color:#b73974;background:transparent;box-shadow:none;font:12px/32px system-ui}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover{background:rgba(255,255,255,.52)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update{box-shadow:inset 0 -2px 0 #e34c8f;animation:pinkieUpdateGlow 1.8s ease-in-out infinite}@media(max-width:900px){html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{left:54px;right:164px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;gap:0}}';
     document.head.append(style);
     window.__pinkieCheckForUpdates = () => inspectUpdate(false);
+    return true;
+  };
+  if (!installWindowChrome()) {
+    document.addEventListener('DOMContentLoaded', installWindowChrome, {once: true});
   }
   document.addEventListener('click', event => {
     const link = event.target.closest('a[href]');
@@ -1248,7 +1260,7 @@ BRIDGE_SCRIPT = r"""
 
 def show_startup_error(window):
     window.evaluate_js("""
-      (()=>{const box=document.createElement('div');box.style.cssText='position:fixed;left:50%;bottom:9%;transform:translateX(-50%);padding:10px 16px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22';box.textContent='本机服务还没有准备好，现有资料没有改动。重新打开 App 会继续恢复。';document.body.append(box)})();
+      (()=>{const box=document.createElement('div');box.style.cssText='position:fixed;left:50%;bottom:9%;transform:translateX(-50%);padding:10px 16px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22';box.textContent='本机服务还没有准备好，现有资料没有改动。重新打开 App 会继续恢复。';(document.body||document.documentElement).append(box)})();
     """)
 
 
@@ -1258,6 +1270,49 @@ def update_health_token_from_argv(arguments=None):
         if match:
             return match.group(1)
     return None
+
+
+def install_native_bridge(window, updater, update_health_token=None):
+    """Dress the gateway page with the native bridge and confirm a fresh update.
+
+    pywebview fires `loaded` on WebView2's GUI thread, where a synchronous
+    evaluate_js deadlocks, so callers run this on a worker instead.
+
+    The health marker means one thing only -- "the new version came up" -- and it
+    is written before the UI script is injected.  The two used to share a single
+    try block, so an injected script that threw (WebView2 reports the navigation
+    as loaded while the document can still be mid-parse) swallowed the marker
+    too: the replacer would wait out its whole 120 s health deadline and roll a
+    perfectly good build back.  A cosmetic UI failure must not veto an upgrade.
+    """
+    current_url = str(window.get_current_url() or "")
+    if not current_url.startswith(GATEWAY_URL):
+        return
+
+    if update_health_token:
+        try:
+            health = state_root() / "updates/health" / f"{update_health_token}.ready"
+            health.parent.mkdir(parents=True, exist_ok=True)
+            health.write_text("ready\n", encoding="ascii")
+        except OSError as error:
+            append_log("launcher", f"update health marker not written: {error}")
+
+    try:
+        window.evaluate_js(BRIDGE_SCRIPT)
+    except Exception as error:
+        append_log("launcher", f"native bridge setup skipped: {error}")
+
+    def announce_update():
+        info = updater.check()
+        if info.get("available"):
+            try:
+                window.evaluate_js(
+                    "window.__pinkieUpdateAvailable?.(" + json.dumps(info, ensure_ascii=False) + ")"
+                )
+            except Exception:
+                pass
+
+    threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
 
 
 def run_desktop(resource_root, prepare, update_health_token=None):
@@ -1289,32 +1344,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # synchronous evaluate_js there deadlocks: ExecuteScriptAsync needs the
         # very same GUI thread to complete. Return from the event immediately
         # and do all synchronous window calls from a worker instead.
-        def install_bridge():
-            try:
-                current_url = str(window.get_current_url() or "")
-                if not current_url.startswith(GATEWAY_URL):
-                    return
-                window.evaluate_js(BRIDGE_SCRIPT)
-                if update_health_token:
-                    health = state_root() / "updates/health" / f"{update_health_token}.ready"
-                    health.parent.mkdir(parents=True, exist_ok=True)
-                    health.write_text("ready\n", encoding="ascii")
-
-                def announce_update():
-                    info = updater.check()
-                    if info.get("available"):
-                        try:
-                            window.evaluate_js(
-                                "window.__pinkieUpdateAvailable?.(" + json.dumps(info, ensure_ascii=False) + ")"
-                            )
-                        except Exception:
-                            pass
-
-                threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
-            except Exception as error:
-                append_log("launcher", f"native bridge setup skipped: {error}")
-
-        threading.Thread(target=install_bridge, name="pinkie-native-bridge", daemon=True).start()
+        threading.Thread(
+            target=install_native_bridge,
+            args=(window, updater, update_health_token),
+            name="pinkie-native-bridge",
+            daemon=True,
+        ).start()
 
     def bootstrap():
         try:
