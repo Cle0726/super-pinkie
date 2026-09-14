@@ -3,6 +3,7 @@ import argparse
 import codecs
 from concurrent.futures import ThreadPoolExecutor
 import contextlib
+from contextlib import closing
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -37,6 +38,19 @@ MODEL_CACHE = {'until': 0, 'data': None}
 MODEL_LOCK = threading.Lock()
 TRANSIENT_FAILURE = re.compile(r'(timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|\b429\b|\b50[234]\b|temporar|try again|实时连接中断)', re.I)
 PERMANENT_FAILURE = re.compile(r'(cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|context (?:length|window)|billing|policy)', re.I)
+
+
+def broad_root(directory):
+    """True when a directory is too broad to host a coding job's workspace.
+
+    Listing Path('/') by hand missed every Windows drive root: there
+    Path('/').resolve() is e.g. ``F:\\`` while Path('/') stays ``\\``, so the
+    two never compare equal.  A directory that is its own parent is a
+    filesystem root on every platform, which also covers UNC shares.
+    """
+    directory = Path(directory)
+    return directory == directory.parent or directory in (
+        Path.home(), Path('/Users'), Path.home()/'.openclaw', ROOT)
 
 
 def transient_failure(value):
@@ -225,7 +239,12 @@ class Store:
         if 'archived' not in {row['name'] for row in self.db.execute('PRAGMA table_info(rooms)')}:
             if self.db.execute('SELECT COUNT(*) FROM rooms').fetchone()[0]:
                 backup_path = self.root / ('before-room-management-' + str(time.time_ns()) + '.sqlite3')
-                with sqlite3.connect(str(backup_path)) as backup:
+                # `with sqlite3.connect(...) as backup` would only commit the
+                # transaction: the connection sits in a reference cycle, so even
+                # after this frame returns the handle stays open until a cyclic
+                # GC pass, and on Windows the backup file cannot be moved or
+                # removed until then.  close it explicitly.
+                with closing(sqlite3.connect(str(backup_path))) as backup:
                     self.db.backup(backup)
                 os.chmod(backup_path, 0o600)
             self.db.execute('ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
@@ -334,7 +353,7 @@ class Store:
         if path:
             directory = Path(path).expanduser().resolve()
             # Broad roots should not become a coding job's writable workspace.
-            if directory in (Path('/'), Path.home(), Path('/Users'), Path.home() / '.openclaw', ROOT):
+            if broad_root(directory):
                 raise ValueError('请选择具体项目文件夹，不要选择主目录、系统根目录或 App 源码目录')
             if not directory.is_dir():
                 raise ValueError('项目文件夹不存在')
