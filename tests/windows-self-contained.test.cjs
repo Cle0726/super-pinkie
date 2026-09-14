@@ -246,6 +246,18 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
   }
 });
 
+test('uninstall finds the proxy by command line, not by executable path', () => {
+  const install = read('install.ps1');
+  // The proxy runs as `pythonw.exe proxy\mm-retry-proxy.py`, so its .Path is
+  // pythonw.exe.  Matching the script name there never matched anything and
+  // -Remove left the proxy listening on 1467; the script path only appears in
+  // the command line, which Get-Process does not expose on 5.1.
+  assert.match(install, /Get-CimInstance Win32_Process/);
+  assert.match(install, /CommandLine[\s\S]{0,80}mm-retry-proxy/);
+  assert.doesNotMatch(install, /\$_\.Path\s+-like\s+"\*mm-retry-proxy\*"/,
+    'the executable path cannot identify a python-run script');
+});
+
 test('Windows bundled watchdog has a dedicated task installer', () => {
   const installer = read('installer/windows/register-bundled-watchdog.ps1');
   assert.match(installer, /SuperPinkieGatewayWatchdog/);
