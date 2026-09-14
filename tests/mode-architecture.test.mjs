@@ -886,6 +886,34 @@ test('a verifier printing Chinese survives a non-UTF-8 Windows locale',async t=>
   assert.doesNotMatch(reason,/UnicodeEncodeError|charmap/);
 });
 
+test('a verifier overwritten right after the boundary is never blessed by a ctime tick collision',()=>{
+  // NTFS quantizes ctime to a ~100ns tick, so without the guard in
+  // contractTimeBoundary a file written immediately after the marker lands on
+  // the same ctime ~14% of the time and stableContractFile's strict `>` misses
+  // it -- the verifier then passes as pre-existing.  The boundary now waits
+  // past the tick, so a post-boundary write is always strictly later.  Loop
+  // enough that any residual collision would be caught: even a 14% per-iteration
+  // miss becomes essentially certain across 300 tries.
+  for(let i=0;i<300;i+=1){
+    const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-tick-collision-'));
+    const skill=path.join(root,'skills','video','SKILL.md');
+    const verifier=path.join(path.dirname(skill),'tools','verify_completion.py');
+    fs.mkdirSync(path.dirname(verifier),{recursive:true});
+    fs.writeFileSync(skill,'# video');
+    fs.writeFileSync(verifier,'print("FAIL")\n');
+    const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:`agent:project:tick-${i}`,runId:`run-${i}`};
+    guard.begin({prompt:'调用 Skill 生成视频'},ctx);
+    // Overwrite the verifier after begin() -- the exact collision the flaky
+    // test hit.  It must be refused, never blessed as pre-existing.
+    fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"PASS","verified":True}))\n');
+    guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
+    guard.afterTool({toolName:'exec',result:'SUBMITTED'},ctx);
+    const reason=guard.finalize({lastAssistantMessage:'视频已经全部生成完成。'},ctx).reason||'';
+    assert.ok(/没有独立 verify_completion\.py|校验器|修改了真实性校验器/.test(reason),`iteration ${i}: the overwritten verifier must be refused, got: ${reason}`);
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
 test('creating or changing a verifier before first Skill read cannot self-certify',async t=>{
   for(const existing of [false,true]){
     const {skill,verifier,guard,ctx}=integrityContract(t,`pre-read-${existing}`,existing?'print("FAIL")\n':null);
