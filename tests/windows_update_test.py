@@ -40,6 +40,22 @@ class SizedResponse(io.BytesIO):
 
 
 class WindowsUpdateTests(unittest.TestCase):
+    def setUp(self):
+        # The updater resolves the state root from the process environment, both
+        # for the staged package and for its log.  Left alone that is the live
+        # profile, so the tests that fail a download on purpose used to append
+        # "update package download was cut short" to the real updater.log, where
+        # it is indistinguishable from an outage.  The service suites isolate
+        # themselves the same way.
+        self.temporary = tempfile.TemporaryDirectory(prefix="pinkie-update-unit-")
+        self.state = Path(self.temporary.name) / "state"
+        self.environment = mock.patch.dict(os.environ, {"PINKIE_STATE_ROOT": str(self.state)})
+        self.environment.start()
+
+    def tearDown(self):
+        self.environment.stop()
+        self.temporary.cleanup()
+
     def test_versions_are_numeric_and_reject_non_release_tags(self):
         self.assertGreater(version_tuple("v2.10.0"), version_tuple("2.9.9"))
         self.assertEqual((2, 5, 0, 0), version_tuple("2.5"))
@@ -88,14 +104,15 @@ class WindowsUpdateTests(unittest.TestCase):
             (root / "VERSION").write_text("2.5.1", encoding="utf-8")
             executable = root / "超級碧琪.exe"
             executable.write_bytes(b"old")
-            state = root / "state"
-            with mock.patch.dict(os.environ, {"LOCALAPPDATA": str(state)}, clear=False):
-                updater = WindowsUpdater(root, opener=opener, executable=executable)
-                result = updater.prepare()
-                self.assertTrue(result["ready"])
-                staged = state / "SuperPinkie/updates" / version / name
-                self.assertEqual(digest, hashlib.sha256(staged.read_bytes()).hexdigest())
-                self.assertEqual(b"old", executable.read_bytes())
+            updater = WindowsUpdater(root, opener=opener, executable=executable)
+            result = updater.prepare()
+            self.assertTrue(result["ready"])
+            staged = self.state / "updates" / version / name
+            self.assertEqual(digest, hashlib.sha256(staged.read_bytes()).hexdigest())
+            # Staged under the state root, never inside the directory that is
+            # about to be replaced -- the replacer has to be free to wipe it.
+            self.assertNotIn(root, staged.parents)
+            self.assertEqual(b"old", executable.read_bytes())
 
     def test_onedir_is_detected_by_layout_not_by_folder_name(self):
         """装在 F:\\SuperPinkie 这类自定义目录里的 onedir 包必须仍被认成便携目录。

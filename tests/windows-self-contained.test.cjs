@@ -246,6 +246,34 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
   }
 });
 
+test('the desktop shell reads PINKIE_STATE_ROOT instead of only exporting it', () => {
+  const launcher = read('app/windows_desktop.py');
+  const start = launcher.indexOf('def state_root(');
+  assert.ok(start !== -1, 'app/windows_desktop.py must keep a state_root()');
+  const body = launcher.slice(start, launcher.indexOf('\ndef ', start + 1));
+  // It used to only *export* the variable to its child processes.  A guard that
+  // just looked for the name therefore passed while the shell itself ignored it,
+  // and a suite that set it kept writing the staged update and the updater log
+  // into the live profile.
+  assert.match(body, /os\.environ\.get\(\s*["']PINKIE_STATE_ROOT["']\s*\)/,
+    'state_root() must read PINKIE_STATE_ROOT, not just pass it down');
+  // Compare the code, not the prose above it: the comment names LOCALAPPDATA
+  // too, and matching it first would report the override as coming second.
+  const code = body.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
+  const override = code.indexOf('PINKIE_STATE_ROOT');
+  const fallback = code.indexOf('LOCALAPPDATA');
+  assert.ok(override !== -1 && fallback !== -1 && override < fallback,
+    'the override must be consulted before the LOCALAPPDATA fallback');
+});
+
+test('the update suite keeps its downloads and log lines out of the live profile', () => {
+  const suite = read('tests/windows_update_test.py');
+  assert.match(suite, /PINKIE_STATE_ROOT/,
+    'windows_update_test.py must isolate the state root it resolves');
+  assert.doesNotMatch(suite, /LOCALAPPDATA/,
+    'shadowing LOCALAPPDATA is a Windows-only accident; use the shared override');
+});
+
 test('uninstall finds the proxy by command line, not by executable path', () => {
   const install = read('install.ps1');
   // The proxy runs as `pythonw.exe proxy\mm-retry-proxy.py`, so its .Path is
