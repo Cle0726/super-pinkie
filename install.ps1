@@ -53,9 +53,14 @@ if ($Remove) {
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
   Stop-ScheduledTask    -TaskName $GatewayWatchdogTask -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $GatewayWatchdogTask -Confirm:$false -ErrorAction SilentlyContinue
-  Get-Process -Name "python*" -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -and $_.Path -like "*mm-retry-proxy*" } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
+  # Get-Process exposes .Path as the executable, so matching the script name
+  # there never matched anything: the proxy runs as `pythonw.exe
+  # proxy\mm-retry-proxy.py`, whose .Path is pythonw.exe.  -Remove therefore
+  # left it listening on 1467.  The script path only appears in the command
+  # line, which Get-Process does not expose on Windows PowerShell 5.1.
+  Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like "*mm-retry-proxy*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   Write-Host "done. Config baseUrl changes (if any) must be reverted manually."
   exit 0
 }
