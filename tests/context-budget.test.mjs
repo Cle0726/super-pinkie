@@ -46,28 +46,30 @@ const threshold = resolveCompactionThreshold({
 \t});
 return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
-test('compaction triggers early and leaves enough recovery headroom',()=>{
+test('compaction triggers at the configured window share and leaves recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
+  // 所有模式共用同一条触发边界，档位表已随 2026-09-13 的 Mac→git 同步移除。
+  assert.equal(installedPolicy.triggerRatio,.85);
+  assert.equal(installedPolicy.targetRatio,.6);
   for(const window of [4096,16000,32768,128000,258400,1000000]){
     const resolved=window;
     const b=compactionBudget(window);assert.equal(b.window,resolved);
-    const tier=installedPolicy.adaptiveTiers.find((item)=>resolved<=item.maxContextTokens) || installedPolicy.adaptiveTiers.at(-1);
-    assert.equal(b.threshold,Math.floor(resolved*tier.triggerRatio));
+    const threshold=Math.floor(resolved*installedPolicy.triggerRatio);
+    assert.equal(b.threshold,threshold);
     assert.equal(resolved-b.reserve,b.threshold);
-    const requestedKeep=Math.floor(resolved*tier.keepRecentRatio);
-    const workingHeadroom=Math.max(4096,Math.floor(resolved*(resolved>=500000?.10:.15)));
+    const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
+    const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
     assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
-    assert.equal(b.targetRatio,tier.targetRatio);
+    assert.equal(b.targetRatio,installedPolicy.targetRatio);
     assert.ok(b.keepRecent<b.threshold);
-    assert.equal(b.threshold-1>=b.threshold,false);assert.equal(b.threshold>=b.threshold,true);
   }
 });
 test('272k model compacts far enough that summary and prompt overhead cannot immediately re-overflow',()=>{
   const b=compactionBudget(272000);
   assert.deepEqual({threshold:b.threshold,reserve:b.reserve,keepRecent:b.keepRecent},{
-    threshold:190400,
-    reserve:81600,
-    keepRecent:122400
+    threshold:231200,
+    reserve:40800,
+    keepRecent:163200
   });
   // The failed production session added about 30k tokens of summary/system overhead.
   assert.ok(b.keepRecent+30000<b.threshold);
