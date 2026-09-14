@@ -41,9 +41,9 @@ def install(home=None):
         return False
     raw = source.read_bytes()
     config = json.loads(raw)
-    state = Path(os.environ.get('PINKIE_STATE_ROOT',
-                                (Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
-                                 if os.name == 'nt' else home/'Library/Application Support/SuperPinkie')))
+    # One definition of the state root, shared with the budget rules: it also
+    # decides that a caller-supplied home is a sandbox rather than the profile.
+    state = Path(budget['state_root'](home))
     policy_file = state/'context-policy.json'
     rules = budget['policy'](home)
     provenance = budget['read_json'](state/'context-limits.json')

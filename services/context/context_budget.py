@@ -22,9 +22,15 @@ def state_root(home=None):
     if configured:
         return Path(configured)
     home = Path(home or Path.home())
-    if os.name == 'nt':
-        return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
-    return home/'Library/Application Support/SuperPinkie'
+    if os.name != 'nt':
+        return home/'Library/Application Support/SuperPinkie'
+    # An explicit home that is not the live profile means a sandbox: the test
+    # suite and portable runs pass their own root and must not read or write
+    # the real user's state.  Only the actual profile uses LOCALAPPDATA, which
+    # is where the app keeps its state on Windows.
+    if home != Path.home():
+        return home/'AppData/Local/SuperPinkie'
+    return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
 
 
 def policy(home=None):
