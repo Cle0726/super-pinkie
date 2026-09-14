@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import runpy
 import shutil
 import sqlite3
 import tempfile
@@ -14,21 +15,10 @@ import time
 USAGE_LOCK=threading.Lock()
 DISPLAY_PRICING_VERSION=2
 
-
-def state_root(home=None):
-    configured=os.environ.get('PINKIE_STATE_ROOT')
-    if configured:
-        return Path(configured)
-    home=Path(home or Path.home())
-    if os.name!='nt':
-        return home/'Library/Application Support/SuperPinkie'
-    # An explicit home that is not the live profile means a sandbox: the test
-    # suite and portable runs pass their own root and must not read or write
-    # the real user's state.  Only the actual profile uses LOCALAPPDATA, which
-    # is where the app keeps its state on Windows.
-    if home!=Path.home():
-        return home/'AppData/Local/SuperPinkie'
-    return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+# One definition, shared with every other service that writes into the state
+# tree; see services/state_root.py for the rule and why it is loaded this way.
+STATE=runpy.run_path(str(Path(__file__).resolve().parents[1]/'state_root.py'))
+state_root=STATE['state_root']
 
 
 def number(value):

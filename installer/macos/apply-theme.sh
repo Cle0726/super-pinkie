@@ -655,6 +655,13 @@ sync_launcher_resources() {
   copy_if_changed \
     "$REPO_ROOT/services/roundtable/server.py" \
     "$bundled_root/services/roundtable/server.py"
+  # The state-root rule moved into its own top-level module so the context
+  # budget, the usage ledger and the installers cannot drift apart. Hotfixing
+  # the consumers into a bundle that predates it would leave the cold-launch
+  # repair crashing on a missing file, so ship the module with them.
+  copy_if_changed \
+    "$REPO_ROOT/services/state_root.py" \
+    "$bundled_root/services/state_root.py"
   # The managed launcher installs these two OpenClaw extensions from its own
   # bundled service tree on every cold launch. Keep that tree aligned with the
   # hotfix source as well; otherwise a restart silently restores stale hook

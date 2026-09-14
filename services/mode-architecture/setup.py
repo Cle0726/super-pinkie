@@ -4,11 +4,17 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
+import runpy
 import shutil
 import tempfile
 import time
-import re
 
+
+# One definition, shared with every other service that writes into the state
+# tree; see services/state_root.py for the rule and why it is loaded this way.
+STATE = runpy.run_path(str(Path(__file__).resolve().parents[1]/'state_root.py'))
+state_root = STATE['state_root']
 
 MODE_WORKSPACES = {
     "chat": ".openclaw/workspace",
@@ -18,24 +24,6 @@ MODE_WORKSPACES = {
     "none": ".openclaw/workspace-unrestricted",
 }
 
-
-def state_root(home):
-    """Where a given home keeps SuperPinkie state.
-
-    An explicit home that is not the live profile means a sandbox -- the test
-    suite and portable runs pass their own root -- so it is honoured instead of
-    reaching into the real user's state.  Only the actual profile resolves
-    through LOCALAPPDATA, which is where the app keeps its state on Windows.
-    """
-    configured = os.environ.get("PINKIE_STATE_ROOT")
-    if configured:
-        return Path(configured)
-    home = Path(home)
-    if os.name != "nt":
-        return home / "Library/Application Support/SuperPinkie"
-    if home != Path.home():
-        return home / "AppData/Local/SuperPinkie"
-    return Path(os.environ.get("LOCALAPPDATA", home / "AppData/Local")) / "SuperPinkie"
 
 PERSONA = {
     "chat": {
