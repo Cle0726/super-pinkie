@@ -15,6 +15,7 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(build, /RUNTIME_ROOT\/cua-driver-helper\.tar\.gz/);
   assert.match(build, /RUNTIME_ROOT\/bin\/npm/);
   assert.match(build, /services\/process_io\.py/);
+  assert.match(build, /services\/state_root\.py/);
   assert.match(launcher, /openclaw\/openclaw\.mjs/);
   assert.match(launcher, /python\/bin\/python3/);
   assert.match(launcher, /\/Applications\/CuaDriver\.app/);

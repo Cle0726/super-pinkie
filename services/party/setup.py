@@ -2,25 +2,17 @@
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import tempfile
 import time
 
 IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(encoding='utf-8'))
 
-
-def state_root(home):
-    configured=os.environ.get('PINKIE_STATE_ROOT')
-    if configured:
-        return Path(configured)
-    home=Path(home)
-    if os.name!='nt':
-        return home/'Library/Application Support/SuperPinkie'
-    # See services/party/usage.py::state_root: a caller-supplied home means a
-    # sandbox, and only the real profile resolves through LOCALAPPDATA.
-    if home!=Path.home():
-        return home/'AppData/Local/SuperPinkie'
-    return Path(os.environ.get('LOCALAPPDATA', home/'AppData/Local'))/'SuperPinkie'
+# One definition, shared with every other service that writes into the state
+# tree; see services/state_root.py for the rule and why it is loaded this way.
+STATE = runpy.run_path(str(Path(__file__).resolve().parents[1]/'state_root.py'))
+state_root = STATE['state_root']
 
 
 def party_soul(name, address='铲屎官'):

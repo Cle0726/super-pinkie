@@ -24,6 +24,9 @@ from urllib.parse import urlparse, parse_qs
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
+# The one state-root rule; see services/state_root.py.  This module used to
+# carry two copies of it inline, and neither honoured a sandboxed home.
+STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
 CONTEXT = runpy.run_path(str(ROOT/'services/context/context_budget.py'))
 USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
@@ -672,9 +675,7 @@ class Manager:
         away, plus the prior checkpoint state, indexed by room/model/time.
         """
         try:
-            base=Path(os.environ.get('PINKIE_STATE_ROOT',
-                                     (Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'SuperPinkie'
-                                      if os.name == 'nt' else Path.home()/'Library/Application Support/SuperPinkie'))) / 'context-archives'
+            base = STATE['state_root']() / 'context-archives'
             base.mkdir(parents=True,exist_ok=True,mode=0o700)
             safe=lambda s:re.sub(r'[^A-Za-z0-9._-]','_',str(s))[:64] or 'unknown'
             name=f"{safe(room['id'])}_{safe(model)}_{time.time_ns()}.json"
@@ -1195,8 +1196,6 @@ def serve(port, state_dir, on_ready=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18889)
-    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT',
-        (Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')) / 'SuperPinkie'
-         if os.name == 'nt' else Path.home() / 'Library/Application Support/SuperPinkie'))) / 'party'))
+    parser.add_argument('--state-dir', default=str(STATE['state_root']() / 'party'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)
