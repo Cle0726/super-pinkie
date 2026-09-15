@@ -3,7 +3,6 @@ import argparse
 import codecs
 from concurrent.futures import ThreadPoolExecutor
 import contextlib
-from contextlib import closing
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -24,15 +23,12 @@ from urllib.parse import urlparse, parse_qs
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
-# The one state-root rule; see services/state_root.py.  This module used to
-# carry two copies of it inline, and neither honoured a sandboxed home.
-STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
 CONTEXT = runpy.run_path(str(ROOT/'services/context/context_budget.py'))
 USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'CLE Kk',
-          'claude': 'Claude', 'gemini': 'Gemini', 'ollama': 'Ollama'}
+          'claude': 'Claude', 'gemini': 'Gemini', 'grok': 'Grok'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MAX_MESSAGE = 12000
 IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(encoding='utf-8'))
@@ -41,19 +37,6 @@ MODEL_CACHE = {'until': 0, 'data': None}
 MODEL_LOCK = threading.Lock()
 TRANSIENT_FAILURE = re.compile(r'(timeout|timed out|network|fetch failed|econn|connection[_ -](?:reset|closed)|socket|upstream|overload|rate.?limit|terminated|\b429\b|\b50[234]\b|temporar|try again|实时连接中断)', re.I)
 PERMANENT_FAILURE = re.compile(r'(cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|context (?:length|window)|billing|policy)', re.I)
-
-
-def broad_root(directory):
-    """True when a directory is too broad to host a coding job's workspace.
-
-    Listing Path('/') by hand missed every Windows drive root: there
-    Path('/').resolve() is e.g. ``F:\\`` while Path('/') stays ``\\``, so the
-    two never compare equal.  A directory that is its own parent is a
-    filesystem root on every platform, which also covers UNC shares.
-    """
-    directory = Path(directory)
-    return directory == directory.parent or directory in (
-        Path.home(), Path('/Users'), Path.home()/'.openclaw', ROOT)
 
 
 def transient_failure(value):
@@ -202,15 +185,36 @@ def openclaw_ready(agent_id):
 
 def roster():
     result = []
+    agent_map = {
+        'pinkie': 'pinkie-party',
+        'openclaw': 'party-openclaw',
+        'claude': 'party-claude',
+        'gemini': 'party-gemini',
+        'grok': 'party-grok'
+    }
+    details = {
+        'pinkie': '派对主持 · 全工具执行与派工',
+        'codex': '本机 CLI · 项目与电脑全工具执行',
+        'openclaw': '独立执行成员 · 可直接操作项目与本机工具',
+        'claude': 'Claude 专属成员 · 深度分析与架构代码',
+        'gemini': 'Gemini 专属成员 · 极速多模态与长上下文执行',
+        'grok': 'Grok 专属成员 · 实时情报搜集与无审查穿透'
+    }
     for agent_id, label in LABELS.items():
-        binary = executable('openclaw' if agent_id == 'pinkie' else agent_id)
-        ready = bool(binary) and agent_id in ('pinkie', 'codex', 'openclaw')
-        if agent_id in ('pinkie', 'openclaw'):
-            ready = ready and openclaw_ready('pinkie-party' if agent_id == 'pinkie' else 'party-openclaw')
-        detail = {'pinkie': '派对主持 · 全工具执行与派工', 'codex': '本机 CLI · 项目与电脑全工具执行',
-                  'openclaw': '独立执行成员 · 可直接操作项目与本机工具'}.get(agent_id, '桌面窗口适配尚未接入')
-        result.append({'id': agent_id, 'name': label, 'available': ready, 'detail': detail,
-                       'reason': '' if ready else ('需安装派对 Agent 配置' if binary and agent_id in ('pinkie', 'openclaw') else '尚未接入，不能接收任务')})
+        if agent_id == 'codex':
+            ready = bool(executable('codex'))
+            reason = '' if ready else '尚未安装 Codex CLI'
+        else:
+            mapped = agent_map.get(agent_id)
+            ready = bool(executable('openclaw')) and openclaw_ready(mapped)
+            reason = '' if ready else '需安装派对 Agent 配置'
+        result.append({
+            'id': agent_id,
+            'name': label,
+            'available': ready,
+            'detail': details.get(agent_id, '独立派对成员'),
+            'reason': reason
+        })
     return result
 
 
@@ -242,12 +246,7 @@ class Store:
         if 'archived' not in {row['name'] for row in self.db.execute('PRAGMA table_info(rooms)')}:
             if self.db.execute('SELECT COUNT(*) FROM rooms').fetchone()[0]:
                 backup_path = self.root / ('before-room-management-' + str(time.time_ns()) + '.sqlite3')
-                # `with sqlite3.connect(...) as backup` would only commit the
-                # transaction: the connection sits in a reference cycle, so even
-                # after this frame returns the handle stays open until a cyclic
-                # GC pass, and on Windows the backup file cannot be moved or
-                # removed until then.  close it explicitly.
-                with closing(sqlite3.connect(str(backup_path))) as backup:
+                with sqlite3.connect(str(backup_path)) as backup:
                     self.db.backup(backup)
                 os.chmod(backup_path, 0o600)
             self.db.execute('ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
@@ -356,7 +355,7 @@ class Store:
         if path:
             directory = Path(path).expanduser().resolve()
             # Broad roots should not become a coding job's writable workspace.
-            if broad_root(directory):
+            if directory in (Path('/'), Path.home(), Path('/Users'), Path.home() / '.openclaw', ROOT):
                 raise ValueError('请选择具体项目文件夹，不要选择主目录、系统根目录或 App 源码目录')
             if not directory.is_dir():
                 raise ValueError('项目文件夹不存在')
@@ -675,7 +674,9 @@ class Manager:
         away, plus the prior checkpoint state, indexed by room/model/time.
         """
         try:
-            base = STATE['state_root']() / 'context-archives'
+            base=Path(os.environ.get('PINKIE_STATE_ROOT',
+                                     (Path(os.environ.get('LOCALAPPDATA', Path.home()/'AppData/Local'))/'SuperPinkie'
+                                      if os.name == 'nt' else Path.home()/'Library/Application Support/SuperPinkie'))) / 'context-archives'
             base.mkdir(parents=True,exist_ok=True,mode=0o700)
             safe=lambda s:re.sub(r'[^A-Za-z0-9._-]','_',str(s))[:64] or 'unknown'
             name=f"{safe(room['id'])}_{safe(model)}_{time.time_ns()}.json"
@@ -1196,6 +1197,8 @@ def serve(port, state_dir, on_ready=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18889)
-    parser.add_argument('--state-dir', default=str(STATE['state_root']() / 'party'))
+    parser.add_argument('--state-dir', default=str(Path(os.environ.get('PINKIE_STATE_ROOT',
+        (Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')) / 'SuperPinkie'
+         if os.name == 'nt' else Path.home() / 'Library/Application Support/SuperPinkie'))) / 'party'))
     options = parser.parse_args()
     serve(options.port, options.state_dir)
