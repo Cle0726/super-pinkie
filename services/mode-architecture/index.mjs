@@ -222,17 +222,13 @@ function safeTag(sessionKey) {
 }
 
 function resolveGatewayCliEntry() {
-  // App-managed gateways are launched through openclaw.mjs, then rename their
-  // process title to openclaw-gateway. Requiring argv[1] to be dist/index.js
-  // therefore disabled the fast local retry path in the packaged App.
+  const bundled = '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/openclaw.mjs';
   const candidates = [
     process.env.PINKIE_OPENCLAW_ENTRY,
     process.env.OPENCLAW_ROOT && path.join(process.env.OPENCLAW_ROOT, 'openclaw.mjs'),
+    bundled,
     process.argv[1],
   ].filter(Boolean).map(String);
-  const managed = process.env.OPENCLAW_SERVICE_KIND === 'gateway'
-    || process.env.PINKIE_MANAGED_GATEWAY === '1';
-  if (!managed) return '';
   return candidates.find(entry => fs.existsSync(entry)
     && /(?:[\\/]openclaw\.mjs|[\\/]openclaw[\\/]dist[\\/]index\.js)$/i.test(entry)) || '';
 }
