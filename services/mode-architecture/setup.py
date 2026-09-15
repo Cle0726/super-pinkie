@@ -10,6 +10,12 @@ import shutil
 import tempfile
 import time
 
+# See services/context/setup.py: a non-UTF-8 Windows locale makes stdout
+# cp1252 and the Chinese status print below raise UnicodeEncodeError.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 
 # One definition, shared with every other service that writes into the state
 # tree; see services/state_root.py for the rule and why it is loaded this way.

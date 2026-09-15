@@ -23,6 +23,12 @@ import time
 from urllib.parse import urlparse, parse_qs
 import uuid
 
+# See services/context/setup.py: cp1252 stdout on a non-UTF-8 Windows locale
+# would break the Chinese "started" print below.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 ROOT = Path(__file__).resolve().parents[2]
 # The one state-root rule; see services/state_root.py.  This module used to
 # carry two copies of it inline, and neither honoured a sandboxed home.
