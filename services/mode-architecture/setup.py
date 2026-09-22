@@ -9,6 +9,8 @@ import runpy
 import shutil
 import tempfile
 import time
+import re
+import shlex
 
 
 # One definition, shared with every other service that writes into the state
@@ -142,6 +144,83 @@ def _copy_if_changed(source: Path, target: Path) -> bool:
     return True
 
 
+def _write_managed(path: Path, content: str, mode: int = 0o644) -> bool:
+    encoded = content.encode("utf-8")
+    if path.is_file() and path.read_bytes() == encoded:
+        if (path.stat().st_mode & 0o777) != mode:
+            os.chmod(path, mode)
+            return True
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encoded)
+    os.chmod(path, mode)
+    return True
+
+
+def _install_web_gpt_collab(repo_root: Path, state: Path) -> bool:
+    """Install the managed read-only bridge without touching account data."""
+    source = repo_root / "services/chatgpt-collab/runtime"
+    if not source.is_dir():
+        return False
+    target_root = state / "web-gpt-collab"
+    target = target_root / "runtime"
+    changed = False
+    for source_file in source.rglob("*"):
+        if source_file.is_file():
+            changed |= _copy_if_changed(source_file, target / source_file.relative_to(source))
+
+    # Reuse the dependencies already sealed in the App instead of shipping a
+    # second 70 MB package tree. This link is entirely App-managed and never
+    # points at user data.
+    runtime_root = repo_root
+    if not (runtime_root / "runtime/bin/node").is_file() and os.name != "nt":
+        app_path = Path(os.environ.get("PINKIE_APP_PATH", "/Applications/超級碧琪.app"))
+        installed_root = app_path / "Contents/Resources/SuperPinkie"
+        if (installed_root / "runtime/bin/node").is_file():
+            runtime_root = installed_root
+    bundled_modules = runtime_root / "runtime/openclaw/node_modules"
+    modules_link = target / "node_modules"
+    if bundled_modules.is_dir():
+        expected = str(bundled_modules)
+        current = os.readlink(modules_link) if modules_link.is_symlink() else None
+        if current != expected:
+            if modules_link.is_symlink() or modules_link.is_file():
+                modules_link.unlink()
+            elif modules_link.is_dir():
+                # A real directory may belong to a previous managed install.
+                # It is usable and must not be deleted just to optimize space.
+                current = "managed-directory"
+            if current != "managed-directory":
+                modules_link.parent.mkdir(parents=True, exist_ok=True)
+                modules_link.symlink_to(bundled_modules, target_is_directory=True)
+                changed = True
+
+    node_bin = runtime_root / "runtime/bin/node"
+    state_dir = target_root / "state"
+    wrapper = target_root / "pinkie-collab"
+    wrapper_text = f"""#!/bin/sh
+set -eu
+SELF_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)
+STATE_DIR=\"$SELF_DIR/state\"
+CLOUDFLARED=\"${{C2C_CLOUDFLARED_PATH:-}}\"
+if [ -z \"$CLOUDFLARED\" ]; then
+  if [ -x /opt/homebrew/bin/cloudflared ]; then CLOUDFLARED=/opt/homebrew/bin/cloudflared
+  elif [ -x /usr/local/bin/cloudflared ]; then CLOUDFLARED=/usr/local/bin/cloudflared
+  elif command -v cloudflared >/dev/null 2>&1; then CLOUDFLARED=$(command -v cloudflared)
+  fi
+fi
+mkdir -p \"$STATE_DIR\"
+export C2C_STATE_DIR=\"$STATE_DIR\"
+export C2C_TUNNEL_PROTOCOL=\"${{C2C_TUNNEL_PROTOCOL:-http2}}\"
+if [ -n \"$CLOUDFLARED\" ]; then export C2C_CLOUDFLARED_PATH=\"$CLOUDFLARED\"; fi
+exec {shlex.quote(str(node_bin))} \"$SELF_DIR/runtime/bin/c2c.js\" \"$@\"
+"""
+    changed |= _write_managed(wrapper, wrapper_text, 0o755)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(state_dir, 0o700)
+    return changed
+
+
 def _version_key(value: str) -> tuple[int, ...]:
     numbers = [int(item) for item in re.findall(r"\d+", str(value or ""))]
     return tuple((numbers + [0, 0, 0])[:3])
@@ -272,7 +351,7 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "package.json", "openclaw.plugin.json"):
+        for name in ("index.mjs", "memory.mjs", "learning.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "package.json", "openclaw.plugin.json"):
             changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():
@@ -296,6 +375,11 @@ def install(home=None) -> bool:
         skill_source = repo_root / "skills/deep-think/SKILL.md"
         if skill_source.is_file():
             changed |= _copy_if_changed(skill_source, workspace / "skills/deep-think/SKILL.md")
+        collab_skill = repo_root / "skills/web-gpt-collab/SKILL.md"
+        if collab_skill.is_file():
+            changed |= _copy_if_changed(collab_skill, workspace / "skills/web-gpt-collab/SKILL.md")
+
+    changed |= _install_web_gpt_collab(repo_root, state)
 
     config_changed = _configure_plugin(data, extension)
     if config_changed:
@@ -315,7 +399,7 @@ def install(home=None) -> bool:
                 os.unlink(temp_name)
         changed = True
     if changed:
-        print("CLE Kk 模式隔离记忆、压缩重载和极致思考派生规则已安装；原有上下文文件未覆盖。")
+        print("CLE Kk 模式隔离记忆、压缩重载、极致思考与网页 GPT 协作已安装；原有账号、权限和上下文文件未覆盖。")
     return changed
 
 

@@ -24,6 +24,8 @@ test('stats use light chips instead of bringing back the removed room header',()
   const css=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-usage-stats.css'),'utf8');
   assert.match(css,/#party-usage[^}]*background:transparent/);assert.match(css,/flex-wrap:wrap/);assert.match(css,/prefers-reduced-motion/);
   assert.match(js,/label: "累计估算"/);assert.match(js,/费用未知，不虚构金额/);assert.match(js,/!\/示例\//);
+  assert.match(js,/key: "runtime", label: "链路"/);assert.doesNotMatch(js,/key: "cacheWrite", label: "缓存写"/);assert.doesNotMatch(js,/key: "quota", label: "额度"/);
+  assert.match(css,/-webkit-user-select: none !important/);assert.match(css,/laolao-usage__chip--runtime/);
 });
 test('old automatic echoes are hidden without deleting stored messages',()=>{
   const party=fs.readFileSync(path.join(__dirname,'../ui/party/party.js'),'utf8');

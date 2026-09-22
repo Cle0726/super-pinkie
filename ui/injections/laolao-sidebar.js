@@ -55,7 +55,11 @@
           // Finish the authenticated binding before the model can receive this
           // message. A failed binding returns an ordinary RPC error to the UI.
           sendQueue=sendQueue.catch(()=>{}).then(async()=>{
-            try { await ensureProjectScope(key);if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');send(data); }
+            try {
+              await ensureProjectScope(key);
+              if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');
+              send(data);
+            }
             catch(error) {
               toast('没有发送：'+error.message);
               ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message:'项目目录尚未确认：'+error.message}})}));
@@ -593,6 +597,93 @@
   }
 
   const creatingSessions=new Map();
+  const autoTitlePending=new Set();
+  const autoTitleDone=new Set();
+  const autoTitleCheckedAt=new Map();
+  const autoTitleHistoryQueue=[];
+  let autoTitleHistoryRunning=false;
+  const placeholderSessionTitle=(value,key='',sessionId='')=>{
+    const text=String(value||'').trim();
+    if(!text)return true;
+    if(/^(?:(?:.+?)\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+)$/i.test(text))return true;
+    if(/^[0-9a-f]{8}\b/i.test(text))return true;
+    return [String(key||'').split(':').pop(),String(sessionId||'')].filter(Boolean).some(id=>{
+      const short=id.slice(0,8);
+      return text===id||text===short||text===short+'…'||text.startsWith(short+' (');
+    });
+  };
+  const messageText=value=>{
+    if(typeof value==='string')return value;
+    if(Array.isArray(value))return value.map(part=>typeof part==='string'?part:(part?.type==='text'||part?.type==='input_text'?part.text||part.content||'':'')).join(' ');
+    if(value&&typeof value==='object')return messageText(value.content??value.text??value.message??'');
+    return '';
+  };
+  const autoTitleFromText=value=>{
+    const cleaned=messageText(value)
+      .replace(/```[\s\S]*?```/g,' ')
+      .replace(/https?:\/\/\S+/g,' ')
+      .replace(/[\u200B-\u200D\u2060\u2063\u2064\uFEFF]/g,' ')
+      .replace(/^\s*(?:[#>*-]|\d+[.)])\s*/gm,'')
+      .replace(/\s+/g,' ').trim();
+    if(!cleaned)return '';
+    const sentence=cleaned.split(/[。！？!?\n]/,1)[0].trim()||cleaned;
+    return sentence.length>28?sentence.slice(0,27).trim()+'…':sentence;
+  };
+
+  async function maybeAutoTitle(key,message){
+    const title=autoTitleFromText(message);
+    const mode=modeForSession(key);
+    if(!title||!mode||key.endsWith(':main')||autoTitlePending.has(key)||autoTitleDone.has(key))return false;
+    autoTitlePending.add(key);
+    try{
+      const listed=await gwRequest('sessions.list',{agentId:MODE_AGENT[mode],limit:1000});
+      const row=extractSessions(listed).find(item=>item.key===key);
+      if(!row||!placeholderSessionTitle(row.label??row.name,key,row.sessionId)){autoTitleDone.add(key);return false;}
+      await gwRequest('sessions.patch',{key,agentId:MODE_AGENT[mode],label:title});
+      autoTitleDone.add(key);sessionIndex=null;window.PinkieSessionList?.invalidate();schedule();
+      return true;
+    }catch(error){
+      if(!/label already in use/i.test(String(error?.message||'')))return false;
+      try{
+        await gwRequest('sessions.patch',{key,agentId:MODE_AGENT[mode],label:`${title} · ${String(key).slice(-4)}`});
+        autoTitleDone.add(key);sessionIndex=null;window.PinkieSessionList?.invalidate();schedule();return true;
+      }catch{return false;}
+    }finally{autoTitlePending.delete(key);}
+  }
+
+  async function drainAutoTitleHistory(){
+    if(autoTitleHistoryRunning)return;
+    autoTitleHistoryRunning=true;
+    try{
+      while(autoTitleHistoryQueue.length){
+        const {key,marker}=autoTitleHistoryQueue.shift();
+        if(autoTitleDone.has(key)||autoTitlePending.has(key)||key.endsWith(':main'))continue;
+        try{
+          const agentId=String(key).match(/^agent:([^:]+):/)?.[1];
+          let user=null;
+          for(const offset of [0,12,24,36]){
+            const history=await gwRequest('chat.history',{sessionKey:key,agentId,limit:12,offset,maxChars:16000},12000);
+            const messages=Array.isArray(history?.messages)?history.messages:Array.isArray(history?.items)?history.items:[];
+            user=messages.find(item=>String(item?.role||item?.message?.role||'').toLowerCase()==='user'&&autoTitleFromText(item.message??item));
+            if(user||messages.length<12)break;
+          }
+          if(user)await maybeAutoTitle(key,user.message??user);
+        }catch{}
+        autoTitleCheckedAt.set(key,marker);
+        await new Promise(resolve=>setTimeout(resolve,120));
+      }
+    }finally{autoTitleHistoryRunning=false;}
+  }
+
+  function queueAutoTitles(rows=[]){
+    for(const row of rows){
+      const name=row?.label??row?.displayName??row?.title??row?.name??'';
+      const marker=row?.updatedAt||row?.lastActivityAt||row?.createdAt||0;
+      if(row?.key&&!row.key.endsWith(':main')&&placeholderSessionTitle(name,row.key,row.sessionId)&&autoTitleCheckedAt.get(row.key)!==marker&&!autoTitleDone.has(row.key)&&!autoTitlePending.has(row.key)&&!autoTitleHistoryQueue.some(item=>item.key===row.key))autoTitleHistoryQueue.push({key:row.key,marker});
+    }
+    void drainAutoTitleHistory();
+  }
+
   async function createProjectSession(name) {
     if(name&&!state.projectFolders[name]){toast('请先为「'+name+'」选择项目文件夹');return;}
     const agentId = currentModeAgent();
@@ -638,12 +729,25 @@
 
   function navigateSession(key){
     if(modeForSession(key)!==stateMode)return;
+    closeNavigationDrawer();
     const current=new URL(window.location.href).searchParams.get('session');
-    if(current===key)return;
+    const requestVisibleSync=()=>window.setTimeout?.(()=>window.dispatchEvent(
+      new CustomEvent('pinkie:session-selected',{detail:{sessionKey:key}})
+    ),0);
+    // Clicking the already-selected row must repair a stale body too. The
+    // address bar alone is not proof that the chat pane loaded that session.
+    if(current===key){requestVisibleSync();return;}
     const search=`?session=${encodeURIComponent(key)}`;
     const shell=document.querySelector('openclaw-app-shell');
-    if(typeof shell?.context?.navigate==='function'){
-      shell.context.gateway?.setSessionKey?.(key);shell.context.navigate('chat',{search});
+    if(typeof shell?.navigate==='function'){
+      // The shell owns drawer cleanup on navigation. Going straight to its
+      // context bypasses that cleanup, leaving a full-page scrim over chat.
+      // Do not pre-set the global gateway key: the native router/pane switch
+      // owns that handoff and an early write can display the previous body
+      // under the next session's URL.
+      shell.navigate('chat',{search});
+    }else if(typeof shell?.context?.navigate==='function'){
+      shell.context.navigate('chat',{search});
     }else{
       // Newer OpenClaw builds keep router context private. A normal location
       // assignment reloads the whole document and wrongly replays the App
@@ -652,6 +756,43 @@
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
     schedule();
+    requestVisibleSync();
+  }
+
+  /* The mobile drawer can be active in a narrow single window as well as in
+     either split pane. Close the upstream component's state, not only its DOM
+     class, whenever a session or window transition could leave its scrim up. */
+  function closeNavigationDrawer(){
+    const host=document.querySelector('openclaw-app-shell');
+    const shell=document.querySelector('.shell.shell--nav-drawer-open');
+    if(!shell&&!host?.navDrawerOpen)return;
+    if(typeof host?.closeNavDrawer==='function'){
+      host.closeNavDrawer({restoreFocus:false});
+      return;
+    }
+    const toggle=shell?.querySelector('.topbar-nav-toggle');
+    if(typeof toggle?.click==='function'&&!toggle.disabled)toggle.click();
+  }
+
+  if(typeof document.addEventListener==='function'){
+    document.addEventListener('pointerdown',event=>{
+      const target=event.target;
+      if(!target||typeof target.closest!=='function')return;
+      const shell=document.querySelector('.shell.shell--nav-drawer-open');
+      if(shell&&!target.closest('.shell-nav, .topbar-nav-toggle'))closeNavigationDrawer();
+    },true);
+    document.addEventListener('click',event=>{
+      const target=event.target;
+      if(!target||typeof target.closest!=='function'||!target.closest('.shell-nav a[href*="session="]'))return;
+      setTimeout(closeNavigationDrawer,0);
+    },true);
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')closeNavigationDrawer();},true);
+  }
+  if(typeof window.addEventListener==='function'){
+    window.addEventListener('popstate',closeNavigationDrawer);
+    window.addEventListener('pageshow',closeNavigationDrawer);
+    window.addEventListener('resize',closeNavigationDrawer,{passive:true});
+    window.addEventListener('pinkie:app-foreground',closeNavigationDrawer,{passive:true});
   }
 
   async function patchSession(key,changes){
@@ -731,6 +872,17 @@
   }
 
   /* ---------- 4. 分组 UI ---------- */
+  // Native and synthetic session rows must take the same route. In particular,
+  // a second click on the active row is a repair request, not a no-op.
+  document.addEventListener('click',event=>{
+    const link=event.target?.closest?.('a.sidebar-recent-session__link');
+    if(!link)return;
+    const key=new URL(link.href,window.location.href).searchParams.get('session');
+    if(!key||modeForSession(key)!==stateMode)return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    navigateSession(key);
+  },true);
   // When already inside a folder project, the familiar New chat button should
   // create another conversation in that project, not silently leave it.
   document.addEventListener('click',event=>{
@@ -859,6 +1011,8 @@
         return {
           key,
           agentId: (it && it.agentId) || (parsed && parsed[1]) || undefined,
+          sessionId: it && it.sessionId,
+          label: it && it.label,
           name: it && (it.displayName || it.title || it.label || it.name),
           updatedAt: it && (it.updatedAt || it.lastActivityAt || it.createdAt),
         };
@@ -1301,7 +1455,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,queueAutoTitles,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }

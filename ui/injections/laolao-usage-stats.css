@@ -7,10 +7,18 @@
   margin-left: auto;
   padding-left: 12px;
   white-space: nowrap;
-  user-select: none;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none;
   cursor: default;
   opacity: 0.88;
   transition: opacity 0.15s ease;
+}
+
+.laolao-usage,
+.laolao-usage * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
 }
 
 .laolao-usage:hover {
@@ -49,17 +57,13 @@
   color: var(--accent-foreground, #ffffff);
 }
 
-/* 额度：空心描边款，和实底的金额区分 */
-.laolao-usage__chip--quota {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--accent, #e94f91);
-  color: var(--accent, #e94f91);
-}
-
-.laolao-usage__chip--quota:hover {
-  background: var(--accent-subtle, #ffe6f0);
-  color: var(--accent-hover, #d83f7f);
-}
+.laolao-usage__chip--runtime { gap: 5px; background: rgba(93, 174, 148, .14); color: #397a66; box-shadow: inset 0 0 0 1px rgba(73, 153, 127, .2); }
+.laolao-usage__chip--runtime::before { width: 5px; height: 5px; border-radius: 50%; background: #53aa8e; box-shadow: 0 0 0 3px rgba(83, 170, 142, .12); content: ""; }
+.laolao-usage__chip--runtime[data-state="live"] { background: rgba(215, 90, 143, .13); color: #9d3e68; box-shadow: inset 0 0 0 1px rgba(202, 75, 131, .2); }
+.laolao-usage__chip--runtime[data-state="live"]::before { background: #d4578e; box-shadow: 0 0 0 3px rgba(212, 87, 142, .14); animation: laolao-runtime-dot 1s ease-in-out infinite; }
+.laolao-usage__chip--runtime[data-state="offline"] { color: #9a7d8a; background: rgba(154, 125, 138, .1); box-shadow: inset 0 0 0 1px rgba(154, 125, 138, .15); }
+.laolao-usage__chip--runtime[data-state="offline"]::before { background: #a9939e; box-shadow: none; }
+@keyframes laolao-runtime-dot { 50% { opacity: .42; transform: scale(.72); } }
 
 /* 暗色模式 */
 html[data-theme-mode="dark"] .laolao-usage__chip {
@@ -81,16 +85,8 @@ html[data-theme-mode="dark"] .laolao-usage__chip--cost {
   color: #ffffff;
 }
 
-html[data-theme-mode="dark"] .laolao-usage__chip--quota {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px #ed93b1;
-  color: #ed93b1;
-}
-
-html[data-theme-mode="dark"] .laolao-usage__chip--quota:hover {
-  background: rgba(233, 79, 145, 0.18);
-  color: #ffd9e8;
-}
+html[data-theme-mode="dark"] .laolao-usage__chip--runtime { background: rgba(83,170,142,.2); color: #d9fff1; }
+html[data-theme-mode="dark"] .laolao-usage__chip--runtime[data-state="live"] { background: rgba(233,79,145,.25); color: #ffe1ed; }
 
 /* 数值上涨时的脉冲动效 */
 @keyframes laolao-usage-pulse {
@@ -145,5 +141,5 @@ html[data-theme-mode="dark"] .laolao-usage__chip--quota:hover {
 #party-usage .laolao-usage { padding-left:0;flex-wrap:wrap;justify-content:flex-end;gap:5px;max-width:100%;-webkit-user-select:none; }
 #party-usage .laolao-usage__chip { background:#efb4ce85;color:#975173;padding:2px 8px;font-size:10px; }
 #party-usage .laolao-usage__chip--cost { background:#dc6199cf;color:white; }
-#party-usage .laolao-usage__chip--quota { background:transparent;box-shadow:inset 0 0 0 1px #dc619970;color:#bd658e; }
+#party-usage .laolao-usage__chip--runtime { background:#8bcbb531;color:#497c6b; }
 @media(prefers-reduced-motion:reduce){.laolao-usage,.laolao-usage__chip{transition:none}.laolao-usage--live .laolao-usage__chip,.laolao-usage__chip--pulse{animation:none}}

@@ -182,14 +182,17 @@ for scope_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/project-scope/$scope_file" "$CONTENTS/Resources/SuperPinkie/services/project-scope/"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
-for architecture_file in index.mjs memory.mjs setup.py package.json openclaw.plugin.json; do
+for architecture_file in index.mjs memory.mjs learning.mjs web-gpt-activity.mjs web-gpt-connection.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/watchdog"
 cp "$REPO_ROOT/services/watchdog/cle-watchdog.sh" "$CONTENTS/Resources/SuperPinkie/services/watchdog/cle-watchdog.sh"
 cp "$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in" "$CONTENTS/Resources/SuperPinkie/services/watchdog/ai.openclaw.watchdog.plist.in"
-mkdir -p "$CONTENTS/Resources/SuperPinkie/skills/deep-think"
-cp "$REPO_ROOT/skills/deep-think/SKILL.md" "$CONTENTS/Resources/SuperPinkie/skills/deep-think/SKILL.md"
+ditto "$REPO_ROOT/services/chatgpt-collab" "$CONTENTS/Resources/SuperPinkie/services/chatgpt-collab"
+for skill in deep-think web-gpt-collab; do
+  mkdir -p "$CONTENTS/Resources/SuperPinkie/skills/$skill"
+  cp "$REPO_ROOT/skills/$skill/SKILL.md" "$CONTENTS/Resources/SuperPinkie/skills/$skill/SKILL.md"
+done
 
 # The shipped App owns its runtime. User configuration, model keys, history and
 # workspaces remain in ~/.openclaw and are deliberately not copied into it.

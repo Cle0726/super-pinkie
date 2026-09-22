@@ -20,7 +20,7 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(phrases,/问问碧琪/);
   assert.match(phrases,/碧琪正在把新模型请进派对/);
   assert.match(phrases,/watchBrandTitle/);
-  assert.match(phrases,/MutationObserver\(\(\) => syncBrandChrome\(\)\)/);
+  assert.match(phrases,/MutationObserver\(\(\) => syncBrandTitle\(\)\)/);
   for(const label of ['Delete message','Open in canvas','Copy as markdown']){
     assert.match(phrases,new RegExp(`\\["${label.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')}"`));
   }
@@ -34,8 +34,8 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(phrases,/isProtectedContent\(node\).*return/s);
   assert.match(mac,/s\{OpenClaw\}\{CLE Kk\}g/);
   assert.match(windows,/Replace\('OpenClaw', 'CLE Kk'\)/);
-  assert.match(mac,/phrases20/);assert.match(windows,/phrases20/);
-  assert.match(mac,/theme39/);assert.match(windows,/theme39/);
+  assert.match(mac,/phrases21/);assert.match(windows,/phrases21/);
+  assert.match(mac,/theme46/);assert.match(windows,/theme46/);
 });
 
 test('every mode has its own readable text palette without replacing the selected artwork',()=>{
@@ -56,6 +56,34 @@ test('every mode has its own readable text palette without replacing the selecte
   }
   assert.equal(new Set(Object.values(palettes)).size,5);
   assert.match(theme,/\[data-mode="learning"\] \{ --mode-button-ink: #615b9a; \}/);
+});
+
+test('the mode header keeps its controls readable and uses one clear split-window icon',()=>{
+  const classic=read('ui/injections/laolao-classic-shell.css');
+  const theme=read('ui/injections/laolao-theme.css');
+  const mode=read('ui/injections/laolao-mode-switcher.js');
+  assert.match(classic,/\.sidebar-brand__identity \{[\s\S]*display: flex !important;[\s\S]*min-width: 0;/);
+  assert.match(classic,/\.sidebar-brand__identity > \.laolao-mode-switcher \{[\s\S]*flex: 1 1 126px;/);
+  assert.match(classic,/\.laolao-mode-button__label \{[\s\S]*min-width: max-content;[\s\S]*text-overflow: clip;/);
+  assert.match(classic,/\.sidebar-brand__actions > openclaw-tooltip:has\(\.sidebar-search\),[\s\S]*display: none !important;/);
+  assert.match(theme,/\.laolao-mode-dock-trigger \{[\s\S]*width: 32px;[\s\S]*flex: 0 0 32px;/);
+  assert.match(mode,/rect x="3\.5" y="4\.5" width="17" height="15"/);
+  assert.match(mode,/path d="M12 4\.5v15"/);
+  assert.doesNotMatch(mode,/rect x="4" y="5" width="10" height="12"/);
+});
+
+test('the sidebar footer keeps primary controls visible and groups secondary tools',()=>{
+  const classic=read('ui/injections/laolao-classic-shell.css');
+  const shell=read('ui/injections/laolao-classic-shell.js');
+  assert.match(shell,/const footerSecondaryActions = \[/);
+  for(const key of ['fullscreen','theme','pair','memory','docs','update']){
+    assert.match(shell,new RegExp(`key: "${key}"`));
+  }
+  assert.match(shell,/aria-label", "更多工具"/);
+  assert.match(shell,/original\.click\(\)/);
+  assert.match(classic,/\[data-laolao-footer-secondary="1"\][\s\S]*display: none !important/);
+  assert.match(classic,/\.laolao-footer-overflow \{[\s\S]*width: 190px/);
+  assert.match(classic,/\.laolao-footer-more \{[\s\S]*width: 32px !important/);
 });
 
 test('empty chat keeps only the avatar and name with a bounded particle entrance',()=>{

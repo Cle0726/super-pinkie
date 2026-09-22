@@ -166,16 +166,153 @@ class ProxyStreamTests(unittest.TestCase):
             self.assertIn('UR_PROXY_STREAM_IDLE_TIMEOUT',source)
             self.assertIn('SSE ended before terminal model event',source)
 
-    def test_default_retry_window_tolerates_a_flapping_upstream(self):
-        """Defaults must wait long enough for a slow provider to recover."""
+    def test_default_retry_window_is_bounded_without_removing_replay_recovery(self):
+        """A relay may retry quick flaps, but one request cannot occupy a turn for minutes."""
         for filename in ('ur-rewrite-proxy.py', 'mm-retry-proxy.py'):
             source = (ROOT / 'proxy' / filename).read_text()
             self.assertRegex(source, r'UR_PROXY_MAX_ATTEMPTS[^\n]*"64"', filename)
             self.assertRegex(source, r'UR_PROXY_FIRST_BYTE_TIMEOUT[^\n]*"35"', filename)
             self.assertRegex(source, r'UR_PROXY_STREAM_IDLE_TIMEOUT[^\n]*"30"', filename)
+            self.assertRegex(source, r'UR_PROXY_RETRY_BUDGET[^\n]*"75"', filename)
+            self.assertRegex(source, r'UR_PROXY_HTTP_STATUS_ATTEMPTS[^\n]*"4"', filename)
             self.assertRegex(source, r'UR_PROXY_RETRY_BASE_DELAY[^\n]*"0\.2"', filename)
             self.assertRegex(source, r'UR_PROXY_RETRY_MAX_DELAY[^\n]*"3"', filename)
             self.assertIn('RETRY_MAX_DELAY_SECONDS', source, filename)
+
+    def test_retryable_http_statuses_stop_at_the_status_budget(self):
+        """Repeated 503s are not replay failures and must not consume all 64 attempts."""
+        for filename in ('ur-rewrite-proxy.py', 'mm-retry-proxy.py'):
+            class Upstream(BaseHTTPRequestHandler):
+                calls = 0
+
+                def do_POST(self):
+                    length = int(self.headers.get('Content-Length', '0'))
+                    if length:
+                        self.rfile.read(length)
+                    type(self).calls += 1
+                    payload = b'{"error":{"message":"busy"}}'
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.send_header('Connection', 'close')
+                    self.end_headers()
+                    self.wfile.write(payload)
+
+                def log_message(self, *_args):
+                    pass
+
+            upstream = ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
+            upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+            upstream_thread.start()
+            proxy_port = self.free_port()
+            env = dict(os.environ)
+            env.update({
+                'UR_PROXY_UPSTREAM_HOST': '127.0.0.1',
+                'UR_PROXY_UPSTREAM_PORT': str(upstream.server_port),
+                'UR_PROXY_MAX_ATTEMPTS': '64',
+                'UR_PROXY_HTTP_STATUS_ATTEMPTS': '3',
+                'UR_PROXY_RETRY_BASE_DELAY': '0.1',
+                'UR_PROXY_RETRY_STEP': '0',
+            })
+            command = [sys.executable, str(ROOT / 'proxy' / filename), str(proxy_port)]
+            if filename.startswith('mm-'):
+                command.append(str(upstream.server_port))
+            process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True)
+            try:
+                deadline = time.time() + 5
+                while True:
+                    try:
+                        with urllib.request.urlopen(f'http://127.0.0.1:{proxy_port}/health', timeout=.3):
+                            break
+                    except Exception:
+                        if time.time() >= deadline:
+                            self.fail(filename + ' did not start')
+                        time.sleep(.05)
+                request = urllib.request.Request(
+                    f'http://127.0.0.1:{proxy_port}/v1/chat/completions',
+                    data=json.dumps({'model': 'test', 'stream': True, 'messages': []}).encode(),
+                    headers={'Content-Type': 'application/json'},
+                )
+                with self.assertRaises(Exception):
+                    urllib.request.urlopen(request, timeout=5)
+                self.assertEqual(Upstream.calls, 3, filename)
+            finally:
+                process.terminate()
+                try:
+                    process.communicate(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=3)
+                upstream.shutdown()
+                upstream.server_close()
+                upstream_thread.join(2)
+
+    def test_account_unavailable_is_not_retried_by_the_transport(self):
+        """Changing models cannot repair an empty local account pool."""
+        for filename in ('ur-rewrite-proxy.py', 'mm-retry-proxy.py'):
+            class Upstream(BaseHTTPRequestHandler):
+                calls = 0
+
+                def do_POST(self):
+                    length = int(self.headers.get('Content-Length', '0'))
+                    if length:
+                        self.rfile.read(length)
+                    type(self).calls += 1
+                    payload = b'{"error":{"message":"auth_unavailable: no auth available"}}'
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.send_header('Connection', 'close')
+                    self.end_headers()
+                    self.wfile.write(payload)
+
+                def log_message(self, *_args):
+                    pass
+
+            upstream = ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
+            upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+            upstream_thread.start()
+            proxy_port = self.free_port()
+            env = dict(os.environ)
+            env.update({
+                'UR_PROXY_UPSTREAM_HOST': '127.0.0.1',
+                'UR_PROXY_UPSTREAM_PORT': str(upstream.server_port),
+                'UR_PROXY_MAX_ATTEMPTS': '64',
+            })
+            command = [sys.executable, str(ROOT / 'proxy' / filename), str(proxy_port)]
+            if filename.startswith('mm-'):
+                command.append(str(upstream.server_port))
+            process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True)
+            try:
+                deadline = time.time() + 5
+                while True:
+                    try:
+                        with urllib.request.urlopen(f'http://127.0.0.1:{proxy_port}/health', timeout=.3):
+                            break
+                    except Exception:
+                        if time.time() >= deadline:
+                            self.fail(filename + ' did not start')
+                        time.sleep(.05)
+                request = urllib.request.Request(
+                    f'http://127.0.0.1:{proxy_port}/v1/chat/completions',
+                    data=json.dumps({'model': 'test', 'stream': True, 'messages': []}).encode(),
+                    headers={'Content-Type': 'application/json'},
+                )
+                with self.assertRaises(Exception):
+                    urllib.request.urlopen(request, timeout=5)
+                self.assertEqual(Upstream.calls, 1, filename)
+            finally:
+                process.terminate()
+                try:
+                    process.communicate(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=3)
+                upstream.shutdown()
+                upstream.server_close()
+                upstream_thread.join(2)
 
     def test_gemini_38_uses_the_hard_prompt_route(self):
         for filename in ('ur-rewrite-proxy.py','mm-retry-proxy.py'):

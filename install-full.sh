@@ -231,6 +231,26 @@ printf 'PINKIE_REPO=%q\n' "$REPO_ROOT" > "$CONFIG_ROOT/install.env"
 printf 'PINKIE_PROVIDER=%q\n' "$PROVIDER" >> "$CONFIG_ROOT/install.env"
 printf 'PINKIE_APP_PATH=%q\n' "$TARGET_APP" >> "$CONFIG_ROOT/install.env"
 
+# A successful copy is not yet a successful update. Verify the final envelope
+# after every UI/runtime hotfix has run, while the previous App is still
+# available for the failure trap to restore. Local ad-hoc builds must use the
+# stable identifier requirement; a CDHash-only identity would make macOS ask
+# for Accessibility/Screen Recording again after the next update.
+if ! codesign --verify --deep --strict "$TARGET_APP" >/dev/null 2>&1; then
+  echo "更新后的 App 签名校验失败，正在恢复上一版。" >&2
+  exit 1
+fi
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$TARGET_APP/Contents/Info.plist" 2>/dev/null || true)" != "com.cle0726.super-pinkie" ]]; then
+  echo "更新后的 App 身份不正确，正在恢复上一版。" >&2
+  exit 1
+fi
+if codesign -dvv "$TARGET_APP" 2>&1 | grep -Fq 'Signature=adhoc' \
+    && ! codesign -dr - "$TARGET_APP" 2>&1 \
+      | grep -Fq 'designated => identifier "com.cle0726.super-pinkie"'; then
+  echo "更新后的本地权限身份不稳定，正在恢复上一版。" >&2
+  exit 1
+fi
+
 APP_SWAP_ACTIVE=0
 trap - EXIT
 

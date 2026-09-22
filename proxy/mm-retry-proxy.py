@@ -312,10 +312,16 @@ MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_MAX_ATTEMPTS", "64")))
 SERVICE_NAME = "super-pinkie-relay"
 FIRST_BYTE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_FIRST_BYTE_TIMEOUT", "35")))
 STREAM_IDLE_TIMEOUT_SECONDS = max(5, int(os.environ.get("UR_PROXY_STREAM_IDLE_TIMEOUT", "30")))
+RETRY_BUDGET_SECONDS = max(1.0, float(os.environ.get("UR_PROXY_RETRY_BUDGET", "75")))
+HTTP_STATUS_MAX_ATTEMPTS = max(1, int(os.environ.get("UR_PROXY_HTTP_STATUS_ATTEMPTS", "4")))
 RETRY_BASE_DELAY_SECONDS = max(0.1, float(os.environ.get("UR_PROXY_RETRY_BASE_DELAY", "0.2")))
 RETRY_STEP_SECONDS = max(0.0, float(os.environ.get("UR_PROXY_RETRY_STEP", "0.1")))
 RETRY_MAX_DELAY_SECONDS = max(RETRY_BASE_DELAY_SECONDS, float(os.environ.get("UR_PROXY_RETRY_MAX_DELAY", "3")))
 RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 529, 530}
+ACCOUNT_UNAVAILABLE = re.compile(
+    r'auth[_ -]?unavailable|no auth available|no account|account unavailable|暂无账号',
+    re.IGNORECASE,
+)
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -393,6 +399,8 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                 "ok": True,
                 "service": SERVICE_NAME,
                 "attempts": MAX_ATTEMPTS,
+                "retryBudgetSeconds": RETRY_BUDGET_SECONDS,
+                "httpStatusAttempts": HTTP_STATUS_MAX_ATTEMPTS,
             })
             return
 
@@ -439,17 +447,34 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
 
         last_error = None
         refusal_retried = False
+        request_started = time.monotonic()
+        retryable_status_attempts = 0
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            remaining = RETRY_BUDGET_SECONDS - (time.monotonic() - request_started)
+            if remaining <= 0:
+                break
             connection = http.client.HTTPConnection(
-                UPSTREAM_HOST, UPSTREAM_PORT, timeout=FIRST_BYTE_TIMEOUT_SECONDS
+                UPSTREAM_HOST, UPSTREAM_PORT,
+                timeout=max(1.0, min(FIRST_BYTE_TIMEOUT_SECONDS, remaining)),
             )
             try:
                 connection.request(self.command, self.path, body=body, headers=headers)
                 response = connection.getresponse()
-                if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_ATTEMPTS:
-                    response.read()
-                    time.sleep(retry_delay(attempt, response))
-                    continue
+                if response.status in RETRYABLE_STATUS_CODES:
+                    retryable_status_attempts += 1
+                    payload = response.read()
+                    ctype = (response.getheader("Content-Type") or "").lower()
+                    if ACCOUNT_UNAVAILABLE.search(payload.decode("utf-8", "replace")):
+                        self.respond_bytes(response.status, response.getheaders(), payload, ctype)
+                        return
+                    if attempt < MAX_ATTEMPTS and retryable_status_attempts < HTTP_STATUS_MAX_ATTEMPTS:
+                        delay = retry_delay(attempt, response)
+                        remaining = RETRY_BUDGET_SECONDS - (time.monotonic() - request_started)
+                        if remaining > delay:
+                            time.sleep(delay)
+                            continue
+                    self.respond_bytes(response.status, response.getheaders(), payload, ctype)
+                    return
 
                 ctype = (response.getheader("Content-Type") or "").lower()
                 is_stream = "text/event-stream" in ctype
@@ -537,11 +562,13 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                     self.close_connection = True
                     return
                 last_error = error
-                if attempt < MAX_ATTEMPTS:
-                    delay = retry_delay(attempt)
+                remaining = RETRY_BUDGET_SECONDS - (time.monotonic() - request_started)
+                if attempt < MAX_ATTEMPTS and remaining > 0:
+                    delay = min(retry_delay(attempt), remaining)
                     print("retry-proxy: transient %s attempt=%d/%d retry-in=%.2fs" % (
                         type(error).__name__, attempt, MAX_ATTEMPTS, delay), flush=True)
-                    time.sleep(delay)
+                    if delay > 0:
+                        time.sleep(delay)
                     continue
             finally:
                 connection.close()

@@ -38,14 +38,18 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             plugin = installed['plugins']['entries']['pinkie-mode-architecture']
             self.assertTrue(plugin['hooks']['allowPromptInjection'])
             self.assertTrue(plugin['hooks']['allowConversationAccess'])
+            collab_wrapper = (home / 'Library/Application Support/SuperPinkie/web-gpt-collab/pinkie-collab').read_text()
+            self.assertIn('C2C_TUNNEL_PROTOCOL', collab_wrapper)
+            self.assertIn('http2', collab_wrapper)
             manifest = json.loads((home / '.openclaw/extensions/pinkie-mode-architecture/openclaw.plugin.json').read_text())
-            self.assertEqual(sorted(manifest['contracts']['tools']), ['clekk_memory', 'computer', 'delivery_guard'])
+            self.assertEqual(sorted(manifest['contracts']['tools']), ['clekk_memory', 'computer', 'delivery_guard', 'learning_activity', 'web_gpt_activity'])
             for mode, relative in setup.MODE_WORKSPACES.items():
                 ws = home / relative
                 self.assertEqual((ws / 'SOUL.md').read_text(), 'USER CUSTOM CONTEXT\n')
                 self.assertTrue((ws / 'memory/INDEX.md').is_file())
                 self.assertTrue((ws / 'memory/context/active.md').is_file())
                 self.assertTrue((ws / 'skills/deep-think/SKILL.md').is_file())
+                self.assertTrue((ws / 'skills/web-gpt-collab/SKILL.md').is_file())
                 self.assertEqual((ws / 'persona').exists(), mode != 'none')
             none_identity = (home / setup.MODE_WORKSPACES['none'] / 'IDENTITY.md').read_text()
             self.assertEqual(none_identity, 'CUSTOM IDENTITY\n')

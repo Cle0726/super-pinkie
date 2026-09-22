@@ -13,8 +13,35 @@ test('image access supports both legacy and current OpenClaw boundary layouts',(
   const oldPatched=transform(legacy),currentPatched=transform(current);
   assert.match(oldPatched,/_pinkiePathIsUnderRoots/);
   assert.match(currentPatched,/\.\.\._pinkieResolveExtraMediaRoots\(\)/);
+  assert.match(oldPatched,/_pinkieWorkspaceRoots/);
+  assert.match(oldPatched,/workspace\(\?:-\[a-z0-9\]/);
+  assert.match(oldPatched,/Do not allow ~\/\.openclaw itself/);
+  assert.match(oldPatched,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return/);
   assert.equal(transform(oldPatched),oldPatched);
   assert.equal(transform(currentPatched),currentPatched);
+});
+
+test('image access upgrades the previous narrow v1 patch in place',()=>{
+  const v1=`/* pinkie-image-access:v1 */\nimport os from "node:os";\nlet _pinkieExtraMediaRoots;\nfunction _pinkieResolveExtraMediaRoots() { return []; }\nfunction _pinkiePathIsUnderRoots() { return false; }\n${anchor}mediaPath, localRoots) {\n\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n}`;
+  const upgraded=transform(v1);
+  assert.match(upgraded,/pinkie-image-access:v3/);
+  assert.doesNotMatch(upgraded,/pinkie-image-access:v1/);
+  assert.match(upgraded,/_pinkieWorkspaceRoots/);
+  assert.match(upgraded,/import fsSync from "node:fs"/);
+  assert.equal(transform(upgraded),upgraded);
+});
+
+test('image access upgrades v2 so Control UI agent-scoped roots include exact workspaces',()=>{
+  const v2=transform(legacy).replace('pinkie-image-access:v3','pinkie-image-access:v2')
+    .replace(
+      'if (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;',
+      'if (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;'
+    );
+  const upgraded=transform(v2);
+  assert.match(upgraded,/pinkie-image-access:v3/);
+  assert.match(upgraded,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return/);
+  assert.doesNotMatch(upgraded,/localRoots === void 0 && _pinkiePathIsUnderRoots/);
+  assert.equal(transform(upgraded),upgraded);
 });
 
 test('image access patch validates before changing the runtime and is idempotent',()=>{

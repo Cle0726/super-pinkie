@@ -13,6 +13,19 @@
   if (splash.dataset.laolaoSplashController === '1') return;
   splash.dataset.laolaoSplashController = '1';
   const url = new URL(window.location.href);
+  const docked = url.searchParams.get('laolao-dock') === '1';
+  if (docked) {
+    // The companion is opening inside an already-live native App. Do not
+    // replay either entry animation over the work panel; keep only its own
+    // independent mode/session route.
+    url.searchParams.delete('laolao-dock');
+    window.history.replaceState(window.history.state, '', url.href);
+    splash.remove();
+    window.dispatchEvent(new CustomEvent('laolao:splash-cleared', {
+      detail: { docked: true },
+    }));
+    return;
+  }
   const switching = url.searchParams.get('laolao-switch') === '1' || sessionStorage.getItem('laolao:skip-entry-splash') === '1';
   let handoff = null;
   try { handoff = JSON.parse(sessionStorage.getItem('laolao:mode-handoff') || 'null'); } catch {}
@@ -67,7 +80,14 @@
       // splash to the stale localStorage value captured before restoration.
       const mountedMode = document.documentElement.getAttribute('data-laolao-mode');
       const readyMode = !switching && ids.includes(mountedMode) ? mountedMode : mode;
-      return motion.chatReady(readyMode);
+      if (motion.chatReady(readyMode)) return true;
+      // A long transcript, compaction checkpoint, or an upstream render
+      // change can make the sidebar arrive before the composer. The page is
+      // already usable in that state, so never keep the entire App hidden
+      // merely because one narrow composer selector has not appeared yet.
+      return Boolean(document.querySelector(
+        '.sidebar-brand, .sidebar-recent-sessions, .dashboard-header, .agent-chat'
+      )) && !document.querySelector('.login-gate, .chat-loading-skeleton');
     }
     // Non-chat pages may be opened directly. Wait for actual page content too.
     return Boolean(document.querySelector('.content > :not(:empty)')) && !document.querySelector('.login-gate, .chat-loading-skeleton');
@@ -102,6 +122,10 @@
       : switching ? details.waiting : phrases[Math.min(phrases.length - 1, Math.floor(elapsed / 560))];
     setProgress(Math.min(switching ? 96 : 94, initial + elapsed / (switching ? 92 : 28)), phrase);
     if (ready(now) && elapsed >= minimum) return leave();
+    // The shell is mounted but a future upstream DOM may not match one of the
+    // readiness selectors above. Reveal the real page instead of leaving an
+    // apparently dead loading screen over it forever.
+    if (elapsed >= 6500 && document.querySelector('openclaw-app-shell, openclaw-app .shell')) return leave(false);
     // Real login/errors stay usable, but transient login mounts during a
     // handoff should never flash between the two scenes.
     if ((loginReady(now) && elapsed >= 5000) || document.querySelector('#openclaw-mount-fallback:not([hidden])')) return leave(false);

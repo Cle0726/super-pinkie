@@ -403,7 +403,7 @@ class PartyTests(unittest.TestCase):
 
     def test_party_identity_is_name_only_and_preserves_task_writing_requirements(self):
         expected = {'pinkie':'碧琪', 'codex':'紫悦', 'openclaw':'云宝',
-                    'claude':'珍奇', 'gemini':'柔柔', 'ollama':'苹果嘉儿'}
+                    'claude':'珍奇', 'gemini':'柔柔', 'grok':'苹果嘉儿'}
         self.assertEqual(expected, party.CHARACTERS)
         self.assertEqual(party.IDENTITIES, setup.IDENTITIES)
         task_text = '请用第一人称写一篇英文长篇故事，保留主角的 I 和 we。'

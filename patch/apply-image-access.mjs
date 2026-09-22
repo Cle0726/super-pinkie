@@ -4,7 +4,8 @@
  * Adds an early-return allowlist check to OpenClaw's
  * `assertLocalMediaAllowed()` so local files under common user
  * directories (~/Desktop, ~/Downloads, ~/Documents, ~/.workbuddy,
- * ~/WorkBuddy) can be displayed inside the control UI without
+ * ~/WorkBuddy, and the user's explicit ~/.openclaw/workspace* directories)
+ * can be displayed inside the control UI without
  * tripping "Outside allowed folders" (`path-not-allowed`).
  *
  * The patch is idempotent (guarded by a marker comment) and version-
@@ -18,22 +19,37 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const marker = "/* pinkie-image-access:v1 */";
+const marker = "/* pinkie-image-access:v3 */";
+const legacyMarker = "/* pinkie-image-access:v1 */";
+const previousMarker = "/* pinkie-image-access:v2 */";
 
 /**
  * Header injected at the very top of the patched dist file.
- * Imports `os` (the file already imports path/fs/promises but not os).
+ * Imports `os` and the synchronous directory reader. The source module already
+ * imports `path` and `fs/promises`; this separate reader is used only once to
+ * enumerate specific workspace directories, never the whole state directory.
  */
-const header = marker + '\nimport os from "node:os";\n';
+const header = marker + '\nimport os from "node:os";\nimport fsSync from "node:fs";\n';
 
 /**
  * Helper functions injected near the top of the file. They expose:
- *   _pinkieResolveExtraMediaRoots(): returns absolute path list, cached.
+ *   _pinkieResolveExtraMediaRoots(): returns exact absolute media roots, cached.
  *   _pinkiePathIsUnderRoots(p, roots): pure membership test.
  * Designed to be tiny and side-effect free — runs once per call.
  */
 const helpers = `
 let _pinkieExtraMediaRoots;
+function _pinkieWorkspaceRoots(home) {
+  const stateDir = path.resolve(path.join(home, ".openclaw"));
+  let entries = [];
+  try { entries = fsSync.readdirSync(stateDir, { withFileTypes: true }); } catch {}
+  return entries.flatMap((entry) => {
+    /* Do not allow ~/.openclaw itself: it holds settings and credentials.
+       Only real workspace directories get a display-media exception. */
+    if (!entry.isDirectory() || !/^workspace(?:-[a-z0-9][a-z0-9._-]*)?$/i.test(entry.name)) return [];
+    try { return [path.resolve(stateDir, entry.name)]; } catch { return []; }
+  });
+}
 function _pinkieResolveExtraMediaRoots() {
   if (_pinkieExtraMediaRoots) return _pinkieExtraMediaRoots;
   const home = (os && typeof os.homedir === "function")
@@ -47,8 +63,8 @@ function _pinkieResolveExtraMediaRoots() {
       if (abs && abs !== path.parse(abs).root) list.push(abs);
     } catch {}
   }
-  _pinkieExtraMediaRoots = list;
-  return list;
+  _pinkieExtraMediaRoots = [...new Set([...list, ..._pinkieWorkspaceRoots(home)])];
+  return _pinkieExtraMediaRoots;
 }
 function _pinkiePathIsUnderRoots(mediaPath, roots) {
   if (!mediaPath || !roots || !roots.length) return false;
@@ -80,7 +96,36 @@ function replaceOnce(text, from, to) {
  */
 export function transform(original) {
   if (original.includes(marker)) return original;
+
+  /* v2 had the right exact workspace list but only applied it to callers that
+     omitted localRoots. Control UI supplies an agent-scoped root array, so its
+     media endpoint still rejected a valid workspace-project path. Retain the
+     same narrow roots, but apply them before either default or explicit root
+     resolution. */
+  if (original.includes(previousMarker)) {
+    const oldCheck = '\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
+    const newCheck = '\tif (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
+    return original
+      .replace(previousMarker, marker)
+      .replace(oldCheck, newCheck);
+  }
   let text = original;
+
+  /* v1 ran in real installs but did not include ~/.openclaw/workspace-*.
+     Remove only our own v1 envelope, then apply the v2 transform cleanly. */
+  if (text.includes(legacyMarker)) {
+    const doc = "/** Verifies that a local media path is managed inbound media or lives under allowed roots. */\n";
+    const helperStart = "let _pinkieExtraMediaRoots;\n";
+    text = text.replace(legacyMarker + '\nimport os from "node:os";\n', "");
+    const start = text.indexOf(helperStart);
+    const end = text.indexOf(doc, start);
+    if (start < 0 || end < 0) throw new Error("旧版图片白名单代码结构已变化，未覆盖");
+    text = text.slice(0, start) + text.slice(end);
+    text = text.replace(
+      '\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n',
+      ""
+    );
+  }
 
   // Inject helper functions right before the assertLocalMediaAllowed
   // declaration. We anchor on the doc-comment + signature so this
@@ -94,20 +139,21 @@ export function transform(original) {
     "async function assertLocalMediaAllowed(";
   text = replaceOnce(text, anchorFrom, anchorTo);
 
-  // Extend only the default allowlist. Explicit roots (including "any")
-  // still win. OpenClaw 2026.9 moved the inbound check into
-  // resolveLocalMediaBoundary; prefer adding canonical roots there so the
-  // upstream realpath, hardlink and boundary checks remain intact.
+  // Add only exact user workspace directories. This must happen for both
+  // default and agent-scoped roots: Control UI supplies the latter even though
+  // the agent is deliberately allowed to render its own project output.
+  // OpenClaw 2026.9 moved some callers into resolveLocalMediaBoundary, so
+  // retain that path too and leave its realpath/boundary checks intact.
   const inboundFrom =
     '\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n';
   const inboundTo =
     '\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n' +
-    '\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
+    '\tif (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
   const boundaryFrom =
     '\tconst roots = localRoots ?? getDefaultLocalRootsCore();\n' +
     '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
   const boundaryTo =
-    '\tconst roots = localRoots ?? [...getDefaultLocalRootsCore(), ..._pinkieResolveExtraMediaRoots()];\n' +
+    '\tconst roots = [...(localRoots ?? getDefaultLocalRootsCore()), ..._pinkieResolveExtraMediaRoots()];\n' +
     '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
   if (text.split(inboundFrom).length === 2) text = text.replace(inboundFrom, inboundTo);
   else if (text.split(boundaryFrom).length === 2) text = text.replace(boundaryFrom, boundaryTo);

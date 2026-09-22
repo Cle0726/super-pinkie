@@ -31,8 +31,10 @@
   const prefersReduced = () =>
     Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
-  // Bubbles we've already wired a subtree observer onto.
-  const wiredBubbles = new WeakSet();
+  // An observer keeps every target alive until disconnect(). Keep one observer
+  // per active bubble so a finished/removed streaming bubble can be released
+  // immediately instead of remaining retained by a shared observer forever.
+  const bubbleObservers = new Map();
   // Cursor span per bubble, so we can move it instead of recreating.
   const cursorByBubble = new WeakMap();
 
@@ -75,56 +77,65 @@
     removeCursor(bubble);
   }
 
-  // Subtree observer:只负责把光标 re-append 到气泡末尾，让光标
-  // 始终跟在最新文本后面。不碰任何内容节点的样式——这是和上一
-  // 版的关键差别，上一版给每个新节点加 fade-in 反而制造了 PPT
-  // 感。
-  // v3：rAF 节流。流式每个 chunk 产生一批 childList record，
-  // 每条都 appendChild 会造成布局颠簸；合并到每帧最多一次。
+  // Subtree observers only move the cursor to the end of their own active
+  // bubble. rAF combines many stream chunks into at most one append per frame.
   let cursorQueued = false;
   const pendingCursorBubbles = new Set();
-  const subtreeObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.type !== "childList") continue;
-      const bubble = m.target.closest ? m.target.closest(STREAM_BUBBLE_SEL) : null;
-      if (!bubble) continue;
-      pendingCursorBubbles.add(bubble);
-    }
+  function scheduleCursor(bubble) {
+    if (!bubbleObservers.has(bubble) || !bubble.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) return;
+    pendingCursorBubbles.add(bubble);
     if (cursorQueued || pendingCursorBubbles.size === 0) return;
     cursorQueued = true;
     requestAnimationFrame(() => {
       cursorQueued = false;
       pendingCursorBubbles.forEach((bubble) => {
-        if (bubble.isConnected) ensureCursor(bubble);
+        if (bubbleObservers.has(bubble) && bubble.isConnected && bubble.matches(STREAM_BUBBLE_SEL)) ensureCursor(bubble);
       });
       pendingCursorBubbles.clear();
     });
-  });
+  }
 
   function attachToBubble(bubble) {
-    if (wiredBubbles.has(bubble)) return;
-    wiredBubbles.add(bubble);
-    subtreeObserver.observe(bubble, { childList: true, subtree: true });
+    if (!bubble?.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) return;
+    if (!bubbleObservers.has(bubble)) {
+      const observer = new MutationObserver((mutations) => {
+        if (!bubble.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) {
+          detachFromBubble(bubble);
+          return;
+        }
+        if (mutations.some((mutation) => mutation.type === "childList")) scheduleCursor(bubble);
+      });
+      bubbleObservers.set(bubble, observer);
+      observer.observe(bubble, { childList: true, subtree: true });
+    }
     markStreaming(bubble);
   }
 
   function detachFromBubble(bubble) {
-    // WeakSet means we won't re-attach next time, but the subtree
-    // observer kept its target reference; once the bubble is gone the
-    // observer is inert. We just need to clear our visual markers.
+    const observer = bubbleObservers.get(bubble);
+    observer?.disconnect();
+    bubbleObservers.delete(bubble);
+    pendingCursorBubbles.delete(bubble);
     unmarkStreaming(bubble);
+  }
+
+  function pruneDetachedBubbles() {
+    bubbleObservers.forEach((_, bubble) => {
+      if (!bubble.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) detachFromBubble(bubble);
+    });
   }
 
   function scanForBubbles(root) {
     let streaming = root.querySelectorAll ? root.querySelectorAll(STREAM_BUBBLE_SEL) : [];
     streaming.forEach(attachToBubble);
 
-    // Bubbles that previously had our marker but have lost .streaming:
-    // streaming finished — clean up.
+    // Remove stale markers from an earlier script instance too, then release
+    // all observers whose bubble was removed or finished.
     let stale = root.querySelectorAll
       ? root.querySelectorAll(`.chat-bubble[${STREAMING_ATTR}="true"]:not(.streaming)`)
       : [];
-    stale.forEach(detachFromBubble);
+    stale.forEach(unmarkStreaming);
+    pruneDetachedBubbles();
   }
 
   // Top-level observer on the chat thread: catches brand new bubbles
@@ -149,6 +160,10 @@
     for (const m of mutations) {
       if (m.type === "childList") {
         // 有元素增删就约一次帧级扫描，不在回调里逐个 qSA。
+        // A removal may be the active streaming bubble itself. Queue one
+        // cleanup pass even when nothing was added, otherwise its observer
+        // would retain a detached DOM subtree.
+        if (m.removedNodes.length) needScan = true;
         for (const node of m.addedNodes) {
           if (node.nodeType === 1) { needScan = true; break; }
         }

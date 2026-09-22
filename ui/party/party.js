@@ -1,11 +1,11 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const names = {pinkie:'碧琪',codex:'紫悦',openclaw:'云宝',claude:'珍奇',gemini:'柔柔',ollama:'苹果嘉儿',user:'铲屎官',system:'派对记录'};
+  const names = {pinkie:'碧琪',codex:'紫悦',openclaw:'云宝',claude:'珍奇',gemini:'柔柔',grok:'苹果嘉儿',user:'铲屎官',system:'派对记录'};
   // Keep the stable `openclaw` dispatch id for stored rooms and compatibility,
   // but never expose the upstream runtime name as this App's agent brand.
-  const engines={pinkie:'主持',codex:'Codex',openclaw:'CLE Kk',claude:'Claude',gemini:'Gemini',ollama:'Ollama'};
-  const portraits={pinkie:'/avatar.png',codex:'/twilight.png',openclaw:'/rainbow.png',claude:'/rarity.png',gemini:'/fluttershy.png',ollama:'/applejack.png'};
+  const engines={pinkie:'主持',codex:'Codex',openclaw:'CLE Kk',claude:'Claude',gemini:'Gemini',grok:'Grok'};
+  const portraits={pinkie:'/avatar.png',codex:'/twilight.png',openclaw:'/rainbow.png',claude:'/rarity.png',gemini:'/fluttershy.png',grok:'/applejack.png'};
   const state = {token:'',agents:[],rooms:[],room:null,messages:new Map(),tasks:[],reply:null,query:'',signature:'',polling:false,epoch:0,requests:new Map(),sending:new Set(),hasOlder:false,archived:false,loadingRoom:false,metadataAt:0};
   const drafts=window.PartyDrafts;
   const roomArt=window.PartyRoomArt;

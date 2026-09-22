@@ -4,10 +4,9 @@
   // Presentation only: replies/tool output stay intact. The reserved gateway
   // failure sentinel is localized as a system notice, not a character reply.
   //
-  // v2 性能修复（2026-09-01，大会话流式期间整页冻结的根因）：
-  // 1. 删掉每轮回调里的全文档 localizeToolActivity(document) + syncFailureCards()，
-  //    改为 600ms 防抖（原来每个 mutation 批次都全文档扫 4 个 querySelectorAll）。
-  // 2. 删掉死代码：itemSeed/groupSeed 会在守卫判断之前读取整组 textContent
+  // 性能约束：首次启动允许做一次完整中文化；之后只处理新增子树，
+  // 绝不在每个流式 mutation 后重扫 document.body。
+  // 另：删掉死代码：itemSeed/groupSeed 会在守卫判断之前读取整组 textContent
   //    （每组工具输出可达数百 KB），且计算结果从未被使用；连带删除不再被调用的
   //    措辞抽取函数组（toolPhrase/activityPhrase/detailPhrase 等）。
   const failureSentinel='The agent run failed before producing a reply.';
@@ -150,22 +149,43 @@
     while ((node = walker.nextNode())) localizeText(node);
   };
 
-  const syncBrandChrome = () => {
+  // Keep every follow-up pass local to the newly changed subtree.  The old
+  // version periodically walked document.body again, which meant one streamed
+  // token could make us revisit every mounted message and every sidebar item.
+  const ownOrDescendants = (scope, selector) => {
+    if (!scope?.querySelectorAll) return [];
+    const own = scope.nodeType === 1 && scope.matches?.(selector) ? [scope] : [];
+    return own.concat([...scope.querySelectorAll(selector)]);
+  };
+
+  const chatScopeFromNode = (node) => {
+    const element = node?.nodeType === 1 ? node : node?.parentElement;
+    return element?.closest?.(".chat-thread-inner, .chat-thread, .agent-chat") || null;
+  };
+
+  const chatScopeFor = (node) => chatScopeFromNode(node)
+    || document.querySelector(".chat-thread-inner, .chat-thread, .agent-chat");
+
+  const syncBrandTitle = () => {
     if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'CLE Kk');
+  };
+
+  const syncBrandChrome = (scope=document) => {
+    syncBrandTitle();
     // "You" is upstream message chrome, not user-authored content. Localize
     // only the dedicated sender label so a real message containing that word
     // is never rewritten.
-    document.querySelectorAll('.chat-group.user .chat-sender-name').forEach(sender=>{
+    ownOrDescendants(scope,'.chat-group.user .chat-sender-name').forEach(sender=>{
       if(sender.textContent.trim()==='You')sender.textContent='你';
     });
-    document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(control=>{
+    ownOrDescendants(scope,'input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
       const next=value
         .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
         .replace(/OpenClaw/g,'CLE Kk');
       if(next!==value)control.setAttribute('placeholder',next);
     });
-    document.querySelectorAll('[title], [aria-label], img[alt]').forEach(element=>{
+    ownOrDescendants(scope,'[title], [aria-label], img[alt]').forEach(element=>{
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
@@ -173,7 +193,7 @@
         if(next!==value)element.setAttribute(name,next);
       }
     });
-    document.querySelectorAll('button, [role="button"]').forEach(element=>{
+    ownOrDescendants(scope,'button, [role="button"]').forEach(element=>{
       const labels=[element.getAttribute('title'),element.getAttribute('aria-label')].filter(Boolean);
       const label=labels.join(' ');
       const isToolbarHome=element.classList.contains('shell-chrome-controls__home');
@@ -196,9 +216,9 @@
     const head = document.head;
     if (!head || head.dataset.pinkieBrandTitleWatch === '1') return;
     head.dataset.pinkieBrandTitleWatch = '1';
-    const observer = new MutationObserver(() => syncBrandChrome());
+    const observer = new MutationObserver(() => syncBrandTitle());
     observer.observe(head, { subtree: true, childList: true, characterData: true });
-    syncBrandChrome();
+    syncBrandTitle();
   };
 
   const hasTerminalReplyAfter = (group, assistantGroups) => {
@@ -224,9 +244,9 @@
   // ribbon. Publish the reverse transition as soon as the full DOM proves
   // every visible failure has already been superseded.
   let lastFailureProjectionState='unknown';
-  const syncFailureProjectionState = () => {
-    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
-    const unresolvedRuntime=[...document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]')]
+  const syncFailureProjectionState = (scope=chatScopeFor()) => {
+    const assistantGroups=ownOrDescendants(scope,'.chat-group.assistant');
+    const unresolvedRuntime=ownOrDescendants(scope,'.chat-bubble[data-pinkie-runtime-error]')
       .some(bubble=>!hasTerminalReplyAfter(bubble.closest('.chat-group.assistant'),assistantGroups));
     const unresolvedFence=assistantGroups.some(group=>
       [...group.querySelectorAll('.chat-bubble[data-message-text]')].some(bubble=>
@@ -241,9 +261,9 @@
     }
   };
 
-  const syncFailureCards = () => {
-    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
-    document.querySelectorAll('.chat-bubble[data-pinkie-runtime-error]').forEach(bubble=>{
+  const syncFailureCards = (scope=chatScopeFor()) => {
+    const assistantGroups=ownOrDescendants(scope,'.chat-group.assistant');
+    ownOrDescendants(scope,'.chat-bubble[data-pinkie-runtime-error]').forEach(bubble=>{
       const content=bubble.querySelector('.chat-text')?.textContent.trim();
       if(bubble.getAttribute('data-message-text')!==failureSentinel || ![failureSentinel,failureNotice].includes(content)){
         bubble.removeAttribute('data-pinkie-runtime-error');
@@ -270,9 +290,9 @@
     });
   };
 
-  const hideInternalRecoveryTurns = () => {
-    const assistantGroups=[...document.querySelectorAll('.chat-group.assistant')];
-    document.querySelectorAll('.chat-group.user').forEach(group=>{
+  const hideInternalRecoveryTurns = (scope=chatScopeFor()) => {
+    const assistantGroups=ownOrDescendants(scope,'.chat-group.assistant');
+    ownOrDescendants(scope,'.chat-group.user').forEach(group=>{
       const bubbles=[...group.querySelectorAll('.chat-group-messages > .chat-bubble')];
       let hiddenCount=0;
       for(const bubble of bubbles){
@@ -328,8 +348,8 @@
     });
   };
 
-  const hideLegacyThinkPrefixes = () => {
-    document.querySelectorAll('.chat-group.user .chat-bubble[data-message-text]').forEach(bubble=>{
+  const hideLegacyThinkPrefixes = (scope=chatScopeFor()) => {
+    ownOrDescendants(scope,'.chat-group.user .chat-bubble[data-message-text]').forEach(bubble=>{
       const raw=bubble.getAttribute('data-message-text')||'';
       const match=raw.match(/^\[deep-think:(?:base|boost|full|marathon)\]\s*/i);
       if(!match)return;
@@ -361,8 +381,8 @@
   };
 
   const localizeToolActivity = (root) => {
-    const scope = root instanceof Element || root instanceof Document ? root : document;
-    scope.querySelectorAll?.(".chat-activity-group").forEach((group) => {
+    const scope = root?.querySelectorAll ? root : document;
+    ownOrDescendants(scope,".chat-activity-group").forEach((group) => {
       const summary = group.querySelector(".chat-activity-group__summary");
       const label = group.querySelector(".chat-activity-group__label");
       if (label && !label.dataset.laolaoLocalized) {
@@ -382,62 +402,86 @@
     /* A one-step tool run is rendered outside .chat-activity-group. Localize
        these summaries too; otherwise its stock "Edit" / "Tool" labels leak
        through while multi-step activity looks correct. */
-    scope.querySelectorAll?.(".chat-tool-msg-summary").forEach(localizeToolSummary);
-    scope.querySelectorAll?.(".chat-group.tool:not(.chat-group--activity) .chat-sender-name").forEach((sender) => {
+    ownOrDescendants(scope,".chat-tool-msg-summary").forEach(localizeToolSummary);
+    ownOrDescendants(scope,".chat-group.tool:not(.chat-group--activity) .chat-sender-name").forEach((sender) => {
       if (sender.dataset.laolaoLocalized) return;
       sender.textContent = "碧琪的小帮手记录";
       sender.dataset.laolaoLocalized = "1";
     });
 
-    scope.querySelectorAll?.(".chat-tool-card__detail").forEach((detail) => {
+    ownOrDescendants(scope,".chat-tool-card__detail").forEach((detail) => {
       if (detail.dataset.laolaoLocalized) return;
       // Do not replace real progress with an invented activity sentence.
       detail.dataset.laolaoLocalized = "1";
     });
   };
 
+  let chatProjectionTimer = 0;
+  let pendingChatScope = null;
+  const scheduleChatProjection = (node) => {
+    const scope = chatScopeFromNode(node) || chatScopeFor();
+    if (!scope) return;
+    pendingChatScope = scope;
+    if (chatProjectionTimer) return;
+    // Failure/recovery state depends on message order, so it needs one small
+    // chat-local pass. It is not a document-wide polling loop: only an actual
+    // chat mutation can schedule it, and it is coalesced during streaming.
+    chatProjectionTimer = window.setTimeout(() => {
+      chatProjectionTimer = 0;
+      const current = pendingChatScope?.isConnected ? pendingChatScope : chatScopeFor();
+      pendingChatScope = null;
+      if (!current) return;
+      syncFailureCards(current);
+      hideInternalRecoveryTurns(current);
+      syncFailureProjectionState(current);
+      hideLegacyThinkPrefixes(current);
+    }, 350);
+  };
+
+  const localizeAddedSubtree = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      localizeText(node);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    localizeTree(node);
+    syncBrandChrome(node);
+    localizeToolActivity(node);
+  };
+
   const start = () => {
+    // One initial pass is needed for already-mounted chrome. From this point
+    // on, only the exact newly added subtree is touched.
     localizeTree(document.body);
-    syncBrandChrome();
+    syncBrandChrome(document);
     watchBrandTitle();
     localizeToolActivity(document);
-    syncFailureCards();
-    hideInternalRecoveryTurns();
-    syncFailureProjectionState();
-    hideLegacyThinkPrefixes();
+    const initialChat = chatScopeFor();
+    if (initialChat) {
+      syncFailureCards(initialChat);
+      hideInternalRecoveryTurns(initialChat);
+      syncFailureProjectionState(initialChat);
+      hideLegacyThinkPrefixes(initialChat);
+    }
 
-    /* 全文档补扫做 600ms 防抖：Lit 有时就地复用节点（不触发 addedNodes），
-       需要定期兜底；但绝不能每个 mutation 批次都全扫。
-       v3：新增元素的语言树/工具条本地化也全部并入这次防抖扫描——
-       观察者回调里跑 querySelectorAll 会疯狂制造 NodeList 包装对象，
-       是 2026-09-01 第三次冻结实抓到的 GC 雪崩主凶。 */
-    let fullScanScheduled = false;
-    const scheduleFullScan = () => {
-      if (fullScanScheduled) return;
-      fullScanScheduled = true;
-      setTimeout(() => {
-        fullScanScheduled = false;
-        localizeTree(document.body);
-        syncBrandChrome();
-        watchBrandTitle();
-        localizeToolActivity(document);
-        syncFailureCards();
-        hideInternalRecoveryTurns();
-        syncFailureProjectionState();
-        hideLegacyThinkPrefixes();
-      }, 600);
-    };
-
+    // openclaw-app is the stable application mount. Observing it (rather than
+    // document.body) keeps portal/splash/background churn out of localization
+    // work and avoids a perpetual whole-page scan during streamed output.
+    const appRoot = document.querySelector("openclaw-app") || document.querySelector("#openclaw-mount-fallback");
+    if (!appRoot || appRoot.dataset.pinkieLocalizedWatch === "1") return;
+    appRoot.dataset.pinkieLocalizedWatch = "1";
     new MutationObserver((records) => {
+      let chatChanged = false;
       for (const record of records) {
-        // 回调里只做零分配的纯文本替换；元素级扫描全部交给防抖。
         if (record.type === "characterData") localizeText(record.target);
+        if (chatScopeFromNode(record.target)) chatChanged = true;
         for (const node of record.addedNodes) {
-          if (node.nodeType === Node.TEXT_NODE) localizeText(node);
+          localizeAddedSubtree(node);
+          if (chatScopeFromNode(node)) chatChanged = true;
         }
       }
-      scheduleFullScan();
-    }).observe(document.body, { childList: true, characterData: true, subtree: true });
+      if (chatChanged) scheduleChatProjection();
+    }).observe(appRoot, { childList: true, characterData: true, subtree: true });
   };
 
   if (document.readyState === "loading") {

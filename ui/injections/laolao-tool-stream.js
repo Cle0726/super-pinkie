@@ -1,19 +1,16 @@
-/* 工具流可见化 v2：自动展开"最后一组"工具进度 + 进行中指示 + 底部汇总。
+/* 工具流可见化 v4：保持工具摘要折叠 + 进行中指示 + 底部汇总。
    只读 DOM 与 chat-pane state，不改消息数据；全部幂等，可被 Lit 重渲染后自愈。
 
    v2 安全约束（v1 在大会话/流式中会把主线程打满）：
-   1. 只自动展开最后一组（正在运行/最近一轮），历史组保持折叠——
-      避免 600+ 消息会话一次性展开全部工具组造成 DOM 爆炸。
-   2. 展开判断用 is-open class + aria-expanded 双重确认（原生两个都会渲染）。
-   3. WeakSet 记录已自动点过的组元素：同一元素终身只自动点击一次，
-      从机制上杜绝"点开→重渲染→再点→点开"的乒乓循环。
-   4. 用户手动折叠过的组永不再自动展开。 */
+   1. 不自动点击任何工具摘要。Lit 重挂时的程序 click 会把大段工具正文
+      重新挂入 DOM，是聊天框跳动和内存暴涨的直接来源。
+   2. 当前工具组默认只保留原生摘要；需要细节时用户手动展开即可。
+   3. 每轮只观察最后一个工具组，历史工具组完全不扫描。 */
 (() => {
   'use strict';
 
   let scheduled = false;
   let applying = false;
-  const autoExpanded = new WeakSet();
 
   const KIND_RULES = [
     [/读取文件|read/i, 'read', '读取'],
@@ -53,7 +50,7 @@
     return summary ? summary.getAttribute('aria-expanded') === 'true' : false;
   }
 
-  /* 真实用户手动折叠后不再自动展开（isTrusted 区分程序点击） */
+  /* 记录用户主动查看过的摘要；脚本从不模拟 click 或改变展开状态。 */
   function armToggleListener(group) {
     if (group.dataset.laolaoTsListener) return;
     group.dataset.laolaoTsListener = '1';
@@ -63,18 +60,6 @@
         group.dataset.laolaoUserToggled = '1';
       }
     }, true);
-  }
-
-  /* 只自动展开最后一组；每个元素终身最多自动点一次 */
-  function expandLastGroup(lastGroup) {
-    if (!lastGroup) return;
-    if (isOpen(lastGroup)) return;
-    if (lastGroup.dataset.laolaoUserToggled === '1') return;
-    if (autoExpanded.has(lastGroup)) return;
-    const summary = $('.chat-activity-group__summary', lastGroup);
-    if (!summary) return;
-    autoExpanded.add(lastGroup);
-    summary.click(); /* 交给 Lit 自己渲染 body，不手搓 DOM */
   }
 
   function decorateItems(group, isLiveGroup, active) {
@@ -144,13 +129,13 @@
       const active = runActive();
       const groups = $$('.chat-activity-group');
       const lastGroup = groups.length ? groups[groups.length - 1] : null;
-      expandLastGroup(lastGroup);
-      for (const group of groups) {
-        armToggleListener(group);
-        if (!isOpen(group)) continue; /* 折叠的组没有 body，跳过装饰 */
-        const n = decorateItems(group, group === lastGroup, active);
-        updateFooter(group, n, active && group === lastGroup);
-      }
+      if (!lastGroup) return;
+      armToggleListener(lastGroup);
+      // 历史与当前工具正文都保持按需挂载；没有用户手动展开时，这里只
+      // 保留原生 summary，不创建任何额外子树。
+      if (!isOpen(lastGroup)) return;
+      const n = decorateItems(lastGroup, true, active);
+      updateFooter(lastGroup, n, active);
     } finally {
       applying = false;
     }

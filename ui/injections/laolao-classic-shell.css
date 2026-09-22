@@ -29,24 +29,47 @@ html[data-laolao-classic-shell="1"] .sidebar {
 html[data-laolao-classic-shell="1"] .sidebar-brand {
   min-height: 66px;
   box-sizing: border-box;
-  padding: 10px 12px 8px 16px;
-  gap: 8px;
+  padding: 10px 10px 8px;
+  gap: 5px;
+  min-width: 0;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-brand > openclaw-sidebar-agent-card {
   display: none !important;
 }
 
-html[data-laolao-classic-shell="1"] .sidebar-brand > .laolao-mode-switcher {
-  width: 158px;
-  height: 42px;
-  flex: 0 0 158px;
-  order: -1;
+/* The mode pill and the split-workspace control live inside identity on the
+   current runtime. The former direct-child selector was therefore inert: all
+   four header controls competed at their intrinsic width and the mode pill
+   got physically cropped. Keep this group flex-shrinkable, never clip it. */
+html[data-laolao-classic-shell="1"] .sidebar-brand__identity {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-brand__identity > .laolao-mode-switcher {
+  width: auto;
+  height: 38px;
+  min-width: 126px;
+  flex: 1 1 126px;
+  padding-right: 8px;
+  order: initial;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-brand__identity > .laolao-mode-switcher .laolao-mode-button__label {
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-brand__actions {
   gap: 2px;
   margin-left: auto;
+  flex: 0 0 auto;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-brand__actions > openclaw-tooltip:has(.sidebar-brand__new-thread),
@@ -54,12 +77,16 @@ html[data-laolao-classic-shell="1"] .sidebar-brand__actions .sidebar-new-session
   display: none !important;
 }
 
-html[data-laolao-classic-shell="1"] .sidebar-brand__actions > openclaw-tooltip:has(.sidebar-brand__search) {
-  order: 1;
+/* The tiny magnifier duplicated the actual session search below and stole the
+   width required for a readable mode name. Command palette shortcuts remain
+   available; this only removes its redundant header button. */
+html[data-laolao-classic-shell="1"] .sidebar-brand__actions > openclaw-tooltip:has(.sidebar-search),
+html[data-laolao-classic-shell="1"] .sidebar-brand__actions .sidebar-search {
+  display: none !important;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-brand__actions > openclaw-tooltip:has(.sidebar-brand__collapse) {
-  order: 2;
+  order: 1;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-shell__content {
@@ -174,7 +201,93 @@ html[data-laolao-classic-shell="1"] .sidebar-shell__footer {
 
 html[data-laolao-classic-shell="1"] .sidebar-footer-bar {
   width: 100%;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-footer-actions {
+  width: auto;
+  gap: 4px;
+}
+
+html[data-laolao-classic-shell="1"] .sidebar-shell__footer [data-laolao-footer-secondary="1"] {
+  display: none !important;
+}
+
+.laolao-footer-more {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border: 1px solid rgba(205, 92, 143, 0.15) !important;
+  border-radius: 11px !important;
+  color: rgba(151, 55, 99, 0.76) !important;
+  background: rgba(255, 251, 253, 0.18) !important;
+}
+
+.laolao-footer-more svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.laolao-footer-overflow {
+  position: fixed;
+  z-index: 10080;
+  display: grid;
+  width: 190px;
+  box-sizing: border-box;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid rgba(218, 120, 161, 0.18);
+  border-radius: 16px;
+  color: #773c59;
+  background: rgba(255, 250, 253, 0.94);
+  box-shadow: 0 15px 38px rgba(104, 42, 72, 0.15), inset 0 1px rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(24px) saturate(118%);
+  -webkit-backdrop-filter: blur(24px) saturate(118%);
+}
+
+.laolao-footer-overflow[hidden] {
+  display: none !important;
+}
+
+.laolao-footer-overflow__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+  font: 560 12px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.laolao-footer-overflow__item:hover,
+.laolao-footer-overflow__item:focus-visible {
+  outline: none;
+  color: #a9366d;
+  background: rgba(244, 215, 229, 0.48);
+}
+
+.laolao-footer-overflow__item:active {
+  transform: scale(0.985);
+}
+
+.laolao-footer-overflow__item svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-shell__footer .sidebar-identity-card {
@@ -287,7 +400,10 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   max-width: none !important;
 }
 
-.chat-workspace-rail.laolao-classic-workspace-rail {
+/* Only the compatibility fallback receives the legacy fixed rail treatment.
+   The runtime-owned rail is laid out directly by laolao-side-layout.css so it
+   never gets reparented, retagged, or briefly painted on top of the chat. */
+.chat-workspace-rail[data-laolao-fallback-rail="1"] {
   position: fixed;
   z-index: 18;
   top: 0;
@@ -306,19 +422,19 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   -webkit-backdrop-filter: blur(22px) saturate(115%);
 }
 
-.chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
+.chat-workspace-rail[data-laolao-fallback-rail="1"]:not(.chat-workspace-rail--collapsed) {
   width: min(300px, 34vw);
   align-items: stretch;
 }
 
-.chat-workspace-rail.laolao-classic-workspace-rail::before,
-.chat-workspace-rail.laolao-classic-workspace-rail::after {
+.chat-workspace-rail[data-laolao-fallback-rail="1"]::before,
+.chat-workspace-rail[data-laolao-fallback-rail="1"]::after {
   position: absolute;
   pointer-events: none;
   content: "";
 }
 
-.chat-workspace-rail.laolao-classic-workspace-rail::before {
+.chat-workspace-rail[data-laolao-fallback-rail="1"]::before {
   top: 44px;
   right: 0;
   left: 0;
@@ -326,7 +442,7 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   background: rgba(217, 89, 143, 0.18);
 }
 
-.chat-workspace-rail.laolao-classic-workspace-rail::after {
+.chat-workspace-rail[data-laolao-fallback-rail="1"]::after {
   top: 45px;
   bottom: 0;
   left: 0;
@@ -361,12 +477,11 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   html[data-laolao-classic-shell="1"] .shell.shell--chat {
     grid-template-columns: min(238px, 31vw) minmax(0, 1fr) !important;
   }
-  html[data-laolao-classic-shell="1"] .sidebar-brand > .laolao-mode-switcher {
-    width: min(150px, calc(31vw - 82px));
-    flex-basis: min(150px, calc(31vw - 82px));
+  html[data-laolao-classic-shell="1"] .sidebar-brand__identity > .laolao-mode-switcher {
+    flex-basis: 86px;
   }
-  html[data-laolao-classic-shell="1"] .laolao-usage__chip:nth-child(3),
-  html[data-laolao-classic-shell="1"] .laolao-usage__chip:nth-child(4) {
+  html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-usage-key="cacheRead"],
+  html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-usage-key="output"] {
     display: none;
   }
 }

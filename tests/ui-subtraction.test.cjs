@@ -7,6 +7,9 @@ const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 test('UI subtraction keeps features while compacting sidebar and composer',()=>{
   const css=read('ui/injections/laolao-ui-subtraction.css');
   assert.match(css,/grid-template-columns: 238px minmax\(0, 1fr\)/);
+  assert.match(css,/\.shell\.shell--chat\.shell--nav-collapsed[\s\S]*grid-template-columns: var\(--shell-nav-rail-width, 78px\) minmax\(0, 1fr\)/);
+  assert.match(css,/:has\(\.sidebar\.sidebar--collapsed\)[\s\S]*\.shell\.shell--chat/);
+  assert.match(css,/:not\(\[data-laolao-workspace-split="1"\]\):not\(\[data-laolao-workspace-dock="1"\]\)/);
   assert.match(css,/#laolao-session-manager \.sidebar-recent-session/);
   assert.match(css,/\.session-row-trail[\s\S]*display: none/);
   assert.match(css,/\.agent-chat__composer-actions[\s\S]*display: flex/);

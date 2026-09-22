@@ -30,12 +30,19 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   margin-right: 0 !important;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail {
+/* The runtime rail stays where Lit put it: directly in the workbench.  This
+   selector intentionally does not rely on a JS-added class, so its first
+   paint already occupies the real grid cell instead of briefly covering the
+   conversation from the window edge. The marked fallback uses the same cell
+   only on runtimes that do not provide a native rail at all. */
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail {
   position: relative !important;
   inset: auto !important;
   grid-column: 2 !important;
   grid-row: 1 !important;
   align-self: stretch !important;
+  justify-self: stretch !important;
+  display: flex !important;
   width: auto !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -46,21 +53,33 @@ html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-wor
   box-sizing: border-box !important;
 }
 
-/* The collapsed workspace rail is a control cluster, not a full-height panel.
-   Keeping `height: 100%` here produced the long empty white strip from the
-   screenshot, while Party Space's old auto margin pushed its button to the
-   very bottom.  Centre one compact glass capsule instead; the expanded file
-   workspace still uses the full-height rule above. */
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed {
+/* The collapsed rail is a compact control cluster, not a full-height panel.
+   Apply the geometry to the native direct child too, so it cannot produce the
+   old empty vertical strip during its mount transition. */
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed {
   align-self: center !important;
+  align-items: center !important;
+  flex-direction: column !important;
   width: auto !important;
   height: auto !important;
   max-height: calc(100% - 24px) !important;
-  margin: 12px 4px !important;
+  margin: 10px 3px !important;
+  padding: 7px 3px !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(213, 92, 149, .22) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(180deg, rgba(255, 252, 254, .86), rgba(255, 238, 248, .72)) !important;
+  box-shadow: 0 9px 25px rgba(109, 42, 75, .15) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(112%) !important;
+  backdrop-filter: blur(18px) saturate(112%) !important;
+  scrollbar-width: none;
+}
+
+/* The compatibility fallback gets the glass treatment and its old injected
+   control. Native rail visuals remain entirely runtime-owned. */
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed {
   padding: 7px 2px !important;
-  gap: 5px !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
   border: 1px solid rgba(217, 89, 143, 0.2) !important;
   border-radius: 18px !important;
   background: rgba(255, 249, 252, 0.76) !important;
@@ -70,40 +89,72 @@ html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-wor
   scrollbar-width: none;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::-webkit-scrollbar {
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::before,
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed::after {
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed::before,
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed::after {
   display: none !important;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed > :is(
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
   .chat-workspace-rail__collapse-toggle,
   .chat-workspace-rail__collapsed-icon,
-  .chat-workspace-rail__terminal
+  .chat-workspace-rail__terminal,
+  #laolao-browser-workspace-entry
 ) {
+  width: 28px !important;
+  height: 28px !important;
   flex: 0 0 auto !important;
   margin: 0 auto !important;
 }
 
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed > :is(
+/* The rail is a quick launcher, not a second vertical navigation bar. Keep
+   the two special spaces visible but compact enough that chat stays central. */
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
   #pinkie-roundtable-entry,
   #pinkie-party-entry
 ) {
-  width: 32px !important;
-  min-height: 92px !important;
-  margin: 1px auto !important;
-  padding: 6px 0 !important;
+  width: 34px !important;
+  min-height: 58px !important;
+  margin: 2px auto !important;
+  padding: 4px 0 !important;
+  gap: 3px !important;
+  border-radius: 13px !important;
+  background: rgba(255, 250, 253, .46) !important;
 }
 
-/* Expanding the native workspace must not resize and repaint hundreds of chat
-   messages. Keep the 44px grid reservation stable and open one isolated panel
-   over the right edge. This also prevents the legacy and native layouts from
-   appearing side-by-side during Lit's class transition. */
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) {
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
+  #pinkie-roundtable-entry,
+  #pinkie-party-entry
+) img {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
+  #pinkie-roundtable-entry,
+  #pinkie-party-entry
+) span {
+  width: 24px !important;
+  max-width: 24px !important;
+  color: inherit !important;
+  font-size: 9px !important;
+  font-weight: 650 !important;
+  line-height: 1.15 !important;
+  letter-spacing: 1px !important;
+  text-align: center !important;
+  white-space: normal !important;
+  word-break: break-all !important;
+  writing-mode: horizontal-tb !important;
+}
+
+/* Expansion does not resize and repaint the conversation. The native direct
+   child overlays the right edge from the same workbench; a fallback can never
+   coexist because the script removes only marked fallbacks when native mounts. */
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail:not(.chat-workspace-rail--collapsed) {
   position: absolute !important;
   z-index: 24 !important;
   grid-column: 1 / -1 !important;
@@ -129,7 +180,7 @@ html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-wor
 
 /* These launchers belong to the compact rail. Hiding them while the file
    workspace is open avoids mixing two different navigation surfaces. */
-html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail:not(.chat-workspace-rail--collapsed) > :is(
+html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail:not(.chat-workspace-rail--collapsed) > :is(
   #pinkie-roundtable-entry,
   #pinkie-party-entry
 ) {
@@ -176,7 +227,7 @@ html[data-laolao-classic-shell="1"] body .chat-bubble :is(pre, table) {
     grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
   }
 
-  html[data-laolao-classic-shell="1"] body .chat-workspace-rail.laolao-classic-workspace-rail {
+  html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail {
     display: flex !important;
   }
 
@@ -213,8 +264,8 @@ html[data-laolao-classic-shell="1"] .chat-pane__header {
 }
 
 html[data-laolao-classic-shell="1"] .chat-pane__header *,
-.chat-workspace-rail.laolao-classic-workspace-rail,
-.chat-workspace-rail.laolao-classic-workspace-rail * {
+html[data-laolao-classic-shell="1"] .chat-workbench > .chat-workspace-rail,
+html[data-laolao-classic-shell="1"] .chat-workbench > .chat-workspace-rail * {
   -webkit-user-select: none !important;
   user-select: none !important;
 }
@@ -253,24 +304,20 @@ html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-fit-hidden] {
 }
 
 @container clekk-chat-header (max-width: 790px) {
-  .laolao-usage__chip:is([data-usage-key="cacheWrite"], :nth-child(4)) { display: none !important; }
+  .laolao-usage__chip[data-usage-key="cacheRead"] { display: none !important; }
 }
 
 @container clekk-chat-header (max-width: 690px) {
-  .laolao-usage__chip:is([data-usage-key="cacheRead"], :nth-child(3)) { display: none !important; }
+  .laolao-usage__chip[data-usage-key="output"] { display: none !important; }
 }
 
 @container clekk-chat-header (max-width: 570px) {
-  .laolao-usage__chip:is([data-usage-key="output"], :nth-child(2)) { display: none !important; }
+  .laolao-usage__chip[data-usage-key="input"] { display: none !important; }
 }
 
 @container clekk-chat-header (max-width: 470px) {
-  .laolao-usage__chip:is([data-usage-key="input"], :nth-child(1)) { display: none !important; }
+  .laolao-usage__chip[data-usage-key="runtime"] { display: none !important; }
   .laolao-classic-breadcrumb__agent,
   .laolao-classic-breadcrumb__sep,
   .laolao-classic-breadcrumb em { display: none !important; }
-}
-
-@container clekk-chat-header (max-width: 360px) {
-  .laolao-usage__chip:is([data-usage-key="quota"], :nth-child(5)) { display: none !important; }
 }

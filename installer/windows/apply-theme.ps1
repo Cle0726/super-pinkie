@@ -42,11 +42,16 @@ $Assets = @(
     "laolao-splash.png",
     "laolao-theme.css",
     "laolao-classic-shell.css",
+    "laolao-material-preview.css",
+    "laolao-workspace-focus.css",
     "laolao-classic-shell.js",
     "laolao-side-layout.css",
     "laolao-side-layout.js",
     "laolao-memory.css",
     "laolao-memory.js",
+    "laolao-learning-stage.css",
+    "laolao-learning-stage.js",
+    "laolao-learning-question.png",
     "laolao-motion.js",
     "laolao-sidebar.css",
     "laolao-sidebar.js",
@@ -62,6 +67,9 @@ $Assets = @(
     "laolao-live-voice.js",
     "laolao-mode-switcher.js",
     "laolao-image-viewer.js",
+    "laolao-material-preview.js",
+    "laolao-workspace-focus.js",
+    "laolao-page-warmup.js",
     "laolao-stream-fx.js",
     "laolao-link-viewer.js",
     "laolao-tool-stream.js",
@@ -77,6 +85,7 @@ $Assets = @(
     "laolao-deep-think-full.webm",
     "laolao-deep-think-marathon.webm",
     "laolao-roundtable-entry.js",
+    "laolao-web-gpt-collab.js",
     "laolao-context-compact.js",
     "laolao-resume.js",
     "laolao-roundtable-entry-v2.png",
@@ -170,27 +179,35 @@ function Apply-UISkin {
     # tests/windows-self-contained.test.cjs 守着。
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
-        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic13">',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side16">',
-        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction2">',
+        '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic17">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side20">',
+        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction11">',
+        '<link rel="stylesheet" href="./laolao-material-preview.css?v=material2">',
+        '<link rel="stylesheet" href="./laolao-workspace-focus.css?v=workspacefocus2">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
-        '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats7">',
+        '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning3">',
+        '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar16"></script>',
-        '<script src="./laolao-session-list.js?v=sessions5"></script>',
-        '<script src="./laolao-usage-stats.js?v=stats15"></script>',
-        '<script defer src="./laolao-classic-shell.js?v=classic13"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar26"></script>',
+        '<script src="./laolao-session-list.js?v=sessions10"></script>',
+        '<script src="./laolao-usage-stats.js?v=stats16"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic15"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
+        '<script defer src="./laolao-learning-stage.js?v=learning3"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
-        '<script defer src="./laolao-stream-fx.js?v=stream3"></script>',
-        '<script defer src="./laolao-link-viewer.js?v=link1"></script>',
-        '<script defer src="./laolao-tool-stream.js?v=toolstream3"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink16"></script>',
+        '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
+        '<script defer src="./laolao-link-viewer.js?v=link4"></script>',
+        '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink17"></script>',
+        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt12"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
-        '<script defer src="./laolao-resume.js?v=resume14"></script>',
-        '<script defer src="./laolao-splash.js?v=splash25"></script>'
+        '<script defer src="./laolao-resume.js?v=resume22"></script>',
+        '<script defer src="./laolao-material-preview.js?v=material2"></script>',
+        '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
+        '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
+        '<script defer src="./laolao-splash.js?v=splash26"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -204,17 +221,22 @@ function Apply-UISkin {
     # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme39'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar16'; 'laolao-session-list.js' = 'sessions5'; 'laolao-usage-stats.js' = 'stats15';
-        'laolao-phrases.js' = 'phrases20';
-        'laolao-mode-switcher.js' = 'mode31'; 'laolao-splash.js' = 'splash25';
-        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume14';
-        'laolao-ui-subtraction.css' = 'subtraction2';
-        'laolao-classic-shell.css' = 'classic13'; 'laolao-classic-shell.js' = 'classic13';
-        'laolao-side-layout.css' = 'side16'; 'laolao-side-layout.js' = 'side12';
+        'laolao-theme.css' = 'theme46'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar26'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
+        'laolao-phrases.js' = 'phrases21'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
+        'laolao-mode-switcher.js' = 'mode36'; 'laolao-splash.js' = 'splash26';
+        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume22';
+        'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
+        'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
+        'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
+        'laolao-page-warmup.js' = 'warmup1';
+        'laolao-link-viewer.js' = 'link4';
+        'laolao-classic-shell.css' = 'classic17'; 'laolao-classic-shell.js' = 'classic15';
+        'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
-        'laolao-deep-think.js' = 'deepthink16'; 'laolao-context-compact.js' = 'contextcompact3';
-        'laolao-live-voice.js' = 'voice3'
+        'laolao-learning-stage.css' = 'learning3'; 'laolao-learning-stage.js' = 'learning3';
+        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt12';
+        'laolao-context-compact.js' = 'contextcompact3'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         # 版本号字符集收紧，避免第二次运行时贪婪越过版本号把后续内容吃掉。
@@ -222,38 +244,46 @@ function Apply-UISkin {
         $html = [regex]::Replace($html, $pattern, "./$($entry.Key)?v=$($entry.Value)")
     }
 
-    # ── 聊天渲染上限：与 installer/macos/apply-theme.sh 对齐 ──────────────────
-    # OpenClaw 7.1 的 history API 已能分页返回完整记录，但聊天渲染器又在最后一层
-    # 把可见消息硬截到 100 条 / 24 万字符，页面因此仍显示
-    # “Showing last 100 messages”。只放宽这两个纯展示上限；数据仍由
-    # laolao-resume 分页加载，工具结果照旧折叠，不改会话文件。
-    $chatBundles = @(Get-ChildItem -LiteralPath (Join-Path $UiRoot 'assets') -Filter 'chat-page-*.js' -File -ErrorAction SilentlyContinue)
-    foreach ($chatBundle in $chatBundles) {
-        $chat = Get-Content -LiteralPath $chatBundle.FullName -Raw -Encoding UTF8
-        if ([regex]::Matches($chat, [regex]::Escape('Showing last ${c} messages')).Count -ne 1) { continue }
-        $patchedChat = [regex]::Replace(
-            $chat,
-            'function Zb\(e\)\{return typeof e!=`number`\|\|!Number\.isFinite\(e\)\?(?:100|5000):Math\.max\(1,Math\.min\((?:100|5000),Math\.floor\(e\)\)\)\}',
-            'function Zb(e){return 5000}'
-        )
-        $patchedChat = $patchedChat.Replace('i+c>24e4)break', 'i+c>16e6)break')
-        if ($patchedChat -ne $chat) {
-            Write-Utf8NoBom $chatBundle.FullName $patchedChat
+    # 完整记录留在网关/SQLite；前端 live DOM 只保留最后五条可见聊天消息。
+    # 有界倒扫避免为整段 transcript 创建临时 filter 数组；工具桥接仍由原生
+    # 组件维护，不能在这里裁掉正在运行的工具状态。
+    Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'chat-page-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $chatBundle = Get-Content $_.FullName -Raw -Encoding UTF8
+        if (($chatBundle.Split('Showing last ${c} messages').Count - 1) -eq 1) {
+            $chatBundle = $chatBundle.Replace(
+                'function Zb(e){return typeof e!=`number`||!Number.isFinite(e)?100:Math.max(1,Math.min(100,Math.floor(e)))}',
+                'function Zb(e){return 5}'
+            )
+            $chatBundle = $chatBundle.Replace(
+                'function Zb(e){return typeof e!=`number`||!Number.isFinite(e)?5000:Math.max(1,Math.min(5000,Math.floor(e)))}',
+                'function Zb(e){return 5}'
+            )
+            $chatBundle = $chatBundle.Replace('function Zb(e){return 5000}', 'function Zb(e){return 5}')
+            $chatBundle = [regex]::Replace(
+                $chatBundle,
+                'r=\(Array\.isArray\(e\.messages\)\?e\.messages:\[\]\)\.filter\(e=>!Li\(e\)\);r=r\.slice\(-(?:n|5|100|5000)\),',
+                'r=(()=>{let t=[],n=Array.isArray(e.messages)?e.messages:[];for(let e=n.length-1;e>=0&&t.length<5;e--){let r=n[e];Li(r)||t.unshift(r)}return t})(),'
+            )
+            $chatBundle = $chatBundle.Replace('i+c>16e6)break', 'i+c>24e4)break')
+            $chatBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
         }
     }
 
-    # 给入口与懒加载的聊天块打版本号。这是对仍被旧 cache-first worker 接管的
-    # WebView2 的硬保证：此前缓存过的 URL 不再能命中已打补丁的块。
-    # 版本号字符集收紧到 [A-Za-z0-9_.-]：用 "非引号" 这类宽字符集时，第二次运行时
-    # 贪婪匹配会越过版本号一直吃到下一个引号，把中间压缩过的 JS 整段删掉。
-    $html = [regex]::Replace($html, '(src="\./assets/index-[^"?]+\.js)(?:\?v=[A-Za-z0-9_.-]*)?"', '${1}?v=clekk-history14"')
-    $entryBundles = @(Get-ChildItem -LiteralPath (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue)
-    foreach ($entryBundle in $entryBundles) {
-        $entry = Get-Content -LiteralPath $entryBundle.FullName -Raw -Encoding UTF8
-        $patchedEntry = [regex]::Replace($entry, '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[A-Za-z0-9_.-]*)?', '${1}?v=clekk-history14')
-        if ($patchedEntry -ne $entry) {
-            Write-Utf8NoBom $entryBundle.FullName $patchedEntry
-        }
+    # Give both the entry module and its lazy chat chunk a revisioned URL.
+    # This bypasses an already-running cache-first worker immediately.
+    $html = [regex]::Replace(
+        $html,
+        '(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"',
+            '$1?v=clekk-history18"'
+    )
+    Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $entryBundle = Get-Content $_.FullName -Raw -Encoding UTF8
+        $entryBundle = [regex]::Replace(
+            $entryBundle,
+            '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'']*)?',
+            '$1?v=clekk-history18'
+        )
+        $entryBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
     }
 
     # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
@@ -271,7 +301,11 @@ function Apply-UISkin {
         # 渲染器喂回来。给本地 UI 改网络优先，并给它那份可丢弃的缓存打版本号；
         # 离线回退仍然保留。
         $worker = [regex]::Replace($worker, '-clekk-history-render-[0-9]+', '')
-        $worker = [regex]::Replace($worker, '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)', '${1}-clekk-history-render-14${2}')
+        $worker = [regex]::Replace(
+            $worker,
+            '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)',
+            '$1-clekk-history-render-18$2'
+        )
         $worker = $worker.Replace(
             '// Cache-first for hashed assets; network-first for HTML/other.',
             '// Network-first for all UI files; cached copies remain an offline fallback.'
@@ -308,6 +342,23 @@ foreach ($packageRoot in $packageRoots) {
             $seenUi[$uiRoot] = $true
             Write-Host "==> applying skin to $uiRoot"
             Apply-UISkin $uiRoot
+            $node = Get-Command node -ErrorAction SilentlyContinue
+            $runtimePatches = @(
+                'apply-image-access.mjs',
+                'apply-material-preview-csp.mjs',
+                'apply-control-ui-workspace-media.mjs'
+            ) | ForEach-Object { Join-Path $RepoRoot "patch\$_" } | Where-Object { Test-Path $_ }
+            if ($node -and $runtimePatches.Count -gt 0) {
+                $previousRoot = $env:OPENCLAW_ROOT
+                try {
+                    $env:OPENCLAW_ROOT = $packageRoot
+                    foreach ($runtimePatch in $runtimePatches) {
+                        & $node.Source $runtimePatch | Out-Null
+                    }
+                } finally {
+                    $env:OPENCLAW_ROOT = $previousRoot
+                }
+            }
             $didAny = $true
         }
     }
