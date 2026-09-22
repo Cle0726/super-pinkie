@@ -14,7 +14,12 @@
     <key>PINKIE_APP_PATH</key><string>@APP_PATH@</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>StartInterval</key><integer>900</integer>
+  <!--
+    The desktop bundle is immutable while it is running. Reapplying assets on
+    a timer rewrites WebKit resources and restarts the relay during a chat,
+    which is indistinguishable from a random reconnect or an old UI layer
+    returning. Run once at login; explicit updates run the same script safely.
+  -->
   <key>StandardOutPath</key><string>/tmp/super-pinkie-reapply.log</string>
   <key>StandardErrorPath</key><string>/tmp/super-pinkie-reapply.log</string>
 </dict>

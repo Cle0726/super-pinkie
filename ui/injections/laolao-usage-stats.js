@@ -19,6 +19,7 @@
     default: { input: 0.2, output: 1.5, cacheRead: 0.02, cacheWrite: 0 },
   };
   const REFRESH_MS = 15000;
+  const clock = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 
   const $sidebar = () => window.__laolaoSidebar;
 
@@ -38,6 +39,8 @@
   /* ---------- 数据 ---------- */
   let view = null; // {input, output, cacheRead, quota, quotaNote, requests, successRate, source}
   let refreshing = false;
+  let linkOnline = false;
+  let linkLatency = null;
 
   const num = (v) => (Number.isFinite(v) ? v : 0);
   const pick = (s, keys) => {
@@ -56,6 +59,7 @@
   async function refresh() {
     if (refreshing) return;
     refreshing = true;
+    const startedAt = clock();
     try {
       const partyPage = Boolean(document.getElementById('party-usage'));
       const [fileStats, liveRuntime] = await Promise.all([
@@ -129,8 +133,14 @@
           source: "累计 · 网关会话",
         };
       }
+      linkOnline = Boolean(view);
+      linkLatency = linkOnline ? Math.max(0, Math.round(clock() - startedAt)) : null;
       render();
-    } catch {} finally { refreshing = false; }
+    } catch {
+      linkOnline = false;
+      linkLatency = null;
+      updateRuntimeChip();
+    } finally { refreshing = false; }
   }
 
   function costOf(v) {
@@ -146,8 +156,9 @@
   let wrap = null;
   let chips = null; // [{el, labelEl, valueEl, key}]
   let liveActive = false; // 模型正在思考/输出（发送按钮变成停止键时为真）
+  let liveStartedAt = 0;
   const prevRaw = {};
-  const FIT_HIDE_ORDER = ["cacheWrite", "cacheRead", "output", "input", "quota"];
+  const FIT_HIDE_ORDER = ["cacheRead", "output", "input", "runtime"];
   let fitFrame = 0;
   let fitObserver = null;
   let fitHeader = null;
@@ -187,15 +198,30 @@
     const live = Boolean(document.querySelector(".chat-send-btn--stop, #jobs .job"));
     if (live === liveActive) return;
     liveActive = live;
+    liveStartedAt = live ? Date.now() : 0;
     if (wrap) wrap.classList.toggle("laolao-usage--live", live);
+    updateRuntimeChip();
+  }
+
+  const runtimeSnapshot = () => liveActive
+    ? {text: `生成 ${Math.max(1, Math.floor((Date.now() - liveStartedAt) / 1000))}s`, state: "live"}
+    : linkOnline && linkLatency != null
+      ? {text: `在线 ${linkLatency}ms`, state: "online"}
+      : {text: "待连接", state: "offline"};
+
+  function updateRuntimeChip() {
+    const chip = chips?.find((item) => item.key === "runtime");
+    if (!chip) return;
+    const runtime = runtimeSnapshot();
+    if (chip.valueEl.textContent !== runtime.text) chip.valueEl.textContent = runtime.text;
+    chip.el.dataset.state = runtime.state;
   }
 
   const CHIP_DEFS = [
     { key: "input", label: "输入" },
     { key: "output", label: "输出" },
     { key: "cacheRead", label: "缓存读", naWhenNull: true },
-    { key: "cacheWrite", label: "缓存写", naWhenNull: true },
-    { key: "quota", label: "额度", cls: "laolao-usage__chip--quota", naWhenNull: true },
+    { key: "runtime", label: "链路", cls: "laolao-usage__chip--runtime" },
     { key: "cost", label: "累计估算", cls: "laolao-usage__chip--cost", naWhenNull: true },
   ];
 
@@ -214,6 +240,7 @@
       const el = document.createElement("span");
       el.className = "laolao-usage__chip" + (def.cls ? " " + def.cls : "");
       el.dataset.usageKey = def.key;
+      el.setAttribute("draggable", "false");
       const labelEl = document.createElement("span");
       labelEl.className = "laolao-usage__label";
       labelEl.textContent = def.label;
@@ -251,12 +278,12 @@
     if (!list || !view) return;
 
     const cost = costOf(view);
+    const runtime = runtimeSnapshot();
     const values = {
       input: { text: fmtTok(view.input), raw: view.input },
       output: { text: fmtTok(view.output), raw: view.output },
       cacheRead: { text: view.cacheRead != null ? fmtTok(view.cacheRead) : "—", raw: view.cacheRead },
-      cacheWrite: { text: fmtTok(view.cacheWrite), raw: view.cacheWrite },
-      quota: { text: view.quota || "—", raw: view.quota },
+      runtime: { text: runtime.text, raw: null, state: runtime.state },
       cost: { text: cost != null ? fmtCost(cost) : "—", raw: cost },
     };
 
@@ -268,9 +295,10 @@
         typeof v.raw === "number" && typeof prev === "number" && v.raw > prev;
       const changed = c.valueEl.textContent !== v.text;
       if (changed) c.valueEl.textContent = v.text;
-      if (increased || (changed && c.key === "quota" && prev != null && prev !== v.raw)) {
+      if (increased) {
         pulse(c.el.closest ? c.el : c.el);
       }
+      if (c.key === "runtime") c.el.dataset.state = v.state;
       if (c.def.naWhenNull) {
         c.el.classList.toggle("laolao-usage__chip--na", v.raw == null);
       }
@@ -305,6 +333,7 @@
     if (!document.getElementById('party-usage') && !$sidebar()) return setTimeout(boot, 500);
 
     setInterval(refresh, REFRESH_MS);
+    setInterval(() => { syncLive(); updateRuntimeChip(); }, 1000);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refresh();
     });

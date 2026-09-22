@@ -349,19 +349,39 @@ html[data-laolao-mode-enter="1"] .agent-chat__welcome[data-laolao-minimal-welcom
   -webkit-backdrop-filter: blur(3px) saturate(108%);
 }
 
-/* Assistant text is intentionally transparent in the upstream shell. On a
-   busy wallpaper that makes a finished reply disappear into the desktop, so
-   give only ordinary assistant messages a quiet, translucent reading surface.
-   Tool shells, reading indicators and forwarded cards keep their own layout.
-   No backdrop-filter or per-frame animation here: streaming stays cheap. */
+/* Keep the wallpaper visible while protecting long-form reading. The layered
+   pearl veil is local to message text, so the page stays transparent instead
+   of turning into an opaque white sheet. No backdrop-filter or per-frame
+   animation here: streaming stays cheap and the surface does not flicker. */
 .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
 .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
-  /* 只给文字一层很淡的识别底，不改变沉浸式透明主背景。 */
-  background: rgba(255, 250, 252, 0.24) !important;
-  border: 1px solid rgba(217, 89, 143, 0.16) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 253, 254, 0.54), rgba(255, 247, 251, 0.34)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.52) !important;
   border-radius: 18px !important;
   padding: 10px 14px !important;
-  box-shadow: 0 4px 14px rgba(111, 45, 74, 0.028) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(217, 89, 143, 0.10),
+    0 6px 20px rgba(111, 45, 74, 0.045) !important;
+}
+
+/* A soft optical edge keeps glyphs legible over both bright clouds and dark
+   artwork without making the type heavier or changing the mode palette. */
+.chat-group :is(.chat-bubble, .chat-group-content) :is(p, li, blockquote, h1, h2, h3, h4, td, th) {
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.76),
+    0 0 10px rgba(255, 255, 255, 0.20);
+}
+
+/* User messages get the same optical treatment, but stay lighter and more
+   compact so the conversation hierarchy remains obvious. */
+.chat-group.user .chat-bubble:not(.chat-bubble--tool-shell) {
+  background:
+    linear-gradient(135deg, rgba(255, 252, 254, 0.46), rgba(250, 239, 247, 0.28)) !important;
+  border-color: rgba(255, 255, 255, 0.46) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(217, 89, 143, 0.09),
+    0 5px 16px rgba(111, 45, 74, 0.035) !important;
 }
 
 .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
@@ -609,6 +629,132 @@ img.chat-avatar.assistant {
   outline: 2px solid rgba(207, 66, 130, 0.48);
   outline-offset: 3px;
   border-radius: 18px;
+}
+
+/* One compact launcher opens the in-window companion workspace. It remains
+   beside the current mode pill instead of adding a second native window. */
+.laolao-mode-dock-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 0;
+  padding: 0;
+  flex: 0 0 32px;
+  border: 1px solid rgba(205, 85, 137, .30);
+  border-radius: 12px;
+  color: var(--mode-button-ink, #ad4f7f);
+  background: linear-gradient(145deg, rgba(255,255,255,.86), rgba(252,226,241,.58));
+  box-shadow: inset 0 1px rgba(255,255,255,.88), 0 3px 10px rgba(135,52,90,.09);
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.laolao-mode-dock-trigger svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+.laolao-mode-dock-trigger:hover,
+.laolao-mode-dock-trigger[aria-expanded="true"] {
+  background: rgba(255,255,255,.94);
+  box-shadow: inset 0 1px rgba(255,255,255,.9), 0 7px 16px rgba(135,52,90,.13);
+  transform: translateY(-1px);
+}
+
+.laolao-mode-dock-trigger:active { transform: translateY(0) scale(.96); }
+.laolao-mode-dock-trigger:focus-visible { outline: 2px solid rgba(207, 66, 130, .48); outline-offset: 3px; }
+html[data-laolao-workspace-dock="1"] .laolao-mode-dock-trigger,
+.sidebar--collapsed .laolao-mode-dock-trigger { display: none !important; }
+
+/* Split exit. The docked half used to be closable only from the primary pane's
+   dock picker, which lives in the sidebar — and the sidebar collapses to a
+   hidden overlay in a narrow split, so the exit could vanish entirely. This
+   button belongs to the docked half, sits in the chat column just inside the
+   reserved workspace rail, and never depends on the sidebar being open. */
+.laolao-dock-exit { display: none !important; }
+
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit {
+  position: fixed;
+  /* First-paint fallback only: the script measures the real top bar and sets an
+     inline top, because the bar is 44px wide-layout and ~58px narrow-layout. */
+  top: 52px;
+  right: calc(var(--laolao-window-rail-reserve, 44px) + 10px);
+  z-index: 200;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid rgba(205, 85, 137, .32);
+  border-radius: 999px;
+  color: #a83e70;
+  background: linear-gradient(150deg, rgba(255,255,255,.93), rgba(252,226,241,.80));
+  box-shadow: 0 6px 18px rgba(135,52,90,.14), inset 0 1px rgba(255,255,255,.9);
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  letter-spacing: .2px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit__label { white-space: nowrap; }
+
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit:hover {
+  background: rgba(255,255,255,.97);
+  transform: translateY(-1px);
+  box-shadow: 0 9px 22px rgba(135,52,90,.19), inset 0 1px rgba(255,255,255,.95);
+}
+
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit:active { transform: translateY(0) scale(.97); }
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit:focus-visible { outline: 2px solid rgba(207,66,130,.48); outline-offset: 3px; }
+
+/* Dark mode in this skin is not a near-black surface: the shell keeps its
+   light chrome and expresses dark mode as saturated pink with light ink (see
+   .laolao-usage__chip in dark mode). A translucent pink would leave light text
+   on a light page, so use the same solid accent treatment as the dark-mode cost
+   chip: white ink on saturated pink reads on either backdrop. */
+html[data-theme-mode="dark"][data-laolao-workspace-dock="1"] .laolao-dock-exit {
+  border-color: rgba(255, 217, 232, .34);
+  color: #ffffff;
+  background: linear-gradient(150deg, #e94f91, #d13a7d);
+  box-shadow: 0 6px 18px rgba(160, 32, 89, .28), inset 0 1px rgba(255,255,255,.30);
+}
+
+html[data-theme-mode="dark"][data-laolao-workspace-dock="1"] .laolao-dock-exit:hover {
+  background: linear-gradient(150deg, #ef63a1, #d94787);
+  color: #ffffff;
+}
+
+/* The right hand half is a focused second workspace, not a miniature copy of
+   the left shell. Its fixed mode is shown by the native split header, so the
+   duplicate session sidebar is removed and the actual conversation gets the
+   usable width. The primary pane keeps its complete sidebar unchanged. */
+html[data-laolao-workspace-dock="1"] .shell.shell--chat {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.laolao-mode-menu__option--dock-close {
+  justify-content: center;
+  min-height: 34px;
+  height: 34px;
+  padding-inline: 10px;
+  color: #9c416a;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
 }
 
 .laolao-mode-menu {
@@ -1855,12 +2001,13 @@ button[data-pinkie-ask-clekk="true"]:hover {
   }
 }
 
-/* 保证长会话聊天记录平滑滚动并完整保留 */
+/* 恢复和流式更新不能触发平滑滚动动画：动画叠加会让输入框看起来在跳。
+   会话完整记录仍在网关保存；页面只保留一个小的实时消息窗口。 */
 .chat-scroll-container,
 .chat-messages-container,
 [data-element="chat-container"],
 openclaw-chat-log {
-  scroll-behavior: smooth !important;
+  scroll-behavior: auto !important;
   overscroll-behavior-y: contain !important;
   contain: none !important;
 }
@@ -1892,6 +2039,28 @@ html[data-pinkie-native-glass="1"] :is(
 ) {
   --chat-surface: transparent !important;
   background: transparent !important;
+}
+
+/* The message area can stay translucent, but the live composer must not ask
+   WKWebView to sample and blur a moving transparent window every time the
+   native chat renderer updates.  That caused the bottom input panel to flash
+   during streaming/reconnects.  This is presentation-only: textarea, model
+   picker, attachment, voice and send controls remain the upstream controls. */
+html[data-pinkie-native-glass="1"] :is(.agent-chat__composer-shell, .agent-chat__input) {
+  animation: none !important;
+  transition: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+html[data-pinkie-native-glass="1"] .agent-chat__input {
+  /* A stable, almost-opaque surface avoids compositor flashes while retaining
+     the soft pink visual language of the rest of the window. */
+  background: rgba(255, 250, 253, 0.88) !important;
+  box-shadow: 0 8px 20px rgba(149, 54, 93, 0.09) !important;
 }
 
 /* 上游断线/重试提示：状态持续到网关恢复并完成历史同步，不再只闪一下。 */

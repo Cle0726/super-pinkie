@@ -66,6 +66,11 @@ test('macOS updater removes only its old app rollback copies after a healthy ins
   assert.match(installer, /STATE_ROOT["']?\/backups\/\*\/app/);
   assert.match(installer, /rm -rf \"\$old_app_backup\"/);
   assert.match(installer, /用户数据、配置、会话或素材/);
+  assert.match(installer, /codesign --verify --deep --strict "\$TARGET_APP"/);
+  assert.match(installer, /Print :CFBundleIdentifier/);
+  assert.match(installer, /更新后的本地权限身份不稳定/);
+  assert.match(installer, /APP_SWAP_ACTIVE=0/);
+  assert.ok(installer.indexOf('codesign --verify --deep --strict "$TARGET_APP"') < installer.indexOf('APP_SWAP_ACTIVE=0'));
 });
 
 test('macOS launcher replaces only a stale gateway proven to belong to an older CLE Kk app', () => {
@@ -80,7 +85,31 @@ test('macOS launcher replaces only a stale gateway proven to belong to an older 
   assert.match(launcher, /Darwin\.kill\(listener\.pid, SIGTERM\)/);
   assert.match(launcher, /Darwin\.kill\(listener\.pid, SIGKILL\)/);
   assert.match(launcher, /Gateway\.ensureCurrentRuntimeForReadyGateway/);
+  assert.match(launcher, /let launcherOwnsGateway = process\?\.isRunning == true/);
+  assert.match(launcher, /return !launcherOwnsGateway[\s\S]*?\|\| \$0\.executablePath != expectedNode/);
   assert.doesNotMatch(launcher, /\b(?:killall|pkill)\b/);
+});
+
+test('managed macOS startup retires only its own legacy global gateway job', () => {
+  const bootstrap = read('installer/macos/apply-bundled.sh');
+  assert.match(bootstrap, /migrate_legacy_managed_gateway/);
+  assert.match(bootstrap, /ai\.openclaw\.gateway\.plist/);
+  assert.match(bootstrap, /legacy_label" == "ai\.openclaw\.gateway"/);
+  assert.match(bootstrap, /\$REPO_ROOT\/runtime\/openclaw\//);
+  assert.match(bootstrap, /launchctl bootout "gui\/\$\(id -u\)\/ai\.openclaw\.gateway"/);
+  assert.match(bootstrap, /backups\/legacy-launchagents-/);
+  assert.doesNotMatch(bootstrap, /launchctl bootout[^\n]*(?:\*|com\.trycua)/);
+});
+
+test('macOS hotfix keeps the same stable local identity used by full builds', () => {
+  const build = read('desktop/macos/build.sh');
+  const hotfix = read('installer/macos/apply-theme.sh');
+  for (const source of [build, hotfix]) {
+    assert.match(source, /designated => identifier ["']com\.cle0726\.super-pinkie["']/);
+  }
+  assert.match(hotfix, /preserve-metadata=identifier,requirements,entitlements,flags,runtime/);
+  assert.match(hotfix, /codesign -dr - "\$LAUNCHER_APP_PATH"/);
+  assert.match(hotfix, /updated CLE Kk App signature did not verify/);
 });
 
 test('macOS gateway provenance detects an old executable replaced at the same app path', () => {
@@ -90,7 +119,7 @@ test('macOS gateway provenance detects an old executable replaced at the same ap
   assert.match(launcher, /mappedExecutableIdentity\(for pid: pid_t, matching executablePath: String\)/);
   assert.match(launcher, /"-d", "txt", "-FDin"/);
   assert.match(launcher, /diskIdentity\(for: expectedNode\)/);
-  assert.match(launcher, /\$0\.executablePath != expectedNode \|\| \$0\.executableIdentity != expectedIdentity/);
+  assert.match(launcher, /!launcherOwnsGateway[\s\S]*?\|\| \$0\.executablePath != expectedNode[\s\S]*?\|\| \$0\.executableIdentity != expectedIdentity/);
   assert.match(launcher, /identity == listener\.executableIdentity/);
 });
 
@@ -126,7 +155,12 @@ test('macOS app owns an unrestricted computer-control driver and capable node', 
   // move_cursor look like a permission failure even when input injection is
   // healthy, and removes useful action feedback during desktop work.
   assert.doesNotMatch(launcher, /"--no-overlay"/);
-  assert.match(launcher, /private static func stopDriverApplications/);
+  assert.match(launcher, /private static func stopCLEKkDrivers/);
+  assert.ok(launcher.includes(String.raw`command.contains("--host-bundle-id \(hostBundleIdentifier)")`));
+  assert.match(launcher, /command\.contains\("--socket \/tmp\/clekk-cua-"\)/);
+  assert.match(launcher, /Self\.stopCLEKkDrivers\(\)/);
+  assert.match(launcher, /let activeSocket = socketURL[\s\S]{0,160}Self\.stopCLEKkDrivers\(socketPath: activeSocket\?\.path\)/);
+  assert.doesNotMatch(launcher, /forceTerminate\(\)/);
   assert.match(launcher, /ensureCuaDriverApp/);
   assert.match(launcher, /TeamIdentifier=/);
   assert.match(launcher, /cua-driver-helper\.tar\.gz/);
@@ -199,15 +233,15 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(launcher, /contentView\.layer\?\.backgroundColor = NSColor\.clear\.cgColor/);
   assert.match(launcher, /window\.hasShadow = false/);
   assert.match(launcher, /contentView\.layer\?\.borderColor = NSColor\(/);
-  assert.match(launcher, /didFinish navigation:[\s\S]{0,700}NSColor\.clear\.cgColor/);
+  assert.match(launcher, /didFinish navigation:[\s\S]{0,1400}NSColor\.clear\.cgColor/);
   const updater = read('installer/macos/apply-theme.sh');
   assert.match(updater, /copy_if_changed "\$REPO_ROOT\/ui\/launcher-loading\.html"/);
   assert.match(updater, /install_relay_watchdog/);
   const watchdog = read('services/watchdog/cle-watchdog.sh');
   assert.match(watchdog, /status" != "000"/);
   assert.match(watchdog, /FAILURE_THRESHOLD/);
-  assert.match(watchdog, /PINKIE_RELAY_CHECK_INTERVAL:-0\.75/);
-  assert.match(watchdog, /PINKIE_RELAY_RESTART_COOLDOWN:-8/);
+  assert.match(watchdog, /PINKIE_RELAY_CHECK_INTERVAL:-1/);
+  assert.match(watchdog, /PINKIE_RELAY_RESTART_COOLDOWN:-10/);
   assert.doesNotMatch(watchdog, /STATUS" != "200"/);
   assert.match(updater, /copy_if_changed "\$ASSET_ROOT\/laolao-splash\.mp4"/);
   assert.match(updater, /apply_ui_skin "\$bundled_ui"/);
@@ -230,7 +264,7 @@ test('startup splash controller is mounted once and tolerates the current app sh
   assert.match(splash, /openclaw-app-shell, openclaw-app \.shell/);
   assert.match(splash, /readyMode = !switching && ids\.includes\(mountedMode\)/);
   assert.match(installer, /exactly one startup controller/);
-  assert.match(installer, /laolao-splash\.js\?v=splash25/);
+  assert.match(installer, /laolao-splash\.js\?v=splash26/);
 });
 
 test('current runtime keeps the classic single-chat shell instead of the upstream control console', () => {
@@ -243,14 +277,14 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(css, /--oc-assistant-reserve-right: 0px/);
   assert.match(css, /openclaw-assistant-panel/);
   assert.match(css, /\.chat-pane__header-trailing/);
-  assert.match(css, /\.laolao-classic-workspace-rail/);
-  assert.match(css, /\.chat-workspace-rail\.laolao-classic-workspace-rail \{[\s\S]*?top: 0;/);
-  assert.match(css, /\.chat-workspace-rail\.laolao-classic-workspace-rail::after \{[\s\S]*?top: 45px;/);
+  assert.match(css, /\.chat-workspace-rail\[data-laolao-fallback-rail="1"\] \{[\s\S]*?top: 0;/);
+  assert.match(css, /\.chat-workspace-rail\[data-laolao-fallback-rail="1"\]::after \{[\s\S]*?top: 45px;/);
   assert.match(css, /\.nav-section--collapsed > \.nav-section__items \{[\s\S]*?display: none !important;/);
-  assert.match(css, /\.laolao-classic-workspace-rail:not\(\.chat-workspace-rail--collapsed\) \{[\s\S]*?width: min\(300px, 34vw\);/);
+  assert.match(css, /\.chat-workspace-rail\[data-laolao-fallback-rail="1"\]:not\(\.chat-workspace-rail--collapsed\) \{[\s\S]*?width: min\(300px, 34vw\);/);
   assert.match(js, /laolao-classic-breadcrumb/);
   assert.match(js, /laolao-classic-more/);
   assert.doesNotMatch(js, /document\.createElement\("button"\)[\s\S]{0,240}laolao-classic-more/);
+  assert.match(sideCss, /\.chat-workbench > \.chat-workspace-rail \{/);
   assert.match(sideCss, /right: 0 !important/);
   assert.match(sideCss, /grid-template-columns: minmax\(0, 1fr\) var\(--laolao-window-rail-reserve\) !important/);
   assert.match(sideCss, /position: relative !important/);
@@ -259,15 +293,18 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(sideCss, /container-name: clekk-chat-header/);
   assert.match(sideCss, /laolao-usage__chip\[data-fit-hidden\]/);
   assert.match(sideCss, /chat-pane__header \*/);
-  assert.match(sideCss, /data-usage-key="cacheWrite"/);
+  assert.match(sideCss, /data-usage-key="runtime"/);
   const usageJs = read('ui/injections/laolao-usage-stats.js');
   assert.match(usageJs, /el\.dataset\.usageKey = def\.key/);
-  assert.match(usageJs, /FIT_HIDE_ORDER = \["cacheWrite", "cacheRead", "output", "input", "quota"\]/);
+  assert.match(usageJs, /FIT_HIDE_ORDER = \["cacheRead", "output", "input", "runtime"\]/);
   assert.match(usageJs, /wrap\.scrollWidth > wrap\.clientWidth/);
   assert.match(usageJs, /new ResizeObserver\(queueFit\)/);
   assert.doesNotMatch(js, /document\.body\.append\(rail\)/);
-  assert.match(js, /rails\.find\(\(node\) => node\.parentElement !== document\.body\)/);
-  assert.match(js, /chat-workspace-rail__collapse-toggle/);
+  assert.doesNotMatch(js, /laolao-classic-workspace-rail/);
+  assert.match(js, /const nativeRail = rails\.find/);
+  assert.match(js, /isFallbackRail/);
+  assert.match(js, /laolaoFallbackRail/);
+  assert.match(js, /#pinkie-party-entry, :scope > #pinkie-roundtable-entry/);
   assert.match(sideJs, /nav-section--more/);
   assert.match(sideJs, /requestAnimationFrame/);
   assert.match(js, /chat-workspace-rail--collapsed/);
@@ -299,7 +336,7 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_PYTHON_BIN/);
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
   assert.match(setup, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
-  assert.match(build, /index\.mjs memory\.mjs setup\.py package\.json openclaw\.plugin\.json/);
+  assert.match(build, /index\.mjs memory\.mjs learning\.mjs web-gpt-activity\.mjs web-gpt-connection\.mjs setup\.py package\.json openclaw\.plugin\.json/);
 });
 
 test('managed macOS startup never rewrites its own signed UI bundle', () => {
@@ -308,6 +345,7 @@ test('managed macOS startup never rewrites its own signed UI bundle', () => {
 
   assert.match(bootstrap, /if \[\[ "\$\{PINKIE_MANAGED_GATEWAY:-0\}" != "1" \]\]; then[\s\S]*PINKIE_SKIP_APP_BUNDLES=1/);
   assert.match(themeInstaller, /copy_if_changed "\$REPO_ROOT\/installer\/macos\/apply-bundled\.sh" "\$bundled_root\/installer\/macos\/apply-bundled\.sh"/);
+  assert.match(themeInstaller, /copy_if_changed "\$REPO_ROOT\/installer\/macos\/apply-theme\.sh" "\$bundled_root\/installer\/macos\/apply-theme\.sh"/);
 });
 
 test('macOS hotfix keeps every bundled web surface and backend in sync', () => {

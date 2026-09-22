@@ -114,16 +114,28 @@ html[data-laolao-classic-shell="1"] {
 html[data-laolao-classic-shell="1"] .shell.shell--chat {
   grid-template-columns: 238px minmax(0, 1fr) !important;
 }
+
+/* The native runtime collapses navigation by adding shell--nav-collapsed and
+   reducing the sidebar itself to --shell-nav-rail-width. Keep our compact
+   238px override in sync with that state; otherwise the grid still reserves
+   the expanded track and leaves a wide transparent dead strip beside the
+   78px icon rail. Split panes intentionally own a separate one-column rule. */
+html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"])
+  .shell.shell--chat.shell--nav-collapsed,
+html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):has(.sidebar.sidebar--collapsed)
+  .shell.shell--chat {
+  grid-template-columns: var(--shell-nav-rail-width, 78px) minmax(0, 1fr) !important;
+}
 html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   margin-right: 0 !important;
 }
-.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed {
+.chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed {
   width: 36px;
   transform: translateX(29px);
   transition: transform .16s ease;
 }
-.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed:hover,
-.chat-workspace-rail.laolao-classic-workspace-rail.chat-workspace-rail--collapsed:focus-within {
+.chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed:hover,
+.chat-workspace-rail[data-laolao-fallback-rail="1"].chat-workspace-rail--collapsed:focus-within {
   transform: translateX(0);
 }
 .laolao-classic-rail__toggle {
@@ -135,7 +147,124 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   html[data-laolao-classic-shell="1"] .shell.shell--chat {
     grid-template-columns: min(220px, 29vw) minmax(0, 1fr) !important;
   }
+  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"])
+    .shell.shell--chat.shell--nav-collapsed,
+  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):has(.sidebar.sidebar--collapsed)
+    .shell.shell--chat {
+    grid-template-columns: var(--shell-nav-rail-width, 78px) minmax(0, 1fr) !important;
+  }
   .agent-chat__composer-shell {
     width: calc(100% - 18px) !important;
   }
+}
+
+/* 同窗分屏不是把原来的整页硬切两半。两个 WebView 都只保留聊天本体，
+   移除各自会占 238px 的导航和 44px 工作轨道；否则 640px 的半屏会被
+   挤成一条窄缝，消息逐字换行。右侧模式名和关闭按钮由原生分屏标题栏
+   提供，因此这里不复制一套控制条。 */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) {
+  /* 会话列表可在分屏里收起，但右侧的真实工作区按键必须留在画面上。 */
+  --laolao-window-rail-reserve: 44px !important;
+  --laolao-classic-rail-width: 44px !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .shell.shell--chat {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  min-width: 0 !important;
+}
+
+/* Do not remove the menu in a split pane. At this width the upstream shell
+   already uses its hamburger state; keep that menu as an overlay so opening
+   it reveals every real action without stealing a permanent 238px column
+   from the conversation. */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .shell.shell--chat {
+  position: relative !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .sidebar {
+  display: flex !important;
+  position: absolute !important;
+  z-index: 80 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: min(252px, calc(100% - 46px)) !important;
+  max-width: calc(100% - 46px) !important;
+  min-width: 0 !important;
+  overflow-y: auto !important;
+  pointer-events: auto !important;
+  box-shadow: 12px 0 28px rgba(103, 43, 74, .18) !important;
+}
+
+/* The closed state is an icon-width native rail.  When the user taps its
+   hamburger, the runtime removes this class and the full menu above becomes
+   a proper overlay.  This explicit pair prevents an old cached `display:
+   none` rule from swallowing every menu action in either split pane. */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .sidebar.sidebar--collapsed {
+  display: none !important;
+}
+
+/* Each split half is intentionally narrow, so upstream uses its mobile
+   navigation drawer. Its viewport-wide backdrop can outlive a SPA session
+   transition and make the chat look frozen. The menu stays available as an
+   overlay; outside clicks are closed by the sidebar's split-drawer handler. */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .shell-nav-backdrop {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .shell.shell--chat > main.content,
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .chat-workbench,
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .chat-workbench__main,
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  :is(.chat-split-container, .chat-main, .chat-main__conversation, .chat-thread, .chat-thread-inner) {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .chat-workbench {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .chat-workbench > .chat-workspace-rail {
+  display: flex !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .agent-chat__composer-shell {
+  width: min(100% - 18px, 680px) !important;
+}
+
+/* 两个透明 WebView 并排时，桌面壁纸会穿过两层半透明底而变成灰黑叠影。
+   分屏单独提升阅读底色，模式壁纸还在，但只做淡淡一层，不会盖住内容。 */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) body {
+  background: rgba(255, 250, 253, 0.94) !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) body::before {
+  opacity: 0.16 !important;
+  filter: saturate(0.92) !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+  .card.chat {
+  background: rgba(255, 252, 253, 0.50) !important;
 }

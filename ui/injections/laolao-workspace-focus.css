@@ -1,0 +1,79 @@
+/* 会话工作区默认是“交付物优先”，但不会移除任何内部文件或能力。 */
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .chat-workspace-rail__scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"] [data-laolao-workspace-section="changed"] { order: 1; }
+.chat-workspace-rail[data-laolao-workspace-focus="1"] [data-laolao-workspace-section="artifacts"] { order: 2; }
+.chat-workspace-rail[data-laolao-workspace-focus="1"] [data-laolao-workspace-section="read"] { order: 3; }
+.chat-workspace-rail[data-laolao-workspace-focus="1"] [data-laolao-workspace-section="browser"] { order: 4; }
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .laolao-workspace-focus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 7px;
+  border-bottom: 1px solid rgba(202, 84, 141, .14);
+  color: #94627b;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .laolao-workspace-focus__copy {
+  min-width: 0;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .laolao-workspace-focus__toggle {
+  flex: 0 0 auto;
+  min-height: 25px;
+  padding: 4px 7px;
+  border: 1px solid rgba(196, 72, 132, .25);
+  border-radius: 999px;
+  color: #a13d70;
+  background: rgba(255, 244, 250, .72);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .laolao-workspace-focus__toggle:hover,
+.chat-workspace-rail[data-laolao-workspace-focus="1"] .laolao-workspace-focus__toggle[aria-pressed="true"] {
+  border-color: rgba(178, 48, 116, .45);
+  background: rgba(255, 224, 241, .9);
+}
+
+/* The native list tracks every process touch. Default to actual delivery and
+   working material; process, cache, old references and diagnostics stay one
+   deliberate click away rather than masquerading as the final work. */
+.chat-workspace-rail[data-laolao-workspace-focus="1"][data-laolao-system-visible="false"]
+  .chat-workspace-rail__file[data-laolao-focus-hidden="true"],
+.chat-workspace-rail[data-laolao-workspace-focus="1"][data-laolao-system-visible="false"]
+  :is(.chat-workspace-rail__section, .chat-workspace-rail__browser)[data-laolao-focus-empty="true"] {
+  display: none;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"]
+  .chat-workspace-rail__file[data-laolao-focus-kind="delivery"] .chat-workspace-rail__file-name {
+  color: #a83b70;
+  font-weight: 760;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"]
+  .chat-workspace-rail__file[data-laolao-focus-kind="material"] .chat-workspace-rail__file-name {
+  color: #5d5b93;
+  font-weight: 720;
+}
+
+.chat-workspace-rail[data-laolao-workspace-focus="1"]
+  .chat-workspace-rail__section-title {
+  color: #a83972;
+  font-weight: 780;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-workspace-rail[data-laolao-workspace-focus="1"] * { scroll-behavior: auto !important; }
+}

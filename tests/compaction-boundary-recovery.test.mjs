@@ -50,6 +50,7 @@ function compactionSafeguardExtension(api) {
 test('repairs empty preparation with a recent-turn boundary and is idempotent',()=>{
   const output=transform(fixture);
   assert.match(output,/resolveRecoveryFirstKeptEntryId/);
+  assert.match(output,/maxTailChars/);
   assert.match(output,/effectiveFirstKeptEntryId = resolveRecoveryFirstKeptEntryId/);
   assert.equal((output.match(/firstKeptEntryId: effectiveFirstKeptEntryId,/g)||[]).length,3);
   assert.equal(transform(output),output);
@@ -61,6 +62,25 @@ test('same-session recovery messaging keeps /new as last-resort only',()=>{
   assert.match(output,/当前会话已保留/);
   assert.match(output,/通常不需要使用 \/new/);
   assert.doesNotMatch(output,/Try again, use \/compact/);
+});
+
+test('fallback boundary obeys context pressure even when many recent turns were requested',()=>{
+  const output=transform(fixture);
+  const resolveBoundary=Function(`${output.replace(/^\/\* pinkie-compaction-boundary-recovery:v2 \*\/\n/,'')}\nreturn resolveRecoveryFirstKeptEntryId;`)();
+  const entries=[];
+  for(let turn=1;turn<=9;turn++){
+    entries.push({type:'message',id:`u${turn}`,message:{role:'user',content:[{type:'text',text:`ask ${turn}`}]}});
+    entries.push({type:'message',id:`a${turn}`,message:{role:'assistant',content:[{type:'text',text:'working'}]}});
+    entries.push({type:'message',id:`t${turn}`,message:{role:'toolResult',content:[{type:'text',text:'x'.repeat(180000)}]}});
+  }
+  const sessionManager={getBranch:()=>entries};
+  // The 1M model gets a conservative 500k-character raw suffix. The newest
+  // two heavy turns fit; retaining all nine would immediately overflow again.
+  assert.equal(resolveBoundary(sessionManager,'fallback',{
+    recentTurnsPreserve:12,
+    contextWindowTokens:1000000,
+    keepRecentTokens:600000,
+  }),'u8');
 });
 
 test('apply backs up and patches exactly one safeguard bundle',()=>{

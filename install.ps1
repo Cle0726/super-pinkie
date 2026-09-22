@@ -82,6 +82,8 @@ node (Join-Path $RepoDir "patch\apply-compaction-boundary-recovery.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Compaction boundary recovery patch failed" }
 node (Join-Path $RepoDir "patch\apply-same-session-recovery.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Same-session recovery patch failed" }
+node (Join-Path $RepoDir "patch\apply-loopback-model-reliability.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Loopback model reliability patch failed" }
 node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Local unrestricted policy patch failed" }
 python (Join-Path $RepoDir "services\context\setup.py")

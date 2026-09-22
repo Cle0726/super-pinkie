@@ -15,10 +15,27 @@
       const data=await job;if(version!==revision)return;
       const rows=(data.sessions||[]).filter(s=>s.key?.startsWith('agent:'+api.agentId+':')&&!s.key.includes(':subagent:'));
       cache.set(key,{rows,at:Date.now()});
+      if(!archiveView)api.queueAutoTitles?.(rows);
     }catch(error){cache.set(key,{rows:cache.get(key)?.rows||[],error:error.message,at:Date.now()});if(current?.api.mode===api.mode)api.toast('会话列表暂未刷新：'+error.message);}
     finally{if(loading.get(key)===job)loading.delete(key);signature='';if(current)render(current.section,current.api);}
   }
-  const title=s=>[s.label,s.derivedTitle,s.title,s.displayName,s.name].find(v=>typeof v==='string'&&v.trim()&&!/^agent:/.test(v))||(s.key?.endsWith(':main')?'主会话':'未命名会话');
+  const placeholderTitle=(value,key='',sessionId='')=>{
+    const text=String(value||'').trim();
+    if(!text)return true;
+    if(/^(?:(?:.+?)\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+)$/i.test(text))return true;
+    if(/^[0-9a-f]{8}\b/i.test(text))return true;
+    return [String(key||'').split(':').pop(),String(sessionId||'')].filter(Boolean).some(id=>{
+      const short=id.slice(0,8);
+      return text===id||text===short||text===short+'…'||text.startsWith(short+' (');
+    });
+  };
+  const title=s=>{
+    const label=typeof s.label==='string'?s.label.trim():'';
+    if(label&&!placeholderTitle(label,s.key,s.sessionId)&&!/^agent:/.test(label))return label;
+    return [s.derivedTitle,s.title,s.displayName,s.name,label]
+      .find(v=>typeof v==='string'&&v.trim()&&!/^agent:/.test(v)&&!placeholderTitle(v,s.key,s.sessionId))
+      ||label||(s.key?.endsWith(':main')?'主会话':'新会话');
+  };
   function row(s,api){
     const n=el('div','sidebar-recent-session session-row-host');n.dataset.sessionKey=s.key;
     n.classList.toggle('sidebar-recent-session--active',s.key===api.currentKey);

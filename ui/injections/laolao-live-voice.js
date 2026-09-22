@@ -8,21 +8,29 @@
   let waitingForVoiceReply = false;
   let dictationDraftReady = false;
 
-  const cleanText = (group) => Array.from(group.querySelectorAll(".chat-text"))
-    .map((node) => {
-      const copy = node.cloneNode(true);
-      copy.querySelectorAll("pre, code, .chat-tool-card, .chat-activity-group").forEach((part) => part.remove());
-      return copy.textContent || "";
-    })
-    .join("\n")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/[\*`_~#[\]{}|]/g, "")
-    .replace(/[,，]+/g, "，")
-    .replace(/[;；]+/g, "；")
-    .replace(/\r/g, "")
-    .replace(/[ \t\f\v]+/g, " ")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
+  // Do not clone a reply just to remove code/tool output before speaking it.
+  // A normal typed turn does not need this work at all (see processGroup), and
+  // a voice turn only walks the one reply that is about to be read aloud.
+  const cleanText = (group) => {
+    const parts = [];
+    group.querySelectorAll(".chat-text").forEach((container) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.parentElement?.closest("pre, code, .chat-tool-card, .chat-activity-group")) continue;
+        parts.push(node.nodeValue || "");
+      }
+    });
+    return parts.join("\n")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[\*`_~#[\]{}|]/g, "")
+      .replace(/[,，]+/g, "，")
+      .replace(/[;；]+/g, "；")
+      .replace(/\r/g, "")
+      .replace(/[ \t\f\v]+/g, " ")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+  };
 
   const say = (text) => {
     const spoken = text.replace(/\s+/g, " ").trim();
@@ -109,11 +117,14 @@
 
   const processGroup = (group) => {
     if (!group.matches(".chat-group.assistant")) return;
+    let track = tracks.get(group);
+    // Normal typed chat must be completely silent and cheap: no DOM clone or
+    // text walk for every streamed chunk unless this was an explicitly voiced
+    // turn (or the one voiced reply is still waiting to be spoken).
+    if (!track && !waitingForVoiceReply) return;
     const nextText = cleanText(group);
     if (!nextText) return;
-    let track = tracks.get(group);
     if (!track) {
-      if (!waitingForVoiceReply) return;
       const baseline = replyBaselines.get(group) || "";
       if (baseline && nextText === baseline) return;
       track = { baseline: nextText.startsWith(baseline) ? baseline : "", timer: 0, spoken: false };
@@ -150,10 +161,15 @@
 
   const armForReply = (fromVoice) => {
     cancelTracks();
+    waitingForVoiceReply = false;
+    // A regular send must not snapshot every mounted assistant reply. Besides
+    // being wasted work, the old clone-per-group path made long chats stutter
+    // even though the user had not asked for spoken feedback.
+    if (!fromVoice) return;
     document.querySelectorAll(".chat-group.assistant").forEach((group) => {
       replyBaselines.set(group, cleanText(group));
     });
-    waitingForVoiceReply = fromVoice;
+    waitingForVoiceReply = true;
   };
 
   const takeVoiceDraftFlag = () => {
@@ -189,6 +205,9 @@
   }, true);
 
   new MutationObserver((records) => {
+    // Keep the observer installed for the next native dictation send, but do
+    // virtually no work while voice is unused. This is the common path.
+    if (!waitingForVoiceReply && tracks.size === 0) return;
     for (const record of records) {
       collectGroups(record.target, dirtyGroups);
       record.addedNodes.forEach((node) => collectGroups(node, dirtyGroups));

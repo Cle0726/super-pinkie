@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import hashlib
 import json
@@ -947,6 +948,45 @@ class NativeBridge:
             "path": str(path),
             "name": path.name,
         }
+
+    def preview_material(self, payload):
+        """Return one user-selected workspace image/PDF/HTML for the in-rail viewer.
+
+        This is presentation-only; it does not change the agent's tool or
+        filesystem access.  A data URL keeps WebView2 inside the same app
+        surface, without asking it to navigate to an arbitrary file URL.
+        """
+        payload = payload if isinstance(payload, dict) else {}
+        path = Path(str(payload.get("path", ""))).expanduser()
+        suffix = path.suffix.lower()
+        mime_types = {
+            ".pdf": "application/pdf",
+            ".html": "text/html", ".htm": "text/html",
+            ".png": "image/png",
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp",
+            ".avif": "image/avif", ".bmp": "image/bmp",
+            ".tif": "image/tiff", ".tiff": "image/tiff",
+            ".heic": "image/heic", ".heif": "image/heic",
+            ".svg": "image/svg+xml",
+        }
+        mime_type = mime_types.get(suffix)
+        if not mime_type:
+            return {"ok": False, "message": "这里只能预览图片、PDF 和 HTML。"}
+        try:
+            if not path.is_file():
+                return {"ok": False, "message": "这个材料已经不在原来的位置了。"}
+            size = path.stat().st_size
+            if size > 96 * 1024 * 1024:
+                return {"ok": False, "message": "这个材料超过 96 MB，直接预览会拖慢页面。请换一个较小的文件，或先压缩它。"}
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            return {
+                "ok": True,
+                "src": f"data:{mime_type};base64,{encoded}",
+                "mimeType": mime_type,
+            }
+        except OSError:
+            return {"ok": False, "message": "读取这个材料时出了点问题，请再试一次。"}
 
     def open_external(self, url):
         if isinstance(url, str) and url.startswith(("https://", "http://")):

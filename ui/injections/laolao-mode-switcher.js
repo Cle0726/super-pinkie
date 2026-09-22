@@ -3,6 +3,7 @@
   const motion = window.PinkieMotion;
 
   const storageKey = "laolao:active-mode";
+  const lastSessionStorageKey = (modeId) => `laolao:last-session:${modeId}`;
   const skipEntrySplashKey = "laolao:skip-entry-splash";
   const skipEntrySplashParam = "laolao-switch";
   const modeHandoffKey = "laolao:mode-handoff";
@@ -86,8 +87,20 @@
 
   let menu = null;
   let trigger = null;
+  let dockTrigger = null;
+  let menuAnchor = null;
   let switching = false;
   let preloading = false;
+
+  const hasWorkspaceDock = () => Boolean(
+    window.webkit?.messageHandlers?.laolaoWorkspaceDock?.postMessage
+  );
+
+  const isDockedWorkspace = () =>
+    document.documentElement.getAttribute("data-laolao-workspace-dock") === "1";
+
+  const hasPrimaryWorkspaceSplit = () =>
+    document.documentElement.getAttribute("data-laolao-workspace-split") === "1";
 
   // A small, fixed particle field gives the empty-chat identity a one-shot
   // materialisation effect without a continuous drawing loop. Every dot animates
@@ -159,6 +172,47 @@
 
   const activeMode = () => modeFromSession() || localStorage.getItem(storageKey) || "chat";
   const modeById = (id) => modes.find((mode) => mode.id === id) || modes[0];
+  const modeIdForSession = (key) => {
+    if (String(key).startsWith("agent:project:")) return "project";
+    if (String(key).startsWith("agent:thinking:")) return "thinking";
+    if (String(key).startsWith("agent:learning:")) return "learning";
+    if (String(key).startsWith("agent:unrestricted:")) return "unrestricted";
+    if (String(key).startsWith("agent:main:")) return "chat";
+    return null;
+  };
+  const agentIdForMode = (modeId) => modeId === "chat" ? "main" : modeId;
+  const rememberSession = (key) => {
+    const modeId = modeIdForSession(key);
+    if (!modeId || String(key).includes(":subagent:")) return;
+    try { localStorage.setItem(lastSessionStorageKey(modeId), String(key)); } catch {}
+  };
+  const storedSession = (mode) => {
+    try {
+      const key = localStorage.getItem(lastSessionStorageKey(mode.id)) || "";
+      return modeIdForSession(key) === mode.id ? key : mode.sessionKey;
+    } catch {
+      return mode.sessionKey;
+    }
+  };
+  const resolveTargetSession = async (mode) => {
+    const preferred = storedSession(mode);
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (typeof rpc !== "function") return preferred;
+    try {
+      const result = await rpc("sessions.list", {
+        agentId: agentIdForMode(mode.id), archived: false, limit: 1000,
+      }, 8_000);
+      const sessions = Array.isArray(result?.sessions) ? result.sessions : [];
+      const usable = sessions.filter((item) => item?.key && !item.key.includes(":subagent:") && item.archived !== true);
+      if (usable.some((item) => item.key === preferred)) return preferred;
+      if (usable.some((item) => item.key === mode.sessionKey)) return mode.sessionKey;
+      return usable[0]?.key || mode.sessionKey;
+    } catch {
+      // A transient list failure must not turn a mode switch into a reconnect
+      // loop. The last known exact session is safer than rebuilding the page.
+      return preferred;
+    }
+  };
 
   // The native startup movie sits above the mounted chat. Replay the short
   // materialisation only after that cover is actually gone, so the user sees it.
@@ -209,7 +263,8 @@
   const closeMenu = () => {
     menu?.remove();
     menu = null;
-    trigger?.setAttribute("aria-expanded", "false");
+    menuAnchor?.setAttribute("aria-expanded", "false");
+    menuAnchor = null;
   };
 
   const preloadTransitions = async () => {
@@ -307,8 +362,11 @@
   const navigateWithinApp = (mode, next) => {
     const shell = document.querySelector("openclaw-app-shell");
     const context = shell?.context;
+    if (typeof shell?.navigate === "function") {
+      shell.navigate("chat", { search: next.search });
+      return "router";
+    }
     if (typeof context?.navigate === "function") {
-      context.gateway?.setSessionKey?.(mode.sessionKey);
       context.navigate("chat", { search: next.search });
       return "router";
     }
@@ -391,17 +449,26 @@
     }
     switching = true;
     closeMenu();
-    const transition = await playModeTransition(mode);
+    rememberSession(currentSessionKey());
+    const [transition, targetSessionKey] = await Promise.all([
+      playModeTransition(mode),
+      resolveTargetSession(mode),
+    ]);
+    const targetMode = {...mode, sessionKey: targetSessionKey};
     localStorage.setItem(storageKey, mode.id);
     sessionStorage.removeItem(skipEntrySplashKey);
     sessionStorage.removeItem(modeHandoffKey);
     const next = new URL(window.location.href);
-    next.searchParams.set("session", mode.sessionKey);
+    next.searchParams.set("session", targetSessionKey);
     next.searchParams.delete(skipEntrySplashParam);
     next.searchParams.delete("draft");
-    transition.overlay.dataset.navigation = navigateWithinApp(mode, next);
-    syncModePresentation(mode);
-    await finishModeTransition(mode, transition);
+    transition.overlay.dataset.navigation = navigateWithinApp(targetMode, next);
+    rememberSession(targetSessionKey);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent(
+      "pinkie:session-selected", {detail: {sessionKey: targetSessionKey}}
+    )), 0);
+    syncModePresentation(targetMode);
+    await finishModeTransition(targetMode, transition);
   };
 
   // Keep the surface live: the old SVG banners baked text and an opaque pill
@@ -450,12 +517,160 @@
     menu.style.left = `${Math.max(8, bounds.left)}px`;
     menu.style.top = `${bounds.bottom + 7}px`;
     document.body.append(menu);
+    menuAnchor = trigger;
     trigger.setAttribute("aria-expanded", "true");
+  };
+
+  const openWorkspaceDock = async (mode) => {
+    const bridge = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
+    if (!bridge?.postMessage || isDockedWorkspace()) return;
+    closeMenu();
+    const sessionKey = await resolveTargetSession(mode);
+    rememberSession(sessionKey);
+    // The native layer validates both fields against its fixed five-mode map.
+    // This message cannot alter the current route or start another gateway.
+    bridge.postMessage({ action: "open", mode: mode.id, sessionKey });
+  };
+
+  // Either half may ask the native shell to drop the companion: the shell's
+  // "close" branch is source-agnostic, and the docked half is the one that
+  // hosts the always-visible exit button (see syncDockExitButton). Refusing
+  // the docked half here was what left a narrow split with no way back.
+  const closeWorkspaceDock = () => {
+    const bridge = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
+    if (!bridge?.postMessage) return;
+    closeMenu();
+    bridge.postMessage({ action: "close" });
+  };
+
+  const DOCK_EXIT_ID = "laolao-dock-exit";
+
+  // A fixed offset cannot be used here: the shell's top bar is 44px tall when
+  // the pane is wide and grows to ~58px once the narrow layout wraps its usage
+  // chips. Measure the real bar instead of guessing, so the exit never lands
+  // on top of the controls it sits next to.
+  const positionDockExit = (button) => {
+    const bar = document.querySelector("header.topbar") || document.querySelector(".topnav-shell");
+    const bottom = bar ? bar.getBoundingClientRect().bottom : 0;
+    button.style.top = `${Math.round(Math.max(8, bottom) + 8)}px`;
+  };
+
+  // The dock picker in the primary pane is the only exit a split used to have,
+  // and it lives inside the sidebar — which becomes a collapsed overlay as soon
+  // as the halves get narrow. A split with a hidden sidebar therefore had no
+  // reachable way out. Give the docked half its own exit that never depends on
+  // the sidebar, and keep it in sync because the flag is set before paint.
+  const syncDockExitButton = () => {
+    const existing = document.getElementById(DOCK_EXIT_ID);
+    if (!isDockedWorkspace() || !hasWorkspaceDock()) {
+      existing?.remove();
+      return;
+    }
+    if (existing) {
+      positionDockExit(existing);
+      return;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = DOCK_EXIT_ID;
+    button.className = "laolao-dock-exit";
+    button.setAttribute("aria-label", "退出分屏，关闭右侧窗口");
+    button.title = "退出分屏";
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5l9 9"></path><path d="M16.5 7.5l-9 9"></path></svg><span class="laolao-dock-exit__label">退出分屏</span>';
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWorkspaceDock();
+    });
+    document.body.append(button);
+    positionDockExit(button);
+  };
+
+  // render() only re-runs on DOM mutations and history changes, so a pure
+  // window resize has to re-seat the button on its own.
+  window.addEventListener("resize", () => {
+    const button = document.getElementById(DOCK_EXIT_ID);
+    if (button) positionDockExit(button);
+  });
+
+  const openDockMenu = () => {
+    if (!dockTrigger || !hasWorkspaceDock() || isDockedWorkspace()) return;
+    if (menu) {
+      closeMenu();
+      return;
+    }
+    const current = activeMode();
+    menu = document.createElement("div");
+    menu.className = "laolao-mode-menu laolao-mode-menu--workspace-dock";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "选择要在右侧分屏打开的模式");
+    modes.filter((mode) => mode.id !== current).forEach((mode) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "laolao-mode-menu__option";
+      option.setAttribute("role", "menuitem");
+      option.setAttribute("aria-label", `在右侧分屏打开${mode.label}`);
+      renderModeButton(option, mode);
+      const warm = () => { void motion.modeAssets(mode.id); };
+      option.addEventListener("pointerenter", warm, { once: true });
+      option.addEventListener("focus", warm, { once: true });
+      option.addEventListener("click", () => { void openWorkspaceDock(mode); });
+      menu.append(option);
+    });
+    // The companion has no decorative native title bar. Keep its sole close
+    // action in the existing left-side split picker instead of spending a
+    // whole 34px row above the second conversation.
+    if (hasPrimaryWorkspaceSplit()) {
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "laolao-mode-menu__option laolao-mode-menu__option--dock-close";
+      close.textContent = "关闭右侧分屏";
+      close.setAttribute("aria-label", "关闭右侧分屏");
+      close.addEventListener("click", closeWorkspaceDock);
+      menu.append(close);
+    }
+    const bounds = dockTrigger.getBoundingClientRect();
+    menu.style.left = `${Math.min(Math.max(8, bounds.right - 150), window.innerWidth - 168)}px`;
+    menu.style.top = `${bounds.bottom + 7}px`;
+    document.body.append(menu);
+    menuAnchor = dockTrigger;
+    dockTrigger.setAttribute("aria-expanded", "true");
+  };
+
+  const syncDockTrigger = (identity) => {
+    dockTrigger = identity.querySelector(".laolao-mode-dock-trigger");
+    if (isDockedWorkspace() || !hasWorkspaceDock()) {
+      dockTrigger?.remove();
+      dockTrigger = null;
+      return;
+    }
+    if (!dockTrigger) {
+      dockTrigger = document.createElement("button");
+      dockTrigger.type = "button";
+      dockTrigger.className = "laolao-mode-dock-trigger";
+      dockTrigger.setAttribute("aria-haspopup", "menu");
+      dockTrigger.setAttribute("aria-expanded", "false");
+      // A single framed split is much clearer than two overlapping cards at
+      // this small size. It reads as “one window, two work areas” instead of
+      // looking like duplicated buttons in the sidebar header.
+      dockTrigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect><path d="M12 4.5v15"></path><path d="M6.5 8h2"></path><path d="M15.5 8h2"></path></svg>';
+      dockTrigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openDockMenu();
+      });
+      identity.append(dockTrigger);
+    }
+    dockTrigger.setAttribute("aria-label", "分屏工作区：在右侧打开另一个模式");
+    dockTrigger.title = "分屏工作区";
   };
 
   const render = () => {
     const mode = modeById(activeMode());
+    rememberSession(currentSessionKey());
     syncModePresentation(mode);
+    // Before the sidebar lookup: the split exit must survive a hidden sidebar.
+    syncDockExitButton();
     const identity = document.querySelector(".sidebar-brand__identity") ||
       document.querySelector(".sidebar-brand");
     if (!identity) return;
@@ -471,10 +686,11 @@
     }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
     renderModeButton(trigger, mode);
+    syncDockTrigger(identity);
   };
 
   document.addEventListener("pointerdown", (event) => {
-    if (menu && !menu.contains(event.target) && !trigger?.contains(event.target)) closeMenu();
+    if (menu && !menu.contains(event.target) && !menuAnchor?.contains(event.target)) closeMenu();
   }, true);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeMenu();

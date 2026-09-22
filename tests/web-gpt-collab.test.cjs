@@ -1,0 +1,120 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '..');
+const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
+
+test('web GPT collaboration is opt-in and scoped per session', () => {
+  const ui = read('ui/injections/laolao-web-gpt-collab.js');
+  assert.match(ui, /laolao:web-gpt-collab:/);
+  assert.match(ui, /localStorage\.getItem\(storageKey\(\)\) === "1"/);
+  assert.match(ui, /pinkie\.webGpt\.arm/);
+  assert.match(ui, /pinkie\.webGpt\.activity\.get/);
+  assert.match(ui, /pinkie\.webGpt\.activity\.append/);
+  assert.match(ui, /browserControl\("send"/);
+  assert.match(ui, /waitForChatGPTReply/);
+  assert.match(ui, /pinkie\.webGpt\.inject/);
+  assert.match(ui, /pinkie\.webGpt\.connection\.bindConversation/);
+  assert.match(ui, /recoveredFromStaleConversation/);
+  assert.match(ui, /原来保存的 ChatGPT 会话已失效/);
+  assert.match(ui, /bridge\.postMessage\(\{action: "open", url: home\}\)/);
+  assert.match(ui, /未绑定项目 · 不读取碧琪记忆/);
+  assert.match(ui, /No user project folder is bound/);
+  assert.match(ui, /Never inspect Pinkie\/OpenClaw memory/);
+  assert.match(ui, /修复前记录，内部工作区连接现已停用/);
+  assert.match(ui, /现在已经禁止读取碧琪记忆和内部工作区/);
+  assert.match(ui, /const syncSession =/);
+  assert.match(ui, /renderActivity\(\);\s*void loadActivity\(\);\s*void loadConnection\(\);/);
+  assert.match(ui, /observedSessionKey = next/);
+  assert.match(ui, /已自动改用普通聊天/);
+  assert.match(ui, /本轮请求已排队/);
+  assert.match(ui, /发往网页 GPT/);
+  assert.match(ui, /网页 GPT 返回/);
+  assert.match(ui, /activity\.get", \{sessionKey: key, limit: 1, offset: activityOffset\}/);
+  assert.match(ui, /data-page="older"/);
+  assert.match(ui, /document\.createElement\("details"\)/);
+  assert.doesNotMatch(ui, /events\.slice\(\)\.reverse\(\)\.map/);
+  assert.doesNotMatch(ui, /laolao-web-gpt-panel__explain/);
+  assert.doesNotMatch(ui, /本会话协作<\/strong>/);
+  assert.match(ui, /尚未向网页 GPT 发送/);
+  assert.match(ui, /preview: String\(preview/);
+  assert.match(ui, /网页 GPT 协作已关闭，恢复普通聊天/);
+  assert.match(ui, /单击开启网页 GPT 协作，双击管理/);
+  assert.match(ui, /addEventListener\("dblclick"/);
+  assert.match(ui, /buttonClickTimer = setTimeout\([\s\S]*?toggle\(\)/);
+  assert.doesNotMatch(ui, /localStorage\.setItem\(storageKey\(\), "1"\)[\s\S]{0,80}render\(\);\s*$/);
+});
+
+test('gateway uses hidden next-turn injection instead of rewriting the composer', () => {
+  const plugin = read('services/mode-architecture/index.mjs');
+  assert.match(plugin, /registerGatewayMethod\('pinkie\.webGpt\.arm'/);
+  assert.match(plugin, /enqueueNextTurnInjection/);
+  assert.match(plugin, /\[pinkie:web-gpt-relayed-plan\]/);
+  assert.match(plugin, /placement: 'append_context'/);
+  assert.match(plugin, /createWebGptActivityTool/);
+  assert.match(plugin, /registerWebGptActivityGateway/);
+  assert.match(plugin, /registerWebGptConnectionGateway/);
+});
+
+test('collaboration panel exposes honest activity and maintainable account controls', () => {
+  const ui = read('ui/injections/laolao-web-gpt-collab.js');
+  const connection = read('services/mode-architecture/web-gpt-connection.mjs');
+  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  assert.match(ui, /连接与账号/);
+  assert.match(ui, /pinkie\.webGpt\.connection\.get/);
+  assert.match(ui, /pinkie\.webGpt\.connection\.pair/);
+  assert.match(ui, /UNPAIR_CURRENT_WEB_GPT/);
+  assert.match(ui, /reset-chatgpt-session/);
+  assert.match(ui, /https:\/\/chatgpt\.com\/plugins/);
+  assert.match(ui, /laolao-web-gpt-connection__confirm/);
+  assert.match(ui, /Number\(bridge\?\.tokenCount \|\| 0\) > 0/);
+  assert.match(ui, /fatalTunnel/);
+  assert.match(ui, /bridge\?\.publicReady === true/);
+  assert.match(ui, /安全连接已建立 · 等待配对/);
+  assert.doesNotMatch(ui, /\bconfirm\(/);
+  assert.match(connection, /pinkie\.webGpt\.connection\.start/);
+  assert.match(connection, /pinkie\.webGpt\.connection\.clearConversation/);
+  assert.match(connection, /pinkie\.webGpt\.connection\.bindConversation/);
+  assert.match(connection, /pinkie\.webGpt\.connection\.unpair/);
+  assert.match(connection, /\['start', '-w', workspace, '--tunnel', '--json'\]/);
+  assert.doesNotMatch(connection, /sandbox-allow/);
+  assert.match(launcher, /resetChatGPTBrowserSession/);
+  assert.match(launcher, /handleChatGPTControl/);
+  assert.match(launcher, /data-testid=\"send-button\"/);
+  assert.match(launcher, /data-message-author-role=\"assistant\"/);
+  assert.match(launcher, /window\.__laolaoBrowserControlResult/);
+  assert.match(launcher, /name\.hasSuffix\("\.chatgpt\.com"\)/);
+  assert.match(launcher, /name\.hasSuffix\("\.openai\.com"\)/);
+});
+
+test('bundled bridge stays read-only and isolated from Codex state', () => {
+  const skill = read('skills/web-gpt-collab/SKILL.md');
+  const setup = read('services/mode-architecture/setup.py');
+  const provenance = read('services/chatgpt-collab/UPSTREAM.md');
+  assert.match(skill, /不要运行 `sandbox-allow`/);
+  assert.match(skill, /只读连接器/);
+  assert.match(skill, /profile="openclaw"/);
+  assert.match(skill, /web_gpt_activity/);
+  assert.match(skill, /宿主已经完成网页收发时/);
+  assert.match(skill, /不调用 `web_gpt_activity`/);
+  assert.match(skill, /当前模型只完成本地工作并正常给用户最终回复/);
+  assert.match(skill, /不得读取当前\s*模式自己的 workspace、memory、persona/);
+  assert.match(skill, /action=sent/);
+  assert.match(skill, /action=received/);
+  assert.match(setup, /web-gpt-collab/);
+  assert.match(setup, /C2C_STATE_DIR/);
+  assert.match(provenance, /9663b88753e35c76796c5bce000293e0bd22cd9e/);
+  assert.ok(fs.existsSync(path.join(root, 'services/chatgpt-collab/runtime/bin/c2c.js')));
+});
+
+test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
+  const installer = read('installer/macos/apply-theme.sh');
+  const build = read('desktop/macos/build.sh');
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt12/);
+  assert.match(installer, /services\/chatgpt-collab/);
+  assert.match(installer, /skills\/web-gpt-collab/);
+  assert.match(build, /services\/chatgpt-collab/);
+  assert.match(build, /web-gpt-collab/);
+});

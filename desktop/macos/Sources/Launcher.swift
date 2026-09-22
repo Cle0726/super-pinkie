@@ -278,6 +278,147 @@ private enum DesktopControlEndpoint {
     }
 }
 
+/* WKWebView cannot safely load arbitrary file: URLs from its HTTP control UI.
+   Keep material bytes in the native shell and hand the page a short-lived,
+   opaque custom URL instead. The UI only requests this for a file the user
+   clicked in the visible workspace rail; this handler does not alter the
+   Agent's filesystem or tool permissions. */
+private final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
+    private struct Resource {
+        let url: URL
+        let mimeType: String
+        let expiresAt: Date
+    }
+
+    private let lock = NSLock()
+    private var resources: [String: Resource] = [:]
+    private let maximumBytes: Int64 = 96 * 1024 * 1024
+    private let lifetime: TimeInterval = 20 * 60
+    private let maximumResources = 24
+
+    private func mimeType(for url: URL) -> String? {
+        switch url.pathExtension.lowercased() {
+        case "pdf": return "application/pdf"
+        case "html", "htm": return "text/html"
+        case "css": return "text/css"
+        case "js", "mjs": return "text/javascript"
+        case "json": return "application/json"
+        case "woff": return "font/woff"
+        case "woff2": return "font/woff2"
+        case "ttf": return "font/ttf"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "avif": return "image/avif"
+        case "bmp": return "image/bmp"
+        case "tif", "tiff": return "image/tiff"
+        case "heic", "heif": return "image/heic"
+        case "svg": return "image/svg+xml"
+        default: return nil
+        }
+    }
+
+    private func pruneLocked(now: Date) {
+        resources = resources.filter { $0.value.expiresAt > now }
+        if resources.count <= maximumResources { return }
+        let surplus = resources
+            .sorted { $0.value.expiresAt < $1.value.expiresAt }
+            .prefix(resources.count - maximumResources)
+            .map(\.key)
+        surplus.forEach { resources.removeValue(forKey: $0) }
+    }
+
+    func register(path: String) -> [String: Any] {
+        let candidate = URL(fileURLWithPath: path).standardizedFileURL
+        guard let mimeType = mimeType(for: candidate) else {
+            return ["ok": false, "message": "这里只能预览图片、PDF 和 HTML。"]
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            return ["ok": false, "message": "这个材料已经不在原来的位置了。"]
+        }
+        let size = ((try? FileManager.default.attributesOfItem(atPath: candidate.path)[.size]) as? NSNumber)?.int64Value ?? 0
+        guard size <= maximumBytes else {
+            return ["ok": false, "message": "这个材料超过 96 MB，直接预览会拖慢页面。请换一个较小的文件，或先压缩它。"]
+        }
+
+        let now = Date()
+        let token = UUID().uuidString.lowercased()
+        lock.lock()
+        pruneLocked(now: now)
+        resources[token] = Resource(url: candidate, mimeType: mimeType, expiresAt: now.addingTimeInterval(lifetime))
+        lock.unlock()
+        let escapedName = candidate.lastPathComponent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? candidate.lastPathComponent
+        return [
+            "ok": true,
+            "url": "clekk-material://preview/\(token)/\(escapedName)",
+            "mimeType": mimeType,
+        ]
+    }
+
+    /* The first path segment is an opaque token. The optional remaining path
+       lets an HTML material load its own sibling CSS/images without granting
+       it access outside the selected file's directory. */
+    private func resource(for task: WKURLSchemeTask) -> (resource: Resource, contentURL: URL)? {
+        guard let requestURL = task.request.url else { return nil }
+        let components = requestURL.pathComponents.filter { $0 != "/" }
+        guard let token = components.first, !token.isEmpty else { return nil }
+        let now = Date()
+        lock.lock()
+        defer { lock.unlock() }
+        pruneLocked(now: now)
+        guard let resource = resources[token] else { return nil }
+        let childParts = components.dropFirst()
+        guard !childParts.isEmpty else { return (resource, resource.url) }
+        let directory = resource.url.deletingLastPathComponent().standardizedFileURL
+        let candidate = childParts.reduce(directory) { partial, item in
+            partial.appendingPathComponent(item)
+        }.standardizedFileURL
+        let directoryPrefix = directory.path.hasSuffix("/") ? directory.path : directory.path + "/"
+        guard candidate.path == resource.url.path || candidate.path.hasPrefix(directoryPrefix) else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory), !isDirectory.boolValue,
+              mimeType(for: candidate) != nil else { return nil }
+        return (resource, candidate)
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let resolved = resource(for: urlSchemeTask), let url = urlSchemeTask.request.url else {
+            urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "材料预览已过期，请再点一次文件。",
+            ]))
+            return
+        }
+        let resource = resolved.resource
+        let contentURL = resolved.contentURL
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let data = try Data(contentsOf: contentURL, options: .mappedIfSafe)
+                DispatchQueue.main.async {
+                    let response = URLResponse(
+                        url: url,
+                        mimeType: self.mimeType(for: contentURL) ?? resource.mimeType,
+                        expectedContentLength: data.count,
+                        textEncodingName: nil
+                    )
+                    urlSchemeTask.didReceive(response)
+                    urlSchemeTask.didReceive(data)
+                    urlSchemeTask.didFinish()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    urlSchemeTask.didFailWithError(error)
+                }
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        // Reads are short and immutable. There is no shared stream to cancel.
+    }
+}
+
 private final class LauncherWindow: NSWindow {
     // Borderless NSWindow instances are not key windows by default. The
     // dashboard contains text inputs, so it must be able to receive focus.
@@ -305,6 +446,32 @@ private final class LauncherWindow: NSWindow {
 private final class WindowDragArea: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
+    }
+}
+
+/* A narrow native drag target between chat and the browser workspace. Keeping
+   resizing outside WebKit avoids pointer loss when either page is repainting. */
+private final class BrowserResizeHandle: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    private var previousX: CGFloat?
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        previousX = event.locationInWindow.x
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let previousX else { return }
+        let currentX = event.locationInWindow.x
+        self.previousX = currentX
+        onDrag?(previousX - currentX)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        previousX = nil
     }
 }
 
@@ -749,9 +916,18 @@ private enum Gateway {
                 DispatchQueue.main.async { completion(.acceptExisting) }
                 return
             }
+            let launcherOwnsGateway = process?.isRunning == true
             let stale = listenerProcesses().filter {
-                isCLEKkBundledNode($0.executablePath)
-                    && ($0.executablePath != expectedNode || $0.executableIdentity != expectedIdentity)
+                guard isCLEKkBundledNode($0.executablePath) else { return false }
+                // A matching binary is not enough: after a crash, force quit,
+                // or an interrupted update, the old Node can be re-parented to
+                // launchd while still pointing to the same App path. The new
+                // Launcher has no Process handle for it, so it cannot stop it
+                // on the next quit and its driver socket is already invalid.
+                // Replace that orphan just as we replace a different build.
+                return !launcherOwnsGateway
+                    || $0.executablePath != expectedNode
+                    || $0.executableIdentity != expectedIdentity
             }
             guard !stale.isEmpty else {
                 DispatchQueue.main.async { completion(.acceptExisting) }
@@ -866,6 +1042,7 @@ private enum Gateway {
 private final class DesktopControlService {
     private static let displayName = "超級碧琪桌面控制"
     private static let driverBundleIdentifier = "com.trycua.driver"
+    private static let hostBundleIdentifier = "com.cle0726.super-pinkie"
 
     private var driverProcess: Process?
     private var nodeProcess: Process?
@@ -903,22 +1080,69 @@ private final class DesktopControlService {
         }
     }
 
-    /// The `open -W` process below is only a LaunchServices waiter. Stopping
-    /// that waiter does not necessarily stop the app it launched, so terminate
-    /// the stable driver identity explicitly when CLE Kk closes or restarts it.
-    private static func stopDriverApplications(timeout: TimeInterval = 1.5) {
-        let applications = NSRunningApplication.runningApplications(
-            withBundleIdentifier: driverBundleIdentifier
-        )
-        for application in applications where !application.isTerminated {
-            _ = application.terminate()
+    private static func executablePath(for pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let end = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private static func processCommand(for pid: pid_t) -> String? {
+        let task = Process()
+        let output = Pipe()
+        task.executableURL = URL(fileURLWithPath: "/bin/ps")
+        task.arguments = ["-p", String(pid), "-o", "command="]
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            let data = (try? output.fileHandleForReading.readToEnd()) ?? Data()
+            task.waitUntilExit()
+            guard task.terminationStatus == 0 else { return nil }
+            return String(decoding: data, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func isCLEKkDriver(_ pid: pid_t, socketPath: String? = nil) -> Bool {
+        guard pid > 1,
+              let executable = executablePath(for: pid),
+              URL(fileURLWithPath: executable).standardizedFileURL.resolvingSymlinksInPath().path
+                == BundledRuntime.cuaDriverURL.standardizedFileURL.resolvingSymlinksInPath().path,
+              let command = processCommand(for: pid),
+              command.contains("serve --embedded"),
+              command.contains("--host-bundle-id \(hostBundleIdentifier)"),
+              command.contains("--socket /tmp/clekk-cua-") else {
+            return false
+        }
+        return socketPath.map { command.contains("--socket \($0)") } ?? true
+    }
+
+    private static func cleKkDriverPIDs() -> [pid_t] {
+        NSRunningApplication.runningApplications(withBundleIdentifier: driverBundleIdentifier)
+            .map(\.processIdentifier)
+            .filter { isCLEKkDriver($0) }
+    }
+
+    /// `open -W` is only a LaunchServices waiter; the real driver is reparented
+    /// and can survive an App crash. Stop only CuaDriver processes carrying
+    /// CLE Kk's private socket prefix + host bundle id. Other apps' CuaDriver
+    /// sessions are never signalled.
+    private static func stopCLEKkDrivers(socketPath: String? = nil, timeout: TimeInterval = 1.5) {
+        let targets = (socketPath == nil ? cleKkDriverPIDs() : cleKkDriverPIDs().filter {
+            isCLEKkDriver($0, socketPath: socketPath)
+        })
+        for pid in targets where isCLEKkDriver(pid, socketPath: socketPath) {
+            _ = Darwin.kill(pid, SIGTERM)
         }
         let deadline = Date().addingTimeInterval(timeout)
-        while applications.contains(where: { !$0.isTerminated }) && Date() < deadline {
+        while targets.contains(where: { isCLEKkDriver($0, socketPath: socketPath) }) && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
         }
-        for application in applications where !application.isTerminated {
-            _ = application.forceTerminate()
+        for pid in targets where isCLEKkDriver(pid, socketPath: socketPath) {
+            _ = Darwin.kill(pid, SIGKILL)
         }
     }
 
@@ -944,10 +1168,11 @@ private final class DesktopControlService {
         try? driverLog?.close()
         driverLog = nil
 
-        DesktopControlEndpoint.clear(socket: socketURL)
+        let activeSocket = socketURL
+        DesktopControlEndpoint.clear(socket: activeSocket)
         socketURL = nil
 
-        Self.stopDriverApplications()
+        Self.stopCLEKkDrivers(socketPath: activeSocket?.path)
         var entries: [(process: Process, interruptFirst: Bool)] = []
         if let node { entries.append((node, true)) }
         if let driver { entries.append((driver, false)) }
@@ -970,6 +1195,12 @@ private final class DesktopControlService {
             NSLog("[CLE Kk computer] %@", lastError ?? "桌面执行器缺失")
             return
         }
+
+        // A previous Launcher may have exited before LaunchServices reaped its
+        // helper. Remove only CLE Kk-owned orphan drivers before creating the
+        // new private endpoint, otherwise identical helpers race for macOS TCC
+        // permissions and one of them keeps an obsolete socket.
+        Self.stopCLEKkDrivers()
 
         generation += 1
         let currentGeneration = generation
@@ -997,7 +1228,7 @@ private final class DesktopControlService {
             "--embedded",
             "--socket", socketURL.path,
             "--dangerously-bypass-approvals",
-            "--host-bundle-id", Bundle.main.bundleIdentifier ?? "com.cle0726.super-pinkie",
+            "--host-bundle-id", Bundle.main.bundleIdentifier ?? Self.hostBundleIdentifier,
         ]
         task.environment = BundledRuntime.environment()
         let output = BundledRuntime.logHandle(named: "computer-control-driver")
@@ -1450,6 +1681,27 @@ struct LauncherMain {
         // had started or jumped to the wrong page.
         let roundtableItem = appMenu.addItem(withTitle: "打开灵感圆桌", action: #selector(AppDelegate.openRoundtable(_:)), keyEquivalent: "")
         roundtableItem.target = delegate
+        let workspaceItem = appMenu.addItem(
+            withTitle: "打开分屏工作区…",
+            action: #selector(AppDelegate.openWorkspaceDockPicker(_:)),
+            keyEquivalent: "n"
+        )
+        workspaceItem.keyEquivalentModifierMask = [.command, .shift]
+        workspaceItem.target = delegate
+        let browserItem = appMenu.addItem(
+            withTitle: "打开浏览器工作区",
+            action: #selector(AppDelegate.openBrowserWorkspaceFromMenu(_:)),
+            keyEquivalent: "b"
+        )
+        browserItem.keyEquivalentModifierMask = [.command, .shift]
+        browserItem.target = delegate
+        let fullScreenItem = appMenu.addItem(
+            withTitle: "切换全屏",
+            action: #selector(AppDelegate.toggleFullScreen(_:)),
+            keyEquivalent: "f"
+        )
+        fullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        fullScreenItem.target = delegate
         appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
@@ -1470,10 +1722,36 @@ struct LauncherMain {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var window: NSWindow?
     private var webView: WKWebView?
+    // The companion is deliberately another WKWebView inside the *same*
+    // native window. It keeps a second mode/session truly independent while
+    // the two chats stay visible as a real left/right split instead of a
+    // floating mini window over the primary work.
+    private var companionPanel: NSView?
+    private var companionWebView: WKWebView?
+    private var companionModeID: String?
+    // One browser workspace is shared by every chat mode. It lives beside the
+    // primary WebView, so switching sessions cannot remount or erase the page.
+    private var browserPanel: NSView?
+    private var browserWebView: WKWebView?
+    private var browserWidthConstraint: NSLayoutConstraint?
+    private var browserAddressField: NSSearchField?
+    private var browserBackButton: NSButton?
+    private var browserForwardButton: NSButton?
+    private var browserReloadButton: NSButton?
+    private var browserExternalButton: NSButton?
+    private var browserLoadingIndicator: NSProgressIndicator?
+    private var browserStatusLabel: NSTextField?
+    private var lastBrowserURL: URL?
+    private var browserAnimationGeneration = 0
+    private var primaryFullSizeConstraints: [NSLayoutConstraint] = []
+    private var workspaceSplitConstraints: [NSLayoutConstraint] = []
+    private let primaryMinimumSize = NSSize(width: 860, height: 580)
+    private let splitMinimumSize = NSSize(width: 1180, height: 650)
     private var retries = 0
+    private var companionRetries = 0
     private var startupVideoStartedAt: Date?
     private var dashboardLoadPending = false
     private var gatewayMonitor: Timer?
@@ -1483,20 +1761,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let dictationHandlerName = "laolaoNativeDictation"
     private let liveSpeech = NativeLiveSpeechController()
     private let liveSpeechHandlerName = "laolaoLiveVoice"
+    private let companionDictation = NativeDictationController()
+    private let companionLiveSpeech = NativeLiveSpeechController()
     private let projectFolderHandlerName = "laolaoProjectFolder"
     private let updateHandlerName = "laolaoUpdate"
+    private let workspaceDockHandlerName = "laolaoWorkspaceDock"
+    private let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"
+    private let windowControlHandlerName = "laolaoWindowControl"
+    private let materialPreviewHandlerName = "laolaoMaterialPreview"
     private var updateLaunchInProgress = false
     private let party = PartyService()
     private let roundtable = RoundtableService()
     private let tts = TTSService()
     private let desktopControl = DesktopControlService()
+    private let materialPreview = MaterialPreviewSchemeHandler()
+
+    private let workspaceSessions: [String: String] = [
+        "chat": "agent:main:main",
+        "project": "agent:project:main",
+        "thinking": "agent:thinking:main",
+        "learning": "agent:learning:main",
+        "unrestricted": "agent:unrestricted:main",
+    ]
+
+    private let workspaceLabels: [String: String] = [
+        "chat": "唠嗑模式",
+        "project": "项目模式",
+        "thinking": "想法模式",
+        "learning": "学习模式",
+        "unrestricted": "无限制模式",
+    ]
 
     @objc func openParty(_ sender: Any?) {
+        openParty(in: webView)
+    }
+
+    private func openParty(in targetWebView: WKWebView?) {
         party.ready { [weak self] ready in
             if ready {
-                self?.dictation.stop()
-                self?.liveSpeech.stop()
-                self?.webView?.load(URLRequest(url: PartyService.url))
+                self?.stopNativeInput(for: targetWebView)
+                targetWebView?.load(URLRequest(url: PartyService.url))
             } else {
                 let alert = NSAlert()
                 alert.messageText = "派对服务还没准备好"
@@ -1507,11 +1811,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc func openRoundtable(_ sender: Any?) {
+        openRoundtable(in: webView)
+    }
+
+    private func openRoundtable(in targetWebView: WKWebView?) {
         roundtable.ready { [weak self] ready in
             if ready {
-                self?.dictation.stop()
-                self?.liveSpeech.stop()
-                self?.webView?.load(URLRequest(url: RoundtableService.url))
+                self?.stopNativeInput(for: targetWebView)
+                targetWebView?.load(URLRequest(url: RoundtableService.url))
             } else {
                 let alert = NSAlert()
                 alert.messageText = "灵感圆桌还没准备好"
@@ -1519,6 +1826,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 alert.runModal()
             }
         }
+    }
+
+    @objc func openWorkspaceDockPicker(_ sender: Any?) {
+        let primaryMode = modeID(for: webView?.url) ?? "chat"
+        let candidates = workspaceSessions.keys
+            .filter { $0 != primaryMode }
+            .sorted { (workspaceLabels[$0] ?? $0) < (workspaceLabels[$1] ?? $1) }
+        guard !candidates.isEmpty else { return }
+
+        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 28), pullsDown: false)
+        for mode in candidates {
+            picker.addItem(withTitle: workspaceLabels[mode] ?? mode)
+            picker.lastItem?.representedObject = mode
+        }
+        if let learningIndex = candidates.firstIndex(of: "learning") {
+            picker.selectItem(at: learningIndex)
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "分屏工作区"
+        alert.informativeText = "在当前窗口右侧打开另一个独立模式。两边各自保留会话和记忆，互不打断。"
+        alert.accessoryView = picker
+        alert.addButton(withTitle: "打开")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let mode = picker.selectedItem?.representedObject as? String else { return }
+        openWorkspaceDock(modeID: mode, requestedSessionKey: workspaceSessions[mode])
+    }
+
+    @objc func openBrowserWorkspaceFromMenu(_ sender: Any?) {
+        openBrowserWorkspace(url: nil)
+    }
+
+    @objc func toggleFullScreen(_ sender: Any?) {
+        window?.toggleFullScreen(sender)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1547,6 +1889,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         notifyWebView("pinkie:app-foreground")
     }
 
+    private func setFullScreenChrome(_ active: Bool) {
+        guard let contentView = window?.contentView else { return }
+        contentView.layer?.cornerRadius = active ? 0 : 22
+        contentView.layer?.borderWidth = active ? 0 : 1
+    }
+
+    private func notifyFullScreenState(_ active: Bool) {
+        let script = "window.dispatchEvent(new CustomEvent('pinkie:window-fullscreen',{detail:{active:\(active ? "true" : "false")}}));"
+        [webView, companionWebView].compactMap { $0 }.forEach { target in
+            target.evaluateJavaScript(script, completionHandler: nil)
+        }
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        setFullScreenChrome(true)
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        notifyFullScreenState(true)
+    }
+
+    func windowWillExitFullScreen(_ notification: Notification) {
+        notifyFullScreenState(false)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        setFullScreenChrome(false)
+        clampWindowToVisibleScreen()
+    }
+
     private func clampWindowToVisibleScreen() {
         guard let window, let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
         let constrained = window.constrainFrameRect(window.frame, to: window.screen ?? NSScreen.main)
@@ -1560,12 +1932,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func notifyWebView(_ event: String) {
         let script = "window.dispatchEvent(new CustomEvent('\(event)'));"
         DispatchQueue.main.async { [weak self] in
-            self?.webView?.evaluateJavaScript(script) { _, error in
-                if let error = error {
-                    NSLog("[laolao] \(event) notify failed: %@", error.localizedDescription)
+            guard let self else { return }
+            [self.webView, self.companionWebView].compactMap { $0 }.forEach { target in
+                target.evaluateJavaScript(script) { _, error in
+                    if let error = error {
+                        NSLog("[laolao] \(event) notify failed: %@", error.localizedDescription)
+                    }
                 }
             }
         }
+    }
+
+    private func isCompanion(_ target: WKWebView?) -> Bool {
+        guard let target, let companionWebView else { return false }
+        return target === companionWebView
+    }
+
+    private func stopNativeInput(for target: WKWebView?) {
+        if isCompanion(target) {
+            companionDictation.stop()
+            companionLiveSpeech.stop()
+        } else {
+            dictation.stop()
+            liveSpeech.stop()
+        }
+    }
+
+    private func modeID(for url: URL?) -> String? {
+        guard let url,
+              let session = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "session" })?.value else { return nil }
+        if session.hasPrefix("agent:main:") { return "chat" }
+        return workspaceSessions.first(where: { session.hasPrefix($0.value.replacingOccurrences(of: ":main", with: ":")) })?.key
+    }
+
+    private func chatURL(sessionKey: String, docked: Bool = false) -> URL {
+        var components = URLComponents(url: Gateway.defaultChatURL, resolvingAgainstBaseURL: false)
+        var queryItems = [URLQueryItem(name: "session", value: sessionKey)]
+        if docked {
+            // The companion joins an already-running App. It must never replay
+            // the first-entry movie or the web splash over the work area.
+            queryItems.append(URLQueryItem(name: "laolao-dock", value: "1"))
+        }
+        components?.queryItems = queryItems
+        return components?.url ?? Gateway.defaultChatURL
     }
 
     private func trustedFrame(_ frame: WKFrameInfo) -> Bool {
@@ -1647,39 +2058,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // The stock black NSWindow shadow reads like a system frame against
         // the pink artwork. Keep the edge inside our own themed glass shell.
         window.hasShadow = false
-        window.minSize = NSSize(width: 860, height: 580)
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.delegate = self
+        window.minSize = primaryMinimumSize
         window.setFrame(window.constrainFrameRect(rect, to: NSScreen.main), display: false)
         window.center()
 
-        let configuration = WKWebViewConfiguration()
-        configuration.userContentController.add(self, name: dictationHandlerName)
-        configuration.userContentController.add(self, name: liveSpeechHandlerName)
-        configuration.userContentController.add(self, name: projectFolderHandlerName)
-        configuration.userContentController.add(self, name: updateHandlerName)
-        configuration.userContentController.add(self, name: "laolaoParty")
-        configuration.userContentController.add(self, name: "laolaoRoundtable")
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: nativeDictationBridge,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        ))
-        // Mark only the native shell. The web UI uses this to avoid whole-page
-        // opacity animation while keeping its decorative motion intact.
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: "document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        ))
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        webView.setValue(false, forKey: "drawsBackground")
-        if #available(macOS 12.0, *) {
-            // Do not let WebKit derive a temporary opaque under-page colour
-            // while its remote layer tree is being restored.
-            webView.underPageBackgroundColor = .clear
-        }
+        let webView = makeChatWebView()
 
         guard let contentView = window.contentView else { return }
         contentView.wantsLayer = true
@@ -1697,12 +2082,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         ).cgColor
         contentView.layer?.masksToBounds = true
         contentView.addSubview(webView)
-        NSLayoutConstraint.activate([
+        primaryFullSizeConstraints = [
             webView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             webView.topAnchor.constraint(equalTo: contentView.topAnchor),
             webView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-        ])
+        ]
+        NSLayoutConstraint.activate(primaryFullSizeConstraints)
 
         let dragArea = WindowDragArea(frame: .zero)
         dragArea.translatesAutoresizingMaskIntoConstraints = false
@@ -1742,6 +2128,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self?.startBundledServices()
             }
         }
+    }
+
+    private func makeChatWebView(docked: Bool = false) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(materialPreview, forURLScheme: "clekk-material")
+        let controller = configuration.userContentController
+        controller.add(self, name: dictationHandlerName)
+        controller.add(self, name: liveSpeechHandlerName)
+        controller.add(self, name: projectFolderHandlerName)
+        controller.add(self, name: updateHandlerName)
+        controller.add(self, name: workspaceDockHandlerName)
+        controller.add(self, name: browserWorkspaceHandlerName)
+        controller.add(self, name: windowControlHandlerName)
+        controller.add(self, name: materialPreviewHandlerName)
+        controller.add(self, name: "laolaoParty")
+        controller.add(self, name: "laolaoRoundtable")
+        controller.addUserScript(WKUserScript(
+            source: nativeDictationBridge,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        // Mark only the native shell. The web UI uses this to avoid whole-page
+        // opacity animation while keeping its decorative motion intact.
+        controller.addUserScript(WKUserScript(
+            source: "document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        if !docked {
+            // The primary view survives normal in-app navigation.  Keep its
+            // compact split presentation across that navigation while a
+            // companion is visible, without leaking the state into a future
+            // app launch (sessionStorage is WebView-session only).
+            controller.addUserScript(WKUserScript(
+                source: "try { if (sessionStorage.getItem('laolao-primary-workspace-split') === '1') document.documentElement.setAttribute('data-laolao-workspace-split', '1'); } catch (_) {}",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
+        if docked {
+            controller.addUserScript(WKUserScript(
+                source: "document.documentElement.setAttribute('data-laolao-workspace-dock', '1')",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = self
+        webView.uiDelegate = self
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.0, *) {
+            // Do not let WebKit derive a temporary opaque under-page colour
+            // while its remote layer tree is being restored.
+            webView.underPageBackgroundColor = .clear
+        }
+        return webView
     }
 
     private func showStartupScreen() {
@@ -1856,6 +2300,748 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         true
     }
 
+    private func browserToolbarButton(symbol: String, label: String, action: Selector) -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.imagePosition = .imageOnly
+        button.contentTintColor = NSColor(
+            srgbRed: 0.39,
+            green: 0.55,
+            blue: 0.59,
+            alpha: 1.0
+        )
+        button.appearance = NSAppearance(named: .aqua)
+        button.toolTip = label
+        button.target = self
+        button.action = action
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 30),
+            button.heightAnchor.constraint(equalToConstant: 30),
+        ])
+        return button
+    }
+
+    private func makeBrowserWebView() -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        // The default store deliberately persists site logins/cookies across
+        // mode switches and app launches, like a normal embedded browser.
+        configuration.websiteDataStore = .default()
+        let browser = WKWebView(frame: .zero, configuration: configuration)
+        browser.translatesAutoresizingMaskIntoConstraints = false
+        browser.navigationDelegate = self
+        browser.uiDelegate = self
+        browser.allowsBackForwardNavigationGestures = true
+        browser.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.0, *) {
+            browser.underPageBackgroundColor = NSColor(
+                srgbRed: 1.0,
+                green: 0.985,
+                blue: 0.993,
+                alpha: 0.97
+            )
+        }
+        return browser
+    }
+
+    private func setBrowserStatus(_ message: String, loading: Bool = false) {
+        browserStatusLabel?.stringValue = message
+        browserStatusLabel?.isHidden = message.isEmpty
+        if loading {
+            browserLoadingIndicator?.startAnimation(nil)
+            browserLoadingIndicator?.isHidden = false
+        } else {
+            browserLoadingIndicator?.stopAnimation(nil)
+            browserLoadingIndicator?.isHidden = true
+        }
+    }
+
+    private func browserErrorPage(_ error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
+        let detail = nsError.localizedDescription
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        let html = #"""
+        <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light">
+        <style>
+          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
+          main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid #d8679b38;border-radius:20px;background:#fff9;box-shadow:0 16px 45px #9f4c741c;text-align:center}
+          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;background:#f8dfea;color:#ad4a76;font-size:22px}
+          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:#997487;line-height:1.65}.detail{margin-top:12px;font-size:11px;color:#ad8799}
+        </style><main><div class="mark">!</div><h1>页面没有加载成功</h1><p>点上方的重新加载再试；如果登录页仍被网络验证拦住，可点右上角“在默认浏览器打开”。</p><p class="detail">\#(detail)</p></main>
+        """#
+        browserWebView?.loadHTMLString(html, baseURL: nil)
+        if let url = lastBrowserURL { browserAddressField?.stringValue = url.absoluteString }
+        setBrowserStatus("加载失败", loading: false)
+    }
+
+    private func makeBrowserPanel() -> NSView {
+        let panel = NSView(frame: .zero)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor(
+            srgbRed: 1.0,
+            green: 0.975,
+            blue: 0.988,
+            alpha: 0.97
+        ).cgColor
+        panel.layer?.masksToBounds = true
+        panel.appearance = NSAppearance(named: .aqua)
+
+        let toolbar = NSView(frame: .zero)
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.appearance = NSAppearance(named: .aqua)
+        toolbar.wantsLayer = true
+        toolbar.layer?.backgroundColor = NSColor(
+            srgbRed: 1.0,
+            green: 0.93,
+            blue: 0.97,
+            alpha: 0.96
+        ).cgColor
+
+        let back = browserToolbarButton(symbol: "chevron.left", label: "后退", action: #selector(browserGoBack(_:)))
+        let forward = browserToolbarButton(symbol: "chevron.right", label: "前进", action: #selector(browserGoForward(_:)))
+        let reload = browserToolbarButton(symbol: "arrow.clockwise", label: "重新加载", action: #selector(browserReload(_:)))
+        let external = browserToolbarButton(symbol: "arrow.up.right.square", label: "在默认浏览器打开", action: #selector(browserOpenExternally(_:)))
+        let close = browserToolbarButton(symbol: "xmark", label: "关闭浏览器工作区", action: #selector(closeBrowserWorkspace(_:)))
+        let loading = NSProgressIndicator(frame: .zero)
+        loading.translatesAutoresizingMaskIntoConstraints = false
+        loading.style = .spinning
+        loading.controlSize = .small
+        loading.isDisplayedWhenStopped = false
+        loading.isHidden = true
+        let status = NSTextField(labelWithString: "")
+        status.translatesAutoresizingMaskIntoConstraints = false
+        status.isHidden = true
+        status.lineBreakMode = .byTruncatingTail
+        status.textColor = NSColor(srgbRed: 0.58, green: 0.42, blue: 0.50, alpha: 1)
+        status.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+        let address = NSSearchField(frame: .zero)
+        address.translatesAutoresizingMaskIntoConstraints = false
+        address.placeholderString = "输入网址或搜索"
+        address.sendsSearchStringImmediately = false
+        address.target = self
+        address.action = #selector(browserAddressSubmitted(_:))
+        address.focusRingType = .none
+        address.appearance = NSAppearance(named: .aqua)
+        address.backgroundColor = NSColor(
+            srgbRed: 1.0,
+            green: 0.985,
+            blue: 0.993,
+            alpha: 0.92
+        )
+        address.textColor = NSColor(
+            srgbRed: 0.39,
+            green: 0.29,
+            blue: 0.35,
+            alpha: 1.0
+        )
+
+        let browser = makeBrowserWebView()
+        let resize = BrowserResizeHandle(frame: .zero)
+        resize.translatesAutoresizingMaskIntoConstraints = false
+        resize.wantsLayer = true
+        resize.layer?.backgroundColor = NSColor(
+            srgbRed: 0.83,
+            green: 0.33,
+            blue: 0.57,
+            alpha: 0.18
+        ).cgColor
+        resize.onDrag = { [weak self] delta in
+            guard let self,
+                  let window = self.window,
+                  let width = self.browserWidthConstraint else { return }
+            let maximum = max(420, window.contentLayoutRect.width - 430)
+            width.constant = min(maximum, max(360, width.constant + delta))
+        }
+
+        toolbar.addSubview(back)
+        toolbar.addSubview(forward)
+        toolbar.addSubview(reload)
+        toolbar.addSubview(loading)
+        toolbar.addSubview(status)
+        toolbar.addSubview(address)
+        toolbar.addSubview(external)
+        toolbar.addSubview(close)
+        panel.addSubview(toolbar)
+        panel.addSubview(browser)
+        panel.addSubview(resize)
+
+        NSLayoutConstraint.activate([
+            toolbar.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            toolbar.topAnchor.constraint(equalTo: panel.topAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: 48),
+
+            back.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 10),
+            back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            forward.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
+            forward.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            reload.leadingAnchor.constraint(equalTo: forward.trailingAnchor, constant: 2),
+            reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            loading.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 4),
+            loading.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            loading.widthAnchor.constraint(equalToConstant: 14),
+            loading.heightAnchor.constraint(equalToConstant: 14),
+            status.leadingAnchor.constraint(equalTo: loading.trailingAnchor, constant: 4),
+            status.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            status.widthAnchor.constraint(lessThanOrEqualToConstant: 96),
+            address.leadingAnchor.constraint(equalTo: status.trailingAnchor, constant: 7),
+            address.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            address.trailingAnchor.constraint(equalTo: external.leadingAnchor, constant: -6),
+            external.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            external.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -2),
+            close.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -10),
+            close.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+
+            browser.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            browser.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            browser.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            browser.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+
+            resize.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            resize.topAnchor.constraint(equalTo: panel.topAnchor),
+            resize.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+            resize.widthAnchor.constraint(equalToConstant: 6),
+        ])
+
+        browserPanel = panel
+        browserWebView = browser
+        browserAddressField = address
+        browserBackButton = back
+        browserForwardButton = forward
+        browserReloadButton = reload
+        browserExternalButton = external
+        browserLoadingIndicator = loading
+        browserStatusLabel = status
+        updateBrowserControls()
+        return panel
+    }
+
+    private func browserURL(from value: String) -> URL? {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if let direct = URL(string: text), ["http", "https", "file"].contains(direct.scheme?.lowercased() ?? "") {
+            return direct
+        }
+        if !text.contains(where: { $0.isWhitespace }), text.contains(".") || text.contains(":") {
+            return URL(string: "https://\(text)")
+        }
+        var search = URLComponents(string: "https://www.google.com/search")
+        search?.queryItems = [URLQueryItem(name: "q", value: text)]
+        return search?.url
+    }
+
+    // Keep account switching narrowly scoped to the embedded OpenAI sites.
+    // CLE Kk localhost auth, other websites, project data and permissions stay
+    // untouched; the user signs in to the replacement account themselves.
+    private func resetChatGPTBrowserSession() {
+        let dataStore = WKWebsiteDataStore.default()
+        let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
+        dataStore.fetchDataRecords(ofTypes: dataTypes) { [weak self] records in
+            let openAIRecords = records.filter { record in
+                let name = record.displayName.lowercased()
+                return name == "chatgpt.com" || name.hasSuffix(".chatgpt.com")
+                    || name == "openai.com" || name.hasSuffix(".openai.com")
+            }
+            dataStore.removeData(ofTypes: dataTypes, for: openAIRecords) { [weak self] in
+                DispatchQueue.main.async {
+                    guard let self,
+                          let loginURL = URL(string: "https://chatgpt.com/") else { return }
+                    self.openBrowserWorkspace(url: loginURL)
+                }
+            }
+        }
+    }
+
+    private func loadBrowserURL(_ url: URL) {
+        guard ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return }
+        lastBrowserURL = url
+        browserAddressField?.stringValue = url.absoluteString
+        if url.isFileURL {
+            browserWebView?.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            browserWebView?.load(URLRequest(url: url))
+        }
+    }
+
+    private func isChatGPTURL(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host == "chatgpt.com" || host.hasSuffix(".chatgpt.com")
+    }
+
+    private func sendBrowserControlResult(
+        requestId: String,
+        ok: Bool,
+        result: [String: Any] = [:],
+        error: String = "",
+        to targetWebView: WKWebView?
+    ) {
+        var payload: [String: Any] = ["requestId": requestId, "ok": ok]
+        if !result.isEmpty { payload["result"] = result }
+        if !error.isEmpty { payload["error"] = error }
+        guard let targetWebView,
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        targetWebView.evaluateJavaScript("window.__laolaoBrowserControlResult?.(\(json));")
+    }
+
+    private func chatGPTSnapshot(requestId: String, sourceWebView: WKWebView?) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url) else {
+            sendBrowserControlResult(
+                requestId: requestId,
+                ok: false,
+                error: "右侧还没有打开 ChatGPT",
+                to: sourceWebView
+            )
+            return
+        }
+        let script = #"""
+        (() => {
+          const visible = (node) => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const composer = Array.from(document.querySelectorAll('#prompt-textarea,textarea,[contenteditable="true"]'))
+            .find((node) => visible(node) && (node.id === 'prompt-textarea' || node.tagName === 'TEXTAREA' || node.getAttribute('contenteditable') === 'true'));
+          const assistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'))
+            .filter(visible);
+          const latest = assistants.length ? (assistants[assistants.length - 1].innerText || '').trim() : '';
+          const stop = Array.from(document.querySelectorAll('button'))
+            .find((button) => visible(button) && /stop|停止生成|停止回应|停止/i.test(`${button.getAttribute('aria-label') || ''} ${button.textContent || ''}`));
+          const path = location.pathname || '';
+          return {
+            ready: !!composer,
+            generating: !!stop,
+            assistantCount: assistants.length,
+            latestAssistant: latest.slice(0, 20000),
+            url: location.href,
+            conversationUrl: /(?:^|\/)c\/[^/?#]+/.test(path) ? location.href.split('#')[0] : '',
+            title: document.title || ''
+          };
+        })()
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            if let evalError {
+                self.sendBrowserControlResult(requestId: requestId, ok: false, error: evalError.localizedDescription, to: sourceWebView)
+                return
+            }
+            let result = value as? [String: Any] ?? [:]
+            self.sendBrowserControlResult(requestId: requestId, ok: true, result: result, to: sourceWebView)
+        }
+    }
+
+    private func submitPreparedChatGPTMessage(
+        requestId: String,
+        sourceWebView: WKWebView?,
+        baseline: Int,
+        attempt: Int = 0
+    ) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "ChatGPT 页面已经离开", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        (() => {
+          const visible = (node) => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const selectors = [
+            'button[data-testid="send-button"]',
+            'button[data-testid="composer-submit-button"]',
+            'button[aria-label="Send prompt"]',
+            'button[aria-label*="发送"]',
+            'button[aria-label*="Send"]'
+          ];
+          const button = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+            .find((node) => visible(node) && !node.disabled && node.getAttribute('aria-disabled') !== 'true');
+          if (!button) return {sent:false,reason:'发送键尚未就绪'};
+          button.click();
+          return {sent:true,url:location.href};
+        })()
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            let sent = (value as? [String: Any])?["sent"] as? Bool ?? false
+            if sent {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self, weak sourceWebView] in
+                    guard let self else { return }
+                    self.sendBrowserControlResult(
+                        requestId: requestId,
+                        ok: true,
+                        result: [
+                            "sent": true,
+                            "assistantCount": baseline,
+                            "url": self.browserWebView?.url?.absoluteString ?? "",
+                        ],
+                        to: sourceWebView
+                    )
+                }
+                return
+            }
+            if attempt < 24, evalError == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak sourceWebView] in
+                    self?.submitPreparedChatGPTMessage(
+                        requestId: requestId,
+                        sourceWebView: sourceWebView,
+                        baseline: baseline,
+                        attempt: attempt + 1
+                    )
+                }
+                return
+            }
+            self.sendBrowserControlResult(
+                requestId: requestId,
+                ok: false,
+                error: evalError?.localizedDescription ?? "ChatGPT 发送键没有就绪",
+                to: sourceWebView
+            )
+        }
+    }
+
+    private func sendChatGPTMessage(_ text: String, requestId: String, sourceWebView: WKWebView?) {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, message.utf8.count <= 12_000 else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "发往 ChatGPT 的控制消息为空或过长", to: sourceWebView)
+            return
+        }
+        guard let browser = browserWebView, isChatGPTURL(browser.url) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "右侧不是 ChatGPT 页面", to: sourceWebView)
+            return
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: ["message": message]),
+              let json = String(data: data, encoding: .utf8) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "控制消息编码失败", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        ((payload) => {
+          const visible = (node) => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const composer = Array.from(document.querySelectorAll('#prompt-textarea,textarea,[contenteditable="true"]'))
+            .find((node) => visible(node) && (node.id === 'prompt-textarea' || node.tagName === 'TEXTAREA' || node.getAttribute('contenteditable') === 'true'));
+          if (!composer) return {prepared:false,reason:'没有找到 ChatGPT 输入框'};
+          const assistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]')).filter(visible);
+          composer.focus();
+          if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
+            const proto = composer.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            if (setter) setter.call(composer, payload.message); else composer.value = payload.message;
+            composer.dispatchEvent(new Event('input', {bubbles:true}));
+            composer.dispatchEvent(new Event('change', {bubbles:true}));
+          } else {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(composer);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            let inserted = false;
+            try { inserted = document.execCommand('insertText', false, payload.message); } catch (_) {}
+            if (!inserted || !(composer.innerText || '').trim()) composer.textContent = payload.message;
+            try {
+              composer.dispatchEvent(new InputEvent('input', {bubbles:true,inputType:'insertText',data:payload.message}));
+            } catch (_) {
+              composer.dispatchEvent(new Event('input', {bubbles:true}));
+            }
+          }
+          return {prepared:true,assistantCount:assistants.length};
+        })(\#(json))
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            let result = value as? [String: Any] ?? [:]
+            guard evalError == nil, result["prepared"] as? Bool == true else {
+                self.sendBrowserControlResult(
+                    requestId: requestId,
+                    ok: false,
+                    error: evalError?.localizedDescription ?? (result["reason"] as? String ?? "ChatGPT 输入框没有就绪"),
+                    to: sourceWebView
+                )
+                return
+            }
+            let baseline = result["assistantCount"] as? Int ?? 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self, weak sourceWebView] in
+                self?.submitPreparedChatGPTMessage(
+                    requestId: requestId,
+                    sourceWebView: sourceWebView,
+                    baseline: baseline
+                )
+            }
+        }
+    }
+
+    private func handleChatGPTControl(_ body: [String: Any], sourceWebView: WKWebView?) {
+        let requestId = body["requestId"] as? String ?? UUID().uuidString
+        switch body["operation"] as? String {
+        case "snapshot":
+            chatGPTSnapshot(requestId: requestId, sourceWebView: sourceWebView)
+        case "send":
+            sendChatGPTMessage(body["text"] as? String ?? "", requestId: requestId, sourceWebView: sourceWebView)
+        default:
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "不支持的 ChatGPT 控制操作", to: sourceWebView)
+        }
+    }
+
+    private func loadBrowserStartPage() {
+        let html = #"""
+        <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light">
+        <style>
+          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
+          main{text-align:center;padding:36px}.mark{width:58px;height:58px;margin:0 auto 18px;display:grid;place-items:center;border:1px solid #d8679b45;border-radius:20px;background:#fff9;box-shadow:0 14px 38px #9f4c7420;font-size:25px}
+          p{margin:0;color:#9a7187}
+        </style><main><div class="mark">◎</div><p>在上方输入网址或搜索内容</p></main>
+        """#
+        browserWebView?.loadHTMLString(html, baseURL: nil)
+        browserAddressField?.stringValue = ""
+    }
+
+    private func updateBrowserControls() {
+        browserBackButton?.isEnabled = browserWebView?.canGoBack == true
+        browserForwardButton?.isEnabled = browserWebView?.canGoForward == true
+        if let url = browserWebView?.url,
+           ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") {
+            lastBrowserURL = url
+            browserAddressField?.stringValue = url.absoluteString
+        }
+    }
+
+    private func openBrowserWorkspace(url: URL?) {
+        guard let window,
+              let contentView = window.contentView,
+              let primaryWebView = webView else { return }
+
+        if companionPanel?.superview != nil {
+            closeWorkspaceDock(nil)
+        }
+
+        browserAnimationGeneration += 1
+        let panel = browserPanel ?? makeBrowserPanel()
+        panel.layer?.removeAllAnimations()
+        panel.alphaValue = 1
+        if panel.superview == nil {
+            contentView.addSubview(panel)
+            primaryFullSizeConstraints.forEach { $0.isActive = false }
+            let initialWidth = min(max(420, window.contentLayoutRect.width * 0.44), max(420, window.contentLayoutRect.width - 430))
+            let width = panel.widthAnchor.constraint(equalToConstant: initialWidth)
+            browserWidthConstraint = width
+            workspaceSplitConstraints = [
+                primaryWebView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+                primaryWebView.topAnchor.constraint(equalTo: contentView.topAnchor),
+                primaryWebView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+                panel.leadingAnchor.constraint(equalTo: primaryWebView.trailingAnchor, constant: -1),
+                width,
+                panel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+                panel.topAnchor.constraint(equalTo: contentView.topAnchor),
+                panel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            ]
+            NSLayoutConstraint.activate(workspaceSplitConstraints)
+            window.minSize = primaryMinimumSize
+            primaryWebView.evaluateJavaScript("try { sessionStorage.setItem('laolao-primary-workspace-split', '1'); document.documentElement.setAttribute('data-laolao-workspace-split', '1'); document.documentElement.setAttribute('data-laolao-browser-workspace', '1'); } catch (_) {}")
+            contentView.layoutSubtreeIfNeeded()
+
+            // The panel eases in from the existing right rail. This is a
+            // presentation-only transition: the live page and its scroll
+            // position are never remounted for the animation.
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = 54
+            slide.toValue = 0
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.78
+            fade.toValue = 1.0
+            let group = CAAnimationGroup()
+            group.animations = [slide, fade]
+            group.duration = 0.26
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.layer?.add(group, forKey: "laolao-browser-enter")
+        }
+
+        if let url {
+            loadBrowserURL(url)
+        } else if browserWebView?.url == nil {
+            if let lastBrowserURL { loadBrowserURL(lastBrowserURL) }
+            else { loadBrowserStartPage() }
+        }
+        window.makeFirstResponder(browserAddressField)
+    }
+
+    private func detachBrowserWorkspace() {
+        guard browserPanel?.superview != nil else { return }
+        browserAnimationGeneration += 1
+        workspaceSplitConstraints.forEach { $0.isActive = false }
+        workspaceSplitConstraints.removeAll()
+        browserWidthConstraint = nil
+        browserPanel?.removeFromSuperview()
+        primaryFullSizeConstraints.forEach { $0.isActive = true }
+        window?.minSize = primaryMinimumSize
+        webView?.evaluateJavaScript("try { sessionStorage.removeItem('laolao-primary-workspace-split'); document.documentElement.removeAttribute('data-laolao-workspace-split'); document.documentElement.removeAttribute('data-laolao-browser-workspace'); } catch (_) {}")
+        window?.makeFirstResponder(webView)
+    }
+
+    @objc private func closeBrowserWorkspace(_ sender: Any?) {
+        guard let panel = browserPanel, panel.superview != nil else { return }
+        browserAnimationGeneration += 1
+        let generation = browserAnimationGeneration
+        let slide = CABasicAnimation(keyPath: "transform.translation.x")
+        slide.fromValue = 0
+        slide.toValue = 42
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1.0
+        fade.toValue = 0.72
+        let group = CAAnimationGroup()
+        group.animations = [slide, fade]
+        group.duration = 0.18
+        group.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        panel.layer?.add(group, forKey: "laolao-browser-exit")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self, weak panel] in
+            guard let self,
+                  let panel,
+                  self.browserAnimationGeneration == generation,
+                  panel.superview != nil else { return }
+            self.detachBrowserWorkspace()
+        }
+    }
+
+    @objc private func browserAddressSubmitted(_ sender: NSSearchField) {
+        guard let url = browserURL(from: sender.stringValue) else { return }
+        loadBrowserURL(url)
+        window?.makeFirstResponder(browserWebView)
+    }
+
+    @objc private func browserGoBack(_ sender: Any?) {
+        browserWebView?.goBack()
+    }
+
+    @objc private func browserGoForward(_ sender: Any?) {
+        browserWebView?.goForward()
+    }
+
+    @objc private func browserReload(_ sender: Any?) {
+        if browserWebView?.url != nil { browserWebView?.reload() }
+        else if let lastBrowserURL { loadBrowserURL(lastBrowserURL) }
+    }
+
+    @objc private func browserOpenExternally(_ sender: Any?) {
+        guard let url = browserWebView?.url ?? lastBrowserURL,
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func openWorkspaceDock(modeID requestedModeID: String, requestedSessionKey: String?) {
+        guard let canonicalSession = workspaceSessions[requestedModeID],
+              requestedSessionKey == nil || requestedSessionKey == canonicalSession,
+              requestedModeID != (modeID(for: webView?.url) ?? "chat"),
+              let window,
+              let contentView = window.contentView,
+              let primaryWebView = webView else { return }
+
+        if browserPanel?.superview != nil {
+            detachBrowserWorkspace()
+        }
+
+        if let companionWebView {
+            let alreadyShowing = companionModeID == requestedModeID && self.modeID(for: companionWebView.url) == requestedModeID
+            companionModeID = requestedModeID
+            // Two modes are enough for the focused workflow. Reusing this
+            // dock changes only the companion route; it never reloads or
+            // interrupts the primary chat.
+            if alreadyShowing {
+                window.makeFirstResponder(companionWebView)
+                return
+            }
+            companionRetries = 0
+            companionWebView.load(URLRequest(url: chatURL(sessionKey: canonicalSession, docked: true)))
+            window.makeFirstResponder(companionWebView)
+            return
+        }
+
+        companionModeID = requestedModeID
+
+        let panel = NSView(frame: .zero)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor(
+            srgbRed: 1.0,
+            green: 0.93,
+            blue: 0.97,
+            alpha: 0.52
+        ).cgColor
+        panel.layer?.borderWidth = 0
+        panel.layer?.borderColor = NSColor(
+            srgbRed: 0.84,
+            green: 0.40,
+            blue: 0.60,
+            alpha: 0.28
+        ).cgColor
+        // Only the outer App frame is rounded. The split's inside edge stays
+        // straight and continuous with the primary workspace.
+        panel.layer?.masksToBounds = true
+
+        let companion = makeChatWebView(docked: true)
+        panel.addSubview(companion)
+        // Keep both chats in the layout tree. The former overlay was only
+        // 46% wide and 72% high, so the second pane could not be read.
+        contentView.addSubview(panel)
+        primaryFullSizeConstraints.forEach { $0.isActive = false }
+        workspaceSplitConstraints = [
+            primaryWebView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            primaryWebView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            primaryWebView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            // Adjacent transparent WKWebViews can still expose a physical
+            // compositor seam even at a zero Auto Layout gap. Let the right
+            // pane overlap one point (two Retina pixels) so its opaque chat
+            // surface covers that seam; the window's outer rounded edge is
+            // deliberately unchanged.
+            panel.leadingAnchor.constraint(equalTo: primaryWebView.trailingAnchor, constant: -1),
+            panel.widthAnchor.constraint(equalTo: primaryWebView.widthAnchor),
+            panel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            panel.topAnchor.constraint(equalTo: contentView.topAnchor),
+            panel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            companion.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            companion.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            companion.topAnchor.constraint(equalTo: panel.topAnchor),
+            companion.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+        ]
+        NSLayoutConstraint.activate(workspaceSplitConstraints)
+
+        // A normal 1280px window becomes two useful ~640px work areas. If it
+        // had been shrunk, restore just enough room without exceeding screen.
+        window.minSize = splitMinimumSize
+        if let screen = window.screen ?? NSScreen.main {
+            var frame = window.frame
+            frame.size.width = min(screen.visibleFrame.width, max(frame.width, splitMinimumSize.width))
+            frame.size.height = min(screen.visibleFrame.height, max(frame.height, splitMinimumSize.height))
+            window.setFrame(window.constrainFrameRect(frame, to: screen), display: true, animate: true)
+        }
+
+        companionPanel = panel
+        companionWebView = companion
+        companionDictation.webView = companion
+        // Both halves need the same compact chat presentation.  Leaving the
+        // primary's full navigation rail visible at half width is what made
+        // each reply collapse into a skinny vertical strip.
+        primaryWebView.evaluateJavaScript("try { sessionStorage.setItem('laolao-primary-workspace-split', '1'); document.documentElement.setAttribute('data-laolao-workspace-split', '1'); } catch (_) {}")
+        companionRetries = 0
+        companion.load(URLRequest(url: chatURL(sessionKey: canonicalSession, docked: true)))
+        window.makeFirstResponder(companion)
+    }
+
+    @objc private func closeWorkspaceDock(_ sender: Any?) {
+        companionDictation.stop()
+        companionLiveSpeech.stop()
+        companionWebView?.stopLoading()
+        companionWebView?.navigationDelegate = nil
+        companionWebView?.uiDelegate = nil
+        companionPanel?.removeFromSuperview()
+        workspaceSplitConstraints.forEach { $0.isActive = false }
+        workspaceSplitConstraints.removeAll()
+        primaryFullSizeConstraints.forEach { $0.isActive = true }
+        window?.minSize = primaryMinimumSize
+        webView?.evaluateJavaScript("try { sessionStorage.removeItem('laolao-primary-workspace-split'); document.documentElement.removeAttribute('data-laolao-workspace-split'); } catch (_) {}")
+        companionPanel = nil
+        companionWebView = nil
+        companionModeID = nil
+        companionRetries = 0
+        window?.makeFirstResponder(webView)
+    }
+
     private func loadDashboard() {
         if let started = startupVideoStartedAt {
             let remaining = 6.1 - Date().timeIntervalSince(started)
@@ -1874,9 +3060,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        if webView === browserWebView {
+            updateBrowserControls()
+            let host = webView.url?.host?.lowercased() ?? ""
+            setBrowserStatus(host == "chatgpt.com" || host.hasSuffix(".chatgpt.com") ? "ChatGPT 已打开" : "", loading: false)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                webView.animator().alphaValue = 1.0
+            }
+            return
+        }
         guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
         // WebKit 导航结束后仍保持透明，避免重新加载时把系统玻璃背景盖成实心粉色。
         window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+        if webView === browserWebView {
+            webView.alphaValue = 0.88
+            setBrowserStatus("正在加载…", loading: true)
+            updateBrowserControls()
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        if webView === browserWebView,
+           let response = navigationResponse.response as? HTTPURLResponse,
+           response.statusCode == 403,
+           response.url?.host?.lowercased().hasSuffix("chatgpt.com") == true {
+            // ChatGPT may briefly answer with a Cloudflare verification page.
+            // Keep it loaded so the challenge can finish instead of replacing
+            // the page with a silent white surface.
+            setBrowserStatus("正在通过安全验证…", loading: true)
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil,
+              let url = navigationAction.request.url,
+              ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        openBrowserWorkspace(url: url)
+        return nil
     }
 
     @available(macOS 12.0, *)
@@ -1892,24 +3127,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard trustedFrame(message.frameInfo) else { return }
-        if message.name == "laolaoParty" { openParty(nil); return }
-        if message.name == "laolaoRoundtable" { openRoundtable(nil); return }
+        let sourceWebView = message.webView ?? webView
+        if message.name == "laolaoParty" { openParty(in: sourceWebView); return }
+        if message.name == "laolaoRoundtable" { openRoundtable(in: sourceWebView); return }
         if message.name == updateHandlerName { checkForUpdates(nil); return }
+        if message.name == windowControlHandlerName,
+           let body = message.body as? [String: Any],
+           body["action"] as? String == "toggle-fullscreen" {
+            toggleFullScreen(nil)
+            return
+        }
+        if message.name == browserWorkspaceHandlerName,
+           let body = message.body as? [String: Any] {
+            if body["action"] as? String == "open" {
+                let requestedURL = (body["url"] as? String).flatMap { browserURL(from: $0) }
+                openBrowserWorkspace(url: requestedURL)
+                return
+            }
+            if body["action"] as? String == "reset-chatgpt-session" {
+                resetChatGPTBrowserSession()
+                return
+            }
+            if body["action"] as? String == "chatgpt-control" {
+                handleChatGPTControl(body, sourceWebView: sourceWebView)
+                return
+            }
+        }
+        if message.name == materialPreviewHandlerName,
+           let body = message.body as? [String: Any],
+           body["action"] as? String == "open",
+           let path = body["path"] as? String,
+           !path.isEmpty {
+            var payload = materialPreview.register(path: path)
+            payload["requestId"] = body["requestId"] as? String ?? ""
+            sendMaterialPreviewResult(payload, to: sourceWebView)
+            return
+        }
+        if message.name == workspaceDockHandlerName,
+           let body = message.body as? [String: Any],
+           let action = body["action"] as? String {
+            switch action {
+            case "open":
+                guard let requestedModeID = body["mode"] as? String else { return }
+                openWorkspaceDock(
+                    modeID: requestedModeID,
+                    requestedSessionKey: body["sessionKey"] as? String
+                )
+            case "close":
+                closeWorkspaceDock(nil)
+            default:
+                break
+            }
+            return
+        }
         if message.name == projectFolderHandlerName,
            let body = message.body as? [String: Any],
            let action = body["action"] as? String {
-            handleProjectFolderAction(action, body: body)
+            handleProjectFolderAction(action, body: body, sourceWebView: sourceWebView)
             return
         }
 
         if message.name == liveSpeechHandlerName,
            let body = message.body as? [String: Any] {
+            let targetSpeech = isCompanion(sourceWebView) ? companionLiveSpeech : liveSpeech
             if body["action"] as? String == "stop" {
-                liveSpeech.stop()
+                targetSpeech.stop()
                 return
             }
             if let text = body["text"] as? String {
-                liveSpeech.enqueue(text)
+                targetSpeech.enqueue(text)
             }
             return
         }
@@ -1919,16 +3205,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
            let action = body["action"] as? String {
             switch action {
             case "start":
-                dictation.start(baseDraft: body["draft"] as? String ?? "")
+                if isCompanion(sourceWebView) {
+                    // There is one physical microphone. Move the capture to
+                    // the pane the user just pressed instead of letting two
+                    // independent modes compete for it.
+                    dictation.stop()
+                    companionDictation.start(baseDraft: body["draft"] as? String ?? "")
+                } else {
+                    companionDictation.stop()
+                    dictation.start(baseDraft: body["draft"] as? String ?? "")
+                }
             case "stop":
-                dictation.stop()
+                if isCompanion(sourceWebView) { companionDictation.stop() }
+                else { dictation.stop() }
             default:
                 break
             }
         }
     }
 
-    private func handleProjectFolderAction(_ action: String, body: [String: Any]) {
+    private func handleProjectFolderAction(_ action: String, body: [String: Any], sourceWebView: WKWebView?) {
         switch action {
         case "choose":
             let requestId = body["requestId"] as? String ?? UUID().uuidString
@@ -1961,7 +3257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     self.sendProjectFolderResult([
                         "requestId": requestId,
                         "cancelled": true,
-                    ])
+                    ], to: sourceWebView)
                     return
                 }
                 self.sendProjectFolderResult([
@@ -1969,7 +3265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     "cancelled": false,
                     "path": url.path,
                     "name": url.lastPathComponent,
-                ])
+                ], to: sourceWebView)
             }
             if let window {
                 panel.beginSheetModal(for: window, completionHandler: completion)
@@ -1990,19 +3286,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    private func sendProjectFolderResult(_ payload: [String: Any]) {
-        guard let webView,
+    private func sendProjectFolderResult(_ payload: [String: Any], to targetWebView: WKWebView?) {
+        guard let targetWebView,
               let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
-        webView.evaluateJavaScript("window.__laolaoProjectFolderResult?.(\(json));")
+        targetWebView.evaluateJavaScript("window.__laolaoProjectFolderResult?.(\(json));")
+    }
+
+    private func sendMaterialPreviewResult(_ payload: [String: Any], to targetWebView: WKWebView?) {
+        guard let targetWebView,
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        targetWebView.evaluateJavaScript("window.__laolaoMaterialPreviewResult?.(\(json));")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
+        if webView === browserWebView {
+            webView.alphaValue = 1.0
+            updateBrowserControls()
+            browserErrorPage(error)
+            return
+        }
+        if isCompanion(webView) {
+            guard companionRetries < 8 else { return }
+            companionRetries += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self, weak webView] in
+                guard let self,
+                      let webView,
+                      self.companionWebView === webView,
+                      let mode = self.companionModeID,
+                      let session = self.workspaceSessions[mode] else { return }
+                webView.load(URLRequest(url: self.chatURL(sessionKey: session, docked: true)))
+            }
+            return
+        }
         guard retries < 8 else { return }
         retries += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
             self?.loadDashboard()
         }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
+        guard webView === browserWebView else { return }
+        webView.alphaValue = 1.0
+        updateBrowserControls()
+        browserErrorPage(error)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webView === browserWebView else { return }
+        setBrowserStatus("页面恢复中…", loading: true)
+        if let lastBrowserURL { loadBrowserURL(lastBrowserURL) }
+        else { webView.reload() }
     }
 
     private var nativeDictationBridge: String {
@@ -2074,6 +3410,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             actions.prepend(button);
           };
 
+          const updateFullScreenButton = (active) => {
+            const button = document.getElementById("pinkie-window-fullscreen");
+            if (!button) return;
+            const label = active ? "退出全屏 (Esc)" : "进入全屏 (⌃⌘F)";
+            button.setAttribute("aria-label", label);
+            button.title = label;
+            button.classList.toggle("is-active", active);
+          };
+
+          const ensureFullScreenButton = () => {
+            const actions = document.querySelector(".sidebar-footer-bar");
+            if (!actions || document.getElementById("pinkie-window-fullscreen")) return;
+            const button = document.createElement("button");
+            button.id = "pinkie-window-fullscreen";
+            button.type = "button";
+            button.className = "sidebar-brand__icon sidebar-footer-icon";
+            button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><path d="M8.5 4.5h-4v4M15.5 4.5h4v4M8.5 19.5h-4v-4M15.5 19.5h4v-4"></path></svg>';
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.webkit?.messageHandlers?.laolaoWindowControl?.postMessage({ action: "toggle-fullscreen" });
+            });
+            actions.prepend(button);
+            updateFullScreenButton(false);
+          };
+
+          window.addEventListener("pinkie:window-fullscreen", (event) => {
+            updateFullScreenButton(event.detail?.active === true);
+          });
+
           window.__laolaoNativeDictationUpdate = (payload) => {
             if (!payload || typeof payload !== "object") return;
             if (typeof payload.transcript === "string") setDraft(payload.transcript);
@@ -2085,7 +3451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
           ensureButton();
           ensureUpdateButton();
-          new MutationObserver(() => { ensureButton(); ensureUpdateButton(); })
+          ensureFullScreenButton();
+          new MutationObserver(() => { ensureButton(); ensureUpdateButton(); ensureFullScreenButton(); })
             .observe(document.documentElement, { childList: true, subtree: true });
         })();
         """#

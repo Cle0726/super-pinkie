@@ -160,6 +160,7 @@
 
   const disarmCurrent = async (preferredSessionKey = "") => {
     const sessionKey = preferredSessionKey || currentSessionKey();
+    if (!sessionKey) { return false; }
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (!sessionKey || typeof rpc !== "function") {
       console.warn("[deep-think] disarmCurrent ignored: no valid sessionKey for current view");
@@ -276,9 +277,6 @@
       selectedTier = status.tier;
       writeTier(status.tier);
       render();
-    }).catch((error) => {
-        toast(`档位取消失败：${error?.message || "网关暂时不可用"}`);
-      });
     }
     const endedRecently = status.complete && status.endedAt && Date.now() - status.endedAt < 12_000;
     const sessionKey = currentSessionKey();
@@ -336,6 +334,10 @@
     try {
       if (latestStatus?.active) throw new Error("上一轮还在执行，完成后会自动显示终稿");
       await armSelected();
+      if (typeof window.__laolaoWebGptPrepareNextTurn === "function") {
+        await window.__laolaoWebGptPrepareNextTurn();
+        window.__laolaoWebGptAllowNextSend?.();
+      }
       bypassSend = true;
       send();
     } catch (error) {
