@@ -48,6 +48,10 @@ test('web GPT collaboration is opt-in and scoped per session', () => {
   assert.match(ui, /pinkie\.webGpt\.connection\.start/);
   assert.match(ui, /当前项目还没有完成网页 GPT 的只读配对/);
   assert.match(ui, /不要输出 C2C、STATE、TASK_ID、ITERATION/);
+  assert.match(ui, /read_file before making conclusions/);
+  assert.match(ui, /listing alone is never inspection/);
+  assert.match(ui, /search_workspace for a named error/);
+  assert.match(ui, /files read with paths\/lines/);
   assert.doesNotMatch(ui, /Reply with \[C2C\] STATE: PLAN/);
   assert.doesNotMatch(ui, /localStorage\.setItem\(storageKey\(\), "1"\)[\s\S]{0,80}render\(\);\s*$/);
 });
@@ -62,6 +66,7 @@ test('gateway uses hidden next-turn injection instead of rewriting the composer'
   assert.match(plugin, /registerWebGptActivityGateway/);
   assert.match(plugin, /registerWebGptConnectionGateway/);
   assert.match(plugin, /stripWebGptProtocol/);
+  assert.match(plugin, /WEB_GPT_PLAN_MAX_CHARS = 6_000/);
   assert.match(plugin, /replace\(\/\^\\s\*\\\[C2C\\\]/);
 });
 
@@ -130,7 +135,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
 test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const build = read('desktop/macos/build.sh');
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt14/);
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt15/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);
   assert.match(build, /services\/chatgpt-collab/);

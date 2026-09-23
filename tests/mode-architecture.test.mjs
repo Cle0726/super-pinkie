@@ -4,18 +4,28 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
-import plugin,{CleKkAuditLog,CleKkSupervisor,CompactionHandoffStore,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,createCuaComputerTool,deliberationRequirements,isTransientFailure,modeForContext} from '../services/mode-architecture/index.mjs';
+import plugin,{CleKkAuditLog,CleKkSupervisor,CompactionHandoffStore,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,createCuaComputerTool,deliberationRequirements,isTransientFailure,modeForContext,sessionCheckpointRelative} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mode-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  for(const dir of ['persona','memory/context','memory/feedback'])fs.mkdirSync(path.join(root,dir),{recursive:true});
+  for(const dir of ['persona','memory/context/sessions','memory/feedback'])fs.mkdirSync(path.join(root,dir),{recursive:true});
   fs.writeFileSync(path.join(root,'persona/core.md'),`persona-${label}`);
   fs.writeFileSync(path.join(root,'persona/voice_examples.md'),`voice-${label}`);
   fs.writeFileSync(path.join(root,'memory/INDEX.md'),`index-${label}`);
   fs.writeFileSync(path.join(root,'memory/identity.md'),`identity-${label}`);
-  fs.writeFileSync(path.join(root,'memory/context/active.md'),`active-${label}`);
+  // Legacy shared checkpoints are intentionally preserved but must never be
+  // injected into a new session.
+  fs.writeFileSync(path.join(root,'memory/context/active.md'),`legacy-active-${label}`);
   return root;
+}
+
+function writeSessionCheckpoint(root,sessionKey,text){
+  const relative=sessionCheckpointRelative(sessionKey);
+  const target=path.join(root,relative);
+  fs.mkdirSync(path.dirname(target),{recursive:true});
+  fs.writeFileSync(target,text);
+  return target;
 }
 
 test('existing agent ids map to display modes without renaming agents',()=>{
@@ -29,21 +39,25 @@ test('existing agent ids map to display modes without renaming agents',()=>{
 test('each prompt loads only its runtime workspace persona and memory',t=>{
   const a=workspace(t,'A'),b=workspace(t,'B');
   const runtime=new ModeArchitecture();
-  const result=runtime.prompt({prompt:'hello',messages:[]},{agentId:'main',sessionKey:'agent:main:a',workspaceDir:a});
+  const sessionKey='agent:main:a';
+  writeSessionCheckpoint(a,sessionKey,'active-A');
+  const result=runtime.prompt({prompt:'hello',messages:[]},{agentId:'main',sessionKey,workspaceDir:a});
   assert.match(result.appendSystemContext,/persona-A/);
   assert.match(result.appendSystemContext,/index-A/);
   assert.match(result.appendSystemContext,/identity-A/);
   assert.match(result.appendSystemContext,/active-A/);
+  assert.match(result.appendSystemContext,new RegExp(sessionCheckpointRelative(sessionKey)));
   assert.match(result.appendSystemContext,/全局交付真实性门禁/);
   assert.match(result.appendSystemContext,/独立模块：边做边学/);
   assert.ok(result.appendSystemContext.indexOf('独立模块：边做边学')<result.appendSystemContext.indexOf('persona-A'));
-  assert.doesNotMatch(result.appendSystemContext,/persona-B|index-B/);
+  assert.doesNotMatch(result.appendSystemContext,/persona-B|index-B|legacy-active-A/);
   assert.ok(fs.existsSync(b));
 });
 
 test('automatic compaction carries durable task anchors into exactly one continuation prompt',t=>{
   const root=workspace(t,'compaction-handoff');
-  fs.writeFileSync(path.join(root,'memory/context/active.md'),[
+  const ctx={agentId:'project',sessionKey:'agent:project:compaction-handoff',workspaceDir:root};
+  writeSessionCheckpoint(root,ctx.sessionKey,[
     '# 当前任务',
     '修复发布前的续工流程',
     '已完成：保留了真实工具结果',
@@ -51,7 +65,6 @@ test('automatic compaction carries durable task anchors into exactly one continu
   ].join('\n'));
   const handoffs=new CompactionHandoffStore(path.join(root,'.handoffs'));
   const runtime=new ModeArchitecture(null,null,handoffs);
-  const ctx={agentId:'project',sessionKey:'agent:project:compaction-handoff',workspaceDir:root};
   runtime.setCompactionEvidenceProvider(()=>({
     prompt:'修复发布前的续工流程并验证',
     tools:[{name:'exec',failed:false,output:'node --test 已通过',effects:[{path:'services/a.mjs',changed:true,exists:true,hostReported:true}]}],
@@ -68,6 +81,26 @@ test('automatic compaction carries durable task anchors into exactly one continu
   assert.match(continuation,/node --test 已通过/);
   assert.match(continuation,/禁止盲目重复/);
   assert.doesNotMatch(runtime.prompt({prompt:'\u2063'},ctx).appendSystemContext,/压缩续工交接/);
+});
+
+test('same-mode sessions cannot load or compact another session checkpoint',t=>{
+  const root=workspace(t,'session-isolation');
+  const handoffs=new CompactionHandoffStore(path.join(root,'.handoffs'));
+  const runtime=new ModeArchitecture(null,null,handoffs);
+  const first={agentId:'project',sessionKey:'agent:project:checkpoint-first',workspaceDir:root};
+  const second={agentId:'project',sessionKey:'agent:project:checkpoint-second',workspaceDir:root};
+  writeSessionCheckpoint(root,first.sessionKey,'only-first-session-checkpoint');
+  runtime.prompt({prompt:'修复第一个会话'},first);
+  runtime.beforeCompaction({},first);
+  runtime.afterCompaction({},first);
+
+  const secondContext=runtime.prompt({prompt:'处理另一个任务'},second).appendSystemContext;
+  assert.doesNotMatch(secondContext,/only-first-session-checkpoint|legacy-active-session-isolation|压缩续工交接/);
+  assert.doesNotMatch(runtime.prompt({prompt:'\u2063'},second).appendSystemContext,/only-first-session-checkpoint|压缩续工交接/);
+
+  const firstContinuation=runtime.prompt({prompt:'\u2063'},first).appendSystemContext;
+  assert.match(firstContinuation,/only-first-session-checkpoint/);
+  assert.match(firstContinuation,/压缩续工交接/);
 });
 
 test('compaction handoff rejects tampering and only resumes the explicit native hand-back failure twice',t=>{
