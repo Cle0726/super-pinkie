@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .DS_Store
 dist/
+!services/chatgpt-collab/runtime/dist/
+!services/chatgpt-collab/runtime/dist/**
 build/
 *.spec
 .build/

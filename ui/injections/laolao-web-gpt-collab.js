@@ -356,7 +356,7 @@
             <div><dt>连接器</dt><dd data-field="connector">尚未配对</dd></div>
             <div><dt>ChatGPT 账号</dt><dd data-field="account">由右侧 ChatGPT 页面显示</dd></div>
           </dl>
-          <p>碧琪不会读取密码或冒充显示邮箱。换号只清除内置浏览器里的 ChatGPT / OpenAI 登录，不动其他网站、聊天记录、项目、权限和本机配置。</p>
+          <p>碧琪不会读取密码或冒充显示邮箱。媒体分析只会发送你明确点名的图片或视频关键帧；原视频、音轨不会上传。首次使用媒体分析需重新配对以增加这项单独的只读权限。换号只清除内置浏览器里的 ChatGPT / OpenAI 登录，不动其他网站、聊天记录、项目、权限和本机配置。</p>
           <div class="laolao-web-gpt-connection__pairing" hidden><div><span></span><code></code></div><button type="button" data-action="copy-pair">复制配对码</button></div>
           <div class="laolao-web-gpt-connection__actions">
             <button type="button" data-action="open-chatgpt">打开 ChatGPT</button>

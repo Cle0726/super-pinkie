@@ -459,10 +459,10 @@ apply_ui_skin() {
 
   # 网页 GPT 协作开关（默认关闭、按会话保存、所有模式可用）。
   if ! grep -Fq './laolao-web-gpt-collab.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-web-gpt-collab.js?v=webgpt13"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-web-gpt-collab.js?v=webgpt14"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-web-gpt-collab.js?v=webgpt13' "$index_file"; then
-    perl -0pi -e 's{\./laolao-web-gpt-collab\.js\?v=[^"]*}{./laolao-web-gpt-collab.js?v=webgpt13}g' "$index_file"
+  elif ! grep -Fq './laolao-web-gpt-collab.js?v=webgpt14' "$index_file"; then
+    perl -0pi -e 's{\./laolao-web-gpt-collab\.js\?v=[^"]*}{./laolao-web-gpt-collab.js?v=webgpt14}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -636,7 +636,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme46}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar26}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink17}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt13}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact3}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g; s{(?:\./|/)laolao-link-viewer\.js(?:\?v=[^" ]*)?}{/laolao-link-viewer.js?v=link4}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme46}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar26}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink17}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt14}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact3}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g' "$index_file"
 }
 
 apply_bundle_icon() {
