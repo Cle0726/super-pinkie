@@ -106,6 +106,62 @@ export class WebGptConnectionManager {
     this.root = path.resolve(root);
     this.bindingFile = path.resolve(bindingFile);
     this.cli = path.join(this.root, process.platform === 'win32' ? 'pinkie-collab.cmd' : 'pinkie-collab');
+    // The upstream bridge stores one chat pointer per workspace. Pinkie can
+    // have several user-facing chats in that workspace, so keep the actual
+    // browser conversation pointer at the narrower Pinkie-session boundary.
+    // This prevents an old unrelated chat from being silently reused.
+    this.conversationFile = path.join(this.root, 'pinkie-session-conversations.json');
+  }
+
+  readConversationBindings() {
+    try {
+      if (!fs.existsSync(this.conversationFile)) return {};
+      const parsed = JSON.parse(fs.readFileSync(this.conversationFile, 'utf8'));
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      // A damaged optional browser pointer must never block normal chat or
+      // make us fall back to a different project's old conversation.
+      return {};
+    }
+  }
+
+  writeConversationBindings(bindings) {
+    fs.mkdirSync(path.dirname(this.conversationFile), {recursive: true, mode: 0o700});
+    const temporary = `${this.conversationFile}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(temporary, `${JSON.stringify(bindings, null, 2)}\n`, {mode: 0o600});
+    fs.renameSync(temporary, this.conversationFile);
+  }
+
+  conversationFor(sessionKey, workspace, legacy = {}) {
+    const record = this.readConversationBindings()[sessionKey];
+    if (record?.workspace === workspace && typeof record.url === 'string') {
+      try {
+        const url = chatGptConversationUrl(record.url);
+        return {
+          mode: 'long-chat',
+          reason: 'pinkie-session-chat',
+          projectUrl: null,
+          projectReady: false,
+          chatUrl: url,
+          connectorName: String(record.connectorName || legacy?.connectorName || '').slice(0, 240) || null,
+          reuseSavedChat: true,
+          sessionScoped: true,
+        };
+      } catch {
+        // Ignore a stale local pointer. A later real browser reply will bind a
+        // new one, rather than opening an arbitrary saved workspace chat.
+      }
+    }
+    return {
+      mode: 'project',
+      reason: 'new-pinkie-session',
+      projectUrl: null,
+      projectReady: false,
+      chatUrl: null,
+      connectorName: String(legacy?.connectorName || '').slice(0, 240) || null,
+      reuseSavedChat: false,
+      sessionScoped: true,
+    };
   }
 
   workspace(sessionKey, requestedWorkspace = '', {allowUnbound = false} = {}) {
@@ -163,7 +219,15 @@ export class WebGptConnectionManager {
       workspace,
       bridge: normalizedBridge,
       preferences,
-      conversation: conversation?.conversation || conversation?.session || conversation,
+      // Do not use the bridge's workspace-wide legacy pointer for dispatch.
+      // It may belong to another Pinkie chat in the same project, or to an
+      // older project that was rebound later. New sends start clean and then
+      // bind the resulting ChatGPT URL to this exact Pinkie session.
+      conversation: this.conversationFor(
+        sessionKey,
+        workspace,
+        conversation?.conversation || conversation?.session || conversation,
+      ),
       diagnostics,
       accountIdentity: '由内置 ChatGPT 页面显示',
     };
@@ -207,7 +271,11 @@ export class WebGptConnectionManager {
 
   async clearConversation(sessionKey, requestedWorkspace = '') {
     const workspace = this.workspace(sessionKey, requestedWorkspace);
-    const cleared = await this.run(['session', 'clear', '-w', workspace], {allowPlain: true});
+    const bindings = this.readConversationBindings();
+    const hadBinding = Boolean(bindings[sessionKey]?.workspace === workspace);
+    delete bindings[sessionKey];
+    this.writeConversationBindings(bindings);
+    const cleared = {ok: true, cleared: hadBinding, scope: 'current-pinkie-session'};
     return {...await this.status(sessionKey, workspace), cleared};
   }
 
@@ -227,6 +295,14 @@ export class WebGptConnectionManager {
       '--mode', 'long-chat',
       '--connector-name', connectorName,
     ], {allowPlain: true});
+    const bindings = this.readConversationBindings();
+    bindings[sessionKey] = {
+      workspace,
+      url,
+      connectorName,
+      savedAt: new Date().toISOString(),
+    };
+    this.writeConversationBindings(bindings);
     return {...await this.status(sessionKey, workspace), saved};
   }
 

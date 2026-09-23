@@ -85,6 +85,9 @@ test('collaboration panel exposes honest activity and maintainable account contr
   assert.match(connection, /pinkie\.webGpt\.connection\.clearConversation/);
   assert.match(connection, /pinkie\.webGpt\.connection\.bindConversation/);
   assert.match(connection, /pinkie\.webGpt\.connection\.unpair/);
+  assert.match(connection, /pinkie-session-conversations\.json/);
+  assert.match(connection, /new-pinkie-session/);
+  assert.match(connection, /sessionScoped: true/);
   assert.match(connection, /\['start', '-w', workspace, '--tunnel', '--json'\]/);
   assert.doesNotMatch(connection, /sandbox-allow/);
   assert.match(launcher, /resetChatGPTBrowserSession/);
