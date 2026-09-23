@@ -9,13 +9,15 @@ import { createMcpServer } from "../mcp/server.js";
 import { createMcpHttpHandler } from "../mcp/http.js";
 import { CloudflaredQuickTunnel } from "../tunnel/cloudflared.js";
 import { CloudflaredNamedTunnel } from "../tunnel/cloudflared-named.js";
-import { namedTunnelBinding, readTunnelState } from "../tunnel/state.js";
+import { TailscaleFunnel } from "../tunnel/tailscale-funnel.js";
+import { namedTunnelBinding, readTunnelState, tailscaleFunnelBinding } from "../tunnel/state.js";
 import { nullLogger } from "../logger/index.js";
 import { DEFAULT_HOST, DEFAULT_PORT } from "../config/paths.js";
 import { SERVICE_NAME, VERSION } from "../version.js";
 import { writeRuntimeState, clearRuntimeState } from "./runtime.js";
 function tunnelForWorkspace(workspaceId, logger) {
-    const binding = namedTunnelBinding(readTunnelState(workspaceId));
+    const state = readTunnelState(workspaceId);
+    const binding = namedTunnelBinding(state);
     if (binding) {
         return new CloudflaredNamedTunnel({
             tunnelName: binding.tunnelName,
@@ -23,6 +25,9 @@ function tunnelForWorkspace(workspaceId, logger) {
             logger,
         });
     }
+    const tailscale = tailscaleFunnelBinding(state);
+    if (tailscale)
+        return new TailscaleFunnel({ hostname: tailscale.hostname, logger });
     return new CloudflaredQuickTunnel(logger);
 }
 /**

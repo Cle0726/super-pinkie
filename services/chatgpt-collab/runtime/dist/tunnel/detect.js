@@ -52,6 +52,7 @@ export function findBinary(name) {
 export function detectTunnelBinaries() {
     return {
         cloudflared: findBinary("cloudflared"),
+        tailscale: findBinary("tailscale"),
         wrangler: findBinary("wrangler"),
     };
 }

@@ -185,7 +185,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-material-preview.css?v=material2">',
         '<link rel="stylesheet" href="./laolao-workspace-focus.css?v=workspacefocus2">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
-        '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning3">',
+        '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning4">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
         '<script src="./laolao-sidebar.js?v=sidebar26"></script>',
@@ -194,14 +194,14 @@ function Apply-UISkin {
         '<script defer src="./laolao-classic-shell.js?v=classic15"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
-        '<script defer src="./laolao-learning-stage.js?v=learning3"></script>',
+        '<script defer src="./laolao-learning-stage.js?v=learning4"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link4"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
         '<script defer src="./laolao-deep-think.js?v=deepthink17"></script>',
-        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt15"></script>',
+        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt16"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
         '<script defer src="./laolao-resume.js?v=resume22"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
@@ -234,8 +234,8 @@ function Apply-UISkin {
         'laolao-classic-shell.css' = 'classic17'; 'laolao-classic-shell.js' = 'classic15';
         'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
-        'laolao-learning-stage.css' = 'learning3'; 'laolao-learning-stage.js' = 'learning3';
-        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt15';
+        'laolao-learning-stage.css' = 'learning4'; 'laolao-learning-stage.js' = 'learning4';
+        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt16';
         'laolao-context-compact.js' = 'contextcompact3'
     }
     foreach ($entry in $versions.GetEnumerator()) {

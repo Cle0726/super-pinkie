@@ -26,7 +26,16 @@ export function namedTunnelBinding(state) {
         return null;
     return { tunnelName: state.tunnelName, hostname: state.hostname };
 }
+export function isTailscaleFunnelReady(state) {
+    return state.preference === "tailscale" && Boolean(state.hostname?.trim());
+}
+export function tailscaleFunnelBinding(state) {
+    if (!isTailscaleFunnelReady(state) || !state.hostname)
+        return null;
+    return { hostname: state.hostname };
+}
 export const TUNNEL_CHOICE_PROMPT = `连 ChatGPT 之前，有一条可选的。
+你也可以登录 Tailscale 并使用 Funnel：它会提供一个固定的 .ts.net 地址，不用购买域名；只需在 ChatGPT 里配一次，以后电脑重启会自动恢复。
 你有没有 Cloudflare 账号，并且有没有一个域名已经加在 Cloudflare 里？
 - 有：可以用固定域名。插件配一次，以后电脑重启一般不用再改插件。要登录一次 Cloudflare，并在你的域名下加一个子域名。
 - 没有：用临时地址。不用注册，功能一样。但电脑重启后地址常会变，ChatGPT 里的旧地址会失效。我会自己删掉这个项目的插件、用新地址再加回去，你偶尔要再登一下 ChatGPT。能修好，只是更慢。

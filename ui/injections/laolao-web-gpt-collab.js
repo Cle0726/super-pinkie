@@ -132,8 +132,10 @@
     }
     for (const button of host.querySelectorAll("button[data-action]")) button.disabled = connectionBusy;
     const start = host.querySelector('[data-action="start"]');
+    const tailscale = host.querySelector('[data-action="use-tailscale"]');
     start.hidden = publicReady || projectRequired;
     start.textContent = running ? "建立安全连接" : "启动桥接";
+    tailscale.hidden = projectRequired || bridge?.tunnel?.provider === "tailscale-funnel";
     host.querySelector('[data-action="pair"]').hidden = projectRequired || !publicReady;
     if (projectRequired) {
       for (const action of ["clear-conversation", "unpair"]) {
@@ -362,6 +364,7 @@
             <button type="button" data-action="open-chatgpt">打开 ChatGPT</button>
             <button type="button" data-action="manage-connectors">管理连接器</button>
             <button type="button" data-action="switch-account">更换账号</button>
+            <button type="button" data-action="use-tailscale">使用固定地址</button>
             <button type="button" data-action="start">启动桥接</button>
             <button type="button" data-action="pair" hidden>生成新配对</button>
             <button type="button" data-action="refresh">检查连接</button>
@@ -423,6 +426,12 @@
         );
       } else if (action === "start") {
         void connectionAction("pinkie.webGpt.connection.start", {}, "网页 GPT 本地桥接已启动");
+      } else if (action === "use-tailscale") {
+        askConfirmation(
+          "会把本项目从临时地址切到当前 Tailscale 设备的固定地址。现有账号、项目和会话不会删除，但 ChatGPT 连接器需最后更新一次地址并重新配对。",
+          "切换固定地址",
+          () => void connectionAction("pinkie.webGpt.connection.useTailscale", {}, "固定地址已保存，正在建立安全连接"),
+        );
       } else if (action === "pair") {
         void connectionAction("pinkie.webGpt.connection.pair", {}, "已生成新的临时配对码");
       } else if (action === "refresh") {

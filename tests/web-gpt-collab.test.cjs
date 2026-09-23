@@ -42,6 +42,8 @@ test('web GPT collaboration is opt-in and scoped per session', () => {
   assert.match(ui, /preview: String\(preview/);
   assert.match(ui, /网页 GPT 协作已关闭，恢复普通聊天/);
   assert.match(ui, /单击开启网页 GPT 协作，双击管理/);
+  assert.match(ui, /data-action="use-tailscale"/);
+  assert.match(ui, /pinkie\.webGpt\.connection\.useTailscale/);
   assert.match(ui, /addEventListener\("dblclick"/);
   assert.match(ui, /buttonClickTimer = setTimeout\([\s\S]*?toggle\(\)/);
   assert.match(ui, /ensureCollaborationConnection/);
@@ -87,6 +89,7 @@ test('collaboration panel exposes honest activity and maintainable account contr
   assert.match(ui, /安全连接已建立 · 等待配对/);
   assert.doesNotMatch(ui, /\bconfirm\(/);
   assert.match(connection, /pinkie\.webGpt\.connection\.start/);
+  assert.match(connection, /pinkie\.webGpt\.connection\.useTailscale/);
   assert.match(connection, /pinkie\.webGpt\.connection\.clearConversation/);
   assert.match(connection, /pinkie\.webGpt\.connection\.bindConversation/);
   assert.match(connection, /pinkie\.webGpt\.connection\.unpair/);
@@ -108,6 +111,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
   const skill = read('skills/web-gpt-collab/SKILL.md');
   const setup = read('services/mode-architecture/setup.py');
   const bridge = read('services/chatgpt-collab/runtime/dist/mcp/server.js');
+  const tunnelBridge = read('services/chatgpt-collab/runtime/dist/bridge/server.js');
   const scopes = read('services/chatgpt-collab/runtime/dist/auth/store.js');
   const provenance = read('services/chatgpt-collab/UPSTREAM.md');
   assert.match(skill, /不要运行 `sandbox-allow`/);
@@ -123,6 +127,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
   assert.match(skill, /action=sent/);
   assert.match(skill, /action=received/);
   assert.match(bridge, /analyze_media/);
+  assert.match(tunnelBridge, /TailscaleFunnel/);
   assert.match(bridge, /workspace\.media\.read/);
   assert.match(bridge, /raw video is never sent/);
   assert.match(scopes, /workspace\.media\.read/);
@@ -135,7 +140,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
 test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const build = read('desktop/macos/build.sh');
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt15/);
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt16/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);
   assert.match(build, /services\/chatgpt-collab/);
