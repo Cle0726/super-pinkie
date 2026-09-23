@@ -27,7 +27,6 @@ const PERSONA_FILES = Object.freeze({
 const ALWAYS_MEMORY_FILES = Object.freeze([
   'memory/INDEX.md',
   'memory/identity.md',
-  'memory/context/active.md',
 ]);
 
 const TIER_LIMITS = Object.freeze({base: 20, boost: 48, full: 96, marathon: 512});
@@ -179,6 +178,12 @@ function stripWebGptProtocol(value = '') {
     .replace(/^\s*PLAN\s*:\s*/i, '')
     .trim();
 }
+
+// The webpage performs the broad read/reasoning pass on the user's ChatGPT
+// account. Only a bounded, evidence-backed handoff enters the local Codex
+// context, so web collaboration reduces local context pressure instead of
+// duplicating an entire second conversation.
+const WEB_GPT_PLAN_MAX_CHARS = 6_000;
 
 function failureReasonFromEvent(event = {}) {
   const reasons = [];
@@ -2752,6 +2757,16 @@ function stateFileId(value) {
   return createHash('sha256').update(String(value || '')).digest('hex').slice(0, 32);
 }
 
+// `active.md` used to be shared by every conversation in one mode workspace.
+// A mode can have many independent conversations, so a shared checkpoint lets
+// one session's unfinished task leak into another session's model context.
+// Keep the old file untouched for backwards-compatible user data, but never
+// load or write it as live state again.
+export function sessionCheckpointRelative(sessionKey = '') {
+  const normalized = String(sessionKey || '').trim();
+  return normalized ? `memory/context/sessions/${stateFileId(normalized)}.md` : '';
+}
+
 export class FileRunStore {
   constructor(root = process.env.PINKIE_STATE_ROOT
     ? path.join(pinkieStateRoot(), 'cle-kk', 'deep-think')
@@ -3826,7 +3841,7 @@ function section(relative, content) {
   return content ? `\n--- ${relative}（本轮从当前模式工作区完整重载）---\n${content.trim()}\n` : '';
 }
 
-export function buildDeliberationPlan(tier, mode) {
+export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点') {
   const normalizedTier = TIER_LIMITS[tier] ? tier : 'boost';
   const upgrades = {
     chat: '加强档增加：假设审查员 + 固定两轮对抗；只用于确实复杂的求助。',
@@ -3847,7 +3862,7 @@ export function buildDeliberationPlan(tier, mode) {
 - 工作法（对齐 Fable 5 长程代理与 Kimi Agent Swarm 的公开模式）：Plan-Execute-Verify——先把目标拆成命名阶段写进检查点，逐阶段执行、每阶段对照验收标准验证通过后再推进；只有真正独立的子任务才并行成批启动，有依赖关系的必须串行等结果（避免假并行空烧和串行塌方）；阶段交接时核对接口、字段与格式的一致性，对不上就拦下修复再继续；任何失败从上一个成功检查点恢复，不从头重来。
 - 可验证增量（反空转第一卡）：每一轮交付都必须带来至少一个新的可验证产物——改动的文件、命令的真实输出、通过的测试结果——并在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报。没有新增产物的一轮不算进展。
 - 停滞纪律（反空转第二卡）：连续 3 轮没有新的可验证产物，后端会强制暂停。届时只做一件事：输出停滞报告（卡在哪一步、试过什么、缺什么权限或信息、建议用户怎么决策），附 <!-- pinkie-longrun-pause --> 结束等用户决策。禁止原地重试同一条失败路径继续烧额度。
-- 检查点纪律（反空转第三卡）：对话历史只追加，不重写早先轮次。每完成一个里程碑，更新 memory/context/active.md：当前目标、已完成项、真实工具结果、未完成项和下一步；后端会比对检查点更新时间与进度申报。网络续接后先读该检查点并核对项目现场，禁止重复已完成的副作用。
+- 检查点纪律（反空转第三卡）：对话历史只追加，不重写早先轮次。每完成一个里程碑，更新 ${checkpointPath}：当前目标、已完成项、真实工具结果、未完成项和下一步；绝不能读写别的会话检查点。后端会比对本会话检查点更新时间与进度申报。网络续接后先读该检查点并核对项目现场，禁止重复已完成的副作用。
 - 至少每完成一个阶段给用户一条简短进度，不展示隐藏推理，不念角色流水账；最终用说人话的总结列出成品、验证结果、剩余阻塞——总结的主体是交付物，不是审议过程。
 - 只有全部验收项完成且验证通过，才在最终回复末尾追加不可见标记 <!-- pinkie-longrun-complete -->。收尾标准是“任务完成”（人可逐项验收的交付物），不是“生成过一些东西”。确实缺少必须由用户提供的新权限或关键选择时，说明具体阻塞，并追加 <!-- pinkie-longrun-pause -->。除此之外不得结束本轮。` : '';
   return `
@@ -3956,12 +3971,13 @@ export class ModeArchitecture {
     try { evidence = this.compactionEvidenceProvider?.(sessionKey) || null; } catch {}
     const remembered = this.lastUserPrompts.get(sessionKey)?.text || '';
     const objective = handoffText(remembered || evidence?.prompt || event.prompt || ctx.prompt || '', 12_000);
-    const checkpoint = root ? readWorkspaceFile(root, 'memory/context/active.md', 20_000) : '';
+    const checkpointPath = sessionCheckpointRelative(sessionKey);
+    const checkpoint = root && checkpointPath ? readWorkspaceFile(root, checkpointPath, 20_000) : '';
     return this.handoffStore.capture(sessionKey, {
       mode: modeForContext(ctx) || this.getRun(parent)?.mode || '',
       workspace: root || '',
       objective,
-      checkpointPath: checkpoint ? 'memory/context/active.md' : '',
+      checkpointPath: checkpoint ? checkpointPath : '',
       checkpoint: handoffText(checkpoint, 20_000),
       run: handoffRunState(this.getRun(parent)),
       tools: handoffToolEvidence(evidence),
@@ -4024,7 +4040,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       token: randomUUID(), model: '', parentRunning: false, lastEventAt: Date.now(),
     };
     this.setRun(sessionKey, run);
-    return {mode, tier, text: buildDeliberationPlan(tier, mode)};
+    return {mode, tier, text: buildDeliberationPlan(tier, mode, sessionCheckpointRelative(sessionKey))};
   }
 
   tierFor(sessionKey) {
@@ -4144,6 +4160,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       for (const relative of ALWAYS_MEMORY_FILES) {
         blocks.push(section(relative, readWorkspaceFile(root, relative)));
       }
+      const checkpointPath = sessionCheckpointRelative(sessionKey);
+      if (checkpointPath) blocks.push(section(checkpointPath, readWorkspaceFile(root, checkpointPath)));
     }
     const tier = VALID_TIER.exec(event.prompt || '')?.[1]?.toLowerCase();
     if (tier && sessionKey) {
@@ -4154,14 +4172,14 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       // 子代理只执行父代理分配的单项职责。若把整份档位运行单也塞给
       // 子代理，它会再次派生同一批角色，形成指数级嵌套和完成通知拥堵。
       if (state?.active && sessionKey === state.parentSessionKey) {
-        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode) + '\n');
+        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, sessionCheckpointRelative(sessionKey)) + '\n');
         const evidence = completedEvidence(state);
         if (evidence) blocks.push('\n' + evidence + '\n');
       }
     }
     const reloaded = this.recentCompaction.get(sessionKey);
     if (reloaded && injectWorkspaceMarkdown) {
-      blocks.push('\n【压缩后重载】上面的 persona/core、INDEX、identity、active 已从磁盘重新完整载入；不要依赖摘要中的旧副本。\n');
+      blocks.push('\n【压缩后重载】上面的 persona/core、INDEX、identity 和本会话专属检查点已从磁盘重新完整载入；不要依赖摘要中的旧副本。\n');
       this.recentCompaction.delete(sessionKey);
     } else if (reloaded) {
       this.recentCompaction.delete(sessionKey);
@@ -4173,7 +4191,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
 - 只读写当前 workspace 下的 persona/ 与 memory/；不得读取其他三个模式的对应目录。
 - 用户明确说“记住”时写 memory/feedback/；普通信息先判重、判价值，不值得就不写。
 - 闲置沉淀写 memory/episodic/YYYY-MM-DD.md；稳定事实覆盖更新 memory/identity.md，不能堆互相矛盾的版本。
-- 当前任务状态只写 memory/context/active.md；结束即清空或归档。审议草稿只进 memory/context/deliberation/。
+- 当前任务状态只写 ${sessionCheckpointRelative(sessionKey) || '当前会话专属检查点'}；绝不能读写别的会话检查点；结束即清空或归档。审议草稿只进 memory/context/deliberation/。
 - INDEX.md 硬上限 25KB/200 行；接近上限先合并同类项，把细节移到 semantic/feedback/reference。
 - 上下文接近自动压缩阈值时，先把必要的稳定事实和用户纠正写盘；压缩后以本轮磁盘重载内容为准。
 `.trim());
@@ -4469,12 +4487,13 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const reply = String(event.lastAssistantMessage || '');
     if (/<!--\s*pinkie-longrun-(?:complete|pause)\s*-->/i.test(reply)) return;
     // 反空转：一轮必须带来新的可验证产物。两个信号取其一即算进展——
-    // 回复里的进度申报标记，或检查点文件（memory/context/active.md）被更新。
+    // 回复里的进度申报标记，或本会话专属检查点文件被更新。
+    const checkpointPath = sessionCheckpointRelative(ctx.sessionKey || '');
     let checkpointAt = 0;
     try {
       const root = safeWorkspace(ctx);
-      if (root) {
-        const checkpoint = path.join(root, 'memory/context/active.md');
+      if (root && checkpointPath) {
+        const checkpoint = path.join(root, checkpointPath);
         if (fs.existsSync(checkpoint)) checkpointAt = fs.statSync(checkpoint).mtimeMs || 0;
       }
     } catch {}
@@ -4503,7 +4522,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       action: 'revise',
       reason: '长跑档仍有未完成闭环',
       retry: {
-        instruction: '不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果。本轮必须产出至少一个新的可验证产物（改动的文件、命令真实输出或测试通过结果），在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报，完成里程碑时更新 memory/context/active.md 检查点；禁止重复已完成的副作用。全部完成并验证后正常总结并附完成标记；确实缺少用户新权限或关键选择时说明具体阻塞并附暂停标记。连续无新增产物会被强制暂停。',
+        instruction: `不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果。本轮必须产出至少一个新的可验证产物（改动的文件、命令真实输出或测试通过结果），在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报，完成里程碑时更新 ${checkpointPath || '当前会话专属检查点'}；绝不能读写别的会话检查点，禁止重复已完成的副作用。全部完成并验证后正常总结并附完成标记；确实缺少用户新权限或关键选择时说明具体阻塞并附暂停标记。连续无新增产物会被强制暂停。`,
         idempotencyKey: `pinkie-marathon-${ctx.runId || ctx.sessionKey || 'run'}`,
         maxAttempts: 64,
       },
@@ -4847,7 +4866,7 @@ export default {
         if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
-        const plan = stripWebGptProtocol(String(params?.plan || '').replace(/\u0000/g, '')).slice(0, 16_000);
+        const plan = stripWebGptProtocol(String(params?.plan || '').replace(/\u0000/g, '')).slice(0, WEB_GPT_PLAN_MAX_CHARS);
         if (!plan) throw new Error('网页 ChatGPT 没有返回可用内容');
         const result = await api.session.workflow.enqueueNextTurnInjection({
           sessionKey,

@@ -510,7 +510,10 @@
     sync();
   };
 
-  const truncateUtf8 = (value, maxBytes = 520) => {
+  // The web GPT needs the actual user request, not a tiny title-sized snippet,
+  // in order to choose which project files to read. This stays well below a
+  // browser message limit and never enters the local model context verbatim.
+  const truncateUtf8 = (value, maxBytes = 2_600) => {
     const source = String(value || "").replace(/\s+/g, " ").trim();
     const encoder = new TextEncoder();
     if (encoder.encode(source).length <= maxBytes) return source;
@@ -533,7 +536,7 @@
       || "Codex with ChatGPT",
     ).slice(0, 120);
     const instruction = projectWorkspace
-      ? `Use the connected "${connector}" connector to inspect only the files needed inside the bound user project ${JSON.stringify(projectWorkspace)}. First call workspace_info, then inspect only directly relevant files. Never inspect Pinkie/OpenClaw memory, persona, configuration, or hidden agent workspaces. Return a concise executable plan for Codex in normal prose.`
+      ? `Use the connected "${connector}" connector to inspect only the files needed inside the bound user project ${JSON.stringify(projectWorkspace)}. Call workspace_info first only to identify the project type. Then read the actual contents of directly relevant files with read_file before making conclusions. A directory listing is only allowed when the task gives no file name and you need to find candidate files; a listing alone is never inspection and must never be the basis for a conclusion. For code or report analysis, read the relevant entry/source/report files (and paginate large files); use search_workspace for a named error, identifier, or phrase. Never inspect Pinkie/OpenClaw memory, persona, configuration, or hidden agent workspaces. Do the substantive analysis in this web ChatGPT session, then return a compact evidence-backed handoff for Codex: files read with paths/lines, findings, risks, and the next executable steps. Do not reveal private chain-of-thought or output protocol labels.`
       : "No user project folder is bound. Do not use any connector and do not inspect, request, or infer local files, Pinkie memory, persona, configuration, or hidden agent workspaces. Analyze only the user request and return a concise plan in normal prose.";
     return [
       "请协助碧琪分析下面这项用户任务。",
@@ -545,7 +548,7 @@
       instruction,
       "",
       "不要输出 C2C、STATE、TASK_ID、ITERATION 或其他协议标签；直接给计划。",
-    ].join("\n").slice(0, 980);
+    ].join("\n").slice(0, 4_800);
   };
 
   const sameConversation = (current, expected) => {
