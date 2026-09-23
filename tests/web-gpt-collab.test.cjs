@@ -102,17 +102,25 @@ test('collaboration panel exposes honest activity and maintainable account contr
 test('bundled bridge stays read-only and isolated from Codex state', () => {
   const skill = read('skills/web-gpt-collab/SKILL.md');
   const setup = read('services/mode-architecture/setup.py');
+  const bridge = read('services/chatgpt-collab/runtime/dist/mcp/server.js');
+  const scopes = read('services/chatgpt-collab/runtime/dist/auth/store.js');
   const provenance = read('services/chatgpt-collab/UPSTREAM.md');
   assert.match(skill, /不要运行 `sandbox-allow`/);
   assert.match(skill, /只读连接器/);
   assert.match(skill, /profile="openclaw"/);
   assert.match(skill, /web_gpt_activity/);
+  assert.match(skill, /analyze_media/);
+  assert.match(skill, /最多 8 个媒体路径/);
   assert.match(skill, /宿主已经完成网页收发时/);
   assert.match(skill, /不调用 `web_gpt_activity`/);
   assert.match(skill, /当前模型只完成本地工作并正常给用户最终回复/);
   assert.match(skill, /不得读取当前\s*模式自己的 workspace、memory、persona/);
   assert.match(skill, /action=sent/);
   assert.match(skill, /action=received/);
+  assert.match(bridge, /analyze_media/);
+  assert.match(bridge, /workspace\.media\.read/);
+  assert.match(bridge, /raw video is never sent/);
+  assert.match(scopes, /workspace\.media\.read/);
   assert.match(setup, /web-gpt-collab/);
   assert.match(setup, /C2C_STATE_DIR/);
   assert.match(provenance, /9663b88753e35c76796c5bce000293e0bd22cd9e/);
@@ -122,7 +130,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
 test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const build = read('desktop/macos/build.sh');
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt13/);
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt14/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);
   assert.match(build, /services\/chatgpt-collab/);
