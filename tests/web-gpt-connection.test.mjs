@@ -66,6 +66,50 @@ test('an unbound chat never falls back to Pinkie memory or an internal agent wor
   );
 });
 
+test('browser conversation state is isolated by Pinkie session even inside one project', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-session-state-'));
+  const workspace = path.join(root, 'project');
+  fs.mkdirSync(workspace);
+  const bindingFile = path.join(root, 'bindings.json');
+  const first = 'agent:project:session-first';
+  const second = 'agent:project:session-second';
+  fs.writeFileSync(bindingFile, JSON.stringify({
+    [first]: {root: workspace, name: '同一项目'},
+    [second]: {root: workspace, name: '同一项目'},
+  }));
+  const cli = path.join(root, 'pinkie-collab');
+  fs.writeFileSync(cli, `#!/bin/sh
+case "$1" in
+  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://pinkie.example","tunnel":{"running":true}}' ;;
+  prefs|doctor) printf '%s\\n' '{"ok":true}' ;;
+  session)
+    if [ "$2" = "set" ]; then printf '%s\\n' '已保存';
+    else printf '%s\\n' '{"ok":true,"conversation":{"chatUrl":"https://chatgpt.com/c/legacy-shared-chat","connectorName":"只读项目连接器"}}'; fi ;;
+esac
+`, {mode: 0o700});
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+
+  const manager = new WebGptConnectionManager({root, bindingFile});
+  // A workspace-wide legacy pointer is deliberately not reused by a different
+  // Pinkie session, because that is how cross-chat logical state leaked.
+  const before = await manager.status(second, workspace);
+  assert.equal(before.conversation.chatUrl, null);
+  assert.equal(before.conversation.reason, 'new-pinkie-session');
+
+  await manager.bindConversation(first, workspace, 'https://chatgpt.com/c/first-chat');
+  await manager.bindConversation(second, workspace, 'https://chatgpt.com/c/second-chat');
+  const firstState = await manager.status(first, workspace);
+  const secondState = await manager.status(second, workspace);
+  assert.equal(firstState.conversation.chatUrl, 'https://chatgpt.com/c/first-chat');
+  assert.equal(secondState.conversation.chatUrl, 'https://chatgpt.com/c/second-chat');
+  assert.equal(firstState.conversation.sessionScoped, true);
+  assert.equal(secondState.conversation.sessionScoped, true);
+
+  await manager.clearConversation(first, workspace);
+  assert.equal((await manager.status(first, workspace)).conversation.chatUrl, null);
+  assert.equal((await manager.status(second, workspace)).conversation.chatUrl, 'https://chatgpt.com/c/second-chat');
+});
+
 test('stale tunnel URLs are never reported as ready or accepted for pairing', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-stale-'));
   const workspace = path.join(root, 'project');
