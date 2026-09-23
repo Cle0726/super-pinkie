@@ -256,6 +256,12 @@ export class WebGptConnectionManager {
     return {...await this.status(sessionKey, workspace), started};
   }
 
+  async useTailscale(sessionKey, requestedWorkspace = '') {
+    const workspace = this.workspace(sessionKey, requestedWorkspace);
+    const selected = await this.run(['tunnel', 'choose', '--mode', 'tailscale', '-w', workspace, '--json']);
+    return {...await this.status(sessionKey, workspace), tailscale: selected};
+  }
+
   async pair(sessionKey, requestedWorkspace = '') {
     const workspace = this.workspace(sessionKey, requestedWorkspace);
     const before = await this.status(sessionKey, workspace);
@@ -329,6 +335,7 @@ export function registerWebGptConnectionGateway(api, manager) {
   };
   api.registerGatewayMethod('pinkie.webGpt.connection.get', handle('status'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.start', handle('start'), {scope: 'operator.admin'});
+  api.registerGatewayMethod('pinkie.webGpt.connection.useTailscale', handle('useTailscale'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.pair', handle('pair'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.clearConversation', handle('clearConversation'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.bindConversation', async ({params, respond}) => {

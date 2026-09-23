@@ -10,8 +10,9 @@ import { Workspace } from "../workspace/manager.js";
 import { AuthStore } from "../auth/store.js";
 import { detectTunnelBinaries } from "../tunnel/detect.js";
 import { chooseQuickTunnel, hasCloudflaredCert, ProcessCloudflaredAccount, provisionNamedTunnel, } from "../tunnel/named-provision.js";
+import { chooseTailscaleFunnel } from "../tunnel/tailscale-funnel.js";
 import { parseZoneInput, suggestedNamedHostname } from "../tunnel/hostname.js";
-import { isNamedTunnelReady, NAMED_LOGIN_PROMPT, NAMED_REPAIR_MESSAGE, needsTunnelChoice, readTunnelState, TUNNEL_CHOICE_PROMPT, } from "../tunnel/state.js";
+import { isNamedTunnelReady, isTailscaleFunnelReady, NAMED_LOGIN_PROMPT, NAMED_REPAIR_MESSAGE, needsTunnelChoice, readTunnelState, TUNNEL_CHOICE_PROMPT, } from "../tunnel/state.js";
 import { Logger } from "../logger/index.js";
 import { getStateDir } from "../config/paths.js";
 import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
@@ -96,6 +97,7 @@ function tunnelChoicePayload(workspace, zoneHint) {
         preference: state.preference,
         loggedIn: hasCloudflaredCert(),
         namedReady: isNamedTunnelReady(state),
+        tailscaleReady: isTailscaleFunnelReady(state),
         zone,
         hostname: state.hostname ?? null,
         suggestedHostname: zone ? suggestedNamedHostname(zone, workspace.name, workspace.id) : null,
@@ -119,7 +121,11 @@ async function ensureBridgeAndTunnel(workspaceRoot, opts) {
     let mcpUrl = info.publicUrl ? `${info.publicUrl}/mcp` : null;
     if (opts.tunnel && !info.publicUrl) {
         const binaries = detectTunnelBinaries();
-        if (!binaries.cloudflared) {
+        const configured = readTunnelState(info.workspaceId);
+        if (isTailscaleFunnelReady(configured) && !binaries.tailscale) {
+            throw new Error("NEED_TAILSCALE: Tailscale is not installed. Install and log in before using the stable address.");
+        }
+        if (!isTailscaleFunnelReady(configured) && !binaries.cloudflared) {
             throw new Error("NEED_CLOUDFLARED: cloudflared is not installed. Install it first (macOS: brew install cloudflared).");
         }
         const result = await adminFetch(runtime, "POST", "/admin/tunnel/start", 90_000);
@@ -238,7 +244,7 @@ program
                 pairingExpiresAt: pairingResult.expiresAt,
                 sandbox,
                 tunnel: {
-                    mode: isNamedTunnelReady(tunnelState) ? "named" : "quick",
+                    mode: isNamedTunnelReady(tunnelState) ? "named" : isTailscaleFunnelReady(tunnelState) ? "tailscale" : "quick",
                     hostname: tunnelState.hostname ?? null,
                     fallback: Boolean(tunnelState.fallbackReason),
                 },
@@ -433,6 +439,9 @@ program
         : "Codex with ChatGPT";
     const tunnelState = workspace ? readTunnelState(workspace.id) : null;
     const namedReady = tunnelState ? isNamedTunnelReady(tunnelState) : false;
+    const tailscaleReady = tunnelState ? isTailscaleFunnelReady(tunnelState) : false;
+    const fixedReady = namedReady || tailscaleReady;
+    const expectedProvider = namedReady ? "cloudflare-named" : tailscaleReady ? "tailscale-funnel" : "";
     let namedRepair = { needed: false };
     let chatgptRepair = {
         needed: false,
@@ -448,7 +457,7 @@ program
     };
     if (runtime) {
         let info = await adminFetch(runtime, "GET", "/admin/info");
-        if (namedReady && opts.fix && info.tunnel.provider !== "cloudflare-named") {
+        if (fixedReady && opts.fix && info.tunnel.provider !== expectedProvider) {
             await stopBridge(root);
             await new Promise((resolve) => setTimeout(resolve, 400));
             try {
@@ -460,7 +469,7 @@ program
                 report.tunnel = { ok: false, detail: error.message };
             }
         }
-        const expectedPublic = Boolean(lastEndpoint?.publicUrl) || namedReady;
+        const expectedPublic = Boolean(lastEndpoint?.publicUrl) || fixedReady;
         let currentUrl = info.publicUrl ?? info.tunnel.url;
         let healthy = false;
         if (currentUrl) {
@@ -522,7 +531,7 @@ program
                 results.push(`安全连接地址已更换，需要更新「${boundName}」`);
             }
         }
-        else if (namedReady) {
+        else if (fixedReady) {
             report.tunnel = report.tunnel ?? { ok: false, detail: "NAMED_TUNNEL_DOWN" };
             namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
         }
@@ -548,7 +557,7 @@ program
     else if (bridgeUnknown) {
         report.tunnel = report.tunnel ?? { ok: false, detail: "Bridge 状态无法确认，未执行连接器修复" };
     }
-    else if (namedReady) {
+    else if (fixedReady) {
         report.tunnel = { ok: false, detail: "NAMED_TUNNEL_DOWN" };
         namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
     }
@@ -608,7 +617,7 @@ program
         : chatgptRepair.needed
             ? "本地已就绪，还需要在 ChatGPT 删除并重新添加该连接。"
             : namedRepair.needed
-                ? "固定域名还没连上，需要先登录 Cloudflare。"
+                ? "固定地址还没连上；Cloudflare 请登录账号，Tailscale 请确认已登录并开启 Funnel。"
                 : "仍有问题未解决，可尝试 `c2c restart --tunnel`。");
     if (!allOk || namedRepair.needed)
         process.exitCode = 1;
@@ -1019,8 +1028,8 @@ tunnelCmd
 });
 tunnelCmd
     .command("choose")
-    .description("Remember quick vs named, and provision a named hostname when asked")
-    .requiredOption("--mode <mode>", "quick or named")
+    .description("Remember quick, Cloudflare named, or Tailscale Funnel")
+    .requiredOption("--mode <mode>", "quick, named, or tailscale")
     .option("-w, --workspace <path>")
     .option("--zone <domain>", "Cloudflare domain for a named hostname")
     .option("--hostname <hostname>", "override the default c2c-<project>.<zone>")
@@ -1044,8 +1053,19 @@ tunnelCmd
                 check("已选用临时地址");
             return;
         }
+        if (mode === "tailscale") {
+            const state = chooseTailscaleFunnel(workspace.id);
+            if (await findLiveBridge(workspace.id))
+                await stopBridge(root);
+            const payload = { ...tunnelChoicePayload(workspace), state };
+            if (opts.json)
+                say(JSON.stringify(payload));
+            else
+                check(`已选用 Tailscale 固定地址：${state.hostname}`);
+            return;
+        }
         if (mode !== "named") {
-            throw new Error("mode must be quick or named");
+            throw new Error("mode must be quick, named, or tailscale");
         }
         const zone = parseZoneInput(opts.zone ?? "");
         if (!zone) {
