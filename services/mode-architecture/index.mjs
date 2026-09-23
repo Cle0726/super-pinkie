@@ -168,6 +168,18 @@ export function isTransientFailure(value = '') {
   return !PERMANENT_FAILURE.test(text) && (TRANSIENT_FAILURE.test(text) || GATEWAY_RECOVERY_FAILURE.test(text));
 }
 
+// The browser collaboration bridge may receive older replies that still carry
+// its former C2C envelope. It is transport metadata, not a user-visible plan;
+// never let it enter the next model turn where it could be echoed back into
+// chat or mistaken for an instruction.
+function stripWebGptProtocol(value = '') {
+  return String(value || '')
+    .replace(/^\s*\[C2C\]\s*\n?/i, '')
+    .replace(/^\s*(?:STATE|TASK_ID|ITERATION)\s*:[^\n]*\n?/gim, '')
+    .replace(/^\s*PLAN\s*:\s*/i, '')
+    .trim();
+}
+
 function failureReasonFromEvent(event = {}) {
   const reasons = [];
   const add = value => {
@@ -4835,7 +4847,7 @@ export default {
         if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
-        const plan = String(params?.plan || '').replace(/\u0000/g, '').trim().slice(0, 16_000);
+        const plan = stripWebGptProtocol(String(params?.plan || '').replace(/\u0000/g, '')).slice(0, 16_000);
         if (!plan) throw new Error('网页 ChatGPT 没有返回可用内容');
         const result = await api.session.workflow.enqueueNextTurnInjection({
           sessionKey,

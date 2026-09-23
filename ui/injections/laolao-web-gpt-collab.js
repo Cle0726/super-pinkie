@@ -249,6 +249,43 @@
     return connection;
   };
 
+  // A green toggle only means that this session opted in. It must never be
+  // mistaken for a working connector: a quick tunnel may have changed after
+  // restart, and an OAuth token is deliberately scoped to one user project.
+  // Start the bridge for the selected project on demand, then refuse to send
+  // the user's request until that exact project has a live read-only grant.
+  const hasLiveProjectConnector = (value) => value?.projectRequired !== true
+    && value?.bridge?.publicReady === true
+    && Number(value?.bridge?.tokenCount || 0) > 0;
+
+  const ensureCollaborationConnection = async () => {
+    const request = rpc();
+    if (!sessionKey() || typeof request !== "function") {
+      throw new Error("网页 GPT 协作服务还没连接好");
+    }
+    if (!connection) await loadConnection();
+    if (connection?.projectRequired === true) {
+      throw new Error("当前会话还没有绑定项目；网页 GPT 不会读取碧琪记忆或内部工作区");
+    }
+    if (connection?.bridge?.publicReady !== true) {
+      connectionBusy = true;
+      renderConnection();
+      try {
+        connection = await request("pinkie.webGpt.connection.start", connectionParams(), 125_000);
+      } finally {
+        connectionBusy = false;
+        renderConnection();
+      }
+    }
+    if (connection?.bridge?.publicReady !== true) {
+      throw new Error("当前项目的安全连接没有建立，已阻止向网页 GPT 发送任务");
+    }
+    if (!hasLiveProjectConnector(connection)) {
+      throw new Error("当前项目还没有完成网页 GPT 的只读配对。双击网页 GPT 图标，生成新配对后在“管理连接器”完成授权");
+    }
+    return connection;
+  };
+
   const connectionAction = async (method, params = {}, success = "操作完成") => {
     const request = rpc();
     if (typeof request !== "function" || connectionBusy) return;
@@ -495,21 +532,19 @@
       || connection?.bridge?.connectorName
       || "Codex with ChatGPT",
     ).slice(0, 120);
-    const taskId = `pinkie_${Date.now().toString(36)}`;
     const instruction = projectWorkspace
-      ? `Use the connected "${connector}" connector to inspect only the files needed inside the bound user project ${JSON.stringify(projectWorkspace)}. Never inspect Pinkie/OpenClaw memory, persona, configuration, or hidden agent workspaces. Return a concise executable plan for Codex. Reply with [C2C] STATE: PLAN.`
-      : "No user project folder is bound. Do not use any connector and do not inspect, request, or infer local files, Pinkie memory, persona, configuration, or hidden agent workspaces. Analyze only the GOAL text below and return a concise plan. Reply with [C2C] STATE: PLAN.";
+      ? `Use the connected "${connector}" connector to inspect only the files needed inside the bound user project ${JSON.stringify(projectWorkspace)}. First call workspace_info, then inspect only directly relevant files. Never inspect Pinkie/OpenClaw memory, persona, configuration, or hidden agent workspaces. Return a concise executable plan for Codex in normal prose.`
+      : "No user project folder is bound. Do not use any connector and do not inspect, request, or infer local files, Pinkie memory, persona, configuration, or hidden agent workspaces. Analyze only the user request and return a concise plan in normal prose.";
     return [
-      "[C2C]",
-      "STATE: INIT",
-      `TASK_ID: ${taskId}`,
-      "ITERATION: 0",
+      "请协助碧琪分析下面这项用户任务。",
       "",
-      "GOAL:",
+      "用户任务：",
       truncateUtf8(preview),
       "",
-      "INSTRUCTION:",
+      "工作要求：",
       instruction,
+      "",
+      "不要输出 C2C、STATE、TASK_ID、ITERATION 或其他协议标签；直接给计划。",
     ].join("\n").slice(0, 980);
   };
 
@@ -597,6 +632,7 @@
     if (!key || typeof rpc !== "function") throw new Error("网页 GPT 协作服务还没连接好");
     if (!arming) {
       arming = (async () => {
+        await ensureCollaborationConnection();
         const result = await rpc("pinkie.webGpt.arm", {sessionKey: key, preview: String(preview || "").slice(0, 16_000)}, 12_000);
           if (!result?.armed) throw new Error("本轮网页 GPT 协作没有挂载成功");
           if (result.activity) activity = result.activity;
