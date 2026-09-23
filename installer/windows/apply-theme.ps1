@@ -201,7 +201,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-link-viewer.js?v=link4"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
         '<script defer src="./laolao-deep-think.js?v=deepthink17"></script>',
-        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt12"></script>',
+        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt13"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
         '<script defer src="./laolao-resume.js?v=resume22"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
@@ -235,7 +235,7 @@ function Apply-UISkin {
         'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'laolao-learning-stage.css' = 'learning3'; 'laolao-learning-stage.js' = 'learning3';
-        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt12';
+        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt13';
         'laolao-context-compact.js' = 'contextcompact3'
     }
     foreach ($entry in $versions.GetEnumerator()) {

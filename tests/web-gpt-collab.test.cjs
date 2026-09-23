@@ -44,6 +44,11 @@ test('web GPT collaboration is opt-in and scoped per session', () => {
   assert.match(ui, /单击开启网页 GPT 协作，双击管理/);
   assert.match(ui, /addEventListener\("dblclick"/);
   assert.match(ui, /buttonClickTimer = setTimeout\([\s\S]*?toggle\(\)/);
+  assert.match(ui, /ensureCollaborationConnection/);
+  assert.match(ui, /pinkie\.webGpt\.connection\.start/);
+  assert.match(ui, /当前项目还没有完成网页 GPT 的只读配对/);
+  assert.match(ui, /不要输出 C2C、STATE、TASK_ID、ITERATION/);
+  assert.doesNotMatch(ui, /Reply with \[C2C\] STATE: PLAN/);
   assert.doesNotMatch(ui, /localStorage\.setItem\(storageKey\(\), "1"\)[\s\S]{0,80}render\(\);\s*$/);
 });
 
@@ -56,6 +61,8 @@ test('gateway uses hidden next-turn injection instead of rewriting the composer'
   assert.match(plugin, /createWebGptActivityTool/);
   assert.match(plugin, /registerWebGptActivityGateway/);
   assert.match(plugin, /registerWebGptConnectionGateway/);
+  assert.match(plugin, /stripWebGptProtocol/);
+  assert.match(plugin, /replace\(\/\^\\s\*\\\[C2C\\\]/);
 });
 
 test('collaboration panel exposes honest activity and maintainable account controls', () => {
@@ -112,7 +119,7 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
 test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const build = read('desktop/macos/build.sh');
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt12/);
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt13/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);
   assert.match(build, /services\/chatgpt-collab/);
