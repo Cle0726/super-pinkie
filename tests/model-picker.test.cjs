@@ -205,6 +205,91 @@ test('new reasoning and non-reasoning endpoints join one future slider family', 
   assert.equal(window.__pickerTest.familyTargetModel(state, 'high'), 'mm/grok-4.20-0309-reasoning');
 });
 
+test('each selectable model receives its actual AI brand mark beside the name', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {modelBrand, syncModelBrands};})();');
+  const window = {};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const entries = ['mm/gemini-2.5-flash', 'mm/claude-opus-4-6-thinking',
+    'clekk/gpt-5.6-sol', 'mm/grok-4.6', 'mm/tab_flash_lite_preview']
+    .map((value) => ({dataset: {}, getAttribute() { return value; }}));
+  window.__pickerTest.syncModelBrands({querySelectorAll: () => entries});
+  assert.deepEqual(entries.map((entry) => entry.dataset.pinkieBrand),
+    ['gemini', 'claude', 'codex', 'grok', 'crossmodel']);
+  const css = read('ui/injections/laolao-theme.css');
+  for (const brand of ['gemini', 'claude', 'codex', 'grok', 'crossmodel']) {
+    assert.match(css, new RegExp(`ProviderIcon-${brand}\\.svg`));
+  }
+  assert.match(css, /\[data-chat-model-option\]\[data-pinkie-brand\]::before/);
+});
+
+test('the closed picker decorates only the tier word and preserves the plain model name', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {writeTriggerLabel};})();');
+  const window = {};
+  const document = {
+    addEventListener() {},
+    createElement() { return {className: '', textContent: ''}; },
+    createTextNode(textContent) { return {textContent}; },
+  };
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  const label = {
+    textContent: '', children: [],
+    querySelector(selector) { return this.children.find((item) => selector.includes(item.className)); },
+    replaceChildren(...children) {
+      this.children = children;
+      this.textContent = children.map((item) => item.textContent).join('');
+    },
+  };
+  window.__pickerTest.writeTriggerLabel(label, 'Gemini 2.5 Flash', 'ultra');
+  assert.equal(label.textContent, 'Gemini 2.5 Flash · Ultra');
+  assert.equal(label.children[0].className, 'pinkie-external-model-name');
+  assert.equal(label.children[0].textContent, 'Gemini 2.5 Flash');
+  assert.equal(label.children[2].className, 'pinkie-external-tier');
+  assert.equal(label.children[2].textContent, 'Ultra');
+  const css = read('ui/injections/laolao-theme.css');
+  assert.match(css, /\.pinkie-external-model-name \{ color: #5a5068; \}/);
+  for (const level of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']) {
+    assert.match(css, new RegExp(`data-pinkie-outside-material="${level}"`));
+  }
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.pinkie-external-tier \{ animation: none !important/);
+});
+
+test('the closed model label follows external tier changes without styling its model name', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {syncTrigger};})();');
+  const label = {
+    textContent: 'Gemini 2.5 Flash · High', children: [],
+    querySelector(selector) { return this.children.find((item) => selector.includes(item.className)); },
+    replaceChildren(...children) { this.children = children; this.textContent = children.map((item) => item.textContent).join(''); },
+  };
+  let ariaLabel = '';
+  const summary = {
+    querySelector() { return label; },
+    getAttribute() { return ariaLabel; },
+    setAttribute(_name, value) { ariaLabel = value; },
+  };
+  const attributes = new Map();
+  const details = {
+    querySelector() { return summary; },
+    setAttribute(name, value) { attributes.set(name, value); },
+    removeAttribute(name) { attributes.delete(name); },
+  };
+  const document = {
+    addEventListener() {},
+    createElement() { return {className: '', textContent: ''}; },
+    createTextNode(textContent) { return {textContent}; },
+  };
+  const window = {};
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  window.__pickerTest.syncTrigger(details);
+  assert.equal(attributes.get('data-pinkie-outside-material'), 'high');
+  assert.equal(label.children[0].textContent, 'Gemini 2.5 Flash');
+  assert.equal(label.children[2].textContent, 'High');
+  label.children = [];
+  label.textContent = 'Gemini 2.5 Flash · Ultra';
+  window.__pickerTest.syncTrigger(details);
+  assert.equal(attributes.get('data-pinkie-outside-material'), 'ultra');
+  assert.equal(label.children[2].textContent, 'Ultra');
+});
+
 test('changing a grouped slider stop saves the matching backend model without closing', async () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates};})();');
   const key = 'agent:project:grouped-test';
