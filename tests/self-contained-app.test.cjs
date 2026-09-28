@@ -43,6 +43,14 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
 });
 
+test('macOS updater selects a build Node with npm when the bundled runtime has none', () => {
+  const build = read('desktop/macos/build.sh');
+  assert.match(build, /NODE_CANDIDATES=\("\$\(command -v node[^\n]+" "\$HOME"\/\.nvm\/versions\/node\/\*\/bin\/node/);
+  assert.match(build, /\[\[ -f "\$candidate_npm\/bin\/npm-cli\.js" \]\] \|\| continue/);
+  assert.match(build, /NODE_BIN="\$candidate"[\s\S]*?NPM_ROOT="\$candidate_npm"/);
+  assert.match(build, /if \[\[ -z "\$NODE_BIN" \]\]; then/);
+});
+
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
   const mac = read('desktop/macos/Sources/Launcher.swift');
   const windows = read('app/windows_desktop.py');
