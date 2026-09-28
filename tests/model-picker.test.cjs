@@ -205,6 +205,89 @@ test('new reasoning and non-reasoning endpoints join one future slider family', 
   assert.equal(window.__pickerTest.familyTargetModel(state, 'high'), 'mm/grok-4.20-0309-reasoning');
 });
 
+test('model list groups by AI family and folds identical IDs across providers without losing the route', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, groupedPresentationModels, modelGroup};})();');
+  const window = {};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const models = [
+    {provider: 'mm', id: 'gemini-3.8-flash-tiered', name: 'Gemini 3.8 Flash Tiered'},
+    {provider: 'mm', id: 'gpt-6-sol', name: 'GPT 6 Sol'},
+    {provider: 'clekk', id: 'gpt-6-sol', name: 'GPT-6 Sol'},
+    {provider: 'mm', id: 'gpt-5.5', name: 'GPT 5.5'},
+    {provider: 'clekk', id: 'gpt-5.5', name: 'GPT-5.5'},
+    {provider: 'clekk', id: 'codex-auto-review', name: 'Codex Auto Review'},
+    {provider: 'mm', id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6'},
+    {provider: 'mm', id: 'gpt-6-sol-preview', name: 'GPT-6 Sol', input: ['text']},
+  ];
+  const shown = window.__pickerTest.groupedPresentationModels(models, 'mm/gpt-6-sol');
+  assert.deepEqual(Array.from(shown, (item) => item.id), [
+    'gpt-5.5', 'gpt-6-sol', 'gpt-6-sol-preview', 'codex-auto-review',
+    'gemini-3.8-flash-tiered', 'claude-sonnet-4-6',
+  ]);
+  assert.deepEqual(Array.from(shown, (item) => window.__pickerTest.modelGroup(item)),
+    ['GPT', 'GPT', 'GPT', 'Codex', 'Gemini', 'Claude']);
+  const sol = shown.find((item) => item.id === 'gpt-6-sol');
+  assert.equal(sol.provider, 'clekk', 'the GPT row routes through the richer configured endpoint');
+  assert.deepEqual(Array.from(sol.sources), ['mm/gpt-6-sol', 'clekk/gpt-6-sol']);
+  assert.equal(sol.sources.includes('mm/gpt-6-sol'), true, 'an old mm session still highlights this one row');
+  assert.equal(shown.filter((item) => item.name === 'GPT-6 Sol').length, 2,
+    'different IDs with the same display name are not falsely merged');
+  const css = read('ui/injections/laolao-theme.css');
+  assert.match(css, /\.chat-controls__model \.pinkie-model-group \{/);
+  assert.doesNotMatch(css, /\.chat-controls__model \.pinkie-fallback-provider \{/);
+});
+
+test('the rendered picker shows a model group once and one selected row for two provider routes', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
+  const window = {};
+  let list;
+  const document = {
+    addEventListener() {},
+    createElement() { return {dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; },
+      replaceChildren(fragment) { this.children = fragment.children; }}; },
+    createDocumentFragment() { return {children: [], append(node) { this.children.push(node); }}; },
+  };
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  const browser = {querySelector() { return list; }, append(node) { list = node; }};
+  const state = {models: [
+    {provider: 'mm', id: 'gpt-6-sol', name: 'GPT 6 Sol'},
+    {provider: 'clekk', id: 'gpt-6-sol', name: 'GPT-6 Sol'},
+  ], selectedModel: 'mm/gpt-6-sol', session: {hasActiveRun: false}};
+  window.__pickerTest.renderFallbackCatalog({}, browser, state);
+  assert.deepEqual(Array.from(list.children, (node) => node.textContent), ['GPT', 'GPT-6 Sol']);
+  assert.equal(list.children[0].className, 'pinkie-model-group');
+  assert.equal(list.children[1].dataset.chatModelOption, 'clekk/gpt-6-sol');
+  assert.equal(list.children[1].attributes['aria-selected'], 'true');
+});
+
+test('clicking the single selected row can move an old route to its displayed backing model', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates, pendingPatches};})();');
+  const listeners = new Map();
+  const key = 'agent:project:deduped-model';
+  const details = {open: true, isConnected: true, dataset: {}, querySelector() { return null; }, closest() { return null; }};
+  const state = {key, models: [
+    {provider: 'mm', id: 'gpt-6-sol', name: 'GPT 6 Sol'},
+    {provider: 'clekk', id: 'gpt-6-sol', name: 'GPT-6 Sol'},
+  ], selectedModel: 'mm/gpt-6-sol', session: {modelProvider: 'mm', model: 'gpt-6-sol'}};
+  const window = {location: {search: `?session=${encodeURIComponent(key)}`},
+    localStorage: {getItem() { return null; }, removeItem() {}},
+    setTimeout() { return 1; }, clearTimeout() {}};
+  const document = {addEventListener(name, fn) { listeners.set(name, fn); }};
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  window.__pickerTest.fallbackStates.set(details, state);
+  const option = {disabled: false, dataset: {}, classList: {contains(value) { return value === 'pinkie-fallback-option'; }},
+    getAttribute(name) { return name === 'data-chat-model-option' ? 'clekk/gpt-6-sol' : 'true'; }};
+  listeners.get('click')({preventDefault() {}, stopImmediatePropagation() {}, target: {closest(selector) {
+    if (selector === 'details.chat-controls__model') return details;
+    if (selector === '[data-chat-model-option]') return option;
+    return null;
+  }}});
+  assert.equal(state.selectedModel, 'clekk/gpt-6-sol');
+  assert.equal(state.modelName, 'GPT-6 Sol');
+  assert.equal(window.__pickerTest.pendingPatches.get(details).model, 'clekk/gpt-6-sol');
+  assert.equal(details.open, true);
+});
+
 test('each selectable model receives its actual AI brand mark beside the name', () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {modelBrand, syncModelBrands};})();');
   const window = {};

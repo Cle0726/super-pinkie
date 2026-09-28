@@ -4590,12 +4590,16 @@ html[data-laolao-watchdog-state="recovered"] body::after {
 }
 .chat-controls__model[data-pinkie-fallback="1"][data-pinkie-fallback-ready="0"] .chat-controls__model-browser { display: none !important; }
 .chat-controls__model .pinkie-fallback-catalog { display: flex; flex-direction: column; gap: 2px; padding: 7px; }
-.chat-controls__model .pinkie-fallback-provider {
-  padding: 7px 8px 3px;
-  color: rgba(105, 75, 103, .65);
-  font-size: 10px;
-  font-weight: 650;
+.chat-controls__model .pinkie-model-group {
+  padding: 8px 8px 4px;
+  color: rgba(95, 65, 100, .8);
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: .04em;
+}
+.chat-controls__model .pinkie-model-group:not(:first-child) {
+  margin-top: 5px;
+  border-top: 1px solid rgba(137, 103, 138, .14);
 }
 .chat-controls__model .pinkie-fallback-option {
   display: block;
