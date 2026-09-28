@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="20" viewBox="0 0 200 20">
+  <defs>
+    <linearGradient id="opal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff" stop-opacity=".94"/><stop offset=".23" stop-color="#c7f4e9" stop-opacity=".73"/><stop offset=".48" stop-color="#f0c5eb" stop-opacity=".78"/><stop offset=".72" stop-color="#ffe4b2" stop-opacity=".8"/><stop offset="1" stop-color="#c0bbf5" stop-opacity=".53"/></linearGradient>
+    <linearGradient id="face"><stop stop-color="#fff" stop-opacity=".84"/><stop offset="1" stop-color="#fff" stop-opacity=".07"/></linearGradient>
+    <radialGradient id="fire"><stop stop-color="#fff" stop-opacity=".91"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path d="M6 10 16 1 30 5 31 15 18 20Z" fill="url(#opal)"/><path d="M16 1 30 5 19 11Z" fill="url(#face)"/>
+  <path d="M42 3 58 2 64 11 54 19 39 14Z" fill="url(#opal)"/><path d="M58 2 64 11 51 10Z" fill="url(#face)"/>
+  <circle cx="82" cy="10" r="10" fill="url(#fire)"/><path d="M82 2 84 8 91 10 84 12 82 18 80 12 73 10 80 8Z" fill="url(#opal)"/>
+  <path d="M102 2 117 4 122 15 109 19 98 12Z" fill="url(#opal)"/><path d="M102 2 117 4 109 10Z" fill="url(#face)"/>
+  <path d="M138 4 151 2 161 10 154 19 140 17 133 10Z" fill="url(#opal)"/><path d="M151 2 161 10 147 10Z" fill="url(#face)"/>
+  <circle cx="178" cy="10" r="8" fill="url(#fire)"/><path d="M178 3 180 8 186 10 180 12 178 17 176 12 170 10 176 8Z" fill="url(#opal)"/>
+</svg>

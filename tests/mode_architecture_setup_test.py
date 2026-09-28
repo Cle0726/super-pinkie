@@ -112,6 +112,22 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertEqual(data['agents']['defaults']['heartbeat']['agentId'],'main')
         self.assertEqual(data['talk']['agentId'],'main')
 
+    def test_only_verified_gemini_model_gains_native_xhigh_without_changing_permissions(self):
+        data = {
+            'models': {'providers': {'mm': {'models': [
+                {'id': 'gemini-3.8-flash-tiered', 'compat': {'supportedReasoningEfforts': ['minimal', 'low', 'medium', 'high']}},
+                {'id': 'other-model', 'compat': {'supportedReasoningEfforts': ['low', 'high']}},
+            ]}}},
+            'agents': {'defaults': {}},
+            'plugins': {'entries': {'pinkie-mode-architecture': {'enabled': True}}},
+        }
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        models = data['models']['providers']['mm']['models']
+        self.assertEqual(models[0]['compat']['supportedReasoningEfforts'], ['minimal', 'low', 'medium', 'high', 'xhigh'])
+        self.assertEqual(models[1]['compat']['supportedReasoningEfforts'], ['low', 'high'])
+        self.assertNotIn('max', models[0]['compat']['supportedReasoningEfforts'])
+        self.assertNotIn('ultra', models[0]['compat']['supportedReasoningEfforts'])
+
 
 if __name__ == '__main__':
     unittest.main()

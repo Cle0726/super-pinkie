@@ -79,7 +79,12 @@ test('startup cannot force success on timeout; animation survives while error re
   assert.doesNotMatch(splash,/setTimeout\(completeHandoff/);assert.match(splash,/重新连接/);assert.match(splash,/leave\(false\)/);
   assert.doesNotMatch(splash+mode,/\.style\.width\s*=/);assert.match(mode,/motion\.stable/);
   for(const css of ['ui/injections/laolao-theme.css','ui/injections/laolao-splash.css']){
-    const source=read(css);assert.match(source,/transform: scaleX\(\.08\)/);assert.doesNotMatch(source,/transition: width/);
+    const source=read(css);assert.match(source,/transform: scaleX\(\.08\)/);
+    const progress=css.endsWith('laolao-splash.css')
+      ? source.match(/\.laolao-splash__progress-fill \{([\s\S]*?)\n\}/)?.[1]
+      : source.match(/\.laolao-mode-transition__fill \{([\s\S]*?)\n\}/)?.[1];
+    assert.ok(progress, `missing progress fill rule in ${css}`);
+    assert.doesNotMatch(progress,/transition: width/);
   }
 });
 test('mode switching prewarms every local scene and has no old multi-second artificial gate',()=>{

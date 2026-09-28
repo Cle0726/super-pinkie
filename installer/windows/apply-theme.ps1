@@ -41,6 +41,33 @@ $Assets = @(
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
     "laolao-theme.css",
+    "laolao-reasoning-off.svg",
+    "laolao-reasoning-minimal.svg",
+    "laolao-reasoning-low.svg",
+    "laolao-reasoning-medium.svg",
+    "laolao-reasoning-high.svg",
+    "laolao-reasoning-xhigh.svg",
+    "laolao-reasoning-adaptive.svg",
+    "laolao-reasoning-max.svg",
+    "laolao-reasoning-ultra.svg",
+    "laolao-reasoning-frame-off.png",
+    "laolao-reasoning-frame-minimal.png",
+    "laolao-reasoning-frame-low.png",
+    "laolao-reasoning-frame-medium.png",
+    "laolao-reasoning-frame-high.png",
+    "laolao-reasoning-frame-xhigh.png",
+    "laolao-reasoning-frame-adaptive.png",
+    "laolao-reasoning-frame-max.png",
+    "laolao-reasoning-frame-ultra.png",
+    "laolao-reasoning-party-off.svg",
+    "laolao-reasoning-party-minimal.svg",
+    "laolao-reasoning-party-low.svg",
+    "laolao-reasoning-party-medium.svg",
+    "laolao-reasoning-party-high.svg",
+    "laolao-reasoning-party-xhigh.svg",
+    "laolao-reasoning-party-adaptive.svg",
+    "laolao-reasoning-party-max.svg",
+    "laolao-reasoning-party-ultra.svg",
     "laolao-classic-shell.css",
     "laolao-material-preview.css",
     "laolao-workspace-focus.css",
@@ -66,6 +93,7 @@ $Assets = @(
     "laolao-session-list.js",
     "laolao-live-voice.js",
     "laolao-mode-switcher.js",
+    "laolao-model-picker.js",
     "laolao-image-viewer.js",
     "laolao-material-preview.js",
     "laolao-workspace-focus.js",
@@ -188,20 +216,21 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning4">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
-        '<script src="./laolao-sidebar.js?v=sidebar26"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
         '<script defer src="./laolao-classic-shell.js?v=classic15"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning4"></script>',
+        '<script defer src="./laolao-model-picker.js?v=modelpicker17"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link4"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink17"></script>',
-        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt16"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink19"></script>',
+        '<script defer src="./laolao-web-gpt-collab.js?v=webgpt32"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
         '<script defer src="./laolao-resume.js?v=resume22"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
@@ -221,10 +250,10 @@ function Apply-UISkin {
     # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme46'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar26'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
+        'laolao-theme.css' = 'theme75'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases21'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
-        'laolao-mode-switcher.js' = 'mode36'; 'laolao-splash.js' = 'splash26';
+        'laolao-mode-switcher.js' = 'mode37'; 'laolao-model-picker.js' = 'modelpicker17'; 'laolao-splash.js' = 'splash26';
         'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume22';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
@@ -235,7 +264,7 @@ function Apply-UISkin {
         'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'laolao-learning-stage.css' = 'learning4'; 'laolao-learning-stage.js' = 'learning4';
-        'laolao-deep-think.js' = 'deepthink17'; 'laolao-web-gpt-collab.js' = 'webgpt16';
+        'laolao-deep-think.js' = 'deepthink19'; 'laolao-web-gpt-collab.js' = 'webgpt32';
         'laolao-context-compact.js' = 'contextcompact3'
     }
     foreach ($entry in $versions.GetEnumerator()) {

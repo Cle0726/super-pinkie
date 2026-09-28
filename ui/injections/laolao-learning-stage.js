@@ -180,6 +180,20 @@
     }
   };
 
+  const stopActiveInteractionRun = async sessionKey => {
+    // First the server-side learning fence is written by toggleInteraction.
+    // Then cancel any queued recovery and the reply which may still be about to
+    // call learning_activity. The native stop button is only a compatibility
+    // fallback for older gateways without chat.abort.
+    const results = await Promise.allSettled([
+      request("pinkie.watchdog.cancel", {sessionKey}, 8000),
+      request("chat.abort", {sessionKey, preserveSideRuns: false}, 12000),
+    ]);
+    if (results[1]?.status === "fulfilled") return;
+    const nativeStop = document.querySelector(".chat-send-btn--stop");
+    if (nativeStop && !nativeStop.disabled) nativeStop.click();
+  };
+
   const optionNode = (current, option) => {
     const label = el("label", "laolao-learning-option");
     const input = el("input");
@@ -285,15 +299,21 @@
   };
 
   const toggleInteraction = async button => {
-    const enabled = !Boolean(state.remote?.enabled);
+    const enabled = !(state.remote?.enabled ?? state.toggle?.getAttribute("aria-pressed") === "true");
+    const sessionKey = pageSessionKey();
     setBusy(button, true, enabled ? "开启中…" : "关闭中…");
     try {
-      const result = await request("pinkie.learning.set", {sessionKey: pageSessionKey(), enabled});
+      const result = await request("pinkie.learning.set", {sessionKey, enabled});
       state.remote = result;
       state.revision = Number(result?.revision) || 0;
       renderStage(result);
       syncButtons();
-      if (enabled && !result.current) await sendControl(`${START_MARKER}\n请从当前对话选择最值得巩固的知识点，调用 learning_activity present 出一道互动题；上下文不足时先用一句话问我要练什么。`);
+      if (!enabled) {
+        await stopActiveInteractionRun(sessionKey);
+        showToast("互动学习已停止，当前题卡和出题请求已取消");
+      } else if (!result.current) {
+        await sendControl(`${START_MARKER}\n请从当前对话选择最值得巩固的知识点，调用 learning_activity present 出一道互动题；上下文不足时先用一句话问我要练什么。`);
+      }
     } catch (error) {
       showToast(error.message || "互动学习切换失败", true);
       syncButtons();

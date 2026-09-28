@@ -15,6 +15,7 @@ test('interactive cards are session-scoped and never expose the private answer',
   const store = fixture(t);
   const first = 'agent:learning:one';
   const second = 'agent:learning:two';
+  store.setEnabled(first, true);
   const shown = store.present(first, {
     kind: 'single_choice', topic: '英语', question: 'Choose one',
     options: [{id: 'A', label: 'alpha'}, {id: 'B', label: 'beta'}], correct_answer: 'B', hint: '想想第二个',
@@ -29,6 +30,7 @@ test('interactive cards are session-scoped and never expose the private answer',
 test('submissions are idempotent and reject stale activity ids', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:answer';
+  store.setEnabled(sessionKey, true);
   const shown = store.present(sessionKey, {kind: 'single_choice', question: '2+2?', options: ['3', '4'], correct_answer: '2'});
   const submitted = store.submit(sessionKey, {activityId: shown.current.id, answer: '2', submissionId: 'same', confidence: 90});
   assert.equal(submitted.current.submission.correctness, true);
@@ -41,6 +43,7 @@ test('submissions are idempotent and reject stale activity ids', t => {
 test('resolved key points and selected text persist outside chat history', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:notes';
+  store.setEnabled(sessionKey, true);
   const shown = store.present(sessionKey, {kind: 'short_answer', question: '为什么?', rubric: '说明原因'});
   store.submit(sessionKey, {activityId: shown.current.id, answer: '因为边界条件', submissionId: 'one'});
   const resolved = store.resolve(sessionKey, {activity_id: shown.current.id, correct: true, feedback: '对', explanation: '边界条件决定行为', key_point: '先确认边界条件'});
@@ -54,6 +57,7 @@ test('resolved key points and selected text persist outside chat history', t => 
 
 test('tool binds the active learning session and updates the native card', async t => {
   const store = fixture(t);
+  store.setEnabled('agent:learning:tool', true);
   const tool = createLearningActivityTool(store, {});
   const params = tool.prepareBeforeToolCallParams(
     {action: 'present', kind: 'fill_blank', question: 'CSS 全称?', correct_answer: 'Cascading Style Sheets'},
@@ -63,6 +67,40 @@ test('tool binds the active learning session and updates the native card', async
   assert.equal(result.isError, false);
   assert.equal(result.details.current.kind, 'fill_blank');
   assert.equal('correctAnswer' in result.details.current, false);
+});
+
+test('stopping interaction clears the card and fences a delayed present call', t => {
+  const store = fixture(t);
+  const sessionKey = 'agent:learning:hard-stop';
+  store.setEnabled(sessionKey, true);
+  const shown = store.present(sessionKey, {kind: 'single_choice', question: 'stop?', options: ['A', 'B'], correct_answer: 'A'});
+  const stopped = store.setEnabled(sessionKey, false);
+  assert.equal(stopped.enabled, false);
+  assert.equal(stopped.current, null);
+  const persisted = store.read(sessionKey);
+  assert.equal(persisted.history.at(-1).id, shown.current.id);
+  assert.equal(persisted.history.at(-1).dismissedReason, 'interaction_disabled');
+  assert.throws(() => store.present(sessionKey, {kind: 'single_choice', question: 'late?', options: ['A', 'B'], correct_answer: 'A'}), /互动学习已关闭/);
+  assert.equal(store.status(sessionKey).enabled, false);
+  assert.equal(store.status(sessionKey).current, null);
+});
+
+test('a legacy disabled card is cleaned before it can revive on the next launch', t => {
+  const store = fixture(t);
+  const sessionKey = 'agent:learning:legacy-disabled';
+  const legacy = store.read(sessionKey);
+  legacy.enabled = false;
+  legacy.current = {id: 'old-card', kind: 'short_answer', question: '旧题', phase: 'asking', createdAt: Date.now()};
+  store.write(sessionKey, legacy);
+  const status = store.status(sessionKey);
+  assert.equal(status.enabled, false);
+  assert.equal(status.current, null);
+  const repaired = store.read(sessionKey);
+  assert.equal(repaired.current, null);
+  assert.equal(repaired.history.at(-1).id, 'old-card');
+  assert.equal(repaired.history.at(-1).dismissedReason, 'interaction_disabled');
+  const reopened = store.setEnabled(sessionKey, true);
+  assert.equal(reopened.current, null);
 });
 
 test('gateway methods are admin-scoped and ordinary learning chat stays normal until enabled', async t => {
@@ -87,6 +125,10 @@ test('frontend keeps one native card, restores by revision, and avoids subtree o
   assert.match(source, /stage\.replaceChildren\(\)/);
   assert.match(source, /chat\.send/);
   assert.match(source, /idempotencyKey/);
+  assert.match(source, /pinkie\.watchdog\.cancel/);
+  assert.match(source, /chat\.abort/);
+  assert.match(source, /preserveSideRuns: false/);
+  assert.match(source, /Promise\.allSettled/);
   assert.match(source, /\.chat-group\.assistant/);
   assert.doesNotMatch(source, /new MutationObserver/);
 });

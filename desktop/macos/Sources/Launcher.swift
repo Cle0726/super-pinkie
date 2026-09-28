@@ -1958,13 +1958,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    private func sessionKey(for url: URL?) -> String? {
+        guard let url else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "session" })?.value
+    }
+
     private func modeID(for url: URL?) -> String? {
-        guard let url,
-              let session = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?
-                .first(where: { $0.name == "session" })?.value else { return nil }
+        guard let session = sessionKey(for: url) else { return nil }
         if session.hasPrefix("agent:main:") { return "chat" }
         return workspaceSessions.first(where: { session.hasPrefix($0.value.replacingOccurrences(of: ":main", with: ":")) })?.key
+    }
+
+    private func isWorkspaceSession(_ sessionKey: String, for modeID: String) -> Bool {
+        guard let rootSession = workspaceSessions[modeID] else { return false }
+        let prefix = "\(String(rootSession.dropLast(5))):"
+        return sessionKey.hasPrefix(prefix)
+            && sessionKey.count > prefix.count
+            && !sessionKey.contains(":subagent:")
     }
 
     private func chatURL(sessionKey: String, docked: Bool = false) -> URL {
@@ -2604,17 +2616,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           const visible = (node) => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
           const composer = Array.from(document.querySelectorAll('#prompt-textarea,textarea,[contenteditable="true"]'))
             .find((node) => visible(node) && (node.id === 'prompt-textarea' || node.tagName === 'TEXTAREA' || node.getAttribute('contenteditable') === 'true'));
-          const assistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'))
-            .filter(visible);
-          const latest = assistants.length ? (assistants[assistants.length - 1].innerText || '').trim() : '';
+          // ChatGPT can put the turn marker on a display:contents wrapper.
+          // Such a wrapper has no rect even while its reply is on screen, so
+          // filtering turn markers through visible() silently loses replies.
+          const roleAssistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'));
+          const turns = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"], article[data-turn-id]'));
+          const turnAssistants = turns.filter((turn) => !turn.querySelector('[data-message-author-role="user"]')
+            && (/(?:ChatGPT 说|ChatGPT said)/i.test(turn.querySelector('h4,h5')?.textContent || '')
+              || !!turn.querySelector('.markdown, [data-message-author-role="assistant"]')));
+          const assistants = turnAssistants.length >= roleAssistants.length ? turnAssistants : roleAssistants;
+          const roleUsers = Array.from(document.querySelectorAll('[data-message-author-role="user"]'));
+          const turnUsers = turns.filter((turn) => !!turn.querySelector('[data-message-author-role="user"]')
+            || /(?:你说|You said)/i.test(turn.querySelector('h4,h5')?.textContent || ''));
+          const users = turnUsers.length >= roleUsers.length ? turnUsers : roleUsers;
+          const turnId = (node) => {
+            const turn = node?.closest('[data-turn-id], [data-testid^="conversation-turn-"]') || node;
+            return turn?.getAttribute('data-turn-id') || node?.getAttribute('data-message-id')
+              || turn?.getAttribute('data-testid') || '';
+          };
+          const lastAssistant = assistants[assistants.length - 1];
+          const replyBody = lastAssistant?.querySelector('[data-testid="conversation-turn-content"], .markdown, .prose') || lastAssistant;
+          const latest = (replyBody?.innerText || replyBody?.textContent || '').trim();
           const stop = Array.from(document.querySelectorAll('button'))
             .find((button) => visible(button) && /stop|停止生成|停止回应|停止/i.test(`${button.getAttribute('aria-label') || ''} ${button.textContent || ''}`));
+          const pluginButton = Array.from(document.querySelectorAll('button'))
+            .find((button) => visible(button) && /Codex with ChatGPT/i.test(`${button.getAttribute('aria-label') || ''} ${button.textContent || ''}`));
+          const pluginLabel = pluginButton ? `${pluginButton.getAttribute('aria-label') || ''} ${pluginButton.textContent || ''}`.trim() : '';
+          const modes = Array.from(document.querySelectorAll('[role="radio"],input[type="radio"],label,button,[role="tab"]'));
+          const modeName = node => `${node.getAttribute('aria-label') || ''} ${node.getAttribute('value') || ''} ${node.getAttribute('data-value') || ''} ${node.textContent || ''} ${Array.from(node.labels || []).map(label => label.textContent || '').join(' ')}`.trim();
+          const selected = node => node.checked === true || node.getAttribute('aria-checked') === 'true'
+            || node.getAttribute('aria-pressed') === 'true' || node.getAttribute('data-state') === 'checked'
+            || !!node.querySelector?.('input:checked,[aria-checked="true"]');
+          const checkedMode = node => selected(node) || node.getAttribute('aria-selected') === 'true'
+            || node.getAttribute('data-selected') === 'true' || /(?:^|\s)(?:active|selected|checked)(?:\s|$)/i.test(node.className || '');
+          const chatMode = modes.some(node => /(?:^|\s)(?:聊天|Chat)(?:\s|$)/i.test(modeName(node)) && checkedMode(node))
+            ? 'chat' : modes.some(node => /(?:^|\s)(?:工作|Work)(?:\s|$)/i.test(modeName(node)) && checkedMode(node))
+              ? 'work' : 'unknown';
           const path = location.pathname || '';
           return {
             ready: !!composer,
+            chatMode,
             generating: !!stop,
             assistantCount: assistants.length,
+            assistantId: turnId(lastAssistant),
+            userCount: users.length,
+            userId: turnId(users[users.length - 1]),
+            assistantCountRole: roleAssistants.length,
+            assistantCountTurns: turnAssistants.length,
+            turnCount: turns.length,
             latestAssistant: latest.slice(0, 20000),
+            pluginLabel: pluginLabel.slice(0, 300),
+            pluginNeedsRetry: /点击以重试|click to retry|retry/i.test(pluginLabel),
             url: location.href,
             conversationUrl: /(?:^|\/)c\/[^/?#]+/.test(path) ? location.href.split('#')[0] : '',
             title: document.title || ''
@@ -2632,10 +2684,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func submitPreparedChatGPTMessage(
+    private func selectChatGPTChatMode(requestId: String, sourceWebView: WKWebView?) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "请先打开 ChatGPT", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        (() => {
+          const visible = node => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const options = Array.from(document.querySelectorAll('[role="radio"],input[type="radio"],label,button,[role="tab"]'));
+          const name = node => `${node.getAttribute('aria-label') || ''} ${node.getAttribute('value') || ''} ${node.getAttribute('data-value') || ''} ${node.textContent || ''} ${Array.from(node.labels || []).map(label => label.textContent || '').join(' ')}`.trim();
+          const exact = node => /^(?:聊天|Chat)$/i.test((node.textContent || '').trim());
+          const leaf = Array.from(document.querySelectorAll('*')).find(node => exact(node) && !Array.from(node.children).some(exact));
+          const chat = options.find(node => /(?:^|\s)(?:聊天|Chat)(?:\s|$)/i.test(name(node)))
+            || leaf?.closest('button,label,[role="radio"],[role="tab"]') || leaf?.parentElement;
+          if (!chat) return {selected:false,reason:'找不到 ChatGPT 聊天模式'};
+          (chat.tagName === 'INPUT' && chat.labels?.length ? chat.labels[0] : chat).click();
+          return {selected:true};
+        })()
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            if let evalError {
+                self.sendBrowserControlResult(requestId: requestId, ok: false, error: evalError.localizedDescription, to: sourceWebView)
+                return
+            }
+            self.sendBrowserControlResult(requestId: requestId, ok: true, result: value as? [String: Any] ?? [:], to: sourceWebView)
+        }
+    }
+
+    private func findChatGPTPlugin(_ name: String, requestId: String, sourceWebView: WKWebView?) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url),
+              browser.url?.path == "/plugins", !name.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: ["name": name]),
+              let json = String(data: data, encoding: .utf8) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "请先打开 ChatGPT 插件列表", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        ((payload) => {
+          const links = Array.from(document.querySelectorAll('a[href*="/plugins/plugin_"]'));
+          // Plugin cards also contain a description, so their full text is
+          // longer than the exact project connector name.
+          const link = links.find(node => (node.textContent || '').trim().startsWith(payload.name));
+          if (!link) return {found:false};
+          const url = new URL(link.getAttribute('href') || '', location.href);
+          if (url.hostname !== 'chatgpt.com' || !/^\/plugins\/plugin_[^/]+$/.test(url.pathname)) return {found:false};
+          return {found:true,url:url.href};
+        })(\#(json))
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            if let evalError {
+                self.sendBrowserControlResult(requestId: requestId, ok: false, error: evalError.localizedDescription, to: sourceWebView)
+                return
+            }
+            self.sendBrowserControlResult(requestId: requestId, ok: true, result: value as? [String: Any] ?? [:], to: sourceWebView)
+        }
+    }
+
+    private func activateChatGPTPlugin(_ name: String, requestId: String, sourceWebView: WKWebView?) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url),
+              browser.url?.path.hasPrefix("/plugins/plugin_") == true, !name.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: ["name": name]),
+              let json = String(data: data, encoding: .utf8) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "请先打开当前项目的 ChatGPT 插件", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        ((payload) => {
+          const visible = node => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const heading = Array.from(document.querySelectorAll('h1')).find(node => visible(node));
+          if ((heading?.textContent || '').trim() !== payload.name) return {activated:false,reason:'插件名称与当前项目不匹配'};
+          const button = Array.from(document.querySelectorAll('button'))
+            .find(node => visible(node) && /^(在聊天中试用|Try in chat)$/i.test((node.textContent || '').trim()));
+          if (!button || button.disabled) return {activated:false,reason:'插件试用按钮不可用'};
+          button.click();
+          return {activated:true};
+        })(\#(json))
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            if let evalError {
+                self.sendBrowserControlResult(requestId: requestId, ok: false, error: evalError.localizedDescription, to: sourceWebView)
+                return
+            }
+            self.sendBrowserControlResult(requestId: requestId, ok: true, result: value as? [String: Any] ?? [:], to: sourceWebView)
+        }
+    }
+
+    private func verifyChatGPTSubmission(
         requestId: String,
         sourceWebView: WKWebView?,
-        baseline: Int,
+        baselineAssistantCount: Int,
+        baselineAssistantId: String,
+        baselineUserCount: Int,
+        baselineUserId: String,
         attempt: Int = 0
     ) {
         guard let browser = browserWebView, isChatGPTURL(browser.url) else {
@@ -2644,7 +2788,105 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         let script = #"""
         (() => {
+          const turns = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"], article[data-turn-id]'));
+          const roleUsers = Array.from(document.querySelectorAll('[data-message-author-role="user"]'));
+          const turnUsers = turns.filter((turn) => !!turn.querySelector('[data-message-author-role="user"]')
+            || /(?:你说|You said)/i.test(turn.querySelector('h4,h5')?.textContent || ''));
+          const users = turnUsers.length >= roleUsers.length ? turnUsers : roleUsers;
+          const node = users[users.length - 1];
+          const turn = node?.closest('[data-turn-id], [data-testid^="conversation-turn-"]') || node;
+          return {userCount: users.length, userId: turn?.getAttribute('data-turn-id')
+            || node?.getAttribute('data-message-id') || turn?.getAttribute('data-testid') || ''};
+        })()
+        """#
+        browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
+            guard let self else { return }
+            if let evalError {
+                self.sendBrowserControlResult(requestId: requestId, ok: false, error: evalError.localizedDescription, to: sourceWebView)
+                return
+            }
+            let result = value as? [String: Any] ?? [:]
+            let userCount = result["userCount"] as? Int ?? 0
+            let userId = result["userId"] as? String ?? ""
+            if userCount > baselineUserCount || (!userId.isEmpty && userId != baselineUserId) {
+                self.sendBrowserControlResult(requestId: requestId, ok: true, result: [
+                    "sent": true,
+                    "assistantCount": baselineAssistantCount,
+                    "assistantId": baselineAssistantId,
+                    "url": browser.url?.absoluteString ?? "",
+                ], to: sourceWebView)
+                return
+            }
+            if attempt < 24 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak sourceWebView] in
+                    self?.verifyChatGPTSubmission(
+                        requestId: requestId, sourceWebView: sourceWebView,
+                        baselineAssistantCount: baselineAssistantCount,
+                        baselineAssistantId: baselineAssistantId,
+                        baselineUserCount: baselineUserCount,
+                        baselineUserId: baselineUserId,
+                        attempt: attempt + 1
+                    )
+                }
+                return
+            }
+            self.sendBrowserControlResult(
+                requestId: requestId, ok: false,
+                error: "网页发送键已触发，但 ChatGPT 没有新增用户消息；已停止等待，不会重复发送",
+                to: sourceWebView
+            )
+        }
+    }
+
+    private func submitPreparedChatGPTMessage(
+        message: String,
+        requestId: String,
+        sourceWebView: WKWebView?,
+        baselineAssistantCount: Int,
+        baselineAssistantId: String,
+        baselineUserCount: Int,
+        baselineUserId: String,
+        attempt: Int = 0
+    ) {
+        guard let browser = browserWebView, isChatGPTURL(browser.url) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "ChatGPT 页面已经离开", to: sourceWebView)
+            return
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: ["message": message]),
+              let json = String(data: data, encoding: .utf8) else {
+            sendBrowserControlResult(requestId: requestId, ok: false, error: "控制消息编码失败", to: sourceWebView)
+            return
+        }
+        let script = #"""
+        ((payload) => {
           const visible = (node) => !!node && !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+          const composer = Array.from(document.querySelectorAll('#prompt-textarea,textarea,[contenteditable="true"]'))
+            .find((node) => visible(node) && (node.id === 'prompt-textarea' || node.tagName === 'TEXTAREA' || node.getAttribute('contenteditable') === 'true'));
+          if (!composer) return {sent:false,reason:'ChatGPT 输入框暂时不可用'};
+          const content = () => (composer.tagName === 'TEXTAREA' ? composer.value : composer.innerText || composer.textContent || '').trim();
+          const busy = Array.from(document.querySelectorAll('button[data-testid="stop-button"],button[aria-label*="停止回答"],button[aria-label*="Stop generating"]'))
+            .some((node) => visible(node) && !node.disabled);
+          if (busy) return {sent:false,reason:'ChatGPT 仍在生成上一条回复'};
+          if (!content()) {
+            composer.focus();
+            if (composer.tagName === 'TEXTAREA') {
+              const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+              if (setter) setter.call(composer, payload.message); else composer.value = payload.message;
+              composer.dispatchEvent(new Event('input', {bubbles:true}));
+            } else {
+              const selection = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(composer);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              let inserted = false;
+              try { inserted = document.execCommand('insertText', false, payload.message); } catch (_) {}
+              if (!inserted || !content()) composer.textContent = payload.message;
+              try { composer.dispatchEvent(new InputEvent('input', {bubbles:true,inputType:'insertText',data:payload.message})); }
+              catch (_) { composer.dispatchEvent(new Event('input', {bubbles:true})); }
+            }
+            return {sent:false,reason:'ChatGPT 输入框重载，已恢复待发文字'};
+          }
           const selectors = [
             'button[data-testid="send-button"]',
             'button[data-testid="composer-submit-button"]',
@@ -2654,36 +2896,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           ];
           const button = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
             .find((node) => visible(node) && !node.disabled && node.getAttribute('aria-disabled') !== 'true');
-          if (!button) return {sent:false,reason:'发送键尚未就绪'};
+          if (!button) return {sent:false,reason:'发送键尚未就绪',composerLength:content().length};
           button.click();
           return {sent:true,url:location.href};
-        })()
+        })(\#(json))
         """#
         browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
             guard let self else { return }
             let sent = (value as? [String: Any])?["sent"] as? Bool ?? false
             if sent {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self, weak sourceWebView] in
-                    guard let self else { return }
-                    self.sendBrowserControlResult(
-                        requestId: requestId,
-                        ok: true,
-                        result: [
-                            "sent": true,
-                            "assistantCount": baseline,
-                            "url": self.browserWebView?.url?.absoluteString ?? "",
-                        ],
-                        to: sourceWebView
-                    )
-                }
+                self.verifyChatGPTSubmission(
+                    requestId: requestId, sourceWebView: sourceWebView,
+                    baselineAssistantCount: baselineAssistantCount,
+                    baselineAssistantId: baselineAssistantId,
+                    baselineUserCount: baselineUserCount,
+                    baselineUserId: baselineUserId
+                )
                 return
             }
-            if attempt < 24, evalError == nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak sourceWebView] in
+            if attempt < 80, evalError == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self, weak sourceWebView] in
                     self?.submitPreparedChatGPTMessage(
+                        message: message,
                         requestId: requestId,
                         sourceWebView: sourceWebView,
-                        baseline: baseline,
+                        baselineAssistantCount: baselineAssistantCount,
+                        baselineAssistantId: baselineAssistantId,
+                        baselineUserCount: baselineUserCount,
+                        baselineUserId: baselineUserId,
                         attempt: attempt + 1
                     )
                 }
@@ -2692,7 +2932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             self.sendBrowserControlResult(
                 requestId: requestId,
                 ok: false,
-                error: evalError?.localizedDescription ?? "ChatGPT 发送键没有就绪",
+                error: evalError?.localizedDescription ?? ((value as? [String: Any])?["reason"] as? String ?? "ChatGPT 发送键没有就绪"),
                 to: sourceWebView
             )
         }
@@ -2719,7 +2959,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           const composer = Array.from(document.querySelectorAll('#prompt-textarea,textarea,[contenteditable="true"]'))
             .find((node) => visible(node) && (node.id === 'prompt-textarea' || node.tagName === 'TEXTAREA' || node.getAttribute('contenteditable') === 'true'));
           if (!composer) return {prepared:false,reason:'没有找到 ChatGPT 输入框'};
-          const assistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]')).filter(visible);
+          const roleAssistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'));
+          const turns = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"], article[data-turn-id]'));
+          const turnAssistants = turns.filter((turn) => !turn.querySelector('[data-message-author-role="user"]')
+            && (/(?:ChatGPT 说|ChatGPT said)/i.test(turn.querySelector('h4,h5')?.textContent || '')
+              || !!turn.querySelector('.markdown, [data-message-author-role="assistant"]')));
+          const assistants = turnAssistants.length >= roleAssistants.length ? turnAssistants : roleAssistants;
+          const roleUsers = Array.from(document.querySelectorAll('[data-message-author-role="user"]'));
+          const turnUsers = turns.filter((turn) => !!turn.querySelector('[data-message-author-role="user"]')
+            || /(?:你说|You said)/i.test(turn.querySelector('h4,h5')?.textContent || ''));
+          const users = turnUsers.length >= roleUsers.length ? turnUsers : roleUsers;
+          const turnId = (node) => {
+            const turn = node?.closest('[data-turn-id], [data-testid^="conversation-turn-"]') || node;
+            return turn?.getAttribute('data-turn-id') || node?.getAttribute('data-message-id')
+              || turn?.getAttribute('data-testid') || '';
+          };
           composer.focus();
           if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
             const proto = composer.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -2742,7 +2996,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
               composer.dispatchEvent(new Event('input', {bubbles:true}));
             }
           }
-          return {prepared:true,assistantCount:assistants.length};
+          return {prepared:true,assistantCount:assistants.length,
+            assistantId:turnId(assistants[assistants.length - 1]),
+            userCount:users.length,userId:turnId(users[users.length - 1])};
         })(\#(json))
         """#
         browser.evaluateJavaScript(script) { [weak self, weak sourceWebView] value, evalError in
@@ -2757,12 +3013,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 )
                 return
             }
-            let baseline = result["assistantCount"] as? Int ?? 0
+            let baselineAssistantCount = result["assistantCount"] as? Int ?? 0
+            let baselineAssistantId = result["assistantId"] as? String ?? ""
+            let baselineUserCount = result["userCount"] as? Int ?? 0
+            let baselineUserId = result["userId"] as? String ?? ""
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self, weak sourceWebView] in
                 self?.submitPreparedChatGPTMessage(
+                    message: message,
                     requestId: requestId,
                     sourceWebView: sourceWebView,
-                    baseline: baseline
+                    baselineAssistantCount: baselineAssistantCount,
+                    baselineAssistantId: baselineAssistantId,
+                    baselineUserCount: baselineUserCount,
+                    baselineUserId: baselineUserId
                 )
             }
         }
@@ -2773,6 +3036,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         switch body["operation"] as? String {
         case "snapshot":
             chatGPTSnapshot(requestId: requestId, sourceWebView: sourceWebView)
+        case "selectChat":
+            selectChatGPTChatMode(requestId: requestId, sourceWebView: sourceWebView)
+        case "findPlugin":
+            findChatGPTPlugin(body["name"] as? String ?? "", requestId: requestId, sourceWebView: sourceWebView)
+        case "activatePlugin":
+            activateChatGPTPlugin(body["name"] as? String ?? "", requestId: requestId, sourceWebView: sourceWebView)
         case "send":
             sendChatGPTMessage(body["text"] as? String ?? "", requestId: requestId, sourceWebView: sourceWebView)
         default:
@@ -2926,18 +3195,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func openWorkspaceDock(modeID requestedModeID: String, requestedSessionKey: String?) {
         guard let canonicalSession = workspaceSessions[requestedModeID],
-              requestedSessionKey == nil || requestedSessionKey == canonicalSession,
               requestedModeID != (modeID(for: webView?.url) ?? "chat"),
               let window,
               let contentView = window.contentView,
               let primaryWebView = webView else { return }
+        let targetSession = requestedSessionKey ?? canonicalSession
+        guard isWorkspaceSession(targetSession, for: requestedModeID) else { return }
 
         if browserPanel?.superview != nil {
             detachBrowserWorkspace()
         }
 
         if let companionWebView {
-            let alreadyShowing = companionModeID == requestedModeID && self.modeID(for: companionWebView.url) == requestedModeID
+            let alreadyShowing = companionModeID == requestedModeID && self.sessionKey(for: companionWebView.url) == targetSession
             companionModeID = requestedModeID
             // Two modes are enough for the focused workflow. Reusing this
             // dock changes only the companion route; it never reloads or
@@ -2947,7 +3217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 return
             }
             companionRetries = 0
-            companionWebView.load(URLRequest(url: chatURL(sessionKey: canonicalSession, docked: true)))
+            companionWebView.load(URLRequest(url: chatURL(sessionKey: targetSession, docked: true)))
             window.makeFirstResponder(companionWebView)
             return
         }
@@ -3019,7 +3289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // each reply collapse into a skinny vertical strip.
         primaryWebView.evaluateJavaScript("try { sessionStorage.setItem('laolao-primary-workspace-split', '1'); document.documentElement.setAttribute('data-laolao-workspace-split', '1'); } catch (_) {}")
         companionRetries = 0
-        companion.load(URLRequest(url: chatURL(sessionKey: canonicalSession, docked: true)))
+        companion.load(URLRequest(url: chatURL(sessionKey: targetSession, docked: true)))
         window.makeFirstResponder(companion)
     }
 

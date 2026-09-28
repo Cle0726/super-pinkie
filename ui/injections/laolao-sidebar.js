@@ -8,6 +8,39 @@
   const NativeWS = window.WebSocket;
   let gwSocket = null;
   const pending = new Map();
+  const reasoningJobs = new Map();
+  const reasoningTierKey = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
+
+  function reasoningTier(sessionKey) {
+    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    try {
+      const tier = localStorage.getItem(reasoningTierKey(sessionKey));
+      return tier === "max" || tier === "ultra" ? tier : "";
+    } catch { return ""; }
+  }
+
+  function emitReasoningProgress(detail) {
+    document.dispatchEvent(new CustomEvent("pinkie:reasoning-preparing", {detail}));
+  }
+
+  function cancelReasoning(sessionKey, requestId = "") {
+    const job = reasoningJobs.get(sessionKey);
+    if (!job || (requestId && job.requestId !== requestId)) return;
+    job.cancelled = true;
+    emitReasoningProgress({active: false, sessionKey, requestId: job.requestId});
+    void gwRequest("pinkie.reasoning.cancel", {sessionKey, requestId: job.requestId}, 12_000).catch(() => {});
+  }
+
+  document.addEventListener("pinkie:reasoning-cancel", (event) => {
+    const {sessionKey, requestId} = event.detail || {};
+    if (!reasoningJobs.has(sessionKey)) return;
+    cancelReasoning(sessionKey, requestId);
+  });
+  window.addEventListener("pinkie:session-selected", (event) => {
+    const selected = event.detail?.sessionKey;
+    if (!selected) return;
+    for (const key of reasoningJobs.keys()) if (key !== selected) cancelReasoning(key);
+  });
 
   function sniff(ws) {
     ws.addEventListener("message", (ev) => {
@@ -41,30 +74,65 @@
         gwSocket = ws;
         sniff(ws);
         const send = ws.send.bind(ws);
-        let sendQueue = Promise.resolve();
+        const sendQueues = new Map();
         const abortVersions=new Map();
         ws.send = function(data) {
           let request;try { request=JSON.parse(data); } catch { return send(data); }
           if(request.type==='req'&&['chat.abort','sessions.abort'].includes(request.method)){
             const key=request.params?.sessionKey||request.params?.key;
-            abortVersions.set(key,(abortVersions.get(key)||0)+1);return send(data);
+            abortVersions.set(key,(abortVersions.get(key)||0)+1);
+            cancelReasoning(key);
+            return send(data);
           }
           if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
           const key=request.params?.sessionKey||request.params?.key;
           const version=abortVersions.get(key)||0;
           // Finish the authenticated binding before the model can receive this
           // message. A failed binding returns an ordinary RPC error to the UI.
-          sendQueue=sendQueue.catch(()=>{}).then(async()=>{
+          const prior = sendQueues.get(key) || Promise.resolve();
+          const queued = prior.catch(()=>{}).then(async()=>{
+            let stage = 'project';
+            let job = null;
             try {
               await ensureProjectScope(key);
               if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');
+              const tier = reasoningTier(key);
+              const message = messageText(request.params?.message).trim();
+              if (tier && message && !message.startsWith('/')) {
+                stage = 'reasoning';
+                if (message.length > 12_000) throw new Error('消息太长，增强推演没有启动；请缩短或先关闭增强档位');
+                const requestId = request.id || window.crypto?.randomUUID?.() || `reasoning-${Date.now()}`;
+                job = {requestId, cancelled: false};
+                reasoningJobs.set(key, job);
+                emitReasoningProgress({active: true, sessionKey: key, requestId, tier});
+                let history = [];
+                try {
+                  const agentId = String(key).match(/^agent:([^:]+):/)?.[1];
+                  const result = await gwRequest('chat.history', {sessionKey: key, agentId, limit: 8, maxChars: 10000}, 15_000);
+                  const items = Array.isArray(result?.messages) ? result.messages : Array.isArray(result?.items) ? result.items : [];
+                  history = items.map((item) => ({
+                    role: String(item?.role || item?.message?.role || '').toLowerCase(),
+                    text: messageText(item?.message ?? item).slice(0, 1600),
+                  })).filter((item) => ['user', 'assistant'].includes(item.role) && item.text);
+                } catch { /* A history refresh is optional; never lose the draft over it. */ }
+                if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
+                const prepared = await gwRequest('pinkie.reasoning.prepare', {sessionKey: key, requestId, tier, message, history}, 300_000);
+                if (!prepared?.prepared) throw new Error('增强推演没有完成');
+                if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
+              }
               send(data);
             }
             catch(error) {
-              toast('没有发送：'+error.message);
-              ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message:'项目目录尚未确认：'+error.message}})}));
+              const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : '项目目录尚未确认：'+error.message;
+              toast('没有发送：'+message);
+              ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message}})}));
+            } finally {
+              if (job && reasoningJobs.get(key) === job) reasoningJobs.delete(key);
+              if (job) emitReasoningProgress({active: false, sessionKey: key, requestId: job.requestId});
             }
           });
+          sendQueues.set(key, queued);
+          void queued.finally(() => { if (sendQueues.get(key) === queued) sendQueues.delete(key); });
         };
       }
     } catch {}

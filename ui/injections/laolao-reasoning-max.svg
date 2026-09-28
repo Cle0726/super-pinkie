@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="184" height="20" viewBox="0 0 184 20">
+  <defs>
+    <radialGradient id="star"><stop stop-color="#fff" stop-opacity=".98"/><stop offset=".27" stop-color="#ffe6c5" stop-opacity=".92"/><stop offset=".6" stop-color="#dfb0e8" stop-opacity=".59"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="shard" x2="1" y2="1"><stop stop-color="#fffbe8" stop-opacity=".83"/><stop offset=".55" stop-color="#e8b9d1" stop-opacity=".56"/><stop offset="1" stop-color="#a3e5d8" stop-opacity=".26"/></linearGradient>
+  </defs>
+  <circle cx="18" cy="10" r="12" fill="url(#star)"/><path d="M18 2 20 8 27 10 20 12 18 18 16 12 9 10 16 8Z" fill="url(#shard)"/>
+  <path d="M43 3 56 7 51 17 39 13Z" fill="url(#shard)"/><path d="M72 4 76 9 83 10 76 11 72 17 70 11 64 10 70 9Z" fill="url(#shard)"/>
+  <circle cx="113" cy="10" r="11" fill="url(#star)"/><path d="M113 1 116 8 124 10 116 12 113 19 110 12 102 10 110 8Z" fill="url(#shard)"/>
+  <path d="M145 2 159 7 153 18 139 13Z" fill="url(#shard)"/><circle cx="170" cy="8" r="1.8" fill="#fff" opacity=".89"/>
+</svg>

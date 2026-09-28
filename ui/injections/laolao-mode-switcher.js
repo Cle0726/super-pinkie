@@ -525,10 +525,11 @@
     const bridge = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
     if (!bridge?.postMessage || isDockedWorkspace()) return;
     closeMenu();
-    const sessionKey = await resolveTargetSession(mode);
-    rememberSession(sessionKey);
-    // The native layer validates both fields against its fixed five-mode map.
-    // This message cannot alter the current route or start another gateway.
+    // A dock is a clean second workspace, not a copy of a cached recent chat.
+    // Older native shells only accept the stable root session for each mode;
+    // a recent-session key was silently rejected and made this control appear
+    // to do nothing. Regular mode switching still uses remembered sessions.
+    const sessionKey = mode.sessionKey;
     bridge.postMessage({ action: "open", mode: mode.id, sessionKey });
   };
 

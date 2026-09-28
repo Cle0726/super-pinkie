@@ -331,16 +331,32 @@
   };
 
   const afterArm = async (send) => {
+    let armedHere = false;
     try {
       if (latestStatus?.active) throw new Error("上一轮还在执行，完成后会自动显示终稿");
       await armSelected();
+      armedHere = true;
       if (typeof window.__laolaoWebGptPrepareNextTurn === "function") {
-        await window.__laolaoWebGptPrepareNextTurn();
+        const webResult = await window.__laolaoWebGptPrepareNextTurn();
+        if (webResult === "blocked") throw new Error("网页聊天未就绪；消息仍在输入框，未调用本地模型");
+        if (webResult === "web-direct") {
+          await disarmCurrent();
+          armedHere = false;
+          const input = $(".agent-chat__composer-combobox textarea");
+          if (input) {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            if (setter) setter.call(input, ""); else input.value = "";
+            input.dispatchEvent(new Event("input", {bubbles: true}));
+          }
+          await window.__laolaoRefreshCurrentChat?.();
+          return;
+        }
         window.__laolaoWebGptAllowNextSend?.();
       }
       bypassSend = true;
       send();
     } catch (error) {
+      if (armedHere) await disarmCurrent();
       toast(`${error?.message || "思考服务暂时不可用"}，本条没有发送`);
     } finally {
       queueMicrotask(() => { bypassSend = false; });

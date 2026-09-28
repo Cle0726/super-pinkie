@@ -23,8 +23,8 @@ test('mode switching lets the router own session/model handoff without mutating 
   assert.match(resume, /recoverPaneChat\(pane, "session-selected"/);
 });
 
-test('split view opens the saved session and never starts or stops a gateway', () => {
-  assert.match(mode, /const sessionKey = await resolveTargetSession\(mode\)/);
+test('split view opens its mode root without replaying a stale recent chat or restarting the gateway', () => {
+  assert.match(mode, /const sessionKey = mode\.sessionKey/);
   assert.match(mode, /bridge\.postMessage\(\{ action: "open", mode: mode\.id, sessionKey \}\)/);
   assert.doesNotMatch(mode, /Gateway\.(?:start|stop|repair)|gateway\s+restart/);
 });

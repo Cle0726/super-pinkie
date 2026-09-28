@@ -125,7 +125,6 @@ export function createOAuthRouter(deps) {
     };
     router.get("/.well-known/oauth-authorization-server", asMetadataHandler);
     router.get("/.well-known/oauth-authorization-server/mcp", asMetadataHandler);
-    router.get("/.well-known/openid-configuration", asMetadataHandler);
     router.get("/.well-known/oauth-protected-resource", prMetadataHandler);
     router.get("/.well-known/oauth-protected-resource/mcp", prMetadataHandler);
     // ---- Dynamic Client Registration (RFC 7591) ------------------------------

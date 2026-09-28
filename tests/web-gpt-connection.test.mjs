@@ -27,6 +27,11 @@ esac
 `, {mode: 0o700});
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const manager = new WebGptConnectionManager({root, bindingFile});
+  const chatOnly = manager.chatStatus(sessionKey, workspace);
+  assert.equal(chatOnly.workspace, fs.realpathSync(workspace));
+  assert.equal(chatOnly.projectRequired, false);
+  assert.equal(chatOnly.conversation.chatUrl, null);
+  assert.equal(fs.existsSync(`${cli}.bind`), false);
   const status = await manager.status(sessionKey, workspace);
   assert.equal(status.bridge.running, true);
   assert.equal(status.bridge.publicReady, true);
@@ -55,11 +60,19 @@ test('an unbound chat never falls back to Pinkie memory or an internal agent wor
     root,
     bindingFile: path.join(root, 'missing-bindings.json'),
   });
+  const chatOnly = manager.chatStatus('agent:learning:unbound-session');
+  assert.equal(chatOnly.projectRequired, true);
+  assert.equal(chatOnly.workspace, '');
   const status = await manager.status('agent:learning:unbound-session');
   assert.equal(status.projectRequired, true);
   assert.equal(status.workspace, '');
   assert.equal(status.bridge.running, false);
   assert.doesNotMatch(JSON.stringify(status), /workspace-learning|memory|persona/);
+  await manager.bindConversation('agent:learning:unbound-session', '', 'https://chatgpt.com/c/web-only');
+  assert.equal(
+    (await manager.status('agent:learning:unbound-session')).conversation.chatUrl,
+    'https://chatgpt.com/c/web-only',
+  );
   await assert.rejects(
     () => manager.start('agent:learning:unbound-session'),
     /不会读取碧琪记忆或内部工作区/,
@@ -97,10 +110,14 @@ esac
   assert.equal(before.conversation.reason, 'new-pinkie-session');
 
   await manager.bindConversation(first, workspace, 'https://chatgpt.com/c/first-chat');
+  await manager.bindConversation(first, workspace, 'https://chatgpt.com/c/first-web-chat', 'web');
   await manager.bindConversation(second, workspace, 'https://chatgpt.com/c/second-chat');
   const firstState = await manager.status(first, workspace);
   const secondState = await manager.status(second, workspace);
   assert.equal(firstState.conversation.chatUrl, 'https://chatgpt.com/c/first-chat');
+  assert.equal(firstState.conversation.projectChatUrl, 'https://chatgpt.com/c/first-chat');
+  assert.equal(firstState.conversation.webChatUrl, 'https://chatgpt.com/c/first-web-chat');
+  assert.equal(firstState.conversation.webChatSurface, 'chat');
   assert.equal(secondState.conversation.chatUrl, 'https://chatgpt.com/c/second-chat');
   assert.equal(firstState.conversation.sessionScoped, true);
   assert.equal(secondState.conversation.sessionScoped, true);
@@ -108,6 +125,38 @@ esac
   await manager.clearConversation(first, workspace);
   assert.equal((await manager.status(first, workspace)).conversation.chatUrl, null);
   assert.equal((await manager.status(second, workspace)).conversation.chatUrl, 'https://chatgpt.com/c/second-chat');
+});
+
+test('old single-chat records remain project chats when web-only state is added', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-migrate-'));
+  const workspace = path.join(root, 'project');
+  fs.mkdirSync(workspace);
+  const sessionKey = 'agent:project:legacy-chat';
+  const bindingFile = path.join(root, 'bindings.json');
+  fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace}}));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const manager = new WebGptConnectionManager({root, bindingFile});
+  manager.writeConversationBindings({
+    [sessionKey]: {workspace, url: 'https://chatgpt.com/c/old-project-chat', connectorName: '旧连接器'},
+  });
+  const conversation = manager.conversationFor(sessionKey, workspace);
+  assert.equal(conversation.projectChatUrl, 'https://chatgpt.com/c/old-project-chat');
+  assert.equal(conversation.webChatUrl, null);
+  assert.equal(conversation.webChatSurface, null);
+  assert.equal(conversation.connectorName, '旧连接器');
+});
+
+test('old web URLs are not trusted as ChatGPT chat-mode conversations', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-surface-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const manager = new WebGptConnectionManager({root});
+  const sessionKey = 'agent:learning:dashboard:old-work';
+  manager.writeConversationBindings({
+    [sessionKey]: {workspace: '', webChatUrl: 'https://chatgpt.com/c/old-work-conversation'},
+  });
+  const conversation = manager.conversationFor(sessionKey, '');
+  assert.equal(conversation.webChatUrl, 'https://chatgpt.com/c/old-work-conversation');
+  assert.equal(conversation.webChatSurface, null);
 });
 
 test('stale tunnel URLs are never reported as ready or accepted for pairing', async t => {
@@ -122,6 +171,29 @@ test('stale tunnel URLs are never reported as ready or accepted for pairing', as
 case "$1" in
   status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://stale.example","tunnel":{"running":true,"detail":"Unauthorized: Tunnel not found"}}' ;;
   prefs|session|doctor) printf '%s\\n' '{"ok":true}' ;;
+  pair) printf '%s\\n' '{"ok":true,"pairingCode":"MUST-NOT-RUN"}' ;;
+esac
+`, {mode: 0o700});
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const manager = new WebGptConnectionManager({root, bindingFile});
+  const status = await manager.status(sessionKey, workspace);
+  assert.equal(status.bridge.publicReady, false);
+  await assert.rejects(() => manager.pair(sessionKey, workspace), /请先建立安全连接/);
+});
+
+test('a running tunnel with an unreachable public URL is not reported as connected', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-unreachable-'));
+  const workspace = path.join(root, 'project');
+  fs.mkdirSync(workspace);
+  const bindingFile = path.join(root, 'bindings.json');
+  const sessionKey = 'agent:project:unreachable-test';
+  fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace}}));
+  const cli = path.join(root, 'pinkie-collab');
+  fs.writeFileSync(cli, `#!/bin/sh
+case "$1" in
+  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://unreachable.example","tunnel":{"running":true}}' ;;
+  doctor) printf '%s\\n' '{"report":{"tunnel":{"ok":false,"detail":"公网地址无法访问"}}}' ;;
+  prefs|session) printf '%s\\n' '{"ok":true}' ;;
   pair) printf '%s\\n' '{"ok":true,"pairingCode":"MUST-NOT-RUN"}' ;;
 esac
 `, {mode: 0o700});

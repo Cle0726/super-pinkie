@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="20" viewBox="0 0 160 20">
+  <defs>
+    <radialGradient id="drop" cx=".32" cy=".27" r=".85"><stop stop-color="#fff" stop-opacity=".94"/><stop offset=".28" stop-color="#b6f5e9" stop-opacity=".78"/><stop offset=".66" stop-color="#69b4a8" stop-opacity=".6"/><stop offset="1" stop-color="#43817f" stop-opacity=".32"/></radialGradient>
+    <radialGradient id="lens"><stop stop-color="#e8fff7" stop-opacity=".46"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <ellipse cx="24" cy="12" rx="16" ry="8" fill="url(#lens)"/><ellipse cx="96" cy="8" rx="19" ry="9" fill="url(#lens)"/>
+  <path d="M22 2 C18 7 15 11 15 13 A7 7 0 0 0 29 13 C29 11 26 7 22 2Z" fill="url(#drop)"/>
+  <path d="M22 5 C19 9 18 12 18 13" fill="none" stroke="#fff" stroke-opacity=".72" stroke-linecap="round"/>
+  <circle cx="55" cy="9" r="4.4" fill="url(#drop)"/><circle cx="53.8" cy="7.7" r="1.1" fill="#fff" opacity=".85"/>
+  <path d="M99 1 C95 6 91 11 91 13 A8 8 0 0 0 107 13 C107 11 103 6 99 1Z" fill="url(#drop)"/>
+  <circle cx="136" cy="11" r="5" fill="url(#drop)"/><circle cx="134.5" cy="9.2" r="1.2" fill="#fff" opacity=".82"/>
+</svg>

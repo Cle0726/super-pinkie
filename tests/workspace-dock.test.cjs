@@ -14,7 +14,7 @@ const between = (source, start, end) => {
   return source.slice(from, to);
 };
 
-test('workspace dock uses only the fixed per-mode session map', () => {
+test('workspace dock defaults to its mode root and rejects other-mode or subagent sessions', () => {
   const launcher = read('desktop/macos/Sources/Launcher.swift');
   const expected = {
     chat: 'agent:main:main',
@@ -34,9 +34,12 @@ test('workspace dock uses only the fixed per-mode session map', () => {
     '@objc private func closeWorkspaceDock'
   );
   assert.match(dock, /let canonicalSession = workspaceSessions\[requestedModeID\]/);
-  assert.match(dock, /requestedSessionKey == nil \|\| requestedSessionKey == canonicalSession/);
-  assert.match(dock, /chatURL\(sessionKey: canonicalSession, docked: true\)/);
-  assert.doesNotMatch(dock, /chatURL\(sessionKey:\s*requestedSessionKey/);
+  assert.match(dock, /let targetSession = requestedSessionKey \?\? canonicalSession/);
+  assert.match(dock, /guard isWorkspaceSession\(targetSession, for: requestedModeID\) else \{ return \}/);
+  assert.match(dock, /chatURL\(sessionKey: targetSession, docked: true\)/);
+  const validator = between(launcher, 'private func isWorkspaceSession(', 'private func chatURL(');
+  assert.match(validator, /sessionKey\.hasPrefix\(prefix\)/);
+  assert.match(validator, /!sessionKey\.contains\(":subagent:"\)/);
 });
 
 test('workspace dock is a full-height companion split in the same native window, not another runtime', () => {
