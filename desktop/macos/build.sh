@@ -182,7 +182,7 @@ for scope_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/project-scope/$scope_file" "$CONTENTS/Resources/SuperPinkie/services/project-scope/"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
-for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs setup.py package.json openclaw.plugin.json; do
+for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/watchdog"

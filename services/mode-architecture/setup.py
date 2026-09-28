@@ -362,7 +362,7 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "reasoning.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "package.json", "openclaw.plugin.json"):
+        for name in ("index.mjs", "memory.mjs", "learning.mjs", "reasoning.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "package.json", "openclaw.plugin.json"):
             changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():

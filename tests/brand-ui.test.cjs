@@ -80,7 +80,7 @@ test('model picker keeps native session actions in a compact Pinkie glass surfac
   assert.match(behavior,/details\.dataset\.pinkieModelsOpen = "0"/);
   assert.match(behavior,/Number\(range\.value\) >= Number\(range\.max\)/);
   assert.match(behavior,/watcher\.observe\(details, \{childList: true, subtree: true, characterData: true\}\)/);
-  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker17/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker18/);
 });
 
 test('the mode header keeps its controls readable and uses one clear split-window icon',()=>{
