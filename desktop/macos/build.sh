@@ -21,27 +21,40 @@ CUA_DRIVER_URL="https://github.com/trycua/cua/releases/download/cua-driver-rs-v$
 CUA_DRIVER_SHA256="59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727"
 CUA_DRIVER_TEAM_ID="YCK386LBJ7"
 
-NODE_BIN="${PINKIE_NODE_BIN:-$(command -v node 2>/dev/null || true)}"
 OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
-if [[ -z "$NODE_BIN" || ! -x "$NODE_BIN" ]]; then
-  echo "error: 构建机没有可用的 Node.js" >&2
-  exit 1
-fi
 if [[ -z "$OPENCLAW_BIN" || ! -x "$OPENCLAW_BIN" ]]; then
   echo "error: 构建机没有可用的 OpenClaw" >&2
   exit 1
 fi
-NODE_BIN="$(realpath "$NODE_BIN")"
 OPENCLAW_ENTRY="$(realpath "$OPENCLAW_BIN")"
 OPENCLAW_ROOT="$(dirname "$OPENCLAW_ENTRY")"
 if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
   echo "error: 无法确认 OpenClaw 包目录：$OPENCLAW_ROOT" >&2
   exit 1
 fi
-NODE_ROOT="$(cd "$(dirname "$NODE_BIN")/.." && pwd)"
-NPM_ROOT="$NODE_ROOT/lib/node_modules/npm"
-if [[ ! -f "$NPM_ROOT/bin/npm-cli.js" ]]; then
-  echo "error: 构建机的 Node.js 没有配套 npm" >&2
+
+# The installed App puts its private Node first on PATH during an update. That
+# runtime intentionally has no npm, so look for a complete build toolchain
+# instead of failing before the old App can be replaced.
+if [[ -n "${PINKIE_NODE_BIN:-}" ]]; then
+  NODE_CANDIDATES=("$PINKIE_NODE_BIN")
+else
+  NODE_CANDIDATES=("$(command -v node 2>/dev/null || true)" "$HOME"/.nvm/versions/node/*/bin/node /opt/homebrew/bin/node /usr/local/bin/node)
+fi
+NODE_BIN=""
+NPM_ROOT=""
+for candidate in "${NODE_CANDIDATES[@]}"; do
+  [[ -n "$candidate" && -x "$candidate" ]] || continue
+  candidate="$(realpath "$candidate")"
+  candidate_root="$(cd "$(dirname "$candidate")/.." && pwd)"
+  candidate_npm="$candidate_root/lib/node_modules/npm"
+  [[ -f "$candidate_npm/bin/npm-cli.js" ]] || continue
+  NODE_BIN="$candidate"
+  NPM_ROOT="$candidate_npm"
+  break
+done
+if [[ -z "$NODE_BIN" ]]; then
+  echo "error: 构建机没有带 npm 的 Node.js；可通过 PINKIE_NODE_BIN 指定" >&2
   exit 1
 fi
 
