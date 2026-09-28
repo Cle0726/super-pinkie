@@ -7,6 +7,10 @@
   const POPOVER_ID = "laolao-context-compact-popover";
   let busy = false;
   let popover = null;
+  let usage = null;
+  let usageKey = "";
+  let usageFetchedAt = 0;
+  let usageRequest = null;
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(location.search).get("session") || "";
@@ -30,6 +34,78 @@
   const formatTokens = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? Math.round(number).toLocaleString() : "";
+  };
+
+  const contextCapacity = (session, defaults) => {
+    if (session?.totalTokens == null) return null;
+    const used = Number(session?.totalTokens);
+    const limit = Number(session?.contextTokens || defaults?.contextTokens);
+    if (!Number.isFinite(used) || used < 0 || !Number.isFinite(limit) || limit <= 0) return null;
+    const percent = Math.min(100, Math.round(used / limit * 100));
+    return {used, limit, percent, approximate: session?.totalTokensFresh === false};
+  };
+
+  const fetchContextCapacity = () => {
+    const key = currentSessionKey();
+    if (key !== usageKey) {
+      usageKey = key;
+      usage = null;
+      usageFetchedAt = 0;
+    }
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!key || typeof rpc !== "function" || usageRequest || Date.now() - usageFetchedAt < 15000) return;
+    usageFetchedAt = Date.now();
+    const agentId = key.split(":")[1];
+    usageRequest = Promise.resolve(rpc("sessions.list", {agentId, limit: 1000}, 15000))
+      .then((result) => {
+        if (usageKey !== key) return;
+        const session = result?.sessions?.find?.((item) => item.key === key);
+        usage = contextCapacity(session, result?.defaults);
+        renderContextViewer();
+      })
+      .catch(() => {})
+      .finally(() => { usageRequest = null; });
+  };
+
+  const renderContextViewer = () => {
+    const metas = document.querySelectorAll(".agent-chat__composer-meta");
+    document.querySelectorAll(".laolao-context-viewer").forEach((node) => {
+      if (!node.closest(".agent-chat__composer-meta") || metas.length !== 1) node.remove();
+    });
+    // The upstream meter takes precedence. Only repair its missing-data case.
+    if (metas.length !== 1 || !usageKey) return;
+    const meta = metas[0];
+    if (meta.querySelector(".context-usage")) {
+      meta.querySelector(".laolao-context-viewer")?.remove();
+      return;
+    }
+    let viewer = meta.querySelector(".laolao-context-viewer");
+    if (!viewer) {
+      viewer = document.createElement("details");
+      viewer.className = "laolao-context-viewer";
+      viewer.innerHTML = `<summary><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track"/><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__fill"/></svg><span class="laolao-context-viewer__percent"></span></summary><section class="laolao-context-viewer__popover"><strong>上下文容量</strong><div class="laolao-context-viewer__amount"></div><div class="laolao-context-viewer__bar"><span></span></div><small class="laolao-context-viewer__note"></small></section>`;
+      meta.append(viewer);
+    }
+    const ratio = usageKey === currentSessionKey() ? usage : null;
+    const label = ratio ? `${ratio.approximate ? "约 " : ""}${ratio.percent}%` : "—";
+    const setText = (selector, value) => {
+      const node = viewer.querySelector(selector);
+      if (node.textContent !== value) node.textContent = value;
+    };
+    setText(".laolao-context-viewer__percent", label);
+    setText(".laolao-context-viewer__amount", ratio
+      ? `${formatTokens(ratio.used)} / ${formatTokens(ratio.limit)} token` : "等待会话用量数据");
+    setText(".laolao-context-viewer__note", ratio
+      ? `${ratio.approximate ? "估算 · " : ""}剩余约 ${formatTokens(Math.max(0, ratio.limit - ratio.used))} token` : "有用量数据后会自动更新，不显示虚构百分比");
+    const offset = String(40.84 * (1 - (ratio?.percent || 0) / 100));
+    const fill = viewer.querySelector(".laolao-context-viewer__fill");
+    if (fill.style.strokeDashoffset !== offset) fill.style.strokeDashoffset = offset;
+    const width = `${ratio?.percent || 0}%`;
+    const bar = viewer.querySelector(".laolao-context-viewer__bar span");
+    if (bar.style.width !== width) bar.style.width = width;
+    const summary = viewer.querySelector("summary");
+    const aria = ratio ? `上下文容量：已用${label}，${formatTokens(ratio.used)} / ${formatTokens(ratio.limit)} token` : "上下文容量：等待用量数据";
+    if (summary.getAttribute("aria-label") !== aria) summary.setAttribute("aria-label", aria);
   };
 
   const compact = async (button) => {
@@ -120,11 +196,14 @@
       if (!node.closest(".agent-chat__composer-actions")) node.remove();
     });
     const actions = document.querySelector(".agent-chat__composer-actions");
-    if (!actions || actions.querySelector(`.${BUTTON_CLASS}`)) return;
-    const deepThink = actions.querySelector(".laolao-deep-think-btn");
-    const button = makeButton();
-    if (deepThink) actions.insertBefore(button, deepThink);
-    else actions.append(button);
+    if (actions && !actions.querySelector(`.${BUTTON_CLASS}`)) {
+      const deepThink = actions.querySelector(".laolao-deep-think-btn");
+      const button = makeButton();
+      if (deepThink) actions.insertBefore(button, deepThink);
+      else actions.append(button);
+    }
+    fetchContextCapacity();
+    renderContextViewer();
   };
 
   const ensureStyle = () => {
@@ -136,6 +215,7 @@
 #laolao-context-compact-popover{position:fixed;z-index:2147483000;width:min(286px,calc(100vw - 20px));padding:12px;border:1px solid rgba(255,255,255,.74);border-radius:17px;background:linear-gradient(145deg,rgba(255,252,253,.94),rgba(249,228,240,.91));color:#61394e;box-shadow:0 18px 42px rgba(84,42,65,.16),inset 0 1px rgba(255,255,255,.78);animation:laolao-context-pop .16s cubic-bezier(.2,.78,.28,1) both}.laolao-context-compact__copy{display:flex;flex-direction:column;gap:4px}.laolao-context-compact__copy strong{font-size:12px}.laolao-context-compact__copy span{color:rgba(97,57,78,.62);font-size:10.5px;line-height:1.45}.laolao-context-compact__actions{display:flex;justify-content:flex-end;gap:6px;margin-top:10px}.laolao-context-compact__actions button{padding:5px 10px;border:1px solid rgba(184,99,136,.18);border-radius:999px;background:rgba(255,255,255,.42);color:inherit;font-size:10.5px;cursor:pointer}.laolao-context-compact__actions button.is-primary{border-color:rgba(205,76,132,.26);background:#d85b91;color:white}
 #laolao-context-compact-toast{position:fixed;left:50%;bottom:72px;z-index:2147483647;max-width:min(520px,84vw);padding:8px 14px;border:1px solid rgba(255,255,255,.74);border-radius:999px;background:rgba(252,235,244,.96);color:#6d3650;box-shadow:0 10px 28px rgba(106,48,79,.16);font-size:12px;opacity:0;pointer-events:none;transform:translate(-50%,6px);transition:opacity .18s ease,transform .18s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#laolao-context-compact-toast.is-visible{opacity:1;transform:translate(-50%,0)}
 @keyframes laolao-context-spin{to{transform:rotate(360deg)}}@keyframes laolao-context-pop{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.laolao-context-compact-btn,.laolao-context-compact-btn svg,#laolao-context-compact-popover,#laolao-context-compact-toast{animation:none!important;transition:none!important}}
+.laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 9px);z-index:100;width:min(268px,calc(100vw - 24px));box-sizing:border-box;padding:14px;border:1px solid rgba(255,255,255,.78);border-radius:16px;background:linear-gradient(145deg,rgba(255,252,254,.97),rgba(248,234,244,.95));box-shadow:0 15px 38px rgba(88,54,77,.16);color:#503c56;font-size:11px}.laolao-context-viewer__popover strong{font-size:12px}.laolao-context-viewer__amount{margin-top:8px;font-variant-numeric:tabular-nums;font-weight:650}.laolao-context-viewer__bar{height:5px;margin:10px 0;border-radius:99px;background:rgba(119,107,136,.15);overflow:hidden}.laolao-context-viewer__bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c888b1,#9fa5db);transition:width .35s ease}.laolao-context-viewer__note{color:#766b7e;line-height:1.4}
 `;
     document.head.append(style);
   };
@@ -147,5 +227,6 @@
   ensureStyle();
   render();
   setInterval(render, 900);
-  window.__laolaoContextCompact = {compact, currentSessionKey};
+  window.addEventListener("laolao:sessions-changed", () => { usageFetchedAt = 0; fetchContextCapacity(); });
+  window.__laolaoContextCompact = {compact, currentSessionKey, contextCapacity};
 })();

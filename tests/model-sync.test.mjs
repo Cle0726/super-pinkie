@@ -67,6 +67,45 @@ test('failed upstream fetch never mutates local models', async () => {
   assert.equal(writes, 0);
 });
 
+test('sync also follows the configured clekk catalog without inventing GPT-6 entries', async () => {
+  const config = {models: {providers: {
+    mm: {baseUrl: 'http://127.0.0.1:1467/v1', apiKey: 'mm-secret', models: []},
+    clekk: {baseUrl: 'http://127.0.0.1:54395/v1', apiKey: 'clekk-secret', models: [
+      {id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', input: ['text'], contextWindow: 128000},
+    ]},
+  }}};
+  const api = {runtime: {config: {
+    current: () => config,
+    async mutateConfigFile({mutate}) { mutate(config); },
+  }}};
+  const fetchImpl = async (url) => new Response(JSON.stringify({data: String(url).includes('54395')
+    ? [{id: 'gpt-5.6-sol'}, {id: 'gpt-5.6-luna'}, {id: 'gpt-image-2'}]
+    : [{id: 'gemini-3.8-flash-tiered'}]}), {status: 200});
+  const result = await createModelSynchronizer(api, {fetchImpl}).sync();
+  assert.equal(result.providers.clekk.added, 1);
+  assert.equal(result.providers.mm.added, 1);
+  assert.deepEqual(config.models.providers.clekk.models.map((model) => model.id),
+    ['gpt-5.6-sol', 'gpt-5.6-luna']);
+  assert.equal(config.models.providers.clekk.models.some((model) => model.id.startsWith('gpt-6')), false);
+});
+
+test('one unavailable provider does not block a healthy provider catalog', async () => {
+  const config = {models: {providers: {
+    mm: {baseUrl: 'http://127.0.0.1:1467/v1', apiKey: 'mm-secret', models: []},
+    clekk: {baseUrl: 'http://127.0.0.1:54395/v1', apiKey: 'clekk-secret', models: []},
+  }}};
+  const sync = createModelSynchronizer({runtime: {config: {
+    current: () => config,
+    async mutateConfigFile({mutate}) { mutate(config); },
+  }}}, {fetchImpl: async (url) => String(url).includes('1467')
+    ? new Response('unavailable', {status: 503})
+    : new Response(JSON.stringify({data: [{id: 'gpt-5.6-sol'}]}), {status: 200})});
+  const result = await sync.sync();
+  assert.equal(result.failed, 1);
+  assert.equal(result.providers.clekk.added, 1);
+  assert.deepEqual(config.models.providers.clekk.models.map((model) => model.id), ['gpt-5.6-sol']);
+});
+
 test('sync refuses an unencrypted non-local endpoint before sending credentials', async () => {
   let fetched = false;
   const sync = createModelSynchronizer({runtime: {config: {

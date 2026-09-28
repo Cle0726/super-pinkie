@@ -223,7 +223,7 @@ function Apply-UISkin {
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning4"></script>',
-        '<script defer src="./laolao-model-picker.js?v=modelpicker19"></script>',
+        '<script defer src="./laolao-model-picker.js?v=modelpicker20"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
@@ -231,7 +231,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
         '<script defer src="./laolao-deep-think.js?v=deepthink19"></script>',
         '<script defer src="./laolao-web-gpt-collab.js?v=webgpt32"></script>',
-        '<script defer src="./laolao-context-compact.js?v=contextcompact3"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact4"></script>',
         '<script defer src="./laolao-resume.js?v=resume22"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
         '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
@@ -250,10 +250,10 @@ function Apply-UISkin {
     # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme76'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-theme.css' = 'theme77'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
         'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases21'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
-        'laolao-mode-switcher.js' = 'mode37'; 'laolao-model-picker.js' = 'modelpicker19'; 'laolao-splash.js' = 'splash26';
+        'laolao-mode-switcher.js' = 'mode37'; 'laolao-model-picker.js' = 'modelpicker20'; 'laolao-splash.js' = 'splash26';
         'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume22';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
@@ -265,7 +265,7 @@ function Apply-UISkin {
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'laolao-learning-stage.css' = 'learning4'; 'laolao-learning-stage.js' = 'learning4';
         'laolao-deep-think.js' = 'deepthink19'; 'laolao-web-gpt-collab.js' = 'webgpt32';
-        'laolao-context-compact.js' = 'contextcompact3'
+        'laolao-context-compact.js' = 'contextcompact4'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         # 版本号字符集收紧，避免第二次运行时贪婪越过版本号把后续内容吃掉。
