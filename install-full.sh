@@ -163,8 +163,15 @@ echo "==> 4/6 构建并安装超級碧琪.app"
 /usr/bin/python3 "$REPO_ROOT/services/party/setup.py"
 /usr/bin/python3 "$REPO_ROOT/services/project-scope/setup.py"
 chmod +x "$REPO_ROOT/desktop/macos/build.sh"
-PINKIE_BUILD_DIR="$STATE_ROOT/build" "$REPO_ROOT/desktop/macos/build.sh" >/dev/null
+if ! PINKIE_BUILD_DIR="$STATE_ROOT/build" "$REPO_ROOT/desktop/macos/build.sh" >/dev/null; then
+  echo "构建失败，尚未替换现有超級碧琪.app。" >&2
+  exit 1
+fi
 SOURCE_APP="$STATE_ROOT/build/超級碧琪.app"
+if [[ ! -d "$SOURCE_APP" ]] || ! codesign --verify --deep --strict "$SOURCE_APP" >/dev/null 2>&1; then
+  echo "构建产物不完整或签名无效，尚未替换现有超級碧琪.app。" >&2
+  exit 1
+fi
 if [[ -n "${PINKIE_APP_ROOT:-}" ]]; then
   APP_ROOT="$PINKIE_APP_ROOT"
   mkdir -p "$APP_ROOT"
