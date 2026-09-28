@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="152" height="20" viewBox="0 0 152 20">
+  <defs>
+    <linearGradient id="prism" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff6e7" stop-opacity=".9"/><stop offset=".38" stop-color="#f4c9a7" stop-opacity=".72"/><stop offset=".68" stop-color="#e5a2bc" stop-opacity=".74"/><stop offset="1" stop-color="#fff" stop-opacity=".37"/></linearGradient>
+    <linearGradient id="facet"><stop stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#96607f" stop-opacity=".12"/></linearGradient>
+  </defs>
+  <path d="M14 3 27 8 23 17 8 13Z" fill="url(#prism)"/><path d="M14 3 27 8 17 10Z" fill="url(#facet)"/>
+  <path d="M50 2 61 10 50 18 39 10Z" fill="url(#prism)"/><path d="M50 2 61 10 50 10Z" fill="url(#facet)"/>
+  <path d="M82 4 96 3 101 14 87 18 78 11Z" fill="url(#prism)"/><path d="M96 3 101 14 87 18 91 10Z" fill="url(#facet)"/>
+  <path d="M121 2 137 7 132 18 117 13Z" fill="url(#prism)"/><path d="M121 2 137 7 126 10Z" fill="url(#facet)"/>
+  <circle cx="69" cy="5" r="1.1" fill="#fff" opacity=".83"/>
+</svg>

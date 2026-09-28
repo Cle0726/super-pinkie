@@ -43,18 +43,18 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme46/);
+  assert.match(installer,/laolao-theme\.css\?v=theme75/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar17/);
-  assert.match(installer,/laolao-sidebar\.js\?v=sidebar26/);
+  assert.match(installer,/laolao-sidebar\.js\?v=sidebar27/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions10/);
   assert.match(installer,/trap reseal_app_on_exit EXIT/);
   assert.match(installer,/codesign --force --deep --sign -/);
   assert.match(installer,/Computer Use v2 patch skipped/);
-  assert.match(installer,/laolao-deep-think\.js\?v=deepthink17/);
-  assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt16/);
+  assert.match(installer,/laolao-deep-think\.js\?v=deepthink19/);
+  assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt32/);
   assert.match(installer,/laolao-splash\.css\?v=splash18/);
   assert.match(installer,/laolao-splash\.js\?v=splash26/);
-  assert.match(installer,/laolao-mode-switcher\.js\?v=mode36/);
+  assert.match(installer,/laolao-mode-switcher\.js\?v=mode37/);
   assert.match(installer,/laolao-usage-stats\.js\?v=stats16/);
   assert.match(installer,/laolao-classic-shell\.css\?v=classic17/);
   assert.match(installer,/laolao-classic-shell\.js\?v=classic15/);
@@ -68,7 +68,7 @@ test('installer cache-busts the native glass assets',()=>{
 test('assistant replies get a subtle readable surface without slowing streams',()=>{
   const css=read('ui/injections/laolao-theme.css');
   const bubbleBlock=css.match(/chat-group\.assistant:not\(\.chat-group--forwarded\)[\s\S]*?\{([\s\S]*?)\}/)?.[1]||'';
-  assert.match(bubbleBlock,/linear-gradient\(135deg, rgba\(255, 253, 254, 0\.54\), rgba\(255, 247, 251, 0\.34\)\)/);
+  assert.match(bubbleBlock,/linear-gradient\(135deg, rgba\(255, 253, 254, 0\.72\), rgba\(255, 247, 251, 0\.50\)\)/);
   assert.match(css,/chat-bubble:not\(\.chat-bubble--tool-shell\):not\(\.chat-reading-indicator\)/);
   assert.doesNotMatch(bubbleBlock,/backdrop-filter/);
   assert.match(css,/chat-group :is\(\.chat-bubble, \.chat-group-content\)[\s\S]*text-shadow:/);

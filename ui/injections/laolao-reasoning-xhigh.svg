@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="168" height="20" viewBox="0 0 168 20">
+  <defs>
+    <radialGradient id="planet" cx=".34" cy=".26" r=".82"><stop stop-color="#fff" stop-opacity=".88"/><stop offset=".28" stop-color="#ddbee9" stop-opacity=".74"/><stop offset=".66" stop-color="#9d82c3" stop-opacity=".65"/><stop offset="1" stop-color="#665880" stop-opacity=".27"/></radialGradient>
+    <linearGradient id="orbit"><stop stop-color="#dffcf7" stop-opacity=".08"/><stop offset=".5" stop-color="#f9e5ff" stop-opacity=".85"/><stop offset="1" stop-color="#b5e8e7" stop-opacity=".15"/></linearGradient>
+  </defs>
+  <ellipse cx="25" cy="10" rx="19" ry="5.6" fill="none" stroke="url(#orbit)" stroke-width="1.4" transform="rotate(-16 25 10)"/>
+  <circle cx="25" cy="10" r="5.5" fill="url(#planet)"/>
+  <path d="M63 2 A7.8 7.8 0 1 0 63 18 A5.2 5.2 0 1 1 63 2Z" fill="#d9fff2" opacity=".6"/>
+  <ellipse cx="104" cy="10" rx="22" ry="5.9" fill="none" stroke="url(#orbit)" stroke-width="1.6" transform="rotate(13 104 10)"/>
+  <circle cx="104" cy="10" r="6.2" fill="url(#planet)"/>
+  <circle cx="145" cy="7" r="3.5" fill="url(#planet)"/><circle cx="141" cy="15" r="1.1" fill="#fff" opacity=".85"/>
+</svg>

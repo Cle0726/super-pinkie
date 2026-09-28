@@ -290,6 +290,17 @@ def _configure_plugin(data: dict, target: Path) -> bool:
         if isinstance(talk, dict):
             talk.pop("agentId", None)
 
+    # This model was probed against the user's current mm upstream: xhigh is
+    # accepted as a real thinking level. Do not advertise it for other models,
+    # and never invent native max/ultra levels (the upstream rejects both).
+    mm = data.get("models", {}).get("providers", {}).get("mm", {})
+    for model in mm.get("models", []) if isinstance(mm, dict) else []:
+        if not isinstance(model, dict) or model.get("id") != "gemini-3.8-flash-tiered":
+            continue
+        efforts = model.get("compat", {}).get("supportedReasoningEfforts")
+        if isinstance(efforts, list) and "high" in efforts and "xhigh" not in efforts:
+            efforts.append("xhigh")
+
     plugins = data.setdefault("plugins", {})
     plugin_id = "pinkie-mode-architecture"
     if plugins.get("enabled") is False or plugin_id in plugins.get("deny", []):
@@ -351,7 +362,7 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "package.json", "openclaw.plugin.json"):
+        for name in ("index.mjs", "memory.mjs", "learning.mjs", "reasoning.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "package.json", "openclaw.plugin.json"):
             changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():

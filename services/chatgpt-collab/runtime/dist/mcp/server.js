@@ -152,6 +152,13 @@ const executionOutputOutputSchema = {
     truncated: z.boolean().optional(),
     text: z.string().optional().describe("Sanitized command output returned by the read operation"),
 };
+// The bundled MCP SDK passes tool _meta through but does not yet emit the
+// top-level securitySchemes field. Keep both shapes so ChatGPT can discover
+// per-tool scopes now and newer SDKs can use the standard field later.
+function securityFor(scope) {
+    const schemes = [{ type: "oauth2", scopes: [scope] }];
+    return { securitySchemes: schemes, _meta: { securitySchemes: schemes } };
+}
 export function createMcpServer(ctx) {
     const { workspace } = ctx;
     const server = new McpServer({ name: PRODUCT_NAME, version: VERSION }, { capabilities: { tools: {} }, instructions: UNTRUSTED_NOTE });
@@ -162,6 +169,7 @@ export function createMcpServer(ctx) {
         inputSchema: {},
         outputSchema: workspaceInfoOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("workspace.read"),
     }, async (_args, extra) => {
         const denied = requireScope(extra.authInfo, "workspace.read");
         if (denied)
@@ -198,6 +206,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: listDirectoryOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("workspace.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "workspace.read");
         if (denied)
@@ -221,6 +230,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: readFileOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("workspace.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "workspace.read");
         if (denied)
@@ -240,6 +250,7 @@ export function createMcpServer(ctx) {
             video_frames: z.number().int().min(1).max(6).default(4).describe("Evenly-spaced keyframes per video; raw video is never sent"),
         },
         annotations: { readOnlyHint: true },
+        ...securityFor("workspace.media.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "workspace.media.read");
         if (denied)
@@ -278,6 +289,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: searchWorkspaceOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("workspace.search"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "workspace.search");
         if (denied)
@@ -295,6 +307,7 @@ export function createMcpServer(ctx) {
         inputSchema: {},
         outputSchema: gitStatusOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("git.read"),
     }, async (_args, extra) => {
         const denied = requireScope(extra.authInfo, "git.read");
         if (denied)
@@ -318,6 +331,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: gitDiffOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("git.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "git.read");
         if (denied)
@@ -340,6 +354,7 @@ export function createMcpServer(ctx) {
         inputSchema: {},
         outputSchema: testStatusOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("execution.read"),
     }, async (_args, extra) => {
         const denied = requireScope(extra.authInfo, "execution.read");
         if (denied)
@@ -368,6 +383,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: executionSummaryOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("execution.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "execution.read");
         if (denied)
@@ -386,6 +402,7 @@ export function createMcpServer(ctx) {
         },
         outputSchema: executionOutputOutputSchema,
         annotations: { readOnlyHint: true },
+        ...securityFor("execution.read"),
     }, async (args, extra) => {
         const denied = requireScope(extra.authInfo, "execution.read");
         if (denied)

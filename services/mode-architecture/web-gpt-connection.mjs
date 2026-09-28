@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {projectContext} from './web-gpt-project-context.mjs';
 
 const execFileAsync = promisify(execFile);
 const VALID_SESSION = /^agent:(main|project|thinking|learning|unrestricted):/;
@@ -11,11 +12,14 @@ const TRANSIENT_TUNNEL_ERROR = /Tunnel start timed out|fetch failed|public healt
 const FATAL_TUNNEL_STATUS = /Unauthorized|Tunnel not found|no recent network activity|operation was aborted due to timeout/i;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function bridgePublicReady(bridge) {
+function bridgePublicReady(bridge, diagnostics) {
   const detail = [bridge?.error, bridge?.tunnel?.detail].filter(Boolean).join('\n');
   return bridge?.running === true
     && !FATAL_TUNNEL_STATUS.test(detail)
-    && Boolean(bridge?.publicUrl || bridge?.tunnel?.running);
+    && Boolean(bridge?.publicUrl || bridge?.tunnel?.running)
+    // A remembered URL or a locally running tunnel is not proof that ChatGPT
+    // can reach it. The doctor probes the public health endpoint.
+    && diagnostics?.report?.tunnel?.ok === true;
 }
 
 function stateRoot() {
@@ -134,32 +138,28 @@ export class WebGptConnectionManager {
 
   conversationFor(sessionKey, workspace, legacy = {}) {
     const record = this.readConversationBindings()[sessionKey];
-    if (record?.workspace === workspace && typeof record.url === 'string') {
-      try {
-        const url = chatGptConversationUrl(record.url);
-        return {
-          mode: 'long-chat',
-          reason: 'pinkie-session-chat',
-          projectUrl: null,
-          projectReady: false,
-          chatUrl: url,
-          connectorName: String(record.connectorName || legacy?.connectorName || '').slice(0, 240) || null,
-          reuseSavedChat: true,
-          sessionScoped: true,
-        };
-      } catch {
-        // Ignore a stale local pointer. A later real browser reply will bind a
-        // new one, rather than opening an arbitrary saved workspace chat.
-      }
-    }
+    const validUrl = value => {
+      try { return typeof value === 'string' ? chatGptConversationUrl(value) : null; }
+      catch { return null; }
+    };
+    // Old records had one URL and always represented the project-plugin path.
+    // Keep that chat while giving plain web dialogue a separate pointer.
+    const projectChatUrl = record?.workspace === workspace
+      ? validUrl(record.projectChatUrl || (workspace ? record.url : null)) : null;
+    const webChatUrl = record?.workspace === workspace
+      ? validUrl(record.webChatUrl || (!workspace ? record.url : null)) : null;
     return {
-      mode: 'project',
-      reason: 'new-pinkie-session',
+      mode: projectChatUrl || webChatUrl ? 'long-chat' : 'project',
+      reason: projectChatUrl || webChatUrl ? 'pinkie-session-chat' : 'new-pinkie-session',
       projectUrl: null,
       projectReady: false,
-      chatUrl: null,
-      connectorName: String(legacy?.connectorName || '').slice(0, 240) || null,
-      reuseSavedChat: false,
+      chatUrl: projectChatUrl || webChatUrl,
+      projectChatUrl,
+      webChatUrl,
+      // Only URLs created after the ChatGPT "聊天" check are safe to reuse.
+      webChatSurface: record?.workspace === workspace && record.webChatSurface === 'chat' ? 'chat' : null,
+      connectorName: String(record?.connectorName || legacy?.connectorName || '').slice(0, 240) || null,
+      reuseSavedChat: Boolean(projectChatUrl || webChatUrl),
       sessionScoped: true,
     };
   }
@@ -170,6 +170,17 @@ export class WebGptConnectionManager {
       throw new Error('当前会话未绑定用户项目；网页 GPT 不会读取碧琪记忆或内部工作区');
     }
     return workspace;
+  }
+
+  chatStatus(sessionKey, requestedWorkspace = '') {
+    const workspace = this.workspace(sessionKey, requestedWorkspace, {allowUnbound: true});
+    return {
+      ok: true,
+      workspace,
+      projectRequired: !workspace,
+      conversation: this.conversationFor(sessionKey, workspace),
+      accountIdentity: '由内置 ChatGPT 页面显示',
+    };
   }
 
   async run(args, {timeout = 30_000, allowPlain = false} = {}) {
@@ -199,7 +210,7 @@ export class WebGptConnectionManager {
         projectRequired: true,
         bridge: {ok: true, running: false, publicReady: false, state: 'unbound'},
         preferences: {},
-        conversation: {},
+        conversation: this.conversationFor(sessionKey, '', {}),
         diagnostics: {project: {ok: false, detail: '当前会话未绑定用户项目'}},
         accountIdentity: '由内置 ChatGPT 页面显示',
       };
@@ -213,7 +224,7 @@ export class WebGptConnectionManager {
       safeRun(['session', 'get', '-w', workspace, '--json']),
       safeRun(['doctor', '-w', workspace, '--no-fix', '--json']),
     ]);
-    const normalizedBridge = {...bridge, publicReady: bridgePublicReady(bridge)};
+    const normalizedBridge = {...bridge, publicReady: bridgePublicReady(bridge, diagnostics)};
     return {
       ok: true,
       workspace,
@@ -276,7 +287,7 @@ export class WebGptConnectionManager {
   }
 
   async clearConversation(sessionKey, requestedWorkspace = '') {
-    const workspace = this.workspace(sessionKey, requestedWorkspace);
+    const workspace = this.workspace(sessionKey, requestedWorkspace, {allowUnbound: true});
     const bindings = this.readConversationBindings();
     const hadBinding = Boolean(bindings[sessionKey]?.workspace === workspace);
     delete bindings[sessionKey];
@@ -285,9 +296,11 @@ export class WebGptConnectionManager {
     return {...await this.status(sessionKey, workspace), cleared};
   }
 
-  async bindConversation(sessionKey, requestedWorkspace = '', value = '') {
-    const workspace = this.workspace(sessionKey, requestedWorkspace);
+  async bindConversation(sessionKey, requestedWorkspace = '', value = '', mode = 'project') {
+    const workspace = this.workspace(sessionKey, requestedWorkspace, {allowUnbound: true});
     const url = chatGptConversationUrl(value);
+    const webOnly = mode === 'web' || !workspace;
+    if (mode !== 'web' && mode !== 'project') throw new Error('网页会话类型无效');
     const before = await this.status(sessionKey, workspace);
     const connectorName = String(
       before.conversation?.connectorName
@@ -295,17 +308,21 @@ export class WebGptConnectionManager {
       || before.bridge?.connectorName
       || `Codex with ChatGPT · ${path.basename(workspace)}`,
     ).slice(0, 240);
-    const saved = await this.run([
-      'session', 'set', '-w', workspace,
-      '--url', url,
-      '--mode', 'long-chat',
-      '--connector-name', connectorName,
-    ], {allowPlain: true});
+    const saved = webOnly
+      ? {ok: true, scope: 'web-conversation-only'}
+      : await this.run([
+        'session', 'set', '-w', workspace,
+        '--url', url,
+        '--mode', 'long-chat',
+        '--connector-name', connectorName,
+      ], {allowPlain: true});
     const bindings = this.readConversationBindings();
+    const previous = bindings[sessionKey]?.workspace === workspace ? bindings[sessionKey] : {};
     bindings[sessionKey] = {
+      ...previous,
       workspace,
-      url,
-      connectorName,
+      ...(webOnly ? {webChatUrl: url, webChatSurface: 'chat'} : {projectChatUrl: url, url}),
+      connectorName: workspace ? connectorName : null,
       savedAt: new Date().toISOString(),
     };
     this.writeConversationBindings(bindings);
@@ -317,6 +334,11 @@ export class WebGptConnectionManager {
     const workspace = this.workspace(sessionKey, requestedWorkspace);
     const revoked = await this.run(['unpair', '-w', workspace], {allowPlain: true});
     return {...await this.status(sessionKey, workspace), revoked};
+  }
+
+  async projectContext(sessionKey, requestedWorkspace = '', options = {}) {
+    const workspace = this.workspace(sessionKey, requestedWorkspace);
+    return {ok: true, workspace: path.basename(workspace), ...projectContext(workspace, options)};
   }
 }
 
@@ -334,6 +356,13 @@ export function registerWebGptConnectionGateway(api, manager) {
     }
   };
   api.registerGatewayMethod('pinkie.webGpt.connection.get', handle('status'), {scope: 'operator.admin'});
+  api.registerGatewayMethod('pinkie.webGpt.chatStatus', async ({params, respond}) => {
+    try {
+      respond(true, manager.chatStatus(String(params?.sessionKey || ''), String(params?.workspace || '')));
+    } catch (error) {
+      respond(false, undefined, {code: 'INVALID_REQUEST', message: error instanceof Error ? error.message : String(error)});
+    }
+  }, {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.start', handle('start'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.useTailscale', handle('useTailscale'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.pair', handle('pair'), {scope: 'operator.admin'});
@@ -344,6 +373,7 @@ export function registerWebGptConnectionGateway(api, manager) {
         String(params?.sessionKey || ''),
         String(params?.workspace || ''),
         String(params?.url || ''),
+        String(params?.mode || 'project'),
       );
       respond(true, result);
     } catch (error) {
@@ -351,4 +381,16 @@ export function registerWebGptConnectionGateway(api, manager) {
     }
   }, {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.unpair', handle('unpair'), {scope: 'operator.admin'});
+  api.registerGatewayMethod('pinkie.webGpt.projectContext', async ({params, respond}) => {
+    try {
+      const result = await manager.projectContext(
+        String(params?.sessionKey || ''),
+        String(params?.workspace || ''),
+        {task: String(params?.task || '').slice(0, 4_000), paths: params?.paths},
+      );
+      respond(true, result);
+    } catch (error) {
+      respond(false, undefined, {code: 'INVALID_REQUEST', message: error instanceof Error ? error.message : String(error)});
+    }
+  }, {scope: 'operator.admin'});
 }

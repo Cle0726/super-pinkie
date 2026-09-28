@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="20" viewBox="0 0 176 20">
+  <defs>
+    <radialGradient id="cell" cx=".36" cy=".28" r=".88"><stop stop-color="#fff" stop-opacity=".64"/><stop offset=".35" stop-color="#c8e9e1" stop-opacity=".61"/><stop offset=".72" stop-color="#d9acdb" stop-opacity=".57"/><stop offset="1" stop-color="#9c8bc0" stop-opacity=".18"/></radialGradient>
+    <linearGradient id="membrane" x2="1" y2="1"><stop stop-color="#fff" stop-opacity=".66"/><stop offset="1" stop-color="#f4d6af" stop-opacity=".19"/></linearGradient>
+  </defs>
+  <path d="M5 10 C5 3 17 1 25 5 C32 8 30 17 20 19 C11 20 4 16 5 10Z" fill="url(#cell)" stroke="url(#membrane)" stroke-width=".8"/>
+  <path d="M39 6 C43 1 55 0 62 6 C68 12 59 18 49 17 C41 16 36 11 39 6Z" fill="url(#cell)" stroke="url(#membrane)" stroke-width=".8"/>
+  <path d="M78 11 C80 2 93 1 100 6 C107 11 103 18 93 19 C82 20 76 16 78 11Z" fill="url(#cell)" stroke="url(#membrane)" stroke-width=".8"/>
+  <path d="M116 5 C123 1 135 3 140 9 C145 16 136 19 126 17 C116 16 112 10 116 5Z" fill="url(#cell)" stroke="url(#membrane)" stroke-width=".8"/>
+  <path d="M153 12 C154 3 166 2 171 8 C175 14 168 18 159 18 C153 18 151 15 153 12Z" fill="url(#cell)" stroke="url(#membrane)" stroke-width=".8"/>
+  <circle cx="18" cy="8" r="1.4" fill="#fff" opacity=".67"/><circle cx="92" cy="9" r="1.2" fill="#fff" opacity=".7"/>
+</svg>

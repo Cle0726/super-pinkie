@@ -7,6 +7,7 @@ import {LongTermMemoryStore, memorySystemRules, renderRetrievedMemory} from './m
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
+import {registerReasoningGateway} from './reasoning.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -4770,6 +4771,7 @@ export default {
     registerLearningGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
+    registerReasoningGateway(api);
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
         const ctx = memory.contextForSession(String(params?.sessionKey || ''));

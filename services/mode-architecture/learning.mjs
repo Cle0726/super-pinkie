@@ -158,14 +158,37 @@ export class LearningInteractionStore {
   }
 
   status(sessionKey) {
-    const state = this.read(sessionKey);
-    return {v: 1, sessionKey: state.sessionKey, enabled: Boolean(state.enabled), revision: state.revision, current: publicActivity(state.current), updatedAt: state.updatedAt};
+    const state = this.normalizeStoppedState(sessionKey, this.read(sessionKey));
+    return this.publicState(state);
   }
 
   setEnabled(sessionKey, enabled) {
-    const state = this.read(sessionKey);
+    const state = this.normalizeStoppedState(sessionKey, this.read(sessionKey));
     state.enabled = Boolean(enabled);
+    // “关闭互动学习”是一个硬边界：不能只把 UI 隐藏起来，否则已经在
+    // 路上的模型 tool call 会在稍后又塞回一张题卡，让用户以为怎么也关不掉。
+    if (!state.enabled) this.archiveCurrent(state, 'interaction_disabled');
     return this.publicState(this.write(sessionKey, state));
+  }
+
+  archiveCurrent(state, reason = '') {
+    if (!state.current) return;
+    const archivedAt = Date.now();
+    state.history.push({
+      ...state.current,
+      archivedAt,
+      ...(reason ? {dismissedAt: archivedAt, dismissedReason: reason} : {}),
+    });
+    state.current = null;
+  }
+
+  normalizeStoppedState(sessionKey, state) {
+    // Older releases hid a card when disabled but left it in the persisted
+    // state. Migrate that state on first read so re-enabling never revives an
+    // abandoned question from a previous session.
+    if (state.enabled || !state.current) return state;
+    this.archiveCurrent(state, 'interaction_disabled');
+    return this.write(sessionKey, state);
   }
 
   publicState(state) {
@@ -174,13 +197,15 @@ export class LearningInteractionStore {
 
   present(sessionKey, payload = {}) {
     const state = this.read(sessionKey);
+    // Only an explicit user action may reopen interaction mode. This is the
+    // server-side fence for a delayed tool call from a reply that was stopped.
+    if (!state.enabled) throw new Error('互动学习已关闭，本次出题已忽略');
     const kind = normalizedKind(payload.kind);
     const question = cleanText(payload.question, 8000);
     const options = normalizeOptions(payload.options);
     if (!question) throw new Error('question 不能为空');
     if ((kind === 'single_choice' || kind === 'multiple_choice') && options.length < 2) throw new Error('选择题至少需要两个选项');
-    if (state.current) state.history.push({...state.current, archivedAt: Date.now()});
-    state.enabled = true;
+    this.archiveCurrent(state);
     state.current = {
       id: cleanId(payload.activity_id) || randomUUID(),
       kind,
@@ -247,7 +272,10 @@ export class LearningInteractionStore {
     if (state.current) {
       state.current = {...state.current, phase: 'complete', completedAt: Date.now(), summary: cleanText(payload.summary, 3000)};
     }
-    if (payload.disable === true) state.enabled = false;
+    if (payload.disable === true) {
+      state.enabled = false;
+      this.archiveCurrent(state, 'interaction_completed');
+    }
     return this.publicState(this.write(sessionKey, state));
   }
 
