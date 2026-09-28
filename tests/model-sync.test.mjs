@@ -20,6 +20,16 @@ test('new effort endpoint inherits known sibling capabilities without modifying 
   assert.deepEqual(current[0].input, ['text', 'image']);
 });
 
+test('verified clekk GPT-6 gets slider capabilities while an unverified provider stays conservative', () => {
+  const [unknown] = newModelEntries([], ['gpt-6-sol']);
+  assert.equal(unknown.name, 'GPT-6 Sol');
+  assert.equal(unknown.reasoning, false);
+  assert.equal(unknown.compat, undefined);
+  const [verified] = newModelEntries([], ['gpt-6-sol'], {verifiedGpt6: true});
+  assert.equal(verified.reasoning, true);
+  assert.deepEqual(verified.compat.supportedReasoningEfforts, ['low', 'medium', 'high', 'xhigh']);
+});
+
 test('sync adds upstream models once, preserves configured entries, and does not expose the key', async () => {
   const original = {id: 'gemini-2.5-flash', name: 'Custom name', contextWindow: 1000000,
     input: ['text', 'image'], reasoning: true, compat: {supportedReasoningEfforts: ['low', 'high']}};
@@ -87,6 +97,36 @@ test('sync also follows the configured clekk catalog without inventing GPT-6 ent
   assert.deepEqual(config.models.providers.clekk.models.map((model) => model.id),
     ['gpt-5.6-sol', 'gpt-5.6-luna']);
   assert.equal(config.models.providers.clekk.models.some((model) => model.id.startsWith('gpt-6')), false);
+});
+
+test('sync upgrades only its old clekk GPT-6 placeholders, preserving custom and other-provider entries', async () => {
+  const placeholder = (id) => ({id, name: `GPT 6 ${id.split('-').at(-1)[0].toUpperCase()}${id.split('-').at(-1).slice(1)}`,
+    reasoning: false, input: ['text'], contextWindow: 128000, contextTokens: 128000});
+  const custom = {...placeholder('gpt-6-luna'), name: 'My Luna'};
+  const config = {models: {providers: {
+    mm: {baseUrl: 'http://127.0.0.1:1467/v1', apiKey: 'mm-secret', models: [placeholder('gpt-6-sol')]},
+    clekk: {baseUrl: 'http://127.0.0.1:54395/v1', apiKey: 'clekk-secret',
+      models: [placeholder('gpt-6-sol'), custom]},
+  }}};
+  let writes = 0;
+  const api = {runtime: {config: {
+    current: () => config,
+    async mutateConfigFile({mutate}) { writes++; mutate(config); },
+  }}};
+  const fetchImpl = async () => new Response(JSON.stringify({data: [
+    {id: 'gpt-6-sol'}, {id: 'gpt-6-luna'},
+  ]}), {status: 200});
+  const result = await createModelSynchronizer(api, {fetchImpl}).sync();
+  assert.equal(result.added, 1);
+  assert.equal(result.upgraded, 1);
+  assert.equal(writes, 1);
+  assert.equal(config.models.providers.mm.models[0].reasoning, false);
+  assert.equal(config.models.providers.clekk.models[0].name, 'GPT-6 Sol');
+  assert.equal(config.models.providers.clekk.models[0].reasoning, true);
+  assert.deepEqual(config.models.providers.clekk.models[0].compat.supportedReasoningEfforts,
+    ['low', 'medium', 'high', 'xhigh']);
+  assert.equal(config.models.providers.clekk.models[1].name, 'My Luna');
+  assert.equal(config.models.providers.clekk.models[1].reasoning, false);
 });
 
 test('one unavailable provider does not block a healthy provider catalog', async () => {

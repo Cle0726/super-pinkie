@@ -43,7 +43,7 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme77/);
+  assert.match(installer,/laolao-theme\.css\?v=theme78/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar17/);
   assert.match(installer,/laolao-sidebar\.js\?v=sidebar27/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions10/);
