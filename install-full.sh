@@ -229,7 +229,9 @@ if [[ "$INSTALL_SERVICES" == "1" ]]; then
     -e "s|@APP_PATH@|$TARGET_APP|g" \
     "$REPO_ROOT/installer/macos/com.super-pinkie.reapply.plist.in" > "$UPDATE_PLIST"
   launchctl bootout "gui/$(id -u)/com.super-pinkie.reapply" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$UPDATE_PLIST"
+  # Step 5 already applied the theme. Bootstrapping a RunAtLoad job here races
+  # the final codesign check by modifying the App while it is being sealed.
+  # Keep the plist for the next login, but do not run it during this update.
 else
   echo "    已跳过后台服务注册"
 fi

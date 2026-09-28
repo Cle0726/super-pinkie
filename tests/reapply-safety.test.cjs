@@ -12,6 +12,16 @@ test('the desktop reapply job never rewrites a live App on a fixed timer', () =>
   assert.match(plist, /immutable while it is running/);
 });
 
+test('the installer does not launch the reapply job while verifying its App signature', () => {
+  const installer = read('install-full.sh');
+  const start = installer.indexOf('UPDATE_PLIST=');
+  const end = installer.indexOf("printf 'PINKIE_REPO=", start);
+  const setup = installer.slice(start, end);
+  assert.match(setup, /launchctl bootout "gui\/\$\(id -u\)\/com\.super-pinkie\.reapply"/);
+  assert.doesNotMatch(setup, /launchctl bootstrap/);
+  assert.match(installer.slice(end), /codesign --verify --deep --strict "\$TARGET_APP"/);
+});
+
 test('manual theme application leaves a healthy watchdog alone', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const block = installer.slice(installer.indexOf('install_relay_watchdog()'), installer.indexOf('\nOPENCLAW_ROOT='));
