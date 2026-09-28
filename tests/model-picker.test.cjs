@@ -171,6 +171,40 @@ test('effort-suffixed Gemini endpoints become two family rows while the slider k
   assert.equal(window.__pickerTest.presentationModels(models).length, 7, 'only the differing 3.5 pair splits; the compatible 3.6 family stays grouped');
 });
 
+test('Gemini 2.5 Flash Thinking is one slider family while Lite stays separate', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel, fallbackModelName};})();');
+  const window = {};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const model = (id, reasoning = true) => ({provider: 'mm', id, name: id, reasoning,
+    input: ['text', 'image'], contextWindow: 1000000});
+  const models = [model('gemini-2.5-flash'), model('gemini-2.5-flash-thinking'),
+    model('gemini-2.5-flash-lite'), model('gemini-3.1-pro-low'), model('gemini-3.1-pro-high')];
+  const shown = window.__pickerTest.presentationModels(models);
+  assert.deepEqual(Array.from(shown, (item) => item.name),
+    ['Gemini 2.5 Flash', 'gemini-2.5-flash-lite', 'Gemini 3.1 Pro']);
+  const state = {models, session: {modelProvider: 'mm', model: 'gemini-2.5-flash-thinking'}};
+  assert.equal(window.__pickerTest.fallbackModelName(state), 'Gemini 2.5 Flash');
+  assert.equal(window.__pickerTest.familyTargetModel(state, 'off'), 'mm/gemini-2.5-flash');
+  assert.equal(window.__pickerTest.familyTargetModel(state, 'high'), 'mm/gemini-2.5-flash-thinking');
+  state.session.model = 'gemini-3.1-pro-low';
+  assert.equal(window.__pickerTest.familyTargetModel(state, 'high'), 'mm/gemini-3.1-pro-high');
+});
+
+test('new reasoning and non-reasoning endpoints join one future slider family', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel};})();');
+  const window = {};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const models = ['grok-4.20-0309-non-reasoning', 'grok-4.20-0309-reasoning']
+    .map((id) => ({provider: 'mm', id, name: id, reasoning: id.endsWith('-reasoning') && !id.endsWith('-non-reasoning'),
+      input: ['text'], contextWindow: 128000}));
+  const shown = window.__pickerTest.presentationModels(models);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].id, 'grok-4.20-0309-reasoning');
+  const state = {models, session: {modelProvider: 'mm', model: shown[0].id}};
+  assert.equal(window.__pickerTest.familyTargetModel(state, 'off'), 'mm/grok-4.20-0309-non-reasoning');
+  assert.equal(window.__pickerTest.familyTargetModel(state, 'high'), 'mm/grok-4.20-0309-reasoning');
+});
+
 test('changing a grouped slider stop saves the matching backend model without closing', async () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates};})();');
   const key = 'agent:project:grouped-test';

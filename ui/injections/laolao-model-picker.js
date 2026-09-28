@@ -72,9 +72,15 @@
   const MATERIALS = ["off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max", "ultra"];
   const MATERIAL_RANK = new Map(MATERIALS.map((name, index) => [name, index]));
   const LEVEL_LABELS = {off: "关闭", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "XHigh", adaptive: "Adaptive", max: "Max", ultra: "Ultra"};
-  /* Only effort-suffixed endpoints with matching capabilities are folded.
-     Keep image, agent, fast and standalone Thinking models separate. */
+  /* Fold endpoint-level effort variants into the existing reasoning slider.
+     Lite, image, agent and fast endpoints remain distinct models. */
   const MODEL_FAMILIES = [
+    {
+      provider: "mm", label: "Gemini 2.5 Flash", canonical: "gemini-2.5-flash",
+      ids: ["gemini-2.5-flash", "gemini-2.5-flash-thinking"],
+      byLevel: {off: "gemini-2.5-flash", minimal: "gemini-2.5-flash-thinking", low: "gemini-2.5-flash-thinking", medium: "gemini-2.5-flash-thinking", high: "gemini-2.5-flash-thinking", xhigh: "gemini-2.5-flash-thinking", adaptive: "gemini-2.5-flash-thinking", max: "gemini-2.5-flash-thinking", ultra: "gemini-2.5-flash-thinking"},
+      implied: {},
+    },
     {
       provider: "mm", label: "Gemini 3.5 Flash", canonical: "gemini-3.5-flash-low",
       ids: ["gemini-3.5-flash-extra-low", "gemini-3.5-flash-low"],
@@ -89,13 +95,49 @@
     },
   ];
 
+  const FAMILY_SUFFIX = /-(extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/;
+  function dynamicFamily(model, catalog) {
+    if (model.provider !== "mm") return null;
+    const base = model.id.replace(FAMILY_SUFFIX, "");
+    const variants = catalog.filter((entry) => entry.provider === model.provider &&
+      (entry.id === base || (FAMILY_SUFFIX.test(entry.id) && entry.id.replace(FAMILY_SUFFIX, "") === base)));
+    if (variants.length < 2) return null;
+    const signature = (entry) => JSON.stringify([entry.input, entry.contextWindow]);
+    if (variants.some((entry) => signature(entry) !== signature(variants[0]))) return null;
+    const canonical = variants.find((entry) => entry.id === base || entry.id === `${base}-tiered`)?.id
+      || variants.find((entry) => entry.id === `${base}-reasoning` || entry.id === `${base}-thinking`)?.id
+      || variants.find((entry) => entry.id === `${base}-low`)?.id || variants[0].id;
+    const ids = variants.map((entry) => entry.id);
+    const byLevel = {};
+    const implied = {};
+    for (const entry of variants) {
+      const suffix = entry.id.slice(base.length + 1);
+      if (["extra-low", "low", "medium", "high", "xhigh", "adaptive"].includes(suffix)) {
+        const level = suffix === "extra-low" ? "minimal" : suffix;
+        byLevel[level] = entry.id;
+        implied[entry.id] = level;
+      }
+      if (suffix === "non-reasoning") byLevel.off = entry.id;
+      if (suffix === "reasoning" || suffix === "thinking") {
+        for (const level of ["minimal", "low", "medium", "high", "xhigh", "adaptive"]) byLevel[level] ||= entry.id;
+      }
+    }
+    byLevel.off ||= ids.includes(base) ? base : canonical;
+    byLevel.max = ids.includes(`${base}-tiered`) ? `${base}-tiered` : canonical;
+    byLevel.ultra = byLevel.max;
+    const label = variants.find((entry) => entry.id === base)?.name
+      || base.split("-").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ");
+    return {provider: model.provider, label, canonical, ids, byLevel, implied, dynamic: true};
+  }
+
   function modelFamily(model, catalog) {
     if (!model || !Array.isArray(catalog)) return null;
-    const family = MODEL_FAMILIES.find((entry) => entry.provider === model.provider && entry.ids.includes(model.id));
+    const family = MODEL_FAMILIES.find((entry) => entry.provider === model.provider && entry.ids.includes(model.id))
+      || dynamicFamily(model, catalog);
     if (!family) return null;
     const variants = catalog.filter((entry) => entry.provider === family.provider && family.ids.includes(entry.id));
     if (variants.length < 2 || !variants.some((entry) => entry.id === family.canonical)) return null;
-    const signature = (entry) => JSON.stringify([entry.reasoning, entry.input, entry.contextWindow]);
+    const signature = (entry) => JSON.stringify([...(family.dynamic ? [] : [entry.reasoning]), entry.input, entry.contextWindow]);
     if (variants.some((entry) => signature(entry) !== signature(variants[0]))) return null;
     return family;
   }
@@ -645,6 +687,7 @@
         ]).then(([models, sessions]) => {
           if (fallbackStates.get(details) !== state) return;
           state.models = [...models];
+          state.loadedAt = Date.now();
           state.error = state.models.length ? "" : "暂无可选模型";
           state.session = sessions?.sessions?.find?.((session) => session.key === key) || null;
           const currentProvider = state.session?.modelProvider;
@@ -677,6 +720,24 @@
     }
     details.dataset.pinkieFallbackReady = state.models.length || state.error ? "1" : "0";
     return state;
+  }
+
+  function refreshFallbackCatalog(details) {
+    const state = fallbackStates.get(details);
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!state || typeof rpc !== "function" || state.refreshing ||
+        Date.now() - (state.lastRefreshAt || 0) < 60_000) return;
+    state.refreshing = true;
+    state.lastRefreshAt = Date.now();
+    const agentId = /^agent:([^:]+):/.exec(state.key)?.[1] || "";
+    void rpc("pinkie.models.sync", {}, 15_000).catch(() => null).then(async () => {
+      catalogRequests.delete(agentId);
+      const models = await loadCatalog(rpc, agentId);
+      if (fallbackStates.get(details) !== state || !models.length) return;
+      state.models = [...models];
+      state.loadedAt = Date.now();
+      schedule(details);
+    }).catch(() => {}).finally(() => { state.refreshing = false; });
   }
 
   function sync(details) {
@@ -772,6 +833,7 @@
       if (Date.now() - (pointerToggles.get(details) || 0) < 600) return;
       details.dataset.pinkieModelsOpen = details.dataset.pinkieModelsOpen === "1" ? "0" : "1";
       sync(details);
+      if (details.dataset.pinkieModelsOpen === "1") refreshFallbackCatalog(details);
       return;
     }
     const modelOption = event.target.closest?.("[data-chat-model-option]");
@@ -790,7 +852,8 @@
           if (fallback) {
             fallback.selectedModel = value;
             fallback.switchingModel = true;
-            const family = MODEL_FAMILIES.find((entry) => `${entry.provider}/${entry.canonical}` === modelOption.dataset?.pinkieFamily);
+            const family = presentationModels(fallback.models).find((entry) =>
+              `${entry.family?.provider}/${entry.family?.canonical}` === modelOption.dataset?.pinkieFamily)?.family;
             const selected = fallback.models.find((model) => `${model.provider}/${model.id}` === value);
             fallback.modelName = family?.label || selected?.name || selected?.id || value;
           }
@@ -828,6 +891,7 @@
     pointerToggles.set(details, Date.now());
     details.dataset.pinkieModelsOpen = details.dataset.pinkieModelsOpen === "1" ? "0" : "1";
     sync(details);
+    if (details.dataset.pinkieModelsOpen === "1") refreshFallbackCatalog(details);
   }, true);
 
   document.addEventListener("keydown", (event) => {
