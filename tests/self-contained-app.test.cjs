@@ -48,7 +48,11 @@ test('macOS updater selects a build Node with npm when the bundled runtime has n
   assert.match(build, /NODE_CANDIDATES=\("\$\(command -v node[^\n]+" "\$HOME"\/\.nvm\/versions\/node\/\*\/bin\/node/);
   assert.match(build, /\[\[ -f "\$candidate_npm\/bin\/npm-cli\.js" \]\] \|\| continue/);
   assert.match(build, /NODE_BIN="\$candidate"[\s\S]*?NPM_ROOT="\$candidate_npm"/);
+  assert.match(build, /NODE_ROOT="\$candidate_root"/);
   assert.match(build, /if \[\[ -z "\$NODE_BIN" \]\]; then/);
+  const installer = read('install-full.sh');
+  assert.match(installer, /if ! PINKIE_BUILD_DIR="\$STATE_ROOT\/build" "\$REPO_ROOT\/desktop\/macos\/build\.sh" >\/dev\/null; then/);
+  assert.match(installer, /codesign --verify --deep --strict "\$SOURCE_APP"/);
 });
 
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {

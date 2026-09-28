@@ -42,6 +42,7 @@ else
   NODE_CANDIDATES=("$(command -v node 2>/dev/null || true)" "$HOME"/.nvm/versions/node/*/bin/node /opt/homebrew/bin/node /usr/local/bin/node)
 fi
 NODE_BIN=""
+NODE_ROOT=""
 NPM_ROOT=""
 for candidate in "${NODE_CANDIDATES[@]}"; do
   [[ -n "$candidate" && -x "$candidate" ]] || continue
@@ -50,6 +51,7 @@ for candidate in "${NODE_CANDIDATES[@]}"; do
   candidate_npm="$candidate_root/lib/node_modules/npm"
   [[ -f "$candidate_npm/bin/npm-cli.js" ]] || continue
   NODE_BIN="$candidate"
+  NODE_ROOT="$candidate_root"
   NPM_ROOT="$candidate_npm"
   break
 done
