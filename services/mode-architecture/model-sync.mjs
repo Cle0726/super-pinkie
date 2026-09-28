@@ -5,7 +5,8 @@ const MEDIA_ID = /(?:^|[-_])(?:image|imagine|video|veo|audio|tts|speech|embeddin
 const EFFORT_SUFFIX = /-(?:extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/i;
 
 function modelName(id) {
-  return id.split(/[-_]/).map((part) => part ? part[0].toUpperCase() + part.slice(1) : part).join(' ');
+  return id.split(/[-_]/).map((part) => part.toLowerCase() === 'gpt'
+    ? 'GPT' : part ? part[0].toUpperCase() + part.slice(1) : part).join(' ');
 }
 
 export function chatModelIds(payload) {
@@ -55,36 +56,50 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
   let lastResult = {added: 0, available: 0, checkedAt: 0};
 
   async function run() {
-    const provider = api.runtime.config.current()?.models?.providers?.mm;
-    if (!provider?.baseUrl || typeof provider.apiKey !== 'string' || !provider.apiKey.trim()) {
+    const providers = api.runtime.config.current()?.models?.providers || {};
+    const configured = Object.entries(providers).filter(([, provider]) =>
+      provider?.baseUrl && typeof provider.apiKey === 'string' && provider.apiKey.trim());
+    if (!configured.length) {
       throw new Error('模型上游地址或密钥未配置');
     }
-    const base = new URL(provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`);
-    if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
-        (base.protocol === 'http:' && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(base.hostname))) {
-      throw new Error('模型上游地址不安全');
-    }
-    const url = new URL('models', base);
-    const response = await fetchImpl(url, {
-      headers: {Authorization: `Bearer ${provider.apiKey}`},
-      signal: AbortSignal.timeout(10_000),
-    });
-    const ids = chatModelIds(await readLimitedJson(response));
-    const existing = provider.models || [];
-    const additions = newModelEntries(existing, ids);
+    const results = await Promise.allSettled(configured.map(async ([name, provider]) => {
+      const base = new URL(provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`);
+      if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
+          (base.protocol === 'http:' && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(base.hostname))) {
+        throw new Error(`${name} 模型上游地址不安全`);
+      }
+      const response = await fetchImpl(new URL('models', base), {
+        headers: {Authorization: `Bearer ${provider.apiKey}`},
+        signal: AbortSignal.timeout(10_000),
+      });
+      const ids = chatModelIds(await readLimitedJson(response));
+      return {name, available: ids.length, additions: newModelEntries(provider.models || [], ids)};
+    }));
+    const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+    if (!successes.length) throw results[0].reason;
+    const additions = successes.filter((result) => result.additions.length);
     if (additions.length) {
       await api.runtime.config.mutateConfigFile({
         base: 'source', afterWrite: {mode: 'auto'},
         mutate(draft) {
-          const models = draft.models?.providers?.mm?.models;
-          if (!Array.isArray(models)) throw new Error('模型配置已改变，稍后重试');
-          const live = new Set(models.map((model) => model.id));
-          for (const entry of additions) if (!live.has(entry.id)) { models.push(entry); live.add(entry.id); }
+          for (const {name, additions: entries} of additions) {
+            const models = draft.models?.providers?.[name]?.models;
+            if (!Array.isArray(models)) throw new Error(`${name} 模型配置已改变，稍后重试`);
+            const live = new Set(models.map((model) => model.id));
+            for (const entry of entries) if (!live.has(entry.id)) { models.push(entry); live.add(entry.id); }
+          }
         },
       });
     }
     lastChecked = now();
-    lastResult = {added: additions.length, available: ids.length, checkedAt: lastChecked};
+    lastResult = {
+      added: successes.reduce((sum, result) => sum + result.additions.length, 0),
+      available: successes.reduce((sum, result) => sum + result.available, 0),
+      checkedAt: lastChecked,
+      providers: Object.fromEntries(successes.map(({name, available, additions}) =>
+        [name, {available, added: additions.length}])),
+      failed: results.filter((result) => result.status === 'rejected').length,
+    };
     return lastResult;
   }
 

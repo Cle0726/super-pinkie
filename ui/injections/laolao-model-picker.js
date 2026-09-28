@@ -439,6 +439,7 @@
     const level = document.createElement("span");
     level.className = "pinkie-external-tier";
     level.textContent = LEVEL_LABELS[tier];
+    level.dataset.pinkieTierLabel = LEVEL_LABELS[tier];
     label.replaceChildren(model, document.createTextNode(" · "), level);
     return display;
   }

@@ -227,7 +227,7 @@ test('the closed picker decorates only the tier word and preserves the plain mod
   const window = {};
   const document = {
     addEventListener() {},
-    createElement() { return {className: '', textContent: ''}; },
+    createElement() { return {className: '', textContent: '', dataset: {}}; },
     createTextNode(textContent) { return {textContent}; },
   };
   vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
@@ -245,12 +245,13 @@ test('the closed picker decorates only the tier word and preserves the plain mod
   assert.equal(label.children[0].textContent, 'Gemini 2.5 Flash');
   assert.equal(label.children[2].className, 'pinkie-external-tier');
   assert.equal(label.children[2].textContent, 'Ultra');
+  assert.equal(label.children[2].dataset.pinkieTierLabel, 'Ultra');
   const css = read('ui/injections/laolao-theme.css');
   assert.match(css, /\.pinkie-external-model-name \{ color: #5a5068; \}/);
   for (const level of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']) {
     assert.match(css, new RegExp(`data-pinkie-outside-material="${level}"`));
   }
-  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.pinkie-external-tier \{ animation: none !important/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.pinkie-external-tier::after \{ animation: none !important/);
 });
 
 test('the closed model label follows external tier changes without styling its model name', () => {
@@ -274,7 +275,7 @@ test('the closed model label follows external tier changes without styling its m
   };
   const document = {
     addEventListener() {},
-    createElement() { return {className: '', textContent: ''}; },
+    createElement() { return {className: '', textContent: '', dataset: {}}; },
     createTextNode(textContent) { return {textContent}; },
   };
   const window = {};
