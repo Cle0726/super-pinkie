@@ -154,6 +154,38 @@
     });
   }
 
+  function modelBrand(provider, id) {
+    const model = String(id || "").toLowerCase().split("/").at(-1);
+    const source = String(provider || "").toLowerCase();
+    if (/^(?:gemini|gemma|veo)(?:[-_.:]|$)/.test(model)) return "gemini";
+    if (/^(?:claude)(?:[-_.:]|$)/.test(model)) return "claude";
+    if (/^(?:gpt|codex|o1|o3|o4)(?:[-_.:]|$)/.test(model)) return "codex";
+    if (/^grok(?:[-_.:]|$)/.test(model)) return "grok";
+    if (/^groq(?:[-_.:]|$)/.test(model)) return "groq";
+    if (/^deepseek(?:[-_.:]|$)/.test(model)) return "deepseek";
+    if (/^mistral(?:[-_.:]|$)/.test(model)) return "mistral";
+    if (/^(?:kimi|moonshot)(?:[-_.:]|$)/.test(model)) return "kimi";
+    if (/^(?:qwen|qwq)(?:[-_.:]|$)/.test(model)) return "alibaba";
+    if (/^(?:glm|zai)(?:[-_.:]|$)/.test(model)) return "zai";
+    if (/^(?:llama|ollama)(?:[-_.:]|$)/.test(model)) return "ollama";
+    if (/^minimax(?:[-_.:]|$)/.test(model)) return "minimax";
+    if (/^doubao(?:[-_.:]|$)/.test(model)) return "doubao";
+    if (/^perplexity(?:[-_.:]|$)/.test(model)) return "perplexity";
+    return ({anthropic: "claude", openai: "codex", google: "gemini", xai: "grok",
+      deepseek: "deepseek", mistral: "mistral", moonshot: "kimi", alibaba: "alibaba",
+      zai: "zai", ollama: "ollama", groq: "groq", minimax: "minimax", doubao: "doubao"})[source] || "crossmodel";
+  }
+
+  function syncModelBrands(browser) {
+    browser?.querySelectorAll?.("[data-chat-model-option]")?.forEach((option) => {
+      const value = option.getAttribute?.("data-chat-model-option") || "";
+      const separator = value.indexOf("/");
+      const provider = separator < 0 ? "" : value.slice(0, separator);
+      const id = separator < 0 ? value : value.slice(separator + 1);
+      if (option.dataset) option.dataset.pinkieBrand = modelBrand(provider, id);
+    });
+  }
+
   function familyForSession(state) {
     const session = state?.session;
     if (!session?.model) return null;
@@ -342,6 +374,7 @@
     details?.setAttribute?.("data-pinkie-level", String(visualLevel));
     details?.setAttribute?.("data-pinkie-step-index", String(index));
     details?.setAttribute?.("data-pinkie-material", material);
+    details?.setAttribute?.("data-pinkie-outside-material", material);
     details?.style?.setProperty?.("--pinkie-material-rank", String(MATERIAL_RANK.get(material) ?? index));
     syncFrame(details, material);
   }
@@ -387,6 +420,29 @@
     close();
   }
 
+  function splitModelTier(text) {
+    const match = /^(.*?)\s*[·•]\s*(off|minimal|low|medium|high|xhigh|adaptive|max|ultra)\s*$/i.exec(String(text || ""));
+    return match ? {name: match[1].trim(), tier: match[2].toLowerCase()} : {name: String(text || "").trim(), tier: ""};
+  }
+
+  function writeTriggerLabel(label, name, tier) {
+    const display = tier ? `${name} · ${LEVEL_LABELS[tier]}` : name;
+    const decorated = label.querySelector?.(":scope > .pinkie-external-tier");
+    if (label.textContent?.trim() === display && Boolean(decorated) === Boolean(tier)) return display;
+    if (!tier || !document.createElement || !document.createTextNode || !label.replaceChildren) {
+      label.textContent = display;
+      return display;
+    }
+    const model = document.createElement("span");
+    model.className = "pinkie-external-model-name";
+    model.textContent = name;
+    const level = document.createElement("span");
+    level.className = "pinkie-external-tier";
+    level.textContent = LEVEL_LABELS[tier];
+    label.replaceChildren(model, document.createTextNode(" · "), level);
+    return display;
+  }
+
   function syncTrigger(details) {
     const summary = details?.querySelector?.(":scope > summary.chat-controls__inline-select-trigger");
     const label = summary?.querySelector?.(".chat-controls__inline-select-label");
@@ -400,22 +456,26 @@
     }
     if (text !== state.appliedText) state.nativeText = text;
     if (aria !== state.appliedAria) state.nativeAria = aria;
-    const tier = selectedEnhancement(currentSessionKey(details));
+    const native = splitModelTier(state.nativeText);
     const fallback = fallbackStates.get(details);
-    const fallbackName = fallback?.key === currentSessionKey(details) && fallback.session ? fallback.modelName : "";
-    if (!tier && !fallbackName) {
-      if (state.appliedText && text === state.appliedText) label.textContent = state.nativeText;
+    const matchingFallback = fallback?.key === currentSessionKey(details) && fallback.session;
+    const fallbackTier = matchingFallback && !fallback.switchingModel && MATERIAL_RANK.has(fallback.session.thinkingLevel)
+      ? fallback.session.thinkingLevel : "";
+    const tier = selectedEnhancement(currentSessionKey(details)) || fallbackTier
+      || (matchingFallback && fallback.switchingModel ? "" : native.tier);
+    if (tier) details?.setAttribute?.("data-pinkie-outside-material", tier);
+    else details?.removeAttribute?.("data-pinkie-outside-material");
+    const base = matchingFallback ? fallback.modelName || native.name : native.name;
+    const display = writeTriggerLabel(label, base, tier);
+    if (!matchingFallback && !tier) {
       if (state.appliedAria && aria === state.appliedAria) summary.setAttribute("aria-label", state.nativeAria);
       state.appliedText = "";
       state.appliedAria = "";
       return;
     }
-    const base = fallbackName || state.nativeText.replace(/\s*[·•]\s*[^·•]+$/, "").trim();
-    const display = tier ? `${base || state.nativeText} · ${LEVEL_LABELS[tier]}` : base;
     const colon = state.nativeAria.lastIndexOf(":");
     const displayAria = colon >= 0 ? `${state.nativeAria.slice(0, colon + 1)} ${display}` : display;
-    if (text !== display) label.textContent = display;
-    if (aria !== displayAria) summary.setAttribute("aria-label", displayAria);
+    if (aria !== displayAria) summary.setAttribute?.("aria-label", displayAria);
     state.appliedText = display;
     state.appliedAria = displayAria;
   }
@@ -600,6 +660,7 @@
       option.type = "button";
       option.className = "chat-controls__combined-model-option pinkie-fallback-option";
       option.dataset.chatModelOption = `${model.provider}/${model.id}`;
+      option.dataset.pinkieBrand = modelBrand(model.provider, model.id);
       if (model.family) option.dataset.pinkieFamily = `${model.family.provider}/${model.family.canonical}`;
       const selected = model.family
         ? model.family.ids.some((id) => state.selectedModel === `${model.provider}/${id}`)
@@ -753,6 +814,7 @@
     const browser = menu?.querySelector(".chat-controls__model-browser");
     if (!menu || !browser) return;
     const fallback = ensureFallbackData(details, browser);
+    syncModelBrands(browser);
     if (!fallback) extendNativeRange(nativeRange, details);
     const fallbackRange = fallback?.session ? ensureFallbackRange(details, menu, fallback) : null;
     const visibleRange = fallbackRange || nativeRange;
@@ -782,6 +844,13 @@
     const modelName = fallback?.modelName || draftName || current.replace(/\s*[·•]\s*[^·•]+$/, "").trim() || current;
     const name = button.querySelector(".pinkie-model-current__name");
     if (name.textContent !== modelName) name.textContent = modelName;
+    const selectedRef = fallback?.selectedModel
+      || menu.querySelector?.('[data-chat-model-option][aria-selected="true"]')?.getAttribute?.("data-chat-model-option") || "";
+    if (selectedRef && button.dataset) {
+      const separator = selectedRef.indexOf("/");
+      button.dataset.pinkieBrand = modelBrand(separator < 0 ? "" : selectedRef.slice(0, separator),
+        separator < 0 ? selectedRef : selectedRef.slice(separator + 1));
+    } else if (button.dataset) delete button.dataset.pinkieBrand;
     const expanded = details.dataset.pinkieModelsOpen === "1";
     button.setAttribute("aria-expanded", String(expanded));
     button.setAttribute("aria-label", `${expanded ? "收起模型列表" : "选择模型"}，当前 ${modelName}`);
