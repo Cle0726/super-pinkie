@@ -142,15 +142,61 @@
     return family;
   }
 
-  function presentationModels(models) {
-    const seen = new Set();
-    return models.flatMap((model) => {
+  function presentationModels(models, selectedModel = "") {
+    const seenFamilies = new Set();
+    const folded = models.flatMap((model) => {
       const family = modelFamily(model, models);
-      if (!family) return [{...model, family: null}];
+      if (!family) return [{...model, family: null,
+        sources: [`${model.provider}/${model.id}`]}];
       const key = `${family.provider}/${family.canonical}`;
-      if (seen.has(key)) return [];
-      seen.add(key);
-      return [{...model, id: family.canonical, name: family.label, family}];
+      if (seenFamilies.has(key)) return [];
+      seenFamilies.add(key);
+      return [{...model, id: family.canonical, name: family.label, family,
+        sources: family.ids.map((id) => `${family.provider}/${id}`)}];
+    });
+    const byId = new Map();
+    for (const model of folded) {
+      // Provider names are routing details. The same model ID is one choice,
+      // but keep every backing route so an existing session stays selected.
+      const key = model.id.toLowerCase();
+      const previous = byId.get(key);
+      if (!previous) { byId.set(key, model); continue; }
+      const sources = [...new Set([...previous.sources, ...model.sources])];
+      const score = (entry) => (/^(?:gpt|codex)[-_.]/i.test(entry.id)
+        && entry.provider === "clekk" ? 200 : 0)
+        + (entry.provider === selectedModel.slice(0, selectedModel.indexOf("/"))
+          && entry.sources.includes(selectedModel) ? 100 : 0);
+      byId.set(key, {...(score(model) > score(previous) ? model : previous), sources});
+    }
+    return [...byId.values()];
+  }
+
+  const MODEL_GROUP_ORDER = ["GPT", "Codex", "Gemini", "Gemma", "Claude", "Grok",
+    "DeepSeek", "Qwen", "Kimi", "GLM", "Mistral", "Llama", "其他模型"];
+  const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
+  function modelGroup(model) {
+    const id = String(model.id || "").toLowerCase();
+    if (/^gpt[-_.]/.test(id)) return "GPT";
+    if (/^codex[-_.]/.test(id)) return "Codex";
+    if (/^gemini[-_.]/.test(id)) return "Gemini";
+    if (/^gemma[-_.]/.test(id)) return "Gemma";
+    if (/^claude[-_.]/.test(id)) return "Claude";
+    if (/^grok[-_.]/.test(id)) return "Grok";
+    if (/^deepseek[-_.]/.test(id)) return "DeepSeek";
+    if (/^(?:qwen|qwq)[-_.]/.test(id)) return "Qwen";
+    if (/^(?:kimi|moonshot)[-_.]/.test(id)) return "Kimi";
+    if (/^(?:glm|zai)[-_.]/.test(id)) return "GLM";
+    if (/^mistral[-_.]/.test(id)) return "Mistral";
+    if (/^(?:llama|ollama)[-_.]/.test(id)) return "Llama";
+    return "其他模型";
+  }
+
+  function groupedPresentationModels(models, selectedModel = "") {
+    return presentationModels(models, selectedModel).sort((left, right) => {
+      const groupDifference = MODEL_GROUP_ORDER.indexOf(modelGroup(left))
+        - MODEL_GROUP_ORDER.indexOf(modelGroup(right));
+      return groupDifference || MODEL_NAME_ORDER.compare(left.name || left.id, right.name || right.id)
+        || MODEL_NAME_ORDER.compare(left.id, right.id);
     });
   }
 
@@ -630,6 +676,10 @@
     if (!session?.model) return "";
     const family = familyForSession(state);
     if (family) return family.label;
+    const selected = `${session.modelProvider || ""}/${session.model}`;
+    const presentation = presentationModels(state.models, selected)
+      .find((item) => item.sources.includes(selected));
+    if (presentation) return presentation.name || presentation.id;
     const model = state.models.find((item) => item.id === session.model && item.provider === session.modelProvider)
       || state.models.find((item) => item.id === session.model);
     return model?.name || session.model;
@@ -643,19 +693,20 @@
       list.className = "pinkie-fallback-catalog";
       browser.append(list);
     }
-    const items = presentationModels(state.models);
-    const signature = `${items.map((model) => `${model.provider}/${model.id}`).join("|")}:${state.selectedModel || ""}:${state.session?.hasActiveRun ? 1 : 0}`;
+    const items = groupedPresentationModels(state.models, state.selectedModel);
+    const signature = `${items.map((model) => `${model.provider}/${model.id}/${model.name}`).join("|")}:${state.selectedModel || ""}:${state.session?.hasActiveRun ? 1 : 0}`;
     if (list.dataset.signature === signature) return;
     list.dataset.signature = signature;
     const fragment = document.createDocumentFragment();
-    let previousProvider = "";
+    let previousGroup = "";
     for (const model of items) {
-      if (model.provider !== previousProvider) {
+      const group = modelGroup(model);
+      if (group !== previousGroup) {
         const heading = document.createElement("span");
-        heading.className = "pinkie-fallback-provider";
-        heading.textContent = model.provider;
+        heading.className = "pinkie-model-group";
+        heading.textContent = group;
         fragment.append(heading);
-        previousProvider = model.provider;
+        previousGroup = group;
       }
       const option = document.createElement("button");
       option.type = "button";
@@ -663,9 +714,7 @@
       option.dataset.chatModelOption = `${model.provider}/${model.id}`;
       option.dataset.pinkieBrand = modelBrand(model.provider, model.id);
       if (model.family) option.dataset.pinkieFamily = `${model.family.provider}/${model.family.canonical}`;
-      const selected = model.family
-        ? model.family.ids.some((id) => state.selectedModel === `${model.provider}/${id}`)
-        : option.dataset.chatModelOption === state.selectedModel;
+      const selected = model.sources.includes(state.selectedModel);
       option.setAttribute("aria-selected", String(selected));
       option.disabled = Boolean(state.session?.hasActiveRun);
       option.textContent = model.name || model.id;
@@ -908,17 +957,20 @@
     }
     const modelOption = event.target.closest?.("[data-chat-model-option]");
     if (modelOption) {
-      if (modelOption.classList?.contains?.("pinkie-fallback-option")) {
+      const fallbackOption = modelOption.classList?.contains?.("pinkie-fallback-option");
+      if (fallbackOption) {
         event.preventDefault?.();
         event.stopImmediatePropagation?.();
       }
       details.dataset.pinkieModelsOpen = "0";
-      if (!modelOption.disabled && modelOption.getAttribute?.("aria-selected") !== "true") {
+      const value = modelOption.getAttribute?.("data-chat-model-option") || "";
+      const selectedRoute = fallbackStates.get(details)?.selectedModel || "";
+      if (!modelOption.disabled && (modelOption.getAttribute?.("aria-selected") !== "true"
+        || (fallbackOption && selectedRoute && value !== selectedRoute))) {
         setEnhancement("", currentSessionKey(details));
         pendingPatches.delete(details);
-        if (modelOption.classList?.contains?.("pinkie-fallback-option")) {
+        if (fallbackOption) {
           const fallback = fallbackStates.get(details);
-          const value = modelOption.getAttribute("data-chat-model-option");
           if (fallback) {
             fallback.selectedModel = value;
             fallback.switchingModel = true;
@@ -929,7 +981,7 @@
           }
         }
         scheduleAutoSave(details, {
-          model: modelOption.getAttribute("data-chat-model-option") || null,
+          model: value || null,
           ...(modelOption.dataset?.pinkieFamily ? {thinkingLevel: null} : {}),
         });
       }

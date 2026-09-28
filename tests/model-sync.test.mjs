@@ -27,6 +27,7 @@ test('verified clekk GPT-6 gets slider capabilities while an unverified provider
   assert.equal(unknown.compat, undefined);
   const [verified] = newModelEntries([], ['gpt-6-sol'], {verifiedGpt6: true});
   assert.equal(verified.reasoning, true);
+  assert.deepEqual(verified.input, ['text', 'image']);
   assert.deepEqual(verified.compat.supportedReasoningEfforts, ['low', 'medium', 'high', 'xhigh']);
 });
 
@@ -123,10 +124,35 @@ test('sync upgrades only its old clekk GPT-6 placeholders, preserving custom and
   assert.equal(config.models.providers.mm.models[0].reasoning, false);
   assert.equal(config.models.providers.clekk.models[0].name, 'GPT-6 Sol');
   assert.equal(config.models.providers.clekk.models[0].reasoning, true);
+  assert.deepEqual(config.models.providers.clekk.models[0].input, ['text', 'image']);
   assert.deepEqual(config.models.providers.clekk.models[0].compat.supportedReasoningEfforts,
     ['low', 'medium', 'high', 'xhigh']);
   assert.equal(config.models.providers.clekk.models[1].name, 'My Luna');
   assert.equal(config.models.providers.clekk.models[1].reasoning, false);
+});
+
+test('sync adds image input only to its exact prior clekk GPT-6 entries', async () => {
+  const current = (id) => ({id, name: id === 'gpt-6-sol' ? 'GPT-6 Sol' : 'My Astra',
+    reasoning: true, input: ['text'], contextWindow: 128000, contextTokens: 128000,
+    compat: {supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh']}});
+  const config = {models: {providers: {
+    clekk: {baseUrl: 'http://127.0.0.1:54395/v1', apiKey: 'secret',
+      models: [current('gpt-6-sol'), current('gpt-6-astra')]},
+  }}};
+  let writes = 0;
+  const sync = createModelSynchronizer({runtime: {config: {
+    current: () => config,
+    async mutateConfigFile({mutate}) { writes++; mutate(config); },
+  }}}, {fetchImpl: async () => new Response(JSON.stringify({data: [
+    {id: 'gpt-6-sol'}, {id: 'gpt-6-astra'},
+  ]}), {status: 200})});
+  const result = await sync.sync();
+  assert.equal(result.upgraded, 1);
+  assert.equal(writes, 1);
+  assert.deepEqual(config.models.providers.clekk.models[0].input, ['text', 'image']);
+  assert.deepEqual(config.models.providers.clekk.models[1].input, ['text']);
+  assert.equal((await sync.sync({force: true})).upgraded, 0);
+  assert.equal(writes, 1);
 });
 
 test('one unavailable provider does not block a healthy provider catalog', async () => {

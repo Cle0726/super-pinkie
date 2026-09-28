@@ -24,6 +24,14 @@ function isLegacyAutoDiscoveredGpt6(entry) {
     && entry.name === modelName(entry.id).replace(/^GPT-/, 'GPT ');
 }
 
+function isVerifiedTextOnlyGpt6(entry) {
+  return entry && VERIFIED_GPT6.test(entry.id) && entry.name === modelName(entry.id)
+    && entry.reasoning === true && entry.contextWindow === 128000
+    && entry.contextTokens === 128000 && Array.isArray(entry.input)
+    && entry.input.length === 1 && entry.input[0] === 'text'
+    && JSON.stringify(entry.compat?.supportedReasoningEfforts) === JSON.stringify(GPT6_EFFORTS);
+}
+
 export function chatModelIds(payload) {
   if (!Array.isArray(payload?.data) || payload.data.length > 500) throw new Error('上游模型列表格式不正确');
   return [...new Set(payload.data.map((entry) => entry?.id)
@@ -42,7 +50,7 @@ export function newModelEntries(current, ids, {verifiedGpt6 = false} = {}) {
     const verified = verifiedGpt6 && VERIFIED_GPT6.test(id);
     return {
       id, name: modelName(id), reasoning: verified || reasoning,
-      input: ['text'], contextWindow: 128000, contextTokens: 128000,
+      input: verified ? ['text', 'image'] : ['text'], contextWindow: 128000, contextTokens: 128000,
       ...(verified ? {compat: {supportedReasoningEfforts: [...GPT6_EFFORTS]}} : {}),
     };
   });
@@ -98,17 +106,21 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const verifiedGpt6 = name === 'clekk';
       const legacy = verifiedGpt6 ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry)) : [];
+      // Official GPT-6 modality specs include image input. The local proxy's
+      // image forwarding is intentionally not claimed as tested here.
+      const imagePending = verifiedGpt6 ? (provider.models || [])
+        .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry)) : [];
       return {name, available: ids.length,
-        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6}), legacy};
+        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6}), legacy, imagePending};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
     if (!successes.length) throw results[0].reason;
-    const changes = successes.filter((result) => result.additions.length || result.legacy.length);
+    const changes = successes.filter((result) => result.additions.length || result.legacy.length || result.imagePending.length);
     if (changes.length) {
       await api.runtime.config.mutateConfigFile({
         base: 'source', afterWrite: {mode: 'auto'},
         mutate(draft) {
-          for (const {name, additions: entries, legacy} of changes) {
+          for (const {name, additions: entries, legacy, imagePending} of changes) {
             const models = draft.models?.providers?.[name]?.models;
             if (!Array.isArray(models)) throw new Error(`${name} 模型配置已改变，稍后重试`);
             const live = new Set(models.map((model) => model.id));
@@ -118,7 +130,12 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
               if (!isLegacyAutoDiscoveredGpt6(entry)) continue;
               entry.name = modelName(entry.id);
               entry.reasoning = true;
+              entry.input = ['text', 'image'];
               entry.compat = {supportedReasoningEfforts: [...GPT6_EFFORTS]};
+            }
+            for (const old of imagePending) {
+              const entry = models.find((model) => model.id === old.id);
+              if (isVerifiedTextOnlyGpt6(entry)) entry.input = ['text', 'image'];
             }
           }
         },
@@ -127,11 +144,11 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     lastChecked = now();
     lastResult = {
       added: successes.reduce((sum, result) => sum + result.additions.length, 0),
-      upgraded: successes.reduce((sum, result) => sum + result.legacy.length, 0),
+      upgraded: successes.reduce((sum, result) => sum + result.legacy.length + result.imagePending.length, 0),
       available: successes.reduce((sum, result) => sum + result.available, 0),
       checkedAt: lastChecked,
-      providers: Object.fromEntries(successes.map(({name, available, additions, legacy}) =>
-        [name, {available, added: additions.length, upgraded: legacy.length}])),
+      providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending}) =>
+        [name, {available, added: additions.length, upgraded: legacy.length + imagePending.length}])),
       failed: results.filter((result) => result.status === 'rejected').length,
     };
     return lastResult;
