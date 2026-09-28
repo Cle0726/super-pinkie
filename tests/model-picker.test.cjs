@@ -248,6 +248,8 @@ test('the closed picker decorates only the tier word and preserves the plain mod
   assert.equal(label.children[2].dataset.pinkieTierLabel, 'Ultra');
   const css = read('ui/injections/laolao-theme.css');
   assert.match(css, /\.pinkie-external-model-name \{ color: #5a5068; \}/);
+  assert.doesNotMatch(css, /\.pinkie-external-tier::before\s*\{/);
+  assert.match(css, /\.pinkie-external-tier \{[\s\S]*?filter: drop-shadow/);
   for (const level of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']) {
     assert.match(css, new RegExp(`data-pinkie-outside-material="${level}"`));
   }

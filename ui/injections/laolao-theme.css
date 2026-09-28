@@ -4688,7 +4688,6 @@ html[data-laolao-watchdog-state="recovered"] body::after {
 .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier {
   display: inline-block;
   position: relative;
-  isolation: isolate;
   font-weight: 760;
   letter-spacing: .018em;
   background: var(--pinkie-outside-ink, #625b69);
@@ -4697,20 +4696,8 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(255,255,255,.75));
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.75)) drop-shadow(0 0 2px color-mix(in srgb, var(--pinkie-outside-glow-ink, transparent) 38%, transparent));
   animation: var(--pinkie-outside-motion, none);
-}
-.chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::before {
-  content: attr(data-pinkie-tier-label);
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  color: var(--pinkie-outside-glow-ink, transparent);
-  -webkit-text-fill-color: currentColor;
-  filter: blur(var(--pinkie-outside-blur, 0px));
-  opacity: var(--pinkie-outside-glow-opacity, 0);
-  pointer-events: none;
-  animation: var(--pinkie-outside-aura, none);
 }
 .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::after {
   content: "";
@@ -4740,6 +4727,5 @@ html[data-laolao-watchdog-state="recovered"] body::after {
 @keyframes pinkie-outside-breathe { 50% { opacity: .28; transform: scale(1.07); } }
 @media (prefers-reduced-motion: reduce) {
   .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier,
-  .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::before,
   .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::after { animation: none !important; background-position: 50% 50%; }
 }

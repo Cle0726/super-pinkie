@@ -3,10 +3,25 @@ const MIN_REQUEST_GAP_MS = 30_000;
 const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/;
 const MEDIA_ID = /(?:^|[-_])(?:image|imagine|video|veo|audio|tts|speech|embedding|embed|rerank|transcribe)(?:[-_.]|$)/i;
 const EFFORT_SUFFIX = /-(?:extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/i;
+const VERIFIED_GPT6 = /^gpt-6-(?:astra|sol|luna)$/;
+const GPT6_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh']);
 
 function modelName(id) {
   return id.split(/[-_]/).map((part) => part.toLowerCase() === 'gpt'
-    ? 'GPT' : part ? part[0].toUpperCase() + part.slice(1) : part).join(' ');
+    ? 'GPT' : part ? part[0].toUpperCase() + part.slice(1) : part).join(' ').replace(/^GPT (?=\d)/, 'GPT-');
+}
+
+function isAutoDiscoveredGpt6(entry) {
+  return entry && VERIFIED_GPT6.test(entry.id) && entry.name === modelName(entry.id)
+    && entry.reasoning === false && entry.contextWindow === 128000
+    && entry.contextTokens === 128000 && !entry.compat
+    && Array.isArray(entry.input) && entry.input.length === 1 && entry.input[0] === 'text';
+}
+
+function isLegacyAutoDiscoveredGpt6(entry) {
+  return entry && VERIFIED_GPT6.test(entry.id)
+    && isAutoDiscoveredGpt6({...entry, name: modelName(entry.id)})
+    && entry.name === modelName(entry.id).replace(/^GPT-/, 'GPT ');
 }
 
 export function chatModelIds(payload) {
@@ -15,7 +30,7 @@ export function chatModelIds(payload) {
     .filter((id) => typeof id === 'string' && MODEL_ID.test(id) && !MEDIA_ID.test(id)))];
 }
 
-export function newModelEntries(current, ids) {
+export function newModelEntries(current, ids, {verifiedGpt6 = false} = {}) {
   const known = new Set(current.map((entry) => entry.id));
   return ids.filter((id) => !known.has(id)).map((id) => {
     const base = id.replace(EFFORT_SUFFIX, '');
@@ -24,7 +39,12 @@ export function newModelEntries(current, ids) {
     if (sibling) return {...structuredClone(sibling), id, name: modelName(id)};
     // /v1/models only supplies IDs. Keep unknown capabilities conservative.
     const reasoning = /-(?:reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/.test(id);
-    return {id, name: modelName(id), reasoning, input: ['text'], contextWindow: 128000, contextTokens: 128000};
+    const verified = verifiedGpt6 && VERIFIED_GPT6.test(id);
+    return {
+      id, name: modelName(id), reasoning: verified || reasoning,
+      input: ['text'], contextWindow: 128000, contextTokens: 128000,
+      ...(verified ? {compat: {supportedReasoningEfforts: [...GPT6_EFFORTS]}} : {}),
+    };
   });
 }
 
@@ -73,20 +93,33 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
         signal: AbortSignal.timeout(10_000),
       });
       const ids = chatModelIds(await readLimitedJson(response));
-      return {name, available: ids.length, additions: newModelEntries(provider.models || [], ids)};
+      // This account's clekk GPT-6 endpoints were verified with reasoning_effort.
+      // A different provider advertising the same ID is not proof its key can invoke it.
+      const verifiedGpt6 = name === 'clekk';
+      const legacy = verifiedGpt6 ? (provider.models || [])
+        .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry)) : [];
+      return {name, available: ids.length,
+        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6}), legacy};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
     if (!successes.length) throw results[0].reason;
-    const additions = successes.filter((result) => result.additions.length);
-    if (additions.length) {
+    const changes = successes.filter((result) => result.additions.length || result.legacy.length);
+    if (changes.length) {
       await api.runtime.config.mutateConfigFile({
         base: 'source', afterWrite: {mode: 'auto'},
         mutate(draft) {
-          for (const {name, additions: entries} of additions) {
+          for (const {name, additions: entries, legacy} of changes) {
             const models = draft.models?.providers?.[name]?.models;
             if (!Array.isArray(models)) throw new Error(`${name} 模型配置已改变，稍后重试`);
             const live = new Set(models.map((model) => model.id));
             for (const entry of entries) if (!live.has(entry.id)) { models.push(entry); live.add(entry.id); }
+            for (const old of legacy) {
+              const entry = models.find((model) => model.id === old.id);
+              if (!isLegacyAutoDiscoveredGpt6(entry)) continue;
+              entry.name = modelName(entry.id);
+              entry.reasoning = true;
+              entry.compat = {supportedReasoningEfforts: [...GPT6_EFFORTS]};
+            }
           }
         },
       });
@@ -94,10 +127,11 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     lastChecked = now();
     lastResult = {
       added: successes.reduce((sum, result) => sum + result.additions.length, 0),
+      upgraded: successes.reduce((sum, result) => sum + result.legacy.length, 0),
       available: successes.reduce((sum, result) => sum + result.available, 0),
       checkedAt: lastChecked,
-      providers: Object.fromEntries(successes.map(({name, available, additions}) =>
-        [name, {available, added: additions.length}])),
+      providers: Object.fromEntries(successes.map(({name, available, additions, legacy}) =>
+        [name, {available, added: additions.length, upgraded: legacy.length}])),
       failed: results.filter((result) => result.status === 'rejected').length,
     };
     return lastResult;
