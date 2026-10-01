@@ -2437,6 +2437,8 @@ test('order and answer-style wording does not turn a read-only task into a file 
   const cases=[
     ['请先依次用 read 工具读取 SOUL.md 和 IDENTITY.md；两次读取都完成前不要给最终答复。','两份文件读完了：……'],
     ['改成用 X 方法：不要逐项复述文件，改按“规则—例子—结论”组织。','已采用 X 方法：……'],
+    ['这是一次追加消息修复后的验证。请读取 SOUL.md 并总结。','两份文件读完了：……'],
+    ['看看修改过的 README.md 有没有错别字','读完了，没有错别字。'],
   ];
   for (const [prompt,reply] of cases) {
     const guard=new CompletionIntegrityGuard(),ctx={sessionKey:'agent:learning:order-style',runId:'r'};
