@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {LearningInteractionStore, calculateReviewSchedule, createLearningActivityTool, createLearningNotesTool, detectSimilarNotes, learningPrompt, registerLearningGateway, validateOrganizationOperations} from '../services/mode-architecture/learning.mjs';
+import {LearningInteractionStore, calculateReviewSchedule, createLearningActivityTool, detectSimilarNotes, learningPrompt, registerLearningGateway, validateOrganizationOperations} from '../services/mode-architecture/learning.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-learning-'));
@@ -109,12 +109,14 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   registerLearningGateway({registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); }}, store);
   assert.deepEqual([...methods.keys()].sort(), [
     'pinkie.learning.current', 'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
-    'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.restore',
+    'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
+    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.restore',
     'pinkie.learning.notes.review', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
     'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit',
   ]);
   for (const item of methods.values()) assert.equal(item.opts.scope, 'operator.admin');
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /碧琪学习笔记/);
+  assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /防剧透自检在内部完成/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /题目消息只放题干、选项和必要的生词注释/);
   store.setEnabled('agent:learning:prompt', true);
@@ -129,6 +131,9 @@ test('frontend keeps one native card, restores by revision, and avoids subtree o
   assert.match(source, /pinkie\.learning\.notes\.update/);
   assert.match(source, /pinkie\.learning\.notes\.review/);
   assert.match(source, /pinkie\.learning\.notes\.organize\.apply/);
+  assert.match(source, /pinkie\.learning\.notes\.organize\.light/);
+  assert.match(source, /pinkie\.learning\.notes\.organize\.preview/);
+  assert.doesNotMatch(source, /learning_notes/);
   assert.match(source, /CLEKK_LEARNING_BATCH_V1/);
   assert.match(source, /notes__search/);
   assert.match(source, /notes__tag-filters/);
@@ -347,17 +352,4 @@ test('batch activity result writes review results back to its linked notes', t =
     assert.equal(note.lapses, 1);
     assert.ok(note.nextReviewAt > Date.now());
   }
-});
-
-test('learning notes model tool stages only validated deep proposals', async t => {
-  const store = fixture(t);
-  const sessionKey = 'agent:learning:notes-tool';
-  const note = store.saveNote(sessionKey, {content: 'word = 单词'}).note;
-  const tool = createLearningNotesTool(store, {sessionKey});
-  const light = await tool.execute('light', {action: 'organize_light', note_id: note.id, structured: {term: 'word', meaning: '单词'}, tags: ['单词']});
-  assert.equal(light.isError, false);
-  assert.equal(light.details.note.term, 'word');
-  const deep = await tool.execute('deep', {action: 'propose_deep', request_id: 'tool-plan', operations: [{type: 'group', ids: [note.id], topic: '词汇', reason: '便于复习'}]});
-  assert.equal(deep.isError, false);
-  assert.equal(deep.details.operations[0].type, 'group');
 });
