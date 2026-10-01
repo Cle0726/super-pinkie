@@ -12,6 +12,20 @@
 - 派对首屏只等待必需图片，其他成员素材后台预热。进度平滑推进，输入区域在淡出结束后解除 `inert`。
 - 系统开启「减少动态效果」时缩短入场等待并关闭装饰动画；就绪检查仍保留。
 
+## 模式转场
+
+五个模式切换优先使用 `laolao-mode-transition-fx.js`：唠嗑是气球爆开，项目是蓝图格子翻开，想法是云朵展开，学习是笔尖画星星，无限制是彩虹斜切。揭幕盖住旧页面以后才换路由，目的地稳定后才走完进度条和退场。
+
+想临时关掉新版转场，在页面控制台执行：
+
+```js
+localStorage['laolao:mode-transition-fx'] = 'off'
+```
+
+删掉这个键或改成其他值即可恢复。系统开启「减少动态效果」、浏览器没有可用 WebGL、素材加载/解码失败时，都会自动回到原来的模式转场，不会挡住切换。
+
+转场图仍以 `ui/assets/laolao-mode-transition-<mode>.png` 为原图；重新做人物遮罩和补图层的步骤见 `scripts/mode-transition-assets/README.md`。生成的 `mask / plate / plate-soft / char-soft` 四类文件每个模式各一套，由安装器一并复制。
+
 ## 验证
 
 `node --test tests/motion.test.cjs tests/party-selection.test.cjs` 覆盖单调进度、连续稳定、解码去重/失败/超时、跨页进度衔接、透明 PNG 的像素和白色细节。
