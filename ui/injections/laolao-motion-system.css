@@ -1,0 +1,139 @@
+/* 来啦～老弟动效规范（说明见 docs/UI-MOTION.md）。
+   日常控件克制顺滑：按下即时、松开带轻微回弹，弹层和页面柔和入场。
+   这里只统一 transition / animation 的时长与曲线，并补齐缺少的入场动画：
+   不改布局属性，不新增脚本或观察器，不碰聊天消息区。
+   必须在 laolao-theme.css 之后加载，才能覆盖其中写死的数值。 */
+
+:root {
+  --motion-instant: 90ms;   /* 按下反馈 */
+  --motion-fast: 160ms;     /* 悬停、颜色、开关 */
+  --motion-base: 220ms;     /* 弹层、提示、列表项 */
+  --motion-slow: 420ms;     /* 页面切换 */
+  --ease-out: cubic-bezier(.2, .78, .28, 1);      /* 进入 */
+  --ease-in: cubic-bezier(.4, 0, 1, 1);           /* 离开 */
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);    /* 颜色、透明度 */
+  --ease-spring: cubic-bezier(.34, 1.32, .64, 1); /* 松开、弹层，轻微回弹 */
+}
+
+/* 1. 控件过渡：主题里各处写的是 100–230ms 的不同曲线，这里统一。 */
+:where(
+  .laolao-mode-switcher, .laolao-mode-menu__option,
+  .sidebar-brand__icon, .sidebar-new-session, .sidebar-session-sort, .sidebar-footer-icon,
+  .sidebar-recent-sessions__all, .laolao-group__toggle, .laolao-group__action, .laolao-row-btn,
+  .session-action, .theme-mode-toggle, .nav-item, .nav-section__label, .nav-collapse-toggle,
+  .topbar-icon-btn, .topbar-search,
+  .agent-chat__suggestion, .agent-chat__input-btn, .agent-chat__attach-menu-option,
+  .chat-send-btn, .chat-settings-chip,
+  .chat-controls__provider-option, .chat-controls__inline-select-option,
+  .chat-controls__reasoning-default, .chat-controls__reasoning-option,
+  .laolao-deep-think-btn, .laolao-web-gpt-collab, .laolao-context-compact-btn, .laolao-memory-entry,
+  .laolao-menu__item, .laolao-footer-overflow__item, .laolao-managed-button,
+  .btn
+) {
+  transition:
+    transform var(--motion-fast) var(--ease-spring),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-out),
+    color var(--motion-fast) var(--ease-standard),
+    filter var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard) !important;
+}
+
+/* 2. 按下：主题里有两条互相覆盖的按下效果（scale .965 和 .985），
+   不同按钮手感不一样。统一成一种，按下即时，松开走上面的回弹。 */
+:where(
+  .laolao-mode-switcher, .laolao-mode-menu__option,
+  .sidebar-brand__icon, .sidebar-new-session, .sidebar-session-sort, .sidebar-footer-icon,
+  .sidebar-recent-sessions__all, .laolao-group__toggle, .laolao-group__action, .laolao-row-btn,
+  .session-action, .theme-mode-toggle, .nav-collapse-toggle, .topbar-icon-btn,
+  .agent-chat__suggestion, .agent-chat__input-btn, .chat-send-btn, .chat-settings-chip,
+  .chat-controls__reasoning-default, .chat-controls__reasoning-option,
+  .laolao-deep-think-btn, .laolao-web-gpt-collab, .laolao-context-compact-btn, .laolao-memory-entry,
+  .btn
+):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: translate3d(0, 1px, 0) scale(.97) !important;
+  transition-duration: var(--motion-instant) !important;
+}
+
+/* 整行的菜单项和导航项缩放会显得晃，只轻压一点。 */
+:where(
+  .nav-item, .nav-section__label, .agent-chat__attach-menu-option,
+  .chat-controls__provider-option, .chat-controls__inline-select-option,
+  .laolao-menu__item, .laolao-footer-overflow__item
+):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(.985) !important;
+  transition-duration: var(--motion-instant) !important;
+}
+
+.sidebar-recent-session {
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-out) !important;
+}
+
+/* 3. 弹层：统一已有入场动画的节奏；补上原来瞬间出现的两个。
+   单一动画的弹层才改时长，模型选择和档位菜单有自己调好的多段动画，不动。 */
+.laolao-mode-menu,
+.agent-chat__attach-menu-popover,
+.agent-chat__talk-select-menu,
+.chat-settings-popover,
+.popover,
+.laolao-menu,
+.laolao-modal,
+#laolao-context-compact-popover {
+  animation-duration: var(--motion-base);
+  animation-timing-function: var(--ease-out);
+}
+
+/* 用 translate / scale 独立属性，不覆盖元素自身用于定位的 transform。 */
+.laolao-footer-overflow:not([hidden]),
+.laolao-context-viewer[open] > .laolao-context-viewer__popover {
+  transform-origin: bottom center;
+  animation: laolao-motion-pop-in var(--motion-base) var(--ease-spring) both;
+}
+
+@keyframes laolao-motion-pop-in {
+  from { opacity: 0; translate: 0 6px; scale: .97; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+.laolao-toast {
+  transition:
+    opacity var(--motion-base) var(--ease-out),
+    transform var(--motion-base) var(--ease-spring);
+}
+
+/* 4. 页面切换：设置、会话等页面柔和入场，不再整页闪一下。
+   聊天页有自己的模式转场，不叠加。WebKit 会把分屏里没聚焦的那一半标成
+   hidden 并停住动画时钟，所以分屏和停靠窗口不做入场；起点也不从全透明开始，
+   即使时钟停住，页面仍然可见。 */
+html:not([data-laolao-workspace-split]):not([data-laolao-workspace-dock])
+  openclaw-router-outlet > :not(openclaw-chat-page) {
+  animation: laolao-motion-page-in var(--motion-slow) var(--ease-out) both;
+}
+
+@keyframes laolao-motion-page-in {
+  from { opacity: .55; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* 5. 减少动态效果：所有时长归零，去掉位移和入场动画，只保留状态变化。 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: 0.01ms;
+    --motion-fast: 0.01ms;
+    --motion-base: 0.01ms;
+    --motion-slow: 0.01ms;
+  }
+  :where(button, .btn, [role="button"], .nav-item, .sidebar-recent-session):active {
+    transform: none !important;
+  }
+  .laolao-footer-overflow,
+  .laolao-context-viewer__popover,
+  openclaw-router-outlet > * {
+    animation: none !important;
+  }
+}
