@@ -1,0 +1,116 @@
+/* 碧琪的工作过程卡：和原气泡同一套珍珠玻璃，左边缘对齐碧琪的气泡列。 */
+.chat-group.chat-group--process {
+  display: block !important;
+  margin: 0 16px 6px 4px !important;
+  padding-left: 46px;
+  animation: pinkie-process-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pinkie-process-in { from { opacity: 0; transform: translateY(6px); } }
+.chat-group--process > .chat-group-messages { display: block !important; margin: 0 !important; padding: 0 !important; }
+
+.pinkie-process {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 4px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 253, 254, 0.74), rgba(255, 247, 251, 0.52));
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.10), 0 6px 20px rgba(111, 45, 74, 0.045);
+  transition: box-shadow 0.4s;
+  interpolate-size: allow-keywords;
+}
+.pinkie-process[data-live="1"] { box-shadow: inset 0 0 0 1px rgba(233, 79, 145, 0.26), 0 6px 22px rgba(233, 79, 145, 0.08); }
+/* Nothing to show yet (the very first second of a turn): only the status pill. */
+.pinkie-process:not(:has(.pinkie-process__rows > *)):not(:has(.pinkie-thinking)) { display: none; }
+.pinkie-process::details-content { transition: height 0.45s cubic-bezier(0.22, 1, 0.36, 1), content-visibility 0.45s allow-discrete; height: 0; overflow: clip; }
+.pinkie-process[open]::details-content { height: auto; }
+
+.pinkie-process__summary {
+  list-style: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; cursor: pointer; user-select: none;
+  font-size: 13px; color: #805269;
+}
+.pinkie-process__summary::-webkit-details-marker { display: none; }
+.pinkie-process__summary::after {
+  content: ""; margin-left: auto; width: 7px; height: 7px; flex: none;
+  border-right: 1.6px solid #a36b82; border-bottom: 1.6px solid #a36b82;
+  transform: rotate(-45deg); transition: transform 0.28s;
+}
+.pinkie-process[open] > .pinkie-process__summary::after { transform: rotate(45deg); }
+.pinkie-process__title { font-weight: 600; color: #623247; }
+.pinkie-process__meta { color: #a36b82; font-variant-numeric: tabular-nums; }
+.pinkie-process[open] > .pinkie-process__summary { padding-bottom: 4px; }
+.pinkie-process__rows { padding: 0 14px 8px; }
+.pinkie-process__thinking:not(:empty) { padding: 0 14px 4px; }
+
+/* Rows inside the card: Pinkie's sentences become light text, tools keep their native rows. */
+.pinkie-process .chat-group.chat-group--timeline-step { margin: 0 !important; padding: 0 !important; animation: none !important; }
+.pinkie-process .chat-group--timeline-step > .chat-group-messages { max-width: none !important; width: auto !important; }
+.pinkie-process .chat-group.assistant.chat-group--timeline-step:not(.chat-group--forwarded) .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
+  position: relative;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 3px 0 3px 18px !important;
+  background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  font-size: 14px;
+}
+.pinkie-process .chat-group.assistant.chat-group--timeline-step:not(.chat-group--forwarded) .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict)::before {
+  content: ""; position: absolute; left: 4px; top: 13px; width: 6px; height: 6px; border-radius: 50%; background: #f3c3d8;
+}
+.pinkie-process .chat-timeline-overflow { margin: 2px 0 4px; font-size: 12.5px; color: #a36b82; }
+
+/* thinking */
+.pinkie-thinking__head { all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12.5px; color: #805269; padding: 2px 0; }
+.pinkie-thinking__chev { display: inline-block; width: 10px; color: #a36b82; transition: transform 0.25s; }
+.pinkie-thinking.is-open .pinkie-thinking__chev, .pinkie-thinking.is-live .pinkie-thinking__chev { transform: rotate(90deg); }
+.pinkie-thinking.is-live .pinkie-thinking__label, .pinkie-status__phrase.is-shimmer {
+  background: linear-gradient(90deg, #805269 35%, #e94f91 50%, #805269 65%); background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: pinkie-shimmer 1.8s linear infinite; font-weight: 600;
+}
+@keyframes pinkie-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+.pinkie-thinking__body {
+  margin: 2px 0 6px 4px; padding-left: 12px; border-left: 2px solid rgba(233, 79, 145, 0.22);
+  font-size: 13px; line-height: 1.75; color: #7a5068; white-space: pre-wrap;
+  max-height: 0; overflow: hidden; transition: max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pinkie-thinking.is-live .pinkie-thinking__body {
+  max-height: 68px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, #000 24px); mask-image: linear-gradient(transparent, #000 24px);
+}
+.pinkie-thinking.is-open:not(.is-live) .pinkie-thinking__body { max-height: 240px; overflow-y: auto; }
+
+/* status pill with Pinkie's stickers */
+.pinkie-status {
+  display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 2px 14px 2px 4px; border-radius: 999px;
+  background: rgba(255, 253, 254, 0.78); box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.14), 0 4px 14px rgba(111, 45, 74, 0.05);
+  font-size: 13px; color: #805269; transition: opacity 0.45s, transform 0.45s;
+  animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.pinkie-status.is-gone { opacity: 0; transform: translateY(-4px); }
+.pinkie-status__face { position: relative; width: 44px; height: 44px; margin: -7px -2px; flex: none; }
+.pinkie-status__face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity 0.28s, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
+.pinkie-status__face img.is-in, .pinkie-status__face img.is-out { opacity: 0; transform: scale(0.8); }
+.pinkie-status[data-state="thinking"] img.is-current { animation: pinkie-sway 2.4s ease-in-out infinite; }
+.pinkie-status[data-state="working"] img.is-current { animation: pinkie-hop 0.8s ease-in-out infinite; }
+.pinkie-status[data-state="writing"] img.is-current { animation: pinkie-nod 1.1s ease-in-out infinite; }
+.pinkie-status[data-state="asking"] img.is-current { animation: pinkie-hop 1.4s ease-in-out infinite; }
+.pinkie-status[data-state="done"] img.is-current { animation: pinkie-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.pinkie-status[data-state="oops"] img.is-current { animation: pinkie-shake 0.5s ease both; }
+@keyframes pinkie-sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg) translateY(-1px); } }
+@keyframes pinkie-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } }
+@keyframes pinkie-nod { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-5deg); } 60% { transform: rotate(3deg); } }
+@keyframes pinkie-pop { from { transform: scale(0.6); } }
+@keyframes pinkie-shake { 25% { transform: translateX(-2px) rotate(-3deg); } 75% { transform: translateX(2px) rotate(3deg); } }
+.pinkie-status__phrase { font-weight: 600; }
+.pinkie-status__time { color: #a36b82; font-variant-numeric: tabular-nums; }
+.pinkie-status__time:empty { display: none; }
+
+/* The live card already says Pinkie is busy; hide the native "…" reading bubble. */
+.chat-group--process:has(.pinkie-process__status[data-live="1"] .pinkie-status) ~ .chat-group:has(.chat-reading-indicator) { display: none !important; }
+
+.pinkie-confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483000; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-group--process, .pinkie-process, .pinkie-process *, .pinkie-status, .pinkie-status * { animation: none !important; transition: none !important; }
+}

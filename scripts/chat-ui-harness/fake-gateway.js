@@ -406,19 +406,34 @@
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const persistAndAnnounce = (message) => { const stored = persist(message); sessionMessage(stored); return stored; };
   // Append to the run buffer and stream it in chunks, like emitChatDelta.
+  // The real gateway emits both a `chat` delta and an `agent` assistant event
+  // per chunk; live UI layers (status stickers) listen to the agent stream.
+  const agentStream = (runId, stream, data) => broadcast('agent', {
+    runId, stream, data, sessionKey: SK, agentId: AGENT, seq: 0, ts: now(),
+  });
   async function streamText(runId, addition, chunks, gap) {
     const base = state.runText.get(runId) || '';
     let previous = base;
     for (let i = 1; i <= chunks; i++) {
       const full = base + addition.slice(0, Math.ceil(addition.length * i / chunks));
-      chatDelta(runId, full, previous); previous = full;
+      chatDelta(runId, full, previous);
+      agentStream(runId, 'assistant', {text: full, delta: full.slice(previous.length)});
+      previous = full;
       await sleep(gap);
     }
     state.runText.set(runId, base + addition);
   }
+  async function streamThinking(runId, thought, chunks, gap) {
+    for (let i = 0; i < chunks; i++) {
+      const delta = thought.slice(Math.floor(thought.length * i / chunks), Math.floor(thought.length * (i + 1) / chunks));
+      agentStream(runId, 'thinking', {text: thought.slice(0, Math.floor(thought.length * (i + 1) / chunks)), delta});
+      await sleep(gap);
+    }
+  }
   let toolSeq = 0;
   async function runTool(runId, caller, name, args, result, gap, {say = '', thinking = ''} = {}) {
     const id = `call_${++toolSeq}`;
+    if (thinking) await streamThinking(runId, thinking, 4, gap / 3);
     if (say) await streamText(runId, say, 2, gap / 2);
     const content = [
       ...(thinking ? [{type: 'thinking', thinking}] : []),
@@ -538,7 +553,9 @@
         ['再读一下架构文档，确认有没有冲突规则。', 'read', {path: 'docs/ARCHITECTURE.md'}, '# 架构'],
       ];
       for (const [say, name, args, result] of steps) {
-        await runTool(runId, caller, name, args, result, gap, {say, thinking: o.thinking ? '规划下一步' : ''});
+        const thought = typeof o.thinking === 'string' ? o.thinking
+          : `先想清楚这一步：${say.replace(/。$/, '')}，确认结果后再决定下一步。`;
+        await runTool(runId, caller, name, args, result, gap, {say, thinking: o.thinking ? thought : ''});
       }
       await finishRun(runId, o.reply || '基线测试全部通过，没有发现冲突规则。【最终回复】', gap);
       note('scenario-done', {name: 'narrated'});

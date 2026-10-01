@@ -137,6 +137,8 @@ $Assets = @(
     "laolao-settings-user.js",
     "laolao-ask-user.css",
     "laolao-ask-user.js",
+    "laolao-process-card.css",
+    "laolao-process-card.js",
     "laolao-pinkie-status-thinking.png",
     "laolao-pinkie-status-working.png",
     "laolao-pinkie-status-writing.png",
@@ -263,6 +265,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
         '<link rel="stylesheet" href="./laolao-ask-user.css?v=askuser1">',
+        '<link rel="stylesheet" href="./laolao-process-card.css?v=processcard1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
         '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
         '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx3">',
@@ -290,6 +293,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
         '<script defer src="./laolao-settings-user.js?v=settingsuser1"></script>',
         '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
+        '<script defer src="./laolao-process-card.js?v=processcard1"></script>',
         '<script defer src="./laolao-splash-fx.js?v=splashfx1"></script>',
         '<script defer src="./laolao-splash.js?v=splash28"></script>'
     )
@@ -315,6 +319,7 @@ function Apply-UISkin {
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
         'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
+        'laolao-process-card.css' = 'processcard1'; 'laolao-process-card.js' = 'processcard1';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
@@ -364,14 +369,14 @@ function Apply-UISkin {
     $html = [regex]::Replace(
         $html,
         '(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"',
-            '$1?v=clekk-history32"'
+            '$1?v=clekk-history33"'
     )
     Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
         $entryBundle = Get-Content $_.FullName -Raw -Encoding UTF8
         $entryBundle = [regex]::Replace(
             $entryBundle,
             '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'']*)?',
-            '$1?v=clekk-history32'
+            '$1?v=clekk-history33'
         )
         $entryBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
     }
@@ -394,7 +399,7 @@ function Apply-UISkin {
         $worker = [regex]::Replace(
             $worker,
             '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)',
-            '$1-clekk-history-render-32$2'
+            '$1-clekk-history-render-33$2'
         )
         $worker = $worker.Replace(
             '// Cache-first for hashed assets; network-first for HTML/other.',
