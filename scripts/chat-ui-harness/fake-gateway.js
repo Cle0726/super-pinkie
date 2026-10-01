@@ -146,9 +146,16 @@
     return {seeded: true, keys, queue};
   };
 
-  // Seed: an earlier completed exchange so the window is not empty.
-  persist({role: 'user', content: text('你好，碧琪')});
-  persist({role: 'assistant', content: text('你好呀！有什么要我帮忙的？'), stopReason: 'stop'});
+  // Seed: an earlier completed exchange so the window is not empty.  A page
+  // can instead define window.__fakeSeedHistory (e.g. a real chat.history
+  // `messages` array) before this script runs to replay a recorded session.
+  const seedHistory = Array.isArray(window.__fakeSeedHistory) ? window.__fakeSeedHistory : null;
+  if (seedHistory) {
+    for (const message of seedHistory) persist(clone(message));
+  } else {
+    persist({role: 'user', content: text('你好，碧琪')});
+    persist({role: 'assistant', content: text('你好呀！有什么要我帮忙的？'), stopReason: 'stop'});
+  }
 
   const row = () => ({
     key: SK, sessionId: SID, kind: 'direct', chatType: 'direct', channel: 'webchat',

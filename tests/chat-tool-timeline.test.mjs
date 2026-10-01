@@ -62,8 +62,11 @@ test('the current user turn is split into chronological text and single-tool row
   const rows = timeline.slice(current + 1);
   assert.deepEqual(rows.map((item) => item.role), ['assistant', 'assistant', 'tool', 'tool', 'assistant']);
   assert.match(rows[1].messages[0].message.content[0].text, /核对实现/);
-  assert.equal(rows[2].messages[0].message.toolName, 'read');
-  assert.equal(rows[3].messages[0].message.toolName, 'exec');
+  // Tool identity lives only in the content parts; a top-level toolName would
+  // make the native renderer add its generic "Tool output" card label.
+  assert.equal(rows[2].messages[0].message.toolName, undefined);
+  assert.equal(rows[2].messages[0].message.content[0].name, 'read');
+  assert.equal(rows[3].messages[0].message.content[0].name, 'exec');
   assert.equal(rows[2].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
   assert.equal(rows[3].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
   assert.equal(rows.slice(0, -1).every((item) => item.isTimelineStep === true), true);
@@ -99,7 +102,7 @@ test('older real turns use the same timeline rows and internal user messages do 
   assert.equal(timeline.some((item) => /(?:watchdog|tier-control|empty-control)/u.test(item.key)), false);
   assert.equal(timeline[1].isTimelineStep, true);
   assert.equal(timeline[2].isTimelineStep, true);
-  assert.equal(timeline[2].messages[0].message.toolName, 'read');
+  assert.equal(timeline[2].messages[0].message.content[0].name, 'read');
   assert.equal(timeline[2].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
   assert.equal(timeline[3].key, 'first-final');
   assert.equal(timeline[3].isTimelineStep, undefined);
@@ -260,7 +263,12 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
   return [...prefix, ...safeEntries.slice(userIndex)];
 }`;
 
-function asLegacyV1Bundle(v2Bundle) {
+function asOlderBundle(currentBundle, version) {
+  return currentBundle.replace('/* pinkie-chat-timeline:v3 */', `/* pinkie-chat-timeline:${version} */`);
+}
+
+function asLegacyV1Bundle(v3Bundle) {
+  const v2Bundle = asOlderBundle(v3Bundle, 'v2');
   const v2Marker = '/* pinkie-chat-timeline:v2 */';
   const markerIndex = v2Bundle.indexOf(v2Marker);
   const legacyStart = v2Bundle.indexOf('function isRealUserGroup', markerIndex);
@@ -276,7 +284,7 @@ function asLegacyV1Bundle(v2Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v2/);
+  assert.match(result.text, /pinkie-chat-timeline:v3/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,512\)/);
   assert.match(result.text, /return 512/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -295,16 +303,16 @@ test('native bundle patch is structural, idempotent, syntax-safe and skips chang
   });
 });
 
-test('an installed v1 chat bundle upgrades to v2 through apply and stays idempotent', (t) => {
-  const v2 = transformWithStatus(bundleFixture).text;
-  const v1 = asLegacyV1Bundle(v2);
+test('an installed v1 chat bundle upgrades to v3 through apply and stays idempotent', (t) => {
+  const v3 = transformWithStatus(bundleFixture).text;
+  const v1 = asLegacyV1Bundle(v3);
   assert.match(v1, /pinkie-chat-timeline:v1/);
   assert.match(v1, /const prefix = safeEntries\.slice/);
 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v2/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v3/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -340,7 +348,46 @@ test('timeline tool details keep no card shell and injection cache keys advance'
     assert.match(source, /laolao-queue-steer\.js\?v=queuesteer2/u);
   }
   for (const source of [mac, windows]) {
-    assert.match(source, /clekk-history31/u);
-    assert.match(source, /clekk-history-render-31/u);
+    assert.match(source, /clekk-history32/u);
+    assert.match(source, /clekk-history-render-32/u);
   }
+});
+
+test('an installed v2 chat bundle upgrades to v3 in place', () => {
+  const v3 = transformWithStatus(bundleFixture).text;
+  // The released v2 runtime still gave synthetic tool rows a top-level toolName.
+  const v2 = asOlderBundle(v3, 'v2').replace('return cleanAssistantMessage(message, content);',
+    "return {...message, role: 'assistant', toolName: 'legacy', content};");
+  assert.match(v2, /toolName: 'legacy'/);
+  const upgraded = transformWithStatus(v2);
+  assert.equal(upgraded.changed, true, upgraded.reason);
+  assert.equal(upgraded.reason, 'upgraded-v2');
+  assert.equal(upgraded.text, v3);
+  assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
+});
+
+test('history tool results without their call part render as named tool rows', () => {
+  // chat.history keeps toolResult messages but drops the assistant's toolCall
+  // parts, so after a reload every step arrives as a standalone result.
+  const entries = [
+    group('user', 'user', [message('user', '读取 SOUL.md 并总结', 'user')]),
+    group('assistant', 'say', [message('assistant', '我先读取 SOUL.md。', 'say')]),
+    group('tool', 'result', [{
+      role: 'toolResult', toolName: 'read', toolCallId: 'read-1', isError: false,
+      content: [{type: 'text', text: '# SOUL.md'}],
+    }]),
+    group('assistant', 'final', [message('assistant', '读完了。', 'final')]),
+  ];
+  const timeline = pinkieBuildTimeline(entries, () => []);
+  const row = timeline.find((item) => item.key === 'result:0');
+  assert.equal(row.isTimelineStep, true);
+  const synthetic = row.messages[0].message;
+  assert.equal(synthetic.role, 'assistant');
+  assert.equal(synthetic.toolName, undefined);
+  assert.deepEqual(synthetic.content.map((part) => [part.type, part.name, part.callId]), [
+    ['tool_call', 'read', 'read-1'],
+    ['tool_result', 'read', 'read-1'],
+  ]);
+  assert.equal(synthetic.content[1].text, '# SOUL.md');
+  assert.equal(synthetic.content[1].isError, false);
 });

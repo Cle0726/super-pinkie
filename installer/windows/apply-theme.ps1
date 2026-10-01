@@ -255,8 +255,8 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
-        '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx3">',
         '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
+        '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx3">',
         '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
@@ -297,7 +297,7 @@ function Apply-UISkin {
     $versions = @{
         'laolao-theme.css' = 'theme81'; 'laolao-splash.css' = 'splash20'; 'laolao-sidebar.css' = 'sidebar17';
         'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
-        'laolao-phrases.js' = 'phrases25'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
+        'laolao-phrases.js' = 'phrases26'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx3'; 'laolao-mode-transition-fx.css' = 'modetransitionfx3';
         'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode39'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx1';
         'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume43';
@@ -353,14 +353,14 @@ function Apply-UISkin {
     $html = [regex]::Replace(
         $html,
         '(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"',
-            '$1?v=clekk-history31"'
+            '$1?v=clekk-history32"'
     )
     Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
         $entryBundle = Get-Content $_.FullName -Raw -Encoding UTF8
         $entryBundle = [regex]::Replace(
             $entryBundle,
             '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'']*)?',
-            '$1?v=clekk-history31'
+            '$1?v=clekk-history32'
         )
         $entryBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
     }
@@ -383,7 +383,7 @@ function Apply-UISkin {
         $worker = [regex]::Replace(
             $worker,
             '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)',
-            '$1-clekk-history-render-31$2'
+            '$1-clekk-history-render-32$2'
         )
         $worker = $worker.Replace(
             '// Cache-first for hashed assets; network-first for HTML/other.',
