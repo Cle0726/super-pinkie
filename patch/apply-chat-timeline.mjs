@@ -1,5 +1,5 @@
 /**
- * Patch the native Control UI chat renderer so the latest user turn is a
+ * Patch the native Control UI chat renderer so every visible user turn is a
  * bounded, chronological timeline. The patch is structural and all-or-nothing:
  * an upstream bundle that no longer matches is left byte-for-byte untouched.
  */
@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const marker = '/* pinkie-chat-timeline:v1 */';
+export const marker = '/* pinkie-chat-timeline:v2 */';
+const previousMarker = '/* pinkie-chat-timeline:v1 */';
 export const MAX_TIMELINE_ROWS = 80;
 export const LIVE_MESSAGE_WINDOW = 512;
 export const HISTORY_RENDER_LIMIT = 512;
@@ -319,41 +320,73 @@ function attachToolResults(entry, groupResults, pairedResultKeys, getToolCalls) 
   return {...entry, message: {...message, content}};
 }
 
-/** Pure timeline projection, also exercised directly by unit tests. */
-export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80) {
-  const safeEntries = entries.flatMap((item) => {
-    if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
-    const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
-    return messages.length ? [{...item, messages}] : [];
-  });
-  const userIndex = safeEntries.findLastIndex((item) => item?.kind === 'group'
+function isRealUserGroup(item) {
+  return item?.kind === 'group'
     && String(item.role || '').toLowerCase() === 'user'
-    && (item.messages || []).some((entry) => !isInternalUserMessage(entry?.message || {})));
-  if (userIndex < 0) return safeEntries;
+    && (item.messages || []).some((entry) => !isInternalUserMessage(entry?.message || {}));
+}
 
+function timelineTimestamp(item) {
+  return item?.timestamp
+    ?? item?.messages?.[0]?.message?.timestamp
+    ?? item?.messages?.[0]?.timestamp
+    ?? 0;
+}
+
+function collapseTimelineTurn(turn, maxRows) {
+  const rowLimit = Math.max(4, Number.isFinite(maxRows) ? Math.floor(maxRows) : 80);
+  if (turn.length <= rowLimit) return turn;
+  const trailingRows = rowLimit - 2;
+  const hiddenEnd = turn.length - trailingRows;
+  const hidden = turn.slice(1, hiddenEnd);
+  const first = turn[0] || {};
+  const overflow = {
+    kind: 'group',
+    key: `pinkie:timeline:overflow:${String(first.key || first.messages?.[0]?.key || 'turn')}`,
+    role: 'assistant',
+    messages: [],
+    timestamp: timelineTimestamp(first),
+    timelineOverflow: true,
+    overflowItems: hidden,
+    overflowCount: hidden.length,
+  };
+  return [first, overflow, ...turn.slice(-trailingRows)];
+}
+
+function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
+  if (!entries.length) return [];
   let lastToolIndex = -1;
-  for (let index = userIndex + 1; index < safeEntries.length; index += 1) {
-    const item = safeEntries[index];
-    if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'tool') lastToolIndex = index;
+  for (let index = 1; index < entries.length; index += 1) {
+    const item = entries[index];
+    if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'tool') {
+      lastToolIndex = index;
+    }
   }
   let finalAssistantIndex = -1;
-  for (let index = userIndex + 1; index < safeEntries.length; index += 1) {
-    const item = safeEntries[index];
+  for (let index = 1; index < entries.length; index += 1) {
+    const item = entries[index];
     if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'assistant'
-        && (lastToolIndex < 0 || index > lastToolIndex)) finalAssistantIndex = index;
+        && (lastToolIndex < 0 || index > lastToolIndex)) {
+      finalAssistantIndex = index;
+    }
   }
 
-  const turn = [safeEntries[userIndex]];
-  for (let index = userIndex + 1; index < safeEntries.length; index += 1) {
-    const item = safeEntries[index];
+  const turn = [entries[0]];
+  for (let index = 1; index < entries.length; index += 1) {
+    const item = entries[index];
     if (item?.kind !== 'group') {
-      turn.push(item?.kind === 'stream' || item?.kind === 'reading-indicator'
-        ? {...item, isTimelineStep: true}
-        : item);
+      // Live-only entries are emitted by the active user turn. A stale one
+      // must not survive as an old native-rendered row after the next send.
+      if (item?.kind === 'stream' || item?.kind === 'reading-indicator') {
+        if (isLatestTurn) turn.push({...item, isTimelineStep: true});
+        continue;
+      }
+      turn.push(item);
       continue;
     }
     const role = String(item.role || '').toLowerCase();
     if (role === 'assistant' && index === finalAssistantIndex) {
+      // The final response deliberately keeps the normal assistant bubble.
       turn.push(item);
       continue;
     }
@@ -375,26 +408,34 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
       }
     }
   }
+  return collapseTimelineTurn(turn, maxRows);
+}
 
-  const prefix = safeEntries.slice(Math.max(0, userIndex - 16), userIndex);
-  const rowLimit = Math.max(4, Number.isFinite(maxRows) ? Math.floor(maxRows) : 80);
-  if (turn.length > rowLimit) {
-    const trailingRows = rowLimit - 2;
-    const hiddenEnd = turn.length - trailingRows;
-    const hidden = turn.slice(1, hiddenEnd);
-    const overflow = {
-      kind: 'group',
-      key: `pinkie:timeline:overflow:${turn[0]?.key || 'turn'}`,
-      role: 'assistant',
-      messages: [],
-      timestamp: turn[0]?.timestamp ?? Date.now(),
-      timelineOverflow: true,
-      overflowItems: hidden,
-      overflowCount: hidden.length,
-    };
-    return [...prefix, turn[0], overflow, ...turn.slice(-trailingRows)];
+/** Pure timeline projection, also exercised directly by unit tests. */
+export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80) {
+  const safeEntries = (Array.isArray(entries) ? entries : []).flatMap((item) => {
+    if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
+    const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
+    return messages.length ? [{...item, messages}] : [];
+  });
+  const turnStarts = [];
+  for (let index = 0; index < safeEntries.length; index += 1) {
+    if (isRealUserGroup(safeEntries[index])) turnStarts.push(index);
   }
-  return [...prefix, ...turn];
+  if (!turnStarts.length) return safeEntries;
+
+  const timeline = [...safeEntries.slice(0, turnStarts[0])];
+  for (let turnIndex = 0; turnIndex < turnStarts.length; turnIndex += 1) {
+    const start = turnStarts[turnIndex];
+    const end = turnStarts[turnIndex + 1] ?? safeEntries.length;
+    timeline.push(...projectTimelineTurn(
+      safeEntries.slice(start, end),
+      getToolCalls,
+      maxRows,
+      turnIndex === turnStarts.length - 1,
+    ));
+  }
+  return timeline;
 }
 
 function escapeRegExp(value) {
@@ -422,11 +463,38 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineTurn.toString()}\n${projectTimelineTurn.toString()}\n${pinkieBuildTimeline.toString()}`;
+}
+
+function upgradeV1Bundle(original) {
+  try {
+    const markerIndex = original.indexOf(previousMarker);
+    if (markerIndex < 0 || original.indexOf(previousMarker, markerIndex + previousMarker.length) >= 0) {
+      throw new Error('cannot identify exactly one v1 timeline runtime');
+    }
+    const history = functionSection(original, 'Showing last ${c} messages');
+    if (history.start <= markerIndex
+        || !history.text.includes('pinkieBuildTimeline(__pinkieTimelineEntries,')) {
+      throw new Error('v1 history projection is missing');
+    }
+    const runtime = `${marker}${splitRuntimeSource()}\n`;
+    return {
+      text: sourceWithReplacement(original, markerIndex, history.start, runtime),
+      changed: true,
+      reason: 'upgraded-v1',
+    };
+  } catch (error) {
+    return {text: original, changed: false, reason: String(error?.message || error)};
+  }
+}
+
+function sourceWithReplacement(source, start, end, replacement) {
+  return source.slice(0, start) + replacement + source.slice(end);
 }
 
 function transformBundle(original) {
   if (original.includes(marker)) return {text: original, changed: false, reason: 'already-patched'};
+  if (original.includes(previousMarker)) return upgradeV1Bundle(original);
   try {
     let source = original;
     const liPattern = /(function\s+([\w$]+)\(e\)\{)(?=if\(!e\|\|typeof e!=`object`\)return!1;let t=e;if\(O\(t\.role\)!==`assistant`)(?=[\s\S]{0,800}?hasVisibleNonTextContent)/gu;
