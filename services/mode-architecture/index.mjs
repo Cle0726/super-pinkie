@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFile, spawnSync} from 'node:child_process';
 import {LongTermMemoryStore, memorySystemRules, renderRetrievedMemory} from './memory.mjs';
-import {LearningInteractionStore, createLearningActivityTool, createLearningNotesTool, learningPrompt, registerLearningGateway} from './learning.mjs';
+import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {registerReasoningGateway} from './reasoning.mjs';
@@ -5328,7 +5328,6 @@ export default {
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
-    api.registerTool?.(ctx => createLearningNotesTool(learning, ctx), {name: 'learning_notes'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     registerLearningGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
