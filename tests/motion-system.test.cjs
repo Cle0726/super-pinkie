@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 const css = read('ui/injections/laolao-motion-system.css');
+const modeMenuFx = read('ui/injections/laolao-mode-menu-fx.css');
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('motion tokens are defined once and used instead of hard-coded timings', () => {
@@ -43,8 +44,14 @@ test('motion system loads after the theme on macOS and Windows with matching ver
   assert.match(mac, /laolao-motion-system\.css\?v=motionsys1/);
   assert.match(windows, /"laolao-motion-system\.css"/);
   assert.match(windows, /'laolao-motion-system\.css' = 'motionsys1'/);
+  assert.match(mac, /laolao-mode-menu-fx\.css \\/);
+  assert.match(mac, /laolao-mode-menu-fx\.css\?v=modemenufx1/);
+  assert.match(windows, /"laolao-mode-menu-fx\.css"/);
+  assert.match(windows, /'laolao-mode-menu-fx\.css' = 'modemenufx1'/);
   assert.ok(fragment.indexOf('laolao-motion-system.css') > fragment.indexOf('laolao-theme.css'));
+  assert.ok(fragment.indexOf('laolao-mode-menu-fx.css') > fragment.indexOf('laolao-motion-system.css'));
   // New links are appended before </head>, after the theme link inserted earlier.
   assert.ok(mac.indexOf("grep -Fq 'laolao-motion-system.css'") > mac.indexOf("grep -Fq './laolao-theme.css'"));
   assert.doesNotMatch(css, /MutationObserver|<script/);
+  assert.doesNotMatch(modeMenuFx, /MutationObserver|<script/);
 });

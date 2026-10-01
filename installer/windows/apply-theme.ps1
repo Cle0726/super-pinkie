@@ -135,6 +135,7 @@ $Assets = @(
     "laolao-settings-user.css",
     "laolao-settings-user.js",
     "laolao-motion-system.css",
+    "laolao-mode-menu-fx.css",
     "laolao-mode-transition-fx.css",
     "laolao-party-entry.js",
     "laolao-party-avatar-v1.png",
@@ -253,6 +254,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
         '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx2">',
+        '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
         '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
@@ -293,7 +295,7 @@ function Apply-UISkin {
         'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases23'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx2'; 'laolao-mode-transition-fx.css' = 'modetransitionfx2';
-        'laolao-mode-switcher.js' = 'mode38'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash27';
+        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode39'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash27';
         'laolao-handoff-bootstrap.js' = 'handoff6'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume41';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
@@ -327,7 +329,7 @@ function Apply-UISkin {
     # Some legacy heads keep other tags between FX and the switcher. Move the
     # former beside the latter so deferred execution order is reliable.
     $fxTag = '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx2"></script>'
-    $switcherTag = '<script defer src="./laolao-mode-switcher.js?v=mode38"></script>'
+    $switcherTag = '<script defer src="./laolao-mode-switcher.js?v=mode39"></script>'
     $fxPattern = '(?is)\s*<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-transition-fx\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>\s*'
     $html = [regex]::Replace($html, $fxPattern, "`n")
     $switcherPattern = '(?is)<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-switcher\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>'

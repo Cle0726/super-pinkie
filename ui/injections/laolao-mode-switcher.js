@@ -91,6 +91,26 @@
   let menuAnchor = null;
   let switching = false;
   let preloading = false;
+  let pendingModePortraitFx = null;
+  const modeSignatureCleanup = new WeakMap();
+  const modeSignatureAnimation = Object.freeze({
+    chat: "laolao-mode-fx-chat-bounce",
+    project: "laolao-mode-fx-project-peek",
+    thinking: "laolao-mode-fx-thinking-tilt",
+    learning: "laolao-mode-fx-learning-rise",
+    unrestricted: "laolao-mode-fx-unrestricted-steps",
+  });
+  // A few native routes set the root data attribute before this injection has
+  // a chance to paint. Track our own last presented mode so a genuine switch
+  // cannot be mistaken for an ordinary repaint.
+  let presentedModeId = null;
+
+  // CSS derives the visible durations from the shared motion tokens. These
+  // timers only retire one-shot classes/nodes after their last frame.
+  const MODE_MENU_FX_ENTRY_LIFETIME = 900;
+  const MODE_MENU_FX_ACTION_LIFETIME = 1100;
+  const MODE_MENU_FX_BURST_LIFETIME = 760;
+  const MODE_MENU_FX_SWAP_LIFETIME = 620;
 
   const hasWorkspaceDock = () => Boolean(
     window.webkit?.messageHandlers?.laolaoWorkspaceDock?.postMessage
@@ -172,6 +192,9 @@
 
   const activeMode = () => modeFromSession() || localStorage.getItem(storageKey) || "chat";
   const modeById = (id) => modes.find((mode) => mode.id === id) || modes[0];
+  const modeFxReduced = () => Boolean(
+    motion?.reduced?.() || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+  );
   const modeIdForSession = (key) => {
     if (String(key).startsWith("agent:project:")) return "project";
     if (String(key).startsWith("agent:thinking:")) return "thinking";
@@ -221,11 +244,22 @@
   });
 
   const syncModePresentation = (mode) => {
-    const previousMode = document.documentElement.getAttribute("data-laolao-mode");
+    const previousMode = presentedModeId ?? document.documentElement.getAttribute("data-laolao-mode");
     if (previousMode !== mode.id) {
+      // The root attribute changes before the router finishes. Keep the old
+      // portrait until the new chat is ready, then consume this token exactly
+      // once. A normal observer repaint cannot create a second swap.
+      if (previousMode && !modeFxReduced()) {
+        pendingModePortraitFx = {
+          from: previousMode,
+          to: mode.id,
+          armed: !switching,
+        };
+      }
       document.documentElement.setAttribute("data-laolao-mode", mode.id);
       window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
     }
+    presentedModeId = mode.id;
 
     document.querySelectorAll(".dashboard-header__breadcrumb-link").forEach((element) => {
       if (element.getAttribute("data-laolao-mode-label") !== mode.label) {
@@ -476,13 +510,62 @@
     window.requestAnimationFrame(tick);
   });
 
-  const switchMode = async (mode) => {
+  // The menu is removed as soon as a real switch starts. Put this short-lived
+  // ghost on body first so the selected portrait can grow and burst without
+  // delaying either the transition cover or the router handoff.
+  const launchSelectionBurst = (sourceOption, mode) => {
+    if (modeFxReduced()) return;
+    const sourcePortrait = sourceOption?.querySelector(".laolao-mode-button__portrait");
+    if (!sourcePortrait) return;
+    const bounds = sourcePortrait.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+
+    const burst = document.createElement("span");
+    burst.className = "laolao-mode-fx-burst";
+    burst.dataset.mode = mode.id;
+    burst.setAttribute("aria-hidden", "true");
+    burst.style.setProperty("--laolao-mode-fx-x", `${Math.round(bounds.left)}px`);
+    burst.style.setProperty("--laolao-mode-fx-y", `${Math.round(bounds.top)}px`);
+
+    const avatar = document.createElement("img");
+    avatar.src = mode.avatar;
+    avatar.alt = "";
+    avatar.draggable = false;
+    burst.append(avatar);
+    for (let index = 0; index < 5; index += 1) burst.append(document.createElement("i"));
+    document.body.append(burst);
+
+    let cleaned = false;
+    const clean = () => {
+      if (cleaned) return;
+      cleaned = true;
+      burst.remove();
+    };
+    burst.addEventListener("animationend", (event) => {
+      if (event.target === avatar) clean();
+    });
+    window.requestAnimationFrame(() => burst.classList.add("is-playing"));
+    window.setTimeout(clean, MODE_MENU_FX_BURST_LIFETIME);
+  };
+
+  const flushPendingModePortraitFx = (mode) => {
+    const pending = pendingModePortraitFx;
+    if (!pending || pending.to !== mode.id) return;
+    // The router may have rebuilt the sidebar while the cover was playing.
+    // Let render() reacquire the current visible trigger instead of animating
+    // a stale button reference from the previous chat tree.
+    pending.armed = true;
+    render();
+  };
+
+  const switchMode = async (mode, sourceOption = null) => {
     if (switching) return;
     if (mode.id === activeMode()) {
       closeMenu();
       return;
     }
     switching = true;
+    launchSelectionBurst(sourceOption, mode);
     closeMenu();
     rememberSession(currentSessionKey());
     const [transition, targetSessionKey] = await Promise.all([
@@ -504,24 +587,137 @@
     )), 0);
     syncModePresentation(targetMode);
     await finishModeTransition(targetMode, transition);
+    flushPendingModePortraitFx(targetMode);
   };
 
   // Keep the surface live: the old SVG banners baked text and an opaque pill
-  // into one image. Use the original HD portraits and native text instead.
-  const renderModeButton = (button, mode) => {
-    if (button.dataset.mode === mode.id && button.querySelector('.laolao-mode-button__label')) return;
+  // into one image. The portrait wrapper is fully ours, so it is safe to give
+  // the avatar a halo and small props without touching Lit-managed content.
+  const renderModeButton = (button, mode, {
+    current = false,
+    force = false,
+    animateSwap = false,
+    outgoingMode = null,
+  } = {}) => {
+    const currentPortrait = button.querySelector(".laolao-mode-button__portrait");
+    const isCurrent = currentPortrait?.classList.contains("is-current") || false;
+    if (!force && button.dataset.mode === mode.id && button.querySelector(".laolao-mode-button__label") && isCurrent === current) {
+      return false;
+    }
+
+    const outgoingAvatar = animateSwap && !modeFxReduced()
+      ? createPortraitImage(outgoingMode?.avatar) || currentPortrait?.querySelector("img")?.cloneNode(true)
+      : null;
+    const portrait = createModePortrait(mode, current);
+    if (outgoingAvatar) {
+      outgoingAvatar.className = "laolao-mode-button__portrait-leaving";
+      portrait.append(outgoingAvatar);
+      portrait.classList.add("laolao-mode-button__portrait--fx-swap");
+      let cleaned = false;
+      const cleanSwap = () => {
+        if (cleaned) return;
+        cleaned = true;
+        outgoingAvatar.remove();
+        portrait.classList.remove("laolao-mode-button__portrait--fx-swap");
+      };
+      portrait.addEventListener("animationend", (event) => {
+        if (event.target === outgoingAvatar) cleanSwap();
+      });
+      window.setTimeout(cleanSwap, MODE_MENU_FX_SWAP_LIFETIME);
+    }
+
     button.dataset.mode = mode.id;
-    const portrait = document.createElement('img');
-    portrait.src = mode.avatar;
-    portrait.alt = '';
-    portrait.draggable = false;
-    const label = document.createElement('span');
-    label.className = 'laolao-mode-button__label';
+    const label = document.createElement("span");
+    label.className = "laolao-mode-button__label";
     label.textContent = mode.label;
-    const arrow = document.createElement('span');
-    arrow.className = 'laolao-mode-button__arrow';
-    arrow.setAttribute('aria-hidden', 'true');
+    const arrow = document.createElement("span");
+    arrow.className = "laolao-mode-button__arrow";
+    arrow.setAttribute("aria-hidden", "true");
     button.replaceChildren(portrait, label, arrow);
+    return true;
+  };
+
+  const createPortraitImage = (src) => {
+    if (!src) return null;
+    const avatar = document.createElement("img");
+    avatar.src = src;
+    avatar.alt = "";
+    avatar.draggable = false;
+    return avatar;
+  };
+
+  const createModePortrait = (mode, current) => {
+    const portrait = document.createElement("span");
+    portrait.className = "laolao-mode-button__portrait";
+    portrait.dataset.mode = mode.id;
+    portrait.setAttribute("aria-hidden", "true");
+    if (current) portrait.classList.add("is-current");
+
+    const halo = document.createElement("span");
+    halo.className = "laolao-mode-button__halo";
+    const fx = document.createElement("span");
+    fx.className = "laolao-mode-button__fx";
+    const bubbles = mode.id === "thinking" ? document.createElement("span") : null;
+    if (bubbles) {
+      bubbles.className = "laolao-mode-button__fx-bubbles";
+      bubbles.setAttribute("aria-hidden", "true");
+      for (let index = 0; index < 3; index += 1) bubbles.append(document.createElement("i"));
+    }
+    const createSvg = document.createElementNS
+      ? (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag)
+      : (tag) => document.createElement(tag);
+    const star = createSvg("svg");
+    // SVGAnimatedString is readonly in WebKit, so use the DOM attribute
+    // instead of assigning className as we do for ordinary HTML spans.
+    star.setAttribute("class", "laolao-mode-button__fx-star");
+    star.setAttribute("viewBox", "0 0 42 42");
+    star.setAttribute("aria-hidden", "true");
+    const starPath = createSvg("path");
+    starPath.setAttribute("pathLength", "96");
+    starPath.setAttribute("d", "M21 3.5 25.9 15l12.4 1-9.4 8.1 2.8 12.1L21 29.8l-10.7 6.4 2.8-12.1L3.7 16l12.4-1z");
+    star.append(starPath);
+
+    const avatar = createPortraitImage(mode.avatar);
+    portrait.append(halo, fx, bubbles, star, avatar);
+    return portrait;
+  };
+
+  const replayModeSignature = (option) => {
+    if (modeFxReduced() || option.classList.contains("laolao-mode-menu__option--dock-close")) return;
+    modeSignatureCleanup.get(option)?.();
+    option.classList.remove("laolao-mode-menu__option--fx-playing");
+    void option.offsetWidth;
+    option.classList.add("laolao-mode-menu__option--fx-playing");
+    let timeoutId;
+    const clean = () => {
+      if (modeSignatureCleanup.get(option) !== clean) return;
+      option.classList.remove("laolao-mode-menu__option--fx-playing");
+      option.removeEventListener("animationend", onAnimationEnd);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      modeSignatureCleanup.delete(option);
+    };
+    const onAnimationEnd = (event) => {
+      if (
+        event.target === option.querySelector(".laolao-mode-button__portrait")
+        && event.animationName === modeSignatureAnimation[option.dataset.mode]
+      ) clean();
+    };
+    option.addEventListener("animationend", onAnimationEnd);
+    modeSignatureCleanup.set(option, clean);
+    timeoutId = window.setTimeout(clean, MODE_MENU_FX_ACTION_LIFETIME);
+  };
+
+  const prepareModeMenuOption = (option, mode, index, current = false) => {
+    option.style.setProperty("--laolao-mode-fx-delay", `${index * 40}ms`);
+    renderModeButton(option, mode, {current});
+    const warm = () => {
+      void motion.modeAssets(mode.id);
+      window.PinkieModeTransitionFx?.warm?.(mode.id);
+    };
+    option.addEventListener("pointerenter", warm, {once: true});
+    option.addEventListener("focus", warm, {once: true});
+    option.addEventListener("pointerenter", () => replayModeSignature(option));
+    option.addEventListener("focus", () => replayModeSignature(option));
   };
 
   const openMenu = () => {
@@ -532,23 +728,17 @@
     }
     const current = activeMode();
     menu = document.createElement("div");
-    menu.className = "laolao-mode-menu";
+    menu.className = "laolao-mode-menu laolao-mode-menu--fx laolao-mode-menu--fx-opening";
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", "选择碧琪的工作模式");
-    modes.forEach((mode) => {
+    modes.forEach((mode, index) => {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "laolao-mode-menu__option";
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", String(mode.id === current));
-      renderModeButton(option, mode);
-      const warm = () => {
-        void motion.modeAssets(mode.id);
-        window.PinkieModeTransitionFx?.warm?.(mode.id);
-      };
-      option.addEventListener("pointerenter", warm, {once: true});
-      option.addEventListener("focus", warm, {once: true});
-      option.addEventListener("click", () => switchMode(mode));
+      prepareModeMenuOption(option, mode, index, mode.id === current);
+      option.addEventListener("click", () => { void switchMode(mode, option); });
       menu.append(option);
     });
     const bounds = trigger.getBoundingClientRect();
@@ -557,6 +747,10 @@
     document.body.append(menu);
     menuAnchor = trigger;
     trigger.setAttribute("aria-expanded", "true");
+    const openedMenu = menu;
+    window.setTimeout(() => {
+      openedMenu.classList.remove("laolao-mode-menu--fx-opening");
+    }, MODE_MENU_FX_ENTRY_LIFETIME);
   };
 
   const openWorkspaceDock = async (mode) => {
@@ -640,22 +834,16 @@
     }
     const current = activeMode();
     menu = document.createElement("div");
-    menu.className = "laolao-mode-menu laolao-mode-menu--workspace-dock";
+    menu.className = "laolao-mode-menu laolao-mode-menu--workspace-dock laolao-mode-menu--fx laolao-mode-menu--fx-opening";
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", "选择要在右侧分屏打开的模式");
-    modes.filter((mode) => mode.id !== current).forEach((mode) => {
+    modes.filter((mode) => mode.id !== current).forEach((mode, index) => {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "laolao-mode-menu__option";
       option.setAttribute("role", "menuitem");
       option.setAttribute("aria-label", `在右侧分屏打开${mode.label}`);
-      renderModeButton(option, mode);
-      const warm = () => {
-        void motion.modeAssets(mode.id);
-        window.PinkieModeTransitionFx?.warm?.(mode.id);
-      };
-      option.addEventListener("pointerenter", warm, { once: true });
-      option.addEventListener("focus", warm, { once: true });
+      prepareModeMenuOption(option, mode, index);
       option.addEventListener("click", () => { void openWorkspaceDock(mode); });
       menu.append(option);
     });
@@ -677,6 +865,10 @@
     document.body.append(menu);
     menuAnchor = dockTrigger;
     dockTrigger.setAttribute("aria-expanded", "true");
+    const openedMenu = menu;
+    window.setTimeout(() => {
+      openedMenu.classList.remove("laolao-mode-menu--fx-opening");
+    }, MODE_MENU_FX_ENTRY_LIFETIME);
   };
 
   const syncDockTrigger = (identity) => {
@@ -727,7 +919,19 @@
       identity.append(trigger);
     }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
-    renderModeButton(trigger, mode);
+    const pending = pendingModePortraitFx;
+    const shouldHoldOldPortrait = pending && !pending.armed && pending.to === mode.id &&
+      trigger.dataset.mode === pending.from && trigger.querySelector(".laolao-mode-button__portrait");
+    if (!shouldHoldOldPortrait) {
+      const shouldSwapPortrait = Boolean(pending?.armed && pending.to === mode.id);
+      renderModeButton(trigger, mode, {
+        current: true,
+        force: shouldSwapPortrait,
+        animateSwap: shouldSwapPortrait,
+        outgoingMode: shouldSwapPortrait ? modeById(pending.from) : null,
+      });
+      if (shouldSwapPortrait) pendingModePortraitFx = null;
+    }
     syncDockTrigger(identity);
   };
 
