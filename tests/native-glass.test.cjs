@@ -34,7 +34,7 @@ test('native composer uses a stable surface instead of a live backdrop blur',()=
 test('live UI updates avoid redundant root styles and forced synchronous layout',()=>{
   const mode=read('ui/injections/laolao-mode-switcher.js');
   const usage=read('ui/injections/laolao-usage-stats.js');
-  assert.match(mode,/if \(previousMode !== mode\.id\) \{\s*document\.documentElement\.setAttribute/);
+  assert.match(mode,/if \(previousMode !== mode\.id\) \{[\s\S]*?document\.documentElement\.setAttribute\("data-laolao-mode", mode\.id\);/);
   assert.doesNotMatch(usage,/offsetWidth|offsetHeight|getBoundingClientRect/);
   assert.match(usage,/el\.animate\(\[/);
   assert.match(usage,/Math\.max\(Number\(fileStats\[key\]\)/);
@@ -54,7 +54,7 @@ test('installer cache-busts the native glass assets',()=>{
   assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt32/);
   assert.match(installer,/laolao-splash\.css\?v=splash19/);
   assert.match(installer,/laolao-splash\.js\?v=splash27/);
-  assert.match(installer,/laolao-mode-switcher\.js\?v=mode38/);
+  assert.match(installer,/laolao-mode-switcher\.js\?v=mode39/);
   assert.match(installer,/laolao-usage-stats\.js\?v=stats16/);
   assert.match(installer,/laolao-classic-shell\.css\?v=classic17/);
   assert.match(installer,/laolao-classic-shell\.js\?v=classic15/);

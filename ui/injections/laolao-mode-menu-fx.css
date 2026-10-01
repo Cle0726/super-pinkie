@@ -1,0 +1,592 @@
+/* laolao-mode-menu-fx.css?v=modemenufx1
+   模式头像的小戏法只落在自建 portrait 包裹层：菜单行和顶部按钮仍可继续
+   使用全局 motion system 的 transform 按压反馈，二者不会互相覆盖。 */
+
+:root {
+  --laolao-mode-fx-entry: calc(var(--motion-slow) + var(--motion-base));
+  --laolao-mode-fx-action: calc(var(--motion-slow) + var(--motion-base) + var(--motion-fast));
+  --laolao-mode-fx-select: calc(var(--motion-slow) + var(--motion-base));
+  --laolao-mode-fx-swap: calc(var(--motion-slow) + var(--motion-fast));
+  --laolao-mode-fx-halo-breathe: calc(var(--motion-slow) + var(--motion-slow) + var(--motion-slow) + var(--motion-slow) + var(--motion-slow));
+}
+
+.laolao-mode-button__portrait {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  isolation: isolate;
+  border-radius: 50%;
+  transform-origin: 50% 82%;
+}
+
+.laolao-mode-button__portrait[data-mode="chat"],
+.laolao-mode-fx-burst[data-mode="chat"] {
+  --laolao-mode-fx-a: #e94f91;
+  --laolao-mode-fx-b: #f6bd69;
+  --laolao-mode-fx-c: #e94f91;
+}
+
+.laolao-mode-button__portrait[data-mode="project"],
+.laolao-mode-fx-burst[data-mode="project"] {
+  --laolao-mode-fx-a: #e75d9c;
+  --laolao-mode-fx-b: #59aaa5;
+  --laolao-mode-fx-c: #59aaa5;
+}
+
+.laolao-mode-button__portrait[data-mode="thinking"],
+.laolao-mode-fx-burst[data-mode="thinking"] {
+  --laolao-mode-fx-a: #9d74c8;
+  --laolao-mode-fx-b: #8bc6df;
+  --laolao-mode-fx-c: #9d74c8;
+}
+
+.laolao-mode-button__portrait[data-mode="learning"],
+.laolao-mode-fx-burst[data-mode="learning"] {
+  --laolao-mode-fx-a: #b277c7;
+  --laolao-mode-fx-b: #f4c66d;
+  --laolao-mode-fx-c: #f4c66d;
+}
+
+.laolao-mode-button__portrait[data-mode="unrestricted"],
+.laolao-mode-fx-burst[data-mode="unrestricted"] {
+  --laolao-mode-fx-a: #ef568f;
+  --laolao-mode-fx-b: #f3ca63;
+  --laolao-mode-fx-c: #63bfe9;
+}
+
+/* 覆盖主题原本直接写在 img 上的 hover transform；头像的动效只由本层完成。 */
+.laolao-mode-button__portrait > img:not(.laolao-mode-button__portrait-leaving) {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 2px 9px color-mix(in srgb, var(--laolao-mode-fx-a) 30%, transparent);
+  pointer-events: none;
+  transform: none !important;
+  -webkit-user-drag: none;
+}
+
+.laolao-mode-button__halo {
+  position: absolute;
+  z-index: 1;
+  inset: -3px;
+  padding: 1.25px;
+  border-radius: 50%;
+  background: conic-gradient(from 28deg, var(--laolao-mode-fx-a), var(--laolao-mode-fx-b), var(--laolao-mode-fx-c), var(--laolao-mode-fx-a));
+  opacity: .28;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.laolao-mode-button__portrait.is-current .laolao-mode-button__halo {
+  opacity: .74;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--laolao-mode-fx-a) 52%, transparent));
+}
+
+.laolao-mode-switcher:hover .laolao-mode-button__halo,
+.laolao-mode-switcher:focus-visible .laolao-mode-button__halo,
+.laolao-mode-menu__option:hover .laolao-mode-button__halo,
+.laolao-mode-menu__option:focus-visible .laolao-mode-button__halo {
+  opacity: 1;
+}
+
+html[data-theme-mode="dark"] .laolao-mode-button__halo { opacity: .4; }
+html[data-theme-mode="dark"] .laolao-mode-button__portrait.is-current .laolao-mode-button__halo { opacity: .86; }
+
+.laolao-mode-button__fx {
+  position: absolute;
+  z-index: 4;
+  inset: -9px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.laolao-mode-button__fx::before,
+.laolao-mode-button__fx::after {
+  position: absolute;
+  display: block;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.laolao-mode-button__fx-bubbles {
+  position: absolute;
+  z-index: 5;
+  inset: -9px;
+  pointer-events: none;
+}
+
+.laolao-mode-button__fx-bubbles > i {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--laolao-mode-fx-b) 84%, #fff);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--laolao-mode-fx-a) 58%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.laolao-mode-button__fx-star {
+  position: absolute;
+  z-index: 5;
+  inset: -6px;
+  width: 42px;
+  height: 42px;
+  overflow: visible;
+  fill: none;
+  stroke: #f5c55f;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 96;
+  stroke-dashoffset: 96;
+  opacity: 0;
+  filter: drop-shadow(0 0 2px rgba(245, 197, 95, .70));
+  pointer-events: none;
+}
+
+/* 唠嗑：落地弹一下，右上角气球短暂飘起。 */
+.laolao-mode-button__portrait[data-mode="chat"] .laolao-mode-button__fx::before {
+  top: 1px;
+  right: -2px;
+  width: 9px;
+  height: 11px;
+  border: 1px solid color-mix(in srgb, var(--laolao-mode-fx-a) 82%, #fff);
+  border-radius: 50% 50% 48% 48%;
+  background: color-mix(in srgb, var(--laolao-mode-fx-b) 78%, #fff);
+}
+
+.laolao-mode-button__portrait[data-mode="chat"] .laolao-mode-button__fx::after {
+  top: 10px;
+  right: 1px;
+  width: 1px;
+  height: 9px;
+  background: color-mix(in srgb, var(--laolao-mode-fx-a) 72%, transparent);
+  rotate: 16deg;
+  transform-origin: top;
+}
+
+/* 项目：蓝图格子一闪，纸片从头像背后探出来。 */
+.laolao-mode-button__portrait[data-mode="project"] .laolao-mode-button__fx::before {
+  z-index: -1;
+  inset: 4px;
+  border-radius: 50%;
+  background-image: linear-gradient(rgba(89, 170, 165, .55) 1px, transparent 1px), linear-gradient(90deg, rgba(89, 170, 165, .55) 1px, transparent 1px);
+  background-size: 5px 5px;
+  mix-blend-mode: multiply;
+}
+
+.laolao-mode-button__portrait[data-mode="project"] .laolao-mode-button__fx::after {
+  z-index: -1;
+  top: 1px;
+  right: -3px;
+  width: 10px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, .80);
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, #e9f9f8 0 3px, #59aaa5 3px 4px, #e9f9f8 4px 6px);
+  box-shadow: 0 2px 5px rgba(51, 112, 111, .25);
+}
+
+html[data-theme-mode="dark"] .laolao-mode-button__portrait[data-mode="project"] .laolao-mode-button__fx::before { mix-blend-mode: screen; }
+
+/* 想法：三颗泡泡按次序浮起，最后闪一下灵感星。 */
+.laolao-mode-button__portrait[data-mode="thinking"] .laolao-mode-button__fx-bubbles > i:nth-child(1) {
+  top: 2px;
+  right: -1px;
+  width: 5px;
+  height: 5px;
+  --laolao-mode-fx-bubble-delay: 0ms;
+}
+
+.laolao-mode-button__portrait[data-mode="thinking"] .laolao-mode-button__fx-bubbles > i:nth-child(2) {
+  top: -6px;
+  right: -5px;
+  width: 4px;
+  height: 4px;
+  --laolao-mode-fx-bubble-delay: 80ms;
+}
+
+.laolao-mode-button__portrait[data-mode="thinking"] .laolao-mode-button__fx-bubbles > i:nth-child(3) {
+  top: -13px;
+  right: -8px;
+  width: 3px;
+  height: 3px;
+  --laolao-mode-fx-bubble-delay: 160ms;
+}
+
+.laolao-mode-button__portrait[data-mode="thinking"] .laolao-mode-button__fx::after {
+  top: -9px;
+  right: -8px;
+  color: #ffd46d;
+  content: "✦";
+  font: 700 13px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+  text-shadow: 0 0 7px rgba(255, 200, 74, .72);
+}
+
+/* 学习：金色笔尖沿着描边星星走一圈。 */
+.laolao-mode-button__portrait[data-mode="learning"] .laolao-mode-button__fx::after {
+  top: 1px;
+  left: 15px;
+  width: 3px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(#fff2b3 0 38%, #d49b37 39% 72%, #7b544a 73%);
+  rotate: 31deg;
+}
+
+/* 无限制：两拍踩步，光环转一圈，三道速度线掠过。 */
+.laolao-mode-button__portrait[data-mode="unrestricted"] .laolao-mode-button__fx::before {
+  top: 8px;
+  left: 0;
+  width: 12px;
+  height: 16px;
+  background: linear-gradient(90deg, transparent, var(--laolao-mode-fx-a)) 0 0 / 8px 1px no-repeat, linear-gradient(90deg, transparent, var(--laolao-mode-fx-b)) 0 7px / 12px 1px no-repeat, linear-gradient(90deg, transparent, var(--laolao-mode-fx-c)) 0 14px / 6px 1px no-repeat;
+}
+
+/* 菜单每项约 40ms 错开；只有菜单开着时，当前项的光环才慢慢呼吸。 */
+@media (prefers-reduced-motion: no-preference) {
+  .laolao-mode-menu--fx .laolao-mode-menu__option[aria-checked="true"] .laolao-mode-button__halo {
+    animation: laolao-mode-fx-halo-breathe var(--laolao-mode-fx-halo-breathe) ease-in-out infinite;
+  }
+
+  .laolao-mode-menu--fx-opening .laolao-mode-menu__option:not(.laolao-mode-menu__option--dock-close) {
+    animation: laolao-mode-fx-option-in var(--laolao-mode-fx-entry) var(--laolao-mode-fx-delay, 0ms) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu--fx-opening .laolao-mode-menu__option:not(.laolao-mode-menu__option--dock-close) .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-portrait-in var(--laolao-mode-fx-entry) var(--laolao-mode-fx-delay, 0ms) var(--ease-spring) both;
+    will-change: translate, scale, opacity;
+  }
+
+  .laolao-mode-menu--fx-opening .laolao-mode-menu__option[aria-checked="true"] .laolao-mode-button__arrow {
+    animation: laolao-mode-fx-check-in var(--laolao-mode-fx-entry) var(--laolao-mode-fx-delay, 0ms) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing .laolao-mode-button__portrait {
+    will-change: translate, scale, rotate;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="chat"] .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-chat-bounce var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="chat"] .laolao-mode-button__fx::before {
+    animation: laolao-mode-fx-chat-balloon var(--laolao-mode-fx-action) var(--ease-out) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="chat"] .laolao-mode-button__fx::after {
+    animation: laolao-mode-fx-chat-string var(--laolao-mode-fx-action) var(--ease-out) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="project"] .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-project-peek var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="project"] .laolao-mode-button__fx::before {
+    animation: laolao-mode-fx-project-grid var(--laolao-mode-fx-action) var(--ease-standard) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="project"] .laolao-mode-button__fx::after {
+    animation: laolao-mode-fx-project-paper var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="thinking"] .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-thinking-tilt var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="thinking"] .laolao-mode-button__fx-bubbles > i {
+    animation: laolao-mode-fx-thinking-bubbles calc(var(--motion-base) + var(--motion-fast)) var(--laolao-mode-fx-bubble-delay) var(--ease-out) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="thinking"] .laolao-mode-button__fx::after {
+    animation: laolao-mode-fx-thinking-star calc(var(--motion-base) + var(--motion-fast)) 280ms var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="learning"] .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-learning-rise var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="learning"] .laolao-mode-button__fx-star {
+    animation: laolao-mode-fx-learning-star-draw var(--laolao-mode-fx-action) var(--ease-out) both, laolao-mode-fx-learning-star-flash var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="learning"] .laolao-mode-button__fx::after {
+    animation: laolao-mode-fx-learning-pen var(--laolao-mode-fx-action) var(--ease-out) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="unrestricted"] .laolao-mode-button__portrait {
+    animation: laolao-mode-fx-unrestricted-steps var(--laolao-mode-fx-action) var(--ease-spring) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="unrestricted"] .laolao-mode-button__halo {
+    animation: laolao-mode-fx-unrestricted-halo var(--laolao-mode-fx-action) var(--ease-out) both;
+  }
+
+  .laolao-mode-menu__option.laolao-mode-menu__option--fx-playing[data-mode="unrestricted"] .laolao-mode-button__fx::before {
+    animation: laolao-mode-fx-unrestricted-speed var(--laolao-mode-fx-action) var(--ease-out) both;
+  }
+
+  .laolao-mode-switcher:hover .laolao-mode-button__portrait:not(.laolao-mode-button__portrait--fx-swap) {
+    animation: laolao-mode-fx-top-wiggle var(--laolao-mode-fx-action) var(--ease-out) both;
+    will-change: rotate;
+  }
+
+  .laolao-mode-button__portrait--fx-swap > img:not(.laolao-mode-button__portrait-leaving) {
+    animation: laolao-mode-fx-top-in var(--laolao-mode-fx-swap) var(--ease-spring) both;
+  }
+
+  .laolao-mode-button__portrait--fx-swap .laolao-mode-button__halo {
+    animation: laolao-mode-fx-top-halo-flash var(--laolao-mode-fx-swap) var(--ease-out) both;
+  }
+
+  .laolao-mode-fx-burst.is-playing > img {
+    animation: laolao-mode-fx-selection-avatar var(--laolao-mode-fx-select) var(--ease-spring) both;
+  }
+
+  .laolao-mode-fx-burst.is-playing > i {
+    animation: laolao-mode-fx-selection-particle var(--laolao-mode-fx-select) var(--ease-out) both;
+  }
+}
+
+.laolao-mode-button__portrait-leaving {
+  position: absolute !important;
+  z-index: 3 !important;
+  inset: 0;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .laolao-mode-button__portrait--fx-swap > .laolao-mode-button__portrait-leaving {
+    animation: laolao-mode-fx-top-out var(--laolao-mode-fx-swap) var(--ease-in) both;
+  }
+}
+
+.laolao-mode-fx-burst {
+  position: fixed;
+  z-index: 2147483647;
+  top: var(--laolao-mode-fx-y);
+  left: var(--laolao-mode-fx-x);
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+}
+
+.laolao-mode-fx-burst > img {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--laolao-mode-fx-a) 58%, transparent), 0 3px 10px color-mix(in srgb, var(--laolao-mode-fx-b) 40%, transparent);
+}
+
+.laolao-mode-fx-burst > i {
+  position: absolute;
+  z-index: 3;
+  top: 13px;
+  left: 13px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--laolao-mode-fx-particle-color, var(--laolao-mode-fx-a));
+  box-shadow: 0 0 4px color-mix(in srgb, var(--laolao-mode-fx-particle-color, var(--laolao-mode-fx-a)) 76%, transparent);
+}
+
+.laolao-mode-fx-burst > i:nth-of-type(1) { --laolao-mode-fx-particle-x: -20px; --laolao-mode-fx-particle-y: -14px; }
+.laolao-mode-fx-burst > i:nth-of-type(2) { --laolao-mode-fx-particle-x: 19px; --laolao-mode-fx-particle-y: -13px; --laolao-mode-fx-particle-color: var(--laolao-mode-fx-b); }
+.laolao-mode-fx-burst > i:nth-of-type(3) { --laolao-mode-fx-particle-x: 21px; --laolao-mode-fx-particle-y: 9px; --laolao-mode-fx-particle-color: var(--laolao-mode-fx-c); }
+.laolao-mode-fx-burst > i:nth-of-type(4) { --laolao-mode-fx-particle-x: -18px; --laolao-mode-fx-particle-y: 15px; --laolao-mode-fx-particle-color: var(--laolao-mode-fx-b); }
+.laolao-mode-fx-burst > i:nth-of-type(5) { --laolao-mode-fx-particle-x: 1px; --laolao-mode-fx-particle-y: -23px; --laolao-mode-fx-particle-color: #fff3ab; }
+
+@keyframes laolao-mode-fx-option-in {
+  from { opacity: 0; translate: 0 9px; scale: .97; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-portrait-in {
+  from { opacity: 0; scale: .6; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-halo-breathe {
+  0%, 100% { opacity: .64; scale: .96; }
+  50% { opacity: 1; scale: 1.06; }
+}
+
+@keyframes laolao-mode-fx-check-in {
+  0% { opacity: 0; scale: .32; }
+  65% { opacity: 1; scale: 1.24; }
+  100% { opacity: 1; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-chat-bounce {
+  0%, 100% { translate: 0 0; scale: 1; }
+  17% { translate: 0 3px; scale: 1.13 .78; }
+  47% { translate: 0 -6px; scale: .88 1.19; }
+  71% { translate: 0 1px; scale: 1.05 .94; }
+}
+
+@keyframes laolao-mode-fx-chat-balloon {
+  0% { opacity: 0; translate: -2px 8px; scale: .52; }
+  38% { opacity: 1; }
+  100% { opacity: 0; translate: 5px -13px; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-chat-string {
+  0%, 18% { opacity: 0; translate: 0 6px; }
+  44% { opacity: .75; }
+  100% { opacity: 0; translate: 4px -10px; }
+}
+
+@keyframes laolao-mode-fx-project-peek {
+  0%, 100% { translate: 0 0; scale: 1; }
+  25% { translate: 0 8px; scale: 1.08 .74; }
+  58% { translate: 0 -4px; scale: .94 1.12; }
+}
+
+@keyframes laolao-mode-fx-project-grid {
+  0% { opacity: 0; scale: .64; }
+  34% { opacity: .83; scale: 1.05; }
+  100% { opacity: 0; scale: 1.15; }
+}
+
+@keyframes laolao-mode-fx-project-paper {
+  0% { opacity: 0; translate: -4px 9px; scale: .38; rotate: -16deg; }
+  52% { opacity: 1; }
+  100% { opacity: 0; translate: 5px -9px; scale: 1; rotate: 10deg; }
+}
+
+@keyframes laolao-mode-fx-thinking-tilt {
+  0%, 100% { rotate: 0deg; translate: 0 0; }
+  39% { rotate: 6deg; translate: -1px -1px; }
+  72% { rotate: 3deg; }
+}
+
+@keyframes laolao-mode-fx-thinking-bubbles {
+  0% { opacity: 0; translate: -2px 7px; scale: .25; }
+  41% { opacity: 1; }
+  100% { opacity: 0; translate: 4px -10px; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-thinking-star {
+  0%, 54% { opacity: 0; scale: .22; rotate: -22deg; }
+  78% { opacity: 1; scale: 1.28; rotate: 12deg; }
+  100% { opacity: 0; scale: 1; rotate: 0deg; }
+}
+
+@keyframes laolao-mode-fx-learning-rise {
+  0%, 100% { translate: 0 0; scale: 1; }
+  42% { translate: 0 -5px; scale: 1.04 1.10; }
+  70% { translate: 0 -2px; scale: .99 1.04; }
+}
+
+@keyframes laolao-mode-fx-learning-star-draw {
+  0% { opacity: 0; stroke-dashoffset: 96; }
+  9% { opacity: 1; }
+  76% { opacity: 1; stroke-dashoffset: 0; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+
+@keyframes laolao-mode-fx-learning-star-flash {
+  0%, 69% { opacity: 0; scale: 1; }
+  84% { opacity: 1; scale: 1.2; }
+  100% { opacity: 0; scale: 1.06; }
+}
+
+@keyframes laolao-mode-fx-learning-pen {
+  0% { opacity: 0; translate: -2px 8px; rotate: 31deg; }
+  10% { opacity: 1; }
+  41% { translate: 11px 4px; rotate: 82deg; }
+  72% { translate: 2px -6px; rotate: 160deg; }
+  100% { opacity: 0; translate: -2px 0; rotate: 248deg; }
+}
+
+@keyframes laolao-mode-fx-unrestricted-steps {
+  0%, 100% { translate: 0 0; rotate: 0deg; }
+  21% { translate: -4px 1px; rotate: -3deg; }
+  49% { translate: 4px -1px; rotate: 3deg; }
+  74% { translate: -2px 0; rotate: -1deg; }
+}
+
+@keyframes laolao-mode-fx-unrestricted-halo {
+  0% { opacity: .72; rotate: 0deg; }
+  35% { opacity: 1; }
+  100% { opacity: .72; rotate: 360deg; }
+}
+
+@keyframes laolao-mode-fx-unrestricted-speed {
+  0% { opacity: 0; translate: -8px 0; scale: .28 1; }
+  34% { opacity: .86; }
+  100% { opacity: 0; translate: 8px 0; scale: 1.1 1; }
+}
+
+@keyframes laolao-mode-fx-top-out {
+  from { opacity: 1; translate: 0 0; scale: 1; rotate: 0deg; }
+  to { opacity: 0; translate: -8px 1px; scale: .72; rotate: -11deg; }
+}
+
+@keyframes laolao-mode-fx-top-in {
+  0% { opacity: 0; translate: 8px -1px; scale: .7; rotate: 10deg; }
+  65% { opacity: 1; translate: -1px 0; scale: 1.1; rotate: -2deg; }
+  100% { opacity: 1; translate: 0 0; scale: 1; rotate: 0deg; }
+}
+
+@keyframes laolao-mode-fx-top-halo-flash {
+  0%, 100% { opacity: .74; scale: 1; }
+  40% { opacity: 1; scale: 1.12; }
+}
+
+@keyframes laolao-mode-fx-top-wiggle {
+  0%, 100% { rotate: 0deg; }
+  29% { rotate: -3deg; }
+  66% { rotate: 2.5deg; }
+}
+
+@keyframes laolao-mode-fx-selection-avatar {
+  0% { opacity: 1; scale: 1; }
+  45% { opacity: 1; scale: 1.15; }
+  100% { opacity: 0; scale: 1; }
+}
+
+@keyframes laolao-mode-fx-selection-particle {
+  0% { opacity: 0; translate: 0 0; scale: .2; }
+  21% { opacity: 1; }
+  100% { opacity: 0; translate: var(--laolao-mode-fx-particle-x) var(--laolao-mode-fx-particle-y); scale: .82; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-mode-button__portrait,
+  .laolao-mode-button__portrait *,
+  .laolao-mode-fx-burst,
+  .laolao-mode-fx-burst * {
+    animation: none !important;
+    transition: none !important;
+    translate: none !important;
+    scale: 1 !important;
+    rotate: 0deg !important;
+  }
+
+  .laolao-mode-button__fx,
+  .laolao-mode-button__fx-bubbles,
+  .laolao-mode-button__fx-star,
+  .laolao-mode-fx-burst { display: none !important; }
+
+  .laolao-mode-button__portrait.is-current .laolao-mode-button__halo { opacity: .74; filter: none; }
+}
