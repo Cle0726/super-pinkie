@@ -428,8 +428,10 @@
     persistAndAnnounce({role: 'assistant', content, stopReason: 'toolUse'});
     toolEvent(runId, caller, {phase: 'start', name, toolCallId: id, args});
     await sleep(gap);
-    toolEvent(runId, caller, {phase: 'result', name, toolCallId: id, result: {content: text(result)}});
-    persistAndAnnounce({role: 'toolResult', toolCallId: id, toolName: name, content: text(result)});
+    // A function result can embed the call id (ask_user stores it in its card).
+    const output = typeof result === 'function' ? result(id) : result;
+    toolEvent(runId, caller, {phase: 'result', name, toolCallId: id, result: {content: text(output)}});
+    persistAndAnnounce({role: 'toolResult', toolCallId: id, toolName: name, content: text(output)});
     await sleep(gap);
   }
   function startRun(runId, userText, {persistUser = true} = {}) {
@@ -497,6 +499,30 @@
   }
 
   const scenarios = {
+    /* Pinkie stops to ask a multiple-choice question (ask_user), exactly as the
+       plugin tool returns it: the result starts with the card marker + JSON. */
+    async ask(o = {}) {
+      const gap = o.gap ?? 250;
+      const runId = o.uiRunId || `ui-${now()}`;
+      const caller = o.uiSocket || state.lastUiSocket;
+      startRun(runId, o.userText || '帮我把登录页改好看一点');
+      await sleep(gap);
+      const card = {
+        question: o.question || '登录页想往哪个方向改？',
+        header: o.header ?? '风格',
+        multiSelect: o.multiSelect === true,
+        options: o.options || [
+          {label: '柔和粉（推荐）', description: '沿用碧琪的粉色和圆角，改动最小'},
+          {label: '简洁白', description: '大面积留白和细线条，更克制'},
+          {label: '活泼派对', description: '加彩纸和气球动效，最热闹'},
+        ],
+      };
+      await runTool(runId, caller, 'ask_user', card,
+        (id) => `[[PINKIE_ASK_V1]]${JSON.stringify({id, ...card})}\n已把问题展示给先生，正在等先生选择。`,
+        gap, {say: o.say ?? '这个得你来拍板。'});
+      await finishRun(runId, o.reply || '选好我就接着改～', gap);
+      note('scenario-done', {name: 'ask'});
+    },
     /* The target behaviour: a short sentence before each tool call. As in
        real transcripts, that sentence is persisted in the same assistant
        message as the toolCall, and the live `final` carries all of them. */

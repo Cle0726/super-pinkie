@@ -8,6 +8,7 @@ See README.md in this directory.
 """
 import argparse
 import http.server
+import mimetypes
 import os
 import re
 import urllib.parse
@@ -79,6 +80,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if OVERLAY and base.startswith('laolao-') and os.path.isfile(os.path.join(OVERLAY, base)):
             ctype = 'text/css' if base.endswith('.css') else 'text/javascript; charset=utf-8'
             with open(os.path.join(OVERLAY, base), 'rb') as f:
+                return self.send_bytes(f.read(), ctype)
+        assets = os.path.join(REPO, 'ui', 'assets')
+        if OVERLAY and base.startswith('laolao-') and os.path.isfile(os.path.join(assets, base)):
+            # Repo images (status stickers, art) that the installed App may not have yet.
+            ctype = mimetypes.guess_type(base)[0] or 'application/octet-stream'
+            with open(os.path.join(assets, base), 'rb') as f:
                 return self.send_bytes(f.read(), ctype)
         local = os.path.join(args.ui_root, path.lstrip('/'))
         if path == '/' or ('.' not in base and not os.path.isfile(local)):

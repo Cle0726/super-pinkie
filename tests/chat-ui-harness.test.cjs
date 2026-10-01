@@ -247,3 +247,21 @@ test('watchdog-append binds the extra message to the watchdog run and leaves the
   assert.match(textOf(history.at(-1)), /已按追加信息调整：改成用 X 方法继续/);
   assert.equal(window.__fake.state.deliveries.length, 1);
 });
+
+test('ask scenario stores the ask_user card in its tool result, like the plugin tool', async () => {
+  const window = loadFakeGateway();
+  const {socket, frames, request} = await connect(window);
+  await request('connect');
+  await request('sessions.subscribe');
+  await request('sessions.messages.subscribe', {key: window.__fake.SK});
+  await window.__fake.scenario('ask', {gap: 2, uiSocket: socket});
+  const result = events(frames, 'agent').find((event) => event.stream === 'tool' && event.data.phase === 'result');
+  assert.equal(result.data.name, 'ask_user');
+  const text = result.data.result.content[0].text;
+  assert.ok(text.startsWith('[[PINKIE_ASK_V1]]'));
+  const card = JSON.parse(text.slice('[[PINKIE_ASK_V1]]'.length).split('\n')[0]);
+  assert.equal(card.id, result.data.toolCallId);
+  assert.equal(card.options.length, 3);
+  const history = (await request('chat.history', {limit: 50})).payload.messages;
+  assert.ok(history.some((message) => message.role === 'toolResult' && message.toolName === 'ask_user'));
+});
