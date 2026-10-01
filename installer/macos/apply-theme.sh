@@ -184,6 +184,8 @@ apply_ui_skin() {
     laolao-settings-user.js \
     laolao-ask-user.css \
     laolao-ask-user.js \
+    laolao-process-card.css \
+    laolao-process-card.js \
     laolao-pinkie-status-thinking.png \
     laolao-pinkie-status-working.png \
     laolao-pinkie-status-writing.png \
@@ -499,6 +501,21 @@ apply_ui_skin() {
     perl -0pi -e 's{((?:\./|/)laolao-ask-user\.js)(?:\?v=[^"]*)?}{${1}?v=askuser1}g' "$index_file"
     DID_CHANGE=1
   fi
+  # 碧琪的工作过程卡：思考和状态表情只填在时间线补丁预留的位置里。
+  if ! grep -Fq 'laolao-process-card.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-process-card.css?v=processcard1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-process-card.css?v=processcard1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.css)(?:\?v=[^"]*)?}{${1}?v=processcard1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq 'laolao-process-card.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard1"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-process-card.js?v=processcard1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard1}g' "$index_file"
+    DID_CHANGE=1
+  fi
   # 动效规范必须排在 laolao-theme.css 之后，才能覆盖主题里写死的时长和曲线。
   if ! grep -Fq 'laolao-motion-system.css' "$index_file"; then
     perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">\n</head>}' "$index_file"
@@ -571,11 +588,11 @@ apply_ui_skin() {
   # Also revision the entry and lazy chat import URLs. This is the hard
   # guarantee for WebKit instances still controlled by the old cache-first
   # worker: a previously cached URL can no longer match the repaired chunks.
-  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history32"}g' "$index_file"
+  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history33"}g' "$index_file"
   local entry_bundle
   for entry_bundle in "$ui_root"/assets/index-*.js; do
     [[ -f "$entry_bundle" ]] || continue
-  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history32}g' "$entry_bundle"
+  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history33}g' "$entry_bundle"
   done
 
   # Patched native chunks keep their upstream hashed filename. Cache-first
@@ -585,7 +602,7 @@ apply_ui_skin() {
   if [[ -f "$service_worker" ]]; then
     perl -0pi -e '
       s{-clekk-history-render-[0-9]+}{}g;
-      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-32${2}};
+      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-33${2}};
     ' "$service_worker"
     perl -0pi -e '
       s{// Cache-first for hashed assets; network-first for HTML/other\.}{// Network-first for all UI files; cached copies remain an offline fallback.}g;

@@ -8,10 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const marker = '/* pinkie-chat-timeline:v3 */';
+export const marker = '/* pinkie-chat-timeline:v4 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 export const LIVE_MESSAGE_WINDOW = 512;
 export const HISTORY_RENDER_LIMIT = 512;
@@ -349,26 +349,39 @@ function timelineTimestamp(item) {
     ?? 0;
 }
 
-function collapseTimelineTurn(turn, maxRows) {
+function collapseTimelineRows(rows, maxRows, ownerKey) {
   const rowLimit = Math.max(4, Number.isFinite(maxRows) ? Math.floor(maxRows) : 80);
-  if (turn.length <= rowLimit) return turn;
-  const trailingRows = rowLimit - 2;
-  const hiddenEnd = turn.length - trailingRows;
-  const hidden = turn.slice(1, hiddenEnd);
-  const first = turn[0] || {};
+  if (rows.length <= rowLimit) return rows;
+  const trailingRows = rowLimit - 1;
+  const hidden = rows.slice(0, rows.length - trailingRows);
   const overflow = {
     kind: 'group',
-    key: `pinkie:timeline:overflow:${String(first.key || first.messages?.[0]?.key || 'turn')}`,
+    key: `pinkie:timeline:overflow:${ownerKey}`,
     role: 'assistant',
     messages: [],
-    timestamp: timelineTimestamp(first),
+    timestamp: timelineTimestamp(hidden[0]),
     timelineOverflow: true,
     overflowItems: hidden,
     overflowCount: hidden.length,
   };
-  return [first, overflow, ...turn.slice(-trailingRows)];
+  return [overflow, ...rows.slice(-trailingRows)];
 }
 
+function formatProcessDuration(ms) {
+  const seconds = Math.max(1, Math.round(Number(ms) / 1000));
+  if (!Number.isFinite(seconds)) return '';
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
+}
+
+/**
+ * One turn becomes: the user message, one "process card" holding Pinkie's
+ * narration and tool rows in source order, then the final reply bubble (and,
+ * for the live turn, the native stream/reading rows). Plain answers without
+ * any intermediate step keep exactly the native layout.
+ */
 function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
   if (!entries.length) return [];
   let lastToolIndex = -1;
@@ -387,27 +400,42 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     }
   }
 
-  const turn = [entries[0]];
+  const head = entries[0];
+  const steps = [];
+  const tail = [];
+  let liveItems = false;
   for (let index = 1; index < entries.length; index += 1) {
     const item = entries[index];
     if (item?.kind !== 'group') {
       // Live-only entries are emitted by the active user turn. A stale one
       // must not survive as an old native-rendered row after the next send.
       if (item?.kind === 'stream' || item?.kind === 'reading-indicator') {
-        if (isLatestTurn) turn.push({...item, isTimelineStep: true});
+        if (!isLatestTurn) continue;
+        liveItems = true;
+        // A sentence Pinkie streamed before a later tool call is narration:
+        // it belongs in the card now, not only after the history sync.
+        if (item.kind === 'stream' && index < lastToolIndex && String(item.text || '').trim()) {
+          steps.push({
+            kind: 'group', role: 'assistant', key: String(item.key || `stream:${index}`), senderLabel: null,
+            messages: [{message: {role: 'assistant', content: [{type: 'text', text: String(item.text)}], timestamp: item.startedAt}, key: String(item.key || `stream:${index}`)}],
+            timestamp: item.startedAt, isTimelineStep: true,
+          });
+          continue;
+        }
+        tail.push(item);
         continue;
       }
-      turn.push(item);
+      tail.push(item);
       continue;
     }
     const role = String(item.role || '').toLowerCase();
     if (role === 'assistant' && index === finalAssistantIndex) {
       // The final response deliberately keeps the normal assistant bubble.
-      turn.push(item);
+      tail.push(item);
       continue;
     }
     if (role !== 'assistant' && role !== 'tool') {
-      turn.push(item);
+      tail.push(item);
       continue;
     }
 
@@ -420,11 +448,40 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
         : entry;
       const parts = pinkieSplitTimelineMessage(augmented, getToolCalls);
       for (const part of parts) {
-        turn.push(timelineGroup(item, {...part, entry: augmented}));
+        steps.push(timelineGroup(item, {...part, entry: augmented}));
       }
     }
   }
-  return collapseTimelineTurn(turn, maxRows);
+  const ownerKey = String(head?.key || head?.messages?.[0]?.key || 'turn');
+  const live = isLatestTurn && (liveItems || finalAssistantIndex < 0);
+  // The live turn always gets its card, so thinking has a place before the
+  // first step. A finished plain answer keeps one only when the page recorded
+  // its thinking (laolao-process-card maintains this read-only key set).
+  const keep = globalThis.__pinkieProcessKeep;
+  const kept = Boolean(keep && typeof keep.has === 'function' && keep.has(`pinkie:process:${ownerKey}`));
+  if (!steps.length && !live && !kept) return [head, ...tail];
+
+  const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
+  const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
+  const started = Number(timelineTimestamp(head));
+  const ended = Number(timelineTimestamp(lastItem));
+  const duration = started > 0 && ended > started ? formatProcessDuration(ended - started) : '';
+  const card = {
+    kind: 'group',
+    key: `pinkie:process:${ownerKey}`,
+    role: 'assistant',
+    messages: [],
+    timestamp: timelineTimestamp(steps[0]),
+    isProcessCard: true,
+    processLive: live,
+    processRows: collapseTimelineRows(steps, maxRows, ownerKey),
+    processSteps: toolCount,
+    processTitle: live ? '碧琪正在干活' : '碧琪的工作过程',
+    processMeta: live
+      ? (toolCount ? `已做 ${toolCount} 步` : '')
+      : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : ''].filter(Boolean).join(' · '),
+  };
+  return [head, card, ...tail];
 }
 
 /** Pure timeline projection, also exercised directly by unit tests. */
@@ -479,7 +536,27 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineTurn.toString()}\n${projectTimelineTurn.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${projectTimelineTurn.toString()}\n${pinkieBuildTimeline.toString()}`;
+}
+
+/**
+ * Renderer branch for a process card. <details> keeps the open state on the
+ * element: Lit only rewrites ?open when processLive flips, so the card opens
+ * while Pinkie works, folds when the turn ends, and a manual toggle in between
+ * survives every re-render. The thinking and status slots are static children
+ * that laolao-process-card.js fills from live gateway events.
+ */
+function processBranchSource(groupName) {
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" ?open=\${e.processLive} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`}></div></div></div>\`;`;
+}
+
+/** Add the process branch to a renderer patched by an older release. */
+function withProcessBranch(source) {
+  if (source.includes('e.isProcessCard')) return source;
+  const match = /function\s+([\w$]+)\(e,t\)\{if\(e&&e\.timelineOverflow\)/u.exec(source);
+  if (!match) throw new Error('timeline overflow renderer is missing');
+  const at = match.index + match[0].length - 'if(e&&e.timelineOverflow)'.length;
+  return source.slice(0, at) + processBranchSource(match[1]) + source.slice(at);
 }
 
 function upgradeBundle(original, previousMarker) {
@@ -496,7 +573,7 @@ function upgradeBundle(original, previousMarker) {
     }
     const runtime = `${marker}${splitRuntimeSource()}\n`;
     return {
-      text: sourceWithReplacement(original, markerIndex, history.start, runtime),
+      text: withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime)),
       changed: true,
       reason: `upgraded-${version}`,
     };
@@ -576,7 +653,7 @@ function transformBundle(original) {
     const overflowBranch = `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow"><summary>前面还有 \${e.overflowCount} 步</summary><div class="chat-timeline-overflow__body">\${e.overflowItems.map(n=>n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):n.kind===\`stream\`?${groupName}({kind:\`group\`,role:\`assistant\`,key:n.key,messages:[{message:{role:\`assistant\`,content:[{type:\`text\`,text:n.text}],timestamp:n.startedAt},key:n.key}],timestamp:n.startedAt,isTimelineStep:!0},t):c)}</div></details>\`;`;
     groupSource = replaceExactlyOnce(groupSource,
       /function\s+[\w$]+\(e,t\)\{/gu,
-      (match) => `${match}${overflowBranch}`,
+      (match) => `${match}${processBranchSource(groupName)}${overflowBranch}`,
       'timeline overflow renderer');
 
     const callMatch = /if\(n===`tool`&&t\.showToolCalls===!1\)return c;/u;
