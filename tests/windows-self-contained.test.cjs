@@ -51,6 +51,11 @@ test('Windows injects the same asset versions as macOS, never older ones', () =>
     }
   }
   assert.deepEqual(downgraded, [], `Windows lowers the version the shared head fragment injects:\n${downgraded.join('\n')}`);
+
+  const windowsSource = read('installer/windows/apply-theme.ps1');
+  assert.match(windowsSource, /"laolao-mode-menu-fx\.css"/);
+  assert.match(windowsSource, /<link rel="stylesheet" href="\.\/laolao-mode-menu-fx\.css\?v=modemenufx1">/);
+  assert.match(windowsSource, /'laolao-mode-menu-fx\.css' = 'modemenufx1'/);
 });
 
 test('the Windows installer pins one version per asset, not two', () => {
@@ -323,6 +328,7 @@ test('every PowerShell script carries the UTF-8 BOM Windows PowerShell needs', (
   for (const name of scripts) {
     const bytes = fs.readFileSync(path.join(root, name));
     assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], `${name} must start with a UTF-8 BOM`);
+    assert.equal(bytes.includes(Buffer.from('\r\n')), false, `${name} must keep LF line endings`);
   }
 });
 
