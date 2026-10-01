@@ -144,6 +144,40 @@ test('stream and reading indicators are retained only for the latest real turn',
   assert.equal(timeline.find((item) => item.key === 'live-reading')?.isTimelineStep, true);
 });
 
+test('a user steer between a tool call and its result remains chronological without losing either tool step', () => {
+  const entries = [
+    group('user', 'first-user', [message('user', '先查旧方法', 'first-user')]),
+    group('assistant', 'narrate', [message('assistant', '我先读现状。', 'narrate')]),
+    group('tool', 'call', [message('assistant', [
+      {type: 'tool_call', callId: 'read-1', name: 'read', arguments: {path: 'old.md'}},
+    ], 'call')]),
+    // This is an accepted `messages.queue: steer` user message. Its result
+    // may land while the tool it interrupted is still finishing.
+    group('user', 'steer-user', [message('user', '改成用 X 方法继续', 'steer-user')]),
+    group('tool', 'result', [message('tool', [
+      {type: 'tool_result', callId: 'read-1', name: 'read', text: '旧方法结果'},
+    ], 'result')]),
+    group('assistant', 'after-steer', [message('assistant', '按 X 方法继续。', 'after-steer')]),
+    group('assistant', 'final', [message('assistant', '已经完成。', 'final')]),
+  ];
+
+  const first = pinkieBuildTimeline(entries, parseToolRows);
+  const second = pinkieBuildTimeline(entries, parseToolRows);
+  assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
+  assert.deepEqual(first.map((item) => item.key), [
+    'first-user', 'narrate:0', 'call:0:timeline:tool:0', 'steer-user',
+    'result:0', 'after-steer:0', 'final',
+  ]);
+  const call = first.find((item) => item.key === 'call:0:timeline:tool:0');
+  const result = first.find((item) => item.key === 'result:0');
+  assert.equal(call?.isTimelineStep, true);
+  assert.equal(result?.isTimelineStep, true);
+  assert.equal(call?.role, 'tool');
+  assert.equal(result?.role, 'tool');
+  assert.equal(first.find((item) => item.key === 'after-steer:0')?.isTimelineStep, true);
+  assert.equal(first.find((item) => item.key === 'final')?.isTimelineStep, undefined);
+});
+
 test('messages mixing prose and multiple tool calls split in source order', () => {
   const source = {
     message: message('assistant', [
@@ -302,10 +336,11 @@ test('timeline tool details keep no card shell and injection cache keys advance'
   assert.match(css, /\.chat-group--timeline-tools \.chat-tool-msg-collapse\s*\{[^}]*border: 0 !important;[^}]*background: transparent !important;[^}]*box-shadow: none !important;/u);
   for (const source of [head, mac, windows]) {
     assert.match(source, /laolao-tool-stream\.css\?v=toolstream3/u);
-    assert.match(source, /laolao-resume\.js\?v=resume41/u);
+    assert.match(source, /laolao-resume\.js\?v=resume43/u);
+    assert.match(source, /laolao-queue-steer\.js\?v=queuesteer2/u);
   }
   for (const source of [mac, windows]) {
-    assert.match(source, /clekk-history29/u);
-    assert.match(source, /clekk-history-render-29/u);
+    assert.match(source, /clekk-history31/u);
+    assert.match(source, /clekk-history-render-31/u);
   }
 });

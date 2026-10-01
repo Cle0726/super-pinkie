@@ -97,6 +97,7 @@ function loadTwoPaneHarness(request,options={}){
   };
   const location={pathname:'/chat',search:`?session=${encodeURIComponent(leftKey)}`};
   const window={location,setTimeout(){return 1;},clearTimeout(){},setInterval(){return 1;},
+    localStorage:options.localStorage,
     addEventListener(){},dispatchEvent(){}};
   class MutationObserver{observe(){} disconnect(){}}
   class CustomEvent{constructor(type,options){this.type=type;this.detail=options?.detail;}}
@@ -115,6 +116,38 @@ const sendButton=()=>({
   hasAttribute(){return false;},getAttribute(name){return name==='aria-label'?'发送消息':null;},
   closest(selector){return selector==='.chat-send-btn'?this:null;},
 });
+
+function memoryStorage(){
+  const values=new Map();
+  return {
+    getItem(key){return values.has(key)?values.get(key):null;},
+    setItem(key,value){values.set(key,String(value));},
+    removeItem(key){values.delete(key);},
+  };
+}
+
+// The recovery injection must delegate actual queue I/O back to these native
+// pane methods. This tiny model records that delegation without duplicating
+// chat.send in the test harness.
+function attachNativeQueueApi(pane,queue,options={}){
+  const state=pane.state;
+  const calls={remove:[],retry:[]};
+  state.chatQueue=queue.map(item=>({...item}));
+  state.removeQueuedMessage=function(id){
+    calls.remove.push(id);
+    this.chatQueue=this.chatQueue.filter(item=>item.id!==id);
+  };
+  state.retryQueuedChatMessage=async function(id){
+    const item=this.chatQueue.find(entry=>entry.id===id);
+    calls.retry.push(item?{...item}:{id,missing:true});
+    if(options.onRetry){
+      await options.onRetry.call(this,item,calls);
+      return;
+    }
+    this.chatQueue=this.chatQueue.filter(entry=>entry.id!==id);
+  };
+  return calls;
+}
 
 test('a split-pane send follows its own persisted final even when native state already rendered it offscreen',async()=>{
   const oldLeft={role:'assistant',content:'left old',__openclaw:{id:'left-old'}};
@@ -332,6 +365,240 @@ test('stale-busy cleanup is scoped to one pane and never clears a different acti
   h.window.__laolaoStaleBusy.forceIdle();
   assert.equal(h.left.state.chatRunId,null);
   assert.equal(h.right.state.chatRunId,'real-right');
+});
+
+test('queue recovery removes a delivered old steer before asking native retry to send the next item',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[{role:'user',content:'already delivered',timestamp:2_000}],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'old-steer',text:'already delivered',createdAt:1_000,kind:'steered',
+      pendingRunId:'run-lost',sendState:'waiting-model'},
+    {id:'next-queue',text:'send this once',createdAt:1_000,sendState:'waiting-reconnect'},
+  ]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('lost-terminal'),true);
+  assert.deepEqual(calls.remove,['old-steer']);
+  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry[0].id,'next-queue');
+  assert.equal(h.left.state.chatQueue.length,0);
+  assert.equal(h.window.__laolaoQueueRecovery.status().removed,1);
+  assert.equal(h.window.__laolaoQueueRecovery.status().retriedId,'next-queue');
+});
+
+test('queue recovery consumes same-text history one-to-one, preserving an intentional duplicate',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[{role:'user',content:'repeat this exactly',timestamp:2_000}],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'first-repeat',text:'repeat this exactly',createdAt:1_000,sendState:'waiting-model'},
+    {id:'second-repeat',text:'repeat this exactly',createdAt:1_001,sendState:'waiting-model'},
+  ]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('same-text-once'),true);
+  assert.deepEqual(calls.remove,['first-repeat']);
+  assert.deepEqual(calls.retry.map(item=>item.id),['second-repeat']);
+  assert.equal(h.left.state.chatQueue.length,0);
+});
+
+test('queue recovery recognizes a delivered attachment-only steer without re-sending it',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/png;base64,x'}}],
+      timestamp:2_000}],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'delivered-image',text:'',createdAt:1_000,kind:'steered',pendingRunId:'lost-run',
+    attachments:[{id:'image-1',type:'image/png'}],sendState:'waiting-model',
+  }]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('attachment-steer'),true);
+  assert.deepEqual(calls.remove,['delivered-image']);
+  assert.equal(calls.retry.length,0);
+});
+
+test('queue recovery trusts the native retry idempotency key before comparing payload text',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[{role:'user',content:'stored normal form',timestamp:2_000,
+      idempotencyKey:'native-retry-run:user'}],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'retry-confirmed',text:'locally transformed display text',createdAt:1_000,
+    sendRunId:'native-retry-run',sendState:'sending',
+  }]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('idempotency-confirmed'),true);
+  assert.deepEqual(calls.remove,['retry-confirmed']);
+  assert.equal(calls.retry.length,0);
+});
+
+test('an exact native retry receipt wins over an older same-text steered card',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[{role:'user',content:'use the same wording',timestamp:2_000,
+      idempotencyKey:'newer-native-run:user'}],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'older-steer',text:'use the same wording',createdAt:1_000,kind:'steered',
+      pendingRunId:'lost-run',sendState:'waiting-model'},
+    {id:'newer-native-retry',text:'use the same wording',createdAt:1_001,
+      sendRunId:'newer-native-run',sendState:'sending'},
+  ]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('mixed-same-text'),true);
+  assert.deepEqual(calls.remove,['newer-native-retry']);
+  assert.deepEqual(calls.retry.map(item=>item.id),['older-steer']);
+});
+
+test('force-idle recovery demotes an abandoned steer and lets the native retry API deliver it',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false});
+  h.panes.pop();
+  h.left.state.chatRunId='old-native-run';
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'accepted-old-run',text:'change direction',createdAt:1_000,kind:'steered',
+    pendingRunId:'pinkie-watchdog-old',sendState:'waiting-model',sendError:'old state',
+  }]);
+  h.window.__laolaoStaleBusy.forceIdle();
+  assert.equal(h.left.state.chatRunId,null);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('force-idle'),true);
+  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry[0].kind,'queued');
+  assert.equal(calls.retry[0].pendingRunId,undefined);
+  assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+  assert.equal(calls.retry[0].sendError,undefined);
+  assert.equal(h.left.state.chatQueue.length,0);
+});
+
+test('an ordinary busy queue item resumes immediately after a lost final instead of waiting for stale-state timeout',async()=>{
+  const now=1_700_000_000_000;
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{clock:true,now});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'queued-behind-final',text:'send after the lost final',createdAt:now-1,
+    sendState:'waiting-model',
+  }]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('history-final'),true);
+  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+  assert.equal(h.left.state.chatQueue.length,0);
+});
+
+test('a queued message fast-forces only a tracked run that sessions.list confirms has ended',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false});
+  h.panes.pop();
+  h.left.state.chatRunId='lost-terminal-run';
+  h.left.state.chatSending=true;
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'fast-lost-final',text:'please still send this',createdAt:1_000,sendState:'waiting-model',
+  }]);
+  assert.equal(await h.window.__laolaoStaleBusy.reconcileQueued(),true);
+  assert.equal(h.left.state.chatRunId,null);
+  assert.equal(h.left.state.chatSending,false);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('queued-run-ended'),true);
+  assert.equal(calls.retry.length,1);
+
+  // A watchdog/tier replacement is a genuine active run. The same fast path
+  // must leave both the old tracking id and the card alone.
+  const active=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:active.leftKey,hasActiveRun:true}]}
+    : {messages:[],hasMore:false});
+  active.panes.pop();
+  active.left.state.chatRunId='old-ui-run';
+  const activeCalls=attachNativeQueueApi(active.left,[{
+    id:'watchdog-still-live',text:'wait for the real continuation',createdAt:1_000,sendState:'waiting-model',
+  }]);
+  assert.equal(await active.window.__laolaoStaleBusy.reconcileQueued(),false);
+  assert.equal(active.left.state.chatRunId,'old-ui-run');
+  assert.equal(activeCalls.retry.length,0);
+});
+
+test('a verified queued idle is not blocked by one stale native Stop button',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false});
+  h.panes.pop();
+  h.left.querySelector=(selector)=>selector.includes('chat-send-btn--stop')?{offsetParent:{}}:null;
+  h.left.state.chatRunId='lost-run-with-stale-stop';
+  h.left.state.chatSending=true;
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'stale-stop-queue',text:'do not wait for another stale timeout',createdAt:1_000,sendState:'waiting-model',
+  }]);
+  assert.equal(await h.window.__laolaoStaleBusy.reconcileQueued(),true);
+  assert.equal(h.left.state.chatRunId,null);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('stale-stop-handoff'),true);
+  assert.deepEqual(calls.retry.map(item=>item.id),['stale-stop-queue']);
+});
+
+test('a restored expired send state is revived once without turning a permanent failure into an idle retry loop',async()=>{
+  const now=1_700_000_000_000;
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{clock:true,now});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'restored-failed',text:'do not lose this',createdAt:now-20_000,
+    sendState:'failed',sendError:'stale gateway error',
+  }],{onRetry(item){
+    this.chatQueue=this.chatQueue.map(entry=>entry.id===item.id
+      ? {...entry,sendState:'failed',sendError:'permanent error'}:entry);
+  }});
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('restored-queue'),true);
+  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+  // The same restored item may remain visible after a non-retryable native
+  // failure, but the 1s idle poll must preserve its text rather than hammer it.
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('idle-poll'),false);
+  assert.equal(calls.retry.length,1);
+  assert.equal(h.left.state.chatQueue[0].text,'do not lose this');
+  assert.equal(h.left.state.chatQueue[0].sendState,'failed');
+});
+
+test('a selected-session reload hydrates one stale native composer queue and delegates its send back to retry',async()=>{
+  const storage=memoryStorage();
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{localStorage:storage});
+  h.panes.pop();
+  // The selected/default agent can lag the session key after a refresh. The
+  // persisted queue belongs to the session's `project` agent, not `main`.
+  h.left.state.assistantAgentId='main';
+  const storeKey='openclaw.control.chatComposer.v1:default';
+  const persistedKey=`${h.leftKey}\u0000agent:project`;
+  storage.setItem(storeKey,JSON.stringify({version:1,sessions:{[persistedKey]:{
+    queue:[{id:'reload-stale',text:'refresh must not strand this',createdAt:1_000,
+      kind:'steered',pendingRunId:'expired-run',sendState:'failed',sendError:'old failure',
+      sessionKey:h.leftKey,agentId:'project'}],updatedAt:2_000,
+  }}}));
+  const calls=attachNativeQueueApi(h.left,[]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('composer-hydration'),true);
+  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry[0].id,'reload-stale');
+  assert.equal(calls.retry[0].kind,'queued');
+  assert.equal(calls.retry[0].pendingRunId,undefined);
+  assert.equal(h.left.state.chatQueue.length,0);
+  // Page-local hydration is one-shot. A native remove/retry cannot be undone
+  // by an unchanged old storage record during the same page lifetime.
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('idle-poll'),false);
+  assert.equal(calls.retry.length,1);
+});
+
+test('queue recovery does not retry while the backend says a watchdog replacement run is active',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:true}]}
+    : {messages:[],hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{
+    id:'watchdog-pending',text:'wait for the replacement run',createdAt:1_000,
+    kind:'steered',pendingRunId:'old-run',sendState:'waiting-model',
+  }]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('watchdog-active'),false);
+  assert.equal(calls.remove.length,0);
+  assert.equal(calls.retry.length,0);
+  assert.equal(h.left.state.chatQueue[0].pendingRunId,'old-run');
 });
 
 test('a stale retry ribbon cannot deadlock single-pane terminal recovery',async()=>{
@@ -852,9 +1119,9 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume41/);
+    assert.match(installer,/laolao-resume\.js\?v=resume43/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
-    assert.match(installer,/clekk-history29/);
+    assert.match(installer,/clekk-history31/);
   }
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/LIVE_MESSAGE_WINDOW = 512/);
@@ -875,7 +1142,7 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   const resume=read('ui/injections/laolao-resume.js');
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
-  assert.match(resume,/UI_CACHE_REVISION = "history-render-29"/);
+  assert.match(resume,/UI_CACHE_REVISION = "history-render-31"/);
   assert.match(resume,/startsWith\("openclaw-control-"\)/);
   assert.match(resume,/UI_CACHE_REFRESH_ATTEMPTED/);
   assert.match(resume,/window\.localStorage\.setItem\(UI_CACHE_REFRESHED, "1"\)/);
@@ -884,8 +1151,8 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   assert.match(cacheRefresh,/let the current view stay put/);
   assert.doesNotMatch(cacheRefresh,/window\.location\.reload\(\)/);
   for(const installer of [mac,windows]){
-    assert.match(installer,/clekk-history-render-29/);
-    assert.match(installer,/clekk-history29/);
+    assert.match(installer,/clekk-history-render-31/);
+    assert.match(installer,/clekk-history31/);
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }

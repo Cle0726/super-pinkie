@@ -8,8 +8,8 @@ const vm = require('node:vm');
 // Pin the protocol shapes it relies on, so a stale fake cannot make a broken
 // chat view look healthy.
 
-function loadFakeGateway() {
-  const window = {};
+function loadFakeGateway(options = {}) {
+  const window = {...options};
   const source = fs.readFileSync(path.join(__dirname, '..', 'scripts/chat-ui-harness/fake-gateway.js'), 'utf8');
   vm.runInNewContext(source, {window, EventTarget, Event, MessageEvent, setTimeout, clearTimeout, Promise, console});
   return window;
@@ -36,6 +36,25 @@ async function connect(window) {
 
 const events = (frames, name) => frames.filter((frame) => frame.type === 'event' && frame.event === name).map((frame) => frame.payload);
 const textOf = (message) => (message?.content || []).filter((part) => part.type === 'text').map((part) => part.text).join('');
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function waitFor(predicate, label, timeout = 800) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    if (predicate()) return;
+    await wait(2);
+  }
+  assert.fail(`timed out waiting for ${label}`);
+}
+function memoryStorage() {
+  const values = new Map();
+  return {
+    get length() { return values.size; },
+    key(index) { return [...values.keys()][index] ?? null; },
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(String(key), String(value)); },
+    removeItem(key) { values.delete(String(key)); },
+  };
+}
 
 test('fake gateway completes the Control UI handshake and serves history pages', async () => {
   const window = loadFakeGateway();
@@ -110,4 +129,121 @@ test('watchdog continuation arrives from another run with an invisible user turn
   const finals = events(frames, 'chat').filter((event) => event.state === 'final');
   assert.match(textOf(finals.at(-1).message), /【最终回复】$/);
   assert.notEqual(finals.at(-1).runId, finals[0].runId);
+});
+
+test('queue-normal is the baseline: a later native retry reaches the gateway once after final', async () => {
+  const window = loadFakeGateway();
+  const {socket, request} = await connect(window);
+  await request('connect');
+  const observation = await window.__fake.scenario('queue-normal', {gap: 2, holdMs: 2, uiSocket: socket});
+  assert.match(observation.beforeFix, /收到 final/);
+  assert.equal(observation.activeAfter, false);
+
+  // This request represents native lg()/retryQueuedChatMessage after final;
+  // the fake must not manufacture a second receipt for it.
+  const sent = await request('chat.send', {message: '第一轮结束后再发', idempotencyKey: 'queue-a'});
+  assert.equal(sent.payload.status, 'started');
+  await waitFor(() => window.__fake.state.deliveries.length === 1, 'queued retry receipt');
+  assert.equal(window.__fake.state.deliveries[0].kind, 'normal');
+  assert.equal(window.__fake.state.deliveries[0].message, '第一轮结束后再发');
+  await waitFor(() => window.__fake.state.activeRuns.size === 0, 'follow-up terminal');
+});
+
+test('queue-missing-terminal exposes the stale-idle recovery wire conditions and accepts a retry once', async () => {
+  const window = loadFakeGateway();
+  const {socket, frames, request} = await connect(window);
+  await request('connect');
+  await request('sessions.subscribe');
+  const observation = await window.__fake.scenario('queue-missing-terminal', {gap: 2, holdMs: 2, uiSocket: socket});
+  assert.match(observation.beforeFix, /forceIdle/);
+  assert.equal(observation.activeAfter, false);
+  assert.equal(events(frames, 'chat').some((event) => event.runId === observation.runId && event.state === 'final'), false);
+  const sessions = await request('sessions.list');
+  assert.equal(sessions.payload.sessions[0].hasActiveRun, false);
+
+  // The repair invokes the native queued-message retry only after this exact
+  // idle proof.  A normal send here is its protocol-level observable result.
+  await request('chat.send', {message: '结束事件丢了也要送达', idempotencyKey: 'queue-b'});
+  await waitFor(() => window.__fake.state.deliveries.length === 1, 'stale-idle retry receipt');
+  assert.equal(window.__fake.state.deliveries[0].message, '结束事件丢了也要送达');
+});
+
+test('steer-accepted persists one real user turn in the active run and reports duplicate idempotency safely', async () => {
+  const window = loadFakeGateway();
+  const {socket, request} = await connect(window);
+  await request('connect');
+  const task = window.__fake.scenario('steer-accepted', {gap: 2, holdMs: 70, uiSocket: socket});
+  await waitFor(() => window.__fake.state.activeRuns.size === 1, 'active steer target');
+  const first = await request('chat.send', {message: '改成用 X 方法', idempotencyKey: 'steer-c', deliver: false});
+  const duplicate = await request('chat.send', {message: '改成用 X 方法', idempotencyKey: 'steer-c', deliver: false});
+  assert.equal(first.payload.status, 'accepted');
+  assert.equal(duplicate.payload.status, 'in_flight');
+  assert.equal(window.__fake.state.deliveries.length, 1);
+  assert.equal(window.__fake.state.deliveries[0].kind, 'steer');
+  assert.equal(window.__fake.state.deliveries[0].runId, first.payload.runId);
+  await task;
+  const history = (await request('chat.history', {limit: 50})).payload.messages;
+  assert.ok(history.some((message) => message.role === 'user' && textOf(message) === '改成用 X 方法'));
+  assert.match(textOf(history.at(-1)), /已按追加信息调整：改成用 X 方法/);
+});
+
+test('steer-race-ended returns timeout without persisting text, then permits one ordinary fallback send', async () => {
+  const window = loadFakeGateway();
+  const {socket, request} = await connect(window);
+  await request('connect');
+  const task = window.__fake.scenario('steer-race-ended', {
+    gap: 2, holdMs: 100, raceResponseDelay: 12, uiSocket: socket,
+  });
+  await waitFor(() => window.__fake.state.activeRuns.size === 1, 'race target');
+  const race = await request('chat.send', {message: '碰撞后也别丢字', idempotencyKey: 'steer-d', deliver: false});
+  assert.equal(race.payload.status, 'timeout');
+  assert.equal(window.__fake.state.deliveries.length, 0);
+  await task;
+  const fallback = await request('chat.send', {message: '碰撞后也别丢字', idempotencyKey: 'queue-d'});
+  assert.equal(fallback.payload.status, 'started');
+  await waitFor(() => window.__fake.state.deliveries.length === 1, 'race fallback receipt');
+  assert.equal(window.__fake.state.deliveries[0].kind, 'normal');
+});
+
+test('queue-refresh seeds stale persisted composer state across a page replacement', async () => {
+  const localStorage = memoryStorage();
+  const window = loadFakeGateway({localStorage});
+  const observation = await window.__fake.scenario('queue-refresh', {message: '刷新后继续发'});
+  assert.match(observation.beforeFix, /刷新恢复/);
+  assert.equal(observation.entry.sendState, 'failed');
+  assert.equal(observation.entry.pendingRunId, 'expired-run');
+  assert.equal(observation.seeded.seeded, true);
+
+  // A new fake page sees an idle server while the native composer storage is
+  // unchanged.  The actual browser test reloads at this point.
+  const refreshed = loadFakeGateway({localStorage});
+  const {request} = await connect(refreshed);
+  await request('connect');
+  const sessions = await request('sessions.list');
+  assert.equal(sessions.payload.sessions[0].hasActiveRun, false);
+  await request('chat.send', {message: '刷新后继续发', idempotencyKey: 'queue-e'});
+  await waitFor(() => refreshed.__fake.state.deliveries.length === 1, 'restored queue retry receipt');
+  refreshed.__fake.clearComposerQueue();
+  const key = observation.seeded.keys[0];
+  const saved = localStorage.getItem(key);
+  assert.ok(!saved || !JSON.parse(saved).sessions['agent:unrestricted:dashboard:harness0001\u0000agent:unrestricted']);
+});
+
+test('watchdog-append binds the extra message to the watchdog run and leaves the U+2063 control turn distinct', async () => {
+  const window = loadFakeGateway();
+  const {socket, request} = await connect(window);
+  await request('connect');
+  const task = window.__fake.scenario('watchdog-append', {
+    gap: 2, watchdogDelay: 2, holdMs: 70, uiSocket: socket,
+  });
+  await waitFor(() => [...window.__fake.state.activeRuns].some((id) => id.startsWith('pinkie-watchdog-')), 'watchdog continuation');
+  const steer = await request('chat.send', {message: '改成用 X 方法继续', idempotencyKey: 'steer-f', deliver: false});
+  assert.equal(steer.payload.status, 'accepted');
+  assert.match(steer.payload.runId, /^pinkie-watchdog-/);
+  await task;
+  const history = (await request('chat.history', {limit: 80})).payload.messages;
+  assert.ok(history.some((message) => message.role === 'user' && textOf(message) === '⁣'));
+  assert.ok(history.some((message) => message.role === 'user' && textOf(message) === '改成用 X 方法继续'));
+  assert.match(textOf(history.at(-1)), /已按追加信息调整：改成用 X 方法继续/);
+  assert.equal(window.__fake.state.deliveries.length, 1);
 });

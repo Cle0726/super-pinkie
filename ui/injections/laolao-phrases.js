@@ -69,6 +69,15 @@
     ["Copy as markdown", "复制为 Markdown"],
     ["Copied", "已复制"],
     ["Copy failed", "复制失败"],
+    // Native chatQueue chrome. Keep these scoped to the queue below: an
+    // assistant may legitimately quote an upstream English error in a reply.
+    ["Steer queued message", "立即追加这条消息"],
+    ["Remove queued message", "移除待发送消息"],
+    ["Waiting for model", "等待模型准备好"],
+    ["Waiting for reconnect", "等待重新连接"],
+    ["Failed", "发送失败"],
+    ["The active run ended before the steer message was accepted.", "这轮刚结束，这轮结束后发送。"],
+    ["Steer failed before it reached the run; try again.", "追加没有送达，这轮结束后发送。"],
   ]);
 
   // These short words are also ordinary setting labels (for example
@@ -84,15 +93,22 @@
     "Calling tool", "Running tool", "Tool call", "Tool result", "Tool input",
     "Tool output", "Tool error", "Tool Access",
   ]);
+  const queueExactPhrases = new Set([
+    "Steer queued message", "Remove queued message", "Waiting for model", "Waiting for reconnect",
+    "Failed", "The active run ended before the steer message was accepted.",
+    "Steer failed before it reached the run; try again.",
+  ]);
   const isStatusContext = (element) => Boolean(element?.closest?.(
     '[role="status"], [aria-live="polite"], [aria-live="assertive"], .chat-activity-group__summary, .chat-tool-card__status, .pinkie-reasoning-progress__text, .laolao-deep-think-status__retry, #laolao-deep-think-status'
   ));
   const isToolContext = (element) => Boolean(element?.closest?.(
     '.chat-activity-group, .chat-tool-card, .chat-tool-msg-summary, .chat-group--timeline-tools'
   ));
+  const isQueueContext = (element) => Boolean(element?.closest?.('.chat-queue'));
   const exactPhraseAllowed = (phrase, element) => {
     if (statusExactPhrases.has(phrase)) return isStatusContext(element);
     if (toolExactPhrases.has(phrase)) return isToolContext(element);
+    if (queueExactPhrases.has(phrase)) return isQueueContext(element);
     return true;
   };
 
@@ -103,6 +119,12 @@
     if (exactPhrases.has(core) && exactPhraseAllowed(core, element)) {
       return `${leading}${exactPhrases.get(core)}${trailing}`;
     }
+
+    // Some control-ui builds render the count as one Lit text binding rather
+    // than three adjacent bindings ("Queued (", count, ")").  Keep this
+    // equally narrow so ordinary chat text is never rewritten.
+    const queuedTitle = isQueueContext(element) && core.match(/^Queued\s*\((\d+)\)$/);
+    if (queuedTitle) return `${leading}待发送（${queuedTitle[1]}）${trailing}`;
 
     // The UI sometimes interpolates the assistant's configured name into an
     // English live-status sentence (for example, “碧琪 is responding…”), so an
@@ -142,6 +164,18 @@
   // render, so the pane stops committing new replies and never scrolls to them
   // until the app is reopened. Only rewrite the text node values in place.
   const toolLabels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
+  const queueSteerBadge = (parent) => {
+    const pane=parent.closest?.('openclaw-chat-pane');
+    const state=pane?.state;
+    // A historical tool card can remain in chatToolMessages after its result;
+    // only an unfinished live stream means the next model boundary is after
+    // this tool step. Otherwise the steer is available for the next action.
+    const liveTool=state?.toolStreamById instanceof Map
+      && [...state.toolStreamById.values()].some((tool)=>tool?.runId===state.chatRunId&&tool.output===undefined);
+    return liveTool||state?.chatRunStatus?.phase==='tool'
+      ? '已追加 · 这一步结束后碧琪就会看到'
+      : '已追加 · 碧琪下一步就会看到';
+  };
   const litLabelText = (parent, core) => {
     if(parent.matches?.('.chat-activity-group__label')){
       // Template: "Activity: " ${count} " tool" ${plural}. The count stays live.
@@ -153,6 +187,22 @@
       const label=toolLabels[core.toLowerCase()];
       return label?`${label} · ${core}`:null;
     }
+    // Queue labels are also Lit bindings. Update only the individual text
+    // node so its sibling marker and live count survive the next render.
+    if(parent.matches?.('.chat-queue__title')){
+      if(core==='Queued (')return '待发送（';
+      if(core===')')return '）';
+      return null;
+    }
+    if(parent.matches?.('.chat-queue__badge')){
+      if(core==='Steered')return queueSteerBadge(parent);
+      if(core==='Waiting for model')return '等待模型准备好';
+      if(core==='Waiting for reconnect')return '等待重新连接';
+      if(core==='Failed')return '发送失败';
+      return null;
+    }
+    if(parent.closest?.('.chat-queue__steer')&&core==='Steer')return '立即追加';
+    if(parent.closest?.('.chat-queue__retry')&&core==='Retry')return '重试';
     if(!parent.matches?.('.chat-sender-name'))return null;
     if(core==='You'&&parent.closest('.chat-group.user'))return '你';
     if(core==='Activity'&&parent.closest('.chat-group--activity'))return '碧琪的行动小记录';
