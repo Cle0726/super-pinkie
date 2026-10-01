@@ -27,36 +27,23 @@ function loadFx({reduced = false, webgl = true, setting = null} = {}) {
   return context.module.exports;
 }
 
-test('FX configures five modes plus the shared splash scene, with only shipped assets', () => {
+test('FX configures the five modes with only shipped assets; the splash has its own module', () => {
   const fx = loadFx();
   assert.deepEqual([...fx.modes].sort(), ['chat', 'learning', 'project', 'thinking', 'unrestricted']);
-  assert.equal(typeof fx.playSplash, 'function');
-  assert.ok(fx._test.SCENES.splash, 'splash has scene configuration');
-  const splash = fx._test.SCENES.splash;
-  for (const key of ['anchor', 'hair', 'mustache', 'dust', 'motion']) {
-    assert.ok(splash[key], `${key}: splash configuration`);
-  }
-
-  for (const id of [...fx.modes, 'splash']) {
-    assert.ok(fx._test.SCENES[id], `${id} has configuration`);
+  assert.equal(fx.playSplash, undefined, 'cold-start splash lives in laolao-splash-fx.js');
+  for (const id of fx.modes) {
+    assert.ok(fx._test.MODES[id], `${id} has configuration`);
     for (const assetUrl of Object.values(fx.assetUrls(id))) {
       const relative = assetUrl.split('?', 1)[0].replace(/^\//, '');
       assert.ok(fs.existsSync(path.join(root, 'ui', 'assets', relative)), `${id}: ${relative}`);
     }
   }
-  assert.deepEqual(
-    Object.values(fx.assetUrls('splash')).map((url) => path.basename(url.split('?', 1)[0])).sort(),
-    ['laolao-splash-char-soft.png', 'laolao-splash-mask.png', 'laolao-splash-plate-soft.png',
-      'laolao-splash-plate.webp', 'laolao-splash.png'].sort(),
-  );
 });
 
-test('FX falls back for both a normal transition and splash when it cannot animate', () => {
-  for (const id of ['chat', 'splash']) {
-    assert.equal(loadFx({reduced: true}).supported(id), false, `${id}: reduced motion`);
-    assert.equal(loadFx({webgl: false}).supported(id), false, `${id}: no WebGL`);
-    assert.equal(loadFx({setting: 'off'}).supported(id), false, `${id}: user switch`);
-  }
+test('FX falls back to the old transition when it cannot animate', () => {
+  assert.equal(loadFx({reduced: true}).supported('chat'), false, 'reduced motion');
+  assert.equal(loadFx({webgl: false}).supported('chat'), false, 'no WebGL');
+  assert.equal(loadFx({setting: 'off'}).supported('chat'), false, 'user switch');
 });
 
 test('fragments and both installers carry the same splash and FX revisions', () => {
@@ -65,21 +52,23 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   const revisions = {
-    'laolao-mode-transition-fx.js': 'modetransitionfx2',
-    'laolao-mode-transition-fx.css': 'modetransitionfx2',
-    'laolao-splash.js': 'splash27',
-    'laolao-splash.css': 'splash19',
-    'laolao-handoff-bootstrap.js': 'handoff6',
+    'laolao-mode-transition-fx.js': 'modetransitionfx3',
+    'laolao-mode-transition-fx.css': 'modetransitionfx3',
+    'laolao-splash-fx.js': 'splashfx1',
+    'laolao-splash.js': 'splash28',
+    'laolao-splash.css': 'splash20',
+    'laolao-handoff-bootstrap.js': 'handoff7',
   };
   for (const [file, revision] of Object.entries(revisions)) {
     assert.match(mac, new RegExp(`${file.replace('.', '\\.') }\\?v=${revision}`), `macOS: ${file}`);
     assert.match(windows, new RegExp(`'${file.replace('.', '\\.') }' = '${revision}'`), `Windows: ${file}`);
   }
-  assert.match(fragment, /laolao-splash\.css\?v=splash19/);
-  assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx2/);
-  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx2/);
-  assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff6/);
-  for (const file of ['laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
+  assert.match(fragment, /laolao-splash\.css\?v=splash20/);
+  assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx3/);
+  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx3/);
+  assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx1/);
+  assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
+  for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
     assert.match(mac, new RegExp(file.replace(/\./g, '\\.')), `macOS copies ${file}`);
     assert.match(windows, new RegExp(file.replace(/\./g, '\\.')), `Windows copies ${file}`);
   }
@@ -107,10 +96,3 @@ test('FX keeps its canvas visible during the controlled leave animation', () => 
   assert.match(css, /\.laolao-mode-transition--fx\.is-leaving\s*\{\s*opacity:\s*1;\s*\}/);
 });
 
-test('the splash cross-fades its aligned canvas and keeps party particles over the copy', () => {
-  const css = read('ui/injections/laolao-splash.css');
-  assert.match(css, /\.laolao-splash \.laolao-splash__gl\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?transition:\s*opacity 300ms/);
-  assert.match(css, /\.laolao-splash\.is-fx-ready \.laolao-splash__gl\s*\{\s*opacity:\s*1;/);
-  assert.match(css, /\.laolao-splash \.laolao-splash__particles\s*\{[\s\S]*?z-index:\s*6;/);
-  assert.match(css, /\.laolao-splash__content\s*\{\s*position:\s*relative;\s*z-index:\s*2;/);
-});

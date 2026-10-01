@@ -1,4 +1,22 @@
 (() => {
+  // 首帧之前把开屏标题拆成单字，laolao-splash.css 才能让「来啦～老弟」逐字弹出。
+  // 这是纯 CSS 动画，不依赖后面的脚本；模式切换接续时标题会被换成模式名，不受影响。
+  const title = document.getElementById("laolao-splash")?.querySelector?.(".laolao-splash__title");
+  if (!title || title.children.length || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  const text = title.textContent.trim();
+  if (!text) return;
+  title.setAttribute("aria-label", text);
+  title.textContent = "";
+  [...text].forEach((char, index) => {
+    const letter = document.createElement("span");
+    letter.setAttribute("aria-hidden", "true");
+    letter.style.setProperty("--i", String(index));
+    letter.textContent = char;
+    title.append(letter);
+  });
+})();
+
+(() => {
   // Run synchronously beside the splash markup so a mode handoff is painted
   // at its carried percentage on the very first frame of the new document.
   let handoff = null;
@@ -24,10 +42,6 @@
   const carriedProgress = Math.max(68, Math.min(96, Number(handoff.progress) || 68));
 
   splash.dataset.handoffBootstrapped = "1";
-  // splash.js 在首帧后的空闲窗口才接入 WebGL；把已画好的场景和百分比
-  // 留在 DOM 上，既不会闪回 8%，也不会让它重新播一次揭幕。
-  splash.dataset.laolaoHandoffScene = handoff.mode;
-  splash.dataset.laolaoHandoffProgress = String(carriedProgress);
   splash.classList.add("is-mode-progress", `is-mode-progress--${handoff.mode}`);
   splash.style.setProperty(
     "--laolao-mode-progress-image",
@@ -36,7 +50,10 @@
   const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
   const title = splash.querySelector(".laolao-splash__title");
   if (eyebrow) eyebrow.textContent = "碧琪的模式切换";
-  if (title) title.textContent = details.label;
+  if (title) {
+    title.removeAttribute("aria-label");
+    title.textContent = details.label;
+  }
 
   fill.style.transition = "none";
   window.PinkieMotion.progress(fill, percentage, progressbar, carriedProgress);

@@ -116,6 +116,7 @@ $Assets = @(
     "laolao-quota.json",
     "laolao-splash.css",
     "laolao-splash.js",
+    "laolao-splash-fx.js",
     "laolao-handoff-bootstrap.js",
     "laolao-phrases.js",
     "laolao-progress.js",
@@ -224,7 +225,7 @@ function Apply-UISkin {
         )
     }
     if ($html -notmatch "laolao-handoff-bootstrap") {
-        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff6""></script>`n    `$1"
+        $html = $html -replace "(?i)(<openclaw-app>)", "    <script src=""./laolao-handoff-bootstrap.js?v=handoff7""></script>`n    `$1"
     }
 
     # One controller only. Older packages placed this script in both the head
@@ -253,7 +254,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
-        '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx2">',
+        '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx3">',
         '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
         '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
@@ -262,7 +263,7 @@ function Apply-UISkin {
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning5"></script>',
-        '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx2"></script>',
+        '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx3"></script>',
         '<script defer src="./laolao-model-picker.js?v=modelpicker25"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
@@ -277,7 +278,8 @@ function Apply-UISkin {
         '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
         '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
         '<script defer src="./laolao-settings-user.js?v=settingsuser1"></script>',
-        '<script defer src="./laolao-splash.js?v=splash27"></script>'
+        '<script defer src="./laolao-splash-fx.js?v=splashfx1"></script>',
+        '<script defer src="./laolao-splash.js?v=splash28"></script>'
     )
     foreach ($tag in $headTags) {
         $fileName = [regex]::Match($tag, 'laolao-[^?"'']+').Value
@@ -291,12 +293,12 @@ function Apply-UISkin {
     # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme81'; 'laolao-splash.css' = 'splash19'; 'laolao-sidebar.css' = 'sidebar17';
+        'laolao-theme.css' = 'theme81'; 'laolao-splash.css' = 'splash20'; 'laolao-sidebar.css' = 'sidebar17';
         'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases23'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
-        'laolao-mode-transition-fx.js' = 'modetransitionfx2'; 'laolao-mode-transition-fx.css' = 'modetransitionfx2';
-        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode39'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash27';
-        'laolao-handoff-bootstrap.js' = 'handoff6'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume41';
+        'laolao-mode-transition-fx.js' = 'modetransitionfx3'; 'laolao-mode-transition-fx.css' = 'modetransitionfx3';
+        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode39'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx1';
+        'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume41';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
@@ -328,7 +330,7 @@ function Apply-UISkin {
 
     # Some legacy heads keep other tags between FX and the switcher. Move the
     # former beside the latter so deferred execution order is reliable.
-    $fxTag = '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx2"></script>'
+    $fxTag = '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx3"></script>'
     $switcherTag = '<script defer src="./laolao-mode-switcher.js?v=mode39"></script>'
     $fxPattern = '(?is)\s*<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-transition-fx\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>\s*'
     $html = [regex]::Replace($html, $fxPattern, "`n")
