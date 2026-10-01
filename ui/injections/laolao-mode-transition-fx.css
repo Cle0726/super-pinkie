@@ -1,0 +1,267 @@
+/* WebGL 模式转场的补层。基础胶囊、配色和小纹理由 laolao-theme.css 提供；
+   本文件只把它们接到新的画布、揭幕和完成反馈上。 */
+.laolao-mode-transition--fx {
+  --laolao-transition-tip: 255, 240, 248;
+  --laolao-transition-ring: 239, 95, 158;
+  --laolao-transition-glow: 231, 77, 145;
+  display: block;
+  background: transparent;
+  opacity: 1;
+  pointer-events: all;
+  transition: none;
+}
+/* Theme's legacy .is-leaving fades its whole overlay immediately. Keep this
+   shell opaque so the WebGL fade and the completed capsule can finish first. */
+.laolao-mode-transition--fx.is-leaving { opacity: 1; }
+
+/* WebGL 先盖画面；彩纸和气球最后画，必须压在文字和进度条上。 */
+.laolao-mode-transition--fx::before { display: none; }
+.laolao-mode-transition--fx :is(.laolao-mode-transition__gl, .laolao-mode-transition__particles) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__gl { z-index: 0; }
+.laolao-mode-transition--fx .laolao-mode-transition__particles { z-index: 5; }
+
+.laolao-mode-transition--fx .laolao-mode-transition__veil {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 251, 246, .84) 0%, rgba(255, 251, 246, .46) 30%, transparent 52%);
+  transition: opacity 320ms var(--ease-out, cubic-bezier(.2, .78, .28, 1)) 260ms;
+}
+.laolao-mode-transition--fx.is-copy-in .laolao-mode-transition__veil { opacity: 1; }
+
+/* 不复用旧 .is-visible 的入场；FX 等到揭幕后才弹文字。 */
+.laolao-mode-transition--fx .laolao-mode-transition__content {
+  position: absolute;
+  z-index: 3;
+  left: clamp(28px, 7vw, 112px);
+  bottom: clamp(34px, 9vh, 90px);
+  width: min(440px, calc(100vw - 48px));
+  margin: 0;
+  opacity: 0;
+  translate: -18px 10px;
+  scale: .96;
+  transform: none;
+  animation: none;
+  transition: opacity 260ms var(--ease-out, ease-out), translate 520ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1)), scale 520ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1));
+}
+.laolao-mode-transition--fx.is-copy-in .laolao-mode-transition__content {
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__title > span {
+  display: inline-block;
+  opacity: 0;
+  translate: 0 14px;
+  rotate: -6deg;
+  transition: opacity 200ms ease-out, translate 520ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1)), rotate 520ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1));
+}
+.laolao-mode-transition--fx.is-copy-in .laolao-mode-transition__title > span {
+  opacity: 1;
+  translate: 0 0;
+  rotate: 0deg;
+  transition-delay: calc(var(--i) * 45ms + 80ms);
+}
+
+/* 仍是原来的 42px 糖果胶囊；新脚本直接给 fill 写像素宽度。 */
+.laolao-mode-transition--fx .laolao-mode-transition__progress {
+  --laolao-progress: .08;
+  overflow: hidden;
+  box-shadow: inset 0 2px 5px rgba(170, 70, 120, .11), inset 0 -1px 0 rgba(255, 255, 255, .95), 0 11px 30px rgba(178, 65, 112, .12);
+}
+.laolao-mode-transition--fx .laolao-mode-transition__fill {
+  width: 42px;
+  transform: none;
+  transition: none;
+  will-change: width;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 5px rgba(120, 30, 90, .16), 0 4px calc(10px + 10px * var(--laolao-progress)) rgba(var(--laolao-transition-glow), calc(.16 + .22 * var(--laolao-progress)));
+}
+.laolao-mode-transition--fx .laolao-mode-transition__gloss {
+  position: absolute;
+  z-index: 2;
+  top: 3px;
+  right: 9px;
+  left: 9px;
+  height: 42%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .08));
+}
+.laolao-mode-transition--fx .laolao-mode-transition__dots {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 原有 ::before 是第一层纹理；这里补更慢的第二层。 */
+.laolao-mode-transition--fx.laolao-mode-transition--chat .laolao-mode-transition__dots {
+  opacity: .55;
+  background: radial-gradient(circle at 8px 26px, rgba(255,255,255,.7) 0 1px, transparent 1.5px), radial-gradient(circle at 30px 8px, rgba(255,246,210,.8) 0 1.2px, transparent 1.7px);
+  background-size: 46px 42px;
+  animation: laolao-mode-fx-drift-46 3.4s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--thinking .laolao-mode-transition__dots {
+  opacity: .6;
+  background: radial-gradient(circle at 30px 20px, transparent 0 2.5px, rgba(255,255,255,.6) 3px 3.8px, transparent 4.3px);
+  background-size: 64px 42px;
+  animation: laolao-mode-fx-bubbles 3.6s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--learning .laolao-mode-transition__dots {
+  opacity: .7;
+  background: radial-gradient(circle at 30px 9px, rgba(255,250,215,.9) 0 1.2px, transparent 1.7px);
+  background-size: 52px 42px;
+  animation: laolao-mode-fx-drift-52 3.2s linear infinite;
+}
+/* 这两个旧模式没有 ::before，补上第一层以后再各给一个慢层。 */
+.laolao-mode-transition--fx.laolao-mode-transition--project { --laolao-transition-tip: 236, 255, 250; --laolao-transition-ring: 89, 170, 165; --laolao-transition-glow: 89, 150, 160; }
+.laolao-mode-transition--fx.laolao-mode-transition--project .laolao-mode-transition__fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: .5;
+  background: linear-gradient(90deg, rgba(255,255,255,.34) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,.34) 1px, transparent 1px);
+  background-size: 14px 14px;
+  animation: laolao-mode-fx-drift-14 1.4s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--project .laolao-mode-transition__dots {
+  background: radial-gradient(circle at 7px 7px, rgba(255,255,255,.75) 0 1.4px, transparent 2px);
+  background-size: 42px 28px;
+  animation: laolao-mode-fx-drift-42 2.6s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--unrestricted { --laolao-transition-tip: 255, 255, 255; --laolao-transition-ring: 243, 150, 120; --laolao-transition-glow: 220, 120, 150; }
+.laolao-mode-transition--fx.laolao-mode-transition--unrestricted .laolao-mode-transition__fill::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: .55;
+  background: repeating-linear-gradient(115deg, transparent 0 18px, rgba(255,255,255,.55) 18px 20px, transparent 20px 34px);
+  background-size: 68px 42px;
+  animation: laolao-mode-fx-drift-68 .55s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--unrestricted .laolao-mode-transition__dots {
+  background: radial-gradient(circle at 10px 12px, rgba(255,255,255,.8) 0 1.6px, transparent 2.2px), radial-gradient(circle at 40px 30px, rgba(255,250,200,.8) 0 2px, transparent 2.6px);
+  background-size: 60px 42px;
+  animation: laolao-mode-fx-drift-60 1.1s linear infinite;
+}
+.laolao-mode-transition--fx.laolao-mode-transition--thinking { --laolao-transition-tip: 246, 238, 255; --laolao-transition-ring: 168, 120, 214; --laolao-transition-glow: 150, 100, 200; }
+.laolao-mode-transition--fx.laolao-mode-transition--learning { --laolao-transition-tip: 255, 248, 214; --laolao-transition-ring: 244, 190, 90; --laolao-transition-glow: 200, 130, 120; }
+
+.laolao-mode-transition--fx .laolao-mode-transition__tip {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 100%;
+  margin-left: -27px;
+  pointer-events: none;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__tip::before {
+  position: absolute;
+  inset: 2px 0;
+  content: "";
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(var(--laolao-transition-tip),.5) 52%, transparent);
+  animation: laolao-mode-fx-tip-breathe 900ms ease-in-out infinite alternate;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__star {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: laolao-mode-fx-twinkle 1.1s ease-in-out infinite;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__star:nth-child(1) { top: 6px; left: 14px; }
+.laolao-mode-transition--fx .laolao-mode-transition__star:nth-child(2) { top: 26px; left: 6px; width: 6px; height: 6px; background: rgb(var(--laolao-transition-tip)); animation-delay: -.55s; }
+
+.laolao-mode-transition--fx .laolao-mode-transition__message {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  height: auto;
+  margin: 0;
+  padding: 0 18px 0 15px;
+  overflow: hidden;
+  color: #8e2856;
+  font-size: .79rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255,255,255,.66);
+}
+.laolao-mode-transition--fx .laolao-mode-transition__message--lit {
+  z-index: 6;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(120,30,90,.38);
+  clip-path: inset(0 100% 0 0);
+}
+.laolao-mode-transition--fx .laolao-mode-transition__msg {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform-origin: 0 50%;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__msg.is-swapping { animation: laolao-mode-fx-msg-swap 420ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1)); }
+.laolao-mode-transition--fx .laolao-mode-transition__percentage {
+  z-index: 7;
+  background: transparent;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__flash {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.85) 50%, transparent 70%) 0 0 / 60% 100% no-repeat;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done { animation: laolao-mode-fx-jelly 620ms var(--ease-out, cubic-bezier(.2, .78, .28, 1)), laolao-mode-fx-ring 700ms ease-out; }
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done .laolao-mode-transition__msg { font-size: .9rem; }
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done .laolao-mode-transition__msg.is-swapping { animation: laolao-mode-fx-msg-ready 520ms var(--ease-spring, cubic-bezier(.34, 1.32, .64, 1)); }
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done .laolao-mode-transition__flash { animation: laolao-mode-fx-flash 560ms ease-out; }
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done .laolao-mode-transition__tip::before { animation: laolao-mode-fx-tip-burst 420ms ease-out forwards; }
+.laolao-mode-transition--fx .laolao-mode-transition__progress.is-done .laolao-mode-transition__star { animation: none; opacity: 0; }
+
+.laolao-mode-transition--fx.is-leaving .laolao-mode-transition__content { opacity: 0; translate: 0 -8px; scale: 1; transition: opacity 240ms var(--ease-in, ease-in), translate 240ms var(--ease-in, ease-in); }
+.laolao-mode-transition--fx.is-leaving .laolao-mode-transition__veil { opacity: 0; transition: opacity 300ms var(--ease-in, ease-in); }
+
+@keyframes laolao-mode-fx-drift-14 { to { background-position: 14px 0; } }
+@keyframes laolao-mode-fx-drift-42 { to { background-position: 42px 0; } }
+@keyframes laolao-mode-fx-drift-46 { to { background-position: 46px 0; } }
+@keyframes laolao-mode-fx-drift-52 { to { background-position: 52px 0; } }
+@keyframes laolao-mode-fx-drift-60 { to { background-position: 60px 0; } }
+@keyframes laolao-mode-fx-drift-68 { to { background-position: 68px 0; } }
+@keyframes laolao-mode-fx-bubbles { from { background-position: 0 10px; } to { background-position: 64px -10px; } }
+@keyframes laolao-mode-fx-tip-breathe { from { opacity: .7; scale: .85 .9; } to { opacity: 1; scale: 1.08 1; } }
+@keyframes laolao-mode-fx-twinkle { 0%, 100% { opacity: 0; scale: .3; rotate: 0deg; } 50% { opacity: 1; scale: 1; rotate: 45deg; } }
+@keyframes laolao-mode-fx-msg-swap { 0% { opacity: 0; translate: 0 13px; } 60% { opacity: 1; } }
+@keyframes laolao-mode-fx-msg-ready { 0% { opacity: 0; scale: .6; } 55% { opacity: 1; scale: 1.12; } 100% { scale: 1; } }
+@keyframes laolao-mode-fx-jelly { 0% { scale: 1 1; } 28% { scale: 1.03 .88; } 52% { scale: .99 1.06; } 74% { scale: 1.006 .985; } 100% { scale: 1 1; } }
+@keyframes laolao-mode-fx-ring { 0% { box-shadow: inset 0 2px 5px rgba(170,70,120,.11), 0 0 0 0 rgba(var(--laolao-transition-ring),.55), 0 11px 30px rgba(178,65,112,.12); } 100% { box-shadow: inset 0 2px 5px rgba(170,70,120,.11), 0 0 0 14px rgba(var(--laolao-transition-ring),0), 0 11px 30px rgba(178,65,112,.12); } }
+@keyframes laolao-mode-fx-flash { 0% { opacity: 1; background-position: -80% 0; } 100% { opacity: 1; background-position: 180% 0; } }
+@keyframes laolao-mode-fx-tip-burst { 0% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 2.2 1.4; } }
+
+/* 原生玻璃窗口本来就裁掉了内容，继续沿用其圆角，避免揭幕四角露出直角。 */
+html[data-pinkie-native-glass="1"] .laolao-mode-transition--fx { border-radius: inherit; }
+
+@media (max-width: 720px) {
+  .laolao-mode-transition--fx .laolao-mode-transition__veil { background: linear-gradient(0deg, rgba(255,251,246,.95), rgba(255,251,246,.08) 72%); }
+  .laolao-mode-transition--fx .laolao-mode-transition__content { right: 24px; bottom: 30px; left: 24px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-mode-transition--fx *, .laolao-mode-transition--fx *::before, .laolao-mode-transition--fx *::after { animation: none !important; transition: none !important; }
+}

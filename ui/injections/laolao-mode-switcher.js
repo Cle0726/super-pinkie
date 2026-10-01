@@ -273,11 +273,33 @@
     // All assets are local. Pre-decode them during the first idle window so a
     // later mode switch does not wait behind a 3.6s timer plus four serial
     // image groups. Promise deduplication in PinkieMotion keeps this cheap.
+    modes.forEach((mode) => window.PinkieModeTransitionFx?.warm?.(mode.id));
     await Promise.all(modes.map(mode => motion.preload(mode.transition)));
     await Promise.all(modes.map(mode => motion.modeAssets(mode.id)));
   };
 
-  const playModeTransition = (mode) => new Promise((resolve) => {
+  const playModeTransition = async (mode) => {
+    // The FX module deliberately declines when graphics acceleration is unavailable or the
+    // system asks for reduced motion. In that case the established transition
+    // below remains the complete, accessible fallback.
+    let fx = null;
+    try {
+      // Keep the old path usable even if an optional module is only partly
+      // loaded (or its feature probe itself throws on an unusual graphics setup).
+      fx = window.PinkieModeTransitionFx?.play?.(mode, {onExit: () => motion.enter()}) || null;
+    } catch {}
+    if (fx) {
+      try {
+        await fx.ready;
+        // Do not touch the router while a corner can still show the old page.
+        await fx.covered;
+        return {overlay: fx.overlay, fx, assets: motion.modeAssets(mode.id)};
+      } catch {
+        fx.abort?.();
+      }
+    }
+
+    return new Promise((resolve) => {
     const overlay = document.createElement("section");
     overlay.className = `laolao-mode-transition laolao-mode-transition--${mode.id}`;
     overlay.setAttribute("role", "status");
@@ -357,7 +379,8 @@
       startedAt = performance.now();
       window.requestAnimationFrame(tick);
     });
-  });
+    });
+  };
 
   const navigateWithinApp = (mode, next) => {
     const shell = document.querySelector("openclaw-app-shell");
@@ -384,6 +407,8 @@
     let fallbackStarted = false;
     let assetsReady = false;
     ui.assets.then(() => { assetsReady = true; });
+    const waitingText = `模式小屋正在开门，${mode.address}稍等…`;
+    if (ui.fx) ui.fx.waiting(waitingText);
 
     const destinationReady = motion.stable(() => {
       const session = currentSessionKey();
@@ -393,6 +418,15 @@
     const complete = async () => {
       if (completed) return;
       completed = true;
+      if (ui.fx) {
+        try {
+          await ui.fx.finish();
+        } finally {
+          switching = false;
+          resolve();
+        }
+        return;
+      }
       ui.message.textContent = mode.readyPhrase;
       await motion.finishProgress(ui.fill, ui.percentage, ui.progress, 160);
       window.setTimeout(() => {
@@ -410,13 +444,13 @@
       if (completed) return;
       const elapsed = performance.now() - startedAt;
       const value = Math.min(96, Math.round(68 + elapsed / 92));
-      motion.progress(ui.fill, ui.percentage, ui.progress, value);
-      motion.text(ui.message, elapsed < 1200
-        ? `模式小屋正在开门，${mode.address}稍等…`
-        : mode.phrases.at(-1));
+      if (!ui.fx) {
+        motion.progress(ui.fill, ui.percentage, ui.progress, value);
+        motion.text(ui.message, elapsed < 1200 ? waitingText : mode.phrases.at(-1));
+      }
 
       if (destinationReady(performance.now()) && elapsed >= 120) {
-        complete();
+        void complete();
         return;
       }
 
@@ -424,6 +458,7 @@
       // back to a normal reload instead of leaving the user stuck forever.
       if (!fallbackStarted && elapsed >= 12000) {
         fallbackStarted = true;
+        ui.fx?.abort?.();
         sessionStorage.setItem(skipEntrySplashKey, "1");
         sessionStorage.setItem(modeHandoffKey, JSON.stringify({
           mode: mode.id,
@@ -507,7 +542,10 @@
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", String(mode.id === current));
       renderModeButton(option, mode);
-      const warm = () => { void motion.modeAssets(mode.id); };
+      const warm = () => {
+        void motion.modeAssets(mode.id);
+        window.PinkieModeTransitionFx?.warm?.(mode.id);
+      };
       option.addEventListener("pointerenter", warm, {once: true});
       option.addEventListener("focus", warm, {once: true});
       option.addEventListener("click", () => switchMode(mode));
@@ -612,7 +650,10 @@
       option.setAttribute("role", "menuitem");
       option.setAttribute("aria-label", `在右侧分屏打开${mode.label}`);
       renderModeButton(option, mode);
-      const warm = () => { void motion.modeAssets(mode.id); };
+      const warm = () => {
+        void motion.modeAssets(mode.id);
+        window.PinkieModeTransitionFx?.warm?.(mode.id);
+      };
       option.addEventListener("pointerenter", warm, { once: true });
       option.addEventListener("focus", warm, { once: true });
       option.addEventListener("click", () => { void openWorkspaceDock(mode); });
