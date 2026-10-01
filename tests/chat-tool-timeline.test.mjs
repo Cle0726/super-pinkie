@@ -11,6 +11,8 @@ const group = (role, key, messages) => ({
   kind: 'group', key, role, timestamp: 1,
   messages: messages.map((entry, index) => ({message: entry, key: `${key}:${index}`})),
 });
+// A turn's steps now live inside one process card; expand it back into rows.
+const flat = (timeline) => timeline.flatMap((item) => (item.isProcessCard ? item.processRows : [item]));
 
 function parseToolRows(value) {
   const content = Array.isArray(value.content) ? value.content : [];
@@ -54,7 +56,7 @@ test('the current user turn is split into chronological text and single-tool row
     group('assistant', 'final', [message('assistant', '改动已完成。', 'final')]),
   ];
 
-  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
   assert.equal(timeline.some((item) => item.key === 'image-only-user'), true);
   assert.equal(timeline.some((item) => item.key === 'watchdog' || item.key === 'tier-control'), false);
   const current = timeline.findIndex((item) => item.key === 'current-user');
@@ -93,7 +95,7 @@ test('older real turns use the same timeline rows and internal user messages do 
     group('assistant', 'second-final', [message('assistant', '第二轮已经完成。', 'second-final')]),
   ];
 
-  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
   const second = timeline.findIndex((item) => item.key === 'second-user');
   assert.ok(second > 0);
   assert.deepEqual(timeline.slice(0, second).map((item) => item.role), [
@@ -118,13 +120,14 @@ test('each historical turn has its own stable overflow row', () => {
   entries.push(group('user', 'latest-user', [message('user', 'new task', 'latest-user')]));
   entries.push(group('assistant', 'latest-final', [message('assistant', 'new answer', 'latest-final')]));
 
-  const first = pinkieBuildTimeline(entries, parseToolRows);
-  const second = pinkieBuildTimeline(entries, parseToolRows);
+  const first = flat(pinkieBuildTimeline(entries, parseToolRows));
+  const second = flat(pinkieBuildTimeline(entries, parseToolRows));
   const latest = first.findIndex((item) => item.key === 'latest-user');
   const oldRows = first.slice(0, latest);
-  assert.equal(oldRows.length, 80);
+  // user + overflow + 79 trailing steps + the final answer outside the card
+  assert.equal(oldRows.length, 82);
   assert.equal(oldRows[1].timelineOverflow, true);
-  assert.equal(oldRows[1].overflowCount, 22);
+  assert.equal(oldRows[1].overflowCount, 20);
   assert.equal(oldRows[1].key, 'pinkie:timeline:overflow:old-user');
   assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
 });
@@ -141,10 +144,16 @@ test('stream and reading indicators are retained only for the latest real turn',
     group('assistant', 'latest-final', [message('assistant', 'latest answer', 'latest-final')]),
   ];
 
-  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const projected = pinkieBuildTimeline(entries, parseToolRows);
+  const timeline = flat(projected);
   assert.equal(timeline.some((item) => item.key === 'stale-stream' || item.key === 'stale-reading'), false);
-  assert.equal(timeline.find((item) => item.key === 'live-stream')?.isTimelineStep, true);
-  assert.equal(timeline.find((item) => item.key === 'live-reading')?.isTimelineStep, true);
+  // The live reply streams below the card as a normal bubble.
+  assert.equal(timeline.find((item) => item.key === 'live-stream')?.isTimelineStep, undefined);
+  assert.equal(timeline.find((item) => item.key === 'live-reading')?.kind, 'reading-indicator');
+  const live = projected.find((item) => item.isProcessCard);
+  assert.equal(live?.key, 'pinkie:process:latest-user');
+  assert.equal(live?.processLive, true);
+  assert.equal(projected.filter((item) => item.isProcessCard).length, 1);
 });
 
 test('a user steer between a tool call and its result remains chronological without losing either tool step', () => {
@@ -164,8 +173,8 @@ test('a user steer between a tool call and its result remains chronological with
     group('assistant', 'final', [message('assistant', '已经完成。', 'final')]),
   ];
 
-  const first = pinkieBuildTimeline(entries, parseToolRows);
-  const second = pinkieBuildTimeline(entries, parseToolRows);
+  const first = flat(pinkieBuildTimeline(entries, parseToolRows));
+  const second = flat(pinkieBuildTimeline(entries, parseToolRows));
   assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
   assert.deepEqual(first.map((item) => item.key), [
     'first-user', 'narrate:0', 'call:0:timeline:tool:0', 'steer-user',
@@ -206,12 +215,12 @@ test('turns beyond 80 rows collapse older steps into one expandable row', () => 
   for (let index = 0; index < 100; index += 1) {
     entries.push(group('assistant', `step-${index}`, [message('assistant', `step ${index}`, `step-${index}`)]));
   }
-  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
   const start = timeline.findIndex((item) => item.key === 'turn-user');
   const rows = timeline.slice(start);
-  assert.equal(rows.length, 80);
+  assert.equal(rows.length, 82);
   assert.equal(rows[1].timelineOverflow, true);
-  assert.equal(rows[1].overflowCount, 22);
+  assert.equal(rows[1].overflowCount, 20);
   assert.equal(rows.at(-1).messages[0].message.content, 'step 99');
   const renderer = fs.readFileSync(new URL('../patch/apply-chat-timeline.mjs', import.meta.url), 'utf8');
   assert.match(renderer, /<details class="chat-timeline-overflow">/);
@@ -264,11 +273,11 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v3 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v4 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
-function asLegacyV1Bundle(v3Bundle) {
-  const v2Bundle = asOlderBundle(v3Bundle, 'v2');
+function asLegacyV1Bundle(v4Bundle) {
+  const v2Bundle = asOlderBundle(v4Bundle, 'v2');
   const v2Marker = '/* pinkie-chat-timeline:v2 */';
   const markerIndex = v2Bundle.indexOf(v2Marker);
   const legacyStart = v2Bundle.indexOf('function isRealUserGroup', markerIndex);
@@ -284,7 +293,7 @@ function asLegacyV1Bundle(v3Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v3/);
+  assert.match(result.text, /pinkie-chat-timeline:v4/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,512\)/);
   assert.match(result.text, /return 512/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -303,16 +312,16 @@ test('native bundle patch is structural, idempotent, syntax-safe and skips chang
   });
 });
 
-test('an installed v1 chat bundle upgrades to v3 through apply and stays idempotent', (t) => {
-  const v3 = transformWithStatus(bundleFixture).text;
-  const v1 = asLegacyV1Bundle(v3);
+test('an installed v1 chat bundle upgrades to v4 through apply and stays idempotent', (t) => {
+  const v4 = transformWithStatus(bundleFixture).text;
+  const v1 = asLegacyV1Bundle(v4);
   assert.match(v1, /pinkie-chat-timeline:v1/);
   assert.match(v1, /const prefix = safeEntries\.slice/);
 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v3/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v4/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -348,21 +357,21 @@ test('timeline tool details keep no card shell and injection cache keys advance'
     assert.match(source, /laolao-queue-steer\.js\?v=queuesteer2/u);
   }
   for (const source of [mac, windows]) {
-    assert.match(source, /clekk-history32/u);
-    assert.match(source, /clekk-history-render-32/u);
+    assert.match(source, /clekk-history33/u);
+    assert.match(source, /clekk-history-render-33/u);
   }
 });
 
-test('an installed v2 chat bundle upgrades to v3 in place', () => {
-  const v3 = transformWithStatus(bundleFixture).text;
+test('an installed v2 chat bundle upgrades to v4 in place', () => {
+  const v4 = transformWithStatus(bundleFixture).text;
   // The released v2 runtime still gave synthetic tool rows a top-level toolName.
-  const v2 = asOlderBundle(v3, 'v2').replace('return cleanAssistantMessage(message, content);',
+  const v2 = asOlderBundle(v4, 'v2').replace('return cleanAssistantMessage(message, content);',
     "return {...message, role: 'assistant', toolName: 'legacy', content};");
   assert.match(v2, /toolName: 'legacy'/);
   const upgraded = transformWithStatus(v2);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v2');
-  assert.equal(upgraded.text, v3);
+  assert.equal(upgraded.text, v4);
   assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
 });
 
@@ -378,7 +387,7 @@ test('history tool results without their call part render as named tool rows', (
     }]),
     group('assistant', 'final', [message('assistant', '读完了。', 'final')]),
   ];
-  const timeline = pinkieBuildTimeline(entries, () => []);
+  const timeline = flat(pinkieBuildTimeline(entries, () => []));
   const row = timeline.find((item) => item.key === 'result:0');
   assert.equal(row.isTimelineStep, true);
   const synthetic = row.messages[0].message;
@@ -390,4 +399,90 @@ test('history tool results without their call part render as named tool rows', (
   ]);
   assert.equal(synthetic.content[1].text, '# SOUL.md');
   assert.equal(synthetic.content[1].isError, false);
+});
+
+test('a turn with steps becomes user · process card · final reply', () => {
+  const entries = [
+    {...group('user', 'u1', [message('user', '跑一下测试', 'u1')]), timestamp: 1000},
+    group('tool', 'tools', [
+      message('assistant', [
+        {type: 'text', text: '我先跑测试。'},
+        {type: 'tool_call', callId: 'e1', name: 'exec', arguments: {command: 'npm test'}},
+      ], 'call'),
+      message('tool', [{type: 'tool_result', callId: 'e1', name: 'exec', text: 'ok'}], 'result'),
+    ]),
+    {...group('assistant', 'final', [message('assistant', '全部通过。', 'final')]), timestamp: 19000},
+  ];
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  assert.deepEqual(timeline.map((item) => item.key), ['u1', 'pinkie:process:u1', 'final']);
+  const card = timeline[1];
+  assert.equal(card.isProcessCard, true);
+  assert.equal(card.processLive, false);
+  assert.equal(card.processTitle, '碧琪的工作过程');
+  assert.equal(card.processMeta, '1 个步骤 · 用时 18 秒');
+  assert.deepEqual(card.processRows.map((row) => row.role), ['assistant', 'tool']);
+  assert.equal(card.processRows.every((row) => row.isTimelineStep), true);
+});
+
+test('plain answers keep the native layout unless the page recorded their thinking', () => {
+  const entries = [
+    group('user', 'chat-user', [message('user', '你好', 'chat-user')]),
+    group('assistant', 'chat-final', [message('assistant', '你好呀！', 'chat-final')]),
+    group('user', 'next-user', [message('user', '再见', 'next-user')]),
+    group('assistant', 'next-final', [message('assistant', '拜拜！', 'next-final')]),
+  ];
+  assert.deepEqual(pinkieBuildTimeline(entries, parseToolRows).map((item) => item.key),
+    ['chat-user', 'chat-final', 'next-user', 'next-final']);
+  globalThis.__pinkieProcessKeep = new Set(['pinkie:process:chat-user']);
+  try {
+    const kept = pinkieBuildTimeline(entries, parseToolRows);
+    assert.deepEqual(kept.map((item) => item.key),
+      ['chat-user', 'pinkie:process:chat-user', 'chat-final', 'next-user', 'next-final']);
+    assert.equal(kept[1].processRows.length, 0);
+    assert.equal(kept[1].processLive, false);
+  } finally {
+    delete globalThis.__pinkieProcessKeep;
+  }
+});
+
+test('narration streamed before a later tool call is already a card row while live', () => {
+  const entries = [
+    group('user', 'live-user', [message('user', '查一下', 'live-user')]),
+    {kind: 'stream', key: 'say-1', text: '我先查配置。', startedAt: 2},
+    group('tool', 'tool-1', [message('assistant', [
+      {type: 'tool_call', callId: 'r1', name: 'read', arguments: {path: 'a.json'}},
+    ], 'tool-1')]),
+    {kind: 'stream', key: 'reply', text: '查到了', startedAt: 4},
+    {kind: 'reading-indicator', key: 'reading'},
+  ];
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  assert.deepEqual(timeline.map((item) => item.key), ['live-user', 'pinkie:process:live-user', 'reply', 'reading']);
+  const card = timeline[1];
+  assert.equal(card.processLive, true);
+  assert.equal(card.processTitle, '碧琪正在干活');
+  assert.equal(card.processMeta, '已做 1 步');
+  assert.deepEqual(card.processRows.map((row) => [row.key, row.role]), [['say-1', 'assistant'], ['tool-1:0:timeline:tool:0', 'tool']]);
+  assert.equal(card.processRows[0].messages[0].message.content[0].text, '我先查配置。');
+});
+
+test('the renderer opens the card while live and keeps the slots for the page script', () => {
+  const v4 = transformWithStatus(bundleFixture).text;
+  assert.match(v4, /if\(e&&e\.isProcessCard\)return s`<div class="chat-group assistant chat-group--process"/);
+  assert.match(v4, /<details class="pinkie-process" \?open=\$\{e\.processLive\}/);
+  assert.match(v4, /data-pinkie-thinking=\$\{e\.key\}/);
+  assert.match(v4, /data-pinkie-status=\$\{e\.key\}/);
+  assert.match(v4, /e\.processRows\.map\(n=>n\.kind===`group`\?_S\(n,t\):c\)/);
+});
+
+test('an installed v3 bundle gains the process-card renderer when it upgrades to v4', () => {
+  const v4 = transformWithStatus(bundleFixture).text;
+  const branch = /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u.exec(v4)?.[0];
+  assert.ok(branch);
+  // What v3 installed: same runtime span, renderer without the card branch.
+  const v3 = asOlderBundle(v4, 'v3').replace(branch, '');
+  assert.doesNotMatch(v3, /isProcessCard\)return/);
+  const upgraded = transformWithStatus(v3);
+  assert.equal(upgraded.reason, 'upgraded-v3');
+  assert.equal(upgraded.text, v4);
+  assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
 });
