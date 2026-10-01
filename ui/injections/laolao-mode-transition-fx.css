@@ -1,13 +1,9 @@
 /* WebGL 模式转场的补层。基础胶囊、配色和小纹理由 laolao-theme.css 提供；
-   本文件只把它们接到新的画布、揭幕和完成反馈上。开屏把同一套
-   laolao-fx-progress 嵌入原胶囊，具体尺寸仍留在 laolao-splash.css。 */
-:where(.laolao-mode-transition--fx, .laolao-splash--fx) {
+   本文件只把它们接到新的画布、揭幕和完成反馈上。 */
+.laolao-mode-transition--fx {
   --laolao-transition-tip: 255, 240, 248;
   --laolao-transition-ring: 239, 95, 158;
   --laolao-transition-glow: 231, 77, 145;
-}
-:where(.laolao-mode-transition--fx, .laolao-splash--fx) .laolao-fx-progress { isolation: isolate; }
-.laolao-mode-transition--fx {
   display: block;
   background: transparent;
   opacity: 1;

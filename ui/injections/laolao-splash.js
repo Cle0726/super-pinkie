@@ -63,58 +63,23 @@
   const started = performance.now();
   const minimum = motion.reduced() ? 400 : switching ? 700 : 2600;
   let completed = false;
+  // 冷启动的开屏动效（laolao-splash-fx.js）。首帧不等它，空闲时再接手；
+  // 不支持、减少动态效果或素材失败时返回 null，下面的静态开屏照常走完。
   let splashFx = null;
-  let lastProgress = initial;
-  let lastPhrase = switching ? details.waiting : '';
-  let enteredThroughFx = false;
-  const setProgress = (value, phrase) => {
-    lastProgress = motion.progress(fill, percentage, bar, value);
-    lastPhrase = phrase;
-    motion.text(message, phrase);
-    // 旧胶囊仍由 PinkieMotion 的 transform-only 写入；FX 只叠高光、白字
-    // 和前端光点，所以未就绪、失败或关闭效果时完全回到原来路径。
-    if (splashFx?.isReady) splashFx.progress(lastProgress, {message: phrase});
-  };
-  const clear = () => {
-    splash.remove();
-    window.dispatchEvent(new CustomEvent('laolao:splash-cleared', {
-      detail: { mode, switching },
-    }));
-  };
-  // 不让首帧为了 WebGL probe、下载或解码等一帧：等静态画面已画好，再进
-  // 第一个空闲窗口。切换接续只有 700ms，若这时还没准备好就自然走静态离场。
-  const startFxWhenIdle = () => {
-    if (motion.reduced()) return;
-    const launch = () => {
-      if (completed || splashFx) return;
-      try {
-        const candidate = window.PinkieModeTransitionFx?.playSplash?.({
-          host: splash,
-          sceneId: switching ? mode : 'splash',
-          initialProgress: lastProgress,
-          onExit: () => {
-            if (!enteredThroughFx) { enteredThroughFx = true; motion.enter(); }
-          },
-        });
-        if (!candidate) return;
-        splashFx = candidate;
-        candidate.ready.then(() => {
-          if (completed) { candidate.abort?.(); return; }
-          candidate.progress(lastProgress, {message: lastPhrase});
-        }).catch(() => {
-          if (splashFx === candidate) splashFx = null;
-        });
-      } catch {}
-    };
-    window.requestAnimationFrame(() => {
-      if (completed) return;
-      // 接续画面本身只有 700ms 的最短停留：等到 idle timeout 再创建 WebGL，
-      // 本地素材即使很快也可能赶不上。静态首帧已经提交后，下一轮任务马上接管；
-      // 冷启动仍只在空闲窗口初始化，绝不阻塞第一帧。
-      if (switching) window.setTimeout(launch, 0);
-      else if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(launch, {timeout: 450});
-      else window.setTimeout(launch, 70);
+  let fxEntered = false;
+  const startFx = () => {
+    if (completed || splashFx || switching) return;
+    const candidate = window.PinkieSplashFx?.play?.({
+      host: splash,
+      onImpact: () => { fxEntered = true; motion.enter(); },
     });
+    if (!candidate) return;
+    splashFx = candidate;
+    candidate.ready.catch(() => { if (splashFx === candidate) splashFx = null; });
+  };
+  const setProgress = (value, phrase) => {
+    motion.progress(fill, percentage, bar, value);
+    motion.text(message, phrase);
   };
   const ready = motion.stable(() => {
     // 2026.9.x exposes the mounted surface as <openclaw-app-shell>; the old
@@ -147,27 +112,27 @@
     completed = true;
     if (success) {
       motion.text(message, switching ? details.ready : `${details.address}，门要开啦！`);
-      const finalPhrase = switching ? details.ready : `${details.address}，门要开啦！`;
-      if (splashFx?.isReady) {
-        const activeFx = splashFx;
-        // 胶囊走满、完成光和 460ms 冲刺共用同一段约 900ms 离场时钟。
-        // 先让 runner 记住完成点，但保留旧 transform-only 填充到 100%。
-        activeFx.finish({keepProgress: true}).then(() => {
-          if (!enteredThroughFx) { enteredThroughFx = true; motion.enter(); }
-          clear();
-        });
-        await motion.finishProgress(fill, percentage, bar);
-        activeFx.progress(100, {message: finalPhrase, done: true});
+      if (splashFx?.active) {
+        // 动效版离场：进度走满、碧琪冲向镜头、冲破开屏露出 App。
+        await splashFx.finish();
+        if (!fxEntered) motion.enter();
+        splash.remove();
+        window.dispatchEvent(new CustomEvent('laolao:splash-cleared', {
+          detail: { mode, switching },
+        }));
         return;
       }
       await motion.finishProgress(fill, percentage, bar);
     }
-    splashFx?.abort?.();
+    splashFx?.abort();
     window.setTimeout(() => {
       if (success) motion.enter();
       splash.classList.add('is-leaving');
       window.setTimeout(() => {
-        clear();
+        splash.remove();
+        window.dispatchEvent(new CustomEvent('laolao:splash-cleared', {
+          detail: { mode, switching },
+        }));
       }, motion.reduced() ? 0 : 560);
     }, success && !motion.reduced() ? 160 : 0);
   };
@@ -202,9 +167,11 @@
     splash.querySelector('.laolao-splash__content').append(actions);
   }, 30000);
   setProgress(initial, switching ? details.waiting : phrases[0]);
-  startFxWhenIdle();
   window.requestAnimationFrame(() => {
     fill.style.removeProperty('transition');
     window.requestAnimationFrame(tick);
+    if (switching || motion.reduced()) return;
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(startFx, {timeout: 400});
+    else window.setTimeout(startFx, 60);
   });
 })();

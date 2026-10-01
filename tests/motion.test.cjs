@@ -97,12 +97,12 @@ test('cold startup and handoff retain their safety gates while splash FX stays o
   // The canvas is deliberately an optional, idle-time enhancement. Reduced
   // motion, a missing controller/WebGL, or an asset failure must leave the
   // old static controller running instead of blocking the page.
-  assert.match(splash,/if \(motion\.reduced\(\)\) return/);
-  assert.match(splash,/requestIdleCallback/);
-  assert.match(splash,/PinkieModeTransitionFx\?\.playSplash\?\./);
+  assert.match(splash,/if \(switching \|\| motion\.reduced\(\)\) return/);
+  assert.match(splash,/requestIdleCallback\(startFx/);
+  assert.match(splash,/PinkieSplashFx\?\.play\?\./);
   assert.match(splash,/if \(!candidate\) return/);
   assert.match(splash,/candidate\.ready[\s\S]*?\.catch\(\(\) => \{[\s\S]*?splashFx = null/);
-  assert.match(splash,/splashFx\?\.abort\?\.\(\)/);
+  assert.match(splash,/splashFx\?\.abort\(\)/);
 
   // Keep every legacy escape hatch and event: 6.5s shell escape, real-login
   // escape, 30s recovery controls, docked direct removal, and the cleared
@@ -111,8 +111,9 @@ test('cold startup and handoff retain their safety gates while splash FX stays o
   assert.match(splash,/loginReady\(now\) && elapsed >= 5000/);
   assert.match(splash,/\}, 30000\);/);
   assert.match(splash,/if \(docked\) \{[\s\S]{0,700}splash\.remove\(\)[\s\S]{0,260}laolao:splash-cleared/);
-  assert.match(splash,/const clear = \(\) => \{[\s\S]*?splash\.remove\(\)[\s\S]*?laolao:splash-cleared/);
-  assert.match(splash,/activeFx\.finish\([^)]*\)\.then\(\(\) => \{[\s\S]*?motion\.enter\(\)[\s\S]*?clear\(\)/);
+  // FX 离场：等冲破开屏播完再移除；没在冲破时入场的兜底补一次 motion.enter()。
+  assert.match(splash,/await splashFx\.finish\(\);[\s\S]{0,80}if \(!fxEntered\) motion\.enter\(\);[\s\S]{0,40}splash\.remove\(\)[\s\S]{0,160}laolao:splash-cleared/);
+  assert.match(splash,/splash\.classList\.add\('is-leaving'\)[\s\S]{0,120}splash\.remove\(\)[\s\S]{0,160}laolao:splash-cleared/);
 });
 test('startup cannot force success on timeout; animation survives while error recovery stays available',()=>{
   const splash=read('ui/injections/laolao-splash.js'),mode=read('ui/injections/laolao-mode-switcher.js');
