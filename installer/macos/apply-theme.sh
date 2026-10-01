@@ -510,10 +510,10 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-process-card.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard2"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-process-card.js?v=processcard1' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard1}g' "$index_file"
+  elif ! grep -Fq 'laolao-process-card.js?v=processcard2' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard2}g' "$index_file"
     DID_CHANGE=1
   fi
   # 动效规范必须排在 laolao-theme.css 之后，才能覆盖主题里写死的时长和曲线。
