@@ -48,6 +48,9 @@ return threshold;}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
 test('compaction triggers at the configured window share and leaves recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
+  assert.equal(installedPolicy.modelLimits['deepseek/deepseek-flash'],1048576);
+  assert.equal(installedPolicy.modelLimits['deepseek/deepseek-v4-pro'],1048576);
+  assert.equal(installedPolicy.modelLimits['deepseek/deepseek-v4-flash-vision-exp'],undefined);
   // 所有模式共用同一条触发边界，档位表已随 2026-09-13 的 Mac→git 同步移除。
   assert.equal(installedPolicy.triggerRatio,.85);
   assert.equal(installedPolicy.targetRatio,.6);

@@ -97,5 +97,7 @@ test('OpenClaw tap drops reasoning and carries actual assistant/tool events',asy
 test('tool labels retain actual paths and commands instead of fabricated progress',()=>{
   const src=read('ui/injections/laolao-phrases.js');
   assert.doesNotMatch(src,/detail\.textContent = (?:detailPhrase|cardDetailPhrase)/);
-  assert.match(src,/toolLabel\.textContent=label\+' · '\+rawToolName/);
+  // Localized in place on Lit's text node; the raw tool name stays visible.
+  assert.match(src,/return label\?`\$\{label\} · \$\{core\}`:null/);
+  assert.doesNotMatch(src,/toolLabel\.textContent\s*=/);
 });

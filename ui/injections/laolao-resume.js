@@ -21,6 +21,13 @@
   const activePane = () => chatPanes().find((pane) => pane.active === true) || chatPanes()[0] || null;
   const routedSessionKey = () => new URLSearchParams(window.location.search).get("session")?.trim() || "";
   const paneSessionKey = (pane) => pane?.state?.sessionKey?.trim() || "";
+  // macOS keeps each half of the split workspace in its own WKWebView. WebKit
+  // may mark the unfocused half as hidden even though it remains on screen;
+  // that half still needs terminal-event and stale-run recovery.
+  const isVisibleChatSurface = () => !document.hidden
+    || document.documentElement?.hasAttribute?.("data-laolao-workspace-split")
+    || document.documentElement?.hasAttribute?.("data-laolao-workspace-dock")
+    || new URLSearchParams(location.search).get("laolao-dock") === "1";
   // URL is the selected session. The pane can still hold the previous session
   // for a render tick (or indefinitely after a failed router update).
   const currentSessionKey = () => {
@@ -53,6 +60,8 @@
   const gatewayConnected = () => Boolean(
     gatewayClient() && (gatewaySnapshot()?.connected === true || nativeGatewayConnected())
   );
+  const recoveryTransportAvailable = () => gatewayConnected()
+    || typeof window.__laolaoSidebar?.gwRequest === "function";
 
   // The classic 7.1 client can enter a poisoned reconnect state after the
   // local gateway process is replaced: every automatic WebSocket attempt is
@@ -67,7 +76,7 @@
   // so a repaired renderer could remain invisible forever. Run one guarded
   // cache migration per UI revision. This removes only disposable control-ui
   // caches; transcripts, settings, prompts and media are not stored here.
-  const UI_CACHE_REVISION = "history-render-18";
+  const UI_CACHE_REVISION = "history-render-28";
   const UI_CACHE_REFRESHED = `laolao:ui-cache-refreshed:${UI_CACHE_REVISION}`;
   const UI_CACHE_REFRESH_ATTEMPTED = `laolao:ui-cache-refresh-attempted:${UI_CACHE_REVISION}`;
   let gatewayOfflineSince = 0;
@@ -151,7 +160,7 @@
   };
 
   const probeReadyForSocketRecovery = async () => {
-    if (document.hidden || !location.pathname.startsWith("/chat")) return;
+    if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
     // Native UI says online: do not second-guess it with a stale injected
     // snapshot and, critically, never reload a healthy visible chat.
     if (nativeGatewayConnected()) {
@@ -194,19 +203,36 @@
     return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timer));
   };
 
+  // The sidebar owns a second gateway socket. A native control-ui snapshot
+  // can claim to be online while its request promise is already poisoned;
+  // read-only recovery may safely retry through that independent connection.
+  const requestRecovery = async (method, params, timeoutMs = 8000, client = gatewayClient()) => {
+    const fallback = window.__laolaoSidebar?.gwRequest;
+    let primaryError;
+    if (client && gatewayConnected()) {
+      try {
+        return await withTimeout(client.request(method, params),
+          typeof fallback === "function" ? Math.min(timeoutMs, 5000) : timeoutMs);
+      } catch (error) { primaryError = error; }
+    }
+    if (typeof fallback === "function") {
+      return withTimeout(fallback(method, params, timeoutMs), timeoutMs + 1000);
+    }
+    throw primaryError || new Error("gateway recovery transport unavailable");
+  };
+
   const isHistoryRebuildingError = (error) => {
     const text = String(error?.message || error?.errorMessage || error || "");
     return /session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(text);
   };
 
-  // 会话记录始终完整保存在网关/SQLite；浏览器只持有最后五条可见消息。
-  // 这不是删除历史，而是一个 live window（实时窗口）：避免一次断线恢复
-  // 把数百条旧记录重新塞进 Lit 和 WebKit，导致输入框抢滚动、闪跳和内存飙升。
-  const LIVE_MESSAGE_WINDOW = 5;
-  const HISTORY_PAGE_SIZE = LIVE_MESSAGE_WINDOW;
+  // The native timeline renders at most 80 rows. Keep a larger bounded message
+  // window so a long current turn (including tool calls and their results)
+  // survives reconnects and app restarts; old turns still never load wholesale.
+  const LIVE_MESSAGE_WINDOW = 512;
+  const HISTORY_PAGE_SIZE = 128;
   // Internal watchdog turns are persisted for crash/restart recovery, but are
-  // not visible chat records. Scan a few tiny pages until five renderable
-  // records are found; only those five are ever assigned to Lit/the DOM.
+  // not visible chat records. Scan bounded pages until the live window is full.
   const HISTORY_MAX_SCAN_PAGES = 12;
   const HISTORY_MAX_CHARS = 240000;
   const historyStatusBySession = new Map();
@@ -250,7 +276,7 @@
     if (role === "user") {
       if (hasUserMedia(message) || hasVisibleNonTextContent(message)) return true;
       if (!visibleText) return false;
-      if (/^\[pinkie-(?:watchdog|tier)[^\]]*\]\s*$/iu.test(visibleText)) return false;
+      if (/^\[pinkie-(?:watchdog|tier-control|tier)[^\]]*\]/iu.test(visibleText)) return false;
       return true;
     }
     if (role === "assistant") {
@@ -299,12 +325,22 @@
   };
 
   // 恢复发生时页面已确认 idle，说明正在发送的 optimistic 消息早应落盘。
-  // 因此 server tail 是唯一权威来源，绝不能再把旧 Lit state 拼到最后：
-  // 页面若恰好保留的是旧页，拼接后 slice(-5) 会反过来把刚拉到的最新五条
-  // 挤掉，视觉上就像聊天记录丢失。流式期间由 isBusy() 直接跳过恢复。
-  const mergeRecentHistory = (history) => uniqueMessages(
-    Array.isArray(history) ? history : []
-  ).filter(isRenderableHistoryMessage).slice(-LIVE_MESSAGE_WINDOW);
+  // 流式期间由 isBusy() 直接跳过恢复。若单轮异常长到超过窗口，仍保留
+  // 最后一条真实用户消息作为时间线起点，并把其余容量留给最新步骤。
+  const keepLiveMessages = (messages) => {
+    const renderable = uniqueMessages(Array.isArray(messages) ? messages : [])
+      .filter(isRenderableHistoryMessage);
+    if (renderable.length <= LIVE_MESSAGE_WINDOW) return renderable;
+    const lastUserIndex = renderable.findLastIndex((message) =>
+      String(message?.role || "").toLowerCase() === "user");
+    const start = renderable.length - LIVE_MESSAGE_WINDOW;
+    if (lastUserIndex >= 0 && lastUserIndex < start) {
+      return [renderable[lastUserIndex], ...renderable.slice(-LIVE_MESSAGE_WINDOW + 1)];
+    }
+    return renderable.slice(-LIVE_MESSAGE_WINDOW);
+  };
+
+  const mergeRecentHistory = (history) => keepLiveMessages(history);
 
   const sameMessageSequence = (left, right) => {
     if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
@@ -331,7 +367,7 @@
   // 完整记录留在持久层，需要时由会话检查点/搜索读取；聊天页只同步 live window。
   const fetchRecentHistory = async (pane, sessionKey, expectedClient) => {
     const client = expectedClient || gatewayClient();
-    if (!client || !gatewayConnected() || !sessionKey) return null;
+    if (!recoveryTransportAvailable() || !sessionKey) return null;
     // 会话切换或 websocket 换代后，旧请求的结果绝不能写进新聊天。
     if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey) return null;
     let offset = 0;
@@ -341,10 +377,7 @@
     let renderable = [];
     while (hasMore && pageCount < HISTORY_MAX_SCAN_PAGES
         && renderable.length < LIVE_MESSAGE_WINDOW) {
-      const page = await withTimeout(
-        client.request("chat.history", historyParams(sessionKey, offset)),
-        20000,
-      );
+      const page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
       if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey) return null;
       if (!newestPage) newestPage = page;
       const rawMessages = Array.isArray(page?.messages) ? page.messages : [];
@@ -356,7 +389,7 @@
     }
 
     return {
-      messages: renderable.slice(-LIVE_MESSAGE_WINDOW),
+      messages: keepLiveMessages(renderable),
       sessionId: String(newestPage?.sessionInfo?.sessionId || newestPage?.sessionId || ""),
       totalMessages: Number.isFinite(newestPage?.totalMessages) ? newestPage.totalMessages : undefined,
       pageCount,
@@ -376,6 +409,106 @@
     // permissions. It is not evidence of a live model turn.
     return false;
   };
+
+  const terminalPainted = (pane, message) => {
+    const raw = messageText(message).trim();
+    if (!raw) return false;
+    // The native renderer keeps the unformatted reply on each visible bubble.
+    // Checking the exact bubble avoids mistaking a state-only final for a
+    // painted one (and avoids matching the same text in the composer).
+    const bubbles = pane?.querySelectorAll?.(".chat-bubble[data-message-text]") || [];
+    for (const bubble of bubbles) {
+      if (String(bubble?.getAttribute?.("data-message-text") || "").trim() === raw) return true;
+    }
+    // Older bundles may not expose data-message-text. Their Markdown renderer
+    // splits text across DOM nodes, so textContent omits the spaces between
+    // paragraphs even though accessibility displays them.
+    const compact = (value) => String(value || "").replace(/[`*_#>~\s]/g, "");
+    const preview = compact(raw);
+    const root = pane?.renderRoot || pane?.shadowRoot || pane;
+    const paintedText = compact(root?.textContent);
+    const head = preview.slice(0, Math.min(32, preview.length));
+    const tail = preview.slice(-Math.min(32, preview.length));
+    return paintedText.includes(head)
+      && (preview.length <= 96 || paintedText.includes(tail));
+  };
+
+  // Sending a new message means the user wants to see that turn's answer,
+  // even when this pane was previously scrolled up. Keep this intent scoped
+  // to the pane: the other half of split view must never move with it.
+  // The native chat pane can be replaced while tool cards are rebuilt. Keep
+  // the follow intent on the session rather than the short-lived DOM element.
+  const followOwnSendBySession = new Map();
+  const paneForEvent = (event) => {
+    const panes = chatPanes();
+    const pathPane = event.composedPath?.().find((node) =>
+      node?.tagName?.toLowerCase?.() === "openclaw-chat-pane");
+    if (pathPane && panes.includes(pathPane)) return pathPane;
+    const closest = event.target?.closest?.("openclaw-chat-pane");
+    if (closest && panes.includes(closest)) return closest;
+    return panes.length === 1 ? panes[0] : null;
+  };
+  const followOwnSend = (pane) => {
+    const state = pane?.state;
+    const sessionKey = paneSessionKey(pane);
+    if (!state || !sessionKey) return;
+    followOwnSendBySession.set(sessionKey, {
+      sessionKey,
+      previousTail: messageIdentity(state.chatMessages?.at(-1)),
+    });
+    state.chatUserNearBottom = true;
+    window.setTimeout(() => {
+      if (followOwnSendBySession.has(sessionKey)) {
+        const current = chatPanes().find((item) => paneSessionKey(item) === sessionKey);
+        current?.state?.scrollToBottom?.({smooth: false});
+      }
+    }, 120);
+  };
+  const followTerminalReply = (pane, messages) => {
+    const sessionKey = paneSessionKey(pane);
+    const follow = followOwnSendBySession.get(sessionKey);
+    if (!follow) return false;
+    const last = messages.at(-1);
+    if (messageIdentity(last) === follow.previousTail
+        || String(last?.role || "").toLowerCase() !== "assistant"
+        || last?.stopReason === "toolUse"
+        || !messageText(last).trim()) return false;
+    followOwnSendBySession.delete(sessionKey);
+    const state = pane.state;
+    state.chatUserNearBottom = true;
+    // Lit may paint the persisted final one frame after chat.history resolves.
+    state.scrollToBottom?.({smooth: false});
+    window.setTimeout(() => {
+      if (paneSessionKey(pane) === sessionKey && !isBusy(pane)) {
+        state.scrollToBottom?.({smooth: false});
+      }
+    }, 120);
+    return true;
+  };
+  const realSendButton = (target) => {
+    const button = target?.closest?.(".chat-send-btn");
+    if (!button || button.disabled || button.hasAttribute?.("disabled")) return null;
+    if (["chat-send-btn--stop", "chat-send-btn--voice", "chat-send-btn--laolao-dictation", "chat-send-btn--queue"]
+      .some((name) => button.classList?.contains(name))) return null;
+    return /send|发送/i.test(button.getAttribute?.("aria-label") || "") ? button : null;
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (realSendButton(event.target)) followOwnSend(paneForEvent(event));
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    const input = event.target?.closest?.(".agent-chat__composer-combobox textarea");
+    if (input?.value?.trim()) followOwnSend(paneForEvent(event));
+  }, true);
+  const cancelFollowOnUserScroll = (event) => {
+    const pane = paneForEvent(event);
+    const sessionKey = paneSessionKey(pane);
+    if (!sessionKey || !followOwnSendBySession.has(sessionKey)) return;
+    followOwnSendBySession.delete(sessionKey);
+    if (pane.state) pane.state.chatUserNearBottom = false;
+  };
+  document.addEventListener("wheel", cancelFollowOnUserScroll, {capture: true, passive: true});
+  document.addEventListener("touchmove", cancelFollowOnUserScroll, {capture: true, passive: true});
 
   // The router can advance before the lazy chat page receives its new loader
   // data. Repair only the selected pane via native reactive properties; never
@@ -452,8 +585,8 @@
     document.body?.removeAttribute("data-laolao-watchdog-message");
   };
 
-  // 只读刷新会话列表。正文恢复不能靠 sessions.list；正文必须走原生
-  // chat pane 的 refreshCurrentChat（内部会调用 chat.history）。
+  // 只读刷新会话列表。正文恢复不能靠 sessions.list；它读取 chat.history，
+  // 而不是重载聊天页或向模型再发送一轮。
   const refreshSession = async () => {
     const client = gatewayClient();
     if (!client || !gatewayConnected()) return;
@@ -478,11 +611,11 @@
 
   // 关键恢复路径：不要点击停止、不要伪造输入框、不要重载整个 App。
   // 不调用原生 refreshCurrentChat：它会先把默认的一整页历史写入 reactive
-  // state，再由本脚本裁掉，正是聊天框反复跳动的来源。这里直接读取最新五条。
-  const recoverPaneChat = async (pane, reason, options) => {
+  // state，再由本脚本裁掉，正是聊天框反复跳动的来源。这里直接读取有界时间线窗口。
+  const recoverPaneChat = async (pane, reason, options = {}) => {
     const sessionKey = paneSessionKey(pane);
     const state = pane?.state;
-    if (!sessionKey || !state || !gatewayConnected()) return false;
+    if (!sessionKey || !state || !recoveryTransportAvailable()) return false;
     if (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey) return false;
     if (pane.sessionKey && pane.sessionKey !== sessionKey) return false;
     const now = Date.now();
@@ -496,21 +629,26 @@
         && now - last.at < RECOVERY_THROTTLE_MS) return false;
     // Never replace a live stream with a persisted snapshot. The native pane
     // owns the active tail; a later idle/recovered event performs the sync.
-    if (isBusy(pane)) return false;
+    if (isBusy(pane) && !options.verifiedTerminal) return false;
     lastRecoveryAt.set(pane, {sessionKey, at: now});
-    const recovery = {sessionKey, promise: null};
+    const recovery = {sessionKey, promise: Promise.resolve(false)};
+    // A pre-fetched page has no first await. Register before starting so the
+    // synchronous identity guard sees this very recovery, not an empty map.
+    recoveryByPane.set(pane, recovery);
     recovery.promise = (async () => {
       try {
         const client = gatewayClient();
-        const recent = await fetchRecentHistory(pane, sessionKey, client);
+        const recent = options.recent || await fetchRecentHistory(pane, sessionKey, client);
         if (!recent || recoveryByPane.get(pane) !== recovery
             || pane.state !== state || paneSessionKey(pane) !== sessionKey
             || (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey)
-            || gatewayClient() !== client || isBusy(pane)) return false;
+            || (!options.recent && gatewayClient() !== client)
+            || (isBusy(pane) && !options.verifiedTerminal)) return false;
         const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
         const mergedMessages = mergeRecentHistory(recent.messages);
         const messagesChanged = !sameMessageSequence(localMessages, mergedMessages);
-        if (messagesChanged) state.chatMessages = mergedMessages;
+        const repaint = options.forcePaint === true;
+        if (messagesChanged || repaint) state.chatMessages = mergedMessages;
         // 新版原生页认识此字段；旧版会忽略它。明确关闭向前分页，避免它把
         // 已持久化的旧记录重新挂回 live DOM。
         if ("chatHistoryPagination" in state) {
@@ -535,10 +673,20 @@
         // Avoid a full Lit render when history is byte-for-byte unchanged;
         // this is common during reconnect polling and was another source of
         // the composer visibly jumping up and down.
-        if (messagesChanged) state.requestUpdate?.();
+        if (messagesChanged || repaint) {
+          state.requestUpdate?.();
+          // In some OpenClaw builds `state` is a plain controller and only
+          // the custom element owns Lit's render queue. Request both; the
+          // extra call is limited to an actual changed/repainted transcript.
+          if (state !== pane) pane.requestUpdate?.();
+        }
         // 只有确实有新消息、且用户明确停在底部，才跟随到末尾。未知状态一律
         // 不抢滚动，避免断线恢复把用户正在看的位置弹走。
-        if (messagesChanged && !isBusy(pane) && state.chatUserNearBottom === true) {
+        const terminalIsVerified = !isBusy(pane) || options.verifiedTerminal;
+        const followedReply = terminalIsVerified
+          && followTerminalReply(pane, recent.messages);
+        if (!followedReply && (messagesChanged || repaint) && terminalIsVerified
+            && state.chatUserNearBottom === true) {
           state.scrollToBottom?.({smooth: false});
         }
         window.dispatchEvent(new CustomEvent("pinkie:session-resynced", {
@@ -569,12 +717,11 @@
         if (recoveryByPane.get(pane) === recovery) recoveryByPane.delete(pane);
       }
     })();
-    recoveryByPane.set(pane, recovery);
     return recovery.promise;
   };
 
   const recoverCurrentChat = async (reason = "unknown", options = {}) => {
-    if (document.hidden || !location.pathname.startsWith("/chat")) return false;
+    if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return false;
     reconcileSelectedSession();
     const panes = chatPanes();
     if (!panes.length) return false;
@@ -593,8 +740,7 @@
     uniqueMessages,
     isRenderableHistoryMessage,
     mergeRecentHistory,
-    keepLatestMessages: (messages) => uniqueMessages(Array.isArray(messages) ? messages : [])
-      .filter(isRenderableHistoryMessage).slice(-LIVE_MESSAGE_WINDOW),
+    keepLatestMessages: keepLiveMessages,
   };
   window.__laolaoGatewayTestHooks = {gatewayConnected, nativeGatewayConnected};
 
@@ -673,17 +819,14 @@
   const STALE_BUSY_RELOAD_COOLDOWN_MS = 10 * 60_000;
   const STALE_BUSY_OFF_KEY = "laolao:stale-busy-reconcile";
   const STALE_BUSY_RELOAD_KEY = "laolao:stale-busy-reload-at";
-  const staleStateByPane = new WeakMap();
+  const staleStateBySession = new Map();
   const staleState = (pane) => {
-    let state = staleStateByPane.get(pane);
+    const sessionKey = paneSessionKey(pane);
+    let state = staleStateBySession.get(sessionKey);
     if (!state) {
-      state = {sessionKey: paneSessionKey(pane), busySince: 0, verifyAt: 0,
+      state = {sessionKey, busySince: 0, verifyAt: 0,
         softResetAt: 0, inFlight: false};
-      staleStateByPane.set(pane, state);
-    }
-    if (state.sessionKey !== paneSessionKey(pane)) {
-      Object.assign(state, {sessionKey: paneSessionKey(pane), busySince: 0,
-        verifyAt: 0, softResetAt: 0, inFlight: false});
+      staleStateBySession.set(sessionKey, state);
     }
     return state;
   };
@@ -766,10 +909,10 @@
   // （网关不在、超时、返回结构不认识）——null 时绝不复位，宁可不动手。
   const backendHasActiveRun = async (sessionKey = currentSessionKey()) => {
     const client = gatewayClient();
-    if (!client || !gatewayConnected()) return null;
+    if (!recoveryTransportAvailable()) return null;
     let payload;
     try {
-      payload = await withTimeout(client.request("sessions.list", {limit: 1000}), 6000);
+      payload = await requestRecovery("sessions.list", {limit: 1000}, 6000, client);
     } catch {
       return null;
     }
@@ -781,17 +924,104 @@
     return null;
   };
 
+  // A watchdog retry can finish under a new run id after the native pane has
+  // stopped listening to the original run. In that case the composer looks
+  // idle and the tool card stays behind, even though chat.history has a final.
+  // Independently compare the server tail every few seconds. Only the exact
+  // session's persisted terminal reply, combined with hasActiveRun=false, may
+  // replace local state; this never sends another prompt or aborts a live run.
+  const TERMINAL_PROBE_MS = 5_000;
+  const terminalProbeAtBySession = new Map();
+  const terminalProbeInFlight = new Set();
+  const terminalProbeStatusBySession = new Map();
+  const reconcilePersistedFinal = async (pane = activePane()) => {
+    const key = paneSessionKey(pane);
+    if (!key || !pane?.state || !recoveryTransportAvailable()
+        || !location.pathname.startsWith("/chat")) return false;
+    if (pane === activePane() && routedSessionKey() && routedSessionKey() !== key) return false;
+    if (pane.sessionKey && pane.sessionKey !== key) return false;
+    // A painted local assistant can be the *previous* turn. The native pane
+    // sometimes renders the new user bubble/tool card outside chatMessages,
+    // leaving that old assistant as the array tail. Never conclude the server
+    // has no newer final from local paint alone; compare the server tail.
+    const now = Date.now();
+    const lastProbeAt = terminalProbeAtBySession.get(key);
+    if (terminalProbeInFlight.has(key)
+        || (Number.isFinite(lastProbeAt) && now - lastProbeAt < TERMINAL_PROBE_MS)) return false;
+    terminalProbeAtBySession.set(key, now);
+    terminalProbeInFlight.add(key);
+    try {
+      const backendActive = await backendHasActiveRun(key);
+      if (backendActive !== false || paneSessionKey(pane) !== key) return false;
+      const recent = await fetchRecentHistory(pane, key, gatewayClient());
+      if (!recent) return false;
+      const final = recent.messages.at(-1);
+      if (String(final?.role || "").toLowerCase() !== "assistant"
+          || final?.stopReason === "toolUse" || !messageText(final).trim()) return false;
+      const current = pane.state?.chatMessages?.at(-1);
+      const sameFinal = messageIdentity(current) === messageIdentity(final);
+      if (sameFinal && !isBusy(pane) && terminalPainted(pane, final)) return false;
+      // Do not replace an optimistic user send with an older terminal reply.
+      const currentAt = Date.parse(String(current?.timestamp || current?.ts || ""))
+        || Number(current?.timestamp || current?.ts) || 0;
+      const finalAt = Date.parse(String(final?.timestamp || final?.ts || ""))
+        || Number(final?.timestamp || final?.ts) || 0;
+      if (currentAt && finalAt && finalAt < currentAt) return false;
+      const freshRunAt = Number(pane.state?.chatRunStatus?.occurredAt) || 0;
+      if (freshRunAt && now - freshRunAt < 10_000) return false;
+      if (paneSessionKey(pane) !== key || (pane === activePane()
+          && routedSessionKey() && routedSessionKey() !== key)) return false;
+      // A new turn could have started while chat.history was loading. Confirm
+      // that the backend is still idle before overriding a native busy flag.
+      if (await backendHasActiveRun(key) !== false) return false;
+      if (isBusy(pane)) forceIdleComposerState(pane);
+      // A completed tool turn can leave transient tool/stream records in the
+      // native renderer even after chatRunId has cleared. Those records can
+      // mask the newly persisted assistant final. They are not transcript
+      // history, so clear them only after the backend confirms this run ended.
+      const state = pane.state;
+      const staleToolStream = Boolean(state?.chatToolMessages?.length
+        || state?.chatStreamSegments?.length);
+      if (staleToolStream) {
+        state.resetToolStream?.();
+        state.chatToolMessages = [];
+        state.chatStreamSegments = [];
+      }
+      const restored = await recoverPaneChat(pane, "persisted-terminal", {
+        manual: true,
+        verifiedTerminal: true,
+        forcePaint: sameFinal || staleToolStream,
+        recent,
+      });
+      terminalProbeStatusBySession.set(key, {
+        checkedAt: now, restored, finalIdentity: messageIdentity(final),
+      });
+      return restored;
+    } catch (error) {
+      terminalProbeStatusBySession.set(key, {
+        checkedAt: now, error: String(error?.message || error),
+      });
+      return false;
+    } finally {
+      terminalProbeInFlight.delete(key);
+    }
+  };
+  window.__laolaoTerminalSync = {
+    reconcile: () => reconcilePersistedFinal(),
+    status: () => terminalProbeStatusBySession.get(currentSessionKey()) || null,
+  };
+
   const reconcileStaleBusy = async (pane = activePane()) => {
     if (!pane) return;
     const key = paneSessionKey(pane);
     const stale = staleState(pane);
     const now = Date.now();
     if (stale.inFlight || !staleBusyEnabled()) return;
-    if (document.hidden || !location.pathname.startsWith("/chat")) return;
+    if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
     // The ribbon can remain "retrying" after the socket has recovered. Its
     // label is not an authoritative connection state; using it here made a
     // completed backend turn permanently look busy in a single pane too.
-    if (!gatewayConnected()) return;
+    if (!recoveryTransportAvailable()) return;
 
     if (!isBusy(pane)) {
       stale.busySince = 0;
@@ -925,7 +1155,7 @@
     for (const pane of chatPanes()) observedPaneKeys.set(pane, paneSessionKey(pane));
     void syncSelectedSession(observedSessionKey);
     window.setInterval(() => {
-      if (document.hidden || !location.pathname.startsWith("/chat")) return;
+      if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
       reconcileSelectedSession();
       const sessionKey = currentSessionKey();
       if (sessionKey && sessionKey !== observedSessionKey) {
@@ -934,7 +1164,7 @@
       }
       // A stale retry ribbon must not stop the idle tail poll or stale-busy
       // reconciliation. Only the actual gateway connection can block them.
-      const waitingForGateway = !gatewayConnected();
+      const waitingForGateway = !recoveryTransportAvailable();
       for (const pane of chatPanes()) {
         const key = paneSessionKey(pane);
         const state = pane.state;
@@ -944,11 +1174,10 @@
           scheduleRecovery("pane-session-changed", 250);
         }
         // Native history can briefly remount a larger page. Keep each pane's
-        // five-message window independent; one busy pane must not block another.
+        // bounded timeline window independent; one busy pane must not block another.
         if (Array.isArray(state.chatMessages) && state.chatMessages.length > LIVE_MESSAGE_WINDOW
             && !isBusy(pane)) {
-          state.chatMessages = uniqueMessages(state.chatMessages)
-            .filter(isRenderableHistoryMessage).slice(-LIVE_MESSAGE_WINDOW);
+          state.chatMessages = keepLiveMessages(state.chatMessages);
           state.requestUpdate?.();
           scheduleRecovery("native-history-remounted", 250);
           continue;
@@ -971,6 +1200,15 @@
     }, 1000);
   }, 400);
 
+  // This timer is intentionally separate from the ordinary idle poll: WebKit
+  // may report a visible chat as hidden, and a stale native busy flag can
+  // suppress normal history recovery indefinitely after a watchdog retry.
+  window.setInterval(() => {
+    if (!location.pathname.startsWith("/chat")) return;
+    const panes = chatPanes();
+    for (const pane of panes) void reconcilePersistedFinal(pane);
+  }, TERMINAL_PROBE_MS);
+
   // The new injection itself is network-first, so it can evict an older
   // cache-first native chat bundle without replaying the current screen.
   window.setTimeout(() => void refreshStaleControlUiCache(), 80);
@@ -979,6 +1217,72 @@
   // lightweight local ready endpoint frequently enough to catch a recovered
   // gateway whose old page client is still stuck in an invalid handshake.
   window.setInterval(() => void probeReadyForSocketRecovery(), 750);
+
+  // ── 聊天面板渲染自愈 ────────────────────────────────────────────────
+  // Lit writes each text binding after a comment marker it placed in the DOM.
+  // If a script deletes those nodes (e.g. by assigning textContent to a native
+  // label), the next change of that binding throws inside the chat pane's
+  // render. Lit then skips every later binding and the pane's `updated` hooks:
+  // the finished reply is neither committed nor scrolled into view, and every
+  // further render fails the same way until the app is reopened. None of the
+  // history recovery above can help, because state is already correct.
+  // Rebuild only the pane's DOM from its intact state instead.
+  const PANE_REBUILD_MIN_INTERVAL_MS = 5_000;
+  const paneRebuildAt = new WeakMap();
+  const hasDetachedLitMarkers = (pane) => {
+    const root = pane?.renderRoot;
+    const pending = [root?._$litPart$];
+    for (let visited = 0; pending.length && visited < 20_000; visited += 1) {
+      const part = pending.pop();
+      if (!part || part._$AA === undefined) continue;
+      if (!part._$AA.isConnected) return true;
+      const value = part._$AH;
+      if (value != null && typeof value !== "object" && typeof value !== "function"
+          && typeof value !== "symbol" && part._$AA.nextSibling?.nodeType !== 3) return true;
+      if (Array.isArray(value)) pending.push(...value);
+      else if (Array.isArray(value?._$AV)) pending.push(...value._$AV);
+    }
+    return false;
+  };
+  const guardChatPaneRender = (Pane) => {
+    const proto = Pane?.prototype;
+    if (!proto || typeof proto.update !== "function" || proto.__laolaoRenderGuard) return;
+    const update = proto.update;
+    proto.update = function (changed) {
+      try {
+        return update.call(this, changed);
+      } catch (error) {
+        const root = this.renderRoot;
+        const last = paneRebuildAt.get(this) || 0;
+        if (!root?._$litPart$ || Date.now() - last < PANE_REBUILD_MIN_INTERVAL_MS
+            || !hasDetachedLitMarkers(this)) throw error;
+        paneRebuildAt.set(this, Date.now());
+        const state = this.state;
+        const followTail = state?.chatUserNearBottom !== false;
+        const composerFocused = root.contains?.(document.activeElement)
+          && document.activeElement?.matches?.(".agent-chat__composer-combobox textarea");
+        console.warn("[laolao] chat pane render hit detached Lit markers; rebuilding its DOM", error);
+        root._$litPart$.setConnected?.(false);
+        delete root._$litPart$;
+        root.replaceChildren();
+        if (this.renderOptions?.renderBefore) this.renderOptions.renderBefore = null;
+        const result = update.call(this, changed);
+        window.requestAnimationFrame(() => {
+          if (followTail) state?.scrollToBottom?.({smooth: false});
+          if (composerFocused) document.querySelector(".agent-chat__composer-combobox textarea")?.focus?.();
+        });
+        window.dispatchEvent(new CustomEvent("pinkie:chat-pane-rebuilt", {
+          detail: {sessionKey: paneSessionKey(this), error: String(error?.message || error)},
+        }));
+        return result;
+      }
+    };
+    proto.__laolaoRenderGuard = true;
+  };
+  window.customElements?.whenDefined?.("openclaw-chat-pane")
+    .then(() => guardChatPaneRender(window.customElements.get("openclaw-chat-pane")))
+    .catch(() => {});
+  window.__laolaoRenderGuardTestHooks = {hasDetachedLitMarkers, guardChatPaneRender};
 
   // 标记流式状态 (由其它注入或页面事件维护)
   document.addEventListener("laolao:streaming", (e) => {

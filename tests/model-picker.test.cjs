@@ -221,11 +221,11 @@ test('model list groups by AI family and folds identical IDs across providers wi
   ];
   const shown = window.__pickerTest.groupedPresentationModels(models, 'mm/gpt-6-sol');
   assert.deepEqual(Array.from(shown, (item) => item.id), [
-    'gpt-5.5', 'gpt-6-sol', 'gpt-6-sol-preview', 'codex-auto-review',
+    'gpt-6-sol', 'gpt-6-sol-preview', 'codex-auto-review',
     'gemini-3.8-flash-tiered', 'claude-sonnet-4-6',
   ]);
   assert.deepEqual(Array.from(shown, (item) => window.__pickerTest.modelGroup(item)),
-    ['GPT', 'GPT', 'GPT', 'Codex', 'Gemini', 'Claude']);
+    ['GPT', 'GPT', 'Codex', 'Gemini', 'Claude']);
   const sol = shown.find((item) => item.id === 'gpt-6-sol');
   assert.equal(sol.provider, 'clekk', 'the GPT row routes through the richer configured endpoint');
   assert.deepEqual(Array.from(sol.sources), ['mm/gpt-6-sol', 'clekk/gpt-6-sol']);
@@ -233,8 +233,45 @@ test('model list groups by AI family and folds identical IDs across providers wi
   assert.equal(shown.filter((item) => item.name === 'GPT-6 Sol').length, 2,
     'different IDs with the same display name are not falsely merged');
   const css = read('ui/injections/laolao-theme.css');
-  assert.match(css, /\.chat-controls__model \.pinkie-model-group \{/);
+  assert.match(css, /\.chat-controls__model \.pinkie-model-brand-tabs \{/);
   assert.doesNotMatch(css, /\.chat-controls__model \.pinkie-fallback-provider \{/);
+});
+
+test('agreed old models are hidden from both pickers without losing their session route', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {groupedPresentationModels, fallbackModelName, syncModelBrands};})();');
+  const window = {};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const hiddenGemini = [
+    'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro',
+    'gemini-3-flash', 'gemini-3-flash-agent', 'gemini-3-flash-preview', 'gemini-3-pro-preview',
+    'gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview',
+    'gemini-3.5-flash-low', 'gemini-3.6-flash-tiered', 'gemini-3.7-flash-tiered',
+    'gemini-pro-agent',
+  ];
+  const keptGemini = [
+    'gemini-3.8-flash-tiered', 'gemini-3.5-flash-lite',
+    'gemini-3.1-pro-low', 'gemini-3.1-flash-image',
+  ];
+  const models = [...hiddenGemini, ...keptGemini, 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-4o', 'gpt-6-sol']
+    .map((id) => ({provider: id.startsWith('gpt-') ? 'clekk' : 'mm', id, name: id}));
+  const shown = window.__pickerTest.groupedPresentationModels(models, 'mm/gemini-3.7-flash-tiered');
+  assert.deepEqual(Array.from(shown, (model) => model.id).sort(),
+    [...keptGemini, 'gpt-6-sol'].sort());
+  assert.equal(window.__pickerTest.fallbackModelName({models,
+    session: {modelProvider: 'mm', model: 'gemini-3.7-flash-tiered'}}), 'gemini-3.7-flash-tiered',
+  'a hidden default still has a readable current-model label');
+
+  const options = models.map((model) => ({dataset: {},
+    getAttribute(name) { return name === 'data-chat-model-option' ? `${model.provider}/${model.id}` : ''; }}));
+  window.__pickerTest.syncModelBrands({querySelectorAll() { return options; }});
+  for (const option of options) {
+    const id = option.getAttribute('data-chat-model-option').split('/')[1];
+    assert.equal(option.dataset.pinkieHiddenModel === '1',
+      hiddenGemini.includes(id) || ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-4o'].includes(id), id);
+  }
+  assert.match(read('ui/injections/laolao-theme.css'),
+    /\[data-chat-model-option\]\[data-pinkie-hidden-model="1"\] \{ display: none !important; \}/);
 });
 
 test('the rendered picker shows a model group once and one selected row for two provider routes', () => {
@@ -254,10 +291,80 @@ test('the rendered picker shows a model group once and one selected row for two 
     {provider: 'clekk', id: 'gpt-6-sol', name: 'GPT-6 Sol'},
   ], selectedModel: 'mm/gpt-6-sol', session: {hasActiveRun: false}};
   window.__pickerTest.renderFallbackCatalog({}, browser, state);
-  assert.deepEqual(Array.from(list.children, (node) => node.textContent), ['GPT', 'GPT-6 Sol']);
-  assert.equal(list.children[0].className, 'pinkie-model-group');
+  assert.equal(list.children[0].className, 'pinkie-model-brand-tabs');
+  assert.deepEqual(Array.from(list.children[0].children, (node) => node.textContent), ['GPT']);
+  assert.equal(list.children[0].children[0].attributes['aria-pressed'], 'true');
   assert.equal(list.children[1].dataset.chatModelOption, 'clekk/gpt-6-sol');
   assert.equal(list.children[1].attributes['aria-selected'], 'true');
+});
+
+test('brand tabs show only their models and switch without closing the picker', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {renderFallbackCatalog, fallbackStates};})();');
+  const listeners = new Map();
+  const window = {};
+  let list;
+  const document = {
+    addEventListener(name, fn) { listeners.set(name, fn); },
+    createElement() { return {dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; },
+      replaceChildren(fragment) { this.children = fragment.children; }}; },
+    createDocumentFragment() { return {children: [], append(node) { this.children.push(node); }}; },
+  };
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  const browser = {scrollTop: 35, querySelector() { return list; }, append(node) { list = node; }};
+  const details = {dataset: {pinkieModelsOpen: '1'}, querySelector() { return browser; }};
+  const state = {models: [
+    {provider: 'clekk', id: 'gpt-6-sol', name: 'GPT-6 Sol'},
+    {provider: 'mm', id: 'gemini-3.8-flash-tiered', name: 'Gemini 3.8 Flash'},
+    {provider: 'mm', id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6'},
+  ], selectedModel: 'mm/gemini-3.7-flash-tiered', session: {hasActiveRun: false}};
+  window.__pickerTest.fallbackStates.set(details, state);
+  window.__pickerTest.renderFallbackCatalog(details, browser, state);
+  assert.deepEqual(Array.from(list.children, (node) => node.textContent).slice(1), ['Gemini 3.8 Flash']);
+  assert.deepEqual(Array.from(list.children[0].children, (node) => node.textContent), ['GPT', 'Gemini', 'Claude']);
+  assert.equal(list.children[0].children[1].attributes['aria-pressed'], 'true',
+    'a hidden current model still opens its AI brand');
+
+  const gptTab = list.children[0].children[0];
+  let prevented = false;
+  let stopped = false;
+  listeners.get('click')({target: {closest(selector) {
+    if (selector === 'details.chat-controls__model') return details;
+    if (selector === '.pinkie-model-brand-tab') return gptTab;
+    return null;
+  }}, preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; }});
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.equal(details.dataset.pinkieModelsOpen, '1');
+  assert.equal(browser.scrollTop, 0);
+  assert.deepEqual(Array.from(list.children, (node) => node.textContent).slice(1), ['GPT-6 Sol']);
+  assert.equal(list.children[0].children[0].attributes['aria-pressed'], 'true');
+  assert.equal(list.children[0].children[1].attributes['aria-pressed'], 'false');
+});
+
+test('verified DeepSeek routes get their own brand tab and selectable rows', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {renderFallbackCatalog};})();');
+  const window = {};
+  let list;
+  const document = {
+    addEventListener() {},
+    createElement() { return {dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; },
+      replaceChildren(fragment) { this.children = fragment.children; }}; },
+    createDocumentFragment() { return {children: [], append(node) { this.children.push(node); }}; },
+  };
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  const browser = {querySelector() { return list; }, append(node) { list = node; }};
+  const state = {models: [
+    {provider: 'mm', id: 'gemini-3.8-flash-tiered', name: 'Gemini 3.8 Flash'},
+    {provider: 'deepseek', id: 'deepseek-flash', name: 'DeepSeek V4.1 Flash'},
+    {provider: 'deepseek', id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro'},
+  ], selectedModel: 'mm/gemini-3.8-flash-tiered', activeGroup: 'DeepSeek', session: {hasActiveRun: false}};
+  window.__pickerTest.renderFallbackCatalog({}, browser, state);
+  assert.deepEqual(Array.from(list.children[0].children, (tab) => tab.textContent), ['Gemini', 'DeepSeek']);
+  assert.equal(list.children[0].children[1].dataset.pinkieBrand, 'deepseek');
+  assert.deepEqual(Array.from(list.children).slice(1).map((option) => option.dataset.chatModelOption).sort(),
+    ['deepseek/deepseek-flash', 'deepseek/deepseek-v4-pro'].sort());
 });
 
 test('clicking the single selected row can move an old route to its displayed backing model', () => {
@@ -305,30 +412,70 @@ test('each selectable model receives its actual AI brand mark beside the name', 
   assert.match(css, /\[data-chat-model-option\]\[data-pinkie-brand\]::before/);
 });
 
+/** Element double for the picker's own spans. */
+function pickerElement() {
+  const element = {
+    className: '', dataset: {}, children: [], attributes: {}, text: '',
+    get textContent() { return this.children.length ? this.children.map((item) => item.textContent).join('') : this.text; },
+    set textContent(value) { this.children = []; this.text = value; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    querySelector(selector) { return this.children.find((item) => item.className && selector.includes(item.className)) || null; },
+    replaceChildren(...children) { this.children = children; },
+  };
+  element.classList = {contains: (name) => element.className.split(/\s+/).includes(name)};
+  return element;
+}
+
+/** The native `${label}` span is owned by Lit: rewriting it would detach Lit's
+    markers and make the chat pane render throw, so the double refuses it. */
+function nativeTriggerLabel(text) {
+  const style = new Map();
+  const label = {
+    nextElementSibling: null,
+    get textContent() { return text; },
+    set textContent(_value) { throw new Error('native Lit label was rewritten'); },
+    replaceChildren() { throw new Error('native Lit label was rewritten'); },
+    style: {setProperty(name, value) { style.set(name, value); }, removeProperty(name) { style.delete(name); }},
+    after(node) {
+      label.nextElementSibling = node;
+      node.remove = () => { if (label.nextElementSibling === node) label.nextElementSibling = null; };
+    },
+    setNative(value) { text = value; },
+    isHidden() { return style.get('display') === 'none'; },
+  };
+  return label;
+}
+
+const pickerDocument = () => ({
+  addEventListener() {},
+  createElement: pickerElement,
+  createTextNode(textContent) { return {textContent}; },
+});
+
 test('the closed picker decorates only the tier word and preserves the plain model name', () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {writeTriggerLabel};})();');
   const window = {};
-  const document = {
-    addEventListener() {},
-    createElement() { return {className: '', textContent: '', dataset: {}}; },
-    createTextNode(textContent) { return {textContent}; },
-  };
-  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
-  const label = {
-    textContent: '', children: [],
-    querySelector(selector) { return this.children.find((item) => selector.includes(item.className)); },
-    replaceChildren(...children) {
-      this.children = children;
-      this.textContent = children.map((item) => item.textContent).join('');
-    },
-  };
+  vm.runInNewContext(source, {window, document: pickerDocument(), requestAnimationFrame() {}});
+  const label = nativeTriggerLabel('Gemini 2.5 Flash · Ultra');
   window.__pickerTest.writeTriggerLabel(label, 'Gemini 2.5 Flash', 'ultra');
+  const owned = label.nextElementSibling;
+  assert.ok(owned.classList.contains('pinkie-trigger-label'));
+  assert.ok(owned.classList.contains('chat-controls__inline-select-label'));
+  assert.equal(label.isHidden(), true);
   assert.equal(label.textContent, 'Gemini 2.5 Flash · Ultra');
-  assert.equal(label.children[0].className, 'pinkie-external-model-name');
-  assert.equal(label.children[0].textContent, 'Gemini 2.5 Flash');
-  assert.equal(label.children[2].className, 'pinkie-external-tier');
-  assert.equal(label.children[2].textContent, 'Ultra');
-  assert.equal(label.children[2].dataset.pinkieTierLabel, 'Ultra');
+  assert.equal(owned.textContent, 'Gemini 2.5 Flash · Ultra');
+  assert.equal(owned.children[0].className, 'pinkie-external-model-name');
+  assert.equal(owned.children[0].textContent, 'Gemini 2.5 Flash');
+  assert.equal(owned.children[2].className, 'pinkie-external-tier');
+  assert.equal(owned.children[2].textContent, 'Ultra');
+  assert.equal(owned.children[2].dataset.pinkieTierLabel, 'Ultra');
+  window.__pickerTest.writeTriggerLabel(label, 'Gemini 2.5 Flash', 'ultra');
+  assert.equal(label.nextElementSibling, owned);
+  // A plain native label needs no overlay: show Lit's own text again.
+  label.setNative('Gemini 2.5 Flash');
+  window.__pickerTest.writeTriggerLabel(label, 'Gemini 2.5 Flash', '');
+  assert.equal(label.nextElementSibling, null);
+  assert.equal(label.isHidden(), false);
   const css = read('ui/injections/laolao-theme.css');
   assert.match(css, /\.pinkie-external-model-name \{ color: #5a5068; \}/);
   assert.doesNotMatch(css, /\.pinkie-external-tier::before\s*\{/);
@@ -341,11 +488,7 @@ test('the closed picker decorates only the tier word and preserves the plain mod
 
 test('the closed model label follows external tier changes without styling its model name', () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {syncTrigger};})();');
-  const label = {
-    textContent: 'Gemini 2.5 Flash · High', children: [],
-    querySelector(selector) { return this.children.find((item) => selector.includes(item.className)); },
-    replaceChildren(...children) { this.children = children; this.textContent = children.map((item) => item.textContent).join(''); },
-  };
+  const label = nativeTriggerLabel('Gemini 2.5 Flash · High');
   let ariaLabel = '';
   const summary = {
     querySelector() { return label; },
@@ -358,22 +501,18 @@ test('the closed model label follows external tier changes without styling its m
     setAttribute(name, value) { attributes.set(name, value); },
     removeAttribute(name) { attributes.delete(name); },
   };
-  const document = {
-    addEventListener() {},
-    createElement() { return {className: '', textContent: '', dataset: {}}; },
-    createTextNode(textContent) { return {textContent}; },
-  };
   const window = {};
-  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  vm.runInNewContext(source, {window, document: pickerDocument(), requestAnimationFrame() {}});
   window.__pickerTest.syncTrigger(details);
   assert.equal(attributes.get('data-pinkie-outside-material'), 'high');
-  assert.equal(label.children[0].textContent, 'Gemini 2.5 Flash');
-  assert.equal(label.children[2].textContent, 'High');
-  label.children = [];
-  label.textContent = 'Gemini 2.5 Flash · Ultra';
+  assert.equal(label.nextElementSibling.children[0].textContent, 'Gemini 2.5 Flash');
+  assert.equal(label.nextElementSibling.children[2].textContent, 'High');
+  // Lit updates its own label; the picker follows without touching it.
+  label.setNative('Gemini 2.5 Flash · Ultra');
   window.__pickerTest.syncTrigger(details);
   assert.equal(attributes.get('data-pinkie-outside-material'), 'ultra');
-  assert.equal(label.children[2].textContent, 'Ultra');
+  assert.equal(label.nextElementSibling.children[2].textContent, 'Ultra');
+  assert.equal(label.textContent, 'Gemini 2.5 Flash · Ultra');
 });
 
 test('changing a grouped slider stop saves the matching backend model without closing', async () => {
@@ -650,7 +789,8 @@ test('composer label follows the session-specific enhanced tier and restores nat
     localStorage: {getItem: (key) => stored.get(key) || null},
     addEventListener(name, fn) { listeners.set(name, fn); },
   };
-  const label = {textContent: 'Gemini 3.1 Pro · High'};
+  const label = nativeTriggerLabel('Gemini 3.1 Pro · High');
+  const shown = () => label.nextElementSibling?.textContent ?? label.textContent;
   const summary = {
     aria: '聊天模型, 聊天思考级别: Gemini 3.1 Pro · High',
     querySelector() { return label; },
@@ -663,22 +803,23 @@ test('composer label follows the session-specific enhanced tier and restores nat
     removeAttribute() {}, closest() { return null; },
   };
   const document = {
+    ...pickerDocument(),
     body: null,
-    addEventListener() {},
     querySelectorAll() { return [details]; },
   };
   vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window, document, MutationObserver: class {observe() {} disconnect() {}}, requestAnimationFrame(fn) { fn(); },
   });
-  assert.equal(label.textContent, 'Gemini 3.1 Pro · Ultra');
+  assert.equal(shown(), 'Gemini 3.1 Pro · Ultra');
   assert.match(summary.aria, /Ultra$/);
   stored.delete('laolao:reasoning-enhance:v1:agent:project:one');
   listeners.get('storage')({key: 'laolao:reasoning-enhance:v1:agent:project:one'});
-  assert.equal(label.textContent, 'Gemini 3.1 Pro · High');
+  assert.equal(shown(), 'Gemini 3.1 Pro · High');
   stored.set('laolao:reasoning-enhance:v1:agent:project:two', 'max');
   window.location.search = '?session=agent%3Aproject%3Atwo';
   listeners.get('pinkie:session-selected')();
-  assert.equal(label.textContent, 'Gemini 3.1 Pro · Max');
+  assert.equal(shown(), 'Gemini 3.1 Pro · Max');
+  assert.equal(label.textContent, 'Gemini 3.1 Pro · High', 'Lit keeps its own native label');
 });
 
 test('model and slider selections patch the session without closing the picker', async () => {
@@ -740,7 +881,7 @@ test('model and slider selections patch the session without closing the picker',
 
 test('model header opens by pointer and click-away or Escape closes only when requested', () => {
   const listeners = new Map();
-  const label = {textContent: 'Gemini 3.1 Pro · High'};
+  const label = nativeTriggerLabel('Gemini 3.1 Pro · High');
   const summary = {querySelector() { return label; }, getAttribute() { return ''; }};
   const details = {
     open: true, isConnected: true, dataset: {},
@@ -754,7 +895,7 @@ test('model header opens by pointer and click-away or Escape closes only when re
     if (selector === '.pinkie-model-current') return button;
     return null;
   }};
-  const document = {body: null, addEventListener(name, fn) { listeners.set(name, fn); }, querySelectorAll() { return [details]; }};
+  const document = {...pickerDocument(), body: null, addEventListener(name, fn) { listeners.set(name, fn); }, querySelectorAll() { return [details]; }};
   vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window: {}, document, MutationObserver: class {observe() {} disconnect() {}}, requestAnimationFrame() {},
   });

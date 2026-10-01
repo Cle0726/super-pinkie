@@ -43,14 +43,14 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 
 test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme79/);
+  assert.match(installer,/laolao-theme\.css\?v=theme81/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar17/);
   assert.match(installer,/laolao-sidebar\.js\?v=sidebar27/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions10/);
   assert.match(installer,/trap reseal_app_on_exit EXIT/);
   assert.match(installer,/codesign --force --deep --sign -/);
   assert.match(installer,/Computer Use v2 patch skipped/);
-  assert.match(installer,/laolao-deep-think\.js\?v=deepthink19/);
+  assert.match(installer,/laolao-deep-think\.js\?v=deepthink20/);
   assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt32/);
   assert.match(installer,/laolao-splash\.css\?v=splash18/);
   assert.match(installer,/laolao-splash\.js\?v=splash26/);
