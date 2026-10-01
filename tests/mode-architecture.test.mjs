@@ -1730,7 +1730,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,5);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity']);
+  assert.equal(tools.length,6);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity','ask_user']);
   const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
   assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   // OpenClaw's embedded tool factory can expose the ephemeral conversation
@@ -1785,7 +1785,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
 
 test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
-  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','computer','delivery_guard','learning_activity','web_gpt_activity']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['ask_user','clekk_memory','computer','delivery_guard','learning_activity','web_gpt_activity']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{

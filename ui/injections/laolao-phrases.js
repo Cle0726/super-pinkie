@@ -186,6 +186,7 @@
       return core==='s'?'':null;
     }
     if(parent.matches?.('.chat-tool-msg-summary__label')){
+      if(/^ask[_ ]user$/i.test(core))return '向你提问';
       const label=toolLabels[core.toLowerCase()];
       return label?`${label} · ${core}`:null;
     }

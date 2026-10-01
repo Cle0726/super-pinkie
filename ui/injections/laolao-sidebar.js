@@ -46,6 +46,12 @@
     ws.addEventListener("message", (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      // One shared, read-only feed of live gateway events (thinking, tool,
+      // lifecycle, approvals) for the chat injections. They never parse the
+      // socket themselves and never mutate the payload.
+      if (msg?.type === 'event' && msg.event) {
+        window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: msg.event, payload: msg.payload}}));
+      }
       if(msg?.type==='event' && (String(msg.event).startsWith('sessions.') || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
         window.dispatchEvent(new Event('laolao:sessions-changed'));
       }
@@ -70,7 +76,10 @@
   window.WebSocket = function (url, protocols) {
     const ws = protocols !== undefined ? new NativeWS(url, protocols) : new NativeWS(url);
     try {
-      if (/18789/.test(String(url))) {
+      // The harness serves the page and its fake gateway from one origin.
+      let sameOrigin = false;
+      try { sameOrigin = new URL(String(url), location.href).host === location.host; } catch {}
+      if (/18789/.test(String(url)) || sameOrigin) {
         gwSocket = ws;
         sniff(ws);
         const send = ws.send.bind(ws);

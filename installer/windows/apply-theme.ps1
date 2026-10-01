@@ -135,6 +135,14 @@ $Assets = @(
     "laolao-tool-stream.css",
     "laolao-settings-user.css",
     "laolao-settings-user.js",
+    "laolao-ask-user.css",
+    "laolao-ask-user.js",
+    "laolao-pinkie-status-thinking.png",
+    "laolao-pinkie-status-working.png",
+    "laolao-pinkie-status-writing.png",
+    "laolao-pinkie-status-done.png",
+    "laolao-pinkie-status-oops.png",
+    "laolao-pinkie-status-asking.png",
     "laolao-motion-system.css",
     "laolao-mode-menu-fx.css",
     "laolao-mode-transition-fx.css",
@@ -254,10 +262,11 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
+        '<link rel="stylesheet" href="./laolao-ask-user.css?v=askuser1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
         '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
         '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx3">',
-        '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar28"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
         '<script defer src="./laolao-classic-shell.js?v=classic15"></script>',
@@ -280,6 +289,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
         '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
         '<script defer src="./laolao-settings-user.js?v=settingsuser1"></script>',
+        '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
         '<script defer src="./laolao-splash-fx.js?v=splashfx1"></script>',
         '<script defer src="./laolao-splash.js?v=splash28"></script>'
     )
@@ -296,14 +306,15 @@ function Apply-UISkin {
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
         'laolao-theme.css' = 'theme81'; 'laolao-splash.css' = 'splash20'; 'laolao-sidebar.css' = 'sidebar17';
-        'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
-        'laolao-phrases.js' = 'phrases26'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
+        'laolao-sidebar.js' = 'sidebar28'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
+        'laolao-phrases.js' = 'phrases27'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx3'; 'laolao-mode-transition-fx.css' = 'modetransitionfx3';
         'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode40'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx1';
         'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume43';
         'laolao-queue-steer.js' = 'queuesteer2';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
+        'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';

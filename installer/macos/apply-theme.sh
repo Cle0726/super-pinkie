@@ -61,7 +61,7 @@ apply_ui_skin() {
   # Force a fresh stylesheet URL when the visual skin changes. WebKit can keep
   # the previous query-keyed CSS in memory across a gateway reload, which made
   # a small bubble-only adjustment look like it had not been deployed.
-  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme81}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker25}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases26}g' "$index_file"
+  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme81}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker25}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases27}g' "$index_file"
 
   for asset in \
     laolao-avatar.png \
@@ -182,6 +182,14 @@ apply_ui_skin() {
     laolao-tool-stream.css \
     laolao-settings-user.css \
     laolao-settings-user.js \
+    laolao-ask-user.css \
+    laolao-ask-user.js \
+    laolao-pinkie-status-thinking.png \
+    laolao-pinkie-status-working.png \
+    laolao-pinkie-status-writing.png \
+    laolao-pinkie-status-done.png \
+    laolao-pinkie-status-oops.png \
+    laolao-pinkie-status-asking.png \
     laolao-motion-system.css \
     laolao-mode-menu-fx.css \
     laolao-mode-transition-fx.css \
@@ -258,7 +266,7 @@ apply_ui_skin() {
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar27"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar28"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -323,7 +331,7 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-phrases.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases26"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-phrases.js?v=phrases27"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
@@ -334,8 +342,8 @@ apply_ui_skin() {
     perl -0pi -e 's{</head>}{    <script src="./laolao-session-list.js?v=sessions10"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-phrases.js?v=phrases26' "$index_file"; then
-    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases26}g' "$index_file"
+  if ! grep -Fq './laolao-phrases.js?v=phrases27' "$index_file"; then
+    perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases27}g' "$index_file"
   fi
   if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
     perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
@@ -474,6 +482,21 @@ apply_ui_skin() {
     DID_CHANGE=1
   elif ! grep -Fq 'laolao-settings-user.js?v=settingsuser1' "$index_file"; then
     perl -0pi -e 's{((?:\./|/)laolao-settings-user\.js)(?:\?v=[^"]*)?}{${1}?v=settingsuser1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  # 碧琪主动提问卡：只建自己的浮层节点，答案走原生输入框。
+  if ! grep -Fq 'laolao-ask-user.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ask-user.css?v=askuser1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-ask-user.css?v=askuser1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-ask-user\.css)(?:\?v=[^"]*)?}{${1}?v=askuser1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq 'laolao-ask-user.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-ask-user.js?v=askuser1"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-ask-user.js?v=askuser1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-ask-user\.js)(?:\?v=[^"]*)?}{${1}?v=askuser1}g' "$index_file"
     DID_CHANGE=1
   fi
   # 动效规范必须排在 laolao-theme.css 之后，才能覆盖主题里写死的时长和曲线。
@@ -653,8 +676,8 @@ apply_ui_skin() {
     perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme81}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq '/laolao-sidebar.js?v=sidebar27' "$index_file"; then
-    perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^"]*)?}{/laolao-sidebar.js?v=sidebar27}g' "$index_file"
+  if ! grep -Fq '/laolao-sidebar.js?v=sidebar28' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^"]*)?}{/laolao-sidebar.js?v=sidebar28}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-sidebar.css?v=sidebar17' "$index_file"; then
@@ -761,7 +784,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme81}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx3}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx3}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode40}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker25}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases26}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume43}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer2}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar27}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink20}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt32}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact4}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme81}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx3}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx3}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode40}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker25}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases27}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume43}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer2}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar28}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink20}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt32}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact4}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g' "$index_file"
 }
 
 apply_bundle_icon() {
@@ -896,7 +919,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/project-scope/$service_file" \
       "$bundled_root/services/project-scope/$service_file"
   done
-  for service_file in index.mjs memory.mjs learning.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs learning.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs setup.py package.json openclaw.plugin.json; do
     copy_if_changed \
       "$REPO_ROOT/services/mode-architecture/$service_file" \
       "$bundled_root/services/mode-architecture/$service_file"
@@ -1156,7 +1179,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
   # apply-context-budget/apply-image-access may regenerate the control-ui
   # entrypoint, so refresh the skin cache key after all runtime patches finish.
   if [[ -f "$OPENCLAW_ROOT/dist/control-ui/index.html" ]]; then
-    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme81}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker25}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases26}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
+    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme81}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker25}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases27}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
   fi
 else
   echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
