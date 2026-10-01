@@ -80,6 +80,26 @@ apply_ui_skin() {
     laolao-mode-transition-thinking.png \
     laolao-mode-transition-learning.png \
     laolao-mode-transition-unrestricted.png \
+    laolao-mode-transition-chat-mask.png \
+    laolao-mode-transition-chat-plate.webp \
+    laolao-mode-transition-chat-plate-soft.png \
+    laolao-mode-transition-chat-char-soft.png \
+    laolao-mode-transition-project-mask.png \
+    laolao-mode-transition-project-plate.webp \
+    laolao-mode-transition-project-plate-soft.png \
+    laolao-mode-transition-project-char-soft.png \
+    laolao-mode-transition-thinking-mask.png \
+    laolao-mode-transition-thinking-plate.webp \
+    laolao-mode-transition-thinking-plate-soft.png \
+    laolao-mode-transition-thinking-char-soft.png \
+    laolao-mode-transition-learning-mask.png \
+    laolao-mode-transition-learning-plate.webp \
+    laolao-mode-transition-learning-plate-soft.png \
+    laolao-mode-transition-learning-char-soft.png \
+    laolao-mode-transition-unrestricted-mask.png \
+    laolao-mode-transition-unrestricted-plate.webp \
+    laolao-mode-transition-unrestricted-plate-soft.png \
+    laolao-mode-transition-unrestricted-char-soft.png \
     laolao-mode-chat.svg \
     laolao-mode-project.svg \
     laolao-mode-thinking.svg \
@@ -144,6 +164,7 @@ apply_ui_skin() {
     laolao-progress.js \
     laolao-session-list.js \
     laolao-live-voice.js \
+    laolao-mode-transition-fx.js \
     laolao-mode-switcher.js \
     laolao-model-picker.js \
     laolao-image-viewer.js \
@@ -157,6 +178,7 @@ apply_ui_skin() {
     laolao-settings-user.css \
     laolao-settings-user.js \
     laolao-motion-system.css \
+    laolao-mode-transition-fx.css \
     laolao-party-entry.js \
     laolao-party-avatar-v1.png \
     laolao-deep-think-base.png \
@@ -323,6 +345,23 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
+  # FX 先于切换器执行：模块会根据 WebGL 和减少动态效果自行决定是否接管。
+  if ! grep -Fq './laolao-mode-transition-fx.js' "$index_file"; then
+    if grep -Eq 'src="(\./|/)laolao-mode-switcher\.js' "$index_file"; then
+      perl -0pi -e 's{(<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-switcher\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>)}{    <script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx1"></script>\n    $1}i' "$index_file"
+    else
+      perl -0pi -e 's{</head>}{    <script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx1"></script>\n</head>}' "$index_file"
+    fi
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-mode-transition-fx.js?v=modetransitionfx1' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-transition-fx\.js(?:\?v=[^"]*)?}{./laolao-mode-transition-fx.js?v=modetransitionfx1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if grep -Eq 'laolao-mode-switcher\.js[^>]*></script>[[:space:]]*<script[^>]*laolao-mode-transition-fx\.js' "$index_file"; then
+    perl -0pi -e 's{(<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-switcher\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>)\s*(<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-transition-fx\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>)}{$2\n    $1}ig' "$index_file"
+    DID_CHANGE=1
+  fi
+
   if ! grep -Fq './laolao-mode-switcher.js' "$index_file"; then
     perl -0pi -e 's{</head>}{    <script defer src="./laolao-mode-switcher.js"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
@@ -436,6 +475,14 @@ apply_ui_skin() {
     DID_CHANGE=1
   elif ! grep -Fq 'laolao-motion-system.css?v=motionsys1' "$index_file"; then
     perl -0pi -e 's{((?:\./|/)laolao-motion-system\.css)(?:\?v=[^"]*)?}{${1}?v=motionsys1}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  # FX 覆盖主题和动效规范里的旧转场；两者都在它之前加载。
+  if ! grep -Fq 'laolao-mode-transition-fx.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-mode-transition-fx.css?v=modetransitionfx1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-mode-transition-fx\.css)(?:\?v=[^"]*)?}{${1}?v=modetransitionfx1}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -608,8 +655,8 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash18}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-mode-switcher.js?v=mode37' "$index_file"; then
-    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode37}g' "$index_file"
+  if ! grep -Fq './laolao-mode-switcher.js?v=mode38' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode38}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-splash.js?v=splash26' "$index_file"; then
@@ -689,7 +736,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme81}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker25}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases23}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar27}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink20}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt32}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact4}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme81}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx1}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx1}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode38}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker25}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases23}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic17}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar27}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions10}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink20}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt32}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact4}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction11}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side20}g' "$index_file"
 }
 
 apply_bundle_icon() {

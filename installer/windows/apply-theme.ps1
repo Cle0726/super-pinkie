@@ -22,22 +22,47 @@ $Assets = @(
     "laolao-mode-chat.png",
     "laolao-mode-project.png",
     "laolao-mode-thinking.png",
+    "laolao-mode-learning.png",
     "laolao-mode-unrestricted.png",
     "laolao-mode-chat-hd.png",
     "laolao-mode-project-hd.png",
     "laolao-mode-thinking-hd.png",
+    "laolao-mode-learning-hd.png",
     "laolao-mode-unrestricted-hd.png",
     "laolao-mode-transition-chat.png",
     "laolao-mode-transition-project.png",
     "laolao-mode-transition-thinking.png",
+    "laolao-mode-transition-learning.png",
     "laolao-mode-transition-unrestricted.png",
+    "laolao-mode-transition-chat-mask.png",
+    "laolao-mode-transition-chat-plate.webp",
+    "laolao-mode-transition-chat-plate-soft.png",
+    "laolao-mode-transition-chat-char-soft.png",
+    "laolao-mode-transition-project-mask.png",
+    "laolao-mode-transition-project-plate.webp",
+    "laolao-mode-transition-project-plate-soft.png",
+    "laolao-mode-transition-project-char-soft.png",
+    "laolao-mode-transition-thinking-mask.png",
+    "laolao-mode-transition-thinking-plate.webp",
+    "laolao-mode-transition-thinking-plate-soft.png",
+    "laolao-mode-transition-thinking-char-soft.png",
+    "laolao-mode-transition-learning-mask.png",
+    "laolao-mode-transition-learning-plate.webp",
+    "laolao-mode-transition-learning-plate-soft.png",
+    "laolao-mode-transition-learning-char-soft.png",
+    "laolao-mode-transition-unrestricted-mask.png",
+    "laolao-mode-transition-unrestricted-plate.webp",
+    "laolao-mode-transition-unrestricted-plate-soft.png",
+    "laolao-mode-transition-unrestricted-char-soft.png",
     "laolao-mode-chat.svg",
     "laolao-mode-project.svg",
     "laolao-mode-thinking.svg",
+    "laolao-mode-learning.svg",
     "laolao-mode-unrestricted.svg",
     "laolao-wallpaper.png",
     "laolao-wallpaper-project.png",
     "laolao-wallpaper-thinking.png",
+    "laolao-wallpaper-learning.png",
     "laolao-wallpaper-unrestricted.png",
     "laolao-splash.png",
     "laolao-theme.css",
@@ -92,6 +117,7 @@ $Assets = @(
     "laolao-progress.js",
     "laolao-session-list.js",
     "laolao-live-voice.js",
+    "laolao-mode-transition-fx.js",
     "laolao-mode-switcher.js",
     "laolao-model-picker.js",
     "laolao-image-viewer.js",
@@ -105,6 +131,7 @@ $Assets = @(
     "laolao-settings-user.css",
     "laolao-settings-user.js",
     "laolao-motion-system.css",
+    "laolao-mode-transition-fx.css",
     "laolao-party-entry.js",
     "laolao-party-avatar-v1.png",
     "laolao-deep-think-base.png",
@@ -221,6 +248,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
+        '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx1">',
         '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
@@ -228,6 +256,7 @@ function Apply-UISkin {
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning5"></script>',
+        '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx1"></script>',
         '<script defer src="./laolao-model-picker.js?v=modelpicker25"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
@@ -259,7 +288,8 @@ function Apply-UISkin {
         'laolao-theme.css' = 'theme81'; 'laolao-splash.css' = 'splash18'; 'laolao-sidebar.css' = 'sidebar17';
         'laolao-sidebar.js' = 'sidebar27'; 'laolao-session-list.js' = 'sessions10'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases23'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
-        'laolao-mode-switcher.js' = 'mode37'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash26';
+        'laolao-mode-transition-fx.js' = 'modetransitionfx1'; 'laolao-mode-transition-fx.css' = 'modetransitionfx1';
+        'laolao-mode-switcher.js' = 'mode38'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash26';
         'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume40';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
@@ -279,6 +309,29 @@ function Apply-UISkin {
         # 版本号字符集收紧，避免第二次运行时贪婪越过版本号把后续内容吃掉。
         $pattern = '((?:\./|/)' + [regex]::Escape($entry.Key) + ')(?:\?v=[A-Za-z0-9_.-]*)?'
         $html = [regex]::Replace($html, $pattern, ('$1?v=' + $entry.Value))
+    }
+
+    # A legacy page can already contain the switcher before the newly added FX
+    # module. Deferred scripts still respect source order, so normalise just
+    # this pair before the document is written back.
+    $html = [regex]::Replace(
+        $html,
+        '(?is)(<script\b[^>]*\bsrc="(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>)\s*(<script\b[^>]*\bsrc="(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>)',
+        "`$2`n`$1"
+    )
+
+    # Some legacy heads keep other tags between FX and the switcher. Move the
+    # former beside the latter so deferred execution order is reliable.
+    $fxTag = '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx1"></script>'
+    $switcherTag = '<script defer src="./laolao-mode-switcher.js?v=mode38"></script>'
+    $fxPattern = '(?is)\s*<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-transition-fx\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>\s*'
+    $html = [regex]::Replace($html, $fxPattern, "`n")
+    $switcherPattern = '(?is)<script\b[^>]*\bsrc="(?:\./|/)?laolao-mode-switcher\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>'
+    $switcherMatch = [regex]::Match($html, $switcherPattern)
+    if ($switcherMatch.Success) {
+        $html = $html.Substring(0, $switcherMatch.Index) + "    $fxTag`n    " + $html.Substring($switcherMatch.Index)
+    } else {
+        $html = $html -replace "(?i)(</head>)", "    $fxTag`n    $switcherTag`n`$1"
     }
 
     # The native timeline patch checks the renderer structure as one unit and

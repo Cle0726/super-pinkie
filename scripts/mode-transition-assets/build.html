@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>模式转场素材生成</title>
+<style>
+  body { margin: 24px; font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; color: #6c2749; background: #fff8f3; }
+  pre { padding: 12px; border-radius: 10px; background: #fff; }
+</style>
+</head>
+<body>
+<h1>模式转场素材生成</h1>
+<p>每个模式读取转场图和 Vision 抠图，生成四个文件写回 ui/assets。</p>
+<pre id="log"></pre>
+<script>
+(() => {
+  'use strict';
+  const MODES = ['chat', 'project', 'thinking', 'learning', 'unrestricted'];
+  const log = (line) => { document.getElementById('log').textContent += `${line}\n`; };
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const load = (src) => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
+  const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), {width: w, height: h});
+
+  function boxBlur(src, w, h, r) {
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      let acc = 0; const row = y * w;
+      for (let x = -r; x <= r; x++) acc += src[row + clamp(x, 0, w - 1)];
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = acc / (2 * r + 1);
+        acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += tmp[clamp(y, 0, h - 1) * w + x];
+      for (let y = 0; y < h; y++) {
+        out[y * w + x] = acc / (2 * r + 1);
+        acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+      }
+    }
+    return out;
+  }
+
+  // 缩小到 1/4 再模糊：失焦用的柔焦版本。按预乘颜色模糊，透明边缘不会发黑。
+  function softVersion(source, radius) {
+    const w = Math.ceil(source.width / 4), h = Math.ceil(source.height / 4);
+    const c = makeCanvas(w, h), x = c.getContext('2d', {willReadFrequently: true});
+    x.imageSmoothingQuality = 'high'; x.drawImage(source, 0, 0, w, h);
+    const d = x.getImageData(0, 0, w, h);
+    const ch = [0, 1, 2, 3].map(() => new Float32Array(w * h));
+    for (let i = 0; i < w * h; i++) {
+      const a = d.data[i * 4 + 3] / 255;
+      ch[0][i] = d.data[i * 4] * a; ch[1][i] = d.data[i * 4 + 1] * a; ch[2][i] = d.data[i * 4 + 2] * a; ch[3][i] = a;
+    }
+    const b = ch.map((plane) => boxBlur(boxBlur(plane, w, h, radius), w, h, radius));
+    for (let i = 0; i < w * h; i++) {
+      const a = b[3][i];
+      d.data[i * 4] = a > 0 ? b[0][i] / a : 0; d.data[i * 4 + 1] = a > 0 ? b[1][i] / a : 0;
+      d.data[i * 4 + 2] = a > 0 ? b[2][i] / a : 0; d.data[i * 4 + 3] = a * 255;
+    }
+    x.putImageData(d, 0, 0);
+    return c;
+  }
+
+  function prepare(image, maskImage) {
+    const w = image.width, h = image.height;
+    const mc = makeCanvas(w, h), mx = mc.getContext('2d', {willReadFrequently: true});
+    mx.drawImage(maskImage, 0, 0, w, h);
+    const md = mx.getImageData(0, 0, w, h).data;
+    const raw = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) raw[i] = md[i * 4] / 255;
+    // R：轻微模糊补上小孔，作为角色透明度；G：向内收的核心区，发丝飘动只作用在 R 和 G 之间的外圈；
+    // B：外扩一圈的挖空区。运行时只在 B 里用补好的背景板，其余背景直接用原图。
+    const soft = boxBlur(boxBlur(raw, w, h, 2), w, h, 2);
+    const inner = boxBlur(boxBlur(raw, w, h, 9), w, h, 9);
+    const wide = boxBlur(boxBlur(raw, w, h, 5), w, h, 5);
+    const packed = mx.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      packed.data[i * 4] = clamp(soft[i] * 1.6 - .3) * 255;
+      packed.data[i * 4 + 1] = clamp((inner[i] - .82) / .12) * 255;
+      packed.data[i * 4 + 2] = clamp((wide[i] - .02) / .04) * 255;
+      packed.data[i * 4 + 3] = 255;
+    }
+    mx.putImageData(packed, 0, 0);
+
+    // 背景板：挖掉角色（外扩一圈），用金字塔推拉填补。
+    const base = makeCanvas(w, h), bx = base.getContext('2d', {willReadFrequently: true});
+    bx.drawImage(image, 0, 0);
+    const bd = bx.getImageData(0, 0, w, h);
+    let sr = 0, sg = 0, sb = 0, n = 0;
+    for (let i = 0; i < w * h; i++) {
+      if (wide[i] > .04) { bd.data[i * 4 + 3] = 0; continue; }
+      sr += bd.data[i * 4]; sg += bd.data[i * 4 + 1]; sb += bd.data[i * 4 + 2]; n++;
+    }
+    bx.putImageData(bd, 0, 0);
+    const levels = [base];
+    while (levels.at(-1).width > 8) {
+      const prev = levels.at(-1);
+      const c = makeCanvas(Math.ceil(prev.width / 2), Math.ceil(prev.height / 2));
+      const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high';
+      cx.drawImage(prev, 0, 0, c.width, c.height);
+      levels.push(c);
+    }
+    const coarse = levels.at(-1), solid = makeCanvas(coarse.width, coarse.height), sx = solid.getContext('2d');
+    sx.fillStyle = `rgb(${sr / n | 0},${sg / n | 0},${sb / n | 0})`;
+    sx.fillRect(0, 0, solid.width, solid.height);
+    sx.drawImage(coarse, 0, 0);
+    levels[levels.length - 1] = solid;
+    for (let i = levels.length - 2; i >= 0; i--) {
+      const cur = levels[i], up = makeCanvas(cur.width, cur.height), ux = up.getContext('2d');
+      ux.imageSmoothingQuality = 'high';
+      ux.drawImage(levels[i + 1], 0, 0, cur.width, cur.height);
+      ux.drawImage(cur, 0, 0);
+      levels[i] = up;
+    }
+    const plate = levels[0];
+
+    // 角色单独一层（透明背景），只用来做柔焦版本；清晰版运行时直接用原图加遮罩。
+    const charCanvas = makeCanvas(w, h), cx = charCanvas.getContext('2d', {willReadFrequently: true});
+    cx.drawImage(image, 0, 0);
+    const cd = cx.getImageData(0, 0, w, h);
+    for (let i = 0; i < w * h; i++) cd.data[i * 4 + 3] = packed.data[i * 4];
+    cx.putImageData(cd, 0, 0);
+    return {mask: mc, plate, plateSoft: softVersion(plate, 3), charSoft: softVersion(charCanvas, 3)};
+  }
+
+  const blob = (canvas, type, quality) => new Promise((ok) => canvas.toBlob(ok, type, quality));
+  async function put(name, data) {
+    const response = await fetch(`/out/${name}`, {method: 'PUT', body: data});
+    if (!response.ok) throw new Error(`${name}: ${response.status}`);
+    log(`  ${name}  ${(data.size / 1024).toFixed(0)} KB`);
+  }
+
+  (async () => {
+    for (const id of MODES) {
+      const [image, mask] = await Promise.all([load(`/assets/laolao-mode-transition-${id}.png`), load(`/masks/${id}-mask.png`)]);
+      const out = prepare(image, mask);
+      log(`${id}:`);
+      await put(`laolao-mode-transition-${id}-mask.png`, await blob(out.mask, 'image/png'));
+      await put(`laolao-mode-transition-${id}-plate.webp`, await blob(out.plate, 'image/webp', .9));
+      await put(`laolao-mode-transition-${id}-plate-soft.png`, await blob(out.plateSoft, 'image/png'));
+      await put(`laolao-mode-transition-${id}-char-soft.png`, await blob(out.charSoft, 'image/png'));
+    }
+    log('完成');
+    window.__done = true;
+  })().catch((error) => { log(`失败：${error.message}`); window.__done = 'error'; });
+})();
+</script>
+</body>
+</html>
