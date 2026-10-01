@@ -2392,31 +2392,64 @@ test('a new user request is not trapped behind a rejected retry turn',async t=>{
   assert.equal(supervisor.hasPending(key),false);
 });
 
-test('a steered real user message opens a fresh evidence window without orphaning its live run',t=>{
+test('a steered user message refines the live turn without discarding its evidence',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-steered-user-message-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const key='agent:project:steered-user-message',activeRun='active-run';
+  const key='agent:learning:steered-user-message',activeRun='active-run';
   const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root),integrity:new CompletionIntegrityGuard()});
-  const activeCtx={agentId:'project',sessionKey:key,runId:activeRun};
-  supervisor.begin({prompt:'先用旧方法检查项目',runId:activeRun},activeCtx);
-  supervisor.afterTool({toolName:'read',toolCallId:'old-read',runId:activeRun,params:{path:'old.md'},result:'old evidence'},activeCtx);
-  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+  const activeCtx={agentId:'learning',sessionKey:key,runId:activeRun};
+  const original='这是一次追加消息验证。请先依次用 read 工具读取 SOUL.md 和 IDENTITY.md；两次读取都完成前不要给最终答复。最后只用一段话总结。';
+  supervisor.begin({prompt:original,runId:activeRun},activeCtx);
+  supervisor.afterTool({toolName:'read',toolCallId:'read-1',runId:activeRun,params:{path:'SOUL.md'},result:'# SOUL'},activeCtx);
 
   // `message_received` has a new inbound id even though the original agent
   // harness is still alive and will keep reporting tools as activeRun.
-  assert.equal(supervisor.receiveUserMessage({
-    content:'改成用 X 方法，并继续当前任务',messageId:'append-1',runId:'inbound-steer-id',
-  },{agentId:'project',sessionKey:key,runId:'inbound-steer-id',messageId:'append-1'}),true);
-  assert.equal(supervisor.turns.get(key).prompt,'改成用 X 方法，并继续当前任务');
-  assert.equal(supervisor.integrity.runs.get(key).prompt,'改成用 X 方法，并继续当前任务');
-  assert.equal(supervisor.integrity.runs.get(key).tools.length,0);
+  const steer='改成用 X 方法：不要逐项复述文件，改按“规则—例子—结论”组织；最终答复以“已采用 X 方法”开头。';
+  assert.equal(supervisor.receiveUserMessage({content:steer,messageId:'append-1',runId:'inbound-steer-id'},
+    {agentId:'learning',sessionKey:key,runId:'inbound-steer-id',messageId:'append-1'}),true);
+  assert.equal(supervisor.turns.get(key).prompt,original);
+  assert.deepEqual(supervisor.turns.get(key).amendments,[steer]);
+  assert.equal(supervisor.integrity.runs.get(key).prompt,original);
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
   assert.equal(supervisor.orphaned.has(activeRun),false);
 
-  // The live run is neither ended nor fenced: its next tool result belongs
-  // to the new evidence window instead of being silently discarded.
-  supervisor.afterTool({toolName:'exec',toolCallId:'new-exec',runId:activeRun,params:{command:'use-x'},result:'new evidence'},activeCtx);
-  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+  supervisor.afterTool({toolName:'read',toolCallId:'read-2',runId:activeRun,params:{path:'IDENTITY.md'},result:'# IDENTITY'},activeCtx);
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,2);
+  const decision=supervisor.integrity.finalize({lastAssistantMessage:'已采用 X 方法：规则是……例子是……结论是两份文件一致。'},activeCtx,{verifyExternal:false});
+  assert.equal(decision?.action==='revise',false,decision?.reason);
   assert.equal(supervisor.end({runId:activeRun},activeCtx),true);
+});
+
+test('a steer that adds an explicit file change still needs a real write',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-steered-mutation-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:steered-mutation',ctx={agentId:'project',sessionKey:key,runId:'active-run'};
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root),integrity:new CompletionIntegrityGuard()});
+  supervisor.begin({prompt:'读一下 README 并总结',runId:ctx.runId},ctx);
+  supervisor.afterTool({toolName:'read',toolCallId:'r',runId:ctx.runId,params:{path:'README.md'},result:'# README'},ctx);
+  supervisor.receiveUserMessage({content:'顺便把总结写入 notes.md 文件',runId:'inbound'},{...ctx,runId:'inbound'});
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+  const rejected=supervisor.integrity.finalize({lastAssistantMessage:'总结已写入 notes.md，完成。'},ctx,{verifyExternal:false});
+  assert.equal(rejected?.action,'revise');
+});
+
+test('order and answer-style wording does not turn a read-only task into a file change',()=>{
+  const cases=[
+    ['请先依次用 read 工具读取 SOUL.md 和 IDENTITY.md；两次读取都完成前不要给最终答复。','两份文件读完了：……'],
+    ['改成用 X 方法：不要逐项复述文件，改按“规则—例子—结论”组织。','已采用 X 方法：……'],
+  ];
+  for (const [prompt,reply] of cases) {
+    const guard=new CompletionIntegrityGuard(),ctx={sessionKey:'agent:learning:order-style',runId:'r'};
+    guard.begin({prompt},ctx);
+    guard.afterTool({toolName:'read',toolCallId:'c',params:{path:'SOUL.md'},result:'# SOUL'},ctx);
+    const decision=guard.finalize({lastAssistantMessage:reply},ctx,{verifyExternal:false});
+    assert.equal(decision?.action==='revise',false,`${prompt}: ${decision?.reason}`);
+  }
+  // A real change request is still held to a real write, even with the same wording around it.
+  const guard=new CompletionIntegrityGuard(),ctx={sessionKey:'agent:project:real-change',runId:'r'};
+  guard.begin({prompt:'修改 README.md 的安装说明，改完后告诉我'},ctx);
+  guard.afterTool({toolName:'read',toolCallId:'c',params:{path:'README.md'},result:'# README'},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'README 已修改完成。'},ctx,{verifyExternal:false})?.action,'revise');
 });
 
 test('internal queue controls never replace the current user evidence window',t=>{
