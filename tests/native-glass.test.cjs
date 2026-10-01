@@ -52,8 +52,8 @@ test('installer cache-busts the native glass assets',()=>{
   assert.match(installer,/Computer Use v2 patch skipped/);
   assert.match(installer,/laolao-deep-think\.js\?v=deepthink20/);
   assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt32/);
-  assert.match(installer,/laolao-splash\.css\?v=splash18/);
-  assert.match(installer,/laolao-splash\.js\?v=splash26/);
+  assert.match(installer,/laolao-splash\.css\?v=splash19/);
+  assert.match(installer,/laolao-splash\.js\?v=splash27/);
   assert.match(installer,/laolao-mode-switcher\.js\?v=mode38/);
   assert.match(installer,/laolao-usage-stats\.js\?v=stats16/);
   assert.match(installer,/laolao-classic-shell\.css\?v=classic17/);

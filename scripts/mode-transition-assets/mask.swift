@@ -1,4 +1,6 @@
 // Usage: swift mask.swift INPUT.png OUTPUT-mask.png
+//
+// INPUT can be a laolao-mode-transition-<mode>.png or laolao-splash.png.
 // Writes an 8-bit grayscale foreground mask (white = subject) at the input size.
 import AppKit
 import CoreImage
@@ -6,7 +8,7 @@ import Vision
 
 let args = CommandLine.arguments
 guard args.count == 3, let image = CIImage(contentsOf: URL(fileURLWithPath: args[1])) else {
-    FileHandle.standardError.write("usage: mask.swift INPUT OUTPUT\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: mask.swift INPUT.png OUTPUT-mask.png\n".data(using: .utf8)!)
     exit(2)
 }
 

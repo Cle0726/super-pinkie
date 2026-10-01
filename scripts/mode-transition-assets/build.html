@@ -2,20 +2,35 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>模式转场素材生成</title>
+<title>模式转场和开屏素材生成</title>
 <style>
   body { margin: 24px; font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; color: #6c2749; background: #fff8f3; }
   pre { padding: 12px; border-radius: 10px; background: #fff; }
 </style>
 </head>
 <body>
-<h1>模式转场素材生成</h1>
-<p>每个模式读取转场图和 Vision 抠图，生成四个文件写回 ui/assets。</p>
+<h1>模式转场和开屏素材生成</h1>
+<p>每个模式及开屏读取原图和 Vision 抠图，生成四个文件写回 ui/assets。</p>
 <pre id="log"></pre>
 <script>
 (() => {
   'use strict';
-  const MODES = ['chat', 'project', 'thinking', 'learning', 'unrestricted'];
+  const SCENES = [
+    ...['chat', 'project', 'thinking', 'learning', 'unrestricted'].map((id) => ({
+      id,
+      source: `laolao-mode-transition-${id}.png`,
+      mask: `${id}-mask.png`,
+      output: `laolao-mode-transition-${id}`,
+    })),
+    {
+      id: 'splash',
+      source: 'laolao-splash.png',
+      mask: 'splash-mask.png',
+      output: 'laolao-splash',
+    },
+  ];
+  const requestedScene = new URLSearchParams(window.location.search).get('scene');
+  const scenes = requestedScene ? SCENES.filter(({id}) => id === requestedScene) : SCENES;
   const log = (line) => { document.getElementById('log').textContent += `${line}\n`; };
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const load = (src) => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
@@ -133,14 +148,16 @@
   }
 
   (async () => {
-    for (const id of MODES) {
-      const [image, mask] = await Promise.all([load(`/assets/laolao-mode-transition-${id}.png`), load(`/masks/${id}-mask.png`)]);
+    if (!scenes.length) throw new Error(`unknown scene: ${requestedScene}`);
+    for (const scene of scenes) {
+      const [image, mask] = await Promise.all([load(`/assets/${scene.source}`), load(`/masks/${scene.mask}`)]);
       const out = prepare(image, mask);
+      const {id, output} = scene;
       log(`${id}:`);
-      await put(`laolao-mode-transition-${id}-mask.png`, await blob(out.mask, 'image/png'));
-      await put(`laolao-mode-transition-${id}-plate.webp`, await blob(out.plate, 'image/webp', .9));
-      await put(`laolao-mode-transition-${id}-plate-soft.png`, await blob(out.plateSoft, 'image/png'));
-      await put(`laolao-mode-transition-${id}-char-soft.png`, await blob(out.charSoft, 'image/png'));
+      await put(`${output}-mask.png`, await blob(out.mask, 'image/png'));
+      await put(`${output}-plate.webp`, await blob(out.plate, 'image/webp', .9));
+      await put(`${output}-plate-soft.png`, await blob(out.plateSoft, 'image/png'));
+      await put(`${output}-char-soft.png`, await blob(out.charSoft, 'image/png'));
     }
     log('完成');
     window.__done = true;
