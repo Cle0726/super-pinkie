@@ -1714,16 +1714,19 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
     else process.env.PINKIE_STATE_ROOT=priorStateRoot;
     fs.rmSync(isolatedStateRoot,{recursive:true,force:true});
   });
-  const hooks=new Map(),methods=new Map(),queued=[],tools=[];
+  const hooks=new Map(),methods=new Map(),queued=[],tools=[],unscheduled=[];
   plugin.register({
     on:(name,fn)=>hooks.set(name,fn),
     registerGatewayMethod:(name,fn,opts)=>methods.set(name,{fn,opts}),
     registerTool:(factory,opts)=>tools.push({factory,opts}),
     // Some compatible OpenClaw builds resolve a successful enqueue with no
     // payload; the control RPC must still stay usable in that case.
-    session:{workflow:{enqueueNextTurnInjection:async value=>{queued.push(value);}}},
+    session:{workflow:{
+      enqueueNextTurnInjection:async value=>{queued.push(value);},
+      unscheduleSessionTurnsByTag:async value=>{unscheduled.push(value);return {removed:0};},
+    }},
   });
-  for(const name of ['before_agent_run','before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended','before_compaction','after_compaction','before_agent_finalize','before_message_write','reply_payload_sending','model_call_started','model_call_ended','llm_output','agent_end'])assert.ok(hooks.has(name));
+  for(const name of ['before_agent_run','message_received','before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended','before_compaction','after_compaction','before_agent_finalize','before_message_write','reply_payload_sending','model_call_started','model_call_ended','llm_output','agent_end'])assert.ok(hooks.has(name));
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
@@ -1764,6 +1767,20 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/反批评/);
   await methods.get('pinkie.deepThink.disarm').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
+
+  // A transport-level steer has no second before_prompt_build hook. It still
+  // retires stale watchdog/tier continuations, while control payloads leave
+  // them untouched and cannot masquerade as new user work.
+  const steeredKey='agent:project:registered-steer';
+  const unscheduledBeforeSteer=unscheduled.length;
+  await hooks.get('message_received')({content:'改成用 X 方法继续当前任务',messageId:'append-1',runId:'append-run'},
+    {sessionKey:steeredKey,runId:'append-run',messageId:'append-1'});
+  assert.equal(unscheduled.length,unscheduledBeforeSteer+2);
+  assert.ok(unscheduled.slice(unscheduledBeforeSteer).some(item=>/pinkie-watchdog-/.test(item.tag)));
+  assert.ok(unscheduled.slice(unscheduledBeforeSteer).some(item=>/pinkie-tier-/.test(item.tag)));
+  await hooks.get('message_received')({content:'\u2063',runId:'watchdog-run'},
+    {sessionKey:steeredKey,runId:'watchdog-run'});
+  assert.equal(unscheduled.length,unscheduledBeforeSteer+2);
 });
 
 test('plugin manifest declares every agent tool before registration',()=>{
@@ -2373,6 +2390,61 @@ test('a new user request is not trapped behind a rejected retry turn',async t=>{
   // the clean turn with the old rejection.
   supervisor.recordFinalize({lastAssistantMessage:'旧任务仍未完成。'},oldCtx,{action:'revise',reason:'late old event'});
   assert.equal(supervisor.hasPending(key),false);
+});
+
+test('a steered real user message opens a fresh evidence window without orphaning its live run',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-steered-user-message-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:steered-user-message',activeRun='active-run';
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root),integrity:new CompletionIntegrityGuard()});
+  const activeCtx={agentId:'project',sessionKey:key,runId:activeRun};
+  supervisor.begin({prompt:'先用旧方法检查项目',runId:activeRun},activeCtx);
+  supervisor.afterTool({toolName:'read',toolCallId:'old-read',runId:activeRun,params:{path:'old.md'},result:'old evidence'},activeCtx);
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+
+  // `message_received` has a new inbound id even though the original agent
+  // harness is still alive and will keep reporting tools as activeRun.
+  assert.equal(supervisor.receiveUserMessage({
+    content:'改成用 X 方法，并继续当前任务',messageId:'append-1',runId:'inbound-steer-id',
+  },{agentId:'project',sessionKey:key,runId:'inbound-steer-id',messageId:'append-1'}),true);
+  assert.equal(supervisor.turns.get(key).prompt,'改成用 X 方法，并继续当前任务');
+  assert.equal(supervisor.integrity.runs.get(key).prompt,'改成用 X 方法，并继续当前任务');
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,0);
+  assert.equal(supervisor.orphaned.has(activeRun),false);
+
+  // The live run is neither ended nor fenced: its next tool result belongs
+  // to the new evidence window instead of being silently discarded.
+  supervisor.afterTool({toolName:'exec',toolCallId:'new-exec',runId:activeRun,params:{command:'use-x'},result:'new evidence'},activeCtx);
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+  assert.equal(supervisor.end({runId:activeRun},activeCtx),true);
+});
+
+test('internal queue controls never replace the current user evidence window',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-internal-queue-control-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const key='agent:project:internal-queue-control',ctx={agentId:'project',sessionKey:key,runId:'active-run'};
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root),integrity:new CompletionIntegrityGuard()});
+  supervisor.begin({prompt:'继续处理真实用户任务',runId:ctx.runId},ctx);
+  supervisor.afterTool({toolName:'read',toolCallId:'r',runId:ctx.runId,params:{path:'state.md'},result:'evidence'},ctx);
+  assert.equal(supervisor.receiveUserMessage({content:'\u2063',runId:'watchdog-run'},{...ctx,runId:'watchdog-run'}),false);
+  assert.equal(supervisor.receiveUserMessage({content:'[pinkie-tier-control] continue',runId:'tier-run'},{...ctx,runId:'tier-run'}),false);
+  assert.equal(supervisor.turns.get(key).prompt,'继续处理真实用户任务');
+  assert.equal(supervisor.integrity.runs.get(key).tools.length,1);
+});
+
+test('queue-steered user input updates the active objective without ending its parent run',()=>{
+  const runtime=new ModeArchitecture();
+  const key='agent:project:steered-objective';
+  runtime.arm(key,'boost');
+  runtime.parentStarted({runId:'active-run'},{sessionKey:key,runId:'active-run'});
+  assert.equal(runtime.receiveUserMessage({content:'改成用 X 方法验证当前结果',runId:'inbound-steer-id'},
+    {sessionKey:key,runId:'inbound-steer-id'}),key);
+  assert.equal(runtime.getRun(key).taskPrompt,'改成用 X 方法验证当前结果');
+  assert.equal(runtime.activityFor(key).parentRunning,true);
+  assert.equal(runtime.receiveUserMessage({content:'\u2063',runId:'watchdog-run'},
+    {sessionKey:key,runId:'watchdog-run'}),'');
+  assert.equal(runtime.getRun(key).taskPrompt,'改成用 X 方法验证当前结果');
+  assert.equal(runtime.activityFor(key).parentRunning,true);
 });
 
 test('继续 keeps an explicitly pending task on its retry lane',t=>{

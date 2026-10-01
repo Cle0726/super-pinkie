@@ -56,6 +56,60 @@ __fake.tail();                         // 最近的请求和事件日志
 | `multiTool` | 同一轮里连续多次工具调用后回复 | `tools`：次数；`parallel: true` 最后再来一条消息里的两个并行调用 |
 | `watchdog` | 第一轮工具调用后没回复就结束，网关看门狗从另一个连接（CLI）续跑。续跑会插入不可见用户消息 U+2063，并用新的 runId | `rounds`：续跑次数；`r1Terminal: 'error'` 首轮以错误结束（`chat` 错误事件按 15 秒宽限延后，`graceMs` 可调） |
 
+### 追加消息 / 队列自愈（a–f）
+
+这些场景专门给“碧琪正在思考或跑工具时继续补一句”的回归测试用。它们不伪造
+composer 队列：页面仍用原生的 `chatQueue`、`steerQueuedChatMessage` 和
+`retryQueuedChatMessage`。假网关只决定当前 run 是否接收引导、是否丢终止事件，并记录
+真正收到的消息。`__fake.checks.deliveries()` 中每个 idempotency key 最多一条，能查重发。
+
+| 场景 | 含义 | 修复前可观察现象 |
+|---|---|---|
+| `queue-normal`（别名 `busy-queue-normal`） | 忙碌首轮正常 `final`；用 Alt/Option+Enter 排队的消息应在结束后发出。 | 这是基线，原生本来能发出。 |
+| `queue-missing-terminal`（别名 `busy-queue-missing-terminal`） | run 实际已结束，`sessions.list` 已是 idle，但没有 lifecycle/end、chat/final 或 sessions.changed。 | `forceIdle` 只清忙碌字段，卡片一直停在输入框上方，`deliveries()` 没有该消息。 |
+| `steer-accepted` | 当前 run 回 `accepted`，并把追加内容作为真实 user 记录持久化。 | 已追加卡会等旧 run 的终止事件；该事件丢失时不会消失。 |
+| `steer-race-ended` | UI 刚开始引导，run 就在确认前结束；网关回 `timeout`，且不会持久化该消息。 | 卡片遗留，用户得手动 Retry；原文容易一直不发。 |
+| `queue-refresh` | 向**原生** composer localStorage 写入一张带过期 `failed` / `steered` / `pendingRunId` 的卡；随后刷新页面。 | 恢复后的卡因旧状态不再被原生发送路径接手。 |
+| `watchdog-append` | 首轮结束后 `pinkie-watchdog-*` 新 run 续跑；追加消息必须绑定新 run，而不是不可见的 U+2063 控制消息。 | UI 仍盯旧 runId，追加或已引导卡时机错乱，续跑可能吞消息。 |
+
+队列场景的 `auto` 默认只消费第一条用户发送，后面由真实原生队列重试，不会再次启动首轮：
+
+```js
+// a：首轮运行时按 Option/Alt+Enter，明确“结束后发”
+__fake.auto('queue-normal', {gap: 180, holdMs: 1400});
+__fake.checks.send('先做一个多步任务');
+setTimeout(() => __fake.checks.send('等这一轮结束再发', {altKey: true}), 350);
+
+// b：终止事件丢失。首轮运行时同样排队，随后让 resume 走真实的 idle 自愈。
+__fake.auto('queue-missing-terminal', {gap: 180, holdMs: 900});
+__fake.checks.send('模拟丢失结束事件');
+setTimeout(() => __fake.checks.send('仍然要发出去', {altKey: true}), 350);
+// 正常会在下一次空闲检查自愈；手动验可用：await __laolaoStaleBusy.reconcileQueued()。
+
+// c：普通 Enter 默认应立即追加；最终回复会带“已按追加信息调整”。
+__fake.auto('steer-accepted', {gap: 180, holdMs: 1400});
+__fake.checks.send('先开始处理');
+setTimeout(() => __fake.checks.send('改成用 X 方法'), 350);
+
+// e：写完原生持久化后刷新；重新进入空闲会话后应自动接手该卡。
+await __fake.scenario('queue-refresh', {message: '刷新后继续发'});
+location.reload();
+```
+
+`steer-race-ended` 和 `watchdog-append` 的用法与 c 相同。前者要在首轮工具期间发
+追加消息；后者等第二个 `pinkie-watchdog-*` run 出现后再发。检查时同时看：
+
+```js
+__fake.checks.queue();                 // 原生队列卡和按钮
+__fake.checks.deliveries();            // 网关真正收到、且没有重复的消息
+__fake.tail(80);                       // queue-probe / terminal-dropped / delivery 记录
+__fake.checks.captureRenderErrors();
+__fake.checks.brokenLitParts();
+```
+
+测试文件 `tests/chat-ui-harness.test.cjs` 也逐个固定了 a–f 的协议结果；它记录的
+`beforeFix` 字段就是每个复现的修复前现象，方便 UI 改动后对照。
+
 ## 模拟的网关行为（对应 OpenClaw 2026.7.1-2）
 
 - `chat` 增量和 `final` 广播给所有连接。同一轮的文字跨工具调用累积（上一段 + 新增量，中间不加分隔），`final` 带的是整轮累积文字。所以流式界面收尾时，说明句会和最终回复合在同一条消息里；历史同步后，它们又是分开存储的消息。

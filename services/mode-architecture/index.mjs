@@ -2436,6 +2436,12 @@ export class CleKkSupervisor {
     const key = bound.sessionKey;
     const prompt = String(event.prompt || '').trim();
     const control = internalControlText(prompt);
+    // `message_received` also fires for a real user message that was steered
+    // into an already-live agent run. Its inbound run id is deliberately new,
+    // while the active harness keeps emitting tool/final hooks under the old
+    // run id. It must open a new evidence window, but must not orphan that
+    // still-live harness (or its remaining tool evidence would be discarded).
+    const inboundUserMessage = event.__pinkieInboundUserMessage === true;
     let turn = this.turns.get(key) || this.restore(key);
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
@@ -2462,7 +2468,7 @@ export class CleKkSupervisor {
         // Preserve the old append-only audit chain, retire its retry lease,
         // and start a clean evidence window for the actual new message. Late
         // hooks from the superseded run are fenced by `orphaned` above.
-        if (turn.runId && turn.runId !== incomingRunId) {
+        if (!inboundUserMessage && turn.runId && turn.runId !== incomingRunId) {
           this.orphaned.set(String(turn.runId), key);
           while (this.orphaned.size > 2048) this.orphaned.delete(this.orphaned.keys().next().value);
         }
@@ -2513,6 +2519,25 @@ export class CleKkSupervisor {
     this.integrity.begin(event, ctx);
     this.integrity.updatePrompt({prompt: turn?.prompt || prompt}, ctx);
     if (turn) this.persist(key, turn);
+  }
+
+  /**
+   * `before_prompt_build` is not called again when OpenClaw steers an inbound
+   * message into the currently running harness. Observe that transport-level
+   * event explicitly so the added instruction is a real user turn for the
+   * integrity gate, while the original live run stays valid for later tools.
+   */
+  receiveUserMessage(event = {}, ctx = {}) {
+    const prompt = String(event.content ?? event.body ?? event.prompt ?? '').trim();
+    if (!prompt || internalControlText(prompt)) return false;
+    const bound = this.boundContext(event, ctx);
+    if (!bound) return false;
+    this.begin({
+      ...bound.event,
+      prompt,
+      __pinkieInboundUserMessage: true,
+    }, bound.ctx);
+    return true;
   }
 
   afterTool(event = {}, ctx = {}) {
@@ -4257,6 +4282,32 @@ export class ModeArchitecture {
     }
   }
 
+  /**
+   * A queue-steered message reaches `message_received`, but does not always
+   * trigger another prompt-build hook because it joins the active harness.
+   * Keep its user intent in the same host-owned state as a normal prompt;
+   * watchdog/tier control text intentionally stays out of this path.
+   */
+  receiveUserMessage(event = {}, ctx = {}) {
+    const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
+    const prompt = String(event.content ?? event.body ?? event.prompt ?? '').trim();
+    if (!sessionKey || !prompt || internalControlText(prompt) || isInternalExecutionSession(sessionKey)) return '';
+    const parent = this.resolveParent(sessionKey);
+    this.rememberUserPrompt(sessionKey, prompt);
+    const state = this.getRun(parent);
+    if (state?.active && state.parentSessionKey === sessionKey
+        && !CONTINUATION_ONLY_PROMPT.test(prompt)) {
+      // Do not terminate or replace the live parent run here. A steer is
+      // received between model/tool boundaries; it only changes the latest
+      // user objective for the next decision and keeps the run lease intact.
+      state.taskPrompt = prompt;
+      state.taskType = classifyDeliberationTask(prompt);
+      state.lastEventAt = Date.now();
+      this.setRun(sessionKey, state);
+    }
+    return parent;
+  }
+
   captureCompactionHandoff(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
     if (!sessionKey || isInternalExecutionSession(sessionKey)) return null;
@@ -5398,6 +5449,20 @@ export default {
     api.on('before_agent_run', (event, ctx) => {
       architecture.parentStarted(event, ctx);
       cleKk.begin(event, ctx);
+    }, {priority: -12000});
+    // OpenClaw emits this for every accepted inbound message, including a
+    // `messages.queue: steer` addition that stays inside the current harness
+    // and therefore has no second before_agent_run/prompt-build lifecycle.
+    // A real user addition gets its own evidence objective and retires only
+    // pending *continuations*; neither cancellation aborts the live agent.
+    api.on('message_received', async (event, ctx) => {
+      const sessionKey = architecture.receiveUserMessage(event, ctx);
+      if (!sessionKey) return;
+      cleKk.receiveUserMessage(event, ctx);
+      await Promise.all([
+        watchdog.cancel(sessionKey),
+        tierContinuation.cancel(sessionKey),
+      ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
       cleKk.begin(event, ctx);
