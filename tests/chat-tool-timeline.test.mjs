@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {apply, pinkieBuildTimeline, pinkieSelectMessageWindow, pinkieSplitTimelineMessage, transform, transformWithStatus} from '../patch/apply-chat-timeline.mjs';
 
 const message = (role, content, id) => ({role, content, timestamp: 1, __openclaw: {id}});
@@ -66,6 +68,80 @@ test('the current user turn is split into chronological text and single-tool row
   assert.equal(rows[3].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
   assert.equal(rows.slice(0, -1).every((item) => item.isTimelineStep === true), true);
   assert.equal(rows.at(-1).isTimelineStep, undefined);
+});
+
+test('older real turns use the same timeline rows and internal user messages do not split them', () => {
+  const entries = [
+    group('user', 'first-user', [message('user', '先完成第一件事', 'first-user')]),
+    group('tool', 'first-tools', [
+      message('assistant', [
+        {type: 'text', text: '我先查第一轮的资料。'},
+        {type: 'tool_call', callId: 'first-read', name: 'read', arguments: {path: 'first.md'}},
+      ], 'first-call'),
+      message('tool', [
+        {type: 'tool_result', callId: 'first-read', name: 'read', text: 'first result'},
+      ], 'first-result'),
+    ]),
+    group('user', 'watchdog-control', [message('user', '\u2063', 'watchdog-control')]),
+    group('user', 'tier-control', [message('user', '[pinkie-tier-control] continue', 'tier-control')]),
+    group('user', 'empty-control', [message('user', '', 'empty-control')]),
+    group('assistant', 'first-final', [message('assistant', '第一轮已经完成。', 'first-final')]),
+    group('user', 'second-user', [message('user', '再完成第二件事', 'second-user')]),
+    group('assistant', 'second-final', [message('assistant', '第二轮已经完成。', 'second-final')]),
+  ];
+
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const second = timeline.findIndex((item) => item.key === 'second-user');
+  assert.ok(second > 0);
+  assert.deepEqual(timeline.slice(0, second).map((item) => item.role), [
+    'user', 'assistant', 'tool', 'assistant',
+  ]);
+  assert.equal(timeline.some((item) => /(?:watchdog|tier-control|empty-control)/u.test(item.key)), false);
+  assert.equal(timeline[1].isTimelineStep, true);
+  assert.equal(timeline[2].isTimelineStep, true);
+  assert.equal(timeline[2].messages[0].message.toolName, 'read');
+  assert.equal(timeline[2].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
+  assert.equal(timeline[3].key, 'first-final');
+  assert.equal(timeline[3].isTimelineStep, undefined);
+});
+
+test('each historical turn has its own stable overflow row', () => {
+  const entries = [group('user', 'old-user', [message('user', 'old long task', 'old-user')])];
+  for (let index = 0; index < 100; index += 1) {
+    entries.push(group('assistant', `old-step-${index}`, [
+      message('assistant', `old step ${index}`, `old-step-${index}`),
+    ]));
+  }
+  entries.push(group('user', 'latest-user', [message('user', 'new task', 'latest-user')]));
+  entries.push(group('assistant', 'latest-final', [message('assistant', 'new answer', 'latest-final')]));
+
+  const first = pinkieBuildTimeline(entries, parseToolRows);
+  const second = pinkieBuildTimeline(entries, parseToolRows);
+  const latest = first.findIndex((item) => item.key === 'latest-user');
+  const oldRows = first.slice(0, latest);
+  assert.equal(oldRows.length, 80);
+  assert.equal(oldRows[1].timelineOverflow, true);
+  assert.equal(oldRows[1].overflowCount, 22);
+  assert.equal(oldRows[1].key, 'pinkie:timeline:overflow:old-user');
+  assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
+});
+
+test('stream and reading indicators are retained only for the latest real turn', () => {
+  const entries = [
+    group('user', 'old-user', [message('user', 'old task', 'old-user')]),
+    {kind: 'stream', key: 'stale-stream', text: 'stale', startedAt: 2},
+    {kind: 'reading-indicator', key: 'stale-reading'},
+    group('assistant', 'old-final', [message('assistant', 'old answer', 'old-final')]),
+    group('user', 'latest-user', [message('user', 'latest task', 'latest-user')]),
+    {kind: 'stream', key: 'live-stream', text: 'live', startedAt: 3},
+    {kind: 'reading-indicator', key: 'live-reading'},
+    group('assistant', 'latest-final', [message('assistant', 'latest answer', 'latest-final')]),
+  ];
+
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  assert.equal(timeline.some((item) => item.key === 'stale-stream' || item.key === 'stale-reading'), false);
+  assert.equal(timeline.find((item) => item.key === 'live-stream')?.isTimelineStep, true);
+  assert.equal(timeline.find((item) => item.key === 'live-reading')?.isTimelineStep, true);
 });
 
 test('messages mixing prose and multiple tool calls split in source order', () => {
@@ -134,10 +210,39 @@ function hS(e,t={}){let{onOpenSidebar:n,assistant:r,basePath:i,authToken:a}=t,o=
 function afterStreaming(){return null}
 `;
 
+// A compact fixture for the runtime shape emitted by the released v1 patch.
+// Its prefix branch is the behavior this upgrade must replace, not preserve.
+const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80) {
+  const safeEntries = entries.flatMap((item) => {
+    if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
+    const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
+    return messages.length ? [{...item, messages}] : [];
+  });
+  const userIndex = safeEntries.findLastIndex((item) => item?.kind === 'group'
+    && String(item.role || '').toLowerCase() === 'user'
+    && (item.messages || []).some((entry) => !isInternalUserMessage(entry?.message || {})));
+  if (userIndex < 0) return safeEntries;
+  const prefix = safeEntries.slice(Math.max(0, userIndex - 16), userIndex);
+  return [...prefix, ...safeEntries.slice(userIndex)];
+}`;
+
+function asLegacyV1Bundle(v2Bundle) {
+  const v2Marker = '/* pinkie-chat-timeline:v2 */';
+  const markerIndex = v2Bundle.indexOf(v2Marker);
+  const legacyStart = v2Bundle.indexOf('function isRealUserGroup', markerIndex);
+  const historyStart = v2Bundle.indexOf('\nfunction $b(', legacyStart);
+  assert.ok(markerIndex >= 0 && legacyStart > markerIndex && historyStart > legacyStart);
+  return v2Bundle.slice(0, markerIndex)
+    + '/* pinkie-chat-timeline:v1 */'
+    + v2Bundle.slice(markerIndex + v2Marker.length, legacyStart)
+    + legacyV1BuildTimeline
+    + v2Bundle.slice(historyStart);
+}
+
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v1/);
+  assert.match(result.text, /pinkie-chat-timeline:v2/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,512\)/);
   assert.match(result.text, /return 512/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -156,6 +261,39 @@ test('native bundle patch is structural, idempotent, syntax-safe and skips chang
   });
 });
 
+test('an installed v1 chat bundle upgrades to v2 through apply and stays idempotent', (t) => {
+  const v2 = transformWithStatus(bundleFixture).text;
+  const v1 = asLegacyV1Bundle(v2);
+  assert.match(v1, /pinkie-chat-timeline:v1/);
+  assert.match(v1, /const prefix = safeEntries\.slice/);
+
+  const upgraded = transformWithStatus(v1);
+  assert.equal(upgraded.changed, true, upgraded.reason);
+  assert.equal(upgraded.reason, 'upgraded-v1');
+  assert.match(upgraded.text, /pinkie-chat-timeline:v2/);
+  assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1|const prefix = safeEntries\.slice/);
+  assert.doesNotThrow(() => new vm.Script(upgraded.text));
+  assert.deepEqual(transformWithStatus(upgraded.text), {
+    text: upgraded.text,
+    changed: false,
+    reason: 'already-patched',
+  });
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-v1-upgrade-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const assets = path.join(root, 'dist', 'control-ui', 'assets');
+  const chunk = path.join(assets, 'chat-page-test.js');
+  fs.mkdirSync(assets, {recursive: true});
+  fs.writeFileSync(chunk, v1);
+  const applied = apply(root, {backupRoot: path.join(root, 'backups')});
+  assert.equal(applied.changed, true);
+  assert.equal(fs.readFileSync(chunk, 'utf8'), upgraded.text);
+  assert.equal(fs.readFileSync(path.join(applied.backup, 'chat-page-test.js'), 'utf8'), v1);
+  const repeated = apply(root, {backupRoot: path.join(root, 'second-backup')});
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.reason, 'already-patched');
+});
+
 test('timeline tool details keep no card shell and injection cache keys advance', () => {
   const css = fs.readFileSync(new URL('../ui/injections/laolao-tool-stream.css', import.meta.url), 'utf8');
   const head = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
@@ -164,6 +302,10 @@ test('timeline tool details keep no card shell and injection cache keys advance'
   assert.match(css, /\.chat-group--timeline-tools \.chat-tool-msg-collapse\s*\{[^}]*border: 0 !important;[^}]*background: transparent !important;[^}]*box-shadow: none !important;/u);
   for (const source of [head, mac, windows]) {
     assert.match(source, /laolao-tool-stream\.css\?v=toolstream3/u);
-    assert.match(source, /laolao-resume\.js\?v=resume40/u);
+    assert.match(source, /laolao-resume\.js\?v=resume41/u);
+  }
+  for (const source of [mac, windows]) {
+    assert.match(source, /clekk-history29/u);
+    assert.match(source, /clekk-history-render-29/u);
   }
 });

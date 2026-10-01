@@ -266,7 +266,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-deep-think.js?v=deepthink20"></script>',
         '<script defer src="./laolao-web-gpt-collab.js?v=webgpt32"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact4"></script>',
-        '<script defer src="./laolao-resume.js?v=resume40"></script>',
+        '<script defer src="./laolao-resume.js?v=resume41"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
         '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
         '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
@@ -290,7 +290,7 @@ function Apply-UISkin {
         'laolao-phrases.js' = 'phrases23'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx1'; 'laolao-mode-transition-fx.css' = 'modetransitionfx1';
         'laolao-mode-switcher.js' = 'mode38'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash26';
-        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume40';
+        'laolao-handoff-bootstrap.js' = 'handoff5'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume41';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
@@ -342,14 +342,14 @@ function Apply-UISkin {
     $html = [regex]::Replace(
         $html,
         '(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"',
-            '$1?v=clekk-history28"'
+            '$1?v=clekk-history29"'
     )
     Get-ChildItem (Join-Path $UiRoot 'assets') -Filter 'index-*.js' -File -ErrorAction SilentlyContinue | ForEach-Object {
         $entryBundle = Get-Content $_.FullName -Raw -Encoding UTF8
         $entryBundle = [regex]::Replace(
             $entryBundle,
             '(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'']*)?',
-            '$1?v=clekk-history28'
+            '$1?v=clekk-history29'
         )
         $entryBundle | Set-Content $_.FullName -Encoding UTF8 -NoNewline
     }
@@ -372,7 +372,7 @@ function Apply-UISkin {
         $worker = [regex]::Replace(
             $worker,
             '(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)',
-            '$1-clekk-history-render-28$2'
+            '$1-clekk-history-render-29$2'
         )
         $worker = $worker.Replace(
             '// Cache-first for hashed assets; network-first for HTML/other.',

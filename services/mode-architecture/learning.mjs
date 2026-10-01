@@ -909,8 +909,14 @@ export function learningPrompt(store, sessionKey) {
 - 收到 [[CLEKK_NOTE_DEEP_V1]] 时，检查请求编号和提供的全部笔记，调用 learning_notes action=propose_deep 提交结构化 operations。类型只能是 merge、compare、group、fix；每项都写 reason，并只引用提供的笔记 id。merge 保留一条，其余会进入可恢复的“已合并”；compare 创建对比卡但保留原笔记；fix 只提建议，不能修改释义。提交后不要在聊天里复述操作列表。
 - 深度整理的方案必须交给抽屉预览，由先生勾选后应用；不要自行调用应用、删除或覆盖笔记。
 `.trim();
-  if (!state.enabled) return noteRules;
+  const questionHygieneRules = `
+【学习题目回复卫生】
+- 出题前的防剧透自检在内部完成；题目消息只放题干、选项和必要的生词注释，不写检查过程。
+`.trim();
+  if (!state.enabled) return `${noteRules}\n\n${questionHygieneRules}`;
   return `${noteRules}
+
+${questionHygieneRules}
 
 【原生互动学习已开启】
 - 普通学习聊天仍照常回答；不要为了互动而打断先生当前问题。
