@@ -36,8 +36,7 @@
     "mm/gpt-oss-120b-medium": 128000,
     "mm/tab_flash_lite_preview": 128000,
     "mm/tab_jump_flash_lite_preview": 128000,
-    "deepseek/deepseek-v4-flash": 128000,
-    "deepseek/deepseek-v4-pro": 128000,
-    "deepseek/deepseek-v4-flash-vision-exp": 128000
+    "deepseek/deepseek-flash": 1048576,
+    "deepseek/deepseek-v4-pro": 1048576
   }
 }

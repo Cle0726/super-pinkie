@@ -139,3 +139,123 @@ html[data-theme-mode="dark"] .laolao-tool-stream-footer--live {
   .laolao-tool-live-badge { animation: none; }
   .chat-activity-group__body .chat-tool-msg-summary { transition: none; }
 }
+
+/* The current turn is rendered by the native bundle as individual timeline
+   rows. Keep text aligned with Pinkie's message column and let each tool row
+   expand only its own parameters and output. Older rounds keep their groups. */
+.chat-group--timeline-step {
+  display: block !important;
+  width: 100%;
+  margin: 2px 0 !important;
+  animation: none !important;
+}
+.chat-group--timeline-step > .chat-avatar.tool,
+.chat-group--timeline-step > .chat-avatar.assistant,
+.chat-group--timeline-step > .chat-group-footer {
+  display: none !important;
+}
+.chat-group--timeline-step > .chat-group-messages {
+  display: block !important;
+  grid-column: auto !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.chat-group--timeline-step .chat-timeline-text-row,
+.chat-group--timeline-step .chat-timeline-tool-row {
+  min-width: 0;
+  margin: 1px 0;
+  animation: none !important;
+}
+.chat-group--timeline-step .chat-timeline-text-row > .chat-bubble,
+.chat-group--timeline-step .chat-timeline-tool-row > .chat-bubble--tool-shell {
+  max-width: 100%;
+  margin: 0 !important;
+  padding: 2px 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.chat-group--timeline-tools .chat-tool-msg-collapse {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.chat-group--timeline-tools .chat-tool-msg-summary {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0 !important;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: left;
+}
+.chat-group--timeline-tools .chat-tool-msg-summary:hover,
+.chat-group--timeline-tools .chat-tool-msg-summary:focus-visible {
+  background: rgba(217, 80, 141, 0.08) !important;
+}
+.chat-group--timeline-tools .chat-tool-msg-body {
+  margin: 3px 0 3px 26px;
+  padding: 4px 8px;
+  border: 0 !important;
+  border-left: 1px solid rgba(217, 80, 141, 0.2) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.chat-timeline-overflow {
+  margin: 3px 0;
+}
+.chat-timeline-overflow > summary {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 8px;
+  color: var(--text-muted, #8b7c88);
+  cursor: pointer;
+  font-size: 11px;
+  list-style: none;
+}
+.chat-timeline-overflow > summary::-webkit-details-marker { display: none; }
+.chat-timeline-overflow > summary:hover {
+  background: rgba(217, 80, 141, 0.08);
+}
+.chat-timeline-overflow__body {
+  margin: 3px 0 3px 10px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(217, 80, 141, 0.2);
+}
+html[data-theme-mode="dark"] .chat-group--timeline-tools .chat-tool-msg-summary:hover,
+html[data-theme-mode="dark"] .chat-group--timeline-tools .chat-tool-msg-summary:focus-visible,
+html[data-theme-mode="dark"] .chat-timeline-overflow > summary:hover {
+  background: rgba(230, 120, 170, 0.14) !important;
+}
+html[data-theme-mode="dark"] .chat-group--timeline-tools .chat-tool-msg-body,
+html[data-theme-mode="dark"] .chat-timeline-overflow__body {
+  border-left-color: rgba(230, 120, 170, 0.3) !important;
+}
+
+/* Remove the upstream gear and its grid slot in every tool group, including
+   older collapsed turns. Assistant/user bubbles keep their normal styles. */
+.chat-avatar.tool {
+  display: none !important;
+}
+.chat-group.tool > .chat-group-messages {
+  grid-column: 1 / -1 !important;
+  margin-left: 0 !important;
+}
+.chat-group.tool .chat-bubble--tool-shell,
+.chat-activity-group {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.chat-group.tool .chat-bubble--tool-shell {
+  margin: 0 !important;
+}

@@ -174,6 +174,21 @@
   const MODEL_GROUP_ORDER = ["GPT", "Codex", "Gemini", "Gemma", "Claude", "Grok",
     "DeepSeek", "Qwen", "Kimi", "GLM", "Mistral", "Llama", "其他模型"];
   const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
+  /* Hide retired and user-pruned choices in the picker only. Keep the full
+     catalog for existing sessions, reasoning routes and proxy fallbacks. */
+  const HIDDEN_PICKER_MODEL_IDS = new Set([
+    "gemini-3-pro-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview", "gemini-pro-agent",
+  ]);
+  function hiddenPickerModel(model) {
+    const id = String(model?.id || "").toLowerCase();
+    return HIDDEN_PICKER_MODEL_IDS.has(id)
+      || /^gpt-4/.test(id) || /^gpt-5\.(?:4|5)(?:$|[.-])/.test(id)
+      || /^gemini-2\.5-/.test(id)
+      || /^gemini-3-flash(?:$|-)/.test(id)
+      || /^gemini-3\.5-flash(?:$|-(?!lite(?:$|-)))/.test(id)
+      || /^gemini-3\.[67]-flash(?:$|-)/.test(id);
+  }
   function modelGroup(model) {
     const id = String(model.id || "").toLowerCase();
     if (/^gpt[-_.]/.test(id)) return "GPT";
@@ -192,7 +207,7 @@
   }
 
   function groupedPresentationModels(models, selectedModel = "") {
-    return presentationModels(models, selectedModel).sort((left, right) => {
+    return presentationModels(models, selectedModel).filter((model) => !hiddenPickerModel(model)).sort((left, right) => {
       const groupDifference = MODEL_GROUP_ORDER.indexOf(modelGroup(left))
         - MODEL_GROUP_ORDER.indexOf(modelGroup(right));
       return groupDifference || MODEL_NAME_ORDER.compare(left.name || left.id, right.name || right.id)
@@ -222,13 +237,30 @@
       zai: "zai", ollama: "ollama", groq: "groq", minimax: "minimax", doubao: "doubao"})[source] || "crossmodel";
   }
 
+  // The user-facing settings page shares this exact catalog, family folding,
+  // retirement filter and brand ordering so the two model pickers never drift.
+  window.__laolaoModelPickerCatalog = Object.freeze({
+    load(agentId = "main") {
+      const rpc = window.__laolaoSidebar?.gwRequest;
+      if (typeof rpc !== "function") return Promise.reject(new Error("模型目录暂时不可用"));
+      return loadCatalog(rpc, agentId);
+    },
+    present: groupedPresentationModels,
+    group: modelGroup,
+    brand: modelBrand,
+  });
+
   function syncModelBrands(browser) {
     browser?.querySelectorAll?.("[data-chat-model-option]")?.forEach((option) => {
       const value = option.getAttribute?.("data-chat-model-option") || "";
       const separator = value.indexOf("/");
       const provider = separator < 0 ? "" : value.slice(0, separator);
       const id = separator < 0 ? value : value.slice(separator + 1);
-      if (option.dataset) option.dataset.pinkieBrand = modelBrand(provider, id);
+      if (option.dataset) {
+        option.dataset.pinkieBrand = modelBrand(provider, id);
+        if (hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
+        else delete option.dataset.pinkieHiddenModel;
+      }
     });
   }
 
@@ -471,12 +503,33 @@
     return match ? {name: match[1].trim(), tier: match[2].toLowerCase()} : {name: String(text || "").trim(), tier: ""};
   }
 
+  /* The native label is Lit's live `${label}` binding. Replacing its children
+     deletes Lit's markers, and the next model/thinking change then throws in
+     the chat pane render: the pane stops committing new replies and stops
+     scrolling to them until the app is reopened. Leave the native label
+     untouched (only hidden) and draw the decorated label in a sibling the
+     picker owns. */
   function writeTriggerLabel(label, name, tier) {
     const display = tier ? `${name} · ${LEVEL_LABELS[tier]}` : name;
-    const decorated = label.querySelector?.(":scope > .pinkie-external-tier");
-    if (label.textContent?.trim() === display && Boolean(decorated) === Boolean(tier)) return display;
-    if (!tier || !document.createElement || !document.createTextNode || !label.replaceChildren) {
-      label.textContent = display;
+    const sibling = label.nextElementSibling;
+    let owned = sibling?.classList?.contains("pinkie-trigger-label") ? sibling : null;
+    if (!tier && display === (label.textContent?.trim() || "")) {
+      owned?.remove();
+      label.style?.removeProperty?.("display");
+      return display;
+    }
+    if (!owned) {
+      owned = document.createElement("span");
+      owned.className = "chat-controls__inline-select-label pinkie-trigger-label";
+      // The summary's aria-label already announces the model and tier.
+      owned.setAttribute?.("aria-hidden", "true");
+      label.after(owned);
+    }
+    label.style?.setProperty?.("display", "none", "important");
+    const decorated = owned.querySelector?.(":scope > .pinkie-external-tier");
+    if (owned.textContent === display && Boolean(decorated) === Boolean(tier)) return display;
+    if (!tier || !document.createTextNode || !owned.replaceChildren) {
+      owned.textContent = display;
       return display;
     }
     const model = document.createElement("span");
@@ -486,7 +539,7 @@
     level.className = "pinkie-external-tier";
     level.textContent = LEVEL_LABELS[tier];
     level.dataset.pinkieTierLabel = LEVEL_LABELS[tier];
-    label.replaceChildren(model, document.createTextNode(" · "), level);
+    owned.replaceChildren(model, document.createTextNode(" · "), level);
     return display;
   }
 
@@ -501,7 +554,8 @@
       state = {label, nativeText: text, nativeAria: aria, appliedText: "", appliedAria: ""};
       triggerStates.set(summary, state);
     }
-    if (text !== state.appliedText) state.nativeText = text;
+    // writeTriggerLabel never rewrites the native label, so it is always native.
+    state.nativeText = text;
     if (aria !== state.appliedAria) state.nativeAria = aria;
     const native = splitModelTier(state.nativeText);
     const fallback = fallbackStates.get(details);
@@ -694,20 +748,36 @@
       browser.append(list);
     }
     const items = groupedPresentationModels(state.models, state.selectedModel);
-    const signature = `${items.map((model) => `${model.provider}/${model.id}/${model.name}`).join("|")}:${state.selectedModel || ""}:${state.session?.hasActiveRun ? 1 : 0}`;
+    const groups = [...new Set(items.map(modelGroup))];
+    const selected = items.find((model) => model.sources.includes(state.selectedModel));
+    const selectedId = state.selectedModel?.split("/").at(-1) || state.session?.model || "";
+    const selectedGroup = selected ? modelGroup(selected) : selectedId ? modelGroup({id: selectedId}) : "";
+    const activeGroup = groups.includes(state.activeGroup) ? state.activeGroup
+      : groups.includes(selectedGroup) ? selectedGroup : groups[0] || "";
+    state.activeGroup = activeGroup;
+    const signature = `${items.map((model) => `${model.provider}/${model.id}/${model.name}`).join("|")}:${state.selectedModel || ""}:${activeGroup}:${state.session?.hasActiveRun ? 1 : 0}`;
     if (list.dataset.signature === signature) return;
     list.dataset.signature = signature;
     const fragment = document.createDocumentFragment();
-    let previousGroup = "";
-    for (const model of items) {
-      const group = modelGroup(model);
-      if (group !== previousGroup) {
-        const heading = document.createElement("span");
-        heading.className = "pinkie-model-group";
-        heading.textContent = group;
-        fragment.append(heading);
-        previousGroup = group;
-      }
+    const brandTabs = document.createElement("div");
+    brandTabs.className = "pinkie-model-brand-tabs";
+    brandTabs.setAttribute("role", "group");
+    brandTabs.setAttribute("aria-label", "选择 AI 品牌");
+    const tabFragment = document.createDocumentFragment();
+    for (const group of groups) {
+      const representative = items.find((model) => modelGroup(model) === group);
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "pinkie-model-brand-tab";
+      tab.dataset.pinkieModelGroup = group;
+      tab.dataset.pinkieBrand = modelBrand(representative.provider, representative.id);
+      tab.setAttribute("aria-pressed", String(group === activeGroup));
+      tab.textContent = group;
+      tabFragment.append(tab);
+    }
+    brandTabs.replaceChildren(tabFragment);
+    fragment.append(brandTabs);
+    for (const model of items.filter((item) => modelGroup(item) === activeGroup)) {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "chat-controls__combined-model-option pinkie-fallback-option";
@@ -950,9 +1020,27 @@
       event.preventDefault();
       event.stopPropagation();
       if (Date.now() - (pointerToggles.get(details) || 0) < 600) return;
-      details.dataset.pinkieModelsOpen = details.dataset.pinkieModelsOpen === "1" ? "0" : "1";
+      const expanding = details.dataset.pinkieModelsOpen !== "1";
+      details.dataset.pinkieModelsOpen = expanding ? "1" : "0";
+      if (expanding) {
+        const fallback = fallbackStates.get(details);
+        if (fallback) fallback.activeGroup = "";
+      }
       sync(details);
       if (details.dataset.pinkieModelsOpen === "1") refreshFallbackCatalog(details);
+      return;
+    }
+    const brandTab = event.target.closest?.(".pinkie-model-brand-tab");
+    if (brandTab) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+      const fallback = fallbackStates.get(details);
+      if (fallback?.models?.length) {
+        fallback.activeGroup = brandTab.dataset?.pinkieModelGroup || "";
+        const browser = details.querySelector?.(".chat-controls__model-browser");
+        renderFallbackCatalog(details, browser, fallback);
+        if (browser) browser.scrollTop = 0;
+      }
       return;
     }
     const modelOption = event.target.closest?.("[data-chat-model-option]");

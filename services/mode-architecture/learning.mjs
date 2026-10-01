@@ -7,6 +7,8 @@ const MAX_TEXT = 12_000;
 const MAX_OPTIONS = 8;
 const MAX_HISTORY = 24;
 const MAX_NOTES = 500;
+const MAX_ORGANIZATION_BACKUPS = 5;
+const REVIEW_INTERVALS_DAYS = [1, 3, 7, 14, 30];
 
 function stateRoot() {
   if (process.env.PINKIE_STATE_ROOT) return path.resolve(process.env.PINKIE_STATE_ROOT);
@@ -91,6 +93,122 @@ function comparable(value) {
   return cleanText(value, 4000).normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+export function stripNoteTitleDecoration(value) {
+  return cleanText(value, 500).replace(/^[\s\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0f•·●○◦▪▫‣*_#👉→➜➡️✅📌📝🎯-]+\s*/u, '').trim();
+}
+
+function structuredNote(title, content) {
+  const lines = cleanText(content, 20_000).split(/\r?\n/);
+  const first = lines[0] || '';
+  const match = first.match(/^\s*(.{1,240}?)\s*=\s*(.{1,2000})\s*$/);
+  if (!match) return {term: stripNoteTitleDecoration(title) || first.slice(0, 240), meaning: '', example: '', note: ''};
+  const rest = lines.slice(1).join('\n').trim();
+  const exampleMatch = rest.match(/(?:^|\n)\s*(?:例句|example)\s*[:：]\s*([\s\S]*)/i);
+  const example = exampleMatch?.[1]?.trim() || '';
+  const note = rest && !exampleMatch ? rest : '';
+  return {term: stripNoteTitleDecoration(match[1]), meaning: match[2].trim(), example, note};
+}
+
+export function calculateReviewSchedule(note = {}, rating, now = Date.now()) {
+  const rawLevel = Number(note.reviewLevel);
+  const currentLevel = Math.max(-1, Math.min(REVIEW_INTERVALS_DAYS.length - 1, Number.isFinite(rawLevel) ? rawLevel : -1));
+  const normalized = ['remembered', 'fuzzy', 'forgot'].includes(rating) ? rating : 'fuzzy';
+  const reviewLevel = normalized === 'forgot' ? 0
+    : normalized === 'remembered' ? Math.min(REVIEW_INTERVALS_DAYS.length - 1, currentLevel + 1)
+      : Math.max(0, currentLevel);
+  const days = REVIEW_INTERVALS_DAYS[reviewLevel];
+  return {
+    lastReviewedAt: Number(now),
+    nextReviewAt: Number(now) + days * 24 * 60 * 60 * 1000,
+    reviewCount: Math.max(0, Number(note.reviewCount) || 0) + 1,
+    lapses: Math.max(0, Number(note.lapses) || 0) + (normalized === 'forgot' ? 1 : 0),
+    reviewLevel,
+  };
+}
+
+function withReviewDefaults(note) {
+  return {
+    ...note,
+    tags: Array.isArray(note.tags) ? note.tags : [],
+    lastReviewedAt: Number(note.lastReviewedAt) || 0,
+    nextReviewAt: Number(note.nextReviewAt) || 0,
+    reviewCount: Math.max(0, Number(note.reviewCount) || 0),
+    lapses: Math.max(0, Number(note.lapses) || 0),
+    reviewLevel: Number.isFinite(Number(note.reviewLevel)) ? Number(note.reviewLevel) : -1,
+  };
+}
+
+export function detectSimilarNotes(notes = []) {
+  const active = notes.filter(note => note?.status !== 'merged');
+  const pairs = [];
+  const seen = new Set();
+  const add = (type, left, right, reason) => {
+    const key = [left.id, right.id].sort().join(':');
+    if (!left.id || !right.id || left.id === right.id || seen.has(key)) return;
+    seen.add(key);
+    pairs.push({type, ids: [left.id, right.id], terms: [left.term || left.title || '', right.term || right.title || ''], reason});
+  };
+  const comparisonFamily = /\b(?:be\s+)?(the\s+same\s+as|similar\s+to|different\s+from|different\s+than)\b/i;
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const left = active[i];
+      const right = active[j];
+      const leftTerm = comparable(left.term || left.title);
+      const rightTerm = comparable(right.term || right.title);
+      if (!leftTerm || !rightTerm) continue;
+      if (leftTerm === rightTerm) add('merge', left, right, '词条相同');
+      else {
+        const leftFamily = leftTerm.match(comparisonFamily)?.[1]?.replace(/\s+/g, ' ');
+        const rightFamily = rightTerm.match(comparisonFamily)?.[1]?.replace(/\s+/g, ' ');
+        if (leftFamily && rightFamily && leftFamily !== rightFamily) add('compare', left, right, '都在表达比较关系，适合放在一起辨析');
+      }
+    }
+  }
+  return pairs;
+}
+
+export function validateOrganizationOperations(operations, notes, sessionKey) {
+  const owned = new Map((Array.isArray(notes) ? notes : [])
+    .filter(note => note.sourceSessionKey === sessionKey && note.status !== 'merged')
+    .map(note => [note.id, note]));
+  const accepted = [];
+  const discarded = [];
+  const input = Array.isArray(operations) ? operations : [];
+  if (!Array.isArray(operations)) discarded.push({index: 0, type: 'unknown', reason: '操作列表格式无效，必须是数组'});
+  input.slice(0, 200).forEach((operation, index) => {
+    const type = cleanText(operation?.type, 24).toLowerCase();
+    const reason = cleanText(operation?.reason, 1000);
+    const ids = Array.isArray(operation?.ids) ? [...new Set(operation.ids.map(cleanId).filter(Boolean))] : [];
+    const referenceIds = type === 'fix' ? [cleanId(operation?.id)] : ids;
+    if (!['merge', 'compare', 'group', 'fix'].includes(type)) return discarded.push({index, type: type || 'unknown', reason: '操作类型无效或不支持'});
+    if (!reason) return discarded.push({index, type, reason: '缺少操作理由'});
+    if (!referenceIds.length || referenceIds.some(id => !owned.has(id))) return discarded.push({index, type, reason: '引用了不存在、其他会话或已合并的笔记'});
+    if (type === 'merge') {
+      const keepId = cleanId(operation?.keepId);
+      if (ids.length < 2 || !ids.includes(keepId)) return discarded.push({index, type, reason: '合并需要至少两条笔记，并指定其中一条作为保留项'});
+      accepted.push({id: `op-${index}`, type, ids, keepId, title: stripNoteTitleDecoration(operation?.title), term: cleanText(operation?.term, 1000), meaning: cleanText(operation?.meaning, 8000), example: cleanText(operation?.example, 8000), note: cleanText(operation?.note, 8000), reason});
+      return;
+    }
+    if (type === 'compare') {
+      if (ids.length < 2) return discarded.push({index, type, reason: '对比卡至少需要两条笔记'});
+      const items = Array.isArray(operation?.items) ? operation.items.slice(0, 12).map(item => ({term: cleanText(item?.term, 500), meaning: cleanText(item?.meaning, 2000)})).filter(item => item.term) : [];
+      accepted.push({id: `op-${index}`, type, ids, title: stripNoteTitleDecoration(operation?.title) || '易混对比', items, differencePoints: cleanText(operation?.differencePoints, 5000), reason});
+      return;
+    }
+    if (type === 'group') {
+      const topic = cleanText(operation?.topic, 120);
+      if (!topic) return discarded.push({index, type, reason: '主题不能为空'});
+      accepted.push({id: `op-${index}`, type, ids, topic, reason});
+      return;
+    }
+    const suggestion = cleanText(operation?.suggestion, 2000);
+    if (!suggestion) return discarded.push({index, type, reason: '修改建议不能为空'});
+    accepted.push({id: `op-${index}`, type, noteId: referenceIds[0], field: cleanText(operation?.field, 40) || 'meaning', suggestion, reason});
+  });
+  if (input.length > 200) discarded.push({index: 200, type: 'unknown', reason: '一次最多检查 200 项，剩余项已丢弃'});
+  return {operations: accepted, discarded};
+}
+
 function sameAnswer(expected, actual, kind) {
   if (expected === undefined || expected === null || expected === '') return null;
   if (kind === 'multiple_choice') {
@@ -123,6 +241,7 @@ export class LearningInteractionStore {
     this.activityRoot = path.join(this.root, 'sessions');
     this.notesFile = path.join(this.root, 'notes.json');
     this.notesMarkdown = path.join(this.workspace, 'notes', '学习笔记.md');
+    this.notesBackupRoot = path.join(this.root, 'notes-backups');
   }
 
   assertLearningSession(sessionKey) {
@@ -214,6 +333,9 @@ export class LearningInteractionStore {
       options,
       hint: cleanText(payload.hint, 3000),
       topic: cleanText(payload.topic, 500),
+      noteIds: Array.isArray(payload.note_ids || payload.noteIds)
+        ? [...new Set((payload.note_ids || payload.noteIds).slice(0, MAX_NOTES).map(cleanId).filter(Boolean))]
+        : [],
       correctAnswer: (kind === 'single_choice' || kind === 'multiple_choice')
         ? normalizeChoiceAnswer(payload.correct_answer, options, kind === 'multiple_choice')
         : normalizeAnswer(payload.correct_answer),
@@ -263,6 +385,10 @@ export class LearningInteractionStore {
       keyPoint: cleanText(payload.key_point || payload.keyPoint, 5000),
       resolvedAt: Date.now(),
     };
+    if (!current.reviewRecordedAt && current.noteIds?.length) {
+      this.recordQuizOutcome(sessionKey, current.noteIds, current.result.correct);
+      current.reviewRecordedAt = Date.now();
+    }
     state.current = current;
     return this.publicState(this.write(sessionKey, state));
   }
@@ -279,68 +405,368 @@ export class LearningInteractionStore {
     return this.publicState(this.write(sessionKey, state));
   }
 
-  readNotes() {
-    const raw = readJson(this.notesFile, {v: 1, notes: []});
-    return {v: 1, notes: Array.isArray(raw.notes) ? raw.notes.slice(0, MAX_NOTES) : []};
+  markdownPathForSession(sessionKey) {
+    const folder = createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 16);
+    return path.join(this.workspace, 'notes', folder, '学习笔记.md');
   }
 
-  writeNotes(notes) {
-    const state = {v: 1, updatedAt: Date.now(), notes: notes.slice(0, MAX_NOTES)};
+  readNotesState() {
+    const raw = readJson(this.notesFile, {v: 1, notes: []});
+    return {
+      ...raw,
+      v: 1,
+      notes: Array.isArray(raw.notes) ? raw.notes.slice(0, MAX_NOTES) : [],
+      organizationPlans: raw.organizationPlans && typeof raw.organizationPlans === 'object' ? raw.organizationPlans : {},
+    };
+  }
+
+  readNotes() { return this.readNotesState(); }
+
+  writeNotes(notes, extras = {}, extraMarkdownSessions = []) {
+    const previous = this.readNotesState();
+    const state = {...previous, ...extras, v: 1, updatedAt: Date.now(), notes: notes.slice(0, MAX_NOTES)};
     writeJsonAtomic(this.notesFile, state);
-    this.writeNotesMarkdown(state.notes);
+    const sessions = new Set([...state.notes.map(note => note.sourceSessionKey), ...extraMarkdownSessions].filter(Boolean));
+    for (const sessionKey of sessions) this.writeNotesMarkdown(state.notes, sessionKey);
     return state;
   }
 
-  writeNotesMarkdown(notes) {
-    ensureDirectory(path.dirname(this.notesMarkdown));
-    const body = ['# 学习笔记', '', '> 由学习模式自动保存；可以直接编辑或复制。', ''];
-    for (const note of notes) {
-      body.push(`## ${markdownEscape(note.title || '知识点')}`, '');
-      body.push(markdownEscape(note.content), '');
-      const meta = [note.tags?.length ? `标签：${note.tags.join('、')}` : '', note.sourceLabel ? `来源：${note.sourceLabel}` : '', note.createdAt ? `时间：${new Date(note.createdAt).toISOString()}` : ''].filter(Boolean);
-      if (meta.length) body.push(`_${markdownEscape(meta.join(' · '))}_`, '');
+  writeNotesMarkdown(allNotes, sessionKey) {
+    const file = this.markdownPathForSession(sessionKey);
+    ensureDirectory(path.dirname(file));
+    const notes = allNotes.filter(note => note.sourceSessionKey === sessionKey);
+    const active = notes.filter(note => note.status !== 'merged');
+    const merged = notes.filter(note => note.status === 'merged');
+    const groups = new Map();
+    for (const note of active) {
+      const topic = cleanText(note.topic, 120) || '未分类';
+      if (!groups.has(topic)) groups.set(topic, []);
+      groups.get(topic).push(note);
     }
-    const temporary = `${this.notesMarkdown}.${process.pid}.tmp`;
+    const body = ['# 学习笔记', '', '> 按当前学习会话独立保存；由学习模式自动同步。', ''];
+    for (const [topic, items] of groups) {
+      body.push(`## ${markdownEscape(topic)}`, '');
+      for (const note of items) {
+        body.push(`### ${markdownEscape(note.title || note.term || '知识点')}`, '');
+        if (note.kind === 'compare' && Array.isArray(note.compareItems)) {
+          for (const item of note.compareItems) body.push(`- **${markdownEscape(item.term)}**：${markdownEscape(item.meaning)}`);
+          if (note.differencePoints) body.push('', markdownEscape(note.differencePoints));
+        } else {
+          const parsed = structuredNote(note.title || '', note.content || '');
+          const term = note.term || parsed.term;
+          const meaning = note.meaning || parsed.meaning;
+          const example = note.example || parsed.example;
+          const extra = note.note || parsed.note;
+          const structured = term && meaning ? `**${term}**：${meaning}` : note.content;
+          body.push(markdownEscape(structured || ''), '');
+          if (example) body.push(`_${markdownEscape(example)}_`, '');
+          if (extra) body.push(markdownEscape(extra), '');
+          if (note.supplementalMeaning) body.push(`> ${markdownEscape(note.supplementalMeaning)}`, '');
+        }
+        if (note.suggestedFix) body.push(`> 建议核对（${markdownEscape(note.suggestedFix.field || '释义')}）：${markdownEscape(note.suggestedFix.suggestion)}`, '');
+        if (note.tags?.length) body.push(`标签：${note.tags.map(markdownEscape).join('、')}`, '');
+        const meta = [note.sourceLabel ? `来源：${note.sourceLabel}` : '', note.createdAt ? `时间：${new Date(note.createdAt).toISOString()}` : ''].filter(Boolean);
+        if (meta.length) body.push(`_${markdownEscape(meta.join(' · '))}_`, '');
+      }
+    }
+    if (merged.length) {
+      body.push('## 已合并', '');
+      for (const note of merged) body.push(`- **${markdownEscape(note.title || note.term || '知识点')}**：${markdownEscape(note.content || '')}（已合并，可在笔记抽屉恢复）`);
+    }
+    const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
     fs.writeFileSync(temporary, `${body.join('\n').trim()}\n`, {encoding: 'utf8', mode: 0o600});
-    fs.renameSync(temporary, this.notesMarkdown);
+    fs.renameSync(temporary, file);
+    return file;
   }
 
-  listNotes({query = '', limit = 200} = {}) {
+  notesForSession(sessionKey, {includeMerged = false} = {}) {
+    return this.readNotesState().notes
+      .filter(note => note.sourceSessionKey === sessionKey && (includeMerged || note.status !== 'merged'))
+      .map(withReviewDefaults);
+  }
+
+  findOwnedNote(sessionKey, id, {includeMerged = true} = {}) {
+    const noteId = cleanId(id);
+    const note = this.readNotesState().notes.find(item => item.id === noteId && item.sourceSessionKey === sessionKey && (includeMerged || item.status !== 'merged'));
+    if (!note) throw new Error('没有找到这条笔记');
+    return note;
+  }
+
+  listNotes({sessionKey, query = '', tags = [], includeMerged = false, limit = 200} = {}) {
+    const all = this.readNotesState().notes;
+    const scoped = sessionKey
+      ? all.filter(note => note.sourceSessionKey === sessionKey)
+      : all;
+    const visible = scoped.filter(note => includeMerged || note.status !== 'merged').map(note => {
+      const parsed = structuredNote(note.title || '', note.content || '');
+      return withReviewDefaults({
+        ...note,
+        term: note.term || parsed.term,
+        meaning: note.meaning || parsed.meaning,
+        example: note.example || parsed.example,
+        note: note.note || parsed.note,
+        original: note.original ?? note.content ?? '',
+      });
+    });
     const needle = comparable(query);
-    const notes = this.readNotes().notes.filter(note => !needle || comparable(`${note.title} ${note.content} ${(note.tags || []).join(' ')}`).includes(needle));
-    return {v: 1, notes: notes.slice(0, Math.max(1, Math.min(500, Number(limit) || 200))), markdownPath: this.notesMarkdown};
+    const selectedTags = (Array.isArray(tags) ? tags : [tags]).map(tag => comparable(tag)).filter(Boolean);
+    const filtered = visible.filter(note => {
+      if (needle && !comparable(`${note.title} ${note.content} ${note.term || ''} ${note.meaning || ''} ${(note.tags || []).join(' ')} ${note.topic || ''}`).includes(needle)) return false;
+      return selectedTags.every(tag => note.tags.some(item => comparable(item) === tag));
+    });
+    const availableTags = [...new Set(visible.flatMap(note => note.tags))].sort((a, b) => a.localeCompare(b, 'zh-Hans'));
+    const active = scoped.filter(note => note.status !== 'merged');
+    const dueCount = active.filter(note => !Number(note.nextReviewAt) || Number(note.nextReviewAt) <= Date.now()).length;
+    const unorganizedCount = active.filter(note => !note.deepOrganizedAt).length;
+    return {
+      v: 2,
+      notes: filtered.slice(0, Math.max(1, Math.min(500, Number(limit) || 200))),
+      availableTags,
+      dueCount,
+      unorganizedCount,
+      similar: detectSimilarNotes(visible),
+      markdownPath: sessionKey ? this.markdownPathForSession(sessionKey) : this.notesMarkdown,
+    };
   }
 
   saveNote(sessionKey, payload = {}) {
     this.assertLearningSession(sessionKey);
     const content = cleanText(payload.content, 20_000);
     if (!content) throw new Error('笔记内容不能为空');
-    const current = this.readNotes().notes;
+    const state = this.readNotesState();
     const requestedId = cleanId(payload.id);
-    const existing = requestedId ? current.find(note => note.id === requestedId) : null;
-    const note = {
+    const existing = requestedId ? state.notes.find(note => note.id === requestedId && note.sourceSessionKey === sessionKey) : null;
+    const title = stripNoteTitleDecoration(payload.title || content.split(/\r?\n/)[0]) || '知识点';
+    const parsed = structuredNote(title, content);
+    const note = withReviewDefaults({
+      ...existing,
       id: existing?.id || randomUUID(),
-      title: cleanText(payload.title, 500) || cleanText(content.split(/\r?\n/)[0], 80) || '知识点',
+      title,
       content,
-      tags: Array.isArray(payload.tags) ? payload.tags.slice(0, 12).map(tag => cleanText(tag, 80)).filter(Boolean) : [],
+      original: existing?.original ?? cleanText(payload.original ?? content, 20_000),
+      term: existing?.term || parsed.term,
+      meaning: existing?.meaning || parsed.meaning,
+      example: existing?.example || parsed.example,
+      note: existing?.note || parsed.note,
+      tags: Array.isArray(payload.tags) ? [...new Set(payload.tags.slice(0, 12).map(tag => cleanText(tag, 80)).filter(Boolean))] : existing?.tags || [],
       sourceSessionKey: String(sessionKey),
-      sourceLabel: cleanText(payload.sourceLabel || payload.source_label, 500),
+      sourceLabel: cleanText(payload.sourceLabel || payload.source_label, 500) || existing?.sourceLabel || '',
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
-    };
-    const next = [note, ...current.filter(item => item.id !== note.id)];
+      status: existing?.status || 'active',
+    });
+    const next = [note, ...state.notes.filter(item => item.id !== note.id)];
     this.writeNotes(next);
-    return {ok: true, note, markdownPath: this.notesMarkdown};
+    return {ok: true, note, markdownPath: this.markdownPathForSession(sessionKey)};
+  }
+
+  updateNote(sessionKey, id, payload = {}) {
+    this.assertLearningSession(sessionKey);
+    const current = this.findOwnedNote(sessionKey, id);
+    const content = cleanText(payload.content ?? current.content, 20_000);
+    if (!content) throw new Error('笔记内容不能为空');
+    const title = stripNoteTitleDecoration(payload.title ?? current.title) || '知识点';
+    const parsed = structuredNote(title, content);
+    const tags = Array.isArray(payload.tags)
+      ? [...new Set(payload.tags.slice(0, 12).map(tag => cleanText(tag, 80)).filter(Boolean))]
+      : current.tags || [];
+    const updated = {
+      ...current,
+      title,
+      content,
+      tags,
+      term: parsed.term || current.term || '',
+      meaning: parsed.meaning || current.meaning || '',
+      example: parsed.example || current.example || '',
+      note: parsed.note || current.note || '',
+      original: current.original ?? content,
+      updatedAt: Date.now(),
+    };
+    const state = this.readNotesState();
+    this.writeNotes(state.notes.map(note => note.id === updated.id ? updated : note));
+    return {ok: true, note: withReviewDefaults(updated), markdownPath: this.markdownPathForSession(sessionKey)};
+  }
+
+  organizeLightNote(sessionKey, id, payload = {}) {
+    this.assertLearningSession(sessionKey);
+    const current = this.findOwnedNote(sessionKey, id, {includeMerged: false});
+    const tags = Array.isArray(payload.tags)
+      ? [...new Set(payload.tags.slice(0, 3).map(tag => cleanText(tag, 80)).filter(Boolean))]
+      : [];
+    const structured = payload.structured && typeof payload.structured === 'object' ? payload.structured : {};
+    const originalText = String(current.original ?? current.content ?? '');
+    const originalHasChinese = /[\u3400-\u9fff]/.test(originalText);
+    const modelMeaning = cleanText(structured.meaning, 4000);
+    const supplement = cleanText(payload.supplementalMeaning, 4000) || (!originalHasChinese && !current.meaning ? modelMeaning : '');
+    const updated = {
+      ...current,
+      term: cleanText(structured.term, 1000) || current.term || '',
+      meaning: current.meaning || (originalHasChinese ? modelMeaning : ''),
+      example: cleanText(structured.example, 4000) || current.example || '',
+      note: cleanText(structured.note, 4000) || current.note || '',
+      ...(tags.length ? {tags} : {}),
+      ...(supplement && !originalHasChinese ? {supplementalMeaning: `碧琪补充：${supplement}`} : {}),
+      lightOrganizedAt: Date.now(),
+      updatedAt: Date.now(),
+      original: current.original ?? current.content,
+    };
+    const state = this.readNotesState();
+    this.writeNotes(state.notes.map(note => note.id === updated.id ? updated : note));
+    return {ok: true, note: withReviewDefaults(updated)};
+  }
+
+  restoreNote(sessionKey, note) {
+    this.assertLearningSession(sessionKey);
+    if (!note || note.sourceSessionKey !== sessionKey) throw new Error('不能恢复其他会话的笔记');
+    const state = this.readNotesState();
+    if (state.notes.some(item => item.id === note.id)) throw new Error('这条笔记已经存在');
+    const restored = {...note, status: 'active', updatedAt: Date.now()};
+    this.writeNotes([restored, ...state.notes]);
+    return {ok: true, note: withReviewDefaults(restored)};
   }
 
   deleteNote(sessionKey, id) {
     this.assertLearningSession(sessionKey);
-    const noteId = cleanId(id);
-    const current = this.readNotes().notes;
-    const next = current.filter(note => note.id !== noteId);
-    if (next.length === current.length) throw new Error('没有找到这条笔记');
-    this.writeNotes(next);
-    return {ok: true, id: noteId};
+    const note = this.findOwnedNote(sessionKey, id);
+    const state = this.readNotesState();
+    this.writeNotes(state.notes.filter(item => item.id !== note.id), {}, [sessionKey]);
+    return {ok: true, id: note.id, note: withReviewDefaults(note)};
+  }
+
+  reviewNote(sessionKey, id, rating, now = Date.now()) {
+    this.assertLearningSession(sessionKey);
+    const current = this.findOwnedNote(sessionKey, id, {includeMerged: false});
+    const schedule = calculateReviewSchedule(current, rating, now);
+    const updated = {...current, ...schedule, updatedAt: now};
+    const state = this.readNotesState();
+    this.writeNotes(state.notes.map(note => note.id === updated.id ? updated : note));
+    return {ok: true, note: withReviewDefaults(updated)};
+  }
+
+  recordQuizOutcome(sessionKey, ids, correct) {
+    const rating = correct === true ? 'remembered' : correct === false ? 'forgot' : 'fuzzy';
+    let updatedCount = 0;
+    for (const id of [...new Set((Array.isArray(ids) ? ids : []).map(cleanId).filter(Boolean))]) {
+      try { this.reviewNote(sessionKey, id, rating); updatedCount++; } catch { /* Ignore stale or foreign ids from a model tool call. */ }
+    }
+    return {updatedCount, rating};
+  }
+
+  createOrganizationBackup(sessionKey) {
+    ensureDirectory(this.notesBackupRoot);
+    const state = this.readNotesState();
+    const id = `${Date.now()}-${randomUUID()}`;
+    const file = path.join(this.notesBackupRoot, `${id}.json`);
+    writeJsonAtomic(file, {...state, backupId: id, backupSessionKey: sessionKey, backedUpAt: Date.now()});
+    const files = fs.readdirSync(this.notesBackupRoot).filter(name => /^\d+-[a-f0-9-]+\.json$/.test(name))
+      .map(name => ({name, mtime: fs.statSync(path.join(this.notesBackupRoot, name)).mtimeMs}))
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const expired of files.slice(MAX_ORGANIZATION_BACKUPS)) fs.rmSync(path.join(this.notesBackupRoot, expired.name), {force: true});
+    return id;
+  }
+
+  stageOrganizationPlan(sessionKey, requestId, operations) {
+    this.assertLearningSession(sessionKey);
+    const id = cleanId(requestId);
+    if (!id) throw new Error('缺少整理请求编号');
+    const state = this.readNotesState();
+    const validation = validateOrganizationOperations(operations, state.notes, sessionKey);
+    state.organizationPlans[id] = {
+      id,
+      sessionKey,
+      state: 'preview',
+      operations: validation.operations,
+      discarded: validation.discarded,
+      createdAt: Date.now(),
+    };
+    const plans = Object.values(state.organizationPlans).filter(plan => plan.sessionKey === sessionKey).sort((a, b) => b.createdAt - a.createdAt);
+    for (const expired of plans.slice(10)) delete state.organizationPlans[expired.id];
+    this.writeNotes(state.notes, {organizationPlans: state.organizationPlans});
+    return this.getOrganizationPlan(sessionKey, id);
+  }
+
+  getOrganizationPlan(sessionKey, requestId) {
+    this.assertLearningSession(sessionKey);
+    const id = cleanId(requestId);
+    const plan = this.readNotesState().organizationPlans[id];
+    if (!plan || plan.sessionKey !== sessionKey) return {state: 'pending', id};
+    return plan;
+  }
+
+  applyOrganizationPlan(sessionKey, requestId, operationIds = []) {
+    this.assertLearningSession(sessionKey);
+    const id = cleanId(requestId);
+    const state = this.readNotesState();
+    const plan = state.organizationPlans[id];
+    if (!plan || plan.sessionKey !== sessionKey || plan.state !== 'preview') throw new Error('整理预览已过期，请重新生成');
+    const selected = new Set(Array.isArray(operationIds) ? operationIds.map(cleanId) : []);
+    const operations = plan.operations.filter(operation => selected.has(operation.id));
+    if (!operations.length) throw new Error('请至少勾选一项整理操作');
+    const backupId = this.createOrganizationBackup(sessionKey);
+    const now = Date.now();
+    const notes = state.notes.map(note => ({...note}));
+    const byId = new Map(notes.map(note => [note.id, note]));
+    for (const operation of operations) {
+      if (operation.type === 'merge') {
+        const keep = byId.get(operation.keepId);
+        if (!keep || keep.sourceSessionKey !== sessionKey) continue;
+        for (const noteId of operation.ids) {
+          if (noteId === operation.keepId) continue;
+          const merged = byId.get(noteId);
+          if (merged && merged.sourceSessionKey === sessionKey) {
+            merged.status = 'merged'; merged.mergedInto = keep.id; merged.mergedAt = now; merged.deepOrganizedAt = now;
+          }
+        }
+        if (operation.title) keep.title = operation.title;
+        if (operation.term) keep.term = operation.term;
+        if (operation.meaning) keep.meaning = operation.meaning;
+        if (operation.example) keep.example = operation.example;
+        if (operation.note) keep.note = operation.note;
+        keep.mergedNoteIds = [...new Set([...(keep.mergedNoteIds || []), ...operation.ids.filter(noteId => noteId !== keep.id)])];
+        keep.deepOrganizedAt = now; keep.updatedAt = now;
+      } else if (operation.type === 'compare') {
+        const items = operation.items.length ? operation.items : operation.ids.map(noteId => {
+          const note = byId.get(noteId); return {term: note?.term || note?.title || '词条', meaning: note?.meaning || note?.content || ''};
+        });
+        const content = items.map(item => `${item.term} = ${item.meaning}`).join('\n');
+        const card = withReviewDefaults({
+          id: randomUUID(), title: operation.title, content, original: content,
+          term: items.map(item => item.term).join(' / '), meaning: operation.differencePoints,
+          example: '', note: '', kind: 'compare', compareItems: items, differencePoints: operation.differencePoints,
+          sourceSessionKey: sessionKey, sourceLabel: '碧琪整理的对比卡', createdAt: now, updatedAt: now,
+          tags: ['易混'], status: 'active', deepOrganizedAt: now,
+        });
+        notes.unshift(card); byId.set(card.id, card);
+        for (const noteId of operation.ids) {
+          const note = byId.get(noteId); if (note?.sourceSessionKey === sessionKey) { note.compareCardId = card.id; note.deepOrganizedAt = now; }
+        }
+      } else if (operation.type === 'group') {
+        for (const noteId of operation.ids) {
+          const note = byId.get(noteId); if (note?.sourceSessionKey === sessionKey) { note.topic = operation.topic; note.deepOrganizedAt = now; note.updatedAt = now; }
+        }
+      } else if (operation.type === 'fix') {
+        const note = byId.get(operation.noteId);
+        if (note?.sourceSessionKey === sessionKey) { note.suggestedFix = {field: operation.field, suggestion: operation.suggestion, reason: operation.reason, proposedAt: now}; note.updatedAt = now; }
+      }
+    }
+    plan.state = 'applied'; plan.appliedAt = now; plan.backupId = backupId;
+    state.organizationPlans[id] = plan;
+    this.writeNotes(notes, {organizationPlans: state.organizationPlans});
+    return {ok: true, backupId, appliedCount: operations.length, markdownPath: this.markdownPathForSession(sessionKey)};
+  }
+
+  undoOrganization(sessionKey, backupId) {
+    this.assertLearningSession(sessionKey);
+    const id = cleanId(backupId);
+    const file = path.join(this.notesBackupRoot, `${id}.json`);
+    if (!fs.existsSync(file)) throw new Error('整理备份已过期');
+    const backup = readJson(file, null);
+    if (!backup || backup.backupSessionKey !== sessionKey) throw new Error('不能恢复其他会话的整理备份');
+    const current = this.readNotesState();
+    const restoredSessionNotes = (Array.isArray(backup.notes) ? backup.notes : []).filter(note => note.sourceSessionKey === sessionKey);
+    const otherSessionNotes = current.notes.filter(note => note.sourceSessionKey !== sessionKey);
+    this.writeNotes([...restoredSessionNotes, ...otherSessionNotes], {organizationPlans: current.organizationPlans}, [sessionKey]);
+    return {ok: true, restoredCount: restoredSessionNotes.length, markdownPath: this.markdownPathForSession(sessionKey)};
   }
 }
 
@@ -365,6 +791,7 @@ export function createLearningActivityTool(store, initialContext = {}) {
         question: {type: 'string'},
         options: {type: 'array', items: {oneOf: [{type: 'string'}, {type: 'object', properties: {id: {type: 'string'}, label: {type: 'string'}}, required: ['label']}] }},
         correct_answer: {oneOf: [{type: 'string'}, {type: 'array', items: {type: 'string'}}]},
+        note_ids: {type: 'array', items: {type: 'string'}},
         rubric: {type: 'string'},
         hint: {type: 'string'},
         correct: {type: 'boolean'},
@@ -395,6 +822,54 @@ export function createLearningActivityTool(store, initialContext = {}) {
   };
 }
 
+export function createLearningNotesTool(store, initialContext = {}) {
+  let activeSessionKey = sessionFromContext(initialContext);
+  return {
+    name: 'learning_notes',
+    label: '学习笔记整理',
+    description: '在学习模式中轻整理笔记，或提交需要用户确认的深度整理预览。不会删除或覆盖笔记原文。',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {type: 'string', enum: ['organize_light', 'propose_deep']},
+        note_id: {type: 'string'},
+        request_id: {type: 'string'},
+        structured: {type: 'object', additionalProperties: false, properties: {
+          term: {type: 'string'}, meaning: {type: 'string'}, example: {type: 'string'}, note: {type: 'string'},
+        }},
+        tags: {type: 'array', items: {type: 'string'}, maxItems: 3},
+        supplemental_meaning: {type: 'string'},
+        operations: {type: 'array', maxItems: 200, items: {type: 'object'}},
+      },
+      required: ['action'],
+    },
+    prepareBeforeToolCallParams(params, meta = {}) {
+      activeSessionKey = sessionFromContext(meta.hookContext || meta) || activeSessionKey;
+      return params;
+    },
+    async execute(_toolCallId, params = {}) {
+      try {
+        if (!activeSessionKey) throw new Error('缺少当前学习会话');
+        const action = cleanText(params.action, 40);
+        if (action === 'organize_light') {
+          return toolResponse(store.organizeLightNote(activeSessionKey, params.note_id, {
+            structured: params.structured,
+            tags: params.tags,
+            supplementalMeaning: params.supplemental_meaning,
+          }));
+        }
+        if (action === 'propose_deep') {
+          return toolResponse(store.stageOrganizationPlan(activeSessionKey, params.request_id, params.operations));
+        }
+        throw new Error('不支持的笔记整理动作');
+      } catch (error) {
+        return toolResponse({ok: false, error: error instanceof Error ? error.message : String(error)}, true);
+      }
+    },
+  };
+}
+
 function register(api, name, handler) {
   api.registerGatewayMethod(name, async ({params, respond}) => {
     try {
@@ -411,22 +886,36 @@ export function registerLearningGateway(api, store) {
   register(api, 'pinkie.learning.current', params => store.status(String(params.sessionKey || '')));
   register(api, 'pinkie.learning.submit', params => store.submit(String(params.sessionKey || ''), params));
   register(api, 'pinkie.learning.notes.list', params => {
-    store.assertLearningSession(String(params.sessionKey || ''));
-    return store.listNotes(params);
+    const sessionKey = store.assertLearningSession(String(params.sessionKey || ''));
+    return store.listNotes({...params, sessionKey});
   });
   register(api, 'pinkie.learning.notes.save', params => store.saveNote(String(params.sessionKey || ''), params));
+  register(api, 'pinkie.learning.notes.update', params => store.updateNote(String(params.sessionKey || ''), params.id, params));
   register(api, 'pinkie.learning.notes.delete', params => store.deleteNote(String(params.sessionKey || ''), params.id));
+  register(api, 'pinkie.learning.notes.restore', params => store.restoreNote(String(params.sessionKey || ''), params.note));
+  register(api, 'pinkie.learning.notes.review', params => store.reviewNote(String(params.sessionKey || ''), params.id, params.rating));
+  register(api, 'pinkie.learning.notes.organize.get', params => store.getOrganizationPlan(String(params.sessionKey || ''), params.requestId));
+  register(api, 'pinkie.learning.notes.organize.apply', params => store.applyOrganizationPlan(String(params.sessionKey || ''), params.requestId, params.operationIds));
+  register(api, 'pinkie.learning.notes.organize.undo', params => store.undoOrganization(String(params.sessionKey || ''), params.backupId));
 }
 
 export function learningPrompt(store, sessionKey) {
   if (!isLearningSession(sessionKey)) return '';
-  let state;
-  try { state = store.status(sessionKey); } catch { return ''; }
-  if (!state.enabled) return '';
-  return `
+  let state = {enabled: false};
+  try { state = store.status(sessionKey); } catch { /* Keep the save-only notebook usable while status reloads. */ }
+  const noteRules = `
+【碧琪学习笔记】
+- 收到 [[CLEKK_NOTE_LIGHT_V1]] 时，必须根据提供的原文调用 learning_notes action=organize_light，输出 term、meaning、example、note 四个字段和 1–3 个标签；只有原文没有中文释义才填 supplemental_meaning。原文只读，禁止改写 original/content；整理失败不影响保存。
+- 收到 [[CLEKK_NOTE_DEEP_V1]] 时，检查请求编号和提供的全部笔记，调用 learning_notes action=propose_deep 提交结构化 operations。类型只能是 merge、compare、group、fix；每项都写 reason，并只引用提供的笔记 id。merge 保留一条，其余会进入可恢复的“已合并”；compare 创建对比卡但保留原笔记；fix 只提建议，不能修改释义。提交后不要在聊天里复述操作列表。
+- 深度整理的方案必须交给抽屉预览，由先生勾选后应用；不要自行调用应用、删除或覆盖笔记。
+`.trim();
+  if (!state.enabled) return noteRules;
+  return `${noteRules}
+
 【原生互动学习已开启】
 - 普通学习聊天仍照常回答；不要为了互动而打断先生当前问题。
 - 当适合练习、先生请求出题，或收到 [[CLEKK_LEARNING_START_V1]] / [[CLEKK_LEARNING_NEXT_V1]] 时，调用 learning_activity 的 present 展示一张题卡。不要用 Markdown、HTML 或 JSON 假装题卡。
+- 收到 [[CLEKK_LEARNING_BATCH_V1]] 时，根据给出的全部到期笔记一次生成一组练习题，并调用 learning_activity present 展示为一道多小题题卡；note_ids 必须原样包含消息中给出的全部笔记 id，便于系统将结果写回复习记录。
 - 每次只保留一张当前题。present 必须给出明确题干；选择题给 2~8 个选项；correct_answer 只进入本机私有状态，不会显示在前端。
 - 收到 [[CLEKK_LEARNING_ANSWER_V1]] 时，根据答案与上下文调用 learning_activity resolve，给出简短口语化 feedback、explanation 和可独立保存的 key_point；不能只在聊天里点评而不结算题卡。
 - short_answer 需要你判断正误；其他题型服务端可能已做确定性校验，但你仍要解释关键原因。

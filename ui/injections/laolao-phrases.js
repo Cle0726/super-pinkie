@@ -71,31 +71,58 @@
     ["Copy failed", "复制失败"],
   ]);
 
-  const translate = (text) => {
+  // These short words are also ordinary setting labels (for example
+  // “Thinking” on the quick settings card). Only translate them when they are
+  // part of a real progress/status surface. Tool chrome has its own narrower
+  // scope so a settings row can never turn into a pony status message.
+  const statusExactPhrases = new Set([
+    "Thinking", "Thinking…", "Thinking...", "Running", "Waiting…", "Waiting...",
+    "Retry", "Retrying…", "Retrying...", "Interrupted", "Stopped", "Cancelled",
+    "Aborted", "Error rendering content", "An error occurred:",
+  ]);
+  const toolExactPhrases = new Set([
+    "Calling tool", "Running tool", "Tool call", "Tool result", "Tool input",
+    "Tool output", "Tool error", "Tool Access",
+  ]);
+  const isStatusContext = (element) => Boolean(element?.closest?.(
+    '[role="status"], [aria-live="polite"], [aria-live="assertive"], .chat-activity-group__summary, .chat-tool-card__status, .pinkie-reasoning-progress__text, .laolao-deep-think-status__retry, #laolao-deep-think-status'
+  ));
+  const isToolContext = (element) => Boolean(element?.closest?.(
+    '.chat-activity-group, .chat-tool-card, .chat-tool-msg-summary, .chat-group--timeline-tools'
+  ));
+  const exactPhraseAllowed = (phrase, element) => {
+    if (statusExactPhrases.has(phrase)) return isStatusContext(element);
+    if (toolExactPhrases.has(phrase)) return isToolContext(element);
+    return true;
+  };
+
+  const translate = (text, element) => {
     const leading = text.match(/^\s*/)?.[0] ?? "";
     const trailing = text.match(/\s*$/)?.[0] ?? "";
     const core = text.slice(leading.length, text.length - trailing.length);
-    if (exactPhrases.has(core)) return `${leading}${exactPhrases.get(core)}${trailing}`;
+    if (exactPhrases.has(core) && exactPhraseAllowed(core, element)) {
+      return `${leading}${exactPhrases.get(core)}${trailing}`;
+    }
 
     // The UI sometimes interpolates the assistant's configured name into an
     // English live-status sentence (for example, “碧琪 is responding…”), so an
     // exact string map cannot catch it.
-    if (/^.+\s+is responding[.…]*$/i.test(core)) {
+    if (isStatusContext(element) && /^.+\s+is responding[.…]*$/i.test(core)) {
       return `${leading}碧琪正鼓着腮帮子认真回话呢…${trailing}`;
     }
-    if (/^.+\s+is thinking[.…]*$/i.test(core)) {
+    if (isStatusContext(element) && /^.+\s+is thinking[.…]*$/i.test(core)) {
       return `${leading}碧琪转着卷卷鬃毛想呀想…${trailing}`;
     }
-    if (/^.+\s+is working[.…]*$/i.test(core)) {
+    if (isStatusContext(element) && /^.+\s+is working[.…]*$/i.test(core)) {
       return `${leading}碧琪正忙着把这件事办好呢…${trailing}`;
     }
     if (/^(?:Ask|询问|问问)\s*(?:OpenClaw|CLE\s*Kk)$/i.test(core)) {
       return `${leading}问问碧琪${trailing}`;
     }
 
-    const activity = core.match(/^Activity:\s*(\d+)\s*tools?$/i);
+    const activity = isStatusContext(element) && core.match(/^Activity:\s*(\d+)\s*tools?$/i);
     if (activity) return `${leading}碧琪请了 ${activity[1]} 位工具小帮手${trailing}`;
-    const toolCount = core.match(/^(\d+)\s*(Enabled |Live )?Tools?$/i);
+    const toolCount = isToolContext(element) && core.match(/^(\d+)\s*(Enabled |Live )?Tools?$/i);
     if (toolCount) return `${leading}${toolCount[1]} 位工具小帮手${trailing}`;
     // Brand chrome only. Chat messages/code are filtered by
     // isProtectedContent before translate() is called.
@@ -109,9 +136,38 @@
     node.parentElement?.closest("pre, code, textarea, input, select, [contenteditable='true'], .cm-preview, .chat-text, .chat-tool-card__detail, .chat-tool-msg-summary__names")
   );
 
+  // Lit writes these chat labels through comment markers and live text nodes
+  // (tool counts, tool names, sender names). Assigning textContent deletes the
+  // markers; Lit's next update of that label then throws inside the chat pane
+  // render, so the pane stops committing new replies and never scrolls to them
+  // until the app is reopened. Only rewrite the text node values in place.
+  const toolLabels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
+  const litLabelText = (parent, core) => {
+    if(parent.matches?.('.chat-activity-group__label')){
+      // Template: "Activity: " ${count} " tool" ${plural}. The count stays live.
+      if(/^Activity:$/.test(core))return '工具进度 · ';
+      if(/^tools?$/.test(core))return ' 项';
+      return core==='s'?'':null;
+    }
+    if(parent.matches?.('.chat-tool-msg-summary__label')){
+      const label=toolLabels[core.toLowerCase()];
+      return label?`${label} · ${core}`:null;
+    }
+    if(!parent.matches?.('.chat-sender-name'))return null;
+    if(core==='You'&&parent.closest('.chat-group.user'))return '你';
+    if(core==='Activity'&&parent.closest('.chat-group--activity'))return '碧琪的行动小记录';
+    if(core==='Tool'&&parent.closest('.chat-group.tool'))return '碧琪的小帮手记录';
+    return null;
+  };
+
   const localizeText = (node) => {
     if (node.nodeType !== Node.TEXT_NODE) return;
     const parent=node.parentElement;
+    const litLabel=parent?litLabelText(parent,(node.nodeValue||'').trim()):null;
+    if(litLabel!==null){
+      if(node.nodeValue!==litLabel)node.nodeValue=litLabel;
+      return;
+    }
     const core=(node.nodeValue||'').trim();
     const startup=core.match(modelStartup);
     if(startup && parent && !isProtectedContent(node)){
@@ -139,7 +195,7 @@
       if(parent.hasAttribute('title'))parent.setAttribute('title','碧琪');
       return;
     }
-    const localized = translate(node.nodeValue ?? "");
+    const localized = translate(node.nodeValue ?? "", parent);
     if (localized !== node.nodeValue) node.nodeValue = localized;
   };
 
@@ -172,12 +228,8 @@
 
   const syncBrandChrome = (scope=document) => {
     syncBrandTitle();
-    // "You" is upstream message chrome, not user-authored content. Localize
-    // only the dedicated sender label so a real message containing that word
-    // is never rewritten.
-    ownOrDescendants(scope,'.chat-group.user .chat-sender-name').forEach(sender=>{
-      if(sender.textContent.trim()==='You')sender.textContent='你';
-    });
+    // Sender labels ("You", "Tool", "Activity") are localized per text node by
+    // litLabelText, so a real message containing those words is never touched.
     ownOrDescendants(scope,'input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
       const next=value
@@ -189,7 +241,8 @@
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
-        const next=(exactPhrases.get(value) || value).replace(/OpenClaw/g,'CLE Kk');
+        const mapped=exactPhrases.get(value);
+        const next=((mapped && exactPhraseAllowed(value,element)) ? mapped : value).replace(/OpenClaw/g,'CLE Kk');
         if(next!==value)element.setAttribute(name,next);
       }
     });
@@ -363,56 +416,16 @@
     });
   };
 
-  const localizeToolSummary = (item) => {
-    const toolLabel = item.querySelector(".chat-tool-msg-summary__label");
-    const detail = item.querySelector(".chat-tool-msg-summary__names");
-
-    if (toolLabel && !toolLabel.dataset.laolaoLocalized) {
-      const rawToolName = toolLabel.textContent || "";
-      const labels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
-      const label=labels[rawToolName.trim().toLowerCase()];
-      if(label)toolLabel.textContent=label+' · '+rawToolName;
-      toolLabel.dataset.laolaoLocalized = "1";
-    }
-    if (detail && !detail.dataset.laolaoLocalized) {
-      // Paths, commands and actual tool results must remain visible.
-      detail.dataset.laolaoLocalized = "1";
-    }
-  };
-
+  // Tool labels, counts and sender names are localized per text node by
+  // litLabelText (via localizeTree / characterData), which keeps the counts
+  // live. Only the summary's accessible name is set here; it is an attribute,
+  // so Lit simply rewrites it on its next change instead of failing.
   const localizeToolActivity = (root) => {
     const scope = root?.querySelectorAll ? root : document;
-    ownOrDescendants(scope,".chat-activity-group").forEach((group) => {
-      const summary = group.querySelector(".chat-activity-group__summary");
-      const label = group.querySelector(".chat-activity-group__label");
-      if (label && !label.dataset.laolaoLocalized) {
-        const count = (label.textContent || "").match(/\d+/)?.[0] || "几";
-        label.textContent = `工具进度 · ${count} 项`;
-        label.dataset.laolaoLocalized = "1";
-        if (summary) summary.setAttribute("aria-label", "碧琪的工具小帮手行动记录");
+    ownOrDescendants(scope,".chat-activity-group__summary").forEach((summary) => {
+      if (summary.getAttribute("aria-label") !== "碧琪的工具小帮手行动记录") {
+        summary.setAttribute("aria-label", "碧琪的工具小帮手行动记录");
       }
-
-      const activitySender = group.closest(".chat-group")?.querySelector(".chat-sender-name");
-      if (activitySender && !activitySender.dataset.laolaoLocalized) {
-        activitySender.textContent = "碧琪的行动小记录";
-        activitySender.dataset.laolaoLocalized = "1";
-      }
-    });
-
-    /* A one-step tool run is rendered outside .chat-activity-group. Localize
-       these summaries too; otherwise its stock "Edit" / "Tool" labels leak
-       through while multi-step activity looks correct. */
-    ownOrDescendants(scope,".chat-tool-msg-summary").forEach(localizeToolSummary);
-    ownOrDescendants(scope,".chat-group.tool:not(.chat-group--activity) .chat-sender-name").forEach((sender) => {
-      if (sender.dataset.laolaoLocalized) return;
-      sender.textContent = "碧琪的小帮手记录";
-      sender.dataset.laolaoLocalized = "1";
-    });
-
-    ownOrDescendants(scope,".chat-tool-card__detail").forEach((detail) => {
-      if (detail.dataset.laolaoLocalized) return;
-      // Do not replace real progress with an invented activity sentence.
-      detail.dataset.laolaoLocalized = "1";
     });
   };
 

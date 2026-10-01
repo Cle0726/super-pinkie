@@ -237,12 +237,35 @@
     if (node && node.textContent !== value) node.textContent = value;
   };
 
-  const renderRoleDetails = (details, roles, failedChildren) => {
+  const renderRoleDetails = (details, roles, failedChildren, workflow = null) => {
     const existing = new Map(
       Array.from(details.querySelectorAll(".laolao-deep-think-status__role"))
         .map((row) => [row.dataset.role || "", row])
     );
     const seen = new Set();
+    const ensureRow = (key) => {
+      let row = existing.get(key);
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "laolao-deep-think-status__role";
+        row.dataset.role = key;
+        row.append(document.createElement("span"), document.createElement("span"));
+        details.append(row);
+      }
+      seen.add(key);
+      return row;
+    };
+    if (workflow?.label) {
+      const route = ensureRow("workflow-route");
+      setText(route.children[0], "本次流程");
+      setText(route.children[1], workflow.label);
+      const stages = Array.isArray(workflow.stages) ? workflow.stages : [];
+      const used = stages.filter((stage) => stage?.used).map((stage) => stage.label);
+      const pending = stages.filter((stage) => !stage?.used).map((stage) => stage.label);
+      const steps = ensureRow("workflow-stages");
+      setText(steps.children[0], "已用 / 待用");
+      setText(steps.children[1], (used.join("、") || "无") + " / " + (pending.join("、") || "无"));
+    }
     for (const role of roles) {
       const key = String(role.role || role.label || "协作");
       seen.add(key);
@@ -305,7 +328,14 @@
       fill.style.transform = `scaleX(${progress})`;
     }
     const details = panel.querySelector(".laolao-deep-think-status__details");
-    renderRoleDetails(details, Array.isArray(status.roles) ? status.roles : [], Number(status.failedChildren) || 0);
+    const workflow = status.workflow || null;
+    renderRoleDetails(details, Array.isArray(status.roles) ? status.roles : [], Number(status.failedChildren) || 0, workflow);
+    if (workflow?.label) {
+      const countLabel = required
+        ? workflow.label + " · " + completed + "/" + required + (underway ? " · " + underway + " 项进行中" : "")
+        : workflow.label;
+      setText(panel.querySelector(".laolao-deep-think-status__count"), countLabel);
+    }
     details.hidden = !statusExpanded;
     requestAnimationFrame(positionStatus);
   };

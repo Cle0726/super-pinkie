@@ -1,0 +1,384 @@
+/* 来啦～老弟 · 常用设置。独立于原生页面的 Lit 节点。 */
+body[data-pinkie-user-settings="1"] .qs-container,
+body[data-pinkie-user-settings="1"] .config-view-toggle-row {
+  display: none !important;
+}
+
+body[data-pinkie-user-settings="1"] .content-header .page-sub {
+  display: none !important;
+}
+
+#laolao-user-settings {
+  --pinkie-settings-ink: #63364c;
+  --pinkie-settings-muted: #886b7c;
+  --pinkie-settings-accent: #d9518d;
+  --pinkie-settings-border: rgba(196, 119, 157, .23);
+  --pinkie-settings-card: rgba(255, 251, 253, .97);
+  --pinkie-settings-soft: rgba(255, 238, 247, .98);
+  --pinkie-settings-control: rgba(255, 255, 255, .96);
+  position: fixed;
+  z-index: 8;
+  right: auto;
+  bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+}
+
+#laolao-user-settings[hidden] { display: none !important; }
+
+#laolao-user-settings,
+#laolao-user-settings * { box-sizing: border-box; }
+
+#laolao-user-settings .pinkie-user-settings__scroll {
+  width: min(100%, 1120px);
+  height: 100%;
+  margin: 0 auto;
+  padding: 2px 28px 26px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#laolao-user-settings .pinkie-user-settings__intro { margin: 2px 0 18px; }
+#laolao-user-settings .pinkie-user-settings__title {
+  margin: 0;
+  color: #b84279;
+  font-size: clamp(20px, 2.1vw, 27px);
+  font-weight: 760;
+  letter-spacing: -.035em;
+}
+#laolao-user-settings .pinkie-user-settings__intro-copy,
+#laolao-user-settings .pinkie-user-settings__card-hint,
+#laolao-user-settings .pinkie-user-settings__hint,
+#laolao-user-settings .pinkie-user-settings__soft-note {
+  color: var(--pinkie-settings-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+#laolao-user-settings .pinkie-user-settings__intro-copy { margin: 4px 0 0; }
+
+#laolao-user-settings .pinkie-user-settings__card {
+  margin: 0 0 13px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 18px;
+  background: var(--pinkie-settings-card);
+  box-shadow: 0 8px 26px rgba(114, 56, 83, .075);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+#laolao-user-settings .pinkie-user-settings__card-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 25px;
+}
+#laolao-user-settings .pinkie-user-settings__icon { font-size: 17px; line-height: 1; }
+#laolao-user-settings .pinkie-user-settings__card-title {
+  margin: 0;
+  color: var(--pinkie-settings-ink);
+  font-size: 15px;
+  font-weight: 740;
+}
+#laolao-user-settings .pinkie-user-settings__card-hint { margin: 4px 0 9px 27px; }
+#laolao-user-settings .pinkie-user-settings__row {
+  display: grid;
+  grid-template-columns: minmax(140px, .34fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(196, 119, 157, .14);
+}
+#laolao-user-settings .pinkie-user-settings__row-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+#laolao-user-settings .pinkie-user-settings__row-title { font-size: 13px; font-weight: 650; }
+#laolao-user-settings .pinkie-user-settings__row-control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+#laolao-user-settings .pinkie-user-settings__segments,
+#laolao-user-settings .pinkie-user-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+#laolao-user-settings .pinkie-user-settings__segments--wrap { justify-content: flex-start; }
+
+#laolao-user-settings .pinkie-user-settings__choice,
+#laolao-user-settings .pinkie-user-settings__brand,
+#laolao-user-settings .pinkie-user-settings__model-button,
+#laolao-user-settings .pinkie-user-settings__button,
+#laolao-user-settings .pinkie-user-settings__text-button,
+#laolao-user-settings .pinkie-user-settings__advanced-link {
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 999px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+#laolao-user-settings .pinkie-user-settings__choice,
+#laolao-user-settings .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; }
+#laolao-user-settings .pinkie-user-settings__choice:hover,
+#laolao-user-settings .pinkie-user-settings__brand:hover,
+#laolao-user-settings .pinkie-user-settings__model-button:hover,
+#laolao-user-settings .pinkie-user-settings__button:hover,
+#laolao-user-settings .pinkie-user-settings__text-button:hover,
+#laolao-user-settings .pinkie-user-settings__advanced-link:hover {
+  border-color: rgba(217, 81, 141, .56);
+  background: #fff0f7;
+  box-shadow: 0 3px 12px rgba(202, 91, 143, .12);
+}
+#laolao-user-settings .pinkie-user-settings__choice.is-selected,
+#laolao-user-settings .pinkie-user-settings__brand.is-selected {
+  border-color: rgba(202, 70, 130, .48);
+  background: #ffe5f0;
+  color: #a63269;
+  box-shadow: inset 0 0 0 1px rgba(202, 70, 130, .12);
+}
+#laolao-user-settings button:focus-visible,
+#laolao-user-settings summary:focus-visible {
+  outline: 3px solid rgba(222, 91, 148, .34);
+  outline-offset: 2px;
+}
+
+#laolao-user-settings .pinkie-user-settings__soft-note { margin: 8px 0 0; }
+#laolao-user-settings .pinkie-user-settings__status {
+  min-height: 17px;
+  margin: 7px 0 0;
+  color: #54846e;
+  font-size: 11px;
+  line-height: 1.45;
+}
+#laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: #b13d63; }
+#laolao-user-settings .pinkie-user-settings__status[data-state="busy"] { color: #947248; }
+
+#laolao-user-settings .pinkie-user-settings__model-button {
+  min-width: min(100%, 280px);
+  min-height: 37px;
+  padding: 7px 14px;
+  text-align: left;
+}
+#laolao-user-settings .pinkie-user-settings__model-menu {
+  margin: 4px 0 10px;
+  padding: 10px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 14px;
+  background: var(--pinkie-settings-soft);
+}
+#laolao-user-settings .pinkie-user-settings__model-menu[hidden] { display: none !important; }
+#laolao-user-settings .pinkie-user-settings__brand-row {
+  display: flex;
+  gap: 6px;
+  overflow: auto;
+  padding: 1px 1px 8px;
+}
+#laolao-user-settings .pinkie-user-settings__brand { flex: 0 0 auto; min-height: 31px; padding: 5px 11px; }
+#laolao-user-settings .pinkie-user-settings__brand[data-brand="gemini"],
+#laolao-user-settings .pinkie-user-settings__brand[data-brand="claude"],
+#laolao-user-settings .pinkie-user-settings__brand[data-brand="codex"] { border-color: rgba(194, 121, 164, .32); }
+#laolao-user-settings .pinkie-user-settings__model-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+#laolao-user-settings .pinkie-user-settings__model-choice {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid rgba(196, 119, 157, .18);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+#laolao-user-settings .pinkie-user-settings__model-choice[hidden] { display: none !important; }
+#laolao-user-settings .pinkie-user-settings__model-choice:hover { border-color: var(--pinkie-settings-accent); }
+
+#laolao-user-settings .pinkie-user-settings__preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+#laolao-user-settings .pinkie-user-settings__preset {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 87px;
+  padding: 12px 13px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 14px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+#laolao-user-settings .pinkie-user-settings__preset:hover { border-color: rgba(217, 81, 141, .62); }
+#laolao-user-settings .pinkie-user-settings__preset.is-selected {
+  border-color: rgba(202, 70, 130, .64);
+  background: #ffedf5;
+  box-shadow: inset 0 0 0 1px rgba(202, 70, 130, .16);
+}
+#laolao-user-settings .pinkie-user-settings__preset-title { font-size: 13px; font-weight: 730; }
+#laolao-user-settings .pinkie-user-settings__preset-detail { color: var(--pinkie-settings-muted); font-size: 11px; line-height: 1.45; }
+#laolao-user-settings .pinkie-user-settings__custom {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--pinkie-settings-soft);
+  color: #8e5f76;
+  font-size: 12px;
+}
+#laolao-user-settings .pinkie-user-settings__custom[hidden] { display: none !important; }
+
+#laolao-user-settings .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; }
+#laolao-user-settings .pinkie-user-settings__button--primary {
+  border-color: rgba(196, 65, 126, .35);
+  background: linear-gradient(135deg, #ffecf4, #fff8fb);
+  color: #a83c70;
+}
+#laolao-user-settings .pinkie-user-settings__button--small { min-height: 31px; padding: 5px 11px; }
+#laolao-user-settings .pinkie-user-settings__text-button,
+#laolao-user-settings .pinkie-user-settings__advanced-link {
+  min-height: 33px;
+  padding: 6px 13px;
+  color: #b84279;
+}
+#laolao-user-settings .pinkie-user-settings__channels { margin: 8px 0 0; border-top: 1px solid rgba(196, 119, 157, .14); }
+#laolao-user-settings .pinkie-user-settings__channels-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  color: var(--pinkie-settings-ink);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+#laolao-user-settings .pinkie-user-settings__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--pinkie-settings-soft);
+  color: #a84575;
+  font-size: 10px;
+}
+#laolao-user-settings .pinkie-user-settings__channel-list { display: grid; gap: 6px; }
+#laolao-user-settings .pinkie-user-settings__channel {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--pinkie-settings-soft);
+  font-size: 12px;
+}
+#laolao-user-settings .pinkie-user-settings__channel-state { color: #54846e; }
+#laolao-user-settings .pinkie-user-settings__empty { margin: 2px 0 8px; color: var(--pinkie-settings-muted); font-size: 12px; }
+#laolao-user-settings .pinkie-user-settings__warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 11px 12px;
+  border: 1px solid rgba(201, 143, 73, .34);
+  border-radius: 12px;
+  background: rgba(255, 248, 230, .98);
+  color: #705a36;
+}
+#laolao-user-settings .pinkie-user-settings__warning[hidden] { display: none !important; }
+#laolao-user-settings .pinkie-user-settings__warning-icon { font-size: 17px; }
+#laolao-user-settings .pinkie-user-settings__warning-text { margin: 0; font-size: 11px; line-height: 1.5; }
+
+#laolao-user-settings .pinkie-user-settings__value { color: var(--pinkie-settings-muted); font-size: 12px; }
+#laolao-user-settings .pinkie-user-settings__usage-label { margin: 12px 0 7px; font-size: 12px; font-weight: 700; }
+#laolao-user-settings .pinkie-user-settings__usage-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 7px;
+}
+#laolao-user-settings .pinkie-user-settings__usage-chip {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(196, 119, 157, .17);
+  border-radius: 11px;
+  background: var(--pinkie-settings-soft);
+}
+#laolao-user-settings .pinkie-user-settings__usage-name { color: var(--pinkie-settings-muted); font-size: 10px; }
+#laolao-user-settings .pinkie-user-settings__usage-value { overflow: hidden; color: var(--pinkie-settings-ink); font-size: 13px; text-overflow: ellipsis; }
+#laolao-user-settings .pinkie-user-settings__footer { display: flex; justify-content: center; padding: 7px 0 16px; }
+
+html[data-theme-mode="dark"] #laolao-user-settings,
+html[data-theme="dark"] #laolao-user-settings,
+html[data-color-scheme="dark"] #laolao-user-settings {
+  --pinkie-settings-ink: #f6e5ee;
+  --pinkie-settings-muted: #d1b3c2;
+  --pinkie-settings-accent: #ff87b8;
+  --pinkie-settings-border: rgba(243, 153, 195, .2);
+  --pinkie-settings-card: rgba(42, 29, 40, .97);
+  --pinkie-settings-soft: rgba(58, 38, 53, .98);
+  --pinkie-settings-control: rgba(52, 37, 50, .98);
+}
+html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__title,
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__title,
+html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__title { color: #ff9ac4; }
+html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
+html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
+html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__preset.is-selected,
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__preset.is-selected,
+html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
+html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
+html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__preset.is-selected {
+  border-color: rgba(255, 154, 196, .62);
+  background: rgba(119, 56, 88, .7);
+  color: #ffe3ef;
+}
+html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__warning,
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__warning,
+html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__warning {
+  border-color: rgba(235, 183, 107, .35);
+  background: rgba(75, 58, 34, .98);
+  color: #f3dfbb;
+}
+
+@media (max-width: 780px) {
+  #laolao-user-settings .pinkie-user-settings__scroll { padding: 2px 14px 20px; }
+  #laolao-user-settings .pinkie-user-settings__card { padding: 14px 13px 12px; }
+  #laolao-user-settings .pinkie-user-settings__row { grid-template-columns: 1fr; gap: 8px; }
+  #laolao-user-settings .pinkie-user-settings__row-control { justify-content: flex-start; }
+  #laolao-user-settings .pinkie-user-settings__preset-grid { grid-template-columns: 1fr; }
+  #laolao-user-settings .pinkie-user-settings__preset { min-height: 68px; }
+  #laolao-user-settings .pinkie-user-settings__usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #laolao-user-settings .pinkie-user-settings__warning { grid-template-columns: auto minmax(0, 1fr); }
+  #laolao-user-settings .pinkie-user-settings__warning .pinkie-user-settings__button { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #laolao-user-settings *, #laolao-user-settings *::before, #laolao-user-settings *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

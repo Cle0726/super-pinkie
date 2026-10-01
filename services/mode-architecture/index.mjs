@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFile, spawnSync} from 'node:child_process';
 import {LongTermMemoryStore, memorySystemRules, renderRetrievedMemory} from './memory.mjs';
-import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
+import {LearningInteractionStore, createLearningActivityTool, createLearningNotesTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {registerReasoningGateway} from './reasoning.mjs';
@@ -32,36 +32,90 @@ const ALWAYS_MEMORY_FILES = Object.freeze([
 ]);
 
 const TIER_LIMITS = Object.freeze({base: 20, boost: 48, full: 96, marathon: 512});
-const UPGRADE_ROLES = Object.freeze(['decomposer', 'pipeline', 'debater', 'verifier', 'assumption', 'countercritic']);
+export const TIER_RETRY_LIMITS = Object.freeze({base: 3, boost: 6, full: 10, marathon: 40});
+const SOLVER_LIMITS = Object.freeze({base: 3, boost: 3, full: 3, marathon: 3});
+const UPGRADE_ROLES = Object.freeze(['decomposer', 'pipeline', 'debater', 'verifier', 'assumption']);
 const ROLE_LABELS = Object.freeze({
   planner: '规划', solver: '求解', critic: '批评', judge: '仲裁',
   decomposer: '递归分解', pipeline: '独立流水线', debater: '多轮对抗',
   verifier: '真实验证', assumption: '假设审查', countercritic: '反批评',
 });
+const TASK_WORKFLOWS = Object.freeze({
+  pending: {label: '等待本轮问题', stages: ['收到问题'], roles: {}},
+  simple: {label: '此问题无需多方案，已直接回答', stages: ['此问题无需多方案，已直接回答'], roles: {}},
+  implementation: {label: '写代码 / 修 bug', stages: ['复现', '修改', '测试'], roles: {}},
+  standard_answer: {label: '有标准答案的难题', stages: ['独立解法', '验算', '必要时裁决'], roles: {solver: 2}},
+  tradeoff: {label: '方案 / 取舍类', stages: ['不同立场', '对比代价', '交给用户选择'], roles: {solver: 2}},
+  fact_check: {label: '查事实', stages: ['多来源核对', '标注出处与不确定性'], roles: {}},
+});
 const VALID_TIER = /\[deep-think:(base|boost|full|marathon)\]/i;
-// 长跑档反空转：每轮交付必须带来新的可验证产物，并用此标记申报；
-// 连续多轮无新增产物即判定停滞，强制走暂停报告而不是继续烧额度。
-const PROGRESS_MARKER = /<!--\s*pinkie-progress(?::[\s\S]*?)?-->/i;
-const STAGNATION_LIMIT = 3;
+// 所有档位连续两次没有新证据时停止，避免只重复重试没有变化的做法。
+const NO_PROGRESS_LIMIT = 2;
+const RETRY_DIFFERENCE = /这次和上次不同\s*[：:]\s*(换思路|换信息|换模型)[，,、\s：:]+(.{4,})/i;
+const GATE_RESEARCH = /(?:COMPLETION_TRUTH_RULES|completionClaimed|scheduleIntegrityRetry|integrityRetryLimit|verify_completion\.py|delivery_guard.{0,30}(?:代码|实现|规则|门禁)|(?:通过|绕过|构造).{0,24}(?:验收|门禁|completion|integrity)|(?:--test-name-pattern|--grep)[= ]?.{0,100}(?:integrity|门禁|验收|completion|delivery))/i;
+const MODE_ARCHITECTURE_SOURCE = /services[\\/ ]mode-architecture[\\/ ]index\.mjs/i;
+const MODE_ARCHITECTURE_TASK = /(?:services[\\/ ]mode-architecture[\\/ ]index\.mjs|模式架构|mode-architecture|deliberationRequirements|思考档位.{0,16}(?:流程|逻辑|映射)|极致思考.{0,16}(?:流程|档位))/i;
 const COMPLETION_CLAIM = /(?:100%|全部|完整|真正|真实|已经|已|成功).{0,24}(?:完成|交付|提交|生成|下载|发布|执行|修复|处理)|(?:完成|交付|提交|生成|下载|发布|执行|修复|处理).{0,16}(?:完毕|成功|完成)/i;
 const DELIVERY_CLAIM = /(?:搞定|处理好了|弄好了|做完了|做成了|已按要求|可以用了|没问题了|已经可以|一切就绪|顺利交付|已落实|已修好|已修复)/i;
-const IN_PROGRESS_CLAIM = /(?:仍在|还在|正在|等待|排队|后台.{0,8}(?:生成|运行|处理|渲染)|稍后|尚未|未下载|未生成|待完成|失败|未通过|报错|被阻塞)/i;
+// A failed *probe* can be an expected, completed test result. The contradiction
+// guard should look for an unfinished overall state, not any word "失败".
+const IN_PROGRESS_CLAIM = /(?:仍在|还在|正在|等待|排队|后台.{0,8}(?:生成|运行|处理|渲染)|稍后|尚未|未下载|未生成|待完成|被阻塞)/i;
 const HONEST_INCOMPLETE = /(?:明确.{0,8})?(?:未完成|尚未完成|无法完成|还没(?:有)?(?:完成|做完|搞定)|执行失败|验收失败|验证未通过|被阻塞|需要用户.{0,8}(?:登录|验证|确认|提供)|验证码|人机验证)/i;
 const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|打开|删除|安装|部署|打包|测试|验证|完成).{0,30}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)?/i;
 const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
 const QUESTION_ONLY = /(?:为什么|为何|怎么回事|什么原因|如何理解|能不能|有没有办法|是不是|是否|请解释|问一下|想知道|？|\?)/i;
 const ACTION_CONTINUATION = /^(?:继续|接着|往下|开始吧|动手吧|加强(?:一下)?|优化(?:一下)?|完善(?:一下)?|升级(?:一下)?|修复(?:啊|吧)?)[！!。.\s]*$/i;
-const NEGATED_MUTATION_CLAUSE = /(?:不要|无需|不需要|禁止|严禁|勿|不可|不能|仅(?:需|限)?只读)[^。！？!?；;\n]{0,80}(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成)[^。！？!?；;\n]{0,80}(?=[。！？!?；;\n]|$)/gi;
+const NEGATED_MUTATION_CLAUSE = /(?:不要|无需|不需要|禁止|严禁|勿|不可|不能|不(?=修改|改动|创建|删除|写入|更新)|仅(?:需|限)?只读)[^。！？!?；;，,:：\n]{0,80}(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成)[^。！？!?；;，,:：\n]{0,80}(?=[。！？!?；;，,:：\n]|$)/gi;
+function promptInstructionText(prompt = '') {
+  // Attachment wrappers contain source material, not new user instructions.
+  // An unclosed file/untrusted block consumes the rest of the prompt.
+  return String(prompt || '')
+    .replace(/^\s*\[media attached:[^\r\n]*\]\s*$/gim, '')
+    .replace(/<file\b[^>]*>[\s\S]*?<\/file\s*>/gi, '')
+    .replace(/<file\b[^>]*>[\s\S]*$/gi, '')
+    .replace(/<<<EXTERNAL_UNTRUSTED_CONTENT>>>[\s\S]*?<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>/gi, '')
+    .replace(/<<<EXTERNAL_UNTRUSTED_CONTENT>>>[\s\S]*$/gi, '')
+    .trim();
+}
+function hasAttachedSourceContent(prompt = '') {
+  return /(?:^\s*\[media attached:|<file\b|<<<EXTERNAL_UNTRUSTED_CONTENT>>>)/im.test(String(prompt || ''));
+}
 function isMutationRequest(prompt = '') {
   // Negated safety wording such as “只读，不要修改/创建/删除文件” must not
   // turn an observation into a file-changing task. Keep a positive mutation
   // elsewhere in the same prompt intact (for example: “修改 A，不要删除 B”).
-  const text = String(prompt || '').replace(NEGATED_MUTATION_CLAUSE, '');
-  if (/(?:只读|只查看|只读取|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(prompt)) {
-    const explicitMutation = /(?:修改|改|修复|生成|创建|制作|下载|上传|发布|安装|部署|打包|写入|更新|替换|移动|重命名).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?|(?:做|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)/i;
+  const text = promptInstructionText(prompt).replace(NEGATED_MUTATION_CLAUSE, '');
+  if (/(?:只读|只查看|只读取|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(text)) {
+    // Generic “做/完成” near a later mention of 文件 describes a completed
+    // *check* just as often as a write. Require an actual positive write verb.
+    const explicitMutation = /(?:修改|改动|修复|生成|创建|制作|下载|上传|发布|安装|部署|打包|写入|更新|替换|移动|重命名).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
     if (!explicitMutation.test(text)) return false;
   }
   return MUTATION_REQUEST.test(text);
+}
+
+export function classifyDeliberationTask(prompt = '') {
+  const text = promptInstructionText(prompt).replace(VALID_TIER, '').trim();
+  if (!text) return 'pending';
+  if (isMutationRequest(text)
+      || /(?:写代码|修(?:复)?bug|修复故障|实现功能|重构代码|编写脚本|改代码|代码修改|fix(?:ing)? a bug|debug(?:ging)?|implement(?:ing)?|refactor(?:ing)?)/i.test(text)) {
+    return 'implementation';
+  }
+  if (/(?:方案|取舍|利弊|优缺点|对比|比较|选哪|哪个更好|怎么选|推荐哪|成本.{0,12}比较|compare|trade.?off|which (?:one|option)|pros and cons)/i.test(text)) {
+    return 'tradeoff';
+  }
+  if (/(?:查证|核实|事实|来源|出处|真假|是否属实|最新(?:消息|版本|规定|价格)|当前(?:价格|版本|政策)|谁是|何时|哪一年|来源可靠吗|fact.?check|verify (?:whether|if|that))/i.test(text)) {
+    return 'fact_check';
+  }
+  if (/(?:解方程|求方程|计算|证明|推导|逻辑题|数学题|标准答案|多步推理|复杂问题|难题|求解|why does|prove that|solve for|calculate|derive)/i.test(text)
+      || (text.length > 700 && /(?:为什么|原因|如何判断|是否成立|怎么算|怎么证明)/i.test(text))) {
+    return 'standard_answer';
+  }
+  return 'simple';
+}
+
+function normalizedTaskType(value = '') {
+  return Object.prototype.hasOwnProperty.call(TASK_WORKFLOWS, value) ? value : 'simple';
 }
 // A response-only smoke test is not permission to execute work.  Keep this
 // guard before ACTION_REQUEST because the requested reply may itself contain
@@ -294,6 +348,13 @@ const COMPLETION_TRUTH_RULES = `
 - 需要机器回执的 Skill 只能调用“成果核验”工具写入受控证据，并在最后调用同一工具的 verify 动作；通用 write、临时脚本或模型文字不能生成权威回执。
 - 禁止复制旧运行的图片、视频、发布截图或回执冒充本轮成果；禁止用 touch、os.utime、改系统时间等方式伪造“本轮新生成”。发布回执、公开页凭据和 QC 结果必须由对应真实动作及专用适配器产生，不能用 write 或临时 Python/Node 脚本手写。
 - 工具失败后保留旧成果，不覆盖旧文件来伪装本轮成功；修复后必须重新验证。无法继续时说清真实阻塞和已保留内容。
+`.trim();
+
+const TOOL_PROGRESS_RULES = `
+【工具调用前的进度说明】
+- 每次单独调用工具，或开始一组紧密相关的工具调用之前，先用一句简短中文说明接下来要检查、读取或运行什么，以及原因；说清后不要重复。
+- 只描述下一步，例如“我先检查消息排序，看看说明文字和工具记录有没有被合并。”不报告尚未发生的结果，不作完成或交付声明，也不把进度句当作最终回复。
+- 多次工具调用按实际先后交代必要的下一步；整轮工具结束后，再单独给用户最终答复。
 `.trim();
 
 // Independent system module shared by all five modes. Keep it separate from
@@ -642,7 +703,7 @@ function faststartOk(file) {
 }
 
 function isLikelyActionRequest(prompt = '') {
-  const text = String(prompt || '').trim();
+  const text = promptInstructionText(prompt);
   // A bare “继续” can mean continue an explanation. Integrity retries retain
   // the original action prompt, so this ambiguous one-word message must not
   // be upgraded into a mutation request on its own.
@@ -673,7 +734,11 @@ function isReadOnlyDiagnosticRequest(prompt = '') {
 }
 
 function isHonestIncomplete(value = '') {
-  const text = String(value || '');
+  // A report can explicitly say that an expected failed probe does *not*
+  // mean the overall task is incomplete. Do not invert that negation.
+  const text = String(value || '').replace(
+    /(?:不代表|并非|不是|不等于|不能说明|并不意味着).{0,12}(?:任务|整体|本轮)?未完成/gi, '',
+  );
   if (!HONEST_INCOMPLETE.test(text)) return false;
   if (/(?:之前|此前|上一轮|刚才|曾经).{0,12}(?:未完成|失败|阻塞)/i.test(text)) return false;
   // “未完成项：无”是在声明全部完成，不能利用“未完成”三个字绕过。
@@ -852,7 +917,7 @@ function toolEffectKind(entry = {}) {
   if (/(?:send|publish|upload|download|install|deploy|create|delete|update|move)/i.test(name)) return 'external-action';
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
-    if (/(?:^|[;&|]\s*)(?:git\s+(?:push|commit)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|pip\s+install|brew\s+install|open\s|osascript\s|mkdir\s|rm\s|mv\s|cp\s|chmod\s|ffmpeg\s|codesign\s|xcodebuild\s|docker\s+(?:build|push)|(?:python\d*|node)\s+[^\n]*(?:write|create|generate|download|publish))/i.test(command)) {
+    if (/(?:^|[;&|]\s*)(?:git\s+(?:push|commit)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|pip\s+install|brew\s+install|openclaw\s+(?:skills\s+(?:install|update|remove|publish|sync)|gateway\s+(?:restart|stop))|clawhub\s+(?:skill\s+publish|sync)|open\s|osascript\s|mkdir\s|rm\s|mv\s|cp\s|chmod\s|ffmpeg\s|codesign\s|xcodebuild\s|docker\s+(?:build|push)|(?:python\d*|node)\s+[^\n]*(?:write|create|generate|download|publish))/i.test(command)) {
       return 'executed-action';
     }
   }
@@ -871,7 +936,7 @@ function toolIsMechanicalCheck(entry = {}) {
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
     if (/verify_completion\.py\b/i.test(command)) return true;
-    return /(?:^|[;&|]\s*)(?:test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor))/i.test(command);
+    return /(?:^|[;&|]\s*)(?:test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor|skills\s+(?:list|check)))/i.test(command);
   }
   return false;
 }
@@ -1536,10 +1601,14 @@ export class CompletionIntegrityGuard {
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     if (!state) return;
     const actionRun = isLikelyActionRequest(state.prompt);
+    // Reading or summarizing an attached document needs no tool/effect proof.
+    // Its quoted wording ("正在生成", "未完成"...) is source content, not the
+    // assistant's status report, and must not trigger a retry loop.
+    if (!actionRun && hasAttachedSourceContent(state.prompt)) return;
     const honestIncomplete = isHonestIncomplete(reply);
     const completionClaimed = COMPLETION_CLAIM.test(reply) || DELIVERY_CLAIM.test(reply);
     const overallCompletion = DELIVERY_CLAIM.test(reply)
-      || /(?:(?:全部|所有|整体|任务|最终).{0,16}(?:完成|交付|成功)|(?:完成|交付|成功).{0,16}(?:全部|所有|整体|任务))/i.test(reply);
+      || /(?:(?:全部|所有|整体|任务|最终|完整|完全).{0,16}(?:完成|交付|成功)|(?:完成|交付|成功).{0,16}(?:全部|所有|整体|任务|完整|完全))/i.test(reply);
     // 执行型请求不能靠避开“完成”两个字绕过门禁；只有明确报告未完成/阻塞
     // 才允许不运行最终验收。
     if (honestIncomplete && !overallCompletion) return;
@@ -1548,7 +1617,7 @@ export class CompletionIntegrityGuard {
       return this.revise(key, '回复同时把整体任务写成“完成”和“未完成/被阻塞”，状态自相矛盾');
     }
 
-    if (IN_PROGRESS_CLAIM.test(reply)) {
+    if (overallCompletion && IN_PROGRESS_CLAIM.test(reply)) {
       return this.revise(key, '回复同时声称“已完成”和“仍在生成/等待”，状态自相矛盾');
     }
     const tampering = evidenceTamperingReason(state);
@@ -2079,6 +2148,8 @@ export class CleKkSupervisor {
     this.pendingDeliverySessions = new Map();
     this.retryScheduler = null;
     this.retryCanceller = null;
+    this.retryLimitResolver = null;
+    this.deliveryFallbackBySession = new Map();
   }
 
   setRetryScheduler(fn) {
@@ -2087,6 +2158,16 @@ export class CleKkSupervisor {
 
   setRetryCanceller(fn) {
     this.retryCanceller = typeof fn === 'function' ? fn : null;
+  }
+
+  setRetryLimitResolver(fn) {
+    this.retryLimitResolver = typeof fn === 'function' ? fn : null;
+  }
+
+  retryLimit(key, decision) {
+    const configured = Number(this.retryLimitResolver?.(key, decision));
+    return Number.isFinite(configured) && configured > 0
+      ? configured : Math.max(1, Number(decision?.retry?.maxAttempts) || 24);
   }
 
   retireRetry(key) {
@@ -2366,6 +2447,7 @@ export class CleKkSupervisor {
       ))
     );
     if (distinctUserTurn) {
+      this.deliveryFallbackBySession.delete(key);
       // “继续/接着” explicitly belongs to the old task. Every other new
       // request must remain usable even when the previous turn is pending:
       // a stale retry lane must never monopolize the session or hide replies.
@@ -2467,6 +2549,15 @@ export class CleKkSupervisor {
     }
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '').trim();
     const runId = String(ctx.runId || event.runId || turn?.runId || '');
+    const fallback = this.deliveryFallbackBySession.get(key);
+    if (fallback && Date.now() - fallback.at < 120_000
+        && (!fallback.runId || !runId || fallback.runId === runId)
+        && reply !== fallback.text) {
+      // Some hosts call finalize again with the original model candidate
+      // after the transcript hook replaced it. Do not rearm that rejected
+      // candidate after the honest fallback has already been accepted.
+      return;
+    }
     const chain = this.audit.verify(key);
     // A damaged control log is itself a failed verification. Never clear a
     // pending decision or accept a final while the provenance chain is broken.
@@ -2511,7 +2602,8 @@ export class CleKkSupervisor {
     // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
     // 静默改成成功，否则下一轮又会失去续接依据。
     if (reply && !internalControlText(reply)) {
-      if (hadPending && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !explicitIncomplete) {
+      if (hadPending && isLikelyActionRequest(turn.prompt)
+        && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !explicitIncomplete) {
         this.persist(key, turn);
         return decision;
       }
@@ -2623,10 +2715,39 @@ export class CleKkSupervisor {
       // valid retry clears the old marker here, so its final text is written
       // to durable history instead of appearing only in the live stream and
       // vanishing after a reload.
+      const key = this.key({}, ctx);
+      const turn = this.turns.get(key);
+      if (decision?.action === 'revise' && turn
+          && (turn.retryExhausted || Number(turn.retryAttempts) >= this.retryLimit(key, decision))) {
+        // The scheduler marks exhaustion only *after* this synchronous write
+        // hook has blocked the candidate. No later model answer then exists
+        // to release. Write a truthful terminal failure instead of silence.
+        const fallbackText = '本轮未完成：多次自动核验后仍无法确认最终结果，已停止重试。工具记录保留在当前会话中，请查看记录后再继续。';
+        const fallbackMessage = {...message,stopReason:'stop',content:[{type:'text',text:fallbackText}]};
+        const fallbackDecision = this.integrity.finalize({
+          lastAssistantMessage:fallbackText,messages:[fallbackMessage],runId:ctx.runId,sessionKey:key,
+        },ctx,{verifyExternal:false});
+        if (!fallbackDecision || fallbackDecision.action !== 'revise') {
+          this.recordFinalize({lastAssistantMessage:fallbackText,messages:[fallbackMessage],runId:ctx.runId},ctx,fallbackDecision);
+          this.deliveryFallbackBySession.set(key, {
+            runId:String(ctx.runId || event.runId || ''),text:fallbackText,at:Date.now(),
+          });
+          this.retireRetry(key);
+          return {message:fallbackMessage};
+        }
+      }
       this.recordFinalize({lastAssistantMessage: text, messages: [message], runId: ctx.runId}, ctx, decision);
       pending = this.pendingFor({}, ctx);
     }
     if (!pending) return;
+    // 重试预算已耗尽时放行最后一次回复，不再阻断。继续阻断只会导致
+    // 会话无输出地静默结束——用户看到"工具调用完成"后永远等不到文字。
+    if (pending.turn?.retryExhausted) {
+      pending.turn.pending = null;
+      pending.turn.retryScheduled = false;
+      this.persist(this.key({}, ctx), pending.turn);
+      return;
+    }
     this.scheduleRetry(pending, ctx, 'transcript');
     // 诚实的未完成说明可以留在记录里，完成性谎报则连 transcript 也不落盘。
     if (isHonestIncomplete(text)) return;
@@ -2636,9 +2757,23 @@ export class CleKkSupervisor {
   async beforeReplyPayload(event = {}, ctx = {}) {
     if (String(event.kind || '') !== 'final') return;
     const text = payloadText(event.payload);
+    const key = this.key(event, ctx);
+    const fallback = this.deliveryFallbackBySession.get(key);
+    const runId = String(ctx.runId || event.runId || '');
+    if (fallback && Date.now() - fallback.at < 120_000
+        && (!fallback.runId || !runId || fallback.runId === runId)) {
+      return {payload:{text:fallback.text}};
+    }
     if (internalControlText(text)) return {cancel: true, reason: 'internal_control_payload'};
     const pending = this.pendingFor(event, ctx);
     if (!pending) return;
+    // 重试已耗尽时放行，避免最终回复被永久拦截。
+    if (pending.turn?.retryExhausted) {
+      pending.turn.pending = null;
+      pending.turn.retryScheduled = false;
+      this.persist(this.key(event, ctx), pending.turn);
+      return;
+    }
     this.scheduleRetry(pending, ctx, 'reply_payload');
     if (isHonestIncomplete(text)) return;
     return {cancel: true, reason: 'CLE Kk 正在继续核对真实执行结果'};
@@ -2652,7 +2787,7 @@ export class CleKkSupervisor {
     const key = this.key(event, ctx);
     if (!key) return true;
     const turn = this.turns.get(key);
-    if (turn?.pending) return false;
+    if (turn?.pending && !turn.retryExhausted) return false;
     this.integrity.end(event, ctx);
     this.turns.delete(key);
     this.audit.append('turn_end', key, {run: event.runId ? hashForAudit(event.runId) : ''});
@@ -2731,6 +2866,7 @@ function encodeRun(state) {
     completedChildren: [...state.completedChildren],
     emptyChildren: [...(state.emptyChildren || new Set())],
     childRoles: Object.fromEntries(state.childRoles),
+    childCandidates: Object.fromEntries(state.childCandidates || new Map()),
     childResults: Object.fromEntries(state.childResults),
     reservations: Object.fromEntries(state.reservations),
     childModels: Object.fromEntries(state.childModels),
@@ -2747,11 +2883,30 @@ function decodeRun(value) {
     completedChildren: new Set(Array.isArray(value.completedChildren) ? value.completedChildren : []),
     emptyChildren: new Set(Array.isArray(value.emptyChildren) ? value.emptyChildren : []),
     childRoles: new Map(Object.entries(value.childRoles || {})),
+    childCandidates: new Map(Object.entries(value.childCandidates || {})),
     childResults: new Map(Object.entries(value.childResults || {})),
     reservations: new Map(Object.entries(value.reservations || {})),
     childModels: new Map(Object.entries(value.childModels || {})),
     modelCounts: new Map(Object.entries(value.modelCounts || {}).map(([model, count]) => [model, Number(count) || 0])),
     completedRoles: new Map(Object.entries(value.completedRoles || {}).map(([role, count]) => [role, Number(count) || 0])),
+    taskPrompt: String(value.taskPrompt || ''),
+    taskType: normalizedTaskType(value.taskType || 'pending'),
+    verificationEvidence: Array.isArray(value.verificationEvidence) ? value.verificationEvidence.slice(-120) : [],
+    progressDigests: Array.isArray(value.progressDigests) ? [...new Set(value.progressDigests)].slice(-120) : [],
+    progressSequence: Math.max(0, Number(value.progressSequence) || 0),
+    tradeoffCompared: Boolean(value.tradeoffCompared),
+    tradeoffPresented: Boolean(value.tradeoffPresented),
+    retryAttempts: Math.max(0, Number(value.retryAttempts) || 0),
+    noProgressCycles: Math.max(0, Number(value.noProgressCycles) || 0),
+    lastProgressFingerprint: String(value.lastProgressFingerprint || ''),
+    lastRetryRunId: String(value.lastRetryRunId || ''),
+    retryDifferences: Array.isArray(value.retryDifferences) ? value.retryDifferences.slice(-10) : [],
+    lastRetryDecision: value.lastRetryDecision && typeof value.lastRetryDecision === 'object' ? value.lastRetryDecision : null,
+    stopRequested: Boolean(value.stopRequested),
+    stopReason: String(value.stopReason || ''),
+    stopRunId: String(value.stopRunId || ''),
+    stopReportPending: Boolean(value.stopReportPending),
+    finalSourceSummary: Boolean(value.finalSourceSummary),
   };
 }
 
@@ -3315,6 +3470,12 @@ export class UpstreamWatchdog {
     return jobs.length;
   }
 
+  integrityRetryLimit(sessionKey, decision) {
+    const tier = this.tierFor(sessionKey);
+    if (tier && TIER_RETRY_LIMITS[tier]) return TIER_RETRY_LIMITS[tier];
+    return Math.max(1, Number(decision?.retry?.maxAttempts) || 24);
+  }
+
   /**
    * Retry a rejected final through the same authenticated local gateway path as
    * a network failure.  This is deliberately separate from model failure
@@ -3326,8 +3487,7 @@ export class UpstreamWatchdog {
     sessionKey, agentId, runId, decision, attempt = 1, reuseAcceptedAttempt = false,
   } = {}) {
     if (!sessionKey || isInternalExecutionSession(sessionKey)) return {ok: false};
-    const tierMinimum={base:24,boost:48,full:96,marathon:512}[this.tierFor(sessionKey)] || 24;
-    const maxAttempts = Math.max(tierMinimum, Number(decision?.retry?.maxAttempts) || 24);
+    const maxAttempts = this.integrityRetryLimit(sessionKey, decision);
     const current = Number(this.integrityAttempts.get(sessionKey) || 0);
     // before_message_write can arm the durable lease while the parent model
     // is still running. agent_end is the first boundary where chat.send is
@@ -3696,7 +3856,9 @@ function completedEvidence(state) {
     const text = String(entry?.text || '').trim().slice(0, Math.min(6_000, remaining));
     if (!text) continue;
     const suffix = String(childSessionKey).split(':').at(-1)?.slice(0, 8) || 'result';
-    const chunk = `\n--- ${ROLE_LABELS[role] || '子任务'} · ${suffix} ---\n${text}\n`;
+    const candidateId = entry?.candidateId || '';
+    const heading = candidateId ? '候选方案 ' + candidateId + ' · ' + (ROLE_LABELS[role] || '求解') : (ROLE_LABELS[role] || '子任务') + ' · ' + suffix;
+    const chunk = '\n--- ' + heading + ' ---\n' + text + '\n';
     chunks.push(chunk);
     remaining -= chunk.length;
   }
@@ -3707,52 +3869,234 @@ function completedEvidence(state) {
 ${chunks.join('')}`.trim();
 }
 
-export function deliberationRequirements(tier, mode) {
-  const normalizedTier = TIER_LIMITS[tier] ? tier : 'boost';
-  const base = normalizedTier === 'base'
-    ? {planner: 1, solver: 3, critic: 2, judge: 1}
-    : {planner: 1, solver: normalizedTier === 'boost' ? 4 : 5, critic: 3, judge: 1};
-  if (normalizedTier === 'base') return {roles: base, dynamicUpgradeKinds: 0};
-  if (normalizedTier === 'boost') {
-    const upgrades = mode === 'project'
-      ? {decomposer: 2, verifier: 2}
-      : mode === 'ideas'
-        ? {pipeline: 4, countercritic: 2}
-        : mode === 'learning'
-          ? {verifier: 2, assumption: 2}
-        : mode === 'chat'
-          ? {assumption: 2, debater: 3}
-          : {};
-    return {roles: {...base, ...upgrades}, dynamicUpgradeKinds: mode === 'none' ? 2 : 0, dynamicUpgradeEach: 2};
-  }
-  const each = normalizedTier === 'marathon' ? 3 : 2;
+export function deliberationRequirements(tier, mode, taskType = 'pending') {
+  const normalizedTier = TIER_RETRY_LIMITS[tier] ? tier : 'boost';
+  const type = normalizedTaskType(taskType);
+  const maxSolvers = SOLVER_LIMITS[normalizedTier];
+  const roles = ['standard_answer', 'tradeoff'].includes(type)
+    ? {solver: 2}
+    : {};
+  const needsEvidence = type === 'fact_check'
+    || (normalizedTier !== 'base' && !['pending', 'simple'].includes(type));
   return {
-    roles: {...base, ...Object.fromEntries(UPGRADE_ROLES.map(role => [role, each]))},
-    dynamicUpgradeKinds: 0,
+    roles,
+    maxSolvers,
+    optionalRoles: {
+      critic: normalizedTier === 'full' && ['standard_answer', 'tradeoff'].includes(type) ? 1 : 0,
+      judge: type === 'standard_answer' ? 1 : 0,
+    },
+    workflow: TASK_WORKFLOWS[type],
+    taskType: type,
+    needsEvidence,
+    evidenceKind: type === 'implementation' ? 'test'
+      : type === 'fact_check' ? 'sources'
+        : needsEvidence ? 'verification' : '',
+    retryLimit: TIER_RETRY_LIMITS[normalizedTier],
   };
 }
 
-function auditDeliberation(state) {
-  const requirement = deliberationRequirements(state.tier, state.mode);
-  const missing = [];
-  for (const [role, count] of Object.entries(requirement.roles)) {
-    const actual = state.completedRoles.get(role) || 0;
-    if (actual < count) missing.push(`${ROLE_LABELS[role]} ${actual}/${count}`);
-  }
-  if (requirement.dynamicUpgradeKinds) {
-    const satisfied = UPGRADE_ROLES.filter(role => (state.completedRoles.get(role) || 0) >= requirement.dynamicUpgradeEach);
-    if (satisfied.length < requirement.dynamicUpgradeKinds) {
-      missing.push(`升级类别 ${satisfied.length}/${requirement.dynamicUpgradeKinds}（每类至少 ${requirement.dynamicUpgradeEach} 个）`);
+function verificationEvidence(state) {
+  return Array.isArray(state?.verificationEvidence) ? state.verificationEvidence : [];
+}
+
+function sourceEvidenceCount(state) {
+  const refs = new Set();
+  for (const entry of verificationEvidence(state)) {
+    if (!entry?.ok || !entry.output) continue;
+    for (const ref of sourceReferences(String(entry.params || '') + '\n' + String(entry.output || ''))) {
+      refs.add(ref.toLowerCase());
     }
   }
-  if (state.pendingChildren.size) missing.push(`等待中的子任务 ${state.pendingChildren.size}`);
-  return {complete: missing.length === 0, missing};
+  return refs.size;
+}
+
+function sourceReferences(value = '') {
+  const text = String(value || '');
+  const urls = text.match(/https?:\/\/[^\s"'<>),，。；：、？！]+/gi) || [];
+  const paths = text.match(/(?:^|[\s"'])(?:\/|\.{0,2}\/)[\w.@/+~-]+\.[a-z0-9]{1,8}\b/gi) || [];
+  return [...new Set([...urls, ...paths].map(ref => ref.toLowerCase()))];
+}
+
+function captureWorkflowFinalClaims(state, reply = '') {
+  const text = String(reply || '');
+  if (state.taskType === 'tradeoff') {
+    state.tradeoffCompared = /(?:比较|对比|差异|优缺点|成本|代价)/i.test(text);
+    state.tradeoffPresented = /(?:请.{0,12}选择|由你.{0,8}选择|你可以选择|选择其中|建议你选择|请选择|交给.{0,8}选择)/i.test(text);
+  }
+  if (state.taskType === 'fact_check') {
+    state.finalSourceSummary = sourceReferences(text).length >= 2
+      && /(?:不确定|暂未核实|无法确认|来源之间|存在差异|存疑|证据不足|无法判定|未能确定)/i.test(text);
+  }
+}
+
+function captureVerificationEvidence(state, event = {}) {
+  const name = String(event.toolName || '').slice(0, 120);
+  const params = event.params && typeof event.params === 'object'
+    ? JSON.stringify(event.params).slice(0, 2_000)
+    : String(event.params || '').slice(0, 2_000);
+  let output = resultText(event.result).slice(0, 2_000);
+  const isError = toolResultFailed(event, output)
+    || /(?:\bnot ok\b|(?:fail(?:ed|ure)?|error)\s*[:=]\s*[1-9]\d*|\bfail(?:ed|ure)?\s+[1-9]\d*\b)/i.test(output);
+  const lowerName = name.toLowerCase();
+  const command = String(event.params?.command || event.params?.cmd || event.params?.script || '');
+  const kind = /(?:^|[._:-])(?:write|edit|apply_patch|create|update|delete|move)(?:$|[._:-])/i.test(name)
+    ? 'mutation'
+    : /(?:^|[._:-])(?:exec|shell|bash|terminal|run)(?:$|[._:-])/i.test(name)
+      ? /(?:\btest\b|pytest|vitest|jest|mocha|cargo\s+test|go\s+test|unittest|playwright|cypress)/i.test(command) ? 'test' : 'command'
+      : /read|search|web|browser|fetch|open|list|inspect|find/i.test(lowerName) ? 'source'
+        : 'other';
+  if (!output && !isError && kind === 'mutation') output = '工具操作已返回';
+  if (!output && !isError) return null;
+  const digest = hashForAudit(name + '\n' + params + '\n' + output);
+  if (state.progressDigests.includes(digest)) return null;
+  const entry = {
+    name,
+    kind,
+    params,
+    output,
+    digest,
+    sequence: (Number(state.progressSequence) || 0) + 1,
+    at: Date.now(),
+    ok: !isError,
+  };
+  state.progressSequence = entry.sequence;
+  state.verificationEvidence.push(entry);
+  state.verificationEvidence = state.verificationEvidence.slice(-120);
+  state.progressDigests.push(digest);
+  state.progressDigests = state.progressDigests.slice(-120);
+  return entry;
+}
+
+export function hasEvidenceBackedCritique(text = '') {
+  const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const noFindings = /(?:没有发现问题|未发现问题|没有可证实的问题|未找到有证据的问题)/i;
+  const findings = lines.filter(line => !noFindings.test(line)
+    && /(?:问题|错误|缺陷|不足|风险|漏洞|不成立|不一致|失败|会导致|可能导致)/i.test(line));
+  if (!findings.length) return noFindings.test(String(text || ''));
+  const evidence = /(?:https?:\/\/|(?:^|[\s"'(])(?:\/|\.{0,2}\/)[\w.@/+~-]+\.[a-z0-9]{1,8}\b|(?:npm|node|python\d*|pytest|vitest|jest|cargo|go)\s+(?:test|run|check)|(?:测试|命令|输出).{0,20}(?:失败|报错|未通过|实际)|(?:反例|例如|当.{1,80}时).{6,})/i;
+  return findings.every(line => evidence.test(line));
+}
+
+export function validateJudgeSelection(text = '', candidates = [], evidenceEntries = []) {
+  const value = String(text || '');
+  const selections = [...value.matchAll(/选择\s*[：:]\s*(?:候选方案\s*)?([ABC])/gi)].map(match => match[1].toUpperCase());
+  if (selections.length !== 1) return {ok: false, reason: '必须明确选择一个已有候选方案'};
+  const selected = selections[0];
+  const available = new Set(candidates.map(candidate => String(candidate?.candidateId || '').toUpperCase()).filter(Boolean));
+  if (!available.has(selected)) return {ok: false, reason: '所选方案不在已有候选中'};
+  if (/(?:合并|融合|拼接|综合|折中成|把候选方案?\s*[ABC].{0,16}(?:结合|整合))/i.test(value)) {
+    return {ok: false, reason: '仲裁不能合成新方案'};
+  }
+  if (!/依据\s*[：:]/i.test(value) || !/(?:通过|未通过|没通过|失败|结果|输出)/i.test(value)) {
+    return {ok: false, reason: '依据必须说明实际检验结果'};
+  }
+  const citedEvidence = evidenceEntries.some(entry => {
+    if (!entry?.ok) return false;
+    const terms = [entry.output, entry.params]
+      .map(part => String(part || '').trim())
+      .filter(part => part.length >= 5)
+      .map(part => part.slice(0, Math.min(part.length, 120)));
+    return terms.some(term => value.includes(term));
+  });
+  if (!citedEvidence) return {ok: false, reason: '依据没有引用已取得的实际检验结果'};
+  return {ok: true, selected};
+}
+
+function deliberationFingerprint(state) {
+  const evidence = Array.isArray(state?.progressDigests) ? state.progressDigests : [];
+  const children = state?.childResults instanceof Map
+    ? [...state.childResults.entries()].map(([key, value]) => [key, value?.candidateId || '', hashForAudit(value?.text || '')])
+    : [];
+  return hashForAudit(JSON.stringify({evidence: [...evidence].sort(), children}));
+}
+
+function verificationEvidenceCount(state, requirement) {
+  const entries = verificationEvidence(state).filter(entry => entry?.ok && entry.output);
+  if (requirement.evidenceKind === 'test') {
+    const mutations = entries.filter(entry => entry.kind === 'mutation');
+    if (!mutations.length) return 0;
+    const lastMutation = mutations.reduce((latest, entry) => Math.max(latest, Number(entry.sequence) || Number(entry.at) || 0), 0);
+    return entries.filter(entry => entry.kind === 'test'
+      && (Number(entry.sequence) || Number(entry.at) || 0) > lastMutation).length;
+  }
+  if (requirement.evidenceKind === 'sources') return sourceEvidenceCount(state);
+  return entries.length;
+}
+
+function auditDeliberation(state, reply = '') {
+  if (state?.stopRequested) return {complete: true, missing: []};
+  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType);
+  const missing = [];
+  for (const [role, count] of Object.entries(requirement.roles)) {
+    const actual = state?.completedRoles?.get?.(role) || 0;
+    if (actual < count) missing.push((ROLE_LABELS[role] || role) + ' ' + actual + '/' + count);
+  }
+  if (state?.pendingChildren?.size) missing.push('等待中的子任务 ' + state.pendingChildren.size);
+  if (requirement.needsEvidence) {
+    const needed = requirement.evidenceKind === 'sources' ? 2 : 1;
+    const actual = verificationEvidenceCount(state, requirement);
+    if (actual < needed) {
+      missing.push(requirement.evidenceKind === 'test'
+        ? '缺少本轮测试命令及结果'
+        : requirement.evidenceKind === 'sources'
+          ? '缺少两个可区分的来源'
+          : '缺少与本任务相关的实际验证证据');
+    }
+  }
+  if (requirement.taskType === 'tradeoff') {
+    if (!/(?:比较|对比|差异|优缺点|成本|代价)/i.test(String(reply || ''))) missing.push('最终答复缺少方案差异和代价对比');
+    if (!/(?:请.{0,12}选择|由你.{0,8}选择|你可以选择|选择其中|建议你选择|请选择|交给.{0,8}选择)/i.test(String(reply || ''))) {
+      missing.push('最终答复还没有交给用户选择');
+    }
+  }
+  if (requirement.taskType === 'fact_check' && !state?.finalSourceSummary) {
+    missing.push('最终答复缺少两个来源和不确定性说明');
+  }
+  return {complete: missing.length === 0, missing, requirement};
+}
+
+function workflowProgress(state) {
+  const type = normalizedTaskType(state?.taskType || 'pending');
+  const requirement = deliberationRequirements(state?.tier, state?.mode, type);
+  const evidence = verificationEvidence(state);
+  const solvers = state?.completedRoles?.get?.('solver') || 0;
+  const used = new Set();
+  if (type === 'implementation') {
+    const mutations = evidence.filter(entry => entry.kind === 'mutation' && entry.ok);
+    const sequenceOf = entry => Number(entry.sequence) || Number(entry.at) || 0;
+    const firstMutation = mutations.length ? Math.min(...mutations.map(sequenceOf)) : Infinity;
+    const lastMutation = mutations.length ? Math.max(...mutations.map(sequenceOf)) : Infinity;
+    if (evidence.some(entry => entry.kind === 'test' && !entry.ok && sequenceOf(entry) <= firstMutation)) used.add('复现');
+    if (mutations.length) used.add('修改');
+    if (evidence.some(entry => entry.kind === 'test' && entry.ok && sequenceOf(entry) > lastMutation)) used.add('测试');
+  } else if (type === 'standard_answer') {
+    if (solvers) used.add('独立解法');
+    if (evidence.length) used.add('验算');
+    if (state?.completedRoles?.get?.('judge')) used.add('必要时裁决');
+  } else if (type === 'tradeoff') {
+    if (solvers) used.add('不同立场');
+    if (state?.tradeoffCompared) used.add('对比代价');
+    if (state?.tradeoffPresented) used.add('交给用户选择');
+  } else if (type === 'fact_check') {
+    if (sourceEvidenceCount(state) >= 2) used.add('多来源核对');
+    if (sourceEvidenceCount(state) >= 2 && state?.finalSourceSummary) used.add('标注出处与不确定性');
+  } else if (type === 'simple' && state?.endedAt) {
+    used.add('此问题无需多方案，已直接回答');
+  }
+  if (requirement.optionalRoles.critic && state?.completedRoles?.get?.('critic')) used.add('按需证据审查');
+  const stageLabels = [...requirement.workflow.stages];
+  if (requirement.optionalRoles.critic) stageLabels.push('按需证据审查');
+  return {
+    type,
+    label: requirement.workflow.label,
+    stages: stageLabels.map(label => ({label, used: used.has(label)})),
+  };
 }
 
 function deliberationProgress(state) {
-  const requirement = deliberationRequirements(state.tier, state.mode);
+  const requirement = deliberationRequirements(state.tier, state.mode, state.taskType);
   const pendingByRole = new Map();
-  for (const child of state.pendingChildren) {
+  for (const child of state.pendingChildren || []) {
     const role = state.childRoles.get(child) || '';
     if (role) pendingByRole.set(role, (pendingByRole.get(role) || 0) + 1);
   }
@@ -3767,49 +4111,43 @@ function deliberationProgress(state) {
     completed: state.completedRoles.get(role) || 0,
     pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
     required,
+    optional: false,
   }));
-  let required = roles.reduce((sum, entry) => sum + entry.required, 0);
-  let completed = roles.reduce((sum, entry) => sum + Math.min(entry.completed, entry.required), 0);
-  if (requirement.dynamicUpgradeKinds) {
-    const dynamic = UPGRADE_ROLES.map(role => ({
+  for (const [role, cap] of Object.entries(requirement.optionalRoles)) {
+    if (!cap) continue;
+    roles.push({
       role,
       label: ROLE_LABELS[role] || role,
       completed: state.completedRoles.get(role) || 0,
       pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
-      required: requirement.dynamicUpgradeEach,
-    })).filter(entry => entry.completed || entry.pending)
-      .sort((a, b) => (b.completed + b.pending) - (a.completed + a.pending))
-      .slice(0, requirement.dynamicUpgradeKinds);
-    while (dynamic.length < requirement.dynamicUpgradeKinds) {
-      dynamic.push({role: `upgrade-${dynamic.length + 1}`, label: `升级协作 ${dynamic.length + 1}`, completed: 0, pending: 0, required: requirement.dynamicUpgradeEach});
-    }
-    roles.push(...dynamic);
-    required += requirement.dynamicUpgradeKinds * requirement.dynamicUpgradeEach;
-    completed += dynamic.reduce((sum, entry) => sum + Math.min(entry.completed, entry.required), 0);
+      required: cap,
+      optional: true,
+    });
   }
+  const required = roles.filter(entry => !entry.optional).reduce((sum, entry) => sum + entry.required, 0);
+  const completed = roles.filter(entry => !entry.optional).reduce((sum, entry) => sum + Math.min(entry.completed, entry.required), 0);
   return {roles, required, completed};
 }
 
-function requirementSummary(tier, mode) {
-  const requirement = deliberationRequirements(tier, mode);
-  const fixed = Object.entries(requirement.roles)
-    .map(([role, count]) => `${ROLE_LABELS[role]}×${count}`)
-    .join('、');
-  const dynamic = requirement.dynamicUpgradeKinds
-    ? `；另从六项升级中任选 ${requirement.dynamicUpgradeKinds} 类，每类至少 ${requirement.dynamicUpgradeEach} 个`
+function requirementSummary(tier, mode, taskType = 'pending') {
+  const requirement = deliberationRequirements(tier, mode, taskType);
+  const solver = requirement.roles.solver ? '最多 ' + requirement.roles.solver + ' 位不同解法' : '不派求解代理';
+  const evidence = requirement.needsEvidence
+    ? requirement.evidenceKind === 'test' ? '；需真实运行测试'
+      : requirement.evidenceKind === 'sources' ? '；需交叉核对两个来源'
+        : '；需取得相关验证证据'
     : '';
-  return fixed + dynamic;
+  return requirement.workflow.label + '：' + solver + evidence;
 }
 
 function roleSpawnCap(state, role) {
-  if (!role) return Infinity;
-  if (role === 'planner' || role === 'judge') return 1;
-  if (role === 'solver') return 5;
-  if (role === 'critic') return 3;
-  const fixed = deliberationRequirements(state.tier, state.mode).roles[role];
-  if (fixed) return fixed;
-  if (state.tier === 'boost' && UPGRADE_ROLES.includes(role)) return 2;
-  return Infinity;
+  if (!role) return 0;
+  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType);
+  if (requirement.taskType === 'pending') return 0;
+  if (role === 'solver') return requirement.roles.solver ? requirement.maxSolvers : 0;
+  if (role === 'critic') return requirement.optionalRoles.critic;
+  if (role === 'judge') return requirement.optionalRoles.judge;
+  return 0;
 }
 
 function isInside(root, target) {
@@ -3843,76 +4181,30 @@ function section(relative, content) {
   return content ? `\n--- ${relative}（本轮从当前模式工作区完整重载）---\n${content.trim()}\n` : '';
 }
 
-export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点') {
-  const normalizedTier = TIER_LIMITS[tier] ? tier : 'boost';
-  const upgrades = {
-    chat: '加强档增加：假设审查员 + 固定两轮对抗；只用于确实复杂的求助。',
-    project: '加强档增加：真实执行验证 + 模块递归分解（递归深度最多 2）。',
-    ideas: '加强档增加：反批评 + 两条独立完整流水线后再做元仲裁。',
-    learning: '加强档增加：事实核查 + 最小实验；解释必须落到可复现的练习或产物。',
-    none: '加强档按任务选两项：可执行产物优先“执行验证+递归分解”；创意任务优先“反批评+多流水线”；高风险判断优先“假设审查+多轮对抗”。',
-  }[mode] || '';
-  const tierRule = normalizedTier === 'base'
-    ? '只运行第 0—4 层标准流水线，不启用六项升级。'
-    : normalizedTier === 'boost'
-      ? upgrades
-      : '在标准流水线上启用全部六项升级：递归分解、多流水线自洽、多轮对抗、真实执行验证、假设审查、反批评。执行验证仅在存在可验证产物时运行；反批评只复核被否决候选，避免空转。';
-  const marathonRule = normalizedTier === 'marathon' ? `
-
-长跑协议（强制）：
-- 这是无人值守的长时任务。用户不会守在屏幕前；已在原请求授权的普通步骤直接完成，不要用“要不要继续”“是否需要碧琪执行”提前收尾。
-- 工作法（对齐 Fable 5 长程代理与 Kimi Agent Swarm 的公开模式）：Plan-Execute-Verify——先把目标拆成命名阶段写进检查点，逐阶段执行、每阶段对照验收标准验证通过后再推进；只有真正独立的子任务才并行成批启动，有依赖关系的必须串行等结果（避免假并行空烧和串行塌方）；阶段交接时核对接口、字段与格式的一致性，对不上就拦下修复再继续；任何失败从上一个成功检查点恢复，不从头重来。
-- 可验证增量（反空转第一卡）：每一轮交付都必须带来至少一个新的可验证产物——改动的文件、命令的真实输出、通过的测试结果——并在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报。没有新增产物的一轮不算进展。
-- 停滞纪律（反空转第二卡）：连续 3 轮没有新的可验证产物，后端会强制暂停。届时只做一件事：输出停滞报告（卡在哪一步、试过什么、缺什么权限或信息、建议用户怎么决策），附 <!-- pinkie-longrun-pause --> 结束等用户决策。禁止原地重试同一条失败路径继续烧额度。
-- 检查点纪律（反空转第三卡）：对话历史只追加，不重写早先轮次。每完成一个里程碑，更新 ${checkpointPath}：当前目标、已完成项、真实工具结果、未完成项和下一步；绝不能读写别的会话检查点。后端会比对本会话检查点更新时间与进度申报。网络续接后先读该检查点并核对项目现场，禁止重复已完成的副作用。
-- 至少每完成一个阶段给用户一条简短进度，不展示隐藏推理，不念角色流水账；最终用说人话的总结列出成品、验证结果、剩余阻塞——总结的主体是交付物，不是审议过程。
-- 只有全部验收项完成且验证通过，才在最终回复末尾追加不可见标记 <!-- pinkie-longrun-complete -->。收尾标准是“任务完成”（人可逐项验收的交付物），不是“生成过一些东西”。确实缺少必须由用户提供的新权限或关键选择时，说明具体阻塞，并追加 <!-- pinkie-longrun-pause -->。除此之外不得结束本轮。` : '';
-  return `
-【极致思考运行单：${normalizedTier} / ${mode}】
-这是用户手动开启的审议/长任务运行单。属于审议范围的复杂任务必须真实调用子代理工具，不能只在正文里模拟角色。
-
-需求锚定（执行前先锁定，各档位通用）：
-- 读全：用户点名或任务依赖的每个文件必须完整读取。工具一次读不完就分页续读到文件末尾；只读开头或摘要就凭印象发挥，视同没读。
-- 抄单：把用户消息和文件里的显式要求逐条抄成需求清单，每条标注来源（文件路径+小节/行号）；转述文件内容必须带原文或行号，禁止“大概意思是”。
-- 覆盖：执行计划必须逐条映射到需求清单；验收清单把需求清单全量并入。
-- 核对：交付前逐条标注“已落实/未落实+原因”，任何一条漏落都不算完成；Judge 裁定前先核这份单子。
-
-标准流水线：
-0. Planner ×1：拆任务并给出可逐条打勾的验收清单。
-1. Solver ×3~5：同批并行，复杂度低取 3，高取 5。框架必须互斥，从这组里分配：第一性原理、逆向拆解、类比迁移、清单驱动、对抗假设；禁止多个 Solver 用同质思路产出相关性错误。
-2. Critic ×2~3：同批并行，分别查逻辑、边界、原需求覆盖；只列问题。
-3. 固定 3 轮对抗：Solver 与 Critic 就分歧点来回辩论并把修订融入候选；复用已派生角色完成，不额外计角色数。
-4. Judge ×1：两两锦标赛裁定——候选两两对比、胜者晋级，不一次性排名；逐条对照验收清单打分并引用候选原文作证据；关键断言（代码能跑、事实成立、文件存在）必须先用工具验证再采信；凡是能变成命令/测试/脚本的验收项一律机械执行，每个候选都验，不抽样。
-5. 不通过才打回，最多 2 轮；到点必须从现有候选交付最优结果。
-
-后端硬验收（不是建议）：
-- 本档至少完成：${requirementSummary(normalizedTier, mode)}。
-- 必须等所有已派生子任务真正结束；只写“已让多个角色分析”或在正文里模拟角色，一律无法通过最终交付闸门。
-- 统一使用这些可识别显示名：规划、求解、批评、仲裁、递归分解、独立流水线、多轮对抗、真实验证、假设审查、反批评；可在后面加编号或职责。
-- 子任务失败不计入完成数，必须补派；达到最低数量后仍应按任务复杂度继续审议，不能把最低线当成最高线。
-
-本档规则：${tierRule}${marathonRule}
-
-交付契约（优先级高于角色讨论）：
-- 四档的目的都是完成用户原始目标，子代理讨论只是手段，不是成品。先判断用户要的是“直接答案”还是“实际动作/产物”，不得把两者一律写成研究报告。
-- 若用户要求修改、生成、打开、运行、下载、发布、排错或验证：Planner 先定最小验收清单；Solver 给可执行方案；主代理必须继续调用真实工具完成修改/产物并运行验证。只给建议、代码片段、计划书或角色观点，均视为未交付。
-- 若用户只是提问、比较或要判断：直接回答问题就是交付；多代理证据只用于提高答案质量，不得用冗长过程淹没结论。
-- Critic 和 Judge 必须对照“用户最初要求 + 当前真实现场 + 验证结果”验收，不能只评价文字是否完整。发现没动手、没产物或没验证，必须打回执行。
-- 主代理拥有最终执行与交付责任，不能以“子代理建议”“后续可以做”代替自己完成。除非确实缺少用户必须提供的新权限或关键选择，否则不得停在待办状态。
-
-派生规则（强制）：
-- 只用 sessions_spawn 的原生 subagent；context="fork"、runtime="subagent"、mode="run"。
-- 不得硬编码 agentId、cwd、model、thinking；插件会按当前 session 的实际模型动态透传，agent id 与工作区仍走原生继承。
-- taskName 使用稳定英文句柄；label 只写 UI 显示名（如“规划师”“求解·边界”“批评·需求”“仲裁者”），不得创建或改名任何 agent id。
-- 子任务完成后由插件内部收集结果，不要另外向父会话发“已完成”通知。父会话会在整批结束后一次性获取候选结果。
-- sessions_spawn 工具结果里关于“Auto-announce”和“NO_REPLY”的通用备注在本模式下已失效；永远不得用 NO_REPLY 规避后端验收缺口。
-- 每批最多并行 5 个；启动一批后用 sessions_yield 等完成事件，不轮询 sessions_list/history。
-- 递归深度硬上限 2；多流水线最多 3 条；辩论最多 3 轮；本次总派生上限 ${TIER_LIMITS[normalizedTier]}。
-- 中间产物只进当前模式的 memory/context/deliberation/ 或子会话记录，不进入长期记忆。只有 Judge 的稳定结论经过判别后才能写 feedback/semantic。
-- 最终先交付说人话的答案或成品，再用 1~3 行说明实际修改与验证。除非用户明确要求，不得汇报角色数量、流水线、打回轮次或审议过程。
-`.trim();
+export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点', taskType = 'pending') {
+  const normalizedTier = TIER_RETRY_LIMITS[tier] ? tier : 'boost';
+  const workflow = TASK_WORKFLOWS[normalizedTaskType(taskType)];
+  const rules = [
+    '【极致思考运行单：' + normalizedTier + ' / ' + mode + '】',
+    '先读本轮真实用户问题，再按任务类型走对应流程；不预设规划、批评、仲裁或辩论环节。',
+    '当前流程：' + workflow.label + '；进度面板显示本次实际走的流程和已用环节。',
+    '任务路由：写代码/修 bug＝先复现，再修改，最后运行测试；有标准答案的难题＝最多 3 个独立解法，再用可运行结果、计算或来源验算；方案取舍＝不同立场各给一版，比较代价后交用户选；查事实＝交叉核对多个来源并标出处和不确定性；简单问题＝直接回答，进度面板显示“此问题无需多方案，已直接回答”。',
+    '求解代理：最多 3 个。每个求解者采用不同解法；只给它原始问题和必要材料，不转交父会话已有猜测或结论。完成结果标成候选方案 A、B、C。',
+    '裁决顺序：先运行可运行的检查，再查文件、文档或来源；候选结论一致就直接采用。仍需仲裁时，只能从已有候选中选一个，写出通过与未通过的实际依据；不能把多个候选合成新答案。确实无法判定时并列交付候选和依据，让用户选择。',
+    normalizedTier === 'full'
+      ? '全开档的批评环节按需启动。每条批评必须附具体反例、失败的测试/命令或事实出处；没有证据的批评丢弃，“没有发现问题”是有效结果。只修被证实的问题，不因猜测整体重写。反批评角色已停用。'
+      : '批评角色只在全开档按需启用；反批评角色已停用。',
+    '高档实测：加强、全开、长跑档对适用任务要取得真实测试、执行或来源证据；证据拿不到时，明确缺什么并报告未完成。',
+    '重试：每次重试前先说明“这次和上次不同：换思路/换信息/换模型 + 具体变化”。没有新变化不得重试；连续两次没有新的测试结果、文件变化或来源证据时停止，报告卡点和已试方法。',
+    '本档续跑上限为 ' + TIER_RETRY_LIMITS[normalizedTier] + ' 次。',
+    normalizedTier === 'base' ? '基础档：启用不同求解思路与现实核验，按任务分类选流程。'
+      : normalizedTier === 'boost' ? '加强档：基础档流程，并对适用任务取得实测或来源证据。'
+        : normalizedTier === 'full' ? '全开档：加强档流程，按需增加有证据的审查。'
+          : '长跑档：沿用加强档思路持续执行；每个阶段写入当前会话检查点“' + checkpointPath + '”，核对现场后续跑，直到完成或达到停机条件。',
+    '只执行和报告用户原始目标；最终用简短中文列出结果、实际依据和未解决的阻塞。不要汇报代理数量或隐藏推理。',
+  ];
+  return rules.join('\n');
 }
-
 export class ModeArchitecture {
   constructor(runStore = null, memory = null, handoffStore = null, learning = null) {
     this.runStore = runStore;
@@ -4036,9 +4328,17 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const run = {
       tier, mode, parentSessionKey: sessionKey, count: 0, limit: TIER_LIMITS[tier], active: true,
       pendingChildren: new Set(), completedChildren: new Set(), emptyChildren: new Set(), childRoles: new Map(), childResults: new Map(), reservations: new Map(),
+      childCandidates: new Map(),
       childModels: new Map(), modelCounts: new Map(),
       completedRoles: new Map(), failedChildren: 0,
       progressMarks: 0, stagnantCycles: 0, lastCheckpointAt: 0,
+      taskPrompt: '', taskType: 'pending', verificationEvidence: [], progressDigests: [],
+      progressSequence: 0,
+      tradeoffCompared: false, tradeoffPresented: false,
+      retryAttempts: 0, noProgressCycles: 0, lastProgressFingerprint: '', lastRetryRunId: '',
+      retryDifferences: [], stopRequested: false, stopReason: '', finalSourceSummary: false,
+      stopRunId: '', stopReportPending: false,
+      lastRetryDecision: null,
       token: randomUUID(), model: '', parentRunning: false, lastEventAt: Date.now(),
     };
     this.setRun(sessionKey, run);
@@ -4081,7 +4381,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const progress = deliberationProgress(state);
     const active = state.active !== false;
     const phase = !active
-      ? (audit.complete ? 'done' : 'stopped')
+      ? (state.stopRequested ? 'stopped' : audit.complete ? 'done' : 'stopped')
       : audit.complete
         ? 'summarizing'
         : state.pendingChildren.size
@@ -4097,6 +4397,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       active,
       tier: state.tier,
       mode: state.mode,
+      taskType: normalizedTaskType(state.taskType || 'pending'),
+      workflow: workflowProgress(state),
       phase,
       spawned: state.count,
       pending: state.pendingChildren.size,
@@ -4108,7 +4410,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       collectedResults: state.childResults.size,
       completedRoles: Object.fromEntries(state.completedRoles),
       failedChildren: state.failedChildren,
-      complete: audit.complete,
+      complete: audit.complete && !state.stopRequested,
+      stopReason: state.stopReason || '',
       missing: audit.missing,
       required: progress.required,
       completed: progress.completed,
@@ -4127,11 +4430,16 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const mode = modeForContext(ctx);
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
+    const sessionKey = ctx.sessionKey || '';
+    const requestedTier = VALID_TIER.exec(event.prompt || '')?.[1]?.toLowerCase();
+    const existingTierRun = this.getRun(this.resolveParent(sessionKey));
+    const tierPrompt = Boolean(requestedTier || existingTierRun?.active);
     /* “无限制模式”保留工具、档位和真实性门禁，但不把任何工作区
        人格或记忆 Markdown 塞给模型。文件本身保留，不删除。 */
     const injectWorkspaceMarkdown = mode !== 'none';
     const blocks = [
-      '\n' + COMPLETION_TRUTH_RULES + '\n',
+      ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
+      '\n' + TOOL_PROGRESS_RULES + '\n',
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
     if (mode === 'learning') {
@@ -4147,7 +4455,6 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       } catch {}
       blocks.push('\n' + memorySystemRules(mode) + '\n');
     }
-    const sessionKey = ctx.sessionKey || '';
     this.rememberUserPrompt(sessionKey, event.prompt || '');
     const currentState = this.getRun(this.resolveParent(sessionKey));
     if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
@@ -4165,16 +4472,31 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const checkpointPath = sessionCheckpointRelative(sessionKey);
       if (checkpointPath) blocks.push(section(checkpointPath, readWorkspaceFile(root, checkpointPath)));
     }
-    const tier = VALID_TIER.exec(event.prompt || '')?.[1]?.toLowerCase();
+    const tier = requestedTier;
     if (tier && sessionKey) {
       const armed = this.arm(sessionKey, tier);
-      blocks.push('\n' + armed.text + '\n');
+      const state = this.getRun(sessionKey);
+      const taskPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
+      if (state && taskPrompt && !internalControlText(taskPrompt)) {
+        state.taskPrompt = taskPrompt;
+        state.taskType = classifyDeliberationTask(taskPrompt);
+        state.lastEventAt = Date.now();
+        this.setRun(sessionKey, state);
+      }
+      blocks.push('\n' + buildDeliberationPlan(tier, armed.mode, sessionCheckpointRelative(sessionKey), state?.taskType || 'pending') + '\n');
     } else {
       const state = this.getRun(this.resolveParent(sessionKey));
       // 子代理只执行父代理分配的单项职责。若把整份档位运行单也塞给
       // 子代理，它会再次派生同一批角色，形成指数级嵌套和完成通知拥堵。
       if (state?.active && sessionKey === state.parentSessionKey) {
-        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, sessionCheckpointRelative(sessionKey)) + '\n');
+        const taskPrompt = String(event.prompt || '').trim();
+        if (taskPrompt && !internalControlText(taskPrompt) && !CONTINUATION_ONLY_PROMPT.test(taskPrompt)) {
+          state.taskPrompt = taskPrompt;
+          state.taskType = classifyDeliberationTask(taskPrompt);
+          state.lastEventAt = Date.now();
+          this.setRun(sessionKey, state);
+        }
+        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, sessionCheckpointRelative(sessionKey), state.taskType) + '\n');
         const evidence = completedEvidence(state);
         if (evidence) blocks.push('\n' + evidence + '\n');
       }
@@ -4230,10 +4552,27 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
   }
 
   beforeTool(event, ctx) {
-    if (event.toolName !== 'sessions_spawn' || !modeForContext(ctx)) return;
-    const params = {...(event.params || {})};
+    if (!modeForContext(ctx)) return;
     const parent = this.resolveParent(ctx.sessionKey || '');
-    const state = this.getRun(parent);
+    let state = this.getRun(parent);
+    const toolParams = JSON.stringify(event.params || {});
+    const toolName = String(event.toolName || '');
+    const researchTool = /(?:^|[._:-])(?:read|exec|shell|bash|search|grep|find|browser)(?:$|[._:-])/i.test(toolName);
+    const offTaskArchitectureRead = MODE_ARCHITECTURE_SOURCE.test(toolParams)
+      && !MODE_ARCHITECTURE_TASK.test(String(state?.taskPrompt || ''));
+    if (state?.active && researchTool && (GATE_RESEARCH.test(toolParams) || offTaskArchitectureRead)) {
+      state.stopRequested = true;
+      state.stopReason = '当前操作偏离了原始任务，系统已停止本轮执行。';
+      state.active = false;
+      state.stopRunId = String(event.runId || ctx.runId || '');
+      state.stopReportPending = true;
+      state.lastEventAt = Date.now();
+      this.setRun(parent, state);
+      return {block: true, blockReason: '当前操作偏离了原始任务，已停止执行。请向用户如实说明卡点、已做内容和已尝试的方法。'};
+    }
+    if (event.toolName !== 'sessions_spawn') return;
+    const params = {...(event.params || {})};
+    state = this.getRun(parent);
     const childDepth = String(ctx.sessionKey || '').split(':subagent:').length - 1;
     // Base mode is a single standard pipeline: only the selected parent may
     // create its planner/solver/critic/judge batch.  Higher tiers may use the
@@ -4262,13 +4601,30 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (state?.active && state.pendingChildren.size + state.reservations.size >= 5) {
       return {block: true, blockReason: '已有 5 个子任务在运行。请先用 sessions_yield 等这一批结束，再派下一批。'};
     }
+    if (state?.active && !role) {
+      return {block: true, blockReason: '当前任务流程不需要此子任务，请按已选流程直接处理。'};
+    }
     if (state?.active && role) {
-      const pendingForRole = [...state.pendingChildren].filter(child => state.childRoles.get(child) === role).length;
       const reservedForRole = [...state.reservations.values()].filter(value => value?.role === role).length;
-      const completedForRole = state.completedRoles.get(role) || 0;
+      const spawnedForRole = [...state.childRoles.values()].filter(childRole => childRole === role).length;
       const cap = roleSpawnCap(state, role);
-      if (completedForRole + pendingForRole + reservedForRole >= cap) {
-        return {block: true, blockReason: `${ROLE_LABELS[role]}已达到本档有效数量 ${cap}，不要重复派生；继续补齐其他缺失角色。`};
+      if (cap < 1) {
+        return {block: true, blockReason: ROLE_LABELS[role] + '不是当前任务流程启用的环节。'};
+      }
+      if (spawnedForRole + reservedForRole >= cap) {
+        return {block: true, blockReason: ROLE_LABELS[role] + '已达到本流程派发上限 ' + cap + '，不要重复派生。'};
+      }
+      const taskRequirements = deliberationRequirements(state.tier, state.mode, state.taskType);
+      const candidateCount = [...state.childResults.values()].filter(entry => entry.role === 'solver' && entry.candidateId).length;
+      const requiredCandidates = taskRequirements.roles.solver || 0;
+      if (role === 'critic' && candidateCount < requiredCandidates) {
+        return {block: true, blockReason: '先收齐独立候选，再按需做带证据的批评审查。'};
+      }
+      if (role === 'judge' && candidateCount < requiredCandidates) {
+        return {block: true, blockReason: '先收齐独立候选，再决定是否需要仲裁。'};
+      }
+      if (role === 'judge' && !verificationEvidence(state).some(entry => entry.ok)) {
+        return {block: true, blockReason: '先运行或查证可核验的结果，再决定是否需要模型仲裁。'};
       }
     }
     if (state?.active) {
@@ -4280,13 +4636,52 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const originalLabel = params.label || params.taskName;
       params.label = normalizedRoleLabel(role, originalLabel);
       if (state?.active && !/(?:[-_·\s])\d+\s*$/.test(String(originalLabel || '')) && roleSpawnCap(state, role) > 1) {
-        const completed = state.completedRoles.get(role) || 0;
-        const pending = [...state.pendingChildren].filter(child => state.childRoles.get(child) === role).length;
+        const spawned = [...state.childRoles.values()].filter(childRole => childRole === role).length;
         const reserved = [...state.reservations.values()].filter(value => value?.role === role).length;
-        params.label = `${ROLE_LABELS[role]}·${completed + pending + reserved}`;
+        params.label = ROLE_LABELS[role] + '·' + (spawned + reserved);
       }
     }
-    // 标准派生：同 agent、同 workspace、同模型、同思考设置。显示名只走 label/taskName。
+    if (state?.active && role === 'solver') {
+      const ordinal = Math.max(0, [...state.childRoles.values()].filter(childRole => childRole === 'solver').length
+        + [...state.reservations.values()].filter(value => value?.role === 'solver').length - 1);
+      const candidateId = ['A', 'B', 'C'][Math.min(2, ordinal)];
+      const methods = state.taskType === 'tradeoff' ? [
+        '从当前目标优先级出发，支持用户原文中最匹配的一项；明确收益、代价和前提。',
+        '从不同优先级出发，支持主要替代项；明确它解决什么、付出什么代价。',
+        '若仍有第三种现实选项，按另一组优先级独立成案，并列出可比较的代价。',
+      ] : [
+        '从定义和第一性原理独立推导，不看父会话已有分析。',
+        '反向拆解结论并主动寻找边界反例，不沿用其他求解者的推导步骤。',
+        '把问题换一种形式建模，并优先用计算、运行或独立来源检验。',
+      ];
+      params.task = [
+        '你只负责独立求解，不负责执行父会话的猜测或结论。',
+        '候选方案 ' + candidateId + '。本次必须采用不同解法：' + methods[ordinal],
+        '原始用户问题：\n' + String(state.taskPrompt || '').slice(0, 12_000),
+        '只附上原问题里明确给出的材料；不要继承父会话上下文、推测、旧结论或审议记录。',
+        '输出一份可核对的候选方案，列出关键依据、可运行/可查证的验算办法，以及尚不确定的部分。',
+      ].join('\n');
+    } else if (state?.active && role === 'critic') {
+      const candidates = [...state.childResults.values()].filter(entry => entry.role === 'solver');
+      params.task = [
+        '只审查已有候选，不写新方案。',
+        '原始用户问题：\n' + String(state.taskPrompt || '').slice(0, 8_000),
+        candidates.map(entry => '候选方案 ' + (entry.candidateId || '?') + '：\n' + entry.text).join('\n\n'),
+        '每一条批评都必须附具体反例、失败的测试/命令或事实出处；没有证据的批评不要写。“没有发现问题”是有效结果。',
+        '只指出已证实的问题，不因猜测建议整体重写。',
+      ].join('\n\n');
+    } else if (state?.active && role === 'judge') {
+      const candidates = [...state.childResults.values()].filter(entry => entry.role === 'solver' && entry.candidateId);
+      const evidence = verificationEvidence(state).filter(entry => entry.ok);
+      params.task = [
+        '只在已有候选中选择，不要合成或改写新方案。',
+        '原始用户问题：\n' + String(state.taskPrompt || '').slice(0, 8_000),
+        candidates.map(entry => '候选方案 ' + entry.candidateId + '：\n' + entry.text).join('\n\n'),
+        evidence.map(entry => '实际检验结果（' + entry.name + '）：\n' + entry.output).join('\n\n'),
+        '输出格式：选择：候选方案 A/B/C；依据：引用具体通过或未通过的检验结果。无法区分时，明确列出候选及依据。',
+      ].join('\n\n');
+    }
+    // 只传当前角色所需材料；隔离上下文避免子任务继承父会话的猜测。
     delete params.agentId;
     delete params.cwd;
     delete params.model;
@@ -4294,7 +4689,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     delete params.resumeSessionId;
     delete params.streamTo;
     params.runtime = 'subagent';
-    params.context = 'fork';
+    params.context = 'isolated';
     params.mode = 'run';
     params.thread = false;
     // 子代理结果由插件收集；禁止每个子代理各自唤醒并争写父会话 JSONL。
@@ -4304,10 +4699,17 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
   }
 
   afterTool(event, ctx) {
-    if (event.toolName !== 'sessions_spawn') return;
     const parent = this.resolveParent(ctx.sessionKey || '');
     const state = this.getRun(parent);
     if (!state?.active) return;
+    if (event.toolName !== 'sessions_spawn') {
+      const evidence = captureVerificationEvidence(state, event);
+      if (evidence) {
+        state.lastEventAt = Date.now();
+        this.setRun(parent, state);
+      }
+      return;
+    }
     const reservationKey = `${event.runId || ctx.runId || 'run'}:${event.toolCallId || ''}`;
     if (!state.reservations.delete(reservationKey)) return;
     this.setRun(parent, state);
@@ -4351,6 +4753,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (firstSeen) state.count += 1;
     state.pendingChildren.add(event.childSessionKey);
     state.childRoles.set(event.childSessionKey, role);
+    if (role === 'solver') {
+      const ordinal = Number(String(event.label || '').match(/(?:[-_·\s])(\d+)\s*$/)?.[1]) || 0;
+      const candidateId = ['A', 'B', 'C'][Math.max(0, Math.min(2, ordinal - 1))] || '';
+      if (candidateId) state.childCandidates.set(event.childSessionKey, candidateId);
+    }
     const resolvedModel = String(event.resolvedModel || '').trim();
     if (resolvedModel) {
       state.childModels.set(event.childSessionKey, resolvedModel);
@@ -4372,7 +4779,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const role = state.childRoles.get(event.targetSessionKey) || '';
       const resultText = String(event.resultText || '').trim();
       const successful = !event.outcome || event.outcome === 'ok';
-      const substantive = meaningfulChildResult(resultText);
+      // A short, evidence-free “no findings” result is explicitly valid for a
+      // critic. Other roles still need a substantive result before they count.
+      const substantive = role === 'critic' && hasEvidenceBackedCritique(resultText)
+        ? true
+        : meaningfulChildResult(resultText);
       const lateEmpty = state.emptyChildren?.has(event.targetSessionKey);
       // Some hosts emit a terminal child event without carrying its final
       // text.  Do not leave the tier blocked forever: close that child as a
@@ -4393,9 +4804,19 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const duplicated = successful && substantive && [...state.childResults.values()].some(existing => (
         hashForAudit(String(existing?.text || '').replace(/\s+/g, ' ').trim()) === resultDigest
       ));
-      const acceptedSuccess = successful && substantive && !duplicated;
+      let acceptedSuccess = successful && substantive && !duplicated;
+      if (acceptedSuccess && role === 'critic' && !hasEvidenceBackedCritique(resultText)) acceptedSuccess = false;
+      if (acceptedSuccess && role === 'judge') {
+        const candidates = [...state.childResults.values()].filter(entry => entry.role === 'solver' && entry.candidateId);
+        const decision = validateJudgeSelection(resultText, candidates, verificationEvidence(state));
+        if (!decision.ok) acceptedSuccess = false;
+      }
       if (acceptedSuccess && !state.childResults.has(event.targetSessionKey)) {
-        state.childResults.set(event.targetSessionKey, {role, text: resultText.slice(0, 6_000)});
+        state.childResults.set(event.targetSessionKey, {
+          role,
+          candidateId: state.childCandidates.get(event.targetSessionKey) || '',
+          text: resultText.slice(0, 6_000),
+        });
       }
       if (state.completedChildren.has(event.targetSessionKey) && !lateEmpty && !(successful && !substantive)) {
         state.lastEventAt = Date.now();
@@ -4440,102 +4861,156 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     this.recentCompaction.set(sessionKey, Date.now());
   }
 
-  /** Synchronous, side-effect-free gate used before the transcript is saved. */
-  previewFinalize(event, ctx = {}) {
-    const state = this.getRun(ctx.sessionKey || '');
-    if (!state || ctx.sessionKey !== state.parentSessionKey) return;
-    const reply = String(event.lastAssistantMessage || '');
-    const audit = auditDeliberation(state);
-    if (!audit.complete) {
-      return {
-        action: 'revise',
-        reason: `极致思考真实调用未达标：${audit.missing.join('；')}`,
-        retry: {
-          instruction: `不能交付，也不要用文字假装完成。当前缺口：${audit.missing.join('；')}。立即用 sessions_spawn 补齐对应显示名的真实子任务；已有子任务在运行时用 sessions_yield 等完成，失败的补派。收齐结果后再由仲裁整合并验证。`,
-          idempotencyKey: `pinkie-deliberation-${ctx.runId || ctx.sessionKey || 'run'}-${state.tier}`,
-          maxAttempts: state.tier === 'marathon' ? 64 : state.tier === 'full' ? 48 : state.tier === 'boost' ? 24 : 12,
-        },
-      };
-    }
-    if (state.tier === 'marathon' && !/<!--\s*pinkie-longrun-(?:complete|pause)\s*-->/i.test(reply)) {
-      return {
-        action: 'revise',
-        reason: '长跑档仍有未完成闭环',
-        retry: {
-          instruction: '不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果；无法继续时明确写出真实阻塞并附暂停标记。',
-          idempotencyKey: `pinkie-marathon-${ctx.runId || ctx.sessionKey || 'run'}`,
-          maxAttempts: 64,
-        },
-      };
-    }
-  }
+  prepareRetryDecision(decision, event = {}, ctx = {}) {
+    if (decision?.action !== 'revise') return decision;
+    const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
+    const state = this.getRun(this.resolveParent(sessionKey));
+    if (!state?.active || sessionKey !== state.parentSessionKey) return decision;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    const runId = String(ctx.runId || event.runId || hashForAudit(reply));
+    if (state.lastRetryRunId === runId && state.lastRetryDecision) return state.lastRetryDecision;
 
-  finalize(event, ctx = {}) {
-    const state = this.getRun(ctx.sessionKey || '');
-    if (!state || ctx.sessionKey !== state.parentSessionKey) return;
-    const audit = auditDeliberation(state);
-    if (!audit.complete) {
-      return {
-        action: 'revise',
-        reason: `极致思考真实调用未达标：${audit.missing.join('；')}`,
-        retry: {
-          instruction: `不能交付，也不要用文字假装完成。当前缺口：${audit.missing.join('；')}。立即用 sessions_spawn 补齐对应显示名的真实子任务；已有子任务在运行时用 sessions_yield 等完成，失败的补派。收齐结果后再由仲裁整合并验证。`,
-          idempotencyKey: `pinkie-deliberation-${ctx.runId || ctx.sessionKey || 'run'}-${state.tier}`,
-          maxAttempts: state.tier === 'marathon' ? 64 : state.tier === 'full' ? 48 : state.tier === 'boost' ? 24 : 12,
-        },
-      };
-    }
-    if (state.tier !== 'marathon') return;
-    const reply = String(event.lastAssistantMessage || '');
-    if (/<!--\s*pinkie-longrun-(?:complete|pause)\s*-->/i.test(reply)) return;
-    // 反空转：一轮必须带来新的可验证产物。两个信号取其一即算进展——
-    // 回复里的进度申报标记，或本会话专属检查点文件被更新。
-    const checkpointPath = sessionCheckpointRelative(ctx.sessionKey || '');
-    let checkpointAt = 0;
-    try {
-      const root = safeWorkspace(ctx);
-      if (root && checkpointPath) {
-        const checkpoint = path.join(root, checkpointPath);
-        if (fs.existsSync(checkpoint)) checkpointAt = fs.statSync(checkpoint).mtimeMs || 0;
+    if (state.retryAttempts > 0) {
+      const difference = RETRY_DIFFERENCE.exec(reply);
+      if (!difference) {
+        state.stopRequested = true;
+        state.stopReason = '续跑没有先说明与上次不同的做法，系统已停止本轮。';
+        state.active = false;
+        state.lastRetryRunId = runId;
+        state.lastRetryDecision = null;
+        state.stopRunId = runId;
+        state.stopReportPending = true;
+        state.lastEventAt = Date.now();
+        this.setRun(state.parentSessionKey, state);
+        return;
       }
-    } catch {}
-    const hasProgress = PROGRESS_MARKER.test(reply) || checkpointAt > (state.lastCheckpointAt || 0);
-    if (checkpointAt > (state.lastCheckpointAt || 0)) state.lastCheckpointAt = checkpointAt;
-    if (hasProgress) {
-      state.progressMarks = (state.progressMarks || 0) + 1;
-      state.stagnantCycles = 0;
-    } else {
-      state.stagnantCycles = (state.stagnantCycles || 0) + 1;
+      state.retryDifferences.push(difference[0].slice(0, 300));
+      state.retryDifferences = state.retryDifferences.slice(-10);
     }
-    this.setRun(ctx.sessionKey, state);
-    // 第二卡触发：连续停滞达到上限，只许输出停滞报告并暂停，不许继续烧。
-    if ((state.stagnantCycles || 0) >= STAGNATION_LIMIT) {
-      return {
-        action: 'revise',
-        reason: `长跑档连续 ${state.stagnantCycles} 轮无可验证增量，强制停滞报告`,
-        retry: {
-          instruction: '禁止继续空转。你已连续多轮没有产出新的可验证产物。下一轮只做一件事：输出停滞报告——当前卡在哪一步、已经试过什么、缺什么权限或关键信息、建议用户怎么决策——然后附 <!-- pinkie-longrun-pause --> 结束。不得再重复已经失败的路径。',
-          idempotencyKey: `pinkie-marathon-stall-${ctx.runId || ctx.sessionKey || 'run'}-${state.stagnantCycles}`,
-          maxAttempts: 2,
-        },
-      };
+
+    const fingerprint = deliberationFingerprint(state);
+    if (state.lastProgressFingerprint) {
+      state.noProgressCycles = fingerprint === state.lastProgressFingerprint
+        ? (state.noProgressCycles || 0) + 1
+        : 0;
     }
-    return {
+    state.lastProgressFingerprint = fingerprint;
+    state.lastRetryRunId = runId;
+    if (state.noProgressCycles >= NO_PROGRESS_LIMIT) {
+      state.stopRequested = true;
+      state.stopReason = '连续两次续跑没有新增测试结果、文件变化或来源证据，系统已停止本轮。';
+      state.active = false;
+      state.lastRetryDecision = null;
+      state.stopRunId = runId;
+      state.stopReportPending = true;
+      state.lastEventAt = Date.now();
+      this.setRun(state.parentSessionKey, state);
+      return;
+    }
+    const maxAttempts = TIER_RETRY_LIMITS[state.tier] || TIER_RETRY_LIMITS.boost;
+    if (state.retryAttempts >= maxAttempts) {
+      state.stopRequested = true;
+      state.stopReason = '已达到本档续跑上限 ' + maxAttempts + ' 次，系统已停止本轮。';
+      state.active = false;
+      state.lastRetryDecision = null;
+      state.stopRunId = runId;
+      state.stopReportPending = true;
+      state.lastEventAt = Date.now();
+      this.setRun(state.parentSessionKey, state);
+      return;
+    }
+    state.retryAttempts += 1;
+    const safeDecision = {
       action: 'revise',
-      reason: '长跑档仍有未完成闭环',
+      reason: '当前任务还需要补充实际结果，请回到用户原始目标继续。',
       retry: {
-        instruction: `不要结束。继续执行尚未完成的验收项，调用需要的工具并验证真实结果。本轮必须产出至少一个新的可验证产物（改动的文件、命令真实输出或测试通过结果），在回复中加 <!-- pinkie-progress: 产物与验证结果一句话 --> 标记申报，完成里程碑时更新 ${checkpointPath || '当前会话专属检查点'}；绝不能读写别的会话检查点，禁止重复已完成的副作用。全部完成并验证后正常总结并附完成标记；确实缺少用户新权限或关键选择时说明具体阻塞并附暂停标记。连续无新增产物会被强制暂停。`,
-        idempotencyKey: `pinkie-marathon-${ctx.runId || ctx.sessionKey || 'run'}`,
-        maxAttempts: 64,
+        instruction: '继续处理用户原始任务。下一步必须与上次不同，并在开始前用一句短进度说明“这次和上次不同：换思路/换信息/换模型 + 具体变化”。用新结果推进；不要重复没有新结果的做法。若已无法推进，说明卡点、已尝试的方法和缺失信息，并如实报告未完成。',
+        idempotencyKey: 'pinkie-task-progress-' + hashForAudit(state.parentSessionKey + ':' + runId).slice(0, 16),
+        maxAttempts,
       },
     };
+    state.lastRetryDecision = safeDecision;
+    state.lastEventAt = Date.now();
+    this.setRun(state.parentSessionKey, state);
+    return safeDecision;
+  }
+
+  stopReport(ctx = {}) {
+    const sessionKey = String(ctx.sessionKey || '');
+    const state = this.getRun(this.resolveParent(sessionKey));
+    if (!state?.stopRequested || !state.stopReportPending || sessionKey !== state.parentSessionKey) return '';
+    if (state.stopRunId && ctx.runId && state.stopRunId !== String(ctx.runId)) return '';
+    const methods = state.retryDifferences.length
+      ? state.retryDifferences.join('；')
+      : [...new Set(verificationEvidence(state).map(entry => entry.name).filter(Boolean))].join('、') || '尚未取得新的工具结果';
+    return '本轮未完成：' + state.stopReason + '\n已尝试：' + methods
+      + '\n当前流程：' + workflowProgress(state).label
+      + '。请查看本轮已有结果后，再决定下一步。';
+  }
+
+  stopForHonestIncomplete(state, reply, audit, ctx = {}) {
+    if (!isHonestIncomplete(reply)) return false;
+    const runId = String(ctx.runId || '');
+    state.stopRequested = true;
+    state.stopReason = audit.missing.length
+      ? '已如实报告本轮未完成；仍缺：' + audit.missing.join('；')
+      : '已如实报告本轮未完成；阻塞说明：' + String(reply || '').trim().slice(0, 300);
+    state.active = false;
+    state.stopRunId = runId;
+    state.stopReportPending = true;
+    state.lastEventAt = Date.now();
+    this.setRun(state.parentSessionKey, state);
+    return true;
+  }
+
+  previewFinalize(event = {}, ctx = {}) {
+    const state = this.getRun(ctx.sessionKey || '');
+    if (!state || ctx.sessionKey !== state.parentSessionKey || state.stopRequested) return;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    captureWorkflowFinalClaims(state, reply);
+    this.setRun(state.parentSessionKey, state);
+    const audit = auditDeliberation(state, reply);
+    if (this.stopForHonestIncomplete(state, reply, audit, ctx)) return;
+    if (audit.complete) return;
+    return this.prepareRetryDecision({
+      action: 'revise',
+      reason: '当前流程尚有未完成项，请继续处理用户原始目标。',
+      retry: {
+        instruction: '继续处理用户原始任务。下一步必须与上次不同，并在开始前用一句短进度说明“这次和上次不同：换思路/换信息/换模型 + 具体变化”。优先补上实际结果；若无法推进，说明卡点、已尝试的方法和缺失信息，并如实报告未完成。',
+        idempotencyKey: 'pinkie-task-progress-' + hashForAudit(ctx.sessionKey || '').slice(0, 16),
+        maxAttempts: TIER_RETRY_LIMITS[state.tier] || TIER_RETRY_LIMITS.boost,
+      },
+    }, event, ctx);
+  }
+
+  finalize(event = {}, ctx = {}) {
+    const state = this.getRun(ctx.sessionKey || '');
+    if (!state || ctx.sessionKey !== state.parentSessionKey || state.stopRequested) return;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    captureWorkflowFinalClaims(state, reply);
+    this.setRun(state.parentSessionKey, state);
+    const audit = auditDeliberation(state, reply);
+    if (this.stopForHonestIncomplete(state, reply, audit, ctx)) return;
+    if (audit.complete) return;
+    return this.prepareRetryDecision({
+      action: 'revise',
+      reason: '当前流程尚有未完成项，请继续处理用户原始目标。',
+      retry: {
+        instruction: '继续处理用户原始任务。下一步必须与上次不同，并在开始前用一句短进度说明“这次和上次不同：换思路/换信息/换模型 + 具体变化”。优先补上实际结果；若无法推进，说明卡点、已尝试的方法和缺失信息，并如实报告未完成。',
+        idempotencyKey: 'pinkie-task-progress-' + hashForAudit(ctx.sessionKey || '').slice(0, 16),
+        maxAttempts: TIER_RETRY_LIMITS[state.tier] || TIER_RETRY_LIMITS.boost,
+      },
+    }, event, ctx);
   }
 
   finishTurn(ctx = {}, event = {}) {
     const sessionKey = ctx.sessionKey || '';
     const state = this.getRun(sessionKey);
     if (state && sessionKey === state.parentSessionKey) {
-      const audit = auditDeliberation(state);
+      const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+      captureWorkflowFinalClaims(state, reply);
+      const audit = auditDeliberation(state, reply);
+      if (this.stopForHonestIncomplete(state, reply, audit, ctx)) return;
       if (!audit.complete) return;
       // sessions_yield / toolUse 只是阶段结束，不是用户可见的最终交付。
       // 只有真正存在一条可展示的 assistant 终稿，档位才允许变成 done。
@@ -4543,6 +5018,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       state.active = false;
       state.lastEventAt = Date.now();
       state.endedAt = state.lastEventAt;
+      if (state.stopRequested) state.stopReportPending = false;
       this.setRun(sessionKey, state);
       this.lastRuns.set(sessionKey, this.status(sessionKey));
     }
@@ -4758,6 +5234,7 @@ export default {
     const cleKk = new CleKkSupervisor({integrity, logger: api.logger});
     cleKk.setRetryScheduler(params => watchdog.scheduleIntegrityRetry(params));
     cleKk.setRetryCanceller(sessionKey => watchdog.cancel(sessionKey));
+    cleKk.setRetryLimitResolver((sessionKey, decision) => watchdog.integrityRetryLimit(sessionKey, decision));
     const tierContinuation = new TierContinuation(
       api,
       sessionKey => architecture.status(sessionKey),
@@ -4768,6 +5245,7 @@ export default {
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
+    api.registerTool?.(ctx => createLearningNotesTool(learning, ctx), {name: 'learning_notes'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     registerLearningGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
@@ -4954,13 +5432,23 @@ export default {
     api.on('model_call_ended', event => watchdog.modelEnded(event));
     api.on('llm_output', event => usage.record(event));
     api.on('before_agent_finalize', (event, ctx) => {
+      if (architecture.stopReport(ctx)) {
+        cleKk.retireRetry(ctx.sessionKey || '');
+        return;
+      }
       // Always run both gates.  The architecture gate checks child/task
       // completion; the integrity gate checks real tool/evidence provenance.
       // Previously `a || b` skipped the second gate whenever the first one
       // returned a revision, leaving a blind spot in mixed failures.
       const architectureDecision = architecture.finalize(event, ctx);
+      const stoppedReport = architecture.stopReport(ctx);
+      if (stoppedReport) {
+        cleKk.retireRetry(ctx.sessionKey || '');
+        return;
+      }
       const integrityDecision = cleKk.finalizeDecision(event, ctx, {verifyExternal: false});
-      return cleKk.recordFinalize(event, ctx, architectureDecision || integrityDecision);
+      const decision = architecture.prepareRetryDecision(architectureDecision || integrityDecision, event, ctx);
+      return cleKk.recordFinalize(event, ctx, decision);
     });
     // OpenClaw intentionally ignores before_agent_finalize revisions after a
     // deterministic side effect.  This final transcript hook is synchronous
@@ -4968,6 +5456,13 @@ export default {
     // being persisted while the retry is queued.
     api.on('before_message_write', (event, ctx) => {
       const message = event?.message || {};
+      const stoppedReport = architecture.stopReport(ctx);
+      if (stoppedReport && message.role === 'assistant' && isTerminalAssistantMessage(message)) {
+        cleKk.cancel(ctx.sessionKey || event?.sessionKey || '', 'deep_think_stopped');
+        return {
+          message: {...message, stopReason: 'stop', content: [{type: 'text', text: stoppedReport}]},
+        };
+      }
       if (message.role !== 'assistant' || !isTerminalAssistantMessage(message)) {
         return cleKk.beforeMessageWrite(event, ctx);
       }
@@ -4987,11 +5482,19 @@ export default {
       // independent Skill verifier here too; waiting until finalize is too
       // late on hosts that ignore revisions after side effects.
       const integrityDecision = cleKk.finalizeDecision(candidate, ctx, {verifyExternal: false});
-      return cleKk.beforeMessageWrite(event, ctx, architectureDecision || integrityDecision, true);
+      const decision = architecture.prepareRetryDecision(architectureDecision || integrityDecision, candidate, ctx);
+      return cleKk.beforeMessageWrite(event, ctx, decision, true);
     }, {priority: -20000});
     // Delivery has its own hook and catches channels that render a final reply
     // without first appending it to the session JSONL.
-    api.on('reply_payload_sending', (event, ctx) => cleKk.beforeReplyPayload(event, ctx), {priority: -20000});
+    api.on('reply_payload_sending', (event, ctx) => {
+      const stoppedReport = architecture.stopReport(ctx);
+      if (stoppedReport) {
+        cleKk.cancel(ctx.sessionKey || event?.sessionKey || '', 'deep_think_stopped');
+        return {payload: {text: stoppedReport}};
+      }
+      return cleKk.beforeReplyPayload(event, ctx);
+    }, {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
       if (/:subagent:/.test(ctx.sessionKey || '')) {
         const parent = architecture.resolveParent(ctx.sessionKey);

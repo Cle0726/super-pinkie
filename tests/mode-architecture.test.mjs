@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
-import plugin,{CleKkAuditLog,CleKkSupervisor,CompactionHandoffStore,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,buildDeliberationPlan,createCuaComputerTool,deliberationRequirements,isTransientFailure,modeForContext,sessionCheckpointRelative} from '../services/mode-architecture/index.mjs';
+import plugin,{CleKkAuditLog,CleKkSupervisor,CompactionHandoffStore,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,TIER_RETRY_LIMITS,buildDeliberationPlan,classifyDeliberationTask,createCuaComputerTool,deliberationRequirements,hasEvidenceBackedCritique,isTransientFailure,modeForContext,sessionCheckpointRelative,validateJudgeSelection} from '../services/mode-architecture/index.mjs';
 
 function workspace(t,label){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mode-'));
@@ -124,10 +124,17 @@ test('compaction handoff rejects tampering and only resumes the explicit native 
   assert.equal(handoffs.read(clean.sessionKey),null);
 });
 
-test('learn while doing is one separate system module in every mode',t=>{
+test('tool progress rules and learn-while-doing apply independently in all five modes',t=>{
+  const completionClaim=/(?:100%|全部|完整|真正|真实|已经|已|成功).{0,24}(?:完成|交付|提交|生成|下载|发布|执行|修复|处理)|(?:完成|交付|提交|生成|下载|发布|执行|修复|处理).{0,16}(?:完毕|成功|完成)/i;
+  const deliveryClaim=/(?:搞定|处理好了|弄好了|做完了|做成了|已按要求|可以用了|没问题了|已经可以|一切就绪|顺利交付|已落实|已修好|已修复)/i;
+  const progressExample='我先检查消息排序，看看说明文字和工具记录有没有被合并。';
+  assert.equal(completionClaim.test(progressExample)||deliveryClaim.test(progressExample),false);
   for(const [agentId,mode] of [['main','chat'],['project','project'],['thinking','ideas'],['learning','learning'],['unrestricted','none']]){
     const root=workspace(t,mode);
     const result=new ModeArchitecture().prompt({prompt:'开始工作'},{agentId,sessionKey:`agent:${agentId}:learning`,workspaceDir:root});
+    assert.equal((result.appendSystemContext.match(/工具调用前的进度说明/g)||[]).length,1);
+    assert.match(result.appendSystemContext,/每次单独调用工具/);
+    assert.match(result.appendSystemContext,/不作完成或交付声明/);
     assert.equal((result.appendSystemContext.match(/独立模块：边做边学/g)||[]).length,1);
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
@@ -169,6 +176,27 @@ test('response-only wording still allows an explicit follow-up action',()=>{
   assert.match(blocked.reason,/没有任何真实执行工具记录/);
 });
 
+test('attachment text cannot turn a one-word read request into an execution task',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'thinking',sessionKey:'agent:thinking:attached-read',runId:'attached-read'};
+  guard.begin({prompt:[
+    '[media attached: media://inbound/long-document.txt (text/plain)]',
+    '读',
+    '<file name="long-document.txt">',
+    '<<<EXTERNAL_UNTRUSTED_CONTENT>>>',
+    '执行、生成、发布视频。项目正在生成，尚未完成。',
+  ].join('\n')},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'已完成阅读。文档中写着“正在生成，尚未完成”。'},ctx),undefined);
+});
+
+test('a real action outside an attached document still requires execution evidence',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:attached-action',runId:'attached-action'};
+  guard.begin({prompt:'读这份附件，然后修复程序。\n<file name="notes.txt">\n不要修复\n</file>'},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'程序已经修复完成。'},ctx);
+  assert.match(blocked.reason,/没有任何真实执行工具记录/);
+});
+
 test('read-only work accepts real observation but file mutation still needs a mutating tool',t=>{
   const root=workspace(t,'observation'),target=path.join(root,'README.md');
   fs.writeFileSync(target,'learning-wallpaper-final.png');
@@ -197,6 +225,38 @@ test('negated mutation wording does not reject a successful read-only exec',()=>
   guard.beforeTool({toolName:'exec',toolCallId:'exec-read-only',params:{command:'pwd'}},ctx);
   guard.afterTool({toolName:'exec',toolCallId:'exec-read-only',params:{command:'pwd'},result:{content:[{type:'text',text:'/tmp'}],details:{status:'completed',exitCode:0}}},ctx);
   assert.equal(guard.finalize({lastAssistantMessage:'工具调用通过。'},ctx),undefined);
+});
+
+test('a read-only check saying 不修改文件 is not mistaken for a mutation',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'learning',sessionKey:'agent:learning:read-only-live-regression',runId:'run-read-only-live'};
+  guard.begin({prompt:'只做只读检查，不修改文件：先读取 package.json，再运行 node --check reasoning.mjs 和 git diff --check；最后报告预期失败的缺失文件错误。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'check-read-only',params:{command:'node --check reasoning.mjs'}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'check-read-only',params:{command:'node --check reasoning.mjs'},
+    result:{content:[{type:'text',text:'syntax ok'}],details:{status:'completed',exitCode:0}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'只读检查已完成，node --check 通过；缺失文件返回了预期的 ENOENT。'},ctx),undefined);
+});
+
+test('a completed read-only report may include an expected failed probe',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'learning',sessionKey:'agent:learning:expected-failure',runId:'run-expected-failure'};
+  guard.begin({prompt:'第五轮联合回归，标记 UI_LIVE_E_1057。只做只读检查，不修改文件：读取 /Users/Admin/.openclaw/workspace-unrestricted/super-pinkie/services/mode-architecture/package.json 的 scripts、dependencies，以及 reasoning.mjs 前 60 行；实际运行 node --check services/mode-architecture/reasoning.mjs、node --test tests/resume-ui.test.cjs、git diff --check；尝试读取不存在的 __missing_ui_probe_E__.txt，把 ENOENT 记录为预期失败并继续；最后检查 http://127.0.0.1:18789/readyz 的 HTTP 状态。工具全部结束后给完整中文总结，首行必须写 UI_LIVE_E_1057，准确说明成功项、预期失败项和测试通过数。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'},
+    result:{content:[{type:'text',text:'syntax ok'}],details:{status:'completed',exitCode:0}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'所有检查已完成：语法检查通过；不存在文件的探测按预期失败并返回 ENOENT。预期失败不代表任务未完成。'},ctx),undefined);
+});
+
+test('a separate positive write request still needs a real effect after a negated clause',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'learning',sessionKey:'agent:learning:read-then-create',runId:'run-read-then-create'};
+  guard.begin({prompt:'先只读检查，不修改原文件；然后创建 reports/result.txt。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'read-only',params:{command:'pwd'}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'read-only',params:{command:'pwd'},
+    result:{content:[{type:'text',text:'/tmp'}],details:{status:'completed',exitCode:0}}},ctx);
+  const blocked=guard.finalize({lastAssistantMessage:'已全部完成。'},ctx);
+  assert.equal(blocked.action,'revise');
+  assert.match(blocked.reason,/没有主机确认的文件变化/);
 });
 
 test('read-only permission diagnostics pass on real host evidence without running an unrelated Skill workflow',async t=>{
@@ -246,6 +306,14 @@ test('global integrity gate rejects contradictory completed and still-running cl
   const blocked=guard.finalize({lastAssistantMessage:'视频已经完整完成，客户端仍在后台生成中。'},ctx);
   assert.equal(blocked.action,'revise');
   assert.match(blocked.reason,/状态自相矛盾/);
+});
+
+test('a completed stage with later work in progress is not an overall-completion contradiction',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'learning',sessionKey:'agent:learning:stage-progress',runId:'stage-progress'};
+  guard.begin({prompt:'请调用工具读取报告并总结'},ctx);
+  guard.afterTool({toolName:'read',result:'报告第一部分内容'},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'已完成第一部分阅读，第二部分正在核对。'},ctx),undefined);
 });
 
 test('global integrity gate cannot finalize directly after a failed tool',()=>{
@@ -451,6 +519,55 @@ test('a valid retry final clears the old rejection before transcript persistence
   assert.equal(supervisor.beforeMessageWrite({message:validFinal},ctx,undefined,true),undefined);
   assert.equal(supervisor.hasPending(ctx.sessionKey),false);
   assert.equal(await supervisor.beforeReplyPayload({kind:'final',payload:{text:'项目文件已经创建完成。'}},ctx),undefined);
+});
+
+test('the last rejected retry writes and delivers an honest final instead of silence',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-last-retry-fallback-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  const ctx={agentId:'project',sessionKey:'agent:project:last-retry-fallback',runId:'attempt-24'};
+  supervisor.begin({prompt:'请创建文件并验证'},ctx);
+  supervisor.turns.get(ctx.sessionKey).retryAttempts=24;
+  const decision=new CompletionIntegrityGuard().revise(ctx.sessionKey,'没有真实文件变化');
+  const candidate={role:'assistant',stopReason:'stop',content:[{type:'text',text:'文件已创建完成。'}]};
+  const result=supervisor.beforeMessageWrite({message:candidate},ctx,decision,true);
+  const safe=result?.message?.content?.[0]?.text;
+  assert.match(safe,/本轮未完成/);
+  assert.doesNotMatch(safe,/已创建完成/);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),false);
+  assert.equal(supervisor.recordFinalize({lastAssistantMessage:'文件已创建完成。'},ctx,decision),undefined);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),false);
+  const delivery=await supervisor.beforeReplyPayload({kind:'final',payload:{text:'文件已创建完成。'}},ctx);
+  assert.equal(delivery.payload.text,safe);
+});
+
+test('a higher-tier retry budget is not cut off at the base-tier limit',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-tier-retry-limit-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  supervisor.setRetryLimitResolver(()=>48);
+  supervisor.setRetryScheduler(async()=>true);
+  const ctx={agentId:'thinking',sessionKey:'agent:thinking:tier-retry-limit',runId:'attempt-24'};
+  supervisor.begin({prompt:'请创建文件并验证'},ctx);
+  supervisor.turns.get(ctx.sessionKey).retryAttempts=24;
+  const decision=new CompletionIntegrityGuard().revise(ctx.sessionKey,'没有真实文件变化');
+  const candidate={role:'assistant',stopReason:'stop',content:[{type:'text',text:'文件已创建完成。'}]};
+  assert.deepEqual(supervisor.beforeMessageWrite({message:candidate},ctx,decision,true),{block:true});
+  assert.equal(supervisor.hasPending(ctx.sessionKey),true);
+});
+
+test('a stale execution rejection cannot keep an attached reading turn silent',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-attached-read-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const supervisor=new CleKkSupervisor({audit:new CleKkAuditLog(root)});
+  const ctx={agentId:'thinking',sessionKey:'agent:thinking:attached-retry',runId:'retry-run'};
+  supervisor.begin({prompt:'[media attached: media://inbound/document.txt (text/plain)]\n读\n<file name="document.txt">\n生成视频\n'},ctx);
+  supervisor.recordFinalize({lastAssistantMessage:'我读过了。'},ctx,
+    {action:'revise',reason:'旧版把附件内容误判为执行任务'});
+  assert.equal(supervisor.hasPending(ctx.sessionKey),true);
+  const message={role:'assistant',stopReason:'stop',content:[{type:'text',text:'我读过了，主要讲的是视频方案。'}]};
+  assert.equal(supervisor.beforeMessageWrite({message},ctx),undefined);
+  assert.equal(supervisor.hasPending(ctx.sessionKey),false);
 });
 
 test('CLE Kk never shows its internal watchdog/control text',async()=>{
@@ -1138,275 +1255,433 @@ test('an artifact mutation during asynchronous verification invalidates its resu
   assert.equal(guard.runs.get(ctx.sessionKey).verification,null);
 });
 
-test('deep-think tiers are bounded and mode-aware',()=>{
-  const base=buildDeliberationPlan('base','project');
-  assert.match(base,/Planner ×1/);assert.match(base,/Solver ×3~5/);assert.match(base,/Critic ×2~3/);assert.match(base,/Judge ×1/);
-  assert.match(base,/不启用六项升级/);assert.match(base,/总派生上限 20/);
-  assert.match(buildDeliberationPlan('boost','project'),/真实执行验证.*递归分解/);
-  assert.match(buildDeliberationPlan('boost','ideas'),/反批评.*两条独立完整流水线/);
-  assert.match(buildDeliberationPlan('boost','none'),/可执行产物优先/);
-  const full=buildDeliberationPlan('full','none');
-  assert.match(full,/全部六项升级/);assert.match(full,/执行验证仅在存在可验证产物/);assert.match(full,/总派生上限 96/);
-  const marathon=buildDeliberationPlan('marathon','project');
-  assert.match(marathon,/无人值守的长时任务/);assert.match(marathon,/真正独立的子任务才并行/);
-  assert.match(marathon,/pinkie-longrun-complete/);assert.match(marathon,/总派生上限 512/);
-  assert.match(base,/后端硬验收/);assert.match(full,/真实验证×2/);assert.match(marathon,/反批评×3/);
-  assert.match(base,/交付契约/);assert.match(base,/不得把两者一律写成研究报告/);
-  assert.match(full,/主代理必须继续调用真实工具完成修改\/产物并运行验证/);
-  assert.match(base,/不得汇报角色数量、流水线、打回轮次或审议过程/);
-  assert.doesNotMatch(base,/报告实际使用的角色数/);
-  assert.deepEqual(deliberationRequirements('base','project').roles,{planner:1,solver:3,critic:2,judge:1});
-  assert.equal(deliberationRequirements('boost','none').dynamicUpgradeKinds,2);
-});
-
-function completeRole(runtime,ctx,role,count){
-  for(let i=0;i<count;i+=1){
-    const child=`${ctx.sessionKey}:subagent:${role}-${i}`;
-    runtime.spawned({childSessionKey:child,label:`${role} ${i}`,mode:'run',agentId:ctx.agentId,runId:`run-${role}-${i}`},{requesterSessionKey:ctx.sessionKey});
-    runtime.ended({targetSessionKey:child,targetKind:'subagent',reason:'completed',outcome:'ok',resultText:`${role} ${i} 已完成独立分析：核对了原始要求、真实现场和边界条件，并给出可执行步骤、风险点以及对应的机械验证办法。`});
-  }
+function setTierTask(runtime, ctx, prompt) {
+  const state = runtime.getRun(ctx.sessionKey);
+  state.taskPrompt = prompt;
+  state.taskType = classifyDeliberationTask(prompt);
+  runtime.setRun(ctx.sessionKey, state);
+  return state;
 }
 
-test('every tier blocks a prose-only answer until real child runs complete',()=>{
-  for(const tier of ['base','boost','full','marathon']){
-    const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:`agent:project:${tier}`,runId:`run-${tier}`};
-    runtime.arm(ctx.sessionKey,tier);
-    const gate=runtime.finalize({lastAssistantMessage:'几位角色已经分析完毕。'},ctx);
-    assert.equal(gate.action,'revise');assert.match(gate.reason,/真实调用未达标/);
-    assert.ok(gate.retry.maxAttempts>=5);
+test('tier limits and task routing match the new four-level design', () => {
+  assert.deepEqual(TIER_RETRY_LIMITS, {base: 3, boost: 6, full: 10, marathon: 40});
+  assert.equal(classifyDeliberationTask('请修复这个 bug 并运行测试'), 'implementation');
+  assert.equal(classifyDeliberationTask('求方程 x + 4 = 9'), 'standard_answer');
+  assert.equal(classifyDeliberationTask('比较这两个方案的成本'), 'tradeoff');
+  assert.equal(classifyDeliberationTask('核实这个事实并给出处'), 'fact_check');
+  assert.equal(classifyDeliberationTask('请解释闭包是什么'), 'simple');
+
+  assert.deepEqual(deliberationRequirements('base', 'project', 'standard_answer').roles, {solver: 2});
+  assert.deepEqual(deliberationRequirements('boost', 'project', 'tradeoff').roles, {solver: 2});
+  assert.deepEqual(deliberationRequirements('full', 'project', 'standard_answer').roles, {solver: 2});
+  assert.equal(deliberationRequirements('full', 'project', 'standard_answer').maxSolvers, 3);
+  assert.deepEqual(deliberationRequirements('marathon', 'project', 'standard_answer').roles, {solver: 2});
+  assert.equal(deliberationRequirements('marathon', 'project', 'standard_answer').maxSolvers, 3);
+  assert.deepEqual(deliberationRequirements('boost', 'project', 'implementation').roles, {});
+  assert.equal(deliberationRequirements('boost', 'project', 'implementation').evidenceKind, 'test');
+  assert.equal(deliberationRequirements('full', 'project', 'fact_check').evidenceKind, 'sources');
+  assert.equal(deliberationRequirements('base', 'project', 'fact_check').needsEvidence, true);
+  assert.equal(deliberationRequirements('full', 'project', 'implementation').optionalRoles.critic, 0);
+  assert.equal(deliberationRequirements('full', 'project', 'standard_answer').optionalRoles.critic, 1);
+  assert.equal(deliberationRequirements('full', 'project', 'tradeoff').optionalRoles.critic, 1);
+  assert.equal(deliberationRequirements('boost', 'project', 'implementation').optionalRoles.critic, 0);
+  assert.equal(deliberationRequirements('marathon', 'project', 'implementation').optionalRoles.critic, 0);
+  assert.equal(Object.hasOwn(deliberationRequirements('full', 'project', 'implementation').roles, 'countercritic'), false);
+
+  const simpleRuntime = new ModeArchitecture();
+  const simpleCtx = {agentId: 'main', sessionKey: 'agent:main:no-fan-out', runId: 'simple'};
+  simpleRuntime.arm(simpleCtx.sessionKey, 'base');
+  setTierTask(simpleRuntime, simpleCtx, '请解释闭包是什么');
+  assert.equal(simpleRuntime.beforeTool({toolName: 'sessions_spawn', params: {label: '求解'}}, simpleCtx).block, true);
+
+  const implementationCtx = {agentId: 'project', sessionKey: 'agent:project:no-code-debate', runId: 'implementation'};
+  simpleRuntime.arm(implementationCtx.sessionKey, 'full');
+  setTierTask(simpleRuntime, implementationCtx, '修复这个 bug 并运行测试');
+  assert.equal(simpleRuntime.beforeTool({toolName: 'sessions_spawn', params: {label: '求解'}}, implementationCtx).block, true);
+
+  const plan = buildDeliberationPlan('full', 'project', 'checkpoint.md', 'implementation');
+  assert.match(plan, /写代码\/修 bug/);
+  assert.match(plan, /不同解法/);
+  assert.match(plan, /反批评角色已停用/);
+  assert.doesNotMatch(plan, /COMPLETION_TRUTH_RULES|completionClaimed|delivery_guard|verify_completion\.py/);
+});
+
+test('solver children get isolated original prompts and distinct methods, with a hard cap of three', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:isolated-solvers', runId: 'solve'};
+  runtime.arm(ctx.sessionKey, 'full');
+  const state = setTierTask(runtime, ctx, '求解 x² = 9，给出所有实数解');
+  state.parentGuess = '不要传给子代理的父会话猜测';
+  runtime.setRun(ctx.sessionKey, state);
+
+  const first = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's1', runId: 'solve', params: {label: '求解', task: '带入父会话推测'}}, ctx);
+  const second = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's2', runId: 'solve', params: {label: '求解', task: '沿用上一个答案'}}, ctx);
+  assert.equal(first.params.context, 'isolated');
+  assert.equal(second.params.context, 'isolated');
+  assert.match(first.params.task, /候选方案 A/);
+  assert.match(second.params.task, /候选方案 B/);
+  assert.match(first.params.task, /第一性原理/);
+  assert.match(second.params.task, /反向拆解/);
+  assert.match(first.params.task, /求解 x² = 9/);
+  assert.doesNotMatch(first.params.task, /父会话猜测|带入父会话推测/);
+  assert.notEqual(first.params.task, second.params.task);
+  const third = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's3', runId: 'solve', params: {label: '求解', task: '第三个'}}, ctx);
+  const fourth = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's4', runId: 'solve', params: {label: '求解', task: '第四个'}}, ctx);
+  assert.equal(third.block, undefined);
+  assert.match(third.params.task, /候选方案 C/);
+  assert.equal(fourth.block, true);
+});
+
+test('failed solver children still consume the three-dispatch ceiling', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:solver-dispatch-cap', runId: 'solver'};
+  runtime.arm(ctx.sessionKey, 'full');
+  setTierTask(runtime, ctx, '求解 x² = 9，给出所有实数解');
+  for (let index = 1; index <= 2; index += 1) {
+    const callId = `s${index}`;
+    const call = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: callId, runId: 'solver', params: {label: '求解'}}, ctx);
+    assert.match(call.params.task, new RegExp(`候选方案 ${index === 1 ? 'A' : 'B'}`));
+    const child = `${ctx.sessionKey}:subagent:solver-${index}`;
+    runtime.spawned({childSessionKey: child, label: call.params.label}, {requesterSessionKey: ctx.sessionKey});
+    runtime.afterTool({toolName: 'sessions_spawn', toolCallId: callId, runId: 'solver'}, ctx);
+    runtime.ended({targetSessionKey: child, outcome: 'error', resultText: '子任务失败'});
+  }
+  const third = runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's3', runId: 'solver', params: {label: '求解'}}, ctx);
+  assert.match(third.params.task, /候选方案 C/);
+  runtime.spawned({childSessionKey: `${ctx.sessionKey}:subagent:solver-3`, label: third.params.label}, {requesterSessionKey: ctx.sessionKey});
+  runtime.afterTool({toolName: 'sessions_spawn', toolCallId: 's3', runId: 'solver'}, ctx);
+  assert.equal(runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 's4', runId: 'solver', params: {label: '求解'}}, ctx).block, true);
+});
+
+test('boost requires actual test or source evidence and reports the selected workflow', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:boost-evidence', runId: 'first'};
+  runtime.arm(ctx.sessionKey, 'boost');
+  setTierTask(runtime, ctx, '修复测试失败的 bug，并运行相关测试');
+  const missing = runtime.finalize({lastAssistantMessage: '修复已完成。'}, ctx);
+  assert.equal(missing.action, 'revise');
+  assert.equal(missing.retry.maxAttempts, 6);
+  assert.doesNotMatch(missing.retry.instruction, /completionClaimed|delivery_guard|verify_completion/);
+
+  runtime.afterTool({
+    toolName: 'exec', runId: 'second',
+    params: {command: 'npm test'},
+    result: {exitCode: 1, stdout: 'Tests: 1 failed'},
+  }, {...ctx, runId: 'second'});
+  runtime.afterTool({
+    toolName: 'edit', runId: 'third',
+    params: {path: 'src/app.js'},
+    result: 'Updated src/app.js',
+  }, {...ctx, runId: 'third'});
+  runtime.afterTool({
+    toolName: 'exec', runId: 'fourth',
+    params: {command: 'npm test'},
+    result: {content: [{type: 'text', text: 'Tests: 4 passed, 0 failed'}]},
+  }, {...ctx, runId: 'fourth'});
+  const state = runtime.getRun(ctx.sessionKey);
+  assert.equal(state.verificationEvidence[0].kind, 'test');
+  assert.equal(runtime.status(ctx.sessionKey).workflow.label, '写代码 / 修 bug');
+  assert.equal(runtime.status(ctx.sessionKey).workflow.stages.find(stage => stage.label === '测试').used, true);
+  const completed = runtime.finalize({
+    lastAssistantMessage: '这次和上次不同：换信息，先复现失败再运行 npm test；测试通过。',
+  }, {...ctx, runId: 'second'});
+  assert.equal(completed, undefined);
+});
+
+test('implementation progress records reproduce, modify, then post-change tests', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:implementation-stages', runId: 'before'};
+  runtime.arm(ctx.sessionKey, 'boost');
+  setTierTask(runtime, ctx, '修复这个 bug 并运行测试');
+
+  runtime.afterTool({toolName: 'exec', params: {command: 'npm test'}, result: {exitCode: 1, stdout: 'Tests: 1 failed'}}, ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).workflow.stages.map(stage => stage.used), [true, false, false]);
+
+  runtime.afterTool({toolName: 'edit', params: {path: 'src/app.js'}, result: 'Updated src/app.js'}, ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).workflow.stages.map(stage => stage.used), [true, true, false]);
+  assert.equal(runtime.finalize({lastAssistantMessage: '修改后还没跑测试。'}, ctx).action, 'revise');
+
+  runtime.afterTool({toolName: 'exec', params: {command: 'npm test'}, result: {exitCode: 0, stdout: 'Tests: 4 passed, 0 failed'}}, {...ctx, runId: 'after'});
+  assert.deepEqual(runtime.status(ctx.sessionKey).workflow.stages.map(stage => stage.used), [true, true, true]);
+  assert.equal(runtime.finalize({lastAssistantMessage: '这次和上次不同：换信息，修改后重新运行 npm test；4 项通过。'}, {...ctx, runId: 'retry'}), undefined);
+});
+
+test('honest incomplete implementation stops with the missing evidence instead of retrying', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:honest-incomplete', runId: 'blocked'};
+  runtime.arm(ctx.sessionKey, 'boost');
+  setTierTask(runtime, ctx, '修复这个 bug 并运行测试');
+  runtime.afterTool({toolName: 'exec', params: {command: 'npm test'}, result: {exitCode: 1, stdout: 'Tests: 1 failed'}}, ctx);
+  runtime.afterTool({toolName: 'edit', params: {path: 'src/app.js'}, result: 'Updated src/app.js'}, ctx);
+
+  assert.equal(runtime.previewFinalize({lastAssistantMessage: '本轮未完成：修改后没有可运行的测试环境。'}, ctx), undefined);
+  assert.equal(runtime.status(ctx.sessionKey).active, false);
+  assert.equal(runtime.status(ctx.sessionKey).complete, false);
+  assert.match(runtime.status(ctx.sessionKey).stopReason, /缺少本轮测试命令及结果/);
+  assert.match(runtime.stopReport(ctx), /本轮未完成/);
+  assert.match(runtime.stopReport(ctx), /已尝试/);
+
+  const simple = new ModeArchitecture();
+  const simpleCtx = {agentId: 'main', sessionKey: 'agent:main:honest-incomplete-simple', runId: 'simple'};
+  simple.arm(simpleCtx.sessionKey, 'base');
+  setTierTask(simple, simpleCtx, '请解释闭包是什么');
+  simple.previewFinalize({lastAssistantMessage: '本轮未完成：还缺少问题里的关键定义。'}, simpleCtx);
+  assert.equal(simple.status(simpleCtx.sessionKey).complete, false);
+  assert.equal(simple.status(simpleCtx.sessionKey).phase, 'stopped');
+});
+
+test('workflow panel reports simple answers and completed tradeoff stages accurately', () => {
+  const runtime = new ModeArchitecture();
+  const simple = {agentId: 'main', sessionKey: 'agent:main:simple-panel', runId: 'simple'};
+  runtime.arm(simple.sessionKey, 'base');
+  setTierTask(runtime, simple, '请解释闭包是什么');
+  runtime.finishTurn(simple, {success: true, lastAssistantMessage: '闭包会保留定义时的变量环境。'});
+  assert.equal(runtime.status(simple.sessionKey).workflow.stages[0].used, true);
+
+  const tradeoff = {agentId: 'project', sessionKey: 'agent:project:tradeoff-panel', runId: 'tradeoff'};
+  runtime.arm(tradeoff.sessionKey, 'base');
+  const state = setTierTask(runtime, tradeoff, '比较这两个方案的成本');
+  state.completedRoles.set('solver', 2);
+  runtime.setRun(tradeoff.sessionKey, state);
+  runtime.finishTurn(tradeoff, {success: true, lastAssistantMessage: '我对比了两种方案的成本和代价，请你选择其中一种。'});
+  assert.deepEqual(runtime.status(tradeoff.sessionKey).workflow.stages.map(stage => stage.used), [true, true, true]);
+});
+
+test('fact-check workflow needs two distinct source references and reports uncertainty', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'thinking', sessionKey: 'agent:thinking:fact-check', runId: 'facts'};
+  runtime.arm(ctx.sessionKey, 'full');
+  setTierTask(runtime, ctx, '核实这个事实并给出多个来源和不确定性');
+  runtime.afterTool({toolName: 'web.search', params: {query: 'fact'}, result: 'https://one.example/source 结论 A'}, ctx);
+  assert.equal(runtime.status(ctx.sessionKey).workflow.stages[0].used, false);
+  runtime.afterTool({toolName: 'web.search', params: {query: 'fact'}, result: 'https://two.example/report 结论 B'}, ctx);
+  assert.equal(runtime.status(ctx.sessionKey).workflow.stages[0].used, true);
+  runtime.finishTurn(ctx, {
+    success: true,
+    lastAssistantMessage: '来源一：https://one.example/source；来源二：https://two.example/report。两者一致；截至目前仍有一处无法确认。',
+  });
+  const status = runtime.status(ctx.sessionKey);
+  assert.equal(status.workflow.label, '查事实');
+  assert.equal(status.workflow.stages[1].used, true);
+});
+
+test('tradeoff and fact-check finals cannot finish without their promised user-facing summary', () => {
+  const tradeoff = new ModeArchitecture();
+  const tradeoffCtx = {agentId: 'project', sessionKey: 'agent:project:tradeoff-final'};
+  tradeoff.arm(tradeoffCtx.sessionKey, 'base');
+  const tradeoffState = setTierTask(tradeoff, tradeoffCtx, '比较两个方案并交给我选择');
+  tradeoffState.completedRoles.set('solver', 2);
+  tradeoff.finishTurn(tradeoffCtx, {success: true, lastAssistantMessage: '方案 A 的速度更快；方案 B 的维护成本更低。'});
+  assert.equal(tradeoff.status(tradeoffCtx.sessionKey).complete, false);
+  assert.ok(tradeoff.status(tradeoffCtx.sessionKey).missing.includes('最终答复还没有交给用户选择'));
+
+  const facts = new ModeArchitecture();
+  const factsCtx = {agentId: 'thinking', sessionKey: 'agent:thinking:fact-final'};
+  facts.arm(factsCtx.sessionKey, 'base');
+  setTierTask(facts, factsCtx, '核实这件事并标注来源和不确定性');
+  facts.afterTool({toolName: 'web.search', result: 'https://one.example/source A'}, factsCtx);
+  facts.afterTool({toolName: 'web.search', result: 'https://two.example/source B'}, factsCtx);
+  facts.finishTurn(factsCtx, {
+    success: true,
+    lastAssistantMessage: '来源：https://one.example/source。这个结论目前无法确认。',
+  });
+  assert.equal(facts.status(factsCtx.sessionKey).complete, false);
+  assert.ok(facts.status(factsCtx.sessionKey).missing.includes('最终答复缺少两个来源和不确定性说明'));
+});
+
+test('full-tier criticism without evidence is discarded and no-finding is accepted', () => {
+  assert.equal(hasEvidenceBackedCritique('检查了边界，没有发现问题。'), true);
+  assert.equal(hasEvidenceBackedCritique('这里有一个问题：这个方法可能出错。'), false);
+  assert.equal(hasEvidenceBackedCritique('问题：npm test 输出 not ok 2，复现了空输入时报错。'), true);
+
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:critic-proof'};
+  runtime.arm(ctx.sessionKey, 'full');
+  setTierTask(runtime, ctx, '推导这个复杂问题并核对结果');
+  const rejectedChild = ctx.sessionKey + ':subagent:critic-bad';
+  runtime.spawned({childSessionKey: rejectedChild, label: '批评·1'}, {requesterSessionKey: ctx.sessionKey});
+  runtime.ended({targetSessionKey: rejectedChild, outcome: 'ok', resultText: '这里有一个问题：这个方法可能出错。'});
+  assert.equal(runtime.status(ctx.sessionKey).completedRoles.critic, undefined);
+  const acceptedChild = ctx.sessionKey + ':subagent:critic-clear';
+  runtime.spawned({childSessionKey: acceptedChild, label: '批评·1'}, {requesterSessionKey: ctx.sessionKey});
+  runtime.ended({targetSessionKey: acceptedChild, outcome: 'ok', resultText: '检查了全部边界，没有发现问题。'});
+  assert.equal(runtime.status(ctx.sessionKey).completedRoles.critic, 1);
+  assert.equal(runtime.status(ctx.sessionKey).workflow.stages.find(stage => stage.label === '按需证据审查').used, true);
+});
+
+test('critics wait for candidates and judges wait for reality checks', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:reality-first', runId: 'review'};
+  runtime.arm(ctx.sessionKey, 'full');
+  const state = setTierTask(runtime, ctx, '求方程 x² = 9，给出所有实数解');
+  assert.equal(runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 'critic-early', runId: 'review', params: {label: '批评'}}, ctx).block, true);
+
+  state.childResults.set('candidate-a', {role: 'solver', candidateId: 'A', text: '候选 A 的独立推导，代入后检查方程成立。'});
+  state.childResults.set('candidate-b', {role: 'solver', candidateId: 'B', text: '候选 B 的另一种推导，代入后也检查方程成立。'});
+  state.completedRoles.set('solver', 2);
+  runtime.setRun(ctx.sessionKey, state);
+  assert.equal(runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 'critic-ready', runId: 'review', params: {label: '批评'}}, ctx).block, undefined);
+  assert.equal(runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 'judge-early', runId: 'review', params: {label: '仲裁'}}, ctx).block, true);
+
+  runtime.afterTool({toolName: 'exec', params: {command: 'node -e "check candidates"'}, result: '实际代入检查：两组根都成立。'}, ctx);
+  assert.equal(runtime.beforeTool({toolName: 'sessions_spawn', toolCallId: 'judge-ready', runId: 'review', params: {label: '仲裁'}}, ctx).block, undefined);
+});
+
+test('judge can select only an existing candidate and must cite a real check', () => {
+  const candidates = [
+    {candidateId: 'A', text: '候选 A 推导'},
+    {candidateId: 'B', text: '候选 B 推导'},
+  ];
+  const evidence = [{ok: true, params: 'command: npm test', output: 'npm test: 4 passed, 0 failed'}];
+  const selected = validateJudgeSelection(
+    '选择：候选方案 A\n依据：npm test: 4 passed, 0 failed，候选 A 的验算通过。',
+    candidates,
+    evidence,
+  );
+  assert.deepEqual(selected, {ok: true, selected: 'A'});
+  assert.equal(validateJudgeSelection(
+    '选择：候选方案 A\n依据：npm test 通过；把候选方案 A 和 B 合并成新方案。',
+    candidates,
+    evidence,
+  ).ok, false);
+  assert.equal(validateJudgeSelection(
+    '选择：候选方案 C\n依据：npm test: 4 passed, 0 failed。',
+    candidates,
+    evidence,
+  ).ok, false);
+});
+
+test('every retry states its difference and two unchanged retries stop with a report', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:stagnation', runId: 'r1'};
+  runtime.arm(ctx.sessionKey, 'base');
+  setTierTask(runtime, ctx, '求方程 x² = 4，并验算两个根');
+  const first = runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx);
+  assert.equal(first.action, 'revise');
+  assert.equal(first.retry.maxAttempts, 3);
+
+  const second = runtime.finalize({
+    lastAssistantMessage: '这次和上次不同：换思路，改用因式分解重新推导。',
+  }, {...ctx, runId: 'r2'});
+  assert.equal(second.action, 'revise');
+  assert.equal(runtime.status(ctx.sessionKey).active, true);
+
+  const third = runtime.finalize({
+    lastAssistantMessage: '这次和上次不同：换信息，重新检查原始方程。',
+  }, {...ctx, runId: 'r3'});
+  assert.equal(third, undefined);
+  assert.equal(runtime.status(ctx.sessionKey).active, false);
+  assert.match(runtime.stopReport({...ctx, runId: 'r3'}), /连续两次续跑没有新增/);
+  assert.match(runtime.stopReport({...ctx, runId: 'r3'}), /已尝试/);
+});
+
+test('a retry without a stated change stops immediately', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:no-change', runId: 'r1'};
+  runtime.arm(ctx.sessionKey, 'base');
+  setTierTask(runtime, ctx, '求方程 x + 1 = 3');
+  assert.equal(runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx).action, 'revise');
+  assert.equal(runtime.finalize({lastAssistantMessage: '我再试一次。'}, {...ctx, runId: 'r2'}), undefined);
+  assert.match(runtime.stopReport({...ctx, runId: 'r2'}), /没有先说明与上次不同/);
+});
+
+test('tiered prompts omit completion-gate internals in all five modes', t => {
+  const modes = [
+    ['main', 'agent:main:prompt-check'],
+    ['project', 'agent:project:prompt-check'],
+    ['thinking', 'agent:thinking:prompt-check'],
+    ['learning', 'agent:learning:prompt-check'],
+    ['unrestricted', 'agent:unrestricted:prompt-check'],
+  ];
+  for (const [agentId, sessionKey] of modes) {
+    const root = workspace(t, agentId);
+    const runtime = new ModeArchitecture();
+    runtime.arm(sessionKey, 'boost');
+    const prompt = runtime.prompt({prompt: '请解释闭包是什么'}, {agentId, sessionKey, workspaceDir: root});
+    assert.doesNotMatch(prompt.appendSystemContext, /全局交付真实性门禁|completionClaimed|delivery_guard|verify_completion\.py/);
+    assert.match(prompt.appendSystemContext, /此问题无需多方案，已直接回答/);
+    assert.equal(runtime.status(sessionKey).workflow.label, '此问题无需多方案，已直接回答');
   }
 });
 
-test('model-authored skip markers cannot bypass a selected tier',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:no-skip',runId:'run-no-skip'};
-  runtime.arm(ctx.sessionKey,'base');
-  const result=runtime.finalize({lastAssistantMessage:'直接完成。 <!-- pinkie-deliberation-skip -->'},ctx);
-  assert.equal(result.action,'revise');assert.match(result.reason,/真实调用未达标/);
+test('gate research is blocked on the deep-think turn and reported as a stop', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:gate-research', runId: 'gate'};
+  runtime.arm(ctx.sessionKey, 'base');
+  setTierTask(runtime, ctx, '请解释闭包是什么');
+  assert.equal(runtime.beforeTool({toolName: 'read_file', params: {path: 'README.md'}}, ctx), undefined);
+  const offTaskRead = runtime.beforeTool({
+    toolName: 'read_file',
+    params: {path: 'services/mode-architecture/index.mjs', query: 'deliberationRequirements'},
+  }, ctx);
+  assert.equal(offTaskRead.block, true);
+  assert.equal(runtime.status(ctx.sessionKey).active, false);
+  assert.match(runtime.stopReport(ctx), /当前操作偏离了原始任务/);
+
+  const targeted = new ModeArchitecture();
+  const targetCtx = {agentId: 'project', sessionKey: 'agent:project:gate-target', runId: 'target'};
+  targeted.arm(targetCtx.sessionKey, 'boost');
+  setTierTask(targeted, targetCtx, '调整 services/mode-architecture/index.mjs 的思考档位流程');
+  assert.equal(targeted.beforeTool({
+    toolName: 'read_file',
+    params: {path: 'services/mode-architecture/index.mjs', query: 'deliberationRequirements'},
+  }, targetCtx), undefined);
+  const gateSymbols = targeted.beforeTool({
+    toolName: 'read_file',
+    params: {path: 'services/mode-architecture/index.mjs', query: 'completionClaimed'},
+  }, targetCtx);
+  assert.equal(gateSymbols.block, true);
+
+  const gateTest = new ModeArchitecture();
+  const testCtx = {agentId: 'project', sessionKey: 'agent:project:gate-test', runId: 'gate-test'};
+  gateTest.arm(testCtx.sessionKey, 'full');
+  setTierTask(gateTest, testCtx, '调整模式架构里的思考档位流程');
+  assert.equal(gateTest.beforeTool({
+    toolName: 'exec_command',
+    params: {command: 'node --test tests/mode-architecture.test.mjs --test-name-pattern="global integrity gate"'},
+  }, testCtx).block, true);
 });
 
-test('empty, canned, and duplicated child answers do not satisfy role counts',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:child-quality'};
-  runtime.arm(ctx.sessionKey,'base');
-  const first=`${ctx.sessionKey}:subagent:one`,second=`${ctx.sessionKey}:subagent:two`;
-  runtime.spawned({childSessionKey:first,label:'求解·1'},{requesterSessionKey:ctx.sessionKey});
-  runtime.ended({targetSessionKey:first,outcome:'ok',resultText:'已完成'});
-  assert.equal(runtime.status(ctx.sessionKey).completedRoles.solver,undefined);
-  const substantive='逐项核对了原需求和真实项目现场，给出了具体文件改动、风险边界、执行顺序以及可以重复运行的验证命令。';
-  runtime.ended({targetSessionKey:first,outcome:'ok',resultText:substantive});
-  runtime.spawned({childSessionKey:second,label:'求解·2'},{requesterSessionKey:ctx.sessionKey});
-  runtime.ended({targetSessionKey:second,outcome:'ok',resultText:substantive});
-  assert.equal(runtime.status(ctx.sessionKey).completedRoles.solver,1);
-  assert.equal(runtime.status(ctx.sessionKey).failedChildren,1);
-});
+test('retry budgets are exact and old active tier records load without duplicate fan-out', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-old-run-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const parent = 'agent:project:old-active';
+  const child = parent + ':subagent:solver-old';
+  const oldStore = new FileRunStore(root);
+  oldStore.set(parent, {
+    tier: 'base', mode: 'project', parentSessionKey: parent, count: 1, limit: 20, active: true,
+    pendingChildren: new Set([child]), completedChildren: new Set(), emptyChildren: new Set(),
+    childRoles: new Map([[child, 'solver']]), childResults: new Map(), reservations: new Map(),
+    childModels: new Map(), modelCounts: new Map(), completedRoles: new Map([['solver', 1]]),
+    failedChildren: 0, token: 'old', model: '', parentRunning: false, lastEventAt: Date.now(),
+  });
+  const runtime = new ModeArchitecture(oldStore);
+  const status = runtime.status(parent);
+  assert.equal(status.active, true);
+  assert.equal(status.pending, 1);
+  assert.equal(status.taskType, 'pending');
+  assert.doesNotThrow(() => runtime.beforeTool({
+    toolName: 'sessions_spawn', params: {label: '求解', task: '重复派发'},
+  }, {agentId: 'project', sessionKey: parent}));
+  assert.equal(runtime.beforeTool({
+    toolName: 'sessions_spawn', params: {label: '求解', task: '重复派发'},
+  }, {agentId: 'project', sessionKey: parent}).block, true);
 
-test('base tier needs completed planner solvers critics and judge, not spawn attempts',()=>{
-  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:gated',runId:'gated'};
-  runtime.arm(ctx.sessionKey,'base');
-  const pending=`${ctx.sessionKey}:subagent:pending`;
-  runtime.spawned({childSessionKey:pending,label:'规划 1',mode:'run',agentId:'project',runId:'pending'},{requesterSessionKey:ctx.sessionKey});
-  assert.match(runtime.finalize({lastAssistantMessage:'done'},ctx).reason,/等待中的子任务 1/);
-  runtime.ended({targetSessionKey:pending,targetKind:'subagent',reason:'failed',outcome:'error'});
-  for(const [role,count] of Object.entries({planner:1,solver:3,critic:2,judge:1}))completeRole(runtime,ctx,role,count);
-  assert.equal(runtime.finalize({lastAssistantMessage:'真实完成'},ctx),undefined);
-});
-
-test('child completion reconciliation is idempotent when both lifecycle events arrive',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:idempotent'};
-  runtime.arm(ctx.sessionKey,'base');
-  const child=`${ctx.sessionKey}:subagent:planner`;
-  runtime.spawned({childSessionKey:child,label:'规划·1'}, {requesterSessionKey:ctx.sessionKey});
-  runtime.ended({targetSessionKey:child,outcome:'ok'});
-  assert.equal(runtime.status(ctx.sessionKey).pending,0);
-  assert.equal(runtime.status(ctx.sessionKey).failedChildren,1);
-  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'已拆出完整验收清单，逐项对应原始要求，并为文件变化、命令结果和最终交付分别标明了可重复的机械验证方法。'});
-  const status=runtime.status(ctx.sessionKey);
-  assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
-  assert.equal(status.required,7);assert.equal(status.completed,1);
-  assert.equal(status.phase,'waiting');assert.equal(status.roles.find(role=>role.role==='planner').label,'规划');
-});
-
-test('child results are collected once and returned to the parent as candidate evidence',t=>{
-  const root=workspace(t,'evidence');
-  const runtime=new ModeArchitecture(),ctx={agentId:'project',sessionKey:'agent:project:evidence'};
-  runtime.arm(ctx.sessionKey,'base');
-  const child=`${ctx.sessionKey}:subagent:planner`;
-  runtime.spawned({childSessionKey:child,label:'规划·1'}, {requesterSessionKey:ctx.sessionKey});
-  runtime.ended({targetSessionKey:child,outcome:'ok'});
-  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'先完整读取项目和用户点名的文件，再把每项要求映射到实际改动，最后运行测试并对照验收清单逐项核对。'});
-  const status=runtime.status(ctx.sessionKey);
-  const prompt=runtime.prompt({prompt:'继续'}, {...ctx,workspaceDir:root});
-  assert.equal(status.completedRoles.planner,1);assert.equal(status.collectedResults,1);
-  assert.match(prompt.appendSystemContext,/已完成子任务的候选证据/);
-  assert.match(prompt.appendSystemContext,/先完整读取项目和用户点名的文件/);
-});
-
-test('full tier requires all six upgrade families to finish',()=>{
-  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:full-gate',runId:'full-gate'};
-  runtime.arm(ctx.sessionKey,'full');
-  for(const [role,count] of Object.entries(deliberationRequirements('full','project').roles))completeRole(runtime,ctx,role,count);
-  assert.equal(runtime.finalize({lastAssistantMessage:'全部完成'},ctx),undefined);
-});
-
-test('completed tier audit remains queryable after the parent turn ends',()=>{
-  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:audit',runId:'audit'};
-  runtime.arm(ctx.sessionKey,'base');
-  for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
-  assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'成品已经完成并验证通过。'});
-  const status=runtime.status(ctx.sessionKey);
-  assert.equal(status.active,false);assert.equal(status.complete,true);assert.equal(status.completedRoles.solver,3);
-  assert.equal(status.completed,status.required);assert.equal(status.phase,'done');assert.ok(status.endedAt>0);
-});
-
-test('a completed role audit cannot end on sessions_yield or an empty parent turn',()=>{
-  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:needs-final',runId:'needs-final'};
-  runtime.arm(ctx.sessionKey,'base');
-  for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
-  runtime.finishTurn(ctx,{success:true,messages:[{role:'assistant',stopReason:'toolUse',content:[{type:'text',text:'等待子任务完成。'}]}]});
-  assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:''});
-  assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx,{success:true,messages:[{role:'assistant',stopReason:'error',content:[{type:'text',text:'The agent run failed before producing a reply.'}]}]});
-  assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'Agent failed before reply: temporary upstream error'});
-  assert.equal(runtime.status(ctx.sessionKey).active,true);
-  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'已完成实际交付。'});
-  assert.equal(runtime.status(ctx.sessionKey).active,false);
-});
-
-test('arming cannot overwrite a tier run that is still active',()=>{
-  const runtime=new ModeArchitecture();const sessionKey='agent:project:no-overlap';
-  runtime.arm(sessionKey,'base');
-  assert.throws(()=>runtime.arm(sessionKey,'full'),/上一轮档位任务仍在执行/);
-  assert.equal(runtime.status(sessionKey).tier,'base');
-});
-
-test('a late tier fallback becomes silent after the real final was delivered',t=>{
-  const root=workspace(t,'stale-control');
-  const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:stale-control'};
-  runtime.arm(ctx.sessionKey,'base');
-  for(const [role,count] of Object.entries(deliberationRequirements('base','project').roles))completeRole(runtime,ctx,role,count);
-  runtime.finishTurn(ctx,{success:true,lastAssistantMessage:'成品已交付。'});
-  const prompt=runtime.prompt({prompt:'[pinkie-tier-control] 迟到的内部续跑'}, {...ctx,workspaceDir:root});
-  assert.match(prompt.appendSystemContext,/过期内部续跑指令/);
-  assert.match(prompt.appendSystemContext,/只输出 NO_REPLY/);
-  assert.doesNotMatch(prompt.appendSystemContext,/极致思考运行单/);
-});
-
-test('tier audit survives separate plugin instances through the durable store',t=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-run-store-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const parent='agent:unrestricted:durable',ctx={agentId:'unrestricted',sessionKey:parent};
-  const armed=new ModeArchitecture(new FileRunStore(root));armed.arm(parent,'base');
-  const spawning=new ModeArchitecture(new FileRunStore(root));
-  const adjusted=spawning.beforeTool({toolName:'sessions_spawn',params:{task:'plan',label:'plan-1'}},ctx);
-  assert.equal(adjusted.params.label,'规划·1');
-  spawning.modelStarted({sessionKey:parent,provider:'mm',model:'gemini-3.6-flash-high'});
-  assert.equal(spawning.beforeTool({toolName:'sessions_spawn',params:{task:'solve',label:'solve-1'}},ctx).params.model,'mm/gemini-3.6-flash-high');
-  const child='agent:unrestricted:subagent:durable';
-  spawning.spawned({childSessionKey:child,label:'规划·1',resolvedModel:'mm/gemini-3.6-flash-high'},{requesterSessionKey:parent});
-  const ending=new ModeArchitecture(new FileRunStore(root));ending.ended({targetSessionKey:child,outcome:'ok',resultText:'已完成规划：列出了逐项可执行、可验证的交付清单，并给每个步骤标注依赖、风险以及失败后的恢复路径。'});
-  const status=new ModeArchitecture(new FileRunStore(root)).status(parent);
-  assert.equal(status.spawned,1);assert.equal(status.completedRoles.planner,1);assert.equal(status.pending,0);
-  assert.deepEqual(status.childModels,{'mm/gemini-3.6-flash-high':1});assert.equal(status.modelMismatches,0);
-});
-
-test('native derivation inherits agent/workspace and only passes the current resolved model',()=>{
-  const runtime=new ModeArchitecture();
-  runtime.arm('agent:project:one','base');
-  const result=runtime.beforeTool({toolName:'sessions_spawn',params:{task:'x',taskName:'solver_1',label:'求解者',agentId:'other',cwd:'/tmp/other',model:'other/model',thinking:'low',runtime:'acp'}},{agentId:'project',sessionKey:'agent:project:one'});
-  assert.equal(result.params.context,'fork');assert.equal(result.params.runtime,'subagent');assert.equal(result.params.mode,'run');
-  assert.equal(result.params.expectsCompletionMessage,false);
-  assert.equal(result.params.label,'求解·1');assert.equal(result.params.taskName,'solver_1');
-  for(const key of ['agentId','cwd','model','thinking'])assert.equal(key in result.params,false);
-});
-
-test('base child agents cannot create an unbounded nested tree',()=>{
-  const runtime=new ModeArchitecture();
-  const parent='agent:unrestricted:base-parent',child=`${parent}:subagent:solver-1`;
-  runtime.arm(parent,'base');
-  runtime.spawned({childSessionKey:child,label:'求解·1'},{requesterSessionKey:parent});
-  const blocked=runtime.beforeTool({toolName:'sessions_spawn',params:{label:'批评·递归',task:'继续派生'}},{sessionKey:child,agentId:'unrestricted'});
-  assert.equal(blocked.block,true);
-  assert.match(blocked.blockReason,/基础档子代理/);
-});
-
-test('a locked verifier executed through exec counts as its machine attestation',async t=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-exec-verifier-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const skill=path.join(root,'skills','delivery','SKILL.md');
-  const verifier=path.join(root,'skills','delivery','tools','verify_completion.py');
-  const target=path.join(root,'result.txt');
-  fs.mkdirSync(path.dirname(verifier),{recursive:true});
-  fs.writeFileSync(skill,'# delivery');
-  fs.writeFileSync(verifier,'import json; print(json.dumps({"status":"PASS","verified":True,"issues":[]}))');
-  const guard=new CompletionIntegrityGuard();
-  const ctx={agentId:'project',sessionKey:'agent:project:exec-verifier'};
-  guard.begin({prompt:'调用 skill 完成任务'},ctx);
-  guard.beforeTool({toolName:'read',params:{path:skill}},ctx);guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
-  guard.beforeTool({toolName:'write',params:{path:target}},ctx);fs.writeFileSync(target,'done');guard.afterTool({toolName:'write',params:{path:target},result:'ok'},ctx);
-  guard.beforeTool({toolName:'exec',params:{command:`python3 ${verifier}`}},ctx);
-  guard.afterTool({toolName:'exec',params:{command:`python3 ${verifier}`},result:{content:[{type:'text',text:'{"status":"PASS","verified":true,"issues":[]}'}]}},ctx);
-  assert.equal((await guard.verifyAfterTool({},ctx)).ok,true);
-  assert.equal(guard.finalize({lastAssistantMessage:'任务已经完成并交付。'},ctx,{verifyExternal:false}),undefined);
-});
-
-test('printed PASS cannot replace the independently executed verifier',async t=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-false-pass-'));
-  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const skill=path.join(root,'skills','delivery','SKILL.md');
-  const verifier=path.join(path.dirname(skill),'tools','verify_completion.py');
-  fs.mkdirSync(path.dirname(verifier),{recursive:true});
-  fs.writeFileSync(skill,'# delivery');
-  fs.writeFileSync(verifier,'import json\nprint(json.dumps({"status":"FAIL","verified":False,"issues":["missing artifact"]}))\n');
-  const guard=new CompletionIntegrityGuard(),ctx={sessionKey:'agent:project:false-pass'};
-  guard.begin({prompt:'调用 skill 完成任务'},ctx);
-  guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
-  guard.afterTool({toolName:'exec',params:{command:`python3 -c 'print("PASS")' # ${verifier}`},result:'{"status":"PASS","verified":true}'},ctx);
-  assert.equal((await guard.verifyAfterTool({},ctx)).ok,false);
-  assert.equal(guard.finalize({lastAssistantMessage:'任务已经完成。'},ctx,{verifyExternal:false}).action,'revise');
-});
-
-test('explicit role label wins over role words mentioned inside the task body',()=>{
-  const runtime=new ModeArchitecture();
-  runtime.arm('agent:project:role-priority','base');
-  const result=runtime.beforeTool({toolName:'sessions_spawn',params:{
-    label:'solve-2',taskName:'solver_2',task:'提出方案，并说明如何验证以及如何回应批评。',
-  }},{agentId:'project',sessionKey:'agent:project:role-priority'});
-  assert.equal(result.params.label,'求解·2');
-});
-
-test('repeated role labels receive unique ordinals before OpenClaw stores them',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:labels',runId:'run'};
-  runtime.arm(ctx.sessionKey,'full');
-  const first=runtime.beforeTool({toolName:'sessions_spawn',toolCallId:'a',runId:'run',params:{label:'多轮对抗',task:'x'}},ctx);
-  const second=runtime.beforeTool({toolName:'sessions_spawn',toolCallId:'b',runId:'run',params:{label:'多轮对抗',task:'y'}},ctx);
-  assert.equal(first.params.label,'多轮对抗·1');assert.equal(second.params.label,'多轮对抗·2');
-});
-
-test('backend caps both live concurrency and duplicate role fan-out',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:bounded'};
-  runtime.arm(ctx.sessionKey,'full');
-  completeRole(runtime,ctx,'planner',1);
-  const duplicate=runtime.beforeTool({toolName:'sessions_spawn',params:{label:'规划·2',task:'again'}},ctx);
-  assert.equal(duplicate.block,true);assert.match(duplicate.blockReason,/不要重复派生/);
-  for(let i=0;i<5;i+=1){
-    const child=`${ctx.sessionKey}:subagent:pending-${i}`;
-    runtime.spawned({childSessionKey:child,label:`求解·${i+1}`},{requesterSessionKey:ctx.sessionKey});
+  for (const [tier, cap] of Object.entries({base: 3, boost: 6, full: 10, marathon: 40})) {
+    const watchdog = new UpstreamWatchdog({}, () => tier);
+    assert.equal(watchdog.integrityRetryLimit('session', {retry: {maxAttempts: 999}}), cap);
   }
-  const overflow=runtime.beforeTool({toolName:'sessions_spawn',params:{label:'批评·1',task:'critic'}},ctx);
-  assert.equal(overflow.block,true);assert.match(overflow.blockReason,/5 个子任务/);
 });
 
-test('parallel spawn calls reserve slots before child lifecycle events arrive',()=>{
-  const runtime=new ModeArchitecture(),ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:reserved',runId:'run'};
-  runtime.arm(ctx.sessionKey,'full');
-  for(let i=0;i<5;i+=1){
-    const allowed=runtime.beforeTool({toolName:'sessions_spawn',toolCallId:`call-${i}`,runId:'run',params:{label:`未分类${i}`,task:'x'}},ctx);
-    assert.equal(allowed.block,undefined);
-  }
-  const blocked=runtime.beforeTool({toolName:'sessions_spawn',toolCallId:'call-5',runId:'run',params:{label:'未分类5',task:'x'}},ctx);
-  assert.equal(blocked.block,true);assert.equal(runtime.status(ctx.sessionKey).reserved,5);
-  runtime.afterTool({toolName:'sessions_spawn',toolCallId:'call-0',runId:'run'},ctx);
-  assert.equal(runtime.status(ctx.sessionKey).reserved,4);
+test('simple and long-run tasks do not require fixed roles or completion markers', () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:marathon-simple', runId: 'simple'};
+  runtime.arm(ctx.sessionKey, 'marathon');
+  setTierTask(runtime, ctx, '请解释闭包是什么');
+  assert.equal(runtime.finalize({lastAssistantMessage: '闭包会保留定义时的变量环境。'}, ctx), undefined);
+  runtime.finishTurn(ctx, {success: true, lastAssistantMessage: '闭包会保留定义时的变量环境。'});
+  assert.equal(runtime.status(ctx.sessionKey).complete, true);
+  assert.equal(runtime.status(ctx.sessionKey).workflow.label, '此问题无需多方案，已直接回答');
 });
 
 test('the full tier plan is reloaded only for the parent, never recursively for children',t=>{
@@ -1449,7 +1724,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,5);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity']);
+  assert.equal(tools.length,6);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','learning_notes','web_gpt_activity']);
   const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
   assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   // OpenClaw's embedded tool factory can expose the ephemeral conversation
@@ -1490,7 +1765,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
 
 test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
-  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','computer','delivery_guard','learning_activity','web_gpt_activity']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['clekk_memory','computer','delivery_guard','learning_activity','learning_notes','web_gpt_activity']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -1546,14 +1821,21 @@ test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{
   assert.equal(response[1].active,false);
 });
 
-test('marathon tier keeps revising until it completes or genuinely needs user input',()=>{
+test('marathon tier uses the 40-retry cap and stops without completion markers',()=>{
   const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:overnight',runId:'run-1'};
   runtime.arm(ctx.sessionKey,'marathon');
-  const retry=runtime.finalize({lastAssistantMessage:'完成了第一阶段，接下来继续。'},ctx);
-  assert.equal(retry.action,'revise');assert.equal(retry.retry.maxAttempts,64);
-  for(const [role,count] of Object.entries(deliberationRequirements('marathon','project').roles))completeRole(runtime,ctx,role,count);
-  assert.equal(runtime.finalize({lastAssistantMessage:'全部验证通过。\n<!-- pinkie-longrun-complete -->'},ctx),undefined);
-  assert.equal(runtime.finalize({lastAssistantMessage:'需要用户提供新权限。\n<!-- pinkie-longrun-pause -->'},ctx),undefined);
+  setTierTask(runtime,ctx,'求方程 x² = 4，并验算两个根');
+  let decision=runtime.finalize({lastAssistantMessage:'还没解完。'},ctx);
+  assert.equal(decision.action,'revise');assert.equal(decision.retry.maxAttempts,40);
+  for(let attempt=2;attempt<=40;attempt+=1){
+    runtime.afterTool({toolName:'read',params:{path:`./evidence-${attempt}.txt`},result:`本轮独立证据 ${attempt}`},ctx);
+    decision=runtime.finalize({lastAssistantMessage:`这次和上次不同：换信息，核对第 ${attempt} 份独立材料并重算。`},{...ctx,runId:`run-${attempt}`});
+    assert.equal(decision.action,'revise');
+  }
+  runtime.afterTool({toolName:'read',params:{path:'./evidence-41.txt'},result:'新的独立证据 41'},ctx);
+  assert.equal(runtime.finalize({lastAssistantMessage:'这次和上次不同：换思路，反向代入检验。'},{...ctx,runId:'run-41'}),undefined);
+  assert.equal(runtime.status(ctx.sessionKey).active,false);
+  assert.match(runtime.stopReport({...ctx,runId:'run-41'}),/达到本档续跑上限 40 次/);
 });
 
 test('upstream watchdog retries transient failures invisibly and ignores explicit cancellation',async()=>{
