@@ -8,6 +8,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {registerReasoningGateway} from './reasoning.mjs';
+import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {registerModelSync} from './model-sync.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
@@ -275,6 +276,9 @@ function failureReasonFromEvent(event = {}) {
 }
 
 function hasIncompleteToolTurn(event = {}, reason = '') {
+  // A turn that ends on ask_user is deliberately waiting for the user's
+  // choice; resuming it would answer the question on the user's behalf.
+  if (endsWithUserQuestion(event.messages)) return false;
   if (/(?:incomplete(?:[_ -](?:turn|response))?|non[_ -]?deliverable[_ -]?terminal[_ -]?turn)/i.test(reason)) return true;
   const messages = (Array.isArray(event.messages) ? event.messages.slice(-8) : []).map(entry => (
     entry?.message && typeof entry.message === 'object' ? entry.message : entry
@@ -1617,6 +1621,9 @@ export class CompletionIntegrityGuard {
     const state = this.runs.get(key);
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     if (!state) return;
+    // Asking the user is a legitimate pause, not a delivery claim.
+    const lastTool = state.tools.at(-1);
+    if (lastTool && lastTool.name === ASK_USER_TOOL && !lastTool.failed) return;
     const actionRun = isLikelyActionRequest(state.prompt);
     // Reading or summarizing an attached document needs no tool/effect proof.
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
@@ -4523,6 +4530,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       '\n' + TOOL_PROGRESS_RULES + '\n',
+      '\n' + ASK_USER_RULES + '\n',
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
     if (mode === 'learning') {
@@ -5329,6 +5337,7 @@ export default {
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    api.registerTool?.(() => createAskUserTool(), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
