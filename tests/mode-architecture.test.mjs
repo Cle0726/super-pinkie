@@ -135,6 +135,9 @@ test('tool progress rules and learn-while-doing apply independently in all five 
     assert.equal((result.appendSystemContext.match(/工具调用前的进度说明/g)||[]).length,1);
     assert.match(result.appendSystemContext,/每次单独调用工具/);
     assert.match(result.appendSystemContext,/不作完成或交付声明/);
+    assert.match(result.appendSystemContext,/【回复卫生】/);
+    assert.match(result.appendSystemContext,/计划、自检、规则复述只在内部完成/);
+    assert.match(result.appendSystemContext,/调用工具前仍允许用最多一句话说明要做什么/);
     assert.equal((result.appendSystemContext.match(/独立模块：边做边学/g)||[]).length,1);
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);

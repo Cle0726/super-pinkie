@@ -513,10 +513,10 @@ apply_ui_skin() {
   #    hasActiveRun=false 时强制复位，仍无效则保草稿后重载。
   #    关闭开关：localStorage['laolao:stale-busy-reconcile'] = 'off'
   if ! grep -Eq 'src="(\./|/)laolao-resume\.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume40"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume41"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Eq 'src="(\./|/)laolao-resume\.js\?v=resume40"' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-resume\.js)(?:\?v=[^"]*)?}{${1}?v=resume40}g' "$index_file"
+  elif ! grep -Eq 'src="(\./|/)laolao-resume\.js\?v=resume41"' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-resume\.js)(?:\?v=[^"]*)?}{${1}?v=resume41}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -526,11 +526,11 @@ apply_ui_skin() {
   # Also revision the entry and lazy chat import URLs. This is the hard
   # guarantee for WebKit instances still controlled by the old cache-first
   # worker: a previously cached URL can no longer match the repaired chunks.
-  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history28"}g' "$index_file"
+  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history29"}g' "$index_file"
   local entry_bundle
   for entry_bundle in "$ui_root"/assets/index-*.js; do
     [[ -f "$entry_bundle" ]] || continue
-  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history28}g' "$entry_bundle"
+  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history29}g' "$entry_bundle"
   done
 
   # Patched native chunks keep their upstream hashed filename. Cache-first
@@ -540,7 +540,7 @@ apply_ui_skin() {
   if [[ -f "$service_worker" ]]; then
     perl -0pi -e '
       s{-clekk-history-render-[0-9]+}{}g;
-      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-28${2}};
+      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-29${2}};
     ' "$service_worker"
     perl -0pi -e '
       s{// Cache-first for hashed assets; network-first for HTML/other\.}{// Network-first for all UI files; cached copies remain an offline fallback.}g;

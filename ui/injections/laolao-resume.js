@@ -76,7 +76,7 @@
   // so a repaired renderer could remain invisible forever. Run one guarded
   // cache migration per UI revision. This removes only disposable control-ui
   // caches; transcripts, settings, prompts and media are not stored here.
-  const UI_CACHE_REVISION = "history-render-28";
+  const UI_CACHE_REVISION = "history-render-29";
   const UI_CACHE_REFRESHED = `laolao:ui-cache-refreshed:${UI_CACHE_REVISION}`;
   const UI_CACHE_REFRESH_ATTEMPTED = `laolao:ui-cache-refresh-attempted:${UI_CACHE_REVISION}`;
   let gatewayOfflineSince = 0;

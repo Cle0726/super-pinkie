@@ -852,14 +852,14 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume40/);
+    assert.match(installer,/laolao-resume\.js\?v=resume41/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
-    assert.match(installer,/clekk-history28/);
+    assert.match(installer,/clekk-history29/);
   }
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/LIVE_MESSAGE_WINDOW = 512/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
-  assert.match(patch,/pinkie-chat-timeline:v1/);
+  assert.match(patch,/pinkie-chat-timeline:v2/);
 });
 
 test('desktop installers update an existing root-relative resume URL',()=>{
@@ -875,7 +875,7 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   const resume=read('ui/injections/laolao-resume.js');
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
-  assert.match(resume,/UI_CACHE_REVISION = "history-render-28"/);
+  assert.match(resume,/UI_CACHE_REVISION = "history-render-29"/);
   assert.match(resume,/startsWith\("openclaw-control-"\)/);
   assert.match(resume,/UI_CACHE_REFRESH_ATTEMPTED/);
   assert.match(resume,/window\.localStorage\.setItem\(UI_CACHE_REFRESHED, "1"\)/);
@@ -884,8 +884,8 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   assert.match(cacheRefresh,/let the current view stay put/);
   assert.doesNotMatch(cacheRefresh,/window\.location\.reload\(\)/);
   for(const installer of [mac,windows]){
-    assert.match(installer,/clekk-history-render-28/);
-    assert.match(installer,/clekk-history28/);
+    assert.match(installer,/clekk-history-render-29/);
+    assert.match(installer,/clekk-history29/);
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }
