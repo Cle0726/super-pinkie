@@ -80,10 +80,11 @@ function promptInstructionText(prompt = '') {
 function hasAttachedSourceContent(prompt = '') {
   return /(?:^\s*\[media attached:|<file\b|<<<EXTERNAL_UNTRUSTED_CONTENT>>>)/im.test(String(prompt || ''));
 }
-// “都完成前不要回复”“完成后再总结”只描述先后顺序；“改成用 X 方法”“改按
-// 规则—例子—结论组织”只换做法或回答格式。它们都不是在要求改动或产出什么，
-// 不能让只读的检查任务被当成必须有写入证据的修改任务。
-const ORDER_OR_STYLE_PHRASE = /(?:(?:都|全部|全都|均)?完成(?:之?前|之?后|以后|时)|改(?:成|为|用|按)[^。！？!?；;，,\n]{0,24}?(?:方法|方式|思路|格式|顺序|组织|结构|风格|口吻|语气|写法|说法|角度|步骤))/g;
+// “都完成前不要回复”“完成后再总结”只描述先后顺序；“修复后的版本”“改动过的
+// 文件”只描述状态；“改成用 X 方法”“改按规则—例子—结论组织”只换做法或回答
+// 格式。它们都不是在要求改动或产出什么，不能让只读的检查任务被当成必须有
+// 写入证据的修改任务。
+const ORDER_OR_STYLE_PHRASE = /(?:(?:都|全部|全都|均)?完成(?:之?前|之?后|以后|时)|(?:修复|修改|改动|更新|升级|安装|部署|生成|创建|优化)(?:之?后|以后|过)的|改(?:成|为|用|按)[^。！？!?；;，,\n]{0,24}?(?:方法|方式|思路|格式|顺序|组织|结构|风格|口吻|语气|写法|说法|角度|步骤))/g;
 function intentText(prompt = '') {
   return promptInstructionText(prompt).replace(ORDER_OR_STYLE_PHRASE, '');
 }
