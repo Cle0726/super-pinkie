@@ -38,13 +38,13 @@ test('main chat shows aggregate worker progress without exposing child chats',()
   assert.match(src,/window\.setInterval\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
 });
 
-test('tier completion refreshes only the five-message live window while reload stays a guarded offline-only fallback',()=>{
+test('tier completion refreshes only the bounded live timeline window while reload stays a guarded offline-only fallback',()=>{
   const src=read('ui/injections/laolao-resume.js');
   assert.match(src,/pinkie:tier-complete/);
   assert.match(src,/refreshVisibleChat/);
-  assert.match(src,/client\.request\("chat\.history"/);
+  assert.match(src,/requestRecovery\("chat\.history"/);
   assert.match(src,/recoverCurrentChat\("manual-refresh", \{force: true, manual: true\}\)/);
-  assert.match(src,/直接读取最新五条/);
+  assert.match(src,/直接读取有界时间线窗口/);
   assert.doesNotMatch(src,/state\.refreshCurrentChat/);
   assert.match(src,/scheduleRecovery\("tier-complete"/);
   assert.doesNotMatch(src,/button\.chat-settings-action/);
