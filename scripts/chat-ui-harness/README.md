@@ -110,6 +110,16 @@ __fake.checks.brokenLitParts();
 测试文件 `tests/chat-ui-harness.test.cjs` 也逐个固定了 a–f 的协议结果；它记录的
 `beforeFix` 字段就是每个复现的修复前现象，方便 UI 改动后对照。
 
+## 重放真实会话
+
+在页面脚本运行前定义 `window.__fakeSeedHistory`（真实 `chat.history` 返回的 `messages` 数组），假网关就用它代替默认的问候作为历史。用 CDP 的 `Page.addScriptToEvaluateOnNewDocument` 注入即可：
+
+```bash
+openclaw gateway call chat.history --json --params '{"sessionKey":"agent:learning:…","limit":80}' > history.json
+```
+
+刷新后工具结果的显示（`chat.history` 只保留 toolResult，不带调用参数）就是这样复现的。
+
 ## 模拟的网关行为（对应 OpenClaw 2026.7.1-2）
 
 - `chat` 增量和 `final` 广播给所有连接。同一轮的文字跨工具调用累积（上一段 + 新增量，中间不加分隔），`final` 带的是整轮累积文字。所以流式界面收尾时，说明句会和最终回复合在同一条消息里；历史同步后，它们又是分开存储的消息。

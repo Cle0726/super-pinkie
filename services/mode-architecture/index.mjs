@@ -80,11 +80,18 @@ function promptInstructionText(prompt = '') {
 function hasAttachedSourceContent(prompt = '') {
   return /(?:^\s*\[media attached:|<file\b|<<<EXTERNAL_UNTRUSTED_CONTENT>>>)/im.test(String(prompt || ''));
 }
+// “都完成前不要回复”“完成后再总结”只描述先后顺序；“改成用 X 方法”“改按
+// 规则—例子—结论组织”只换做法或回答格式。它们都不是在要求改动或产出什么，
+// 不能让只读的检查任务被当成必须有写入证据的修改任务。
+const ORDER_OR_STYLE_PHRASE = /(?:(?:都|全部|全都|均)?完成(?:之?前|之?后|以后|时)|改(?:成|为|用|按)[^。！？!?；;，,\n]{0,24}?(?:方法|方式|思路|格式|顺序|组织|结构|风格|口吻|语气|写法|说法|角度|步骤))/g;
+function intentText(prompt = '') {
+  return promptInstructionText(prompt).replace(ORDER_OR_STYLE_PHRASE, '');
+}
 function isMutationRequest(prompt = '') {
   // Negated safety wording such as “只读，不要修改/创建/删除文件” must not
   // turn an observation into a file-changing task. Keep a positive mutation
   // elsewhere in the same prompt intact (for example: “修改 A，不要删除 B”).
-  const text = promptInstructionText(prompt).replace(NEGATED_MUTATION_CLAUSE, '');
+  const text = intentText(prompt).replace(NEGATED_MUTATION_CLAUSE, '');
   if (/(?:只读|只查看|只读取|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(text)) {
     // Generic “做/完成” near a later mention of 文件 describes a completed
     // *check* just as often as a write. Require an actual positive write verb.
@@ -704,7 +711,7 @@ function faststartOk(file) {
 }
 
 function isLikelyActionRequest(prompt = '') {
-  const text = promptInstructionText(prompt);
+  const text = intentText(prompt);
   // A bare “继续” can mean continue an explanation. Integrity retries retain
   // the original action prompt, so this ambiguous one-word message must not
   // be upgraded into a mutation request on its own.
@@ -1207,6 +1214,14 @@ export class CompletionIntegrityGuard {
       return;
     }
     if (!state.prompt || internalControlText(state.prompt)) state.prompt = prompt;
+  }
+
+  /** A steer that adds an explicit change keeps the window but raises the bar. */
+  amendPrompt(event = {}, ctx = {}) {
+    const key = completionRunKey(event, ctx);
+    const prompt = String(event.prompt || '').trim();
+    const state = key && this.runs.get(key);
+    if (state && prompt && !internalControlText(prompt)) state.prompt = prompt;
   }
 
   beforeTool(event = {}, ctx = {}) {
@@ -2443,6 +2458,21 @@ export class CleKkSupervisor {
     // still-live harness (or its remaining tool evidence would be discarded).
     const inboundUserMessage = event.__pinkieInboundUserMessage === true;
     let turn = this.turns.get(key) || this.restore(key);
+    // 追加消息（steer）在 run 还活着时到达，是对同一个任务的补充，比如
+    // “改成用 X 方法”。它不能清空这一轮已经做过的工具记录，也不能拿这句
+    // 补充话去重新判定任务类型；否则碧琪按要求答完也会被判“没有执行记录”，
+    // 一直重试到“本轮未完成”。只有补充里明确要求改动文件时才提高门槛。
+    if (inboundUserMessage && !control && prompt && turn?.prompt && !turn.pending
+        && !internalControlText(turn.prompt) && prompt !== turn.prompt
+        && this.integrity.has(key)) {
+      turn.amendments = [...(Array.isArray(turn.amendments) ? turn.amendments : []), prompt.slice(0, 8_000)].slice(-8);
+      this.audit.append('turn_amended', key, {prompt: hashForAudit(prompt)});
+      if (isMutationRequest(prompt) && !isMutationRequest(turn.prompt)) {
+        this.integrity.amendPrompt({prompt: `${turn.prompt}\n${prompt}`}, ctx);
+      }
+      this.persist(key, turn);
+      return;
+    }
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
     const incomingRunId = String(ctx.runId || event.runId || '');

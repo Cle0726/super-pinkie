@@ -8,8 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const marker = '/* pinkie-chat-timeline:v2 */';
-const previousMarker = '/* pinkie-chat-timeline:v1 */';
+export const marker = '/* pinkie-chat-timeline:v3 */';
+// Installed bundles keep their old runtime between the marker and the history
+// projection function; an upgrade swaps exactly that span.
+const previousMarkers = ['/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 export const LIVE_MESSAGE_WINDOW = 512;
 export const HISTORY_RENDER_LIMIT = 512;
@@ -105,16 +107,13 @@ function cleanAssistantMessage(message, content) {
   return copy;
 }
 
-function makeToolMessage(message, content, call = {}) {
-  const name = String(call.name || message.toolName || message.tool_name || 'tool');
-  const callId = String(call.callId || message.toolCallId || message.tool_call_id || '');
-  const result = {...message, role: 'assistant', toolName: name, content};
-  if (callId) result.toolCallId = callId;
-  delete result.tool_name;
-  delete result.tool_call_id;
-  delete result.toolUseId;
-  delete result.tool_use_id;
-  return result;
+function makeToolMessage(message, content) {
+  // Keep tool identity only in the synthetic content parts.  The native
+  // renderer treats any top-level toolName/toolCallId alias as a standalone
+  // tool-result message, which adds its generic "Tool output" summary ahead
+  // of the actual tool name.  cleanAssistantMessage removes those aliases
+  // while leaving the tool_call/tool_result data intact for the native parser.
+  return cleanAssistantMessage(message, content);
 }
 
 /**
@@ -135,6 +134,23 @@ export function pinkieSplitTimelineMessage(entry = {}, getToolCalls = () => []) 
   const isMixedToolMessage = role === 'assistant'
     && (calls.length > 0 || content.some((part) => isToolCallPart(part) || isToolResultPart(part)));
   if (!isMixedToolMessage) {
+    // History replies carry tool results as standalone toolResult messages
+    // whose call part was not kept. Render them like every other tool row
+    // ("读取文件 · Read") instead of the native generic "Tool output" card.
+    const name = message.toolName || message.tool_name;
+    if (role !== 'assistant' && role !== 'user' && name) {
+      const callId = partCallId({}, message);
+      const output = content.filter((part) => typeof part?.text === 'string').map((part) => part.text).join('\n');
+      return [{
+        role: 'tool',
+        message: makeToolMessage(message, [
+          {type: 'tool_call', name: String(name), ...(callId ? {callId} : {})},
+          {type: 'tool_result', name: String(name), text: output, ...(callId ? {callId} : {}),
+            ...(typeof message.isError === 'boolean' ? {isError: message.isError} : {})},
+        ]),
+        key,
+      }];
+    }
     return [{
       role: role === 'assistant' ? 'assistant' : 'tool',
       message,
@@ -466,22 +482,23 @@ function splitRuntimeSource() {
   return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineTurn.toString()}\n${projectTimelineTurn.toString()}\n${pinkieBuildTimeline.toString()}`;
 }
 
-function upgradeV1Bundle(original) {
+function upgradeBundle(original, previousMarker) {
+  const version = /:(v\d+) \*\/$/u.exec(previousMarker)?.[1] || 'old';
   try {
     const markerIndex = original.indexOf(previousMarker);
     if (markerIndex < 0 || original.indexOf(previousMarker, markerIndex + previousMarker.length) >= 0) {
-      throw new Error('cannot identify exactly one v1 timeline runtime');
+      throw new Error(`cannot identify exactly one ${version} timeline runtime`);
     }
     const history = functionSection(original, 'Showing last ${c} messages');
     if (history.start <= markerIndex
         || !history.text.includes('pinkieBuildTimeline(__pinkieTimelineEntries,')) {
-      throw new Error('v1 history projection is missing');
+      throw new Error(`${version} history projection is missing`);
     }
     const runtime = `${marker}${splitRuntimeSource()}\n`;
     return {
       text: sourceWithReplacement(original, markerIndex, history.start, runtime),
       changed: true,
-      reason: 'upgraded-v1',
+      reason: `upgraded-${version}`,
     };
   } catch (error) {
     return {text: original, changed: false, reason: String(error?.message || error)};
@@ -494,7 +511,8 @@ function sourceWithReplacement(source, start, end, replacement) {
 
 function transformBundle(original) {
   if (original.includes(marker)) return {text: original, changed: false, reason: 'already-patched'};
-  if (original.includes(previousMarker)) return upgradeV1Bundle(original);
+  const previousMarker = previousMarkers.find((value) => original.includes(value));
+  if (previousMarker) return upgradeBundle(original, previousMarker);
   try {
     let source = original;
     const liPattern = /(function\s+([\w$]+)\(e\)\{)(?=if\(!e\|\|typeof e!=`object`\)return!1;let t=e;if\(O\(t\.role\)!==`assistant`)(?=[\s\S]{0,800}?hasVisibleNonTextContent)/gu;

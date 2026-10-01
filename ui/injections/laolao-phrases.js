@@ -49,7 +49,9 @@
     ["Tool call", "工具小帮手出场"],
     ["Tool result", "工具小帮手回信"],
     ["Tool input", "碧琪收到的小任务"],
-    ["Tool output", "小帮手带回的消息"],
+    // A timeline tool row already says which tool ran.  Keep a neutral result
+    // label here so a re-render can never bring back the old bubble wording.
+    ["Tool output", "工具结果"],
     ["Tool error", "这一步碰到一点彩带小状况"],
     ["Tool Access", "工具小帮手通行证"],
     ["Retry", "再试一次"],
@@ -206,7 +208,7 @@
     if(!parent.matches?.('.chat-sender-name'))return null;
     if(core==='You'&&parent.closest('.chat-group.user'))return '你';
     if(core==='Activity'&&parent.closest('.chat-group--activity'))return '碧琪的行动小记录';
-    if(core==='Tool'&&parent.closest('.chat-group.tool'))return '碧琪的小帮手记录';
+    if(core==='Tool'&&parent.closest('.chat-group.tool'))return '工具';
     return null;
   };
 
