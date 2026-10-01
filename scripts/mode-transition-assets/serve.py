@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Serve build.html and write the mode-transition assets it produces.
+"""Serve build.html and write the mode-transition and splash assets it produces.
 
 build.html reads each ui/assets/laolao-mode-transition-<mode>.png plus a raw
 Vision mask from --masks, prepares the layers in the browser and PUTs them
-back. Only the four derived files per mode can be written. See README.md.
+back. Only the four derived files for each supported scene can be written. See
+README.md.
 """
 import argparse
 import http.server
@@ -14,12 +15,29 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
 ASSETS = os.path.join(REPO, 'ui', 'assets')
-MODES = ('chat', 'project', 'thinking', 'learning', 'unrestricted')
-OUTPUT = re.compile(r'^laolao-mode-transition-(%s)-(mask\.png|plate\.webp|plate-soft\.png|char-soft\.png)$' % '|'.join(MODES))
+SCENES = (
+    'laolao-mode-transition-chat',
+    'laolao-mode-transition-project',
+    'laolao-mode-transition-thinking',
+    'laolao-mode-transition-learning',
+    'laolao-mode-transition-unrestricted',
+    'laolao-splash',
+)
+DERIVATIVES = ('mask.png', 'plate.webp', 'plate-soft.png', 'char-soft.png')
+OUTPUT = re.compile(
+    r'^(?:%s)-(?:%s)$' % (
+        '|'.join(re.escape(scene) for scene in SCENES),
+        '|'.join(re.escape(derivative) for derivative in DERIVATIVES),
+    )
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--port', type=int, default=18841)
-parser.add_argument('--masks', required=True, help='directory holding <mode>-mask.png from mask.swift')
+parser.add_argument(
+    '--masks',
+    required=True,
+    help='directory holding <mode>-mask.png plus splash-mask.png from mask.swift',
+)
 args = parser.parse_args()
 
 

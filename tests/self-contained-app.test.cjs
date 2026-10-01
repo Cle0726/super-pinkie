@@ -276,7 +276,7 @@ test('startup splash controller is mounted once and tolerates the current app sh
   assert.match(splash, /openclaw-app-shell, openclaw-app \.shell/);
   assert.match(splash, /readyMode = !switching && ids\.includes\(mountedMode\)/);
   assert.match(installer, /exactly one startup controller/);
-  assert.match(installer, /laolao-splash\.js\?v=splash26/);
+  assert.match(installer, /laolao-splash\.js\?v=splash27/);
 });
 
 test('current runtime keeps the classic single-chat shell instead of the upstream control console', () => {

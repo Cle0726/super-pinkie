@@ -12,7 +12,7 @@
 })(typeof window === "object" ? window : globalThis, (root) => {
   "use strict";
 
-  const ASSET_VERSION = "modetransitionfx1";
+  const ASSET_VERSION = "modetransitionfx2";
   const FINISH = 380;          // 加载好后进度走完的时长
   const EXIT = 460;            // 退场时长
   const PHRASE_EVERY = 600;    // 每句台词至少停留的时长
@@ -122,12 +122,34 @@
     },
   };
 
+  // 开屏也走同一条合成管线。坐标都仍是原图的 0–1（左上为 0,0）：
+  // anchor 是压低身子时前蹄的着地点，mustache 只圈住假胡子，避免把脸
+  // 一起拉扯；hair 覆盖鬃毛和尾巴的外圈。
+  const SPLASH = {
+    pop: 0, reveal: 0, hop: 0, revealType: 0, charDepth: 1.28,
+    anchor: [.605, .920], shadow: [.612, .913, .19, .045, .9],
+    hair: [[.395, .235, .935, .610], [.585, .270, .965, .590], [.690, .405, .970, .665]],
+    mustache: [.490, .570, .630, .750], dust: [.815, .835],
+    haze: [1, .972, .985], rim: [1, .91, .95],
+    // 先静止 300ms 和 CSS 首帧严丝合缝，随后才让蓄力动作轻轻呼吸。
+    motion: (t) => {
+      const u = Math.max(0, t - 300), breath = Math.sin(u / 610);
+      return {
+        ty: -.0022 * (1 - Math.cos(u / 610)),
+        sy: 1 - breath * .0065,
+        sx: 1 + breath * .0045,
+        rot: -.0025 * Math.sin(u / 1240),
+      };
+    },
+  };
+  const SCENES = {...MODES, splash: SPLASH};
+
   const assetUrls = (id) => ({
-    image: `/laolao-mode-transition-${id}.png?v=transition2`,
-    mask: `/laolao-mode-transition-${id}-mask.png?v=${ASSET_VERSION}`,
-    plate: `/laolao-mode-transition-${id}-plate.webp?v=${ASSET_VERSION}`,
-    plateSoft: `/laolao-mode-transition-${id}-plate-soft.png?v=${ASSET_VERSION}`,
-    charSoft: `/laolao-mode-transition-${id}-char-soft.png?v=${ASSET_VERSION}`,
+    image: id === 'splash' ? '/laolao-splash.png?v=splash19' : `/laolao-mode-transition-${id}.png?v=transition2`,
+    mask: id === 'splash' ? `/laolao-splash-mask.png?v=${ASSET_VERSION}` : `/laolao-mode-transition-${id}-mask.png?v=${ASSET_VERSION}`,
+    plate: id === 'splash' ? `/laolao-splash-plate.webp?v=${ASSET_VERSION}` : `/laolao-mode-transition-${id}-plate.webp?v=${ASSET_VERSION}`,
+    plateSoft: id === 'splash' ? `/laolao-splash-plate-soft.png?v=${ASSET_VERSION}` : `/laolao-mode-transition-${id}-plate-soft.png?v=${ASSET_VERSION}`,
+    charSoft: id === 'splash' ? `/laolao-splash-char-soft.png?v=${ASSET_VERSION}` : `/laolao-mode-transition-${id}-char-soft.png?v=${ASSET_VERSION}`,
   });
 
   // ---------- WebGL：背景板 + 角色两层，按深度做视差，带对焦和五种揭幕 ----------
@@ -136,13 +158,19 @@
     precision highp float;
     varying vec2 vUv;
     uniform sampler2D uImage, uPlate, uMask, uPlateSoft, uCharSoft;
-    uniform vec2 uRes, uImg, uPan, uAnchor, uHopT, uHopS;
-    uniform float uTime, uZoom, uFade, uWobble, uBlurBg, uBlurChar, uHaze, uRot, uClipY, uCharDepth, uRevealType, uRimFade, uPx;
+    uniform vec2 uRes, uImg, uPan, uAnchor, uHopT, uHopS, uCover;
+    uniform float uTime, uZoom, uFade, uWobble, uMustacheWobble, uBlurBg, uBlurChar, uHaze, uRot, uClipY, uCharDepth, uRevealType, uRimFade, uPx;
     uniform vec3 uReveal, uHazeColor, uRimColor;
-    uniform vec4 uRevealB, uShadow, uHair[3];
+    uniform vec4 uRevealB, uShadow, uMustache, uHair[3];
     vec2 cover(vec2 s) {
       float sa = uRes.x / uRes.y, ia = uImg.x / uImg.y;
-      if (sa > ia) s.y = (s.y - .5) * (ia / sa) + .5; else s.x = (s.x - .5) * (sa / ia) + .5;
+      if (sa > ia) {
+        float k = ia / sa;
+        s.y = s.y * k + uCover.y * (1. - k);
+      } else {
+        float k = sa / ia;
+        s.x = s.x * k + uCover.x * (1. - k);
+      }
       return s;
     }
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -186,7 +214,9 @@
       float band = clamp(m.r - m.g, 0., 1.) * hair * uWobble;
       vec2 wave = vec2(sin(pc.y * 46. + uTime * 2.3) + .5 * sin(pc.y * 91. - uTime * 3.1),
                        cos(pc.x * 39. + uTime * 1.9)) * .0021 * band;
-      vec2 pcd = pc + wave;
+      float mustache = box(pc, uMustache) * uMustacheWobble;
+      vec2 mustacheWave = vec2(sin(uTime * 38.) * .0034, cos(uTime * 31.) * .0018) * mustache;
+      vec2 pcd = pc + wave + mustacheWave;
       float inside = step(0., pcd.x) * step(pcd.x, 1.) * step(0., pcd.y) * step(pcd.y, 1.);
       // 抽屉之类挡在角色前面的东西：这条线以下不画角色。
       float clipK = uClipY > 0. ? smoothstep(uClipY - .002, uClipY + .002, pc0.y) : 1.;
@@ -263,9 +293,9 @@
       gl_FragColor = over + outc * (1. - over.a);
     }`;
 
-  const UNIFORMS = ['uRes', 'uImg', 'uPan', 'uAnchor', 'uHopT', 'uHopS', 'uTime', 'uZoom', 'uFade', 'uWobble', 'uBlurBg',
-    'uBlurChar', 'uHaze', 'uRot', 'uClipY', 'uCharDepth', 'uRevealType', 'uRimFade', 'uPx', 'uReveal', 'uHazeColor',
-    'uRimColor', 'uRevealB', 'uShadow', 'uHair'];
+  const UNIFORMS = ['uRes', 'uImg', 'uPan', 'uAnchor', 'uHopT', 'uHopS', 'uCover', 'uTime', 'uZoom', 'uFade', 'uWobble',
+    'uMustacheWobble', 'uBlurBg', 'uBlurChar', 'uHaze', 'uRot', 'uClipY', 'uCharDepth', 'uRevealType', 'uRimFade', 'uPx',
+    'uReveal', 'uHazeColor', 'uRimColor', 'uRevealB', 'uShadow', 'uHair', 'uMustache'];
 
   function createGL(canvas, images, m) {
     const gl = canvas.getContext('webgl', {premultipliedAlpha: true, alpha: true, antialias: false, powerPreference: 'high-performance'});
@@ -299,6 +329,7 @@
     });
     gl.uniform2f(U.uImg, images.image.naturalWidth, images.image.naturalHeight);
     gl.uniform2f(U.uAnchor, m.anchor[0], 1 - m.anchor[1]);
+    gl.uniform2f(U.uCover, .5, .5);
     gl.uniform1f(U.uClipY, m.clipY ? 1 - m.clipY : 0);
     gl.uniform1f(U.uCharDepth, m.charDepth);
     gl.uniform1f(U.uRevealType, m.revealType);
@@ -307,6 +338,8 @@
     const sh = m.shadow;
     gl.uniform4f(U.uShadow, sh ? sh[0] : 0, sh ? 1 - sh[1] : 0, sh ? sh[2] : 0, sh ? sh[3] : 0);
     gl.uniform4fv(U.uHair, new Float32Array([0, 1, 2].flatMap((i) => m.hair[i] || [2, 2, 2, 2])));
+    gl.uniform4fv(U.uMustache, new Float32Array(m.mustache || [2, 2, 2, 2]));
+    gl.uniform1f(U.uMustacheWobble, 0);
     return {gl, U};
   }
 
@@ -319,6 +352,7 @@
     thinking: ['#c9a7f5', '#b98bd6', '#ffffff', '#ffd9f0', '#9fd2ea', '#fff4b8'],
     learning: ['#f4c66d', '#ffe08a', '#df8fbd', '#c9a7f5', '#ffffff', '#ffd166'],
     unrestricted: ['#ef568f', '#f3ca63', '#63bfe9', '#9be27f', '#c9a7f5', '#ffffff'],
+    splash: ['#ef5d9c', '#f791bf', '#f6c96a', '#8ecdf0', '#c9a7f5', '#ffffff'],
   };
 
   function drawBalloon(ctx, x, y, s, color, stringLen = 1.6) {
@@ -392,7 +426,7 @@
     ctx.strokeStyle = g; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.restore();
   }
   // 加载完成时从进度条末端撒出来的东西，每个模式不一样。
-  const DONE_KIND = {chat: 'confetti', project: 'check', thinking: 'bubble', learning: 'star', unrestricted: 'streak'};
+  const DONE_KIND = {chat: 'confetti', project: 'check', thinking: 'bubble', learning: 'star', unrestricted: 'streak', splash: 'confetti'};
   function drawDoneBit(ctx, kind, x, y, p, dt, alpha) {
     const rot = p.rot + p.spin * dt;
     if (kind === 'confetti') drawConfetti(ctx, x, y, p.size, rot, p.color, alpha);
@@ -411,7 +445,22 @@
       doneBurst: Array.from({length: 26}, () => ({ang: -Math.PI * (.1 + r() * .8), speed: .18 + r() * .32, size: 4 + r() * 4,
         spin: (r() - .5) * .03, rot: r() * 6, color: pick(r, C), life: 650 + r() * 400, alt: r() > .5})),
     };
-    if (id === 'chat') {
+    if (id === 'splash') {
+      // 慢飘的是环境层；冲刺时才一次性放出大炮那团彩纸，二者都用固定随机数，
+      // 所以 rAF 丢帧不会让粒子跳位。
+      P.ambient = Array.from({length: 38}, (_, i) => ({
+        kind: i % 7 === 0 ? 'balloon' : 'confetti', at: r() * 11000, x: r(), vy: .010 + r() * .017,
+        sway: 10 + r() * 24, phase: r() * 6, freq: .00045 + r() * .00045, size: 4 + r() * 5,
+        balloon: 13 + r() * 10, spin: (r() - .5) * .0024, rot: r() * 6, color: pick(r, C), life: 11800 + r() * 3600,
+      }));
+      P.dust = Array.from({length: 15}, () => ({
+        ang: -Math.PI * (.15 + r() * .68), speed: .022 + r() * .045, size: 8 + r() * 16, phase: r() * 6,
+      }));
+      P.cannon = Array.from({length: 78}, () => ({
+        ang: Math.PI + (r() - .5) * 1.5, speed: .22 + r() * .62, size: 4 + r() * 8,
+        spin: (r() - .5) * .034, rot: r() * 6, color: pick(r, C), life: 560 + r() * 520,
+      }));
+    } else if (id === 'chat') {
       P.burst = Array.from({length: 54}, () => ({ang: r() * Math.PI * 2, speed: .45 + r() * .95, size: 5 + r() * 6,
         spin: (r() - .5) * .03, rot: r() * 6, color: pick(r, C), life: 900 + r() * 700}));
       P.rain = Array.from({length: 120}, (_, i) => ({at: 60 + i * (i < 50 ? 22 : 75), x: r(), vy: .07 + r() * .07,
@@ -458,6 +507,51 @@
 
   // 每个模式的粒子（ctx 是 CSS 像素坐标）。env：view、parts、时间点、toScreen。
   const FX = {
+    splash(ctx, t, s, e) {
+      const {view, parts, m} = e;
+      const live = Math.max(0, t - 300);
+      // 彩纸和气球永远在 UI 上层，慢慢飘但绝不抢字。
+      for (const p of parts.ambient) {
+        const dt = (live + p.at) % p.life;
+        const y = view.h + 38 - p.vy * dt;
+        if (y < -100) continue;
+        const x = p.x * view.w + Math.sin(p.phase + dt * p.freq) * p.sway;
+        if (p.kind === 'balloon') {
+          ctx.save(); ctx.globalAlpha *= .56; drawBalloon(ctx, x, y, p.balloon, p.color, 1.15); ctx.restore();
+        } else drawConfetti(ctx, x, y, p.size, p.rot + p.spin * dt, p.color, .62);
+      }
+      // 后蹄每隔一拍扬一点细尘，起点跟随角色层，所以推镜时不会漂。
+      const cycle = live % 1180;
+      if (cycle < 460) {
+        const hoof = e.toScreen(m.dust[0], m.dust[1], s), k = cycle / 460;
+        for (const p of parts.dust) {
+          const d = p.speed * cycle, x = hoof.x + Math.cos(p.ang) * d;
+          const y = hoof.y + Math.sin(p.ang) * d * .42 - 10 * k + .00015 * cycle * cycle;
+          ctx.save(); ctx.globalAlpha *= (1 - k) * .21;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, p.size * (1 + k));
+          g.addColorStop(0, 'rgba(255,248,224,.9)'); g.addColorStop(1, 'rgba(240,190,156,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, p.size * (1 + k), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        }
+      }
+      // 离场是向左前方冲刺；伸长、速度线和大炮彩纸都从同一 exit 时钟算。
+      if (s.exitAge > 0) {
+        const dash = clamp(s.exitAge / 500);
+        const cannon = e.toScreen(.865, .69, s, 'plate');
+        for (const p of parts.cannon) {
+          if (s.exitAge > p.life) continue;
+          const x = cannon.x + Math.cos(p.ang) * p.speed * s.exitAge;
+          const y = cannon.y + Math.sin(p.ang) * p.speed * s.exitAge + .0008 * s.exitAge * s.exitAge;
+          drawConfetti(ctx, x, y, p.size * (1 - dash * .22), p.rot + p.spin * s.exitAge, p.color,
+            1 - clamp((s.exitAge - p.life * .58) / (p.life * .42)));
+        }
+        const head = e.toScreen(.565, .59, s);
+        for (let i = 0; i < 11; i++) {
+          const yy = head.y + (i - 5) * 16, len = 55 + i % 3 * 48;
+          drawStreak(ctx, head.x + 18, yy, head.x + 18 + len * (1 + dash * 2), yy - (i - 5) * 1.5, 2 + i % 3, '#fff9ef', .58 * (1 - dash));
+        }
+      }
+    },
+
     chat(ctx, t, s, e) {
       const {view, parts, POP, HOP} = e;
       const pop = {x: view.w * .3, y: view.h * .42};
@@ -692,13 +786,13 @@
     } catch { webglChecked = false; }
     return webglChecked;
   }
-  const supported = (id) => Boolean(MODES[id]) && !reduced() && webglAvailable()
+  const supported = (id) => Boolean(SCENES[id]) && !reduced() && webglAvailable()
     && root.localStorage?.getItem?.('laolao:mode-transition-fx') !== 'off';
 
   // 空闲时只把文件拉进 HTTP 缓存；真正解码留到切换那一刻。
   const warmed = new Set();
   function warm(id) {
-    if (!MODES[id] || warmed.has(id) || typeof root.fetch !== 'function') return;
+    if (!SCENES[id] || warmed.has(id) || typeof root.fetch !== 'function') return;
     warmed.add(id);
     const urls = assetUrls(id);
     for (const key of ['image', 'mask', 'plate', 'plateSoft', 'charSoft']) root.fetch(urls[key], {cache: 'force-cache'}).catch(() => {});
@@ -758,20 +852,101 @@
     content.append(eyebrow, title, progress);
     const fxCanvas = el('canvas', 'laolao-mode-transition__particles', {'aria-hidden': 'true'});
     overlay.append(glCanvas, veil, content, fxCanvas);
-    return {overlay, glCanvas, fxCanvas, content, progress, fill, tip, lit, messages: [msg, litMsg], percentage};
+    return {overlay, glCanvas, fxCanvas, content, progress, fill, tip, lit, messages: [msg, litMsg], percentage, messageNode: message, litNode: lit, pixelFill: true};
+  }
+
+  // 两类进度条外形不同，但高光、发光前端、白字切换、完成回弹和亮光扫过
+  // 必须完全同一套逻辑。模式转场给 fill 写像素宽度；开屏继续用旧的
+  // scaleX，避免第一帧/接续进度条的既有节奏变掉。
+  function decorateProgress(ui) {
+    const {progress, fill, messageNode, litNode, tip} = ui;
+    progress.classList.add('laolao-fx-progress');
+    fill.classList.add('laolao-fx-progress__fill');
+    tip?.classList.add('laolao-fx-progress__tip');
+    litNode?.classList.add('laolao-fx-progress__lit');
+    const sync = (value, {done = false} = {}) => {
+      const p = clamp(Number(value) || 0);
+      const w = progress.clientWidth, h = progress.clientHeight;
+      if (ui.pixelFill && w && h) {
+        const filled = h + (w - h) * p;
+        fill.style.width = `${filled.toFixed(1)}px`;
+        litNode.style.clipPath = `inset(0 ${(w - filled).toFixed(1)}px 0 0)`;
+        tip.style.translate = `${filled.toFixed(1)}px 0`;
+      } else if (w) {
+        const filled = w * p;
+        litNode.style.clipPath = `inset(0 ${(w - filled).toFixed(1)}px 0 0)`;
+        tip.style.translate = `${filled.toFixed(1)}px 0`;
+      }
+      if (ui.copyMessage && messageNode && litNode && litNode.textContent !== messageNode.textContent) litNode.textContent = messageNode.textContent;
+      progress.style.setProperty('--laolao-progress', p.toFixed(3));
+      progress.classList.toggle('is-done', done);
+    };
+    return {sync};
+  }
+
+  function buildSplashOverlay(host) {
+    const progress = host.querySelector('.laolao-splash__progress-shell');
+    const fill = host.querySelector('.laolao-splash__progress-fill');
+    const message = host.querySelector('.laolao-splash__message');
+    const percentage = host.querySelector('.laolao-splash__percentage');
+    if (!progress || !fill || !message || !percentage) return null;
+    const glCanvas = el('canvas', 'laolao-splash__gl', {'aria-hidden': 'true'});
+    const fxCanvas = el('canvas', 'laolao-splash__particles', {'aria-hidden': 'true'});
+    const gloss = el('span', 'laolao-mode-transition__gloss');
+    const dots = el('span', 'laolao-mode-transition__dots');
+    fill.append(gloss, dots);
+    const tip = el('span', 'laolao-mode-transition__tip', {'aria-hidden': 'true'});
+    tip.append(el('i', 'laolao-mode-transition__star'), el('i', 'laolao-mode-transition__star'));
+    const lit = el('span', 'laolao-splash__message laolao-mode-transition__message--lit', {'aria-hidden': 'true'});
+    const flash = el('span', 'laolao-mode-transition__flash', {'aria-hidden': 'true'});
+    progress.append(tip, lit, flash);
+    host.append(glCanvas, fxCanvas);
+    return {
+      overlay: host, glCanvas, fxCanvas, content: host.querySelector('.laolao-splash__content'), progress, fill, tip, lit,
+      messages: [message, lit], percentage, messageNode: message, litNode: lit, pixelFill: false, copyMessage: true,
+      dispose() {
+        glCanvas.remove(); fxCanvas.remove(); tip.remove(); lit.remove(); flash.remove(); gloss.remove(); dots.remove();
+        progress.classList.remove('laolao-fx-progress', 'is-done'); fill.classList.remove('laolao-fx-progress__fill');
+      },
+    };
+  }
+
+  // CSS 的 cover 不是永远居中：窄屏开屏是 62% 焦点。shader 读同一位置，
+  // 新画布淡入时才不会从角色旁边闪一下。
+  function cssCoverPosition(node) {
+    const raw = root.getComputedStyle?.(node)?.backgroundPosition || '50% 50%';
+    const bits = raw.trim().split(/\s+/);
+    const number = (value) => {
+      if (value === 'center') return .5;
+      const match = /^(-?\d+(?:\.\d+)?)%$/.exec(value || '');
+      return match ? clamp(Number(match[1]) / 100) : .5;
+    };
+    return [number(bits[0]), number(bits[1])];
   }
 
   // ---------- 一次转场 ----------
-  function play(mode, hooks = {}) {
+  function playScene(mode, hooks = {}, options = {}) {
     if (!supported(mode.id)) return null;
-    const m = MODES[mode.id];
-    const POP = m.pop, REVEAL = m.reveal, HOP = POP + m.hop, COPY_IN = POP + COPY_DELAY;
-    const ui = buildOverlay(mode);
+    const m = SCENES[mode.id];
+    const embedded = Boolean(options.embedded);
+    const alreadyRevealed = Boolean(options.alreadyRevealed);
+    const staticFrame = embedded ? 300 : 0;
+    const exitDuration = options.exitDuration || EXIT;
+    const finishPause = options.finishPause ?? 300;
+    const POP = alreadyRevealed ? 0 : m.pop;
+    const REVEAL = alreadyRevealed ? 0 : m.reveal;
+    const HOP = alreadyRevealed ? 0 : POP + m.hop;
+    const COPY_IN = alreadyRevealed ? 0 : POP + COPY_DELAY;
+    const idleOrigin = m.pop + m.hop + 980;
+    const ui = options.ui || buildOverlay(mode);
+    if (!ui) return null;
+    const progressFx = decorateProgress(ui);
     const parts = makeParticles(mode.id);
-    const view = {w: 1, h: 1, glScale: 1, fxScale: 1};
+    const view = {w: 1, h: 1, glScale: 1, fxScale: 1, coverX: .5, coverY: .5};
     let gl = null, U = null, fx = null, images = null;
-    let startAt = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
-    let phraseKey = '', copyStep = 0, waitingText = '', finished = false, destroyed = false;
+    let startAt = 0, readyAt = Infinity, readyProgress = options.initialProgress ?? .72, exitAt = Infinity, raf = 0;
+    let externalProgress = clamp(options.initialProgress ?? .08), phraseKey = '', copyStep = alreadyRevealed ? 1 : 0;
+    let waitingText = '', finished = false, destroyed = false, initialized = false;
     let resolveCovered, resolveFinished, rejectReady;
     const covered = new Promise((resolve) => { resolveCovered = resolve; });
     const done = new Promise((resolve) => { resolveFinished = resolve; });
@@ -784,6 +959,7 @@
       // 素材只有 1672 像素宽，画布再大也不会更清楚；按需封顶，省 GPU。
       view.glScale = Math.min(dpr, Math.max(1, 2000 / view.w), 2);
       view.fxScale = Math.min(dpr, 2);
+      [view.coverX, view.coverY] = embedded ? cssCoverPosition(ui.overlay) : [.5, .5];
       ui.glCanvas.width = Math.round(view.w * view.glScale); ui.glCanvas.height = Math.round(view.h * view.glScale);
       ui.fxCanvas.width = Math.round(view.w * view.fxScale); ui.fxCanvas.height = Math.round(view.h * view.fxScale);
       gl?.viewport(0, 0, ui.glCanvas.width, ui.glCanvas.height);
@@ -799,12 +975,14 @@
 
     const revealAt = (t) => {
       const W = view.w * view.glScale, H = view.h * view.glScale, d = view.glScale;
-      const k = clamp((t - POP) / REVEAL), started = t >= POP;
+      const revealTime = alreadyRevealed ? m.pop + m.reveal + 2000 : t;
+      const k = alreadyRevealed ? 1 : clamp((t - POP) / REVEAL);
+      const started = alreadyRevealed || t >= POP;
       const far = (x, y) => Math.max(Math.hypot(x, y), Math.hypot(W - x, y), Math.hypot(x, H - y), Math.hypot(W - x, H - y));
-      const rimFade = 1 - smooth(clamp((k - .7) / .3));
+      const rimFade = alreadyRevealed ? 0 : 1 - smooth(clamp((k - .7) / .3));
       if (m.revealType === 0) return {o: [view.w * .3 * d, view.h * .58 * d], z: started ? easeOutQuart(k) * Math.hypot(W, H) * 1.05 : 0, b: [0, 0, 0], rimFade};
       if (m.revealType === 1) {
-        const grid = .5 * (1 - smooth(clamp((t - POP - REVEAL * .55) / 700)));
+        const grid = .5 * (1 - smooth(clamp((revealTime - m.pop - m.reveal * .55) / 700)));
         return {o: [0, H * .5], z: started ? easeOutCubic(k) * 1.25 : -1, b: [64 * d, far(0, H * .5), grid], rimFade};
       }
       if (m.revealType === 2) {
@@ -814,7 +992,7 @@
       if (m.revealType === 3) {
         const c = starOrigin(view), o = [c.x * d, (view.h - c.y) * d];
         const z = started ? 56 * d + (easeInOutCubic(k) * .7 + easeOutQuart(k) * .3) * far(o[0], o[1]) * 3 : 0;
-        return {o, z, b: [STAR_TILT * (1 - k) + Math.sin(t / 900) * .04, 0, 0], rimFade};
+        return {o, z, b: [STAR_TILT * (1 - k) + Math.sin(revealTime / 900) * .04, 0, 0], rimFade};
       }
       const ang = .32, n = [Math.cos(ang), Math.sin(ang)], band = 58 * d;
       const total = W * n[0] + H * n[1] + band + 4;
@@ -822,15 +1000,44 @@
     };
 
     const state = (t) => {
+      const exit = clamp((t - exitAt) / exitDuration);
+      // 嵌入开屏的第一个合成帧就是原 CSS 画面：不推镜、不位移、不失焦，
+      // 等画布开始淡入后再把待机动作和缓慢景深加回来。
+      if (embedded && t < staticFrame && exit === 0) {
+        return {zoom: 1, panX: 0, tx: 0, ty: 0, sx: 1, sy: 1, rot: 0, fade: 1, exit: 0, exitAge: 0,
+          blurChar: 0, blurBg: 0, haze: 0, mustacheWobble: 0};
+      }
+      const sceneT = alreadyRevealed ? idleOrigin + Math.max(0, t - staticFrame) : t;
       const tRel = t - POP;
-      const exit = clamp((t - exitAt) / EXIT);
-      const zoom = tRel < 0 ? 1.09 : lerp(1.09, 1, easeOutCubic(clamp(tRel / 1500))) + .006 * Math.sin(t / 1400);
-      const panX = tRel < 0 ? .025 : lerp(.025, 0, easeOutCubic(clamp(tRel / 1500))) + .003 * Math.sin(t / 1700);
-      // 对焦：先朦胧发亮，焦点先落到碧琪，背景随后清晰；退场时反过来轻微失焦。
-      const blurChar = Math.max(1 - smooth(clamp((t - (POP + 120)) / 620)), exit * .7);
-      const blurBg = Math.max(1 - smooth(clamp((t - (POP + 260)) / 900)), exit * .8);
-      const haze = Math.max(t < POP ? 1 : 1 - easeOutCubic(clamp(tRel / 820)), exit * .35);
-      return {zoom: zoom + exit * .05, panX, ...m.motion(t, t - HOP, POP), fade: 1 - easeInQuad(exit), exit, blurChar, blurBg, haze};
+      let zoom, panX, blurChar, blurBg, haze;
+      if (alreadyRevealed) {
+        const idle = Math.max(0, t - staticFrame);
+        zoom = 1 + .018 * (1 - Math.exp(-idle / 7800)) + .0025 * Math.sin(idle / 2200);
+        panX = .003 * Math.sin(idle / 3400);
+        blurChar = exit * .7; blurBg = exit * .8; haze = exit * .35;
+      } else {
+        zoom = tRel < 0 ? 1.09 : lerp(1.09, 1, easeOutCubic(clamp(tRel / 1500))) + .006 * Math.sin(t / 1400);
+        panX = tRel < 0 ? .025 : lerp(.025, 0, easeOutCubic(clamp(tRel / 1500))) + .003 * Math.sin(t / 1700);
+        // 对焦：先朦胧发亮，焦点先落到碧琪，背景随后清晰；退场时反过来轻微失焦。
+        blurChar = Math.max(1 - smooth(clamp((t - (POP + 120)) / 620)), exit * .7);
+        blurBg = Math.max(1 - smooth(clamp((t - (POP + 260)) / 900)), exit * .8);
+        haze = Math.max(t < POP ? 1 : 1 - easeOutCubic(clamp(tRel / 820)), exit * .35);
+      }
+      const motionT = embedded ? sceneT : t;
+      const motionH = embedded ? sceneT - (m.pop + m.hop) : t - HOP;
+      const pose = m.motion(motionT, motionH, m.pop);
+      if (mode.id === 'splash' && exit > 0) {
+        const dash = easeOutQuart(exit);
+        pose.tx = -.42 * dash;
+        pose.ty += .010 * dash;
+        pose.sx *= 1 + .38 * dash;
+        pose.sy *= 1 - .20 * dash;
+        pose.rot -= .035 * dash;
+      }
+      const mustacheCycle = Math.max(0, sceneT - staticFrame) % 1200;
+      const mustacheWobble = m.mustache && mustacheCycle < 245 ? Math.sin(Math.PI * mustacheCycle / 245) : 0;
+      return {zoom: zoom + exit * .05, panX, ...pose, fade: 1 - easeInQuad(exit), exit, exitAge: Math.max(0, t - exitAt),
+        blurChar, blurBg, haze, mustacheWobble};
     };
 
     // 图片上的一点在画面上的位置（char 跟着碧琪动，plate 跟着背景动）。
@@ -841,7 +1048,7 @@
         let qx = (u - m.anchor[0]) * s.sx * ia, qy = (v - (1 - m.anchor[1])) * s.sy;
         const c = Math.cos(s.rot), sn = Math.sin(s.rot);
         [qx, qy] = [c * qx - sn * qy, sn * qx + c * qy];
-        u = m.anchor[0] + qx / ia; v = 1 - m.anchor[1] + qy + s.ty;
+        u = m.anchor[0] + qx / ia + (s.tx || 0); v = 1 - m.anchor[1] + qy + s.ty;
         const zc = 1 + (s.zoom - 1) * m.charDepth;
         p0 = [.5 + (u - .5 - s.panX * m.charDepth) * zc, .5 + (v - .5) * zc];
       } else {
@@ -851,7 +1058,13 @@
       }
       const sa = view.w / view.h;
       let [x, y] = p0;
-      if (sa > ia) y = (y - .5) / (ia / sa) + .5; else x = (x - .5) / (sa / ia) + .5;
+      if (sa > ia) {
+        const k = ia / sa;
+        y = (y - view.coverY * (1 - k)) / k;
+      } else {
+        const k = sa / ia;
+        x = (x - view.coverX * (1 - k)) / k;
+      }
       return {x: x * view.w, y: (1 - y) * view.h};
     };
     const fallRain = (t, list, draw) => {
@@ -866,15 +1079,17 @@
     const render = (t) => {
       const s = state(t), rv = revealAt(t);
       gl.uniform2f(U.uRes, ui.glCanvas.width, ui.glCanvas.height);
+      gl.uniform2f(U.uCover, view.coverX, view.coverY);
       gl.uniform1f(U.uPx, view.glScale);
       gl.uniform1f(U.uTime, t / 1000);
       gl.uniform1f(U.uZoom, s.zoom);
       gl.uniform2f(U.uPan, s.panX, 0);
-      gl.uniform2f(U.uHopT, 0, s.ty);
+      gl.uniform2f(U.uHopT, s.tx || 0, s.ty);
       gl.uniform2f(U.uHopS, s.sx, s.sy);
       gl.uniform1f(U.uRot, s.rot);
       gl.uniform1f(U.uFade, s.fade);
-      gl.uniform1f(U.uWobble, clamp((t - POP) / 600));
+      gl.uniform1f(U.uWobble, embedded ? clamp((t - staticFrame) / 600) : clamp((t - POP) / 600));
+      gl.uniform1f(U.uMustacheWobble, s.mustacheWobble || 0);
       gl.uniform1f(U.uBlurBg, s.blurBg);
       gl.uniform1f(U.uBlurChar, s.blurChar);
       gl.uniform1f(U.uHaze, s.haze);
@@ -887,7 +1102,7 @@
       fx.setTransform(view.fxScale, 0, 0, view.fxScale, 0, 0);
       fx.clearRect(0, 0, view.w, view.h);
       fx.globalAlpha = s.fade;
-      FX[mode.id](fx, t, s, env);
+      if (!alreadyRevealed || mode.id === 'splash') FX[mode.id](fx, t, s, env);
       // 加载完成：从进度条末端撒一把
       const doneAt = t - (readyAt + FINISH);
       if (doneAt > 0) {
@@ -902,31 +1117,39 @@
     };
 
     const setMessage = (text, ready = false) => {
-      ui.progress.classList.toggle('is-done', ready);
       for (const node of ui.messages) {
         node.textContent = text;
         node.classList.remove('is-swapping'); void node.offsetWidth; node.classList.add('is-swapping');
       }
+      if (ready) ui.progress.classList.add('is-done');
+    };
+
+    const setExternalProgress = (value, {done = false, message} = {}) => {
+      const raw = Number(value);
+      externalProgress = clamp(raw > 1 ? raw / 100 : raw);
+      if (typeof message === 'string' && ui.messageNode?.textContent !== message) setMessage(message, done);
+      progressFx.sync(externalProgress, {done});
+      const aria = String(Math.round(externalProgress * 100));
+      if (ui.progress.getAttribute('aria-valuenow') !== aria) ui.progress.setAttribute('aria-valuenow', aria);
     };
 
     const syncDom = (t) => {
       if (copyStep === 0 && t >= COPY_IN) { ui.overlay.classList.add('is-copy-in'); copyStep = 1; }
-      const p = progressAt(t), ready = t >= readyAt + FINISH;
-      // 填充按宽度走（最短一个圆头），圆头和彩点不会被压扁。
-      const w = ui.progress.clientWidth, h = ui.progress.clientHeight, filled = h + (w - h) * p;
-      ui.fill.style.width = `${filled.toFixed(1)}px`;
-      ui.lit.style.clipPath = `inset(0 ${(w - filled).toFixed(1)}px 0 0)`;
-      ui.tip.style.translate = `${filled.toFixed(1)}px 0`;
-      ui.progress.style.setProperty('--laolao-progress', p.toFixed(3));
-      const value = String(Math.round(p * 100));
-      if (ui.progress.getAttribute('aria-valuenow') !== value) ui.progress.setAttribute('aria-valuenow', value);
-      const index = Math.floor(Math.max(0, t - COPY_IN) / PHRASE_EVERY);
-      const key = ready ? 'ready' : (index >= phrases.length + 3 && waitingText ? 'waiting' : String(Math.min(phrases.length - 1, index)));
-      if (key !== phraseKey) {
-        phraseKey = key;
-        setMessage(key === 'ready' ? mode.readyPhrase : key === 'waiting' ? waitingText : phrases[+key], key === 'ready');
+      if (options.externalProgress) {
+        progressFx.sync(externalProgress, {done: finished && externalProgress >= 1});
+      } else {
+        const p = progressAt(t), ready = t >= readyAt + FINISH;
+        progressFx.sync(p, {done: ready});
+        const value = String(Math.round(p * 100));
+        if (ui.progress.getAttribute('aria-valuenow') !== value) ui.progress.setAttribute('aria-valuenow', value);
+        const index = Math.floor(Math.max(0, t - COPY_IN) / PHRASE_EVERY);
+        const key = ready ? 'ready' : (index >= phrases.length + 3 && waitingText ? 'waiting' : String(Math.min(phrases.length - 1, index)));
+        if (key !== phraseKey) {
+          phraseKey = key;
+          setMessage(key === 'ready' ? mode.readyPhrase : key === 'waiting' ? waitingText : phrases[+key], key === 'ready');
+        }
       }
-      if (t >= readyAt && exitAt === Infinity) exitAt = Math.max(readyAt + FINISH + 300, HOP + 820, POP + REVEAL + 200);
+      if (t >= readyAt && exitAt === Infinity) exitAt = Math.max(readyAt + FINISH + finishPause, HOP + (embedded ? 0 : 820), POP + REVEAL + (embedded ? 0 : 200));
       if (t >= exitAt && copyStep === 1) {
         copyStep = 2;
         ui.overlay.classList.add('is-leaving');
@@ -940,7 +1163,10 @@
       root.cancelAnimationFrame(raf);
       root.removeEventListener('resize', resize);
       try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
-      ui.overlay.remove();
+      if (embedded) {
+        ui.dispose?.();
+        ui.overlay.classList.remove('is-fx-ready', 'laolao-splash--fx', 'is-leaving');
+      } else ui.overlay.remove();
       resolveCovered();
       resolveFinished();
     };
@@ -951,7 +1177,7 @@
       syncDom(t);
       render(t);
       if (t >= POP + REVEAL + 16) resolveCovered();
-      if (t >= exitAt + EXIT) { cleanup(); return; }
+      if (t >= exitAt + exitDuration) { cleanup(); return; }
       raf = root.requestAnimationFrame(tick);
     };
 
@@ -960,16 +1186,21 @@
       const entries = await withTimeout(Promise.all(Object.entries(urls).map(async ([key, url]) => [key, await loadImage(url)])), LOAD_TIMEOUT);
       if (destroyed) throw new Error('aborted');
       images = Object.fromEntries(entries);
-      root.document.body.append(ui.overlay);
+      if (!embedded) root.document.body.append(ui.overlay);
       resize();
       const created = createGL(ui.glCanvas, images, m);
       if (!created) throw new Error('webgl');
       ({gl, U} = created);
       fx = ui.fxCanvas.getContext('2d');
+      if (!fx) throw new Error('canvas');
       root.addEventListener('resize', resize);
-      setMessage(phrases[0]);
+      if (!options.externalProgress) setMessage(phrases[0]);
       startAt = root.performance.now();
       render(0);
+      initialized = true;
+      if (embedded) root.requestAnimationFrame(() => {
+        if (!destroyed) ui.overlay.classList.add('laolao-splash--fx', 'is-fx-ready');
+      });
       raf = root.requestAnimationFrame(tick);
     })();
     ready.catch(() => cleanup());
@@ -980,22 +1211,51 @@
       // 揭幕完全盖住旧页面后再换路由，换页过程藏在画面后面。
       covered,
       // 目的地已就绪：进度走完、完成动效、退场，结束后移除浮层。
-      finish() {
+      finish(detail = {}) {
         if (!finished && !destroyed) {
           finished = true;
           const t = root.performance.now() - startAt;
-          readyProgress = waitingProgress(t);
+          if (options.externalProgress && !detail.keepProgress) {
+            externalProgress = 1;
+            progressFx.sync(1, {done: true});
+          } else readyProgress = waitingProgress(t);
           readyAt = Math.max(t, COPY_IN);
           // 窗口被隐藏时动画时钟会停，不能让浮层一直挡着。
           if (root.document.hidden) cleanup();
-          else root.setTimeout(cleanup, Math.max(readyAt + FINISH + 300, HOP + 820) - t + EXIT + 1500);
+          else root.setTimeout(cleanup,
+            Math.max(readyAt + FINISH + finishPause, HOP + (embedded ? 0 : 820), POP + REVEAL + (embedded ? 0 : 200)) - t + exitDuration + 1500);
         }
         return done;
       },
+      progress(value, detail) { setExternalProgress(value, detail); },
+      get isReady() { return initialized && !destroyed; },
       waiting(text) { waitingText = text; },
       abort: cleanup,
     };
   }
 
-  return {supported, warm, play, assetUrls, modes: Object.keys(MODES), _test: {MODES, makeParticles, keys}};
+  function play(mode, hooks = {}) {
+    if (!supported(mode?.id)) return null;
+    return playScene(mode, hooks);
+  }
+
+  // 开屏不再复制一份效果：只是把同一个 scene runner 嵌到现有静态壳里。
+  // 切换后的整页刷新带 alreadyRevealed，直接从该模式的已对焦待机状态起播。
+  function playSplash({host, sceneId = 'splash', initialProgress = 8, onExit} = {}) {
+    if (!host || !supported(sceneId)) return null;
+    const ui = buildSplashOverlay(host);
+    if (!ui) return null;
+    const scene = {
+      id: sceneId,
+      label: sceneId === 'splash' ? '来啦～老弟' : (MODES[sceneId]?.label || '碧琪的模式切换'),
+      phrases: [],
+      readyPhrase: '',
+    };
+    return playScene(scene, {onExit}, {
+      ui, embedded: true, alreadyRevealed: true, externalProgress: true,
+      initialProgress: clamp(Number(initialProgress) / 100), finishPause: 60, exitDuration: 460,
+    });
+  }
+
+  return {supported, warm, play, playSplash, assetUrls, modes: Object.keys(MODES), _test: {MODES, SCENES, makeParticles, keys}};
 });
