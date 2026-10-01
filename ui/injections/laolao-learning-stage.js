@@ -5,8 +5,6 @@
   const ANSWER_MARKER = "[[CLEKK_LEARNING_ANSWER_V1]]";
   const NEXT_MARKER = "[[CLEKK_LEARNING_NEXT_V1]]";
   const BATCH_MARKER = "[[CLEKK_LEARNING_BATCH_V1]]";
-  const LIGHT_NOTE_MARKER = "[[CLEKK_NOTE_LIGHT_V1]]";
-  const DEEP_NOTE_MARKER = "[[CLEKK_NOTE_DEEP_V1]]";
   const ASSET = "./laolao-learning-question.png";
   const state = {
     sessionKey: "",
@@ -37,6 +35,7 @@
     reviewFlipped: false,
     organizationPlan: null,
     organizationBusy: false,
+    organizationRequestId: "",
     organizationReminderDismissed: false,
     organizationSourceNotes: [],
     undoKind: "",
@@ -104,7 +103,9 @@
     const groups = Array.from(document.querySelectorAll(".chat-group.user")).slice(-8);
     for (const group of groups) {
       const text = group.textContent || "";
-      const internal = [START_MARKER, ANSWER_MARKER, NEXT_MARKER, BATCH_MARKER, LIGHT_NOTE_MARKER, DEEP_NOTE_MARKER].some(marker => text.includes(marker));
+      // Older saved chats can still contain note controls sent before the independent drawer model.
+      const internal = [START_MARKER, ANSWER_MARKER, NEXT_MARKER, BATCH_MARKER,
+        "[[CLEKK_NOTE_LIGHT_V1]]", "[[CLEKK_NOTE_DEEP_V1]]"].some(marker => text.includes(marker));
       group.classList.toggle("laolao-learning-control-message", internal);
     }
   };
@@ -384,7 +385,6 @@
   const noteOriginal = note => String(note?.original ?? note?.content ?? "");
   const currentSession = () => pageSessionKey();
   const currentTags = () => [...state.selectedTags];
-  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   const loadSessionLabels = async () => {
     if (Date.now() - state.sessionLabelsAt < 45_000) return;
@@ -567,11 +567,16 @@
     const items = [
       ["复制", async () => { try { await navigator.clipboard.writeText(note.content || noteOriginal(note)); showToast("已复制"); } catch { showToast("系统没有允许复制，请手动选择文字", true); } }],
       ["编辑", () => beginEdit(card, note)],
+      ["整理这条", () => organizeSingleNote(note)],
       ["用它出题", () => startSingleNoteQuiz(note)],
       ["删除", () => deleteNoteWithUndo(note)],
     ];
     for (const [label, action] of items) {
       const item = el("button", "", label); item.type = "button";
+      if (label === "整理这条") {
+        item.dataset.notesOrganize = "1";
+        item.disabled = state.organizationBusy || !state.noteData?.organizer?.available;
+      }
       item.addEventListener("click", event => { event.stopPropagation(); menu.hidden = true; more.setAttribute("aria-expanded", "false"); action(); });
       menu.append(item);
     }
@@ -712,34 +717,51 @@
 
   const requestDeepOrganization = async () => {
     if (state.organizationBusy) return;
+    const sessionKey = currentSession();
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `organize-${Date.now()}`;
+    state.organizationRequestId = requestId;
     state.organizationBusy = true;
+    renderOrganizer(state.noteData?.organizer);
     const status = state.drawer?.querySelector(".laolao-learning-notes__status");
-    if (status) status.textContent = "碧琪正在检查笔记…";
+    if (status) status.textContent = "整理助手正在检查笔记…";
     try {
-      const result = await request("pinkie.learning.notes.list", {sessionKey: currentSession(), limit: 500});
-      const notes = (result.notes || []).filter(note => note.status !== "merged");
-      state.organizationSourceNotes = notes;
-      const requestId = crypto.randomUUID ? crypto.randomUUID() : `organize-${Date.now()}`;
-      const compact = notes.map(note => ({
-        id: note.id, title: note.title, original: noteOriginal(note).slice(0, 12000),
-        term: note.term || "", meaning: note.meaning || "", example: note.example || "", note: note.note || "",
-        tags: note.tags || [], topic: note.topic || "",
-      }));
-      await sendControl(`${DEEP_NOTE_MARKER}\nrequest_id: ${requestId}\n请为以下当前学习会话的全部笔记提出整理操作，只返回 learning_notes 工具调用，不要在聊天里发方案。笔记 JSON：${JSON.stringify(compact)}`);
-      for (let attempt = 0; attempt < 45; attempt++) {
-        const plan = await request("pinkie.learning.notes.organize.get", {sessionKey: currentSession(), requestId}, 8000);
-        if (plan?.state === "preview") {
-          state.organizationPlan = plan; renderOrganizationPreview(plan);
-          if (status) status.textContent = `${plan.operations?.length || 0} 项待确认 · 未选中的不生效`;
-          return;
-        }
-        await wait(900);
-      }
-      throw new Error("碧琪没有按时交回整理方案，请稍后再试；笔记保持原样");
+      const result = await request("pinkie.learning.notes.list", {sessionKey, limit: 500});
+      if (currentSession() !== sessionKey || state.organizationRequestId !== requestId) return;
+      state.organizationSourceNotes = (result.notes || []).filter(note => note.status !== "merged");
+      const plan = await request("pinkie.learning.notes.organize.preview", {sessionKey, requestId}, 50000);
+      if (currentSession() !== sessionKey || state.organizationRequestId !== requestId) return;
+      state.organizationPlan = plan; renderOrganizationPreview(plan);
+      if (status) status.textContent = `${plan.operations?.length || 0} 项待确认 · 未选中的不生效`;
     } catch (error) {
+      if (currentSession() !== sessionKey || state.organizationRequestId !== requestId) return;
       if (status) status.textContent = error.message || "整理失败 · 笔记保持原样";
       showToast(error.message || "整理失败，笔记保持原样", true);
-    } finally { state.organizationBusy = false; }
+    } finally {
+      if (state.organizationRequestId === requestId) {
+        state.organizationBusy = false; state.organizationRequestId = ""; renderOrganizer(state.noteData?.organizer);
+      }
+    }
+  };
+
+  const renderOrganizer = data => {
+    const select = state.drawer?.querySelector(".laolao-learning-notes__model");
+    const hint = state.drawer?.querySelector(".laolao-learning-notes__model-hint");
+    if (!select) return;
+    const signature = JSON.stringify(data || {});
+    if (select.dataset.catalog !== signature) {
+      select.replaceChildren();
+      const fallback = el("option", "", data?.defaultModelName ? `默认 · ${data.defaultModelName}` : "暂无可用模型"); fallback.value = "";
+      select.append(fallback);
+      for (const model of data?.models || []) {
+        const option = el("option", "", model.name); option.value = model.id; select.append(option);
+      }
+      select.value = data?.selectedModel || ""; select.dataset.catalog = signature;
+    }
+    select.disabled = !(data?.models?.length);
+    if (hint) hint.textContent = data?.available ? "仅手动整理 · 不占用聊天" : "模型不可用 · 保存照常";
+    for (const button of state.drawer.querySelectorAll("[data-notes-organize]")) {
+      button.disabled = state.organizationBusy || !data?.available;
+    }
   };
 
   const renderTagFilters = tags => {
@@ -810,6 +832,7 @@
       state.notesSessionKey = sessionKey;
       state.selectedTags.clear(); state.searchText = ""; state.includeMerged = false;
       state.reviewQueue = null; state.reviewFlipped = false; state.organizationPlan = null;
+      state.organizationBusy = false; state.organizationRequestId = "";
       state.groupVisibility = new Map();
       const search = state.drawer?.querySelector(".laolao-learning-notes__search"); if (search) search.value = "";
       renderOrganizationPreview(null);
@@ -825,6 +848,7 @@
       });
       if (requestId !== state.notesLoadId) return;
       state.noteData = result; state.notes = Array.isArray(result?.notes) ? result.notes : [];
+      renderOrganizer(result?.organizer);
       const due = Number(result?.dueCount) || 0;
       const dueButton = state.drawer?.querySelector(".laolao-learning-notes__due");
       if (dueButton) { dueButton.textContent = `今天要复习 ${due} 条`; dueButton.disabled = due === 0; }
@@ -844,13 +868,25 @@
     }
   };
 
-  const triggerLightOrganization = note => {
-    const requestId = crypto.randomUUID ? crypto.randomUUID() : `light-${Date.now()}`;
-    const payload = {id: note.id, title: note.title || "", original: noteOriginal(note)};
-    void sendControl(`${LIGHT_NOTE_MARKER}\nrequest_id: ${requestId}\nnote_id: ${note.id}\n原文 JSON：${JSON.stringify(payload)}\n请调用 learning_notes organize_light，原文不可改写。`, note.sourceSessionKey || currentSession())
-      .then(() => wait(600))
-      .then(() => { if (state.drawer?.classList.contains("is-open")) return loadNotes(); })
-      .catch(() => {});
+  const organizeSingleNote = async note => {
+    if (state.organizationBusy) return;
+    const sessionKey = note.sourceSessionKey || currentSession();
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}-${Math.random()}`;
+    state.organizationBusy = true; state.organizationRequestId = requestId;
+    renderOrganizer(state.noteData?.organizer);
+    showToast("正在整理这条笔记…");
+    try {
+      const result = await request("pinkie.learning.notes.organize.light", {sessionKey, id: note.id}, 50000);
+      if (currentSession() !== sessionKey || state.organizationRequestId !== requestId) return;
+      showToast(result.skipped ? result.reason || "这次整理已跳过" : "这条笔记已整理");
+      if (state.drawer?.classList.contains("is-open")) await loadNotes();
+    } catch (error) {
+      if (currentSession() === sessionKey && state.organizationRequestId === requestId) showToast(error.message || "整理失败，笔记保持原样", true);
+    } finally {
+      if (state.organizationRequestId === requestId) {
+        state.organizationBusy = false; state.organizationRequestId = ""; renderOrganizer(state.noteData?.organizer);
+      }
+    }
   };
 
   const enterBatchQuiz = async () => {
@@ -924,9 +960,29 @@
       const topActions = el("div", "laolao-learning-notes__top-actions");
       const newButton = el("button", "laolao-learning-button laolao-learning-button--primary", "＋ 新笔记"); newButton.type = "button";
       const organize = el("button", "laolao-learning-button", "一键整理"); organize.type = "button"; organize.addEventListener("click", requestDeepOrganization);
+      organize.dataset.notesOrganize = "1";
       const markdown = el("button", "laolao-learning-notes__icon-action", "Markdown"); markdown.type = "button"; markdown.addEventListener("click", revealMarkdown);
       const anki = el("button", "laolao-learning-notes__icon-action", "Anki CSV"); anki.type = "button"; anki.addEventListener("click", exportAnkiCsv);
       topActions.append(newButton, organize, markdown, anki);
+
+      const modelRow = el("div", "laolao-learning-notes__model-row");
+      const modelLabel = el("label", "", "整理模型");
+      const model = el("select", "laolao-learning-notes__model"); model.setAttribute("aria-label", "笔记整理模型");
+      const modelHint = el("small", "laolao-learning-notes__model-hint", "仅手动整理 · 不占用聊天");
+      modelLabel.append(model); modelRow.append(modelLabel, modelHint);
+      model.addEventListener("change", async () => {
+        const sessionKey = currentSession(); const previous = state.noteData?.organizer;
+        model.disabled = true;
+        try {
+          const data = await request("pinkie.learning.notes.organizer.setModel", {sessionKey, model: model.value});
+          if (currentSession() !== sessionKey) return;
+          if (state.noteData) state.noteData.organizer = data;
+          renderOrganizer(data);
+        } catch (error) {
+          if (currentSession() !== sessionKey) return;
+          model.value = previous?.selectedModel || ""; renderOrganizer(previous); showToast(error.message || "模型选择失败", true);
+        }
+      });
 
       const compose = el("form", "laolao-learning-notes__compose"); compose.hidden = true;
       const title = el("input"); title.placeholder = "标题（可不填）"; title.setAttribute("aria-label", "笔记标题");
@@ -942,12 +998,12 @@
         const sessionKey = currentSession();
         setBusy(save, true, "保存中…");
         try {
-          const result = await request("pinkie.learning.notes.save", {
+          await request("pinkie.learning.notes.save", {
             sessionKey, title: title.value, content: noteBody.value,
             tags: noteTags.value.split(/[,，]/).map(value => value.trim()).filter(Boolean), sourceLabel: "手写笔记",
           });
           title.value = ""; noteBody.value = ""; noteTags.value = ""; compose.hidden = true; newButton.setAttribute("aria-expanded", "false");
-          setBusy(save, false, "保存笔记"); await loadNotes(); triggerLightOrganization(result.note);
+          setBusy(save, false, "保存笔记"); await loadNotes();
         } catch (error) { setBusy(save, false, "保存笔记"); showToast(error.message || "保存失败", true); }
       });
       newButton.setAttribute("aria-expanded", "false");
@@ -959,6 +1015,7 @@
       const reminder = el("div", "laolao-learning-notes__organize-reminder"); reminder.hidden = true;
       reminder.append(el("span", "", "有 10 条以上笔记还没做主题整理"));
       const remindOrganize = el("button", "", "现在整理"); remindOrganize.type = "button"; remindOrganize.addEventListener("click", requestDeepOrganization);
+      remindOrganize.dataset.notesOrganize = "1";
       const remindDismiss = el("button", "", "×"); remindDismiss.type = "button"; remindDismiss.setAttribute("aria-label", "关闭整理提示");
       remindDismiss.addEventListener("click", () => {
         const key = `pinkie:notes:organize-dismissed:${currentSession()}`;
@@ -998,7 +1055,7 @@
       const preview = el("div", "laolao-learning-notes__preview"); preview.hidden = true;
       const list = el("div", "laolao-learning-notes__list");
       const undo = el("div", "laolao-learning-notes__undo"); undo.hidden = true;
-      contentWrap.append(reviewBar, topActions, compose, reminder, searchRow, tags, filters, status, preview, list, undo);
+      contentWrap.append(reviewBar, topActions, modelRow, compose, reminder, searchRow, tags, filters, status, preview, list, undo);
       drawer.append(header, contentWrap);
       document.body.append(drawer);
       state.drawer = drawer;
@@ -1013,9 +1070,8 @@
     state.selectionButton?.remove(); state.selectionButton = null;
     if (!text) return;
     try {
-      const result = await request("pinkie.learning.notes.save", {sessionKey: pageSessionKey(), content: text, sourceLabel: state.selectionLabel || "聊天摘录"});
+      await request("pinkie.learning.notes.save", {sessionKey: pageSessionKey(), content: text, sourceLabel: state.selectionLabel || "聊天摘录"});
       showToast("已记进学习笔记");
-      triggerLightOrganization(result.note);
       if (state.drawer?.classList.contains("is-open")) await loadNotes();
     } catch (error) { showToast(error.message || "笔记保存失败", true); }
   };

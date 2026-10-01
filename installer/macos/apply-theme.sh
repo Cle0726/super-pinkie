@@ -291,7 +291,7 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-learning-stage.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-learning-stage.css?v=learning5">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-learning-stage.css?v=learning8">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -394,7 +394,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-learning-stage.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-stage.js?v=learning5"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-stage.js?v=learning8"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -717,12 +717,12 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-memory\.js(?:\?v=[^"]*)?}{./laolao-memory.js?v=memory2}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-learning-stage.css?v=learning5' "$index_file"; then
-    perl -0pi -e 's{\./laolao-learning-stage\.css(?:\?v=[^"]*)?}{./laolao-learning-stage.css?v=learning5}g' "$index_file"
+  if ! grep -Fq './laolao-learning-stage.css?v=learning8' "$index_file"; then
+    perl -0pi -e 's{\./laolao-learning-stage\.css(?:\?v=[^"]*)?}{./laolao-learning-stage.css?v=learning8}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-learning-stage.js?v=learning5' "$index_file"; then
-    perl -0pi -e 's{\./laolao-learning-stage\.js(?:\?v=[^"]*)?}{./laolao-learning-stage.js?v=learning5}g' "$index_file"
+  if ! grep -Fq './laolao-learning-stage.js?v=learning8' "$index_file"; then
+    perl -0pi -e 's{\./laolao-learning-stage\.js(?:\?v=[^"]*)?}{./laolao-learning-stage.js?v=learning8}g' "$index_file"
     DID_CHANGE=1
   fi
 
