@@ -76,7 +76,7 @@
   // so a repaired renderer could remain invisible forever. Run one guarded
   // cache migration per UI revision. This removes only disposable control-ui
   // caches; transcripts, settings, prompts and media are not stored here.
-  const UI_CACHE_REVISION = "history-render-29";
+  const UI_CACHE_REVISION = "history-render-31";
   const UI_CACHE_REFRESHED = `laolao:ui-cache-refreshed:${UI_CACHE_REVISION}`;
   const UI_CACHE_REFRESH_ATTEMPTED = `laolao:ui-cache-refresh-attempted:${UI_CACHE_REVISION}`;
   let gatewayOfflineSince = 0;
@@ -410,6 +410,36 @@
     return false;
   };
 
+  // A terminal frame can leave the native Stop button in the DOM for one
+  // paint after its reactive run fields have been cleared.  Keep the fact
+  // that *we just verified the backend idle* separate from the broad UI busy
+  // predicate: queue recovery may ignore only that residual button, and only
+  // for this short handoff.  A fresh run still wins immediately through the
+  // reactive fields and the second sessions.list check below.
+  const VERIFIED_QUEUE_IDLE_MS = 4_000;
+  const verifiedQueueIdleByPane = new WeakMap();
+  const markVerifiedQueueIdle = (pane, sessionKey = paneSessionKey(pane)) => {
+    if (!pane || !sessionKey) return;
+    verifiedQueueIdleByPane.set(pane, {sessionKey, until: Date.now() + VERIFIED_QUEUE_IDLE_MS});
+  };
+  const hasVerifiedQueueIdle = (pane, sessionKey = paneSessionKey(pane)) => {
+    const marker = verifiedQueueIdleByPane.get(pane);
+    return Boolean(marker && marker.sessionKey === sessionKey && marker.until > Date.now());
+  };
+  const hasLiveComposerState = (pane) => {
+    const state = pane?.state;
+    if (state?.chatRunId || state?.chatSending || state?.chatStream) return true;
+    const root = pane?.querySelector ? pane : document;
+    return Boolean(root.querySelector?.('[data-laolao-streaming="true"]'));
+  };
+  const queueRecoveryBusy = (pane = activePane()) => {
+    if (!isBusy(pane)) return false;
+    // Do not discount an actual stream or a newly started run.  The one case
+    // we intentionally allow through is the stale Stop element described
+    // above, after an authoritative hasActiveRun=false result.
+    return !hasVerifiedQueueIdle(pane) || hasLiveComposerState(pane);
+  };
+
   const terminalPainted = (pane, message) => {
     const raw = messageText(message).trim();
     if (!raw) return false;
@@ -692,6 +722,14 @@
         window.dispatchEvent(new CustomEvent("pinkie:session-resynced", {
           detail: {sessionKey, reason},
         }));
+        // Native terminal events normally drain chatQueue themselves. A
+        // dropped final (or a watchdog/tier continuation using a replacement
+        // run id) misses that one-shot drain, leaving the composer-side card
+        // stranded forever. Once this bounded authoritative history sync says
+        // the pane is idle, let the native queue API resume it. The helper
+        // re-checks backend idleness and de-duplicates against this history
+        // before it ever retries an item.
+        if (!isBusy(pane)) scheduleQueueRecovery(pane, `history:${reason}`, recent);
         // Normal first-load/manual history sync is silent.  Only close the
         // ribbon when a real offline/retry state was previously announced.
         if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")) {
@@ -782,6 +820,10 @@
     // later real assistant terminal reply for every prior failure.
     clearWatchdogStatus();
     scheduleRecovery("run-recovered", 450);
+    // The watchdog can have completed under a run id the native pane never
+    // tracked. Queue recovery independently confirms idle before using the
+    // public retry API, so this is safe even if a replacement run just began.
+    scheduleQueueRecovery(activePane(), "watchdog-recovered");
   });
   // The native chat pane reports projection rebuilds as an RPC error. The
   // sidebar WebSocket shim forwards that signal here so recovery is armed even
@@ -791,6 +833,7 @@
   });
   window.addEventListener("pinkie:tier-complete", () => {
     scheduleRecovery("tier-complete", 450);
+    scheduleQueueRecovery(activePane(), "tier-complete");
   });
 
   // 只有用户真实点击停止，才取消这一轮自动续接。
@@ -863,7 +906,7 @@
     return out;
   };
 
-  const forceIdleComposerState = (pane = activePane()) => {
+  const forceIdleComposerState = (pane = activePane(), {verifiedIdle = false} = {}) => {
     let touched = false;
     const sessionKey = paneSessionKey(pane);
     for (const {state, owner} of runningStateTargets(pane)) {
@@ -902,6 +945,14 @@
       document.documentElement.removeAttribute("data-laolao-streaming");
       document.dispatchEvent(new CustomEvent("laolao:streaming", {detail: {active: false}}));
     }
+    // This is normally called after an authoritative inactive-run check.  In
+    // that case retain the proof for one paint so a stale Stop element cannot
+    // strand the native queue. The explicit console diagnostic deliberately
+    // does not set it; recovery will then keep the conservative UI guard.
+    if (verifiedIdle) markVerifiedQueueIdle(pane, sessionKey);
+    // Queue recovery performs sessions.list again before sending, so this
+    // narrow handoff can never race a real replacement run.
+    if (!queueRecoveryBusy(pane)) scheduleQueueRecovery(pane, "force-idle");
     return touched;
   };
 
@@ -922,6 +973,404 @@
     if (mine) return mine.hasActiveRun === true;
     // A missing row is not proof of inactivity. Never reset another pane.
     return null;
+  };
+
+  // ── 排队消息的断线收尾兜底 ──────────────────────────────────────────
+  // 原生 chat-page 会在自己收到 terminal event 时调用 lg() 继续 chatQueue。
+  // 但 WKWebView 在后台、看门狗换 runId 或档位续跑时，最容易丢的正是这个
+  // terminal event。这里不重写发送协议：只把已经没有所属 run 的本地项整理
+  // 成原生 retryQueuedChatMessage 能处理的状态，再由原生方法实际发送。
+  const QUEUE_STALE_STATE_AFTER_MS = 8_000;
+  const QUEUE_RECOVERY_THROTTLE_MS = 900;
+  const queueRecoveryByPane = new WeakMap();
+  const queueRecoveryTimerByPane = new WeakMap();
+  const queueRecoveryAtByPane = new WeakMap();
+  const queueRecoveryStatusBySession = new Map();
+  const hydratedNativeComposerQueues = new Set();
+  // A persisted `failed` item should get one recovery attempt after a reload,
+  // but a fresh permanent failure must not turn the idle poll into a retry
+  // loop. The set is intentionally page-local: a real reload gets one clean
+  // stale-state repair pass again.
+  const recoveredFailedQueueItems = new Set();
+
+  const queueTimestampMs = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.abs(value) < 100_000_000_000 ? value * 1_000 : value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        return Math.abs(numeric) < 100_000_000_000 ? numeric * 1_000 : numeric;
+      }
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
+  const queueForSession = (state, sessionKey) => {
+    if (!state || !sessionKey) return [];
+    if (state.sessionKey === sessionKey || !state.chatQueueBySession) {
+      return Array.isArray(state.chatQueue) ? state.chatQueue : [];
+    }
+    const saved = state.chatQueueBySession?.[sessionKey];
+    return Array.isArray(saved) ? saved : [];
+  };
+
+  // Current chat-page normally restores this store while binding a session.
+  // On a WebKit reload that bind can already point at the selected session,
+  // so its restore hook is skipped and a persisted card becomes invisible.
+  // Read only the native store as a one-page fallback, then hand its entries
+  // straight back to the native retry/remove actions below. We never issue a
+  // second chat.send and never overwrite a live in-memory queue.
+  const nativeComposerQueueStoreKey = (state) => {
+    const gatewayUrl = String(state?.settings?.gatewayUrl || "").trim() || "default";
+    return `openclaw.control.chatComposer.v1:${encodeURIComponent(gatewayUrl).slice(0, 240)}`;
+  };
+  const nativeComposerAgentId = (state, sessionKey) => {
+    // This is the same precedence as the native composer store: the session
+    // key owns the agent identity. A selected/default agent can lag one render
+    // behind after a reload, and must not make us hydrate another agent's
+    // queue into this session.
+    const fromSession = /^agent:([^:]+)/.exec(String(sessionKey || ""))?.[1];
+    if (fromSession) return fromSession;
+    return String(state?.assistantAgentId || state?.agentsList?.defaultId || "main").trim() || "main";
+  };
+  const hydrateNativeComposerQueue = (pane, sessionKey) => {
+    const state = pane?.state;
+    if (!state || !sessionKey || queueForSession(state, sessionKey).length) return false;
+    const agentId = nativeComposerAgentId(state, sessionKey);
+    const hydrationKey = `${sessionKey}\u0000agent:${agentId}`;
+    if (hydratedNativeComposerQueues.has(hydrationKey)) return false;
+    hydratedNativeComposerQueues.add(hydrationKey);
+    let saved;
+    try {
+      const raw = window.localStorage?.getItem(nativeComposerQueueStoreKey(state));
+      saved = raw ? JSON.parse(raw) : null;
+    } catch { return false; }
+    const entries = saved?.version === 1 ? saved.sessions?.[hydrationKey]?.queue : null;
+    if (!Array.isArray(entries) || !entries.length) return false;
+    const restored = entries.filter((entry) => entry && typeof entry.id === "string"
+      && (String(entry.text || "").trim() || Array.isArray(entry.attachments))
+      && (!entry.sessionKey || entry.sessionKey === sessionKey)).map((entry) => ({...entry,
+        sessionKey: entry.sessionKey || sessionKey,
+        agentId: entry.agentId || agentId,
+      }));
+    if (!restored.length) return false;
+    state.chatQueue = restored;
+    state.requestUpdate?.();
+    if (state !== pane) pane.requestUpdate?.();
+    return true;
+  };
+
+  const replaceQueueForSession = (pane, sessionKey, nextQueue) => {
+    const state = pane?.state;
+    if (!state || !sessionKey) return false;
+    const items = Array.isArray(nextQueue) ? nextQueue : [];
+    if (state.sessionKey === sessionKey || !state.chatQueueBySession) {
+      state.chatQueue = items;
+    } else {
+      const bySession = {...(state.chatQueueBySession || {})};
+      if (items.length) bySession[sessionKey] = items;
+      else delete bySession[sessionKey];
+      state.chatQueueBySession = bySession;
+    }
+    // state.requestUpdate is the native controller wrapper, which also
+    // persists chatQueue. Never touch the queue card's Lit DOM directly.
+    state.requestUpdate?.();
+    if (state !== pane) pane.requestUpdate?.();
+    return true;
+  };
+
+  const nativeQueueMethod = (pane, name) => {
+    const candidates = [pane, pane?.state, pane?.controller, pane?.chatController];
+    for (const owner of candidates) {
+      if (typeof owner?.[name] === "function") return owner[name].bind(owner);
+    }
+    return null;
+  };
+
+  const queueItemText = (item) => String(item?.text || "").trim();
+  const queueItemCreatedAt = (item) => queueTimestampMs(item?.createdAt);
+  const queueItemAttachmentCount = (item) => Array.isArray(item?.attachments)
+    ? item.attachments.filter(Boolean).length
+    : 0;
+  const historyMessageAt = (message) => queueTimestampMs(
+    message?.timestamp ?? message?.ts ?? message?.createdAt
+  );
+  const historyAttachmentCount = (message) => {
+    const direct = [message?.attachments, message?.media, message?.MediaPaths]
+      .filter(Array.isArray)
+      .reduce((largest, entries) => Math.max(largest, entries.filter(Boolean).length), 0);
+    if (direct) return direct;
+    if (typeof message?.MediaPath === "string" && message.MediaPath.trim()) return 1;
+    if (!Array.isArray(message?.content)) return 0;
+    return message.content.filter((part) => part && typeof part === "object"
+      && !["text", "input_text", "output_text", "thinking", "reasoning"].includes(part.type)).length;
+  };
+  const historyIdempotencyKey = (message) => String(
+    message?.idempotencyKey ?? message?.__openclaw?.idempotencyKey
+      ?? message?.metadata?.idempotencyKey ?? message?.meta?.idempotencyKey ?? ""
+  ).trim();
+  const queueItemMatchesHistoryMessage = (item, message) => {
+    if (String(message?.role || "").toLowerCase() !== "user") return false;
+    const runId = String(item?.sendRunId || "").trim();
+    // Native retry stores sendRunId and the gateway persists it as
+    // `${sendRunId}:user`. This is stronger than matching text (and is the
+    // only reliable confirmation for a pure attachment send).
+    if (runId) return historyIdempotencyKey(message) === `${runId}:user`;
+
+    const createdAt = queueItemCreatedAt(item);
+    if (!createdAt || historyMessageAt(message) < createdAt) return false;
+    const text = queueItemText(item);
+    const attachmentCount = queueItemAttachmentCount(item);
+    if (text && messageText(message).trim() !== text) return false;
+    // A text-only historical message must never consume a queued image/file
+    // with the same caption. For attachment-only steers this conservative
+    // shape comparison is the best proof available after native acknowledgement.
+    if (attachmentCount && historyAttachmentCount(message) < attachmentCount) return false;
+    return Boolean(text || attachmentCount);
+  };
+  const queueItemArrivedInHistory = (item, messages) => {
+    return Array.isArray(messages) && messages.some((message) =>
+      queueItemMatchesHistoryMessage(item, message));
+  };
+  // Do not let one user history row consume several same-text queue cards.
+  // Messages and cards are paired oldest-first, which mirrors their native
+  // insertion order and preserves deliberately repeated user instructions.
+  const deliveredQueueItemIds = (items, messages) => {
+    if (!Array.isArray(items) || !Array.isArray(messages)) return new Set();
+    const orderedItems = items.map((item, index) => ({item, index})).sort((left, right) =>
+      (queueItemCreatedAt(left.item) - queueItemCreatedAt(right.item)) || left.index - right.index);
+    const orderedMessages = messages.map((message, index) => ({message, index})).filter(({message}) =>
+      String(message?.role || "").toLowerCase() === "user").sort((left, right) =>
+      (historyMessageAt(left.message) - historyMessageAt(right.message)) || left.index - right.index);
+    const usedMessages = new Set();
+    const delivered = new Set();
+    const pair = (item) => {
+      if (!item?.id) return;
+      const matchIndex = orderedMessages.findIndex(({message}, index) => !usedMessages.has(index)
+        && queueItemMatchesHistoryMessage(item, message));
+      if (matchIndex < 0) return;
+      usedMessages.add(matchIndex);
+      delivered.add(item.id);
+    };
+    // A normal native retry has a durable sendRunId. Reserve those exact
+    // idempotency matches before an earlier steered card with the same text
+    // gets a chance to use payload fallback.
+    for (const {item} of orderedItems) {
+      if (String(item?.sendRunId || "").trim()) pair(item);
+    }
+    for (const {item} of orderedItems) {
+      if (!String(item?.sendRunId || "").trim()) pair(item);
+    }
+    return delivered;
+  };
+
+  const queueItemActivityAt = (item) => Math.max(
+    queueTimestampMs(item?.sendRequestStartedAtMs),
+    queueTimestampMs(item?.sendSubmittedAtMs),
+    queueItemCreatedAt(item)
+  );
+  const queueItemStateIsStale = (item, now = Date.now()) => {
+    const at = queueItemActivityAt(item);
+    return !at || now - at >= QUEUE_STALE_STATE_AFTER_MS;
+  };
+  const queueRecoveryKey = (sessionKey, item) => `${sessionKey}:${String(item?.id || "")}`;
+  const queueItemNeedsRecovery = (sessionKey, item, now) => {
+    if (!item || item.localCommandName) return false;
+    // A steer accepted/in-flight item is deliberately pending only while its
+    // tracked run exists. The caller has already confirmed the session idle.
+    if (item.pendingRunId || item.kind === "steered") return true;
+    // This state is only assigned to a message that was queued behind a live
+    // model turn; once sessions.list confirms no run it is immediately safe
+    // to hand back to native retry (no arbitrary 8s wait for a lost final).
+    if (item.sendState === "waiting-model") return true;
+    const blocked = ["sending", "waiting-model", "failed"].includes(item.sendState);
+    if (!blocked || !queueItemStateIsStale(item, now)) return false;
+    return item.sendState !== "failed"
+      || !recoveredFailedQueueItems.has(queueRecoveryKey(sessionKey, item));
+  };
+  const normalizeQueuedItem = (sessionKey, item) => {
+    if (item.sendState === "failed") recoveredFailedQueueItems.add(queueRecoveryKey(sessionKey, item));
+    const {pendingRunId, sendError, sendRequestStartedAtMs, kind, ...rest} = item;
+    return {
+      ...rest,
+      // Native retry accepts waiting-reconnect, while its own send routine
+      // immediately promotes it to sending when the socket is usable.
+      sendState: "waiting-reconnect",
+      ...(kind === "steered" ? {kind: "queued"} : kind ? {kind} : {}),
+    };
+  };
+
+  const publishQueueRecoveryStatus = (sessionKey, detail) => {
+    const status = {sessionKey, at: Date.now(), ...detail};
+    queueRecoveryStatusBySession.set(sessionKey, status);
+    window.dispatchEvent(new CustomEvent("pinkie:queue-recovered", {detail: status}));
+  };
+
+  const resumeQueuedChatMessages = async (pane = activePane(), reason = "unknown", options = {}) => {
+    const state = pane?.state;
+    const sessionKey = paneSessionKey(pane);
+    if (!state || !sessionKey || !gatewayConnected() || !recoveryTransportAvailable()
+        || queueRecoveryBusy(pane)) return false;
+    if (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey) return false;
+    if (pane.sessionKey && pane.sessionKey !== sessionKey) return false;
+    let currentQueue = queueForSession(state, sessionKey);
+    if (!currentQueue.length) {
+      hydrateNativeComposerQueue(pane, sessionKey);
+      currentQueue = queueForSession(state, sessionKey);
+    }
+    if (!currentQueue.length) return false;
+    const inFlight = queueRecoveryByPane.get(pane);
+    if (inFlight?.sessionKey === sessionKey) return inFlight.promise;
+    const now = Date.now();
+    const last = queueRecoveryAtByPane.get(pane);
+    if (!options.force && last?.sessionKey === sessionKey
+        && now - last.at < QUEUE_RECOVERY_THROTTLE_MS) return false;
+    queueRecoveryAtByPane.set(pane, {sessionKey, at: now});
+    const recovery = {sessionKey, promise: Promise.resolve(false)};
+    queueRecoveryByPane.set(pane, recovery);
+    recovery.promise = (async () => {
+      let removed = 0;
+      let normalized = 0;
+      let retriedId = null;
+      try {
+        // A local empty composer is not enough: only the authoritative list
+        // permits a retry. This protects a watchdog/tier continuation that
+        // has just started a replacement run.
+        if (await backendHasActiveRun(sessionKey) !== false || queueRecoveryBusy(pane)) return false;
+        const recent = options.recent || await fetchRecentHistory(pane, sessionKey, gatewayClient());
+        if (!recent || paneSessionKey(pane) !== sessionKey || queueRecoveryBusy(pane)) return false;
+        // chat.history is async; refuse to send if a new run appeared while
+        // it was loading, otherwise a queued note could land in the wrong turn.
+        if (await backendHasActiveRun(sessionKey) !== false || queueRecoveryBusy(pane)) return false;
+
+        let items = queueForSession(state, sessionKey);
+        const remove = nativeQueueMethod(pane, "removeQueuedMessage");
+        const deliveredIds = deliveredQueueItemIds(items, recent.messages);
+        const delivered = items.filter((item) => deliveredIds.has(item?.id));
+        // Never fall through and retry a confirmed-delivered item if an
+        // upstream bundle changed the public remove method. Keeping its card
+        // is preferable to manufacturing a duplicate user message.
+        if (delivered.length && !remove) return false;
+        if (delivered.length) {
+          for (const item of delivered) {
+            await Promise.resolve(remove(item.id));
+            recoveredFailedQueueItems.delete(queueRecoveryKey(sessionKey, item));
+            removed += 1;
+          }
+          items = queueForSession(state, sessionKey);
+          if (items.some((item) => deliveredIds.has(item?.id))) return false;
+        }
+
+        const recoveryNow = Date.now();
+        const next = items.map((item) => {
+          if (!queueItemNeedsRecovery(sessionKey, item, recoveryNow)) return item;
+          normalized += 1;
+          return normalizeQueuedItem(sessionKey, item);
+        });
+        if (normalized) {
+          replaceQueueForSession(pane, sessionKey, next);
+          items = queueForSession(state, sessionKey);
+        }
+
+        const candidate = items.find((item) => !item?.localCommandName && !item?.pendingRunId
+          && !["sending", "waiting-model", "failed"].includes(item?.sendState));
+        const retry = nativeQueueMethod(pane, "retryQueuedChatMessage");
+        if (candidate && retry && !queueRecoveryBusy(pane)) {
+          retriedId = candidate.id;
+          await Promise.resolve(retry(candidate.id));
+        }
+        const changed = removed > 0 || normalized > 0 || Boolean(retriedId);
+        if (changed) publishQueueRecoveryStatus(sessionKey, {
+          reason, removed, normalized, retriedId,
+        });
+        return changed;
+      } catch (error) {
+        publishQueueRecoveryStatus(sessionKey, {
+          reason, removed, normalized, retriedId,
+          error: String(error?.message || error),
+        });
+        return false;
+      } finally {
+        if (queueRecoveryByPane.get(pane) === recovery) queueRecoveryByPane.delete(pane);
+      }
+    })();
+    return recovery.promise;
+  };
+
+  const scheduleQueueRecovery = (pane = activePane(), reason = "unknown", recent = null) => {
+    if (!pane || queueRecoveryTimerByPane.has(pane)) return false;
+    const timer = window.setTimeout(() => {
+      queueRecoveryTimerByPane.delete(pane);
+      void resumeQueuedChatMessages(pane, reason, {recent});
+    }, 80);
+    queueRecoveryTimerByPane.set(pane, timer);
+    return true;
+  };
+
+  // A queue item behind a run is a stronger signal than an ordinary stale
+  // spinner: its author is waiting for a concrete next step.  Do not make it
+  // wait out the 25-second generic stale-busy grace when the gateway already
+  // authoritatively says the *tracked* run is gone.  We deliberately require
+  // chatRunId here (not merely chatSending), so a just-submitted new turn can
+  // never be cleared in the small interval before the gateway records it.
+  const queuedBusyIdleProbeByPane = new WeakMap();
+  const QUEUED_BUSY_IDLE_PROBE_MS = 850;
+  const reconcileQueuedBusyIdle = async (pane = activePane()) => {
+    const state = pane?.state;
+    const sessionKey = paneSessionKey(pane);
+    const trackedRunId = String(state?.chatRunId || "").trim();
+    if (!state || !sessionKey || !trackedRunId || !isBusy(pane)
+        || !queueForSession(state, sessionKey).some((item) => item && !item.localCommandName)) return false;
+    const prior = queuedBusyIdleProbeByPane.get(pane);
+    const now = Date.now();
+    if (prior?.inFlight || (prior?.at && now - prior.at < QUEUED_BUSY_IDLE_PROBE_MS)) return false;
+    const probe = {at: now, inFlight: true};
+    queuedBusyIdleProbeByPane.set(pane, probe);
+    try {
+      // A watchdog/tier replacement makes this true, so it is never mistaken
+      // for the end of the old UI run. Only an explicit false may clear it.
+      if (await backendHasActiveRun(sessionKey) !== false
+          || paneSessionKey(pane) !== sessionKey || String(state.chatRunId || "").trim() !== trackedRunId) {
+        return false;
+      }
+      forceIdleComposerState(pane, {verifiedIdle: true});
+      // forceIdle schedules this too; the coalescer keeps the single native
+      // retry pass. Calling it here documents the required queue handoff when
+      // this path is reached from sessions.list rather than a terminal event.
+      scheduleQueueRecovery(pane, "queued-run-ended");
+      return true;
+    } finally {
+      if (queuedBusyIdleProbeByPane.get(pane) === probe) {
+        queuedBusyIdleProbeByPane.set(pane, {at: now, inFlight: false});
+      }
+    }
+  };
+
+  const queueRecoveryTarget = (paneOrReason, maybeReason) => {
+    const pane = paneOrReason && typeof paneOrReason === "object" && paneOrReason.state
+      ? paneOrReason
+      : activePane();
+    const reason = typeof paneOrReason === "string"
+      ? paneOrReason
+      : (typeof maybeReason === "string" ? maybeReason : "manual");
+    return {pane, reason};
+  };
+  window.__laolaoQueueRecovery = {
+    // `recover(pane, reason)` is useful to the busy-send steering layer,
+    // while `recover(reason)` remains convenient from the console/tests.
+    recover: (paneOrReason = "manual", maybeReason) => {
+      const {pane, reason} = queueRecoveryTarget(paneOrReason, maybeReason);
+      return resumeQueuedChatMessages(pane, reason, {force: true});
+    },
+    schedule: (paneOrReason = "manual", maybeReason) => {
+      const {pane, reason} = queueRecoveryTarget(paneOrReason, maybeReason);
+      return scheduleQueueRecovery(pane, reason);
+    },
+    status: (sessionKey = currentSessionKey()) => queueRecoveryStatusBySession.get(sessionKey) || null,
+    isDelivered: queueItemArrivedInHistory,
   };
 
   // A watchdog retry can finish under a new run id after the native pane has
@@ -960,7 +1409,14 @@
           || final?.stopReason === "toolUse" || !messageText(final).trim()) return false;
       const current = pane.state?.chatMessages?.at(-1);
       const sameFinal = messageIdentity(current) === messageIdentity(final);
-      if (sameFinal && !isBusy(pane) && terminalPainted(pane, final)) return false;
+      if (sameFinal && !isBusy(pane) && terminalPainted(pane, final)) {
+        // The renderer can already have painted the persisted final while the
+        // one native terminal callback that drains chatQueue was lost. The
+        // transcript needs no repaint, but the idle queue still needs its
+        // authoritative dedupe-and-native-retry pass.
+        scheduleQueueRecovery(pane, "persisted-terminal-already-painted", recent);
+        return false;
+      }
       // Do not replace an optimistic user send with an older terminal reply.
       const currentAt = Date.parse(String(current?.timestamp || current?.ts || ""))
         || Number(current?.timestamp || current?.ts) || 0;
@@ -974,7 +1430,7 @@
       // A new turn could have started while chat.history was loading. Confirm
       // that the backend is still idle before overriding a native busy flag.
       if (await backendHasActiveRun(key) !== false) return false;
-      if (isBusy(pane)) forceIdleComposerState(pane);
+      if (isBusy(pane)) forceIdleComposerState(pane, {verifiedIdle: true});
       // A completed tool turn can leave transient tool/stream records in the
       // native renderer even after chatRunId has cleared. Those records can
       // mask the newly persisted assistant final. They are not transcript
@@ -1026,6 +1482,10 @@
     if (!isBusy(pane)) {
       stale.busySince = 0;
       stale.softResetAt = 0;
+      // An idle pane can be the aftermath of a missed terminal event. Do not
+      // infer delivery from the local state: queue recovery checks the server
+      // tail first and only then calls the native retry method.
+      scheduleQueueRecovery(pane, "idle-observed");
       return;
     }
     if (!stale.busySince) {
@@ -1068,7 +1528,7 @@
       ) || 0;
       if (freshRunAt && Date.now() - freshRunAt < 10_000) return;
       preserveComposerDraft();
-      const touched = forceIdleComposerState(pane);
+      const touched = forceIdleComposerState(pane, {verifiedIdle: true});
       stale.softResetAt = Date.now();
       setWatchdogStatus("recovered", "连接正常，已复位卡住的生成状态");
       window.dispatchEvent(new CustomEvent("pinkie:stale-busy-reset", {
@@ -1087,6 +1547,7 @@
   // __laolaoStaleBusy.forceIdle() 可单独验软复位是否认得当前状态对象。
   window.__laolaoStaleBusy = {
     reconcile: () => reconcileStaleBusy(),
+    reconcileQueued: () => reconcileQueuedBusyIdle(),
     forceIdle: () => forceIdleComposerState(),
     backendHasActiveRun,
     isBusy,
@@ -1130,7 +1591,7 @@
           const active = await backendHasActiveRun(key);
           if (revision !== selectedSessionRevision || routedSessionKey() !== key) return false;
           if (active !== false) return false; // Unknown or genuine run: never clear it.
-          forceIdleComposerState(pane);
+          forceIdleComposerState(pane, {verifiedIdle: true});
         }
         if (!isBusy(pane) && await recoverPaneChat(pane, "session-selected", {manual: true})) {
           return true;
@@ -1152,7 +1613,12 @@
   window.setTimeout(() => {
     restoreComposerDraft();
     observedSessionKey = currentSessionKey();
-    for (const pane of chatPanes()) observedPaneKeys.set(pane, paneSessionKey(pane));
+    for (const pane of chatPanes()) {
+      observedPaneKeys.set(pane, paneSessionKey(pane));
+      // Covers the selected-session reload path where native composer
+      // hydration is skipped because there was no visible session transition.
+      if (!isBusy(pane)) scheduleQueueRecovery(pane, "composer-hydration");
+    }
     void syncSelectedSession(observedSessionKey);
     window.setInterval(() => {
       if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
@@ -1194,6 +1660,9 @@
           // visible message count. Poll the tiny server tail while idle.
           scheduleRecovery("idle-tail-check", 250);
         }
+        // A queued message behind a run gets a fast, authoritative idle
+        // check; the generic stale-spinner path remains the broader fallback.
+        void reconcileQueuedBusyIdle(pane);
         void reconcileStaleBusy(pane);
       }
       if (!document.querySelector(".agent-chat__composer-combobox textarea")) scheduleRecovery("composer-missing", 300);

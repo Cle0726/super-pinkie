@@ -81,6 +81,26 @@ test('phrases localizes Lit-owned chat labels only through their text node value
   assert.equal(run(textNode('You', element('chat-sender-name', userGroup))), '你');
   // A user's own message that says "You" is content, not chrome.
   assert.equal(run(textNode('You', element('chat-text', element('chat-bubble', userGroup, 'div'), 'div'))), 'You');
+
+  // The native queue uses the same comment-delimited Lit text bindings as
+  // activity labels. Its count, actions and error need Chinese text without
+  // replacing the parent element or deleting those markers.
+  const queue = element('chat-queue', null, 'div');
+  const title = element('chat-queue__title', queue, 'div');
+  assert.deepEqual(['Queued (', '2', ')'].map((value) => run(textNode(value, title))),
+    ['待发送（', '2', '）']);
+  // Newer bundles put the count in one binding instead of three; that still
+  // has to stay a node-value-only localization.
+  assert.equal(run(textNode('Queued (12)', title)), '待发送（12）');
+  const badge = element('chat-queue__badge', queue, 'span');
+  assert.equal(run(textNode('Steered', badge)), '已追加 · 碧琪下一步就会看到');
+  const steer = element('chat-queue__steer', queue, 'button');
+  assert.equal(run(textNode('Steer', element('', steer))), '立即追加');
+  const retry = element('chat-queue__retry', queue, 'button');
+  assert.equal(run(textNode('Retry', element('', retry))), '重试');
+  const error = element('chat-queue__error', queue, 'div');
+  assert.equal(run(textNode('Steer failed before it reached the run; try again.', error)),
+    '追加没有送达，这轮结束后发送。');
 });
 
 test('short progress phrases are limited to status surfaces, not setting labels', () => {
