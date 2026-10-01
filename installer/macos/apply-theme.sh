@@ -154,6 +154,7 @@ apply_ui_skin() {
     laolao-link-viewer.js \
     laolao-tool-stream.js \
     laolao-tool-stream.css \
+    laolao-motion-system.css \
     laolao-party-entry.js \
     laolao-party-avatar-v1.png \
     laolao-deep-think-base.png \
@@ -403,6 +404,14 @@ apply_ui_skin() {
   fi
   if ! grep -Fq './laolao-tool-stream.css' "$index_file"; then
     perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  fi
+  # 动效规范必须排在 laolao-theme.css 之后，才能覆盖主题里写死的时长和曲线。
+  if ! grep -Fq 'laolao-motion-system.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-motion-system.css?v=motionsys1' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-motion-system\.css)(?:\?v=[^"]*)?}{${1}?v=motionsys1}g' "$index_file"
     DID_CHANGE=1
   fi
 

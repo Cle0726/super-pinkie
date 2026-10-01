@@ -102,6 +102,7 @@ $Assets = @(
     "laolao-link-viewer.js",
     "laolao-tool-stream.js",
     "laolao-tool-stream.css",
+    "laolao-motion-system.css",
     "laolao-party-entry.js",
     "laolao-party-avatar-v1.png",
     "laolao-deep-think-base.png",
@@ -216,6 +217,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning4">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream1">',
+        '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
         '<script src="./laolao-sidebar.js?v=sidebar27"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
@@ -258,7 +260,7 @@ function Apply-UISkin {
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
-        'laolao-page-warmup.js' = 'warmup1';
+        'laolao-page-warmup.js' = 'warmup1'; 'laolao-motion-system.css' = 'motionsys1';
         'laolao-link-viewer.js' = 'link4';
         'laolao-classic-shell.css' = 'classic17'; 'laolao-classic-shell.js' = 'classic15';
         'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
