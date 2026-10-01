@@ -57,7 +57,10 @@
   const rerender = () => { try { document.querySelector("openclaw-chat-pane")?.requestUpdate?.(); } catch {} };
 
   // ---------- the live run ----------
-  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
+  // boundaryAt: when the model last started a new call (turn start, a tool
+  // result). Some providers deliver a whole thought in one chunk just before
+  // acting, so the wait since that boundary is the real thinking time.
+  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
   const liveCardKey = () => {
     const cards = document.querySelectorAll(".chat-group--process details.pinkie-process[data-live='1']");
     const card = cards[cards.length - 1];
@@ -75,7 +78,7 @@
     const key = resolveKey();
     if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
-    if (!run.thinkingSince) { run.thinkingSince = Date.now(); record.count += 1; if (record.text) record.text += "\n\n"; }
+    if (!run.thinkingSince) { run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1; if (record.text) record.text += "\n\n"; }
     record.text = (record.text + text).slice(-MAX_TEXT);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
@@ -104,7 +107,7 @@
       if (payload.stream === "lifecycle") {
         if (data.phase === "start") {
           if (run.state !== "asking" || run.session !== key) {
-            Object.assign(run, {session: key, key: "", startedAt: Date.now(), thinkingSince: 0, buffer: "", confetti: ""});
+            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), thinkingSince: 0, buffer: "", confetti: ""});
             run.oops.clear();
           }
           setState("thinking");
@@ -122,7 +125,7 @@
       if (payload.stream === "assistant") { if (run.state !== "asking") setState("writing"); return; }
       if (payload.stream === "tool") {
         if (data.phase === "start") setState(data.name === "ask_user" ? "asking" : "working");
-        else if (data.phase === "result" && run.state === "working") setState("thinking");
+        else if (data.phase === "result") { run.boundaryAt = Date.now(); if (run.state === "working") setState("thinking"); }
       }
       return;
     }
@@ -137,7 +140,7 @@
     stopThinking();
     // The history sync after a turn replaces the optimistic user message, so
     // the card's key changes. Carry this turn's thinking over to the new key.
-    if (run.key && store[run.key]) run.migrate = {from: run.key, until: Date.now() + 20000};
+    if (run.key) run.migrate = {from: run.key, until: Date.now() + 20000};
     if (state === "oops" && run.key) run.oops.set(run.key, Date.now());
     run.state = state;
     run.doneKey = run.key;
@@ -216,16 +219,18 @@
     if (Date.now() > move.until) { run.migrate = null; return; }
     const cards = document.querySelectorAll(".chat-group--process[data-pinkie-process]");
     const latest = cards[cards.length - 1]?.dataset.pinkieProcess || "";
-    if (!latest || latest === move.from || store[latest]) return;
-    store[latest] = store[move.from];
-    delete store[move.from];
-    keep.delete(move.from);
-    keep.add(latest);
+    if (!latest || latest === move.from) return;
+    if (store[move.from] && !store[latest]) {
+      store[latest] = store[move.from];
+      delete store[move.from];
+      keep.delete(move.from);
+      keep.add(latest);
+      save();
+    }
     if (run.doneKey === move.from) run.doneKey = latest;
     if (run.oops.has(move.from)) { run.oops.set(latest, run.oops.get(move.from)); run.oops.delete(move.from); }
     run.confetti = run.confetti === move.from ? latest : run.confetti;
     run.migrate = null;
-    save();
   }
 
   let frame = 0;

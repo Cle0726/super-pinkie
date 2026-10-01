@@ -293,7 +293,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-page-warmup.js?v=warmup1"></script>',
         '<script defer src="./laolao-settings-user.js?v=settingsuser1"></script>',
         '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
-        '<script defer src="./laolao-process-card.js?v=processcard1"></script>',
+        '<script defer src="./laolao-process-card.js?v=processcard2"></script>',
         '<script defer src="./laolao-splash-fx.js?v=splashfx1"></script>',
         '<script defer src="./laolao-splash.js?v=splash28"></script>'
     )
@@ -319,7 +319,7 @@ function Apply-UISkin {
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
         'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
-        'laolao-process-card.css' = 'processcard1'; 'laolao-process-card.js' = 'processcard1';
+        'laolao-process-card.css' = 'processcard1'; 'laolao-process-card.js' = 'processcard2';
         'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material2'; 'laolao-material-preview.js' = 'material2';
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
