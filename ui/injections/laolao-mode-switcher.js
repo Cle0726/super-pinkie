@@ -678,7 +678,9 @@
     star.append(starPath);
 
     const avatar = createPortraitImage(mode.avatar);
-    portrait.append(halo, fx, bubbles, star, avatar);
+    // Only thinking mode has a bubble layer. append(null) would insert the
+    // text "null", which also pushes the avatar out of its circle.
+    portrait.append(...[halo, fx, bubbles, star, avatar].filter(Boolean));
     return portrait;
   };
 

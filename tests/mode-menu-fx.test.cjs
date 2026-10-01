@@ -97,3 +97,9 @@ test('FX keyframes stay on compositor-friendly independent properties', () => {
   assert.match(css, /stroke-dashoffset: 96/);
   assert.match(css, /laolao-mode-fx-learning-star-draw/);
 });
+
+test('portraits never contain a stray "null" text node from the optional bubble layer', () => {
+  // Element.append(null) inserts the string "null" and pushes the avatar down.
+  assert.doesNotMatch(switcher, /portrait\.append\(halo, fx, bubbles, star, avatar\)/);
+  assert.match(switcher, /portrait\.append\(\.\.\.\[halo, fx, bubbles, star, avatar\]\.filter\(Boolean\)\)/);
+});
