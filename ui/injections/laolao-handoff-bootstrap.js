@@ -24,6 +24,10 @@
   const carriedProgress = Math.max(68, Math.min(96, Number(handoff.progress) || 68));
 
   splash.dataset.handoffBootstrapped = "1";
+  // splash.js 在首帧后的空闲窗口才接入 WebGL；把已画好的场景和百分比
+  // 留在 DOM 上，既不会闪回 8%，也不会让它重新播一次揭幕。
+  splash.dataset.laolaoHandoffScene = handoff.mode;
+  splash.dataset.laolaoHandoffProgress = String(carriedProgress);
   splash.classList.add("is-mode-progress", `is-mode-progress--${handoff.mode}`);
   splash.style.setProperty(
     "--laolao-mode-progress-image",

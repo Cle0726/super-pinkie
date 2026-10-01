@@ -20,6 +20,35 @@
   animation: laolao-splash-scene 4s cubic-bezier(.22,.61,.36,1) both;
   will-change: transform;
 }
+/* 原本轻推镜的静态补层与画布同一段 300ms 交叉淡出，不能 display:none
+   硬切，否则画布很快就绪时会露出一次取景跳动。 */
+.laolao-splash.laolao-splash--fx::after {
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(.22,.61,.36,1);
+}
+
+/* 首帧仍是上面的 CSS cover 背景。合成画布先透明地准备好，下一帧才在
+   300ms 内淡进来；粒子在内容之上，正好能飘过台词和胶囊。 */
+.laolao-splash :is(.laolao-splash__gl, .laolao-splash__particles) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.laolao-splash .laolao-splash__gl {
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(.22,.61,.36,1);
+}
+.laolao-splash.is-fx-ready .laolao-splash__gl { opacity: 1; }
+.laolao-splash .laolao-splash__particles {
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(.22,.61,.36,1);
+}
+.laolao-splash.is-fx-ready .laolao-splash__particles { opacity: 1; }
 .laolao-splash:not(.is-mode-progress).is-art-ready .laolao-splash__content {
   animation: laolao-splash-copy 800ms ease-out both;
 }
@@ -39,6 +68,12 @@
 .laolao-splash.is-leaving {
   visibility: hidden;
   opacity: 0;
+}
+/* FX 自己在 WebGL 内失焦淡出，不能被旧规则瞬间 visibility:hidden。 */
+.laolao-splash.laolao-splash--fx.is-leaving {
+  visibility: visible;
+  opacity: 1;
+  transition: none;
 }
 
 /* A mode change continues the same progress bar across the document reload.
@@ -212,6 +247,101 @@
   font-weight: 800;
   transform: translateY(-50%);
 }
+
+/* 与模式转场共用 laolao-fx-progress 的 DOM/时钟；这里只把它映射回开屏
+   原有的 46px 粉色胶囊，不换掉旧配色和 scaleX 进度逻辑。 */
+.laolao-splash--fx {
+  --laolao-transition-tip: 255, 240, 248;
+  --laolao-transition-ring: 239, 95, 158;
+  --laolao-transition-glow: 231, 77, 145;
+}
+/* 派生素材还在下载时，动态补的白字必须完全不参与旧静态胶囊布局。 */
+.laolao-splash:not(.laolao-splash--fx) .laolao-mode-transition__message--lit { display: none; }
+.laolao-splash--fx .laolao-fx-progress {
+  overflow: hidden;
+  box-shadow: inset 0 2px 5px rgba(170,70,120,.11), inset 0 -1px 0 rgba(255,255,255,.95), 0 11px 30px rgba(178,65,112,.12);
+}
+.laolao-splash--fx .laolao-fx-progress__fill {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -3px 5px rgba(120,30,90,.16), 0 4px calc(10px + 10px * var(--laolao-progress)) rgba(var(--laolao-transition-glow), calc(.16 + .22 * var(--laolao-progress)));
+}
+.laolao-splash--fx .laolao-mode-transition__gloss,
+.laolao-splash--fx .laolao-mode-transition__dots {
+  position: absolute;
+  pointer-events: none;
+}
+.laolao-splash--fx .laolao-mode-transition__gloss {
+  z-index: 2;
+  top: 3px;
+  right: 9px;
+  left: 9px;
+  height: 42%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.08));
+}
+.laolao-splash--fx .laolao-mode-transition__dots {
+  z-index: 3;
+  inset: 0;
+  opacity: .56;
+  background: radial-gradient(circle at 8px 26px, rgba(255,255,255,.7) 0 1px, transparent 1.5px), radial-gradient(circle at 30px 8px, rgba(255,246,210,.8) 0 1.2px, transparent 1.7px);
+  background-size: 46px 42px;
+  animation: laolao-mode-fx-drift-46 3.4s linear infinite;
+}
+.laolao-splash--fx .laolao-mode-transition__tip {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 100%;
+  margin-left: -27px;
+  pointer-events: none;
+}
+.laolao-splash--fx .laolao-mode-transition__tip::before {
+  position: absolute;
+  inset: 2px 0;
+  content: "";
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(var(--laolao-transition-tip),.5) 52%, transparent);
+  animation: laolao-mode-fx-tip-breathe 900ms ease-in-out infinite alternate;
+}
+.laolao-splash--fx .laolao-mode-transition__star {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  clip-path: polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);
+  animation: laolao-mode-fx-twinkle 1.1s ease-in-out infinite;
+}
+.laolao-splash--fx .laolao-mode-transition__star:nth-child(1) { top: 6px; left: 14px; }
+.laolao-splash--fx .laolao-mode-transition__star:nth-child(2) { top: 26px; left: 6px; width: 6px; height: 6px; background: rgb(var(--laolao-transition-tip)); animation-delay: -.55s; }
+.laolao-splash--fx .laolao-mode-transition__message--lit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  height: auto;
+  margin: 0 62px 0 16px;
+  z-index: 5;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(120,30,90,.38);
+  clip-path: inset(0 100% 0 0);
+}
+.laolao-splash--fx .laolao-mode-transition__flash {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.85) 50%, transparent 70%) 0 0 / 60% 100% no-repeat;
+}
+.laolao-splash--fx .laolao-fx-progress.is-done {
+  animation: laolao-mode-fx-jelly 620ms var(--ease-out, cubic-bezier(.2,.78,.28,1)), laolao-mode-fx-ring 700ms ease-out;
+}
+.laolao-splash--fx .laolao-fx-progress.is-done .laolao-splash__message { font-size: .9rem; }
+.laolao-splash--fx .laolao-fx-progress.is-done .laolao-mode-transition__flash { animation: laolao-mode-fx-flash 560ms ease-out; }
+.laolao-splash--fx .laolao-fx-progress.is-done .laolao-mode-transition__tip::before { animation: laolao-mode-fx-tip-burst 420ms ease-out forwards; }
+.laolao-splash--fx .laolao-fx-progress.is-done .laolao-mode-transition__star { animation: none; opacity: 0; }
 
 @keyframes laolao-splash-shine {
   0% { transform: translateX(-120%) skewX(-18deg); }

@@ -68,11 +68,51 @@ test('OpenClaw 7.1 composer releases the entrance instead of leaving it at 94 pe
 });
 test('handoff first-frame bootstrap carries progress without a width reset',()=>{
   const {window,motion}=setup(),{fill,label,bar}=nodes();const message={};
-  const splash={dataset:{},classList:{add(){}},style:{setProperty(){}},querySelector:s=>s.startsWith('[role')?bar:null};
+  const classes=[],styles=[];
+  const splash={
+    dataset:{},
+    classList:{add(...names){classes.push(...names);}},
+    style:{setProperty:(name,value)=>styles.push([name,value])},
+    querySelector:s=>s.startsWith('[role')?bar:null,
+  };
   const elements={'laolao-splash':splash,'laolao-splash-fill':fill,'laolao-splash-message':message,'laolao-splash-percentage':label};
   vm.runInNewContext(read('ui/injections/laolao-handoff-bootstrap.js'),{window,document:{getElementById:id=>elements[id]},sessionStorage:{getItem:()=>JSON.stringify({mode:'thinking',progress:93})}});
+  assert.equal(splash.dataset.handoffBootstrapped,'1');
+  assert.ok(classes.includes('is-mode-progress'));assert.ok(classes.includes('is-mode-progress--thinking'));
+  assert.deepEqual(styles,[['--laolao-mode-progress-image','url("/laolao-mode-transition-thinking.png?v=transition2")']]);
+  assert.equal(fill.style.transition,'none');assert.equal(message.textContent,'灵感房间正在亮灯…');
   assert.equal(fill.style.transform,'scaleX(0.93)');assert.equal(label.textContent,'93%');
   motion.progress(fill,label,bar,68);assert.equal(label.textContent,'93%');
+});
+test('cold startup and handoff retain their safety gates while splash FX stays optional',()=>{
+  const splash=read('ui/injections/laolao-splash.js');
+  const bootstrap=read('ui/injections/laolao-handoff-bootstrap.js');
+  // Cold launch keeps its 2.6s beat; a full-refresh handoff still starts at
+  // carried progress and has the shorter existing gate.
+  assert.match(splash,/const initial = switching \? Math\.max\(68, Math\.min\(96, Number\(handoff\?\.progress\) \|\| 68\)\) : 8/);
+  assert.match(splash,/const minimum = motion\.reduced\(\) \? 400 : switching \? 700 : 2600/);
+  assert.match(bootstrap,/const carriedProgress = Math\.max\(68, Math\.min\(96, Number\(handoff\.progress\) \|\| 68\)\)/);
+  assert.match(bootstrap,/fill\.style\.transition = "none"[\s\S]*PinkieMotion\.progress\(fill, percentage, progressbar, carriedProgress\)/);
+
+  // The canvas is deliberately an optional, idle-time enhancement. Reduced
+  // motion, a missing controller/WebGL, or an asset failure must leave the
+  // old static controller running instead of blocking the page.
+  assert.match(splash,/if \(motion\.reduced\(\)\) return/);
+  assert.match(splash,/requestIdleCallback/);
+  assert.match(splash,/PinkieModeTransitionFx\?\.playSplash\?\./);
+  assert.match(splash,/if \(!candidate\) return/);
+  assert.match(splash,/candidate\.ready[\s\S]*?\.catch\(\(\) => \{[\s\S]*?splashFx = null/);
+  assert.match(splash,/splashFx\?\.abort\?\.\(\)/);
+
+  // Keep every legacy escape hatch and event: 6.5s shell escape, real-login
+  // escape, 30s recovery controls, docked direct removal, and the cleared
+  // event after either the FX or static leave path.
+  assert.match(splash,/elapsed >= 6500[\s\S]{0,180}leave\(false\)/);
+  assert.match(splash,/loginReady\(now\) && elapsed >= 5000/);
+  assert.match(splash,/\}, 30000\);/);
+  assert.match(splash,/if \(docked\) \{[\s\S]{0,700}splash\.remove\(\)[\s\S]{0,260}laolao:splash-cleared/);
+  assert.match(splash,/const clear = \(\) => \{[\s\S]*?splash\.remove\(\)[\s\S]*?laolao:splash-cleared/);
+  assert.match(splash,/activeFx\.finish\([^)]*\)\.then\(\(\) => \{[\s\S]*?motion\.enter\(\)[\s\S]*?clear\(\)/);
 });
 test('startup cannot force success on timeout; animation survives while error recovery stays available',()=>{
   const splash=read('ui/injections/laolao-splash.js'),mode=read('ui/injections/laolao-mode-switcher.js');

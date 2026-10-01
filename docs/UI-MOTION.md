@@ -26,6 +26,24 @@ localStorage['laolao:mode-transition-fx'] = 'off'
 
 转场图仍以 `ui/assets/laolao-mode-transition-<mode>.png` 为原图；重新做人物遮罩和补图层的步骤见 `scripts/mode-transition-assets/README.md`。生成的 `mask / plate / plate-soft / char-soft` 四类文件每个模式各一套，由安装器一并复制。
 
+## 开屏与接续
+
+冷启动仍先画原来的 `laolao-splash.png` CSS 背景，所以 WebGL、素材或解码都不会拖慢第一帧。引擎空闲时准备好后，画布会在约 300ms 内对齐原图淡入；它复用模式转场的景深、慢推镜头、鬃毛和尾巴飘动、彩纸、气球，以及糖果胶囊进度条的完成效果。碧琪以落地的前蹄为锚轻轻蓄力，假胡子和扬尘只在各自的小区域活动；就绪时仍先满足最短展示时间，再冲刺、放彩纸并淡出。
+
+整页刷新接续模式切换时，`is-mode-progress` 不再从头揭幕：它直接从当前模式已对焦的待机画面开始，沿用带过来的百分比。`laolao-handoff-bootstrap.js` 仍在标记后的同步首帧先把进度画好，随后才由开屏控制器接手。
+
+开启“减少动态效果”、没有 WebGL、派生素材加载或解码失败，或执行 `localStorage['laolao:mode-transition-fx'] = 'off'` 时，开屏和模式切换都会继续使用原有静态流程；最短时长、6.5 秒让出页面、登录页处理和 30 秒恢复按钮不变。
+
+### 重生成开屏派生素材
+
+开屏和五个模式共用 `scripts/mode-transition-assets`。先用 Vision 为原图生成一张前景遮罩：
+
+```bash
+swift scripts/mode-transition-assets/mask.swift ui/assets/laolao-splash.png /tmp/pinkie-transition-masks/splash-mask.png
+```
+
+把它和五个模式的 `*-mask.png` 放在同一个 `--masks` 目录，运行 `python3 scripts/mode-transition-assets/serve.py --masks /tmp/pinkie-transition-masks`，再打开 `http://127.0.0.1:18841/build.html?scene=splash`。这个地址只会写回 `laolao-splash-{mask,plate,plate-soft,char-soft}`；原图不会被改动。生成后先检查碧琪的鬃毛、尾巴和轮廓；这张图的扬尘和火花留在背景层，优先保证角色边缘干净。
+
 ## 验证
 
 `node --test tests/motion.test.cjs tests/party-selection.test.cjs` 覆盖单调进度、连续稳定、解码去重/失败/超时、跨页进度衔接、透明 PNG 的像素和白色细节。
