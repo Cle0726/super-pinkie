@@ -115,7 +115,8 @@ html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.
    the two special spaces visible but compact enough that chat stays central. */
 html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
   #pinkie-roundtable-entry,
-  #pinkie-party-entry
+  #pinkie-party-entry,
+  #pinkie-laser-entry
 ) {
   width: 34px !important;
   min-height: 58px !important;
@@ -128,15 +129,17 @@ html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.
 
 html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
   #pinkie-roundtable-entry,
-  #pinkie-party-entry
-) img {
+  #pinkie-party-entry,
+  #pinkie-laser-entry
+) :is(img, svg) {
   width: 28px !important;
   height: 28px !important;
 }
 
 html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail.chat-workspace-rail--collapsed > :is(
   #pinkie-roundtable-entry,
-  #pinkie-party-entry
+  #pinkie-party-entry,
+  #pinkie-laser-entry
 ) span {
   width: 24px !important;
   max-width: 24px !important;
@@ -182,7 +185,8 @@ html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail:
    workspace is open avoids mixing two different navigation surfaces. */
 html[data-laolao-classic-shell="1"] body .chat-workbench > .chat-workspace-rail:not(.chat-workspace-rail--collapsed) > :is(
   #pinkie-roundtable-entry,
-  #pinkie-party-entry
+  #pinkie-party-entry,
+  #pinkie-laser-entry
 ) {
   display: none !important;
 }
