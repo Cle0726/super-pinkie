@@ -1,0 +1,15 @@
+#!/bin/bash
+# look-video 视频文件 [帧数，默认12] [输出.png]
+# 把视频均匀抽帧拼成一张预览图。生成后用 read 打开这张图，逐格看内容是否符合要求。
+set -euo pipefail
+in="${1:?用法: look-video 视频文件 [帧数] [输出.png]}"
+n="${2:-12}"
+[ -f "$in" ] || { echo "找不到视频：$in" >&2; exit 1; }
+out="${3:-${in%.*}.preview.png}"
+dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$in")
+size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$in")
+audio=$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$in" | head -1)
+cols=4; [ "$n" -lt 4 ] && cols="$n"; rows=$(( (n + cols - 1) / cols ))
+ffmpeg -v error -y -i "$in" -vf "fps=${n}/${dur},scale=480:-2,tile=${cols}x${rows}:padding=4:color=white" -frames:v 1 "$out"
+printf '视频：%s\n时长：%.1f 秒，画面 %s，音轨：%s\n预览图（%s 帧，从左到右、从上到下按时间顺序）：%s\n下一步：用 read 打开预览图看内容；需要细看某一刻，用 ffmpeg -ss 秒数 -i 视频 -frames:v 1 帧.png 单独抽帧。\n' \
+  "$in" "$dur" "$size" "${audio:-无}" "$n" "$out"

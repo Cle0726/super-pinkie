@@ -1,0 +1,4 @@
+#!/bin/bash
+# Marp CLI: never wait on stdin (an agent's exec pipe would hang it) and use the installed Chrome.
+export CHROME_PATH="${CHROME_PATH:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+exec "/Users/Admin/.nvm/versions/node/v24.20.0/bin/marp" --no-stdin "$@"

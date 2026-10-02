@@ -1,0 +1,4 @@
+#!/bin/bash
+# Mermaid CLI with the installed Google Chrome (its own Chrome download is unreachable here).
+export PUPPETEER_EXECUTABLE_PATH="${PUPPETEER_EXECUTABLE_PATH:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+exec "/Users/Admin/.nvm/versions/node/v24.20.0/bin/mmdc" "$@"
