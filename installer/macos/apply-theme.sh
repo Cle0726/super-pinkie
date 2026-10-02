@@ -503,17 +503,17 @@ apply_ui_skin() {
   fi
   # 碧琪的工作过程卡：思考和状态表情只填在时间线补丁预留的位置里。
   if ! grep -Fq 'laolao-process-card.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-process-card.css?v=processcard1">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-process-card.css?v=processcard2">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-process-card.css?v=processcard1' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-process-card\.css)(?:\?v=[^"]*)?}{${1}?v=processcard1}g' "$index_file"
+  elif ! grep -Fq 'laolao-process-card.css?v=processcard2' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.css)(?:\?v=[^"]*)?}{${1}?v=processcard2}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-process-card.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard2"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard3"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-process-card.js?v=processcard2' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard2}g' "$index_file"
+  elif ! grep -Fq 'laolao-process-card.js?v=processcard3' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard3}g' "$index_file"
     DID_CHANGE=1
   fi
   # 动效规范必须排在 laolao-theme.css 之后，才能覆盖主题里写死的时长和曲线。
