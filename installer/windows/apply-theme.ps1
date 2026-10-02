@@ -286,7 +286,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-deep-think.js?v=deepthink20"></script>',
         '<script defer src="./laolao-web-gpt-collab.js?v=webgpt32"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact4"></script>',
-        '<script defer src="./laolao-resume.js?v=resume43"></script>',
+        '<script defer src="./laolao-resume.js?v=resume44"></script>',
         '<script defer src="./laolao-queue-steer.js?v=queuesteer2"></script>',
         '<script defer src="./laolao-material-preview.js?v=material2"></script>',
         '<script defer src="./laolao-workspace-focus.js?v=workspacefocus2"></script>',
@@ -314,7 +314,7 @@ function Apply-UISkin {
         'laolao-phrases.js' = 'phrases27'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx4'; 'laolao-mode-transition-fx.css' = 'modetransitionfx3';
         'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode41'; 'laolao-model-picker.js' = 'modelpicker25'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx1';
-        'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume43';
+        'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion5'; 'laolao-resume.js' = 'resume44';
         'laolao-queue-steer.js' = 'queuesteer2';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
