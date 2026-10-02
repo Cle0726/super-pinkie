@@ -342,6 +342,54 @@
 
   const mergeRecentHistory = (history) => keepLiveMessages(history);
 
+  // ── 历史窗口不回缩 ──
+  // 原生页每轮结束后只重新拉最新 10 条，并用它整体替换 chatMessages；它本来靠
+  // 向前分页补回更早的消息，但本脚本关掉了分页（只维持有界窗口）。于是已经显示
+  // 的旧消息会被挤掉，接着本脚本发现窗口回退又整窗补回：旧消息被拆掉重建、入场
+  // 动画重播、滚动乱跳，看起来就像「发完消息之前的聊天又弹出来」。这里在原生赋值
+  // 的那一刻把它的尾页接回已显示的窗口：同一会话里，新列表的第一条若能在当前
+  // 列表里找到，就保留它前面的消息。本脚本自己写入的权威窗口不经过这里。
+  let ownMessageWrite = 0;
+  const writeOwnMessages = (state, messages) => {
+    ownMessageWrite += 1;
+    try { state.chatMessages = messages; } finally { ownMessageWrite -= 1; }
+  };
+  const keepEarlierMessages = (previous, next) => {
+    if (!Array.isArray(previous) || !Array.isArray(next) || !previous.length || !next.length) return next;
+    const first = messageIdentity(next[0]);
+    if (!first) return next;
+    const at = previous.findIndex((message) => messageIdentity(message) === first);
+    if (at <= 0) return next;
+    const merged = [...previous.slice(0, at), ...next];
+    return merged.length > LIVE_MESSAGE_WINDOW ? keepLiveMessages(merged) : merged;
+  };
+  const guardedMessageStates = new WeakSet();
+  const guardMessageWindow = (state) => {
+    if (!state || typeof state !== "object" || guardedMessageStates.has(state)) return false;
+    let owner = state;
+    let descriptor = null;
+    while (owner && !(descriptor = Object.getOwnPropertyDescriptor(owner, "chatMessages"))) owner = Object.getPrototypeOf(owner);
+    if (!descriptor || (owner === state && descriptor.configurable === false)) return false;
+    if (!descriptor.set && descriptor.writable === false) return false;
+    guardedMessageStates.add(state);
+    let value = state.chatMessages;
+    const read = descriptor.get ? () => descriptor.get.call(state) : () => value;
+    const write = descriptor.set ? (next) => descriptor.set.call(state, next) : (next) => { value = next; };
+    let listSession = state.sessionKey;
+    Object.defineProperty(state, "chatMessages", {
+      configurable: true,
+      enumerable: true,
+      get: read,
+      set(next) {
+        // A different session (or a reset to an empty list) always replaces.
+        const sameSession = state.sessionKey === listSession;
+        listSession = state.sessionKey;
+        write(ownMessageWrite || !sameSession ? next : keepEarlierMessages(read(), next));
+      },
+    });
+    return true;
+  };
+
   const sameMessageSequence = (left, right) => {
     if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
     return left.every((message, index) => {
@@ -678,7 +726,7 @@
         const mergedMessages = mergeRecentHistory(recent.messages);
         const messagesChanged = !sameMessageSequence(localMessages, mergedMessages);
         const repaint = options.forcePaint === true;
-        if (messagesChanged || repaint) state.chatMessages = mergedMessages;
+        if (messagesChanged || repaint) writeOwnMessages(state, mergedMessages);
         // 新版原生页认识此字段；旧版会忽略它。明确关闭向前分页，避免它把
         // 已持久化的旧记录重新挂回 live DOM。
         if ("chatHistoryPagination" in state) {
@@ -773,6 +821,7 @@
     return key ? {...(historyStatusBySession.get(key) || {}), sessionKey: key} : null;
   };
   // 只暴露纯函数给离线回归测试，不包含 gateway/token 等运行数据。
+  window.__laolaoMessageWindowTestHooks = {guardMessageWindow, keepEarlierMessages, writeOwnMessages};
   window.__laolaoHistoryTestHooks = {
     messageIdentity,
     uniqueMessages,
@@ -1614,6 +1663,7 @@
     restoreComposerDraft();
     observedSessionKey = currentSessionKey();
     for (const pane of chatPanes()) {
+      guardMessageWindow(pane?.state);
       observedPaneKeys.set(pane, paneSessionKey(pane));
       // Covers the selected-session reload path where native composer
       // hydration is skipped because there was no visible session transition.
@@ -1621,6 +1671,8 @@
     }
     void syncSelectedSession(observedSessionKey);
     window.setInterval(() => {
+      // A replaced native pane brings a new state object; guard it right away.
+      for (const pane of chatPanes()) guardMessageWindow(pane?.state);
       if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
       reconcileSelectedSession();
       const sessionKey = currentSessionKey();
@@ -1643,7 +1695,7 @@
         // bounded timeline window independent; one busy pane must not block another.
         if (Array.isArray(state.chatMessages) && state.chatMessages.length > LIVE_MESSAGE_WINDOW
             && !isBusy(pane)) {
-          state.chatMessages = keepLiveMessages(state.chatMessages);
+          writeOwnMessages(state, keepLiveMessages(state.chatMessages));
           state.requestUpdate?.();
           scheduleRecovery("native-history-remounted", 250);
           continue;
