@@ -431,9 +431,12 @@
     }
   }
   let toolSeq = 0;
-  async function runTool(runId, caller, name, args, result, gap, {say = '', thinking = ''} = {}) {
+  async function runTool(runId, caller, name, args, result, gap, {say = '', thinking = '', thinkingChunks = 4, thinkDelay = 0} = {}) {
     const id = `call_${++toolSeq}`;
-    if (thinking) await streamThinking(runId, thinking, 4, gap / 3);
+    // thinkingChunks: 1 with a thinkDelay mimics Gemini, which thinks silently
+    // and then delivers the whole thought at once right before acting.
+    if (thinkDelay) await sleep(thinkDelay);
+    if (thinking) await streamThinking(runId, thinking, thinkingChunks, gap / 3);
     if (say) await streamText(runId, say, 2, gap / 2);
     const content = [
       ...(thinking ? [{type: 'thinking', thinking}] : []),
@@ -555,7 +558,8 @@
       for (const [say, name, args, result] of steps) {
         const thought = typeof o.thinking === 'string' ? o.thinking
           : `先想清楚这一步：${say.replace(/。$/, '')}，确认结果后再决定下一步。`;
-        await runTool(runId, caller, name, args, result, gap, {say, thinking: o.thinking ? thought : ''});
+        await runTool(runId, caller, name, args, result, gap,
+          {say, thinking: o.thinking ? thought : '', thinkingChunks: o.thinkingChunks, thinkDelay: o.thinkDelay});
       }
       await finishRun(runId, o.reply || '基线测试全部通过，没有发现冲突规则。【最终回复】', gap);
       note('scenario-done', {name: 'narrated'});

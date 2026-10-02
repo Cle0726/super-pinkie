@@ -31,7 +31,18 @@ test('the card matches the original bubbles and respects reduced motion', () => 
   assert.match(css, /\.pinkie-process\[data-live="1"\]/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   for (const source of [read('ui/injections/laolao-head.fragment.html'), read('installer/macos/apply-theme.sh'), read('installer/windows/apply-theme.ps1')]) {
-    assert.match(source, /laolao-process-card\.css\?v=processcard1/);
-    assert.match(source, /laolao-process-card\.js\?v=processcard2/);
+    assert.match(source, /laolao-process-card\.css\?v=processcard2/);
+    assert.match(source, /laolao-process-card\.js\?v=processcard3/);
   }
+});
+
+test('a thought that arrives in one chunk is typed out instead of popping in', () => {
+  // Gemini thinks silently and then delivers the whole thought right before acting.
+  assert.match(script, /const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;/);
+  assert.match(script, /typeOut\(key, before, record\.text\.length\)/);
+  assert.match(script, /stopThinking\(\);\s*hurryTyping\(\);/);
+  assert.match(script, /const shown = isTyping \? record\.text\.slice\(0, typed\) : record\.text;/);
+  assert.match(script, /if \(reduced\(\)\) \{ typing\.delete\(key\); return; \}/);
+  assert.match(css, /\.pinkie-thinking\.is-typing \.pinkie-thinking__text::after/);
+  assert.match(css, /\.pinkie-thinking\.is-entering \{ animation:/);
 });
