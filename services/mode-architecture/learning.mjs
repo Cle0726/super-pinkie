@@ -1068,8 +1068,9 @@ export function learningPrompt(store, sessionKey) {
 - 笔记抽屉使用独立整理模型，整理结果由抽屉直接显示。继续正常学习对话即可。
 `.trim();
   const questionHygieneRules = `
-【学习题目回复卫生】
-- 出题前的防剧透自检在内部完成；题目消息只放题干、选项和必要的生词注释，不写检查过程。
+出题消息的写法：
+- 防剧透检查在心里做完；题目消息只放题干、选项和必要的生词注释。
+- 先生作答之前，不写解题思路、考点分析或答案，也不写检查过程、检查清单，不提任何规则或检查的名字。
 `.trim();
   if (!state.enabled) return `${noteRules}\n\n${questionHygieneRules}`;
   return `${noteRules}
