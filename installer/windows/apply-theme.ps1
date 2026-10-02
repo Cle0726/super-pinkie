@@ -159,6 +159,7 @@ $Assets = @(
     "laolao-deep-think-full.webm",
     "laolao-deep-think-marathon.webm",
     "laolao-roundtable-entry.js",
+    "laolao-laser-pointer.js",
     "laolao-web-gpt-collab.js",
     "laolao-context-compact.js",
     "laolao-resume.js",
@@ -255,7 +256,7 @@ function Apply-UISkin {
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar17">',
         '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic17">',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side20">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side21">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction11">',
         '<link rel="stylesheet" href="./laolao-material-preview.css?v=material2">',
         '<link rel="stylesheet" href="./laolao-workspace-focus.css?v=workspacefocus2">',
@@ -272,7 +273,7 @@ function Apply-UISkin {
         '<script src="./laolao-sidebar.js?v=sidebar28"></script>',
         '<script src="./laolao-session-list.js?v=sessions10"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
-        '<script defer src="./laolao-classic-shell.js?v=classic15"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic16"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning9"></script>',
@@ -280,6 +281,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-model-picker.js?v=modelpicker25"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
+        '<script defer src="./laolao-laser-pointer.js?v=laser4"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link4"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream4"></script>',
@@ -325,8 +327,8 @@ function Apply-UISkin {
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
         'laolao-page-warmup.js' = 'warmup1'; 'laolao-motion-system.css' = 'motionsys1';
         'laolao-link-viewer.js' = 'link4';
-        'laolao-classic-shell.css' = 'classic17'; 'laolao-classic-shell.js' = 'classic15';
-        'laolao-side-layout.css' = 'side20'; 'laolao-side-layout.js' = 'side12';
+        'laolao-classic-shell.css' = 'classic17'; 'laolao-classic-shell.js' = 'classic16';
+        'laolao-side-layout.css' = 'side21'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'laolao-learning-stage.css' = 'learning9'; 'laolao-learning-stage.js' = 'learning9';
         'laolao-deep-think.js' = 'deepthink20'; 'laolao-web-gpt-collab.js' = 'webgpt32';
