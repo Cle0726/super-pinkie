@@ -9,6 +9,7 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {registerReasoningGateway} from './reasoning.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
+import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {registerModelSync} from './model-sync.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
@@ -367,7 +368,7 @@ const TOOL_PROGRESS_RULES = `
 - 每次单独调用工具，或开始一组紧密相关的工具调用之前，先用一句简短中文说明接下来要检查、读取或运行什么，以及原因；说清后不要重复。
 - 只描述下一步，例如“我先检查消息排序，看看说明文字和工具记录有没有被合并。”不报告尚未发生的结果，不作完成或交付声明，也不把进度句当作最终回复。
 - 多次工具调用按实际先后交代必要的下一步；整轮工具结束后，再单独给用户最终答复。
-- 【回复卫生】计划、自检、规则复述只在内部完成，不写进回复；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
+- 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
 // Independent system module shared by all five modes. Keep it separate from
@@ -5560,7 +5561,7 @@ export default {
     // deterministic side effect.  This final transcript hook is synchronous
     // and still runs in that case, so CLE Kk can prevent the false final from
     // being persisted while the retry is queued.
-    api.on('before_message_write', (event, ctx) => {
+    const gateMessageWrite = (event, ctx) => {
       const message = event?.message || {};
       const stoppedReport = architecture.stopReport(ctx);
       if (stoppedReport && message.role === 'assistant' && isTerminalAssistantMessage(message)) {
@@ -5590,6 +5591,14 @@ export default {
       const integrityDecision = cleKk.finalizeDecision(candidate, ctx, {verifyExternal: false});
       const decision = architecture.prepareRetryDecision(architectureDecision || integrityDecision, candidate, ctx);
       return cleKk.beforeMessageWrite(event, ctx, decision, true);
+    };
+    // 先删掉漏进正文的内部自检（见 reply-hygiene.mjs），再走交付核验；
+    // 核验放行时把清理后的消息写进记录。
+    api.on('before_message_write', (event, ctx) => {
+      const cleaned = sanitizeAssistantMessage(event?.message);
+      const result = gateMessageWrite(cleaned ? {...event, message: cleaned} : event, ctx);
+      if (!cleaned || result?.block || result?.message) return result;
+      return {...(result || {}), message: cleaned};
     }, {priority: -20000});
     // Delivery has its own hook and catches channels that render a final reply
     // without first appending it to the session JSONL.
@@ -5599,7 +5608,11 @@ export default {
         cleKk.cancel(ctx.sessionKey || event?.sessionKey || '', 'deep_think_stopped');
         return {payload: {text: stoppedReport}};
       }
-      return cleKk.beforeReplyPayload(event, ctx);
+      const payload = event?.payload;
+      const text = typeof payload?.text === 'string' ? cleanReplyText(payload.text) : null;
+      const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
+      return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))
+        .then((result) => (!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}));
     }, {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
       if (/:subagent:/.test(ctx.sessionKey || '')) {
