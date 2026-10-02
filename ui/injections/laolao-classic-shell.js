@@ -236,7 +236,7 @@
 
   const moveLaunchers = (from, to) => {
     if (!from || !to || from === to) return;
-    from.querySelectorAll(":scope > #pinkie-party-entry, :scope > #pinkie-roundtable-entry")
+    from.querySelectorAll(":scope > #pinkie-party-entry, :scope > #pinkie-roundtable-entry, :scope > #pinkie-laser-entry")
       .forEach((entry) => to.append(entry));
   };
 
