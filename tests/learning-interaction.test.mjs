@@ -117,11 +117,11 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   for (const item of methods.values()) assert.equal(item.opts.scope, 'operator.admin');
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /碧琪学习笔记/);
   assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /防剧透自检在内部完成/);
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /题目消息只放题干、选项和必要的生词注释/);
   store.setEnabled('agent:learning:prompt', true);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /普通学习聊天仍照常回答/);
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /防剧透自检在内部完成/);
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
   assert.equal(learningPrompt(store, 'agent:project:prompt'), '');
 });
 
