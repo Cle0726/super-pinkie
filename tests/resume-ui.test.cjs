@@ -1110,7 +1110,7 @@ test('history recovery is session-scoped and prunes native remounts back to the 
   assert.match(resume,/history-not-yet-synced/);
   assert.match(resume,/!historyStatusBySession\.has\(key\)/);
   assert.match(resume,/state\.chatMessages\.length > LIVE_MESSAGE_WINDOW/);
-  assert.match(resume,/state\.chatMessages = keepLiveMessages\(state\.chatMessages\)/);
+  assert.match(resume,/writeOwnMessages\(state, keepLiveMessages\(state\.chatMessages\)\)/);
   assert.match(resume,/HISTORY_MAX_CHARS = 240000/);
   assert.doesNotMatch(resume,/pagination did not advance/);
 });
@@ -1119,7 +1119,7 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume43/);
+    assert.match(installer,/laolao-resume\.js\?v=resume44/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
     assert.match(installer,/clekk-history33/);
   }
@@ -1156,4 +1156,38 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }
+});
+
+test('a native newer-tail reload keeps the messages already on screen instead of re-mounting them',()=>{
+  // The native page reloads only the newest 10 messages after every turn and
+  // replaces the whole list. Without this guard the older messages vanished and
+  // were re-added a moment later, replaying their entrance animation.
+  const {window,state}=loadResumeHarness(new Map());
+  const message=seq=>({role:seq%2?'user':'assistant',content:[{type:'text',text:`m${seq}`}],__openclaw:{id:`m${seq}`,seq}});
+  const range=(from,to)=>Array.from({length:to-from+1},(_,i)=>message(from+i));
+  const {guardMessageWindow,writeOwnMessages}=window.__laolaoMessageWindowTestHooks;
+  assert.equal(guardMessageWindow(state),true);
+  assert.equal(guardMessageWindow(state),false,'guards a state once');
+  state.chatMessages=range(1,14);
+  const optimistic={role:'user',content:[{type:'text',text:'local send'}],timestamp:123};
+  state.chatMessages=[...state.chatMessages,optimistic];
+  const kept=state.chatMessages.slice(0,8);
+  state.chatMessages=range(9,18);
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.seq),Array.from({length:18},(_,i)=>i+1));
+  assert.ok(kept.every((m,i)=>state.chatMessages[i]===m),'the earlier message objects stay the same');
+  // An unrelated history (no overlap) still replaces.
+  state.chatMessages=[message(100),message(101)];
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.seq),[100,101]);
+  // A reset replaces.
+  state.chatMessages=[];
+  assert.equal(state.chatMessages.length,0);
+  // Another session replaces even when an identity overlaps.
+  state.chatMessages=range(1,6);
+  state.sessionKey='agent:unrestricted:dashboard:other';
+  state.chatMessages=range(3,4);
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.seq),[3,4]);
+  // The resume script's own authoritative window is written as is.
+  state.chatMessages=range(1,6);
+  writeOwnMessages(state,range(4,6));
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.seq),[4,5,6]);
 });
