@@ -63,7 +63,7 @@ const DELIVERY_CLAIM = /(?:搞定|处理好了|弄好了|做完了|做成了|已
 // guard should look for an unfinished overall state, not any word "失败".
 const IN_PROGRESS_CLAIM = /(?:仍在|还在|正在|等待|排队|后台.{0,8}(?:生成|运行|处理|渲染)|稍后|尚未|未下载|未生成|待完成|被阻塞)/i;
 const HONEST_INCOMPLETE = /(?:明确.{0,8})?(?:未完成|尚未完成|无法完成|还没(?:有)?(?:完成|做完|搞定)|执行失败|验收失败|验证未通过|被阻塞|需要用户.{0,8}(?:登录|验证|确认|提供)|验证码|人机验证)/i;
-const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|打开|删除|安装|部署|打包|测试|验证|完成).{0,30}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)?/i;
+const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|打开|删除|安装|部署|打包|测试|验证|完成|剪辑|剪成|剪掉|剪一|渲染|合成|导出|转换|转成|压缩|配音|配乐|绘制|画一|抠图|拼接|录屏|截图).{0,30}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)?/i;
 const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
 const QUESTION_ONLY = /(?:为什么|为何|怎么回事|什么原因|如何理解|能不能|有没有办法|是不是|是否|请解释|问一下|想知道|？|\?)/i;
 const ACTION_CONTINUATION = /^(?:继续|接着|往下|开始吧|动手吧|加强(?:一下)?|优化(?:一下)?|完善(?:一下)?|升级(?:一下)?|修复(?:啊|吧)?)[！!。.\s]*$/i;
@@ -371,7 +371,7 @@ export const WORK_STANDARD_RULES = `
 2. 被批评时实事求是。先核对批评是否成立：成立的部分说清具体错在哪、怎么改，然后去改；不成立的部分礼貌地讲明理由。不夸张自责，不附和过头，也不为了平息情绪而全盘认错。
 3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或先生给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
 4. 先定好标准再动手。做东西前，先想清楚先生要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
-5. 交付前亲自检查成品。看一遍产物本身：打开文件、运行程序、截图看界面、抽帧看视频、读一遍文字；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
+5. 交付前亲自检查成品。看一遍产物本身：视频用 look-video、网页用 look-page、文档用 look-doc 生成预览图，再用 read 打开看；程序要运行，文字要通读；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
 6. 卡住先找原因。报错、下载或安装卡住、结果不对时，先查清原因（网络、依赖、权限、参数、版本）再处理；同一个办法失败两次就换思路，不在原地反复等待或重试。
 7. 降级要说清楚。如果只能做出比要求差的版本（换了更简陋的做法、缩了范围、少了功能），交付时第一句就说明差距和原因，并给出补救办法，不把降级版说成完成。
 `.trim();
@@ -967,7 +967,7 @@ function toolIsMechanicalCheck(entry = {}) {
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
     if (/verify_completion\.py\b/i.test(command)) return true;
-    return /(?:^|[;&|]\s*)(?:test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor|skills\s+(?:list|check)))/i.test(command);
+    return /(?:^|[;&|]\s*)(?:look-(?:video|page|doc)\b|markitdown\b|pdftotext\b|pdfinfo\b|tesseract\b|magick\s+identify\b|test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor|skills\s+(?:list|check)))/i.test(command);
   }
   return false;
 }
@@ -986,6 +986,87 @@ function effectVerificationReason(state) {
   // A single build/test command can both produce and verify its artifact.
   if (toolIsMechanicalCheck(effect)) return '';
   return `最后一次实际改动（${effect.name}）之后没有读取、测试或检查真实结果`;
+}
+
+// ---------- 两道「提醒一次」的门禁：看过成品再交付、说了要做就去做 ----------
+// 交付物：做出来要给用户看的成品。
+const DELIVERABLE_EXT = /\.(mp4|mov|m4v|webm|gif|png|jpe?g|webp|svg|pdf|pptx?|key|docx?|xlsx|html?)(?=$|[\s"'`)\],;:|])/i;
+const DELIVERABLE_KIND = {
+  mp4: '视频', mov: '视频', m4v: '视频', webm: '视频', gif: '动图', png: '图片', jpg: '图片', jpeg: '图片',
+  webp: '图片', svg: '图片', pdf: '文档', ppt: '演示文稿', pptx: '演示文稿', key: '演示文稿', doc: '文档',
+  docx: '文档', xlsx: '表格', html: '网页', htm: '网页',
+};
+const DOCUMENT_KINDS = new Set(['文档', '演示文稿', '表格']);
+const PAGE_TASK = /网页|网站|页面|落地页|主页|官网|海报|界面|landing|website|web\s*page/i;
+const PRODUCING_COMMAND = /\b(?:ffmpeg|remotion|render|magick|convert|montage|marp|mmdc|manim|blender|python\d*|node|npx|sips|qlmanage|rsvg-convert|pdftoppm|curl|wget|yt-dlp)\b/i;
+const LOOK_HELPER = /\blook-(?:video|page|doc)\b/;
+const LOOKABLE_IMAGE = /\.(?:png|jpe?g|webp|gif)$/i;
+const DOCUMENT_TEXT_CHECK = /\b(?:look-doc|markitdown|pdftotext|pdftoppm)\b|(?:python\d*)[^\n]*(?:pptx|docx|openpyxl|pypdf|Presentation\(|Document\()/i;
+
+function toolParamPaths(entry = {}) {
+  const params = entry.params && typeof entry.params === 'object' ? entry.params : {};
+  return ['path', 'file_path', 'filePath', 'image', 'target', 'destination', 'outputPath', 'output_path']
+    .map(key => params[key]).filter(value => typeof value === 'string' && value);
+}
+
+function producedDeliverables(entry = {}, prompt = '') {
+  if (!entry || entry.failed) return [];
+  const name = String(entry.name || '').toLowerCase();
+  const command = String(entry.params?.command || entry.params?.cmd || '');
+  if (LOOK_HELPER.test(command)) return [];
+  const candidates = [];
+  for (const effect of Array.isArray(entry.effects) ? entry.effects : []) {
+    if (effect?.changed && effect.exists !== false) candidates.push(String(effect.path || ''));
+  }
+  if (/^(?:write|edit|apply_patch)$/.test(name)) candidates.push(...toolParamPaths(entry));
+  if (/(?:^|_)exec(?:$|_)/.test(name) && PRODUCING_COMMAND.test(command)) candidates.push(...command.split(/\s+/));
+  const kinds = new Set();
+  for (const candidate of candidates) {
+    if (/[\\/]node_modules[\\/]/.test(candidate)) continue;
+    const match = DELIVERABLE_EXT.exec(candidate);
+    if (!match) continue;
+    const kind = DELIVERABLE_KIND[match[1].toLowerCase()];
+    if (kind === '网页' && !PAGE_TASK.test(prompt)) continue;
+    kinds.add(kind);
+  }
+  return [...kinds];
+}
+
+function looksAtContent(entry = {}) {
+  if (!entry || entry.failed) return false;
+  const name = String(entry.name || '').toLowerCase();
+  if (/^(?:read|view_image|image|open_file)$/.test(name)) return toolParamPaths(entry).some(value => LOOKABLE_IMAGE.test(value));
+  return /(?:browser|computer|screen|cua)/.test(name)
+    && /"(?:action|kind)"\s*:\s*"(?:screenshot|snapshot)"/i.test(toolArgumentsText(entry));
+}
+
+function contentInspectionReason(state) {
+  let last = -1;
+  const kinds = new Set();
+  state.tools.forEach((entry, index) => {
+    const produced = producedDeliverables(entry, state.prompt);
+    if (!produced.length) return;
+    last = index;
+    produced.forEach(kind => kinds.add(kind));
+  });
+  if (last < 0) return '';
+  const after = state.tools.slice(last + 1);
+  if (after.some(looksAtContent)) return '';
+  const documentsOnly = [...kinds].every(kind => DOCUMENT_KINDS.has(kind));
+  if (documentsOnly && after.some(entry => !entry.failed
+      && DOCUMENT_TEXT_CHECK.test(String(entry.params?.command || entry.params?.cmd || '')))) return '';
+  return `本轮做出了${[...kinds].join('、')}，但做完之后没有亲自看过成品内容（只查文件在不在、时长或大小不算）。`
+    + '用 look-video、look-page 或 look-doc 生成预览图，再用 read 打开看一遍，对照用户的要求，不满意就改好再交付';
+}
+
+// 回复最后说「这就去做」却就此结束：预告不等于做了。
+const PROMISE_TAIL = /(?:这就(?:去|开始|动手|做|弄|安排)|马上(?:去|开始|动手|处理|做|弄|安排)|现在就(?:去|开始|动手)|稍等(?:一下|片刻|一会儿?)?|请稍候|接下来(?:碧琪|我)?(?:会|就|先|来|去|马上)|(?:碧琪|我)(?:先|这就|马上|立刻|立即)(?:去|来|开始|动手)|等(?:碧琪|我)(?:一下|一会儿?|做完|弄好))/;
+const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|老板)(?:确认|决定|选|同意|提供|告诉|回复)|无法|不能|没法|做不到|卡在|卡住|阻塞|失败|报错|权限|缺少|额度|网络/;
+
+function promiseWithoutActionReason(reply = '') {
+  const tail = String(reply || '').trim().slice(-140);
+  if (!tail || !PROMISE_TAIL.test(tail) || /[？?]/.test(tail) || PROMISE_BLOCKER.test(tail)) return '';
+  return '回复最后说要去做，但这一轮就此结束了，事情并没有做。不要只预告，直接调用工具把它做完，做完再回复';
 }
 
 function evidenceTamperingReason(state) {
@@ -1177,6 +1258,7 @@ export class CompletionIntegrityGuard {
       loadedSkills: [...state.loadedSkills],
       contractSkills: [...(state.contractSkills || [])],
       missingVerifiers: [...state.missingVerifiers],
+      softGates: compactJson(state.softGates || {}),
       mutationEpoch: Number(state.mutationEpoch) || 0,
       verification: compactJson(state.verification),
       authorityRecords: [...(state.authorityRecords || new Map()).entries()].map(([kind, record]) => [kind, compactJson(record)]),
@@ -1202,6 +1284,7 @@ export class CompletionIntegrityGuard {
       contractSkills: new Set(Array.isArray(value.contractSkills) ? value.contractSkills
         : (Array.isArray(value.loadedSkills) ? value.loadedSkills : []).filter(skillHasVerifier)),
       missingVerifiers: new Set(Array.isArray(value.missingVerifiers) ? value.missingVerifiers : []),
+      softGates: value.softGates && typeof value.softGates === 'object' ? {...value.softGates} : {},
       pendingTools: new Map(),
       mutationEpoch: Number(value.mutationEpoch) || 0,
       verification: value.verification && typeof value.verification === 'object' ? value.verification : null,
@@ -1660,6 +1743,11 @@ export class CompletionIntegrityGuard {
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
     // assistant's status report, and must not trigger a retry loop.
     if (!actionRun && hasAttachedSourceContent(state.prompt)) return;
+    if (actionRun) {
+      const promise = promiseWithoutActionReason(reply);
+      const nudged = promise && this.softRevise(key, state, 'promise', reply, promise);
+      if (nudged) return nudged;
+    }
     const honestIncomplete = isHonestIncomplete(reply);
     const completionClaimed = COMPLETION_CLAIM.test(reply) || DELIVERY_CLAIM.test(reply);
     const overallCompletion = DELIVERY_CLAIM.test(reply)
@@ -1696,6 +1784,11 @@ export class CompletionIntegrityGuard {
       if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
       }
+    }
+    if (completionClaimed) {
+      const unseen = contentInspectionReason(state);
+      const nudged = unseen && this.softRevise(key, state, 'inspection', reply, unseen);
+      if (nudged) return nudged;
     }
     if (isReadOnlyDiagnosticRequest(state.prompt)) {
       if (!state.tools.some(toolIsMechanicalCheck)) {
@@ -1766,6 +1859,17 @@ export class CompletionIntegrityGuard {
     }
     const missingEffect = effectVerificationReason(state);
     if (missingEffect) return this.revise(key, missingEffect);
+  }
+
+  // 只提醒一次的门禁：同一条回复多次核验结果一致；改过之后的新回复不再拦，
+  // 避免像旧的验收器规则那样把模型困在打回循环里。
+  softRevise(key, state, gate, reply, reason) {
+    state.softGates ||= {};
+    const replyHash = hashForAudit(reply);
+    const seen = state.softGates[gate];
+    if (seen && seen !== replyHash) return null;
+    state.softGates[gate] = replyHash;
+    return this.revise(key, reason);
   }
 
   revise(key, reason) {

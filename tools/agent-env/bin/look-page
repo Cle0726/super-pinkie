@@ -1,0 +1,31 @@
+#!/Users/Admin/.openclaw/agent-env/bin/python
+"""look-page 网页文件或网址 [输出.png] [--mobile]
+用本机 Chrome 打开网页并整页截图，同时报告页面标题和控制台报错。
+生成后用 read 打开截图，看排版、文字和图片是否正确。"""
+import sys, pathlib
+from playwright.sync_api import sync_playwright
+
+args = [a for a in sys.argv[1:] if not a.startswith('--')]
+if not args:
+    sys.exit(__doc__)
+target = args[0]
+url = target if '://' in target else pathlib.Path(target).resolve().as_uri()
+mobile = '--mobile' in sys.argv
+default_out = (pathlib.Path(target).with_suffix('') if '://' not in target else pathlib.Path('page'))
+out = args[1] if len(args) > 1 else f"{default_out}{'.mobile' if mobile else ''}.preview.png"
+errors = []
+with sync_playwright() as p:
+    browser = p.chromium.launch(channel='chrome', headless=True)
+    page = browser.new_page(viewport={'width': 390, 'height': 844} if mobile else {'width': 1440, 'height': 900},
+                            device_scale_factor=2 if mobile else 1)
+    page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.goto(url, wait_until='networkidle', timeout=60000)
+    page.wait_for_timeout(800)
+    page.screenshot(path=out, full_page=True)
+    height = page.evaluate('document.documentElement.scrollHeight')
+    title = page.title()
+    browser.close()
+print(f"网页：{target}\n标题：{title or '(无)'}，整页高度 {height}px，{'手机' if mobile else '电脑'}尺寸")
+print(f"控制台报错：{len(errors)} 条" + ('' if not errors else '\n  - ' + '\n  - '.join(e[:200] for e in errors[:8])))
+print(f"截图：{out}\n下一步：用 read 打开截图看效果；手机端加 --mobile 再看一次。")
