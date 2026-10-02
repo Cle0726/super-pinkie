@@ -3,6 +3,8 @@
    揭开后先朦胧再对焦，碧琪做一个招牌动作，配自己的粒子。
    画面是两层：补好的背景板 + 抠出来的碧琪（遮罩和背景板由
    scripts/mode-transition-assets 预先生成），用 WebGL 合成；粒子画在 2D 画布上。
+   整个 App 共用一个 WebGL 舞台：着色器只编译一次，各模式的贴图在开屏结束后的
+   空闲时间里传到 GPU 留着，点切换时不用再等解码、编译和上传。
    不支持 WebGL、素材没加载出来或系统要求减少动态效果时，返回 null，
    由 laolao-mode-switcher.js 走原来的转场。 */
 ((root, factory) => {
@@ -19,6 +21,9 @@
   const COPY_DELAY = 200;      // 揭幕后多久出文字
   const EXPECTED_WAIT = 1500;  // 进度条按这个时长走到 72%，之后慢慢爬
   const LOAD_TIMEOUT = 2500;
+  const MAX_STEP = 40;         // 一帧最多推进的动画时间：主线程卡住时暂停后接着播，不跳过一截
+  const AFTER_SPLASH = 700;    // 开屏动画收尾后再开始预备舞台
+  const BACKGROUND_GAP = 90;   // 后台预备时，每传一张贴图之间让出主线程
 
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const easeOutCubic = (x) => 1 - (1 - x) ** 3;
@@ -267,37 +272,107 @@
     'uBlurChar', 'uHaze', 'uRot', 'uClipY', 'uCharDepth', 'uRevealType', 'uRimFade', 'uPx', 'uReveal', 'uHazeColor',
     'uRimColor', 'uRevealB', 'uShadow', 'uHair'];
 
-  function createGL(canvas, images, m) {
+  // 贴图槽位顺序和着色器里的采样器一一对应；charSoft 是预乘过的角色柔焦层。
+  const TEXTURES = [['image', 'uImage', false], ['plate', 'uPlate', false], ['mask', 'uMask', false],
+    ['plateSoft', 'uPlateSoft', false], ['charSoft', 'uCharSoft', true]];
+  const UPLOAD_UNIT = 7;       // 后台上传用的槽位，不会动到正在播放的转场绑定的贴图
+  const sleep = (ms) => new Promise((resolve) => root.setTimeout(resolve, ms));
+
+  let stage = null;            // 共用舞台：{canvas, gl, U, ready, modes, busy, lost}
+  let playing = 0;             // 正在播放的转场数；播放时后台预备暂停
+
+  function createStage() {
+    const canvas = root.document.createElement('canvas');
+    canvas.className = 'laolao-mode-transition__gl';
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.width = canvas.height = 2;
     const gl = canvas.getContext('webgl', {premultipliedAlpha: true, alpha: true, antialias: false, powerPreference: 'high-performance'});
     if (!gl) return null;
-    const shader = (type, src) => {
-      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    const s = {canvas, gl, U: null, modes: new Map(), busy: false, lost: false};
+    canvas.addEventListener('webglcontextlost', () => { s.lost = true; if (stage === s) stage = null; });
+    s.ready = (async () => {
+      const shader = (type, src) => { const x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+      const vs = shader(gl.VERTEX_SHADER, VERT), fs = shader(gl.FRAGMENT_SHADER, FRAG);
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      // 有并行编译扩展时不在主线程上干等（WebKit 第一次编译要好几百毫秒）。
+      const parallel = gl.getExtension('KHR_parallel_shader_compile');
+      if (parallel) while (!s.lost && !gl.getProgramParameter(prog, parallel.COMPLETION_STATUS_KHR)) await sleep(16);
+      if (s.lost) throw new Error('webgl lost');
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(fs) || gl.getShaderInfoLog(vs) || gl.getProgramInfoLog(prog) || 'link');
+      }
+      gl.useProgram(prog);
+      const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      s.U = Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(prog, n)]));
+      TEXTURES.forEach(([, sampler], unit) => gl.uniform1i(gl.getUniformLocation(prog, sampler), unit));
+      // 以全屏大小透明地上屏空画一帧：渲染管线和第一次合成的开销都提前付掉。
+      const doc = root.document;
+      if (doc.body && !doc.hidden) {
+        canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;opacity:0;pointer-events:none';
+        canvas.width = Math.round((root.innerWidth || 2) * Math.min(root.devicePixelRatio || 1, 2));
+        canvas.height = Math.round((root.innerHeight || 2) * Math.min(root.devicePixelRatio || 1, 2));
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        doc.body.append(canvas);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        await Promise.race([new Promise((resolve) => root.requestAnimationFrame(() => root.requestAnimationFrame(resolve))), sleep(200)]);
+        canvas.remove();
+        canvas.style.cssText = '';
+        canvas.width = canvas.height = 2;
+      } else {
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
       return s;
-    };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
-    gl.useProgram(prog);
-    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const U = Object.fromEntries(UNIFORMS.map((n) => [n, gl.getUniformLocation(prog, n)]));
-    [['uImage', images.image, false], ['uPlate', images.plate, false], ['uMask', images.mask, false],
-      ['uPlateSoft', images.plateSoft, false], ['uCharSoft', images.charSoft, true]].forEach(([name, src, premultiply], unit) => {
-      const tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.uniform1i(gl.getUniformLocation(prog, name), unit);
-    });
-    gl.uniform2f(U.uImg, images.image.naturalWidth, images.image.naturalHeight);
+    })();
+    s.ready.catch(() => { if (stage === s) stage = null; });
+    return s;
+  }
+  const ensureStage = () => (stage && !stage.lost ? stage : (stage = createStage()));
+
+  // 一个模式的五张图：解码后一张一张传到 GPU，传完图片对象就放掉，只留贴图。
+  // urgent：用户已经点了切换，不再让出主线程。
+  function stageMode(s, id, urgent = false) {
+    let entry = s.modes.get(id);
+    if (!entry) {
+      entry = {urgent};
+      entry.ready = (async () => {
+        await s.ready;
+        const urls = assetUrls(id);
+        const images = await Promise.all(TEXTURES.map(([key]) => loadImage(urls[key])));
+        const {gl} = s;
+        const textures = [];
+        for (const [index, [, , premultiply]] of TEXTURES.entries()) {
+          while (!entry.urgent) { await sleep(BACKGROUND_GAP); if (!playing) break; }
+          if (s.lost) throw new Error('webgl lost');
+          const tex = gl.createTexture();
+          gl.activeTexture(gl.TEXTURE0 + UPLOAD_UNIT); gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, images[index]);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.bindTexture(gl.TEXTURE_2D, null);
+          textures.push(tex);
+        }
+        return {textures, w: images[0].naturalWidth, h: images[0].naturalHeight};
+      })();
+      entry.ready.catch(() => { if (s.modes.get(id) === entry) s.modes.delete(id); });
+      s.modes.set(id, entry);
+    }
+    if (urgent) entry.urgent = true;
+    return entry.ready;
+  }
+
+  // 每次播放：把这个模式的贴图挂到采样槽位上，写入它自己的参数。
+  function bindMode(s, tex, m) {
+    const {gl, U} = s;
+    tex.textures.forEach((t, unit) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); });
+    gl.uniform2f(U.uImg, tex.w, tex.h);
     gl.uniform2f(U.uAnchor, m.anchor[0], 1 - m.anchor[1]);
     gl.uniform1f(U.uClipY, m.clipY ? 1 - m.clipY : 0);
     gl.uniform1f(U.uCharDepth, m.charDepth);
@@ -307,7 +382,6 @@
     const sh = m.shadow;
     gl.uniform4f(U.uShadow, sh ? sh[0] : 0, sh ? 1 - sh[1] : 0, sh ? sh[2] : 0, sh ? sh[3] : 0);
     gl.uniform4fv(U.uHair, new Float32Array([0, 1, 2].flatMap((i) => m.hair[i] || [2, 2, 2, 2])));
-    return {gl, U};
   }
 
   // ---------- 粒子：按时间计算位置，同一时间永远画出同一帧 ----------
@@ -695,13 +769,37 @@
   const supported = (id) => Boolean(MODES[id]) && !reduced() && webglAvailable()
     && root.localStorage?.getItem?.('laolao:mode-transition-fx') !== 'off';
 
-  // 空闲时只把文件拉进 HTTP 缓存；真正解码留到切换那一刻。
-  const warmed = new Set();
-  function warm(id) {
-    if (!MODES[id] || warmed.has(id) || typeof root.fetch !== 'function') return;
-    warmed.add(id);
-    const urls = assetUrls(id);
-    for (const key of ['image', 'mask', 'plate', 'plateSoft', 'charSoft']) root.fetch(urls[key], {cache: 'force-cache'}).catch(() => {});
+  // 后台预备：等开屏动画收尾、App 空下来，再编译着色器、一个模式一个模式地传贴图。
+  // 当前所在的模式放到最后（切不进自己）；悬停在某个模式上时把它提到最前。
+  let idleGate = null;
+  const appIdle = () => idleGate ??= new Promise((resolve) => {
+    let started = false;
+    const go = () => { if (!started) { started = true; root.setTimeout(resolve, AFTER_SPLASH); } };
+    if (!root.document.getElementById?.('laolao-splash')) go();
+    else root.addEventListener?.('laolao:splash-cleared', go, {once: true});
+    root.setTimeout(go, 15000);   // 开屏万一没发出结束信号，也不能永远不预备
+  });
+  const warmQueue = [];
+  let warming = false;
+  function warm(id, {soon = false} = {}) {
+    if (!supported(id) || stage?.modes.has(id)) return;
+    const at = warmQueue.indexOf(id);
+    if (at >= 0 && soon) warmQueue.splice(at, 1);
+    if (at < 0 || soon) soon ? warmQueue.unshift(id) : warmQueue.push(id);
+    if (warming) return;
+    warming = true;
+    void (async () => {
+      await appIdle();
+      while (warmQueue.length) {
+        const current = root.document.documentElement?.getAttribute?.('data-laolao-mode');
+        const index = Math.max(0, warmQueue.findIndex((queued) => queued !== current));
+        const [next] = warmQueue.splice(index, 1);
+        const s = ensureStage();
+        if (!s) break;
+        try { await stageMode(s, next); } catch {}
+      }
+      warming = false;
+    })();
   }
   function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -729,7 +827,6 @@
     const overlay = el('section', `laolao-mode-transition laolao-mode-transition--fx laolao-mode-transition--${mode.id}`, {
       role: 'status', 'aria-live': 'polite', 'aria-label': `正在切换到${mode.label}`,
     });
-    const glCanvas = el('canvas', 'laolao-mode-transition__gl', {'aria-hidden': 'true'});
     const veil = el('div', 'laolao-mode-transition__veil');
     const content = el('div', 'laolao-mode-transition__content');
     const eyebrow = el('p', 'laolao-mode-transition__eyebrow');
@@ -757,8 +854,8 @@
     progress.append(fill, tip, message, lit, percentage, flash);
     content.append(eyebrow, title, progress);
     const fxCanvas = el('canvas', 'laolao-mode-transition__particles', {'aria-hidden': 'true'});
-    overlay.append(glCanvas, veil, content, fxCanvas);
-    return {overlay, glCanvas, fxCanvas, content, progress, fill, tip, lit, messages: [msg, litMsg], percentage};
+    overlay.append(veil, content, fxCanvas);
+    return {overlay, glCanvas: null, fxCanvas, content, progress, fill, tip, lit, messages: [msg, litMsg], percentage};
   }
 
   // ---------- 一次转场 ----------
@@ -769,8 +866,8 @@
     const ui = buildOverlay(mode);
     const parts = makeParticles(mode.id);
     const view = {w: 1, h: 1, glScale: 1, fxScale: 1};
-    let gl = null, U = null, fx = null, images = null;
-    let startAt = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
+    let gl = null, U = null, fx = null, size = null, s = null;
+    let clock = 0, lastNow = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
     let phraseKey = '', copyStep = 0, waitingText = '', finished = false, destroyed = false;
     let resolveCovered, resolveFinished, rejectReady;
     const covered = new Promise((resolve) => { resolveCovered = resolve; });
@@ -784,6 +881,7 @@
       // 素材只有 1672 像素宽，画布再大也不会更清楚；按需封顶，省 GPU。
       view.glScale = Math.min(dpr, Math.max(1, 2000 / view.w), 2);
       view.fxScale = Math.min(dpr, 2);
+      if (!ui.glCanvas) return;
       ui.glCanvas.width = Math.round(view.w * view.glScale); ui.glCanvas.height = Math.round(view.h * view.glScale);
       ui.fxCanvas.width = Math.round(view.w * view.fxScale); ui.fxCanvas.height = Math.round(view.h * view.fxScale);
       gl?.viewport(0, 0, ui.glCanvas.width, ui.glCanvas.height);
@@ -836,7 +934,7 @@
     // 图片上的一点在画面上的位置（char 跟着碧琪动，plate 跟着背景动）。
     const toScreen = (ix, iy, s, layer = 'char') => {
       let u = ix, v = 1 - iy, p0;
-      const ia = images.image.naturalWidth / images.image.naturalHeight;
+      const ia = size.w / size.h;
       if (layer === 'char') {
         let qx = (u - m.anchor[0]) * s.sx * ia, qy = (v - (1 - m.anchor[1])) * s.sy;
         const c = Math.cos(s.rot), sn = Math.sin(s.rot);
@@ -939,7 +1037,13 @@
       destroyed = true;
       root.cancelAnimationFrame(raf);
       root.removeEventListener('resize', resize);
-      try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
+      playing = Math.max(0, playing - 1);
+      if (s) {
+        s.busy = false;
+        s.canvas.remove();
+        s.canvas.width = s.canvas.height = 2;   // 放掉全屏大小的绘图缓冲，贴图留着下次用
+        if (s !== stage) try { s.gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
+      }
       ui.overlay.remove();
       resolveCovered();
       resolveFinished();
@@ -947,7 +1051,10 @@
 
     const tick = (now) => {
       if (destroyed) return;
-      const t = now - startAt;
+      // 主线程被别的事占住时（比如目的页正在渲染），画面停一下再接着播，不跳过一截。
+      clock += Math.min(Math.max(0, now - lastNow), MAX_STEP);
+      lastNow = now;
+      const t = clock;
       syncDom(t);
       render(t);
       if (t >= POP + REVEAL + 16) resolveCovered();
@@ -955,20 +1062,26 @@
       raf = root.requestAnimationFrame(tick);
     };
 
+    playing += 1;
     const ready = (async () => {
-      const urls = assetUrls(mode.id);
-      const entries = await withTimeout(Promise.all(Object.entries(urls).map(async ([key, url]) => [key, await loadImage(url)])), LOAD_TIMEOUT);
-      if (destroyed) throw new Error('aborted');
-      images = Object.fromEntries(entries);
+      s = ensureStage();
+      // 共用舞台正被另一个转场占着（正常不会发生）：临时开一个，用完就丢。
+      if (s?.busy) s = createStage();
+      if (!s) throw new Error('webgl');
+      s.busy = true;
+      const tex = await withTimeout(stageMode(s, mode.id, true), LOAD_TIMEOUT);
+      if (destroyed || s.lost) throw new Error('aborted');
+      size = {w: tex.w, h: tex.h};
+      ({gl, U} = s);
+      ui.glCanvas = s.canvas;
+      ui.overlay.prepend(s.canvas);
       root.document.body.append(ui.overlay);
       resize();
-      const created = createGL(ui.glCanvas, images, m);
-      if (!created) throw new Error('webgl');
-      ({gl, U} = created);
+      bindMode(s, tex, m);
       fx = ui.fxCanvas.getContext('2d');
       root.addEventListener('resize', resize);
       setMessage(phrases[0]);
-      startAt = root.performance.now();
+      lastNow = root.performance.now();
       render(0);
       raf = root.requestAnimationFrame(tick);
     })();
@@ -983,7 +1096,7 @@
       finish() {
         if (!finished && !destroyed) {
           finished = true;
-          const t = root.performance.now() - startAt;
+          const t = clock;
           readyProgress = waitingProgress(t);
           readyAt = Math.max(t, COPY_IN);
           // 窗口被隐藏时动画时钟会停，不能让浮层一直挡着。
