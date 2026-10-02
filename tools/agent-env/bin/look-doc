@@ -1,0 +1,25 @@
+#!/bin/bash
+# look-doc 文档 [输出.png]
+# PDF：前 8 页拼成一张预览图；PPT/Word/Excel/Keynote：系统快速预览出第一页的图，并打印全文文字。
+# 生成后用 read 打开预览图看版式，用打印出的文字核对内容。
+set -euo pipefail
+in="${1:?用法: look-doc 文档 [输出.png]}"
+[ -f "$in" ] || { echo "找不到文档：$in" >&2; exit 1; }
+out="${2:-${in%.*}.preview.png}"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+case "${in##*.}" in
+  pdf|PDF)
+    pages=$(pdfinfo "$in" 2>/dev/null | awk '/^Pages:/{print $2}')
+    pdftoppm -png -r 50 -f 1 -l 8 "$in" "$tmp/p"
+    magick montage -font "/System/Library/Fonts/Hiragino Sans GB.ttc" "$tmp"/p-*.png -tile 4x -geometry +4+4 -background white "$out"
+    echo "文档：$in（共 ${pages:-?} 页，预览前 8 页）"
+    echo "--- 文字（前 80 行）---"; pdftotext -layout "$in" - 2>/dev/null | head -80 ;;
+  *)
+    qlmanage -t -s 1400 -o "$tmp" "$in" >/dev/null 2>&1 || true
+    thumb=$(ls "$tmp"/*.png 2>/dev/null | head -1)
+    [ -n "$thumb" ] && cp "$thumb" "$out" || out="(系统预览生成失败)"
+    echo "文档：$in（预览图只有第一页/第一张幻灯片，其余靠下面的文字核对）"
+    echo "--- 文字（前 120 行）---"; markitdown "$in" 2>/dev/null | head -120 ;;
+esac
+echo "预览图：$out"
+echo "下一步：用 read 打开预览图看版式和视觉效果。"
