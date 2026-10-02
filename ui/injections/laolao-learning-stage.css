@@ -479,7 +479,8 @@
 .laolao-learning-note-group[open] > summary::before { transform: rotate(90deg); }
 .laolao-learning-note-group__cards { padding-top: 7px; }
 .laolao-learning-note { position: relative; margin: 0 0 8px; padding: 13px 38px 11px 12px; transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease; cursor: pointer; }
-.laolao-learning-note:hover { border-color: rgba(212, 91, 151, .3); box-shadow: 0 4px 14px rgba(119, 61, 97, .07); transform: translateY(-1px); }
+.laolao-learning-note:hover,
+.laolao-learning-note.has-open-menu { border-color: rgba(212, 91, 151, .3); box-shadow: 0 4px 14px rgba(119, 61, 97, .07); transform: translateY(-1px); }
 .laolao-learning-note:focus-visible { outline: 2px solid rgba(221, 90, 157, .55); outline-offset: 2px; }
 .laolao-learning-note h3 { margin: 0 0 5px; color: #643c5d; font-size: 13px; line-height: 1.45; }
 .laolao-learning-note > p { margin: 0; color: #625368; font-size: 12px; line-height: 1.58; white-space: pre-wrap; }
@@ -501,6 +502,9 @@
 .laolao-learning-note__more:hover { background: rgba(245, 218, 235, .95); }
 .laolao-learning-note__menu { position: absolute; top: 31px; right: 0; display: grid; min-width: 112px; padding: 4px; border: 1px solid rgba(203, 127, 169, .2); border-radius: 11px; background: rgba(255, 251, 254, .98); box-shadow: 0 10px 28px rgba(69, 37, 66, .16); }
 .laolao-learning-note__menu[hidden] { display: none; }
+/* An open menu is moved into the drawer's own layer (openNoteMenu): above sticky group headers,
+   later cards and the undo bar, and outside the scrolling list so it is never clipped. */
+.laolao-learning-note__menu.is-floating { right: auto; z-index: 30; }
 .laolao-learning-note__menu button { padding: 7px 8px; border: 0; border-radius: 7px; color: #79546d; background: transparent; text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
 .laolao-learning-note__menu button:hover { color: #9a386c; background: rgba(251, 229, 241, .82); }
 .laolao-learning-note__compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }

@@ -43,6 +43,7 @@
     undoTimer: 0,
     undoNote: null,
     lastOrganizationBackupId: "",
+    noteMenu: null,
   };
 
   const el = (tag, className, text) => {
@@ -459,7 +460,62 @@
     if (note.differencePoints || note.meaning) body.append(el("p", "laolao-learning-note__difference", note.differencePoints || note.meaning));
   };
 
+  // An open "⋯" menu is lifted out of its card into the drawer's own layer. Left inside the card it
+  // shares the list's stacking order: a hovered card (transform) traps it below the next sticky group
+  // header and the cards after it, and the scrolling list clips it. In the drawer layer it paints
+  // above every header and card, and flips upward when the visible list has no room below.
+  const closeNoteMenu = ({restoreFocus = false} = {}) => {
+    const open = state.noteMenu;
+    if (!open) return;
+    state.noteMenu = null;
+    const {card, home, more, menu} = open;
+    menu.hidden = true;
+    menu.classList.remove("is-floating");
+    menu.style.removeProperty("top"); menu.style.removeProperty("left");
+    delete menu.dataset.placement;
+    card.classList.remove("has-open-menu");
+    more.setAttribute("aria-expanded", "false");
+    if (home.isConnected) home.append(menu); else menu.remove();
+    if (restoreFocus && more.isConnected) more.focus();
+  };
+
+  const placeNoteMenu = () => {
+    const open = state.noteMenu;
+    if (!open) return;
+    const drawer = state.drawer;
+    const scroller = drawer?.querySelector(".laolao-learning-notes__content");
+    if (!drawer?.classList.contains("is-open") || !open.more.isConnected || !scroller) return closeNoteMenu();
+    const frame = drawer.getBoundingClientRect();
+    const visible = scroller.getBoundingClientRect();
+    const anchor = open.more.getBoundingClientRect();
+    if (anchor.bottom <= visible.top || anchor.top >= visible.bottom) return closeNoteMenu();
+    const {menu} = open;
+    const gap = 4, edge = 8;
+    const width = menu.offsetWidth, height = menu.offsetHeight;
+    const below = visible.bottom - edge - anchor.bottom - gap;
+    const above = anchor.top - gap - visible.top - edge;
+    const upward = height > below && above > below;
+    const top = Math.max(visible.top + edge, Math.min(upward ? anchor.top - gap - height : anchor.bottom + gap, visible.bottom - edge - height));
+    const left = Math.max(frame.left + edge, Math.min(anchor.right - width, frame.right - edge - width));
+    menu.dataset.placement = upward ? "above" : "below";
+    menu.style.top = `${Math.round(top - frame.top - drawer.clientTop)}px`;
+    menu.style.left = `${Math.round(left - frame.left - drawer.clientLeft)}px`;
+  };
+
+  const openNoteMenu = (card, home, more, menu) => {
+    closeNoteMenu();
+    if (!state.drawer?.isConnected) return;
+    state.noteMenu = {card, home, more, menu};
+    menu.classList.add("is-floating");
+    menu.hidden = false;
+    state.drawer.append(menu);
+    card.classList.add("has-open-menu");
+    more.setAttribute("aria-expanded", "true");
+    placeNoteMenu();
+  };
+
   const beginEdit = (card, note) => {
+    closeNoteMenu();
     const form = el("form", "laolao-learning-note__edit");
     const title = el("input"); title.value = note.title || ""; title.placeholder = "标题"; title.setAttribute("aria-label", "笔记标题");
     const content = el("textarea"); content.rows = 4; content.value = note.content || ""; content.setAttribute("aria-label", "笔记正文");
@@ -577,15 +633,19 @@
         item.dataset.notesOrganize = "1";
         item.disabled = state.organizationBusy || !state.noteData?.organizer?.available;
       }
-      item.addEventListener("click", event => { event.stopPropagation(); menu.hidden = true; more.setAttribute("aria-expanded", "false"); action(); });
+      item.addEventListener("click", event => { event.stopPropagation(); closeNoteMenu(); action(); });
       menu.append(item);
     }
-    more.addEventListener("click", event => { event.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute("aria-expanded", String(!menu.hidden)); });
+    more.addEventListener("click", event => {
+      event.stopPropagation();
+      if (state.noteMenu?.menu === menu) closeNoteMenu(); else openNoteMenu(card, actionBar, more, menu);
+    });
     actionBar.append(more, menu); card.append(actionBar);
     return card;
   };
 
   const renderReview = list => {
+    closeNoteMenu();
     const queue = state.reviewQueue || [];
     const note = queue[state.reviewIndex];
     if (!note) {
@@ -783,6 +843,7 @@
   const renderNotes = (notes, similar = []) => {
     const list = state.drawer?.querySelector(".laolao-learning-notes__list");
     if (!list) return;
+    closeNoteMenu();
     list.replaceChildren();
     if (state.reviewQueue) { renderReview(list); return; }
     if (!notes.length) {
@@ -938,6 +999,7 @@
   };
 
   const closeNotebook = () => {
+    closeNoteMenu();
     state.drawer?.classList.remove("is-open");
     state.drawer?.setAttribute("aria-hidden", "true");
   };
@@ -1057,6 +1119,12 @@
       const undo = el("div", "laolao-learning-notes__undo"); undo.hidden = true;
       contentWrap.append(reviewBar, topActions, modelRow, compose, reminder, searchRow, tags, filters, status, preview, list, undo);
       drawer.append(header, contentWrap);
+      contentWrap.addEventListener("scroll", placeNoteMenu, {passive: true});
+      drawer.addEventListener("keydown", event => {
+        if (event.key !== "Escape" || !state.noteMenu) return;
+        event.preventDefault(); event.stopPropagation();
+        closeNoteMenu({restoreFocus: true});
+      });
       document.body.append(drawer);
       state.drawer = drawer;
     }
@@ -1152,7 +1220,9 @@
     if (state.selectionButton && !event.target.closest(".laolao-learning-selection-save")) {
       state.selectionButton.remove(); state.selectionButton = null;
     }
+    if (state.noteMenu && !event.target.closest?.(".laolao-learning-note__menu, .laolao-learning-note__more")) closeNoteMenu();
   }, true);
+  window.addEventListener("resize", placeNoteMenu);
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", reconcile, {once: true});
   else reconcile();
