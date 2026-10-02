@@ -363,6 +363,19 @@ const COMPLETION_TRUTH_RULES = `
 - 工具失败后保留旧成果，不覆盖旧文件来伪装本轮成功；修复后必须重新验证。无法继续时说清真实阻塞和已保留内容。
 `.trim();
 
+// 聊天、项目、想法、学习四个模式共用的做事标准（无限制模式不注入）。
+// 针对的是所有场景里都会出现的三类毛病：顺着说话、说没有依据的事、草草交差。
+export const WORK_STANDARD_RULES = `
+做事标准（每个模式、每个任务都适用）：
+1. 对错直说，不顺着说。先生的说法、答案或方案有错，第一句就指出错在哪、为什么、正确的是什么；语气可以温和，结论不能含糊。只在真的对时才说「对」或「完全正确」，部分对就说清哪部分对、哪部分错。先生不高兴或坚持时，没有新证据就不改口。
+2. 被批评时实事求是。先核对批评是否成立：成立的部分说清具体错在哪、怎么改，然后去改；不成立的部分礼貌地讲明理由。不夸张自责，不附和过头，也不为了平息情绪而全盘认错。
+3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或先生给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
+4. 先定好标准再动手。做东西前，先想清楚先生要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
+5. 交付前亲自检查成品。看一遍产物本身：打开文件、运行程序、截图看界面、抽帧看视频、读一遍文字；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
+6. 卡住先找原因。报错、下载或安装卡住、结果不对时，先查清原因（网络、依赖、权限、参数、版本）再处理；同一个办法失败两次就换思路，不在原地反复等待或重试。
+7. 降级要说清楚。如果只能做出比要求差的版本（换了更简陋的做法、缩了范围、少了功能），交付时第一句就说明差距和原因，并给出补救办法，不把降级版说成完成。
+`.trim();
+
 const TOOL_PROGRESS_RULES = `
 【工具调用前的进度说明】
 - 每次单独调用工具，或开始一组紧密相关的工具调用之前，先用一句简短中文说明接下来要检查、读取或运行什么，以及原因；说清后不要重复。
@@ -886,8 +899,12 @@ function registerVerifier(state, skillFile, verifier) {
   return true;
 }
 
+function skillHasVerifier(skillFile) {
+  try { return fs.existsSync(path.join(path.dirname(String(skillFile)), 'tools', 'verify_completion.py')); } catch { return false; }
+}
+
 function missingVerifierReason(state) {
-  const missing = [...state.loadedSkills].filter(skillFile => state.missingVerifiers.has(skillFile) || !state.skills.has(skillFile));
+  const missing = [...(state.contractSkills || [])].filter(skillFile => state.missingVerifiers.has(skillFile) || !state.skills.has(skillFile));
   return missing.length ? `已读取的 Skill 没有独立 verify_completion.py，不能由执行模型自行验收完成：${missing.join('、')}` : '';
 }
 
@@ -1138,6 +1155,7 @@ export class CompletionIntegrityGuard {
       tools: [],
       skills: new Map(),
       loadedSkills: new Set(),
+      contractSkills: new Set(),
       missingVerifiers: new Set(),
       pendingTools: new Map(),
       mutationEpoch: 0,
@@ -1157,6 +1175,7 @@ export class CompletionIntegrityGuard {
       tools: includeTools ? state.tools.slice(-1024).map(compactToolEvidence) : [],
       skills: [...state.skills.entries()].map(([skillFile, contract]) => [skillFile, compactJson(contract)]),
       loadedSkills: [...state.loadedSkills],
+      contractSkills: [...(state.contractSkills || [])],
       missingVerifiers: [...state.missingVerifiers],
       mutationEpoch: Number(state.mutationEpoch) || 0,
       verification: compactJson(state.verification),
@@ -1179,6 +1198,9 @@ export class CompletionIntegrityGuard {
       })) : [],
       skills: new Map(Array.isArray(value.skills) ? value.skills.filter(row => Array.isArray(row) && row.length === 2) : []),
       loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills : []),
+      // Older saved runs did not record contracts: only Skills that ship a verifier are.
+      contractSkills: new Set(Array.isArray(value.contractSkills) ? value.contractSkills
+        : (Array.isArray(value.loadedSkills) ? value.loadedSkills : []).filter(skillHasVerifier)),
       missingVerifiers: new Set(Array.isArray(value.missingVerifiers) ? value.missingVerifiers : []),
       pendingTools: new Map(),
       mutationEpoch: Number(value.mutationEpoch) || 0,
@@ -1235,7 +1257,7 @@ export class CompletionIntegrityGuard {
     if (!key) return;
     const state = this.runs.get(key) || {
       ...contractTimeBoundary(), prompt: '', tools: [], skills: new Map(),
-      loadedSkills: new Set(), missingVerifiers: new Set(), pendingTools: new Map(),
+      loadedSkills: new Set(), contractSkills: new Set(), missingVerifiers: new Set(), pendingTools: new Map(),
       mutationEpoch: 0, verification: null, authorityRecords: new Map(),
     };
     const params = event.params && typeof event.params === 'object' ? event.params : {};
@@ -1249,7 +1271,7 @@ export class CompletionIntegrityGuard {
     if (!key) return;
     const state = this.runs.get(key) || {
       ...contractTimeBoundary(), prompt: '', tools: [], skills: new Map(), loadedSkills: new Set(),
-      missingVerifiers: new Set(), pendingTools: new Map(), mutationEpoch: 0,
+      contractSkills: new Set(), missingVerifiers: new Set(), pendingTools: new Map(), mutationEpoch: 0,
       verification: null, authorityRecords: new Map(),
     };
     const output = resultText(event.result);
@@ -1286,9 +1308,17 @@ export class CompletionIntegrityGuard {
     const readSucceeded = !failed && /^(?:read|read_file|open_file)$/i.test(String(event.toolName || ''));
     if (readSucceeded && SKILL_PATH.test(String(requestedPath))) {
       const skillFile = path.resolve(String(requestedPath));
-      state.loadedSkills.add(skillFile);
       const verifier = path.join(path.dirname(skillFile), 'tools', 'verify_completion.py');
-      if (!registerVerifier(state, skillFile, verifier)) state.missingVerifiers.add(skillFile);
+      state.loadedSkills.add(skillFile);
+      state.contractSkills ||= new Set();
+      // 只有读取时就自带 tools/verify_completion.py 的 Skill 才把独立验收当作
+      // 交付条件。社区或自写的普通 Skill 没有验收器，按常规工具证据核验；以前
+      // 把它们也算作「缺验收器」，结果用任何普通 Skill 都永远不能交付，模型只能
+      // 空转、到处找脚本。读取之后才出现的验收器不会让它变成契约 Skill。
+      if (state.contractSkills.has(skillFile) || fs.existsSync(verifier)) {
+        state.contractSkills.add(skillFile);
+        if (!registerVerifier(state, skillFile, verifier)) state.missingVerifiers.add(skillFile);
+      }
       state.verification = null;
     } else if (readSucceeded && VERIFIER_PATH.test(String(requestedPath))) {
       const verifier = path.resolve(String(requestedPath));
@@ -1296,7 +1326,7 @@ export class CompletionIntegrityGuard {
       // A verifier created by the same model after it read an unverified
       // Skill is not independent. Only a contract present at first Skill load
       // may become the completion authority for this turn.
-      if (state.loadedSkills.has(skillFile) && !state.missingVerifiers.has(skillFile)) {
+      if (state.contractSkills?.has(skillFile) && !state.missingVerifiers.has(skillFile)) {
         registerVerifier(state, skillFile, verifier);
         state.verification = null;
       }
@@ -4531,6 +4561,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       '\n' + TOOL_PROGRESS_RULES + '\n',
+      ...(mode !== 'none' ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
       ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
