@@ -61,6 +61,13 @@
 .pinkie-process .chat-timeline-overflow { margin: 2px 0 4px; font-size: 12.5px; color: #a36b82; }
 
 /* thinking */
+.pinkie-thinking.is-entering { animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* a soft caret while a thought is being typed out */
+.pinkie-thinking.is-typing .pinkie-thinking__text::after {
+  content: ""; display: inline-block; width: 6px; height: 1em; margin-left: 2px; vertical-align: -2px;
+  border-radius: 2px; background: rgba(233, 79, 145, 0.5); animation: pinkie-caret 1s steps(2, jump-none) infinite;
+}
+@keyframes pinkie-caret { 50% { opacity: 0; } }
 .pinkie-thinking__head { all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12.5px; color: #805269; padding: 2px 0; }
 .pinkie-thinking__chev { display: inline-block; width: 10px; color: #a36b82; transition: transform 0.25s; }
 .pinkie-thinking.is-open .pinkie-thinking__chev, .pinkie-thinking.is-live .pinkie-thinking__chev { transform: rotate(90deg); }

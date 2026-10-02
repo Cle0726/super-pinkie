@@ -52,7 +52,7 @@ __fake.tail();                         // 最近的请求和事件日志
 
 | 场景 | 模拟内容 | 其他参数 |
 |---|---|---|
-| `narrated` | 每次调用工具前先流式输出一句说明。和真实记录一样，这句说明与 toolCall 存在同一条助手消息里。 | `steps`：`[说明, 工具名, 参数, 结果]` 数组；`thinking: true` 附带思考块 |
+| `narrated` | 每次调用工具前先流式输出一句说明。和真实记录一样，这句说明与 toolCall 存在同一条助手消息里。 | `steps`：`[说明, 工具名, 参数, 结果]` 数组；`thinking: true` 附带思考块；`thinkingChunks: 1, thinkDelay: 2500` 模拟 Gemini 先安静想、再一次给出整段思考 |
 | `multiTool` | 同一轮里连续多次工具调用后回复 | `tools`：次数；`parallel: true` 最后再来一条消息里的两个并行调用 |
 | `watchdog` | 第一轮工具调用后没回复就结束，网关看门狗从另一个连接（CLI）续跑。续跑会插入不可见用户消息 U+2063，并用新的 runId | `rounds`：续跑次数；`r1Terminal: 'error'` 首轮以错误结束（`chat` 错误事件按 15 秒宽限延后，`graceMs` 可调） |
 

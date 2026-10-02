@@ -78,8 +78,10 @@
     const key = resolveKey();
     if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
+    const before = record.text.length;
     if (!run.thinkingSince) { run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1; if (record.text) record.text += "\n\n"; }
     record.text = (record.text + text).slice(-MAX_TEXT);
+    typeOut(key, before, record.text.length);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
     save();
@@ -138,6 +140,7 @@
     if (!run.startedAt && state === "done") return;
     resolveKey();
     stopThinking();
+    hurryTyping();
     // The history sync after a turn replaces the optimistic user message, so
     // the card's key changes. Carry this turn's thinking over to the new key.
     if (run.key) run.migrate = {from: run.key, until: Date.now() + 20000};
@@ -150,12 +153,46 @@
     if (run.key && store[run.key]) rerender();
   }
 
+  // ---------- typing a thought out ----------
+  // Some providers (Gemini) think silently and then deliver the whole thought
+  // in one chunk right before acting. Type each new piece out instead of
+  // pasting it: about 120 characters a second, each piece within 0.5–2.5 s,
+  // and a finished turn hurries whatever is left. Kept cards restored after a
+  // reload show their text at once.
+  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
+  const typing = new Map();   // card key -> {from, to, start, dur, doneAt}
+  const typedLength = (t, now) => t.from + (t.to - t.from) * Math.min(1, Math.max(0, (now - t.start) / t.dur));
+  function typeOut(key, before, length) {
+    if (reduced()) { typing.delete(key); return; }
+    const now = performance.now(), current = typing.get(key);
+    const from = current ? Math.min(typedLength(current, now), before) : before;
+    if (length <= from) return;
+    const dur = Math.min(TYPE_MAX, Math.max(TYPE_MIN, ((length - from) / TYPE_CPS) * 1000));
+    typing.set(key, {from, to: length, start: now, dur, doneAt: 0});
+  }
+  function hurryTyping() {
+    const now = performance.now();
+    for (const t of typing.values()) {
+      const left = t.start + t.dur - now;
+      if (left > TYPE_HURRY) { t.from = typedLength(t, now); t.start = now; t.dur = TYPE_HURRY; }
+    }
+  }
+
   // ---------- rendering into the two slots ----------
+  let typingFrame = false;
   function renderThinking(slot) {
     const key = slot.dataset.pinkieThinking || "";
     const record = store[key];
     const live = Boolean(run.thinkingSince && run.key === key);
     if (!record || !record.text) { if (slot.firstChild) slot.replaceChildren(); return; }
+    const now = performance.now(), t = typing.get(key);
+    const typed = t ? Math.min(record.text.length, Math.round(typedLength(t, now))) : record.text.length;
+    const isTyping = typed < record.text.length;
+    if (t && !isTyping && !t.doneAt) { t.doneAt = now; setTimeout(schedule, TYPE_HOLD + 20); }
+    // After the last character, stay open a moment before folding away.
+    const holding = Boolean(t && !isTyping && now - t.doneAt < TYPE_HOLD);
+    if (t && !isTyping && !holding && !live) typing.delete(key);
+    if (isTyping) typingFrame = true;
     let box = slot.querySelector(".pinkie-thinking");
     if (!box) {
       box = el("div", "pinkie-thinking");
@@ -165,16 +202,21 @@
       const body = el("div", "pinkie-thinking__body");
       body.append(el("div", "pinkie-thinking__text"));
       box.append(head, body);
+      // Fade in only when a thought arrives live, not when a finished card is redrawn.
+      if (live || isTyping) box.classList.add("is-entering");
       slot.replaceChildren(box);
     }
-    box.classList.toggle("is-live", live);
+    const open = live || isTyping || holding;
+    box.classList.toggle("is-live", open);
+    box.classList.toggle("is-typing", isTyping);
     const label = box.querySelector(".pinkie-thinking__label");
     const ms = record.ms + (live ? Date.now() - run.thinkingSince : 0);
     const text = live ? `正在思考 · ${Math.round(ms / 1000)}s` : `思考了 ${duration(ms || 1000)}${record.count > 1 ? ` · ${record.count} 次` : ""}`;
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
-    if (body.textContent !== record.text) body.textContent = record.text;
-    if (live) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
+    const shown = isTyping ? record.text.slice(0, typed) : record.text;
+    if (body.textContent !== shown) body.textContent = shown;
+    if (open) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
   }
 
   function renderStatus(slot) {
@@ -227,6 +269,7 @@
       keep.add(latest);
       save();
     }
+    if (typing.has(move.from) && !typing.has(latest)) { typing.set(latest, typing.get(move.from)); typing.delete(move.from); }
     if (run.doneKey === move.from) run.doneKey = latest;
     if (run.oops.has(move.from)) { run.oops.set(latest, run.oops.get(move.from)); run.oops.delete(move.from); }
     run.confetti = run.confetti === move.from ? latest : run.confetti;
@@ -240,8 +283,10 @@
       frame = 0;
       if (run.startedAt) resolveKey();
       migrateThinking();
+      typingFrame = false;
       document.querySelectorAll("[data-pinkie-thinking]").forEach(renderThinking);
       document.querySelectorAll("[data-pinkie-status]").forEach(renderStatus);
+      if (typingFrame) schedule();
     });
   }
   new MutationObserver(schedule).observe(document.documentElement, {childList: true, subtree: true});
