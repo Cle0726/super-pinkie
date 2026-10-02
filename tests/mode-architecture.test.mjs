@@ -384,7 +384,7 @@ test('a real mutation invalidates a previously cached verifier attestation',asyn
   assert.match(blocked.reason,/未用成果核验工具验证本轮最新产物/);
 });
 
-test('a skill without an independent verifier cannot self-certify completion',t=>{
+test('a Skill without its own verifier is judged by ordinary tool evidence',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-no-contract-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const skill=path.join(root,'skills','video','SKILL.md');
@@ -394,10 +394,20 @@ test('a skill without an independent verifier cannot self-certify completion',t=
   const ctx={agentId:'project',sessionKey:'agent:project:no-contract'};
   guard.begin({prompt:'调用 skill 完成全部工作'},ctx);
   guard.afterTool({toolName:'read',params:{path:skill},result:'loaded'},ctx);
-  guard.afterTool({toolName:'exec',params:{command:'run something'},result:'ok'},ctx);
+  const output=path.join(root,'out.txt');
+  guard.beforeTool({toolName:'write',toolCallId:'w',params:{path:output}},ctx);
+  fs.writeFileSync(output,'made by the skill');
+  guard.afterTool({toolName:'write',toolCallId:'w',params:{path:output},result:{ok:true}},ctx);
+  guard.afterTool({toolName:'read',params:{path:output},result:'made by the skill'},ctx);
+  // Community and hand-written Skills carry no verifier; requiring one made
+  // every Skill task undeliverable and the model looped looking for it.
+  const accepted=guard.finalize({lastAssistantMessage:'全部工作已经成功完成。'},ctx);
+  assert.notEqual(accepted?.action,'revise',accepted?.reason);
+  // Ordinary evidence still applies: a failed last step cannot be called done.
+  guard.afterTool({toolName:'exec',params:{command:'render video'},result:'ffmpeg failed',isError:true},ctx);
   const blocked=guard.finalize({lastAssistantMessage:'全部工作已经成功完成。'},ctx);
   assert.equal(blocked.action,'revise');
-  assert.match(blocked.reason,/没有独立 verify_completion\.py/);
+  assert.doesNotMatch(blocked.reason,/verify_completion/);
 });
 
 test('copied evidence and forged timestamps cannot pass the global gate',()=>{
@@ -1067,8 +1077,10 @@ test('a verifier created after Skill load cannot self-certify the same turn',t=>
   fs.mkdirSync(path.dirname(verifier),{recursive:true});fs.writeFileSync(verifier,'print("ok")\n');
   guard.afterTool({toolName:'read',params:{path:verifier},result:'loaded'},ctx);
   guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
+  // The late verifier never becomes this turn's completion authority.
+  assert.equal(guard.runs.get(ctx.sessionKey).skills.size,0);
   const result=guard.finalize({lastAssistantMessage:'项目已经完成。'},ctx);
-  assert.match(result.reason,/没有独立 verify_completion\.py/);
+  assert.doesNotMatch(result?.reason||'',/verify_completion/);
 });
 
 function integrityContract(t,label,verifierCode='import json\nprint(json.dumps({"status":"PASS","verified":True}))\n') {
@@ -1168,18 +1180,20 @@ test('rereading changed Skill or verifier never replaces the original contract l
   }
 });
 
-test('one valid Skill cannot certify a second Skill with a missing verifier',async t=>{
+test('a plain Skill read alongside a verified Skill does not block or bypass its verifier',async t=>{
   const {root,skill,guard,ctx}=integrityContract(t,'valid-plus-missing');
   const missing=path.join(root,'skills','missing','SKILL.md');
   fs.mkdirSync(path.dirname(missing),{recursive:true});fs.writeFileSync(missing,'# missing verifier');
   guard.begin({prompt:'调用这两个 Skill 完成项目'},ctx);
   for(const file of [missing,skill])guard.afterTool({toolName:'read',params:{path:file},result:'loaded'},ctx);
   guard.afterTool({toolName:'exec',params:{command:'true'},result:'ok'},ctx);
-  const checked=await guard.verifyExternal(ctx.sessionKey);
-  assert.equal(checked.ok,false);assert.ok(checked.reason.includes(missing));
-  for(const options of [{},{verifyExternal:false}]){
-    assert.match(guard.finalize({lastAssistantMessage:'项目已经全部完成。'},ctx,options).reason,/没有独立 verify_completion\.py/);
-  }
+  const run=guard.runs.get(ctx.sessionKey);
+  assert.equal(run.skills.size,1,'only the Skill that ships a verifier is locked as a contract');
+  assert.equal(run.contractSkills.has(missing),false);
+  // The verified Skill must still pass its own verifier before completion.
+  const blocked=guard.finalize({lastAssistantMessage:'项目已经全部完成。'},ctx,{verifyExternal:false});
+  assert.equal(blocked?.action,'revise');
+  assert.doesNotMatch(blocked.reason,/没有独立 verify_completion\.py/);
 });
 
 test('empty contracts and unsuccessful Skill reads cannot mint a verified attestation',async t=>{
@@ -1607,6 +1621,9 @@ test('tiered prompts omit completion-gate internals in all five modes', t => {
     // Pinkie's ask_user card stays out of unrestricted mode.
     if (agentId === 'unrestricted') assert.doesNotMatch(prompt.appendSystemContext, /ask_user/);
     else assert.match(prompt.appendSystemContext, /ask_user/);
+    // The shared work standard (no flattery, no unfounded claims, check the result) reaches the four Pinkie modes only.
+    if (agentId === 'unrestricted') assert.doesNotMatch(prompt.appendSystemContext, /做事标准/);
+    else for (const rule of [/对错直说，不顺着说/, /被批评时实事求是/, /只说有依据的事/, /交付前亲自检查成品/, /降级要说清楚/]) assert.match(prompt.appendSystemContext, rule);
   }
 });
 
