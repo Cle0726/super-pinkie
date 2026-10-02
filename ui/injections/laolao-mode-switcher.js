@@ -714,7 +714,7 @@
     renderModeButton(option, mode, {current});
     const warm = () => {
       void motion.modeAssets(mode.id);
-      window.PinkieModeTransitionFx?.warm?.(mode.id);
+      window.PinkieModeTransitionFx?.warm?.(mode.id, {soon: true});
     };
     option.addEventListener("pointerenter", warm, {once: true});
     option.addEventListener("focus", warm, {once: true});

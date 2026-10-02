@@ -52,7 +52,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   const revisions = {
-    'laolao-mode-transition-fx.js': 'modetransitionfx3',
+    'laolao-mode-transition-fx.js': 'modetransitionfx4',
     'laolao-mode-transition-fx.css': 'modetransitionfx3',
     'laolao-splash-fx.js': 'splashfx1',
     'laolao-splash.js': 'splash28',
@@ -65,7 +65,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   }
   assert.match(fragment, /laolao-splash\.css\?v=splash20/);
   assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx3/);
-  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx3/);
+  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx4/);
   assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx1/);
   assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
   for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
@@ -74,7 +74,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   }
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.css') > fragment.indexOf('laolao-motion-system.css'));
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.js') < fragment.indexOf('laolao-mode-switcher.js'));
-  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode40/);
+  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode41/);
   assert.match(windows, /\$fxPattern[\s\S]*\$switcherMatch[\s\S]*\$html\.Substring\(0, \$switcherMatch\.Index\)/);
   assert.match(windows, /\$switcherTag[\s\S]*\$1/);
 });
@@ -96,3 +96,73 @@ test('FX keeps its canvas visible during the controlled leave animation', () => 
   assert.match(css, /\.laolao-mode-transition--fx\.is-leaving\s*\{\s*opacity:\s*1;\s*\}/);
 });
 
+
+// A fake WebGL that counts the expensive work: contexts, programs and texture uploads.
+function fakeGl(counters) {
+  const noop = () => {};
+  return new Proxy({}, {
+    get(_, name) {
+      if (name === 'getExtension') return (ext) => (ext === 'KHR_parallel_shader_compile' ? {COMPLETION_STATUS_KHR: 0x91B1} : {loseContext() {}});
+      if (name === 'getProgramParameter') return () => true;
+      if (name === 'createProgram') return () => { counters.programs += 1; return {}; };
+      if (name === 'texImage2D') return () => { counters.uploads += 1; };
+      if (/^create|^get/.test(String(name))) return () => ({});
+      if (/^[A-Z_0-9]+$/.test(String(name))) return 1;
+      return noop;
+    },
+  });
+}
+
+test('the shared stage is prepared once, after the splash, and keeps every mode on the GPU', async () => {
+  const counters = {contexts: 0, programs: 0, uploads: 0};
+  const listeners = new Map();
+  let splash = {};
+  const context = {
+    module: {exports: {}},
+    setTimeout, clearTimeout,
+    matchMedia: () => ({matches: false}),
+    localStorage: {getItem: () => null},
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    Image: class {
+      set src(value) { this.naturalWidth = 1672; this.naturalHeight = 941; setTimeout(() => this.onload(), 1); }
+      decode() { return Promise.resolve(); }
+    },
+    document: {
+      getElementById: (id) => (id === 'laolao-splash' ? splash : null),
+      documentElement: {getAttribute: () => 'chat'},
+      createElement(tag) {
+        if (tag !== 'canvas') return {};
+        return {
+          setAttribute() {}, addEventListener() {},
+          getContext: () => { counters.contexts += 1; return fakeGl(counters); },
+        };
+      },
+    },
+  };
+  context.window = context;
+  vm.runInNewContext(fxSource, context, {filename: 'laolao-mode-transition-fx.js'});
+  const fx = context.module.exports;
+  assert.equal(fx.supported('chat'), true);
+  const probes = counters.contexts;   // supported() probes WebGL once
+
+  fx.warm('project');
+  fx.warm('chat');
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  assert.equal(counters.programs, 0, 'nothing compiles while the cold-start splash is playing');
+
+  splash = null;
+  listeners.get('laolao:splash-cleared')();
+  await new Promise((resolve) => setTimeout(resolve, 2600));
+  assert.equal(counters.contexts - probes, 1, 'one WebGL context for every transition');
+  assert.equal(counters.programs, 1, 'the shader is compiled once');
+  assert.equal(counters.uploads, 10, 'five textures for each warmed mode');
+  fx.warm('project');
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(counters.uploads, 10, 'a prepared mode is not uploaded again');
+});
+
+test('the transition clock pauses through a main-thread stall instead of skipping ahead', () => {
+  assert.match(fxSource, /clock \+= Math\.min\(Math\.max\(0, now - lastNow\), MAX_STEP\)/);
+  assert.match(fxSource, /const MAX_STEP = 40;/);
+  assert.doesNotMatch(fxSource, /now - startAt/);
+});
