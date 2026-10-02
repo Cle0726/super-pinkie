@@ -1604,6 +1604,9 @@ test('tiered prompts omit completion-gate internals in all five modes', t => {
     assert.doesNotMatch(prompt.appendSystemContext, /全局交付真实性门禁|completionClaimed|delivery_guard|verify_completion\.py/);
     assert.match(prompt.appendSystemContext, /此问题无需多方案，已直接回答/);
     assert.equal(runtime.status(sessionKey).workflow.label, '此问题无需多方案，已直接回答');
+    // Pinkie's ask_user card stays out of unrestricted mode.
+    if (agentId === 'unrestricted') assert.doesNotMatch(prompt.appendSystemContext, /ask_user/);
+    else assert.match(prompt.appendSystemContext, /ask_user/);
   }
 });
 
@@ -1731,6 +1734,11 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
   assert.equal(tools.length,6);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity','ask_user']);
+  const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
+  assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
+  assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
+  assert.equal(askFactory({agentId:'unrestricted',sessionKey:'agent:unrestricted:ask'}),null);
+  assert.equal(askFactory({sessionKey:'agent:unrestricted:ask'}),null);
   const guardTool=tools[0].factory({sessionKey:'agent:project:registered-tool'});
   assert.equal(guardTool.name,'delivery_guard');assert.equal(guardTool.label,'成果核验');
   // OpenClaw's embedded tool factory can expose the ephemeral conversation

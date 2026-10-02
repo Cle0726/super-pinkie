@@ -4530,7 +4530,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       '\n' + TOOL_PROGRESS_RULES + '\n',
-      '\n' + ASK_USER_RULES + '\n',
+      ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
     if (mode === 'learning') {
@@ -5337,7 +5337,8 @@ export default {
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
-    api.registerTool?.(() => createAskUserTool(), {name: ASK_USER_TOOL});
+    // 无限制模式不带碧琪的主动提问卡。
+    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : createAskUserTool()), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
