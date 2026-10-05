@@ -278,147 +278,6 @@ private enum DesktopControlEndpoint {
     }
 }
 
-/* WKWebView cannot safely load arbitrary file: URLs from its HTTP control UI.
-   Keep material bytes in the native shell and hand the page a short-lived,
-   opaque custom URL instead. The UI only requests this for a file the user
-   clicked in the visible workspace rail; this handler does not alter the
-   Agent's filesystem or tool permissions. */
-private final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
-    private struct Resource {
-        let url: URL
-        let mimeType: String
-        let expiresAt: Date
-    }
-
-    private let lock = NSLock()
-    private var resources: [String: Resource] = [:]
-    private let maximumBytes: Int64 = 96 * 1024 * 1024
-    private let lifetime: TimeInterval = 20 * 60
-    private let maximumResources = 24
-
-    private func mimeType(for url: URL) -> String? {
-        switch url.pathExtension.lowercased() {
-        case "pdf": return "application/pdf"
-        case "html", "htm": return "text/html"
-        case "css": return "text/css"
-        case "js", "mjs": return "text/javascript"
-        case "json": return "application/json"
-        case "woff": return "font/woff"
-        case "woff2": return "font/woff2"
-        case "ttf": return "font/ttf"
-        case "png": return "image/png"
-        case "jpg", "jpeg": return "image/jpeg"
-        case "gif": return "image/gif"
-        case "webp": return "image/webp"
-        case "avif": return "image/avif"
-        case "bmp": return "image/bmp"
-        case "tif", "tiff": return "image/tiff"
-        case "heic", "heif": return "image/heic"
-        case "svg": return "image/svg+xml"
-        default: return nil
-        }
-    }
-
-    private func pruneLocked(now: Date) {
-        resources = resources.filter { $0.value.expiresAt > now }
-        if resources.count <= maximumResources { return }
-        let surplus = resources
-            .sorted { $0.value.expiresAt < $1.value.expiresAt }
-            .prefix(resources.count - maximumResources)
-            .map(\.key)
-        surplus.forEach { resources.removeValue(forKey: $0) }
-    }
-
-    func register(path: String) -> [String: Any] {
-        let candidate = URL(fileURLWithPath: path).standardizedFileURL
-        guard let mimeType = mimeType(for: candidate) else {
-            return ["ok": false, "message": "这里只能预览图片、PDF 和 HTML。"]
-        }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
-            return ["ok": false, "message": "这个材料已经不在原来的位置了。"]
-        }
-        let size = ((try? FileManager.default.attributesOfItem(atPath: candidate.path)[.size]) as? NSNumber)?.int64Value ?? 0
-        guard size <= maximumBytes else {
-            return ["ok": false, "message": "这个材料超过 96 MB，直接预览会拖慢页面。请换一个较小的文件，或先压缩它。"]
-        }
-
-        let now = Date()
-        let token = UUID().uuidString.lowercased()
-        lock.lock()
-        pruneLocked(now: now)
-        resources[token] = Resource(url: candidate, mimeType: mimeType, expiresAt: now.addingTimeInterval(lifetime))
-        lock.unlock()
-        let escapedName = candidate.lastPathComponent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? candidate.lastPathComponent
-        return [
-            "ok": true,
-            "url": "clekk-material://preview/\(token)/\(escapedName)",
-            "mimeType": mimeType,
-        ]
-    }
-
-    /* The first path segment is an opaque token. The optional remaining path
-       lets an HTML material load its own sibling CSS/images without granting
-       it access outside the selected file's directory. */
-    private func resource(for task: WKURLSchemeTask) -> (resource: Resource, contentURL: URL)? {
-        guard let requestURL = task.request.url else { return nil }
-        let components = requestURL.pathComponents.filter { $0 != "/" }
-        guard let token = components.first, !token.isEmpty else { return nil }
-        let now = Date()
-        lock.lock()
-        defer { lock.unlock() }
-        pruneLocked(now: now)
-        guard let resource = resources[token] else { return nil }
-        let childParts = components.dropFirst()
-        guard !childParts.isEmpty else { return (resource, resource.url) }
-        let directory = resource.url.deletingLastPathComponent().standardizedFileURL
-        let candidate = childParts.reduce(directory) { partial, item in
-            partial.appendingPathComponent(item)
-        }.standardizedFileURL
-        let directoryPrefix = directory.path.hasSuffix("/") ? directory.path : directory.path + "/"
-        guard candidate.path == resource.url.path || candidate.path.hasPrefix(directoryPrefix) else { return nil }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory), !isDirectory.boolValue,
-              mimeType(for: candidate) != nil else { return nil }
-        return (resource, candidate)
-    }
-
-    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
-        guard let resolved = resource(for: urlSchemeTask), let url = urlSchemeTask.request.url else {
-            urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [
-                NSLocalizedDescriptionKey: "材料预览已过期，请再点一次文件。",
-            ]))
-            return
-        }
-        let resource = resolved.resource
-        let contentURL = resolved.contentURL
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let data = try Data(contentsOf: contentURL, options: .mappedIfSafe)
-                DispatchQueue.main.async {
-                    let response = URLResponse(
-                        url: url,
-                        mimeType: self.mimeType(for: contentURL) ?? resource.mimeType,
-                        expectedContentLength: data.count,
-                        textEncodingName: nil
-                    )
-                    urlSchemeTask.didReceive(response)
-                    urlSchemeTask.didReceive(data)
-                    urlSchemeTask.didFinish()
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    urlSchemeTask.didFailWithError(error)
-                }
-            }
-        }
-    }
-
-    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
-        // Reads are short and immutable. There is no shared stream to cancel.
-    }
-}
-
 private final class LauncherWindow: NSWindow {
     // Borderless NSWindow instances are not key windows by default. The
     // dashboard contains text inputs, so it must be able to receive focus.
@@ -1722,7 +1581,17 @@ struct LauncherMain {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+private final class MaterialDownloadContext {
+    weak var webView: WKWebView?
+    var destination: URL?
+    var reservedPath: String?
+
+    init(webView: WKWebView?) {
+        self.webView = webView
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     private var window: NSWindow?
     private var webView: WKWebView?
     // The companion is deliberately another WKWebView inside the *same*
@@ -1775,6 +1644,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let tts = TTSService()
     private let desktopControl = DesktopControlService()
     private let materialPreview = MaterialPreviewSchemeHandler()
+    private let materialPreviewAccess = MaterialPreviewFileAccess()
+    private let materialDownloadLock = NSLock()
+    private var materialDownloadContexts: [ObjectIdentifier: MaterialDownloadContext] = [:]
+    private var reservedDownloadPaths: Set<String> = []
 
     private let workspaceSessions: [String: String] = [
         "chat": "agent:main:main",
@@ -3356,6 +3229,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     func webView(
         _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        if #available(macOS 11.3, *), MaterialDownloadPolicy.navigationActionRequiresDownload(navigationAction.shouldPerformDownload) {
+            decisionHandler(.download)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
@@ -3368,7 +3253,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             // the page with a silent white surface.
             setBrowserStatus("正在通过安全验证…", loading: true)
         }
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")
+        if #available(macOS 11.3, *), MaterialDownloadPolicy.responseRequiresDownload(
+            contentDisposition: disposition,
+            canShowMIMEType: navigationResponse.canShowMIMEType
+        ) {
+            decisionHandler(.download)
+            return
+        }
         decisionHandler(.allow)
+    }
+
+    @available(macOS 11.3, *)
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        attach(download: download, to: webView)
+    }
+
+    @available(macOS 11.3, *)
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        attach(download: download, to: webView)
+    }
+
+    @available(macOS 11.3, *)
+    private func attach(download: WKDownload, to sourceWebView: WKWebView) {
+        materialDownloadContexts[ObjectIdentifier(download)] = MaterialDownloadContext(webView: sourceWebView)
+        download.delegate = self
+    }
+
+    @available(macOS 11.3, *)
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping (URL?) -> Void
+    ) {
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+            materialDownloadLock.lock()
+            let destination = MaterialPreviewFileAccess.uniqueDownloadURL(
+                in: downloads,
+                filename: suggestedFilename,
+                reservedPaths: reservedDownloadPaths
+            )
+            reservedDownloadPaths.insert(destination.path)
+            materialDownloadLock.unlock()
+            let context = materialDownloadContexts[ObjectIdentifier(download)] ?? MaterialDownloadContext(webView: webView)
+            context.destination = destination
+            context.reservedPath = destination.path
+            materialDownloadContexts[ObjectIdentifier(download)] = context
+            completionHandler(destination)
+        } catch {
+            completionHandler(nil)
+            showMaterialToast("无法准备下载文件夹，请检查磁盘空间和权限。", path: nil, in: webView)
+        }
+    }
+
+    @available(macOS 11.3, *)
+    func downloadDidFinish(_ download: WKDownload) {
+        let context = materialDownloadContexts.removeValue(forKey: ObjectIdentifier(download))
+        releaseDownloadReservation(context?.reservedPath)
+        if let destination = context?.destination {
+            showMaterialToast("已保存到「下载/\(destination.lastPathComponent)」", path: destination.path, in: context?.webView)
+        }
+    }
+
+    @available(macOS 11.3, *)
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        let context = materialDownloadContexts.removeValue(forKey: ObjectIdentifier(download))
+        releaseDownloadReservation(context?.reservedPath)
+        showMaterialToast("下载失败：\(MaterialPreviewUserMessage.text(for: error))", path: nil, in: context?.webView)
+    }
+
+    private func releaseDownloadReservation(_ path: String?) {
+        guard let path else { return }
+        materialDownloadLock.lock()
+        reservedDownloadPaths.remove(path)
+        materialDownloadLock.unlock()
     }
 
     func webView(
@@ -3425,12 +3388,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         if message.name == materialPreviewHandlerName,
            let body = message.body as? [String: Any],
-           body["action"] as? String == "open",
+           let action = body["action"] as? String,
            let path = body["path"] as? String,
            !path.isEmpty {
-            var payload = materialPreview.register(path: path)
-            payload["requestId"] = body["requestId"] as? String ?? ""
-            sendMaterialPreviewResult(payload, to: sourceWebView)
+            handleMaterialFileAction(action, path: path, requestId: body["requestId"] as? String ?? "", sourceWebView: sourceWebView)
             return
         }
         if message.name == workspaceDockHandlerName,
@@ -3554,6 +3515,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         default:
             break
         }
+    }
+
+    private func handleMaterialFileAction(_ action: String, path: String, requestId: String, sourceWebView: WKWebView?) {
+        switch action {
+        case "check":
+            do {
+                let file = try materialPreviewAccess.previewFile(path: path)
+                sendMaterialPreviewResult(["ok": true, "requestId": requestId, "name": file.url.lastPathComponent, "kind": file.kind.rawValue], to: sourceWebView)
+            } catch {
+                sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": error.localizedDescription], to: sourceWebView)
+            }
+
+        case "open", "preview":
+            var payload = materialPreview.register(path: path)
+            payload["requestId"] = requestId
+            sendMaterialPreviewResult(payload, to: sourceWebView)
+
+        case "save":
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                do {
+                    let source = try self.materialPreviewAccess.validatedFile(path: path)
+                    let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+                    try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+                    self.materialDownloadLock.lock()
+                    let destination = MaterialPreviewFileAccess.uniqueDownloadURL(
+                        in: downloads,
+                        filename: source.lastPathComponent,
+                        reservedPaths: self.reservedDownloadPaths
+                    )
+                    self.reservedDownloadPaths.insert(destination.path)
+                    self.materialDownloadLock.unlock()
+                    defer { self.releaseDownloadReservation(destination.path) }
+                    try FileManager.default.copyItem(at: source, to: destination)
+                    DispatchQueue.main.async {
+                        self.sendMaterialPreviewResult(["ok": true, "requestId": requestId, "path": destination.path], to: sourceWebView)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": MaterialPreviewUserMessage.text(for: error)], to: sourceWebView)
+                    }
+                }
+            }
+
+        case "reveal", "open-default":
+            do {
+                let file = try materialPreviewAccess.validatedFile(path: path)
+                if action == "reveal" {
+                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                    sendMaterialPreviewResult(["ok": true, "requestId": requestId], to: sourceWebView)
+                } else if NSWorkspace.shared.open(file) {
+                    sendMaterialPreviewResult(["ok": true, "requestId": requestId], to: sourceWebView)
+                } else {
+                    sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": "macOS 没有找到能打开这个文件的应用。"], to: sourceWebView)
+                }
+            } catch {
+                sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": MaterialPreviewUserMessage.text(for: error)], to: sourceWebView)
+            }
+
+        default:
+            sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": "不支持这个文件操作。"], to: sourceWebView)
+        }
+    }
+
+    private func showMaterialToast(_ message: String, path: String?, in targetWebView: WKWebView?) {
+        guard let targetWebView,
+              let data = try? JSONSerialization.data(withJSONObject: [
+                "message": message,
+                "path": path as Any? ?? NSNull(),
+                "actionLabel": "在访达中显示",
+              ]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        targetWebView.evaluateJavaScript("window.__laolaoMaterialPreviewToast?.(\(json));")
     }
 
     private func sendProjectFolderResult(_ payload: [String: Any], to targetWebView: WKWebView?) {
