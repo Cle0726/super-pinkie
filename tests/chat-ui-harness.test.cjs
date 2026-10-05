@@ -68,6 +68,43 @@ test('fake gateway completes the Control UI handshake and serves history pages',
   assert.equal(page.payload.hasMore, true);
 });
 
+test('fake gateway retains seed metadata including compaction kind', () => {
+  const window = loadFakeGateway({__fakeSeedHistory: [{
+    role: 'system', content: [{type: 'text', text: 'Compaction'}],
+    __openclaw: {id: 'seed-compaction', seq: 41, kind: 'compaction', source: 'seed'},
+  }]});
+  const metadata = window.__fake.state.history[0].__openclaw;
+  assert.equal(metadata.id, 'seed-compaction');
+  assert.equal(metadata.seq, 41);
+  assert.equal(metadata.kind, 'compaction');
+  assert.equal(metadata.source, 'seed');
+});
+
+test('running-refresh reproduces a 10-message reload tail and restores the active run', async () => {
+  const localStorage = memoryStorage();
+  const first = loadFakeGateway({localStorage});
+  const observation = await first.__fake.scenario('running-refresh', {gap: 0, tools: 6});
+  assert.equal(observation.nativeLimit, 10);
+  assert.equal(observation.nativeTailHasOpeningUser, false);
+  assert.equal(observation.persistedAcrossRefresh, true);
+  assert.equal(observation.activeAfter, true);
+
+  const refreshed = loadFakeGateway({localStorage});
+  const {request} = await connect(refreshed);
+  await request('connect');
+  const row = (await request('sessions.list')).payload.sessions[0];
+  const nativeTail = (await request('chat.history', {limit: 10})).payload.messages;
+  const recovered = (await request('chat.history', {limit: 512})).payload.messages;
+  assert.equal(row.hasActiveRun, true);
+  assert.equal(nativeTail.length, 10);
+  assert.equal(nativeTail.some((message) => message.role === 'user'
+    && textOf(message) === '检查一个需要多步处理的任务'), false);
+  assert.equal(recovered.some((message) => message.role === 'user'
+    && textOf(message) === '检查一个需要多步处理的任务'), true);
+  const ended = await refreshed.__fake.scenario('finish-running-refresh', {gap: 0});
+  assert.equal(ended.activeAfter, false);
+});
+
 test('fake gateway exposes deep-think status with task route and used stages', async () => {
   const window = loadFakeGateway();
   const {request} = await connect(window);

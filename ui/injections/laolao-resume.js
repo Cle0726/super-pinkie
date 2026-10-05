@@ -21,6 +21,37 @@
   const activePane = () => chatPanes().find((pane) => pane.active === true) || chatPanes()[0] || null;
   const routedSessionKey = () => new URLSearchParams(window.location.search).get("session")?.trim() || "";
   const paneSessionKey = (pane) => pane?.state?.sessionKey?.trim() || "";
+  const timelineRunIds = window.__pinkieActiveChatRunIds instanceof Map
+    ? window.__pinkieActiveChatRunIds
+    : (window.__pinkieActiveChatRunIds = new Map());
+  const activeTimelineBoundarySyncBySession = new Map();
+  const publishTimelineRunState = (sessionKey, active) => {
+    if (!sessionKey || typeof active !== "boolean") return;
+    const runs = window.__pinkieActiveChatRuns instanceof Map
+      ? window.__pinkieActiveChatRuns
+      : (window.__pinkieActiveChatRuns = new Map());
+    const wasKnown = runs.has(sessionKey);
+    const previous = runs.get(sessionKey);
+    const changed = !wasKnown || previous !== active;
+    runs.set(sessionKey, active);
+    if (!active) {
+      timelineRunIds.delete(sessionKey);
+      activeTimelineBoundarySyncBySession.delete(sessionKey);
+    }
+    if (!changed) return;
+    for (const pane of chatPanes()) {
+      if (paneSessionKey(pane) !== sessionKey) continue;
+      const state = pane.state;
+      const nativeSession = state?.sessionsResult?.sessions?.find?.((item) => item?.key === sessionKey);
+      const nativeActive = Boolean(state?.chatRunId || state?.chatStream || nativeSession?.hasActiveRun === true);
+      // The projector already treats an unknown session as idle. Avoid a
+      // redundant Lit render for the first explicit idle result, but repaint
+      // when a live card must close or the backend confirms a running turn.
+      if (!(active || (wasKnown && previous !== active) || nativeActive)) continue;
+      pane.state?.requestUpdate?.();
+      pane.requestUpdate?.();
+    }
+  };
   // macOS keeps each half of the split workspace in its own WKWebView. WebKit
   // may mark the unfocused half as hidden even though it remains on screen;
   // that half still needs terminal-event and stale-run recovery.
@@ -806,6 +837,98 @@
     return recovery.promise;
   };
 
+  // A reload can restore an active run while the native chat pane only has
+  // its ten-message tail. Read the bounded persisted history and prepend the
+  // latest real user turn's missing prefix without replacing the live tail.
+  const restoreActiveTimelineBoundary = async (pane, sessionKey) => {
+    const state = pane?.state;
+    const client = gatewayClient();
+    if (!state || !sessionKey || !client || !recoveryTransportAvailable()
+        || paneSessionKey(pane) !== sessionKey) return false;
+    const runId = timelineRunIds.get(sessionKey) || "";
+    const prior = activeTimelineBoundarySyncBySession.get(sessionKey);
+    if (prior?.runId === runId && prior.done) return false;
+    if (prior?.runId === runId && prior.promise) return prior.promise;
+    const sync = {runId, done: false, promise: null};
+    activeTimelineBoundarySyncBySession.set(sessionKey, sync);
+    sync.promise = (async () => {
+      const recent = await fetchRecentHistory(pane, sessionKey, client);
+      if (!recent || gatewayClient() !== client || pane.state !== state
+          || paneSessionKey(pane) !== sessionKey
+          || (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey)) return false;
+      // The run may have ended or changed while history was loading.
+      if (await backendHasActiveRun(sessionKey) !== true) return false;
+      const refreshedRunId = timelineRunIds.get(sessionKey) || "";
+      if (runId && refreshedRunId && runId !== refreshedRunId) return false;
+
+      const history = recent.messages;
+      const userIndex = history.findLastIndex((message) =>
+        String(message?.role || "").toLowerCase() === "user" && isRenderableHistoryMessage(message));
+      if (userIndex < 0) return false;
+      const turnMessages = history.slice(userIndex);
+      const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+      const userIdentity = messageIdentity(history[userIndex]);
+      if (localMessages.some((message) => messageIdentity(message) === userIdentity)) {
+        sync.done = true;
+        return false;
+      }
+
+      let missingPrefix = turnMessages;
+      if (localMessages.length) {
+        const localIds = new Set(localMessages.map(messageIdentity).filter(Boolean));
+        const overlapIndex = turnMessages.findIndex((message) => {
+          const identity = messageIdentity(message);
+          return identity && localIds.has(identity);
+        });
+        // Without an identity shared by the native tail and persisted history,
+        // appending could duplicate or reorder an optimistic message.
+        if (overlapIndex < 0) return false;
+        missingPrefix = turnMessages.slice(0, overlapIndex);
+      }
+      if (!missingPrefix.some((message) => messageIdentity(message) === userIdentity)) return false;
+      const mergedMessages = keepLiveMessages([...missingPrefix, ...localMessages]);
+      if (sameMessageSequence(localMessages, mergedMessages)) {
+        sync.done = true;
+        return false;
+      }
+      writeOwnMessages(state, mergedMessages);
+      if ("chatHistoryPagination" in state) {
+        state.chatHistoryPagination = {
+          hasMore: false,
+          ...(Number.isFinite(recent.totalMessages) ? {totalMessages: recent.totalMessages} : {}),
+        };
+      }
+      historyStatusBySession.set(sessionKey, {
+        loadedCount: mergedMessages.length,
+        visibleCount: mergedMessages.length,
+        totalMessages: recent.totalMessages,
+        pageCount: recent.pageCount,
+        sessionId: recent.sessionId,
+        lastMessageIdentity: messageIdentity(mergedMessages[mergedMessages.length - 1]),
+        syncedAt: Date.now(),
+        windowed: true,
+        activeTurnBoundary: true,
+      });
+      state.requestUpdate?.();
+      if (state !== pane) pane.requestUpdate?.();
+      sync.done = true;
+      return true;
+    })();
+    try {
+      return await sync.promise;
+    } catch {
+      // A transient history RPC failure must not turn session selection into
+      // an unhandled rejection. The active-run state remains authoritative;
+      // the timeline can still render this tail as an orphan process card.
+      return false;
+    } finally {
+      sync.promise = null;
+      if (!sync.done && activeTimelineBoundarySyncBySession.get(sessionKey) === sync) {
+        activeTimelineBoundarySyncBySession.delete(sessionKey);
+      }
+    }
+  };
+
   const recoverCurrentChat = async (reason = "unknown", options = {}) => {
     if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return false;
     reconcileSelectedSession();
@@ -828,6 +951,7 @@
     isRenderableHistoryMessage,
     mergeRecentHistory,
     keepLatestMessages: keepLiveMessages,
+    publishTimelineRunState,
   };
   window.__laolaoGatewayTestHooks = {gatewayConnected, nativeGatewayConnected};
 
@@ -1019,7 +1143,14 @@
     const sessions = payload?.sessions;
     if (!Array.isArray(sessions)) return null;
     const mine = sessionKey ? sessions.find((s) => s && s.key === sessionKey) : null;
-    if (mine) return mine.hasActiveRun === true;
+    if (mine) {
+      const active = mine.hasActiveRun === true;
+      const runId = Array.isArray(mine.activeRunIds) ? mine.activeRunIds.at(-1)
+        : (mine.activeRunId || mine.chatRunId || "");
+      if (active && typeof runId === "string" && runId) timelineRunIds.set(sessionKey, runId);
+      publishTimelineRunState(sessionKey, active);
+      return active;
+    }
     // A missing row is not proof of inactivity. Never reset another pane.
     return null;
   };
@@ -1636,10 +1767,16 @@
       const aligned = reconcileSelectedSession();
       const pane = activePane();
       if (aligned && pane && paneSessionKey(pane) === key) {
+        // A page reload loses the previous lifecycle events. Read the current
+        // run state so a restored card is live only while the gateway says so.
+        const backendActive = await backendHasActiveRun(key);
+        if (revision !== selectedSessionRevision || routedSessionKey() !== key) return false;
+        if (backendActive === true) {
+          await restoreActiveTimelineBoundary(pane, key);
+          return false;
+        }
         if (isBusy(pane)) {
-          const active = await backendHasActiveRun(key);
-          if (revision !== selectedSessionRevision || routedSessionKey() !== key) return false;
-          if (active !== false) return false; // Unknown or genuine run: never clear it.
+          if (backendActive !== false) return false; // Unknown or genuine run: never clear it.
           forceIdleComposerState(pane, {verifiedIdle: true});
         }
         if (!isBusy(pane) && await recoverPaneChat(pane, "session-selected", {manual: true})) {
