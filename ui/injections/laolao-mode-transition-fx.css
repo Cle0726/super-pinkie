@@ -72,18 +72,41 @@
   transition-delay: calc(var(--i) * 45ms + 80ms);
 }
 
-/* 仍是原来的 42px 糖果胶囊；新脚本直接给 fill 写像素宽度。 */
+/* 仍是原来的糖果胶囊；填充层宽度固定，用缩放遮罩让合成线程独立推进。 */
 .laolao-mode-transition--fx .laolao-mode-transition__progress {
   --laolao-progress: .08;
+  --laolao-progress-scale: .084;
   overflow: hidden;
   box-shadow: inset 0 2px 5px rgba(170, 70, 120, .11), inset 0 -1px 0 rgba(255, 255, 255, .95), 0 11px 30px rgba(178, 65, 112, .12);
 }
 .laolao-mode-transition--fx .laolao-mode-transition__fill {
-  width: 42px;
-  transform: none;
+  width: 100%;
+  transform: scaleX(.084);
+  transform-origin: left center;
   transition: none;
-  will-change: width;
+  will-change: transform;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 5px rgba(120, 30, 90, .16), 0 4px calc(10px + 10px * var(--laolao-progress)) rgba(var(--laolao-transition-glow), calc(.16 + .22 * var(--laolao-progress)));
+}
+.laolao-mode-transition--fx .laolao-mode-transition__fill-viewport {
+  z-index: 1;
+  overflow: hidden;
+  background: none !important;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__fill-viewport::before,
+.laolao-mode-transition--fx .laolao-mode-transition__fill-viewport::after {
+  content: none !important;
+  display: none !important;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__fill-surface {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: auto;
+  overflow: hidden;
+  border-radius: 0;
+  transform-origin: left center;
+  box-shadow: none;
+  will-change: transform;
 }
 .laolao-mode-transition--fx .laolao-mode-transition__gloss {
   position: absolute;
@@ -206,6 +229,23 @@
   color: #fff;
   text-shadow: 0 1px 1px rgba(120,30,90,.38);
   clip-path: inset(0 100% 0 0);
+}
+.laolao-mode-transition--fx .laolao-mode-transition__message--lit-viewport {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  transform-origin: left center;
+  will-change: transform;
+  pointer-events: none;
+}
+.laolao-mode-transition--fx .laolao-mode-transition__message--lit-viewport .laolao-mode-transition__message--lit {
+  inset: 0;
+  width: 100%;
+  clip-path: none;
+  transform-origin: left center;
+  will-change: transform;
 }
 .laolao-mode-transition--fx .laolao-mode-transition__msg {
   display: block;

@@ -64,7 +64,11 @@ test('a real mode change queues exactly one top portrait swap, while normal repa
   assert.match(switcher, /let presentedModeId = null;/);
   assert.match(switcher, /const previousMode = presentedModeId \?\? document\.documentElement\.getAttribute\("data-laolao-mode"\);/);
   assert.match(switcher, /if \(previousMode && !modeFxReduced\(\)\) \{[\s\S]*from: previousMode,[\s\S]*to: mode\.id,[\s\S]*armed: !switching/);
-  assert.match(switcher, /await finishModeTransition\(targetMode, transition\);\s*flushPendingModePortraitFx\(targetMode\);/);
+  const transitionFinish = switcher.slice(
+    switcher.indexOf('await finishModeTransition(targetMode, transition);'),
+    switcher.indexOf('flushPendingModePortraitFx(targetMode);', switcher.indexOf('await finishModeTransition(targetMode, transition);')) + 'flushPendingModePortraitFx(targetMode);'.length,
+  );
+  assert.match(transitionFinish, /await finishModeTransition\(targetMode, transition\);[\s\S]*?modeTransitionTargetId = null;[\s\S]*?laolao:mode-transition-finished[\s\S]*?pinkie:session-selected[\s\S]*?render\(\);[\s\S]*?flushPendingModePortraitFx\(targetMode\);/);
   assert.match(switcher, /pending\.armed = true;\s*render\(\);/);
   assert.match(switcher, /force: shouldSwapPortrait,/);
   assert.match(switcher, /createPortraitImage\(outgoingMode\?\.avatar\) \|\| currentPortrait/);
