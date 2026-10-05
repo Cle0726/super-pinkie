@@ -352,7 +352,7 @@
     // litLabelText, so a real message containing those words is never touched.
     ownOrDescendants(scope,'input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
-      const next=value
+      const next=localizedChromeValue(value,control)
         .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
         .replace(/OpenClaw/g,'CLE Kk');
       if(next!==value)control.setAttribute('placeholder',next);
