@@ -62,6 +62,7 @@ test('D sweep localizes navigation, picker, and duplicate-message chrome', () =>
   assert.match(phrases, /sidebar-recent-session/);
   assert.match(phrases, /isOverviewHint[\s\S]*ov-card__hint[\s\S]*tokens\?[\s\S]*msgs\?[\s\S]*active/);
   assert.match(phrases, /attributes: true,[\s\S]*attributeFilter: \["title", "aria-label", "alt", "placeholder"\]/);
+  assert.match(phrases, /localizedChromeValue\(value,control\)/);
 });
 
 test('D sweep keeps the combined picker inside narrow windows', () => {
