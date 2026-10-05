@@ -1183,7 +1183,7 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume44/);
+    assert.match(installer,/laolao-resume\.js\?v=resume45/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
     assert.match(installer,/clekk-history33/);
   }

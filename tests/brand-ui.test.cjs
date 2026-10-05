@@ -34,8 +34,8 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(phrases,/isProtectedContent\(node\).*return/s);
   assert.match(mac,/s\{OpenClaw\}\{CLE Kk\}g/);
   assert.match(windows,/Replace\('OpenClaw', 'CLE Kk'\)/);
-  assert.match(mac,/phrases27/);assert.match(windows,/phrases27/);
-  assert.match(mac,/theme81/);assert.match(windows,/theme81/);
+  assert.match(mac,/phrases28/);assert.match(windows,/phrases28/);
+  assert.match(mac,/theme82/);assert.match(windows,/theme82/);
 });
 
 test('every mode has its own readable text palette without replacing the selected artwork',()=>{
@@ -73,7 +73,7 @@ test('model picker keeps native session actions in a compact Pinkie glass surfac
   assert.match(picker,/\.chat-controls__picker-actions/);
   assert.match(picker,/not\(:has\(\.chat-controls__reasoning-options--speed button:not\(:disabled\)\)\)/);
   assert.match(picker,/@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-theme\.css\?v=theme81/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-theme\.css\?v=theme82/);
   assert.match(picker,/not\(\[data-pinkie-models-open="1"\]\) \.chat-controls__model-browser \{ display: none !important; \}/);
   assert.match(picker,/\[data-pinkie-level="4"\] \.chat-controls__reasoning-slider::before/);
   const behavior=read('ui/injections/laolao-model-picker.js');

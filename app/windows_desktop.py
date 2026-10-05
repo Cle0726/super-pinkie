@@ -40,6 +40,15 @@ TRUSTED_UPDATE_HOSTS = {
 }
 
 
+DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
+    "pdf", "txt", "md", "markdown", "rtf", "csv", "tsv", "json", "log",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "epub",
+    "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "svg", "psd", "ai",
+    "mp4", "mov", "m4v", "webm", "mkv", "avi", "mp3", "m4a", "wav", "aac", "flac",
+    "srt", "ass", "vtt", "zip",
+})
+
+
 def version_tuple(value):
     """Return a stable four-part key for the release versions used by this app."""
     match = re.fullmatch(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?", str(value).strip())
@@ -1004,6 +1013,10 @@ class NativeBridge:
             except OSError:
                 return {"ok": False, "message": "无法在文件夹中显示这个文件。"}
         if action == "open-default":
+            # Paths come from model output; only hand documents to their viewers,
+            # never scripts, installers or executables.
+            if path.suffix.lower().lstrip(".") not in DEFAULT_APP_DOCUMENT_EXTENSIONS:
+                return {"ok": False, "message": "为了安全，这类文件不直接打开；可以在文件夹中显示后自己处理。"}
             try:
                 os.startfile(str(path))
                 return {"ok": True}

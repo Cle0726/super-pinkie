@@ -101,6 +101,22 @@ final class MaterialPreviewFileAccess {
         return resolved
     }
 
+    /// "Open with the default app" is reachable from paths in model output, so
+    /// it only hands documents to their viewers. Scripts, installers and other
+    /// files that macOS would execute are refused.
+    static let defaultAppDocumentExtensions: Set<String> = [
+        "pdf", "txt", "md", "markdown", "rtf", "rtfd", "csv", "tsv", "json", "log",
+        "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+        "key", "pages", "numbers", "epub",
+        "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "svg", "psd", "ai",
+        "mp4", "mov", "m4v", "webm", "mkv", "avi", "mp3", "m4a", "wav", "aac", "flac",
+        "srt", "ass", "vtt", "zip",
+    ]
+
+    static func canOpenWithDefaultApp(_ url: URL) -> Bool {
+        defaultAppDocumentExtensions.contains(url.pathExtension.lowercased())
+    }
+
     func previewFile(path rawPath: String) throws -> MaterialPreviewFile {
         let url = try validatedFile(path: rawPath)
         let size = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.int64Value ?? 0

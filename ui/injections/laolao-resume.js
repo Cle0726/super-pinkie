@@ -873,7 +873,10 @@
         return false;
       }
 
-      let missingPrefix = turnMessages;
+      // Restore the whole bounded window, not only the active turn: earlier
+      // conversation must not vanish while the run continues and then pop in
+      // above the reader when it ends.
+      let missingPrefix = history;
       if (localMessages.length) {
         const localIds = new Set(localMessages.map(messageIdentity).filter(Boolean));
         const overlapIndex = turnMessages.findIndex((message) => {
@@ -883,7 +886,7 @@
         // Without an identity shared by the native tail and persisted history,
         // appending could duplicate or reorder an optimistic message.
         if (overlapIndex < 0) return false;
-        missingPrefix = turnMessages.slice(0, overlapIndex);
+        missingPrefix = history.slice(0, userIndex + overlapIndex);
       }
       if (!missingPrefix.some((message) => messageIdentity(message) === userIdentity)) return false;
       const mergedMessages = keepLiveMessages([...missingPrefix, ...localMessages]);
