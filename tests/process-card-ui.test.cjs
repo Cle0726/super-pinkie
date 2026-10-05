@@ -7,6 +7,7 @@ const root = path.join(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 const script = read('ui/injections/laolao-process-card.js');
 const css = read('ui/injections/laolao-process-card.css');
+const toolStream = read('ui/injections/laolao-tool-stream.js');
 
 test('the process card script only fills the renderer slots from live gateway events', () => {
   assert.match(script, /pinkie:gateway-event/);
@@ -21,6 +22,9 @@ test('the process card script only fills the renderer slots from live gateway ev
   assert.match(script, /laolao:process-thinking:v1/);
   assert.match(script, /__pinkieProcessKeep/);
   assert.match(script, /function migrateThinking/);
+  assert.match(script, /publishRunState\(key, true\)/);
+  assert.match(script, /slot\.dataset\.state === "oops"/);
+  assert.match(toolStream, /window\.__pinkieActiveChatRuns/);
   assert.doesNotMatch(script, /\.innerHTML\s*=/);
   assert.doesNotMatch(script, /request\("chat\.send"/);
 });

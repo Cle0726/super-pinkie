@@ -8,10 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const marker = '/* pinkie-chat-timeline:v4 */';
+export const marker = '/* pinkie-chat-timeline:v5 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 export const LIVE_MESSAGE_WINDOW = 512;
 export const HISTORY_RENDER_LIMIT = 512;
@@ -134,6 +134,18 @@ export function pinkieSplitTimelineMessage(entry = {}, getToolCalls = () => []) 
   const isMixedToolMessage = role === 'assistant'
     && (calls.length > 0 || content.some((part) => isToolCallPart(part) || isToolResultPart(part)));
   if (!isMixedToolMessage) {
+    const hasVisibleContent = content.some((part) => {
+      const type = partType(part);
+      if (type === 'text' || type === 'inputtext' || type === 'outputtext') {
+        return typeof part?.text === 'string' && Boolean(part.text.trim());
+      }
+      return Boolean(part && typeof part === 'object' && part.type
+        && type !== 'thinking' && type !== 'reasoning');
+    });
+    // Thinking-only and empty assistant records have no user-facing bubble.
+    // Keeping the native message here creates a blank bubble (and its action
+    // row) after a history refresh.
+    if (role === 'assistant' && !hasVisibleContent && !calls.length) return [];
     // History replies carry tool results as standalone toolResult messages
     // whose call part was not kept. Render them like every other tool row
     // ("读取文件 · Read") instead of the native generic "Tool output" card.
@@ -276,7 +288,79 @@ export function pinkieSplitTimelineMessage(entry = {}, getToolCalls = () => []) 
     });
   });
 
-  return rows.length ? rows : [{role: 'assistant', message, key}];
+  return rows;
+}
+
+function isFailedAssistantMessage(message = {}) {
+  return String(message.role || '').toLowerCase() === 'assistant'
+    && String(message.stopReason || '').toLowerCase() === 'error';
+}
+
+function failureDetail(message = {}) {
+  const detail = String(message.errorMessage || message.error || '').replace(/\s+/gu, ' ').trim();
+  if (!detail || /assistant turn failed before producing content/iu.test(detail)) return '';
+  return detail.slice(0, 180);
+}
+
+function formatFailureSummary(message = {}, count = 1) {
+  const detail = failureDetail(message);
+  const summary = detail ? `这次没连上模型：${detail}` : '这次回复没能完成，请稍后再试。';
+  return `${summary}${count > 1 ? `（连续 ${count} 次）` : ''}`;
+}
+
+/** Merge a run of repeated failed assistant replies, even if each retry had
+ * its own user bubble. Keep those user messages in order and show one clean,
+ * actionable Chinese failure line after the last failed attempt. */
+function collapseFailedAssistantEntries(entries) {
+  const output = [];
+  let pending = null;
+  const flush = () => {
+    if (!pending) return;
+    const source = pending.last.message;
+    const message = {
+      ...source,
+      role: 'assistant',
+      content: [{type: 'text', text: formatFailureSummary(source, pending.count)}],
+      __pinkieFailureSummary: true,
+      __pinkieFailureCount: pending.count,
+    };
+    for (const key of ['stopReason', 'errorMessage', 'error', 'actions', 'retryable', 'isError']) delete message[key];
+    output.push({
+      ...pending.last.group,
+      messages: [{...pending.last.entry, message}],
+      timestamp: pending.last.group.timestamp ?? source.timestamp ?? source.ts,
+    });
+    pending = null;
+  };
+
+  for (const entry of entries) {
+    const messages = entry?.kind === 'group' && Array.isArray(entry.messages) ? entry.messages : [];
+    const failures = messages.filter((wrapped) => isFailedAssistantMessage(wrapped?.message || {}));
+    const isFailureOnlyGroup = entry?.kind === 'group'
+      && String(entry.role || '').toLowerCase() === 'assistant'
+      && failures.length === messages.length && failures.length > 0;
+    if (isFailureOnlyGroup) {
+      for (const wrapped of failures) {
+        const message = wrapped.message || {};
+        const signature = failureDetail(message) || 'model-failure';
+        if (pending && pending.signature !== signature) flush();
+        if (!pending) pending = {signature, count: 0, last: null};
+        pending.count += 1;
+        pending.last = {group: entry, entry: wrapped, message};
+      }
+      continue;
+    }
+    // Internal control turns were removed before this pass, while real user
+    // turns stay visible and do not split a consecutive retry streak.
+    if (entry?.kind === 'group' && String(entry.role || '').toLowerCase() === 'user') {
+      output.push(entry);
+      continue;
+    }
+    flush();
+    output.push(entry);
+  }
+  flush();
+  return output;
 }
 
 function timelineGroup(group, row) {
@@ -376,6 +460,21 @@ function formatProcessDuration(ms) {
   return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
 }
 
+function pinkieRunIsActive() {
+  const activeRuns = globalThis.__pinkieActiveChatRuns;
+  let sessionKey = '';
+  try { sessionKey = new URLSearchParams(globalThis.location?.search || '').get('session') || ''; } catch {}
+  if (sessionKey && activeRuns && typeof activeRuns.has === 'function' && activeRuns.has(sessionKey)) {
+    return activeRuns.get(sessionKey) === true;
+  }
+  const panes = Array.from(globalThis.document?.querySelectorAll?.('openclaw-chat-pane') || []);
+  const pane = panes.find((item) => !sessionKey || item?.state?.sessionKey === sessionKey) || panes[0];
+  const state = pane?.state;
+  if (state?.chatRunId || state?.chatStream) return true;
+  const session = state?.sessionsResult?.sessions?.find?.((item) => item?.key === (sessionKey || state.sessionKey));
+  return session?.hasActiveRun === true;
+}
+
 /**
  * One turn becomes: the user message, one "process card" holding Pinkie's
  * narration and tool rows in source order, then the final reply bubble (and,
@@ -384,15 +483,17 @@ function formatProcessDuration(ms) {
  */
 function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
   if (!entries.length) return [];
+  const hasUserHead = isRealUserGroup(entries[0]);
+  const firstStepIndex = hasUserHead ? 1 : 0;
   let lastToolIndex = -1;
-  for (let index = 1; index < entries.length; index += 1) {
+  for (let index = firstStepIndex; index < entries.length; index += 1) {
     const item = entries[index];
     if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'tool') {
       lastToolIndex = index;
     }
   }
   let finalAssistantIndex = -1;
-  for (let index = 1; index < entries.length; index += 1) {
+  for (let index = firstStepIndex; index < entries.length; index += 1) {
     const item = entries[index];
     if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'assistant'
         && (lastToolIndex < 0 || index > lastToolIndex)) {
@@ -400,11 +501,11 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     }
   }
 
-  const head = entries[0];
+  const head = hasUserHead ? entries[0] : null;
   const steps = [];
   const tail = [];
   let liveItems = false;
-  for (let index = 1; index < entries.length; index += 1) {
+  for (let index = firstStepIndex; index < entries.length; index += 1) {
     const item = entries[index];
     if (item?.kind !== 'group') {
       // Live-only entries are emitted by the active user turn. A stale one
@@ -452,18 +553,28 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
       }
     }
   }
-  const ownerKey = String(head?.key || head?.messages?.[0]?.key || 'turn');
-  const live = isLatestTurn && (liveItems || finalAssistantIndex < 0);
+  const ownerKey = String(head?.key || head?.messages?.[0]?.key
+    || entries[0]?.key || entries[0]?.messages?.[0]?.key || 'turn');
+  const live = isLatestTurn && (liveItems || pinkieRunIsActive());
   // The live turn always gets its card, so thinking has a place before the
   // first step. A finished plain answer keeps one only when the page recorded
   // its thinking (laolao-process-card maintains this read-only key set).
   const keep = globalThis.__pinkieProcessKeep;
   const kept = Boolean(keep && typeof keep.has === 'function' && keep.has(`pinkie:process:${ownerKey}`));
-  if (!steps.length && !live && !kept) return [head, ...tail];
+  if (!steps.length && !live && !kept) return [...(head ? [head] : []), ...tail];
+
+  const finalMessage = finalAssistantIndex >= 0
+    ? entries[finalAssistantIndex]?.messages?.at?.(-1)?.message || {}
+    : {};
+  const finalReason = String(finalMessage.stopReason || '').toLowerCase();
+  const processInterrupted = steps.length > 0 && (finalAssistantIndex < 0
+    || finalAssistantIndex <= lastToolIndex
+    || finalReason === 'error' || finalReason === 'aborted' || finalReason === 'timeout'
+    || finalMessage.__pinkieFailureSummary === true);
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
   const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
-  const started = Number(timelineTimestamp(head));
+  const started = Number(timelineTimestamp(head || entries[0]));
   const ended = Number(timelineTimestamp(lastItem));
   const duration = started > 0 && ended > started ? formatProcessDuration(ended - started) : '';
   const card = {
@@ -474,30 +585,58 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     timestamp: timelineTimestamp(steps[0]),
     isProcessCard: true,
     processLive: live,
+    processState: !live && processInterrupted ? 'oops' : '',
     processRows: collapseTimelineRows(steps, maxRows, ownerKey),
     processSteps: toolCount,
-    processTitle: live ? '碧琪正在干活' : '碧琪的工作过程',
+    processTitle: !hasUserHead ? '接着之前的工作'
+      : live ? '碧琪正在干活'
+        : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
-      : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : ''].filter(Boolean).join(' · '),
+      : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',
+        processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
   };
-  return [head, card, ...tail];
+  return [...(head ? [head] : []), card, ...tail];
 }
 
 /** Pure timeline projection, also exercised directly by unit tests. */
 export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80) {
-  const safeEntries = (Array.isArray(entries) ? entries : []).flatMap((item) => {
+  const visibleEntries = (Array.isArray(entries) ? entries : []).flatMap((item) => {
     if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
     const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
+    return messages.length ? [{...item, messages}] : [];
+  });
+  const safeEntries = collapseFailedAssistantEntries(visibleEntries).flatMap((item) => {
+    if (item?.kind !== 'group') return [item];
+    const messages = (item.messages || []).filter((entry) => {
+      const message = entry?.message || {};
+      const role = String(message.role || item.role || '').toLowerCase();
+      if (role !== 'assistant' || message.__pinkieFailureSummary === true) return true;
+      const parts = textParts(message);
+      return parts.some((part) => {
+        const type = partType(part);
+        if (type === 'text' || type === 'inputtext' || type === 'outputtext') {
+          return typeof part?.text === 'string' && Boolean(part.text.trim());
+        }
+        return Boolean(part && typeof part === 'object' && part.type
+          && type !== 'thinking' && type !== 'reasoning');
+      }) || Boolean(message.toolName || message.tool_name || message.toolCallId || message.tool_call_id);
+    });
     return messages.length ? [{...item, messages}] : [];
   });
   const turnStarts = [];
   for (let index = 0; index < safeEntries.length; index += 1) {
     if (isRealUserGroup(safeEntries[index])) turnStarts.push(index);
   }
-  if (!turnStarts.length) return safeEntries;
+  if (!turnStarts.length) {
+    if (!safeEntries.length) return [];
+    // When a fresh page's native ten-message tail has no user head, the
+    // selected session's backend run state still tells us whether this orphan
+    // chunk is live. Earlier chunks separated by compaction remain historical.
+    return projectOrphanEntries(safeEntries, getToolCalls, maxRows, pinkieRunIsActive());
+  }
 
-  const timeline = [...safeEntries.slice(0, turnStarts[0])];
+  const timeline = projectOrphanEntries(safeEntries.slice(0, turnStarts[0]), getToolCalls, maxRows);
   for (let turnIndex = 0; turnIndex < turnStarts.length; turnIndex += 1) {
     const start = turnStarts[turnIndex];
     const end = turnStarts[turnIndex + 1] ?? safeEntries.length;
@@ -509,6 +648,30 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
     ));
   }
   return timeline;
+}
+
+function isCompactionEntry(item) {
+  return item?.kind === 'group' && (item.messages || []).some((entry) =>
+    entry?.message?.__openclaw?.kind === 'compaction');
+}
+
+function projectOrphanEntries(entries, getToolCalls, maxRows, latestChunkIsLive = false) {
+  if (!entries.length) return [];
+  const output = [];
+  let chunk = [];
+  const flush = (isLatestChunk = false) => {
+    if (chunk.length) output.push(...projectTimelineTurn(chunk, getToolCalls, maxRows,
+      latestChunkIsLive && isLatestChunk));
+    chunk = [];
+  };
+  for (const entry of entries) {
+    if (isCompactionEntry(entry)) {
+      flush();
+      output.push(entry);
+    } else chunk.push(entry);
+  }
+  flush(true);
+  return output;
 }
 
 function escapeRegExp(value) {
@@ -536,7 +699,7 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${projectTimelineTurn.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
 }
 
 /**
@@ -547,7 +710,7 @@ function splitRuntimeSource() {
  * that laolao-process-card.js fills from live gateway events.
  */
 function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" ?open=\${e.processLive} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`}></div></div></div>\`;`;
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" ?open=\${e.processLive} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;`;
 }
 
 /** Add the process branch to a renderer patched by an older release. */

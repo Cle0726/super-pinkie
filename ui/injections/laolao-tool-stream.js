@@ -37,6 +37,11 @@
   }
 
   function runActive() {
+    const sessionKey = new URLSearchParams(location.search).get('session') || '';
+    const knownRuns = window.__pinkieActiveChatRuns;
+    if (sessionKey && knownRuns && typeof knownRuns.has === 'function' && knownRuns.has(sessionKey)) {
+      return knownRuns.get(sessionKey) === true;
+    }
     if (document.querySelector('.chat-send-btn--stop')) return true;
     const pane = document.querySelector('openclaw-chat-pane');
     const st = pane && pane.state;

@@ -17,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
 APP = os.environ.get('PINKIE_APP_PATH', '/Applications/超級碧琪.app')
 DEFAULT_UI_ROOT = os.path.join(APP, 'Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui')
+SEEDS = '/Users/Admin/.openclaw/workspace-unrestricted/super-pinkie/work/codex-prompts/tools/seeds'
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--port', type=int, default=18811)
@@ -70,6 +71,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith('/__seed/'):
+            name = os.path.basename(path)
+            if not re.fullmatch(r'(?:s2|full|l2)\.js', name):
+                return self.send_error(404)
+            try:
+                with open(os.path.join(SEEDS, name), 'rb') as seed:
+                    return self.send_bytes(seed.read(), 'text/javascript; charset=utf-8')
+            except OSError:
+                return self.send_error(404)
         if path == '/__fake-gateway.js':
             with open(os.path.join(HERE, 'fake-gateway.js'), 'rb') as f:
                 return self.send_bytes(f.read(), 'text/javascript; charset=utf-8')
@@ -91,7 +101,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == '/' or ('.' not in base and not os.path.isfile(local)):
             with open(os.path.join(args.ui_root, 'index.html'), encoding='utf-8') as f:
                 html = f.read()
-            html = html.replace('<head>', '<head>' + SHIM, 1)
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            seed = query.get('seed', [''])[0]
+            seed_tag = f'<script src="/__seed/{seed}.js"></script>' if seed in {'s2', 'full', 'l2'} else ''
+            html = html.replace('<head>', '<head>' + seed_tag + SHIM, 1)
             html = html.replace('</head>', extra_tags(html) + '\n</head>', 1)
             return self.send_bytes(html.encode('utf-8'), 'text/html; charset=utf-8')
         return super().do_GET()

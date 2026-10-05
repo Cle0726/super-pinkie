@@ -18,6 +18,7 @@
   const AGENT = 'unrestricted';
   const SK = 'agent:unrestricted:dashboard:harness0001';
   const SID = 'harness-session-0001';
+  const RUNNING_REFRESH_STORE = 'pinkie.chat-ui-harness.running-refresh.v1';
   const log = [];
   const note = (kind, detail) => { log.push({t: Date.now(), kind, ...detail}); };
 
@@ -58,10 +59,36 @@
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const persist = (message) => {
     state.seq += 1;
+    const seedMetadata = message.__openclaw && typeof message.__openclaw === 'object'
+      ? message.__openclaw : {};
     const stored = {...message, timestamp: message.timestamp ?? now(),
-      __openclaw: {id: `m${state.seq}`, seq: state.seq}};
+      __openclaw: {...seedMetadata, id: seedMetadata.id || `m${state.seq}`,
+        seq: Number.isSafeInteger(seedMetadata.seq) ? seedMetadata.seq : state.seq}};
     state.history.push(stored);
     return stored;
+  };
+
+  const readRunningRefresh = () => {
+    try {
+      const saved = JSON.parse(window.localStorage?.getItem(RUNNING_REFRESH_STORE) || 'null');
+      return saved?.version === 1 && saved.sessionKey === SK
+        && Array.isArray(saved.history) && saved.runId ? saved : null;
+    } catch { return null; }
+  };
+  const saveRunningRefresh = (runId) => {
+    const storage = window.localStorage;
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    const payload = {version: 1, sessionKey: SK, history: clone(state.history), seq: state.seq, runId};
+    try {
+      storage.setItem(RUNNING_REFRESH_STORE, JSON.stringify(payload));
+      state.refreshSnapshot = {runId, savedAt: now(), messageCount: state.history.length};
+      return true;
+    } catch { return false; }
+  };
+  const clearRunningRefresh = (runId) => {
+    if (runId && state.refreshSnapshot?.runId && state.refreshSnapshot.runId !== runId) return;
+    try { window.localStorage?.removeItem(RUNNING_REFRESH_STORE); } catch {}
+    state.refreshSnapshot = null;
   };
 
   const alreadyDelivered = (idempotencyKey) => idempotencyKey
@@ -150,8 +177,14 @@
   // can instead define window.__fakeSeedHistory (e.g. a real chat.history
   // `messages` array) before this script runs to replay a recorded session.
   const seedHistory = Array.isArray(window.__fakeSeedHistory) ? window.__fakeSeedHistory : null;
+  const savedRunningRefresh = seedHistory ? null : readRunningRefresh();
   if (seedHistory) {
     for (const message of seedHistory) persist(clone(message));
+  } else if (savedRunningRefresh) {
+    state.history = clone(savedRunningRefresh.history);
+    state.seq = Number(savedRunningRefresh.seq) || state.history.length;
+    state.activeRuns.add(savedRunningRefresh.runId);
+    state.refreshSnapshot = {runId: savedRunningRefresh.runId, savedAt: now(), messageCount: state.history.length};
   } else {
     persist({role: 'user', content: text('你好，碧琪')});
     persist({role: 'assistant', content: text('你好呀！有什么要我帮忙的？'), stopReason: 'stop'});
@@ -468,6 +501,7 @@
     }
     state.activeRuns.delete(runId);
     state.injectionsByRun.delete(runId);
+    clearRunningRefresh(runId);
     lifecycle(runId, 'end');
     chatFinal(runId, {stopReason: effectiveReply ? 'stop' : 'toolUse'});
     sessionsChanged('end', runId);
@@ -592,6 +626,37 @@
       }
       await finishRun(runId, o.reply || '全部检查完毕，文件都正常。【最终回复】', gap);
       note('scenario-done', {name: 'multiTool'});
+    },
+
+    /* A still-running transcript whose original user message falls outside
+       the native ten-message reload page. The fake server snapshot survives a
+       browser reload so the page can prove its own 512-message recovery. */
+    async 'running-refresh'(o = {}) {
+      const gap = o.gap ?? 1;
+      const runId = o.uiRunId || `ui-refresh-${now()}`;
+      const caller = o.uiSocket || state.lastUiSocket;
+      state.activeRuns.clear();
+      clearRunningRefresh();
+      startRun(runId, o.userText || '检查一个需要多步处理的任务');
+      const tools = Math.max(6, Math.floor(Number(o.tools) || 6));
+      for (let i = 1; i <= tools; i += 1) {
+        await runTool(runId, caller, 'exec', {command: `refresh-step-${i}`}, `第 ${i} 步已完成`, gap,
+          {say: `我正在处理第 ${i} 步。`});
+      }
+      const saved = saveRunningRefresh(runId);
+      const ten = historyPage({limit: 10}).messages;
+      const hasOpeningUser = ten.some((message) => message.role === 'user'
+        && (message.content || []).some((part) => String(part.text || '').includes(o.userText || '检查一个需要多步处理的任务')));
+      return probe('running-refresh',
+        '刷新时原生只取最近 10 条；长任务开头不在窗口里。',
+        {runId, tools, totalMessages: state.history.length, nativeLimit: 10,
+          nativeTailHasOpeningUser: hasOpeningUser, persistedAcrossRefresh: saved, activeAfter: state.activeRuns.has(runId)});
+    },
+    async 'finish-running-refresh'(o = {}) {
+      const runId = activeRunId() || state.refreshSnapshot?.runId;
+      if (!runId) return probe('finish-running-refresh', '没有待结束的刷新场景。', {activeAfter: false});
+      await finishRun(runId, o.reply || '这轮检查已经完成。', o.gap ?? 1);
+      return probe('finish-running-refresh', '结束刷新场景中的活动任务。', {runId, activeAfter: state.activeRuns.has(runId)});
     },
 
     /* User turn -> tools -> run ends without a reply (incomplete tool turn)
@@ -827,6 +892,17 @@
         text: (group.querySelector('.chat-bubble')?.getAttribute('data-message-text') || '').slice(0, 60),
       }));
     },
+    timelineArtifacts() {
+      const root = pane()?.querySelector?.('.chat-thread') || pane();
+      const text = root?.textContent || '';
+      return {
+        activityGroups: root?.querySelectorAll?.('.chat-group--activity').length || 0,
+        flatToolGroups: root?.querySelectorAll?.('.chat-group.tool:not(.chat-group--timeline-step)').length || 0,
+        emptyAssistantBubbles: [...(root?.querySelectorAll?.('.chat-group.assistant .chat-bubble') || [])]
+          .filter((bubble) => !(bubble.getAttribute('data-message-text') || bubble.textContent || '').trim()).length,
+        failedPlaceholderVisible: text.includes('assistant turn failed'),
+      };
+    },
   };
 
   window.__fake = {
@@ -860,6 +936,7 @@
       state.refreshSnapshot = null;
       return {keys};
     },
+    clearRunningRefresh() { clearRunningRefresh(); return true; },
     setModel(model) { state.model = model; sessionsChanged('model', null); },
     setTierStatus(status) { state.deepThinkStatus = JSON.parse(JSON.stringify(status || {active: false})); },
     tail(n = 40) { return log.slice(-n); },

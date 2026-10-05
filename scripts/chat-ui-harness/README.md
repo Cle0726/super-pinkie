@@ -55,6 +55,7 @@ __fake.tail();                         // 最近的请求和事件日志
 | `narrated` | 每次调用工具前先流式输出一句说明。和真实记录一样，这句说明与 toolCall 存在同一条助手消息里。 | `steps`：`[说明, 工具名, 参数, 结果]` 数组；`thinking: true` 附带思考块；`thinkingChunks: 1, thinkDelay: 2500` 模拟 Gemini 先安静想、再一次给出整段思考 |
 | `multiTool` | 同一轮里连续多次工具调用后回复 | `tools`：次数；`parallel: true` 最后再来一条消息里的两个并行调用 |
 | `watchdog` | 第一轮工具调用后没回复就结束，网关看门狗从另一个连接（CLI）续跑。续跑会插入不可见用户消息 U+2063，并用新的 runId | `rounds`：续跑次数；`r1Terminal: 'error'` 首轮以错误结束（`chat` 错误事件按 15 秒宽限延后，`graceMs` 可调） |
+| `running-refresh` | 生成超过 10 条记录后保持 run 运行，并把假网关历史保存到本地；刷新后恢复同一轮 | `tools`：工具步数（至少 6）；刷新后可用 `finish-running-refresh` 收尾 |
 
 ### 追加消息 / 队列自愈（a–f）
 
@@ -119,6 +120,32 @@ openclaw gateway call chat.history --json --params '{"sessionKey":"agent:learnin
 ```
 
 刷新后工具结果的显示（`chat.history` 只保留 toolResult，不带调用参数）就是这样复现的。
+
+也可以直接回放审查方准备的脱敏 seed。它们只保留会话结构和中文示例文字：`s2` 是窗口从任务中间开始的长任务，`full` 含连续模型失败和压缩分隔线，`l2` 是只有工具调用的一轮。
+
+```bash
+python3 scripts/chat-ui-harness/server.py --port 18812
+```
+
+这个服务器会在假网关前加载 seed；也可以直接运行工作区里的 `work/codex-prompts/tools/seed-server.py`，它提供相同的 `seed=` 参数。
+
+打开对应场景（同一条 URL 可在 1280×820、1440×900 和 640 宽分屏下检查）：
+
+```text
+http://127.0.0.1:18812/chat?session=agent%3Aunrestricted%3Adashboard%3Aharness0001&seed=s2
+http://127.0.0.1:18812/chat?session=agent%3Aunrestricted%3Adashboard%3Aharness0001&seed=full
+http://127.0.0.1:18812/chat?session=agent%3Aunrestricted%3Adashboard%3Aharness0001&seed=l2
+```
+
+复现“任务超过 10 条后刷新”：先启动普通 harness，在控制台执行 `await __fake.scenario('running-refresh')`，再刷新页面。假网关模拟原生只取最近 10 条、拿不到用户开头的情况；页面会再读有界历史并把开头接回活动进程卡。若历史窗口仍找不到开头，卡片会显示“接着之前的工作”。最后用 `await __fake.scenario('finish-running-refresh')` 结束假任务。
+
+回放后可直接查布局和原生渲染错误：
+
+```js
+__fake.checks.timelineArtifacts(); // activity/tool 旧分组、空 assistant 气泡、英文失败占位
+__fake.checks.captureRenderErrors();
+__fake.checks.brokenLitParts();
+```
 
 ## 模拟的网关行为（对应 OpenClaw 2026.7.1-2）
 
