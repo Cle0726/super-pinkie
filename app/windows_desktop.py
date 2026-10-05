@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -950,14 +951,65 @@ class NativeBridge:
         }
 
     def preview_material(self, payload):
-        """Return one user-selected workspace image/PDF/HTML for the in-rail viewer.
+        """Open, copy, reveal or preview one file after a visible user click.
 
-        This is presentation-only; it does not change the agent's tool or
-        filesystem access.  A data URL keeps WebView2 inside the same app
-        surface, without asking it to navigate to an arbitrary file URL.
+        The bridge checks the canonical path on every action. Preview bytes
+        stay in WebView2 as a data URL; this does not change agent permissions.
         """
         payload = payload if isinstance(payload, dict) else {}
+        action = str(payload.get("action", "open"))
         path = Path(str(payload.get("path", ""))).expanduser()
+        try:
+            path = path.resolve(strict=True)
+            home = Path.home().resolve(strict=True)
+            relative = path.relative_to(home)
+        except (OSError, ValueError):
+            return {"ok": False, "message": "只能打开用户主目录里的现有文件，且不能越过符号链接。"}
+        if not path.is_file():
+            return {"ok": False, "message": "这里只能打开文件，不能打开文件夹。"}
+        parts = [part.casefold() for part in relative.parts]
+        is_openclaw_workspace = (
+            len(parts) >= 2
+            and parts[0] == ".openclaw"
+            and (parts[1] == "workspace" or parts[1].startswith("workspace-"))
+        )
+        if (
+            parts[0] == ".ssh"
+            or len(parts) >= 2 and parts[:2] == ["library", "keychains"]
+            or parts[0] == ".openclaw" and not is_openclaw_workspace
+        ):
+            return {"ok": False, "message": "这个位置包含密钥或 CLE Kk 配置，不能从聊天里打开。"}
+        if action == "check":
+            return {"ok": True, "name": path.name}
+
+        if action == "save":
+            try:
+                downloads = Path.home() / "Downloads"
+                downloads.mkdir(parents=True, exist_ok=True)
+                base = path.name
+                stem, suffix = path.stem, path.suffix
+                destination = downloads / base
+                index = 1
+                while destination.exists():
+                    index += 1
+                    destination = downloads / f"{stem} ({index}){suffix}"
+                shutil.copy2(path, destination)
+                return {"ok": True, "path": str(destination)}
+            except OSError:
+                return {"ok": False, "message": "保存到下载文件夹失败，请检查磁盘空间和文件权限。"}
+        if action == "reveal":
+            try:
+                subprocess.Popen(["explorer.exe", "/select,", str(path)], **hidden_process_kwargs())
+                return {"ok": True}
+            except OSError:
+                return {"ok": False, "message": "无法在文件夹中显示这个文件。"}
+        if action == "open-default":
+            try:
+                os.startfile(str(path))
+                return {"ok": True}
+            except OSError:
+                return {"ok": False, "message": "Windows 没有找到能打开这个文件的应用。"}
+
         suffix = path.suffix.lower()
         mime_types = {
             ".pdf": "application/pdf",
@@ -969,17 +1021,41 @@ class NativeBridge:
             ".tif": "image/tiff", ".tiff": "image/tiff",
             ".heic": "image/heic", ".heif": "image/heic",
             ".svg": "image/svg+xml",
+            ".mp4": "video/mp4", ".mov": "video/quicktime",
+            ".m4v": "video/x-m4v", ".webm": "video/webm",
+            ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
         }
+        text_extensions = {
+            ".md", ".markdown", ".txt", ".text", ".log", ".csv", ".tsv",
+            ".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".conf",
+            ".swift", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
+            ".css", ".scss", ".sh", ".bash", ".zsh", ".c", ".h", ".cpp",
+            ".hpp", ".rs", ".go", ".java", ".kt", ".rb", ".php", ".sql",
+            ".diff", ".patch", ".plist",
+        }
+        if suffix in text_extensions:
+            mime_types[suffix] = "text/plain"
         mime_type = mime_types.get(suffix)
         if not mime_type:
-            return {"ok": False, "message": "这里只能预览图片、PDF 和 HTML。"}
+            return {"ok": False, "message": "暂时无法预览这种文件。"}
         try:
-            if not path.is_file():
-                return {"ok": False, "message": "这个材料已经不在原来的位置了。"}
             size = path.stat().st_size
-            if size > 96 * 1024 * 1024:
-                return {"ok": False, "message": "这个材料超过 96 MB，直接预览会拖慢页面。请换一个较小的文件，或先压缩它。"}
-            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            kind_limit = 128 if suffix in {".mp4", ".mov", ".m4v", ".webm", ".mp3", ".m4a", ".wav"} else 64
+            if size > kind_limit * 1024 * 1024:
+                return {"ok": False, "message": f"这个文件超过 {kind_limit} MB，Windows 版暂时不能直接预览。"}
+            content = path.read_bytes()
+            if suffix in {".html", ".htm"}:
+                # Data URLs have no response headers. Put a restrictive CSP
+                # before the selected document so it cannot fetch local or
+                # remote resources while it runs in the sandboxed frame.
+                content = (
+                    b'<!doctype html><meta http-equiv="Content-Security-Policy" '
+                    b'content="default-src \'none\'; img-src data: blob:; media-src data: blob:; '
+                    b"style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; "
+                    b"form-action 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'\">"
+                    + content
+                )
+            encoded = base64.b64encode(content).decode("ascii")
             return {
                 "ok": True,
                 "src": f"data:{mime_type};base64,{encoded}",
