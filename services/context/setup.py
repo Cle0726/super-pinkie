@@ -108,12 +108,16 @@ def install(home=None):
     if policy_file.exists():
         policy_raw = policy_file.read_bytes()
         policy_data = budget['read_json'](policy_file)
-        required_ratios = {'triggerRatio': .85, 'targetRatio': .6, 'keepRecentRatio': .6}
-        if any(policy_data.get(key) != value for key, value in required_ratios.items()):
+        required_ratios = {'triggerRatio': .85, 'targetRatio': .6}
+        retired_policy_keys = ('adaptiveTiers', 'keepRecentRatio', 'minWindowTokens')
+        if (any(policy_data.get(key) != value for key, value in required_ratios.items())
+                or any(key in policy_data for key in retired_policy_keys)):
             backup=state/'backups'/('context-policy-'+str(time.time_ns()))
             backup.mkdir(parents=True,mode=0o700)
             shutil.copy2(policy_file,backup/'context-policy.json')
             policy_data.update(required_ratios)
+            for key in retired_policy_keys:
+                policy_data.pop(key, None)
             fd,tmp=tempfile.mkstemp(dir=policy_file.parent,prefix='.context-policy-')
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as handle:

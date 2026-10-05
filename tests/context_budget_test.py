@@ -24,16 +24,34 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertEqual(600000,unknown['keepRecent'])
         self.assertEqual(600000,unknown['target'])
 
-    def test_existing_policy_is_migrated_to_safe_hysteresis_without_losing_other_values(self):
+    def test_existing_policy_removes_retired_fields_with_a_recovery_copy(self):
         config=self.home/'.openclaw/openclaw.json';config.parent.mkdir();config.write_text('{}')
         policy=budget['state_root'](self.home)/'context-policy.json';policy.parent.mkdir(parents=True)
-        policy.write_text(json.dumps({'triggerRatio':.96,'targetRatio':.9,'keepRecentRatio':.85,'unknownContextWindow':1000000,'custom':'keep'}))
+        original={'triggerRatio':.96,'targetRatio':.9,'keepRecentRatio':.85,
+                  'adaptiveTiers':[{'below':.5,'ratio':.4}], 'minWindowTokens':500000,
+                  'unknownContextWindow':1000000,'custom':'keep'}
+        original_bytes=(json.dumps(original)+'\n').encode()
+        policy.write_bytes(original_bytes)
         self.assertTrue(setup['install'](self.home))
         saved=json.loads(policy.read_text())
         self.assertEqual(.85,saved['triggerRatio']);self.assertEqual(.6,saved['targetRatio'])
-        # 档位表已随 2026-09-13 的 Mac→git 同步移除：所有模式共用同一条全局边界。
-        self.assertEqual(.6,saved['keepRecentRatio']);self.assertNotIn('adaptiveTiers',saved);self.assertEqual('keep',saved['custom'])
+        for key in ('adaptiveTiers','keepRecentRatio','minWindowTokens'):self.assertNotIn(key,saved)
+        self.assertEqual('keep',saved['custom'])
+        backups=list((policy.parent/'backups').glob('context-policy-*/context-policy.json'))
+        self.assertEqual(1,len(backups));self.assertEqual(original_bytes,backups[0].read_bytes())
         self.assertFalse(setup['install'](self.home))
+        self.assertEqual(1,len(list((policy.parent/'backups').glob('context-policy-*/context-policy.json'))))
+
+    def test_retired_policy_fields_do_not_change_party_context_tail_budget(self):
+        policy=budget['state_root'](self.home)/'context-policy.json';policy.parent.mkdir(parents=True)
+        policy.write_text(json.dumps({'triggerRatio':.85,'targetRatio':.6,
+                                      'keepRecentRatio':.2,'adaptiveTiers':[{'ratio':.1}],
+                                      'minWindowTokens':100000}))
+        rules=budget['policy'](self.home)
+        self.assertNotIn('keepRecentRatio',rules)
+        self.assertNotIn('adaptiveTiers',rules)
+        self.assertNotIn('minWindowTokens',rules)
+        self.assertEqual(600000,budget['model_budget']('other/model',{},self.home)['keepRecent'])
     def test_codex_metadata_and_explicit_override(self):
         cache=self.home/'.codex/models_cache.json';cache.parent.mkdir()
         cache.write_text(json.dumps({'models':[{'slug':'model-a','context_window':200000,'effective_context_window_percent':95}]}))

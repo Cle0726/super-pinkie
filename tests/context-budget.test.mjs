@@ -45,6 +45,10 @@ const threshold = resolveCompactionThreshold({
 \t\tminimumThresholdTokens: responsesServerCompactionThreshold
 \t});
 return threshold;}`;
+const sessionList=`// gateway.sessions.list
+function list(result,sessions){
+return { ...result, sessions };
+}`;
 function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
 test('compaction triggers at the configured window share and leaves recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
@@ -64,6 +68,7 @@ test('compaction triggers at the configured window share and leaves recovery hea
     const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
     assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
     assert.equal(b.targetRatio,installedPolicy.targetRatio);
+    assert.equal(b.triggerRatio,installedPolicy.triggerRatio);
     assert.ok(b.keepRecent<b.threshold);
   }
 });
@@ -93,6 +98,22 @@ test('preflight uses the same configured threshold even with server-side compact
     assert.equal(pre(w,20000,4000,w*.9),expected);
   }
 });
+test('automatic preflight and mid-turn checks use the 85 percent boundary',()=>{
+  const runSettings=executable(transform('settings',currentSettings),'settings');
+  const runPreflight=executable(transform('preflight',currentPreflight),'pre');
+  const preflightAt=(tokens,threshold)=>tokens>=threshold;
+  const midTurnAt=(tokens,window,reserve)=>tokens>window-reserve;
+  const budget=runSettings({contextTokenBudget:1000000,cfg:{agents:{defaults:{compaction:{keepRecentTokens:600000}}}}});
+  assert.equal(budget.reserve,150000);
+  assert.equal(budget.recent,600000);
+  const threshold=runPreflight(1000000,20000,900000);
+  for(const [tokens,expected] of [[849999,false],[850001,true]]){
+    assert.equal(preflightAt(tokens,threshold),expected,`preflight at ${tokens}`);
+    assert.equal(midTurnAt(tokens,1000000,budget.reserve),expected,`mid-turn at ${tokens}`);
+  }
+  assert.equal(preflightAt(850000,threshold),true);
+  assert.equal(midTurnAt(850000,1000000,budget.reserve),false);
+});
 test('current OpenClaw settings and preflight structures use the adaptive policy',()=>{
   const runSettings=executable(transform('settings',currentSettings),'settings');
   const runPreflight=executable(transform('preflight',currentPreflight),'pre');
@@ -103,16 +124,29 @@ test('current OpenClaw settings and preflight structures use the adaptive policy
     assert.equal(runPreflight(contextTokenBudget,20000,contextTokenBudget*.9),expected.threshold);
   }
 });
+test('sessions.list returns the same backend budget used by native compaction',()=>{
+  const list=executable(transform('sessions',sessionList),'list');
+  const response=list({defaults:{contextTokens:128000}},[
+    {key:'agent:unrestricted:dashboard:test',contextTokens:1000000},
+    {key:'agent:unrestricted:dashboard:unknown'}
+  ]);
+  assert.equal(response.sessions[0].pinkieCompactionBudget.window,1000000);
+  assert.equal(response.sessions[0].pinkieCompactionBudget.threshold,850000);
+  assert.equal(response.sessions[0].pinkieCompactionBudget.triggerRatio,.85);
+  assert.equal(response.sessions[1].pinkieCompactionBudget.window,128000);
+  assert.equal(response.sessions[1].pinkieCompactionBudget.threshold,108800);
+});
 test('patch is idempotent and validates every target before writing; backups preserve original files',()=>{
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-context-patch-'));
   try{
     const dist=path.join(temp,'dist');fs.mkdirSync(dist);
-    const a=path.join(dist,'agent-settings-test.js'),b=path.join(dist,'agent-runner.runtime-test.js');
-    fs.writeFileSync(a,settings);fs.writeFileSync(b,'different future version');
+    const a=path.join(dist,'agent-settings-test.js'),b=path.join(dist,'agent-runner.runtime-test.js'),c=path.join(dist,'sessions-test.js');
+    fs.writeFileSync(a,settings);fs.writeFileSync(b,'different future version');fs.writeFileSync(c,sessionList);
     assert.throws(()=>apply(temp),/结构已变化/);assert.equal(fs.readFileSync(a,'utf8'),settings);
     fs.writeFileSync(b,preflight);
     const backupRoot=path.join(temp,'backup');assert.equal(apply(temp,{backupRoot}).changed,true);
     assert.equal(fs.readFileSync(path.join(backupRoot,path.basename(a)),'utf8'),settings);
+    assert.equal(fs.readFileSync(path.join(backupRoot,path.basename(c)),'utf8'),sessionList);
     assert.equal(apply(temp,{backupRoot}).changed,false);
     assert.equal(transform('settings',fs.readFileSync(a,'utf8')),fs.readFileSync(a,'utf8'));
   }finally{fs.rmSync(temp,{recursive:true,force:true});}
