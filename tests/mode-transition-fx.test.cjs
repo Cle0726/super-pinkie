@@ -96,6 +96,21 @@ test('FX keeps its canvas visible during the controlled leave animation', () => 
   assert.match(css, /\.laolao-mode-transition--fx\.is-leaving\s*\{\s*opacity:\s*1;\s*\}/);
 });
 
+test('FX progress and white text reveal use dedicated compositor transforms', () => {
+  const css = read('ui/injections/laolao-mode-transition-fx.css');
+  assert.match(fxSource, /fill-viewport/);
+  assert.match(fxSource, /fill-surface/);
+  assert.match(fxSource, /message--lit-viewport/);
+  assert.match(fxSource, /element\.animate\(keyframes, \{duration, easing: 'linear', fill: 'forwards'\}\)/);
+  assert.match(fxSource, /finishProgressTracks\(\)/);
+  assert.match(fxSource, /const elapsed = Math\.max\(0, now - lastNow\);\s*lateFrame = elapsed > MAX_STEP;/);
+  assert.match(fxSource, /lastNow = root\.performance\.now\(\);\s*startProgressTracks\(frames, duration, true\)/);
+  assert.match(fxSource, /if \(progressAnimations\.length\)[\s\S]*?fillScale\(visualProgress\)/);
+  assert.match(css, /\.laolao-mode-transition--fx \.laolao-mode-transition__fill-viewport[\s\S]*?overflow: hidden/);
+  assert.match(css, /\.laolao-mode-transition--fx \.laolao-mode-transition__fill-surface[\s\S]*?will-change: transform/);
+  assert.match(css, /\.laolao-mode-transition--fx \.laolao-mode-transition__message--lit-viewport[\s\S]*?will-change: transform/);
+});
+
 
 // A fake WebGL that counts the expensive work: contexts, programs and texture uploads.
 function fakeGl(counters) {
@@ -161,8 +176,10 @@ test('the shared stage is prepared once, after the splash, and keeps every mode 
   assert.equal(counters.uploads, 10, 'a prepared mode is not uploaded again');
 });
 
-test('the transition clock pauses through a main-thread stall instead of skipping ahead', () => {
-  assert.match(fxSource, /clock \+= Math\.min\(Math\.max\(0, now - lastNow\), MAX_STEP\)/);
+test('the scene clock keeps its pause behavior while progress runs on the compositor', () => {
+  assert.match(fxSource, /clock \+= Math\.min\(elapsed, MAX_STEP\)/);
   assert.match(fxSource, /const MAX_STEP = 40;/);
   assert.doesNotMatch(fxSource, /now - startAt/);
+  assert.match(fxSource, /startWaitingProgress\(\)/);
+  assert.match(fxSource, /progressAnimations\.length \? valueFromTransform\(ui\.fill\) : waitingProgress\(t\)/);
 });

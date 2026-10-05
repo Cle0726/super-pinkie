@@ -839,23 +839,27 @@
       title.append(span);
     });
     const progress = el('div', 'laolao-mode-transition__progress', {role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '8'});
-    const fill = el('span', 'laolao-mode-transition__fill');
-    fill.append(el('span', 'laolao-mode-transition__gloss'), el('span', 'laolao-mode-transition__dots'));
+    const fill = el('span', 'laolao-mode-transition__fill laolao-mode-transition__fill-viewport');
+    const fillSurface = el('span', 'laolao-mode-transition__fill laolao-mode-transition__fill-surface');
+    fillSurface.append(el('span', 'laolao-mode-transition__gloss'), el('span', 'laolao-mode-transition__dots'));
+    fill.append(fillSurface);
     const tip = el('span', 'laolao-mode-transition__tip', {'aria-hidden': 'true'});
     tip.append(el('i', 'laolao-mode-transition__star'), el('i', 'laolao-mode-transition__star'));
     const message = el('span', 'laolao-mode-transition__message');
     const msg = el('span', 'laolao-mode-transition__msg');
     message.append(msg);
-    const lit = el('span', 'laolao-mode-transition__message laolao-mode-transition__message--lit', {'aria-hidden': 'true'});
+    const litViewport = el('span', 'laolao-mode-transition__message--lit-viewport', {'aria-hidden': 'true'});
+    const lit = el('span', 'laolao-mode-transition__message laolao-mode-transition__message--lit');
     const litMsg = el('span', 'laolao-mode-transition__msg');
     lit.append(litMsg);
+    litViewport.append(lit);
     const percentage = el('span', 'laolao-mode-transition__percentage');
     const flash = el('span', 'laolao-mode-transition__flash', {'aria-hidden': 'true'});
-    progress.append(fill, tip, message, lit, percentage, flash);
+    progress.append(fill, tip, message, litViewport, percentage, flash);
     content.append(eyebrow, title, progress);
     const fxCanvas = el('canvas', 'laolao-mode-transition__particles', {'aria-hidden': 'true'});
     overlay.append(veil, content, fxCanvas);
-    return {overlay, glCanvas: null, fxCanvas, content, progress, fill, tip, lit, messages: [msg, litMsg], percentage};
+    return {overlay, glCanvas: null, fxCanvas, content, progress, fill, fillSurface, tip, litViewport, lit, messages: [msg, litMsg], percentage};
   }
 
   // ---------- 一次转场 ----------
@@ -894,6 +898,97 @@
       return .72 + .22 * (1 - Math.exp(-(w - EXPECTED_WAIT) / 4000));
     };
     const progressAt = (t) => (t < readyAt ? waitingProgress(t) : lerp(readyProgress, 1, easeOutCubic(clamp((t - readyAt) / FINISH))));
+
+    let progressAnimations = [];
+    let progressBox = {w: 0, h: 0};
+    let compositorProgress = .08;
+    let lateFrame = false;
+    const fillScale = (p) => {
+      const {w, h} = progressBox;
+      return w > 0 ? (h + (w - h) * clamp(p)) / w : clamp(p);
+    };
+    const valueFromTransform = (element, inverse = false) => {
+      let transform = '';
+      try { transform = root.getComputedStyle(element).transform; } catch {}
+      const match = transform?.match(/^matrix(?:3d)?\(([^)]+)\)/);
+      const scale = match ? Number(match[1].split(',')[0]) : NaN;
+      if (!Number.isFinite(scale)) return compositorProgress;
+      const visualScale = inverse ? 1 / scale : scale;
+      const min = progressBox.w > 0 ? progressBox.h / progressBox.w : .08;
+      return clamp((visualScale - min) / (1 - min));
+    };
+    const progressTrack = (from, to, duration, easing = easeOutCubic, step = 32) => {
+      const times = [0];
+      for (let t = step; t < duration; t += step) times.push(t);
+      if (duration > 0) times.push(duration);
+      return times.map((t) => {
+        const ratio = duration ? t / duration : 1;
+        const p = lerp(from, to, easing(ratio));
+        const scale = fillScale(p);
+        const filled = progressBox.h + (progressBox.w - progressBox.h) * p;
+        return {
+          offset: ratio,
+          fill: `scaleX(${scale})`,
+          surface: `scaleX(${1 / Math.max(.001, scale)})`,
+          tip: `translateX(${filled}px)`,
+        };
+      });
+    };
+    const startProgressTracks = (frames, duration, waiting = false) => {
+      const add = (element, property) => {
+        if (!element?.animate) return;
+        const keyframes = frames.map((frame) => ({offset: frame.offset, transform: frame[property]}));
+        progressAnimations.push(element.animate(keyframes, {duration, easing: 'linear', fill: 'forwards'}));
+      };
+      add(ui.fill, 'fill');
+      add(ui.fillSurface, 'surface');
+      add(ui.litViewport, 'fill');
+      add(ui.lit, 'surface');
+      add(ui.tip, 'tip');
+      if (waiting && frames.length) compositorProgress = .08;
+    };
+    const startWaitingProgress = () => {
+      progressBox = {w: ui.progress.clientWidth, h: ui.progress.clientHeight};
+      if (!progressBox.w || typeof ui.fill.animate !== 'function') {
+        lastNow = root.performance.now();
+        return false;
+      }
+      const duration = 15_000;
+      const times = [0];
+      for (let t = 32; t < duration; t += (t < COPY_IN + EXPECTED_WAIT ? 32 : 160)) times.push(t);
+      times.push(duration);
+      const frames = times.map((t) => {
+        const p = waitingProgress(t);
+        const scale = fillScale(p);
+        const filled = progressBox.h + (progressBox.w - progressBox.h) * p;
+        return {offset: t / duration, fill: `scaleX(${scale})`, surface: `scaleX(${1 / Math.max(.001, scale)})`, tip: `translateX(${filled}px)`};
+      });
+      const first = frames[0];
+      ui.fill.style.transform = first.fill;
+      ui.fillSurface.style.transform = first.surface;
+      ui.litViewport.style.transform = first.fill;
+      ui.lit.style.transform = first.surface;
+      ui.tip.style.transform = first.tip;
+      lastNow = root.performance.now();
+      startProgressTracks(frames, duration, true);
+      return progressAnimations.length > 0;
+    };
+    const finishProgressTracks = () => {
+      if (!progressAnimations.length) return;
+      const start = valueFromTransform(ui.fill);
+      readyProgress = start;
+      progressAnimations.forEach((animation) => animation.cancel());
+      progressAnimations = [];
+      const frames = progressTrack(start, 1, FINISH, easeOutCubic, 16);
+      const first = frames[0];
+      ui.fill.style.transform = first.fill;
+      ui.fillSurface.style.transform = first.surface;
+      ui.litViewport.style.transform = first.fill;
+      ui.lit.style.transform = first.surface;
+      ui.tip.style.transform = first.tip;
+      startProgressTracks(frames, FINISH);
+      compositorProgress = start;
+    };
 
     const revealAt = (t) => {
       const W = view.w * view.glScale, H = view.h * view.glScale, d = view.glScale;
@@ -1010,13 +1105,29 @@
     const syncDom = (t) => {
       if (copyStep === 0 && t >= COPY_IN) { ui.overlay.classList.add('is-copy-in'); copyStep = 1; }
       const p = progressAt(t), ready = t >= readyAt + FINISH;
-      // 填充按宽度走（最短一个圆头），圆头和彩点不会被压扁。
-      const w = ui.progress.clientWidth, h = ui.progress.clientHeight, filled = h + (w - h) * p;
-      ui.fill.style.width = `${filled.toFixed(1)}px`;
-      ui.lit.style.clipPath = `inset(0 ${(w - filled).toFixed(1)}px 0 0)`;
-      ui.tip.style.translate = `${filled.toFixed(1)}px 0`;
-      ui.progress.style.setProperty('--laolao-progress', p.toFixed(3));
-      const value = String(Math.round(p * 100));
+      const visualProgress = progressAnimations.length
+        ? (lateFrame ? valueFromTransform(ui.fill) : Math.max(compositorProgress, p))
+        : p;
+      compositorProgress = Math.max(compositorProgress, visualProgress);
+      const w = ui.progress.clientWidth, h = ui.progress.clientHeight;
+      const filled = h + (w - h) * visualProgress;
+      if (progressAnimations.length) {
+        const scale = fillScale(visualProgress);
+        // Keep the capsule's rounded end and the mode-specific gradient scale
+        // aligned with the compositor-driven clip while the page is responsive.
+        if (scale > 0) ui.fill.style.borderRadius = `${(h / 2 / scale).toFixed(2)}px / ${(h / 2).toFixed(2)}px`;
+        const backgroundScale = ['chat', 'thinking', 'learning'].includes(mode.id) ? 180 : 100;
+        ui.fillSurface.style.backgroundSize = `${(backgroundScale * scale).toFixed(2)}% 100%`;
+      } else {
+        // Older WebKit builds without Web Animations keep the pixel-perfect
+        // width path as a compatibility fallback.
+        ui.fill.style.width = `${filled.toFixed(1)}px`;
+        ui.lit.style.clipPath = `inset(0 ${(w - filled).toFixed(1)}px 0 0)`;
+        ui.tip.style.translate = `${filled.toFixed(1)}px 0`;
+      }
+      ui.progress.style.setProperty('--laolao-progress', visualProgress.toFixed(3));
+      ui.progress.style.setProperty('--laolao-progress-scale', fillScale(visualProgress).toFixed(5));
+      const value = String(Math.round(visualProgress * 100));
       if (ui.progress.getAttribute('aria-valuenow') !== value) ui.progress.setAttribute('aria-valuenow', value);
       const index = Math.floor(Math.max(0, t - COPY_IN) / PHRASE_EVERY);
       const key = ready ? 'ready' : (index >= phrases.length + 3 && waitingText ? 'waiting' : String(Math.min(phrases.length - 1, index)));
@@ -1030,12 +1141,15 @@
         ui.overlay.classList.add('is-leaving');
         try { hooks.onExit?.(); } catch {}
       }
+      lateFrame = false;
     };
 
     const cleanup = () => {
       if (destroyed) return;
       destroyed = true;
       root.cancelAnimationFrame(raf);
+      progressAnimations.forEach((animation) => animation.cancel());
+      progressAnimations = [];
       root.removeEventListener('resize', resize);
       playing = Math.max(0, playing - 1);
       if (s) {
@@ -1052,7 +1166,9 @@
     const tick = (now) => {
       if (destroyed) return;
       // 主线程被别的事占住时（比如目的页正在渲染），画面停一下再接着播，不跳过一截。
-      clock += Math.min(Math.max(0, now - lastNow), MAX_STEP);
+      const elapsed = Math.max(0, now - lastNow);
+      lateFrame = elapsed > MAX_STEP;
+      clock += Math.min(elapsed, MAX_STEP);
       lastNow = now;
       const t = clock;
       syncDom(t);
@@ -1077,11 +1193,12 @@
       ui.overlay.prepend(s.canvas);
       root.document.body.append(ui.overlay);
       resize();
+      startWaitingProgress();
       bindMode(s, tex, m);
       fx = ui.fxCanvas.getContext('2d');
       root.addEventListener('resize', resize);
       setMessage(phrases[0]);
-      lastNow = root.performance.now();
+      syncDom(0);
       render(0);
       raf = root.requestAnimationFrame(tick);
     })();
@@ -1097,8 +1214,9 @@
         if (!finished && !destroyed) {
           finished = true;
           const t = clock;
-          readyProgress = waitingProgress(t);
+          readyProgress = progressAnimations.length ? valueFromTransform(ui.fill) : waitingProgress(t);
           readyAt = Math.max(t, COPY_IN);
+          finishProgressTracks();
           // 窗口被隐藏时动画时钟会停，不能让浮层一直挡着。
           if (root.document.hidden) cleanup();
           else root.setTimeout(cleanup, Math.max(readyAt + FINISH + 300, HOP + 820) - t + EXIT + 1500);
