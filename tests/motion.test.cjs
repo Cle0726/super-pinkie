@@ -33,6 +33,24 @@ test('completion glides to 100 instead of jumping, including reduced motion',asy
   const done=motion.finishProgress(fill,label,bar);frame(0);assert.equal(label.textContent,'80%');frame(150);assert.equal(label.textContent,'95%');frame(300);await done;assert.equal(label.textContent,'100%');
   window.matchMedia=()=>({matches:true});const next=nodes();await motion.finishProgress(next.fill,next.label,next.bar);assert.equal(next.label.textContent,'100%');
 });
+test('WAAPI progress starts from the visible transform and updates its label without per-frame style writes',async()=>{
+  const {window,motion}=setup(),{fill,label,bar,writes}=nodes();const frames=[];let recorded;
+  fill.style.transform='scaleX(0.85)';
+  writes.length=0;
+  window.getComputedStyle=()=>({transform:'matrix(0.85, 0, 0, 1, 0, 0)'});
+  fill.animate=(keyframes,options)=>{recorded={keyframes,options};return {cancel(){}};};
+  window.requestAnimationFrame=callback=>{frames.push(callback);};
+
+  motion.progress(fill,label,bar,68);
+  const done=motion.finishProgress(fill,label,bar,160);
+  assert.equal(recorded.keyframes[0].transform,'scaleX(0.85)');
+  assert.equal(recorded.keyframes.at(-1).transform,'scaleX(1)');
+  assert.equal(recorded.options.duration,160);
+  assert.deepEqual(writes.filter(([key])=>key==='transform').map(([,value])=>value),['scaleX(0.68)','scaleX(0.85)']);
+  frames.shift()(0);assert.equal(label.textContent,'85%');
+  frames.shift()(80);assert.equal(label.textContent,'96%');
+  frames.shift()(160);await done;assert.equal(label.textContent,'100%');
+});
 test('preload is deduplicated and waits for decoding, not just download',async()=>{
   const {motion,images,timers}=setup();let decoded;const first=motion.preload('scene.png');
   assert.equal(motion.preload('scene.png'),first);assert.equal(images.length,1);
