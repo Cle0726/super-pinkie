@@ -71,6 +71,58 @@
     ["Copy as markdown", "复制为 Markdown"],
     ["Copied", "已复制"],
     ["Copy failed", "复制失败"],
+    ["Overview", "概览"],
+    ["More", "更多"],
+    ["New session", "新会话"],
+    ["Settings view", "设置视图"],
+    ["Your local chat identity", "你在本机的聊天身份"],
+    ["Assistant identity", "助手身份"],
+    ["Worktrees", "工作树"],
+    ["Gateway 状态：在线", "网关状态：在线"],
+    ["Close navigation", "收起导航"],
+    ["Open session menu", "打开会话菜单"],
+    ["Color mode: System", "配色：跟随系统"],
+    ["Color mode: Light", "配色：浅色"],
+    ["Color mode: Dark", "配色：深色"],
+    ["Other models", "其他模型"],
+    ["Mm models", "Mm 模型"],
+    ["Use default reasoning (Off)", "使用默认思考强度（关闭）"],
+    ["Speed", "速度"],
+    ["Attached image", "附件图片"],
+    ["Chat", "聊天"],
+    ["system", "系统"],
+    ["unrestricted", "无限制模式"],
+    ["Cron", "定时任务"],
+    ["Usage", "使用情况"],
+    ["Try again", "再试一次"],
+    ["Keep waiting", "继续等待"],
+    ["Open command palette", "打开命令面板"],
+    ["Collapse sidebar", "收起侧边栏"],
+    ["Activity", "活动"],
+    ["Instances", "实例"],
+    ["Sessions", "会话"],
+    ["SESSIONS", "会话"],
+    ["Cron Jobs", "定时任务"],
+    ["Tasks", "任务"],
+    ["Agents", "代理"],
+    ["Skills", "技能"],
+    ["Skill Workshop", "技能工坊"],
+    ["Nodes", "节点"],
+    ["Dreaming", "梦境"],
+    ["Sort sessions", "排序会话"],
+    ["All sessions", "全部会话"],
+    ["Edit pinned items", "自定义侧边栏"],
+    ["Settings", "设置"],
+    ["Docs", "文档"],
+    ["Pair mobile device", "配对移动设备"],
+    ["Gateway status: Online", "网关状态：在线"],
+    ["Session filters", "会话筛选"],
+    ["Token", "词元"],
+    ["direct", "单聊"],
+    ["Agent", "智能体"],
+    ["Previous", "上一页"],
+    ["Mark as unread", "标记为未读"],
+    ["Fork", "分叉会话"],
     // Native chatQueue chrome. Keep these scoped to the queue below: an
     // assistant may legitimately quote an upstream English error in a reply.
     ["Steer queued message", "立即追加这条消息"],
@@ -107,6 +159,7 @@
     '.chat-activity-group, .chat-tool-card, .chat-tool-msg-summary, .chat-group--timeline-tools'
   ));
   const isQueueContext = (element) => Boolean(element?.closest?.('.chat-queue'));
+  const isOverviewHint = (element) => Boolean(element?.closest?.('.ov-card__hint'));
   const exactPhraseAllowed = (phrase, element) => {
     if (statusExactPhrases.has(phrase)) return isStatusContext(element);
     if (toolExactPhrases.has(phrase)) return isToolContext(element);
@@ -114,12 +167,44 @@
     return true;
   };
 
+  const localizedChromeValue = (value, element) => {
+    if (/^just now$/i.test(value) && element?.closest?.('.stat-value, .ov-recent__time, .sessions-table td')) return '刚刚';
+    if (/^(?:just now|now)$/i.test(value) && element?.closest?.('.sidebar-recent-session')) return '刚刚';
+    if (/^per page$/i.test(value) && element?.closest?.('.data-table-pagination__size')) return '条/页';
+    const mapped = exactPhrases.get(value);
+    if (mapped && exactPhraseAllowed(value, element)) return mapped;
+    const duplicateCount = value.match(/^(\d+) consecutive identical messages collapsed$/i);
+    if (duplicateCount) return `连续 ${duplicateCount[1]} 条相同消息已折叠`;
+    const messageContext = value.match(/^Message context for (.+)$/i);
+    if (messageContext) return `消息信息：${messageContext[1]}`;
+    const rowSummary = value.match(/^(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+rows?$/i);
+    if (rowSummary && element?.closest?.('.data-table-wrapper')) {
+      return `显示第 ${rowSummary[1]}–${rowSummary[2]} 条，共 ${rowSummary[3]} 条`;
+    }
+    return value;
+  };
+
   const translate = (text, element) => {
     const leading = text.match(/^\s*/)?.[0] ?? "";
     const trailing = text.match(/\s*$/)?.[0] ?? "";
     const core = text.slice(leading.length, text.length - trailing.length);
-    if (exactPhrases.has(core) && exactPhraseAllowed(core, element)) {
-      return `${leading}${exactPhrases.get(core)}${trailing}`;
+    const localized = localizedChromeValue(core, element);
+    if (localized !== core) return `${leading}${localized}${trailing}`;
+
+    if (element?.closest?.('.data-table-pagination__info')) {
+      if (core === '-') return `${leading}–${trailing}`;
+      if (/^of$/i.test(core)) return `${leading}条，共${trailing}`;
+      if (/^rows?$/i.test(core)) return `${leading}条${trailing}`;
+    }
+
+    const historySummary = core.match(/^Showing last\s+(\d+)\s+messages?\s+\((\d+)\s+hidden\)\.?$/i);
+    if (historySummary) return `${leading}显示最近 ${historySummary[1]} 条消息（已隐藏 ${historySummary[2]} 条）${trailing}`;
+
+    if (isOverviewHint(element)) {
+      const usageCount = core.match(/^([\d,.]+(?:\s?[KMGT])?)\s+tokens?\s*[·•]\s*([\d,.]+(?:\s?[KMGT])?)\s+msgs?$/i);
+      if (usageCount) return `${leading}${usageCount[1]} 词元 · ${usageCount[2]} 条消息${trailing}`;
+      const activeCount = core.match(/^(\d+)\s+active$/i);
+      if (activeCount) return `${leading}${activeCount[1]} 项运行中${trailing}`;
     }
 
     // Some control-ui builds render the count as one Lit text binding rather
@@ -242,6 +327,12 @@
         return;
       }
     }
+    if(parent?.closest?.('select option')){
+      const value=node.nodeValue??'';
+      const next=translate(value,parent.closest('option'));
+      if(next!==value)node.nodeValue=next;
+      return;
+    }
     if(isProtectedContent(node))return;
     if(fallbackName.test(core) && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
       node.nodeValue=node.nodeValue.replace(core,'碧琪');
@@ -285,7 +376,7 @@
     // litLabelText, so a real message containing those words is never touched.
     ownOrDescendants(scope,'input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
-      const next=value
+      const next=localizedChromeValue(value,control)
         .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
         .replace(/OpenClaw/g,'CLE Kk');
       if(next!==value)control.setAttribute('placeholder',next);
@@ -294,8 +385,7 @@
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
-        const mapped=exactPhrases.get(value);
-        const next=((mapped && exactPhraseAllowed(value,element)) ? mapped : value).replace(/OpenClaw/g,'CLE Kk');
+        const next=localizedChromeValue(value,element).replace(/OpenClaw/g,'CLE Kk');
         if(next!==value)element.setAttribute(name,next);
       }
     });
@@ -540,6 +630,9 @@
       let chatChanged = false;
       for (const record of records) {
         if (record.type === "characterData") localizeText(record.target);
+        if (record.type === "attributes" && ["title", "aria-label", "alt", "placeholder"].includes(record.attributeName)) {
+          syncBrandChrome(record.target);
+        }
         if (chatScopeFromNode(record.target)) chatChanged = true;
         for (const node of record.addedNodes) {
           localizeAddedSubtree(node);
@@ -547,7 +640,13 @@
         }
       }
       if (chatChanged) scheduleChatProjection();
-    }).observe(appRoot, { childList: true, characterData: true, subtree: true });
+    }).observe(appRoot, {
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["title", "aria-label", "alt", "placeholder"],
+      subtree: true,
+    });
   };
 
   if (document.readyState === "loading") {
