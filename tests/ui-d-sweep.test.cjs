@@ -46,6 +46,13 @@ test('D sweep localizes navigation, picker, and duplicate-message chrome', () =>
     ['Docs', '文档'],
     ['Pair mobile device', '配对移动设备'],
     ['Gateway status: Online', '网关状态：在线'],
+    ['Session filters', '会话筛选'],
+    ['Token', '词元'],
+    ['direct', '单聊'],
+    ['Agent', '智能体'],
+    ['Previous', '上一页'],
+    ['Mark as unread', '标记为未读'],
+    ['Fork', '分叉会话'],
     ['Gateway 状态：在线', '网关状态：在线'],
     ['Settings view', '设置视图'],
     ['Your local chat identity', '你在本机的聊天身份'],
@@ -59,6 +66,11 @@ test('D sweep localizes navigation, picker, and duplicate-message chrome', () =>
   assert.match(phrases, /Showing last\\s\+/);
   assert.match(phrases, /just now[\s\S]*stat-value/);
   assert.match(phrases, /\.ov-recent__time/);
+  assert.match(phrases, /\.sessions-table td/);
+  assert.match(phrases, /per page[\s\S]*data-table-pagination__size/);
+  assert.match(phrases, /data-table-pagination__info[\s\S]*core === '-'[\s\S]*of\$\/i\.test\(core\)/);
+  assert.ok(phrases.includes("parent?.closest?.('select option')"));
+  assert.ok(phrases.includes("translate(value,parent.closest('option'))"));
   assert.match(phrases, /sidebar-recent-session/);
   assert.match(phrases, /isOverviewHint[\s\S]*ov-card__hint[\s\S]*tokens\?[\s\S]*msgs\?[\s\S]*active/);
   assert.match(phrases, /attributes: true,[\s\S]*attributeFilter: \["title", "aria-label", "alt", "placeholder"\]/);
