@@ -850,7 +850,7 @@ rebuild_launcher_if_needed() {
     [[ "$target_file" -nt "$support_file" ]] || support_fresh=0
   done
   if [[ -x "$target_file" ]] && [[ "$target_file" -nt "$source_file" ]] && (( support_fresh )) \
-    && strings "$target_file" | grep -Fq 'open-default' \
+    && strings "$target_file" | grep -Fq 'super-pinkie.material-preview' \
     && strings "$target_file" | grep -Fq 'laolaoProjectFolder' \
     && strings "$target_file" | grep -Fq 'laolaoRoundtable' \
     && strings "$target_file" | grep -Fq 'laolaoWorkspaceDock' \
