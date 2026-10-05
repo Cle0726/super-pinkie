@@ -8,6 +8,7 @@ USER_HOME="${HOME:?HOME is not set}"
 ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 LAUNCHER_SOURCE="$REPO_ROOT/desktop/macos/Sources/Launcher.swift"
+LAUNCHER_SUPPORT_SOURCES=("$REPO_ROOT/desktop/macos/Sources/MaterialPreview.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -843,7 +844,13 @@ rebuild_launcher_if_needed() {
   local temp_binary
 
   [[ -f "$source_file" && -d "$app_path/Contents/MacOS" ]] || return 0
-  if [[ -x "$target_file" ]] && [[ "$target_file" -nt "$source_file" ]] \
+  local support_file support_fresh=1
+  for support_file in "${LAUNCHER_SUPPORT_SOURCES[@]}"; do
+    [[ -f "$support_file" ]] || return 0
+    [[ "$target_file" -nt "$support_file" ]] || support_fresh=0
+  done
+  if [[ -x "$target_file" ]] && [[ "$target_file" -nt "$source_file" ]] && (( support_fresh )) \
+    && strings "$target_file" | grep -Fq 'open-default' \
     && strings "$target_file" | grep -Fq 'laolaoProjectFolder' \
     && strings "$target_file" | grep -Fq 'laolaoRoundtable' \
     && strings "$target_file" | grep -Fq 'laolaoWorkspaceDock' \
@@ -853,7 +860,7 @@ rebuild_launcher_if_needed() {
   fi
 
   temp_binary="$(mktemp "$app_path/Contents/MacOS/.Launcher.XXXXXX")"
-  xcrun swiftc -parse-as-library -O "$source_file" \
+  xcrun swiftc -parse-as-library -O "${LAUNCHER_SUPPORT_SOURCES[@]}" "$source_file" \
     -framework AppKit \
     -framework AVFoundation \
     -framework Foundation \
