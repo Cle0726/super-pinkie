@@ -126,6 +126,69 @@ function memoryStorage(){
   };
 }
 
+test('authoritative session run state is published to the timeline projector',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>{
+    assert.equal(method,'sessions.list');
+    return {sessions:[
+      {key:h.leftKey,hasActiveRun:true},
+      {key:h.rightKey,hasActiveRun:false},
+    ]};
+  });
+  assert.equal(await h.window.__laolaoStaleBusy.backendHasActiveRun(h.leftKey),true);
+  assert.equal(await h.window.__laolaoStaleBusy.backendHasActiveRun(h.rightKey),false);
+  assert.equal(h.window.__pinkieActiveChatRuns.get(h.leftKey),true);
+  assert.equal(h.window.__pinkieActiveChatRuns.get(h.rightKey),false);
+});
+
+test('an active refresh restores the missing real user head without replacing the live tail',async()=>{
+  const opening={role:'user',content:[{type:'text',text:'检查一个需要多步处理的任务'}],
+    __openclaw:{id:'active-opening',seq:1}};
+  const call={role:'assistant',content:[{type:'tool_call',callId:'active-call',name:'exec',arguments:{command:'check'}}],
+    __openclaw:{id:'active-call-message',seq:2}};
+  const result={role:'toolResult',content:[{type:'text',text:'第 1 步已完成'}],
+    __openclaw:{id:'active-result',seq:3}};
+  const h=loadTwoPaneHarness(async(method,params)=>{
+    if(method==='sessions.list')return {sessions:[
+      {key:h.leftKey,hasActiveRun:true,activeRunIds:['run-active']},
+      {key:h.rightKey,hasActiveRun:false},
+    ]};
+    assert.equal(method,'chat.history');
+    assert.equal(params.limit,128);
+    return {messages:[opening,call,result],totalMessages:3,hasMore:false,sessionId:'long-running'};
+  });
+  h.left.state.chatMessages=[call,result];
+  h.left.state.chatStream={runId:'run-active'};
+  const originalStream=h.left.state.chatStream;
+
+  await h.window.__laolaoSyncSelectedSession(h.leftKey);
+
+  assert.deepEqual(Array.from(h.left.state.chatMessages,m=>m.__openclaw.id),
+    ['active-opening','active-call-message','active-result']);
+  assert.equal(h.left.state.chatStream,originalStream);
+  assert.equal(h.left.state.chatHistoryPagination.hasMore,false);
+  assert.equal(h.window.__pinkieActiveChatRuns.get(h.leftKey),true);
+  assert.equal(h.window.__pinkieActiveChatRunIds.get(h.leftKey),'run-active');
+  assert.equal(h.window.__laolaoHistoryStatus().activeTurnBoundary,true);
+});
+
+test('an active refresh keeps its live tail when bounded history temporarily fails',async()=>{
+  const call={role:'assistant',content:[{type:'tool_call',callId:'active-call',name:'exec',arguments:{command:'check'}}],
+    __openclaw:{id:'active-call-message',seq:2}};
+  const h=loadTwoPaneHarness(async(method)=>{
+    if(method==='sessions.list')return {sessions:[
+      {key:h.leftKey,hasActiveRun:true,activeRunIds:['run-active']},
+      {key:h.rightKey,hasActiveRun:false},
+    ]};
+    throw new Error('temporary gateway failure');
+  });
+  h.left.state.chatMessages=[call];
+
+  assert.equal(await h.window.__laolaoSyncSelectedSession(h.leftKey),false);
+  assert.deepEqual(Array.from(h.left.state.chatMessages,m=>m.__openclaw.id),['active-call-message']);
+  assert.equal(h.window.__pinkieActiveChatRuns.get(h.leftKey),true);
+  assert.equal(h.window.__pinkieActiveChatRunIds.get(h.leftKey),'run-active');
+});
+
 // The recovery injection must delegate actual queue I/O back to these native
 // pane methods. This tiny model records that delegation without duplicating
 // chat.send in the test harness.
@@ -341,8 +404,9 @@ test('clicking the already-selected session replaces a stale body from another s
 
 test('selected-session repair never clears a genuinely active backend turn',async()=>{
   const h=loadTwoPaneHarness(async(method)=>{
-    assert.equal(method,'sessions.list');
-    return {sessions:[{key:h.leftKey,hasActiveRun:true}]};
+    if(method==='sessions.list')return {sessions:[{key:h.leftKey,hasActiveRun:true}]};
+    assert.equal(method,'chat.history');
+    return {messages:[],hasMore:false};
   });
   h.panes.pop();
   h.left.state.chatRunId='real-running-turn';
@@ -1126,7 +1190,7 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/LIVE_MESSAGE_WINDOW = 512/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
-  assert.match(patch,/pinkie-chat-timeline:v2/);
+  assert.match(patch,/pinkie-chat-timeline:v5/);
 });
 
 test('desktop installers update an existing root-relative resume URL',()=>{

@@ -75,6 +75,105 @@ test('the current user turn is split into chronological text and single-tool row
   assert.equal(rows.at(-1).isTimelineStep, undefined);
 });
 
+test('a window that starts inside a task puts the orphaned prefix in a process card', () => {
+  const compaction = group('system', 'compact', [message('system', 'Compaction', 'compact')]);
+  compaction.messages[0].message.__openclaw.kind = 'compaction';
+  const entries = [
+    group('assistant', 'orphan-note', [message('assistant', '我接着核对剩下的内容。', 'orphan-note')]),
+    group('tool', 'orphan-tools', [
+      message('assistant', [{type: 'tool_call', callId: 'orphan-read', name: 'read', arguments: {path: 'a.md'}}], 'orphan-call'),
+      message('toolResult', [{type: 'tool_result', callId: 'orphan-read', name: 'read', text: 'ok'}], 'orphan-result'),
+    ]),
+    compaction,
+    group('tool', 'orphan-tail', [message('toolResult', [{type: 'tool_result', name: 'read', text: 'more'}], 'orphan-tail')]),
+    group('user', 'visible-user', [message('user', '继续往下做', 'visible-user')]),
+    group('assistant', 'visible-final', [message('assistant', '完成啦。', 'visible-final')]),
+  ];
+
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const firstCard = timeline.find((item) => item.isProcessCard);
+  assert.equal(firstCard?.processTitle, '接着之前的工作');
+  assert.deepEqual(firstCard?.processRows.map((row) => row.role), ['assistant', 'tool']);
+  const projectedCompaction = timeline.find((item) => item.key === 'compact');
+  assert.equal(projectedCompaction?.messages[0].message.__openclaw.kind, 'compaction');
+  assert.equal(timeline.some((item) => item.key === 'orphan-tail'), false);
+  assert.equal(timeline.some((item) => item.key === 'visible-user'), true);
+  assert.equal(timeline.some((item) => item.isProcessCard && item.processRows.some((row) => row.key === 'orphan-tail:0')), true);
+});
+
+test('an incomplete historical tool turn is marked stopped instead of live', () => {
+  const entries = [
+    group('user', 'interrupted-user', [message('user', '请继续检查', 'interrupted-user')]),
+    group('tool', 'interrupted-tool', [message('assistant', [
+      {type: 'tool_call', callId: 'unfinished', name: 'exec', arguments: {command: 'check'}},
+    ], 'unfinished-call')]),
+  ];
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const card = timeline.find((item) => item.isProcessCard);
+  assert.equal(card.processLive, false);
+  assert.equal(card.processState, 'oops');
+  assert.equal(card.processTitle, '这一轮停下来了');
+  assert.match(card.processMeta, /已中断/u);
+});
+
+test('an active orphaned tail stays live while keeping the continuation title', () => {
+  const previousRuns = globalThis.__pinkieActiveChatRuns;
+  const previousLocation = globalThis.location;
+  globalThis.__pinkieActiveChatRuns = new Map([['agent:active-tail', true]]);
+  globalThis.location = {search: '?session=agent%3Aactive-tail'};
+  try {
+    const timeline = pinkieBuildTimeline([
+      group('tool', 'active-orphan', [message('assistant', [
+        {type: 'tool_call', callId: 'active-tail-call', name: 'exec', arguments: {command: 'check'}},
+      ], 'active-tail-call')]),
+    ], parseToolRows);
+    const card = timeline.find((item) => item.isProcessCard);
+    assert.equal(card.processLive, true);
+    assert.equal(card.processState, '');
+    assert.equal(card.processTitle, '接着之前的工作');
+    assert.match(card.processMeta, /已做 1 步/u);
+    assert.doesNotMatch(card.processMeta, /已中断/u);
+  } finally {
+    if (previousRuns === undefined) delete globalThis.__pinkieActiveChatRuns;
+    else globalThis.__pinkieActiveChatRuns = previousRuns;
+    if (previousLocation === undefined) delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test('repeated model failures become one Chinese line and keep no English placeholder', () => {
+  const entries = [];
+  for (let index = 0; index < 3; index += 1) {
+    entries.push(group('user', `failure-user-${index}`, [message('user', '再试一次', `failure-user-${index}`)]));
+    entries.push(group('assistant', `failure-${index}`, [{
+      ...message('assistant', '[assistant turn failed before producing content]', `failure-${index}`),
+      stopReason: 'error', errorMessage: '503 模型上游暂时没有回应，请稍后再试。',
+    }]));
+  }
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  const failures = timeline.flatMap((item) => item.messages || [])
+    .map((wrapped) => wrapped.message).filter((message) => message.__pinkieFailureSummary);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].__pinkieFailureCount, 3);
+  assert.equal(failures[0].content[0].text,
+    '这次没连上模型：503 模型上游暂时没有回应，请稍后再试。（连续 3 次）');
+  assert.equal(failures[0].stopReason, undefined);
+  assert.doesNotMatch(JSON.stringify(timeline), /assistant turn failed before producing content/u);
+});
+
+test('assistant messages containing only thoughts or no content leave no blank bubble', () => {
+  assert.deepEqual(pinkieSplitTimelineMessage({
+    key: 'thought-only',
+    message: message('assistant', [{type: 'thinking', thinking: 'private'}], 'thought-only'),
+  }), []);
+  const timeline = pinkieBuildTimeline([
+    group('user', 'blank-user', [message('user', '继续', 'blank-user')]),
+    group('assistant', 'blank-thinking', [message('assistant', [{type: 'reasoning', text: 'private'}], 'blank-thinking')]),
+    group('assistant', 'blank-message', [message('assistant', '', 'blank-message')]),
+  ], parseToolRows);
+  assert.deepEqual(timeline.map((item) => item.key), ['blank-user']);
+});
+
 test('older real turns use the same timeline rows and internal user messages do not split them', () => {
   const entries = [
     group('user', 'first-user', [message('user', '先完成第一件事', 'first-user')]),
@@ -273,7 +372,7 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v4 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v5 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
 function asLegacyV1Bundle(v4Bundle) {
@@ -293,7 +392,7 @@ function asLegacyV1Bundle(v4Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v4/);
+  assert.match(result.text, /pinkie-chat-timeline:v5/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,512\)/);
   assert.match(result.text, /return 512/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -312,16 +411,16 @@ test('native bundle patch is structural, idempotent, syntax-safe and skips chang
   });
 });
 
-test('an installed v1 chat bundle upgrades to v4 through apply and stays idempotent', (t) => {
-  const v4 = transformWithStatus(bundleFixture).text;
-  const v1 = asLegacyV1Bundle(v4);
+test('an installed v1 chat bundle upgrades to v5 through apply and stays idempotent', (t) => {
+  const v5 = transformWithStatus(bundleFixture).text;
+  const v1 = asLegacyV1Bundle(v5);
   assert.match(v1, /pinkie-chat-timeline:v1/);
   assert.match(v1, /const prefix = safeEntries\.slice/);
 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v4/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v5/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -362,16 +461,16 @@ test('timeline tool details keep no card shell and injection cache keys advance'
   }
 });
 
-test('an installed v2 chat bundle upgrades to v4 in place', () => {
-  const v4 = transformWithStatus(bundleFixture).text;
+test('an installed v2 chat bundle upgrades to v5 in place', () => {
+  const v5 = transformWithStatus(bundleFixture).text;
   // The released v2 runtime still gave synthetic tool rows a top-level toolName.
-  const v2 = asOlderBundle(v4, 'v2').replace('return cleanAssistantMessage(message, content);',
+  const v2 = asOlderBundle(v5, 'v2').replace('return cleanAssistantMessage(message, content);',
     "return {...message, role: 'assistant', toolName: 'legacy', content};");
   assert.match(v2, /toolName: 'legacy'/);
   const upgraded = transformWithStatus(v2);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v2');
-  assert.equal(upgraded.text, v4);
+  assert.equal(upgraded.text, v5);
   assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
 });
 
@@ -465,24 +564,35 @@ test('narration streamed before a later tool call is already a card row while li
   assert.equal(card.processRows[0].messages[0].message.content[0].text, '我先查配置。');
 });
 
-test('the renderer opens the card while live and keeps the slots for the page script', () => {
-  const v4 = transformWithStatus(bundleFixture).text;
-  assert.match(v4, /if\(e&&e\.isProcessCard\)return s`<div class="chat-group assistant chat-group--process"/);
-  assert.match(v4, /<details class="pinkie-process" \?open=\$\{e\.processLive\}/);
-  assert.match(v4, /data-pinkie-thinking=\$\{e\.key\}/);
-  assert.match(v4, /data-pinkie-status=\$\{e\.key\}/);
-  assert.match(v4, /e\.processRows\.map\(n=>n\.kind===`group`\?_S\(n,t\):c\)/);
+test('the renderer opens the card while live and keeps status slots for the page script', () => {
+  const v5 = transformWithStatus(bundleFixture).text;
+  assert.match(v5, /if\(e&&e\.isProcessCard\)return s`<div class="chat-group assistant chat-group--process"/);
+  assert.match(v5, /<details class="pinkie-process" \?open=\$\{e\.processLive\}/);
+  assert.match(v5, /data-pinkie-thinking=\$\{e\.key\}/);
+  assert.match(v5, /data-pinkie-status=\$\{e\.key\}/);
+  assert.match(v5, /data-state=\$\{e\.processState\|\|`\`\}/);
+  assert.match(v5, /e\.processRows\.map\(n=>n\.kind===`group`\?_S\(n,t\):c\)/);
 });
 
-test('an installed v3 bundle gains the process-card renderer when it upgrades to v4', () => {
-  const v4 = transformWithStatus(bundleFixture).text;
-  const branch = /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u.exec(v4)?.[0];
+test('an installed v3 bundle gains the process-card renderer when it upgrades to v5', () => {
+  const v5 = transformWithStatus(bundleFixture).text;
+  const branch = /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u.exec(v5)?.[0];
   assert.ok(branch);
   // What v3 installed: same runtime span, renderer without the card branch.
-  const v3 = asOlderBundle(v4, 'v3').replace(branch, '');
+  const v3 = asOlderBundle(v5, 'v3').replace(branch, '');
   assert.doesNotMatch(v3, /isProcessCard\)return/);
   const upgraded = transformWithStatus(v3);
   assert.equal(upgraded.reason, 'upgraded-v3');
-  assert.equal(upgraded.text, v4);
+  assert.equal(upgraded.text, v5);
+  assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
+});
+
+test('an installed v4 bundle upgrades to v5 in place', () => {
+  const v5 = transformWithStatus(bundleFixture).text;
+  const v4 = asOlderBundle(v5, 'v4');
+  const upgraded = transformWithStatus(v4);
+  assert.equal(upgraded.changed, true);
+  assert.equal(upgraded.reason, 'upgraded-v4');
+  assert.equal(upgraded.text, v5);
   assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
 });

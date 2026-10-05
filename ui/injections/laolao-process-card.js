@@ -31,6 +31,15 @@
     if (routed) return routed;
     return document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
   };
+  const publishRunState = (key, active) => {
+    if (!key) return;
+    const runs = window.__pinkieActiveChatRuns instanceof Map
+      ? window.__pinkieActiveChatRuns
+      : (window.__pinkieActiveChatRuns = new Map());
+    if (runs.get(key) === active) return;
+    runs.set(key, active);
+    rerender();
+  };
   const duration = (ms) => {
     const seconds = Math.max(1, Math.round(ms / 1000));
     if (seconds < 60) return `${seconds} 秒`;
@@ -112,6 +121,7 @@
             Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), thinkingSince: 0, buffer: "", confetti: ""});
             run.oops.clear();
           }
+          publishRunState(key, true);
           setState("thinking");
         } else if (data.phase === "end" || data.phase === "error") {
           const aborted = data.aborted === true || /abort|error/i.test(String(data.stopReason || ""));
@@ -145,6 +155,7 @@
     // the card's key changes. Carry this turn's thinking over to the new key.
     if (run.key) run.migrate = {from: run.key, until: Date.now() + 20000};
     if (state === "oops" && run.key) run.oops.set(run.key, Date.now());
+    publishRunState(run.session, false);
     run.state = state;
     run.doneKey = run.key;
     run.doneAt = Date.now();
@@ -221,10 +232,12 @@
 
   function renderStatus(slot) {
     const key = slot.dataset.pinkieStatus || "";
-    const live = slot.dataset.live === "1" && Boolean(run.startedAt) && (run.key === key || !run.key);
+    const live = slot.dataset.live === "1" && (!run.startedAt || run.key === key || !run.key);
     const recentDone = run.doneKey === key && run.state === "done" && Date.now() - run.doneAt < 2800;
     const oops = run.oops.has(key);
-    const state = oops ? "oops" : recentDone ? "done" : live ? (run.state || "thinking") : "";
+    const restoredState = slot.dataset.state === "oops" ? "oops" : "";
+    const state = oops ? "oops" : recentDone ? "done"
+      : live ? (run.state || "thinking") : restoredState;
     if (!state) {
       const pill = slot.querySelector(".pinkie-status");
       if (pill && !pill.classList.contains("is-gone")) { pill.classList.add("is-gone"); setTimeout(() => { if (pill.classList.contains("is-gone")) pill.remove(); }, 450); }
@@ -252,7 +265,7 @@
     }
     const time = pill.querySelector(".pinkie-status__time");
     const seconds = run.startedAt ? Math.round((Date.now() - run.startedAt) / 1000) : 0;
-    time.textContent = state === "done" || state === "oops" ? "" : `${seconds}s`;
+    time.textContent = state === "done" || state === "oops" || !run.startedAt ? "" : `${seconds}s`;
   }
 
   function migrateThinking() {
