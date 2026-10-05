@@ -36,6 +36,7 @@ export function compactionBudget(window) {
     threshold: threshold,
     reserve: tokens - threshold,
     keepRecent,
-    targetRatio
+    targetRatio,
+    triggerRatio: ratio
   };
 }
