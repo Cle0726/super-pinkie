@@ -1,9 +1,7 @@
 {
   "triggerRatio": 0.85,
   "targetRatio": 0.6,
-  "keepRecentRatio": 0.6,
   "unknownContextWindow": 1000000,
-  "minWindowTokens": 500000,
   "modelLimits": {
     "clekk/gpt-5.5": 272000,
     "clekk/gpt-5.4": 272000,
