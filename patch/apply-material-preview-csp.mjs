@@ -9,11 +9,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const marker = "/* pinkie-material-preview-csp:v1 */";
+const marker = "/* pinkie-material-preview-csp:v2 */";
+const previousMarker = "/* pinkie-material-preview-csp:v1 */";
 const imageSource = '"img-src \'self\' data: blob:",';
 const frameSource = '"media-src \'self\' data: blob:",';
 const imageReplacement = '"img-src \'self\' data: blob: clekk-material:",';
-const frameReplacement = '"media-src \'self\' data: blob:",\n\t\t"frame-src \'self\' data: clekk-material:",';
+const frameReplacement = '"media-src \'self\' data: blob: clekk-material:",\n\t\t"frame-src \'self\' data: clekk-material:",';
 
 const replaceOnce = (text, from, to) => {
   const count = text.split(from).length - 1;
@@ -23,6 +24,12 @@ const replaceOnce = (text, from, to) => {
 
 export function transform(source) {
   if (source.includes(marker)) return source;
+  if (source.includes(previousMarker)) {
+    const previousMedia = '"media-src \'self\' data: blob:",';
+    let upgraded = source;
+    if (upgraded.includes(previousMedia)) upgraded = replaceOnce(upgraded, previousMedia, '"media-src \'self\' data: blob: clekk-material:",');
+    return upgraded.replace(previousMarker, marker);
+  }
   let next = source;
   next = replaceOnce(next, imageSource, imageReplacement);
   next = replaceOnce(next, frameSource, frameReplacement);

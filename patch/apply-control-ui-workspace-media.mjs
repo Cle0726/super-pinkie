@@ -4,18 +4,19 @@
  *
  * The gateway correctly decides whether it can issue a ticket, but the chat
  * bundle rejects an absolute path before that request when the path is outside
- * its stale browser allowlist. Only real OpenClaw workspace paths are added:
- * `~/.openclaw/workspace` and `~/.openclaw/workspace-*`. The surrounding
- * `.openclaw` state/config directory remains excluded.
+ * its stale browser allowlist. Extend preflight to ordinary user-home files so
+ * generated project files can be opened. The native bridge still verifies the
+ * real file and sensitive paths after a click; this patch does not read bytes.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const marker = "/* pinkie-control-ui-workspace-media:v1 */";
+const marker = "/* pinkie-control-ui-workspace-media:v2 */";
+const previousInjected = '/* pinkie-control-ui-workspace-media:v1 */function laolaoWorkspaceMediaPathAllowed(e){let t=IS(e);if(!t)return!1;t=RS(t);return/^(?:\\/Users\\/[^/]+|\\/home\\/[^/]+|[a-z]:\\/Users\\/[^/]+)\\/.openclaw\\/workspace(?:-[a-z0-9][a-z0-9._-]*)?(?:\\/|$)/i.test(t)}function zS(e,t){if(FS(e)||laolaoWorkspaceMediaPathAllowed(e))return!0;';
 const needle = "function zS(e,t){if(FS(e))return!0;";
-const injected = `${marker}function laolaoWorkspaceMediaPathAllowed(e){let t=IS(e);if(!t)return!1;t=RS(t);return/^(?:\\/Users\\/[^/]+|\\/home\\/[^/]+|[a-z]:\\/Users\\/[^/]+)\\/.openclaw\\/workspace(?:-[a-z0-9][a-z0-9._-]*)?(?:\\/|$)/i.test(t)}function zS(e,t){if(FS(e)||laolaoWorkspaceMediaPathAllowed(e))return!0;`;
+const injected = `${marker}function laolaoHomeMediaPathAllowed(e){let t=IS(e);if(!t)return!1;t=RS(t);const n=t.toLowerCase();if(/(?:^|\\/)\\.ssh(?:\\/|$)|\\/library\\/keychains(?:\\/|$)/i.test(n))return!1;const o=n.match(/\\/\\.openclaw(?:\\/([^/]+))?/i);if(o&&!/^workspace(?:-[a-z0-9][a-z0-9._-]*)?$/.test(o[1]||""))return!1;return/^(?:\\/Users\\/[^/]+|\\/home\\/[^/]+|[a-z]:\\/Users\\/[^/]+)\\/.+$/i.test(t)}function zS(e,t){if(FS(e)||laolaoHomeMediaPathAllowed(e))return!0;`;
 
 function replaceOnce(text, from, to) {
   if (text.split(from).length !== 2) {
@@ -26,6 +27,7 @@ function replaceOnce(text, from, to) {
 
 export function transform(original) {
   if (original.includes(marker)) return original;
+  if (original.includes(previousInjected)) return original.replace(previousInjected, injected);
   return replaceOnce(original, needle, injected);
 }
 
