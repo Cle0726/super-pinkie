@@ -90,6 +90,8 @@
   let dockTrigger = null;
   let menuAnchor = null;
   let switching = false;
+  let modeTransitionTargetId = null;
+  let deferredModeChangeId = null;
   let preloading = false;
   let pendingModePortraitFx = null;
   const modeSignatureCleanup = new WeakMap();
@@ -244,6 +246,7 @@
   });
 
   const syncModePresentation = (mode) => {
+    const deferPresentation = modeTransitionTargetId === mode.id;
     const previousMode = presentedModeId ?? document.documentElement.getAttribute("data-laolao-mode");
     if (previousMode !== mode.id) {
       // The root attribute changes before the router finishes. Keep the old
@@ -256,10 +259,28 @@
           armed: !switching,
         };
       }
-      document.documentElement.setAttribute("data-laolao-mode", mode.id);
-      window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
+      if (deferPresentation) {
+        deferredModeChangeId = mode.id;
+        document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
+      } else {
+        document.documentElement.setAttribute("data-laolao-mode", mode.id);
+        document.documentElement.removeAttribute("data-laolao-mode-pending");
+        window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
+      }
     }
     presentedModeId = mode.id;
+    if (deferPresentation) {
+      document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
+      return;
+    }
+    if (document.documentElement.getAttribute("data-laolao-mode") !== mode.id) {
+      document.documentElement.setAttribute("data-laolao-mode", mode.id);
+    }
+    document.documentElement.removeAttribute("data-laolao-mode-pending");
+    if (deferredModeChangeId === mode.id) {
+      deferredModeChangeId = null;
+      window.dispatchEvent(new CustomEvent("laolao:modechange", { detail: { mode: mode.id } }));
+    }
 
     document.querySelectorAll(".dashboard-header__breadcrumb-link").forEach((element) => {
       if (element.getAttribute("data-laolao-mode-label") !== mode.label) {
@@ -437,12 +458,16 @@
 
   const finishModeTransition = (mode, ui) => new Promise((resolve) => {
     const startedAt = performance.now();
+    let progressAnimation = null;
     let completed = false;
     let fallbackStarted = false;
     let assetsReady = false;
     ui.assets.then(() => { assetsReady = true; });
     const waitingText = `模式小屋正在开门，${mode.address}稍等…`;
     if (ui.fx) ui.fx.waiting(waitingText);
+    else if (!motion.reduced()) {
+      progressAnimation = motion.animateProgress(ui.fill, ui.percentage, ui.progress, 68, 96, 28 * 92, "linear");
+    }
 
     const destinationReady = motion.stable(() => {
       const session = currentSessionKey();
@@ -462,6 +487,13 @@
         return;
       }
       ui.message.textContent = mode.readyPhrase;
+      if (progressAnimation) {
+        const visualValue = motion.displayedProgress(ui.fill) ?? 68;
+        progressAnimation.cancel();
+        progressAnimation = null;
+        ui.fill.style.transform = `scaleX(${visualValue / 100})`;
+        motion.updateProgress(ui.fill, ui.percentage, ui.progress, visualValue);
+      }
       await motion.finishProgress(ui.fill, ui.percentage, ui.progress, 160);
       window.setTimeout(() => {
         motion.enter();
@@ -479,7 +511,8 @@
       const elapsed = performance.now() - startedAt;
       const value = Math.min(96, Math.round(68 + elapsed / 92));
       if (!ui.fx) {
-        motion.progress(ui.fill, ui.percentage, ui.progress, value);
+        if (progressAnimation) motion.updateProgress(ui.fill, ui.percentage, ui.progress, value);
+        else motion.progress(ui.fill, ui.percentage, ui.progress, value);
         motion.text(ui.message, elapsed < 1200 ? waitingText : mode.phrases.at(-1));
       }
 
@@ -565,6 +598,10 @@
       return;
     }
     switching = true;
+    modeTransitionTargetId = mode.id;
+    window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
+      detail: {mode: mode.id, fromSessionKey: currentSessionKey()},
+    }));
     launchSelectionBurst(sourceOption, mode);
     closeMenu();
     rememberSession(currentSessionKey());
@@ -580,13 +617,24 @@
     next.searchParams.set("session", targetSessionKey);
     next.searchParams.delete(skipEntrySplashParam);
     next.searchParams.delete("draft");
+    window.dispatchEvent(new CustomEvent("laolao:mode-session-handoff", {
+      detail: {mode: mode.id, sessionKey: targetSessionKey},
+    }));
     transition.overlay.dataset.navigation = navigateWithinApp(targetMode, next);
     rememberSession(targetSessionKey);
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent(
-      "pinkie:session-selected", {detail: {sessionKey: targetSessionKey}}
-    )), 0);
+    document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
     syncModePresentation(targetMode);
     await finishModeTransition(targetMode, transition);
+    if (!modeFxReduced()) await motion.frames();
+    modeTransitionTargetId = null;
+    syncModePresentation(targetMode);
+    window.dispatchEvent(new CustomEvent("laolao:mode-transition-finished", {
+      detail: {mode: mode.id, sessionKey: targetSessionKey},
+    }));
+    window.dispatchEvent(new CustomEvent(
+      "pinkie:session-selected", {detail: {sessionKey: targetSessionKey}}
+    ));
+    render();
     flushPendingModePortraitFx(targetMode);
   };
 
@@ -903,6 +951,12 @@
 
   const render = () => {
     const mode = modeById(activeMode());
+    if (modeTransitionTargetId) {
+      if (mode.id === modeTransitionTargetId) {
+        document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
+      }
+      return;
+    }
     rememberSession(currentSessionKey());
     syncModePresentation(mode);
     // Before the sidebar lookup: the split exit must survive a hidden sidebar.

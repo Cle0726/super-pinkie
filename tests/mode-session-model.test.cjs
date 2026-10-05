@@ -28,3 +28,15 @@ test('split view opens its mode root without replaying a stale recent chat or re
   assert.match(mode, /bridge\.postMessage\(\{ action: "open", mode: mode\.id, sessionKey \}\)/);
   assert.doesNotMatch(mode, /Gateway\.(?:start|stop|repair)|gateway\s+restart/);
 });
+
+test('mode changes defer repaint and session observers until the transition is finished', () => {
+  assert.match(mode, /laolao:mode-transition-start/);
+  assert.match(mode, /laolao:mode-session-handoff/);
+  assert.match(mode, /laolao:mode-transition-finished/);
+  assert.match(mode, /data-laolao-mode-pending/);
+  assert.match(mode, /if \(modeTransitionTargetId\) \{[\s\S]*?return;\s*\}/);
+  assert.match(mode, /progressAnimation = motion\.animateProgress\(ui\.fill, ui\.percentage, ui\.progress, 68, 96, 28 \* 92, "linear"\)/);
+  assert.match(mode, /const visualValue = motion\.displayedProgress\(ui\.fill\) \?\? 68;\s*progressAnimation\.cancel\(\);\s*progressAnimation = null;\s*ui\.fill\.style\.transform = `scaleX\(\$\{visualValue \/ 100\}\)`/);
+  assert.ok(mode.indexOf('await finishModeTransition(targetMode, transition)') < mode.indexOf('"pinkie:session-selected"'));
+  assert.doesNotMatch(mode, /setTimeout\(\(\) => window\.dispatchEvent\(new CustomEvent\(\s*"pinkie:session-selected"/);
+});
