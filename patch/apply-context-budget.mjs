@@ -6,14 +6,20 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const marker='/* pinkie-context-budget:v1 */';
+const sessionsMarker='/* pinkie-context-budget:sessions:v1 */';
 const header=marker+'\nimport {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";\n';
 function replaceOnce(text,from,to){
   if(text.split(from).length!==2)throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：'+from.slice(0,90));
   return text.replace(from,to);
 }
+function replacePatternOnce(text,pattern,to,label){
+  const matches=[...text.matchAll(pattern)];
+  if(matches.length!==1)throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：'+label);
+  return text.replace(pattern,to);
+}
 function hasOnce(text,value){return text.split(value).length===2;}
 export function transform(kind,original){
-  if(original.includes(marker))return original;
+  if(original.includes(kind==='sessions'?sessionsMarker:marker))return original;
   let text=original;
   if(kind==='settings'){
     const legacyReserve='const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);';
@@ -46,6 +52,17 @@ export function transform(kind,original){
     }else if(hasOnce(text,current)){
       text=replaceOnce(text,current,'const threshold = pinkieContextBudget(contextWindowTokens).threshold;');
     }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：preflight threshold');
+  }else if(kind==='sessions'){
+    const response=/return\s*\{\s*\.\.\.result,\s*sessions\s*\};/g;
+    const replacement=`return {
+				...result,
+				sessions: sessions.map((session) => {
+					const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;
+					return { ...session, pinkieCompactionBudget: pinkieContextBudget(contextWindow) };
+				})
+			};`;
+    text=replacePatternOnce(text,response,replacement,'sessions.list context budget');
+    return sessionsMarker+'\n'+header+text;
   }else throw new Error('Unknown patch target');
   return header+text;
 }
@@ -55,6 +72,7 @@ export function apply(root,{backupRoot}={}){
   const targets=[
     ['settings',['agent-settings-'],['configuredReserveTokens','targetReserveTokens']],
     ['preflight',['agent-runner.runtime-','agent-runner-memory-'],['minimumThresholdTokens','responsesServerCompactionThreshold']],
+    ['sessions',['sessions-'],['"sessions.list": async','gateway.sessions.list']],
   ].map(([kind,prefixes,needles])=>{
     const names=candidates.filter(name=>prefixes.some(prefix=>name.startsWith(prefix))).filter(name=>{
       const source=fs.readFileSync(path.join(dist,name),'utf8');
