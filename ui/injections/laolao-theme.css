@@ -4785,3 +4785,427 @@ html[data-laolao-watchdog-state="recovered"] body::after {
     width: min(304px, calc(100vw - 24px)) !important;
   }
 }
+
+
+/* ── 2026-10 简化 + 雾板质感（用户认可的样板 work/ui-proto/proto.css） ─────────
+   只用 CSS 重新排版原生控件，不搬动 Lit 节点；颜色跟随每个模式的 --accent。
+   雾感用静态模糊的壁纸层 + 渐变，不对正在刷新的区域用 backdrop-filter
+   （WKWebView 里实时模糊会在流式输出时闪）。 */
+html:not([data-laolao-plain-composer]) {
+  --fog-tint: color-mix(in srgb, var(--accent) 9%, #fff);
+  --fog-deep: color-mix(in srgb, var(--accent) 26%, #fff);
+  --fog-line: color-mix(in srgb, var(--accent) 22%, transparent);
+  --fog-line-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --fog-ink: color-mix(in srgb, var(--text-strong) 82%, var(--accent));
+  --fog-muted: color-mix(in srgb, var(--muted) 88%, transparent);
+}
+
+/* ── 雾板：上面通透、越往下越浓，碧琪壁纸保留 ─────────────────────────── */
+html:not([data-laolao-plain-composer]) .card.chat {
+  position: relative;
+  isolation: isolate;
+  background: transparent !important;
+  border: 0 !important;
+}
+html:not([data-laolao-plain-composer]) .card.chat::before,
+html:not([data-laolao-plain-composer]) .card.chat::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+/* 第一层：同一张壁纸的模糊副本，只在下半部分渐显 → 越往下越像隔着一层雾 */
+html:not([data-laolao-plain-composer]) .card.chat::before {
+  background: var(--laolao-wallpaper-image) center / cover fixed;
+  filter: blur(22px) saturate(1.1);
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 34%, rgba(0,0,0,.55) 70%, #000 100%);
+          mask-image: linear-gradient(180deg, transparent 0%, transparent 34%, rgba(0,0,0,.55) 70%, #000 100%);
+}
+/* 第二层：由浅到深的雾色（珍珠白 → 模式色），加一层极细的磨砂颗粒 */
+html:not([data-laolao-plain-composer]) .card.chat::after {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.22'/></svg>"),
+    linear-gradient(180deg,
+      rgba(255,255,255,0) 0%,
+      color-mix(in srgb, var(--fog-tint) 12%, transparent) 28%,
+      color-mix(in srgb, var(--fog-tint) 36%, transparent) 58%,
+      color-mix(in srgb, var(--fog-deep) 56%, transparent) 84%,
+      color-mix(in srgb, var(--fog-deep) 70%, transparent) 100%);
+  mix-blend-mode: normal;
+}
+
+/* ── 侧边栏：珍珠雾面，右侧一道细光边 ──────────────────────────────────── */
+html:not([data-laolao-plain-composer]) .sidebar {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.66), color-mix(in srgb, var(--fog-tint) 62%, transparent) 70%, color-mix(in srgb, var(--fog-deep) 58%, transparent)) !important;
+  border-right: 0 !important;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.75), 1px 0 0 var(--fog-line-soft) !important;
+}
+html:not([data-laolao-plain-composer]) .laolao-session-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+html:not([data-laolao-plain-composer]) .laolao-session-controls :is(input, [type="search"]) {
+  flex: 1 1 100%;
+  min-width: 0;
+  height: 30px;
+  border-radius: 10px !important;
+  border: 1px solid var(--fog-line-soft) !important;
+  background: rgba(255,255,255,.62) !important;
+  box-shadow: inset 0 1px 0 #fff;
+}
+html:not([data-laolao-plain-composer]) .sidebar-recent-session--active,
+html:not([data-laolao-plain-composer]) .sidebar-recent-session:hover {
+  background: linear-gradient(90deg, rgba(255,255,255,.82), rgba(255,255,255,.52)) !important;
+  box-shadow: inset 0 0 0 1px var(--fog-line-soft), 0 4px 12px color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  border-radius: 12px !important;
+}
+
+/* ── 顶栏：只留模式名；用量只露链路和累计，悬停再展开 ─────────────────── */
+html:not([data-laolao-plain-composer]) .topbar {
+  background: linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,.12)) !important;
+  border-bottom: 1px solid var(--fog-line-soft) !important;
+}
+html:not([data-laolao-plain-composer]) .dashboard-header__breadcrumb > .dashboard-header__breadcrumb-sep,
+html:not([data-laolao-plain-composer]) .dashboard-header__breadcrumb-segment,
+html:not([data-laolao-plain-composer]) .dashboard-header__breadcrumb-current {
+  display: none !important;
+}
+html:not([data-laolao-plain-composer]) .laolao-usage__chip:not(.laolao-usage__chip--runtime):not(.laolao-usage__chip--cost) {
+  display: none !important;
+}
+html:not([data-laolao-plain-composer]) :has(> .laolao-usage__chip):hover > .laolao-usage__chip {
+  display: inline-flex !important;
+}
+html:not([data-laolao-plain-composer]) .laolao-usage__chip {
+  background: rgba(255,255,255,.58) !important;
+  border: 1px solid var(--fog-line-soft) !important;
+  color: var(--fog-ink) !important;
+  box-shadow: inset 0 1px 0 #fff !important;
+}
+
+/* ── 消息：去掉重复的「你 / 碧琪」名字和用户头像，时间悬停才显示 ────────── */
+html:not([data-laolao-plain-composer]) .chat-avatar.user { display: none !important; }
+html:not([data-laolao-plain-composer]) .chat-group-footer .chat-sender-name { display: none !important; }
+html:not([data-laolao-plain-composer]) .chat-group-footer .chat-group-timestamp {
+  font-size: 11px !important;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+html:not([data-laolao-plain-composer]) .chat-group:hover .chat-group-footer .chat-group-timestamp { opacity: .72; }
+html:not([data-laolao-plain-composer]) .chat-group-footer :is(.chat-group-footer-actions, .chat-delete-wrap) {
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+html:not([data-laolao-plain-composer]) .chat-group:hover .chat-group-footer :is(.chat-group-footer-actions, .chat-delete-wrap) { opacity: 1; }
+html:not([data-laolao-plain-composer]) .chat-group-footer { min-height: 18px; }
+
+/* ── 输入框：上面一个干净的输入盒（文字 + 发送），下面一行轻量控件 ────────── */
+html:not([data-laolao-plain-composer]) .agent-chat__composer-shell {
+  width: min(780px, calc(100% - 48px)) !important;
+  padding-bottom: 14px !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input {
+  display: grid !important;
+  grid-template-columns: repeat(8, auto) minmax(0, 1fr) auto auto auto;
+  grid-auto-flow: row;
+  align-items: center;
+  column-gap: 0;
+  row-gap: 7px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.agent-chat__composer-input-row, .agent-chat__composer-actions,
+  .agent-chat__composer-footer, .agent-chat__composer-controls, .agent-chat__composer-meta) {
+  display: contents !important;
+}
+/* 输入盒本体（第 1 行的背景） */
+html:not([data-laolao-plain-composer]) .agent-chat__input::before {
+  content: "";
+  grid-row: 1;
+  grid-column: 1 / -1;
+  align-self: stretch;
+  min-height: 52px;
+  border-radius: 20px;
+  border: 1px solid var(--fog-line);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.96), color-mix(in srgb, var(--fog-tint) 70%, #fff));
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 14px 34px color-mix(in srgb, var(--accent) 13%, transparent);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input:focus-within::before {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 14px 34px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+html:not([data-laolao-plain-composer]) .agent-chat__composer-combobox {
+  grid-row: 1;
+  grid-column: 1 / 12;
+  position: relative;
+  z-index: 1;
+  padding: 8px 4px 8px 18px;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__composer-combobox textarea {
+  min-height: 34px !important;
+  padding: 6px 0 !important;
+  font-size: 14.5px !important;
+  line-height: 1.55 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__composer-combobox textarea::placeholder { color: var(--fog-muted) !important; }
+/* 发送 / 停止 / 听写：在输入盒右侧，圆形 */
+html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.chat-send-btn:not(.chat-send-btn--stop):not(#__p1):not(#__p2) {
+  grid-row: 1;
+  grid-column: 12;
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  width: 34px !important;
+  height: 34px !important;
+  margin: 0 9px 0 0 !important;
+  border-radius: 999px !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 1px 0 rgba(255,255,255,.35) !important;
+}
+
+/* 第 2 行：输入盒外的轻量控件。左边的按钮按 order 自动排进前 8 列（以后多出的按钮也会排进来），
+   项目文件夹在弹性列，右边固定是模型 / 思考强度 / 容量圈。 */
+html:not([data-laolao-plain-composer]) .agent-chat__input > *:not(.agent-chat__composer-input-row):not(.agent-chat__composer-footer),
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.agent-chat__composer-input-row, .agent-chat__composer-actions,
+  .agent-chat__composer-footer, .agent-chat__composer-controls, .agent-chat__composer-meta) > *:not(.agent-chat__composer-combobox):not(.chat-send-btn):not(.agent-chat__composer-actions):not(.agent-chat__composer-controls):not(.agent-chat__composer-meta) {
+  grid-row: 2;
+  position: relative;
+  margin: 0 1px;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input .agent-chat__attach-menu { order: -5; margin-left: 6px; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-settings-popover-wrapper { order: -4; }
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(openclaw-tooltip:has(.chat-open-split-view), .chat-open-split-view) { order: -3; }
+html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) {
+  grid-row: 2;
+  grid-column: 9;
+  position: static !important;
+  justify-self: start;
+  width: auto !important;
+  margin: 0 auto 0 8px !important;
+  text-align: left !important;
+  font-size: 12px !important;
+  color: var(--fog-muted) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control { grid-column: 10; justify-self: end; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-deep-think-btn { grid-column: 11; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-viewer { grid-column: 12; justify-self: end; margin-right: 4px; }
+/* 「手动整理」并进容量圈的弹层里：原按钮留在同一格做定位锚点，但不再单独显示 */
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-compact-btn {
+  grid-column: 12;
+  justify-self: end;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input openclaw-tooltip { display: contents !important; }
+
+/* 第 2 行控件统一成透明的小图标 / 文字，悬停才出底 */
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(
+  .agent-chat__input-btn--attach, .chat-settings-chip, .chat-open-split-view,
+  .laolao-web-gpt-collab, .laolao-deep-think-btn, .laolao-desensitize-btn, .laolao-learning-notebook-button, .laolao-learning-toggle,
+  .chat-controls__inline-select-trigger, .laolao-context-viewer > summary) {
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 7px !important;
+  border: 0 !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--fog-muted) !important;
+  font-size: 12.5px !important;
+  transition: background .15s ease, color .15s ease;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(
+  .agent-chat__input-btn--attach, .chat-settings-chip, .chat-open-split-view,
+  .laolao-web-gpt-collab, .laolao-deep-think-btn, .laolao-desensitize-btn, .laolao-learning-notebook-button, .laolao-learning-toggle,
+  .chat-controls__inline-select-trigger, .laolao-context-viewer > summary):hover {
+  background: rgba(255,255,255,.66) !important;
+  color: var(--fog-ink) !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.chat-settings-chip, .agent-chat__input-btn--attach) {
+  width: 28px !important;
+  display: inline-grid !important;
+  place-items: center;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-settings-popover-wrapper { width: auto !important; height: auto !important; }
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-web-gpt-collab, .laolao-deep-think-btn) svg,
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.agent-chat__input-btn--attach, .chat-settings-chip, .chat-open-split-view) svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+/* 脱敏开着时保留它的状态色，只是不再是一个大胶囊 */
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-desensitize-btn[aria-pressed="true"],
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-desensitize-btn.is-active {
+  color: var(--accent) !important;
+}
+/* 模型名：去掉框，像「Opus 5.5」那样一行字 */
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-controls__inline-select-trigger {
+  font-weight: 500;
+  gap: 4px;
+}
+/* 弹层（附件、模型、思考强度、容量）仍然向上弹，压在输入盒上方 */
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.agent-chat__attach-menu-popover, .chat-controls__inline-select-menu, .laolao-context-viewer__popover) {
+  z-index: 30 !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input button.btn.chat-open-split-view:not([aria-pressed="true"]),
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-deep-think-btn:not(:hover):not([aria-expanded="true"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 停止按钮：同一个位置、同一个圆，只是换成浅底 + 模式色方块，正在干活时一眼能找到 */
+html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.chat-send-btn--stop.chat-send-btn--stop:not(#__p1):not(#__p2) {
+  background: color-mix(in srgb, var(--accent) 14%, #fff) !important;
+  color: var(--accent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent) !important;
+}
+
+html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.chat-send-btn--stop.chat-send-btn--stop:not(#__p1):not(#__p2) {
+  grid-row: 1; grid-column: 12; justify-self: end; position: relative; z-index: 1;
+  width: 34px !important; min-width: 34px !important; height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn svg { width: 16px !important; height: 16px !important; }
+html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #fff !important; color: #fff !important; }
+
+
+/* ── 学习模式阅读版：暖色纸面、柔和墨色、宽行距、英文标注用正文字体 ──────── */
+html[data-laolao-mode="learning"] {
+  --read-paper: #fdf6ea;
+  --read-paper-edge: color-mix(in srgb, #d9b98c 34%, #fff);
+  --read-ink: #3a3230;
+  --read-ink-soft: #63574f;
+  --read-strong: #2b2422;
+  --read-mark: color-mix(in srgb, #e8c98f 24%, #fdf6ea);
+  --read-mark-line: color-mix(in srgb, #c9974a 45%, transparent);
+  --read-rule: color-mix(in srgb, #b98a52 22%, transparent);
+}
+
+/* 纸面 */
+html[data-laolao-mode="learning"] .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
+.chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
+  background: linear-gradient(180deg, rgba(254, 248, 237, .97), rgba(251, 242, 227, .96)) !important;
+  border: 1px solid var(--read-paper-edge) !important;
+  border-radius: 18px !important;
+  padding: 16px 22px 18px !important;
+  max-width: min(46em, 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 252, 245, .9),
+    0 1px 2px rgba(92, 64, 32, .06),
+    0 10px 28px rgba(92, 64, 32, .08) !important;
+}
+html[data-laolao-mode="learning"] .chat-group.user .chat-bubble:not(.chat-bubble--tool-shell) {
+  background: linear-gradient(180deg, rgba(254, 248, 237, .93), color-mix(in srgb, var(--accent) 6%, #fbf1e1)) !important;
+  border-color: var(--read-paper-edge) !important;
+}
+
+/* 正文 */
+html[data-laolao-mode="learning"] .chat-group :is(.chat-bubble, .chat-group-content) .chat-text {
+  font-family: -apple-system, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif !important;
+  font-size: 15.5px !important;
+  line-height: 1.85 !important;
+  letter-spacing: .01em;
+  color: var(--read-ink) !important;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "kern", "liga";
+}
+html[data-laolao-mode="learning"] .chat-group :is(.chat-bubble, .chat-group-content) :is(p, li, blockquote, h1, h2, h3, h4, h5, td, th, strong, em) {
+  color: inherit !important;
+  text-shadow: none !important;
+}
+html[data-laolao-mode="learning"] .chat-group .chat-text p { margin: 0 0 .75em !important; }
+html[data-laolao-mode="learning"] .chat-group .chat-text > :last-child { margin-bottom: 0 !important; }
+
+/* 加粗：少一点重量，免得满屏都是黑块 */
+html[data-laolao-mode="learning"] .chat-group .chat-text :is(strong, b) {
+  font-weight: 600 !important;
+  color: var(--read-strong) !important;
+}
+
+/* 标题和分隔 */
+html[data-laolao-mode="learning"] .chat-group .chat-text :is(h1, h2, h3, h4) {
+  font-size: 16.5px !important;
+  font-weight: 650 !important;
+  line-height: 1.5 !important;
+  margin: 1.25em 0 .55em !important;
+  color: var(--read-strong) !important;
+}
+html[data-laolao-mode="learning"] .chat-group .chat-text :is(h1, h2, h3, h4):first-child { margin-top: .1em !important; }
+html[data-laolao-mode="learning"] .chat-group .chat-text hr {
+  border: 0 !important;
+  height: 1px !important;
+  margin: 1.1em 0 !important;
+  background: var(--read-rule) !important;
+}
+
+/* 列表：每条之间留气口，嵌套的缩进清楚，圆点用模式色 */
+html[data-laolao-mode="learning"] .chat-group .chat-text :is(ul, ol) {
+  margin: .2em 0 .8em !important;
+  padding-left: 1.35em !important;
+}
+html[data-laolao-mode="learning"] .chat-group .chat-text li { margin: .32em 0 !important; padding-left: .15em; }
+html[data-laolao-mode="learning"] .chat-group .chat-text li > :is(ul, ol) { margin: .25em 0 .1em !important; }
+html[data-laolao-mode="learning"] .chat-group .chat-text li::marker { color: color-mix(in srgb, var(--accent) 70%, var(--read-ink-soft)); }
+html[data-laolao-mode="learning"] .chat-group .chat-text li li { color: var(--read-ink-soft) !important; font-size: 15px; }
+
+/* 行内「代码」：学习里基本是英文例句和单词，用正文字体 + 浅色标注 */
+html[data-laolao-mode="learning"] .chat-group .chat-text :not(pre) > code {
+  font-family: "SF Pro Text", -apple-system, "PingFang SC", system-ui, sans-serif !important;
+  font-size: .97em !important;
+  font-weight: 500 !important;
+  color: var(--read-strong) !important;
+  background: var(--read-mark) !important;
+  border: 0 !important;
+  border-bottom: 1.5px solid var(--read-mark-line) !important;
+  border-radius: 3px 3px 1px 1px !important;
+  padding: .05em .3em !important;
+  margin: 0 .08em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+/* 真正的代码块保持等宽，但同样不发虚 */
+html[data-laolao-mode="learning"] .chat-group .chat-text pre,
+html[data-laolao-mode="learning"] .chat-group .chat-text pre code {
+  font-size: 13.5px !important;
+  line-height: 1.65 !important;
+  font-weight: 400 !important;
+  background: #f6eddd !important;
+  border-color: var(--read-rule) !important;
+}
+
+/* 引用、表格 */
+html[data-laolao-mode="learning"] .chat-group .chat-text blockquote {
+  margin: .6em 0 .9em !important;
+  padding: .35em 0 .35em 1em !important;
+  border-left: 3px solid var(--read-mark-line) !important;
+  color: var(--read-ink-soft) !important;
+  background: transparent !important;
+}
+html[data-laolao-mode="learning"] .chat-group .chat-text table { font-size: 14.5px !important; line-height: 1.6 !important; }
+html[data-laolao-mode="learning"] .chat-group .chat-text :is(td, th) { padding: 7px 12px !important; }
+html[data-laolao-mode="learning"] .chat-group .chat-text th { background: var(--read-mark) !important; font-weight: 600 !important; }
+
+/* 表情符号别抢眼 */
+html[data-laolao-mode="learning"] .chat-group .chat-text img.emoji { width: 1.05em; height: 1.05em; vertical-align: -.15em; }

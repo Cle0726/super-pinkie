@@ -227,5 +227,5 @@ test('installers ship and inject the material viewer on both platforms', () => {
     assert.match(source, /laolao-material-preview\.js/);
   }
   assert.match(mac, /laolaoMaterialPreview/);
-  assert.match(windows, /'laolao-material-preview\.js' = 'material2'/);
+  assert.match(windows, /'laolao-material-preview\.js' = 'material3'/);
 });

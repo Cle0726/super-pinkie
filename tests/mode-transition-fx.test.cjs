@@ -52,8 +52,8 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   const revisions = {
-    'laolao-mode-transition-fx.js': 'modetransitionfx4',
-    'laolao-mode-transition-fx.css': 'modetransitionfx3',
+    'laolao-mode-transition-fx.js': 'modetransitionfx5',
+    'laolao-mode-transition-fx.css': 'modetransitionfx4',
     'laolao-splash-fx.js': 'splashfx1',
     'laolao-splash.js': 'splash28',
     'laolao-splash.css': 'splash20',
@@ -64,8 +64,8 @@ test('fragments and both installers carry the same splash and FX revisions', () 
     assert.match(windows, new RegExp(`'${file.replace('.', '\\.') }' = '${revision}'`), `Windows: ${file}`);
   }
   assert.match(fragment, /laolao-splash\.css\?v=splash20/);
-  assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx3/);
-  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx4/);
+  assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx4/);
+  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx5/);
   assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx1/);
   assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
   for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
@@ -74,7 +74,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   }
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.css') > fragment.indexOf('laolao-motion-system.css'));
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.js') < fragment.indexOf('laolao-mode-switcher.js'));
-  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode41/);
+  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode42/);
   assert.match(windows, /\$fxPattern[\s\S]*\$switcherMatch[\s\S]*\$html\.Substring\(0, \$switcherMatch\.Index\)/);
   assert.match(windows, /\$switcherTag[\s\S]*\$1/);
 });
