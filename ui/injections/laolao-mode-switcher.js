@@ -599,43 +599,55 @@
     }
     switching = true;
     modeTransitionTargetId = mode.id;
-    window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
-      detail: {mode: mode.id, fromSessionKey: currentSessionKey()},
-    }));
-    launchSelectionBurst(sourceOption, mode);
-    closeMenu();
-    rememberSession(currentSessionKey());
-    const [transition, targetSessionKey] = await Promise.all([
-      playModeTransition(mode),
-      resolveTargetSession(mode),
-    ]);
-    const targetMode = {...mode, sessionKey: targetSessionKey};
-    localStorage.setItem(storageKey, mode.id);
-    sessionStorage.removeItem(skipEntrySplashKey);
-    sessionStorage.removeItem(modeHandoffKey);
-    const next = new URL(window.location.href);
-    next.searchParams.set("session", targetSessionKey);
-    next.searchParams.delete(skipEntrySplashParam);
-    next.searchParams.delete("draft");
-    window.dispatchEvent(new CustomEvent("laolao:mode-session-handoff", {
-      detail: {mode: mode.id, sessionKey: targetSessionKey},
-    }));
-    transition.overlay.dataset.navigation = navigateWithinApp(targetMode, next);
-    rememberSession(targetSessionKey);
-    document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
-    syncModePresentation(targetMode);
-    await finishModeTransition(targetMode, transition);
-    if (!modeFxReduced()) await motion.frames();
-    modeTransitionTargetId = null;
-    syncModePresentation(targetMode);
-    window.dispatchEvent(new CustomEvent("laolao:mode-transition-finished", {
-      detail: {mode: mode.id, sessionKey: targetSessionKey},
-    }));
-    window.dispatchEvent(new CustomEvent(
-      "pinkie:session-selected", {detail: {sessionKey: targetSessionKey}}
-    ));
-    render();
-    flushPendingModePortraitFx(targetMode);
+    try {
+      window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
+        detail: {mode: mode.id, fromSessionKey: currentSessionKey()},
+      }));
+      launchSelectionBurst(sourceOption, mode);
+      closeMenu();
+      rememberSession(currentSessionKey());
+      const [transition, targetSessionKey] = await Promise.all([
+        playModeTransition(mode),
+        resolveTargetSession(mode),
+      ]);
+      const targetMode = {...mode, sessionKey: targetSessionKey};
+      localStorage.setItem(storageKey, mode.id);
+      sessionStorage.removeItem(skipEntrySplashKey);
+      sessionStorage.removeItem(modeHandoffKey);
+      const next = new URL(window.location.href);
+      next.searchParams.set("session", targetSessionKey);
+      next.searchParams.delete(skipEntrySplashParam);
+      next.searchParams.delete("draft");
+      window.dispatchEvent(new CustomEvent("laolao:mode-session-handoff", {
+        detail: {mode: mode.id, sessionKey: targetSessionKey},
+      }));
+      transition.overlay.dataset.navigation = navigateWithinApp(targetMode, next);
+      rememberSession(targetSessionKey);
+      document.documentElement.setAttribute("data-laolao-mode-pending", mode.id);
+      syncModePresentation(targetMode);
+      await finishModeTransition(targetMode, transition);
+      if (!modeFxReduced()) await motion.frames();
+      modeTransitionTargetId = null;
+      syncModePresentation(targetMode);
+      window.dispatchEvent(new CustomEvent("laolao:mode-transition-finished", {
+        detail: {mode: mode.id, sessionKey: targetSessionKey},
+      }));
+      window.dispatchEvent(new CustomEvent(
+        "pinkie:session-selected", {detail: {sessionKey: targetSessionKey}}
+      ));
+      render();
+      flushPendingModePortraitFx(targetMode);
+    } catch (error) {
+      console.error("[laolao-mode-switcher] mode switch failed", error);
+    } finally {
+      // A failed transition must never leave the presentation frozen.
+      if (modeTransitionTargetId === mode.id) {
+        modeTransitionTargetId = null;
+        switching = false;
+        document.querySelector(".laolao-mode-transition")?.remove();
+        render();
+      }
+    }
   };
 
   // Keep the surface live: the old SVG banners baked text and an opaque pill

@@ -54,11 +54,14 @@ export function transform(kind,original){
     }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：preflight threshold');
   }else if(kind==='sessions'){
     const response=/return\s*\{\s*\.\.\.result,\s*sessions\s*\};/g;
-    const replacement=`return {
+    // One policy read per distinct window per request, not one per session.
+    const replacement=`const pinkieBudgets = new Map();
+			return {
 				...result,
 				sessions: sessions.map((session) => {
 					const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;
-					return { ...session, pinkieCompactionBudget: pinkieContextBudget(contextWindow) };
+					if (!pinkieBudgets.has(contextWindow)) pinkieBudgets.set(contextWindow, pinkieContextBudget(contextWindow));
+					return { ...session, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };
 				})
 			};`;
     text=replacePatternOnce(text,response,replacement,'sessions.list context budget');

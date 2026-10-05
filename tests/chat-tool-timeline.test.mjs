@@ -452,7 +452,7 @@ test('timeline tool details keep no card shell and injection cache keys advance'
   assert.match(css, /\.chat-group--timeline-tools \.chat-tool-msg-collapse\s*\{[^}]*border: 0 !important;[^}]*background: transparent !important;[^}]*box-shadow: none !important;/u);
   for (const source of [head, mac, windows]) {
     assert.match(source, /laolao-tool-stream\.css\?v=toolstream3/u);
-    assert.match(source, /laolao-resume\.js\?v=resume44/u);
+    assert.match(source, /laolao-resume\.js\?v=resume45/u);
     assert.match(source, /laolao-queue-steer\.js\?v=queuesteer2/u);
   }
   for (const source of [mac, windows]) {

@@ -3566,6 +3566,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 if action == "reveal" {
                     NSWorkspace.shared.activateFileViewerSelecting([file])
                     sendMaterialPreviewResult(["ok": true, "requestId": requestId], to: sourceWebView)
+                } else if !MaterialPreviewFileAccess.canOpenWithDefaultApp(file) {
+                    sendMaterialPreviewResult(["ok": false, "requestId": requestId, "message": "为了安全，这类文件不直接打开；可以在访达中显示后自己处理。"], to: sourceWebView)
                 } else if NSWorkspace.shared.open(file) {
                     sendMaterialPreviewResult(["ok": true, "requestId": requestId], to: sourceWebView)
                 } else {
