@@ -116,6 +116,13 @@
     ["Docs", "文档"],
     ["Pair mobile device", "配对移动设备"],
     ["Gateway status: Online", "网关状态：在线"],
+    ["Session filters", "会话筛选"],
+    ["Token", "词元"],
+    ["direct", "单聊"],
+    ["Agent", "智能体"],
+    ["Previous", "上一页"],
+    ["Mark as unread", "标记为未读"],
+    ["Fork", "分叉会话"],
     // Native chatQueue chrome. Keep these scoped to the queue below: an
     // assistant may legitimately quote an upstream English error in a reply.
     ["Steer queued message", "立即追加这条消息"],
@@ -161,14 +168,19 @@
   };
 
   const localizedChromeValue = (value, element) => {
-    if (/^just now$/i.test(value) && element?.closest?.('.stat-value, .ov-recent__time')) return '刚刚';
+    if (/^just now$/i.test(value) && element?.closest?.('.stat-value, .ov-recent__time, .sessions-table td')) return '刚刚';
     if (/^(?:just now|now)$/i.test(value) && element?.closest?.('.sidebar-recent-session')) return '刚刚';
+    if (/^per page$/i.test(value) && element?.closest?.('.data-table-pagination__size')) return '条/页';
     const mapped = exactPhrases.get(value);
     if (mapped && exactPhraseAllowed(value, element)) return mapped;
     const duplicateCount = value.match(/^(\d+) consecutive identical messages collapsed$/i);
     if (duplicateCount) return `连续 ${duplicateCount[1]} 条相同消息已折叠`;
     const messageContext = value.match(/^Message context for (.+)$/i);
     if (messageContext) return `消息信息：${messageContext[1]}`;
+    const rowSummary = value.match(/^(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+rows?$/i);
+    if (rowSummary && element?.closest?.('.data-table-wrapper')) {
+      return `显示第 ${rowSummary[1]}–${rowSummary[2]} 条，共 ${rowSummary[3]} 条`;
+    }
     return value;
   };
 
@@ -178,6 +190,12 @@
     const core = text.slice(leading.length, text.length - trailing.length);
     const localized = localizedChromeValue(core, element);
     if (localized !== core) return `${leading}${localized}${trailing}`;
+
+    if (element?.closest?.('.data-table-pagination__info')) {
+      if (core === '-') return `${leading}–${trailing}`;
+      if (/^of$/i.test(core)) return `${leading}条，共${trailing}`;
+      if (/^rows?$/i.test(core)) return `${leading}条${trailing}`;
+    }
 
     const historySummary = core.match(/^Showing last\s+(\d+)\s+messages?\s+\((\d+)\s+hidden\)\.?$/i);
     if (historySummary) return `${leading}显示最近 ${historySummary[1]} 条消息（已隐藏 ${historySummary[2]} 条）${trailing}`;
@@ -308,6 +326,12 @@
         bubble.setAttribute('title','系统运行提示；原始信息：'+failureSentinel);
         return;
       }
+    }
+    if(parent?.closest?.('select option')){
+      const value=node.nodeValue??'';
+      const next=translate(value,parent.closest('option'));
+      if(next!==value)node.nodeValue=next;
+      return;
     }
     if(isProtectedContent(node))return;
     if(fallbackName.test(core) && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
