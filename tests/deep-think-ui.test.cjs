@@ -56,7 +56,7 @@ test('tier menu uses compact self-drawn pink glass controls and avoids a root mu
   const src=read('ui/injections/laolao-deep-think.js');
   assert.match(src,/viewBox='0 0 24 24'/);
   assert.match(src,/grid-template-columns:repeat\(2/);
-  assert.match(src,/无人值守持续执行/);
+  assert.match(src,/存档续跑直到做完/);
   assert.match(src,/width:30px; height: 30px/);
   assert.match(src,/backdrop-filter:blur\(28px\)/);
   assert.match(src,/item\.dataset\.tier = tier\.id/);

@@ -634,7 +634,7 @@
     const name = LEVEL_LABELS[material] || material;
     const caption = `思考等级 · ${name}${range.disabled ? "（暂不可调整）" : ""}`;
     if (label.textContent !== caption) label.textContent = caption;
-    range.setAttribute?.("aria-valuetext", material === "max" ? "Max，额外两轮审阅" : material === "ultra" ? "Ultra，额外三轮交叉推演" : name);
+    range.setAttribute?.("aria-valuetext", material === "max" ? "Max，答完后自动核对交付" : material === "ultra" ? "Ultra，核对交付并独立复算" : name);
     details.dataset.pinkieEnhancement = tier || "off";
     pickerState(details, range);
   }
@@ -1154,7 +1154,9 @@
       }
       panel.dataset.sessionKey = state.sessionKey || "";
       panel.dataset.requestId = state.requestId || "";
-      panel.querySelector(".pinkie-reasoning-progress__text").textContent = state.tier === "ultra" ? "Ultra · 交叉推演中" : "Max · 复核中";
+      panel.querySelector(".pinkie-reasoning-progress__text").textContent = state.text || (state.tier === "ultra" ? "Ultra · 交付验收 + 独立复算" : "Max · 交付验收");
+      panel.querySelector("button").hidden = state.cancellable === false;
+      panel.dataset.phase = state.phase || "";
       panel.hidden = false;
     } else if (panel && (!state.requestId || panel.dataset.requestId === state.requestId)) {
       panel.hidden = true;

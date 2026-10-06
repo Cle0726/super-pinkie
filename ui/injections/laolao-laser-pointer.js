@@ -1,37 +1,47 @@
-/* Pinkie laser pointer: a rail launcher that turns the cursor into a real
-   presentation laser — a fine thread of light drawn behind the point.
-   The stroke is a self-consuming polyline (PowerPoint style): while you move
-   it keeps a constant-time tail, and when you stop it evaporates as one
-   piece (telestrator style), like the laser tools in excalidraw and tldraw.
-   Left-click the rail button to toggle, right-click it to tune parameters,
-   ESC to leave. Visual language: restrained — a hairline stroke that is
-   white-hot at the point and cools into the theme color as it ages. */
+/* Pinkie presentation toolbox: a global sidebar launcher that turns the
+   cursor into a full presentation kit — laser, annotation pen, highlighter,
+   spotlight and magnifier — drawn on a single overlay canvas.
+   Interaction model borrows from gromit-mpx (keyboard-first: 1-5 switch
+   tools, Cmd+Z undo, ESC leaves, no UI in the way) and ppInk (Shift+wheel
+   retunes the active tool). The laser stroke itself keeps the v4 engine:
+   a self-consuming polyline (excalidraw) that evaporates as one group once
+   idle (tldraw telestrator). Visual language: restrained — hairline strokes
+   that are white-hot at the point and cool into the theme color as they age.
+   Left-click the footer icon to toggle, right-click it for settings. */
 (() => {
   const REDUCED = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
 
   const style = document.createElement('style');
   style.textContent = `
-    #pinkie-laser-entry{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:92px;margin:5px 2px 6px;padding:8px 0;flex-shrink:0;border:0;border-radius:18px;color:#a24a78;background:linear-gradient(180deg,#fff5fb14,#fff4fae6 46%,#f9dff03a);cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .22s,box-shadow .22s,transform .22s}
-    #pinkie-laser-entry svg{width:26px;height:26px;pointer-events:none;filter:drop-shadow(0 3px 5px #c06a992e);transition:transform .3s}
-    #pinkie-laser-entry span{writing-mode:vertical-rl;font-size:11px;font-weight:550;letter-spacing:3px;line-height:1}
-    #pinkie-laser-entry:hover{background:#fff7fbe0;box-shadow:inset 0 0 0 1px #d98bb126}
-    #pinkie-laser-entry:hover svg{transform:translateY(-2px) rotate(-8deg)}
-    #pinkie-laser-entry:focus-visible{outline:2px solid #d983ae;outline-offset:-2px}
-    #pinkie-laser-entry[aria-pressed="true"]{background:linear-gradient(180deg,#f067a4,#d13a7d);color:#fff;box-shadow:0 4px 14px #d13a7d55,inset 0 0 0 1px #ffffff2e}
-    #pinkie-laser-entry[aria-pressed="true"] svg{filter:drop-shadow(0 0 6px #ffd3e8cc)}
-    .chat-workspace-rail:not(.chat-workspace-rail--collapsed) #pinkie-laser-entry{flex-direction:row;min-height:52px;margin:6px 12px;padding:7px 10px}
-    .chat-workspace-rail:not(.chat-workspace-rail--collapsed) #pinkie-laser-entry span{writing-mode:horizontal-tb;letter-spacing:2px}
+    #pinkie-laser-entry{color:#a24a78}
+    #pinkie-laser-entry svg{width:18px;height:18px;display:block}
+    #pinkie-laser-entry[aria-pressed="true"]{background:linear-gradient(180deg,#f067a4,#d13a7d) !important;color:#fff !important;box-shadow:0 4px 14px #d13a7d55,inset 0 0 0 1px #ffffff2e}
+    #pinkie-laser-entry[aria-pressed="true"] svg{filter:drop-shadow(0 0 5px #ffd3e8cc)}
     html.laolao-laser-on,html.laolao-laser-on *{cursor:none !important}
+    /* The overlay hides the native cursor, but the toolbar and settings panel
+       are interactive chrome: the pointer must come back over them. */
+    html.laolao-laser-on #pinkie-laser-toolbar,html.laolao-laser-on #pinkie-laser-toolbar *{cursor:pointer !important}
+    html.laolao-laser-on #pinkie-laser-settings,html.laolao-laser-on #pinkie-laser-settings *{cursor:auto !important}
+    html.laolao-laser-on #pinkie-laser-settings button,html.laolao-laser-on #pinkie-laser-settings input[type="range"],html.laolao-laser-on #pinkie-laser-settings .laser-swatch{cursor:pointer !important}
     #pinkie-laser-canvas{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:10002}
-    #pinkie-laser-hint{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(8px);z-index:10003;pointer-events:none;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.94);color:#b04e81;font-size:12px;font-weight:550;letter-spacing:1px;box-shadow:0 6px 22px #a3507f33,inset 0 0 0 1px #ecc3d9;opacity:0;transition:opacity .28s,transform .28s}
+    #pinkie-laser-toolbar{position:fixed;left:0;top:50%;transform:translateY(-50%) translateX(calc(-100% + 8px));z-index:10004;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 6px;border-radius:0 999px 999px 0;background:rgba(255,250,253,.96);box-shadow:0 8px 26px #8f3f6b30,inset 0 0 0 1px #f2cfe2;opacity:.55;transition:opacity .25s,transform .25s}
+    #pinkie-laser-toolbar.laolao-laser-toolbar--show{opacity:1;transform:translateY(-50%) translateX(6px)}
+    #pinkie-laser-toolbar .laser-tool-btn{width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:#b04e81;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .18s,color .18s,transform .18s}
+    #pinkie-laser-toolbar .laser-tool-btn svg{width:17px;height:17px;pointer-events:none}
+    #pinkie-laser-toolbar .laser-tool-btn:hover{background:#fbe9f2;transform:translateY(-1px)}
+    #pinkie-laser-toolbar .laser-tool-btn[aria-pressed="true"]{background:linear-gradient(180deg,#f067a4,#d13a7d);color:#fff;box-shadow:0 3px 10px #d13a7d4d}
+    #pinkie-laser-toolbar .laser-tool-btn:disabled{opacity:.32;cursor:default;transform:none;background:transparent}
+    #pinkie-laser-toolbar .laser-tool-sep{width:18px;height:1px;background:#f0d3e2;margin:3px 0}
+    #pinkie-laser-hint{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(8px);z-index:10003;pointer-events:none;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.94);color:#b04e81;font-size:12px;font-weight:550;letter-spacing:1px;box-shadow:0 6px 22px #a3507f33,inset 0 0 0 1px #ecc3d9;opacity:0;transition:opacity .28s,transform .28s;white-space:nowrap}
     #pinkie-laser-hint.laolao-laser-hint--show{opacity:1;transform:translateX(-50%) translateY(0)}
-    #pinkie-laser-settings{position:fixed;z-index:10004;width:216px;padding:14px 14px 10px;border-radius:16px;background:rgba(255,251,253,.97);box-shadow:0 10px 34px #8f3f6b38,inset 0 0 0 1px #f2cfe2;color:#8d4265;font-size:12px;user-select:none;-webkit-user-select:none}
+    #pinkie-laser-settings{position:fixed;z-index:10005;width:236px;max-height:min(72vh,560px);overflow-y:auto;padding:14px 14px 10px;border-radius:16px;background:rgba(255,251,253,.97);box-shadow:0 10px 34px #8f3f6b38,inset 0 0 0 1px #f2cfe2;color:#8d4265;font-size:12px;user-select:none;-webkit-user-select:none}
     #pinkie-laser-settings h4{margin:0 0 10px;font-size:12.5px;font-weight:650;letter-spacing:2px;color:#c2497f;display:flex;justify-content:space-between;align-items:center}
     #pinkie-laser-settings h4 button{border:0;background:none;color:#c98bab;font-size:13px;cursor:pointer;padding:2px 4px;border-radius:6px}
     #pinkie-laser-settings h4 button:hover{background:#fbe9f2;color:#b04e81}
+    #pinkie-laser-settings h5{margin:12px 0 4px;font-size:10.5px;font-weight:650;letter-spacing:2px;color:#c98bab;border-top:1px solid #f6d9e8;padding-top:10px}
     #pinkie-laser-settings .laser-row{display:flex;align-items:center;gap:8px;margin:7px 0}
     #pinkie-laser-settings .laser-row label{flex:0 0 52px;font-weight:550;letter-spacing:1px}
-    #pinkie-laser-settings .laser-row output{flex:0 0 34px;text-align:right;color:#c2497f;font-weight:600;font-variant-numeric:tabular-nums}
+    #pinkie-laser-settings .laser-row output{flex:0 0 38px;text-align:right;color:#c2497f;font-weight:600;font-variant-numeric:tabular-nums}
     #pinkie-laser-settings input[type="range"]{flex:1;height:3px;-webkit-appearance:none;appearance:none;border-radius:99px;background:linear-gradient(90deg,#f067a4,#f4c4db);outline:none;cursor:pointer}
     #pinkie-laser-settings input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;border:2.5px solid #e0559a;box-shadow:0 1px 5px #d13a7d4d;cursor:pointer}
     #pinkie-laser-settings .laser-swatches{display:flex;gap:8px;margin:10px 0 4px;padding-left:60px}
@@ -39,36 +49,72 @@
     #pinkie-laser-settings .laser-swatch:hover{transform:scale(1.15)}
     #pinkie-laser-settings .laser-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #fff,0 0 0 4px currentColor}
     #pinkie-laser-settings .laser-foot{margin-top:8px;padding-top:8px;border-top:1px solid #f6d9e8;font-size:10.5px;color:#c98bab;letter-spacing:.5px}
-    @media(prefers-reduced-motion:reduce){#pinkie-laser-entry,#pinkie-laser-entry svg,#pinkie-laser-hint,#pinkie-laser-settings .laser-swatch{transition:none}}
+    @media(prefers-reduced-motion:reduce){#pinkie-laser-toolbar,#pinkie-laser-hint,#pinkie-laser-settings .laser-swatch{transition:none}}
   `;
   document.head.append(style);
 
-  const ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">'
-    + '<path d="M13.2 10.8 5.6 18.4c-.5.5-.5 1.3 0 1.8.5.5 1.3.5 1.8 0l7.6-7.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'
-    + '<path d="M14.6 9.4c-1.2-1.2-3.1-1.2-4.2 0-.4.4-.3 1 .1 1.4l2.7 2.7c.4.4 1 .5 1.4.1 1.1-1.1 1.1-3 0-4.2Z" fill="currentColor" opacity=".9"/>'
-    + '<path d="M15.5 3.5v2.2M19.6 6.4l-1.6 1.6M20.5 10.5h-2.2M8.9 4.9l1.2 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
-    + '<circle cx="16.4" cy="12.9" r="1.15" fill="currentColor"/>'
-    + '</svg>';
+  const svgWrap = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  const TOOL_ORDER = ['laser', 'pen', 'hl', 'spot', 'mag'];
+  const TOOLS = {
+    laser: {
+      label: '激光笔',
+      hint: '激光笔 · 移动留下光迹 · 单击打出光圈',
+      icon: '<path d="M13.2 10.8 5.6 18.4c-.5.5-.5 1.3 0 1.8.5.5 1.3.5 1.8 0l7.6-7.6"/><path d="M14.6 9.4c-1.2-1.2-3.1-1.2-4.2 0-.4.4-.3 1 .1 1.4l2.7 2.7c.4.4 1 .5 1.4.1 1.1-1.1 1.1-3 0-4.2Z" fill="currentColor" stroke="none"/><path d="M15.5 3.5v2.2M19.6 6.4l-1.6 1.6M20.5 10.5h-2.2M8.9 4.9l1.2 1.8"/><circle cx="16.4" cy="12.9" r="1.15" fill="currentColor" stroke="none"/>',
+    },
+    pen: {
+      label: '画笔',
+      hint: '画笔 · 按住拖动标注 · ⌘Z 撤销 · C 清屏',
+      icon: '<path d="M4 20l1.2-4.2L16.5 4.5a2.1 2.1 0 0 1 3 3L8.2 18.8 4 20Z"/><path d="M14.5 6.5l3 3"/>',
+    },
+    hl: {
+      label: '荧光笔',
+      hint: '荧光笔 · 半透明宽笔触，不遮字',
+      icon: '<path d="M5 15.5 13.5 7l3.5 3.5L8.5 19l-4.7 1.2 1.2-4.7Z"/><path d="M15 5.5l2-2 3.5 3.5-2 2"/>',
+    },
+    spot: {
+      label: '聚光灯',
+      hint: '聚光灯 · 讲哪里亮哪里 · ⇧滚轮调孔径',
+      icon: '<circle cx="12" cy="12" r="5.5"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/>',
+    },
+    mag: {
+      label: '放大镜',
+      hint: '放大镜 · 圆形放大区跟随光标 · ⇧滚轮调倍率',
+      icon: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3 20 20"/><path d="M8.2 10.5h4.6M10.5 8.2v4.6"/>',
+    },
+  };
 
-  // ---- tunable settings (right-click the rail button) ---------------------
-  const SETTINGS_KEY = 'laolao:laser-settings.v1';
+  // ---- tunable settings (right-click the footer icon) ----------------------
+  const SETTINGS_KEY = 'laolao:laser-settings.v2';
+  const LEGACY_KEY = 'laolao:laser-settings.v1';
   const COLOR_PRESETS = [
     { name: '玫粉', pink: [224, 64, 127], hot: [240, 103, 168], core: [255, 226, 240], css: '#e0407f' },
     { name: '正红', pink: [229, 62, 62], hot: [247, 101, 101], core: [255, 228, 228], css: '#e53e3e' },
     { name: '鸢尾紫', pink: [139, 92, 246], hot: [167, 128, 250], core: [236, 228, 255], css: '#8b5cf6' },
     { name: '暖阳橙', pink: [245, 158, 11], hot: [250, 181, 74], core: [255, 240, 214], css: '#f59e0b' },
   ];
-  const DEFAULTS = { width: 1, trail: 1050, glow: 1, color: 0 };
+  const DEFAULTS = {
+    width: 1, trail: 1050, glow: 1, color: 0,
+    penWidth: 2.5, hlWidth: 18, hlAlpha: 0.32,
+    spotRadius: 130, spotDim: 0.55, magZoom: 2,
+  };
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
   const loadSettings = () => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-      return {
-        width: Math.min(2, Math.max(0.5, Number(raw.width) || DEFAULTS.width)),
-        trail: Math.min(6000, Math.max(400, Number(raw.trail) || DEFAULTS.trail)),
-        glow: Math.min(2, Math.max(0, raw.glow === undefined ? DEFAULTS.glow : Number(raw.glow))),
-        color: COLOR_PRESETS[raw.color] ? raw.color : 0,
-      };
-    } catch { return { ...DEFAULTS }; }
+    let raw = {};
+    try { raw = JSON.parse(localStorage.getItem(LEGACY_KEY) || '{}'); } catch { /* private mode */ }
+    try { raw = { ...raw, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { /* private mode */ }
+    return {
+      width: clamp(num(raw.width, DEFAULTS.width), 0.5, 2),
+      trail: clamp(num(raw.trail, DEFAULTS.trail), 400, 6000),
+      glow: clamp(raw.glow === undefined ? DEFAULTS.glow : num(raw.glow, DEFAULTS.glow), 0, 2),
+      color: COLOR_PRESETS[raw.color] ? raw.color : 0,
+      penWidth: clamp(num(raw.penWidth, DEFAULTS.penWidth), 1, 8),
+      hlWidth: clamp(num(raw.hlWidth, DEFAULTS.hlWidth), 8, 32),
+      hlAlpha: clamp(num(raw.hlAlpha, DEFAULTS.hlAlpha), 0.15, 0.6),
+      spotRadius: clamp(num(raw.spotRadius, DEFAULTS.spotRadius), 60, 300),
+      spotDim: clamp(num(raw.spotDim, DEFAULTS.spotDim), 0.3, 0.8),
+      magZoom: clamp(num(raw.magZoom, DEFAULTS.magZoom), 1.5, 3),
+    };
   };
   const settings = loadSettings();
   const saveSettings = () => {
@@ -85,13 +131,20 @@
   const palette = () => COLOR_PRESETS[settings.color];
   const FADE_MS = 600;    // evaporation duration once idle
   const MAX_POINTS = 480;
+  const MAX_STROKE_POINTS = 1200;
 
   let active = false;
+  let tool = 'laser';
   let canvas = null, ctx = null, rafId = 0, dpr = 1;
   let seen = false;
   let lastMoveAt = 0;
-  const points = [];   // {x, y, t} raw pointer samples, oldest first
+  const cursor = { x: 0, y: 0, sx: 0, sy: 0 };
+  const points = [];   // {x, y, t} raw laser samples, oldest first
   const ripples = [];  // expanding rings on click
+  const strokes = [];  // committed pen / highlighter strokes
+  const redoStack = [];
+  let drawing = null;  // stroke in progress
+  let toolbar = null;
 
   const resize = () => {
     if (!canvas) return;
@@ -113,10 +166,10 @@
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);
   const lerp = (a, b, t) => a + (b - a) * t;
 
-  // One pass over the stroke. Each segment is a quadratic curve through its
-  // sample; color lerps from white-hot (young) into the preset (old) while
-  // alpha and width ease out — light cooling as it ages. `rise` lifts the
-  // whole stroke a few pixels while it evaporates, like heat haze.
+  // One pass over the laser stroke. Each segment is a quadratic curve through
+  // its sample; color lerps from white-hot (young) into the preset (old)
+  // while alpha and width ease out — light cooling as it ages. `rise` lifts
+  // the whole stroke a few pixels while it evaporates, like heat haze.
   const strokePass = (now, width, alpha, groupFade, rise, aura) => {
     const pal = palette();
     ctx.lineCap = 'round';
@@ -172,12 +225,138 @@
     ctx.fill();
   };
 
+  // Committed pen / highlighter strokes: same midpoint smoothing as the
+  // laser, but permanent until undone or cleared.
+  const drawStroke = (s) => {
+    if (s.pts.length < 2) return;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = s.style;
+    ctx.lineWidth = s.width;
+    ctx.beginPath();
+    ctx.moveTo(s.pts[0].x, s.pts[0].y);
+    for (let i = 1; i < s.pts.length - 1; i++) {
+      const mx = (s.pts[i].x + s.pts[i + 1].x) / 2;
+      const my = (s.pts[i].y + s.pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(s.pts[i].x, s.pts[i].y, mx, my);
+    }
+    const last = s.pts[s.pts.length - 1];
+    ctx.lineTo(last.x, last.y);
+    ctx.stroke();
+  };
+  const strokeStyle = (kind) => {
+    const pal = palette();
+    if (kind === 'hl') return `rgba(${pal.hot[0]},${pal.hot[1]},${pal.hot[2]},${settings.hlAlpha})`;
+    return `rgba(${pal.pink[0]},${pal.pink[1]},${pal.pink[2]},0.92)`;
+  };
+
+  // Spotlight: one radial gradient covering the whole screen — transparent
+  // inside the aperture, dim outside. Strokes drawn afterwards stay lit.
+  const drawSpot = (x, y) => {
+    const r = settings.spotRadius;
+    const dim = ctx.createRadialGradient(x, y, r * 0.85, x, y, r * 1.3);
+    dim.addColorStop(0, 'rgba(24,10,18,0)');
+    dim.addColorStop(1, `rgba(24,10,18,${settings.spotDim})`);
+    ctx.fillStyle = dim;
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+
+  // Magnifier: a circular lens sampling the live screen-capture video around
+  // the cursor. Screen coordinates come from pointer events, so the crop
+  // stays aligned even when the window is not fullscreen.
+  let magStream = null, magVideo = null;
+  const stopMag = () => {
+    magStream?.getTracks().forEach(track => track.stop());
+    magStream = null;
+    if (magVideo) { magVideo.srcObject = null; magVideo = null; }
+  };
+  const startMag = async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      showHint('当前环境不支持屏幕捕获，已切换到聚光灯');
+      setTool('spot');
+      return;
+    }
+    try {
+      magStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      magVideo = document.createElement('video');
+      magVideo.muted = true;
+      magVideo.srcObject = magStream;
+      await magVideo.play();
+      magStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        stopMag();
+        if (active && tool === 'mag') { showHint('屏幕共享已结束，切换到聚光灯'); setTool('spot'); }
+      });
+    } catch {
+      stopMag();
+      if (active && tool === 'mag') { showHint('未获得屏幕录制权限，已切换到聚光灯'); setTool('spot'); }
+    }
+  };
+  const drawLens = () => {
+    const pal = palette();
+    const R = 110;
+    if (magVideo && magVideo.readyState >= 2 && magVideo.videoWidth) {
+      const z = settings.magZoom;
+      const scale = magVideo.videoWidth / (window.screen.width || window.innerWidth);
+      const sw = (R * 2 / z) * scale;
+      const sh = sw * (magVideo.videoHeight / magVideo.videoWidth);
+      const sx = cursor.sx * scale - sw / 2;
+      const sy = cursor.sy * (magVideo.videoHeight / (window.screen.height || window.innerHeight)) - sh / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cursor.x, cursor.y, R, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(magVideo, sx, sy, sw, sh, cursor.x - R, cursor.y - R, R * 2, R * 2);
+      ctx.restore();
+    }
+    ctx.strokeStyle = `rgba(${pal.pink[0]},${pal.pink[1]},${pal.pink[2]},.95)`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cursor.x, cursor.y, R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cursor.x, cursor.y, R - 3.5, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+
+  // Small ring cursor for pen / highlighter so the hidden native cursor
+  // still has an on-screen presence sized to the stroke.
+  const drawToolCursor = () => {
+    const pal = palette();
+    if (tool === 'pen' || tool === 'hl') {
+      const w = tool === 'pen' ? settings.penWidth : settings.hlWidth;
+      const r = Math.max(2.5, w / 2);
+      if (tool === 'hl') {
+        ctx.fillStyle = `rgba(${pal.hot[0]},${pal.hot[1]},${pal.hot[2]},${settings.hlAlpha * .5})`;
+        ctx.beginPath();
+        ctx.arc(cursor.x, cursor.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = `rgba(${pal.pink[0]},${pal.pink[1]},${pal.pink[2]},.85)`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(cursor.x, cursor.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  };
+
   const frame = (now) => {
     rafId = requestAnimationFrame(frame);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    ctx.globalCompositeOperation = 'lighter';
 
+    if (tool === 'spot' && seen) drawSpot(cursor.x, cursor.y);
+
+    for (const s of strokes) drawStroke(s);
+    if (drawing) drawStroke(drawing);
+
+    ctx.globalCompositeOperation = 'lighter';
     trimTrail(now);
     const idleFor = now - lastMoveAt;
     // Group fade: the resting stroke evaporates as one piece after IDLE_MS.
@@ -186,7 +365,7 @@
     const rise = REDUCED ? 0 : fadeT * 5;
     if (groupFade <= 0 && points.length) points.length = 0;
 
-    if (points.length > 1) {
+    if (tool === 'laser' && points.length > 1) {
       if (settings.glow > 0.05) strokePass(now, 3.4, .1 * settings.glow, groupFade, rise, true); // whisper aura
       strokePass(now, 1.7, .85, groupFade, rise, false);                                          // hairline
     }
@@ -211,11 +390,14 @@
       }
     }
 
-    if (seen && points.length) {
+    if (tool === 'laser' && seen && points.length) {
       const head = points[points.length - 1];
       drawHead(head.x, head.y, groupFade);
     }
     ctx.globalCompositeOperation = 'source-over';
+
+    if (seen) drawToolCursor();
+    if (tool === 'mag' && seen) drawLens();
   };
 
   let hintTimer = 0;
@@ -229,10 +411,78 @@
     hint.textContent = text;
     requestAnimationFrame(() => hint.classList.add('laolao-laser-hint--show'));
     clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => hint.classList.remove('laolao-laser-hint--show'), 2400);
+    hintTimer = setTimeout(() => hint.classList.remove('laolao-laser-hint--show'), 2600);
   };
 
-  // ---- settings popover (right-click the rail button) ---------------------
+  // ---- floating toolbar ----------------------------------------------------
+  const syncToolbar = () => {
+    if (!toolbar) return;
+    toolbar.querySelectorAll('.laser-tool-btn[data-tool]').forEach(btn =>
+      btn.setAttribute('aria-pressed', btn.dataset.tool === tool ? 'true' : 'false'));
+    const undoBtn = toolbar.querySelector('[data-act="undo"]');
+    const redoBtn = toolbar.querySelector('[data-act="redo"]');
+    const clearBtn = toolbar.querySelector('[data-act="clear"]');
+    if (undoBtn) undoBtn.disabled = strokes.length === 0;
+    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+    if (clearBtn) clearBtn.disabled = strokes.length === 0 && !drawing;
+  };
+  const toolButton = (id) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'laser-tool-btn';
+    btn.dataset.tool = id;
+    btn.innerHTML = svgWrap(TOOLS[id].icon);
+    btn.title = `${TOOLS[id].label}（${TOOL_ORDER.indexOf(id) + 1}）`;
+    btn.setAttribute('aria-label', TOOLS[id].label);
+    btn.setAttribute('aria-pressed', id === tool ? 'true' : 'false');
+    btn.addEventListener('click', () => setTool(id));
+    return btn;
+  };
+  const actButton = (act, label, icon, onClick) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'laser-tool-btn';
+    btn.dataset.act = act;
+    btn.innerHTML = svgWrap(icon);
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.addEventListener('click', onClick);
+    return btn;
+  };
+  const buildToolbar = () => {
+    toolbar = document.createElement('div');
+    toolbar.id = 'pinkie-laser-toolbar';
+    toolbar.setAttribute('role', 'toolbar');
+    toolbar.setAttribute('aria-label', '演示工具');
+    TOOL_ORDER.forEach(id => toolbar.append(toolButton(id)));
+    const sep = document.createElement('span');
+    sep.className = 'laser-tool-sep';
+    toolbar.append(sep);
+    toolbar.append(actButton('undo', '撤销（⌘Z）', '<path d="M8 5 4 9l4 4"/><path d="M4 9h9a6 6 0 0 1 0 12h-2"/>', undoStroke));
+    toolbar.append(actButton('redo', '重做（⌘⇧Z）', '<path d="m16 5 4 4-4 4"/><path d="M20 9h-9a6 6 0 0 0 0 12h2"/>', redoStroke));
+    toolbar.append(actButton('clear', '清屏（C）', '<path d="M5 5l14 14M19 5 5 19"/>', clearStrokes));
+    toolbar.append(actButton('close', '退出（ESC）', '<path d="M12 3v8"/><path d="M6.5 6.2a8 8 0 1 0 11 0"/>', off));
+    document.body.append(toolbar);
+    syncToolbar();
+  };
+
+  // Edge-docked auto-hide: the bar rests as a thin tab on the left edge and
+  // slides in only when the pointer comes near, so it never covers the
+  // composer. The band between the tab and the chat area keeps the current
+  // state, which makes hovering the revealed bar stable.
+  let toolbarHideTimer = 0;
+  const syncToolbarProximity = (x) => {
+    if (!toolbar) return;
+    if (x < 56) {
+      clearTimeout(toolbarHideTimer);
+      toolbar.classList.add('laolao-laser-toolbar--show');
+    } else if (x > 220) {
+      clearTimeout(toolbarHideTimer);
+      toolbarHideTimer = setTimeout(() => toolbar?.classList.remove('laolao-laser-toolbar--show'), 500);
+    }
+  };
+
+  // ---- settings popover (right-click the footer icon) ----------------------
   let settingsPanel = null;
   const closeSettings = () => { settingsPanel?.remove(); settingsPanel = null; };
 
@@ -241,10 +491,10 @@
     const panel = document.createElement('div');
     panel.id = 'pinkie-laser-settings';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', '激光笔设置');
+    panel.setAttribute('aria-label', '演示工具设置');
 
     const head = document.createElement('h4');
-    head.textContent = '激光笔设置';
+    head.textContent = '演示工具设置';
     const closer = document.createElement('button');
     closer.type = 'button';
     closer.textContent = '✕';
@@ -253,6 +503,11 @@
     head.append(closer);
     panel.append(head);
 
+    const section = (title) => {
+      const h = document.createElement('h5');
+      h.textContent = title;
+      panel.append(h);
+    };
     const slider = (label, min, max, step, get, set, format) => {
       const row = document.createElement('div');
       row.className = 'laser-row';
@@ -273,9 +528,18 @@
       panel.append(row);
     };
 
+    section('激光笔');
     slider('粗细', 0.5, 2, 0.1, () => settings.width, v => { settings.width = v; }, v => `${v.toFixed(1)}×`);
     slider('轨迹时长', 400, 6000, 100, () => settings.trail, v => { settings.trail = v; }, v => `${(v / 1000).toFixed(1)}s`);
     slider('辉光', 0, 2, 0.1, () => settings.glow, v => { settings.glow = v; }, v => `${v.toFixed(1)}×`);
+    section('画笔 / 荧光笔');
+    slider('画笔粗细', 1, 8, 0.5, () => settings.penWidth, v => { settings.penWidth = v; }, v => `${v.toFixed(1)}px`);
+    slider('荧光宽幅', 8, 32, 1, () => settings.hlWidth, v => { settings.hlWidth = v; }, v => `${v.toFixed(0)}px`);
+    slider('荧光浓度', 0.15, 0.6, 0.01, () => settings.hlAlpha, v => { settings.hlAlpha = v; }, v => `${Math.round(v * 100)}%`);
+    section('聚光灯 / 放大镜');
+    slider('光孔大小', 60, 300, 5, () => settings.spotRadius, v => { settings.spotRadius = v; }, v => `${v.toFixed(0)}px`);
+    slider('压暗程度', 0.3, 0.8, 0.05, () => settings.spotDim, v => { settings.spotDim = v; }, v => `${Math.round(v * 100)}%`);
+    slider('放大倍率', 1.5, 3, 0.1, () => settings.magZoom, v => { settings.magZoom = v; }, v => `${v.toFixed(1)}×`);
 
     const swatches = document.createElement('div');
     swatches.className = 'laser-swatches';
@@ -286,7 +550,7 @@
       sw.style.background = preset.css;
       sw.style.color = preset.css;
       sw.title = preset.name;
-      sw.setAttribute('aria-label', `激光颜色：${preset.name}`);
+      sw.setAttribute('aria-label', `主题色：${preset.name}`);
       sw.setAttribute('aria-pressed', settings.color === index ? 'true' : 'false');
       sw.onclick = () => {
         settings.color = index;
@@ -305,8 +569,8 @@
 
     document.body.append(panel);
     const rect = anchor.getBoundingClientRect();
-    panel.style.right = `${Math.max(8, window.innerWidth - rect.left + 10)}px`;
-    panel.style.top = `${Math.min(window.innerHeight - 240, Math.max(8, rect.top - 40))}px`;
+    panel.style.left = `${Math.min(window.innerWidth - 252, Math.max(8, rect.left - 12))}px`;
+    panel.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 10)}px`;
     settingsPanel = panel;
 
     setTimeout(() => {
@@ -320,26 +584,118 @@
     }, 0);
   };
 
+  // ---- stroke management ----------------------------------------------------
+  function undoStroke() {
+    const s = strokes.pop();
+    if (s) redoStack.push(s);
+    syncToolbar();
+  }
+  function redoStroke() {
+    const s = redoStack.pop();
+    if (s) strokes.push(s);
+    syncToolbar();
+  }
+  function clearStrokes() {
+    strokes.length = 0;
+    redoStack.length = 0;
+    drawing = null;
+    syncToolbar();
+  }
+
+  // ---- tool switching --------------------------------------------------------
+  const setTool = (next) => {
+    if (!TOOLS[next]) return;
+    if (tool === 'mag' && next !== 'mag') stopMag();
+    tool = next;
+    drawing = null;
+    points.length = 0;
+    syncToolbar();
+    if (next === 'mag') startMag();
+    showHint(TOOLS[next].hint);
+  };
+
+  // ---- pointer + keyboard ----------------------------------------------------
   const onMove = (event) => {
     const now = performance.now();
+    cursor.x = event.clientX; cursor.y = event.clientY;
+    cursor.sx = event.screenX; cursor.sy = event.screenY;
+    seen = true;
+    syncToolbarProximity(event.clientX);
+    if (drawing) {
+      const last = drawing.pts[drawing.pts.length - 1];
+      if (!last || Math.hypot(event.clientX - last.x, event.clientY - last.y) >= 1.5) {
+        drawing.pts.push({ x: event.clientX, y: event.clientY });
+        if (drawing.pts.length > MAX_STROKE_POINTS) drawing.pts.splice(0, drawing.pts.length - MAX_STROKE_POINTS);
+      }
+      return;
+    }
+    if (tool !== 'laser') return;
     const last = points[points.length - 1];
     // Sub-pixel jitter only pollutes the curve; demand ~1.5px of travel.
     if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 1.5) return;
     points.push({ x: event.clientX, y: event.clientY, t: now });
     if (points.length > MAX_POINTS) points.splice(0, points.length - MAX_POINTS);
     lastMoveAt = now;
-    seen = true;
   };
   const onDown = (event) => {
+    if (event.button !== 0) return;
+    if (tool === 'pen' || tool === 'hl') {
+      drawing = {
+        kind: tool,
+        width: tool === 'pen' ? settings.penWidth : settings.hlWidth,
+        style: strokeStyle(tool),
+        pts: [{ x: event.clientX, y: event.clientY }],
+      };
+      redoStack.length = 0;
+      return;
+    }
     ripples.push({ x: event.clientX, y: event.clientY, t: 0 });
     if (ripples.length > 6) ripples.shift();
   };
+  const onUp = () => {
+    if (!drawing) return;
+    if (drawing.pts.length > 1) strokes.push(drawing);
+    drawing = null;
+    syncToolbar();
+  };
   const onKey = (event) => {
     if (event.key === 'Escape') {
-      // Settings panel gets the first Escape; the laser itself gets the next.
+      // Settings panel gets the first Escape; the toolbox itself gets the next.
       if (settingsPanel) { closeSettings(); return; }
       off();
+      return;
     }
+    if (!active) return;
+    const typing = event.target?.closest?.('input, textarea, [contenteditable="true"], [contenteditable=""]');
+    if (typing) return;
+    // macOS first: Cmd+Z / Cmd+Shift+Z (Ctrl accepted for parity).
+    if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redoStroke(); else undoStroke();
+      }
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const digit = TOOL_ORDER[Number(event.key) - 1];
+    if (digit && event.key.length === 1) { setTool(digit); return; }
+    if (event.key.toLowerCase() === 'c' && event.key.length === 1) clearStrokes();
+  };
+  // Shift+wheel retunes the active tool (ppInk style); plain wheel scrolls.
+  const WHEEL_STEPS = {
+    laser: { get: () => settings.width, set: v => { settings.width = clamp(v, 0.5, 2); }, step: 0.1 },
+    pen: { get: () => settings.penWidth, set: v => { settings.penWidth = clamp(v, 1, 8); }, step: 0.5 },
+    hl: { get: () => settings.hlWidth, set: v => { settings.hlWidth = clamp(v, 8, 32); }, step: 2 },
+    spot: { get: () => settings.spotRadius, set: v => { settings.spotRadius = clamp(v, 60, 300); }, step: 10 },
+    mag: { get: () => settings.magZoom, set: v => { settings.magZoom = clamp(v, 1.5, 3); }, step: 0.1 },
+  };
+  const onWheel = (event) => {
+    if (!active || !event.shiftKey) return;
+    event.preventDefault();
+    const spec = WHEEL_STEPS[tool];
+    if (!spec) return;
+    spec.set(spec.get() + (event.deltaY > 0 ? -spec.step : spec.step));
+    saveSettings();
   };
   const onLeave = () => { seen = false; };
 
@@ -360,11 +716,15 @@
     window.addEventListener('resize', resize);
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointerup', onUp, { passive: true });
     window.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', onWheel, { passive: false });
     document.documentElement.addEventListener('pointerleave', onLeave);
+    buildToolbar();
     rafId = requestAnimationFrame(frame);
     syncButton();
-    showHint('激光笔已开启 · 移动留下光迹 · 单击打出光圈 · ESC 退出 · 右键图标调参数');
+    if (tool === 'mag') startMag();
+    showHint('演示工具已开启 · 1-5 切换 · ⇧滚轮调粗细 · ⌘Z 撤销 · 左缘唤出工具条 · ESC 退出');
   };
 
   const off = () => {
@@ -375,48 +735,62 @@
     window.removeEventListener('resize', resize);
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerdown', onDown);
+    window.removeEventListener('pointerup', onUp);
     window.removeEventListener('keydown', onKey);
+    window.removeEventListener('wheel', onWheel);
     document.documentElement.removeEventListener('pointerleave', onLeave);
+    stopMag();
+    clearTimeout(toolbarHideTimer);
     canvas?.remove(); canvas = null; ctx = null;
-    points.length = 0; ripples.length = 0; seen = false;
+    toolbar?.remove(); toolbar = null;
+    points.length = 0; ripples.length = 0;
+    strokes.length = 0; redoStack.length = 0;
+    drawing = null; seen = false;
     closeSettings();
     document.getElementById('pinkie-laser-hint')?.remove();
     syncButton();
   };
 
   const toggle = () => (active ? off() : on());
-  window.__laolaoLaser = { toggle, on, off, active: () => active, settings };
+  window.__laolaoLaser = {
+    toggle, on, off, setTool,
+    active: () => active,
+    tool: () => tool,
+    settings,
+    strokes: () => strokes.length,
+    undo: undoStroke, redo: redoStroke, clear: clearStrokes,
+  };
 
-  // ---- rail launcher ------------------------------------------------------
+  // ---- global sidebar footer launcher -------------------------------------
+  // The toolbox is global, not tied to one mode's workspace rail: it mounts
+  // into the sidebar footer icon bar next to docs / update / more tools.
   const mount = () => {
-    const rail = document.querySelector('.chat-workspace-rail');
+    const footer = document.querySelector('.sidebar-shell__footer');
+    const host = footer?.querySelector('.sidebar-footer-actions') ||
+      footer?.querySelector('.sidebar-footer-bar') || footer;
     let btn = document.getElementById('pinkie-laser-entry');
-    if (!rail) { btn?.remove(); return; }
-    if (btn?.parentElement === rail) return;
+    if (!host) { btn?.remove(); return; }
+    if (btn?.parentElement === host) return;
     btn?.remove();
     btn = document.createElement('button');
     btn.id = 'pinkie-laser-entry';
     btn.type = 'button';
-    btn.title = '激光笔：左键开启，右键调参数（ESC 退出）';
-    btn.setAttribute('aria-label', '开启激光笔，右键打开设置');
+    btn.className = 'sidebar-brand__icon sidebar-footer-icon';
+    btn.title = '演示工具：左键开启，右键设置（ESC 退出）';
+    btn.setAttribute('aria-label', '演示工具：激光笔、画笔、荧光笔、聚光灯、放大镜');
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    btn.innerHTML = ICON;
-    const label = document.createElement('span');
-    label.textContent = '激光笔';
-    btn.append(label);
+    btn.innerHTML = svgWrap(TOOLS.laser.icon);
     btn.addEventListener('click', toggle);
     btn.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       openSettings(btn);
     });
-    // Park it right above the party space entry so the rail reads as a group.
-    const party = rail.querySelector('#pinkie-party-entry');
-    if (party) party.before(btn); else rail.append(btn);
+    const more = host.querySelector('.laolao-footer-more');
+    if (more) more.before(btn); else host.append(btn);
   };
-  // Poll instead of a subtree-wide MutationObserver: during streaming every
-  // markdown chunk rebuilds the DOM, and each observer receives its own copy
-  // of every mutation record (the GC "record avalanche" that froze the page).
-  // mount() is idempotent, so a slow 1.5s poll is more than enough here.
+  // Poll instead of a subtree-wide observer: during streaming every markdown
+  // chunk rebuilds the DOM, and wide observers each receive a copy of every
+  // mutation record. mount() is idempotent, so a slow 1.5s poll is plenty.
   setInterval(mount, 1500);
   mount();
 })();

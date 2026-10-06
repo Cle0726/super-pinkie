@@ -148,7 +148,7 @@ test('learning stage cache keys match across the head fragment and both installe
   const windows = read('installer/windows/apply-theme.ps1');
   for (const asset of ['css', 'js']) {
     const key = fragment.match(new RegExp(`laolao-learning-stage\\.${asset}\\?v=([a-z]+\\d+)`))[1];
-    assert.equal(key, 'learning9');
+    assert.equal(key, 'learning10');
     const macKeys = [...mac.matchAll(new RegExp(`laolao-learning-stage\\.${asset}\\?v=([a-z]+\\d+)`, 'g'))].map(match => match[1]);
     assert.ok(macKeys.length >= 2);
     assert.deepEqual([...new Set(macKeys)], [key]);

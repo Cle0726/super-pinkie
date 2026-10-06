@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <!-- 2026-10-04: live plist once carried FIRST_BYTE_TIMEOUT=8 + RETRY_BUDGET=20.
+       Any request with a large context needs 15-25s for its first byte, so every
+       attempt was cut at 8s and 64 retries all died — big sessions got a fake
+       "upstream unavailable" 503 while small requests looked fine. Pin generous
+       values here so a reinstall can never bring that wall back. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>UR_PROXY_FIRST_BYTE_TIMEOUT</key>
+    <string>60</string>
+    <key>UR_PROXY_RETRY_BUDGET</key>
+    <string>180</string>
+  </dict>
   <key>Label</key>
   <string>com.openclaw.mm-retry-proxy</string>
   <key>ProgramArguments</key>

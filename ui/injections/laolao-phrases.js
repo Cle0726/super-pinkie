@@ -300,6 +300,9 @@
 
   const localizeText = (node) => {
     if (node.nodeType !== Node.TEXT_NODE) return;
+    // Most text nodes are Lit template whitespace (2814 of 3343 in a 34-group
+    // thread); none of them can match a phrase, so skip them before any lookup.
+    if (!node.nodeValue || !node.nodeValue.trim()) return;
     const parent=node.parentElement;
     const litLabel=parent?litLabelText(parent,(node.nodeValue||'').trim()):null;
     if(litLabel!==null){

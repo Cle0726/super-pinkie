@@ -1610,9 +1610,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var browserBackButton: NSButton?
     private var browserForwardButton: NSButton?
     private var browserReloadButton: NSButton?
+    private var browserCloseButton: NSButton?
     private var browserExternalButton: NSButton?
     private var browserLoadingIndicator: NSProgressIndicator?
     private var browserStatusLabel: NSTextField?
+    private var browserToolbarView: NSView?
+    private var browserResizeView: NSView?
+    /// 网页的「配色」变成深色时由 laolaoWindowControl 告诉原生层，原生画的浏览器栏和分屏底色跟着换。
+    private var nightAppearance = false
     private var lastBrowserURL: URL?
     private var browserAnimationGeneration = 0
     private var primaryFullSizeConstraints: [NSLayoutConstraint] = []
@@ -1921,6 +1926,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let appearanceMode = UserDefaults.standard.string(forKey: "pinkie.appearanceMode") ?? "system"
+        nightAppearance = appearanceMode == "dark" || (appearanceMode == "system" && NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        applyNightAppearance()
         let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let rect = NSRect(
@@ -2037,7 +2045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // Mark only the native shell. The web UI uses this to avoid whole-page
         // opacity animation while keeping its decorative motion intact.
         controller.addUserScript(WKUserScript(
-            source: "document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
+            source: "window.__pinkieBootNight = \(nightAppearance ? "true" : "false"); document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
@@ -2250,12 +2258,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
         let html = #"""
-        <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light">
+        <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
           *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
           main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid #d8679b38;border-radius:20px;background:#fff9;box-shadow:0 16px 45px #9f4c741c;text-align:center}
           .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;background:#f8dfea;color:#ad4a76;font-size:22px}
           h1{margin:0 0 9px;font-size:17px}p{margin:0;color:#997487;line-height:1.65}.detail{margin-top:12px;font-size:11px;color:#ad8799}
+          @media(prefers-color-scheme:dark){body{background:linear-gradient(145deg,#1a131e,#251b2b);color:#efe5ea}main{background:#2a2030;border-color:#ffffff18;box-shadow:0 16px 45px #0006}.mark{background:#ff7fb322;color:#ff9cc6}p,.detail{color:#b3a1ab}}
         </style><main><div class="mark">!</div><h1>页面没有加载成功</h1><p>点上方的重新加载再试；如果登录页仍被网络验证拦住，可点右上角“在默认浏览器打开”。</p><p class="detail">\#(detail)</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -2399,11 +2408,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browserBackButton = back
         browserForwardButton = forward
         browserReloadButton = reload
+        browserCloseButton = close
         browserExternalButton = external
         browserLoadingIndicator = loading
         browserStatusLabel = status
+        browserToolbarView = toolbar
+        browserResizeView = resize
         updateBrowserControls()
+        applyNightAppearance()
         return panel
+    }
+
+    /// 黑夜模式：浏览器工作区和分屏面板这些原生画的底色也换成深色，与网页一致。
+    private func applyNightAppearance() {
+        let dark = nightAppearance
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat) -> NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
+        let followSystem = (UserDefaults.standard.string(forKey: "pinkie.appearanceMode") ?? "system") == "system"
+        NSApp.appearance = followSystem ? nil : appearance
+        window?.appearance = followSystem ? nil : appearance
+        for button in [browserBackButton, browserForwardButton, browserReloadButton, browserCloseButton, browserExternalButton] {
+            button?.appearance = appearance
+            button?.contentTintColor = dark ? rgb(0.81, 0.74, 0.79, 1) : rgb(0.39, 0.55, 0.59, 1)
+        }
+        browserLoadingIndicator?.appearance = appearance
+        if #available(macOS 12.0, *) {
+            browserWebView?.underPageBackgroundColor = dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.985, 0.993, 0.97)
+        }
+        if let panel = browserPanel {
+            panel.appearance = appearance
+            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.975, 0.988, 0.97)).cgColor
+        }
+        if let toolbar = browserToolbarView {
+            toolbar.appearance = appearance
+            toolbar.layer?.backgroundColor = (dark ? rgb(0.14, 0.105, 0.16, 0.96) : rgb(1.0, 0.93, 0.97, 0.96)).cgColor
+        }
+        if let address = browserAddressField {
+            address.appearance = appearance
+            address.backgroundColor = dark ? rgb(1, 1, 1, 0.07) : rgb(1.0, 0.985, 0.993, 0.92)
+            address.textColor = dark ? rgb(0.94, 0.90, 0.92, 1) : rgb(0.39, 0.29, 0.35, 1)
+        }
+        browserStatusLabel?.textColor = dark ? rgb(0.72, 0.62, 0.68, 1) : rgb(0.58, 0.42, 0.50, 1)
+        browserResizeView?.layer?.backgroundColor = (dark ? rgb(1.0, 0.5, 0.7, 0.16) : rgb(0.83, 0.33, 0.57, 0.18)).cgColor
+        if let panel = companionPanel {
+            panel.appearance = appearance
+            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.6) : rgb(1.0, 0.93, 0.97, 0.52)).cgColor
+        }
     }
 
     private func browserURL(from value: String) -> URL? {
@@ -3155,6 +3205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
 
         companionPanel = panel
+        applyNightAppearance()
         companionWebView = companion
         companionDictation.webView = companion
         // Both halves need the same compact chat presentation.  Leaving the
@@ -3368,6 +3419,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
            let body = message.body as? [String: Any],
            body["action"] as? String == "toggle-fullscreen" {
             toggleFullScreen(nil)
+            return
+        }
+        if message.name == windowControlHandlerName,
+           message.webView === webView,
+           let body = message.body as? [String: Any],
+           body["action"] as? String == "appearance",
+           let dark = body["dark"] as? Bool {
+            // 主聊天页决定全局外观；副屏的初始化消息不能把它改回旧配色。
+            var modeChanged = false
+            if let mode = body["mode"] as? String, ["light", "dark", "system"].contains(mode) {
+                modeChanged = mode != UserDefaults.standard.string(forKey: "pinkie.appearanceMode")
+                UserDefaults.standard.set(mode, forKey: "pinkie.appearanceMode")
+            }
+            if dark != nightAppearance || modeChanged {
+                nightAppearance = dark
+                applyNightAppearance()
+            }
             return
         }
         if message.name == browserWorkspaceHandlerName,

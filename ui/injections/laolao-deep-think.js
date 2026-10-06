@@ -3,9 +3,11 @@
   // laolao-deep-think: 极致思考按钮 (四档强度, 全模式可用)
   //
   // 挂载在聊天输入框末端的工具位。点击弹出紧凑四档预设:
-  //   基础 = 标准审议流水线 (Planner→Solver×N→Critic×N→Judge)
-  //   加强 = 基础 + 该模式最推荐的两项升级 (见架构文档"模式×升级"表)
-  //   全开 = 基础 + 六项升级全部叠加
+  //   （与后端 deliberationRequirements / buildDeliberationPlan 实际做的事一致）
+  //   基础 = 按任务类型走对应流程（简单问题直接答；改代码先复现再改再测；难题独立解法验算）
+  //   加强 = 基础 + 说「完成」必须有本轮真实测试、运行或来源证据，拿不到就照实报未完成
+  //   全开 = 加强 + 有标准答案或要取舍的问题，多做几版独立解法，批评必须带证据
+  //   长跑 = 加强 + 每个阶段写检查点，中断自动续跑，直到完成或明确卡点
   //
   // 先选档位，之后每条消息发送前都通过网关挂载运行单；不会改写输入文字。
   //
@@ -48,8 +50,8 @@
       numeral: "Ⅰ",
       art: "/laolao-deep-think-base.png?v=tierart3",
       motion: "/laolao-deep-think-base.webm?v=tiermotion2",
-      short: "标准审议流水线",
-      desc: "第 0—4 层 · 1 规划 / 3~5 求解 / 2~3 批评 / 1 仲裁",
+      short: "按任务类型走流程",
+      desc: "简单问题直接答；改代码先复现再修再测；难题用独立解法验算",
     },
     {
       id: "boost",
@@ -57,8 +59,8 @@
       numeral: "Ⅱ",
       art: "/laolao-deep-think-boost.png?v=tierart3",
       motion: "/laolao-deep-think-boost.webm?v=tiermotion2",
-      short: "本模式两项推荐升级",
-      desc: "基础流水线 + 当前模式最值得用的两项升级",
+      short: "完成必须有真实证据",
+      desc: "基础流程 + 说完成前要有本轮的测试、运行或来源证据；拿不到就照实说没完成",
     },
     {
       id: "full",
@@ -66,8 +68,8 @@
       numeral: "Ⅲ",
       art: "/laolao-deep-think-full.png?v=tierart3",
       motion: "/laolao-deep-think-full.webm?v=tiermotion2",
-      short: "六项升级按需全开",
-      desc: "六项升级全部开启；只在适用环节执行，避免无意义空转",
+      short: "多版独立解法互相核对",
+      desc: "加强档 + 有标准答案或要取舍的问题多做几版独立解法；批评必须附反例或失败的测试",
     },
     {
       id: "marathon",
@@ -75,8 +77,8 @@
       numeral: "Ⅳ",
       art: "/laolao-deep-think-marathon.png?v=tierart3",
       motion: "/laolao-deep-think-marathon.webm?v=tiermotion2",
-      short: "无人值守持续执行",
-      desc: "全开流水线 + 阶段存档 + 高频失败续接，适合整夜长任务",
+      short: "存档续跑直到做完",
+      desc: "加强档 + 每个阶段写检查点，中断自动续跑，直到完成或报告明确卡点；适合长任务",
     },
   ];
 
