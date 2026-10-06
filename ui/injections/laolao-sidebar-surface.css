@@ -1,0 +1,218 @@
+/* 侧栏：一层很薄的雾面，和聊天区的雾板融在一起；不画硬边框、不叠多层玻璃。
+   悬停有一块会滑动的柔光（laolao-sidebar-autohide.js 移动它），当前会话是一枚白色小卡片。
+   收起后完全隐藏，左边缘留一条细把手，鼠标靠近会亮起，碰到就滑出。 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) {
+  --sb-ink: color-mix(in srgb, var(--accent) 22%, #4a3d44);
+  --sb-muted: color-mix(in srgb, var(--accent) 18%, #9a8b92);
+  --sb-hover: color-mix(in srgb, var(--accent) 9%, rgba(255, 255, 255, .78));
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .shell-nav {
+  background: transparent !important; border: 0 !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar {
+  position: relative;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .4) 78%, rgba(255, 255, 255, .22)),
+    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 8%, transparent)) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  backdrop-filter: blur(26px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(1.15) !important;
+}
+/* 右侧不画线：用一道很淡的光渐隐过去 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .9) 18%, rgba(255, 255, 255, .7) 82%, transparent);
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar > .sidebar-shell {
+  height: 100%; box-sizing: border-box; padding: 12px 12px 10px !important; overflow: hidden;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-shell, .sidebar-shell__content, .sidebar-shell__body, .sidebar-shell__footer, .sidebar-brand, .sidebar-nav, .sidebar-footer-bar, .sidebar-footer-actions, .nav-section) {
+  border: 0 !important; border-radius: 0 !important; background: transparent !important;
+  box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-brand {
+  min-height: 50px; padding: 0 2px !important; gap: 8px;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-mode-switcher {
+  background: transparent !important; border: 0 !important; border-radius: 12px !important;
+  box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  transition: background .2s ease !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-mode-switcher:hover { background: var(--sb-hover) !important; }
+
+/* 概览 / 更多：两行安静的小入口，不要分隔线 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-nav { padding: 2px 0 4px !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .nav-section--more { margin-top: 0 !important; padding-top: 0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.nav-item, .laolao-classic-more) {
+  min-height: 30px !important; height: 30px; padding: 0 10px !important;
+  color: var(--sb-ink) !important; font-size: 13px !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-classic-more { padding-left: 33px !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-classic-more .nav-section__label-text {
+  font-size: 13px !important; color: var(--sb-ink) !important; letter-spacing: 0 !important; text-transform: none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.nav-item__icon, .nav-section__chevron) { color: var(--sb-muted) !important; opacity: .9; }
+
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-recent-session, .nav-item, .laolao-classic-more) {
+  border: 0 !important; border-radius: 10px !important; background: transparent !important;
+  box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  transform: none !important; position: relative;
+}
+/* 没有滑动柔光时（脚本未就绪）的退路 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-sb-glide]) .sidebar :is(.sidebar-recent-session, .nav-item, .laolao-classic-more):hover {
+  background: var(--sb-hover) !important;
+}
+
+/* 新会话：一枚轻轻浮起的白色按钮，加号悬停时转一下 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:not(#_sb) {
+  margin: 10px 0 8px !important; height: 36px !important; padding: 0 12px !important;
+  border: 1px solid rgba(255, 255, 255, .9) !important; border-radius: 12px !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(255, 255, 255, .7)) !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 10%, transparent), 0 6px 16px -8px color-mix(in srgb, var(--accent) 30%, transparent) !important;
+  color: var(--sb-ink) !important; font-weight: 600 !important;
+  transform: none !important;
+  transition: box-shadow .25s ease, transform .25s cubic-bezier(.3, 1.4, .5, 1) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:hover:not(#_sb) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 12%, transparent), 0 10px 22px -8px color-mix(in srgb, var(--accent) 38%, transparent) !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:active:not(#_sb) { transform: scale(.98) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session__icon {
+  color: var(--accent) !important; transition: transform .35s cubic-bezier(.3, 1.5, .5, 1);
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:hover .sidebar-new-session__icon { transform: rotate(90deg); }
+
+/* 搜索框：带放大镜的浅色胶囊 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls { padding: 0 !important; margin: 0 0 4px !important; gap: 2px 4px !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls :is(input, [type="search"]) {
+  height: 32px !important; padding: 0 10px 0 30px !important;
+  background: rgba(255, 255, 255, .42) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a48d98' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E") no-repeat 10px 50% / 14px !important;
+  border: 1px solid transparent !important; box-shadow: none !important; border-radius: 10px !important;
+  font-size: 12.5px !important; color: var(--sb-ink) !important;
+  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls :is(input, [type="search"]):focus {
+  background-color: rgba(255, 255, 255, .85) !important;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent) !important;
+}
+/* 归档 / 全部删除：平时很淡，鼠标进到会话区才清楚；删除只在悬停时变红 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls .laolao-managed-button {
+  height: 22px !important; padding: 0 6px !important; border-radius: 6px !important;
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+  color: var(--sb-muted) !important; font-size: 11.5px !important;
+  opacity: .55; transition: opacity .2s ease, color .2s ease, background .2s ease !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-sessions:hover .laolao-session-controls .laolao-managed-button { opacity: 1; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls .laolao-managed-button:hover { background: var(--sb-hover) !important; color: var(--sb-ink) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls .laolao-managed-button--danger:hover { color: #c8456a !important; background: rgba(232, 92, 128, .08) !important; }
+
+/* 分组标题：小号灰字；分组上的操作按钮悬停时才清楚 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.laolao-group__label, .nav-section__label-text):not(.laolao-classic-more *) {
+  font-size: 11.5px !important; font-weight: 500 !important; color: var(--sb-muted) !important; letter-spacing: .02em;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-group__head { padding-inline: 6px !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-group__action:not(#_sb) {
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+  color: var(--sb-muted) !important; font-size: 11.5px !important; opacity: .6; transition: opacity .2s ease, color .2s ease !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-group__head:hover .laolao-group__action:not(#_sb) { opacity: 1; color: var(--accent) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-group__count { color: var(--sb-muted) !important; opacity: .7; }
+
+/* 会话行 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session { margin: 1px 0 !important; z-index: 1; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session__name {
+  font-size: 13px !important; color: var(--sb-ink) !important; transition: color .2s ease, transform .25s ease;
+  margin-left: 6px !important;
+}
+/* 当前会话：白色小卡片 + 左侧一粒会长高的光点 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active {
+  background: rgba(255, 255, 255, .86) !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 10%, transparent), 0 6px 14px -8px color-mix(in srgb, var(--accent) 34%, transparent) !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session::before {
+  content: ""; position: absolute; left: 5px; top: 50%; width: 3px; height: 3px; border-radius: 3px;
+  background: var(--accent); opacity: 0; transform: translateY(-50%);
+  transition: height .3s cubic-bezier(.3, 1.4, .5, 1), opacity .2s ease;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active::before { opacity: 1; height: 14px; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { font-weight: 600 !important; color: color-mix(in srgb, var(--accent) 45%, #3d3036) !important; }
+
+/* 滑动柔光（悬停指示），由脚本放进侧栏并移动 */
+.sb-glide {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  border-radius: 10px; background: var(--sb-hover, rgba(255, 255, 255, .7));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
+  opacity: 0; transition: transform .32s cubic-bezier(.25, 1.25, .45, 1), width .32s cubic-bezier(.25, 1.25, .45, 1), height .32s cubic-bezier(.25, 1.25, .45, 1), opacity .2s ease;
+}
+.sb-glide.is-on { opacity: 1; }
+.sb-glide.is-jump { transition: opacity .2s ease; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-shell { position: relative; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-brand, .sidebar-shell__body, .sidebar-shell__footer) { position: relative; z-index: 1; }
+
+/* 底栏：只有图标，悬停时浮起一点 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-shell__footer { padding: 8px 2px 0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-footer-bar { align-items: center; gap: 4px; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-footer-bar > * { background: transparent !important; box-shadow: none !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-brand__icon, .sidebar-footer-icon):not(#_sb) {
+  border: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important;
+  color: var(--sb-muted) !important; border-radius: 10px !important;
+  transition: color .2s ease, background .2s ease, transform .25s cubic-bezier(.3, 1.5, .5, 1) !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-brand__icon, .sidebar-footer-icon):hover:not(#_sb) {
+  color: var(--accent) !important; background: var(--sb-hover) !important; transform: translateY(-1px);
+}
+
+/* ── 收起：完全隐藏，左边缘留一条细把手 ─────────────────────────────── */
+.pinkie-sidebar-edge { display: none; }
+@media (min-width: 851px) {
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell.shell--chat { grid-template-columns: 238px minmax(0, 1fr) !important; }
+  html[data-pinkie-sidebar-auto="1"][data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]) .shell.shell--chat {
+    grid-template-columns: 0 minmax(0, 1fr) !important;
+    grid-template-areas: "nav topbar" "nav content" !important; column-gap: 0 !important;
+  }
+  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav {
+    position: fixed !important; inset: 8px auto 8px 8px !important;
+    width: 238px !important; height: auto !important; z-index: 150 !important;
+    transform: translateX(calc(-100% - 16px)); visibility: hidden; pointer-events: none;
+    transition: transform .42s cubic-bezier(.22, 1.2, .36, 1), visibility .42s;
+  }
+  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav .sidebar {
+    border-radius: 18px !important; overflow: hidden;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .86), color-mix(in srgb, var(--accent) 6%, rgba(255, 252, 253, .8))) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 24px 60px -20px color-mix(in srgb, var(--accent) 40%, rgba(60, 30, 45, .35)), 0 2px 8px rgba(60, 30, 45, .06) !important;
+  }
+  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav .sidebar::after { display: none; }
+  html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-peek="1"] .shell--chat > .shell-nav {
+    transform: none; visibility: visible; pointer-events: auto;
+  }
+  html[data-pinkie-sidebar-auto="1"] .shell--chat .sidebar { width: 238px !important; max-width: none !important; height: 100% !important; }
+  /* 感应区 + 把手：鼠标靠近时把手变长变亮 */
+  html[data-pinkie-sidebar-auto="1"] .pinkie-sidebar-edge {
+    display: block; position: fixed; inset: 0 auto 0 0; z-index: 151; width: 12px;
+    border: 0; padding: 0; background: transparent; cursor: pointer;
+  }
+  html[data-pinkie-sidebar-auto="1"] .pinkie-sidebar-edge::before {
+    content: ""; position: absolute; left: 4px; top: 50%; width: 4px; height: calc(28px + 44px * var(--edge-near, 0));
+    border-radius: 4px; transform: translateY(-50%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 45%, #fff), var(--accent));
+    opacity: calc(.28 + .62 * var(--edge-near, 0));
+    box-shadow: 0 0 calc(14px * var(--edge-near, 0)) color-mix(in srgb, var(--accent) 60%, transparent);
+    transition: height .25s cubic-bezier(.3, 1.4, .5, 1), opacity .25s ease, box-shadow .25s ease;
+  }
+  html[data-pinkie-sidebar-peek="1"] .pinkie-sidebar-edge::before { opacity: 0; }
+  .pinkie-sidebar-edge:focus-visible { outline: none; }
+  .pinkie-sidebar-edge:focus-visible::before { --edge-near: 1; }
+  .pinkie-sidebar-edge:focus-visible::after {
+    content: "显示侧栏"; position: absolute; top: 30%; left: 14px; padding: 7px 10px;
+    border-radius: 8px; color: #4b4540; background: #fffdf9; white-space: nowrap; box-shadow: 0 3px 16px #0001;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav, .sb-glide { transition: none; }
+}

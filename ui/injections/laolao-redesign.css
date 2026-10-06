@@ -1,0 +1,288 @@
+/* 界面改版第二轮：侧边栏、输入框动效、追加消息、回复宽度、去重复提示。
+   选择器前缀保证比主题里已有的规则更具体。 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) {
+  --r2-line: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* ── 输入框：聚焦时边沿有一圈慢慢流动的柔光；碧琪干活时流得快一点，当作加载提示 ── */
+@property --r2-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input::after {
+  content: "";
+  grid-row: 1; grid-column: 1 / -1;
+  align-self: stretch;
+  position: relative; z-index: 2;
+  border-radius: 20px;
+  padding: 1.5px;
+  background: conic-gradient(from var(--r2-angle),
+    transparent 0 55%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 70%,
+    #fff 76%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 82%,
+    transparent 95%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .5s ease;
+  animation: r2-spin 7s linear infinite;
+  /* 看不见的时候不转：这条动画改的是自定义属性，每一帧都要重算样式 */
+  animation-play-state: paused;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input:focus-within::after { opacity: .55; animation-play-state: running; }
+html[data-pinkie-running]:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input::after { opacity: .9; animation-duration: 2.2s; animation-play-state: running; }
+/* 发送那一下：输入盒轻轻一沉再弹回 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input.is-sent::before { animation: r2-sent .5s cubic-bezier(.3, 1.4, .5, 1); }
+/* 发送键出现时弹一下；停止键外面一圈转动的细弧 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input .chat-send-btn:not(.chat-send-btn--stop) { animation: r2-pop .32s cubic-bezier(.3, 1.6, .5, 1); transition: transform .15s ease, box-shadow .2s ease !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input .chat-send-btn:not(.chat-send-btn--stop):hover { transform: translateY(-1px) scale(1.04); }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input .chat-send-btn:not(.chat-send-btn--stop):active { transform: scale(.92); }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input .chat-send-btn.chat-send-btn--stop { overflow: visible !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__input .chat-send-btn.chat-send-btn--stop::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: var(--accent); border-right-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  animation: r2-turn 1s linear infinite; pointer-events: none;
+}
+/* 光标颜色跟模式走 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__composer-combobox textarea { caret-color: var(--accent) !important; }
+
+/* 碧琪在思考时，输入框下面那条「碧琪正……」和聊天里的提示重复，去掉 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__composer-run-status { display: none !important; }
+
+/* ── 追加消息：从整块黄色大框，改成输入框上方一条精致的小卡片 ── */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue {
+  width: min(780px, calc(100% - 48px)) !important;
+  margin: 0 auto 10px !important;
+  padding: 0 !important;
+  padding-right: 248px !important;
+  box-sizing: border-box;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue__title { display: none !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue__list { display: flex; flex-direction: column; gap: 6px; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item {
+  display: flex !important; align-items: center; gap: 10px;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 6px 6px 6px 10px !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--r2-line) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .92), color-mix(in srgb, var(--accent) 5%, #fffaf8)) !important;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 9%, transparent), inset 0 1px #fff !important;
+  animation: r2-slide-in .32s cubic-bezier(.3, 1.3, .5, 1);
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item::before {
+  content: "等会儿发";
+  flex: none;
+  padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  color: color-mix(in srgb, var(--accent) 80%, #4a3a40);
+  font: 600 11px/1.5 -apple-system, "PingFang SC", sans-serif;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__main { flex: 1; min-width: 0; padding: 0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__text {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 13px !important; line-height: 1.5 !important; color: var(--text-strong) !important; padding: 0 !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__actions { display: flex; align-items: center; gap: 4px; flex: none; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__actions .btn {
+  height: 26px !important; min-height: 0 !important; padding: 0 9px !important;
+  border-radius: 999px !important; border: 0 !important;
+  background: transparent !important; box-shadow: none !important;
+  color: color-mix(in srgb, var(--accent) 75%, #4a3a40) !important;
+  font-size: 12px !important; gap: 4px;
+  transition: background .15s;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__actions .btn:hover { background: color-mix(in srgb, var(--accent) 10%, #fff) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__actions .btn svg { width: 13px !important; height: 13px !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__remove { width: 26px !important; padding: 0 !important; justify-content: center; color: #a3928b !important; }
+
+/* 正文列：跟着窗口变宽（收起侧边栏、全屏时能用上大空间），两边只留够呼吸的白（含右侧工具栏的位置），
+   特别宽的屏幕上封顶 1440px，同时把字号放大一点，免得一行字太细太长。
+   输入框和追加卡跟正文同宽。气泡按内容收紧，不再把短回复铺满整行。 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) {
+  --r4-col: min(1440px, calc(100% - 152px));
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-thread-inner {
+  width: 100% !important;
+  max-width: var(--r4-col) !important;
+  margin-inline: auto !important;
+  box-sizing: border-box;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__composer-shell,
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue {
+  width: calc(var(--r4-col) - 92px) !important;
+  max-width: none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant:not(.chat-group--forwarded) > .chat-group-messages {
+  max-width: calc(100% - 46px) !important;
+  width: auto !important;
+  flex: 1 1 0;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant:not(.chat-group--forwarded):not(.chat-group--timeline-step):not(.chat-group--process) .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
+  max-width: 100% !important;
+  width: fit-content !important;
+  padding: 18px 24px 20px !important;
+  text-align: start;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.user .chat-group-messages { max-width: min(72%, 960px) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text table {
+  display: block !important;
+  width: 100% !important;
+  table-layout: auto;
+  overflow-x: auto !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text :is(th, td) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  padding: 10px 12px !important;
+  vertical-align: top;
+}
+/* 字：中文正文 15px、1.75 倍行距，段落和列表之间留气口；学习模式沿用纸面排版（更大一点、更松一点） */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text {
+  font-size: 15px !important;
+  line-height: 1.75 !important;
+  letter-spacing: .005em;
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+html[data-laolao-mode="learning"]:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text {
+  font-size: 15.5px !important;
+  line-height: 1.85 !important;
+  letter-spacing: .01em;
+}
+@media (min-width: 1600px) {
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text { font-size: 16px !important; }
+  html[data-laolao-mode="learning"]:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text { font-size: 16.5px !important; }
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text p {
+  margin: 0 0 .8em !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text :is(strong, b) { font-weight: 600 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1.05em !important;
+  line-height: 1.5 !important;
+  font-weight: 650 !important;
+  margin: 1.3em 0 .55em !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text h1 { font-size: 1.3em !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text h2 { font-size: 1.15em !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text hr {
+  border: 0 !important; height: 1px !important; margin: 1.1em 0 !important;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 22%, transparent) 12% 88%, transparent) !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text :is(ul, ol) {
+  margin: .2em 0 .85em !important;
+  padding-left: 1.4em !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text li {
+  margin: .3em 0 !important;
+  padding-left: .1em;
+  font-size: inherit !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text li::marker { color: color-mix(in srgb, var(--accent) 65%, transparent); }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text li > p { margin: 0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text li > :is(ul, ol) { margin: .25em 0 .35em !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text > :first-child { margin-top: 0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text > :last-child { margin-bottom: 0 !important; }
+
+/* 消息里的小按钮（复制、删除、展开…）不做毛玻璃：每个按钮各算一次背景模糊，滚动时几十个一起算，
+   24px 的按钮上根本看不出模糊，去掉后样子不变。 */
+.chat-thread :is(.btn, .chat-expand-btn, .chat-group-footer button) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 只有消息文字能选中：背景氛围画布、碧琪、头像、按钮这些装饰不能被选中（选中时 WebKit 会给整块画布盖一层粉色） */
+.pinkie-ambient, .pinkie-burst, .pinkie-buddy, .pinkie-buddy *, .r3-mark, .r3-ghost, .pinkie-focus-track,
+.card.chat canvas, .chat-avatar, .chat-group-footer, .chat-thread img:not(.chat-text img), .topbar,
+html:not([data-laolao-plain-composer]) .agent-chat__composer-shell *:not(textarea):not(input):not([contenteditable="true"]),
+html:not([data-laolao-plain-composer]) .chat-thread {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none;
+}
+html:not([data-laolao-plain-composer]) .chat-thread :is(.chat-text, .chat-text *, pre, code, table, input, textarea, [contenteditable="true"]) {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+html:not([data-laolao-plain-composer]):not([data-pinkie-night]) .chat-thread ::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: inherit;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-thread { padding-bottom: 78px !important; scroll-padding-bottom: 78px; }
+
+@media (max-width: 850px) {
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .shell.shell--chat,
+  html:not([data-laolao-plain-composer]):not([data-r2-off]):has(.sidebar.sidebar--collapsed) .shell.shell--chat.shell--nav-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: "topbar" "content" !important;
+  }
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { padding-right: 180px !important; }
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) { --r4-col: calc(100% - 24px); }
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__composer-shell,
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { width: calc(100% - 32px) !important; }
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant > .chat-group-messages { max-width: calc(100% - 46px) !important; }
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item::before { display: none; }
+}
+
+@media (max-width: 480px) {
+  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue {
+    padding-right: 0 !important;
+    margin-bottom: 94px !important;
+  }
+}
+
+/* 完成时的彩纸改由按模式的点缀负责 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .pinkie-confetti { display: none !important; }
+
+@keyframes r2-spin { to { --r2-angle: 360deg; } }
+@keyframes r2-turn { to { transform: rotate(360deg); } }
+@keyframes r2-pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes r2-sent { 0% { transform: scale(1); } 35% { transform: scale(.985) translateY(1px); } 100% { transform: scale(1); } }
+@keyframes r2-slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html .agent-chat__input::after, html .chat-send-btn--stop::after { animation: none !important; }
+}
+
+/* ══ 沉浸感交互层（immersion.js） ══════════════════════════════════════ */
+/* 发送时飘走的文字 */
+.r3-ghost {
+  position: fixed; z-index: 2147482000; pointer-events: none; box-sizing: border-box;
+  color: color-mix(in srgb, var(--accent, #e94f91) 55%, #3a3035);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent, #e94f91) 35%, transparent);
+}
+
+/* 新消息入场 */
+.chat-group.r3-in--user { animation: r3-in-user .5s cubic-bezier(.22, 1.25, .36, 1) both; transform-origin: 100% 100%; }
+.chat-group.r3-in--assistant { animation: r3-in-assistant .6s cubic-bezier(.22, 1, .36, 1) both; transform-origin: 0 100%; }
+@keyframes r3-in-user { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes r3-in-assistant { from { opacity: 0; transform: translateY(12px) scale(.995); } to { opacity: 1; transform: none; } }
+
+/* 完成：最新回复上扫过一道柔光 */
+.chat-bubble.r3-sheen { position: relative; overflow: clip; }
+.chat-bubble.r3-sheen::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -45%; width: 45%; pointer-events: none; z-index: 3;
+  background: linear-gradient(105deg, transparent 15%, rgba(255, 255, 255, .7) 45%, color-mix(in srgb, var(--accent, #e94f91) 18%, transparent) 55%, transparent 85%);
+  will-change: transform;
+  animation: r3-sheen 1.3s cubic-bezier(.3, .6, .3, 1) both;
+}
+@keyframes r3-sheen { from { transform: translateX(0); } to { transform: translateX(330%); } }
+
+/* 碧琪察觉鼠标靠近 */
+.pinkie-buddy.is-near .pinkie-buddy__img.is-front { transform: translateY(-2px); filter: drop-shadow(0 5px 9px color-mix(in srgb, var(--accent, #e94f91) 26%, transparent)) brightness(1.03); }
+.pinkie-buddy__img { transition: opacity .28s ease, transform .35s cubic-bezier(.3, 1.5, .5, 1), filter .3s ease; }
+
+/* 碧琪身边的小心心 */
+.r3-mark { position: fixed; z-index: 2147482001; width: 16px; height: 16px; pointer-events: none; }
+.r3-mark svg { width: 100%; height: 100%; fill: var(--accent, #e94f91); filter: drop-shadow(0 1px 3px color-mix(in srgb, var(--accent, #e94f91) 40%, transparent)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .r3-mark, .r3-ghost { display: none !important; }
+  .chat-group.r3-in--user, .chat-group.r3-in--assistant, .chat-bubble.r3-sheen::after { animation: none !important; }
+}

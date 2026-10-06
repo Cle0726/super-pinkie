@@ -52,7 +52,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   const revisions = {
-    'laolao-mode-transition-fx.js': 'modetransitionfx5',
+    'laolao-mode-transition-fx.js': 'modetransitionfx6',
     'laolao-mode-transition-fx.css': 'modetransitionfx4',
     'laolao-splash-fx.js': 'splashfx1',
     'laolao-splash.js': 'splash28',
@@ -65,7 +65,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   }
   assert.match(fragment, /laolao-splash\.css\?v=splash20/);
   assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx4/);
-  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx5/);
+  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx6/);
   assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx1/);
   assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
   for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {

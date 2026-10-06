@@ -110,7 +110,7 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   assert.deepEqual([...methods.keys()].sort(), [
     'pinkie.learning.current', 'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
-    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.restore',
+    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare', 'pinkie.learning.notes.restore',
     'pinkie.learning.notes.review', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
     'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit',
   ]);

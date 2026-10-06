@@ -43,7 +43,7 @@ test('ask card files, stickers and cache keys ship through both installers', () 
     assert.match(source, /laolao-ask-user\.js/);
     for (const name of STICKERS) assert.match(source, new RegExp(`laolao-pinkie-status-${name}\\.png`));
     assert.match(source, /askuser1/);
-    assert.match(source, /sidebar28/);
+    assert.match(source, /sidebar29/);
   }
   for (const name of STICKERS) assert.ok(fs.statSync(path.join(root, `ui/assets/laolao-pinkie-status-${name}.png`)).size > 10_000);
   assert.ok(windows.startsWith('﻿'));

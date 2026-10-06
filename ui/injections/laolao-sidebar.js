@@ -23,9 +23,49 @@
     document.dispatchEvent(new CustomEvent("pinkie:reasoning-preparing", {detail}));
   }
 
+  // Max / Ultra 的交付验收在回答结束后进行：跟着后端状态显示「核对中 / 修正中 / 通过」。
+  const reviewWatchers = new Map();
+  const REVIEW_TEXT = {
+    reviewing: () => "碧琪在核对交付",
+    fixing: (status) => `发现 ${status.issues || 1} 处问题，正在修正`,
+    passed: () => "交付核对通过",
+    fixed: () => "已按核对结果修正",
+    unresolved: (status) => `核对后仍有 ${status.issues || 1} 处问题，回复里已说明`,
+  };
+  function watchReview(sessionKey, requestId, tier) {
+    clearTimeout(reviewWatchers.get(sessionKey));
+    const label = {ultra: "Ultra", max: "Max", boost: "加强档", full: "全开档", marathon: "长跑档"}[tier] || "Max";
+    const deadline = Date.now() + 15 * 60_000;
+    const tick = async () => {
+      let status = {};
+      try { status = await gwRequest("pinkie.reasoning.status", {sessionKey}, 10_000) || {}; } catch {}
+      if (requestId && status.requestId && status.requestId !== requestId) return;
+      const phase = status.phase || "idle";
+      const text = REVIEW_TEXT[phase];
+      if (text) emitReasoningProgress({active: true, sessionKey, requestId, tier, phase, text: `${label} · ${text(status)}`, cancellable: phase === "reviewing" || phase === "fixing"});
+      else emitReasoningProgress({active: false, sessionKey, requestId});
+      if (["passed", "fixed", "unresolved"].includes(phase)) {
+        reviewWatchers.set(sessionKey, setTimeout(() => emitReasoningProgress({active: false, sessionKey, requestId}), phase === "unresolved" ? 5000 : 2600));
+        return;
+      }
+      if (["idle", "skipped", "unchecked"].includes(phase) && Date.now() > deadline - 14 * 60_000) return;
+      // 长跑档可能做很久：没到验收阶段就慢一点问。
+      if (Date.now() < deadline) reviewWatchers.set(sessionKey, setTimeout(tick, phase === "answering" ? 8000 : 4000));
+    };
+    reviewWatchers.set(sessionKey, setTimeout(tick, 4000));
+  }
+
   function cancelReasoning(sessionKey, requestId = "") {
     const job = reasoningJobs.get(sessionKey);
-    if (!job || (requestId && job.requestId !== requestId)) return;
+    if (!job) {
+      if (!reviewWatchers.has(sessionKey)) return;
+      clearTimeout(reviewWatchers.get(sessionKey));
+      reviewWatchers.delete(sessionKey);
+      void gwRequest("pinkie.reasoning.cancel", {sessionKey, requestId}, 10_000).catch(() => {});
+      emitReasoningProgress({active: false, sessionKey, requestId});
+      return;
+    }
+    if (requestId && job.requestId !== requestId) return;
     job.cancelled = true;
     emitReasoningProgress({active: false, sessionKey, requestId: job.requestId});
     void gwRequest("pinkie.reasoning.cancel", {sessionKey, requestId: job.requestId}, 12_000).catch(() => {});
@@ -125,11 +165,19 @@
                   })).filter((item) => ['user', 'assistant'].includes(item.role) && item.text);
                 } catch { /* A history refresh is optional; never lose the draft over it. */ }
                 if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
-                const prepared = await gwRequest('pinkie.reasoning.prepare', {sessionKey: key, requestId, tier, message, history}, 300_000);
-                if (!prepared?.prepared) throw new Error('增强推演没有完成');
+                const prepared = await gwRequest('pinkie.reasoning.prepare', {sessionKey: key, requestId, tier, message, history}, 30_000);
+                if (!prepared?.prepared) throw new Error('交付验收没有开启');
                 if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
+                job.review = {requestId, tier};
               }
               send(data);
+              if (job?.review) watchReview(key, job.review.requestId, job.review.tier);
+              else {
+                // 思考强度档位（加强 / 全开 / 长跑）在整个任务结束后也做交付验收。
+                let workTier = '';
+                try { workTier = localStorage.getItem(`laolao:deep-think-tier:${key}`) || ''; } catch {}
+                if (['boost', 'full', 'marathon'].includes(workTier) && message && !message.startsWith('/')) watchReview(key, '', workTier);
+              }
             }
             catch(error) {
               const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : '项目目录尚未确认：'+error.message;

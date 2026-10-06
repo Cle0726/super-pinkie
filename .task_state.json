@@ -24,5 +24,240 @@
     "提交并推送 main",
     "推送 v2.5.5 标签并等待 GitHub Actions 构建 Mac 与 Windows Release",
     "核验 Release 下载项、校验文件与安装启动入口"
-  ]
+  ],
+  "reasoningSubtask": {
+    "status": "INSTALLED_REFRESH_PENDING",
+    "task": "修复模型弹层点不动、配景错位和选档自动退出",
+    "completed": [
+      "后端 XHigh、Max 两轮与 Ultra 三轮隔离审阅已安装，准备与取消按会话和原消息匹配",
+      "模型与思考档位直接通过当前会话 sessions.patch 保存，滑块松开后仍保持弹层打开；仅点击弹层外、顶部或按 Esc 才关闭",
+      "模型文字增加 pointerdown 与 click 双路径，旧档位在切换模型时清除；禁用滑块不再显示误导性可选点位，配景层被上游重绘移除时可重建",
+      "同一滑块未选档位显示可点的小圆点，选中后前面的点由填充轨道覆盖并隐藏；保留原生交互区域及九档各自的渐变材质",
+      "查明当前会话后台有 35 个模型且 hasActiveRun=false，但前端模型目录丢失；加入网关目录和会话状态兜底，恢复模型列表及可调整滑块",
+      "模型目录提前预取并按模式缓存，移除正在读取的冗余提示；切换到不支持思考档位的模型时移除旧滑块，避免无效保存",
+      "新增空目录恢复、目录复用与自动保存后保持弹层打开的测试；模型弹层 20/20，关联测试 32/32",
+      "安装版 UI 资源与源码一致，缓存键升级为 theme75/modelpicker16，代码签名验证通过且 designated requirement 保持 com.cle0726.super-pinkie；网关仍在线",
+      "核对各模式的模型目录，Gemini 3.5 Flash 两个档位与 Gemini 3.6 Flash 四个档位各合并成一个入口；滑块按档位映射回原有模型 ID，旧会话和配置保留；特殊功能模型仍独立显示",
+      "模型弹层与关联测试 34/34，安装版模型选择脚本与源码一致，缓存键升级为 modelpicker17，代码签名及网关健康检查通过；未重启或强制刷新当前窗口"
+    ],
+    "next": "当前窗口重新载入后检查两组模型入口、每档滑块保存和碧琪配景；本次未强制刷新或重启，故未对更新后的当前窗口做可视验收"
+  },
+  "releaseSubtask": {
+    "status": "COMPLETE",
+    "version": "2.5.9",
+    "commit": "6db386e",
+    "run": "https://github.com/Cle0726/super-pinkie/actions/runs/36376460579",
+    "completed": [
+      "macOS 与 Windows 安装器缓存键统一为 theme75/modelpicker17",
+      "Node.js 451/451 与 Python 116/116 回归通过",
+      "已提交并推送 main 和 v2.5.9 标签",
+      "GitHub 发布工作流 verify、source、macos、windows 全部通过",
+      "macOS ZIP、Windows 便携包与 EXE 已上传，Windows 两份校验文件与 GitHub 资产 SHA-256 一致"
+    ],
+    "next": "本地运行中的 App 未重启或替换；用户方便时可从 v2.5.9 发布页更新"
+  },
+  "learningNotesModelSubtask": {
+    "status": "COMPLETE",
+    "task": "笔记只保存，整理改为抽屉独立模型的手动操作",
+    "completed": [
+      "保存选中文字、手写笔记和题卡知识点均不会调用整理模型",
+      "抽屉独立模型选择与轻整理、深度预览 RPC，整理不进入正常聊天",
+      "45 秒超时、模型返回校验、会话隔离、编辑后过期结果保护与原文保留",
+      "达到 500 条时拒绝新增和对比卡，已有超上限文件读写不截断",
+      "真实笔记副本的浏览器验收通过，普通聊天请求为 0，正式笔记未修改",
+      "新增独立模型及保存行为测试，Node 554/554 与 Python 116/116 完整回归通过",
+      "改动前后截图已保存；未提交、源码三个缓存入口保持原样",
+      "按用户授权安装到 /Applications/超級碧琪.app；仅更新笔记相关文件，已备份并保留 App 签名身份",
+      "安装版缓存 learning7；App 重启后独立整理 RPC、60 个模型目录、网关健康和实机抽屉均验证通过",
+      "兼容隐藏旧版笔记控制消息，历史聊天内容保留；安装后 Node 554/554 和 Python 116/116 回归通过"
+    ],
+    "next": [
+      "由用户统一将源码三个公共入口的学习 JS/CSS 缓存 learning5 升到 learning7；文件列表无需新增"
+    ],
+    "installation": {
+      "appPath": "/Applications/超級碧琪.app",
+      "backupRoot": "/Users/Admin/Library/Application Support/SuperPinkie/backups/notes-manual-model-1790841440172885000",
+      "learningCache": "learning7",
+      "signatureVerified": true,
+      "gatewayHealthy": true,
+      "organizerAvailable": true,
+      "notesAndSettingsUnchanged": true,
+      "screenshot": "/Users/Admin/Documents/Codex/2026-09-30/super-pinkie-users-admin-openclaw-workspace-3/outputs/notes-installed.jpg"
+    }
+  },
+  "modeMenuFxSubtask": {
+    "status": "COMPLETE",
+    "task": "模式菜单与顶部头像专属小动效",
+    "completed": [
+      "已完成可交互样片并获用户确认",
+      "已开始接线，特效时长调整为约 800ms",
+      "已通过实机 harness、全量测试、提交和本机 App 更新验收"
+    ],
+    "next": []
+  },
+  "claudeNightTakeover": {
+    "status": "COMPLETE",
+    "task": "接手 Claude：全局黑夜模式、减轻特效并安装本机 App",
+    "updatedAt": "2026-10-05T08:53:11.286193-07:00",
+    "completed": [
+      "已读取 Claude 最新要求：去掉输入粒子、减轻发送特效、全局夜间模式并直接安装",
+      "完成黑夜脚本的早期加载、根路径、重复安装稳定性修复",
+      "补齐冷启动页、原生浏览器控件及错误页外观，跟随系统保留动态切换",
+      "修复配色入口被中文改名后隐藏的问题",
+      "685 项 Node、120 项 Python 测试通过；Swift 编译检查通过",
+      "五模式与 640 宽、学习笔记、模型菜单、追加消息、深浅色切换与刷新已验收",
+      "已备份并安装 /Applications/超級碧琪.app；25 张素材、注入文件与插件均与源码一致",
+      "App 深度严格验签通过，稳定签名身份保持；账号配置和人格文件散列未变",
+      "修复原生模块/CSS 的相对资源路径，直接打开嵌套设置页可加载核心界面"
+    ],
+    "next": [],
+    "installation": {
+      "appPath": "/Applications/超級碧琪.app",
+      "backupRoot": "/Users/Admin/Documents/Codex/2026-10-05/claude-2/work/install-backup",
+      "signatureVerified": true,
+      "nodeTests": 685,
+      "pythonTests": 120,
+      "nightScriptCache": "night2",
+      "classicShellCache": "classic17",
+      "currentWindowRestarted": false,
+      "activation": "用户方便时退出 App 后重开，让当前窗口和原生代码载入更新"
+    }
+  },
+  "replyReadingLayout": {
+    "status": "COMPLETE",
+    "request": "按用户第二张参考图调整回复阅读排版，保留气泡和头像并更新进 App",
+    "steps": [
+      "确认布局与样式来源",
+      "调整阅读宽度、左对齐和段落列表间距",
+      "预览验证并安装"
+    ],
+    "verification": {
+      "centeredColumnPx": 840,
+      "longBubbleMaxPx": 760,
+      "bodyFontPx": 14,
+      "avatarsPreserved": true,
+      "fiveModesChecked": true,
+      "themeChecked": [
+        "light",
+        "dark"
+      ],
+      "installed": true
+    }
+  },
+  "composerDraftPersistence": {
+    "status": "COMPLETE",
+    "request": "每个模式、每个会话自动保存并恢复输入草稿，刷新或重开仍保留",
+    "finding": "原生有分会话 composerPersistence，但仅保留20个会话，需要验证模式切换与关闭保存并补齐",
+    "verification": {
+      "nativeStoreRetained": true,
+      "immediateSave": true,
+      "unfinishedDraftsBeyond20": true,
+      "sessionSwitch": true,
+      "modeIsolation": true,
+      "reload": true,
+      "sentClear": true,
+      "currentNativeDraftPreserved": true,
+      "nativeCacheVersion": "pinkie-drafts=1",
+      "installed": true
+    }
+  },
+  "companionModelSettings": {
+    "status": "COMPLETE",
+    "request": "小吉祥物右键可自设模型和参数，按模式记忆并测试连接",
+    "steps": [
+      "后端持久保存与参数传递",
+      "右键和小菜单设置窗口",
+      "测试、安装并验证"
+    ],
+    "verification": {
+      "perModePersistent": true,
+      "syncAllFiveModes": true,
+      "rightClickAndMenuAndKeyboard": true,
+      "parameterTransportVerified": true,
+      "testConnectionUsesUnsavedSettings": true,
+      "catalogLiveModelCount": 60,
+      "liveGatewayRefreshed": true,
+      "darkPanelChecked": true,
+      "narrowViewport": [
+        360,
+        640
+      ],
+      "narrowDialogWidth": 326,
+      "horizontalOverflow": false,
+      "runtimeTestsPassed": 698,
+      "installed": true
+    },
+    "userPreview": {
+      "status": "manual_refresh_needed",
+      "reason": "原浏览器标签停在内部错误页，浏览器安全策略拒绝自动操作；用户手动刷新即可",
+      "nativeAppConnected": true
+    }
+  },
+  "uniformComposerControls": {
+    "status": "COMPLETE",
+    "request": "所有模式按参考图统一底部功能按钮和上下文UI布局，保留模式各自的功能与其他新改动",
+    "steps": [
+      "检查现有各模式按钮和原生上下文差异",
+      "统一布局顺序及上下文弹窗",
+      "五种模式验收并安装"
+    ],
+    "completedAt": "2026-10-06T04:42:35.391602+00:00",
+    "completedSteps": [
+      "检查现有各模式按钮和原生上下文差异",
+      "统一布局顺序及上下文弹窗",
+      "五种模式验收并安装"
+    ],
+    "changedFiles": [
+      "ui/injections/laolao-theme.css",
+      "ui/injections/laolao-context-compact.js",
+      "ui/injections/laolao-head.fragment.html",
+      "installer/macos/apply-theme.sh",
+      "installer/windows/apply-theme.ps1",
+      "tests/context-compact-ui.test.cjs"
+    ],
+    "validation": {
+      "modes": [
+        "chat",
+        "project",
+        "thinking",
+        "learning",
+        "unrestricted"
+      ],
+      "context": [
+        "known usage",
+        "missing usage",
+        "manual native compaction confirmation and result",
+        "progress does not displace controls"
+      ],
+      "viewportWidths": [
+        1280,
+        560,
+        360
+      ],
+      "nodeTests": {
+        "passed": 38,
+        "failed": 0
+      },
+      "installedAssets": {
+        "theme": "theme84",
+        "context": "contextcompact6"
+      },
+      "codesign": "strict verification passed; designated identity preserved"
+    },
+    "appReload": "Current native App is using dictation; files installed without reloading its active page."
+  },
+  "learningPlushPrototype": {
+    "status": "STOPPED_BY_USER",
+    "request": "学习模式碧琪：轻量真实3D＋局部弹性，先做独立预览看效果",
+    "deliverable": "/Users/Admin/Documents/Codex/2026-10-05/claude-2/outputs/learning-pinkie-3d",
+    "steps": [
+      "程序化毛绒学习形象",
+      "局部按压/摸头/状态动画",
+      "浏览器交互和视觉验收"
+    ],
+    "installedAppChanged": false,
+    "reason": "用户取消本次预览并要求关闭仅代理创建的18832端口；正式App及用户原端口保持不变",
+    "previewPort": 18832,
+    "previewPortClosed": true
+  }
 }

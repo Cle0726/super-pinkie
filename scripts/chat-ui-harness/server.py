@@ -80,6 +80,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     return self.send_bytes(seed.read(), 'text/javascript; charset=utf-8')
             except OSError:
                 return self.send_error(404)
+        if path == '/__perf-probe.js':
+            with open(os.path.join(HERE, 'perf-probe.js'), 'rb') as f:
+                return self.send_bytes(f.read(), 'text/javascript; charset=utf-8')
         if path == '/__fake-gateway.js':
             with open(os.path.join(HERE, 'fake-gateway.js'), 'rb') as f:
                 return self.send_bytes(f.read(), 'text/javascript; charset=utf-8')
@@ -104,7 +107,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             seed = query.get('seed', [''])[0]
             seed_tag = f'<script src="/__seed/{seed}.js"></script>' if re.fullmatch(r'[\w-]+', seed or '') else ''
-            html = html.replace('<head>', '<head>' + seed_tag + SHIM, 1)
+            perf_tag = '<script src="/__perf-probe.js"></script>' if query.get('perf', [''])[0] == '1' else ''
+            html = html.replace('<head>', '<head>' + perf_tag + seed_tag + SHIM, 1)
             html = html.replace('</head>', extra_tags(html) + '\n</head>', 1)
             return self.send_bytes(html.encode('utf-8'), 'text/html; charset=utf-8')
         return super().do_GET()

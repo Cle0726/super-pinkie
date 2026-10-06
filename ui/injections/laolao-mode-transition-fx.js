@@ -872,7 +872,7 @@
     const view = {w: 1, h: 1, glScale: 1, fxScale: 1};
     let gl = null, U = null, fx = null, size = null, s = null;
     let clock = 0, lastNow = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
-    let phraseKey = '', copyStep = 0, waitingText = '', finished = false, destroyed = false;
+    let phraseKey = '', copyStep = 0, waitingText = '', finished = false, destroyed = false, doneOrigin = null;
     let resolveCovered, resolveFinished, rejectReady;
     const covered = new Promise((resolve) => { resolveCovered = resolve; });
     const done = new Promise((resolve) => { resolveFinished = resolve; });
@@ -880,6 +880,7 @@
 
     const resize = () => {
       const rect = ui.overlay.getBoundingClientRect();
+      doneOrigin = null;
       view.w = Math.max(1, rect.width); view.h = Math.max(1, rect.height);
       const dpr = root.devicePixelRatio || 1;
       // 素材只有 1672 像素宽，画布再大也不会更清楚；按需封顶，省 GPU。
@@ -1084,8 +1085,12 @@
       // 加载完成：从进度条末端撒一把
       const doneAt = t - (readyAt + FINISH);
       if (doneAt > 0) {
-        const bar = ui.progress.getBoundingClientRect(), box = ui.overlay.getBoundingClientRect();
-        const x0 = bar.right - box.left - 14, y0 = bar.top - box.top + bar.height / 2;
+        // 进度条在收尾时不动：位置量一次就够。每帧都量会在刚写完样式后强制重新排版。
+        if (!doneOrigin) {
+          const bar = ui.progress.getBoundingClientRect(), box = ui.overlay.getBoundingClientRect();
+          doneOrigin = {x: bar.right - box.left - 14, y: bar.top - box.top + bar.height / 2};
+        }
+        const x0 = doneOrigin.x, y0 = doneOrigin.y;
         for (const p of parts.doneBurst) {
           if (doneAt > p.life) continue;
           const x = x0 + Math.cos(p.ang) * p.speed * doneAt, y = y0 + Math.sin(p.ang) * p.speed * doneAt + .0006 * doneAt * doneAt;

@@ -199,7 +199,8 @@
     document.querySelectorAll(".laolao-context-viewer").forEach((node) => {
       if (!node.closest(".agent-chat__composer-meta") || metas.length !== 1) node.remove();
     });
-    // The upstream meter takes precedence. Only repair its missing-data case.
+    // One capacity control for every mode and for both known/missing usage.
+    // Keep Lit's native meter in place; CSS hides it only while ours is present.
     if (metas.length !== 1 || !usageKey) return;
     const meta = metas[0];
     const ratio = usageKey === currentSessionKey() ? usage : null;
@@ -208,23 +209,6 @@
       if (!budget) return "";
       return `到约 ${formatTokens(budget.threshold)} 令牌（${Math.round(budget.triggerRatio * 100)}%）时自动整理`;
     };
-    const nativeMeter = meta.querySelector(".context-usage");
-    if (nativeMeter) {
-      meta.querySelector(".laolao-context-viewer")?.remove();
-      const popoverContent = nativeMeter.querySelector(".context-usage__popover");
-      let note = nativeMeter.querySelector(".laolao-context-threshold-note");
-      const description = describeThreshold(ratio);
-      if (!description) note?.remove();
-      else {
-        if (!note && popoverContent) {
-          note = document.createElement("small");
-          note.className = "laolao-context-threshold-note";
-          popoverContent.append(note);
-        }
-        if (note && note.textContent !== description) note.textContent = description;
-      }
-      return;
-    }
     let viewer = meta.querySelector(".laolao-context-viewer");
     if (!viewer) {
       viewer = document.createElement("details");
@@ -481,7 +465,7 @@
 #laolao-context-compact-toast{position:fixed;left:50%;bottom:72px;z-index:2147483647;max-width:min(520px,84vw);padding:8px 14px;border:1px solid rgba(255,255,255,.74);border-radius:999px;background:rgba(252,235,244,.96);color:#6d3650;box-shadow:0 10px 28px rgba(106,48,79,.16);font-size:12px;opacity:0;pointer-events:none;transform:translate(-50%,6px);transition:opacity .18s ease,transform .18s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#laolao-context-compact-toast.is-visible{opacity:1;transform:translate(-50%,0)}
 @keyframes laolao-context-spin{to{transform:rotate(360deg)}}@keyframes laolao-context-pop{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.laolao-context-compact-btn,.laolao-context-compact-btn svg,#laolao-context-compact-popover,#laolao-context-compact-toast{animation:none!important;transition:none!important}}
 .laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 9px);z-index:100;width:min(268px,calc(100vw - 24px));box-sizing:border-box;padding:14px;border:1px solid rgba(255,255,255,.78);border-radius:16px;background:linear-gradient(145deg,rgba(255,252,254,.97),rgba(248,234,244,.95));box-shadow:0 15px 38px rgba(88,54,77,.16);color:#503c56;font-size:11px}.laolao-context-viewer__popover strong{font-size:12px}.laolao-context-viewer__amount{margin-top:8px;font-variant-numeric:tabular-nums;font-weight:650}.laolao-context-viewer__bar{height:5px;margin:10px 0;border-radius:99px;background:rgba(119,107,136,.15);overflow:hidden}.laolao-context-viewer__bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c888b1,#9fa5db);transition:width .35s ease}.laolao-context-viewer__note{color:#766b7e;line-height:1.4}.laolao-context-viewer__compact{display:block;width:100%;height:28px;margin-top:10px;border:1px solid rgba(184,99,136,.22);border-radius:9px;background:rgba(255,255,255,.8);color:inherit;font:500 11.5px/1 inherit;cursor:pointer}.laolao-context-viewer__compact:hover{background:#fff}
-.laolao-context-threshold-note{display:block;margin-top:8px;color:#8e5274;font-size:10px;line-height:1.45}
+.agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
 .agent-chat__composer-status-stack:has(.laolao-compaction-notice){display:flex!important;align-items:center;gap:6px}
 .laolao-compaction-notice{display:flex!important;align-items:center;gap:8px;box-sizing:border-box;width:max-content;max-width:min(100%,720px);padding:6px 10px;border:1px solid rgba(205,91,141,.2);border-radius:999px;background:rgba(252,235,244,.88);color:#70425a;font-size:10.5px;line-height:1.35;box-shadow:0 3px 12px rgba(106,48,79,.08)}
