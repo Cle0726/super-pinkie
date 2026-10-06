@@ -99,11 +99,11 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queu
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__actions .btn svg { width: 13px !important; height: 13px !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__remove { width: 26px !important; padding: 0 !important; justify-content: center; color: #a3928b !important; }
 
-/* 正文列：跟着窗口变宽（收起侧边栏、全屏时能用上大空间），两边只留够呼吸的白（含右侧工具栏的位置），
-   特别宽的屏幕上封顶 1440px，同时把字号放大一点，免得一行字太细太长。
-   输入框和追加卡跟正文同宽。气泡按内容收紧，不再把短回复铺满整行。 */
+/* 正文列：铺满窗口（收起侧边栏、全屏时也不在右边留一大块空白），两边只留够呼吸的白和右侧工具栏的位置；
+   1600px 以上的屏幕把字号放大一点。只有超宽外接屏（2200px 以上）才封顶，免得一行长到没法读。
+   输入框和追加卡跟正文同宽。气泡按内容收紧，短回复不会被拉成一整行。 */
 html:not([data-laolao-plain-composer]):not([data-r2-off]) {
-  --r4-col: min(1440px, calc(100% - 152px));
+  --r4-col: min(2200px, calc(100% - 152px));
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-thread-inner {
   width: 100% !important;
@@ -126,6 +126,10 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant:
   width: fit-content !important;
   padding: 18px 24px 20px !important;
   text-align: start;
+}
+/* 回复不止一段（多段、列表、表格、代码、标题…）时气泡铺满整列，右边不再空着一大块；只有一句两句的短回复才按内容收紧 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant:not(.chat-group--forwarded):not(.chat-group--timeline-step):not(.chat-group--process) .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict):has(.chat-text > :nth-child(2), .chat-text :is(ul, ol, table, pre, blockquote, hr, h1, h2, h3, h4)) {
+  width: 100% !important;
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.user .chat-group-messages { max-width: min(72%, 960px) !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text table {
@@ -189,12 +193,29 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant 
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text > :first-child { margin-top: 0 !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant .chat-text > :last-child { margin-bottom: 0 !important; }
 
+/* 雾板下层那张「模糊壁纸」改用预先缩小、模糊好的小图（2–4 KB，按模式各一张），不再对整张大图实时 blur(22px)：
+   实时模糊在窗口或侧栏改变大小时要整块重画，收起侧栏那一帧会因此多卡几十到上百毫秒。看起来一样。 */
+:root { --laolao-wallpaper-soft: url("./laolao-wallpaper-soft.jpg"); }
+html[data-laolao-mode="project"] { --laolao-wallpaper-soft: url("./laolao-wallpaper-soft-project.jpg"); }
+html[data-laolao-mode="thinking"] { --laolao-wallpaper-soft: url("./laolao-wallpaper-soft-thinking.jpg"); }
+html[data-laolao-mode="learning"] { --laolao-wallpaper-soft: url("./laolao-wallpaper-soft-learning.jpg"); }
+html[data-laolao-mode="unrestricted"] { --laolao-wallpaper-soft: url("./laolao-wallpaper-soft-unrestricted.jpg"); }
+html:not([data-laolao-plain-composer]) .card.chat::before {
+  background: var(--laolao-wallpaper-soft) center / cover fixed !important;
+  filter: none !important;
+}
+
 /* 消息里的小按钮（复制、删除、展开…）不做毛玻璃：每个按钮各算一次背景模糊，滚动时几十个一起算，
    24px 的按钮上根本看不出模糊，去掉后样子不变。 */
 .chat-thread :is(.btn, .chat-expand-btn, .chat-group-footer button) {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+
+/* 消息和过程卡的入场动画播完后不要「定格」在最后一帧：fill 留着会让 WebKit 把这些元素一直放在单独的合成层上，
+   长对话里几十上百层，收起侧栏、改窗口大小时每层都要重画（实测一帧 110–250ms，去掉后 60–80ms）。
+   最后一帧本来就和平时一样，换成 backwards 看起来没有区别。 */
+html:not([data-laolao-plain-composer]) .chat-thread :is(.chat-bubble, .chat-group) { animation-fill-mode: backwards !important; }
 
 /* 只有消息文字能选中：背景氛围画布、碧琪、头像、按钮这些装饰不能被选中（选中时 WebKit 会给整块画布盖一层粉色） */
 .pinkie-ambient, .pinkie-burst, .pinkie-buddy, .pinkie-buddy *, .r3-mark, .r3-ghost, .pinkie-focus-track,

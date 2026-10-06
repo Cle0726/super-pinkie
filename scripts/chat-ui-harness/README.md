@@ -56,6 +56,17 @@ __perf.reset();   // 开始计
 __perf.report();  // 每个脚本每秒占多少毫秒、掉帧数、长帧、无限动画
 ```
 
+## 在 App 同款的 WebKit 里录帧
+
+内置浏览器窗格隐藏时会完全停掉 rAF，测不了动画。`wk-host.swift` 用一个 4×4 的小窗口把 WKWebView 留在屏幕上（WebKit 就不会降帧），按时间点执行脚本、按帧率截图：
+
+```bash
+swiftc -O scripts/chat-ui-harness/wk-host.swift -o /tmp/wk
+WK_LIGHT=1 /tmp/wk "http://127.0.0.1:18811/chat?session=agent%3Alearning%3Adashboard%3Awk1&seed=learnreal" /tmp/frames 8 15 "4500=document.querySelector('.shell--chat .sidebar [data-pinkie-sidebar-toggle]').click(),1"
+```
+
+截图在动画进行时会比屏幕慢一点；算时间请在页面里用 rAF 量，截图只用来看样子。
+
 ## 场景
 
 所有场景都接受 `gap`（事件间隔毫秒，默认 250）和 `reply`（最终回复文字）。

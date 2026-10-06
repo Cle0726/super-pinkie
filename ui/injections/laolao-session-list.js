@@ -79,6 +79,7 @@
     const key=api.mode+'|'+archived;void load(api);
     // Only our DOM is rebuilt. Native list remains mounted and can reconcile safely.
     section.classList.add('laolao-managed-sessions');
+    document.documentElement.setAttribute('data-laolao-sessions-managed','1');
     let host=section.querySelector('#laolao-session-manager');
     if(!host){host=el('div');host.id='laolao-session-manager';section.append(host);signature='';}
     const rows=cache.get(key)?.rows||[];

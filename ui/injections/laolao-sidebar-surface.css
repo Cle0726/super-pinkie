@@ -176,18 +176,30 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
     grid-template-columns: 0 minmax(0, 1fr) !important;
     grid-template-areas: "nav topbar" "nav content" !important; column-gap: 0 !important;
   }
+  /* 收起：侧栏按「固定时的样子」原地滑出去（不先变成卡片再滑，那样会像两层叠在一起、卡住了一样）。
+     原生的网格列宽动画关掉：它会让整页聊天每一帧都重新排版；正文改由脚本用位移平滑挪到新位置。 */
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell.shell--chat { transition: none !important; }
+  /* 聊天滚动框常驻一张合成层：收起/固定侧栏时正文跟着滑，第一次滑不用临时建层（实测首帧 225–366ms → 约 100ms）。
+     滚动框里没有 position: fixed 的元素（弹层都挂在 body 上），不受影响。 */
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell--chat .chat-thread { will-change: transform; }
   html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav {
-    position: fixed !important; inset: 8px auto 8px 8px !important;
+    position: fixed !important; inset: 0 auto 0 0 !important;
     width: 238px !important; height: auto !important; z-index: 150 !important;
-    transform: translateX(calc(-100% - 16px)); visibility: hidden; pointer-events: none;
+    transform: translateX(-100%); visibility: hidden; pointer-events: none;
+    transition: transform .34s cubic-bezier(.4, 0, .2, 1), visibility .34s;
+  }
+  /* 鼠标靠左边呼出时是一张浮起的卡片；滑回去的途中保持卡片样子，藏好后才换回去 */
+  html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"] .shell--chat > .shell-nav {
+    inset: 8px auto 8px 8px !important;
+    transform: translateX(calc(-100% - 16px));
     transition: transform .42s cubic-bezier(.22, 1.2, .36, 1), visibility .42s;
   }
-  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav .sidebar {
+  html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"] .shell--chat > .shell-nav .sidebar {
     border-radius: 18px !important; overflow: hidden;
     background: linear-gradient(180deg, rgba(255, 255, 255, .86), color-mix(in srgb, var(--accent) 6%, rgba(255, 252, 253, .8))) !important;
     box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 24px 60px -20px color-mix(in srgb, var(--accent) 40%, rgba(60, 30, 45, .35)), 0 2px 8px rgba(60, 30, 45, .06) !important;
   }
-  html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav .sidebar::after { display: none; }
+  html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"] .shell--chat > .shell-nav .sidebar::after { display: none; }
   html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-peek="1"] .shell--chat > .shell-nav {
     transform: none; visibility: visible; pointer-events: auto;
   }
