@@ -257,10 +257,20 @@
     const message = host.querySelector(".laolao-splash__message");
     if (!shell || !fill || !message) return null;
 
-    // 首帧的 CSS 画面还在朦胧状态，就从开场开始播；已经对焦好了，就直接接手对焦后的画面。
-    let early = true;
-    try { early = /blur\(18px\)/.test(root.getComputedStyle(host, "::after").filter || ""); } catch {}
-    const offset = early ? 0 : OPENING;
+    // 首帧的 CSS 画面自己会对焦（延迟 700ms、900ms 对清）。动效要等素材加载完才接手，
+    // 这时 CSS 可能已经对焦到一半：从 CSS 当前的进度接着播，不能再从全糊重来（否则会「对焦两次」）。
+    // 直接读 CSS 首帧此刻的模糊半径（屏幕上真实的样子），0 = 全糊、1 = 已对清。
+    const cssFocus = () => {
+      try {
+        const filter = root.getComputedStyle(host, "::after").filter || "";
+        const m = /blur\(([\d.]+)px\)/.exec(filter);
+        if (m) return clamp(1 - parseFloat(m[1]) / 18);
+        return filter === "none" || !filter ? 1 : 0;
+      } catch { return 0; }
+    };
+    // smooth(u) 的反函数（二分），用来把「已经对清了多少」换算成动效开场里的时间点
+    const unsmooth = (y) => { let lo = 0, hi = 1; for (let i = 0; i < 20; i += 1) { const mid = (lo + hi) / 2; if (smooth(mid) < y) lo = mid; else hi = mid; } return (lo + hi) / 2; };
+    let offset = 0;
 
     const glCanvas = el("canvas", "laolao-splash__gl", {"aria-hidden": "true"});
     const fxCanvas = el("canvas", "laolao-splash__particles", {"aria-hidden": "true"});
@@ -499,6 +509,10 @@
       ({gl, U} = created);
       fx = fxCanvas.getContext("2d");
       root.addEventListener("resize", resize);
+      // 对上 CSS 的对焦进度：CSS 走完 = 动效开场也走完；走到一半就从动效开场的对应位置接着走。
+      // 背景的对焦（blurBg）和 CSS 首帧对齐：blurBg = 1 - smooth((t - 300) / 850)
+      const focus = cssFocus();
+      offset = focus >= .995 ? OPENING : focus > 0 ? 300 + 850 * unsmooth(focus) : 0;
       startAt = root.performance.now();
       syncBar(offset);
       render(offset);

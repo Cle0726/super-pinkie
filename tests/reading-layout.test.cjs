@@ -8,7 +8,7 @@ const css = read("laolao-redesign.css");
 const immersion = read("laolao-immersion.js");
 
 test("chat column follows the window width with a cap, and the composer matches it", () => {
-  assert.match(css, /--r4-col:\s*min\(1440px, calc\(100% - 152px\)\)/);
+  assert.match(css, /--r4-col:\s*min\(2200px, calc\(100% - 152px\)\)/);
   assert.match(css, /@media \(min-width: 1600px\) \{\s*html:not\(\[data-laolao-plain-composer\]\):not\(\[data-r2-off\]\) \.chat-group\.assistant \.chat-text \{ font-size: 16px !important; \}/);
   assert.match(css, /\.chat-thread-inner \{[^}]*max-width: var\(--r4-col\) !important/);
   assert.match(css, /\.agent-chat__composer-shell,\s*\n[^{]*\.chat-queue \{\s*width: calc\(var\(--r4-col\) - 92px\) !important;\s*max-width: none !important;/);

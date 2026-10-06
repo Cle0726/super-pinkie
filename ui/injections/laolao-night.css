@@ -104,7 +104,7 @@ html[data-pinkie-night]:not(#_n) * { scrollbar-color: rgba(255, 255, 255, .16) t
 html[data-pinkie-night]:not(#_n) ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14) !important; border-color: transparent !important; }
 
 /* ── 雾板：上面通透，越往下越深的夜雾 ─────────────────────────────── */
-html[data-pinkie-night]:not(#_n) .card.chat::before { opacity: .16 !important; filter: blur(24px) brightness(.5) saturate(.9) !important; }
+html[data-pinkie-night]:not(#_n) .card.chat::before { opacity: .16 !important; filter: brightness(.5) saturate(.82) !important; }
 html[data-pinkie-night]:not(#_n) .card.chat::after {
   background:
     linear-gradient(180deg,
@@ -233,7 +233,7 @@ html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [t
 html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [type="search"]):focus { background-color: rgba(255, 255, 255, .1) !important; }
 html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [type="search"])::placeholder { color: #8f7d88 !important; }
 html[data-pinkie-night]:not(#_n) .sb-glide { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04) !important; }
-html[data-pinkie-night][data-pinkie-sidebar-auto="1"]:not(#_n) .shell--chat > .shell-nav .sidebar {
+html[data-pinkie-night][data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"]:not(#_n) .shell--chat > .shell-nav .sidebar {
   background: linear-gradient(180deg, rgba(36, 27, 41, .97), rgba(28, 21, 32, .97)) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 24px 60px -18px rgba(0, 0, 0, .7) !important;
 }
@@ -344,6 +344,8 @@ html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn.chat-se
 
 /* ── 启动画面 / 模式切换的进度：夜里压暗画面，字和进度条用暖白和柔粉 ───── */
 html[data-pinkie-night]:not(#_n) .laolao-splash { background-color: #140f17 !important; color: #f3e3ea !important; }
+/* 开屏动效接手后宿主必须透明：碧琪冲破画面时圆洞里露出的是 App，不是一块黑底（之前这里会先黑一下才出现 App） */
+html[data-pinkie-night]:not(#_n) .laolao-splash.laolao-splash--fx { background-color: transparent !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash::after { background-color: #140f17 !important; filter: blur(18px) brightness(.5) saturate(.85) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash > :is(canvas, img, picture, video) { filter: brightness(.55) saturate(.85) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash::before {
@@ -355,7 +357,9 @@ html[data-pinkie-night]:not(#_n) :is(.laolao-splash__eyebrow) { color: #ff9cc6 !
 html[data-pinkie-night]:not(#_n) :is(.laolao-splash__title, .laolao-splash__title *) { color: #fbe7f0 !important; text-shadow: 0 2px 24px rgba(255, 127, 179, .25) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash__progress-shell { background: rgba(255, 255, 255, .08) !important; border-color: rgba(255, 255, 255, .1) !important; box-shadow: 0 8px 26px rgba(0, 0, 0, .35) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash__message { color: #f3e3ea !important; }
-html[data-pinkie-night]:not(#_n) .laolao-splash__gl { filter: brightness(.55) saturate(.85) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash__gl { filter: brightness(.55) saturate(.85) !important; transition: filter 260ms ease-in; }
+/* 冲刺时上面那层暗色遮罩会淡出；夜里同时把画面再压暗一点，整体亮度不跳，不会在揭幕前闪一下白 */
+html[data-pinkie-night]:not(#_n) .laolao-splash.is-fx-leaving .laolao-splash__gl { filter: brightness(.38) saturate(.85) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-splash__particles { opacity: .7 !important; }
 html[data-pinkie-night]:not(#_n) .laolao-mode-transition__gl { filter: brightness(.6) saturate(.9) !important; }
 html[data-pinkie-night]:not(#_n) .laolao-mode-transition--fx .laolao-mode-transition__veil {
@@ -525,6 +529,15 @@ html[data-pinkie-night]:not(#_n) :is(#pinkie-laser-toolbar, #pinkie-laser-hint, 
 html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-btn { color: #d6c7cf !important; }
 html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-btn:hover { background: rgba(255, 255, 255, .08) !important; }
 html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-sep { background: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings h4 { color: #f3e8ee !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings h4 button:hover { background: rgba(255, 255, 255, .08) !important; color: #f3e8ee !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings :is(h5, .laser-foot) { color: #a3929c !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings .laser-row label { color: #d9cbd2 !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings .laser-row output { background: rgba(255, 255, 255, .08) !important; color: #ffb3d1 !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--accent) 0 var(--p), rgba(255, 255, 255, .14) var(--p) 100%) !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings input[type="range"]::-webkit-slider-thumb { background: #f3e8ee !important; border-color: transparent !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings .laser-swatch { border-color: #2a2030 !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-settings .laser-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px #2a2030, 0 0 0 3.5px currentColor !important; }
 
 /* 用户设置卡的状态字 */
 html[data-pinkie-night]:not(#_n) .pinkie-user-settings__status { color: #ff9db6 !important; }

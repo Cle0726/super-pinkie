@@ -54,19 +54,19 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   const revisions = {
     'laolao-mode-transition-fx.js': 'modetransitionfx6',
     'laolao-mode-transition-fx.css': 'modetransitionfx4',
-    'laolao-splash-fx.js': 'splashfx1',
+    'laolao-splash-fx.js': 'splashfx2',
     'laolao-splash.js': 'splash28',
-    'laolao-splash.css': 'splash20',
+    'laolao-splash.css': 'splash21',
     'laolao-handoff-bootstrap.js': 'handoff7',
   };
   for (const [file, revision] of Object.entries(revisions)) {
     assert.match(mac, new RegExp(`${file.replace('.', '\\.') }\\?v=${revision}`), `macOS: ${file}`);
     assert.match(windows, new RegExp(`'${file.replace('.', '\\.') }' = '${revision}'`), `Windows: ${file}`);
   }
-  assert.match(fragment, /laolao-splash\.css\?v=splash20/);
+  assert.match(fragment, /laolao-splash\.css\?v=splash21/);
   assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx4/);
   assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx6/);
-  assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx1/);
+  assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx2/);
   assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
   for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
     assert.match(mac, new RegExp(file.replace(/\./g, '\\.')), `macOS copies ${file}`);

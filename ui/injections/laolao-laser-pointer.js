@@ -32,24 +32,29 @@
     #pinkie-laser-toolbar .laser-tool-btn[aria-pressed="true"]{background:linear-gradient(180deg,#f067a4,#d13a7d);color:#fff;box-shadow:0 3px 10px #d13a7d4d}
     #pinkie-laser-toolbar .laser-tool-btn:disabled{opacity:.32;cursor:default;transform:none;background:transparent}
     #pinkie-laser-toolbar .laser-tool-sep{width:18px;height:1px;background:#f0d3e2;margin:3px 0}
-    #pinkie-laser-hint{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(8px);z-index:10003;pointer-events:none;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.94);color:#b04e81;font-size:12px;font-weight:550;letter-spacing:1px;box-shadow:0 6px 22px #a3507f33,inset 0 0 0 1px #ecc3d9;opacity:0;transition:opacity .28s,transform .28s;white-space:nowrap}
+    #pinkie-laser-hint{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(8px);z-index:10003;pointer-events:none;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.94);color:#b04e81;font-size:12.5px;font-weight:500;box-shadow:0 6px 22px #a3507f33,inset 0 0 0 1px #ecc3d9;opacity:0;transition:opacity .28s,transform .28s;white-space:nowrap}
     #pinkie-laser-hint.laolao-laser-hint--show{opacity:1;transform:translateX(-50%) translateY(0)}
-    #pinkie-laser-settings{position:fixed;z-index:10005;width:236px;max-height:min(72vh,560px);overflow-y:auto;padding:14px 14px 10px;border-radius:16px;background:rgba(255,251,253,.97);box-shadow:0 10px 34px #8f3f6b38,inset 0 0 0 1px #f2cfe2;color:#8d4265;font-size:12px;user-select:none;-webkit-user-select:none}
-    #pinkie-laser-settings h4{margin:0 0 10px;font-size:12.5px;font-weight:650;letter-spacing:2px;color:#c2497f;display:flex;justify-content:space-between;align-items:center}
-    #pinkie-laser-settings h4 button{border:0;background:none;color:#c98bab;font-size:13px;cursor:pointer;padding:2px 4px;border-radius:6px}
-    #pinkie-laser-settings h4 button:hover{background:#fbe9f2;color:#b04e81}
-    #pinkie-laser-settings h5{margin:12px 0 4px;font-size:10.5px;font-weight:650;letter-spacing:2px;color:#c98bab;border-top:1px solid #f6d9e8;padding-top:10px}
-    #pinkie-laser-settings .laser-row{display:flex;align-items:center;gap:8px;margin:7px 0}
-    #pinkie-laser-settings .laser-row label{flex:0 0 52px;font-weight:550;letter-spacing:1px}
-    #pinkie-laser-settings .laser-row output{flex:0 0 38px;text-align:right;color:#c2497f;font-weight:600;font-variant-numeric:tabular-nums}
-    #pinkie-laser-settings input[type="range"]{flex:1;height:3px;-webkit-appearance:none;appearance:none;border-radius:99px;background:linear-gradient(90deg,#f067a4,#f4c4db);outline:none;cursor:pointer}
-    #pinkie-laser-settings input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;border:2.5px solid #e0559a;box-shadow:0 1px 5px #d13a7d4d;cursor:pointer}
-    #pinkie-laser-settings .laser-swatches{display:flex;gap:8px;margin:10px 0 4px;padding-left:60px}
-    #pinkie-laser-settings .laser-swatch{width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px #00000026,inset 0 0 0 1px #00000014;cursor:pointer;padding:0;transition:transform .15s}
-    #pinkie-laser-settings .laser-swatch:hover{transform:scale(1.15)}
-    #pinkie-laser-settings .laser-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #fff,0 0 0 4px currentColor}
-    #pinkie-laser-settings .laser-foot{margin-top:8px;padding-top:8px;border-top:1px solid #f6d9e8;font-size:10.5px;color:#c98bab;letter-spacing:.5px}
-    @media(prefers-reduced-motion:reduce){#pinkie-laser-toolbar,#pinkie-laser-hint,#pinkie-laser-settings .laser-swatch{transition:none}}
+    #pinkie-laser-settings{position:fixed;z-index:10005;width:276px;box-sizing:border-box;max-height:min(76vh,600px);overflow-x:hidden;overflow-y:auto;padding:14px 16px 12px;border-radius:16px;background:rgba(255,253,251,.97);border:1px solid rgba(121,87,109,.14);box-shadow:0 18px 44px rgba(60,30,45,.16),0 2px 8px rgba(60,30,45,.06);color:#3a3230;font:400 13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB",sans-serif;-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;animation:laser-settings-in .22s cubic-bezier(.3,1.3,.5,1)}
+    #pinkie-laser-settings h4{margin:0 0 2px;font-size:14px;font-weight:600;color:#3a3230;display:flex;justify-content:space-between;align-items:center}
+    #pinkie-laser-settings h4 button{width:24px;height:24px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#a08e86;font-size:12px;line-height:1;cursor:pointer;padding:0}
+    #pinkie-laser-settings h4 button:hover{background:rgba(0,0,0,.05);color:#5a4a46}
+    #pinkie-laser-settings h5{margin:14px 0 2px;font-size:11.5px;font-weight:600;color:#9a8b84}
+    #pinkie-laser-settings .laser-row{display:grid;grid-template-columns:60px minmax(0,1fr) 46px;align-items:center;column-gap:10px;min-height:30px}
+    #pinkie-laser-settings .laser-row label{font-size:12.5px;font-weight:500;color:#5d4f52;white-space:nowrap}
+    #pinkie-laser-settings .laser-row output{justify-self:end;min-width:38px;box-sizing:border-box;padding:1px 6px;border-radius:6px;background:color-mix(in srgb,var(--accent,#e94f91) 9%,#fff);color:color-mix(in srgb,var(--accent,#e94f91) 72%,#4a3a40);font-size:11.5px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
+    #pinkie-laser-settings input[type="range"]{--p:50%;width:100%;min-width:0;height:18px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;outline:none;cursor:pointer}
+    #pinkie-laser-settings input[type="range"]::-webkit-slider-runnable-track{height:4px;border-radius:99px;background:linear-gradient(90deg,var(--accent,#e94f91) 0 var(--p),rgba(121,87,109,.16) var(--p) 100%)}
+    #pinkie-laser-settings input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;border:1px solid rgba(121,87,109,.22);box-shadow:0 1px 4px rgba(60,30,45,.22);transition:transform .15s}
+    #pinkie-laser-settings input[type="range"]:hover::-webkit-slider-thumb{transform:scale(1.15)}
+    #pinkie-laser-settings input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#e94f91) 30%,transparent)}
+    #pinkie-laser-settings .laser-row--colors{margin-top:8px}
+    #pinkie-laser-settings .laser-swatches{grid-column:2 / -1;display:flex;gap:10px}
+    #pinkie-laser-settings .laser-swatch{width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.18);cursor:pointer;padding:0;transition:transform .15s}
+    #pinkie-laser-settings .laser-swatch:hover{transform:scale(1.12)}
+    #pinkie-laser-settings .laser-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #fff,0 0 0 3.5px currentColor}
+    #pinkie-laser-settings .laser-foot{margin-top:10px;padding-top:8px;border-top:1px solid rgba(121,87,109,.1);font-size:11px;color:#a3958f}
+    @keyframes laser-settings-in{from{opacity:0;transform:translateY(6px) scale(.98)}}
+    @media(prefers-reduced-motion:reduce){#pinkie-laser-toolbar,#pinkie-laser-hint,#pinkie-laser-settings .laser-swatch{transition:none}#pinkie-laser-settings{animation:none}}
   `;
   document.head.append(style);
 
@@ -518,11 +523,15 @@
       input.min = min; input.max = max; input.step = step; input.value = get();
       const out = document.createElement('output');
       out.textContent = format(get());
+      // 轨道左边按当前值填色，一眼看出大概在哪个位置
+      const fill = () => input.style.setProperty('--p', `${((Number(input.value) - min) / (max - min)) * 100}%`);
+      fill();
       input.addEventListener('input', () => {
         set(Number(input.value));
         saveSettings();
         syncTrail();
         out.textContent = format(get());
+        fill();
       });
       row.append(name, input, out);
       panel.append(row);
@@ -541,6 +550,10 @@
     slider('压暗程度', 0.3, 0.8, 0.05, () => settings.spotDim, v => { settings.spotDim = v; }, v => `${Math.round(v * 100)}%`);
     slider('放大倍率', 1.5, 3, 0.1, () => settings.magZoom, v => { settings.magZoom = v; }, v => `${v.toFixed(1)}×`);
 
+    const colorRow = document.createElement('div');
+    colorRow.className = 'laser-row laser-row--colors';
+    const colorLabel = document.createElement('label');
+    colorLabel.textContent = '颜色';
     const swatches = document.createElement('div');
     swatches.className = 'laser-swatches';
     COLOR_PRESETS.forEach((preset, index) => {
@@ -560,7 +573,8 @@
       };
       swatches.append(sw);
     });
-    panel.append(swatches);
+    colorRow.append(colorLabel, swatches);
+    panel.append(colorRow);
 
     const foot = document.createElement('div');
     foot.className = 'laser-foot';
@@ -569,7 +583,7 @@
 
     document.body.append(panel);
     const rect = anchor.getBoundingClientRect();
-    panel.style.left = `${Math.min(window.innerWidth - 252, Math.max(8, rect.left - 12))}px`;
+    panel.style.left = `${Math.min(window.innerWidth - panel.offsetWidth - 8, Math.max(8, rect.left - 12))}px`;
     panel.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 10)}px`;
     settingsPanel = panel;
 

@@ -81,9 +81,9 @@ test('both installers load the splash FX once, before the startup controller', (
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   assert.match(mac, /^\s+laolao-splash-fx\.js \\$/m);
-  assert.ok(mac.indexOf('laolao-splash-fx.js?v=splashfx1"></script>\\n</head>') < mac.indexOf('laolao-splash.js?v=splash28"></script>\\n</head>'));
+  assert.ok(mac.indexOf('laolao-splash-fx.js?v=splashfx2"></script>\\n</head>') < mac.indexOf('laolao-splash.js?v=splash28"></script>\\n</head>'));
   assert.match(mac, /laolao-splash-fx\\\.js\(\?:\\\?\[\^" \]\*\)\?"\[\^>\]\*><\/script>/);
   assert.ok(windows.includes('"laolao-splash-fx.js",'));
-  assert.ok(windows.indexOf("'<script defer src=\"./laolao-splash-fx.js?v=splashfx1\"></script>'") < windows.indexOf("'<script defer src=\"./laolao-splash.js?v=splash28\"></script>'"));
-  assert.match(windows, /'laolao-splash-fx\.js' = 'splashfx1'/);
+  assert.ok(windows.indexOf("'<script defer src=\"./laolao-splash-fx.js?v=splashfx2\"></script>'") < windows.indexOf("'<script defer src=\"./laolao-splash.js?v=splash28\"></script>'"));
+  assert.match(windows, /'laolao-splash-fx\.js' = 'splashfx2'/);
 });

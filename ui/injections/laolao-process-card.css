@@ -3,7 +3,7 @@
   display: block !important;
   margin: 0 16px 6px 4px !important;
   padding-left: 46px;
-  animation: pinkie-process-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: pinkie-process-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 @keyframes pinkie-process-in { from { opacity: 0; transform: translateY(6px); } }
 .chat-group--process > .chat-group-messages { display: block !important; margin: 0 !important; padding: 0 !important; }
@@ -61,7 +61,7 @@
 .pinkie-process .chat-timeline-overflow { margin: 2px 0 4px; font-size: 12.5px; color: #a36b82; }
 
 /* thinking */
-.pinkie-thinking.is-entering { animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.pinkie-thinking.is-entering { animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 /* a soft caret while a thought is being typed out */
 .pinkie-thinking.is-typing .pinkie-thinking__text::after {
   content: ""; display: inline-block; width: 6px; height: 1em; margin-left: 2px; vertical-align: -2px;
@@ -92,7 +92,7 @@
   display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 2px 14px 2px 4px; border-radius: 999px;
   background: rgba(255, 253, 254, 0.78); box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.14), 0 4px 14px rgba(111, 45, 74, 0.05);
   font-size: 13px; color: #805269; transition: opacity 0.45s, transform 0.45s;
-  animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .pinkie-status.is-gone { opacity: 0; transform: translateY(-4px); }
 .pinkie-status__face { position: relative; width: 44px; height: 44px; margin: -7px -2px; flex: none; }

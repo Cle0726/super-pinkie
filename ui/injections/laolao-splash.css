@@ -289,7 +289,8 @@
    画面改由 WebGL 画，宿主背景透明，离场时圆洞里才能露出 App。
    层级：首帧图（淡出）/ WebGL 0 → 原来的浅色遮罩 1 → 文字 2 → 彩纸和气球 3。 */
 .laolao-splash.laolao-splash--fx { background: transparent; }
-.laolao-splash.laolao-splash--fx::after { animation: none; opacity: 0; transition: opacity 220ms linear; }
+/* 接手时首帧图只淡出、不停掉它的对焦动画：一停就会弹回 blur(18px)，淡出的 220ms 里画面会先糊一下 */
+.laolao-splash.laolao-splash--fx::after { opacity: 0; transition: opacity 220ms linear; }
 .laolao-splash__gl,
 .laolao-splash__particles {
   position: absolute;
