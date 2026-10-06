@@ -19,13 +19,12 @@ test('manual context control ships in both UI installers',()=>{
   for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']){
     const source=read(file);
     assert.match(source,/laolao-context-compact\.js/);
-    assert.match(source,/contextcompact5/);
+    assert.match(source,/contextcompact6/);
   }
 });
 
-test('missing native context ring is repaired from real session usage, never a guessed percentage',()=>{
+test('context capacity uses real session usage, never a guessed percentage',()=>{
   const source=read('ui/injections/laolao-context-compact.js');
-  assert.match(source,/meta\.querySelector\("\.context-usage"\)/);
   assert.match(source,/rpc\("sessions\.list", \{agentId, limit: 1000\}/);
   const window={addEventListener(){}};
   const document={

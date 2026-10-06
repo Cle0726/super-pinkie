@@ -215,7 +215,6 @@ html[data-pinkie-native-glass="1"] .card.chat {
 }
 
 .topbar,
-.sidebar,
 .chat-workspace-rail {
   /* 0.46 在壁纸复杂的区域会"消失"，尤其 WKWebView backdrop-filter 不稳时。
      提到 0.82 保留玻璃感的同时确保 session 文字始终可读。 */
@@ -231,9 +230,6 @@ html[data-pinkie-native-glass="1"] .card.chat {
   border-bottom: 1px solid rgba(217, 89, 143, 0.2) !important;
 }
 
-.sidebar {
-  border-right: 1px solid rgba(217, 89, 143, 0.16) !important;
-}
 
 .card.chat {
   background: rgba(255, 251, 252, 0.13) !important;
@@ -564,7 +560,6 @@ code {
 }
 
 .topbar-brand__title::after,
-.sidebar-brand__title::after,
 .dashboard-header__breadcrumb-link::after {
   content: "来啦～老弟";
   color: #b72d6b;
@@ -1013,7 +1008,7 @@ html[data-laolao-workspace-dock="1"] .shell.shell--chat {
 
 /* Party-entry material shared by all four modes. Inputs/messages are excluded.
    No overlay layer: the editor and native window drag targets stay clickable. */
-:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger) {
+:is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger) {
   background: linear-gradient(180deg,rgba(255,250,253,.78),rgba(255,245,251,.60) 40%,rgba(251,220,241,.33)) !important;
   border-color: rgba(255,255,255,.72) !important;
   color: var(--mode-button-ink, #ad4f7f) !important;
@@ -1022,24 +1017,24 @@ html[data-laolao-workspace-dock="1"] .shell.shell--chat {
   -webkit-backdrop-filter: blur(8px) saturate(1.08);
 }
 @media (hover: hover) and (pointer: fine) {
-  :is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):hover {
+  :is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):hover {
     background: linear-gradient(180deg,#fffafdee,#fff5fbc9 60%,#fbe5f1a6) !important;
     border-color: rgba(255,255,255,.94) !important;
     box-shadow: inset 0 1px 0 #fff, 0 5px 15px rgba(152,73,115,.11) !important;
     transform: translateY(-1px);
   }
 }
-:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):active {
+:is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):active {
   background: linear-gradient(180deg,#f8e7f1a6,#fff5fbbd) !important;
   box-shadow: inset 0 1px 3px rgba(141,77,113,.10), 0 1px 4px rgba(152,73,115,.05) !important;
   transform: translateY(1px) scale(.985);
 }
-:is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):focus-visible {
+:is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):focus-visible {
   outline: 2px solid rgba(204,117,163,.65) !important;
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.laolao-mode-switcher,.laolao-mode-menu__option,.sidebar-brand__icon,.sidebar-new-session,.sidebar-footer-icon,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger), .laolao-mode-switcher img, .laolao-mode-menu__option img, .laolao-mode-button__arrow {
+  :is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger), .laolao-mode-switcher img, .laolao-mode-menu__option img, .laolao-mode-button__arrow {
     transition: none !important;
     transform: none !important;
   }
@@ -4837,12 +4832,6 @@ html:not([data-laolao-plain-composer]) .card.chat::after {
 }
 
 /* ── 侧边栏：珍珠雾面，右侧一道细光边 ──────────────────────────────────── */
-html:not([data-laolao-plain-composer]) .sidebar {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.66), color-mix(in srgb, var(--fog-tint) 62%, transparent) 70%, color-mix(in srgb, var(--fog-deep) 58%, transparent)) !important;
-  border-right: 0 !important;
-  box-shadow: inset -1px 0 0 rgba(255,255,255,.75), 1px 0 0 var(--fog-line-soft) !important;
-}
 html:not([data-laolao-plain-composer]) .laolao-session-controls {
   display: flex;
   flex-wrap: wrap;
@@ -4991,9 +4980,15 @@ html:not([data-laolao-plain-composer]) .agent-chat__input :is(.agent-chat__compo
   position: relative;
   margin: 0 1px;
 }
-html:not([data-laolao-plain-composer]) .agent-chat__input .agent-chat__attach-menu { order: -5; margin-left: 6px; }
-html:not([data-laolao-plain-composer]) .agent-chat__input .chat-settings-popover-wrapper { order: -4; }
-html:not([data-laolao-plain-composer]) .agent-chat__input :is(openclaw-tooltip:has(.chat-open-split-view), .chat-open-split-view) { order: -3; }
+/* 所有模式共用顺序，不受各功能脚本的插入时间影响：
+   附件 → 设置 → 网页 GPT → 本模式功能 → 拆分视图 → 项目文件夹。 */
+html:not([data-laolao-plain-composer]) .agent-chat__input .agent-chat__attach-menu { order: -80; margin-left: 6px; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-settings-popover-wrapper { order: -70; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-web-gpt-collab { order: -60; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-learning-notebook-button { order: -50; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-learning-toggle { order: -40; }
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-desensitize-btn { order: -30; }
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(openclaw-tooltip:has(.chat-open-split-view), .chat-open-split-view) { order: -20; }
 html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) {
   grid-row: 2;
   grid-column: 9;
@@ -5011,7 +5006,7 @@ html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) {
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control { grid-column: 10; justify-self: end; }
 html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-deep-think-btn { grid-column: 11; }
-html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-viewer { grid-column: 12; justify-self: end; margin-right: 4px; }
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-context-viewer, .context-usage) { grid-column: 12; justify-self: end; margin-right: 4px; }
 /* 「手动整理」并进容量圈的弹层里：原按钮留在同一格做定位锚点，但不再单独显示 */
 html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-compact-btn {
   grid-column: 12;
@@ -5019,7 +5014,27 @@ html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-compac
   opacity: 0 !important;
   pointer-events: none !important;
 }
+/* 整理进度等提示独占一行，不能挤进功能按钮之间。 */
+html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__composer-status-stack {
+  grid-row: 3 !important;
+  grid-column: 1 / -1 !important;
+  min-width: 0;
+  margin: 0 6px;
+}
 html:not([data-laolao-plain-composer]) .agent-chat__input openclaw-tooltip { display: contents !important; }
+
+@media (max-width: 640px) {
+  /* 小窗口换行，但各组内部的顺序保持一致。 */
+  html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control {
+    grid-row: 3 !important;
+    grid-column: 1 / 11;
+    min-width: 0;
+    max-width: 100%;
+  }
+  html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-deep-think-btn, .laolao-context-viewer, .context-usage, .laolao-context-compact-btn) { grid-row: 3 !important; }
+  html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) { grid-column: 9 / -1; min-width: 0; }
+  html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__composer-status-stack { grid-row: 4 !important; }
+}
 
 /* 第 2 行控件统一成透明的小图标 / 文字，悬停才出底 */
 html:not([data-laolao-plain-composer]) .agent-chat__input :is(
@@ -5027,6 +5042,7 @@ html:not([data-laolao-plain-composer]) .agent-chat__input :is(
   .laolao-web-gpt-collab, .laolao-deep-think-btn, .laolao-desensitize-btn, .laolao-learning-notebook-button, .laolao-learning-toggle,
   .chat-controls__inline-select-trigger, .laolao-context-viewer > summary) {
   height: 28px !important;
+  min-height: 28px !important;
   min-width: 28px !important;
   padding: 0 7px !important;
   border: 0 !important;

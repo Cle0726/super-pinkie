@@ -100,8 +100,12 @@
     },
     {
       key: "theme",
-      selectors: '[aria-label^="颜色模式"], [title^="颜色模式"]',
-      label: (node) => (node.getAttribute("aria-label") || node.title || "颜色模式").replace("颜色模式：", "外观 · "),
+      selectors: '.theme-mode-toggle, [aria-label^="颜色模式"], [title^="颜色模式"], [aria-label^="配色"]',
+      label: (node) => {
+        const label = node.getAttribute("aria-label") || node.title || "";
+        const mode = /系统/.test(label) ? "跟随系统" : /深色/.test(label) ? "深色" : /浅/.test(label) ? "浅色" : "配色";
+        return `外观 · ${mode}`;
+      },
       icon: '<path d="M19 14.5A7 7 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5Z"></path>',
     },
     {
@@ -224,10 +228,18 @@
     if (!footerMenu.hidden) positionFooterMenu();
   };
 
+  // 输入框提示按模式换成碧琪的口吻，称呼和各模式的人格一致（项目叫老板，学习叫先生）。
+  const COMPOSER_HINTS = {
+    chat: "和碧琪聊点什么吧～",
+    project: "老板，这次要碧琪做什么？",
+    thinking: "有什么想法，说给碧琪听听",
+    learning: "先生，今天想学点什么？",
+  };
   const ensureComposerBrand = () => {
+    const hint = COMPOSER_HINTS[document.documentElement.getAttribute("data-laolao-mode")] || "给碧琪发消息";
     document.querySelectorAll(".agent-chat__composer-shell textarea, .agent-chat__input textarea").forEach((input) => {
-      if (input.getAttribute("placeholder") !== "给 碧琪 发消息") {
-        input.setAttribute("placeholder", "给 碧琪 发消息");
+      if (input.getAttribute("placeholder") !== hint) {
+        input.setAttribute("placeholder", hint);
       }
     });
   };
@@ -236,7 +248,7 @@
 
   const moveLaunchers = (from, to) => {
     if (!from || !to || from === to) return;
-    from.querySelectorAll(":scope > #pinkie-party-entry, :scope > #pinkie-roundtable-entry, :scope > #pinkie-laser-entry")
+    from.querySelectorAll(":scope > #pinkie-party-entry, :scope > #pinkie-roundtable-entry")
       .forEach((entry) => to.append(entry));
   };
 

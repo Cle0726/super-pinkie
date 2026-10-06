@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script>
+    document.documentElement.toggleAttribute("data-pinkie-night", typeof window.__pinkieBootNight === "boolean" ? window.__pinkieBootNight : matchMedia("(prefers-color-scheme: dark)").matches);
+  </script>
   <title>超級碧琪正在准备</title>
   <style>
     :root { color-scheme: light; }
@@ -23,6 +26,10 @@
       object-position: center;
       background: #efcbd3;
     }
+    html[data-pinkie-night] { color-scheme: dark; }
+    html[data-pinkie-night], html[data-pinkie-night] body { background: #140f17; color: #efe5ea; }
+    html[data-pinkie-night] .scene { background: #140f17; filter: brightness(.48) saturate(.8); }
+    html[data-pinkie-night] #status { color: #efe5ea !important; background: #2a2030ef !important; border-color: #ffffff18 !important; box-shadow: 0 12px 34px #0006 !important; }
   </style>
 </head>
 <body>

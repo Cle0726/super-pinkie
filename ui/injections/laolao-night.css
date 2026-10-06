@@ -1,0 +1,530 @@
+/* 黑夜模式：跟着「配色」走（深色，或跟随系统且系统是深色）；开关由 laolao-night.js 打在 html[data-pinkie-night] 上。
+   这一层最后加载，全部规则以 html[data-pinkie-night]:not(#_n) 开头，权重高过主题里所有按类名写的规则。
+   思路：夜里的派对小屋——深梅子色的雾、壁纸压暗只留轮廓、字是暖白色、粉色变成柔和的发光色；
+   学习模式的纸面变成暖棕色的夜读纸，不刺眼。 */
+
+/* ── 颜色变量：原生界面与各模块共用 ───────────────────────────────── */
+html[data-pinkie-night]:not(#_n) {
+  color-scheme: dark !important;
+  --n-base: #140f17;
+  --n-fog: 30, 22, 34;            /* 雾板底色 rgb */
+  --n-surface: #241b29;           /* 卡片、气泡 */
+  --n-surface-2: #2c2232;         /* 悬停、次级块 */
+  --n-elevated: #2a2030;          /* 菜单、弹层 */
+  --n-line: rgba(255, 255, 255, .08);
+  --n-line-strong: rgba(255, 255, 255, .14);
+  --n-ink: #efe5ea;
+  --n-ink-strong: #fff6fa;
+  --n-muted: #a8959f;
+  --n-shadow: 0 18px 44px rgba(0, 0, 0, .42);
+
+  --bg: rgba(20, 15, 23, .55) !important;
+  --bg-accent: rgba(46, 30, 44, .5) !important;
+  --bg-elevated: var(--n-elevated) !important;
+  --bg-hover: rgba(255, 255, 255, .06) !important;
+  --bg-muted: rgba(255, 255, 255, .04) !important;
+  --bg-content: transparent !important;
+  --card: rgba(36, 27, 41, .78) !important;
+  --card-foreground: var(--n-ink) !important;
+  --card-highlight: rgba(255, 255, 255, .06) !important;
+  --popover: var(--n-elevated) !important;
+  --popover-foreground: var(--n-ink) !important;
+  --panel: rgba(36, 27, 41, .78) !important;
+  --panel-strong: rgba(42, 32, 48, .92) !important;
+  --panel-hover: rgba(255, 255, 255, .06) !important;
+  --chrome: rgba(24, 18, 28, .7) !important;
+  --chrome-strong: rgba(30, 23, 35, .88) !important;
+  --text: var(--n-ink) !important;
+  --text-strong: var(--n-ink-strong) !important;
+  --chat-text: #eadfe5 !important;
+  --muted: var(--n-muted) !important;
+  --muted-strong: #c3b2bb !important;
+  --muted-foreground: #b3a1ab !important;
+  --border: var(--n-line) !important;
+  --border-strong: var(--n-line-strong) !important;
+  --border-hover: rgba(255, 255, 255, .2) !important;
+  --input: rgba(255, 255, 255, .06) !important;
+  --accent: #ff7fb3 !important;
+  --accent-hover: #ff96c2 !important;
+  --accent-muted: rgba(255, 127, 179, .35) !important;
+  --accent-subtle: rgba(255, 127, 179, .12) !important;
+  --accent-foreground: #2a0f1d !important;
+  --accent-glow: rgba(255, 127, 179, .25) !important;
+  --primary: #ff7fb3 !important;
+  --primary-foreground: #2a0f1d !important;
+  --secondary: rgba(255, 220, 120, .16) !important;
+  --secondary-foreground: #ffe6a6 !important;
+  --ring: #ff7fb3 !important;
+  --focus: #ff7fb3 !important;
+  --focus-ring: rgba(255, 127, 179, .35) !important;
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, .3) !important;
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, .38) !important;
+  --laolao-surface: rgba(36, 27, 41, .7);
+  --laolao-surface-strong: rgba(42, 32, 48, .86);
+  /* 雾板（第一轮改版的变量） */
+  --fog-tint: color-mix(in srgb, var(--accent) 8%, #1d1621);
+  --fog-deep: color-mix(in srgb, var(--accent) 16%, #120d15);
+  --fog-line: rgba(255, 255, 255, .09);
+  --fog-line-soft: rgba(255, 255, 255, .05);
+  --fog-ink: var(--n-ink-strong);
+  --fog-muted: #9d8b95;
+  /* 侧栏（laolao-sidebar-surface.css） */
+  --sb-ink: #e6d9e0;
+  --sb-muted: #9a8892;
+  --sb-hover: rgba(255, 255, 255, .07);
+}
+/* 每个模式的字色、强调色（在深底上调亮一档） */
+html[data-pinkie-night][data-laolao-mode="chat"]:not(#_n) { --accent: #ff7fb3 !important; --accent-rgb: 255, 127, 179; }
+html[data-pinkie-night][data-laolao-mode="project"]:not(#_n) { --accent: #5cc6c4 !important; --accent-rgb: 92, 198, 196; --accent-hover: #7ad6d4 !important; --primary: #5cc6c4 !important; --ring: #5cc6c4 !important; }
+html[data-pinkie-night][data-laolao-mode="thinking"]:not(#_n) { --accent: #c09be6 !important; --accent-rgb: 192, 155, 230; --accent-hover: #d0b3f0 !important; --primary: #c09be6 !important; --ring: #c09be6 !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) { --accent: #b4adf0 !important; --accent-rgb: 180, 173, 240; --accent-hover: #c7c2f6 !important; --primary: #b4adf0 !important; --ring: #b4adf0 !important; }
+html[data-pinkie-night][data-laolao-mode="unrestricted"]:not(#_n) { --accent: #ff7aa2 !important; --accent-rgb: 255, 122, 162; --accent-hover: #ff97b8 !important; --primary: #ff7aa2 !important; --ring: #ff7aa2 !important; }
+html[data-pinkie-night]:not(#_n) :is([data-laolao-mode], body) {
+  --text: var(--n-ink) !important;
+  --text-strong: var(--n-ink-strong) !important;
+  --chat-text: #eadfe5 !important;
+  --muted: var(--n-muted) !important;
+  --muted-strong: #c3b2bb !important;
+}
+
+/* ── 底色与壁纸：窗口本身是透明的，夜里由网页铺一层深色，壁纸压暗成轮廓 ── */
+html[data-pinkie-night]:not(#_n) body {
+  background: rgba(16, 11, 19, .9) !important;
+  color: var(--n-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) body::before {
+  opacity: .2 !important;
+  filter: brightness(.55) saturate(.8) contrast(1.05);
+  background:
+    linear-gradient(rgba(16, 11, 19, .2), rgba(16, 11, 19, .45)),
+    var(--laolao-wallpaper-image) center / cover !important;
+}
+html[data-pinkie-night]:not(#_n) ::selection { background: color-mix(in srgb, var(--accent) 40%, transparent) !important; color: #fff !important; }
+html[data-pinkie-night]:not(#_n) * { scrollbar-color: rgba(255, 255, 255, .16) transparent; }
+html[data-pinkie-night]:not(#_n) ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14) !important; border-color: transparent !important; }
+
+/* ── 雾板：上面通透，越往下越深的夜雾 ─────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .card.chat::before { opacity: .16 !important; filter: blur(24px) brightness(.5) saturate(.9) !important; }
+html[data-pinkie-night]:not(#_n) .card.chat::after {
+  background:
+    linear-gradient(180deg,
+      rgba(var(--n-fog), 0) 0%,
+      rgba(var(--n-fog), .18) 30%,
+      color-mix(in srgb, var(--accent) 5%, rgba(var(--n-fog), .42)) 62%,
+      color-mix(in srgb, var(--accent) 9%, rgba(18, 13, 21, .78)) 100%) !important;
+}
+html[data-pinkie-night]:not(#_n) .topbar {
+  background: linear-gradient(180deg, rgba(20, 15, 23, .72), rgba(20, 15, 23, .25)) !important;
+  border-bottom: 1px solid var(--n-line) !important;
+}
+html[data-pinkie-night]:not(#_n) :is(.topbar-brand__title, .dashboard-header__breadcrumb-link, .laolao-mode-button__label) { color: color-mix(in srgb, var(--accent) 70%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-usage__chip {
+  background: rgba(255, 255, 255, .06) !important; border-color: var(--n-line) !important;
+  color: #d9cbd3 !important; box-shadow: none !important;
+}
+
+/* ── 消息气泡 ─────────────────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
+.chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
+  background: linear-gradient(160deg, rgba(43, 32, 49, .9), rgba(33, 25, 38, .84)) !important;
+  border: 1px solid rgba(255, 255, 255, .07) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 10px 28px rgba(0, 0, 0, .28) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
+.chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict):hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-group.user .chat-bubble:not(.chat-bubble--tool-shell) {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 20%, #2a1f2f), color-mix(in srgb, var(--accent) 12%, #221a27)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .25) !important;
+  color: var(--n-ink-strong) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) :is(p, li, blockquote, h1, h2, h3, h4, h5, td, th, span, div) { text-shadow: none !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) :is(p, li, blockquote, td, th) { color: #e9dee4 !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) :is(h1, h2, h3, h4, h5, strong, b) { color: var(--n-ink-strong) !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) a { color: color-mix(in srgb, var(--accent) 80%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) :is(code, pre, .cm-code-block) {
+  color: #f1e6ec !important; background-color: rgba(255, 255, 255, .06) !important; border-color: rgba(255, 255, 255, .08) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) table :is(th, td) { border-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) th { background: rgba(255, 255, 255, .06) !important; }
+html[data-pinkie-night]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) hr { background: rgba(255, 255, 255, .1) !important; border-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .chat-group-footer :is(.chat-group-timestamp, .chat-sender-name) { color: var(--n-muted) !important; }
+
+/* 学习模式：暖棕色的夜读纸，墨色是米白，不刺眼 */
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) {
+  --read-paper: #2a241f;
+  --read-paper-edge: rgba(214, 180, 130, .16);
+  --read-ink: #e6dacb;
+  --read-ink-soft: #bcae9c;
+  --read-strong: #f5ebdc;
+  --read-mark: rgba(232, 201, 143, .14);
+  --read-mark-line: rgba(232, 190, 120, .45);
+  --read-rule: rgba(214, 170, 110, .22);
+}
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group.assistant:not(.chat-group--forwarded) .chat-group-messages >
+.chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator):not(.chat-bubble--workspace-conflict) {
+  background: linear-gradient(180deg, rgba(44, 37, 31, .96), rgba(38, 32, 27, .95)) !important;
+  border: 1px solid var(--read-paper-edge) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 215, .04), 0 10px 28px rgba(0, 0, 0, .3) !important;
+}
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group.user .chat-bubble:not(.chat-bubble--tool-shell) {
+  background: linear-gradient(180deg, rgba(50, 42, 36, .94), color-mix(in srgb, var(--accent) 10%, #2b241f)) !important;
+  border-color: var(--read-paper-edge) !important;
+}
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) :is(p, li, blockquote, td, th) { color: var(--read-ink) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group :is(.chat-bubble, .chat-group-content) .chat-text { color: var(--read-ink) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group .chat-text :is(strong, b, h1, h2, h3, h4) { color: var(--read-strong) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group .chat-text li li { color: var(--read-ink-soft) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group .chat-text :not(pre) > code { color: var(--read-strong) !important; background: var(--read-mark) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group .chat-text :is(pre, pre code) { background: rgba(0, 0, 0, .22) !important; color: var(--read-ink) !important; }
+html[data-pinkie-night][data-laolao-mode="learning"]:not(#_n) .chat-group .chat-text blockquote { color: var(--read-ink-soft) !important; }
+
+/* ── 输入框 ─────────────────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .agent-chat__input::before {
+  background: linear-gradient(180deg, rgba(44, 34, 50, .97), rgba(35, 27, 40, .97)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 14px 34px rgba(0, 0, 0, .35) !important;
+}
+html[data-pinkie-night]:not(#_n) .agent-chat__input:focus-within::before {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 14px 34px rgba(0, 0, 0, .38) !important;
+}
+html[data-pinkie-night]:not(#_n) .agent-chat__input:is(*, :focus-within) {
+  background: transparent !important;
+}
+html[data-pinkie-night]:not(#_n) .agent-chat__input :is(textarea, input, [contenteditable="true"]) {
+  color: var(--n-ink-strong) !important; text-shadow: none !important; caret-color: var(--accent) !important;
+}
+html[data-pinkie-night]:not(#_n) .agent-chat__composer-combobox textarea::placeholder { color: #8f7d88 !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input > div:not([class]) { color: var(--n-muted) !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input :is(.agent-chat__input-btn, .chat-settings-chip, .chat-composer-model-control, .laolao-deep-think-btn) { color: #cdbdc6 !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input :is(.agent-chat__input-btn, .chat-settings-chip):hover { background: rgba(255, 255, 255, .07) !important; color: var(--accent) !important; }
+html[data-pinkie-night]:not(#_n) :is(.chat-controls__inline-select-label, .pinkie-trigger-label, .pinkie-external-model-name, .pinkie-external-tier) { color: #d6c7cf !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) { box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #2a0f1d !important; color: #2a0f1d !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input .chat-send-btn--stop { background: rgba(255, 255, 255, .08) !important; color: var(--n-ink) !important; border-color: rgba(255, 255, 255, .12) !important; }
+
+/* ── 侧栏 ───────────────────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .sidebar {
+  background:
+    linear-gradient(90deg, rgba(24, 18, 28, .86), rgba(24, 18, 28, .72) 78%, rgba(24, 18, 28, .58)),
+    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--accent) 7%, transparent)) !important;
+}
+html[data-pinkie-night]:not(#_n) .sidebar::after { background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .07) 18%, rgba(255, 255, 255, .05) 82%, transparent) !important; }
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-new-session:not(#_sb) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .05)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, .5) !important;
+  color: var(--sb-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-recent-session--active {
+  background: rgba(255, 255, 255, .08) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05) !important;
+}
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { color: var(--n-ink-strong) !important; }
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-recent-session:not(.sidebar-recent-session--active):hover { background: transparent !important; box-shadow: none !important; }
+html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [type="search"]) {
+  background-color: rgba(255, 255, 255, .06) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23927f8a' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E") !important;
+  color: var(--sb-ink) !important; box-shadow: none !important;
+}
+html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [type="search"]):focus { background-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .sidebar .laolao-session-controls :is(input, [type="search"])::placeholder { color: #8f7d88 !important; }
+html[data-pinkie-night]:not(#_n) .sb-glide { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04) !important; }
+html[data-pinkie-night][data-pinkie-sidebar-auto="1"]:not(#_n) .shell--chat > .shell-nav .sidebar {
+  background: linear-gradient(180deg, rgba(36, 27, 41, .97), rgba(28, 21, 32, .97)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 24px 60px -18px rgba(0, 0, 0, .7) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-workspace-rail {
+  background: linear-gradient(180deg, rgba(36, 27, 41, .9), rgba(28, 21, 32, .82)) !important;
+  border-color: var(--n-line) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-workspace-rail > :is(a, button):not(#_r) { background: transparent !important; border-color: transparent !important; }
+html[data-pinkie-night]:not(#_n) .chat-workspace-rail > :is(a, button):not(#_r):hover { background: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .chat-workspace-rail span:not(#_r) { color: #e0a9c4 !important; }
+html[data-pinkie-night]:not(#_n) .chat-workspace-rail :is(svg) { color: #cdbdc6 !important; }
+
+/* ── 弹层：容量、模型、思考强度 ─────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) :is(.laolao-context-viewer__popover, .chat-controls__picker, .chat-controls__picker-panel, .chat-settings-popover, .chat-controls__reasoning-panel, .laolao-mode-menu, .laolao-footer-overflow, .laolao-menu, .agent-chat__attach-menu-panel, [role="menu"], [role="listbox"], .popover, .dropdown-menu) {
+  background: linear-gradient(160deg, rgba(44, 34, 50, .98), rgba(34, 26, 39, .98)) !important;
+  border: 1px solid rgba(255, 255, 255, .09) !important;
+  box-shadow: var(--n-shadow) !important;
+  color: var(--n-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover :is(strong, .laolao-context-viewer__amount, span, div, p) { color: var(--n-ink) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-context-viewer__compact,
+html[data-pinkie-night]:not(#_n) .chat-controls__picker-actions .btn {
+  background: rgba(255, 255, 255, .07) !important; border-color: rgba(255, 255, 255, .1) !important;
+  color: var(--n-ink) !important; box-shadow: none !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-controls__reasoning-slider::after { background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .04)) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__reasoning-slider::before { opacity: .3 !important; }
+
+/* ── 碧琪小伙伴：菜单、气泡、小标签 ───────────────────────────────── */
+html[data-pinkie-night]:not(#_n) :is(.pinkie-buddy__menu, .pinkie-buddy__bubble) {
+  background: linear-gradient(160deg, rgba(46, 35, 52, .98), rgba(35, 27, 40, .98)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45), inset 0 1px rgba(255, 255, 255, .05) !important;
+  color: var(--n-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__bubble::after { background: rgb(37, 28, 42) !important; border-color: rgba(255, 255, 255, .09) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__item { color: var(--n-ink) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__item:is(:hover, :focus-visible) { background: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__hint { color: #8f7d88 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__sep { background: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__ico { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; color: color-mix(in srgb, var(--accent) 85%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__bubble strong { color: color-mix(in srgb, var(--accent) 80%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__bubble .muted { color: #8f7d88 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__quote { background: rgba(255, 255, 255, .06) !important; color: var(--n-ink-strong) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__chip { background: rgba(255, 255, 255, .07) !important; color: var(--n-ink) !important; border-color: rgba(255, 255, 255, .12) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__chip:hover { background: rgba(255, 255, 255, .12) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__chip.is-primary { background: var(--accent) !important; color: #2a0f1d !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__close { color: #9a8892 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__close:hover { background: rgba(255, 255, 255, .08) !important; color: var(--n-ink) !important; }
+html[data-pinkie-night]:not(#_n) :is(.pinkie-buddy__caption, .pinkie-buddy-ask) {
+  background: rgba(40, 30, 46, .94) !important; color: var(--n-ink) !important;
+  border-color: rgba(255, 255, 255, .1) !important; box-shadow: 0 6px 18px rgba(0, 0, 0, .35) !important;
+}
+/* 夜里碧琪本身稍微收一点亮度，避免在深底上发白刺眼 */
+html[data-pinkie-night]:not(#_n) .pinkie-buddy__img { filter: brightness(.9) saturate(.95) drop-shadow(0 3px 6px rgba(0, 0, 0, .35)) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-buddy.is-near .pinkie-buddy__img.is-front { filter: brightness(.97) drop-shadow(0 5px 10px rgba(0, 0, 0, .4)) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-ambient { opacity: .7 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-ambient:not(.is-on) { opacity: 0 !important; }
+html[data-pinkie-night]:not(#_n) .r3-ghost { color: color-mix(in srgb, var(--accent) 60%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .chat-bubble.r3-sheen::after {
+  background: linear-gradient(105deg, transparent 28%, rgba(255, 255, 255, .12) 45%, color-mix(in srgb, var(--accent) 18%, transparent) 52%, transparent 68%) no-repeat !important;
+  background-size: 250% 100% !important;
+}
+
+/* ── 工作过程卡、状态条、读取提示 ───────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .pinkie-process {
+  background: linear-gradient(160deg, rgba(40, 30, 46, .88), rgba(31, 24, 36, .8)) !important;
+  border-color: rgba(255, 255, 255, .07) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .25) !important;
+  color: #cdbdc6 !important;
+}
+html[data-pinkie-night]:not(#_n) .pinkie-process :is(.pinkie-process__title) { color: var(--n-ink-strong) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-process :is(.pinkie-process__meta, .chat-timeline-overflow, .pinkie-thinking__chev) { color: #9a8892 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-process :is(.pinkie-thinking__head, .chat-tool-msg-summary, .chat-tool-msg-summary *, p, li, span) { color: #cdbdc6 !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-process :is(.pinkie-thinking__body, .pinkie-thinking__text) { color: #b8a6b0 !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-process .chat-group-messages > .chat-bubble::before,
+html[data-pinkie-night]:not(#_n) .chat-group--process .chat-bubble::before { background: color-mix(in srgb, var(--accent) 55%, #3a2b40) !important; }
+html[data-pinkie-night]:not(#_n) .pinkie-thinking__live {
+  background: linear-gradient(90deg, #b8a6b0 35%, var(--accent) 50%, #b8a6b0 65%) !important;
+  background-size: 250% 100% !important; -webkit-background-clip: text !important; background-clip: text !important; color: transparent !important;
+}
+html[data-pinkie-night]:not(#_n) .pinkie-status {
+  background: rgba(40, 30, 46, .9) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), 0 4px 14px rgba(0, 0, 0, .3) !important;
+  color: #cdbdc6 !important;
+}
+html[data-pinkie-night]:not(#_n) .pinkie-status__time { color: #9a8892 !important; }
+html[data-pinkie-night]:not(#_n) .chat-reading-indicator { background: rgba(40, 30, 46, .85) !important; color: #cdbdc6 !important; border-color: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .chat-reading-indicator * { color: inherit !important; }
+html[data-pinkie-night]:not(#_n) :is(.chat-activity-group__body, .chat-tool-card, .chat-tool-msg, .chat-bubble--tool-shell) { background: rgba(255, 255, 255, .04) !important; border-color: rgba(255, 255, 255, .07) !important; color: #cdbdc6 !important; }
+html[data-pinkie-night]:not(#_n) .chat-activity-group__body .chat-tool-msg-summary:hover { background: rgba(255, 255, 255, .06) !important; }
+
+/* ── 追加消息、停止键 ─────────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__item {
+  background: linear-gradient(180deg, rgba(44, 34, 50, .96), rgba(36, 27, 41, .96)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__item::before { background: color-mix(in srgb, var(--accent) 20%, transparent) !important; color: color-mix(in srgb, var(--accent) 80%, #fff) !important; }
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__text { color: var(--n-ink) !important; }
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__actions .btn { color: color-mix(in srgb, var(--accent) 75%, #fff) !important; background: transparent !important; }
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__actions .btn:hover { background: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .chat-queue .chat-queue__remove { color: #9a8892 !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn.chat-send-btn--stop.chat-send-btn--stop:not(#_s):not(#_s2) {
+  background: rgba(255, 255, 255, .08) !important; color: var(--n-ink) !important; border-color: rgba(255, 255, 255, .14) !important;
+}
+
+/* ── 启动画面 / 模式切换的进度：夜里压暗画面，字和进度条用暖白和柔粉 ───── */
+html[data-pinkie-night]:not(#_n) .laolao-splash { background-color: #140f17 !important; color: #f3e3ea !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash::after { background-color: #140f17 !important; filter: blur(18px) brightness(.5) saturate(.85) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash > :is(canvas, img, picture, video) { filter: brightness(.55) saturate(.85) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash::before {
+  background:
+    linear-gradient(90deg, rgba(20, 15, 23, .9) 0%, rgba(20, 15, 23, .66) 40%, rgba(20, 15, 23, .3) 75%),
+    linear-gradient(0deg, rgba(20, 15, 23, .5), transparent 45%) !important;
+}
+html[data-pinkie-night]:not(#_n) :is(.laolao-splash__eyebrow) { color: #ff9cc6 !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-splash__title, .laolao-splash__title *) { color: #fbe7f0 !important; text-shadow: 0 2px 24px rgba(255, 127, 179, .25) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash__progress-shell { background: rgba(255, 255, 255, .08) !important; border-color: rgba(255, 255, 255, .1) !important; box-shadow: 0 8px 26px rgba(0, 0, 0, .35) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash__message { color: #f3e3ea !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash__gl { filter: brightness(.55) saturate(.85) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-splash__particles { opacity: .7 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-mode-transition__gl { filter: brightness(.6) saturate(.9) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-mode-transition--fx .laolao-mode-transition__veil {
+  background: linear-gradient(90deg, rgba(20, 15, 23, .86) 0%, rgba(20, 15, 23, .5) 30%, transparent 55%) !important;
+}
+html[data-pinkie-night]:not(#_n) .laolao-mode-transition--fx :is(.laolao-mode-transition__title, .laolao-mode-transition__name, .laolao-mode-transition__copy, h1, h2, p) { color: #fbe7f0 !important; text-shadow: 0 2px 18px rgba(0, 0, 0, .4) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-mode-transition--fx .laolao-mode-transition__message:not(.laolao-mode-transition__message--lit) { color: #f3e3ea !important; text-shadow: none !important; }
+html[data-pinkie-night]:not(#_n) .laolao-mode-transition--fx .laolao-mode-transition__gloss { background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .02)) !important; }
+
+/* ── 模型与思考强度弹层 ─────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .chat-controls__model {
+  --pinkie-picker-ink: #e9dee4;
+  --pinkie-picker-muted: #a6949f;
+  --pinkie-picker-accent: #c9a9d6;
+}
+html[data-pinkie-night]:not(#_n) .chat-controls__model > .chat-controls__inline-select-menu--combined:not(#_m) {
+  background: linear-gradient(140deg, rgba(44, 34, 50, .97), rgba(34, 26, 40, .97) 55%, rgba(40, 30, 46, .97)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .05) !important;
+  color: var(--pinkie-picker-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-controls__model > .chat-controls__inline-select-menu--combined::after { opacity: .18 !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model > .chat-controls__inline-select-menu--combined::before { color: #a6949f !important; border-bottom-color: rgba(255, 255, 255, .07) !important; background: transparent !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model :is(.pinkie-model-current) {
+  background: rgba(255, 255, 255, .05) !important; border-color: rgba(255, 255, 255, .08) !important; color: var(--pinkie-picker-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-model-current:hover { background: rgba(255, 255, 255, .09) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model :is(.pinkie-model-current__name, .chat-controls__model-option-title, .chat-controls__reasoning-value) { color: var(--pinkie-picker-ink) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model :is(.pinkie-model-current__hint, .pinkie-model-current__icon, .chat-controls__model-option-provider, .chat-controls__reasoning-default, .chat-controls__inline-select-section-label, .chat-controls__inline-select-check) { color: var(--pinkie-picker-muted) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__provider-list { background: rgba(255, 255, 255, .04) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__provider-option { color: #b3a1ab !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__provider-option:is(:hover, [aria-pressed="true"]) { color: var(--n-ink-strong) !important; background: rgba(255, 255, 255, .09) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__combined-model-option:hover:not(:disabled) { background: rgba(255, 255, 255, .07) !important; border-color: rgba(255, 255, 255, .06) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__combined-model-option[aria-selected="true"] { background: rgba(255, 255, 255, .1) !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__reasoning-panel { background: rgba(255, 255, 255, .03) !important; border-top-color: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__provider-models { scrollbar-color: rgba(255, 255, 255, .15) transparent !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__picker-actions .btn:not(#_b) { background: rgba(255, 255, 255, .07) !important; border-color: rgba(255, 255, 255, .1) !important; color: var(--n-ink) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__reasoning-slider::after { background: rgba(255, 255, 255, .1) !important; border-color: rgba(255, 255, 255, .12) !important; }
+
+/* 模式菜单的选项、全局的「派对按钮」材质 */
+html[data-pinkie-night]:not(#_n) :is(.laolao-mode-menu__option, .agent-chat__suggestion, .topbar-icon-btn, .btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):not(#_b) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .04)) !important;
+  border-color: rgba(255, 255, 255, .1) !important;
+  color: var(--n-ink) !important;
+  box-shadow: none !important;
+}
+html[data-pinkie-night]:not(#_n) :is(.laolao-mode-menu__option, .agent-chat__suggestion, .topbar-icon-btn, .btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger):not(#_b):hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .07)) !important;
+  border-color: rgba(255, 255, 255, .16) !important;
+}
+html[data-pinkie-night]:not(#_n) .btn.primary:not(#_b) { background: var(--accent) !important; color: #2a0f1d !important; border-color: transparent !important; }
+html[data-pinkie-night]:not(#_n) .btn.danger:not(#_b) { background: rgba(232, 92, 128, .16) !important; color: #ff9db6 !important; border-color: rgba(232, 92, 128, .3) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .chat-controls__model-browser { background: rgba(255, 255, 255, .04) !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-model-brand-tabs { background: rgba(36, 27, 41, .96) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-model-brand-tab { color: #b3a1ab !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-model-brand-tab[aria-pressed="true"] { color: var(--n-ink-strong) !important; background: color-mix(in srgb, var(--accent) 18%, transparent) !important; border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-fallback-option { color: var(--pinkie-picker-ink) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-fallback-option:hover { background: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-fallback-option[aria-selected="true"] { color: color-mix(in srgb, var(--accent) 75%, #fff) !important; background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-fallback-message { color: var(--pinkie-picker-muted) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model .pinkie-reasoning-stop { background: rgba(255, 255, 255, .5) !important; }
+html[data-pinkie-night]:not(#_n) .chat-controls__model > .chat-controls__inline-select-trigger { color: #d6c7cf !important; background: transparent !important; }
+
+/* ── 学习模式：互动学习卡 ───────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) {
+  --learning-ink: #ece2f2;
+  --learning-paper: rgba(36, 28, 44, .94);
+  --learning-pink-deep: #ff9cc6;
+}
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage {
+  background:
+    radial-gradient(circle at 91% 12%, rgba(255, 127, 179, .14) 0 8%, transparent 28%),
+    linear-gradient(136deg, rgba(42, 32, 50, .96), rgba(36, 28, 46, .94) 62%, rgba(34, 30, 52, .94)) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 15px 44px rgba(0, 0, 0, .4), inset 0 1px rgba(255, 255, 255, .05) !important;
+  color: var(--learning-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage.is-resolved {
+  background: radial-gradient(circle at 88% 18%, rgba(255, 220, 140, .12), transparent 25%), linear-gradient(136deg, rgba(42, 32, 50, .96), rgba(34, 30, 52, .94)) !important;
+}
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage::before { border-color: rgba(255, 127, 179, .06) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage::after { background: rgba(255, 255, 255, .6) !important; box-shadow: 17px 18px 0 2px rgba(255, 160, 210, .3), -19px 29px 0 1px rgba(255, 255, 255, .4) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage__eyebrow { color: #ff9cc6 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage__question { color: #f7eefb !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-learning-stage__lead, .laolao-learning-result__feedback, .laolao-learning-result__explanation, .laolao-learning-stage__status, .laolao-learning-stage__hint) { color: #c3b4cc !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage__hint summary { color: #ff9cc6 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-option { background: rgba(255, 255, 255, .05) !important; border-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-option:is(.is-selected, [aria-pressed="true"], [aria-checked="true"]) { background: rgba(255, 127, 179, .14) !important; border-color: rgba(255, 127, 179, .5) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-option__badge { color: #ffb3d3 !important; background: rgba(255, 127, 179, .16) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-option__text { color: #e4d9ea !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage__answer { color: #f1e8f5 !important; background: rgba(255, 255, 255, .06) !important; border-color: rgba(255, 255, 255, .12) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage .laolao-learning-button,
+html[data-pinkie-night]:not(#_n) :is(.laolao-learning-toggle, .laolao-learning-notebook-button) { color: #e6d9e0 !important; background: rgba(255, 255, 255, .06) !important; border-color: rgba(255, 255, 255, .12) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage .laolao-learning-button:hover { background: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-stage .laolao-learning-button--primary { color: #2a0f1d !important; background: #ff9cc6 !important; border-color: transparent !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-result { color: #d6c6e6 !important; background: rgba(180, 160, 240, .12) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-result.is-correct { color: #8fe0c0 !important; background: rgba(80, 200, 150, .14) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-result.is-incorrect { color: #ffa3c0 !important; background: rgba(255, 110, 150, .14) !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-learning-selection-save, .laolao-learning-toast) { color: #f3e8ee !important; background: rgba(46, 35, 52, .97) !important; border-color: rgba(255, 255, 255, .1) !important; box-shadow: 0 8px 24px rgba(0, 0, 0, .4) !important; }
+
+/* ── 学习笔记本：夜里是深色的纸，墨色米白，强调色是柔和的鼠尾草绿 ──────── */
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes {
+  --notes-paper: #1f1d1a;
+  --notes-card: #272421;
+  --notes-ink: #e8e3d9;
+  --notes-muted: #9e988c;
+  --notes-line: rgba(255, 255, 255, .09);
+  --notes-accent: #a9c39b;
+  --notes-tint: rgba(169, 195, 155, .12);
+  background: var(--notes-paper) !important;
+  border-color: var(--notes-line) !important;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .5) !important;
+  color: var(--notes-ink) !important;
+}
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-notes__header button:hover, .laolao-learning-notes__icon-action:hover, .laolao-learning-note__more:hover) { background: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button { color: var(--notes-ink) !important; background: var(--notes-card) !important; border-color: var(--notes-line) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button:hover { background: var(--notes-tint) !important; border-color: rgba(169, 195, 155, .35) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes .laolao-learning-button--primary { color: #1b2016 !important; background: var(--notes-accent) !important; border-color: var(--notes-accent) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__search { background: rgba(255, 255, 255, .05) !important; color: var(--notes-ink) !important; border-color: var(--notes-line) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__search::placeholder { color: #7f7a70 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__view-toggle { background: rgba(255, 255, 255, .06) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__view.is-selected { background: rgba(255, 255, 255, .1) !important; color: var(--notes-ink) !important; box-shadow: none !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-note p, .laolao-learning-note__term-row, .laolao-learning-note__compare-item) { color: #c9c3b7 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-note__extra, .laolao-learning-note__supplement, .laolao-learning-note__difference) { color: #a9c39b !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-note__linked, .laolao-learning-note__fix, .laolao-learning-note__suggestion) { color: #cfc48f !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-note__tags span { color: #b7c9ab !important; background: rgba(169, 195, 155, .12) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-note:is(:hover, .has-open-menu) { border-color: rgba(169, 195, 155, .35) !important; box-shadow: 0 4px 14px rgba(0, 0, 0, .3) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__organize-reminder { color: #d8c99a !important; background: rgba(216, 190, 120, .1) !important; border-color: rgba(216, 190, 120, .22) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__organize-reminder button { color: #e8dbb0 !important; background: rgba(255, 255, 255, .07) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__undo { background: #3b4236 !important; border-color: #3b4236 !important; color: #eef2e8 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(.laolao-learning-notes__tools-panel, .laolao-learning-note__menu) { box-shadow: 0 10px 30px rgba(0, 0, 0, .5) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes :is(select, input, textarea) { color-scheme: dark; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__content { scrollbar-color: rgba(255, 255, 255, .15) transparent !important; }
+html[data-pinkie-night]:not(#_n) .laolao-learning-notes__header { border-bottom-color: var(--notes-line) !important; }
+
+/* 聊天设置弹层里的小标题 */
+html[data-pinkie-night]:not(#_n) .chat-settings-popover :is(.chat-settings-popover__label, label, span) { color: #b3a1ab !important; }
+html[data-pinkie-night]:not(#_n) .chat-settings-popover :is(.chat-settings-popover__value, strong, button) { color: var(--n-ink) !important; }
+
+/* ── 记忆匣 ─────────────────────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) .laolao-memory-panel {
+  color: #eadfe5 !important;
+  background: radial-gradient(circle at 92% 4%, rgba(255, 127, 179, .1), transparent 30%), rgba(34, 26, 39, .97) !important;
+  border-color: rgba(255, 255, 255, .09) !important;
+  box-shadow: 0 26px 74px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05) !important;
+}
+html[data-pinkie-night]:not(#_n) :is(.laolao-memory-head, .laolao-memory-toolbar, .laolao-memory-foot) { border-color: rgba(255, 255, 255, .07) !important; color: #a8959f !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-title strong { color: #ff9cc6 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-title span { color: #a8959f !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-memory-close, .laolao-memory-button:not(.laolao-memory-button--primary)) { color: #e6d9e0 !important; background: rgba(255, 255, 255, .06) !important; border-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-memory-close, .laolao-memory-button:not(.laolao-memory-button--primary)):hover { background: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-button--danger { color: #ff9db6 !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-memory-search, .laolao-memory-editor textarea, .laolao-memory-editor input, .laolao-memory-editor select) { color: #eadfe5 !important; background: rgba(255, 255, 255, .05) !important; border-color: rgba(255, 255, 255, .1) !important; color-scheme: dark; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-card { background: rgba(255, 255, 255, .04) !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-card__text { color: #e2d6dd !important; }
+html[data-pinkie-night]:not(#_n) :is(.laolao-memory-card__meta, .laolao-memory-empty, .laolao-memory-editor__checks, .laolao-memory-card__actions button) { color: #a8959f !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-card__kind { background: rgba(255, 127, 179, .14) !important; color: #ffb3d3 !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-editor { background: rgba(255, 255, 255, .03) !important; border-color: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-entry:hover { background: rgba(255, 255, 255, .07) !important; border-color: rgba(255, 255, 255, .1) !important; }
+html[data-pinkie-night]:not(#_n) .laolao-memory-layer { background: rgba(0, 0, 0, .4) !important; }
+
+/* ── 演示工具箱（激光笔等） ─────────────────────────────────────── */
+html[data-pinkie-night]:not(#_n) :is(#pinkie-laser-toolbar, #pinkie-laser-hint, #pinkie-laser-settings) {
+  background: rgba(36, 27, 41, .97) !important; color: #eadfe5 !important;
+  border-color: rgba(255, 255, 255, .1) !important; box-shadow: 0 12px 34px rgba(0, 0, 0, .5) !important;
+}
+html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-btn { color: #d6c7cf !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-btn:hover { background: rgba(255, 255, 255, .08) !important; }
+html[data-pinkie-night]:not(#_n) #pinkie-laser-toolbar .laser-tool-sep { background: rgba(255, 255, 255, .1) !important; }
+
+/* 用户设置卡的状态字 */
+html[data-pinkie-night]:not(#_n) .pinkie-user-settings__status { color: #ff9db6 !important; }

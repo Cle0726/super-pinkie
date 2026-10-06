@@ -22,10 +22,6 @@ html[data-laolao-classic-shell="1"] .assistant-panel-resizer {
   pointer-events: none !important;
 }
 
-html[data-laolao-classic-shell="1"] .sidebar {
-  background: rgba(255, 252, 253, 0.87) !important;
-}
-
 html[data-laolao-classic-shell="1"] .sidebar-brand {
   min-height: 66px;
   box-sizing: border-box;
@@ -96,7 +92,6 @@ html[data-laolao-classic-shell="1"] .sidebar-shell__content {
 html[data-laolao-classic-shell="1"] .sidebar-nav {
   display: block !important;
   padding: 0 10px 8px !important;
-  border-bottom: 1px solid rgba(209, 111, 154, 0.14);
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-nav__head {
@@ -193,10 +188,7 @@ html[data-laolao-classic-shell="1"] .sidebar-shell__footer openclaw-lobster-pet 
 html[data-laolao-classic-shell="1"] .sidebar-shell__footer {
   min-height: 48px;
   padding: 4px 10px;
-  border-top: 1px solid rgba(209, 111, 154, 0.14);
-  background: linear-gradient(180deg, rgba(255, 252, 253, 0.04), rgba(250, 226, 239, 0.16)) !important;
-  backdrop-filter: blur(22px) saturate(112%);
-  -webkit-backdrop-filter: blur(22px) saturate(112%);
+  background: transparent;
 }
 
 html[data-laolao-classic-shell="1"] .sidebar-footer-bar {

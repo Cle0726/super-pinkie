@@ -9,6 +9,9 @@ const MAX_HISTORY = 24;
 const MAX_NOTES = 500;
 const MAX_ORGANIZATION_BACKUPS = 5;
 const REVIEW_INTERVALS_DAYS = [1, 3, 7, 14, 30];
+// A notebook is a durable collection, not a live chat session. Legacy notes
+// retain their source keys; this scope can read them even after chats are gone.
+export const LEARNING_NOTEBOOK_SESSION = 'agent:learning:notes-library';
 
 function stateRoot() {
   if (process.env.PINKIE_STATE_ROOT) return path.resolve(process.env.PINKIE_STATE_ROOT);
@@ -35,6 +38,11 @@ function sessionHash(sessionKey) {
 
 function isLearningSession(sessionKey) {
   return String(sessionKey || '').startsWith('agent:learning:');
+}
+
+function noteInScope(note, sessionKey) {
+  return isLearningSession(note?.sourceSessionKey)
+    && (sessionKey === LEARNING_NOTEBOOK_SESSION || note.sourceSessionKey === sessionKey);
 }
 
 function ensureDirectory(directory) {
@@ -176,7 +184,7 @@ export function detectSimilarNotes(notes = []) {
 
 export function validateOrganizationOperations(operations, notes, sessionKey) {
   const owned = new Map((Array.isArray(notes) ? notes : [])
-    .filter(note => note.sourceSessionKey === sessionKey && note.status !== 'merged')
+    .filter(note => noteInScope(note, sessionKey) && note.status !== 'merged')
     .map(note => [note.id, note]));
   const accepted = [];
   const discarded = [];
@@ -293,7 +301,10 @@ export class LearningInteractionStore {
     state.enabled = Boolean(enabled);
     // “关闭互动学习”是一个硬边界：不能只把 UI 隐藏起来，否则已经在
     // 路上的模型 tool call 会在稍后又塞回一张题卡，让用户以为怎么也关不掉。
-    if (!state.enabled) this.archiveCurrent(state, 'interaction_disabled');
+    if (!state.enabled) {
+      this.archiveCurrent(state, 'interaction_disabled');
+      state.notebookQuizIds = [];
+    }
     return this.publicState(this.write(sessionKey, state));
   }
 
@@ -351,6 +362,10 @@ export class LearningInteractionStore {
       submission: null,
       result: null,
     };
+    // Only notes explicitly selected in the notebook may be reviewed across
+    // source sessions; a model tool cannot grant itself that scope.
+    const notebookIds = new Set(state.notebookQuizIds || []);
+    state.current.notebookNoteIds = state.current.noteIds.filter(id => notebookIds.has(id));
     return this.publicState(this.write(sessionKey, state));
   }
 
@@ -393,7 +408,7 @@ export class LearningInteractionStore {
       resolvedAt: Date.now(),
     };
     if (!current.reviewRecordedAt && current.noteIds?.length) {
-      this.recordQuizOutcome(sessionKey, current.noteIds, current.result.correct);
+      this.recordQuizOutcome(sessionKey, current.noteIds, current.result.correct, current.notebookNoteIds);
       current.reviewRecordedAt = Date.now();
     }
     state.current = current;
@@ -413,6 +428,7 @@ export class LearningInteractionStore {
   }
 
   markdownPathForSession(sessionKey) {
+    if (sessionKey === LEARNING_NOTEBOOK_SESSION) return this.notesMarkdown;
     const folder = createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 16);
     return path.join(this.workspace, 'notes', folder, '学习笔记.md');
   }
@@ -433,7 +449,7 @@ export class LearningInteractionStore {
     const previous = this.readNotesState();
     const state = {...previous, ...extras, v: 1, updatedAt: Date.now(), notes};
     writeJsonAtomic(this.notesFile, state);
-    const sessions = new Set([...state.notes.map(note => note.sourceSessionKey), ...extraMarkdownSessions].filter(Boolean));
+    const sessions = new Set([LEARNING_NOTEBOOK_SESSION, ...state.notes.map(note => note.sourceSessionKey), ...extraMarkdownSessions].filter(Boolean));
     for (const sessionKey of sessions) this.writeNotesMarkdown(state.notes, sessionKey);
     return state;
   }
@@ -441,7 +457,7 @@ export class LearningInteractionStore {
   writeNotesMarkdown(allNotes, sessionKey) {
     const file = this.markdownPathForSession(sessionKey);
     ensureDirectory(path.dirname(file));
-    const notes = allNotes.filter(note => note.sourceSessionKey === sessionKey);
+    const notes = allNotes.filter(note => noteInScope(note, sessionKey));
     const active = notes.filter(note => note.status !== 'merged');
     const merged = notes.filter(note => note.status === 'merged');
     const groups = new Map();
@@ -450,7 +466,7 @@ export class LearningInteractionStore {
       if (!groups.has(topic)) groups.set(topic, []);
       groups.get(topic).push(note);
     }
-    const body = ['# 学习笔记', '', '> 按当前学习会话独立保存；由学习模式自动同步。', ''];
+    const body = ['# 学习笔记', '', '> 笔记独立保存；删除聊天不会删除笔记。', ''];
     for (const [topic, items] of groups) {
       body.push(`## ${markdownEscape(topic)}`, '');
       for (const note of items) {
@@ -472,7 +488,7 @@ export class LearningInteractionStore {
         }
         if (note.suggestedFix) body.push(`> 建议核对（${markdownEscape(note.suggestedFix.field || '释义')}）：${markdownEscape(note.suggestedFix.suggestion)}`, '');
         if (note.tags?.length) body.push(`标签：${note.tags.map(markdownEscape).join('、')}`, '');
-        const meta = [note.sourceLabel ? `来源：${note.sourceLabel}` : '', note.createdAt ? `时间：${new Date(note.createdAt).toISOString()}` : ''].filter(Boolean);
+        const meta = [note.sourceLabel ? `来源：${note.sourceLabel}` : '', `来源会话：${note.sourceSessionLabel || note.sourceSessionKey}`, note.createdAt ? `时间：${new Date(note.createdAt).toISOString()}` : ''].filter(Boolean);
         if (meta.length) body.push(`_${markdownEscape(meta.join(' · '))}_`, '');
       }
     }
@@ -488,21 +504,22 @@ export class LearningInteractionStore {
 
   notesForSession(sessionKey, {includeMerged = false} = {}) {
     return this.readNotesState().notes
-      .filter(note => note.sourceSessionKey === sessionKey && (includeMerged || note.status !== 'merged'))
+      .filter(note => noteInScope(note, sessionKey) && (includeMerged || note.status !== 'merged'))
       .map(withReviewDefaults);
   }
 
   findOwnedNote(sessionKey, id, {includeMerged = true} = {}) {
     const noteId = cleanId(id);
-    const note = this.readNotesState().notes.find(item => item.id === noteId && item.sourceSessionKey === sessionKey && (includeMerged || item.status !== 'merged'));
+    const note = this.readNotesState().notes.find(item => item.id === noteId && noteInScope(item, sessionKey) && (includeMerged || item.status !== 'merged'));
     if (!note) throw new Error('没有找到这条笔记');
     return note;
   }
 
   listNotes({sessionKey, query = '', tags = [], includeMerged = false, limit = 200} = {}) {
     const all = this.readNotesState().notes;
+    if (sessionKey === LEARNING_NOTEBOOK_SESSION) this.writeNotesMarkdown(all, sessionKey);
     const scoped = sessionKey
-      ? all.filter(note => note.sourceSessionKey === sessionKey)
+      ? all.filter(note => noteInScope(note, sessionKey))
       : all;
     const visible = scoped.filter(note => includeMerged || note.status !== 'merged').map(note => {
       const parsed = structuredNote(note.title || '', note.content || '');
@@ -558,6 +575,7 @@ export class LearningInteractionStore {
       note: existing?.note || parsed.note,
       tags: Array.isArray(payload.tags) ? [...new Set(payload.tags.slice(0, 12).map(tag => cleanText(tag, 80)).filter(Boolean))] : existing?.tags || [],
       sourceSessionKey: String(sessionKey),
+      sourceSessionLabel: cleanText(payload.sourceSessionLabel, 500) || existing?.sourceSessionLabel || '',
       sourceLabel: cleanText(payload.sourceLabel || payload.source_label, 500) || existing?.sourceLabel || '',
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -625,7 +643,7 @@ export class LearningInteractionStore {
 
   restoreNote(sessionKey, note) {
     this.assertLearningSession(sessionKey);
-    if (!note || note.sourceSessionKey !== sessionKey) throw new Error('不能恢复其他会话的笔记');
+    if (!noteInScope(note, sessionKey)) throw new Error('不能恢复其他会话的笔记');
     const state = this.readNotesState();
     if (state.notes.some(item => item.id === note.id)) throw new Error('这条笔记已经存在');
     const restored = {...note, status: 'active', updatedAt: Date.now()};
@@ -637,7 +655,7 @@ export class LearningInteractionStore {
     this.assertLearningSession(sessionKey);
     const note = this.findOwnedNote(sessionKey, id);
     const state = this.readNotesState();
-    this.writeNotes(state.notes.filter(item => item.id !== note.id), {}, [sessionKey]);
+    this.writeNotes(state.notes.filter(item => item.id !== note.id), {}, [sessionKey, note.sourceSessionKey]);
     return {ok: true, id: note.id, note: withReviewDefaults(note)};
   }
 
@@ -651,11 +669,23 @@ export class LearningInteractionStore {
     return {ok: true, note: withReviewDefaults(updated)};
   }
 
-  recordQuizOutcome(sessionKey, ids, correct) {
+  prepareNotebookQuiz(sessionKey, ids) {
+    const state = this.read(sessionKey);
+    if (!state.enabled) throw new Error('请先开启互动学习');
+    const requested = new Set((Array.isArray(ids) ? ids : []).slice(0, MAX_NOTES).map(cleanId).filter(Boolean));
+    const selected = this.notesForSession(LEARNING_NOTEBOOK_SESSION).filter(note => requested.has(note.id));
+    if (!selected.length) throw new Error('没有找到可出题的笔记');
+    state.notebookQuizIds = selected.map(note => note.id);
+    this.write(sessionKey, state);
+    return {ok: true, ids: state.notebookQuizIds};
+  }
+
+  recordQuizOutcome(sessionKey, ids, correct, notebookIds = []) {
     const rating = correct === true ? 'remembered' : correct === false ? 'forgot' : 'fuzzy';
+    const approved = new Set(Array.isArray(notebookIds) ? notebookIds : []);
     let updatedCount = 0;
     for (const id of [...new Set((Array.isArray(ids) ? ids : []).map(cleanId).filter(Boolean))]) {
-      try { this.reviewNote(sessionKey, id, rating); updatedCount++; } catch { /* Ignore stale or foreign ids from a model tool call. */ }
+      try { this.reviewNote(approved.has(id) ? LEARNING_NOTEBOOK_SESSION : sessionKey, id, rating); updatedCount++; } catch { /* Ignore stale or unselected ids from a model tool call. */ }
     }
     return {updatedCount, rating};
   }
@@ -685,7 +715,7 @@ export class LearningInteractionStore {
       state: 'preview',
       operations: validation.operations,
       discarded: validation.discarded,
-      noteVersions: Object.fromEntries(state.notes.filter(note => note.sourceSessionKey === sessionKey).map(note => [note.id, noteVersion(note)])),
+      noteVersions: Object.fromEntries(state.notes.filter(note => noteInScope(note, sessionKey)).map(note => [note.id, noteVersion(note)])),
       createdAt: Date.now(),
     };
     const plans = Object.values(state.organizationPlans).filter(plan => plan.sessionKey === sessionKey).sort((a, b) => b.createdAt - a.createdAt);
@@ -717,7 +747,7 @@ export class LearningInteractionStore {
     }
     const references = new Set(operations.flatMap(operation => operation.ids || [operation.noteId]));
     for (const noteId of references) {
-      const note = state.notes.find(item => item.id === noteId && item.sourceSessionKey === sessionKey && item.status !== 'merged');
+      const note = state.notes.find(item => item.id === noteId && noteInScope(item, sessionKey) && item.status !== 'merged');
       if (!note || (plan.noteVersions?.[noteId] && plan.noteVersions[noteId] !== noteVersion(note))) {
         throw new Error('预览中的笔记已修改，请重新整理；笔记保持原样');
       }
@@ -726,14 +756,15 @@ export class LearningInteractionStore {
     const now = Date.now();
     const notes = state.notes.map(note => ({...note}));
     const byId = new Map(notes.map(note => [note.id, note]));
+    plan.createdNoteIds = [];
     for (const operation of operations) {
       if (operation.type === 'merge') {
         const keep = byId.get(operation.keepId);
-        if (!keep || keep.sourceSessionKey !== sessionKey) continue;
+        if (!noteInScope(keep, sessionKey)) continue;
         for (const noteId of operation.ids) {
           if (noteId === operation.keepId) continue;
           const merged = byId.get(noteId);
-          if (merged && merged.sourceSessionKey === sessionKey) {
+          if (noteInScope(merged, sessionKey)) {
             merged.status = 'merged'; merged.mergedInto = keep.id; merged.mergedAt = now; merged.deepOrganizedAt = now;
           }
         }
@@ -757,16 +788,17 @@ export class LearningInteractionStore {
           tags: ['易混'], status: 'active', deepOrganizedAt: now,
         });
         notes.unshift(card); byId.set(card.id, card);
+        plan.createdNoteIds.push(card.id);
         for (const noteId of operation.ids) {
-          const note = byId.get(noteId); if (note?.sourceSessionKey === sessionKey) { note.compareCardId = card.id; note.deepOrganizedAt = now; }
+          const note = byId.get(noteId); if (noteInScope(note, sessionKey)) { note.compareCardId = card.id; note.deepOrganizedAt = now; }
         }
       } else if (operation.type === 'group') {
         for (const noteId of operation.ids) {
-          const note = byId.get(noteId); if (note?.sourceSessionKey === sessionKey) { note.topic = operation.topic; note.deepOrganizedAt = now; note.updatedAt = now; }
+          const note = byId.get(noteId); if (noteInScope(note, sessionKey)) { note.topic = operation.topic; note.deepOrganizedAt = now; note.updatedAt = now; }
         }
       } else if (operation.type === 'fix') {
         const note = byId.get(operation.noteId);
-        if (note?.sourceSessionKey === sessionKey) { note.suggestedFix = {field: operation.field, suggestion: operation.suggestion, reason: operation.reason, proposedAt: now}; note.updatedAt = now; }
+        if (noteInScope(note, sessionKey)) { note.suggestedFix = {field: operation.field, suggestion: operation.suggestion, reason: operation.reason, proposedAt: now}; note.updatedAt = now; }
       }
     }
     plan.state = 'applied'; plan.appliedAt = now; plan.backupId = backupId;
@@ -783,9 +815,14 @@ export class LearningInteractionStore {
     const backup = readJson(file, null);
     if (!backup || backup.backupSessionKey !== sessionKey) throw new Error('不能恢复其他会话的整理备份');
     const current = this.readNotesState();
-    const restoredSessionNotes = (Array.isArray(backup.notes) ? backup.notes : []).filter(note => note.sourceSessionKey === sessionKey);
-    const otherSessionNotes = current.notes.filter(note => note.sourceSessionKey !== sessionKey);
-    this.writeNotes([...restoredSessionNotes, ...otherSessionNotes], {organizationPlans: current.organizationPlans}, [sessionKey]);
+    const restoredSessionNotes = (Array.isArray(backup.notes) ? backup.notes : []).filter(note => noteInScope(note, sessionKey));
+    const restoredIds = new Set(restoredSessionNotes.map(note => note.id));
+    const appliedPlan = Object.values(current.organizationPlans).find(plan => plan.sessionKey === sessionKey && plan.backupId === id);
+    const createdIds = new Set(appliedPlan?.createdNoteIds || []);
+    const otherSessionNotes = current.notes.filter(note => !noteInScope(note, sessionKey)
+      || (!restoredIds.has(note.id) && !createdIds.has(note.id)));
+    const affectedSources = current.notes.filter(note => noteInScope(note, sessionKey)).map(note => note.sourceSessionKey);
+    this.writeNotes([...restoredSessionNotes, ...otherSessionNotes], {organizationPlans: current.organizationPlans}, [sessionKey, ...affectedSources]);
     return {ok: true, restoredCount: restoredSessionNotes.length, markdownPath: this.markdownPathForSession(sessionKey)};
   }
 }
@@ -945,12 +982,12 @@ export class LearningNotesOrganizer {
     this.pending.set(key, job); return job;
   }
 
-  async requestModel(reference, rules, notes, deep) {
+  async requestModel(reference, rules, notes, deep, options = {}) {
     const target = this.catalog().models.find(item => item.ref === reference);
     if (!target) throw new Error('整理模型暂时不可用，笔记已保存');
     const {model, provider, api, base, apiKey} = target;
     const message = JSON.stringify({notes});
-    const tokens = Math.min(Number(model.maxTokens) || 12_000, deep ? 12_000 : 1600);
+    const tokens = Math.min(Number(model.maxTokens) || 12_000, options.maxTokens ?? (deep ? 12_000 : 1600));
     const headers = {...provider.headers, ...model.headers, 'Content-Type': 'application/json'};
     let endpoint; let body;
     if (api === 'anthropic-messages') {
@@ -966,9 +1003,14 @@ export class LearningNotesOrganizer {
         body = {model: model.id, messages: [{role: 'system', content: rules}, {role: 'user', content: message}], [maxTokensField]: tokens, stream: false};
       }
     }
+    if (options.temperature != null) body.temperature = options.temperature;
+    if (options.reasoningEffort) {
+      if (api === 'openai-responses') body.reasoning = {effort:options.reasoningEffort};
+      else if (api === 'openai-completions') body.reasoning_effort = options.reasoningEffort;
+    }
     const controller = new AbortController(); let timer;
     const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(new Error('笔记整理超时，请稍后再试；笔记保持原样')); }, this.timeoutMs);
+      timer = setTimeout(() => { controller.abort(); reject(new Error('笔记整理超时，请稍后再试；笔记保持原样')); }, options.timeoutMs ?? this.timeoutMs);
     });
     try {
       return await Promise.race([(async () => {
@@ -1003,15 +1045,15 @@ export class LearningNotesOrganizer {
     return this.runJob(`deep:${sessionKey}`, async () => {
       const status = this.status(sessionKey);
       if (!status.available) throw new Error('整理模型暂时不可用，请在抽屉中选择模型；笔记保持原样');
-      const notes = this.store.readNotesState().notes.filter(note => note.sourceSessionKey === sessionKey && note.status !== 'merged');
-      if (!notes.length) throw new Error('当前会话还没有笔记');
+      const notes = this.store.notesForSession(sessionKey);
+      if (!notes.length) throw new Error('笔记本里还没有笔记');
       const versions = notes.map(noteVersion); const generation = this.generations.get(sessionKey) || 0;
       const input = notes.map(note => ({id: note.id, title: note.title, content: note.content, original: note.original ?? note.content,
         term: note.term || '', meaning: note.meaning || '', example: note.example || '', note: note.note || '', tags: note.tags || [], topic: note.topic || ''}));
       if (JSON.stringify(input).length > 160_000) throw new Error('当前笔记内容过多，请减少后再整理；笔记保持原样');
       const result = await this.requestModel(status.model, DEEP_NOTE_RULES, input, true);
       if (!Array.isArray(result.operations)) throw new Error('整理操作列表格式不正确，笔记保持原样');
-      const live = this.store.readNotesState().notes.filter(note => note.sourceSessionKey === sessionKey && note.status !== 'merged');
+      const live = this.store.notesForSession(sessionKey);
       if (JSON.stringify(live.map(noteVersion)) !== JSON.stringify(versions) || (this.generations.get(sessionKey) || 0) !== generation) throw new Error('笔记在整理期间已修改，请重新整理；笔记保持原样');
       return this.store.stageOrganizationPlan(sessionKey, requestId, result.operations);
     });
@@ -1046,6 +1088,7 @@ export function registerLearningGateway(api, store, {organizer = new LearningNot
   register(api, 'pinkie.learning.notes.delete', params => store.deleteNote(String(params.sessionKey || ''), params.id));
   register(api, 'pinkie.learning.notes.restore', params => store.restoreNote(String(params.sessionKey || ''), params.note));
   register(api, 'pinkie.learning.notes.review', params => store.reviewNote(String(params.sessionKey || ''), params.id, params.rating));
+  register(api, 'pinkie.learning.notes.quiz.prepare', params => store.prepareNotebookQuiz(String(params.sessionKey || ''), params.ids));
   register(api, 'pinkie.learning.notes.organize.get', params => store.getOrganizationPlan(String(params.sessionKey || ''), params.requestId));
   register(api, 'pinkie.learning.notes.organize.apply', params => {
     const sessionKey = String(params.sessionKey || '');
