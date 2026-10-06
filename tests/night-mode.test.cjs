@@ -61,8 +61,8 @@ test('installing over an old fragment moves night assets, uses root paths and st
   const file = path.join(dir, 'index.html');
   const fixtures = [
     '<html><head><script src="./assets/main.js"></script><link rel="stylesheet" href="./assets/late.css"></head><body></body></html>',
-    '<html><head data-boot="1"><script src="/main.js"></script><script defer src="./laolao-night.js?v=night1"></script><link rel="stylesheet" href="./laolao-night.css?v=night1"><link rel="stylesheet" href="/late.css"></head><body></body></html>',
-    '<html><HEAD><script src="/laolao-night.js?v=night1"></script><script src="./laolao-night.js"></script><link href="/laolao-night.css" rel="stylesheet"></HEAD></html>',
+    '<html><head data-boot="1"><script src="/main.js"></script><script defer src="./laolao-night.js?v=night3"></script><link rel="stylesheet" href="./laolao-night.css?v=night3"><link rel="stylesheet" href="/late.css"></head><body></body></html>',
+    '<html><HEAD><script src="/laolao-night.js?v=night3"></script><script src="./laolao-night.js"></script><link href="/laolao-night.css" rel="stylesheet"></HEAD></html>',
   ];
   try {
     for (const fixture of fixtures) {
@@ -71,7 +71,7 @@ test('installing over an old fragment moves night assets, uses root paths and st
       run();
       const output = fs.readFileSync(file, 'utf8');
       assert.match(output, /<head\b[^>]*>\s*<script src="\/laolao-night.js\?v=night2"><\/script>/i);
-      assert.match(output, /<link rel="stylesheet" href="\/laolao-night.css\?v=night1">\s*<\/head>/i);
+      assert.match(output, /<link rel="stylesheet" href="\/laolao-night.css\?v=night3">\s*<\/head>/i);
       assert.equal((output.match(/laolao-night\.js/g) || []).length, 1);
       assert.equal((output.match(/laolao-night\.css/g) || []).length, 1);
       assert.ok(!output.includes('"./assets/'), output);

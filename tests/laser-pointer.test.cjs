@@ -12,9 +12,9 @@ test('presentation toolbox is deployed by both installers at the same version', 
   const mac = read('installer/macos/apply-theme.sh');
   const win = read('installer/windows/apply-theme.ps1');
   assert.match(mac, /laolao-laser-pointer\.js \\/, 'macOS asset copy list');
-  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser8/, 'macOS injection pins laser8');
+  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser9/, 'macOS injection pins laser9');
   assert.match(win, /"laolao-laser-pointer\.js"/, 'Windows asset copy list');
-  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser8/, 'Windows head tag pins laser8');
+  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser9/, 'Windows head tag pins laser9');
 });
 
 test('toolbox entry lives in the global sidebar footer, not the per-mode rail', () => {
