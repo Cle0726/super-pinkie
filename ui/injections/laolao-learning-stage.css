@@ -689,3 +689,21 @@
   .laolao-learning-notes { width: calc(100vw - 12px); border-radius: 14px; }
   .laolao-learning-notes__tools-panel { width: min(286px, calc(100vw - 52px)); }
 }
+
+/* A continuous manuscript for copying into a paper notebook. */
+.laolao-learning-notes__top-actions { flex-wrap: wrap; }
+.laolao-learning-notes :is(.laolao-learning-notes__list, .laolao-learning-notes__manuscript, .laolao-learning-notes__manuscript-toggle)[hidden] { display: none !important; }
+.laolao-learning-notes__manuscript { padding: 0 18px 24px; }
+.laolao-learning-manuscript { color: var(--notes-ink); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.laolao-learning-manuscript__title { margin: 12px 0 2px; color: var(--notes-ink); font-size: 17px; line-height: 1.5; }
+.laolao-learning-manuscript__count { display: block; color: var(--notes-muted); font-size: 10px; }
+.laolao-learning-manuscript__topic { margin-top: 20px; }
+.laolao-learning-manuscript__topic h4 { margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--notes-line); font-size: 14px; font-weight: 650; }
+.laolao-learning-manuscript__topic ol { margin: 0; padding-left: 22px; }
+.laolao-learning-manuscript__topic li { padding-left: 3px; margin: 0 0 14px; }
+.laolao-learning-manuscript__topic p { margin: 3px 0; white-space: pre-line; }
+.laolao-learning-manuscript__example { color: var(--notes-muted); font-size: 12px; }
+.laolao-learning-manuscript__reminder { color: var(--notes-accent); font-size: 12px; }
+.laolao-learning-manuscript__stale { padding: 8px 10px; color: var(--notes-muted); border: 1px solid var(--notes-line); border-radius: 7px; font-size: 11px; }
+.laolao-learning-manuscript__actions { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.laolao-learning-organize-preview .laolao-learning-manuscript { padding: 0 3px; }

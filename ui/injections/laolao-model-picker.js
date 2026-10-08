@@ -143,6 +143,11 @@
   }
 
   function presentationModels(models, selectedModel = "") {
+    models = models.map((model) => {
+      let name = String(model.name || model.id).replace(/\s*[·•]\s*Work\s*Buddy\s*$/i, "");
+      if (/^workbuddy\/deepseek(?:[-_.:]|$)/i.test(model.id) && !/\s*[·•]\s*WB$/i.test(name)) name += " · WB";
+      return {...model, name};
+    });
     const seenFamilies = new Set();
     const folded = models.flatMap((model) => {
       const family = modelFamily(model, models);
@@ -172,7 +177,7 @@
   }
 
   const MODEL_GROUP_ORDER = ["GPT", "Codex", "Gemini", "Gemma", "Claude", "Grok",
-    "DeepSeek", "Qwen", "Kimi", "GLM", "Mistral", "Llama", "其他模型"];
+    "DeepSeek", "Qwen", "Kimi", "GLM", "MiniMax", "混元", "Mistral", "Llama", "豆包", "Perplexity", "其他模型"];
   const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
   /* Hide retired and user-pruned choices in the picker only. Keep the full
      catalog for existing sessions, reasoning routes and proxy fallbacks. */
@@ -183,6 +188,8 @@
   function hiddenPickerModel(model) {
     const id = String(model?.id || "").toLowerCase();
     return HIDDEN_PICKER_MODEL_IDS.has(id)
+      || /^tab(?:[-_.:]|$)/.test(id)
+      || /^workbuddy\/(?:auto|space-bunny)$/.test(id)
       || /^gpt-4/.test(id) || /^gpt-5\.(?:4|5)(?:$|[.-])/.test(id)
       || /^gemini-2\.5-/.test(id)
       || /^gemini-3-flash(?:$|-)/.test(id)
@@ -190,7 +197,8 @@
       || /^gemini-3\.[67]-flash(?:$|-)/.test(id);
   }
   function modelGroup(model) {
-    const id = String(model.id || "").toLowerCase();
+    const fullId = String(model.id || "").toLowerCase();
+    const id = fullId.split("/").at(-1);
     if (/^gpt[-_.]/.test(id)) return "GPT";
     if (/^codex[-_.]/.test(id)) return "Codex";
     if (/^gemini[-_.]/.test(id)) return "Gemini";
@@ -203,6 +211,12 @@
     if (/^(?:glm|zai)[-_.]/.test(id)) return "GLM";
     if (/^mistral[-_.]/.test(id)) return "Mistral";
     if (/^(?:llama|ollama)[-_.]/.test(id)) return "Llama";
+    if (/^minimax(?:[-_.:]|$)/.test(id)) return "MiniMax";
+    if (/^(?:hunyuan|hy\d+)(?:[-_.:]|$)/.test(id)) return "混元";
+    if (/^doubao(?:[-_.:]|$)/.test(id)) return "豆包";
+    if (/^perplexity(?:[-_.:]|$)/.test(id)) return "Perplexity";
+    if (/^tab(?:[-_.:]|$)/.test(id)) return "Antigravity";
+    if (fullId.startsWith("workbuddy/")) return "WorkBuddy";
     return "其他模型";
   }
 
@@ -220,7 +234,8 @@
     const source = String(provider || "").toLowerCase();
     if (/^(?:gemini|gemma|veo)(?:[-_.:]|$)/.test(model)) return "gemini";
     if (/^(?:claude)(?:[-_.:]|$)/.test(model)) return "claude";
-    if (/^(?:gpt|codex|o1|o3|o4)(?:[-_.:]|$)/.test(model)) return "codex";
+    if (/^codex(?:[-_.:]|$)/.test(model)) return "codex";
+    if (/^(?:gpt|o1|o3|o4)(?:[-_.:]|$)/.test(model)) return "openai";
     if (/^grok(?:[-_.:]|$)/.test(model)) return "grok";
     if (/^groq(?:[-_.:]|$)/.test(model)) return "groq";
     if (/^deepseek(?:[-_.:]|$)/.test(model)) return "deepseek";
@@ -232,7 +247,10 @@
     if (/^minimax(?:[-_.:]|$)/.test(model)) return "minimax";
     if (/^doubao(?:[-_.:]|$)/.test(model)) return "doubao";
     if (/^perplexity(?:[-_.:]|$)/.test(model)) return "perplexity";
-    return ({anthropic: "claude", openai: "codex", google: "gemini", xai: "grok",
+    if (/^(?:hunyuan|hy\d+)(?:[-_.:]|$)/.test(model)) return "hunyuan";
+    if (/^tab(?:[-_.:]|$)/.test(model)) return "antigravity";
+    if (String(id || "").toLowerCase().startsWith("workbuddy/")) return "workbuddy";
+    return ({anthropic: "claude", openai: "openai", google: "gemini", xai: "grok",
       deepseek: "deepseek", mistral: "mistral", moonshot: "kimi", alibaba: "alibaba",
       zai: "zai", ollama: "ollama", groq: "groq", minimax: "minimax", doubao: "doubao"})[source] || "crossmodel";
   }
@@ -543,7 +561,12 @@
     return display;
   }
 
+  function syncBrandMotion(details) {
+    details?.toggleAttribute?.("data-pinkie-brand-motion-paused", Boolean(document.hidden));
+  }
+
   function syncTrigger(details) {
+    syncBrandMotion(details);
     const summary = details?.querySelector?.(":scope > summary.chat-controls__inline-select-trigger");
     const label = summary?.querySelector?.(".chat-controls__inline-select-label");
     if (!label) return;
@@ -567,6 +590,13 @@
     if (tier) details?.setAttribute?.("data-pinkie-outside-material", tier);
     else details?.removeAttribute?.("data-pinkie-outside-material");
     const base = matchingFallback ? fallback.modelName || native.name : native.name;
+    const selectedRef = matchingFallback ? fallback.selectedModel
+      : details.querySelector?.('[data-chat-model-option][aria-selected="true"]')?.getAttribute?.("data-chat-model-option") || "";
+    const separator = String(selectedRef || "").indexOf("/");
+    const brand = selectedRef ? modelBrand(separator < 0 ? "" : selectedRef.slice(0, separator),
+      separator < 0 ? selectedRef : selectedRef.slice(separator + 1))
+      : modelBrand("", base.replace(/\s+/g, "-"));
+    if (summary.dataset && summary.dataset.pinkieBrand !== brand) summary.dataset.pinkieBrand = brand;
     const display = writeTriggerLabel(label, base, tier);
     if (!matchingFallback && !tier) {
       if (state.appliedAria && aria === state.appliedAria) summary.setAttribute("aria-label", state.nativeAria);
@@ -716,6 +746,15 @@
     return save;
   }
 
+  function modelSelectionPatch(value, family, models = []) {
+    const selected = models.find((model) => `${model.provider}/${model.id}` === value);
+    const workBuddy = selected?.provider === "mm" && selected?.id?.startsWith("workbuddy/") && selected.reasoning === true;
+    return {model: value || null,
+      ...(family ? {thinkingLevel: null} : {}),
+      ...(workBuddy ? {thinkingLevel: "high", reasoningLevel: "stream"} : {}),
+    };
+  }
+
   function scheduleAutoSave(details, patch) {
     if (!details?.open || !patch) return;
     pendingPatches.set(details, {...(pendingPatches.get(details) || {}), ...patch});
@@ -750,7 +789,7 @@
     const items = groupedPresentationModels(state.models, state.selectedModel);
     const groups = [...new Set(items.map(modelGroup))];
     const selected = items.find((model) => model.sources.includes(state.selectedModel));
-    const selectedId = state.selectedModel?.split("/").at(-1) || state.session?.model || "";
+    const selectedId = state.selectedModel?.slice(state.selectedModel.indexOf("/") + 1) || state.session?.model || "";
     const selectedGroup = selected ? modelGroup(selected) : selectedId ? modelGroup({id: selectedId}) : "";
     const activeGroup = groups.includes(state.activeGroup) ? state.activeGroup
       : groups.includes(selectedGroup) ? selectedGroup : groups[0] || "";
@@ -1068,10 +1107,8 @@
             fallback.modelName = family?.label || selected?.name || selected?.id || value;
           }
         }
-        scheduleAutoSave(details, {
-          model: value || null,
-          ...(modelOption.dataset?.pinkieFamily ? {thinkingLevel: null} : {}),
-        });
+        scheduleAutoSave(details, modelSelectionPatch(value, modelOption.dataset?.pinkieFamily,
+          fallbackStates.get(details)?.models || []));
       }
     }
     const immediateOption = event.target.closest?.(".chat-controls__use-default-model, .chat-controls__reasoning-default, [data-chat-thinking-option], [data-chat-speed-option]");
@@ -1121,6 +1158,9 @@
       sync(details);
     }
   }
+  document.addEventListener("visibilitychange", () => {
+    for (const details of triggerObservers.keys()) syncBrandMotion(details);
+  });
   window.addEventListener?.("pinkie:session-selected", syncAllPickers);
   window.addEventListener?.("popstate", syncAllPickers);
   window.addEventListener?.("storage", (event) => {
