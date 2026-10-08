@@ -1581,6 +1581,18 @@ struct LauncherMain {
     }
 }
 
+enum BrowserWorkspaceGeometry {
+    static func browserWidth(totalWidth: CGFloat, fraction: CGFloat) -> CGFloat {
+        guard totalWidth.isFinite, totalWidth > 0 else { return 0 }
+        // Keep enough room for the conversation even after leaving a much
+        // wider full-screen window. Browser dragging uses the same limits.
+        let maximum = max(0, totalWidth - 430)
+        let minimum = min(360, maximum)
+        let ratio = fraction.isFinite ? min(0.85, max(0.15, fraction)) : 0.44
+        return min(maximum, max(minimum, totalWidth * ratio))
+    }
+}
+
 private final class MaterialDownloadContext {
     weak var webView: WKWebView?
     var destination: URL?
@@ -1606,6 +1618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var browserPanel: NSView?
     private var browserWebView: WKWebView?
     private var browserWidthConstraint: NSLayoutConstraint?
+    private var browserWidthFraction: CGFloat = 0.44
+    private var fullScreenTransitionInProgress = false
     private var browserAddressField: NSSearchField?
     private var browserBackButton: NSButton?
     private var browserForwardButton: NSButton?
@@ -1781,24 +1795,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func windowWillEnterFullScreen(_ notification: Notification) {
+        fullScreenTransitionInProgress = true
         setFullScreenChrome(true)
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
+        fullScreenTransitionInProgress = false
+        updateBrowserWorkspaceWidth()
         notifyFullScreenState(true)
     }
 
     func windowWillExitFullScreen(_ notification: Notification) {
+        fullScreenTransitionInProgress = true
         notifyFullScreenState(false)
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
+        fullScreenTransitionInProgress = false
         setFullScreenChrome(false)
+        updateBrowserWorkspaceWidth()
         clampWindowToVisibleScreen()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateBrowserWorkspaceWidth()
+    }
+
+    private func updateBrowserWorkspaceWidth() {
+        guard browserPanel?.superview != nil,
+              let totalWidth = window?.contentView?.bounds.width,
+              let width = browserWidthConstraint else { return }
+        width.constant = BrowserWorkspaceGeometry.browserWidth(totalWidth: totalWidth, fraction: browserWidthFraction)
     }
 
     private func clampWindowToVisibleScreen() {
         guard let window, let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        // A native full-screen window belongs to its Space. Constraining it to
+        // visibleFrame (which excludes menu/Dock) shrinks it on activation.
+        guard !fullScreenTransitionInProgress, !window.styleMask.contains(.fullScreen) else { return }
         let constrained = window.constrainFrameRect(window.frame, to: window.screen ?? NSScreen.main)
         if constrained != window.frame {
             window.setFrame(constrained, display: true, animate: false)
@@ -2348,8 +2382,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             guard let self,
                   let window = self.window,
                   let width = self.browserWidthConstraint else { return }
-            let maximum = max(420, window.contentLayoutRect.width - 430)
-            width.constant = min(maximum, max(360, width.constant + delta))
+            let totalWidth = window.contentView?.bounds.width ?? window.contentLayoutRect.width
+            guard totalWidth > 0 else { return }
+            width.constant = BrowserWorkspaceGeometry.browserWidth(totalWidth: totalWidth, fraction: (width.constant + delta) / totalWidth)
+            self.browserWidthFraction = width.constant / totalWidth
         }
 
         toolbar.addSubview(back)
@@ -3011,7 +3047,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if panel.superview == nil {
             contentView.addSubview(panel)
             primaryFullSizeConstraints.forEach { $0.isActive = false }
-            let initialWidth = min(max(420, window.contentLayoutRect.width * 0.44), max(420, window.contentLayoutRect.width - 430))
+            let initialWidth = BrowserWorkspaceGeometry.browserWidth(totalWidth: contentView.bounds.width, fraction: browserWidthFraction)
             let width = panel.widthAnchor.constraint(equalToConstant: initialWidth)
             browserWidthConstraint = width
             workspaceSplitConstraints = [

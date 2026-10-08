@@ -75,6 +75,23 @@ $Assets = @(
     "laolao-splash-plate-soft.png",
     "laolao-splash-char-soft.png",
     "laolao-theme.css",
+    "laolao-provider-openai.svg",
+    "laolao-provider-codex.svg",
+    "laolao-provider-gemini.svg",
+    "laolao-provider-claude.svg",
+    "laolao-provider-grok.svg",
+    "laolao-provider-deepseek.svg",
+    "laolao-provider-kimi.svg",
+    "laolao-provider-zai.svg",
+    "laolao-provider-minimax.svg",
+    "laolao-provider-alibaba.svg",
+    "laolao-provider-mistral.svg",
+    "laolao-provider-ollama.svg",
+    "laolao-provider-doubao.svg",
+    "laolao-provider-perplexity.svg",
+    "laolao-provider-groq.svg",
+    "laolao-provider-hunyuan.svg",
+    "laolao-provider-icons-LICENSE.txt",
     "laolao-reasoning-off.svg",
     "laolao-reasoning-minimal.svg",
     "laolao-reasoning-low.svg",
@@ -295,14 +312,14 @@ function Apply-UISkin {
     $headTags = @(
         '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar18">',
         '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic18">',
-        '<link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface3">',
-        '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide3"></script>',
+        '<link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface5">',
+        '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide5"></script>',
         '<link rel="stylesheet" href="./laolao-side-layout.css?v=side21">',
-        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction11">',
+        '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction13">',
         '<link rel="stylesheet" href="./laolao-material-preview.css?v=material3">',
         '<link rel="stylesheet" href="./laolao-workspace-focus.css?v=workspacefocus2">',
         '<link rel="stylesheet" href="./laolao-memory.css?v=memory1">',
-        '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning10">',
+        '<link rel="stylesheet" href="./laolao-learning-stage.css?v=learning11">',
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">',
@@ -320,9 +337,9 @@ function Apply-UISkin {
         '<script defer src="./laolao-classic-shell.js?v=classic19"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
-        '<script defer src="./laolao-learning-stage.js?v=learning10"></script>',
+        '<script defer src="./laolao-learning-stage.js?v=learning11"></script>',
         '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx6"></script>',
-        '<script defer src="./laolao-model-picker.js?v=modelpicker26"></script>',
+        '<script defer src="./laolao-model-picker.js?v=modelpicker30"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-laser-pointer.js?v=laser9"></script>',
@@ -358,29 +375,29 @@ function Apply-UISkin {
     # WebView2 会继续用旧的缓存副本，升级后界面看着"没变化"。
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
-        'laolao-theme.css' = 'theme84'; 'laolao-splash.css' = 'splash21'; 'laolao-sidebar.css' = 'sidebar18';
+        'laolao-theme.css' = 'theme87'; 'laolao-splash.css' = 'splash21'; 'laolao-sidebar.css' = 'sidebar18';
         'laolao-sidebar.js' = 'sidebar29'; 'laolao-session-list.js' = 'sessions11'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases29'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx6'; 'laolao-mode-transition-fx.css' = 'modetransitionfx4';
-        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode42'; 'laolao-model-picker.js' = 'modelpicker26'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
+        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode42'; 'laolao-model-picker.js' = 'modelpicker30'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
         'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion6'; 'laolao-resume.js' = 'resume45';
         'laolao-queue-steer.js' = 'queuesteer2';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-settings-user.css' = 'settingsuser1'; 'laolao-settings-user.js' = 'settingsuser1';
         'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
         'laolao-process-card.css' = 'processcard3'; 'laolao-process-card.js' = 'processcard4';
-        'laolao-ui-subtraction.css' = 'subtraction11'; 'laolao-usage-stats.css' = 'stats8';
+        'laolao-ui-subtraction.css' = 'subtraction13'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material3'; 'laolao-material-preview.js' = 'material3';
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
         'laolao-page-warmup.js' = 'warmup1'; 'laolao-motion-system.css' = 'motionsys1';
         'laolao-link-viewer.js' = 'link4';
-        'laolao-sidebar-surface.css' = 'sidebarsurface3'; 'laolao-sidebar-autohide.js' = 'sidebarautohide3';
+        'laolao-sidebar-surface.css' = 'sidebarsurface5'; 'laolao-sidebar-autohide.js' = 'sidebarautohide5';
         'laolao-companion.css' = 'companion4'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion4'; 'laolao-redesign.css' = 'redesign5'; 'laolao-immersion.js' = 'immersion2';
         'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night2';
         'laolao-classic-shell.css' = 'classic18'; 'laolao-classic-shell.js' = 'classic19';
         'laolao-side-layout.css' = 'side21'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
-        'laolao-learning-stage.css' = 'learning10'; 'laolao-learning-stage.js' = 'learning10';
+        'laolao-learning-stage.css' = 'learning11'; 'laolao-learning-stage.js' = 'learning11';
         'laolao-deep-think.js' = 'deepthink21'; 'laolao-web-gpt-collab.js' = 'webgpt32';
         'laolao-context-compact.js' = 'contextcompact6'
     }
@@ -500,6 +517,7 @@ foreach ($packageRoot in $packageRoots) {
             $runtimePatches = @(
                 'apply-chat-timeline.mjs',
                 'apply-composer-drafts.mjs',
+                'apply-work-thinking.mjs',
                 'apply-image-access.mjs',
                 'apply-material-preview-csp.mjs',
                 'apply-control-ui-workspace-media.mjs'

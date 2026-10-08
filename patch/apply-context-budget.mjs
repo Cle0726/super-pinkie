@@ -6,8 +6,10 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const marker='/* pinkie-context-budget:v1 */';
-const sessionsMarker='/* pinkie-context-budget:sessions:v1 */';
+const legacySessionsMarker='/* pinkie-context-budget:sessions:v1 */';
+const sessionsMarker='/* pinkie-context-budget:sessions:v2 */';
 const header=marker+'\nimport {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";\n';
+const sessionsHeader=marker+'\nimport {compactionBudget as pinkieContextBudget, sessionContextWindow as pinkieSessionContextWindow} from "./pinkie-context-budget.mjs";\n';
 function replaceOnce(text,from,to){
   if(text.split(from).length!==2)throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：'+from.slice(0,90));
   return text.replace(from,to);
@@ -21,6 +23,15 @@ function hasOnce(text,value){return text.split(value).length===2;}
 export function transform(kind,original){
   if(original.includes(kind==='sessions'?sessionsMarker:marker))return original;
   let text=original;
+  if(kind==='sessions' && original.includes(legacySessionsMarker)){
+    text=replaceOnce(text,legacySessionsMarker,sessionsMarker);
+    text=replaceOnce(text,header,sessionsHeader);
+    text=replaceOnce(text,'const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;',
+      'const contextWindow = pinkieSessionContextWindow(session, cfg, result.defaults?.contextTokens);');
+    text=replaceOnce(text,'return { ...session, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };',
+      'return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };');
+    return text;
+  }
   if(kind==='settings'){
     const legacyReserve='const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);';
     const currentBudget='const contextTokenBudget = toPositiveInt(params.contextTokenBudget);';
@@ -59,13 +70,13 @@ export function transform(kind,original){
 			return {
 				...result,
 				sessions: sessions.map((session) => {
-					const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;
+					const contextWindow = pinkieSessionContextWindow(session, cfg, result.defaults?.contextTokens);
 					if (!pinkieBudgets.has(contextWindow)) pinkieBudgets.set(contextWindow, pinkieContextBudget(contextWindow));
-					return { ...session, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };
+					return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };
 				})
 			};`;
     text=replacePatternOnce(text,response,replacement,'sessions.list context budget');
-    return sessionsMarker+'\n'+header+text;
+    return sessionsMarker+'\n'+sessionsHeader+text;
   }else throw new Error('Unknown patch target');
   return header+text;
 }

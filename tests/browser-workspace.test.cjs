@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const {spawnSync} = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
@@ -66,4 +67,28 @@ test('every mode gets the same sidebar browser launcher and chat links use it', 
   assert.match(mac, /laolao-link-viewer\.js\?v=link4/);
   assert.match(mac, /laolaoBrowserWorkspace/);
   assert.match(windows, /laolao-link-viewer\.js\?v=link4/);
+});
+
+test('browser width remains bounded through full-screen, drag and ordinary-window sizes', {skip: process.platform !== 'darwin'}, () => {
+  const source = read('desktop/macos/Sources/Launcher.swift');
+  const start = source.indexOf('enum BrowserWorkspaceGeometry {');
+  const end = source.indexOf('private final class MaterialDownloadContext', start);
+  assert.ok(start >= 0 && end > start);
+  const result = spawnSync('xcrun', ['swift', '-'], {encoding: 'utf8', input: `import Foundation\n${source.slice(start, end)}
+    for size: CGFloat in [860, 1180, 1440, 1920, 2560, 4036] {
+      for ratio: CGFloat in [0.15, 0.44, 0.7, 0.85, 1.0] {
+        let browser = BrowserWorkspaceGeometry.browserWidth(totalWidth: size, fraction: ratio)
+        precondition(browser >= 360)
+        precondition(size - browser >= 430)
+      }
+    }
+    let full = BrowserWorkspaceGeometry.browserWidth(totalWidth: 4036, fraction: 0.7)
+    let ordinary = BrowserWorkspaceGeometry.browserWidth(totalWidth: 860, fraction: 0.7)
+    precondition(full > ordinary)
+    precondition(ordinary <= 430)
+    precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: 0, fraction: 0.44) == 0)
+    precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: .nan, fraction: 0.44) == 0)
+    precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: 860, fraction: .nan).isFinite)
+  `});
+  assert.equal(result.status, 0, result.stderr);
 });
