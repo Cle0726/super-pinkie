@@ -195,7 +195,9 @@ test('independent deep RPC validates references and stages a preview without app
   const foreign = store.saveNote('agent:learning:other', {content: 'other = 其他'}).note;
   const organizer = new LearningNotesOrganizer(api, store, {fetchImpl: async (_url, options) => {
     assert.doesNotMatch(options.body, new RegExp(foreign.id));
-    return response({operations: [
+    return response({notebook: {title: '时间表达', sections: [{title: '短语', points: [
+      {text: 'put off 表示推迟。', sourceIds: [note.id]},
+    ]}]}, operations: [
       {type: 'group', ids: [note.id], topic: '时间表达', reason: '便于查找'},
       {type: 'group', ids: [foreign.id], topic: '串会话', reason: '无效引用'},
     ]});

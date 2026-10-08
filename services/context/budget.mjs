@@ -40,3 +40,20 @@ export function compactionBudget(window) {
     triggerRatio: ratio
   };
 }
+
+
+/** The selected model's current declaration wins over a last-turn session cache. */
+export function sessionContextWindow(session, cfg, fallback) {
+  const positive = (value) => Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  const provider = session?.modelProvider;
+  const model = typeof session?.model === 'string' ? session.model : '';
+  const id = provider && model.startsWith(provider + '/') ? model.slice(provider.length + 1) : model;
+  const entry = cfg?.models?.providers?.[provider]?.models?.find((candidate) => candidate.id === id);
+  const declared = positive(entry?.contextTokens) ?? positive(entry?.contextWindow);
+  const agentId = session?.key?.split(':')[1];
+  const agent = cfg?.agents?.list?.find((candidate) => candidate.id === agentId)
+    ?? cfg?.agents?.entries?.[agentId];
+  const agentCap = positive(agent?.contextTokens) ?? positive(cfg?.agents?.defaults?.contextTokens);
+  const window = declared ?? positive(session?.contextTokens) ?? positive(fallback);
+  return window && agentCap ? Math.min(window, agentCap) : window;
+}

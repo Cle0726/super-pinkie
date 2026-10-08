@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {compactionBudget} from '../services/context/budget.mjs';
+import {compactionBudget,sessionContextWindow} from '../services/context/budget.mjs';
 import {apply,transform} from '../patch/apply-context-budget.mjs';
 const policyHome=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-native-budget-'));
 const policyPath=path.join(policyHome,'Library/Application Support/SuperPinkie/context-policy.json');
@@ -46,10 +46,10 @@ const threshold = resolveCompactionThreshold({
 \t});
 return threshold;}`;
 const sessionList=`// gateway.sessions.list
-function list(result,sessions){
+function list(result,sessions,cfg={}){
 return { ...result, sessions };
 }`;
-function executable(source,name){return Function('pinkieContextBudget',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget);}
+function executable(source,name){return Function('pinkieContextBudget','pinkieSessionContextWindow',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget,sessionContextWindow);}
 test('compaction triggers at the configured window share and leaves recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
   assert.equal(installedPolicy.modelLimits['deepseek/deepseek-flash'],1048576);
@@ -156,4 +156,37 @@ test('packaged app includes party identities and shared context policy',()=>{
   assert.match(build,/services\/party\/identities\.json/);assert.match(build,/context_budget\.py setup\.py budget\.mjs policy\.json/);
   const theme=fs.readFileSync(new URL('../installer/macos/apply-theme.sh',import.meta.url),'utf8');
   assert.match(theme,/apply-context-budget\.mjs/);assert.match(theme,/services\/context\/setup\.py/);
+});
+
+
+test('session capacity and compaction threshold follow a changed exact provider window without altering usage',()=>{
+  const list=executable(transform('sessions',sessionList),'list');
+  const cfg={agents:{defaults:{contextTokens:1000000}},models:{providers:{mm:{models:[
+    {id:'workbuddy/deepseek-v4.1-flash',contextTokens:1000000,contextWindow:1000000},
+    {id:'workbuddy/glm-5.1',contextWindow:200000}]},other:{models:[
+    {id:'workbuddy/deepseek-v4.1-flash',contextWindow:256000}]}}}};
+  const row={key:'agent:learning:example',modelProvider:'mm',model:'workbuddy/deepseek-v4.1-flash',
+    contextTokens:128000,totalTokens:36467,totalTokensFresh:true};
+  const response=list({defaults:{contextTokens:1000000}},[row],cfg);
+  assert.equal(response.sessions[0].contextTokens,1000000);
+  assert.equal(response.sessions[0].pinkieCompactionBudget.threshold,850000);
+  assert.equal(response.sessions[0].totalTokens,36467);
+  assert.equal(row.contextTokens,128000,'only projection changes, no session history mutation');
+  assert.equal(sessionContextWindow({...row,modelProvider:'other'},cfg),256000);
+  assert.equal(sessionContextWindow({...row,model:'mm/workbuddy/glm-5.1'},cfg),200000);
+  assert.equal(sessionContextWindow({...row,model:'unknown'},cfg),128000);
+  cfg.agents.list=[{id:'learning',contextTokens:500000}];
+  assert.equal(sessionContextWindow(row,cfg),500000);
+});
+
+test('a previously installed sessions v1 patch upgrades safely and v2 remains idempotent',()=>{
+  const current=transform('sessions',sessionList);
+  const legacy=current.replace('sessions:v2','sessions:v1')
+    .replace(', sessionContextWindow as pinkieSessionContextWindow','')
+    .replace('const contextWindow = pinkieSessionContextWindow(session, cfg, result.defaults?.contextTokens);',
+      'const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;')
+    .replace('...session, contextTokens: contextWindow, pinkieCompactionBudget','...session, pinkieCompactionBudget');
+  assert.equal(transform('sessions',legacy),current);
+  assert.equal(transform('sessions',current),current);
+  assert.throws(()=>transform('sessions',legacy.replace('session.contextTokens : result.defaults','0 : result.defaults')),/结构已变化/);
 });

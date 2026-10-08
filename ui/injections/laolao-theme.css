@@ -4665,27 +4665,32 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   .chat-controls__model .pinkie-reasoning-stop { transition: none; }
 }
 
-/* Model brands use the bundled OpenClaw marks; the monochrome masks keep
-   them legible on the translucent Pinkie surface without extra badges. */
+/* Brand geometry and colors: bundled Lobe Icons v5.23.0 SVGs.
+   Only monochrome marks adapt their ink for light/dark readability. */
+.chat-controls__model { --pinkie-brand-mono: #242424; }
+html[data-pinkie-night] .chat-controls__model { --pinkie-brand-mono: #f5f5f5; }
 .chat-controls__model [data-pinkie-brand] {
   --pinkie-brand-icon: url("/provider-icons/ProviderIcon-crossmodel.svg");
-  --pinkie-brand-ink: #786b82;
+  --pinkie-brand-ink: var(--pinkie-brand-mono);
 }
-.chat-controls__model [data-pinkie-brand="gemini"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-gemini.svg"); --pinkie-brand-ink: linear-gradient(135deg, #4779bd, #9d6faf 62%, #bd6b99); }
-.chat-controls__model [data-pinkie-brand="claude"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-claude.svg"); --pinkie-brand-ink: #a65f4b; }
-.chat-controls__model [data-pinkie-brand="codex"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-codex.svg"); --pinkie-brand-ink: #536b65; }
-.chat-controls__model [data-pinkie-brand="grok"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-grok.svg"); --pinkie-brand-ink: #4c4a61; }
-.chat-controls__model [data-pinkie-brand="groq"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-groq.svg"); --pinkie-brand-ink: #855d57; }
-.chat-controls__model [data-pinkie-brand="deepseek"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-deepseek.svg"); --pinkie-brand-ink: #4978a8; }
-.chat-controls__model [data-pinkie-brand="mistral"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-mistral.svg"); --pinkie-brand-ink: #a86b48; }
-.chat-controls__model [data-pinkie-brand="kimi"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-kimi.svg"); --pinkie-brand-ink: #5d67ad; }
-.chat-controls__model [data-pinkie-brand="alibaba"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-alibaba.svg"); --pinkie-brand-ink: #a36e3e; }
-.chat-controls__model [data-pinkie-brand="zai"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-zai.svg"); --pinkie-brand-ink: #73629a; }
-.chat-controls__model [data-pinkie-brand="ollama"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-ollama.svg"); --pinkie-brand-ink: #686172; }
-.chat-controls__model [data-pinkie-brand="minimax"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-minimax.svg"); --pinkie-brand-ink: #82659b; }
-.chat-controls__model [data-pinkie-brand="doubao"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-doubao.svg"); --pinkie-brand-ink: #a15d83; }
-.chat-controls__model [data-pinkie-brand="perplexity"] { --pinkie-brand-icon: url("/provider-icons/ProviderIcon-perplexity.svg"); --pinkie-brand-ink: #4b8084; }
+.chat-controls__model [data-pinkie-brand="openai"] { --pinkie-brand-icon: url("/laolao-provider-openai.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="codex"] { --pinkie-brand-icon: url("/laolao-provider-codex.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="gemini"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-gemini.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="claude"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-claude.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="grok"] { --pinkie-brand-icon: url("/laolao-provider-grok.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="deepseek"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-deepseek.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="kimi"] { --pinkie-brand-icon: url("/laolao-provider-kimi.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="zai"] { --pinkie-brand-icon: url("/laolao-provider-zai.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="minimax"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-minimax.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="hunyuan"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-hunyuan.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="alibaba"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-alibaba.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="mistral"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-mistral.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="ollama"] { --pinkie-brand-icon: url("/laolao-provider-ollama.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
+.chat-controls__model [data-pinkie-brand="doubao"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-doubao.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="perplexity"] { --pinkie-brand-icon: none; --pinkie-brand-ink: url("/laolao-provider-perplexity.svg") center / contain no-repeat; }
+.chat-controls__model [data-pinkie-brand="groq"] { --pinkie-brand-icon: url("/laolao-provider-groq.svg"); --pinkie-brand-ink: var(--pinkie-brand-mono); }
 .chat-controls__model [data-chat-model-option][data-pinkie-brand] { padding-left: 36px !important; }
+.chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand]::before,
 .chat-controls__model [data-chat-model-option][data-pinkie-brand]::before,
 .chat-controls__model .pinkie-model-current[data-pinkie-brand]::before,
 .chat-controls__model .pinkie-model-brand-tab[data-pinkie-brand]::before {
@@ -4698,6 +4703,12 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   mask: var(--pinkie-brand-icon) center / contain no-repeat;
   pointer-events: none;
 }
+.chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand]::before {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+}
+.chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand] { gap: 6px; }
 .chat-controls__model [data-chat-model-option][data-pinkie-brand]::before {
   position: absolute;
   left: 12px;
@@ -4706,7 +4717,40 @@ html[data-laolao-watchdog-state="recovered"] body::after {
 }
 .chat-controls__model .pinkie-model-current[data-pinkie-brand]::before { flex: 0 0 14px; width: 14px; height: 14px; }
 .chat-controls__model .pinkie-model-current[data-pinkie-brand] { gap: 6px; }
-.chat-controls__model .pinkie-model-brand-tab[data-pinkie-brand]::before { flex: 0 0 12px; width: 12px; height: 12px; }
+.chat-controls__model .pinkie-model-brand-tab[data-pinkie-brand]::before { flex: 0 0 14px; width: 14px; height: 14px; }
+
+/* Two small SVG marks float gently; no timers, canvases or extra library. */
+.chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand]::before,
+.chat-controls__model[open] .pinkie-model-current[data-pinkie-brand]::before {
+  animation: pinkie-brand-float 3.8s ease-in-out infinite;
+}
+@keyframes pinkie-brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+@keyframes pinkie-brand-pop {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-2px) scale(1.12); }
+  72% { transform: translateY(.5px) scale(.97); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand]:hover::before,
+  .chat-controls__model .pinkie-model-brand-tab[data-pinkie-brand]:hover::before {
+    animation: pinkie-brand-pop 420ms ease-out;
+  }
+}
+.chat-controls__model > .chat-controls__inline-select-trigger[data-pinkie-brand]:focus-visible::before,
+.chat-controls__model .pinkie-model-brand-tab[data-pinkie-brand]:focus-visible::before {
+  animation: pinkie-brand-pop 420ms ease-out;
+}
+.chat-controls__model[data-pinkie-brand-motion-paused] [data-pinkie-brand]::before {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-controls__model [data-pinkie-brand]::before {
+    animation: none !important;
+  }
+}
 
 /* Only the tier word borrows the slider material; the model name stays plain. */
 .chat-controls__model[data-pinkie-outside-material] > .chat-controls__inline-select-trigger .chat-controls__inline-select-label {

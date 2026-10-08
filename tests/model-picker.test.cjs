@@ -404,10 +404,10 @@ test('each selectable model receives its actual AI brand mark beside the name', 
     .map((value) => ({dataset: {}, getAttribute() { return value; }}));
   window.__pickerTest.syncModelBrands({querySelectorAll: () => entries});
   assert.deepEqual(entries.map((entry) => entry.dataset.pinkieBrand),
-    ['gemini', 'claude', 'codex', 'grok', 'crossmodel']);
+    ['gemini', 'claude', 'openai', 'grok', 'antigravity']);
   const css = read('ui/injections/laolao-theme.css');
-  for (const brand of ['gemini', 'claude', 'codex', 'grok', 'crossmodel']) {
-    assert.match(css, new RegExp(`ProviderIcon-${brand}\\.svg`));
+  for (const brand of ['gemini', 'claude', 'openai', 'codex', 'grok']) {
+    assert.ok(css.includes(`laolao-provider-${brand}.svg`));
   }
   assert.match(css, /\[data-chat-model-option\]\[data-pinkie-brand\]::before/);
 });
@@ -1144,4 +1144,128 @@ test('model picker keeps the artwork visible in a compact two-row layout', () =>
     const width = Number(rule.match(/--pinkie-frame-size:\s*(\d+)% auto/)?.[1]);
     assert.ok(width >= 79 && width <= 84, `${material} 的角色不能被缩到看不见`);
   }
+});
+
+
+test('namespaced models use vendor groups and marks without dropping their upstream route', () => {
+  const window = {};
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'),
+    {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const api = window.__laolaoModelPickerCatalog;
+  const cases = [
+    ['workbuddy/deepseek-v4.1-flash', 'DeepSeek', 'deepseek'],
+    ['workbuddy/glm-5.3', 'GLM', 'zai'], ['workbuddy/glm-5v-turbo', 'GLM', 'zai'],
+    ['workbuddy/kimi-k3-1', 'Kimi', 'kimi'], ['workbuddy/minimax-m3', 'MiniMax', 'minimax'],
+    ['workbuddy/hy3', '混元', 'hunyuan'], ['workbuddy/hy3-x', '混元', 'hunyuan'],
+    ['workbuddy/hy4-preview', '混元', 'hunyuan'],
+    ['workbuddy/auto', 'WorkBuddy', 'workbuddy'], ['workbuddy/space-bunny', 'WorkBuddy', 'workbuddy'],
+    ['tab_flash_lite_preview', 'Antigravity', 'antigravity'],
+    ['tab_jump_flash_lite_preview', 'Antigravity', 'antigravity'],
+  ];
+  for (const [id, group, brand] of cases) {
+    assert.equal(api.group({provider: 'mm', id}), group, id);
+    assert.equal(api.brand('mm', id), brand, id);
+  }
+  const models = cases.map(([id]) => ({id, provider: 'mm', name: id.split('/').at(-1) + ' · WorkBuddy'}));
+  const rows = api.present(models, 'mm/workbuddy/glm-5.3');
+  assert.equal(rows.length, cases.length - 4);
+  assert.ok(rows.every(row => !/Work\s*Buddy/i.test(row.name)));
+  const glm = rows.find((item) => item.id === 'workbuddy/glm-5.3');
+  assert.equal(glm.sources[0], 'mm/workbuddy/glm-5.3');
+  assert.equal(glm.name, 'glm-5.3');
+  assert.equal(rows.find(row=>row.id==='workbuddy/deepseek-v4.1-flash').name, 'deepseek-v4.1-flash · WB');
+  assert.equal(api.present([{id: 'workbuddy/auto', provider: 'mm', name: 'Auto'}, {id: 'tab_flash_lite_preview', provider: 'mm', name: 'Tab Flash Lite'}]).length, 0);
+  assert.equal(api.present([{provider: 'mm', id: 'gemini-3.6-flash', name: 'Old'}]).length, 0);
+  const css = read('ui/injections/laolao-theme.css');
+  for (const brand of ['hunyuan']) {
+    assert.match(css, new RegExp(`laolao-provider-${brand}\\.svg`));
+    assert.ok(read(`ui/assets/laolao-provider-${brand}.svg`).includes('<svg'));
+    assert.ok(read('installer/macos/apply-theme.sh').includes(`laolao-provider-${brand}.svg`));
+    assert.ok(read('installer/windows/apply-theme.ps1').includes(`laolao-provider-${brand}.svg`));
+  }
+});
+
+
+test('reopening a saved namespaced model selects its brand and exact route', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
+  const window = {};
+  let list;
+  const document = {
+    addEventListener() {},
+    createElement() { return {dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; },
+      replaceChildren(fragment) { this.children = fragment.children; }}; },
+    createDocumentFragment() { return {children: [], append(node) { this.children.push(node); }}; },
+  };
+  vm.runInNewContext(source, {window, document, requestAnimationFrame() {}});
+  const browser = {querySelector() { return list; }, append(node) { list = node; }};
+  const state = {models: [
+    {provider: 'mm', id: 'workbuddy/glm-5.3', name: 'GLM 5.3 · WorkBuddy'},
+    {provider: 'mm', id: 'workbuddy/auto', name: 'Auto · WorkBuddy'},
+  ], selectedModel: 'mm/workbuddy/glm-5.3', session: {hasActiveRun: false}};
+  window.__pickerTest.renderFallbackCatalog({}, browser, state);
+  assert.equal(state.activeGroup, 'GLM');
+  assert.equal(list.children[1].dataset.chatModelOption, 'mm/workbuddy/glm-5.3');
+  assert.equal(list.children[1].attributes['aria-selected'], 'true');
+});
+
+
+test('composer brand follows the exact session route without modifying Lit text or reasoning', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {syncTrigger, fallbackStates};})();');
+  const window = {location:{search:'?session=agent%3Alearning%3Abrand-test'}};
+  const label = nativeTriggerLabel('Gemini 3.8 Flash Tiered · High');
+  const summary = {dataset:{}, aria:'聊天模型: Gemini 3.8 Flash Tiered · High',
+    querySelector(){return label;}, getAttribute(){return this.aria;},
+    setAttribute(name,value){if(name==='aria-label')this.aria=value;}};
+  const details = {querySelector(selector){return selector.startsWith(':scope > summary') ? summary : null;},
+    closest(){return null;}, setAttribute(){}, removeAttribute(){}};
+  vm.runInNewContext(source,{window,document:pickerDocument(),requestAnimationFrame(){}});
+  window.__pickerTest.syncTrigger(details);
+  assert.equal(summary.dataset.pinkieBrand,'gemini','correct icon before opening the picker');
+  const fallback = {key:'agent:learning:brand-test',session:{thinkingLevel:'off'},
+    selectedModel:'mm/workbuddy/deepseek-v4.1-flash',modelName:'DeepSeek V4.1 Flash · WB'};
+  window.__pickerTest.fallbackStates.set(details,fallback);
+  window.__pickerTest.syncTrigger(details);
+  assert.equal(summary.dataset.pinkieBrand,'deepseek');
+  assert.equal(label.nextElementSibling.textContent,'DeepSeek V4.1 Flash · WB · 关闭');
+  fallback.selectedModel='clekk/gpt-6.1-sol';fallback.modelName='GPT-6.1 Sol';
+  window.__pickerTest.syncTrigger(details);assert.equal(summary.dataset.pinkieBrand,'openai');
+  fallback.selectedModel='clekk/codex-auto-review';fallback.modelName='Codex Auto Review';
+  window.__pickerTest.syncTrigger(details);assert.equal(summary.dataset.pinkieBrand,'codex');
+  window.location.search='?session=agent%3Alearning%3Aanother';
+  window.__pickerTest.syncTrigger(details);assert.equal(summary.dataset.pinkieBrand,'gemini','stale session does not leak its mark');
+  assert.equal(label.textContent,'Gemini 3.8 Flash Tiered · High','native Lit text stays intact');
+});
+
+
+test('brand motion pauses on hidden pages and resumes without fetching models', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {syncBrandMotion};})();');
+  const window = {};
+  const document = pickerDocument();
+  document.hidden = true;
+  vm.runInNewContext(source, {window, document, requestAnimationFrame(){}});
+  const attributes = new Set();
+  const details = {toggleAttribute(name, enabled){enabled ? attributes.add(name) : attributes.delete(name);}};
+  window.__pickerTest.syncBrandMotion(details);
+  assert.equal(attributes.has('data-pinkie-brand-motion-paused'), true);
+  document.hidden = false;
+  window.__pickerTest.syncBrandMotion(details);
+  assert.equal(attributes.size, 0);
+});
+
+test('selecting a supported Work model enables its native thinking stream without changing other providers',()=>{
+  const source=read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+    'window.__pickerTest = {modelSelectionPatch};})();');
+  const window={};
+  vm.runInNewContext(source,{window,document:pickerDocument(),requestAnimationFrame(){}});
+  const models=[{provider:'mm',id:'workbuddy/deepseek-v4.1-flash',reasoning:true},
+    {provider:'mm',id:'workbuddy/auto',reasoning:false},
+    {provider:'other',id:'workbuddy/deepseek-v4.1-flash',reasoning:true}];
+  const call=(id,family)=>JSON.parse(JSON.stringify(window.__pickerTest.modelSelectionPatch(id,family,models)));
+  assert.deepEqual(call('mm/workbuddy/deepseek-v4.1-flash'),
+    {model:'mm/workbuddy/deepseek-v4.1-flash',thinkingLevel:'high',reasoningLevel:'stream'});
+  assert.deepEqual(call('mm/workbuddy/auto'),{model:'mm/workbuddy/auto'});
+  assert.deepEqual(call('other/workbuddy/deepseek-v4.1-flash'),{model:'other/workbuddy/deepseek-v4.1-flash'});
+  assert.deepEqual(call('mm/gemini-3.8-flash-tiered','gemini-family'),{model:'mm/gemini-3.8-flash-tiered',thinkingLevel:null});
 });

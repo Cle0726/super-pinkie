@@ -38,6 +38,7 @@
     organizationRequestId: "",
     organizationReminderDismissed: false,
     organizationSourceNotes: [],
+    manuscriptMode: "",
     undoKind: "",
     undoValue: null,
     undoTimer: 0,
@@ -649,6 +650,7 @@
   };
 
   const renderReview = list => {
+    renderSavedManuscript();
     closeNoteMenu();
     const queue = state.reviewQueue || [];
     const note = queue[state.reviewIndex];
@@ -710,17 +712,70 @@
     } catch (error) { showToast(error.message || "复习列表读取失败", true); }
   };
 
+  const notebookDocument = notebook => {
+    const article = el("article", "laolao-learning-manuscript");
+    article.append(el("h3", "laolao-learning-manuscript__title", notebook.title));
+    article.append(el("small", "laolao-learning-manuscript__count", `${notebook.sourceCount} 条原笔记 · 提炼为 ${notebook.pointCount} 个知识点`));
+    if (notebook.stale) article.append(el("p", "laolao-learning-manuscript__stale", "原笔记有新增或修改，重新整理可更新这份稿子。"));
+    for (const section of notebook.sections || []) {
+      const topic = el("section", "laolao-learning-manuscript__topic");
+      topic.append(el("h4", "", section.title));
+      const points = el("ol");
+      for (const point of section.points || []) {
+        const item = el("li");
+        item.append(el("p", "", point.text));
+        if (point.example) item.append(el("p", "laolao-learning-manuscript__example", `例：${point.example}`));
+        if (point.reminder) item.append(el("p", "laolao-learning-manuscript__reminder", `易错：${point.reminder}`));
+        points.append(item);
+      }
+      topic.append(points); article.append(topic);
+    }
+    return article;
+  };
+
+  const manuscriptActions = notebook => {
+    const actions = el("div", "laolao-learning-manuscript__actions");
+    const copy = el("button", "laolao-learning-button", "复制整理稿"); copy.type = "button";
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(notebook.text); showToast("整理稿已复制"); }
+      catch { showToast("系统没有允许复制，请选择文字或导出整理稿", true); }
+    });
+    const download = el("button", "laolao-learning-button", "导出整理稿"); download.type = "button";
+    download.addEventListener("click", () => {
+      const url = URL.createObjectURL(new Blob([notebook.markdown], {type: "text/markdown;charset=utf-8"}));
+      const link = el("a"); link.href = url; link.download = "碧琪学习笔记-整理稿.md";
+      document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    });
+    actions.append(copy, download); return actions;
+  };
+
+  const renderSavedManuscript = () => {
+    const host = state.drawer?.querySelector(".laolao-learning-notes__manuscript");
+    const list = state.drawer?.querySelector(".laolao-learning-notes__list");
+    if (!host) return;
+    const notebook = state.noteData?.organizedNotebook;
+    const show = Boolean(notebook) && state.manuscriptMode !== "source" && !state.organizationPlan && !state.reviewQueue
+      && !state.searchText && !state.selectedTags.size && !state.includeMerged;
+    host.hidden = !show;
+    if (list) list.hidden = show || Boolean(state.organizationPlan?.notebook);
+    host.replaceChildren();
+    const toggle = state.drawer.querySelector(".laolao-learning-notes__manuscript-toggle");
+    if (toggle) { toggle.hidden = !notebook; toggle.textContent = show ? "查看原笔记" : "查看整理稿"; }
+    if (show) host.append(manuscriptActions(notebook), notebookDocument(notebook));
+  };
+
   const renderOrganizationPreview = plan => {
     const host = state.drawer?.querySelector(".laolao-learning-notes__preview");
     if (!host) return;
     host.replaceChildren();
-    if (!plan) { host.hidden = true; return; }
+    if (!plan) { host.hidden = true; renderSavedManuscript(); return; }
     host.hidden = false;
     const panel = el("section", "laolao-learning-organize-preview");
     const header = el("header", "laolao-learning-organize-preview__header");
-    header.append(el("strong", "", "整理预览"));
+    header.append(el("strong", "", plan.notebook ? "抄写稿预览" : "整理预览"));
     const close = el("button", "", "×"); close.type = "button"; close.setAttribute("aria-label", "关闭整理预览"); close.addEventListener("click", () => { state.organizationPlan = null; renderOrganizationPreview(null); });
     header.append(close); panel.append(header);
+    if (plan.notebook) panel.append(manuscriptActions(plan.notebook), notebookDocument(plan.notebook));
     const byType = new Map([["merge", "合并重复"], ["compare", "易混对比"], ["group", "主题归类"], ["fix", "释义与例句核对"]]);
     const checked = [];
     const sourceNotes = state.organizationSourceNotes || [];
@@ -759,24 +814,27 @@
       for (const item of plan.discarded) discarded.append(el("p", "", `${item.type}：${item.reason}`));
       panel.append(discarded);
     }
-    if (!plan.operations?.length) panel.append(el("p", "laolao-learning-notes__empty", "碧琪没有找到可以执行的整理建议。原笔记保持不变。"));
+    if (!plan.operations?.length && !plan.notebook) panel.append(el("p", "laolao-learning-notes__empty", "碧琪没有找到可以执行的整理建议。原笔记保持不变。"));
     const actions = el("div", "laolao-learning-organize-preview__actions");
-    const apply = el("button", "laolao-learning-button laolao-learning-button--primary", "应用所选"); apply.type = "button"; apply.disabled = !checked.length;
+    const applyLabel = plan.notebook ? "保存整理稿" : "应用所选";
+    const apply = el("button", "laolao-learning-button laolao-learning-button--primary", applyLabel); apply.type = "button"; apply.disabled = !checked.length && !plan.notebook;
     apply.addEventListener("click", async () => {
       const ids = checked.filter(input => input.checked).map(input => input.value);
-      if (!ids.length) return showToast("请至少选择一项整理", true);
+      if (!ids.length && !plan.notebook) return showToast("请至少选择一项整理", true);
       setBusy(apply, true, "备份并应用…");
       try {
         const result = await request("pinkie.learning.notes.organize.apply", {sessionKey: notebookSession(), requestId: plan.id, operationIds: ids}, 20000);
         state.lastOrganizationBackupId = result.backupId;
+        if (result.organizedNotebook) state.manuscriptMode = "organized";
         state.organizationPlan = null; renderOrganizationPreview(null);
-        showUndoBar("整理已应用", "organize", result.backupId);
+        showUndoBar(result.organizedNotebook ? "整理稿已保存" : "整理已应用", "organize", result.backupId);
         await loadNotes();
-      } catch (error) { setBusy(apply, false, "应用所选"); showToast(error.message || "整理应用失败", true); }
+      } catch (error) { setBusy(apply, false, applyLabel); showToast(error.message || "整理应用失败", true); }
     });
     const cancel = el("button", "laolao-learning-button", "取消"); cancel.type = "button";
     cancel.addEventListener("click", () => { state.organizationPlan = null; renderOrganizationPreview(null); });
     actions.append(apply, cancel); panel.append(actions); host.append(panel);
+    renderSavedManuscript();
   };
 
   const requestDeepOrganization = async () => {
@@ -787,15 +845,16 @@
     state.organizationBusy = true;
     renderOrganizer(state.noteData?.organizer);
     const status = state.drawer?.querySelector(".laolao-learning-notes__status");
-    if (status) status.textContent = "整理助手正在检查笔记…";
+    if (status) status.textContent = "正在合并重复知识点、提炼重点，生成可直接抄写的笔记…";
     try {
       const result = await request("pinkie.learning.notes.list", {sessionKey, limit: 500});
       if (notebookSession() !== sessionKey || state.organizationRequestId !== requestId) return;
       state.organizationSourceNotes = (result.notes || []).filter(note => note.status !== "merged");
-      const plan = await request("pinkie.learning.notes.organize.preview", {sessionKey, requestId}, 50000);
+      const plan = await request("pinkie.learning.notes.organize.preview", {sessionKey, requestId}, 130000);
       if (notebookSession() !== sessionKey || state.organizationRequestId !== requestId) return;
+      if (!plan.notebook) throw new Error("新版整理功能还未加载，请关闭后重新打开 App 再试。");
       state.organizationPlan = plan; renderOrganizationPreview(plan);
-      if (status) status.textContent = `${plan.operations?.length || 0} 项待确认 · 未选中的不生效`;
+      if (status) status.textContent = `${plan.notebook.sourceCount} 条原笔记 → ${plan.notebook.pointCount} 个知识点 · 预览后保存`;
     } catch (error) {
       if (notebookSession() !== sessionKey || state.organizationRequestId !== requestId) return;
       if (status) status.textContent = error.message || "整理失败 · 笔记保持原样";
@@ -849,6 +908,7 @@
     if (!list) return;
     closeNoteMenu();
     list.replaceChildren();
+    renderSavedManuscript();
     if (state.reviewQueue) { renderReview(list); return; }
     if (!notes.length) {
       const empty = el("div", "laolao-learning-notes__empty");
@@ -900,6 +960,7 @@
       state.notesSessionKey = sessionKey;
       state.selectedTags.clear(); state.searchText = ""; state.includeMerged = false;
       state.reviewQueue = null; state.reviewFlipped = false; state.organizationPlan = null;
+      state.manuscriptMode = "";
       state.organizationBusy = false; state.organizationRequestId = "";
       state.groupVisibility = new Map();
       const search = state.drawer?.querySelector(".laolao-learning-notes__search"); if (search) search.value = "";
@@ -929,7 +990,9 @@
       renderTagFilters(result?.availableTags || []);
       renderNotes(state.notes, result?.similar || []);
       renderOrganizationReminder(Number(result?.unorganizedCount) || 0);
-      if (status) status.textContent = `${state.notes.length} 条 · 独立保存，删除聊天不影响笔记`;
+      if (status) status.textContent = result.organizedNotebook && state.manuscriptMode !== "source"
+        ? `${result.organizedNotebook.pointCount} 个知识点 · 整理稿与原笔记分别保存`
+        : `${state.notes.length} 条 · 独立保存，删除聊天不影响笔记`;
       void loadSessionLabels().then(() => {
         if (state.drawer?.classList.contains("is-open") && state.notesSessionKey === sessionKey) renderNotes(state.notes, state.noteData?.similar || []);
       });
@@ -1035,7 +1098,21 @@
       const topActions = el("div", "laolao-learning-notes__top-actions");
       const newButton = el("button", "laolao-learning-button laolao-learning-button--primary", "＋ 新笔记"); newButton.type = "button";
       const organize = el("button", "laolao-learning-button", "一键整理"); organize.type = "button"; organize.addEventListener("click", requestDeepOrganization);
+      organize.title = "合并重复知识点，提炼重点，生成可直接抄写的整理稿";
       organize.dataset.notesOrganize = "1";
+      const manuscriptToggle = el("button", "laolao-learning-button laolao-learning-notes__manuscript-toggle", "查看整理稿");
+      manuscriptToggle.type = "button"; manuscriptToggle.hidden = true;
+      manuscriptToggle.addEventListener("click", () => {
+        const showingManuscript = !state.drawer.querySelector(".laolao-learning-notes__manuscript")?.hidden;
+        state.manuscriptMode = showingManuscript ? "source" : "organized";
+        if (state.manuscriptMode === "organized") {
+          state.searchText = ""; state.selectedTags.clear(); state.includeMerged = false;
+          state.reviewQueue = null; state.reviewFlipped = false; state.organizationPlan = null;
+          const search = state.drawer.querySelector(".laolao-learning-notes__search"); if (search) search.value = "";
+          renderOrganizationPreview(null);
+        }
+        void loadNotes();
+      });
       const markdown = el("button", "laolao-learning-notes__icon-action", "Markdown"); markdown.type = "button"; markdown.addEventListener("click", revealMarkdown);
       const anki = el("button", "laolao-learning-notes__icon-action", "Anki CSV"); anki.type = "button"; anki.addEventListener("click", exportAnkiCsv);
       const tools = el("details", "laolao-learning-notes__tools");
@@ -1045,7 +1122,7 @@
       exports.append(el("span", "", "导出笔记"), markdown, anki);
       toolPanel.append(exports);
       tools.append(toolPanel);
-      topActions.append(newButton, organize, tools);
+      topActions.append(newButton, organize, manuscriptToggle, tools);
 
       const modelRow = el("div", "laolao-learning-notes__model-row");
       const modelLabel = el("label", "", "整理模型");
@@ -1098,7 +1175,7 @@
       });
 
       const reminder = el("div", "laolao-learning-notes__organize-reminder"); reminder.hidden = true;
-      reminder.append(el("span", "", "有 10 条以上笔记还没做主题整理"));
+      reminder.append(el("span", "", "有 10 条以上笔记可以提炼成抄写稿"));
       const remindOrganize = el("button", "", "现在整理"); remindOrganize.type = "button"; remindOrganize.addEventListener("click", requestDeepOrganization);
       remindOrganize.dataset.notesOrganize = "1";
       const remindDismiss = el("button", "", "×"); remindDismiss.type = "button"; remindDismiss.setAttribute("aria-label", "关闭整理提示");
@@ -1112,9 +1189,10 @@
       const search = el("input", "laolao-learning-notes__search"); search.type = "search"; search.placeholder = "搜索词条、释义和笔记…"; search.setAttribute("aria-label", "搜索学习笔记");
       let searchTimer = 0;
       search.addEventListener("input", () => {
+        state.manuscriptMode = "source";
         state.searchText = search.value.trim(); clearTimeout(searchTimer); searchTimer = setTimeout(loadNotes, 220);
       });
-      const merged = el("button", "laolao-learning-notes__merged", "已合并"); merged.type = "button"; merged.addEventListener("click", () => { state.includeMerged = !state.includeMerged; loadNotes(); });
+      const merged = el("button", "laolao-learning-notes__merged", "已合并"); merged.type = "button"; merged.addEventListener("click", () => { state.manuscriptMode = "source"; state.includeMerged = !state.includeMerged; loadNotes(); });
       searchRow.append(search, merged);
       const tags = el("div", "laolao-learning-notes__tag-filters"); tags.hidden = true;
 
@@ -1138,9 +1216,10 @@
 
       const status = el("div", "laolao-learning-notes__status");
       const preview = el("div", "laolao-learning-notes__preview"); preview.hidden = true;
+      const manuscript = el("div", "laolao-learning-notes__manuscript"); manuscript.hidden = true;
       const list = el("div", "laolao-learning-notes__list");
       const undo = el("div", "laolao-learning-notes__undo"); undo.hidden = true;
-      contentWrap.append(topActions, reviewBar, compose, reminder, searchRow, tags, filters, status, preview, list, undo);
+      contentWrap.append(topActions, reviewBar, compose, reminder, searchRow, tags, filters, status, preview, manuscript, list, undo);
       drawer.append(header, contentWrap);
       contentWrap.addEventListener("scroll", placeNoteMenu, {passive: true});
       drawer.addEventListener("keydown", event => {

@@ -171,8 +171,8 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
 /* ── 收起：完全隐藏，左边缘留一条细把手 ─────────────────────────────── */
 .pinkie-sidebar-edge { display: none; }
 @media (min-width: 851px) {
-  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell.shell--chat { grid-template-columns: 238px minmax(0, 1fr) !important; }
-  html[data-pinkie-sidebar-auto="1"][data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]) .shell.shell--chat {
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]) .shell.shell--chat { grid-template-columns: 238px minmax(0, 1fr) !important; }
+  html[data-pinkie-sidebar-auto="1"][data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]) .shell.shell--chat {
     grid-template-columns: 0 minmax(0, 1fr) !important;
     grid-template-areas: "nav topbar" "nav content" !important; column-gap: 0 !important;
   }

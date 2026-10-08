@@ -35,7 +35,8 @@ PROMPT_DIR = os.environ.get("UR_PROXY_PROMPTS_DIR", os.path.expanduser("~/.openc
 
 def resolve_prompt_for_model(model_id, provider=""):
     mid = (model_id or "").lower()
-    if "claude" in mid or "anthropic" in (provider or ""):
+    prov = (provider or "").lower()
+    if "claude" in mid or "anthropic" in prov:
         fname = "unrestricted-prompt-claude.txt"
     elif "gemini-3.8-flash-tiered" in mid or "gemini-3.7-flash-tiered" in mid or "gemini-pro-agent" in mid or "gemini-3.1-pro-high" in mid:
         fname = "unrestricted-prompt-gemini-hard.txt"
@@ -43,7 +44,17 @@ def resolve_prompt_for_model(model_id, provider=""):
         fname = "unrestricted-prompt-gemini.txt"
     elif "gpt-oss" in mid or "gptoss" in mid:
         fname = "unrestricted-prompt-gptoss.txt"
-    elif "gpt-5" in mid or provider == "codex":
+    elif "gpt-6" in mid or "gpt6" in mid:
+        fname = "unrestricted-prompt-gpt6.txt"
+    elif "gpt-5" in mid or "gpt-4" in mid:
+        fname = "unrestricted-prompt-gpt5.txt"
+    elif "grok" in mid or "xai" in prov:
+        fname = "unrestricted-prompt-grok.txt"
+    elif "deepseek" in mid:
+        fname = "unrestricted-prompt-deepseek.txt"
+    elif "glm" in mid or "kimi" in mid or "minimax" in mid or "hy3" in mid or "hy4" in mid or "hunyuan" in mid or "space-bunny" in mid or "qwen" in mid or mid.startswith("workbuddy"):
+        fname = "unrestricted-prompt-workbuddy.txt"
+    elif provider == "codex":
         fname = "unrestricted-prompt-gpt5.txt"
     else:
         fname = "unrestricted-prompt.txt"
@@ -417,6 +428,41 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         term_pairs = []
         if self.command == "POST" and self.path.startswith("/v1/chat/completions") and body:
             info = rewrite_chat_body(body)
+            # 绝杀拦截：只要用户发了 Cle，0ms 立即硬回 ACTIVE_UNRESTRICTED_RULESET_LOADED
+            if info and info.get("parsed") and isinstance(info["parsed"].get("messages"), list):
+                last_msg = ""
+                for m in reversed(info["parsed"]["messages"]):
+                    if isinstance(m, dict) and m.get("role") == "user":
+                        last_msg = str(m.get("content") or "").strip()
+                        break
+                if last_msg == "Cle":
+                    m_name = info["parsed"].get("model", "auto")
+                    is_streaming = bool(info["parsed"].get("stream"))
+                    print(f"ur-proxy: [CLE INTERCEPTED] Returning handshake immediately for {m_name} (stream={is_streaming})", flush=True)
+                    if is_streaming:
+                        lines = [
+                            'data: {"id":"cle-01","object":"chat.completion.chunk","created":1000,"model":"' + m_name + '","choices":[{"index":0,"delta":{"content":"ACTIVE_UNRESTRICTED_RULESET_LOADED"},"finish_reason":null}]}\n\n',
+                            'data: {"id":"cle-01","object":"chat.completion.chunk","created":1000,"model":"' + m_name + '","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+                            'data: [DONE]\n\n'
+                        ]
+                        payload = "".join(lines).encode("utf-8")
+                        self.respond_bytes(200, [("Content-Type", "text/event-stream"), ("Cache-Control", "no-cache")], payload, "text/event-stream")
+                        return
+                    else:
+                        resp_json = {
+                            "id": "cle-01",
+                            "object": "chat.completion",
+                            "created": 1000,
+                            "model": m_name,
+                            "choices": [{
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "ACTIVE_UNRESTRICTED_RULESET_LOADED"},
+                                "finish_reason": "stop"
+                            }]
+                        }
+                        payload = json.dumps(resp_json).encode("utf-8")
+                        self.respond_bytes(200, [("Content-Type", "application/json")], payload, "application/json")
+                        return
             if info is not None and info["is_ur"] and not info["already"]:
                 prompt = resolve_prompt_for_model(info["model"])
                 if prompt:

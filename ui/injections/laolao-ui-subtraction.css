@@ -120,9 +120,9 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat {
    238px override in sync with that state; otherwise the grid still reserves
    the expanded track and leaves a wide transparent dead strip beside the
    78px icon rail. Split panes intentionally own a separate one-column rule. */
-html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"])
+html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"])
   .shell.shell--chat.shell--nav-collapsed,
-html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):has(.sidebar.sidebar--collapsed)
+html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]):has(.sidebar.sidebar--collapsed)
   .shell.shell--chat {
   grid-template-columns: var(--shell-nav-rail-width, 78px) minmax(0, 1fr) !important;
 }
@@ -147,9 +147,9 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   html[data-laolao-classic-shell="1"] .shell.shell--chat {
     grid-template-columns: min(220px, 29vw) minmax(0, 1fr) !important;
   }
-  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"])
+  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"])
     .shell.shell--chat.shell--nav-collapsed,
-  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):has(.sidebar.sidebar--collapsed)
+  html[data-laolao-classic-shell="1"]:not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]):has(.sidebar.sidebar--collapsed)
     .shell.shell--chat {
     grid-template-columns: var(--shell-nav-rail-width, 78px) minmax(0, 1fr) !important;
   }
@@ -162,29 +162,68 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
    移除各自会占 238px 的导航和 44px 工作轨道；否则 640px 的半屏会被
    挤成一条窄缝，消息逐字换行。右侧模式名和关闭按钮由原生分屏标题栏
    提供，因此这里不复制一套控制条。 */
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) {
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) {
   /* 会话列表可在分屏里收起，但右侧的真实工作区按键必须留在画面上。 */
   --laolao-window-rail-reserve: 44px !important;
   --laolao-classic-rail-width: 44px !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html[data-laolao-classic-shell="1"]:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .shell.shell--chat {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
+  /* Columns and named areas must change together. Keeping the native
+     "nav topbar" / "nav content" map creates an implicit second column;
+     keeping a desktop sidebar track with the mobile map puts the entire
+     conversation into that sidebar-sized first column. */
+  grid-template-areas: "topbar" "content" !important;
+  grid-template-rows: var(--shell-topbar-height, 44px) minmax(0, 1fr) !important;
   min-width: 0 !important;
+}
+
+html[data-laolao-classic-shell="1"]:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
+  .shell.shell--chat > .shell-nav {
+  /* The navigation wrapper must leave the grid too, not only its sidebar.
+     Expanded navigation remains an overlay in either half; a collapsed
+     sidebar cannot leave an invisible hit target over the conversation. */
+  grid-area: auto !important;
+  position: absolute !important;
+  inset: var(--shell-topbar-height, 44px) auto 0 0 !important;
+  width: min(252px, calc(100% - 46px)) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: calc(100% - 46px) !important;
+  height: auto !important;
+  z-index: 80 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateX(-100%) !important;
+  pointer-events: none !important;
+}
+
+html[data-laolao-classic-shell="1"]:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
+  .shell.shell--chat.shell--nav-drawer-open > .shell-nav {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
+  .topbar .topbar-nav-toggle {
+  display: inline-flex !important;
 }
 
 /* Do not remove the menu in a split pane. At this width the upstream shell
    already uses its hamburger state; keep that menu as an overlay so opening
    it reveals every real action without stealing a permanent 238px column
    from the conversation. */
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .shell.shell--chat {
   position: relative !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .sidebar {
   display: flex !important;
   position: absolute !important;
@@ -204,7 +243,7 @@ html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
    hamburger, the runtime removes this class and the full menu above becomes
    a proper overlay.  This explicit pair prevents an old cached `display:
    none` rule from swallowing every menu action in either split pane. */
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .sidebar.sidebar--collapsed {
   display: none !important;
 }
@@ -213,20 +252,20 @@ html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
    navigation drawer. Its viewport-wide backdrop can outlive a SPA session
    transition and make the chat look frozen. The menu stays available as an
    overlay; outside clicks are closed by the sidebar's split-drawer handler. */
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .shell-nav-backdrop {
   display: none !important;
   opacity: 0 !important;
   pointer-events: none !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .shell.shell--chat > main.content,
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .chat-workbench,
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .chat-workbench__main,
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   :is(.chat-split-container, .chat-main, .chat-main__conversation, .chat-thread, .chat-thread-inner) {
   width: 100% !important;
   min-width: 0 !important;
@@ -235,36 +274,36 @@ html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
   box-sizing: border-box !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .chat-workbench {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) var(--laolao-window-rail-reserve) !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .chat-workbench > .chat-workspace-rail {
   display: flex !important;
   grid-column: 2 !important;
   grid-row: 1 !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .agent-chat__composer-shell {
   width: min(100% - 18px, 680px) !important;
 }
 
 /* 两个透明 WebView 并排时，桌面壁纸会穿过两层半透明底而变成灰黑叠影。
    分屏单独提升阅读底色，模式壁纸还在，但只做淡淡一层，不会盖住内容。 */
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) body {
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) body {
   background: rgba(255, 250, 253, 0.94) !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"]) body::before {
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) body::before {
   opacity: 0.16 !important;
   filter: saturate(0.92) !important;
 }
 
-html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"])
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"])
   .card.chat {
   background: rgba(255, 252, 253, 0.50) !important;
 }

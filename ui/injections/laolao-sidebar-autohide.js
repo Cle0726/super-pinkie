@@ -9,7 +9,15 @@
   let cardUntil = 0, cardTimer = 0, collapseTimer = 0;
   let sidebar, edge;
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const desktop = () => innerWidth > 850 && !!document.querySelector('.shell--chat');
+  const splitPane = () => root.getAttribute('data-laolao-workspace-split') === '1'
+    || root.getAttribute('data-laolao-workspace-dock') === '1'
+    || root.getAttribute('data-laolao-browser-workspace') === '1';
+  // Split panes use the native hamburger and an overlay at every width.
+  // A wide half must not start the single-window hover controller or make
+  // that real menu inert simply because it happens to exceed 850px.
+  const desktop = () => innerWidth > 850
+    && !splitPane()
+    && !!document.querySelector('.shell--chat');
   const collapsed = () => sidebar?.classList.contains('sidebar--collapsed');
   const toggle = () => sidebar?.querySelector('[data-pinkie-sidebar-toggle], button[aria-label="折叠侧边栏"], button[aria-label="展开侧边栏"]');
   const nativeToggle = () => {
@@ -112,6 +120,24 @@
     paint();
   };
   document.addEventListener('click', event => {
+    // The upstream drawer normally switches to a pinned sidebar above
+    // 1100px. A wide split half still needs the same overlay menu. Keep its
+    // native state/renderer so Escape, outside clicks and navigation close it.
+    const drawerToggle = event.target.closest?.('.topbar-nav-toggle');
+    const sidebarToggle = event.target.closest?.('.sidebar [data-pinkie-sidebar-toggle]');
+    if (splitPane() && (sidebarToggle || (drawerToggle && innerWidth > 1100))) {
+      const host = document.querySelector('openclaw-app-shell');
+      if (typeof host?.requestUpdate === 'function') {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (host.navDrawerOpen) host.closeNavDrawer({restoreFocus: true});
+        else {
+          host.navDrawerTrigger = drawerToggle || sidebarToggle;
+          host.navDrawerOpen = true;
+          host.requestUpdate();
+        }
+        return;
+      }
+    }
     const button = event.target.closest?.('[data-pinkie-sidebar-toggle], .sidebar button[aria-label="折叠侧边栏"], .sidebar button[aria-label="展开侧边栏"]');
     if (!button || internal || !desktop()) return;
     clearTimeout(closeTimer);
