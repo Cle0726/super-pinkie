@@ -603,6 +603,30 @@ class PartyTests(unittest.TestCase):
             self.assertEqual(originals[backup.name], backup.read_text())
         self.assertFalse(setup.install(home))
 
+    def test_identity_backup_directory_collision_is_harmless(self):
+        # On Windows time.time_ns() can return the same value for back-to-back
+        # calls, so two migrate_file calls pick the same backup directory name
+        # and the second mkdir used to raise FileExistsError.  Force the
+        # collision by pinning time.time_ns() and assert the migration still
+        # lands both files (their per-file names differ, so reuse is safe).
+        home = Path(self.temp.name) / 'collision-home'
+        config = home / '.openclaw/openclaw.json'
+        config.parent.mkdir(parents=True)
+        agent_id = 'pinkie-party'
+        workspace = config.parent / ('workspace-' + agent_id)
+        workspace.mkdir()
+        (workspace / 'SOUL.md').write_text(setup.legacy_party_soul('碧琪'))
+        (workspace / 'IDENTITY.md').write_text(setup.identity_file('碧琪') + '- **Vibe:** 清楚、可靠的群聊搭档\n')
+        config.write_text(json.dumps({'agents': {'list': [
+            {'id': agent_id, 'name': '碧琪', 'workspace': str(workspace), 'tools': {'deny': ['*']}},
+        ]}}))
+        with patch('time.time_ns', return_value=1789385827952216100):
+            self.assertTrue(setup.install(home))
+        backups = list((setup.state_root(home) / 'backups').glob('party-identity-*/*.md'))
+        # Both files migrated into the single shared timestamp directory.
+        self.assertEqual(2, len(backups))
+        self.assertEqual({'pinkie-party-SOUL.md', 'pinkie-party-IDENTITY.md'}, {b.name for b in backups})
+
     def test_identity_migration_preserves_custom_and_symlinked_files(self):
         home = Path(self.temp.name) / 'custom-identity-home'
         config = home / '.openclaw/openclaw.json'
