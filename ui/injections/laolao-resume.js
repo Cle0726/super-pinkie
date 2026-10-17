@@ -58,6 +58,7 @@
   const isVisibleChatSurface = () => !document.hidden
     || document.documentElement?.hasAttribute?.("data-laolao-workspace-split")
     || document.documentElement?.hasAttribute?.("data-laolao-workspace-dock")
+    || document.documentElement?.hasAttribute?.("data-laolao-browser-workspace")
     || new URLSearchParams(location.search).get("laolao-dock") === "1";
   // URL is the selected session. The pane can still hold the previous session
   // for a render tick (or indefinitely after a failed router update).
@@ -371,7 +372,34 @@
     return renderable.slice(-LIVE_MESSAGE_WINDOW);
   };
 
-  const mergeRecentHistory = (history) => keepLiveMessages(history);
+  // A successful chat.final is already authoritative for the selected run.
+  // Its durable history can lag behind the event; retain that received reply
+  // only inside its original user turn and session incarnation. Durable
+  // finals, reset, or compaction replace the matching local reply.
+  const retainReceivedFinal = (previous, next, state) => {
+    if (!Array.isArray(previous) || !Array.isArray(next) || !next.length) return next;
+    const realUser = (message) => String(message?.role || '').toLowerCase() === 'user' && isRenderableHistoryMessage(message);
+    let result = next;
+    for (let at = 0; at < previous.length; at += 1) {
+      const reply = previous[at], received = reply?.__pinkieReceivedFinal;
+      if (received?.sessionKey !== state?.sessionKey) continue;
+      if (received.sessionId && state.currentSessionId && received.sessionId !== state.currentSessionId) continue;
+      const user = previous.slice(0, at).findLast(realUser);
+      const anchor = user ? result.findIndex((message) => messageIdentity(message) === messageIdentity(user)) : -1;
+      if (anchor < 0) continue;
+      const nextUser = result.findIndex((message, index) => index > anchor && realUser(message));
+      const end = nextUser < 0 ? result.length : nextUser;
+      const tail = result.slice(anchor + 1, end);
+      if (tail.some((message) => message?.__openclaw?.kind === 'compaction'
+          || String(message?.role || '').toLowerCase() === 'assistant'
+            && !/^tool[_-]?(?:use|calls?)$/iu.test(String(message.stopReason || ''))
+            && isRenderableHistoryMessage(message))) continue;
+      // Preserve old replies inside their own turn, never after a later user.
+      result = [...result.slice(0, end), reply, ...result.slice(end)];
+    }
+    return result;
+  };
+  const mergeRecentHistory = (history, state) => keepLiveMessages(retainReceivedFinal(state?.chatMessages, history, state));
 
   // ── 历史窗口不回缩 ──
   // 原生页每轮结束后只重新拉最新 10 条，并用它整体替换 chatMessages；它本来靠
@@ -415,7 +443,8 @@
         // A different session (or a reset to an empty list) always replaces.
         const sameSession = state.sessionKey === listSession;
         listSession = state.sessionKey;
-        write(ownMessageWrite || !sameSession ? next : keepEarlierMessages(read(), next));
+        const previous = read();
+        write(ownMessageWrite || !sameSession ? next : retainReceivedFinal(previous, keepEarlierMessages(previous, next), state));
       },
     });
     return true;
@@ -754,7 +783,7 @@
             || (!options.recent && gatewayClient() !== client)
             || (isBusy(pane) && !options.verifiedTerminal)) return false;
         const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
-        const mergedMessages = mergeRecentHistory(recent.messages);
+        const mergedMessages = mergeRecentHistory(recent.messages, state);
         const messagesChanged = !sameMessageSequence(localMessages, mergedMessages);
         const repaint = options.forcePaint === true;
         if (messagesChanged || repaint) writeOwnMessages(state, mergedMessages);
@@ -953,6 +982,7 @@
     uniqueMessages,
     isRenderableHistoryMessage,
     mergeRecentHistory,
+    retainReceivedFinal,
     keepLatestMessages: keepLiveMessages,
     publishTimelineRunState,
   };

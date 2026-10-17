@@ -8,10 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const marker = '/* pinkie-chat-timeline:v5 */';
+export const marker = '/* pinkie-chat-timeline:v17 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 export const LIVE_MESSAGE_WINDOW = 512;
 export const HISTORY_RENDER_LIMIT = 512;
@@ -94,6 +94,89 @@ function textParts(message = {}) {
     return [{type: 'text', text: message.text}];
   }
   return Array.isArray(message.content) ? message.content : [];
+}
+
+/** The native session-message handler defers history reloads during a run.
+ * Gemini can persist its public preamble before it emits any assistant delta,
+ * so consume that authoritative text immediately in the selected pane. Tools
+ * and thoughts retain their separate native/event owners; history reconciles
+ * this same durable message id normally after the run. */
+export function pinkieApplySessionMessage(state, payload, selected) {
+  if (!selected || !state || !payload || typeof payload !== 'object') return false;
+  if (state.currentSessionId && payload.sessionId && state.currentSessionId !== payload.sessionId) return false;
+  const source = payload.message;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
+  const role = String(source.role || '').toLowerCase();
+  if (role !== 'user' && role !== 'assistant') return false;
+  if (role === 'user' && isInternalUserMessage(source)) return false;
+  const content = textParts(source).filter((part) => ['text', 'inputtext', 'outputtext'].includes(partType(part))
+    && typeof part.text === 'string' && Boolean(part.text.trim()));
+  if (!content.length) return false;
+  const id = String(source.__openclaw?.id || payload.messageId || '');
+  if (!id) return false;
+  const message = {...source, content: role === 'user' ? source.content : content,
+    __openclaw: {...source.__openclaw, id}};
+  const messages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+  const head = messages.findLastIndex(item => String(item?.role || '').toLowerCase() === 'user' && !isInternalUserMessage(item));
+  // chat.final can precede the durable session.message. Replace only the
+  // received final from this user turn; identical replies in older turns or
+  // two distinct durable messages must retain their own identities.
+  const receipt = role === 'assistant' && !isToolPreamble(source) && !textParts(source).some(isToolCallPart)
+    ? messages.findLastIndex((item, offset) => offset > head && !item?.__openclaw?.id
+      && item?.__pinkieReceivedFinal?.sessionKey === state.sessionKey
+      && userText(item) === userText(message)) : -1;
+  if (role === 'assistant' && !state.chatRunId && receipt < 0) return false;
+  let index = messages.findIndex((item) => item?.__openclaw?.id === id);
+  if (receipt >= 0) {
+    message.__pinkieReceivedFinal = messages[receipt].__pinkieReceivedFinal;
+    if (index < 0) index = receipt;
+  }
+  if (index < 0 && role === 'user') {
+    const pending = messages.findLastIndex(item => String(item?.role || '').toLowerCase() === 'user'
+      && !isInternalUserMessage(item));
+    const previous = messages[pending];
+    if (previous && !previous.__openclaw?.id && userText(previous) === userText(source)) index = pending;
+  }
+  if (index >= 0 && (receipt < 0 || receipt === index) && JSON.stringify(messages[index]) === JSON.stringify(message)) return false;
+  state.chatMessages = index < 0 ? [...messages, message]
+    : messages.flatMap((item, offset) => offset === index ? [message] : offset === receipt ? [] : [item]);
+  return true;
+}
+
+function isToolPreamble(message = {}) {
+  return /^tool[_-]?(?:use|calls?)$/iu.test(String(message.stopReason || ''));
+}
+
+/** Called only inside the native branch that has accepted this run's final.
+ * Mark that received reply for the short race with a stale history snapshot.
+ * Some adapters concatenate prior tool preambles into chat.final; remove only
+ * an exact prefix that this same turn has already persisted as narration. */
+export function pinkieAcceptFinalMessage(state, payload, message) {
+  if (!message || payload?.state !== 'final') return message;
+  const messages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+  const head = messages.findLastIndex((item) => String(item?.role || '').toLowerCase() === 'user' && !isInternalUserMessage(item));
+  const prefix = messages.slice(head + 1).filter(isToolPreamble)
+    .map((item) => textParts(item).filter((part) => partType(part) === 'text').map((part) => part.text || '').join('').trim()).join('');
+  const parts = textParts(message);
+  const text = parts.filter((part) => partType(part) === 'text').map((part) => part.text || '').join('');
+  const remainder = prefix && text.startsWith(prefix) ? text.slice(prefix.length).trimStart() : '';
+  let replaced = false;
+  const content = remainder ? parts.flatMap((part) => {
+    if (partType(part) !== 'text') return [part];
+    if (replaced) return [];
+    replaced = true;
+    return [{...part, text: remainder}];
+  }) : parts;
+  const accepted = {...message, content, stopReason: message.stopReason || payload.stopReason || 'stop',
+    __pinkieReceivedFinal: {sessionKey: state.sessionKey, sessionId: state.currentSessionId || '', runId: payload.runId || ''}};
+  // Reverse event order: native final append deduplicates stream fallbacks,
+  // not durable messages. Replace this exact durable id before that append.
+  const durable = messages.slice(head + 1).findLast(item => item?.__openclaw?.id
+    && String(item?.role || '').toLowerCase() === 'assistant' && !isToolPreamble(item)
+    && !textParts(item).some(isToolCallPart) && userText(item) === userText(accepted));
+  if (!durable) return accepted;
+  state.chatMessages = messages.filter((item, offset) => offset <= head || item?.__openclaw?.id !== durable.__openclaw.id);
+  return {...durable, __pinkieReceivedFinal: accepted.__pinkieReceivedFinal};
 }
 
 function cleanAssistantMessage(message, content) {
@@ -216,9 +299,9 @@ export function pinkieSplitTimelineMessage(entry = {}, getToolCalls = () => []) 
         if (!isToolResultPart(candidate)) continue;
         const resultId = partCallId(candidate, message);
         if (callId && resultId && callId !== resultId) continue;
-        relatedResults.push(candidate);
+        if (callId) relatedResults.splice(0, relatedResults.length, candidate);
+        else relatedResults.push(candidate);
         consumedResults.add(resultIndex);
-        if (callId) break;
       }
       const callPart = {
         type: 'tool_call',
@@ -245,6 +328,7 @@ export function pinkieSplitTimelineMessage(entry = {}, getToolCalls = () => []) 
       if (consumedResults.has(index)) continue;
       const resultCall = calls.find((call) => call.callId
         && String(call.callId) === partCallId(part, message));
+      if (resultCall) usedCalls.add(calls.indexOf(resultCall));
       rows.push({
         role: 'tool',
         message: makeToolMessage(message, [part], resultCall || {
@@ -477,10 +561,19 @@ function pinkieRunIsActive() {
 
 /**
  * One turn becomes: the user message, one "process card" holding Pinkie's
- * narration and tool rows in source order, then the final reply bubble (and,
- * for the live turn, the native stream/reading rows). Plain answers without
+ * narration and tool rows in source order, then the final reply bubble. While
+ * live, narration is shown outside the folded tool details; completion moves
+ * it into those details. The native final stream/reading rows stay outside.
+ * Plain answers without
  * any intermediate step keep exactly the native layout.
  */
+function pinkieProcessTurnKey(head, ownerKey) {
+  let session = '';
+  try { session = new URLSearchParams(globalThis.location?.search || '').get('session') || ''; } catch {}
+  const id = String(head?.messages?.[0]?.message?.__openclaw?.id || ownerKey);
+  return `pinkie:process:${session}:${id}`;
+}
+
 function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
   if (!entries.length) return [];
   const hasUserHead = isRealUserGroup(entries[0]);
@@ -496,6 +589,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   for (let index = firstStepIndex; index < entries.length; index += 1) {
     const item = entries[index];
     if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'assistant'
+        && !isToolPreamble(item.messages?.at?.(-1)?.message)
+        && (item.messages || []).some(entry => pinkieSplitTimelineMessage(entry, getToolCalls)
+          .some(part => part.role === 'assistant'))
         && (lastToolIndex < 0 || index > lastToolIndex)) {
       finalAssistantIndex = index;
     }
@@ -506,15 +602,26 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const tail = [];
   let liveItems = false;
   for (let index = firstStepIndex; index < entries.length; index += 1) {
-    const item = entries[index];
+    let item = entries[index];
     if (item?.kind !== 'group') {
       // Live-only entries are emitted by the active user turn. A stale one
       // must not survive as an old native-rendered row after the next send.
       if (item?.kind === 'stream' || item?.kind === 'reading-indicator') {
         if (!isLatestTurn) continue;
         liveItems = true;
+        if (item.kind === 'stream') {
+          // A persisted last assistant is authoritative. Some adapters send
+          // preambles + final as a cumulative stream after it has arrived.
+          if (finalAssistantIndex >= 0) continue;
+          const prefix = entries.flatMap(entry => entry.messages || [])
+            .map(entry => entry.message || {}).filter(isToolPreamble)
+            .map(message => userText(message).trim()).join('');
+          const text = String(item.text || '');
+          if (prefix && prefix.startsWith(text.trim()) && text.trim()) continue;
+          if (prefix && text.startsWith(prefix)) item = {...item, text: text.slice(prefix.length).trimStart()};
+        }
         // A sentence Pinkie streamed before a later tool call is narration:
-        // it belongs in the card now, not only after the history sync.
+        // it must stay visible now, not only after the history sync.
         if (item.kind === 'stream' && index < lastToolIndex && String(item.text || '').trim()) {
           steps.push({
             kind: 'group', role: 'assistant', key: String(item.key || `stream:${index}`), senderLabel: null,
@@ -555,13 +662,24 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   }
   const ownerKey = String(head?.key || head?.messages?.[0]?.key
     || entries[0]?.key || entries[0]?.messages?.[0]?.key || 'turn');
+  const processKey = pinkieProcessTurnKey(head || entries[0], ownerKey);
+  const historyThinking = entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
+    .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))
+    .filter(part => ['thinking', 'reasoning'].includes(partType(part)))
+    .map(part => part.thinking || part.reasoning || part.text || '').filter(text => typeof text === 'string' && text.trim()).join('\n\n');
   const live = isLatestTurn && (liveItems || pinkieRunIsActive());
   // The live turn always gets its card, so thinking has a place before the
   // first step. A finished plain answer keeps one only when the page recorded
   // its thinking (laolao-process-card maintains this read-only key set).
   const keep = globalThis.__pinkieProcessKeep;
-  const kept = Boolean(keep && typeof keep.has === 'function' && keep.has(`pinkie:process:${ownerKey}`));
-  if (!steps.length && !live && !kept) return [...(head ? [head] : []), ...tail];
+  const legacyOwner = head?.pinkieLegacyOwnerKey || ownerKey;
+  const legacyKey = `pinkie:process:${legacyOwner}`;
+  const savedThinking = globalThis.__laolaoProcessCard?.store || {};
+  const kept = Boolean(keep && typeof keep.has === 'function' && (keep.has(processKey)
+    || keep.has(legacyKey) || keep.has(pinkieProcessTurnKey(null, legacyOwner))))
+    || Object.values(savedThinking).some(record => record?.text && record.turn?.id
+      && processKey === `pinkie:process:${record.turn.session}:${record.turn.id}`);
+  if (!steps.length && !live && !kept && !historyThinking) return [...(head ? [head] : []), ...tail];
 
   const finalMessage = finalAssistantIndex >= 0
     ? entries[finalAssistantIndex]?.messages?.at?.(-1)?.message || {}
@@ -579,12 +697,15 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const duration = started > 0 && ended > started ? formatProcessDuration(ended - started) : '';
   const card = {
     kind: 'group',
-    key: `pinkie:process:${ownerKey}`,
+    key: processKey,
     role: 'assistant',
     messages: [],
     timestamp: timelineTimestamp(steps[0]),
     isProcessCard: true,
     processLive: live,
+    processThinking: historyThinking,
+    processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
+    processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
     processState: !live && processInterrupted ? 'oops' : '',
     processRows: collapseTimelineRows(steps, maxRows, ownerKey),
     processSteps: toolCount,
@@ -618,11 +739,13 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
         if (type === 'text' || type === 'inputtext' || type === 'outputtext') {
           return typeof part?.text === 'string' && Boolean(part.text.trim());
         }
-        return Boolean(part && typeof part === 'object' && part.type
-          && type !== 'thinking' && type !== 'reasoning');
+        return Boolean(part && typeof part === 'object' && part.type);
       }) || Boolean(message.toolName || message.tool_name || message.toolCallId || message.tool_call_id);
     });
-    return messages.length ? [{...item, messages}] : [];
+    if (!messages.length) return [];
+    if (item.role === 'assistant' || item.role === 'user') return messages.map(entry => ({...item,
+      key: entry.key, pinkieLegacyOwnerKey: item.key, messages: [entry], timestamp: entry.message?.timestamp ?? item.timestamp}));
+    return [{...item, messages}];
   });
   const turnStarts = [];
   for (let index = 0; index < safeEntries.length; index += 1) {
@@ -657,6 +780,11 @@ function isCompactionEntry(item) {
 
 function projectOrphanEntries(entries, getToolCalls, maxRows, latestChunkIsLive = false) {
   if (!entries.length) return [];
+  // Compaction changes model context, not the run's completion state. After a
+  // refresh its retained history can lack a user head; keep that active task's
+  // narration visible on both sides of the divider rather than folding the
+  // prefix as if it were already finished.
+  if (latestChunkIsLive) return projectTimelineTurn(entries, getToolCalls, maxRows, true);
   const output = [];
   let chunk = [];
   const flush = (isLatestChunk = false) => {
@@ -699,27 +827,92 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
+}
+
+function withSessionMessageProgress(source) {
+  if (source.includes('pinkieApplySessionMessage(e,t,r);')) return source;
+  return replaceExactlyOnce(source,
+    /(function\s+[\w$]+\(e,t\)\{let n=[\w$]+\(t\);if\(!n\|\|![\w$]+\(e,n\)\)return;let r=[\w$]+\(e,n\);)(?=r&&n\.archived!==null)/u,
+    (match) => `${match}pinkieApplySessionMessage(e,t,r);`, 'selected session-message progress handler');
+}
+
+function withReceivedFinal(source) {
+  // Remove the v12 receipt writer when upgrading; native history remains the
+  // source of narration and standalone tool results (as in v8).
+  if (source.includes('/* pinkie-history-reconcile:v1 */')) source = replaceExactlyOnce(source,
+    'e.chatMessages=pinkieReconcileHistory(e,ql(f,c),u.sessionInfo?.sessionId||u.sessionId)/* pinkie-history-reconcile:v1 */,',
+    'e.chatMessages=ql(f,c),', 'remove v12 history receipts');
+  source = withToolStreamRendering(withScrollIntent(source));
+  if (source.includes('n=pinkieAcceptFinalMessage(e,t,n);')) return source;
+  return replaceExactlyOnce(source,
+    /(else if\(t\.state===`final`\)\{let n=[\w$]+\(t\.message\);)(?=n&&!)/u,
+    (match) => `${match}n=pinkieAcceptFinalMessage(e,t,n);`, 'accepted native final reply');
+}
+
+function withToolStreamRendering(source) {
+  if (source.includes('/* pinkie-tool-stream-sync:v1 */')) return source;
+  return replaceExactlyOnce(source,
+    /(function\s+[\w$]+\(e\)\{e\.toolStreamSyncTimer!=null&&\(clearTimeout\(e\.toolStreamSyncTimer\),e\.toolStreamSyncTimer=null\),[\w$]+\(e\))(?=\})/u,
+    '$1,e.requestUpdate?.()/* pinkie-tool-stream-sync:v1 */', 'deferred tool stream render');
+}
+
+function withScrollIntent(source) {
+  if (source.includes('/* pinkie-scroll-intent:v1 */')) return source;
+  return replaceExactlyOnce(source,
+    '(u||l===`always`||l===`near-bottom`&&(d||!e.chatFollowLocked&&(e.chatUserNearBottom||n<Cc)))',
+    '(u||l!==`off`&&!e.chatFollowLocked&&(e.chatUserNearBottom||n<Cc))/* pinkie-scroll-intent:v1 */',
+    'delayed follow respects a newer user scroll');
 }
 
 /**
- * Renderer branch for a process card. <details> keeps the open state on the
- * element: Lit only rewrites ?open when processLive flips, so the card opens
- * while Pinkie works, folds when the turn ends, and a manual toggle in between
- * survives every re-render. The thinking and status slots are static children
- * that laolao-process-card.js fills from live gateway events.
+ * Native <details> starts closed and owns manual toggles. The page script only
+ * closes it once when the run completes. Narration and thinking always stay
+ * inside the process; the C.le. styles keep its rows visible.
  */
 function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" ?open=\${e.processLive} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;`;
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><div class="pinkie-process__live-text">\${e.processLiveRows.map(n=>${groupName}(n,t))}</div><details class="pinkie-process" data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;`;
 }
 
 /** Add the process branch to a renderer patched by an older release. */
 function withProcessBranch(source) {
-  if (source.includes('e.isProcessCard')) return source;
+  if (source.includes('e.isProcessCard')) {
+    const renderer = /function\s+([\w$]+)\(e,t\)\{if\(e&&e\.isProcessCard\)/u.exec(source);
+    if (!renderer) throw new Error('process-card renderer is missing');
+    return replaceExactlyOnce(source,
+      /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u,
+      () => processBranchSource(renderer[1]), 'process-card renderer upgrade');
+  }
   const match = /function\s+([\w$]+)\(e,t\)\{if\(e&&e\.timelineOverflow\)/u.exec(source);
   if (!match) throw new Error('timeline overflow renderer is missing');
   const at = match.index + match[0].length - 'if(e&&e.timelineOverflow)'.length;
   return source.slice(0, at) + processBranchSource(match[1]) + source.slice(at);
+}
+
+function withNativePresentation(source) {
+  // This option belongs to the native boxed Reasoning renderer. The separate
+  // laolao-process-card thinking stream and the model's reasoning tier are
+  // unaffected. New tool bodies start folded; native expansion maps still
+  // own later manual clicks.
+  const policy = 'e={...e,showThinking:false,autoExpandToolCalls:false};';
+  if (source.includes(policy)) return source;
+  return replaceExactlyOnce(source,
+    /(function\s+[\w$]+\(e\)\{)(?=let t=[\w$]+\(e\.paneId\),n=e\.onRequestUpdate)/u,
+    (match) => `${match}${policy}`, 'native chat presentation options');
+}
+
+function withChatCompactionSlot(source) {
+  if (source.includes('data-pinkie-compaction=')) return source;
+  const main = /function\s+[\w$]+\(e\)\{e=\{\.\.\.e,showThinking:false,autoExpandToolCalls:false\};let t=[\w$]+\(e\.paneId\),n=e\.onRequestUpdate/u.exec(source);
+  if (!main) throw new Error('native chat thread renderer is missing');
+  const next = source.indexOf('function ', main.index + 9);
+  const end = next < 0 ? source.length : next;
+  const section = source.slice(main.index, end);
+  const footer = /(\$\{[\w$]+\(e\)\})(\s*<\/div>\s*<\/div>\s*`)/u;
+  const patched = replaceExactlyOnce(section, footer,
+    (_match, footerCall, closing) => `<div class="pinkie-chat-compaction" data-pinkie-compaction=\${e.sessionKey}></div>\n        ${footerCall}${closing}`,
+    'chat compaction status slot');
+  return sourceWithReplacement(source, main.index, end, patched);
 }
 
 function upgradeBundle(original, previousMarker) {
@@ -736,7 +929,7 @@ function upgradeBundle(original, previousMarker) {
     }
     const runtime = `${marker}${splitRuntimeSource()}\n`;
     return {
-      text: withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime)),
+      text: withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime)))))),
       changed: true,
       reason: `upgraded-${version}`,
     };
@@ -849,7 +1042,7 @@ function transformBundle(original) {
       'streaming timeline footer');
     source = source.slice(0, streamStart) + streamSource + source.slice(streamEnd);
 
-    return {text: source, changed: true, reason: 'patched'};
+    return {text: withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(source)))), changed: true, reason: 'patched'};
   } catch (error) {
     return {text: original, changed: false, reason: String(error?.message || error)};
   }

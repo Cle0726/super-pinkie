@@ -148,7 +148,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-rece
   position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
   border-radius: 10px; background: var(--sb-hover, rgba(255, 255, 255, .7));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
-  opacity: 0; transition: transform .32s cubic-bezier(.25, 1.25, .45, 1), width .32s cubic-bezier(.25, 1.25, .45, 1), height .32s cubic-bezier(.25, 1.25, .45, 1), opacity .2s ease;
+  opacity: 0; transition: transform .16s ease-out, width .16s ease-out, height .16s ease-out, opacity .2s ease;
 }
 .sb-glide.is-on { opacity: 1; }
 .sb-glide.is-jump { transition: opacity .2s ease; }
@@ -184,15 +184,15 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
   html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]) .shell--chat .chat-thread { will-change: transform; }
   html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav {
     position: fixed !important; inset: 0 auto 0 0 !important;
-    width: 238px !important; height: auto !important; z-index: 150 !important;
+    width: 238px !important; height: auto !important; min-height: 0 !important; z-index: 150 !important;
     transform: translateX(-100%); visibility: hidden; pointer-events: none;
-    transition: transform .34s cubic-bezier(.4, 0, .2, 1), visibility .34s;
+    transition: transform .18s ease-out, visibility .18s;
   }
   /* 鼠标靠左边呼出时是一张浮起的卡片；滑回去的途中保持卡片样子，藏好后才换回去 */
   html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"] .shell--chat > .shell-nav {
     inset: 8px auto 8px 8px !important;
     transform: translateX(calc(-100% - 16px));
-    transition: transform .42s cubic-bezier(.22, 1.2, .36, 1), visibility .42s;
+    transition: transform .2s ease-out, visibility .2s;
   }
   html[data-pinkie-sidebar-auto="1"][data-pinkie-sidebar-card="1"] .shell--chat > .shell-nav .sidebar {
     border-radius: 18px !important; overflow: hidden;

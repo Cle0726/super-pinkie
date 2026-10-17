@@ -27,7 +27,7 @@
 
   const viewerId = "laolao-link-viewer";
   // 内容容器：所有 markdown 渲染产物都在这几个 class 里
-  const CONTENT_SELECTOR = ".chat-bubble, .sidebar-markdown, .markdown-reader, .markdown, .chat-tool-card__block-content";
+  const CONTENT_SELECTOR = ".chat-bubble, .sidebar-markdown, .markdown-reader, .markdown, .chat-tool-card__block-content, .chat-assistant-attachment-card";
   const SKIP_PROTOCOLS = /^(#|mailto:|tel:|javascript:|data:)/i;
   const ALLOW_PROTOCOLS = /^(https?:|file:)/i;
   const EMBED_TIMEOUT_MS = 5000;
@@ -253,7 +253,11 @@
     #laolao-browser-workspace-entry:hover{color:#4f7f8d;background:rgba(255,250,253,.72)}
     #laolao-browser-workspace-entry:active{transform:scale(.96)}
     #laolao-browser-workspace-entry:focus-visible{outline:2px solid rgba(207,66,130,.45);outline-offset:-2px}
+    .laolao-video-workspace-open{align-self:flex-start;border:1px solid var(--border,rgba(145,100,121,.2));border-radius:8px;padding:5px 10px;background:var(--bg-surface,transparent);color:var(--text-strong);cursor:pointer}
+    .laolao-video-workspace-open:hover{color:var(--accent)}
+    html[data-pinkie-night] .laolao-video-workspace-open{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
     .chat-workspace-rail:not(.chat-workspace-rail--collapsed)>#laolao-browser-workspace-entry{display:none}
+    html:is([data-laolao-workspace-split="1"],[data-laolao-workspace-dock="1"],[data-laolao-browser-workspace="1"]) .chat-workspace-rail>#laolao-browser-workspace-entry{display:flex!important}
     @media(prefers-reduced-motion:reduce){#laolao-browser-workspace-entry{transition:none}}
   `;
   document.head.append(launcherStyle);
@@ -284,10 +288,47 @@
     rail.insertBefore(button, party || null);
   };
 
+  // Playback controls keep their normal behaviour. The separate entry also
+  // covers attachment cards whose media URL is relative to the gateway.
+  const mountMediaWorkspaceActions = () => {
+    document.querySelectorAll(".chat-assistant-attachment-card video, .chat-bubble video").forEach((video) => {
+      const parent = video.parentElement;
+      if (!parent || parent.querySelector(".laolao-video-workspace-open")) return;
+      const button = document.createElement("button");
+      button.className = "laolao-video-workspace-open";
+      button.type = "button";
+      button.textContent = "在侧栏打开";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const source = video.currentSrc || video.getAttribute("src") || video.querySelector("source[src]")?.getAttribute("src");
+        if (!source) return;
+        try {
+          const url = new URL(source, window.location.href);
+          if (ALLOW_PROTOCOLS.test(url.protocol)) open(url.href);
+        } catch (_) {}
+      });
+      parent.append(button);
+    });
+  };
+
+  // Lit may replace the rail's children when its file view expands. Re-seat
+  // this launcher after that local click update, instead of waiting 1.5s.
+  let launcherMountFrame = 0;
+  document.addEventListener("click", event => {
+    if (!event.target.closest?.(".chat-workspace-rail") || launcherMountFrame) return;
+    launcherMountFrame = requestAnimationFrame(() => {
+      launcherMountFrame = 0;
+      mountBrowserLauncher();
+    });
+  }, true);
+
   // The app swaps chat roots during mode/session changes. A low-frequency,
   // idempotent mount avoids a subtree observer competing with streaming text.
   setInterval(mountBrowserLauncher, 1500);
+  setInterval(mountMediaWorkspaceActions, 1500);
   mountBrowserLauncher();
+  mountMediaWorkspaceActions();
 
   // 拦截聊天内容里的链接点击
   document.addEventListener(
@@ -301,13 +342,18 @@
       if (!inContent) return;
       const href = link.getAttribute("href") || "";
       if (!href || SKIP_PROTOCOLS.test(href)) return;
-      if (!ALLOW_PROTOCOLS.test(href)) return; // 让相对路径走原生
+      let target = href;
+      if (!ALLOW_PROTOCOLS.test(target)) {
+        if (!link.closest(".chat-assistant-attachment-card")) return;
+        try { target = new URL(href, window.location.href).href; } catch (_) { return; }
+        if (!ALLOW_PROTOCOLS.test(target)) return;
+      }
       // 如果链接目标是图片且 image-viewer 会接管，让它先处理。
       // image-viewer 的选择器只匹配 img 元素，不匹配 a 元素，所以
       // a[href] 永远不会被它截到——这里直接处理即可。
       event.preventDefault();
       event.stopImmediatePropagation();
-      open(href);
+      open(target);
     },
     true // capture，抢在原生 target=_blank 之前
   );

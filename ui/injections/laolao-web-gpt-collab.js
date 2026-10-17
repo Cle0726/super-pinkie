@@ -807,7 +807,8 @@
     return waitForChatGPTReply({assistantCount: sent.assistantCount, assistantId: sent.assistantId}, false, key);
   };
 
-  const prepare = async (preview = "") => {
+  const prepare = async (preview = "", isCurrent = () => true) => {
+    if (!isCurrent()) return "cancelled";
     if (!enabled()) return true;
     if (!String(preview || "").trim()) {
       preview = $(".agent-chat__composer-combobox textarea")?.value || "";
@@ -819,6 +820,7 @@
       const pending = (async () => {
         try {
           const useProjectConnector = await ensureCollaborationConnection();
+          if (!isCurrent()) return "cancelled";
           if (sessionKey() !== key) throw new Error("会话已切换，本轮已停止发送");
           const initialContext = await loadProjectContext(preview);
           const sharedPaths = new Set((initialContext?.files || []).map(file => file.path));
@@ -832,12 +834,14 @@
           const controlMessage = buildControlMessage(preview, false,
             initialContext?.files?.length || initialContext?.manifest?.length ? initialContext : null);
           if (sessionKey() !== key) throw new Error("会话已切换，本轮已停止发送");
+          if (!isCurrent()) return "cancelled";
           let reply = await sendAndWaitForReply(controlMessage, key, {onSent: async () => {
             await appendActivity("sent", "发往网页 GPT", `用户任务：${truncateUtf8(preview, 1_000)}${sharedPaths.size ? `\n已附项目文件：${[...sharedPaths].join("、")}` : ""}`, key);
             toast("已发往右侧 ChatGPT，正在等网页回复");
           }});
           const requested = new Set();
           for (let round = 0; round < 3; round += 1) {
+            if (!isCurrent()) return "cancelled";
             const paths = parseFileRequest(reply);
             if (!paths) break;
             if (!connection?.workspace) throw new Error("网页请求读取项目文件，但当前会话没有绑定用户项目");
@@ -854,10 +858,12 @@
               : `碧琪未能读取这些路径：${(more?.errors || []).join("；") || newPaths.join("、")}。请不要声称读过它们，基于已给出的正文回答。`;
             if (sessionKey() !== key) throw new Error("会话已切换，本轮已停止发送");
             await ensureChatGPTReady(false);
+            if (!isCurrent()) return "cancelled";
             reply = await sendAndWaitForReply(followup, key);
           }
           if (parseFileRequest(reply)) throw new Error("网页仍要求更多文件，已达到三轮只读上限；请缩小问题范围");
           await appendActivity("received", "网页 GPT 返回", reply, key);
+          if (!isCurrent()) return "cancelled";
           if (sessionKey() !== key) throw new Error("会话已切换，网页回复未写入别的会话");
           const transcript = [
             `你问：${String(preview || "").trim().slice(0, 4_000)}`,
@@ -937,24 +943,27 @@
       .some((name) => button.classList.contains(name))) return null;
     return /send|发送/i.test(button.getAttribute("aria-label") || "") ? button : null;
   };
-  const through = async (send, preview) => {
+  const through = async (send, preview, isCurrent = () => true, draftInput = null) => {
     try {
-      const result = await prepare(preview);
-      if (result === "blocked") return;
+      const result = await prepare(preview, isCurrent);
+      if (result === "cancelled" || !isCurrent()) return {status: 'cancelled'};
+      if (result === "blocked") return {status: 'blocked', reason: '网页 GPT 协作没有完成，原文已保留。', notified: true};
       if (result === "web-direct") {
-        const input = $(".agent-chat__composer-combobox textarea");
+        const input = draftInput || $(".agent-chat__composer-combobox textarea");
         if (input && input.value === preview) {
           const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
           if (setter) setter.call(input, ""); else input.value = "";
           input.dispatchEvent(new Event("input", {bubbles: true}));
         }
         await window.__laolaoRefreshCurrentChat?.();
-        return;
+        return {status: 'web-direct'};
       }
       bypassOnce = true;
-      send();
+      return {status: send() === false ? 'cancelled' : 'native'};
     } catch (error) {
-      toast(`${error?.message || "网页 GPT 协作暂时不可用"}；消息仍在输入框，未调用本地模型`);
+      const reason = error?.message || "网页 GPT 协作暂时不可用";
+      toast(`${reason}；消息仍在输入框，未调用本地模型`);
+      return {status: 'blocked', reason, notified: true};
     } finally {
       queueMicrotask(() => { bypassOnce = false; });
     }
@@ -970,7 +979,8 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     const preview = $(".agent-chat__composer-combobox textarea")?.value || "";
-    void through(() => button.click(), preview);
+    const prepareSend = (send, isCurrent, draft) => through(send, draft?.text ?? preview, isCurrent, draft?.input);
+    if (!window.__laolaoStartupHome?.delegateNativeSend?.(button, prepareSend)) void through(() => button.click(), preview);
   }, true);
   document.addEventListener("keydown", (event) => {
     if (bypassOnce) { bypassOnce = false; return; }

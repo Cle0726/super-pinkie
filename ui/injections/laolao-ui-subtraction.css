@@ -158,6 +158,22 @@ html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
   }
 }
 
+/* 小窗口的导航已经变成抽屉，网格也一起收成一列。
+   保留桌面的导航列会让阅读器上下排列时落进零宽的隐式列。 */
+@media (max-width: 850px) {
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]) body div.shell.shell--chat {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: "topbar" "content" !important;
+  }
+  html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
+    grid-area: content !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
 /* 同窗分屏不是把原来的整页硬切两半。两个 WebView 都只保留聊天本体，
    移除各自会占 238px 的导航和 44px 工作轨道；否则 640px 的半屏会被
    挤成一条窄缝，消息逐字换行。右侧模式名和关闭按钮由原生分屏标题栏
@@ -307,3 +323,110 @@ html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [da
   .card.chat {
   background: rgba(255, 252, 253, 0.50) !important;
 }
+
+/* 按聊天区域本身适配。编辑器和原生分屏会缩窄聊天栏，窗口宽度不能代替它。 */
+html:not([data-laolao-plain-composer]) .chat-main {
+  container-name: pinkiechat;
+  container-type: inline-size;
+}
+@container pinkiechat (max-width: 680px) {
+  html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control {
+    grid-row: 3 !important;
+    grid-column: 1 / 11 !important;
+    justify-self: start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  html:not([data-laolao-plain-composer]) .chat-composer-model-control .chat-controls__inline-select-trigger {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+  html:not([data-laolao-plain-composer]) .chat-composer-model-control .chat-controls__inline-select-label {
+    display: block !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-deep-think-btn, .laolao-context-viewer, .context-usage, .laolao-context-compact-btn) {
+    grid-row: 3 !important;
+  }
+  html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) {
+    grid-row: 2 !important;
+    grid-column: 9 / -1 !important;
+    min-width: 0 !important;
+  }
+  html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__composer-status-stack { grid-row: 4 !important; }
+  html:not([data-laolao-plain-composer]) #laolao-project-scope {
+    grid-row: 4 !important;
+    grid-column: 1 / -1 !important;
+    justify-self: start !important;
+    max-width: 100% !important;
+    margin-left: 7px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-web-gpt-collab, .laolao-desensitize-btn) > span { display: none !important; }
+  html:not([data-laolao-plain-composer]) .agent-chat__composer-shell { width: calc(100% - 24px) !important; }
+}
+
+/* 分屏两边都保留单一内容列，消息宽度跟随各自面板，长卡片不能反推网格宽度。 */
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) {
+  --r4-col: calc(100% - 24px) !important;
+}
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .chat-workbench > .chat-workbench__main {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+}
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .chat-group.assistant > .chat-group-messages {
+  width: calc(100% - 24px) !important;
+  max-width: calc(100% - 24px) !important;
+  margin-inline: 12px !important;
+}
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .chat-bubble {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+html:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .chat-bubble :is(pre, table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+html[data-pinkie-night]:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) body {
+  background: rgba(28, 22, 33, .97) !important;
+}
+html[data-pinkie-night]:is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .card.chat {
+  background: rgba(33, 26, 39, .74) !important;
+}
+
+@container pinkiechat (max-width: 680px) {
+  html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control {
+    max-width: calc(100% - 10px) !important;
+  }
+  html:not([data-laolao-plain-composer]) .chat-thread-inner {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    margin-inline: 8px !important;
+  }
+  html:not([data-laolao-plain-composer]) .chat-group.assistant:not(.chat-group--forwarded) {
+    flex-direction: column !important;
+    gap: 6px !important;
+    margin-inline: 0 !important;
+  }
+  html:not([data-laolao-plain-composer]) .chat-group.assistant:not(.chat-group--forwarded) > .chat-group-messages {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-inline: 0 !important;
+  }
+  html:not([data-laolao-plain-composer]) .chat-group.assistant > .chat-avatar {
+    width: 24px !important;
+    height: 24px !important;
+    flex-basis: 24px !important;
+  }
+}
+
+/* 对话栏去掉用户不需要的设置齿轮，侧栏设置入口保留。 */
+.agent-chat__input .chat-settings-popover-wrapper { display: none !important; }

@@ -1,0 +1,128 @@
+/* laolao-cle-stage:v3 —— 工作过程 = 一行状态（像 Claude Code）
+ *   [C.le. 动画]  正在读取 TOOLS.md  12 秒  ›
+ * 卡片外框、标题、旧的碧琪状态条 / 气球小舞台 / 粉色回放面板都去掉；默认不展开。
+ * :not(#p1):not(#p2):not(#p3) 只为压过主题里带 ID 级别的 !important 规则。 */
+html:not(#p1):not(#p2):not(#p3) {
+  --cle-fg: rgba(29, 27, 43, .82);
+  --cle-mute: rgba(29, 27, 43, .48);
+  --cle-ink: #1a1826;
+  --cle-accent: #2f7bff;
+  --cle-cmd: rgba(29, 27, 43, .78);
+  --cle-chip: rgba(47, 123, 255, .07);
+  --cle-chip-line: rgba(47, 123, 255, .16);
+  --cle-sweep: #2f7bff;
+  --cle-sweep-verb: rgba(29, 27, 43, .46);
+  --cle-sweep-cmd: rgba(29, 27, 43, .5);
+}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) {
+  --cle-fg: rgba(236, 232, 240, .86);
+  --cle-mute: rgba(236, 232, 240, .46);
+  --cle-ink: #e9eeff;
+  --cle-accent: #62b4ff;
+  --cle-cmd: rgba(214, 228, 255, .9);
+  --cle-chip: rgba(98, 180, 255, .09);
+  --cle-chip-line: rgba(98, 180, 255, .2);
+  --cle-sweep: #ffffff;
+  --cle-sweep-verb: rgba(236, 232, 240, .42);
+  --cle-sweep-cmd: rgba(214, 228, 255, .48);
+}
+
+/* ── 卡片 → 一行 ─────────────────────────────────── */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process {
+  background: none !important; box-shadow: none !important; border: 0 !important;
+  padding: 0 !important; margin: 2px 0 !important; border-radius: 0 !important;
+}
+/* 状态行在过程最下面（像 Claude Code 底部的「运行中」），不再折叠整段过程 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary {
+  order: 2; display: flex !important; align-items: center !important; gap: 10px !important;
+  padding: 4px 0 !important; margin-top: 4px; min-height: 26px; background: none !important; box-shadow: none !important; border: 0 !important;
+  font-size: 13.5px !important; line-height: 20px; color: var(--cle-mute) !important; cursor: default; list-style: none;
+}
+/* 一轮刚开始、还没有步骤和思考文字时，原卡片是隐藏的（过十几秒第一个工具出来才「突然弹出」）：
+   运行中就一直显示状态行；过程父节点不参与入场延迟，状态立即可见 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process:is([data-live="1"], [data-cle-run]) { display: flex !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process:not([data-live="1"]):not([data-cle-run]):not(:has(.pinkie-process__rows > *)):not(:has(.pinkie-thinking)) { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .chat-group.chat-group--process { animation: none !important; }
+
+/* 原标题等状态文字就位后再隐藏，中间不留空白 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process__summary:has(.cle-status) > .pinkie-process__title,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process__summary:has(.cle-status) > .pinkie-process__meta { display: none !important; }
+/* 卡片一出现就有签名小标（纯 CSS 占位），脚本接手后换成真正的小标 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary:not(:has(.cle-glyph))::before {
+  content: ""; flex: none; width: 46px; height: 22px; opacity: .78; background: var(--cle-ink);
+  -webkit-mask: url("./laolao-cle-mark.svg") center / contain no-repeat; mask: url("./laolao-cle-mark.svg") center / contain no-repeat;
+}
+
+/* 左侧小标：运行中是 WebGL 动画，其余是静态签名 */
+.cle-glyph { position: relative; flex: none; display: block; width: 46px; height: 22px; }
+.cle-glyph--static { color: var(--cle-ink); opacity: .78; }
+.cle-glyph--static svg { display: block; width: 100%; height: 100%; }
+.cle-glyph canvas { pointer-events: none; }
+
+/* 状态文字：动作 · 内容（命令 / 文件用等宽小签）· 用时 */
+.cle-status { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.cle-status b { flex: none; font-weight: 500; color: var(--cle-fg); }
+.cle-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--cle-mute); }
+.cle-status > span[hidden] { display: none; }
+.cle-status em { font-style: normal; }
+.cle-status > span[data-mono] {
+  align-self: center; padding: 1px 7px; border-radius: 6px;
+  background: var(--cle-chip); box-shadow: inset 0 0 0 1px var(--cle-chip-line);
+  font: 12px/18px ui-monospace, "SF Mono", Menlo, monospace; color: var(--cle-cmd);
+}
+.cle-status i { flex: none; font-style: normal; font-variant-numeric: tabular-nums; color: var(--cle-mute); }
+.cle-status[data-kind="done"] b,
+.cle-status[data-kind="stopped"] b { color: var(--cle-mute); font-weight: 400; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status[data-kind="done"] b { color: var(--cle-accent); font-weight: 500; }
+
+/* 运行中：一道光从动作词扫到命令上（同一节拍，命令晚半拍），一眼看出「正在跑」 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status:not([data-kind="done"]):not([data-kind="stopped"]) :is(b, em) {
+  background: linear-gradient(100deg, var(--cle-sweep-base) 0 36%, var(--cle-sweep) 47% 53%, var(--cle-sweep-base) 64% 100%) 0 0 / 280% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: cle-sweep 2.2s cubic-bezier(.45, .05, .35, 1) infinite;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status:not([data-kind="done"]):not([data-kind="stopped"]) b { --cle-sweep-base: var(--cle-sweep-verb); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status:not([data-kind="done"]):not([data-kind="stopped"]) em { --cle-sweep-base: var(--cle-sweep-cmd); animation-delay: .22s; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status:not([data-kind="done"]):not([data-kind="stopped"]) > span:not([data-mono]) em { --cle-sweep-base: var(--cle-mute); }
+@keyframes cle-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+/* 命令小签：换步骤时轻轻浮入 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status > span[data-mono] { animation: cle-chip-in .35s cubic-bezier(.22, 1, .36, 1) backwards; }
+@keyframes cle-chip-in { from { opacity: 0; transform: translateY(3px); } }
+
+html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary::after { content: none !important; display: none !important; }
+
+/* 运行中挂在卡片外的思考块（会自动展开、铺开整段思考文字）：状态行已写「思考中」，这份隐藏；
+   卡片里面那份保留，点 › 展开仍可看完整思考 */
+html:not(#p1):not(#p2):not(#p3) .chat-group--process > .chat-group-messages > .pinkie-process__thinking { display: none !important; }
+
+/* 冲突的旧界面：去掉 */
+.pinkie-loop,
+.pinkie-status,
+.pinkie-replay,
+.pinkie-replay-btn,
+.pinkie-process__live-text { display: none !important; }
+
+/* ── 运行期间：其他焦点退后，悬停即恢复 ───────────── */
+body::before, section.card.chat::before,
+canvas.pinkie-ambient, .pinkie-buddy,
+aside.sidebar, aside.chat-workspace-rail, header.topbar,
+.chat-thread-inner > .chat-group {
+  transition: opacity .7s ease, filter .7s ease;
+}
+html[data-cle-live] body::before,
+html[data-cle-live] section.card.chat::before { opacity: .28 !important; filter: saturate(.25) blur(1px) !important; }
+html[data-cle-live] canvas.pinkie-ambient { opacity: .12 !important; }
+html[data-cle-live] .pinkie-buddy { opacity: .16 !important; filter: saturate(.3) !important; }
+html[data-cle-live] aside.sidebar { opacity: .42 !important; filter: saturate(.4); }
+html[data-cle-live] aside.chat-workspace-rail { opacity: .32 !important; filter: saturate(.3); }
+html[data-cle-live] header.topbar { opacity: .5 !important; }
+html[data-cle-live] .chat-thread-inner:has(> [data-cle-focus]) > .chat-group:not([data-cle-focus]):not([data-cle-focus] ~ .chat-group) { opacity: .3; filter: saturate(.45); }
+html[data-cle-live] aside.sidebar:hover,
+html[data-cle-live] aside.chat-workspace-rail:hover,
+html[data-cle-live] header.topbar:hover,
+html[data-cle-live] .chat-thread-inner > .chat-group:hover { opacity: 1 !important; filter: none !important; }
+html[data-cle-live] .pinkie-buddy:hover { opacity: .9 !important; filter: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(#p1):not(#p2):not(#p3) :is(.cle-status b, .cle-status em, .cle-status > span, .chat-group.chat-group--process) { animation: none !important; }
+}

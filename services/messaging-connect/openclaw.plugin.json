@@ -1,0 +1,1 @@
+{"id":"pinkie-messaging-connect","name":"碧琪飞书与QQ连接","version":"1.0.0","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}}}

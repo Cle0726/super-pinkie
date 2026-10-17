@@ -95,14 +95,22 @@ export class ProjectScope {
     try {
       const b=this.binding(ctx);if(!b)return;
       const p={...event.params};const name=event.toolName;
-      // Codex app-server native tools are already launched with the bound
-      // project as their authoritative cwd. The relay normalizes exec_command
-      // to `exec` while retaining `cmd`, and wraps free-form apply_patch input
+      // OpenClaw's ordinary exec uses `command` and otherwise falls back to
+      // the mode workspace. Give it the selected project as the default cwd;
+      // an explicit directory still means exactly what the caller requested.
+      // Native app-server exec uses `cmd`: its approval payload must pass
+      // through byte-for-byte, including when invoked inside code mode.
+      if(name==='exec'&&typeof p.command==='string'&&!Object.hasOwn(p,'cmd')) {
+        p.workdir=this.resolve(b,typeof p.workdir==='string'&&p.workdir?p.workdir:'.');
+        return {params:p};
+      }
+      // The app-server relay normalizes exec_command to `exec` while
+      // retaining `cmd`, and wraps free-form apply_patch input
       // as `value`. Rewriting either payload makes the app-server correctly
       // reject it as a tampered approval request, so pass these native calls
       // through unchanged. This does not reduce access: absolute paths remain
       // available and the native session cwd is still the selected project.
-      // Never rewrite native-capable command or patch tools. Their payload
+      // Never rewrite native command or patch tools. Their payload
       // shape varies between direct app-server calls and code-mode nesting,
       // and the native approval bridge must receive byte-for-byte parameters.
       // The prompt already gives the model the absolute selected project path.

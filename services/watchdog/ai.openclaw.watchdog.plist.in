@@ -10,6 +10,8 @@
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <!-- 停掉/重载看门狗时不要连带杀掉它拉起的模型中继（1466），否则断线后没人重连。 -->
+  <key>AbandonProcessGroup</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>/tmp/cle_watchdog.out</string>
   <key>StandardErrorPath</key><string>/tmp/cle_watchdog.err</string>

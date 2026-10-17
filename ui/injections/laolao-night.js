@@ -22,7 +22,8 @@
         if (mode === "dark" || mode === "light" || mode === "system") return mode;
       }
     } catch {}
-    return "system";
+    // 出厂默认深色：没有存过偏好的设备直接进黑夜模式。
+    return "dark";
   };
   const resolve = () => {
     const native = root.getAttribute("data-theme-mode");
