@@ -362,34 +362,44 @@
     }
   };
 
-  const afterArm = async (send) => {
+  const afterArm = async (send, isCurrent = () => true, draft = null) => {
+    const ownerKey = currentSessionKey();
     let armedHere = false;
     try {
+      if (!isCurrent()) return {status: 'cancelled'};
       if (latestStatus?.active) throw new Error("上一轮还在执行，完成后会自动显示终稿");
       await armSelected();
       armedHere = true;
+      if (!isCurrent()) { await disarmCurrent(ownerKey); armedHere = false; return {status: 'cancelled'}; }
       if (typeof window.__laolaoWebGptPrepareNextTurn === "function") {
-        const webResult = await window.__laolaoWebGptPrepareNextTurn();
+        const webResult = await window.__laolaoWebGptPrepareNextTurn(draft?.text || "", isCurrent);
+        if (webResult === "cancelled") { await disarmCurrent(ownerKey); armedHere = false; return {status: 'cancelled'}; }
         if (webResult === "blocked") throw new Error("网页聊天未就绪；消息仍在输入框，未调用本地模型");
         if (webResult === "web-direct") {
-          await disarmCurrent();
+          await disarmCurrent(ownerKey);
           armedHere = false;
-          const input = $(".agent-chat__composer-combobox textarea");
+          if (!isCurrent()) return {status: 'cancelled'};
+          const input = draft?.input || $(".agent-chat__composer-combobox textarea");
           if (input) {
             const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
             if (setter) setter.call(input, ""); else input.value = "";
             input.dispatchEvent(new Event("input", {bubbles: true}));
           }
           await window.__laolaoRefreshCurrentChat?.();
-          return;
+          return {status: 'web-direct'};
         }
         window.__laolaoWebGptAllowNextSend?.();
       }
+      if (!isCurrent()) { await disarmCurrent(ownerKey); armedHere = false; return {status: 'cancelled'}; }
       bypassSend = true;
-      send();
+      const resumed = send();
+      if (resumed === false) { await disarmCurrent(ownerKey); armedHere = false; return {status: 'cancelled'}; }
+      return {status: 'native'};
     } catch (error) {
-      if (armedHere) await disarmCurrent();
-      toast(`${error?.message || "思考服务暂时不可用"}，本条没有发送`);
+      if (armedHere) await disarmCurrent(ownerKey);
+      const reason = error?.message || "思考服务暂时不可用";
+      toast(`${reason}，本条没有发送`);
+      return {status: 'blocked', reason, notified: true};
     } finally {
       queueMicrotask(() => { bypassSend = false; });
     }
@@ -668,7 +678,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     if (!button) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    void afterArm(() => button.click());
+    if (!window.__laolaoStartupHome?.delegateNativeSend?.(button, afterArm)) void afterArm(() => button.click());
   }, true);
   document.addEventListener("keydown", (event) => {
     if (bypassSend || !selectedTier || event.key !== "Enter" || event.shiftKey || event.isComposing) return;

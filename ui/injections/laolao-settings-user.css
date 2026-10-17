@@ -165,6 +165,136 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: #b13d63; }
 #laolao-user-settings .pinkie-user-settings__status[data-state="busy"] { color: #947248; }
 
+#laolao-user-settings .pinkie-user-settings__wechat {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 18px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 16px;
+  background: var(--pinkie-settings-soft);
+  text-align: center;
+}
+#laolao-user-settings .pinkie-user-settings__wechat[hidden],
+#laolao-user-settings .pinkie-user-settings__wechat [hidden],
+#laolao-user-settings .pinkie-user-settings__wechat-account[hidden] { display: none !important; }
+#laolao-user-settings .pinkie-user-settings__wechat-qr {
+  display: block;
+  width: min(280px, 100%);
+  height: auto;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+#laolao-user-settings .pinkie-user-settings__wechat-link { color: var(--pinkie-settings-accent); font-size: 12px; }
+#laolao-user-settings .pinkie-user-settings__wechat-verify { display: grid; justify-items: center; gap: 10px; }
+#laolao-user-settings .pinkie-user-settings__wechat-code {
+  width: 160px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  text-align: center;
+  letter-spacing: .25em;
+}
+#laolao-user-settings .pinkie-user-settings__wechat-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+#laolao-user-settings .pinkie-user-settings__messaging-connection { margin-top: 10px; }
+#laolao-user-settings .pinkie-user-settings__messaging-connection [hidden] { display: none !important; }
+#laolao-user-settings .pinkie-user-settings__messaging-panel {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 18px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 16px;
+  background: var(--pinkie-settings-soft);
+  text-align: center;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-qr {
+  display: block;
+  width: min(280px, 100%);
+  height: auto;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-link {
+  color: var(--pinkie-settings-accent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-project {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  text-align: left;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 13px;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-input:focus-visible {
+  outline: 3px solid rgba(222, 91, 148, .34);
+  outline-offset: 2px;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-input:disabled { opacity: .65; }
+#laolao-user-settings .pinkie-user-settings__messaging-bound { overflow-wrap: anywhere; }
+#laolao-user-settings .pinkie-user-settings__messaging-manual { margin: 10px 0; }
+#laolao-user-settings .pinkie-user-settings__messaging-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+#laolao-user-settings .pinkie-user-settings__messaging-form > button { grid-column: 1 / -1; justify-self: start; }
+#laolao-user-settings .pinkie-user-settings__messaging-verify {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 100%);
+}
+#laolao-user-settings .pinkie-user-settings__messaging-verify > button { justify-self: center; }
+#laolao-user-settings .pinkie-user-settings__messaging-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+}
+@media (max-width: 640px) {
+  #laolao-user-settings .pinkie-user-settings__messaging-project,
+  #laolao-user-settings .pinkie-user-settings__messaging-form { grid-template-columns: minmax(0, 1fr); }
+  #laolao-user-settings .pinkie-user-settings__messaging-project > button { justify-self: start; }
+}
+
 #laolao-user-settings .pinkie-user-settings__model-button {
   min-width: min(100%, 280px);
   min-height: 37px;

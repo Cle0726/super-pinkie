@@ -100,7 +100,7 @@
     else{
       const pinned=filtered.filter(s=>api.state.pins.includes(s.key));if(pinned.length)groups.append(group('__pins','置顶',pinned,api));
       const heading=el('div','laolao-group__head');heading.append(el('span','laolao-group__label','项目文件夹'));
-      const add=button('＋ 打开文件夹','选择文件夹并建立项目',()=>api.addFolderProject());add.classList.add('laolao-group__action','laolao-group__add-project');heading.append(add);groups.append(heading);
+      const add=button('＋ 打开文件夹','选择文件夹并建立项目',()=>api.addFolderProject(null,{bindCurrent:true}));add.classList.add('laolao-group__action','laolao-group__add-project');heading.append(add);groups.append(heading);
       const assigned=new Set();
       for(const [name,keys] of Object.entries(api.state.projects)){
         keys.forEach(k=>assigned.add(k));

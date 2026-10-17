@@ -1,0 +1,144 @@
+/* The startup view uses the existing welcome identity and native composer. */
+html[data-laolao-startup-home="1"] .chat-main > .chat-thread {
+  display: none !important;
+}
+/* Start page layout: greeting, then a narrower composer, then recent work,
+   centred as one group a little above the middle (like a book's title page). */
+html[data-laolao-startup-home="1"] {
+  --laolao-home-col: min(720px, calc(100% - 48px));
+}
+.laolao-startup-home {
+  order: 0;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24px 24px 82px;
+  overflow: hidden;
+  visibility: hidden;
+}
+html[data-laolao-startup-ready="1"] .laolao-startup-home,
+html[data-laolao-startup-reveal="1"] .laolao-startup-home {
+  visibility: visible;
+}
+html[data-laolao-startup-home="1"] .chat-main > .agent-chat__composer-shell {
+  order: 1;
+  width: var(--laolao-home-col) !important;
+  max-width: none !important;
+  margin-inline: auto !important;
+}
+html[data-laolao-startup-home="1"] .chat-main > .chat-queue { display: none !important; }
+.laolao-startup-home__recent {
+  order: 2;
+  flex: 1.3 1 0;
+  min-height: 0;
+  width: var(--laolao-home-col);
+  margin: 22px auto 0;
+  padding: 0 14px;
+  box-sizing: border-box;
+  overflow: auto;
+  visibility: hidden;
+}
+html[data-laolao-startup-ready="1"] .laolao-startup-home__recent,
+html[data-laolao-startup-reveal="1"] .laolao-startup-home__recent {
+  visibility: visible;
+}
+.laolao-startup-home__recent > h3 {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted-strong);
+}
+.laolao-startup-home__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0 -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .16s ease;
+}
+.laolao-startup-home__item:hover,
+.laolao-startup-home__item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  outline: none;
+}
+.laolao-startup-home__item:disabled { opacity: .55; cursor: default; }
+.laolao-startup-home__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.laolao-startup-home__icon > svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.laolao-startup-home__item-body { display: grid; gap: 2px; min-width: 0; }
+.laolao-startup-home__item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+}
+.laolao-startup-home__item-meta { font-size: 12px; color: var(--muted-strong); }
+.laolao-startup-home .agent-chat__welcome {
+  display: flex;
+  /* The portrait and particles keep their own entrance. The wrapper must not
+     delay all text with the existing glass-container fade after the splash. */
+  animation: none !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  width: min(100%, 720px) !important;
+  text-align: center;
+  /* The native welcome centres itself with auto margins; sit on the composer instead. */
+  margin: 0 auto !important;
+  padding: 16px 0 !important;
+}
+/* No portrait: the composer Pinkie is the only figure on the page. The line
+   itself is the welcome, set a little larger in a book face. */
+.laolao-startup-home .agent-chat__welcome[data-laolao-minimal-welcome="1"] > h2 {
+  font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+  font-size: 27px !important;
+  line-height: 1.5;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--text-strong) !important;
+  text-wrap: balance;
+}
+.laolao-startup-home .agent-chat__welcome.laolao-welcome--materializing > h2 {
+  animation: laolao-startup-line-in 900ms 120ms cubic-bezier(.2, .78, .25, 1) both !important;
+}
+@keyframes laolao-startup-line-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+html[data-pinkie-night] .laolao-startup-home .agent-chat__welcome > h2 {
+  text-shadow: none;
+}
+@media (max-width: 900px) {
+  .laolao-startup-home { padding-inline: 20px; }
+  .laolao-startup-home .agent-chat__welcome[data-laolao-minimal-welcome="1"] > h2 { font-size: 22px !important; }
+  .laolao-startup-home .agent-chat__welcome { gap: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .laolao-startup-home .agent-chat__welcome > h2 { animation: none !important; }
+  .laolao-startup-home .laolao-welcome-particles { display: none !important; }
+}

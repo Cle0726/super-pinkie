@@ -28,6 +28,8 @@
   const SIZE_STORAGE_KEY = "laolao-material-preview-size-v2";
   const PANEL_MARGIN = 16;
   const pending = new Map();
+  const sidebarPreviews = new Map();
+  const deliveryCards = new WeakMap();
   const previewCleanups = new WeakMap();
   const previousResult = window.__laolaoMaterialPreviewResult;
   let requestNumber = 0;
@@ -87,7 +89,10 @@
       });
     }
     const windowsBridge = window.pywebview?.api?.preview_material;
-    if (windowsBridge) return Promise.resolve(windowsBridge(payload));
+    if (windowsBridge) return Promise.resolve(windowsBridge(payload)).then((result) => {
+      if (result?.ok === false) throw new Error(result.message || "这个文件暂时无法打开。");
+      return result;
+    });
     return Promise.reject(new Error("当前 App 还没有加载文件操作功能。"));
   };
 
@@ -191,10 +196,40 @@
     return button;
   };
 
+  const requestSidebarPreview = (target) => {
+    const handler = window.webkit?.messageHandlers?.laolaoBrowserWorkspace;
+    if (!handler) return Promise.resolve(false);
+    if (sidebarPreviews.has(target.path)) return sidebarPreviews.get(target.path);
+    const request = new Promise((resolve) => {
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        window.removeEventListener("laolao:browser-show-file", onResult);
+        sidebarPreviews.delete(target.path);
+        resolve(ok);
+      };
+      const onResult = (event) => {
+        if (event.detail?.path === target.path) finish(event.detail.ok === true);
+      };
+      const timeout = window.setTimeout(() => finish(false), 1500);
+      window.addEventListener("laolao:browser-show-file", onResult);
+      try { handler.postMessage({ action: "show-file", path: target.path }); }
+      catch (_) { finish(false); }
+    });
+    sidebarPreviews.set(target.path, request);
+    request.finally(() => sidebarPreviews.delete(target.path));
+    return request;
+  };
+
   const runFileAction = (target, action, rail) => {
-    const selectedAction = action === "preview" && target.kind === "external" ? "open-default" : action;
+    const selectedAction = action;
     if (selectedAction === "preview") {
-      openPreview(rail, target);
+      requestSidebarPreview(target).then((opened) => {
+        if (opened) closePreview(rail);
+        else openPreview(rail, target);
+      });
       return;
     }
     requestNativeAction(target, selectedAction).then((result) => {
@@ -231,7 +266,7 @@
     menu.className = "laolao-material-menu";
     menu.setAttribute("role", "menu");
     const entries = [
-      [target.kind === "external" ? "用默认应用打开" : "预览", "preview"],
+      ["预览", "preview"],
       ["保存到下载", "save"],
       [revealLabel(), "reveal"],
     ];
@@ -291,7 +326,7 @@
   window.__laolaoMaterialPreviewToast = revealToast;
 
   const typeLabel = (kind) => ({
-    pdf: "PDF", html: "HTML", image: "图片", video: "视频", audio: "音频", text: "文本",
+    pdf: "文档", html: "网页", image: "图片", video: "视频", audio: "音频", text: "文本",
   }[kind] || "文件");
 
   const openPreview = (rail, target, registered = null) => {
@@ -347,8 +382,8 @@
     body.className = "laolao-material-preview__body";
     const loading = document.createElement("p");
     loading.className = "laolao-material-preview__loading";
-    loading.textContent = target.kind === "pdf" ? "正在翻开 PDF…"
-      : target.kind === "html" ? "正在打开 HTML…"
+    loading.textContent = target.kind === "pdf" ? "正在翻开文档…"
+      : target.kind === "html" ? "正在打开网页…"
       : target.kind === "video" ? "正在加载视频…"
       : target.kind === "audio" ? "正在加载音频…"
       : target.kind === "text" ? "正在读取文本…" : "正在展开图片…";
@@ -472,8 +507,14 @@
   };
 
   const pathFromChatClick = (event, origin) => {
+    const code = origin?.closest("pre, code");
+    const content = origin?.closest(".chat-bubble, .chat-tool-card, .chat-tool-card__block-content, .chat-activity-group, .chat-assistant-attachment-card, .markdown, .markdown-reader, .sidebar-markdown");
+    // Root-relative app routes are URLs, not filesystem paths. In particular,
+    // the sidebar's /settings/general must reach the native router.
+    if (!content) return null;
     const anchor = origin?.closest("a[href]");
     const href = anchor?.getAttribute("href") || "";
+    if (/^\/(?:settings|chat|overview|agents|cron|skills|sessions|logs|config|channels|nodes|plugins|usage)(?:[/?#]|$)/i.test(href)) return null;
     const decodePath = (value) => {
       try {
         return decodeURIComponent(value);
@@ -491,13 +532,10 @@
     }
     const linkedPath = normalizePath(decodePath(href));
     if (linkedPath && !href.startsWith("//")) return linkedPath;
-    const code = origin?.closest("pre, code");
     if (code) {
       const exact = pathFromText(code.textContent);
       if (exact) return exact;
     }
-    const content = origin?.closest(".chat-bubble, .chat-tool-card, .chat-tool-card__block-content, .chat-activity-group, .markdown");
-    if (!content && !code) return null;
     const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
     const node = caret?.startContainer;
     if (node?.nodeType === Node.TEXT_NODE) {
@@ -551,6 +589,106 @@
   }, true);
 
   const initialDecorate = () => document.querySelectorAll(RAIL).forEach(decorateRail);
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialDecorate, { once: true });
-  else initialDecorate();
+  const sizeLabel = (bytes) => {
+    if (!Number.isFinite(bytes) || bytes < 0) return "";
+    if (bytes < 1024) return `${bytes} 字节`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} 千字节`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1048576).toFixed(1)} 兆字节`;
+    return `${(bytes / 1073741824).toFixed(1)} 吉字节`;
+  };
+  const deliveryType = (target) => ({
+    ppt: "演示文稿", pptx: "演示文稿", doc: "文档", docx: "文档",
+    xls: "表格", xlsx: "表格", zip: "压缩包", tar: "压缩包", gz: "压缩包",
+  }[extensionOf(target.path)] || typeLabel(target.kind));
+
+  const decorateDeliveryCard = (card) => {
+    const target = targetFromPath(card.getAttribute("data-laolao-material-path"));
+    if (!target || deliveryCards.get(card) === target.path) return;
+    deliveryCards.set(card, target.path);
+    // The bundle supplies an empty host; Lit keeps ownership of the surrounding
+    // interpolation. Only this host's children belong to the injection.
+    card.replaceChildren();
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", `${target.name} 文件`);
+    const visual = document.createElement("span");
+    visual.className = "laolao-delivery-card__visual";
+    visual.setAttribute("aria-hidden", "true");
+    visual.textContent = {image:"▧",video:"▷",audio:"♫",pdf:"▤",html:"⌘",text:"≡"}[target.kind] || "▤";
+    const info = document.createElement("div");
+    info.className = "laolao-delivery-card__info";
+    const name = document.createElement("strong");
+    name.className = "laolao-delivery-card__name";
+    name.textContent = target.name;
+    name.title = target.name;
+    const meta = document.createElement("span");
+    meta.className = "laolao-delivery-card__meta";
+    meta.textContent = deliveryType(target);
+    info.append(name, meta);
+    const actions = document.createElement("div");
+    actions.className = "laolao-delivery-card__actions";
+    const buttons = [];
+    for (const [label, action] of [["预览", "preview"], ["保存到下载", "save"], [revealLabel(), "reveal"]]) {
+      const button = makeButton(label, `laolao-delivery-card__button${action === "preview" ? " is-primary" : ""}`);
+      button.textContent = label;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        runFileAction(target, action, document.querySelector(RAIL));
+      });
+      actions.append(button);
+      buttons.push(button);
+    }
+    card.append(visual, info, actions);
+    card.dispatchEvent(new CustomEvent("laolao-delivery-ready"));
+    if (!nativeBridgeAvailable()) {
+      meta.textContent = `${deliveryType(target)} · 请在碧琪中打开`;
+      return;
+    }
+    requestNativeAction(target, "check").then((result) => {
+      if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
+      const size = sizeLabel(result.size);
+      meta.textContent = `${deliveryType(target)}${size ? " · " + size : ""}`;
+      return requestNativeAction(target, "describe").then((description) => {
+        if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
+        const size = sizeLabel(description.size);
+        meta.textContent = `${deliveryType(target)}${size ? " · " + size : ""}`;
+        const source = description.thumbnailUrl || description.thumbnailSrc;
+        if (typeof source !== "string" || !/^(?:clekk-material:|data:image\/)/i.test(source)) return;
+        const thumbnail = document.createElement("img");
+        thumbnail.className = "laolao-delivery-card__thumbnail";
+        thumbnail.alt = "";
+        thumbnail.loading = "lazy";
+        thumbnail.decoding = "async";
+        thumbnail.src = source;
+        thumbnail.addEventListener("error", () => thumbnail.remove(), {once:true});
+        visual.append(thumbnail);
+      }).catch(() => {}); // A thumbnail failure keeps the verified file's icon.
+    }).catch((error) => {
+      if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
+      card.classList.add("is-unavailable");
+      const reason = error?.message || "这个文件暂时无法打开。";
+      meta.textContent = /不存在|已移动|已删除|没有找到|原位置/.test(reason) ? "文件已不在原位置" : reason;
+      buttons.forEach((button) => { button.disabled = true; });
+    });
+  };
+
+  let cardsScheduled = false;
+  const decorateDeliveries = () => {
+    cardsScheduled = false;
+    document.querySelectorAll(".laolao-delivery-card[data-laolao-material-path]").forEach(decorateDeliveryCard);
+  };
+  const scheduleDeliveries = () => {
+    if (cardsScheduled) return;
+    cardsScheduled = true;
+    window.setTimeout(decorateDeliveries, 60);
+  };
+  const initialize = () => {
+    initialDecorate();
+    decorateDeliveries();
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(scheduleDeliveries).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:["data-laolao-material-path"]});
+    }
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
+  else initialize();
 })();

@@ -1,0 +1,150 @@
+/* laolao-tool-rows:v7 —— 工作过程像 Claude Code 的执行记录一样分段铺开
+ *
+ *   › 思考了 10 秒
+ *   碧琪先执行 date 命令获取当前的系统时间。            ← 碧琪的说明：照常显示，不藏
+ *   ● 已运行 2 个命令  sw_vers -productVersion  ›       ← 连续的工具收成一行，点开看每一步
+ *       ● 执行命令 · Exec  date
+ *         ⎿ Mon Oct 12 07:46:08 PDT 2026                ← 再点某一步看它的输出
+ *   碧琪读取 USER.md 的前 2 行内容。
+ *   ○ 思路  6,935 字  ›                                  ← 几千字的推演收起来，只留最后一句说明
+ *   碧琪先来创建 lib 目录。
+ *   ● 已读取 1 个文件  USER.md:1–2  ›
+ *   [C.le.] 正在回复 · 35 秒                            ← 状态行在最底下（laolao-cle-stage.css）
+ *
+ * 运行中新来的步骤依次淡入（laolao-cle-stage.js 打 data-cle-enter 并错开延迟）。 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process {
+  --tr-read: #2f7fe0; --tr-write: #c9821a; --tr-edit: #16956f; --tr-exec: #d83f83;
+  --tr-fg: #3c2833; --tr-mute: rgba(60, 40, 51, .56); --tr-hover: rgba(233, 79, 145, .06);
+  --tr-rail: rgba(60, 40, 51, .14); --tr-out: rgba(60, 40, 51, .035); --tr-out-line: rgba(60, 40, 51, .08);
+  --tr-cmd: rgba(40, 30, 60, .78); --tr-dot-ring: #fbf6f9;
+}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) .pinkie-process {
+  --tr-read: #8ec0ff; --tr-write: #ffc56b; --tr-edit: #6fdcb5; --tr-exec: #ff8fbf;
+  --tr-fg: #ece3e8; --tr-mute: rgba(236, 223, 230, .52); --tr-hover: rgba(255, 255, 255, .04);
+  --tr-rail: rgba(236, 223, 230, .13); --tr-out: rgba(255, 255, 255, .035); --tr-out-line: rgba(255, 255, 255, .07);
+  --tr-cmd: rgba(214, 228, 255, .8); --tr-dot-ring: #221b26;
+}
+
+/* ── 过程常显：内容在上，状态行在最下 ───────────────── */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process { display: flex !important; flex-direction: column; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process::details-content {
+  display: contents !important; content-visibility: visible !important; height: auto !important; overflow: visible !important; transition: none !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .pinkie-process__rows { padding: 0 !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .pinkie-process__thinking:not(:empty) { padding: 0 0 2px !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group--timeline-step { margin: 0 !important; padding: 0 !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group--timeline-step > .chat-group-messages { gap: 0 !important; }
+
+/* 碧琪的说明：和正式回复同一套正文，不缩进、不加点 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.assistant.chat-group--timeline-step .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell) {
+  padding: 0 !important; margin: 8px 0 4px !important;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.assistant.chat-group--timeline-step .chat-group-messages > .chat-bubble:not(.chat-bubble--tool-shell)::before { display: none !important; }
+
+/* ── 工具组：● 已运行 2 个命令  最后一步的参数  › ─────── */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.tool[data-cle-member][data-cle-folded] { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.tool[data-cle-folded] > .chat-group-messages { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 9px;
+  width: fit-content; max-width: 100%; min-height: 28px; margin: 2px 0; padding: 3px 10px 3px 2px; border-radius: 8px;
+  font-size: 13.5px; line-height: 20px; color: var(--tr-mute); cursor: pointer; transition: background .2s, color .2s;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run:hover { background: var(--tr-hover); color: var(--tr-fg); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run:focus-visible { outline: 2px solid var(--tr-read); outline-offset: 1px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run i {
+  flex: none; width: 7px; height: 7px; margin: 0 2px 0 3px; border-radius: 50%; background: var(--tr-exec);
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="read"] i { background: var(--tr-read); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="write"] i { background: var(--tr-write); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="edit"] i { background: var(--tr-edit); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run b { flex: none; font-weight: 500; color: var(--tr-fg); opacity: .86; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run span[data-mono] { font: 12px/18px ui-monospace, "SF Mono", Menlo, monospace; color: var(--tr-cmd); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run::after {
+  content: "›"; flex: none; font-size: 15px; line-height: 1; color: var(--tr-mute); transition: transform .2s ease;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[aria-expanded="true"]::after { transform: rotate(90deg); }
+/* 正在进行的那一组：圆点呼吸；步数增加时轻轻一跳 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-active] i { animation: tr-breathe 1.4s ease-in-out infinite; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-bump] b { animation: tr-bump .5s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes tr-breathe { 50% { opacity: .35; transform: scale(.7); } }
+@keyframes tr-bump { 40% { transform: translateY(-2px); opacity: 1; } }
+
+/* 新出场的步骤依次淡入 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .pinkie-process__rows > .chat-group[data-cle-enter] {
+  animation: tr-step-in .5s cubic-bezier(.22, 1, .36, 1) backwards !important;
+}
+@keyframes tr-step-in { from { opacity: 0; transform: translateY(5px); } }
+
+/* ── 点开工具组：每一步一行，左侧细竖线 ───────────── */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.tool:not([data-cle-folded]) > .chat-group-messages {
+  margin: 0 0 0 6px !important; padding: 0 0 0 14px !important; border-left: 1px solid var(--tr-rail);
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-group.tool:not([data-cle-folded]):has(+ .chat-group.tool:not([data-cle-folded])) { padding-bottom: 0 !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-bubble--tool-shell { background: none !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; margin: 0 !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-collapse { margin: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary {
+  display: flex !important; align-items: center !important; gap: 10px !important;
+  width: 100%; min-height: 26px; padding: 3px 8px 3px 0 !important; margin: 0 !important; border-radius: 8px;
+  background: none !important; box-shadow: none !important; border: 0 !important;
+  color: var(--tr-fg) !important; font-size: 13px !important; line-height: 20px; text-align: left; cursor: pointer;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary:hover { background: var(--tr-hover) !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary::before {
+  content: "" !important; flex: none; width: 6px; height: 6px; border-radius: 50%; margin: 0 2px 0 0 !important;
+  transform: none !important; background: var(--tr-exec); box-shadow: 0 0 0 3px var(--tr-dot-ring);
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="read"]::before { background: var(--tr-read); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="write"]::before { background: var(--tr-write); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="edit"]::before { background: var(--tr-edit); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary--error::before { background: #e5484d !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary__icon { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary__label { flex: none; font-weight: 500; color: var(--tr-fg) !important; }
+/* 参数：有补回的就用补回的（命令原文），原来的说明文字藏起来 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary:has(> .cle-args) > .chat-tool-msg-summary__names { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process :is(.chat-tool-msg-summary__names, .cle-args) {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; color: var(--tr-mute) !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process :is(.chat-tool-msg-summary__names, .cle-args[data-mono]) {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--tr-cmd) !important;
+}
+
+/* 这一步的输出：缩进在步骤下面，⎿ 开头，等宽、限高，不再套一层「工具结果」大框 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-body {
+  position: relative; margin: 2px 0 8px 2px !important; padding: 0 0 0 18px !important;
+  background: none !important; border: 0 !important; box-shadow: none !important; max-height: none !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-body::before {
+  content: "⎿"; position: absolute; left: 0; top: 1px; font: 13px/18px ui-monospace, "SF Mono", Menlo, monospace; color: var(--tr-mute);
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card {
+  position: relative; margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__header { position: absolute; top: 4px; right: 4px; z-index: 1; margin: 0 !important; padding: 0 !important; min-height: 0 !important; border: 0 !important; background: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__action-btn { opacity: 0; transition: opacity .2s; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card:hover .chat-tool-card__action-btn { opacity: .7; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__block { margin: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__block + .chat-tool-card__block { margin-top: 6px !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__block-header { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__block-content {
+  margin: 0 !important; padding: 7px 10px !important; max-height: 220px !important; overflow: auto !important;
+  border-radius: 8px !important; background: var(--tr-out) !important; border: 0 !important; box-shadow: inset 0 0 0 1px var(--tr-out-line) !important;
+  font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace !important; color: var(--tr-fg) !important; white-space: pre-wrap !important;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-card__block-content code { font: inherit !important; color: inherit !important; background: none !important; padding: 0 !important; }
+
+/* ── 长篇推演收进「思路」（laolao-cle-stage.js 打标记）：空心点，和工具的实心点区分 ── */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-text[data-cle-planfold="folded"] > [data-cle-plan] { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-plan { margin: 0 0 4px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-plan i { background: none !important; box-shadow: inset 0 0 0 1.5px var(--tr-mute); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-text[data-cle-planfold="open"] > [data-cle-plan] {
+  margin-left: 6px !important; padding-left: 14px !important; border-left: 2px solid var(--tr-rail);
+  color: var(--tr-mute); font-size: 13.5px;
+}
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-text[data-cle-planfold="open"] > :is(ul, ol)[data-cle-plan] { padding-left: 32px !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(#p1):not(#p2):not(#p3) .pinkie-process :is(.cle-run i, .cle-run b, .pinkie-process__rows > .chat-group) { animation: none !important; }
+}

@@ -1,9 +1,9 @@
-/* Shared by all four modes. Native streaming owns rendering and session routing. */
+/* Shared by all five modes. Native streaming owns rendering and session routing. */
 (() => {
   'use strict';
-  // v2 is a one-time, user-requested upgrade. It re-enables only public
-  // commentary and real tool events; hidden reasoning remains untouched.
-  const version='laolao:public-progress:v2';
+  // v3 keeps public commentary/tools, removes only the native Reasoning box.
+  // Pinkie's separate thinking card and the model reasoning tier stay intact.
+  const version='laolao:public-progress:v3';
   let applied=false,scheduled=false;
   const seen=new WeakSet();
   function prepare(){
@@ -18,7 +18,7 @@
         state.assistantName='碧琪';state.requestUpdate?.();
       }
       if(!migrated){
-        state.applySettings({...state.settings,chatShowToolCalls:true,chatPersistCommentary:true});
+        state.applySettings({...state.settings,chatShowThinking:false,chatShowToolCalls:true,chatPersistCommentary:true});
         applied=true;
       }
       if(!seen.has(pane)){

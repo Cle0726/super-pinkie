@@ -190,6 +190,20 @@ html[data-pinkie-night] .pinkie-buddy-settings__status.is-error { color: #f1a0b4
 }
 .pinkie-buddy-ask .pinkie-buddy__ico { width: 20px; height: 20px; border-radius: 50%; }
 
+/* One coordinate system for both selection actions. The top layer also
+   avoids transformed chat containers becoming the fixed-position origin. */
+.pinkie-selection-actions {
+  position: fixed; inset: auto; margin: 0; padding: 0; border: 0;
+  width: max-content; max-width: calc(100vw - 16px); overflow: visible;
+  display: flex; align-items: center; gap: 8px; background: transparent;
+  z-index: 2147483000;
+}
+.pinkie-selection-actions[hidden] { display: none !important; }
+.pinkie-selection-actions > :is(.pinkie-buddy-ask, .laolao-learning-selection-save) {
+  position: static !important; inset: auto !important; margin: 0 !important;
+  flex: none; animation: none; transform: none;
+}
+
 /* 发送 / 完成点缀的画布 & 氛围画布 */
 .pinkie-burst { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
 .pinkie-ambient { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }

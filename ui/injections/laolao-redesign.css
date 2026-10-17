@@ -307,3 +307,9 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .pinkie-confetti { dis
   .r3-mark, .r3-ghost { display: none !important; }
   .chat-group.r3-in--user, .chat-group.r3-in--assistant, .chat-bubble.r3-sheen::after { animation: none !important; }
 }
+
+/* Keep a wide comparison readable inside its own horizontal scroller. */
+html body .chat-group.assistant .chat-text table { box-sizing: border-box; max-width: 100% !important; overscroll-behavior-x: contain; }
+html body .chat-group.assistant .chat-text table:has(tr > :nth-child(4)) :is(th, td) { min-width: 84px; }
+html body .chat-group.assistant .chat-text table:has(tr > :nth-child(4)) :is(th, td):nth-child(n+3) { min-width: 196px; }
+html body .chat-group.assistant .chat-text { min-width: 0; max-width: 100%; }

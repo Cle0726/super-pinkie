@@ -234,6 +234,7 @@
     project: "老板，这次要碧琪做什么？",
     thinking: "有什么想法，说给碧琪听听",
     learning: "先生，今天想学点什么？",
+    unrestricted: "想说什么都可以～",
   };
   const ensureComposerBrand = () => {
     const hint = COMPOSER_HINTS[document.documentElement.getAttribute("data-laolao-mode")] || "给碧琪发消息";

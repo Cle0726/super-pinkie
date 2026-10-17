@@ -4807,24 +4807,100 @@ html[data-pinkie-night] .chat-controls__model { --pinkie-brand-mono: #f5f5f5; }
 /* The native picker anchors to its composer control and can calculate a
    negative left edge in narrow split panes. Keep the open surface fully in
    view without changing its desktop placement. */
-@media (max-width: 680px) {
-  /* The shell can compress the chat pane below the popover width. Let the
-     open picker escape those narrow wrappers so it can use the viewport. */
-  .content--chat:has(.chat-controls__model[open]),
-  .chat-split-view__drop-container:has(.chat-controls__model[open]),
-  .card.chat:has(.chat-controls__model[open]),
-  .chat-workbench:has(.chat-controls__model[open]),
-  .chat-main:has(.chat-controls__model[open]) {
-    overflow: visible !important;
-  }
-
-  .chat-controls__model[open] > .chat-controls__inline-select-menu--combined {
-    left: max(-3px, calc((100vw - 304px) / 2 - 15px)) !important;
-    right: auto !important;
-    width: min(304px, calc(100vw - 24px)) !important;
-  }
+/* Model menus are bounded by their chat pane, including the empty home page.
+   The heading, corner artwork and slider each have their own space. */
+.agent-chat__composer-shell:has(.chat-controls__model[open]) { z-index: 50; }
+.chat-controls__model:not([open]) > .chat-controls__inline-select-menu--combined { display: none !important; }
+.chat-controls__model[data-pinkie-popup-bounded="1"] > .chat-controls__inline-select-menu--combined {
+  position: absolute !important;
+  inset: auto !important;
+  left: var(--pinkie-popup-left) !important;
+  top: var(--pinkie-popup-top) !important;
+  width: var(--pinkie-popup-width) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: var(--pinkie-popup-max-height) !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  animation: none !important;
+  transform: none !important;
+  background-image: none !important;
 }
-
+.chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-model-current {
+  box-sizing: border-box;
+  align-self: stretch;
+  flex: 0 0 64px;
+  width: calc(100% - 82px);
+  max-width: none;
+  min-width: 0;
+  min-height: 64px;
+  margin: 0 72px 0 10px;
+  padding: 8px 6px;
+  text-align: left;
+  border-radius: 10px;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-model-current__name {
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-model-current__chevron {
+  display: block;
+  flex: none;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] > .chat-controls__inline-select-menu--combined > .pinkie-model-frame {
+  inset: 6px 8px auto auto;
+  width: 56px;
+  height: 56px;
+  contain: paint;
+  transform: none !important;
+  transition: opacity .2s ease;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-model-frame__art {
+  background-size: auto 100%;
+  background-position: right center;
+  animation: none;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"]:is([data-pinkie-material="low"], [data-pinkie-material="medium"], [data-pinkie-material="adaptive"], [data-pinkie-material="ultra"]) .pinkie-model-frame__art {
+  background-position: left center;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .chat-controls__reasoning-panel {
+  flex: 0 0 76px;
+  min-height: 76px;
+  padding: 24px 12px 4px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-reasoning-current {
+  top: 9px;
+  left: 18px !important;
+  right: auto !important;
+  color: inherit;
+  text-shadow: none;
+  font-size: 11px;
+}
+.chat-controls__model[data-pinkie-popup-bounded="1"] .chat-controls__model-browser {
+  flex: 1 1 215px;
+  min-height: 40px;
+  overflow: auto;
+}
+html[data-pinkie-night] .chat-controls__model[data-pinkie-popup-bounded="1"] .pinkie-reasoning-current {
+  color: var(--pinkie-picker-ink) !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control .pinkie-trigger-label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.chat-controls__model .pinkie-trigger-label .pinkie-external-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-controls__model .pinkie-trigger-label .pinkie-external-tier { flex: none; }
 
 /* ── 2026-10 简化 + 雾板质感（用户认可的样板 work/ui-proto/proto.css） ─────────
    只用 CSS 重新排版原生控件，不搬动 Lit 节点；颜色跟随每个模式的 --accent。
