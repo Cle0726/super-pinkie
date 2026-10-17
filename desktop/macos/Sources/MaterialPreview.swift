@@ -1,5 +1,54 @@
 import Foundation
 import WebKit
+import AppKit
+import AVFoundation
+import ImageIO
+import QuickLookThumbnailing
+import Darwin
+
+private struct MaterialThumbnailFingerprint: Equatable {
+    let url: URL
+    let size: Int64
+    let modified: Date
+    let fileNumber: UInt64
+
+    init(file: MaterialPreviewFile) throws {
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.url.path)
+        url = file.url
+        size = file.size
+        modified = attributes[.modificationDate] as? Date ?? .distantPast
+        fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
+    }
+}
+
+private final class MaterialDescriptionJob {
+    private let lock = NSLock()
+    private var finished = false
+    private var fallback: [String: Any] = ["ok": false, "message": "读取文件信息超时，请稍后再试。"]
+    private var cancellation: (() -> Void)?
+    private let completion: ([String: Any]) -> Void
+
+    init(completion: @escaping ([String: Any]) -> Void) { self.completion = completion }
+    var pending: Bool { lock.lock(); defer { lock.unlock() }; return !finished }
+    func setFallback(_ value: [String: Any]) { lock.lock(); fallback = value; lock.unlock() }
+    func setCancellation(_ cancel: @escaping () -> Void) {
+        lock.lock()
+        if finished { lock.unlock(); cancel(); return }
+        cancellation = cancel
+        lock.unlock()
+    }
+    func expire() { lock.lock(); let result = fallback; lock.unlock(); finish(result) }
+    func finish(_ result: [String: Any]) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        let cancel = cancellation
+        cancellation = nil
+        lock.unlock()
+        cancel?()
+        DispatchQueue.main.async { self.completion(result) }
+    }
+}
 
 enum MaterialPreviewKind: String {
     case image, pdf, html, video, audio, text, external
@@ -276,6 +325,19 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     private let lock = NSLock()
     private let jobsLock = NSLock()
     private var resources: [String: Resource] = [:]
+    private var workspacePages: [String: (name: String, data: Data)] = [:]
+    private struct ThumbnailResource {
+        let fingerprint: MaterialThumbnailFingerprint
+        let cacheURL: URL
+        let expiresAt: Date
+        let width: Int
+        let height: Int
+    }
+    private var thumbnails: [String: ThumbnailResource] = [:]
+    private var thumbnailDirectory: URL?
+    private var thumbnailGeneration = UUID()
+    private var descriptionJobs: [UUID: MaterialDescriptionJob] = [:]
+    private let thumbnailQueue = DispatchQueue(label: "com.openclaw.super-pinkie.material-thumbnails", qos: .userInitiated)
     private var jobs: [ObjectIdentifier: ReadJob] = [:]
     private let lifetime: TimeInterval = 15 * 60
     private let maximumResources = 24
@@ -283,10 +345,174 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
     private func pruneLocked(now: Date) {
         resources = resources.filter { $0.value.expiresAt > now }
+        workspacePages = workspacePages.filter { resources[$0.key] != nil }
         if resources.count <= maximumResources { return }
         let surplus = resources.sorted { $0.value.expiresAt < $1.value.expiresAt }
             .prefix(resources.count - maximumResources).map(\.key)
         surplus.forEach { resources.removeValue(forKey: $0) }
+    }
+
+    /// Metadata does not require preview support: Office files can still be
+    /// delivered and shown with their type icon or the existing default viewer.
+    func describe(path: String, timeout: TimeInterval = 7, completion: @escaping ([String: Any]) -> Void) {
+        let identifier = UUID()
+        let job = MaterialDescriptionJob { [weak self] result in
+            if let self {
+                self.lock.lock(); self.descriptionJobs.removeValue(forKey: identifier); self.lock.unlock()
+            }
+            completion(result)
+        }
+        lock.lock(); let generation = thumbnailGeneration; descriptionJobs[identifier] = job; lock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + min(7, max(0.01, timeout))) { job.expire() }
+        thumbnailQueue.async { [weak self] in
+            guard let self, job.pending else { return }
+            do {
+                let file = try self.access.previewFile(path: path)
+                let fingerprint = try MaterialThumbnailFingerprint(file: file)
+                var metadata: [String: Any] = ["ok": true, "name": file.url.lastPathComponent, "kind": file.kind.rawValue, "size": file.size]
+                job.setFallback(metadata)
+                if let cached = self.cachedThumbnail(fingerprint) {
+                    metadata.merge(cached) { _, new in new }
+                    job.finish(metadata)
+                    return
+                }
+                let supported = file.kind == .image || file.kind == .video || file.kind == .pdf
+                    || ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "key", "pages", "numbers", "rtf", "epub"].contains(file.url.pathExtension.lowercased())
+                guard supported, (file.kind == .video || file.size <= 128 * 1024 * 1024),
+                      (file.kind != .image || file.size <= 64 * 1024 * 1024), job.pending else { job.finish(metadata); return }
+                let completed: (CGImage?) -> Void = { [weak self] image in
+                    guard let self, job.pending else { return }
+                    guard let image else { job.finish(metadata); return }
+                    self.thumbnailQueue.async { [weak self] in
+                        guard let self, job.pending else { return }
+                        do {
+                            let current = try self.access.previewFile(path: file.url.path)
+                            guard try MaterialThumbnailFingerprint(file: current) == fingerprint else { job.finish(metadata); return }
+                            var result = metadata
+                            result.merge(try self.registerThumbnail(image, fingerprint: fingerprint, generation: generation)) { _, new in new }
+                            job.finish(result)
+                        } catch { job.finish(metadata) }
+                    }
+                }
+                if file.kind == .image { completed(Self.imageThumbnail(file.url)); return }
+                if file.kind == .video {
+                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: file.url))
+                    generator.appliesPreferredTrackTransform = true
+                    generator.maximumSize = CGSize(width: 384, height: 256)
+                    generator.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
+                    generator.requestedTimeToleranceAfter = CMTime(seconds: 1, preferredTimescale: 600)
+                    job.setCancellation { generator.cancelAllCGImageGeneration() }
+                    guard job.pending else { return }
+                    generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: CMTime(seconds: 1, preferredTimescale: 600))]) { _, image, _, result, _ in
+                        completed(result == .succeeded ? image : nil)
+                    }
+                    return
+                }
+                let request = QLThumbnailGenerator.Request(fileAt: file.url, size: CGSize(width: 384, height: 256), scale: 1, representationTypes: .thumbnail)
+                job.setCancellation { QLThumbnailGenerator.shared.cancel(request) }
+                guard job.pending else { return }
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                    if let image = representation?.cgImage { completed(image) }
+                    else if file.kind == .pdf {
+                        self.thumbnailQueue.async { if job.pending { completed(Self.pdfThumbnail(file.url)) } }
+                    }
+                    else { completed(nil) }
+                }
+            } catch { job.finish(["ok": false, "message": MaterialPreviewUserMessage.text(for: error)]) }
+        }
+    }
+
+    private func cachedThumbnail(_ fingerprint: MaterialThumbnailFingerprint) -> [String: Any]? {
+        lock.lock(); defer { lock.unlock() }
+        pruneThumbnailsLocked(now: Date())
+        guard let (token, resource) = thumbnails.first(where: { $0.value.fingerprint == fingerprint && FileManager.default.fileExists(atPath: $0.value.cacheURL.path) }) else { return nil }
+        return ["thumbnailUrl": "clekk-material://thumbnail/\(token)/preview.png", "thumbnailWidth": resource.width, "thumbnailHeight": resource.height]
+    }
+
+    private func pruneThumbnailsLocked(now: Date) {
+        let expired = thumbnails.filter { $0.value.expiresAt <= now }.map(\.key)
+        expired.forEach { token in
+            if let resource = thumbnails.removeValue(forKey: token) { try? FileManager.default.removeItem(at: resource.cacheURL) }
+        }
+        if thumbnails.count >= 64 {
+            let surplus = thumbnails.sorted { $0.value.expiresAt < $1.value.expiresAt }.prefix(thumbnails.count - 63).map(\.key)
+            surplus.forEach { token in
+                if let resource = thumbnails.removeValue(forKey: token) { try? FileManager.default.removeItem(at: resource.cacheURL) }
+            }
+        }
+    }
+
+    private func registerThumbnail(_ image: CGImage, fingerprint: MaterialThumbnailFingerprint, generation: UUID) throws -> [String: Any] {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { throw MaterialPreviewFileError.unsupported }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { throw MaterialPreviewFileError.unsupported }
+        lock.lock(); defer { lock.unlock() }
+        guard thumbnailGeneration == generation else { throw MaterialPreviewFileError.unsupported }
+        let directory: URL
+        if let existing = thumbnailDirectory { directory = existing }
+        else {
+            directory = URL(fileURLWithPath: "/tmp", isDirectory: true).appendingPathComponent("pinkie-thumbnail-" + UUID().uuidString.lowercased(), isDirectory: true)
+            guard Darwin.mkdir(directory.path, 0o700) == 0 else { throw MaterialPreviewFileError.unsupported }
+            thumbnailDirectory = directory
+        }
+        let token = UUID().uuidString.lowercased()
+        let cache = directory.appendingPathComponent(token + ".png")
+        try (data as Data).write(to: cache, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cache.path)
+        pruneThumbnailsLocked(now: Date())
+        thumbnails[token] = ThumbnailResource(fingerprint: fingerprint, cacheURL: cache, expiresAt: Date().addingTimeInterval(lifetime), width: image.width, height: image.height)
+        return ["thumbnailUrl": "clekk-material://thumbnail/\(token)/preview.png", "thumbnailWidth": image.width, "thumbnailHeight": image.height]
+    }
+
+    private static func imageThumbnail(_ url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 384, kCGImageSourceShouldCacheImmediately: true,
+        ] as CFDictionary)
+    }
+
+    private static func pdfThumbnail(_ url: URL) -> CGImage? {
+        guard let document = CGPDFDocument(url as CFURL), let page = document.page(at: 1) else { return nil }
+        let box = page.getBoxRect(.mediaBox)
+        guard box.width > 0, box.height > 0 else { return nil }
+        let scale = min(384 / box.width, 256 / box.height)
+        let width = max(1, Int(box.width * scale)), height = max(1, Int(box.height * scale))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(rect)
+        context.concatenate(page.getDrawingTransform(.mediaBox, rect: rect, rotate: 0, preserveAspectRatio: true))
+        context.drawPDFPage(page)
+        return context.makeImage()
+    }
+
+    private func thumbnailData(for url: URL) -> Data? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard url.host == "thumbnail", parts.count == 2, parts[1] == "preview.png" else { return nil }
+        lock.lock(); pruneThumbnailsLocked(now: Date()); let resource = thumbnails[parts[0]]; let directory = thumbnailDirectory; lock.unlock()
+        guard let resource, let directory,
+              let current = try? access.previewFile(path: resource.fingerprint.url.path),
+              (try? MaterialThumbnailFingerprint(file: current)) == resource.fingerprint,
+              resource.cacheURL.deletingLastPathComponent() == directory,
+              resource.cacheURL.resolvingSymlinksInPath() == resource.cacheURL,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: resource.cacheURL.path),
+              attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
+        return try? Data(contentsOf: resource.cacheURL)
+    }
+
+    func clearThumbnailCache() {
+        lock.lock()
+        let pending = Array(descriptionJobs.values)
+        descriptionJobs.removeAll()
+        let directory = thumbnailDirectory
+        thumbnailGeneration = UUID()
+        thumbnailDirectory = nil
+        thumbnails.removeAll()
+        lock.unlock()
+        pending.forEach { $0.expire() }
+        if let directory { try? FileManager.default.removeItem(at: directory) }
     }
 
     func register(path: String) -> [String: Any] {
@@ -305,6 +531,62 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
         } catch {
             return ["ok": false, "message": MaterialPreviewUserMessage.text(for: error)]
         }
+    }
+
+    /// The sidebar page uses the same validated token and Range transport as
+    /// the chat preview. Neither the address field nor the tool result shows it.
+    func registerWorkspacePreview(path: String) -> [String: Any] {
+        let result = register(path: path)
+        guard result["ok"] as? Bool == true, let source = result["url"] as? String,
+              let sourceURL = URL(string: source) else { return result }
+        let parts = sourceURL.pathComponents.filter { $0 != "/" }
+        guard parts.count == 2 else { return ["ok": false, "message": "无法准备文件预览。"] }
+        let token = parts[0]
+        do {
+            let file = try access.previewFile(path: path)
+            try access.enforcePreviewSize(file)
+            let name = file.url.lastPathComponent
+            let escapedSource = Self.workspaceEscape(source)
+            let content: String
+            switch file.kind {
+            case .video: content = "<video controls playsinline preload=\"metadata\" src=\"\(escapedSource)\"></video>"
+            case .audio: content = "<main><audio controls preload=\"metadata\" src=\"\(escapedSource)\"></audio></main>"
+            case .image: content = "<main><img alt=\"\(Self.workspaceEscape(name))\" src=\"\(escapedSource)\"></main>"
+            case .pdf: content = "<iframe title=\"文件预览\" src=\"\(escapedSource)\"></iframe>"
+            case .html: content = "<iframe title=\"网页预览\" sandbox=\"allow-scripts\" src=\"\(escapedSource)\"></iframe>"
+            case .text:
+                let data = try Data(contentsOf: file.url)
+                let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) ?? "这个文本的编码暂时无法显示。"
+                content = "<pre>\(Self.workspaceEscape(text))</pre>"
+            case .external: return ["ok": false, "message": "暂时无法预览这种文件。"]
+            }
+            let html = """
+            <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>\(Self.workspaceEscape(name))</title>
+            <style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#fffafd;color:#70425b;font:14px -apple-system,BlinkMacSystemFont,sans-serif}main{min-height:100%;display:grid;place-items:center;padding:20px}img{max-width:100%;max-height:calc(100vh - 40px);object-fit:contain}video,iframe{width:100%;height:100%;border:0;display:block}video{object-fit:contain;background:#17121b}audio{width:min(100%,580px)}pre{margin:0;padding:22px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font:13px ui-monospace,monospace}@media(prefers-color-scheme:dark){html,body{background:#1a131e;color:#efe5ea}}</style></head><body>\(content)</body></html>
+            """
+            let pageName = name + ".html"
+            lock.lock(); workspacePages[token] = (pageName, Data(html.utf8)); lock.unlock()
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+            let escapedName = pageName.addingPercentEncoding(withAllowedCharacters: allowed) ?? "preview.html"
+            return ["ok": true, "url": "clekk-material://workspace/\(token)/\(escapedName)", "name": name, "kind": file.kind.rawValue]
+        } catch { return ["ok": false, "message": MaterialPreviewUserMessage.text(for: error)] }
+    }
+
+    private static func workspaceEscape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    private func workspacePage(for url: URL) -> Data? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard url.host == "workspace", parts.count == 2 else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        pruneLocked(now: Date())
+        guard let resource = resources[parts[0]], let page = workspacePages[parts[0]], page.name == parts[1],
+              let current = try? access.previewFile(path: resource.file.url.path),
+              current.url == resource.file.url, current.size == resource.file.size else { return nil }
+        return page.data
     }
 
     private func file(for task: WKURLSchemeTask) -> MaterialPreviewFile? {
@@ -327,6 +609,39 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        if let url = urlSchemeTask.request.url, url.host == "thumbnail" {
+            let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
+            let job = ReadJob()
+            jobsLock.lock(); jobs[identifier] = job; jobsLock.unlock()
+            readQueue.async { [weak self] in
+                guard let self else { return }
+                defer { self.finish(identifier) }
+                guard !job.isStopped else { return }
+                guard let data = self.thumbnailData(for: url), let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                    "Content-Type": "image/png", "Content-Length": String(data.count), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+                ]) else {
+                    if !job.isStopped { urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [NSLocalizedDescriptionKey: "缩略图已过期或文件已变化。"])); }
+                    return
+                }
+                guard !job.isStopped else { return }
+                urlSchemeTask.didReceive(response)
+                urlSchemeTask.didReceive(data)
+                if !job.isStopped { urlSchemeTask.didFinish() }
+            }
+            return
+        }
+        if let url = urlSchemeTask.request.url, url.host == "workspace" {
+            guard let page = workspacePage(for: url), let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": "text/html; charset=utf-8", "Content-Length": String(page.count), "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src clekk-material:; media-src clekk-material:; frame-src clekk-material:; object-src 'none'; base-uri 'none'; form-action 'none'",
+            ]) else {
+                urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [NSLocalizedDescriptionKey: "预览地址已过期或文件已移动，请再点一次。"])); return
+            }
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didReceive(page)
+            urlSchemeTask.didFinish()
+            return
+        }
         guard let requestURL = urlSchemeTask.request.url, let file = file(for: urlSchemeTask) else {
             urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [
                 NSLocalizedDescriptionKey: "预览地址已过期或文件已移动，请再点一次。",
@@ -381,5 +696,9 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
         let job = jobs.removeValue(forKey: identifier)
         jobsLock.unlock()
         job?.stop()
+    }
+
+    deinit {
+        clearThumbnailCache()
     }
 }

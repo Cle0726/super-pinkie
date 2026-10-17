@@ -4,7 +4,7 @@
   if (window.__pinkieSidebarAutohide) return;
   window.__pinkieSidebarAutohide = true;
   const root = document.documentElement;
-  let auto = null, peek = false, internal = false, keyboard = false, closeTimer = 0;
+  let auto = null, peek = false, internal = false, keyboard = false, closeTimer = 0, revealTimer = 0;
   // 呼出的卡片滑回去的途中保持卡片样子（cardUntil）；原生侧栏等滑完再收起，免得内容在半路重画
   let cardUntil = 0, cardTimer = 0, collapseTimer = 0;
   let sidebar, edge;
@@ -27,21 +27,19 @@
     button.click();
     internal = false;
   };
+  const setAttr = (node, name, value) => { if (value == null) { if (node.hasAttribute(name)) node.removeAttribute(name); } else if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
   const paint = () => {
     const active = desktop() && auto;
-    root.toggleAttribute('data-pinkie-sidebar-peek', !!(active && peek));
-    if (active && peek) root.setAttribute('data-pinkie-sidebar-peek', '1');
-    if (active) root.setAttribute('data-pinkie-sidebar-auto', '1');
-    else root.removeAttribute('data-pinkie-sidebar-auto');
-    if (active && (peek || performance.now() < cardUntil)) root.setAttribute('data-pinkie-sidebar-card', '1');
-    else root.removeAttribute('data-pinkie-sidebar-card');
-    if (sidebar) sidebar.inert = !!(active && !peek);
+    setAttr(root, 'data-pinkie-sidebar-peek', active && peek ? '1' : null);
+    setAttr(root, 'data-pinkie-sidebar-auto', active ? '1' : null);
+    setAttr(root, 'data-pinkie-sidebar-card', active && (peek || performance.now() < cardUntil) ? '1' : null);
+    if (sidebar && sidebar.inert !== !!(active && !peek)) sidebar.inert = !!(active && !peek);
     const button = toggle();
     if (button) {
-      button.dataset.pinkieSidebarToggle = '1';
+      setAttr(button, 'data-pinkie-sidebar-toggle', '1');
       const label = active && peek ? '固定侧边栏' : collapsed() ? '展开侧边栏' : '折叠侧边栏';
-      button.setAttribute('aria-label', label);
-      button.title = label;
+      setAttr(button, 'aria-label', label);
+      if (button.title !== label) button.title = label;
     }
   };
   const reveal = () => {
@@ -58,15 +56,15 @@
     clearTimeout(closeTimer);
     if (!peek) return;
     peek = false;
-    cardUntil = performance.now() + 460;
+    cardUntil = performance.now() + 220;
     paint();
     clearTimeout(cardTimer);
-    cardTimer = setTimeout(paint, 480);
+    cardTimer = setTimeout(paint, 240);
     clearTimeout(collapseTimer);
     collapseTimer = setTimeout(() => {
       if (!peek && auto && !collapsed()) nativeToggle();
       paint();
-    }, 470);
+    }, 230);
   };
   /* 固定 / 收起侧栏时正文一次排好版，再用位移从原来的位置滑到新位置（只动合成层，不逐帧重新排版）。 */
   // 量的是正文列（.chat-thread-inner）的位置，动的是外面的滚动框（.chat-thread）：滚动框只有一屏大，
@@ -83,17 +81,21 @@
       if (!node || !target) continue;
       const dx = left - node.getBoundingClientRect().left;
       if (Math.abs(dx) < 2) continue;
-      target.animate([{transform: `translateX(${dx.toFixed(1)}px)`}, {transform: 'translateX(0)'}], {duration: 360, easing: 'cubic-bezier(.22, 1, .36, 1)'});
+      target.animate([{transform: `translateX(${dx.toFixed(1)}px)`}, {transform: 'translateX(0)'}], {duration: 180, easing: 'cubic-bezier(.22, 1, .36, 1)'});
     }
   };
-  const menuOpen = () => [...document.querySelectorAll('.laolao-mode-menu, .laolao-footer-overflow, .laolao-menu')].some(node => {
+  const floatingMenus = '.laolao-mode-menu, .laolao-footer-overflow, .laolao-menu';
+  const menuOpen = () => [...document.querySelectorAll(floatingMenus)].some(node => {
     const rect = node.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]');
   });
   const laterConceal = () => {
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
-      if (sidebar?.matches(':hover') || (keyboard && sidebar?.contains(document.activeElement)) || menuOpen()) return;
+      const focused = document.activeElement;
+      if (sidebar?.matches(':hover') || (sidebar?.contains(focused) && (keyboard || focused.matches('input,textarea,[contenteditable="true"]')))) return;
+      // 菜单挂在 body 上，离开侧栏去选菜单时继续保持展开；菜单关闭后再收回。
+      if (menuOpen()) { closeTimer = setTimeout(laterConceal,180); return; }
       conceal();
     }, 220);
   };
@@ -112,8 +114,8 @@
       edge.className = 'pinkie-sidebar-edge';
       edge.type = 'button';
       edge.setAttribute('aria-label', '显示侧栏');
-      edge.addEventListener('pointerenter', reveal);
-      edge.addEventListener('pointerleave', laterConceal);
+      edge.addEventListener('pointerenter', () => { clearTimeout(revealTimer); revealTimer = setTimeout(reveal,60); });
+      edge.addEventListener('pointerleave', () => { clearTimeout(revealTimer); laterConceal(); });
       edge.addEventListener('click', reveal);
       document.body.append(edge);
     }
@@ -158,7 +160,7 @@
       collapseTimer = setTimeout(() => {
         if (auto && !peek && !collapsed()) nativeToggle();
         paint();
-      }, 380);
+      }, 200);
       return;
     }
     auto = !collapsed(); peek = false; cardUntil = 0;
@@ -166,11 +168,11 @@
   }, true);
   document.addEventListener('keydown', event => {
     keyboard = true;
-    if (event.key === 'Escape' && peek) { conceal(); edge?.focus({preventScroll: true}); }
+    if (event.key === 'Escape' && peek && !menuOpen()) { conceal(); edge?.focus({preventScroll: true}); }
   }, true);
   document.addEventListener('pointerdown', event => {
     keyboard = false;
-    if (peek && !sidebar?.contains(event.target) && event.target !== edge) conceal();
+    if (peek && !sidebar?.contains(event.target) && event.target !== edge && !event.target.closest?.(floatingMenus)) conceal();
   }, true);
   window.addEventListener('resize', () => { if (!desktop()) conceal(); paint(); });
 

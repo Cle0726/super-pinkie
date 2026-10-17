@@ -29,6 +29,19 @@
   const CHANNEL_LABELS = Object.freeze({
     telegram: "Telegram", discord: "Discord", slack: "Slack", whatsapp: "WhatsApp",
     signal: "Signal", imessage: "iMessage",
+    "openclaw-weixin": "微信",
+  });
+  const MESSAGING_CONNECTIONS = Object.freeze({
+    feishu: Object.freeze({
+      label: "飞书", agentId: "learning", mode: "学习模式", prefix: "pinkie.feishu",
+      hosts: Object.freeze(["accounts.feishu.cn", "accounts.larksuite.com", "open.feishu.cn", "open.larksuite.com"]),
+      guide: "用手机飞书扫一扫，按手机上的提示确认。飞书聊天会单独保存。",
+    }),
+    qq: Object.freeze({
+      label: "QQ", agentId: "project", mode: "项目模式", prefix: "pinkie.qq",
+      hosts: Object.freeze(["q.qq.com"]), project: true, pairing: true,
+      guide: "用手机 QQ 扫一扫，按手机上的提示连接机器人。QQ 聊天会单独保存。",
+    }),
   });
 
   const isObject = (value) => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -119,6 +132,7 @@
     presetButtons: new Map(), themeButtons: [], themeModeButtons: [], channelList: null,
     channelDisclosure: null, warning: null, version: null, usageValues: new Map(), statuses: new Map(),
     saveQueue: Promise.resolve(), lastRoute: "", lastView: "", initialized: false,
+    wechat: null, feishu: null, qq: null,
   };
 
   const ownText = (parent, value) => {
@@ -272,6 +286,9 @@
     const pairButton = button("配对移动设备", "pinkie-user-settings__button pinkie-user-settings__button--primary", pairRow.control,
       pairMobile);
     pairButton.setAttribute("aria-label", "配对移动设备");
+    buildWechatConnection(connectionCard);
+    buildMessagingConnection(connectionCard, "feishu");
+    buildMessagingConnection(connectionCard, "qq");
     state.channelDisclosure = element("details", "pinkie-user-settings__channels", connectionCard);
     const channelSummary = element("summary", "pinkie-user-settings__channels-summary", state.channelDisclosure,
       "已连接的其他应用");
@@ -309,6 +326,8 @@
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());
     state.main = scroll;
+    window.__pinkieCapabilities?.mount(scroll);
+    window.dispatchEvent(new CustomEvent('pinkie:settings-ready', {detail: scroll}));
     state.initialized = true;
     syncPage();
     loadInitialData();
@@ -318,6 +337,376 @@
   }
 
   function rpc() { return window.__laolaoSidebar?.gwRequest; }
+
+  function buildWechatConnection(parent) {
+    const wechatRow = row(parent, "微信", "手机微信聊，碧琪用无限模式回复。" );
+    const actions = element("div", "pinkie-user-settings__actions", wechatRow.control);
+    const connect = button("连接微信", "pinkie-user-settings__button pinkie-user-settings__button--primary", actions,
+      () => wechatAction("pinkie.wechat.login.start"));
+    connect.dataset.wechatAction = "connect";
+    const panel = element("div", "pinkie-user-settings__wechat", parent);
+    panel.hidden = true;
+    const image = element("img", "pinkie-user-settings__wechat-qr", panel);
+    image.alt = "用手机微信扫描，连接碧琪无限模式";
+    image.width = 280; image.height = 280; image.hidden = true;
+    const guide = element("p", "pinkie-user-settings__soft-note", panel,
+      "用手机微信扫一扫，按手机上的提示确认。连接后只处理扫码者的消息。" );
+    const link = element("a", "pinkie-user-settings__wechat-link", panel, "打开微信连接链接");
+    link.target = "_blank"; link.rel = "noopener noreferrer"; link.hidden = true;
+    const verify = element("form", "pinkie-user-settings__wechat-verify", panel);
+    verify.hidden = true;
+    const label = element("label", "pinkie-user-settings__row-title", verify, "手机微信显示的数字");
+    const code = element("input", "pinkie-user-settings__wechat-code", verify);
+    code.id = "pinkie-wechat-code"; label.htmlFor = code.id;
+    code.type = "text"; code.inputMode = "numeric"; code.autocomplete = "one-time-code";
+    code.maxLength = 12; code.pattern = "[0-9]{1,12}"; code.required = true;
+    const submit = button("确认数字", "pinkie-user-settings__button", verify);
+    submit.type = "submit";
+    verify.addEventListener("submit", event => {
+      event.preventDefault();
+      const value = code.value.trim();
+      if (!/^\d{1,12}$/.test(value)) { setStatus("wechat", "请输入手机微信显示的数字。", "error"); return; }
+      code.value = "";
+      void wechatAction("pinkie.wechat.login.verify", {id: state.wechat.data?.job?.id, code: value});
+    });
+    const cancel = button("取消连接", "pinkie-user-settings__text-button", panel,
+      () => wechatAction("pinkie.wechat.login.cancel", {id: state.wechat.data?.job?.id}));
+    cancel.dataset.wechatAction = "cancel";
+    const accounts = element("div", "pinkie-user-settings__wechat-accounts", parent);
+    makeStatus(parent, "wechat");
+    state.wechat = {connect, panel, image, guide, link, verify, code, submit, cancel, accounts,
+      accountNodes: new Map(), data: null, pending: false, polling: false, lastPoll: 0, lastQr: "",
+      requestEpoch: 0, stateStamp: JSON.stringify([null, null, null, []]), actionError: ""};
+  }
+
+  function renderWechat(data) {
+    const ui = state.wechat;
+    if (!ui || !data) return;
+    ui.data = data;
+    const job = data.job;
+    const active = ["starting", "waiting", "confirming", "verify", "finishing"].includes(job?.state);
+    const accounts = Array.isArray(data.accounts) ? data.accounts.filter(account => account.enabled && account.routeReady) : [];
+    const stamp = JSON.stringify([job?.id, job?.state, job?.qrGeneration, accounts.map(account => account.accountId)]);
+    if (stamp !== ui.stateStamp) { ui.actionError = ""; ui.stateStamp = stamp; }
+    ui.connect.disabled = ui.pending || active;
+    ownText(ui.connect, active ? "正在连接…" : accounts.length ? "重新扫码" : "连接微信");
+    ui.panel.hidden = !active;
+    ui.verify.hidden = job?.state !== "verify";
+    ui.submit.disabled = ui.pending;
+    ui.cancel.disabled = ui.pending || job?.state === "finishing";
+    const qr = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(job?.qrDataUrl || "") ? job.qrDataUrl : "";
+    if (qr && qr !== ui.lastQr) { ui.image.src = qr; ui.lastQr = qr; }
+    ui.image.hidden = !qr || !active;
+    let qrLink = "";
+    try {
+      const url = new URL(job?.qrUrl || "");
+      if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password
+        && ["weixin.qq.com", "wechat.com"].some(host => url.hostname === host || url.hostname.endsWith(`.${host}`))) qrLink = url.href;
+    } catch { /* Only a recognized official QR link is clickable. */ }
+    ui.link.hidden = !qrLink || !active;
+    if (qrLink) ui.link.href = qrLink;
+    if (!active) { ui.image.removeAttribute("src"); ui.link.removeAttribute("href"); ui.lastQr = ""; ui.code.value = ""; }
+    for (const [id, node] of ui.accountNodes) node.hidden = !accounts.some(account => account.accountId === id);
+    for (const account of accounts) {
+      if (ui.accountNodes.has(account.accountId)) continue;
+      const accountRow = element("div", "pinkie-user-settings__wechat-account", ui.accounts);
+      element("span", "pinkie-user-settings__channel-name", accountRow, "微信已连接 · 无限模式");
+      button("断开微信", "pinkie-user-settings__text-button", accountRow,
+        () => wechatAction("pinkie.wechat.disconnect", {accountId: account.accountId}));
+      ui.accountNodes.set(account.accountId, accountRow);
+    }
+    const message = active || ["error", "expired", "cancelled"].includes(job?.state) ? job.message
+      : accounts.length ? "微信已连接到无限模式，聊天会单独保存。" : "还没有连接微信。";
+    setStatus("wechat", ui.actionError || message, ui.actionError ? "error" : active ? "busy" : ["error", "expired"].includes(job?.state) ? "error" : accounts.length ? "success" : "");
+  }
+
+  async function pollWechat() {
+    const ui = state.wechat, request = rpc();
+    if (!ui || ui.polling || ui.pending || typeof request !== "function") return;
+    const epoch = ui.requestEpoch;
+    ui.polling = true; ui.lastPoll = Date.now();
+    try { const data = await request("pinkie.wechat.status", {}, 15000);
+      if (epoch === ui.requestEpoch && !ui.pending) renderWechat(data); }
+    catch { if (epoch === ui.requestEpoch && !ui.pending) setStatus("wechat", "微信连接暂时还没准备好，稍后再试。", "error"); }
+    finally { ui.polling = false; }
+  }
+  async function wechatAction(method, params = {}) {
+    const ui = state.wechat, request = rpc();
+    if (!ui || ui.pending) return;
+    if (typeof request !== "function") { setStatus("wechat", "暂时没有连上碧琪，请稍后重试。", "error"); return; }
+    ui.requestEpoch += 1; ui.actionError = "";
+    ui.pending = true; ui.connect.disabled = true; ui.cancel.disabled = true; ui.submit.disabled = true;
+    try { renderWechat(await request(method, params, 20000)); }
+    catch (error) { ui.actionError = `连接未完成：${friendlyError(error)}`; setStatus("wechat", ui.actionError, "error"); }
+    finally {
+      ui.pending = false;
+      if (ui.data) renderWechat(ui.data);
+      else { ui.connect.disabled = false; ui.cancel.disabled = false; ui.submit.disabled = false; }
+      ui.lastPoll = 0;
+    }
+  }
+
+  function buildMessagingConnection(parent, key) {
+    if (state[key]) return state[key];
+    const options = MESSAGING_CONNECTIONS[key];
+    if (!options) return null;
+    const section = element("div", "pinkie-user-settings__messaging-connection", parent);
+    section.dataset.messagingChannel = key;
+    const channelRow = row(section, options.label, `${options.label}聊天固定使用${options.mode}，会话单独保存。`);
+    const connect = button(`连接${options.label}`, "pinkie-user-settings__button pinkie-user-settings__button--primary", channelRow.control,
+      () => messagingAction(key, "login.start"));
+    let project = null, chooseFolder = null, projectBound = null;
+    if (options.project) {
+      const projectField = element("div", "pinkie-user-settings__messaging-project", section);
+      project = messagingInput(projectField, key, "project", "QQ 绑定的项目", "text");
+      project.placeholder = "粘贴项目文件夹的完整路径";
+      project.maxLength = 4096;
+      project.addEventListener("input", () => {
+        const ui = state[key];
+        ui.projectEdited = true; ui.projectEditEpoch += 1;
+      });
+      chooseFolder = button("选择文件夹", "pinkie-user-settings__button", projectField, () => chooseMessagingProject(key));
+      chooseFolder.hidden = typeof window.webkit?.messageHandlers?.laolaoProjectFolder?.postMessage !== "function";
+      element("p", "pinkie-user-settings__soft-note", section, "先选定 QQ 要处理的项目，再扫码连接。" );
+      projectBound = element("p", "pinkie-user-settings__soft-note pinkie-user-settings__messaging-bound", section);
+      projectBound.hidden = true;
+    }
+    const panel = element("div", "pinkie-user-settings__messaging-panel", section);
+    panel.hidden = true;
+    const image = element("img", "pinkie-user-settings__messaging-qr", panel);
+    image.alt = `用手机${options.label}扫描，连接碧琪${options.mode}`;
+    image.width = 280; image.height = 280; image.hidden = true;
+    const guide = element("p", "pinkie-user-settings__soft-note", panel, options.guide);
+    const link = element("a", "pinkie-user-settings__messaging-link", panel, `打开${options.label}连接链接`);
+    link.target = "_blank"; link.rel = "noopener noreferrer"; link.hidden = true;
+    let verify = null, code = null, verifySubmit = null;
+    if (options.pairing) {
+      verify = element("form", "pinkie-user-settings__messaging-verify", panel);
+      verify.hidden = true;
+      code = messagingInput(verify, key, "pairing", "QQ 机器人私信里的配对码", "text");
+      code.autocomplete = "one-time-code"; code.maxLength = 128;
+      code.placeholder = "粘贴配对码";
+      verifySubmit = button("确认配对", "pinkie-user-settings__button", verify);
+      verifySubmit.type = "submit";
+      verify.addEventListener("submit", event => {
+        event.preventDefault();
+        const value = code.value.trim();
+        code.value = "";
+        if (!value) { messagingError(key, "请填入 QQ 机器人私信里的配对码。"); return; }
+        void messagingAction(key, "login.verify", {id: state[key].data?.job?.id, code: value});
+      });
+    }
+    const cancel = button("取消连接", "pinkie-user-settings__text-button", panel,
+      () => messagingAction(key, "login.cancel", {id: state[key].data?.job?.id}));
+    const manualDisclosure = element("details", "pinkie-user-settings__messaging-manual", section);
+    element("summary", "pinkie-user-settings__channels-summary", manualDisclosure, "使用已有机器人");
+    element("p", "pinkie-user-settings__soft-note", manualDisclosure, "填入已有机器人的 App ID 和 App Secret。" );
+    const manual = element("form", "pinkie-user-settings__messaging-form", manualDisclosure);
+    const appId = messagingInput(manual, key, "appid", "App ID", "text");
+    appId.maxLength = 128;
+    const secret = messagingInput(manual, key, "secret", "App Secret", "password");
+    secret.autocomplete = "new-password"; secret.maxLength = 1024;
+    const manualSubmit = button("保存并连接", "pinkie-user-settings__button", manual);
+    manualSubmit.type = "submit";
+    manual.addEventListener("submit", event => {
+      event.preventDefault();
+      const credentials = {appId: appId.value.trim(), appSecret: secret.value.trim()};
+      secret.value = "";
+      if (!credentials.appId || !credentials.appSecret) { messagingError(key, "请填入 App ID 和 App Secret。"); return; }
+      void messagingAction(key, "login.manual", credentials);
+    });
+    const accounts = element("div", "pinkie-user-settings__messaging-accounts", section);
+    makeStatus(section, key);
+    state[key] = {connect, panel, image, guide, link, verify, code, verifySubmit, cancel, manualDisclosure,
+      manual, appId, secret, manualSubmit, project, chooseFolder, projectBound, accounts, accountNodes: new Map(),
+      data: null, pending: false, polling: false, lastPoll: 0, lastQr: "", requestEpoch: 0,
+      stateStamp: "", actionError: "", projectEdited: false, projectEditEpoch: 0, projectPicking: false};
+    return state[key];
+  }
+  function messagingInput(parent, key, name, title, type) {
+    const field = element("label", "pinkie-user-settings__messaging-field", parent);
+    const id = `pinkie-${key}-${name}`;
+    field.htmlFor = id;
+    element("span", "pinkie-user-settings__row-title", field, title);
+    const input = element("input", "pinkie-user-settings__messaging-input", field);
+    input.id = id; input.type = type; input.autocomplete = "off"; input.spellcheck = false; input.required = true;
+    return input;
+  }
+  function absoluteProjectPath(value) {
+    return typeof value === "string" && !/[\u0000\r\n]/.test(value)
+      && /^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)/.test(value.trim());
+  }
+  function messagingError(key, message) {
+    const ui = state[key];
+    if (!ui) return;
+    ui.actionError = message;
+    setStatus(key, message, "error");
+  }
+  function messagingControls(key, active = false) {
+    const ui = state[key], options = MESSAGING_CONNECTIONS[key];
+    const unavailable = Boolean(ui.data && (ui.data.available !== true || ui.data.agentId !== options.agentId));
+    const blocked = ui.pending || active || ui.projectPicking || unavailable;
+    ui.connect.disabled = blocked; ui.manualSubmit.disabled = blocked;
+    ui.appId.disabled = blocked; ui.secret.disabled = blocked;
+    ui.cancel.disabled = ui.pending || ui.data?.job?.state === "finishing";
+    if (ui.verifySubmit) { ui.verifySubmit.disabled = ui.pending || unavailable; ui.code.disabled = ui.pending || unavailable; }
+    if (ui.project) {
+      ui.project.disabled = blocked;
+      ui.chooseFolder.disabled = blocked;
+      ui.chooseFolder.hidden = typeof window.webkit?.messageHandlers?.laolaoProjectFolder?.postMessage !== "function";
+    }
+    for (const item of ui.accountNodes.values()) item.disconnect.disabled = blocked;
+  }
+  function renderMessaging(key, data) {
+    const ui = state[key], options = MESSAGING_CONNECTIONS[key];
+    if (!ui || !options || !data) return;
+    const job = data.job;
+    const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+    const stamp = JSON.stringify([job?.id, job?.state, job?.qrGeneration, data.projectRoot || "",
+      accounts.map(account => [account.accountId, account.enabled, account.configured, account.routeReady,
+        account.running, account.connected, account.paired, account.needsPairing])]);
+    if (stamp !== ui.stateStamp) {
+      if (ui.data) ui.actionError = "";
+      ui.stateStamp = stamp;
+    }
+    ui.data = data;
+    const available = data.available === true && data.agentId === options.agentId;
+    const active = available && ["starting", "waiting", "confirming", "finishing", "pairing"].includes(job?.state);
+    const projectReady = !options.project || absoluteProjectPath(data.projectRoot);
+    const isConnected = account => account.enabled && account.routeReady && account.connected
+      && (!options.pairing || account.paired) && projectReady;
+    const connected = accounts.filter(isConnected);
+    ownText(ui.connect, active ? "正在连接…" : connected.length ? "重新扫码" : `连接${options.label}`);
+    ui.panel.hidden = !active;
+    if (ui.project && !ui.projectEdited) ui.project.value = typeof data.projectRoot === "string" ? data.projectRoot : "";
+    if (ui.projectBound) {
+      ui.projectBound.hidden = !absoluteProjectPath(data.projectRoot);
+      ownText(ui.projectBound, ui.projectBound.hidden ? "" : `当前连接的项目：${data.projectRoot}`);
+    }
+    const pairing = active && options.pairing && job?.state === "pairing";
+    if (ui.verify) ui.verify.hidden = !pairing;
+    ownText(ui.guide, pairing ? "先给 QQ 机器人发一条私信，再把它回复的配对码填在这里。" : options.guide);
+    const showQr = active && !pairing && job?.state !== "finishing";
+    const qr = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(job?.qrDataUrl || "") ? job.qrDataUrl : "";
+    if (showQr && qr) {
+      if (qr !== ui.lastQr) { ui.image.src = qr; ui.lastQr = qr; }
+    } else { ui.image.removeAttribute("src"); ui.lastQr = ""; }
+    ui.image.hidden = !showQr || !qr;
+    let qrLink = "";
+    try {
+      const url = new URL(job?.qrUrl || "");
+      if (url.protocol === "https:" && !url.username && !url.password && !url.port && options.hosts.includes(url.hostname)) qrLink = url.href;
+    } catch { /* Keep unexpected QR links unclickable. */ }
+    ui.link.hidden = !showQr || !qrLink;
+    if (!ui.link.hidden) ui.link.href = qrLink;
+    else ui.link.removeAttribute("href");
+    if (!pairing && ui.code) ui.code.value = "";
+    const visibleAccounts = available ? accounts.filter(account => account.enabled && (account.configured || account.connected || account.needsPairing)) : [];
+    for (const [id, item] of ui.accountNodes) item.node.hidden = !visibleAccounts.some(account => account.accountId === id);
+    for (const account of visibleAccounts) {
+      let item = ui.accountNodes.get(account.accountId);
+      if (!item) {
+        const node = element("div", "pinkie-user-settings__messaging-account", ui.accounts);
+        const label = element("span", "pinkie-user-settings__channel-name", node);
+        const disconnect = button(`断开${options.label}`, "pinkie-user-settings__text-button", node,
+          () => messagingAction(key, "disconnect", {accountId: account.accountId}));
+        item = {node, label, disconnect}; ui.accountNodes.set(account.accountId, item);
+      }
+      item.node.hidden = false;
+      ownText(item.label, isConnected(account) ? `${options.label}已连接 · ${options.mode}`
+        : options.pairing && !account.paired ? `${options.label}等待配对 · ${options.mode}`
+          : `${options.label}已保存，尚未接通${options.mode}`);
+    }
+    messagingControls(key, active);
+    let message = `还没有连接${options.label}。`, kind = "";
+    if (!available) { message = `${options.label}连接暂时还没准备好，稍后再试。`; kind = "error"; }
+    else if (active || ["error", "expired", "cancelled"].includes(job?.state)) {
+      message = job.message || (pairing ? "请填入 QQ 私信里的配对码。" : "正在连接，请稍等…");
+      kind = active ? "busy" : ["error", "expired"].includes(job?.state) ? "error" : "";
+    } else if (connected.length) {
+      message = `${options.label}已连接到${options.mode}，聊天会单独保存。`; kind = "success";
+    } else if (visibleAccounts.length) {
+      message = options.pairing && visibleAccounts.some(account => !account.paired)
+        ? "QQ 机器人还需要配对，请点击连接 QQ 继续。" : `${options.label}机器人已保存，尚未接通${options.mode}。`;
+    }
+    setStatus(key, ui.actionError || message, ui.actionError ? "error" : kind);
+  }
+  async function pollMessaging(key) {
+    const ui = state[key], options = MESSAGING_CONNECTIONS[key], request = rpc();
+    if (!ui || !options || state.root?.hidden || ui.polling || ui.pending || typeof request !== "function") return;
+    const epoch = ui.requestEpoch;
+    ui.polling = true; ui.lastPoll = Date.now();
+    try {
+      const data = await request(`${options.prefix}.status`, {}, 15000);
+      if (epoch === ui.requestEpoch && !ui.pending) renderMessaging(key, data);
+    } catch {
+      if (epoch === ui.requestEpoch && !ui.pending) setStatus(key, ui.actionError || `${options.label}连接暂时还没准备好，稍后再试。`, "error");
+    } finally { ui.polling = false; }
+  }
+  async function messagingAction(key, operation, params = {}) {
+    const ui = state[key], options = MESSAGING_CONNECTIONS[key], request = rpc();
+    if (!ui || !options || ui.pending || ui.projectPicking) return;
+    if (typeof request !== "function") { messagingError(key, "暂时没有连上碧琪，请稍后重试。"); return; }
+    if (options.project && ["login.start", "login.manual", "login.verify"].includes(operation)) {
+      const projectRoot = ui.project.value.trim();
+      if (!absoluteProjectPath(projectRoot)) { messagingError(key, "请先选择 QQ 绑定的项目，或填入文件夹的完整路径。"); return; }
+      params = {...params, projectRoot};
+    }
+    if (operation === "login.verify" && (!params.id || ui.data?.job?.state !== "pairing")) {
+      messagingError(key, "这次配对已经结束，请重新连接 QQ。"); return;
+    }
+    ui.requestEpoch += 1; ui.actionError = ""; ui.pending = true;
+    messagingControls(key, true);
+    setStatus(key, operation === "disconnect" ? "正在断开…" : operation === "login.cancel" ? "正在取消…" : "正在连接，请稍等…", "busy");
+    try { renderMessaging(key, await request(`${options.prefix}.${operation}`, params, 20000)); }
+    catch (error) {
+      let detail = friendlyError(error);
+      if (params.appSecret) detail = detail.split(params.appSecret).join("******");
+      messagingError(key, `连接未完成：${detail}`);
+    } finally {
+      ui.pending = false;
+      if (ui.data) renderMessaging(key, ui.data);
+      else messagingControls(key);
+      ui.lastPoll = 0;
+    }
+  }
+  async function chooseMessagingProject(key) {
+    const ui = state[key], bridge = window.webkit?.messageHandlers?.laolaoProjectFolder;
+    if (!ui?.project || ui.pending || ui.projectPicking || ui.project.disabled) return;
+    if (typeof bridge?.postMessage !== "function") { messagingError(key, "请粘贴项目文件夹的完整路径。"); return; }
+    const editEpoch = ui.projectEditEpoch, requestEpoch = ui.requestEpoch;
+    const requestId = window.crypto?.randomUUID?.() || `pinkie-${key}-${Date.now()}-${Math.random()}`;
+    ui.projectPicking = true; messagingControls(key);
+    try {
+      const result = await new Promise(resolve => {
+        const previous = window.__laolaoProjectFolderResult;
+        let settled = false, timer;
+        const finish = payload => {
+          if (settled) return;
+          settled = true; window.clearTimeout(timer);
+          if (window.__laolaoProjectFolderResult === handler) window.__laolaoProjectFolderResult = previous;
+          resolve(payload);
+        };
+        const handler = payload => {
+          if (payload?.requestId === requestId) finish(payload);
+          else if (typeof previous === "function") previous(payload);
+        };
+        window.__laolaoProjectFolderResult = handler;
+        timer = window.setTimeout(() => finish({timeout: true}), 120000);
+        try { bridge.postMessage({action: "choose", context: "qq", requestId, path: ui.project.value.trim()}); }
+        catch { finish({error: true}); }
+      });
+      if (ui !== state[key] || editEpoch !== ui.projectEditEpoch || requestEpoch !== ui.requestEpoch) return;
+      if (result?.timeout || result?.error) { messagingError(key, "文件夹选择没有响应，请重试或粘贴完整路径。"); return; }
+      if (!result?.cancelled && absoluteProjectPath(result?.path)) {
+        ui.project.value = result.path; ui.projectEdited = true; ui.projectEditEpoch += 1;
+      }
+    } finally {
+      ui.projectPicking = false;
+      if (ui.data) renderMessaging(key, ui.data);
+      else messagingControls(key);
+    }
+  }
   async function loadInitialData() {
     const request = rpc();
     if (typeof request !== "function") {
@@ -514,7 +903,7 @@
   function syncChannels() {
     if (!state.config || !state.channelList) return;
     const channels = isObject(state.config.channels) ? state.config.channels : {};
-    const connected = Object.entries(channels).filter(([, value]) => isObject(value)
+    const connected = Object.entries(channels).filter(([id, value]) => !["openclaw-weixin", "feishu", "qqbot"].includes(id) && isObject(value)
       && Object.keys(value).length > 0 && value.enabled !== false);
     ownText(state.channelCount, String(connected.length));
     for (const channel of connected) {
@@ -746,6 +1135,10 @@
     window.setInterval(() => {
       syncPage();
       syncUsage();
+      if (!state.root.hidden && state.wechat && Date.now() - state.wechat.lastPoll > 2500) void pollWechat();
+      if (!state.root.hidden) for (const key of Object.keys(MESSAGING_CONNECTIONS)) {
+        if (state[key] && Date.now() - state[key].lastPoll > 2500) void pollMessaging(key);
+      }
     }, 1000);
     const usage = window.__laolaoUsage;
     if (usage?.refresh) void usage.refresh().then(syncUsage).catch(() => {});

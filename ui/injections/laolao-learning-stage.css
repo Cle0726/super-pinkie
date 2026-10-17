@@ -6,6 +6,325 @@
   --learning-paper: rgba(255, 250, 254, .91);
 }
 
+/* 学习工具悬停胶囊：默认收起，靠近展开 */
+.laolao-learning-tools {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 被胶囊吸收的常驻按钮隐藏 */
+.laolao-learning--absorbed { display: none !important; }
+
+.laolao-learning-tools__trigger {
+  min-width: 0;
+  height: 31px;
+  padding: 0 10px;
+  border: 1px solid rgba(126, 84, 111, .14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .42);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  color: rgba(107, 69, 92, .82);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 590;
+  line-height: 1;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(232, 79, 154, .08);
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .2s ease;
+}
+
+.laolao-learning-tools:hover .laolao-learning-tools__trigger,
+.laolao-learning-tools:focus-within .laolao-learning-tools__trigger {
+  border-color: rgba(232, 79, 154, .28);
+  background: rgba(255, 255, 255, .62);
+  box-shadow: 0 2px 10px rgba(232, 79, 154, .14);
+}
+
+.laolao-learning-tools__tray {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translate(-50%, 4px) scale(.96);
+  transform-origin: bottom center;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(126, 84, 111, .14);
+  border-radius: 12px;
+  background: var(--learning-paper);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: 0 6px 24px rgba(63, 49, 89, .14), 0 1px 4px rgba(63, 49, 89, .08);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.2, .9, .3, 1.2), visibility 0s linear .18s;
+  z-index: 40;
+}
+
+.laolao-learning-tools:hover .laolao-learning-tools__tray,
+.laolao-learning-tools:focus-within .laolao-learning-tools__tray {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(1);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.laolao-learning-tools__item {
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(63, 49, 89, .78);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .14s ease, color .14s ease, border-color .14s ease;
+}
+
+.laolao-learning-tools__item:hover {
+  background: rgba(232, 79, 154, .1);
+  border-color: rgba(232, 79, 154, .18);
+  color: var(--learning-pink-deep);
+}
+
+.laolao-learning-tools__due.is-due {
+  color: var(--learning-pink-deep);
+  font-weight: 640;
+  background: rgba(232, 79, 154, .1);
+  border-color: rgba(232, 79, 154, .2);
+}
+
+html[data-pinkie-night] .laolao-learning-tools__trigger {
+  background: rgba(44, 34, 62, .5);
+  border-color: rgba(255, 255, 255, .1);
+  color: rgba(255, 236, 246, .78);
+}
+
+html[data-pinkie-night] .laolao-learning-tools__tray {
+  background: rgba(40, 30, 56, .92);
+  border-color: rgba(255, 255, 255, .1);
+}
+
+html[data-pinkie-night] .laolao-learning-tools__item { color: rgba(255, 236, 246, .78); }
+html[data-pinkie-night] .laolao-learning-tools__item:hover { background: rgba(232, 79, 154, .16); color: #ffb9d9; }
+html[data-pinkie-night] .laolao-learning-tools__due.is-due { color: #ffb9d9; background: rgba(232, 79, 154, .18); }
+
+/* 首页空态复习横幅 */
+.laolao-learning-due-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(232, 79, 154, .24);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 214, 233, .5), rgba(255, 250, 254, .75));
+  color: var(--learning-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(232, 79, 154, .1);
+  transition: transform .16s ease, box-shadow .2s ease, border-color .16s ease;
+}
+
+.laolao-learning-due-banner:hover {
+  transform: translateY(-1px);
+  border-color: rgba(232, 79, 154, .38);
+  box-shadow: 0 4px 16px rgba(232, 79, 154, .18);
+}
+
+.laolao-learning-due-banner__count {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--learning-pink-deep);
+}
+
+.laolao-learning-due-banner__text { flex: 1; color: rgba(63, 49, 89, .82); }
+.laolao-learning-due-banner__go { color: var(--learning-pink-deep); font-weight: 620; }
+
+html[data-pinkie-night] .laolao-learning-due-banner {
+  background: linear-gradient(135deg, rgba(90, 42, 68, .5), rgba(44, 34, 62, .7));
+  border-color: rgba(255, 158, 205, .22);
+  color: rgba(255, 236, 246, .9);
+}
+html[data-pinkie-night] .laolao-learning-due-banner__count { color: #ffb9d9; }
+html[data-pinkie-night] .laolao-learning-due-banner__text { color: rgba(255, 236, 246, .78); }
+html[data-pinkie-night] .laolao-learning-due-banner__go { color: #ffb9d9; }
+
+/* 错题雷达 */
+.laolao-learning-radar {
+  padding: 16px;
+  border: 1px solid rgba(126, 84, 111, .12);
+  border-radius: 14px;
+  background: var(--learning-paper);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.laolao-learning-radar__eyebrow {
+  font-size: 12px;
+  font-weight: 640;
+  color: rgba(107, 69, 92, .7);
+  letter-spacing: .04em;
+  margin-bottom: 10px;
+}
+.laolao-learning-radar__canvas { display: block; margin: 0 auto; }
+.laolao-learning-radar__legend {
+  text-align: center;
+  font-size: 12px;
+  margin-top: 8px;
+  color: rgba(63, 49, 89, .7);
+}
+.laolao-learning-radar__empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: rgba(107, 69, 92, .6);
+  font-size: 13px;
+}
+.laolao-learning-radar__wrong { margin-top: 14px; }
+.laolao-learning-radar__wrong h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--learning-ink);
+}
+.laolao-learning-radar__wrong-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(232, 79, 154, .06);
+  margin-bottom: 6px;
+}
+.laolao-learning-radar__wrong-item strong { display: block; font-size: 13px; color: var(--learning-ink); }
+.laolao-learning-radar__wrong-item small { color: rgba(107, 69, 92, .6); font-size: 12px; }
+html[data-pinkie-night] .laolao-learning-radar { background: rgba(40, 30, 56, .9); }
+html[data-pinkie-night] .laolao-learning-radar__wrong-item { background: rgba(232, 79, 154, .12); }
+
+/* 考纲题库 */
+.laolao-learning-packs {
+  padding: 16px;
+  border: 1px solid rgba(126, 84, 111, .12);
+  border-radius: 14px;
+  background: var(--learning-paper);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.laolao-learning-packs__eyebrow {
+  font-size: 12px;
+  font-weight: 640;
+  color: rgba(107, 69, 92, .7);
+  letter-spacing: .04em;
+  margin-bottom: 10px;
+}
+.laolao-learning-packs__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.laolao-learning-packs__tab {
+  padding: 5px 10px;
+  border: 1px solid rgba(126, 84, 111, .14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .5);
+  color: rgba(107, 69, 92, .8);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+}
+.laolao-learning-packs__tab:hover { border-color: rgba(232, 79, 154, .28); color: var(--learning-pink-deep); }
+.laolao-learning-packs__tab.is-active {
+  background: rgba(232, 79, 154, .12);
+  border-color: rgba(232, 79, 154, .32);
+  color: var(--learning-pink-deep);
+  font-weight: 620;
+}
+.laolao-learning-packs__desc {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: rgba(107, 69, 92, .6);
+}
+.laolao-learning-packs__summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: rgba(63, 49, 89, .8);
+}
+.laolao-learning-packs__empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: rgba(107, 69, 92, .6);
+  font-size: 13px;
+}
+.laolao-learning-packs__actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.laolao-learning-packs__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow: auto;
+}
+.laolao-learning-packs__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(232, 79, 154, .05);
+  cursor: pointer;
+}
+.laolao-learning-packs__item:hover { background: rgba(232, 79, 154, .1); }
+.laolao-learning-packs__item input { margin-top: 2px; flex: none; }
+.laolao-learning-packs__item-body { min-width: 0; flex: 1; }
+.laolao-learning-packs__item-title {
+  display: block;
+  font-size: 13px;
+  color: var(--learning-ink);
+  font-weight: 560;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.laolao-learning-packs__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.laolao-learning-packs__tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 84, 111, .16);
+  font-size: 11px;
+  color: rgba(107, 69, 92, .75);
+  white-space: nowrap;
+}
+.laolao-learning-packs__tag.is-new {
+  background: rgba(232, 79, 154, .14);
+  border-color: rgba(232, 79, 154, .3);
+  color: var(--learning-pink-deep);
+  font-weight: 600;
+}
+html[data-pinkie-night] .laolao-learning-packs { background: rgba(40, 30, 56, .9); }
+html[data-pinkie-night] .laolao-learning-packs__tab { background: rgba(44, 34, 62, .5); border-color: rgba(255, 255, 255, .1); color: rgba(255, 236, 246, .78); }
+html[data-pinkie-night] .laolao-learning-packs__tab.is-active { background: rgba(232, 79, 154, .2); border-color: rgba(255, 158, 205, .32); color: #ffb9d9; }
+html[data-pinkie-night] .laolao-learning-packs__item { background: rgba(232, 79, 154, .1); }
+html[data-pinkie-night] .laolao-learning-packs__summary { color: rgba(255, 236, 246, .8); }
+html[data-pinkie-night] .laolao-learning-packs__item-title { color: rgba(255, 236, 246, .92); }
+html[data-pinkie-night] .laolao-learning-packs__tag { border-color: rgba(255, 255, 255, .14); color: rgba(255, 236, 246, .72); }
+html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(232, 79, 154, .2); border-color: rgba(255, 158, 205, .3); color: #ffb9d9; }
+
 .laolao-learning-toggle,
 .laolao-learning-notebook-button {
   min-width: 0;

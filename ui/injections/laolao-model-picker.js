@@ -13,12 +13,78 @@
   const autoSaveTimers = new WeakMap();
   const pendingPatches = new WeakMap();
   const activeSaves = new WeakMap();
+  const saveRevisions = new WeakMap();
   const triggerObservers = new Map();
   const triggerStates = new WeakMap();
   const stopStates = new WeakMap();
   const pointerToggles = new WeakMap();
   const fallbackStates = new WeakMap();
   const catalogRequests = new Map();
+  const popupLayouts = new Map();
+  let popupLayoutFrame = 0;
+
+  function releasePopupLayout(details) {
+    const state = popupLayouts.get(details);
+    state?.observer?.disconnect();
+    popupLayouts.delete(details);
+  }
+
+  function layoutPopup(details) {
+    if (!details?.isConnected || !details.open) {
+      releasePopupLayout(details);
+      return;
+    }
+    const menu = details.querySelector(":scope > .chat-controls__inline-select-menu--combined");
+    const composer = details.closest(".agent-chat__composer-shell");
+    const pane = details.closest(".chat-main") || details.closest(".card.chat");
+    if (!menu || !composer || !pane) return;
+    let state = popupLayouts.get(details);
+    if (!state || state.menu !== menu || state.composer !== composer || state.pane !== pane) {
+      releasePopupLayout(details);
+      const observer = typeof ResizeObserver === "function" ? new ResizeObserver(schedulePopupLayouts) : null;
+      for (const node of [menu, composer, pane]) observer?.observe(node);
+      state = {menu, composer, pane, observer};
+      popupLayouts.set(details, state);
+    }
+
+    // Keep Lit's nodes in place. Coordinates are relative to the actual
+    // offset parent; viewport-wide media queries cannot locate a split pane.
+    details.dataset.pinkiePopupBounded = "1";
+    const viewport = window.visualViewport;
+    const vx = viewport?.offsetLeft || 0, vy = viewport?.offsetTop || 0;
+    const vw = viewport?.width || window.innerWidth, vh = viewport?.height || window.innerHeight;
+    const bounds = pane.getBoundingClientRect(), anchor = composer.getBoundingClientRect();
+    const left = Math.max(vx, bounds.left) + 8, right = Math.min(vx + vw, bounds.right) - 8;
+    const top = Math.max(vy, bounds.top) + 8, bottom = Math.min(vy + vh, bounds.bottom) - 8;
+    const width = Math.max(1, Math.min(336, right - left));
+    const above = Math.max(0, anchor.top - top - 8), below = Math.max(0, bottom - anchor.bottom - 8);
+    const upward = above >= 148 || above >= below;
+    const available = upward ? above : below;
+    const set = (name, value) => {
+      if (menu.style.getPropertyValue(name) !== value) menu.style.setProperty(name, value);
+    };
+    set("--pinkie-popup-width", `${width}px`);
+    set("--pinkie-popup-max-height", `${Math.max(1, Math.min(430, available))}px`);
+    const height = menu.getBoundingClientRect().height;
+    const trigger = details.querySelector(":scope > summary")?.getBoundingClientRect() || anchor;
+    const x = Math.max(left, Math.min(trigger.right - width, right - width));
+    const y = upward ? anchor.top - 8 - height : anchor.bottom + 8;
+    const parent = menu.offsetParent || details, origin = parent.getBoundingClientRect();
+    set("--pinkie-popup-left", `${x - origin.left + parent.scrollLeft - parent.clientLeft}px`);
+    set("--pinkie-popup-top", `${y - origin.top + parent.scrollTop - parent.clientTop}px`);
+  }
+
+  function schedulePopupLayouts() {
+    if (popupLayoutFrame) return;
+    popupLayoutFrame = requestAnimationFrame(() => {
+      popupLayoutFrame = 0;
+      for (const details of popupLayouts.keys()) layoutPopup(details);
+    });
+  }
+  window.addEventListener("resize", schedulePopupLayouts);
+  document.addEventListener("scroll", schedulePopupLayouts, true);
+  window.visualViewport?.addEventListener("resize", schedulePopupLayouts);
+  window.visualViewport?.addEventListener("scroll", schedulePopupLayouts);
 
   function loadCatalog(rpc, agentId) {
     const cached = catalogRequests.get(agentId);
@@ -487,6 +553,7 @@
   }
 
   function finishPicker(details) {
+    releasePopupLayout(details);
     const timer = autoSaveTimers.get(details);
     if (timer !== undefined) window.clearTimeout?.(timer);
     autoSaveTimers.delete(details);
@@ -691,16 +758,22 @@
     if (!patch) return activeSaves.get(details) || Promise.resolve(true);
     const key = currentSessionKey(details);
     const agentId = /^agent:([^:]+):/.exec(key)?.[1];
+    const revision = saveRevisions.get(details) || 0;
+    const current = () => currentSessionKey(details) === key && (saveRevisions.get(details) || 0) === revision;
     const prior = activeSaves.get(details) || Promise.resolve(true);
     const save = prior.then(async () => {
       if (!key || currentSessionKey(details) !== key || !details.isConnected) return false;
       const rpc = window.__laolaoSidebar?.gwRequest;
       if (typeof rpc !== "function") throw new Error("连接尚未就绪");
       await rpc("sessions.patch", {key, ...(agentId ? {agentId} : {}), ...patch}, 15_000);
+      // Saves are serialized, but the user may already be on a later step.
+      // An older response must not replace that newer optimistic selection.
+      if (!current()) return true;
       const fallback = fallbackStates.get(details);
       if (fallback?.key === key) {
         try {
           const listed = await rpc("sessions.list", agentId ? {agentId, limit: 1000} : {limit: 1000}, 15_000);
+          if (!current()) return true;
           fallback.session = listed?.sessions?.find?.((session) => session.key === key) || fallback.session;
           fallback.selectedModel = fallback.session?.model ? `${fallback.session.modelProvider || ""}/${fallback.session.model}` : "";
           fallback.modelName = fallbackModelName(fallback);
@@ -708,6 +781,7 @@
           fallback.previousSession = null;
           schedule(details);
         } catch {
+          if (!current()) return true;
           fallback.switchingModel = false;
           fallback.session = null;
           fallback.models = [];
@@ -726,6 +800,7 @@
       window.dispatchEvent?.(new Event("laolao:sessions-changed"));
       return true;
     }).catch((error) => {
+      if (!current()) return false;
       const state = pickerStates.get(details);
       if (state?.key === key) setEnhancement(state.initialTier, key);
       const fallback = fallbackStates.get(details);
@@ -757,6 +832,7 @@
 
   function scheduleAutoSave(details, patch) {
     if (!details?.open || !patch) return;
+    saveRevisions.set(details, (saveRevisions.get(details) || 0) + 1);
     pendingPatches.set(details, {...(pendingPatches.get(details) || {}), ...patch});
     const previous = autoSaveTimers.get(details);
     if (previous !== undefined) window.clearTimeout?.(previous);
@@ -1017,6 +1093,7 @@
     const range = visibleRange;
     syncLevelName(details, menu, range);
     details.toggleAttribute("data-pinkie-max", Boolean(isMax(range)));
+    layoutPopup(details);
   }
 
   function schedule(details) {
@@ -1171,7 +1248,7 @@
   if (document.body) {
     new MutationObserver((changes) => {
       for (const [details, watcher] of triggerObservers) {
-        if (!details.isConnected) { watcher.disconnect(); triggerObservers.delete(details); }
+        if (!details.isConnected) { watcher.disconnect(); triggerObservers.delete(details); releasePopupLayout(details); }
       }
       for (const change of changes) {
         for (const node of change.addedNodes || []) if (node.nodeType === 1) scanPickers(node);

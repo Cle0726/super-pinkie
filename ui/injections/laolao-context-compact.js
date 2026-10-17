@@ -250,49 +250,66 @@
     const key = currentSessionKey();
     const state = readCompactionState(key);
     document.querySelectorAll(".laolao-compaction-notice").forEach((node) => {
-      if (!state || !node.closest(".agent-chat__composer-status-stack")) node.remove();
+      if (!state || node.closest("[data-pinkie-compaction]")?.dataset.pinkieCompaction !== key) node.remove();
     });
     if (!state) return;
-    const host = document.querySelector(".agent-chat__composer-status-stack")
-      || document.querySelector(".agent-chat__composer");
+    // This empty, per-session slot is rendered by the native chat template.
+    // Only its unmanaged children belong to us; never append into Lit's list
+    // of messages or into the composer.
+    const host = Array.from(document.querySelectorAll("[data-pinkie-compaction]"))
+      .find((node) => node.dataset.pinkieCompaction === key);
     if (!host) return;
     let notice = host.querySelector(".laolao-compaction-notice");
     if (!notice) {
       notice = document.createElement("div");
-      notice.className = "compaction-indicator compaction-indicator--active laolao-compaction-notice";
+      notice.className = "laolao-compaction-notice";
       notice.setAttribute("role", "status");
       notice.setAttribute("aria-live", "polite");
       notice.dataset.laolaoCompactionNotice = "true";
-      const copy = document.createElement("span");
+      const icon = document.createElement("span");
+      icon.className = "laolao-compaction-notice__icon";
+      icon.setAttribute("aria-hidden", "true");
+      const copy = document.createElement("strong");
       copy.className = "laolao-compaction-notice__copy";
+      const note = document.createElement("span");
+      note.className = "laolao-compaction-notice__note";
       const elapsed = document.createElement("span");
       elapsed.className = "laolao-compaction-notice__elapsed";
-      notice.append(copy, elapsed);
+      notice.append(icon, copy, note, elapsed);
     }
     if (notice.parentElement !== host) host.prepend(notice);
     const active = state.phase === "active" || state.phase === "retrying";
-    notice.classList.toggle("compaction-indicator--active", active);
-    notice.classList.toggle("compaction-indicator--complete", !active);
+    const phaseChanged = notice.dataset.phase !== state.phase;
     notice.dataset.phase = state.phase;
     const copy = notice.querySelector(".laolao-compaction-notice__copy");
+    const note = notice.querySelector(".laolao-compaction-notice__note");
     const elapsed = notice.querySelector(".laolao-compaction-notice__elapsed");
     let message = "";
-    if (state.phase === "active") message = "碧琪正在整理前面的对话，最近的内容会原样保留……";
-    else if (state.phase === "retrying") message = "碧琪正在复核整理结果……";
+    let description = "";
+    if (state.phase === "active") {
+      message = "正在整理对话内容～";
+      description = "可能需要几分钟，最近的内容会保留。";
+    } else if (state.phase === "retrying") {
+      message = "整理好了，接着处理～";
+      description = "碧琪正在恢复当前任务，工作进度会继续显示。";
+    }
     else if (state.phase === "complete") {
       const before = formatTokens(state.beforeTokens);
       const after = formatTokens(state.afterTokens);
-      message = before && after
+      message = "对话整理好啦";
+      description = before && after
         ? `对话整理完成：整理前 ${before} → ${after} 令牌`
-        : "前面的对话已整理完成";
+        : "最近的内容已保留，可以继续当前任务。";
     } else if (state.phase === "skipped") message = "当前内容暂时不需要整理";
-    else message = "这次整理没有完成，请稍后再试";
+    else { message = "这次整理没有完成"; description = "当前对话仍保留，可以稍后再试。"; }
     if (copy.textContent !== message) copy.textContent = message;
+    if (note.textContent !== description) note.textContent = description;
     const seconds = Math.max(0, Math.floor((Date.now() - Number(state.startedAt)) / 1000));
     const timeText = active
       ? `已用时 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`
       : "";
     if (elapsed.textContent !== timeText) elapsed.textContent = timeText;
+    if (phaseChanged) host.closest("openclaw-chat-pane")?.requestUpdate?.();
   };
 
   const handleCompactionEvent = (event) => {
@@ -300,6 +317,19 @@
     const payload = event.detail?.payload || {};
     const key = typeof payload.sessionKey === "string" ? payload.sessionKey : "";
     if (!key || !/^agent:(main|project|thinking|learning|unrestricted):/.test(key)) return;
+    const terminal = name === "agent" && payload.stream === "lifecycle"
+      && ["end", "error"].includes(payload.data?.phase)
+      || name === "chat" && ["final", "aborted", "error"].includes(payload.state);
+    if (terminal) {
+      const state = readCompactionState(key);
+      // The compaction already succeeded before retrying the original task.
+      // Its matching terminal event clears the continuation notice, including
+      // when the task ends with an error. Never finish another run's notice.
+      if (state?.phase === "retrying" && state.runId && state.runId === payload.runId) {
+        finishCompaction(key, {completed: true});
+      }
+      return;
+    }
     if (name === "session.operation" && payload.operation === "compact") {
       if (payload.phase === "start") beginCompaction(key, "manual", payload.operationId || "");
       else if (payload.phase === "end") {
@@ -339,10 +369,13 @@
     document.querySelectorAll(".chat-divider").forEach((divider) => {
       const label = divider.querySelector(".chat-divider__label");
       if (!label) return;
-      if (label.textContent !== labelText) label.textContent = labelText;
+      // Keep Lit's text/comment nodes and bindings intact. Replacing all
+      // children or removing the native details can break the next update.
+      for (const node of label.childNodes) {
+        if (node.nodeType === 3 && node.nodeValue?.trim() && node.nodeValue !== labelText) node.nodeValue = labelText;
+      }
       const rule = divider.querySelector(".chat-divider__rule");
       if (rule?.getAttribute("aria-label") !== labelText) rule?.setAttribute("aria-label", labelText);
-      divider.querySelector(".chat-divider__details")?.remove();
     });
   };
 
@@ -364,7 +397,6 @@
     button.disabled = true;
     button.setAttribute("aria-label", "正在整理上下文");
     beginCompaction(key, "manual");
-    toast("正在整理较早内容，最近对话会原样保留");
     try {
       const agentId = key.split(":")[1] || undefined;
       const result = await rpc("sessions.compact", {key, agentId}, 600_000);
@@ -376,14 +408,9 @@
         tokensBefore: result.result?.tokensBefore,
         tokensAfter: result.result?.tokensAfter
       });
-      const before = formatTokens(result.result?.tokensBefore);
-      const after = formatTokens(result.result?.tokensAfter);
-      const detail = before && after ? `（${before} → ${after}）` : "";
-      toast(result.compacted ? `上下文已整理${detail}` : "当前内容暂时不需要整理");
       window.dispatchEvent(new Event("laolao:sessions-changed"));
     } catch {
       finishCompaction(key, {outcome: "failed", final: true});
-      toast("整理没有完成，请稍后重试");
     } finally {
       busy = false;
       button.classList.remove("is-running");
@@ -467,12 +494,20 @@
 .laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 9px);z-index:100;width:min(268px,calc(100vw - 24px));box-sizing:border-box;padding:14px;border:1px solid rgba(255,255,255,.78);border-radius:16px;background:linear-gradient(145deg,rgba(255,252,254,.97),rgba(248,234,244,.95));box-shadow:0 15px 38px rgba(88,54,77,.16);color:#503c56;font-size:11px}.laolao-context-viewer__popover strong{font-size:12px}.laolao-context-viewer__amount{margin-top:8px;font-variant-numeric:tabular-nums;font-weight:650}.laolao-context-viewer__bar{height:5px;margin:10px 0;border-radius:99px;background:rgba(119,107,136,.15);overflow:hidden}.laolao-context-viewer__bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c888b1,#9fa5db);transition:width .35s ease}.laolao-context-viewer__note{color:#766b7e;line-height:1.4}.laolao-context-viewer__compact{display:block;width:100%;height:28px;margin-top:10px;border:1px solid rgba(184,99,136,.22);border-radius:9px;background:rgba(255,255,255,.8);color:inherit;font:500 11.5px/1 inherit;cursor:pointer}.laolao-context-viewer__compact:hover{background:#fff}
 .agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
-.agent-chat__composer-status-stack:has(.laolao-compaction-notice){display:flex!important;align-items:center;gap:6px}
-.laolao-compaction-notice{display:flex!important;align-items:center;gap:8px;box-sizing:border-box;width:max-content;max-width:min(100%,720px);padding:6px 10px;border:1px solid rgba(205,91,141,.2);border-radius:999px;background:rgba(252,235,244,.88);color:#70425a;font-size:10.5px;line-height:1.35;box-shadow:0 3px 12px rgba(106,48,79,.08)}
-.laolao-compaction-notice[data-phase="active"]::before,.laolao-compaction-notice[data-phase="retrying"]::before{content:"";width:10px;height:10px;flex:none;border:1.5px solid rgba(189,115,162,.3);border-top-color:#a34b72;border-radius:50%;animation:laolao-context-spin 1s linear infinite}
-.laolao-compaction-notice[data-phase="complete"]::before{content:"✓";color:#698e76;font-size:12px;font-weight:700}
-.laolao-compaction-notice[data-phase="skipped"]::before,.laolao-compaction-notice[data-phase="failed"]::before{content:"·";color:#a34b72;font-size:18px;line-height:10px}
-.laolao-compaction-notice__copy{min-width:0}.laolao-compaction-notice__elapsed{flex:none;color:#8a6a7b;font-variant-numeric:tabular-nums}
+.pinkie-chat-compaction:empty{display:none}
+.laolao-compaction-notice{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:11px;row-gap:4px;box-sizing:border-box;width:min(560px,calc(100% - 66px));margin:12px 16px 12px 50px;padding:14px 17px;border:1px solid rgba(205,91,141,.18);border-radius:17px;background:linear-gradient(135deg,rgba(255,250,253,.86),rgba(247,234,243,.68));color:#70425a;box-shadow:0 5px 18px rgba(106,48,79,.05)}
+.laolao-compaction-notice__icon{grid-column:1;grid-row:1 / span 3;display:grid;place-items:center;align-self:start;width:28px;height:28px;border-radius:9px;background:rgba(205,91,141,.10);color:#a34b72}
+.laolao-compaction-notice__icon::before{content:"";width:13px;height:15px;border:1.3px solid currentColor;border-radius:3px;box-shadow:3px -3px 0 -1px rgba(205,91,141,.25);opacity:.75}
+.laolao-compaction-notice[data-phase="active"] .laolao-compaction-notice__icon::before{width:12px;height:12px;border-radius:50%;border-color:rgba(189,115,162,.28);border-top-color:#a34b72;box-shadow:none;animation:laolao-context-spin 1.1s linear infinite}
+.laolao-compaction-notice[data-phase="complete"] .laolao-compaction-notice__icon::before{content:"✓";width:auto;height:auto;border:0;box-shadow:none;color:#698e76;font-size:18px;line-height:1}
+.laolao-compaction-notice__copy{grid-column:2;font-size:13px;font-weight:600;line-height:1.5;letter-spacing:.01em}
+.laolao-compaction-notice__note{grid-column:2;font-size:12px;line-height:1.6;color:#937889}
+.laolao-compaction-notice__note:empty,.laolao-compaction-notice__elapsed:empty{display:none}
+.laolao-compaction-notice__elapsed{grid-column:2;margin-top:2px;font-size:10.5px;color:#a38a98;font-variant-numeric:tabular-nums}
+html[data-pinkie-night] .laolao-compaction-notice{border-color:rgba(220,160,197,.17);background:linear-gradient(135deg,rgba(46,37,50,.82),rgba(36,32,42,.70));color:#e5c5d7;box-shadow:0 5px 18px rgba(0,0,0,.08)}
+html[data-pinkie-night] .laolao-compaction-notice__note,html[data-pinkie-night] .laolao-compaction-notice__elapsed{color:#ae91a3}
+@media(max-width:640px){.laolao-compaction-notice{width:calc(100% - 32px);margin:10px 16px;padding:12px 14px}}
+@media(prefers-reduced-motion:reduce){.laolao-compaction-notice__icon::before{animation:none!important}}
 .chat-divider{margin:6px 8px!important}.chat-divider__rule{gap:8px!important;min-height:15px}.chat-divider__label{color:#a34b72!important;font-size:10.5px!important;letter-spacing:.025em;line-height:1.35;white-space:nowrap}.chat-divider__line{opacity:.45}.chat-divider__details{display:none!important}
 `;
     document.head.append(style);

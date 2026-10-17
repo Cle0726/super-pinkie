@@ -8,7 +8,7 @@ USER_HOME="${HOME:?HOME is not set}"
 ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 LAUNCHER_SOURCE="$REPO_ROOT/desktop/macos/Sources/Launcher.swift"
-LAUNCHER_SUPPORT_SOURCES=("$REPO_ROOT/desktop/macos/Sources/MaterialPreview.swift")
+LAUNCHER_SUPPORT_SOURCES=("$REPO_ROOT/desktop/macos/Sources/MaterialPreview.swift" "$REPO_ROOT/desktop/macos/Sources/BrowserControl.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -62,7 +62,7 @@ apply_ui_skin() {
   # Force a fresh stylesheet URL when the visual skin changes. WebKit can keep
   # the previous query-keyed CSS in memory across a gateway reload, which made
   # a small bubble-only adjustment look like it had not been deployed.
-  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme87}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker30}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases29}g' "$index_file"
+  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme88}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker31}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases29}g' "$index_file"
 
   for asset in \
     laolao-avatar.png \
@@ -171,6 +171,8 @@ apply_ui_skin() {
     laolao-sidebar-autohide.js \
     laolao-ui-subtraction.css \
     laolao-material-preview.css \
+    laolao-startup-home.css \
+    laolao-startup-home.js \
     laolao-workspace-focus.css \
     laolao-classic-shell.js \
     laolao-side-layout.css \
@@ -179,6 +181,15 @@ apply_ui_skin() {
     laolao-memory.js \
     laolao-learning-stage.css \
     laolao-learning-stage.js \
+    laolao-learning-library.css \
+    laolao-learning-library.js \
+    laolao-vendor-epub.LICENSE.txt \
+    laolao-vendor-epub.mjs \
+    laolao-vendor-fflate.LICENSE.txt \
+    laolao-vendor-pdf-worker.mjs \
+    laolao-vendor-pdf-compat.js \
+    laolao-vendor-pdf.LICENSE.txt \
+    laolao-vendor-pdf.mjs \
     laolao-learning-question.png \
     laolao-motion.js \
     laolao-sidebar.css \
@@ -211,6 +222,7 @@ apply_ui_skin() {
     laolao-ask-user.js \
     laolao-process-card.css \
     laolao-process-card.js \
+    laolao-selection-actions.js \
     laolao-companion.css \
     laolao-buddy-rig.js \
     laolao-companion.js \
@@ -271,6 +283,28 @@ apply_ui_skin() {
     laolao-queue-steer.js \
     laolao-roundtable-entry-v2.png \
     laolao-roundtable-entry-v2-clean.png \
+    laolao-perf.js \
+    laolao-divider.css \
+    laolao-vendor-gsap.min.js \
+    laolao-vendor-three.core.min.js \
+    laolao-vendor-three.module.min.js \
+    laolao-cle-signature.js \
+    laolao-cle-space.js \
+    laolao-cle-stage.js \
+    laolao-cle-stage.css \
+    laolao-cle-mark.svg \
+    laolao-tool-rows.css \
+    laolao-rich.js \
+    laolao-plan.js \
+    laolao-capabilities.js \
+    laolao-workbench.js \
+    laolao-workbench-code.js \
+    laolao-workbench.css \
+    laolao-rich.css \
+    laolao-vendor-chart.js \
+    laolao-vendor-chart.LICENSE.md \
+    laolao-vendor-mermaid.js \
+    laolao-vendor-mermaid.LICENSE.txt \
     favicon.svg \
     favicon-32.png \
     favicon.ico; do
@@ -279,6 +313,37 @@ apply_ui_skin() {
     else
       copy_if_changed "$ASSET_ROOT/$asset" "$ui_root/$asset"
     fi
+  done
+
+  # Local PDF auxiliary assets; preserve their directory names and licenses.
+  local pdf_dir pdf_file
+  for pdf_dir in laolao-vendor-pdf-cmaps laolao-vendor-pdf-standard-fonts laolao-vendor-pdf-wasm; do
+    [[ -d "$INJECTION_ROOT/$pdf_dir" ]] || continue
+    mkdir -p "$ui_root/$pdf_dir"
+    for pdf_file in "$INJECTION_ROOT/$pdf_dir"/*; do
+      [[ -f "$pdf_file" ]] || continue
+      copy_if_changed "$pdf_file" "$ui_root/$pdf_dir/${pdf_file##*/}"
+    done
+  done
+
+  # KaTeX（公式排版，MIT）连同字体整目录带上；laolao-rich.js 第一次遇到公式才加载它
+  if [[ -d "$INJECTION_ROOT/laolao-katex" ]]; then
+    mkdir -p "$ui_root/laolao-katex/fonts"
+    local katex_file
+    for katex_file in "$INJECTION_ROOT"/laolao-katex/* "$INJECTION_ROOT"/laolao-katex/fonts/*; do
+      [[ -f "$katex_file" ]] || continue
+      copy_if_changed "$katex_file" "$ui_root/${katex_file#"$INJECTION_ROOT"/}"
+    done
+  fi
+
+  # 工作台（项目 / 无限模式）：Monaco 编辑器（MIT）、Codicons（CC-BY-4.0）、material 文件图标（MIT）整目录带上
+  local vendor_dir vendor_file
+  for vendor_dir in laolao-vendor-monaco laolao-vendor-codicons laolao-vendor-fileicons; do
+    [[ -d "$INJECTION_ROOT/$vendor_dir" ]] || continue
+    while IFS= read -r -d '' vendor_file; do
+      mkdir -p "$(dirname "$ui_root/${vendor_file#"$INJECTION_ROOT"/}")"
+      copy_if_changed "$vendor_file" "$ui_root/${vendor_file#"$INJECTION_ROOT"/}"
+    done < <(find "$INJECTION_ROOT/$vendor_dir" -type f -print0)
   done
 
   copy_if_changed "$ASSET_ROOT/laolao-avatar.png" "$ui_root/apple-touch-icon.png"
@@ -325,16 +390,32 @@ apply_ui_skin() {
 
   # New presentation scripts may be added after the original skin is already
   # installed, so inject them independently of the first CSS injection.
+  # 碧琪回复里的组件、图表、流程图、公式（laolao-rich）
+  if ! grep -Fq './laolao-rich.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-rich.css?v=rich5">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-rich.css?v=rich5' "$index_file"; then
+    perl -0pi -e 's{\./laolao-rich\.css\?v=[^"]*}{./laolao-rich.css?v=rich5}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-rich.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-rich.js?v=rich4"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-rich.js?v=rich4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-rich\.js\?v=[^"]*}{./laolao-rich.js?v=rich4}g' "$index_file"
+    DID_CHANGE=1
+  fi
+
   if ! grep -Fq './laolao-sidebar.js' "$index_file"; then
-    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar29"></script>\n    $1}' "$index_file"
+    perl -0pi -e 's{(<script type="module")}{    <script src="./laolao-sidebar.js?v=sidebar34"></script>\n    $1}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-ui-subtraction.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction13">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction14">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-ui-subtraction.css?v=subtraction13' "$index_file"; then
-    perl -0pi -e 's{\./laolao-ui-subtraction\.css\?v=[^"]*}{./laolao-ui-subtraction.css?v=subtraction13}g' "$index_file"
+  elif ! grep -Fq './laolao-ui-subtraction.css?v=subtraction14' "$index_file"; then
+    perl -0pi -e 's{\./laolao-ui-subtraction\.css\?v=[^"]*}{./laolao-ui-subtraction.css?v=subtraction14}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -344,24 +425,24 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-classic-shell.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic18">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-classic-shell.css?v=classic19">\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-sidebar-surface.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface5">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface7">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-sidebar-surface.css?v=sidebarsurface5' "$index_file"; then
+  elif ! grep -Fq 'laolao-sidebar-surface.css?v=sidebarsurface7' "$index_file"; then
     # 已安装过的旧版本也要换上新缓存键，否则 App 会一直用旧的侧栏样式
-    perl -0pi -e 's{((?:\./|/)laolao-sidebar-surface\.css)(?:\?v=[^"]*)?}{${1}?v=sidebarsurface5}g' "$index_file"
+    perl -0pi -e 's{((?:\./|/)laolao-sidebar-surface\.css)(?:\?v=[^"]*)?}{${1}?v=sidebarsurface7}g' "$index_file"
     DID_CHANGE=1
   fi
 
   if ! grep -Fq './laolao-sidebar-autohide.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide5"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide8"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-sidebar-autohide.js?v=sidebarautohide5' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-sidebar-autohide\.js)(?:\?v=[^"]*)?}{${1}?v=sidebarautohide5}g' "$index_file"
+  elif ! grep -Fq 'laolao-sidebar-autohide.js?v=sidebarautohide8' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-sidebar-autohide\.js)(?:\?v=[^"]*)?}{${1}?v=sidebarautohide8}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -381,10 +462,10 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq './laolao-material-preview.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-material-preview.css?v=material3">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-material-preview.css?v=material4">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-material-preview.css?v=material3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-material-preview\.css(?:\?v=[^"]*)?}{./laolao-material-preview.css?v=material3}g' "$index_file"
+  elif ! grep -Fq './laolao-material-preview.css?v=material4' "$index_file"; then
+    perl -0pi -e 's{\./laolao-material-preview\.css(?:\?v=[^"]*)?}{./laolao-material-preview.css?v=material4}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -412,7 +493,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-progress.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-progress.js?v=progress4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-progress.js?v=progress5"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-session-list.js' "$index_file"; then
@@ -422,8 +503,8 @@ apply_ui_skin() {
   if ! grep -Fq './laolao-phrases.js?v=phrases29' "$index_file"; then
     perl -0pi -e 's{\./laolao-phrases\.js(?:\?v=[^"]*)?}{./laolao-phrases.js?v=phrases29}g' "$index_file"
   fi
-  if ! grep -Fq './laolao-progress.js?v=progress4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress4}g' "$index_file"
+  if ! grep -Fq './laolao-progress.js?v=progress5' "$index_file"; then
+    perl -0pi -e 's{\./laolao-progress\.js(?:\?v=[^"]*)?}{./laolao-progress.js?v=progress5}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -459,15 +540,29 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-model-picker.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-model-picker.js?v=modelpicker30"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-model-picker.js?v=modelpicker31"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-model-picker.js?v=modelpicker30' "$index_file"; then
-    perl -0pi -e 's{\./laolao-model-picker\.js(?:\?v=[^"]*)?}{./laolao-model-picker.js?v=modelpicker30}g' "$index_file"
+  elif ! grep -Fq './laolao-model-picker.js?v=modelpicker31' "$index_file"; then
+    perl -0pi -e 's{\./laolao-model-picker\.js(?:\?v=[^"]*)?}{./laolao-model-picker.js?v=modelpicker31}g' "$index_file"
     DID_CHANGE=1
   fi
 
+  if ! grep -Fq './laolao-startup-home.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-startup-home.css?v=startuphome6">\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq './laolao-startup-home.css?v=startuphome6' "$index_file"; then
+    perl -0pi -e 's{\./laolao-startup-home\.css(?:\?v=[^"]*)?}{./laolao-startup-home.css?v=startuphome6}g' "$index_file"
+    DID_CHANGE=1
+  fi
+  if ! grep -Fq './laolao-startup-home.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script src="./laolao-startup-home.js?v=startuphome7"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq '<script src="./laolao-startup-home.js?v=startuphome7"></script>' "$index_file"; then
+    perl -0pi -e 's{<script\b[^>]*src="\./laolao-startup-home\.js(?:\?v=[^"]*)?"[^>]*>\s*</script>}{<script src="./laolao-startup-home.js?v=startuphome7"></script>}g' "$index_file"
+    DID_CHANGE=1
+  fi
   if ! grep -Fq './laolao-classic-shell.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic19"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-classic-shell.js?v=classic20"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-side-layout.js' "$index_file"; then
@@ -479,7 +574,7 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-learning-stage.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-stage.js?v=learning11"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-stage.js?v=learning13"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -488,10 +583,10 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-material-preview.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-material-preview.js?v=material3"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-material-preview.js?v=material5"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-material-preview.js?v=material3' "$index_file"; then
-    perl -0pi -e 's{\./laolao-material-preview\.js(?:\?v=[^"]*)?}{./laolao-material-preview.js?v=material3}g' "$index_file"
+  elif ! grep -Fq './laolao-material-preview.js?v=material5' "$index_file"; then
+    perl -0pi -e 's{\./laolao-material-preview\.js(?:\?v=[^"]*)?}{./laolao-material-preview.js?v=material5}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -522,10 +617,10 @@ apply_ui_skin() {
   # Browser workspace：所有模式都能从右侧轨道打开原生 WKWebView，
   # 聊天里的网页链接也统一送进去；普通浏览器环境保留 iframe 回退。
   if ! grep -Fq './laolao-link-viewer.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-link-viewer.js?v=link4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-link-viewer.js?v=link6"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-link-viewer.js?v=link4' "$index_file"; then
-    perl -0pi -e 's{\./laolao-link-viewer\.js(?:\?v=[^"]*)?}{./laolao-link-viewer.js?v=link4}g' "$index_file"
+  elif ! grep -Fq './laolao-link-viewer.js?v=link6' "$index_file"; then
+    perl -0pi -e 's{\./laolao-link-viewer\.js(?:\?v=[^"]*)?}{./laolao-link-viewer.js?v=link6}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -548,17 +643,17 @@ apply_ui_skin() {
   fi
   # 常用设置页：只建自己的节点，原生设置仍在「高级」里。
   if ! grep -Fq 'laolao-settings-user.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser1">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser3">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-settings-user.css?v=settingsuser1' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-settings-user\.css)(?:\?v=[^"]*)?}{${1}?v=settingsuser1}g' "$index_file"
+  elif ! grep -Fq 'laolao-settings-user.css?v=settingsuser3' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-settings-user\.css)(?:\?v=[^"]*)?}{${1}?v=settingsuser3}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-settings-user.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-settings-user.js?v=settingsuser1"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-settings-user.js?v=settingsuser4"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-settings-user.js?v=settingsuser1' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-settings-user\.js)(?:\?v=[^"]*)?}{${1}?v=settingsuser1}g' "$index_file"
+  elif ! grep -Fq 'laolao-settings-user.js?v=settingsuser4' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-settings-user\.js)(?:\?v=[^"]*)?}{${1}?v=settingsuser3}g' "$index_file"
     DID_CHANGE=1
   fi
   # 碧琪主动提问卡：只建自己的浮层节点，答案走原生输入框。
@@ -577,40 +672,43 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   # 碧琪的工作过程卡：思考和状态表情只填在时间线补丁预留的位置里。
+  if ! grep -Fq 'laolao-selection-actions.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script src="./laolao-selection-actions.js?v=selection2"></script>\n</head>}' "$index_file"
+  fi
   if ! grep -Fq 'laolao-process-card.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-process-card.css?v=processcard3">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-process-card.css?v=processcard5">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-process-card.css?v=processcard3' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-process-card\.css)(?:\?v=[^"]*)?}{${1}?v=processcard3}g' "$index_file"
+  elif ! grep -Fq 'laolao-process-card.css?v=processcard5' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.css)(?:\?v=[^"]*)?}{${1}?v=processcard5}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-process-card.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-process-card.js?v=processcard10"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-process-card.js?v=processcard4' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard4}g' "$index_file"
+  elif ! grep -Fq 'laolao-process-card.js?v=processcard10' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-process-card\.js)(?:\?v=[^"]*)?}{${1}?v=processcard10}g' "$index_file"
     DID_CHANGE=1
   fi
   # 碧琪小伙伴、第二轮改版、沉浸交互和黑夜模式。黑夜层要排在所有样式最后。
   if ! grep -Fq 'laolao-companion.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-companion.css?v=companion4">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-companion.css?v=companion5">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-companion.css?v=companion4' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-companion\.css)(?:\?v=[^"]*)?}{${1}?v=companion4}g' "$index_file"
+  elif ! grep -Fq 'laolao-companion.css?v=companion5' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-companion\.css)(?:\?v=[^"]*)?}{${1}?v=companion5}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-redesign.css' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-redesign.css?v=redesign5">\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-redesign.css?v=redesign6">\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-redesign.css?v=redesign5' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-redesign\.css)(?:\?v=[^"]*)?}{${1}?v=redesign5}g' "$index_file"
+  elif ! grep -Fq 'laolao-redesign.css?v=redesign6' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-redesign\.css)(?:\?v=[^"]*)?}{${1}?v=redesign6}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-companion.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-companion.js?v=companion4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-companion.js?v=companion6"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-companion.js?v=companion4' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion4}g' "$index_file"
+  elif ! grep -Fq 'laolao-companion.js?v=companion6' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion6}g' "$index_file"
     DID_CHANGE=1
   fi
   # 会动的碧琪必须在 companion.js 之前加载
@@ -689,10 +787,10 @@ apply_ui_skin() {
   #    hasActiveRun=false 时强制复位，仍无效则保草稿后重载。
   #    关闭开关：localStorage['laolao:stale-busy-reconcile'] = 'off'
   if ! grep -Eq 'src="(\./|/)laolao-resume\.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume45"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-resume.js?v=resume50"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Eq 'src="(\./|/)laolao-resume\.js\?v=resume45"' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-resume\.js)(?:\?v=[^"]*)?}{${1}?v=resume45}g' "$index_file"
+  elif ! grep -Eq 'src="(\./|/)laolao-resume\.js\?v=resume50"' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-resume\.js)(?:\?v=[^"]*)?}{${1}?v=resume50}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Eq 'src="(\./|/)laolao-queue-steer\.js' "$index_file"; then
@@ -703,17 +801,49 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
 
+  for capability in laolao-plan.js laolao-capabilities.js; do
+    case "$capability" in laolao-plan.js) capability_version=plan3 ;; *) capability_version=capabilities4 ;; esac
+    if ! grep -Fq "$capability" "$index_file"; then
+      CAPABILITY_FILE="$capability" CAPABILITY_VERSION="$capability_version" perl -0pi -e 's{</head>}{    <script defer src="./$ENV{CAPABILITY_FILE}?v=$ENV{CAPABILITY_VERSION}"></script>\n</head>}' "$index_file"
+      DID_CHANGE=1
+    elif ! grep -Fq "$capability?v=$capability_version" "$index_file"; then
+      CAPABILITY_FILE="$capability" CAPABILITY_VERSION="$capability_version" perl -0pi -e 's{((?:\./|/)\Q$ENV{CAPABILITY_FILE}\E)(?:\?v=[^"]*)?}{$1?v=$ENV{CAPABILITY_VERSION}}g' "$index_file"
+      DID_CHANGE=1
+    fi
+  done
+
+  # 工作台：样式 + 主脚本（代码模块由主脚本在编辑器加载后自己引入）
+  if ! grep -Fq 'laolao-workbench.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-workbench.css?v=workbench14">\n    <script defer src="./laolao-workbench.js?v=workbench14"></script>\n</head>}' "$index_file"
+    DID_CHANGE=1
+  elif ! grep -Fq 'laolao-workbench.js?v=workbench14' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-workbench\.(?:css|js))(?:\?v=[^"]*)?}{${1}?v=workbench14}g' "$index_file"
+    DID_CHANGE=1
+  fi
+
   # The native timeline is patched by apply-chat-timeline.mjs below. It checks
   # the renderer structure as one unit and leaves unknown OpenClaw bundles alone.
+
+  # Learning library: add missing tags and bump exact assets on upgrades.
+  if ! grep -Fq './laolao-learning-library.css' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="./laolao-learning-library.css?v=library1">\n</head>}' "$index_file"
+  fi
+  if ! grep -Fq './laolao-learning-library.js' "$index_file"; then
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-library.js?v=library1"></script>\n</head>}' "$index_file"
+  fi
+  perl -0pi -e 's{((?:\./|/)laolao-learning-library\.(?:js|css))(?:\?v=[^"]*)?}{${1}?v=library1}g; s{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion6}g' "$index_file"
+
+  # Keep display/selection repairs on a fresh URL during an in-place upgrade.
+  perl -0pi -e 's{((?:\./|/)laolao-cle-stage\.css)(?:\?v=[^"]*)?}{${1}?v=clestage21}g; s{((?:\./|/)laolao-cle-stage\.js)(?:\?v=[^"]*)?}{${1}?v=clestage22}g; s{((?:\./|/)laolao-perf\.js)(?:\?v=[^"]*)?}{${1}?v=perf2}g; s{((?:\./|/)laolao-selection-actions\.js)(?:\?v=[^"]*)?}{${1}?v=selection2}g' "$index_file"
 
   # Also revision the entry and lazy chat import URLs. This is the hard
   # guarantee for WebKit instances still controlled by the old cache-first
   # worker: a previously cached URL can no longer match the repaired chunks.
-  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history33"}g' "$index_file"
+  perl -0pi -e 's{(src="\./assets/index-[^"?]+\.js)(?:\?v=[^"]*)?"}{${1}?v=clekk-history46"}g' "$index_file"
   local entry_bundle
   for entry_bundle in "$ui_root"/assets/index-*.js; do
     [[ -f "$entry_bundle" ]] || continue
-  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history33}g' "$entry_bundle"
+  perl -0pi -e 's{(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"'"'"']*)?}{${1}?v=clekk-history46}g' "$entry_bundle"
   done
 
   # Patched native chunks keep their upstream hashed filename. Cache-first
@@ -723,7 +853,7 @@ apply_ui_skin() {
   if [[ -f "$service_worker" ]]; then
     perl -0pi -e '
       s{-clekk-history-render-[0-9]+}{}g;
-      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-33${2}};
+      s{(const EMBEDDED_CACHE_VERSION = "[^"]*)(";)}{${1}-clekk-history-render-46${2}};
     ' "$service_worker"
     perl -0pi -e '
       s{// Cache-first for hashed assets; network-first for HTML/other\.}{// Network-first for all UI files; cached copies remain an offline fallback.}g;
@@ -733,28 +863,28 @@ apply_ui_skin() {
 
   # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink21"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink22"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink21' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink21}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink22' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink22}g' "$index_file"
     DID_CHANGE=1
   fi
 
   # 网页 GPT 协作开关（默认关闭，可按项目为新会话开启、所有模式可用）。
   if ! grep -Fq './laolao-web-gpt-collab.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-web-gpt-collab.js?v=webgpt32"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-web-gpt-collab.js?v=webgpt33"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-web-gpt-collab.js?v=webgpt32' "$index_file"; then
-    perl -0pi -e 's{\./laolao-web-gpt-collab\.js\?v=[^"]*}{./laolao-web-gpt-collab.js?v=webgpt32}g' "$index_file"
+  elif ! grep -Fq './laolao-web-gpt-collab.js?v=webgpt33' "$index_file"; then
+    perl -0pi -e 's{\./laolao-web-gpt-collab\.js\?v=[^"]*}{./laolao-web-gpt-collab.js?v=webgpt33}g' "$index_file"
     DID_CHANGE=1
   fi
 
   # 全模式手动上下文整理；直接调用原生 sessions.compact，不往聊天里塞命令。
   if ! grep -Fq './laolao-context-compact.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-context-compact.js?v=contextcompact6"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-context-compact.js?v=contextcompact8"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-context-compact.js?v=contextcompact6' "$index_file"; then
-    perl -0pi -e 's{\./laolao-context-compact\.js\?v=[^"]*}{./laolao-context-compact.js?v=contextcompact6}g' "$index_file"
+  elif ! grep -Fq './laolao-context-compact.js?v=contextcompact8' "$index_file"; then
+    perl -0pi -e 's{\./laolao-context-compact\.js\?v=[^"]*}{./laolao-context-compact.js?v=contextcompact8}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -810,12 +940,12 @@ apply_ui_skin() {
   # query version here whenever interaction or transition behavior changes;
   # otherwise WebKit may keep an older local copy after a normal reload.
   # 处理旧版 index.html 已经被规范化为 /laolao-* 的情况。
-  if ! grep -Fq '/laolao-theme.css?v=theme87' "$index_file"; then
-    perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme87}g' "$index_file"
+  if ! grep -Fq '/laolao-theme.css?v=theme88' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^"]*)?}{/laolao-theme.css?v=theme88}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq '/laolao-sidebar.js?v=sidebar29' "$index_file"; then
-    perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^"]*)?}{/laolao-sidebar.js?v=sidebar29}g' "$index_file"
+  if ! grep -Fq '/laolao-sidebar.js?v=sidebar34' "$index_file"; then
+    perl -0pi -e 's{(?:\./|/)laolao-sidebar\.js(?:\?v=[^"]*)?}{/laolao-sidebar.js?v=sidebar34}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-sidebar.css?v=sidebar18' "$index_file"; then
@@ -838,8 +968,8 @@ apply_ui_skin() {
     perl -0pi -e 's{(?:\./|/)laolao-splash\.css(?:\?v=[^"]*)?}{./laolao-splash.css?v=splash21}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-mode-switcher.js?v=mode42' "$index_file"; then
-    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode42}g' "$index_file"
+  if ! grep -Fq './laolao-mode-switcher.js?v=mode44' "$index_file"; then
+    perl -0pi -e 's{\./laolao-mode-switcher\.js(?:\?v=[^"]*)?}{./laolao-mode-switcher.js?v=mode44}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Eq '(\./|/)laolao-splash\.js\?v=splash28' "$index_file"; then
@@ -854,16 +984,16 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-motion\.js(?:\?v=[^"]*)?}{./laolao-motion.js?v=motion6}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.css?v=classic18' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic18}g' "$index_file"
+  if ! grep -Fq './laolao-classic-shell.css?v=classic19' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.css(?:\?v=[^"]*)?}{./laolao-classic-shell.css?v=classic19}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-side-layout.css?v=side21' "$index_file"; then
     perl -0pi -e 's{\./laolao-side-layout\.css(?:\?v=[^"]*)?}{./laolao-side-layout.css?v=side21}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-classic-shell.js?v=classic19' "$index_file"; then
-    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic19}g' "$index_file"
+  if ! grep -Fq './laolao-classic-shell.js?v=classic20' "$index_file"; then
+    perl -0pi -e 's{\./laolao-classic-shell\.js(?:\?v=[^"]*)?}{./laolao-classic-shell.js?v=classic20}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq './laolao-side-layout.js?v=side12' "$index_file"; then
@@ -882,8 +1012,8 @@ apply_ui_skin() {
     perl -0pi -e 's{\./laolao-learning-stage\.css(?:\?v=[^"]*)?}{./laolao-learning-stage.css?v=learning11}g' "$index_file"
     DID_CHANGE=1
   fi
-  if ! grep -Fq './laolao-learning-stage.js?v=learning11' "$index_file"; then
-    perl -0pi -e 's{\./laolao-learning-stage\.js(?:\?v=[^"]*)?}{./laolao-learning-stage.js?v=learning11}g' "$index_file"
+  if ! grep -Fq './laolao-learning-stage.js?v=learning13' "$index_file"; then
+    perl -0pi -e 's{\./laolao-learning-stage\.js(?:\?v=[^"]*)?}{./laolao-learning-stage.js?v=learning13}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -922,7 +1052,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme87}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx4}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx6}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode42}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker30}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases29}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume45}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer2}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic18}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar29}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions11}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink21}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt32}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact6}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction13}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side21}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme88}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx4}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx6}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode44}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker31}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases29}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume50}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer2}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic19}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar34}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions11}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink22}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt33}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact8}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction14}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side21}g' "$index_file"
   # 黑夜模式：开关脚本放在 <head> 最前面，启动画面出现前就定好深浅；样式层放在 </head> 前最后一个。
   # fragment 或旧版安装可能已经把开关放在 head 后面；无条件重新定位，
   # 并使用站点根路径，保证直接打开 /settings/general 也能加载。
@@ -1081,11 +1211,24 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/project-scope/$service_file" \
       "$bundled_root/services/project-scope/$service_file"
   done
-  for service_file in index.mjs memory.mjs learning.mjs companion.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs learning.mjs companion.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs setup.py package.json openclaw.plugin.json; do
     copy_if_changed \
       "$REPO_ROOT/services/mode-architecture/$service_file" \
       "$bundled_root/services/mode-architecture/$service_file"
   done
+  # Older app packages can receive UI first, before the staged plugin.
+  if [[ -f "$REPO_ROOT/services/mode-architecture/learning-library.mjs" ]]; then
+    copy_if_changed "$REPO_ROOT/services/mode-architecture/learning-library.mjs" "$bundled_root/services/mode-architecture/learning-library.mjs"
+  fi
+  # Learning library backend vendor, kept with the plugin in app bundles.
+  if [[ -d "$REPO_ROOT/services/mode-architecture/vendor" ]]; then
+    while IFS= read -r -d '' source_file; do
+      relative_path="${source_file#"$REPO_ROOT/services/mode-architecture/"}"
+      target_file="$bundled_root/services/mode-architecture/$relative_path"
+      mkdir -p "$(dirname "$target_file")"
+      copy_if_changed "$source_file" "$target_file"
+    done < <(find "$REPO_ROOT/services/mode-architecture/vendor" -type f -print0)
+  fi
   while IFS= read -r -d '' source_file; do
     relative_path="${source_file#"$REPO_ROOT/services/chatgpt-collab/"}"
     target_file="$bundled_root/services/chatgpt-collab/$relative_path"
@@ -1242,7 +1385,16 @@ install_relay_watchdog() {
   fi
   if [[ "$should_reload" == "1" ]]; then
     launchctl bootout "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1 || true
-    launchctl bootstrap "gui/$(id -u)" "$target_plist"
+    # bootout 返回后 launchd 可能还在收尾，紧接着 bootstrap 会报「5: Input/output error」，
+    # 看门狗就此没装上，中继断了也没人重连。多试几次。
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+      launchctl bootstrap "gui/$(id -u)" "$target_plist" 2>/dev/null && break
+      sleep 1
+    done
+    if ! launchctl print "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1; then
+      echo "warning: ai.openclaw.watchdog did not load; run: launchctl bootstrap gui/$(id -u) $target_plist" >&2
+    fi
   fi
 }
 
@@ -1305,6 +1457,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
       exit 1
     fi
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-chat-timeline.mjs"
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-chat-math.mjs"
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-chat-linebreaks.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-composer-drafts.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-context-budget.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-compaction-boundary-recovery.mjs"
@@ -1324,6 +1478,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # Control UI 也有一层独立的浏览器预检。让它和网关使用相同的工作区
     # 边界，否则前端会在发请求前错误显示 "Outside allowed folders"。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-control-ui-workspace-media.mjs"
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-control-ui-file-delivery.mjs"
     # The native material viewer uses an opaque clekk-material: URL. Keep the
     # strict Control UI CSP, but allow that one in-app scheme for image/PDF
     # rendering; this does not grant the agent any new filesystem or tool access.
@@ -1345,7 +1500,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
   if [[ -f "$OPENCLAW_ROOT/dist/control-ui/index.html" ]]; then
     # 原生模块和 CSS 也必须从根目录加载，否则直接打开嵌套设置页会停在开屏。
     perl -0pi -e 's{((?:src|href)=")\./assets/}{$1/assets/}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
-    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme87}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker30}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases29}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
+    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme88}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker31}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases29}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
   fi
 else
   echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2

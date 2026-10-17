@@ -1,0 +1,17 @@
+/* laolao-divider:v1 —— 分隔线式聊天排版（白天 / 夜间）
+ * 去掉消息气泡；阅读区一层左右渐隐的底板，壁纸从两侧透出；
+ * 每轮对话前一条渐隐粉线 + ✦；用户消息右侧粉色竖线、玫瑰色文字。
+ * :not(#p1):not(#p2):not(#p3) 只为压过主题里的 !important 规则。 */
+html:not(#p1):not(#p2):not(#p3){--pv-veil:rgba(255,249,251,.74);--pv-line:rgba(233,79,145,.38);--pv-accent:#e94f91;--pv-user:#8a2f5a;--pv-star:#f07aae}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3){--pv-veil:rgba(28,19,32,.66);--pv-line:rgba(255,127,179,.34);--pv-accent:#ff7fb3;--pv-user:#ffc6dd;--pv-star:#ff9cc6}
+html:not(#p1):not(#p2):not(#p3) .chat-thread{background:linear-gradient(90deg,transparent 24px,var(--pv-veil) 92px,var(--pv-veil) calc(100% - 92px),transparent calc(100% - 24px))!important}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner{padding-block:8px 24px!important}
+html:not(#p1):not(#p2):not(#p3) .chat-group .chat-bubble:not(.chat-bubble--tool-shell){background:none!important;box-shadow:none!important;border:0!important;border-radius:0!important;padding:2px 4px!important}
+html:not(#p1):not(#p2):not(#p3) .chat-group.assistant .chat-bubble:not(.chat-bubble--tool-shell){padding:4px 4px 2px!important}
+html:not(#p1):not(#p2):not(#p3) .chat-group.user .chat-bubble:not(.chat-bubble--tool-shell){padding:2px 14px 2px 4px!important;border-right:3px solid var(--pv-accent)!important}
+html:not(#p1):not(#p2):not(#p3) .chat-group.user .chat-text,html:not(#p1):not(#p2):not(#p3) .chat-group.user .chat-text :is(p,li,span,strong,em){color:var(--pv-user)!important}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user{position:relative!important;margin-top:30px!important;padding-top:26px!important}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user::before{content:"";position:absolute;left:46px;right:46px;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--pv-line) 30%,var(--pv-line) 70%,transparent)}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user::after{content:"✦";position:absolute;left:50%;top:0;transform:translate(-50%,-52%);font-size:13px;line-height:1;color:var(--pv-star);padding:0 10px;text-shadow:0 0 6px var(--pv-veil)}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user:first-child{margin-top:0!important;padding-top:0!important}
+html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user:first-child::before,html:not(#p1):not(#p2):not(#p3) .chat-thread-inner>.chat-group.user:first-child::after{display:none}

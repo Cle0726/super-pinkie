@@ -7,6 +7,12 @@
 }
 @keyframes pinkie-process-in { from { opacity: 0; transform: translateY(6px); } }
 .chat-group--process > .chat-group-messages { display: block !important; margin: 0 !important; padding: 0 !important; }
+/* Only the duplicate native Reasoning box is hidden. Pinkie's own thinking
+   card stays visible, independently of the folded tool details. */
+.chat-group .chat-thinking { display: none !important; }
+.pinkie-process__live-text:empty { display: none; }
+.pinkie-process__live-text > .chat-group { margin: 0 0 8px !important; padding: 0 !important; }
+.pinkie-process__live-text > .chat-group > .chat-group-messages { max-width: none !important; }
 
 .pinkie-process {
   box-sizing: border-box;
@@ -86,6 +92,9 @@
   -webkit-mask-image: linear-gradient(transparent, #000 24px); mask-image: linear-gradient(transparent, #000 24px);
 }
 .pinkie-thinking.is-open:not(.is-live) .pinkie-thinking__body { max-height: 240px; overflow-y: auto; }
+.pinkie-thinking.is-open.is-live .pinkie-thinking__body {
+  max-height: 240px; overflow-y: auto; -webkit-mask-image: none; mask-image: none;
+}
 
 /* status pill with Pinkie's stickers */
 .pinkie-status {

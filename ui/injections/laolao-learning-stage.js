@@ -45,6 +45,12 @@
     undoNote: null,
     lastOrganizationBackupId: "",
     noteMenu: null,
+    examPacks: null,
+    examPacksLoading: false,
+    examPackId: "",
+    packMode: false,
+    packSuggestions: null,
+    packSelected: new Set(),
   };
 
   const el = (tag, className, text) => {
@@ -256,6 +262,18 @@
     body.append(eyebrow);
 
     if (!current) {
+      const due = Number(state.dueCount) || 0;
+      if (due > 0) {
+        const banner = el("button", "laolao-learning-due-banner");
+        banner.type = "button";
+        banner.append(
+          el("strong", "laolao-learning-due-banner__count", `${due}`),
+          el("span", "laolao-learning-due-banner__text", "条笔记今天该复习啦"),
+          el("span", "laolao-learning-due-banner__go", "开始复习 →")
+        );
+        banner.addEventListener("click", () => { openNotebook(); startReview(); });
+        body.append(banner);
+      }
       body.append(el("h3", "laolao-learning-stage__question", "想先练哪一个知识点？"));
       body.append(el("p", "laolao-learning-stage__lead", "直接继续聊天也可以；需要练习时，碧琪会把当前内容变成一张可作答的题卡。"));
       const actions = el("div", "laolao-learning-stage__actions");
@@ -351,6 +369,12 @@
     }
   };
 
+  const absorbLegacyButtons = () => {
+    const actions = document.querySelector(".agent-chat__composer-actions");
+    if (!actions) return;
+    for (const node of actions.querySelectorAll(".laolao-learning-notebook-button")) node.classList.add("laolao-learning--absorbed");
+  };
+
   const syncButtons = () => {
     const enabled = Boolean(state.remote?.enabled);
     if (state.toggle) {
@@ -359,11 +383,68 @@
       state.toggle.textContent = enabled ? "互动中" : "互动学习";
       state.toggle.disabled = false;
     }
+    if (state.toolsDue) {
+      const due = Number(state.dueCount) || 0;
+      state.toolsDue.textContent = due > 0 ? `今日复习 ${due}` : "今日复习";
+      state.toolsDue.classList.toggle("is-due", due > 0);
+    }
+    if (state.toolsCapsule?.isConnected) absorbLegacyButtons();
+  };
+
+  const refreshDueCount = async () => {
+    try {
+      const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 1}, 15000);
+      state.dueCount = Number(result?.dueCount) || 0;
+      syncButtons();
+    } catch { /* 静默：复习计数失败不影响聊天 */ }
+  };
+
+  const ensureToolsCapsule = actions => {
+    if (state.toolsCapsule?.isConnected) return;
+    const capsule = el("div", "laolao-learning-tools");
+    const trigger = el("button", "laolao-learning-tools__trigger", "学习工具");
+    trigger.type = "button";
+    trigger.title = "复习、资料库等学习工具；鼠标靠近展开";
+    trigger.setAttribute("aria-haspopup", "true");
+    const tray = el("div", "laolao-learning-tools__tray");
+    tray.setAttribute("role", "menu");
+
+    const review = el("button", "laolao-learning-tools__item laolao-learning-tools__due", "今日复习");
+    review.type = "button";
+    review.addEventListener("click", () => { openNotebook(); startReview(); });
+    state.toolsDue = review;
+
+    const notes = el("button", "laolao-learning-tools__item", "笔记本");
+    notes.type = "button";
+    notes.addEventListener("click", () => openNotebook());
+
+    const library = el("button", "laolao-learning-tools__item", "资料库");
+    library.type = "button";
+    library.addEventListener("click", async () => {
+      try { await window.__pinkieLibrary?.shelf(); }
+      catch { showToast("资料库未就绪", true); }
+    });
+
+    const packs = el("button", "laolao-learning-tools__item", "考纲题库");
+    packs.type = "button";
+    packs.addEventListener("click", () => openExamPacks());
+
+    const mistakes = el("button", "laolao-learning-tools__item", "错题雷达");
+    mistakes.type = "button";
+    mistakes.addEventListener("click", () => openMistakesRadar());
+
+    tray.append(review, notes, library, packs, mistakes);
+    capsule.append(trigger, tray);
+    actions.prepend(capsule);
+    state.toolsCapsule = capsule;
+    refreshDueCount();
+    absorbLegacyButtons();
   };
 
   const ensureButtons = () => {
     const actions = document.querySelector(".agent-chat__composer-actions");
     if (!actions) return;
+    ensureToolsCapsule(actions);
     if (!state.toggle?.isConnected) {
       const button = el("button", "laolao-learning-toggle", "互动学习");
       button.type = "button";
@@ -448,6 +529,12 @@
     const date = dateValue ? new Intl.DateTimeFormat("zh-CN", {month: "numeric", day: "numeric"}).format(new Date(dateValue)) : "日期未知";
     const source = el("div", "laolao-learning-note__source", `${session} · ${date}${note.sourceLabel ? ` · ${note.sourceLabel}` : ""}`);
     source.title = sourceKey;
+    if (note.sourceAnchor) {
+      const jump = el("button", "pinkie-library__source-jump", `${note.sourceAnchor.title} · ${note.sourceAnchor.label} ↗`);
+      jump.type = "button"; jump.title = "回到原文并高亮";
+      jump.addEventListener("click", event => { event.stopPropagation(); closeNotebook(); void window.__pinkieLibrary?.open(note.sourceAnchor.bookId, {location: note.sourceAnchor.location, quote: note.sourceAnchor.quote}).catch(error => showToast(error.message, true)); });
+      source.append(el("br"), jump);
+    }
     card.append(source);
   };
 
@@ -584,10 +671,11 @@
     card.addEventListener("click", event => {
       const control = event.target.closest("button, input, textarea, form, details, a");
       if (control && card.contains(control)) return;
-      beginEdit(card, note);
+      if (note.sourceAnchor) { closeNotebook(); void window.__pinkieLibrary?.open(note.sourceAnchor.bookId, {location: note.sourceAnchor.location, quote: note.sourceAnchor.quote}).catch(error => showToast(error.message, true)); }
+      else beginEdit(card, note);
     });
     card.addEventListener("keydown", event => {
-      if ((event.key === "Enter" || event.key === " ") && event.target === card) { event.preventDefault(); beginEdit(card, note); }
+      if ((event.key === "Enter" || event.key === " ") && event.target === card) { event.preventDefault(); if (note.sourceAnchor) { closeNotebook(); void window.__pinkieLibrary?.open(note.sourceAnchor.bookId, {location: note.sourceAnchor.location, quote: note.sourceAnchor.quote}).catch(error => showToast(error.message, true)); } else beginEdit(card, note); }
     });
     const titleText = String(note.title || "").trim();
     const content = String(note.content || "").trim();
@@ -705,11 +793,354 @@
 
   const startReview = async () => {
     try {
+      state.radarMode = false;
       const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500});
       state.reviewQueue = (result.notes || []).filter(note => !Number(note.nextReviewAt) || Number(note.nextReviewAt) <= Date.now());
       state.reviewIndex = 0; state.reviewFlipped = false;
       renderReview(state.drawer?.querySelector(".laolao-learning-notes__list"));
     } catch (error) { showToast(error.message || "复习列表读取失败", true); }
+  };
+
+  const normalizePackText = value => String(value ?? "").normalize("NFKC").toLowerCase();
+
+  const loadExamPacks = async () => {
+    if (state.examPacks) return state.examPacks;
+    const response = await fetch(new URL("laolao-exam-packs.json", location.href).href, {cache: "no-cache"});
+    if (!response.ok) throw new Error("考纲题库文件读取失败（" + response.status + "）");
+    const doc = await response.json();
+    state.examPacks = Array.isArray(doc?.packs) ? doc.packs : [];
+    return state.examPacks;
+  };
+
+  const packHaystack = note => normalizePackText([
+    note?.title, note?.content, note?.term, note?.meaning, note?.example, note?.note,
+  ].filter(Boolean).join(" "));
+
+  // 通用功能词与纯语法形式词：单独出现不能判定考点（否则 that / which 会把任何句子都判成“定语从句”）
+  const GENERIC_KEYWORDS = new Set([
+    "that", "which", "who", "whom", "whose", "when", "where", "why", "what", "as", "to", "in", "on", "at",
+    "for", "of", "with", "by", "from", "about", "and", "or", "the", "a", "an", "is", "are", "was", "were",
+    "be", "been", "being", "do", "does", "did", "it", "this", "these", "those", "not", "but", "if", "so",
+    "then", "than", "there", "here", "how", "as we know", "as is known", "such as",
+    "-ing", "to do", "doing", "done", "原形", "单三", "复数", "过去式", "过去分词", "现在分词",
+    "不定式", "第三人称单数", "句子", "单词", "短语",
+  ]);
+
+  // 多词搭配是强信号（2 分）；单字至少 4 个字符才算强信号，短词只记 1 分。
+  // 一个考点总分 ≥ 2 才建议，避免单靠一个泛词误标。
+  const keywordWeight = raw => {
+    const key = normalizePackText(raw).trim();
+    if (key.length < 2) return 0;
+    if (GENERIC_KEYWORDS.has(key)) return 0;
+    if (key.includes(" ")) return 2;
+    return key.length >= 4 ? 2 : 1;
+  };
+
+  const scanPack = (notes, pack) => {
+    const suggestions = [];
+    for (const note of notes) {
+      if (note?.status === "merged") continue;
+      const hay = packHaystack(note);
+      if (!hay) continue;
+      const existing = Array.isArray(note.tags) ? note.tags.filter(Boolean) : [];
+      const existingSet = new Set(existing);
+      const hits = [];
+      for (const topic of pack.topics || []) {
+        let score = 0;
+        const matched = [];
+        for (const keyword of topic.keywords || []) {
+          const weight = keywordWeight(keyword);
+          if (!weight) continue;
+          if (hay.includes(normalizePackText(keyword))) {
+            score += weight;
+            if (matched.length < 3) matched.push(String(keyword));
+          }
+        }
+        if (score < 2) continue;
+        hits.push({ name: topic.name, score, keywords: matched });
+      }
+      const add = hits.filter(item => !existingSet.has(item.name)).map(item => item.name);
+      if (!add.length) continue;
+      suggestions.push({
+        id: note.id,
+        title: String(note.title || note.term || note.content || "无标题").split("\n")[0].slice(0, 60),
+        existing,
+        add,
+        evidence: hits.filter(item => add.includes(item.name)).map(item => `${item.name}（${item.keywords.join("、")}）`).join("；"),
+        merged: [...existing, ...add],
+      });
+    }
+    return suggestions;
+  };
+
+  const packSummaryText = (pack, suggestions, notes) => {
+    if (!suggestions.length) return `《${pack.name}》扫描了 ${notes.length} 条笔记，没有发现可补充的考点标签。`;
+    return `《${pack.name}》扫描了 ${notes.length} 条笔记，${suggestions.length} 条可以补考点标签。`;
+  };
+
+  const applyPackTags = async (pack, suggestions, selectedIds) => {
+    const picked = suggestions.filter(item => selectedIds.has(item.id));
+    if (!picked.length) { showToast("先选要应用标签的笔记", true); return; }
+    let ok = 0;
+    const failed = [];
+    for (const item of picked) {
+      try {
+        await request("pinkie.learning.notes.update", {
+          sessionKey: notebookSession(),
+          id: item.id,
+          tags: item.merged,
+        }, 20000);
+        ok += 1;
+      } catch (error) {
+        failed.push(item.title + "：" + (error?.message || "写入失败"));
+      }
+    }
+    if (ok) showToast(`已为 ${ok} 条笔记补上《${pack.name}》考点标签`);
+    if (failed.length) showToast(failed[0], true);
+    await openExamPacks(pack.id);
+  };
+
+  const openExamPacks = async (preferredPackId) => {
+    try {
+      state.packMode = true;
+      state.radarMode = false;
+      state.reviewQueue = null;
+      let drawer = state.drawer;
+      if (!drawer?.classList.contains("is-open")) { openNotebook(); drawer = state.drawer; }
+      for (let i = 0; i < 40; i++) {
+        if (drawer?.querySelector(".laolao-learning-notes__list")?.children?.length) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      const list = drawer?.querySelector(".laolao-learning-notes__list");
+      if (!list) throw new Error("笔记列表未就绪");
+      list.hidden = false;
+      const manuscriptHost = drawer?.querySelector(".laolao-learning-notes__manuscript");
+      if (manuscriptHost) manuscriptHost.hidden = true;
+      const previewHost = drawer?.querySelector(".laolao-learning-notes__preview");
+      if (previewHost) previewHost.hidden = true;
+
+      const panel = el("section", "laolao-learning-packs");
+      panel.append(el("div", "laolao-learning-packs__eyebrow", "考纲题库"));
+      list.replaceChildren(panel);
+
+      let packs = [];
+      try {
+        packs = await loadExamPacks();
+      } catch (error) {
+        panel.append(el("p", "laolao-learning-packs__empty", error.message || "考纲题库加载失败"));
+        return;
+      }
+      if (!packs.length) {
+        panel.append(el("p", "laolao-learning-packs__empty", "没有找到考纲题库文件。"));
+        return;
+      }
+
+      const pack = packs.find(item => item.id === preferredPackId) || packs.find(item => item.id === state.examPackId) || packs[0];
+      state.examPackId = pack.id;
+      const notesResult = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500}, 20000);
+      const notes = (notesResult.notes || []).filter(note => note.status !== "merged");
+      state.notes = notesResult.notes || state.notes;
+      const suggestions = scanPack(notes, pack);
+
+      // 首次进入默认全选，之后保留用户上一次的勾选
+      if (!state.packSuggestions) {
+        state.packSelected = new Set(suggestions.map(item => item.id));
+      } else {
+        const valid = new Set(suggestions.map(item => item.id));
+        state.packSelected = new Set([...state.packSelected].filter(id => valid.has(id)));
+      }
+      state.packSuggestions = suggestions;
+
+      const tabs = el("div", "laolao-learning-packs__tabs");
+      for (const item of packs) {
+        const tab = el("button", "laolao-learning-packs__tab" + (item.id === pack.id ? " is-active" : ""), item.name);
+        tab.type = "button";
+        tab.addEventListener("click", () => { state.packSuggestions = null; state.packSelected = new Set(); void openExamPacks(item.id); });
+        tabs.append(tab);
+      }
+      panel.append(tabs);
+      if (pack.description) panel.append(el("p", "laolao-learning-packs__desc", pack.description));
+      panel.append(el("p", "laolao-learning-packs__summary", packSummaryText(pack, suggestions, notes)));
+
+      if (suggestions.length) {
+        const toolbar = el("div", "laolao-learning-packs__actions");
+        const toggleAll = el("button", "laolao-learning-button", "全部选中");
+        toggleAll.type = "button";
+        toggleAll.addEventListener("click", () => {
+          const allSelected = suggestions.every(item => state.packSelected.has(item.id));
+          state.packSelected = allSelected ? new Set() : new Set(suggestions.map(item => item.id));
+          void openExamPacks(pack.id);
+        });
+        if (suggestions.every(item => state.packSelected.has(item.id))) toggleAll.textContent = "全部取消";
+        const apply = el("button", "laolao-learning-button laolao-learning-button--primary", "应用选中标签");
+        apply.type = "button";
+        apply.addEventListener("click", async () => {
+          setBusy(apply, true, "应用中");
+          await applyPackTags(pack, suggestions, state.packSelected);
+          setBusy(apply, false);
+        });
+        toolbar.append(toggleAll, apply);
+        panel.append(toolbar);
+
+        const box = el("div", "laolao-learning-packs__list");
+        for (const item of suggestions) {
+          const row = el("label", "laolao-learning-packs__item");
+          const check = el("input");
+          check.type = "checkbox";
+          check.checked = state.packSelected.has(item.id);
+          check.addEventListener("change", () => {
+            if (check.checked) state.packSelected.add(item.id); else state.packSelected.delete(item.id);
+          });
+          const body = el("div", "laolao-learning-packs__item-body");
+          body.append(el("strong", "laolao-learning-packs__item-title", item.title));
+          const tags = el("div", "laolao-learning-packs__tags");
+          for (const name of item.add) tags.append(el("span", "laolao-learning-packs__tag is-new", "+" + name));
+          for (const name of item.existing) tags.append(el("span", "laolao-learning-packs__tag", name));
+          body.append(tags);
+          row.append(check, body);
+          box.append(row);
+        }
+        panel.append(box);
+      } else {
+        panel.append(el("p", "laolao-learning-packs__empty", "这条考纲的关键词都已经在现有标签里了，或者笔记内容还没覆盖到这些考点。"));
+      }
+
+      const exit = el("button", "laolao-learning-button", "返回笔记");
+      exit.type = "button";
+      exit.addEventListener("click", () => {
+        state.packMode = false;
+        state.packSuggestions = null;
+        renderNotes(state.notes, state.noteData?.similar || []);
+      });
+      panel.append(exit);
+      for (const node of [list, list.parentElement, drawer]) {
+        if (node) node.scrollTop = 0;
+      }
+    } catch (error) {
+      showToast(error.message || "考纲题库读取失败", true);
+    }
+  };
+
+  const openMistakesRadar = async () => {
+    try {
+      state.radarMode = true;
+      const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500});
+      const notes = result.notes || [];
+      const tagStats = {};
+      for (const n of notes) {
+        for (const t of n.tags || []) {
+          tagStats[t] = tagStats[t] || {total: 0, mistakes: 0};
+          tagStats[t].total++;
+          if (Number(n.lapses) > 0) tagStats[t].mistakes += Number(n.lapses);
+        }
+      }
+      const entries = Object.entries(tagStats).sort((a, b) => b[1].mistakes - a[1].mistakes);
+      const top = entries.slice(0, 8);
+      // 先打开笔记本并等它自己的异步渲染完成，再把雷达插进去（否则会被 loadNotes 覆盖）
+      let drawer = state.drawer;
+      if (!drawer?.classList.contains("is-open")) { openNotebook(); drawer = state.drawer; }
+      for (let i = 0; i < 40; i++) {
+        if (drawer?.querySelector(".laolao-learning-notes__list")?.children?.length) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      const list = drawer?.querySelector(".laolao-learning-notes__list");
+      if (!list) throw new Error("笔记列表未就绪");
+      // 整理稿模式会把原笔记列表整个隐藏；雷达要挂进列表，必须先显式放开
+      list.hidden = false;
+      const manuscriptHost = drawer?.querySelector(".laolao-learning-notes__manuscript");
+      if (manuscriptHost) manuscriptHost.hidden = true;
+      const previewHost = drawer?.querySelector(".laolao-learning-notes__preview");
+      if (previewHost) previewHost.hidden = true;
+      const panel = el("section", "laolao-learning-radar");
+      panel.append(el("div", "laolao-learning-radar__eyebrow", "薄弱点雷达"));
+      if (!top.length) {
+        panel.append(el("p", "laolao-learning-radar__empty", "还没有带标签的笔记。先让碧琪帮你自动打标签，或者手动加几条标签。"));
+      } else {
+        const canvas = el("canvas", "laolao-learning-radar__canvas");
+        canvas.width = 360; canvas.height = 280;
+        panel.append(canvas);
+        const labels = top.map(([tag]) => tag);
+        const totals = top.map(([, s]) => s.total);
+        const mistakes = top.map(([, s]) => s.mistakes);
+        const ctx = canvas.getContext("2d");
+        const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 40;
+        const max = Math.max(...totals, 1);
+        // 网格
+        ctx.strokeStyle = "rgba(232,79,154,.18)";
+        ctx.lineWidth = 1;
+        for (let ring = 1; ring <= 3; ring++) {
+          const r = R * ring / 3;
+          ctx.beginPath();
+          for (let i = 0; i <= labels.length; i++) {
+            const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
+            const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        // 轴线 + 标签
+        ctx.fillStyle = "rgba(63,49,89,.85)";
+        ctx.font = "12px -apple-system, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        labels.forEach((tag, i) => {
+          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
+          const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+          const lx = cx + (R + 20) * Math.cos(a), ly = cy + (R + 20) * Math.sin(a);
+          ctx.fillText(tag, lx, ly);
+        });
+        // 总量区域（蓝）
+        ctx.fillStyle = "rgba(123,99,200,.28)";
+        ctx.strokeStyle = "rgba(123,99,200,.6)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        labels.forEach((_, i) => {
+          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
+          const r = R * totals[i] / max;
+          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // 错题区域（粉）
+        const maxM = Math.max(...mistakes, 1);
+        ctx.fillStyle = "rgba(232,79,154,.3)";
+        ctx.strokeStyle = "rgba(232,79,154,.7)";
+        ctx.beginPath();
+        labels.forEach((_, i) => {
+          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
+          const r = R * mistakes[i] / maxM;
+          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // 图例
+        const legend = el("div", "laolao-learning-radar__legend");
+        legend.innerHTML = "<span style='color:#7b63c8'>● 笔记数</span> <span style='color:#e84f9a'>● 错题数</span>";
+        panel.append(legend);
+        // 错题列表
+        const wrong = notes.filter(n => Number(n.lapses) > 0).sort((a, b) => Number(b.lapses) - Number(a.lapses)).slice(0, 10);
+        if (wrong.length) {
+          const wrongList = el("div", "laolao-learning-radar__wrong");
+          wrongList.append(el("h4", "", `高频错题（${wrong.length}）`));
+          for (const n of wrong) {
+            const item = el("div", "laolao-learning-radar__wrong-item");
+            item.append(el("strong", "", n.title || n.term || "无标题"));
+            item.append(el("small", "", `错 ${n.lapses} 次 · ${n.tags.join("、") || "无标签"}`));
+            wrongList.append(item);
+          }
+          panel.append(wrongList);
+        }
+      }
+      const exit = el("button", "laolao-learning-button", "返回笔记"); exit.type = "button";
+      exit.addEventListener("click", () => { state.radarMode = false; renderNotes(state.notes, state.noteData?.similar || []); });
+      panel.append(exit);
+      list.replaceChildren(panel);
+      // 确保雷达可见：抽屉内部滚到顶
+      for (const node of [list, list.parentElement, drawer]) {
+        if (node) node.scrollTop = 0;
+      }
+      panel.scrollIntoView({ block: "center" });
+    } catch (error) { showToast(error.message || "雷达图读取失败", true); }
   };
 
   const notebookDocument = notebook => {
@@ -755,7 +1186,7 @@
     if (!host) return;
     const notebook = state.noteData?.organizedNotebook;
     const show = Boolean(notebook) && state.manuscriptMode !== "source" && !state.organizationPlan && !state.reviewQueue
-      && !state.searchText && !state.selectedTags.size && !state.includeMerged;
+      && !state.searchText && !state.selectedTags.size && !state.includeMerged && !state.radarMode && !state.packMode;
     host.hidden = !show;
     if (list) list.hidden = show || Boolean(state.organizationPlan?.notebook);
     host.replaceChildren();
@@ -906,6 +1337,9 @@
   const renderNotes = (notes, similar = []) => {
     const list = state.drawer?.querySelector(".laolao-learning-notes__list");
     if (!list) return;
+    // 雷达模式：列表由 openMistakesRadar 独占。必须先于 replaceChildren 返回，
+    // 否则 loadNotes 迟到时会把已经渲染好的雷达整个清掉。
+    if (state.radarMode || state.packMode) return;
     closeNoteMenu();
     list.replaceChildren();
     renderSavedManuscript();
@@ -1250,27 +1684,18 @@
     } catch (error) { showToast(error.message || "笔记保存失败", true); }
   };
 
-  const selectionCandidate = () => {
-    if (!inLearningMode()) return;
-    const selection = window.getSelection();
-    const text = selection?.toString().trim();
-    if (!text || text.length < 2 || text.length > 20000 || selection.rangeCount === 0) return;
-    const anchor = selection.anchorNode?.nodeType === Node.ELEMENT_NODE ? selection.anchorNode : selection.anchorNode?.parentElement;
-    const assistant = anchor?.closest?.(".chat-group.assistant");
-    if (!assistant) return;
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
-    state.selectionButton?.remove();
-    const button = el("button", "laolao-learning-selection-save", "记笔记");
-    button.type = "button";
-    button.style.left = `${Math.max(8, Math.min(window.innerWidth - 88, rect.left + rect.width / 2 - 38))}px`;
-    button.style.top = `${Math.max(8, rect.top - 42)}px`;
-    state.selectionText = text;
-    state.selectionLabel = assistant.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答";
-    button.addEventListener("mousedown", event => event.preventDefault());
-    button.addEventListener("click", saveSelection);
-    document.body.append(button);
-    state.selectionButton = button;
-  };
+  window.__pinkieSelectionActions?.register('note', {
+    order: 1,
+    when: ({text, assistant, library}) => inLearningMode() && (!!assistant || !!library) && text.length >= 2,
+    create: () => el("button", "laolao-learning-selection-save", "记笔记"),
+    run: selected => {
+      const {text, assistant, library} = selected;
+      if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
+      state.selectionText = text;
+      state.selectionLabel = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答";
+      void saveSelection();
+    },
+  });
 
   const poll = async () => {
     if (state.polling || !inLearningMode()) return;
@@ -1287,6 +1712,11 @@
         renderStage(result);
       }
       syncButtons();
+      // 每 30 秒顺带刷新一次今日复习数，让空态横幅和胶囊保持准确
+      if (!state.dueFetchedAt || Date.now() - state.dueFetchedAt > 30_000) {
+        state.dueFetchedAt = Date.now();
+        refreshDueCount().then(() => { if (!state.remote?.current) renderStage(state.remote); });
+      }
     } catch {
       // 网关启动或重连期间保持现有题卡，下一轮自动恢复，不闪空白。
     } finally { state.polling = false; }
@@ -1296,6 +1726,7 @@
     state.stage?.remove(); state.stage = null;
     state.toggle?.remove(); state.toggle = null;
     state.notebookButton?.remove(); state.notebookButton = null;
+    state.toolsCapsule?.remove(); state.toolsCapsule = null; state.toolsDue = null;
     closeNotebook();
     state.selectionButton?.remove(); state.selectionButton = null;
     state.sessionKey = ""; state.revision = -1; state.remote = null;
@@ -1321,14 +1752,11 @@
   window.addEventListener("pinkie:session-selected", reconcile);
   window.addEventListener("laolao:modechange", reconcile);
   window.addEventListener("laolao:sessions-changed", () => { if (state.drawer?.classList.contains("is-open")) void loadNotes(); });
-  document.addEventListener("mouseup", () => setTimeout(selectionCandidate, 0), true);
   document.addEventListener("mousedown", event => {
-    if (state.selectionButton && !event.target.closest(".laolao-learning-selection-save")) {
-      state.selectionButton.remove(); state.selectionButton = null;
-    }
     if (state.noteMenu && !event.target.closest?.(".laolao-learning-note__menu, .laolao-learning-note__more")) closeNoteMenu();
   }, true);
   window.addEventListener("resize", placeNoteMenu);
+  window.addEventListener("pinkie:library-note-saved", () => { if (state.drawer?.classList.contains("is-open")) void loadNotes(); });
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", reconcile, {once: true});
   else reconcile();

@@ -586,23 +586,16 @@
   });
 
   /* 选中聊天文字时出现「问碧琪」 */
-  let askChip = null;
-  document.addEventListener("selectionchange", () => {
-    const sel = window.getSelection?.();
-    const text = String(sel || "").trim();
-    const anchor = sel?.anchorNode?.parentElement;
-    if (!text || text.length > 60 || !anchor?.closest(".chat-thread .chat-text")) { askChip?.remove(); askChip = null; return; }
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    if (!askChip) {
-      askChip = el("button", "pinkie-buddy-ask"); askChip.type = "button";
+  window.__pinkieSelectionActions?.register('ask', {
+    order: 2,
+    when: ({text, library}) => library ? text.length <= 20000 : text.length <= 60,
+    create: () => {
+      const askChip = el("button", "pinkie-buddy-ask");
       const ico = el("span", "pinkie-buddy__ico"); ico.innerHTML = ICON.explain;
       askChip.append(ico, el("span", "", "问碧琪"));
-      askChip.addEventListener("mousedown", (e) => e.preventDefault());
-      askChip.addEventListener("click", () => { const t = String(window.getSelection?.() || "").trim(); askChip?.remove(); askChip = null; if (t) explain(t); });
-      document.body.append(askChip);
-    }
-    askChip.style.left = `${Math.min(innerWidth - 110, rect.right + 6)}px`;
-    askChip.style.top = `${Math.max(8, rect.top - 34)}px`;
+      return askChip;
+    },
+    run: selected => selected.library ? void window.__pinkieLibrary.askSelection(selected).catch(error => say(esc(error.message))) : explain(selected.text),
   });
 
   /* ── 氛围画布 ─────────────────────────────────────────────────────────── */

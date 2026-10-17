@@ -131,6 +131,10 @@
             const key=request.params?.sessionKey||request.params?.key;
             abortVersions.set(key,(abortVersions.get(key)||0)+1);
             cancelReasoning(key);
+            // 用户停止：先在同一条连接上告诉看门狗「这是用户自己停的」，再发 abort。
+            // 停止键和上游断流都会落成 aborted，看门狗只等 200ms 的取消信号；取消请求若排在
+            // abort 后面（同一连接上网关先处理完 abort），停下的这一轮会被当成故障自动续接。
+            if(key){try{send(JSON.stringify({type:'req',id:'pinkie-stop-'+Date.now()+'-'+Math.random().toString(36).slice(2),method:'pinkie.watchdog.cancel',params:{sessionKey:key}}));}catch{}}
             return send(data);
           }
           if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
@@ -144,6 +148,8 @@
             let job = null;
             try {
               await ensureProjectScope(key);
+              stage = 'workbench';
+              await window.__pinkieWorkbench?.flushContext?.(key);
               if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');
               const tier = reasoningTier(key);
               const message = messageText(request.params?.message).trim();
@@ -180,7 +186,7 @@
               }
             }
             catch(error) {
-              const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : '项目目录尚未确认：'+error.message;
+              const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
               toast('没有发送：'+message);
               ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message}})}));
             } finally {
@@ -381,6 +387,13 @@
       .then(result=>{scopeBindings.set(key,result.binding);scopeErrors.delete(key);showScope(key,result.binding);})
       .catch(error=>{scopeErrors.set(key,'目录保护未连接，请重新打开 App');scopeRetryAt=Date.now()+15000;showScope(key,null,scopeErrors.get(key));});
   }
+
+  // Workbench folder selection also updates the chat's project label immediately.
+  window.addEventListener('pinkie:project-scope-changed', event => {
+    if (event.detail?.key && event.detail.key !== pageSessionKey()) return;
+    checkedScope = '';
+    refreshScopeLabel();
+  });
 
   /* 原生 agentSelection 先过滤，class 隐藏再兜底，避免任何一帧串出
      其他模式的会话。 */
@@ -589,7 +602,7 @@
     return `${clean} ${number}`;
   }
 
-  async function addFolderProject(existingName) {
+  async function addFolderProject(existingName, options={}) {
     const ownerMode=stateMode;
     if(existingName&&state.projectFolders[existingName]&&state.projects[existingName]?.length){toast('已有会话的项目目录固定不变。换目录请新建项目，避免混用记录。');return;}
     const currentPath = existingName ? state.projectFolders[existingName] : "";
@@ -620,6 +633,12 @@
     }
     save();
     schedule();
+    // 只有「＋ 打开文件夹」按钮传 bindCurrent；右键菜单、新建项目等入口保持原样，避免误绑当前窗口。
+    const currentKey=pageSessionKey();
+    if(options.bindCurrent && !existingName && projectName && modeForSession(currentKey)===ownerMode && !projectOf(currentKey)){
+      await assignToProject(currentKey, projectName);
+      window.dispatchEvent(new CustomEvent('pinkie:project-scope-changed', {detail:{key:currentKey, path:state.projectFolders[projectName]||''}}));
+    }
     return projectName;
   }
 
@@ -812,6 +831,9 @@
   async function createProjectSession(name) {
     if(name&&!state.projectFolders[name]){toast('请先为「'+name+'」选择项目文件夹');return;}
     const agentId = currentModeAgent();
+    const workbench = window.__pinkieWorkbench?.state;
+    const inheritedFolder = !name && workbench?.visible && workbench.info?.bound && workbench.key === pageSessionKey() && workbench.info.agentId === agentId
+      ? {path:workbench.root,name:workbench.info.name || '当前项目'} : null;
     const ownerMode=stateMode,ownerState=state;
     const operation=ownerMode+'|'+(name||'');
     if(creatingSessions.has(operation))return creatingSessions.get(operation);
@@ -836,6 +858,9 @@
         await gwRequest('pinkie.project.bind',{key,path:ownerState.projectFolders[name],name});
         if (!ownerState.projects[name]) ownerState.projects[name] = [];
         if (!ownerState.projects[name].includes(key)) ownerState.projects[name].push(key);
+      } else if(inheritedFolder) {
+        const bound = await gwRequest('pinkie.project.bind',{key,path:inheritedFolder.path,name:inheritedFolder.name});
+        scopeBindings.set(key,bound.binding);
       }
       writeModeState(ownerMode,ownerState);
       window.PinkieSessionList?.invalidate();
@@ -1617,6 +1642,7 @@
   /* 调试句柄（只读排查用） */
   window.__laolaoSidebar = {
     gwRequest,
+    navigateSession,
     askDeleteAllSessions,
     get mode() { return stateMode; },
     get state() { return state; },

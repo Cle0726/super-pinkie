@@ -209,7 +209,7 @@
   const rememberSession = (key) => {
     const modeId = modeIdForSession(key);
     if (!modeId || String(key).includes(":subagent:")) return;
-    try { localStorage.setItem(lastSessionStorageKey(modeId), String(key)); } catch {}
+    try { const name = lastSessionStorageKey(modeId), value = String(key); if (localStorage.getItem(name) !== value) localStorage.setItem(name, value); } catch {}
   };
   const storedSession = (mode) => {
     try {
@@ -934,12 +934,13 @@
   };
 
   const syncDockTrigger = (identity) => {
-    dockTrigger = identity.querySelector(".laolao-mode-dock-trigger");
+    dockTrigger = document.querySelector(".laolao-mode-dock-trigger");
     if (isDockedWorkspace() || !hasWorkspaceDock()) {
       dockTrigger?.remove();
       dockTrigger = null;
       return;
     }
+    if (dockTrigger && dockTrigger.parentElement !== identity) identity.append(dockTrigger);
     if (!dockTrigger) {
       dockTrigger = document.createElement("button");
       dockTrigger.type = "button";
@@ -973,10 +974,10 @@
     syncModePresentation(mode);
     // Before the sidebar lookup: the split exit must survive a hidden sidebar.
     syncDockExitButton();
-    const identity = document.querySelector(".sidebar-brand__identity") ||
+    const identity = (document.documentElement.dataset.pkWbCompact === '1' && document.querySelector('.pk-workspace-header__identity')) || document.querySelector(".sidebar-brand__identity") ||
       document.querySelector(".sidebar-brand");
     if (!identity) return;
-    trigger = identity.querySelector(".laolao-mode-switcher");
+    trigger = document.querySelector(".laolao-mode-switcher");
     if (!trigger) {
       trigger = document.createElement("button");
       trigger.type = "button";
@@ -986,6 +987,7 @@
       trigger.addEventListener("click", openMenu);
       identity.append(trigger);
     }
+    if (trigger.parentElement !== identity) { closeMenu(); identity.append(trigger); }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
     const pending = pendingModePortraitFx;
     const shouldHoldOldPortrait = pending && !pending.armed && pending.to === mode.id &&
@@ -1011,15 +1013,25 @@
   });
   window.addEventListener("popstate", render);
   let renderQueued = false;
-  new MutationObserver(() => {
-    if (renderQueued) return;
+  const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
+  new MutationObserver(records => {
+    // Streaming text and our status clocks do not change the mode controls.
+    // Only new/retired mount points and assistant avatars need reconciliation.
+    const relevant = records.some(record => {
+      if (record.type === "attributes") {
+        return record.target === document.documentElement || record.target.matches?.("img.chat-avatar.assistant, .agent-chat__welcome img");
+      }
+      return [...record.addedNodes, ...record.removedNodes].some(node =>
+        node.nodeType === 1 && (node.matches(modeMountSelector) || node.querySelector(modeMountSelector)));
+    });
+    if (!relevant || renderQueued) return;
     renderQueued = true;
     window.requestAnimationFrame(() => { renderQueued = false; render(); });
   }).observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["src"],
+    attributeFilter: ["src", "data-pk-wb-compact", "data-laolao-workspace-split", "data-laolao-workspace-dock"],
   });
   const schedulePreload = () => window.setTimeout(() => {
     if (typeof window.requestIdleCallback === "function") {

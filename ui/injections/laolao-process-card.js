@@ -53,6 +53,27 @@
   const keep = window.__pinkieProcessKeep instanceof Set ? window.__pinkieProcessKeep : new Set();
   window.__pinkieProcessKeep = keep;
   for (const key of Object.keys(store)) keep.add(key);
+  const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
+  // v8: show each received thought before folding, including a block delivered
+  // in the same batch as tool.start. Keep this transient state out of storage.
+  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
+  const typing = new Map();
+  let typingFrame = false;
+  const typedLength = (t, now) => t.from + (t.to - t.from) * Math.min(1, Math.max(0, (now - t.start) / (t.dur || 1)));
+  function typeOut(key, before, length) {
+    const now = performance.now(), current = typing.get(key);
+    const from = current ? Math.min(typedLength(current, now), before) : before;
+    typing.set(key, {from: reduced() ? length : from, to: length, start: now,
+      dur: reduced() ? 0 : Math.min(TYPE_MAX, Math.max(TYPE_MIN, (length - from) / TYPE_CPS * 1000)), doneAt: 0});
+  }
+  function hurryTyping() {
+    const now = performance.now();
+    for (const t of typing.values()) {
+      if (t.start + t.dur - now > TYPE_HURRY) {
+        t.from = typedLength(t, now); t.start = now; t.dur = TYPE_HURRY;
+      }
+    }
+  }
   let saveTimer = 0;
   const save = () => {
     clearTimeout(saveTimer);
@@ -87,10 +108,14 @@
     const key = resolveKey();
     if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
+    record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
     const before = record.text.length;
     if (!run.thinkingSince) { run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1; if (record.text) record.text += "\n\n"; }
-    record.text = (record.text + text).slice(-MAX_TEXT);
-    typeOut(key, before, record.text.length);
+    const combined = record.text + text, dropped = Math.max(0, combined.length - MAX_TEXT);
+    const previous = typing.get(key);
+    if (previous && dropped) { previous.from = Math.max(0, previous.from - dropped); previous.to = Math.max(0, previous.to - dropped); }
+    record.text = combined.slice(-MAX_TEXT);
+    typeOut(key, Math.max(0, before - dropped), record.text.length);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
     save();
@@ -100,6 +125,10 @@
     const record = store[run.key];
     if (record) { record.ms += Date.now() - run.thinkingSince; save(); }
     run.thinkingSince = 0;
+    // A stream may have finished drawing while the model was still thinking.
+    // Its one-second reading hold starts after thinking stops, never before.
+    const t = typing.get(run.key);
+    if (t) t.doneAt = 0;
   }
   function setState(state) {
     run.state = state;
@@ -118,7 +147,8 @@
       if (payload.stream === "lifecycle") {
         if (data.phase === "start") {
           if (run.state !== "asking" || run.session !== key) {
-            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), thinkingSince: 0, buffer: "", confetti: ""});
+            stopThinking();
+            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), thinkingSince: 0, buffer: "", confetti: "", migrate: null});
             run.oops.clear();
           }
           publishRunState(key, true);
@@ -128,6 +158,14 @@
           finish(aborted || data.phase === "error" ? "oops" : "done");
         }
         return;
+      }
+      // A page opened mid-run missed lifecycle.start. Adopt its first actual
+      // content/tool event so lifecycle.end can clear the live card normally.
+      if (!run.startedAt && Date.now() - run.doneAt > 3000
+          && ["thinking", "assistant", "tool"].includes(payload.stream)) {
+        Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(),
+          thinkingSince: 0, buffer: "", migrate: null});
+        publishRunState(key, true);
       }
       if (payload.stream === "thinking") {
         const text = String(data.delta ?? data.text ?? "");
@@ -151,9 +189,7 @@
     resolveKey();
     stopThinking();
     hurryTyping();
-    // The history sync after a turn replaces the optimistic user message, so
-    // the card's key changes. Carry this turn's thinking over to the new key.
-    if (run.key) run.migrate = {from: run.key, until: Date.now() + 20000};
+    if (run.key) run.migrate = {from: run.key, session: sessionKey(), until: Date.now() + 20000};
     if (state === "oops" && run.key) run.oops.set(run.key, Date.now());
     publishRunState(run.session, false);
     run.state = state;
@@ -164,70 +200,65 @@
     if (run.key && store[run.key]) rerender();
   }
 
-  // ---------- typing a thought out ----------
-  // Some providers (Gemini) think silently and then deliver the whole thought
-  // in one chunk right before acting. Type each new piece out instead of
-  // pasting it: about 120 characters a second, each piece within 0.5–2.5 s,
-  // and a finished turn hurries whatever is left. Kept cards restored after a
-  // reload show their text at once.
-  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
-  const typing = new Map();   // card key -> {from, to, start, dur, doneAt}
-  const typedLength = (t, now) => t.from + (t.to - t.from) * Math.min(1, Math.max(0, (now - t.start) / t.dur));
-  function typeOut(key, before, length) {
-    if (reduced()) { typing.delete(key); return; }
-    const now = performance.now(), current = typing.get(key);
-    const from = current ? Math.min(typedLength(current, now), before) : before;
-    if (length <= from) return;
-    const dur = Math.min(TYPE_MAX, Math.max(TYPE_MIN, ((length - from) / TYPE_CPS) * 1000));
-    typing.set(key, {from, to: length, start: now, dur, doneAt: 0});
-  }
-  function hurryTyping() {
-    const now = performance.now();
-    for (const t of typing.values()) {
-      const left = t.start + t.dur - now;
-      if (left > TYPE_HURRY) { t.from = typedLength(t, now); t.start = now; t.dur = TYPE_HURRY; }
-    }
-  }
-
-  // ---------- rendering into the two slots ----------
-  let typingFrame = false;
   function renderThinking(slot) {
     const key = slot.dataset.pinkieThinking || "";
-    const record = store[key];
-    const live = Boolean(run.thinkingSince && run.key === key);
+    let record = store[key];
+    if (!record?.text) {
+      const legacy = slot.pinkieLegacyKey || '';
+      const previous = store[legacy] || store[legacy.replace('pinkie:process:', 'pinkie:process:' + sessionKey() + ':')]
+        || Object.values(store).find(record => record.turn?.id && key === 'pinkie:process:' + record.turn.session + ':' + record.turn.id);
+      if (previous?.text) { record = store[key] = {...previous}; keep.add(key); save(); }
+    }
+    if (!record?.text && slot.pinkieHistoryThinking) {
+      record = store[key] = {text: String(slot.pinkieHistoryThinking).slice(-MAX_TEXT), ms: 0, count: 1,
+        at: Date.now(), fromHistory: true};
+      record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
+      keep.add(key); save();
+    }
+    const thinking = Boolean(run.thinkingSince && run.key === key);
     if (!record || !record.text) { if (slot.firstChild) slot.replaceChildren(); return; }
     const now = performance.now(), t = typing.get(key);
-    const typed = t ? Math.min(record.text.length, Math.round(typedLength(t, now))) : record.text.length;
+    const typed = t ? Math.min(record.text.length, Math.floor(typedLength(t, now))) : record.text.length;
     const isTyping = typed < record.text.length;
-    if (t && !isTyping && !t.doneAt) { t.doneAt = now; setTimeout(schedule, TYPE_HOLD + 20); }
-    // After the last character, stay open a moment before folding away.
+    if (t && !isTyping && !t.doneAt) {
+      t.doneAt = now;
+      setTimeout(schedule, TYPE_HOLD + 20);
+    }
     const holding = Boolean(t && !isTyping && now - t.doneAt < TYPE_HOLD);
-    if (t && !isTyping && !holding && !live) typing.delete(key);
+    if (t && !isTyping && !holding && !thinking) typing.delete(key);
     if (isTyping) typingFrame = true;
+    const live = thinking || isTyping || holding;
     let box = slot.querySelector(".pinkie-thinking");
     if (!box) {
       box = el("div", "pinkie-thinking");
       const head = el("button", "pinkie-thinking__head"); head.type = "button";
       head.append(el("span", "pinkie-thinking__chev", "›"), el("span", "pinkie-thinking__label"));
-      head.addEventListener("click", () => box.classList.toggle("is-open"));
       const body = el("div", "pinkie-thinking__body");
+      body.id = "pinkie-thought-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
+      head.setAttribute("aria-controls", body.id);
+      head.addEventListener("click", () => {
+        if (openedThoughts.has(key)) openedThoughts.delete(key); else openedThoughts.add(key);
+        schedule();
+      });
       body.append(el("div", "pinkie-thinking__text"));
       box.append(head, body);
-      // Fade in only when a thought arrives live, not when a finished card is redrawn.
-      if (live || isTyping) box.classList.add("is-entering");
+      if (live) box.classList.add("is-entering");
       slot.replaceChildren(box);
     }
-    const open = live || isTyping || holding;
-    box.classList.toggle("is-live", open);
+    box.classList.toggle("is-live", live);
     box.classList.toggle("is-typing", isTyping);
+    box.classList.toggle("is-open", openedThoughts.has(key));
+    const head = box.querySelector(".pinkie-thinking__head");
+    const expanded = String(live || openedThoughts.has(key));
+    if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
     const label = box.querySelector(".pinkie-thinking__label");
-    const ms = record.ms + (live ? Date.now() - run.thinkingSince : 0);
-    const text = live ? `正在思考 · ${Math.round(ms / 1000)}s` : `思考了 ${duration(ms || 1000)}${record.count > 1 ? ` · ${record.count} 次` : ""}`;
+    const ms = record.ms + (thinking ? Date.now() - run.thinkingSince : 0);
+    const text = thinking ? `正在思考 · ${Math.round(ms / 1000)}s` : `思考了 ${duration(ms || 1000)}${record.count > 1 ? ` · ${record.count} 次` : ""}`;
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
-    const shown = isTyping ? record.text.slice(0, typed) : record.text;
-    if (body.textContent !== shown) body.textContent = shown;
-    if (open) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
+    const visibleText = isTyping ? record.text.slice(0, typed) : record.text;
+    if (body.textContent !== visibleText) body.textContent = visibleText;
+    if (live && !openedThoughts.has(key)) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
   }
 
   function renderStatus(slot) {
@@ -265,44 +296,66 @@
     }
     const time = pill.querySelector(".pinkie-status__time");
     const seconds = run.startedAt ? Math.round((Date.now() - run.startedAt) / 1000) : 0;
-    time.textContent = state === "done" || state === "oops" || !run.startedAt ? "" : `${seconds}s`;
+    const nextTime = state === "done" || state === "oops" || !run.startedAt ? "" : `${seconds}s`;
+    if (time.textContent !== nextTime) time.textContent = nextTime;
   }
 
+  // The v8 thought cache follows the same completed card when native history
+  // replaces it with an orphan reply. Never migrate across a session/new run.
   function migrateThinking() {
     const move = run.migrate;
     if (!move) return;
-    if (Date.now() > move.until) { run.migrate = null; return; }
-    const cards = document.querySelectorAll(".chat-group--process[data-pinkie-process]");
-    const latest = cards[cards.length - 1]?.dataset.pinkieProcess || "";
-    if (!latest || latest === move.from) return;
-    if (store[move.from] && !store[latest]) {
-      store[latest] = store[move.from];
-      delete store[move.from];
-      keep.delete(move.from);
-      keep.add(latest);
-      save();
-    }
-    if (typing.has(move.from) && !typing.has(latest)) { typing.set(latest, typing.get(move.from)); typing.delete(move.from); }
-    if (run.doneKey === move.from) run.doneKey = latest;
-    if (run.oops.has(move.from)) { run.oops.set(latest, run.oops.get(move.from)); run.oops.delete(move.from); }
-    run.confetti = run.confetti === move.from ? latest : run.confetti;
+    if (Date.now() > move.until || sessionKey() !== move.session || run.startedAt) { run.migrate = null; return; }
+    const cards = [...document.querySelectorAll('.chat-group--process[data-pinkie-process]')];
+    if (cards.some(card => card.dataset.pinkieProcess === move.from)) return;
+    const card = cards.at(-1), key = card?.dataset.pinkieProcess || '';
+    const record = store[move.from];
+    if (!key || key === move.from || !record?.text) return;
+    const history = String(card.querySelector('[data-pinkie-thinking]')?.pinkieHistoryThinking || '').trim();
+    if (history && !record.text.includes(history)) { run.migrate = null; return; }
+    store[key] = {...record};
+    keep.add(key);
+    if (typing.has(move.from)) { typing.set(key, typing.get(move.from)); typing.delete(move.from); }
+    if (openedThoughts.has(move.from)) { openedThoughts.add(key); openedThoughts.delete(move.from); }
+    if (run.doneKey === move.from) run.doneKey = key;
+    if (run.oops.has(move.from)) run.oops.set(key, run.oops.get(move.from));
     run.migrate = null;
+    save();
   }
 
   let frame = 0;
+  const foldStates = new WeakMap();
+  function syncProcessFold(details) {
+    const live = details.dataset.live === "1";
+    // Leave a user's manual toggle alone during updates. Completion gathers
+    // the public narration into the same card and folds the whole process.
+    if (foldStates.get(details) === true && !live) details.open = false;
+    foldStates.set(details, live);
+  }
   function schedule() {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
+      typingFrame = false;
       if (run.startedAt) resolveKey();
       migrateThinking();
-      typingFrame = false;
+      document.querySelectorAll("details.pinkie-process").forEach(syncProcessFold);
       document.querySelectorAll("[data-pinkie-thinking]").forEach(renderThinking);
       document.querySelectorAll("[data-pinkie-status]").forEach(renderStatus);
       if (typingFrame) schedule();
     });
   }
-  new MutationObserver(schedule).observe(document.documentElement, {childList: true, subtree: true});
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    schedule();
+  });
+  // These slots are ours. Their timer/typewriter writes must not wake the
+  // document observer and redraw themselves on every animation frame.
+  new MutationObserver(records => {
+    if (records.some(record => !record.target.closest?.("[data-pinkie-thinking], [data-pinkie-status]"))) schedule();
+  }).observe(document.documentElement, {childList: true, subtree: true});
   setInterval(() => { if (run.startedAt || run.doneAt > Date.now() - 3200) schedule(); }, 250);
 
   // ---------- a small confetti pop from the sticker (drawn above the text) ----------
@@ -339,6 +392,6 @@
 
   // Restored kept cards need one projection pass after this script loads.
   setTimeout(rerender, 0);
-  window.addEventListener("pinkie:session-selected", () => { Object.assign(run, {key: "", startedAt: 0, thinkingSince: 0, buffer: "", state: ""}); schedule(); });
+  window.addEventListener("pinkie:session-selected", () => { typing.clear(); Object.assign(run, {key: "", startedAt: 0, thinkingSince: 0, buffer: "", state: "", migrate: null}); schedule(); });
   window.__laolaoProcessCard = {store, keep, run, schedule};
 })();

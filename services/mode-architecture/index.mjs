@@ -11,7 +11,13 @@ import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gp
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
+import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
+import {registerAppBrowserLifecycle} from './app-browser.mjs';
+import {createFileDelivery} from './file-delivery.mjs';
+import {registerRichRuntime} from './rich-runtime.mjs';
+import {registerWorkbench} from './workbench.mjs';
+import {registerLearningLibrary} from './learning-library.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -65,7 +71,7 @@ const DELIVERY_CLAIM = /(?:搞定|处理好了|弄好了|做完了|做成了|已
 const IN_PROGRESS_CLAIM = /(?:仍在|还在|正在|等待|排队|后台.{0,8}(?:生成|运行|处理|渲染)|稍后|尚未|未下载|未生成|待完成|被阻塞)/i;
 const HONEST_INCOMPLETE = /(?:明确.{0,8})?(?:未完成|尚未完成|无法完成|还没(?:有)?(?:完成|做完|搞定)|执行失败|验收失败|验证未通过|被阻塞|需要用户.{0,8}(?:登录|验证|确认|提供)|验证码|人机验证)/i;
 const ACTION_REQUEST = /(?:调用|执行|运行|修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|打开|删除|安装|部署|打包|测试|验证|完成|剪辑|剪成|剪掉|剪一|渲染|合成|导出|转换|转成|压缩|配音|配乐|绘制|画一|抠图|拼接|录屏|截图).{0,30}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app)?/i;
-const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
+const MUTATION_REQUEST = /(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|删|清理|清空|清除|安装|部署|打包|写入|更新|替换|移动|重命名|完成).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
 const QUESTION_ONLY = /(?:为什么|为何|怎么回事|什么原因|如何理解|能不能|有没有办法|是不是|是否|请解释|问一下|想知道|？|\?)/i;
 const ACTION_CONTINUATION = /^(?:继续|接着|往下|开始吧|动手吧|加强(?:一下)?|优化(?:一下)?|完善(?:一下)?|升级(?:一下)?|修复(?:啊|吧)?)[！!。.\s]*$/i;
 const NEGATED_MUTATION_CLAUSE = /(?:不要|无需|不需要|禁止|严禁|勿|不可|不能|不(?=修改|改动|创建|删除|写入|更新)|仅(?:需|限)?只读)[^。！？!?；;，,:：\n]{0,80}(?:修改|改|修复|修|做|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|完成)[^。！？!?；;，,:：\n]{0,80}(?=[。！？!?；;，,:：\n]|$)/gi;
@@ -83,6 +89,23 @@ function promptInstructionText(prompt = '') {
 function hasAttachedSourceContent(prompt = '') {
   return /(?:^\s*\[media attached:|<file\b|<<<EXTERNAL_UNTRUSTED_CONTENT>>>)/im.test(String(prompt || ''));
 }
+// 「翻译：<一段粘贴的文字>」「把下面这段总结一下：…」「……\n\n翻成英文」——
+// 粘贴进来的原文里出现「已完成」「测试通过」，是原文的内容，不是碧琪在汇报
+// 自己的进度。只要指令本身是对这段文字做翻译/润色/总结一类的事，回复里
+// 转述的完成字样就不能触发交付门禁（2026-10-08：翻译一份进度报告被连打
+// 三次回票，最后回复被吞）。返回指令那一小段；不是这类请求就返回 null。
+const TEXT_TASK = '(?:翻译|翻成|译成|译为|润色|改写|重写|转述|总结|概括|摘要|提炼|校对|纠错|缩写|扩写|解释|讲解|分析|读一下|看看)';
+const TEXT_TASK_HEAD = new RegExp(`^(?:请|帮我|麻烦|能不能|可以)?\\s*(?:把|将)?\\s*(?:(?:下面|以下|这段|这篇|这些|如下|这个)(?:的)?){0,2}(?:内容|文字|文本|话|段落|报告|消息)?\\s*${TEXT_TASK}[^\\n：:]{0,30}[：:\\n]`, 'i');
+const TEXT_TASK_TAIL = new RegExp(`\\n\\s*(?:请|帮我|麻烦)?\\s*(?:把|将)?\\s*(?:(?:上面|以上|上述|这段|这些)(?:的)?){0,2}(?:内容|文字|文本|话|段落|报告)?\\s*${TEXT_TASK}[^\\n]{0,30}$`, 'i');
+const TEXT_TASK_EN = /^(?:please\s+|can you\s+)?(?:translate|summari[sz]e|proofread|rewrite|paraphrase|polish|explain)\b[^\n:]{0,40}[:\n]/i;
+function inlineSourceInstruction(prompt = '') {
+  const text = promptInstructionText(prompt).replace(/^(?:\s*\[[^\]\n]{1,200}\]\s*\n)+/, '').trim();
+  const head = TEXT_TASK_HEAD.exec(text) || TEXT_TASK_EN.exec(text);
+  if (head && text.length - head[0].length >= 40) return head[0];
+  const tail = TEXT_TASK_TAIL.exec(text);
+  if (tail && text.length - tail[0].length >= 40) return tail[0];
+  return null;
+}
 // “都完成前不要回复”“完成后再总结”只描述先后顺序；“修复后的版本”“改动过的
 // 文件”只描述状态；“改成用 X 方法”“改按规则—例子—结论组织”只换做法或回答
 // 格式。它们都不是在要求改动或产出什么，不能让只读的检查任务被当成必须有
@@ -95,8 +118,11 @@ function isMutationRequest(prompt = '') {
   // Negated safety wording such as “只读，不要修改/创建/删除文件” must not
   // turn an observation into a file-changing task. Keep a positive mutation
   // elsewhere in the same prompt intact (for example: “修改 A，不要删除 B”).
-  const text = intentText(prompt).replace(NEGATED_MUTATION_CLAUSE, '');
-  if (/(?:只读|只查看|只读取|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(text)) {
+  // 「每做一步之前先说一句」是对说明方式的要求，不是要动手改东西。
+  const text = intentText(prompt).replace(NEGATED_MUTATION_CLAUSE, '').replace(/每(?:做|执行|进行)一步[^。！？!?\n]*/g, '')
+    // 「最后修改时间」是文件属性，不是要改文件。
+    .replace(/(?:最后|最近|上次)?修改(?:时间|日期|记录)/g, '');
+  if (/(?:只读|只查看|只看|只读取|只列出|不(?:删|改|动)(?![\u4e00-\u9fa5]{0,1}(?:除|动|写))|仅(?:需|限)?(?:调用|执行|查看|读取)|不要(?:修改|创建|删除|写入|更新))/i.test(text)) {
     // Generic “做/完成” near a later mention of 文件 describes a completed
     // *check* just as often as a write. Require an actual positive write verb.
     const explicitMutation = /(?:修改|改动|修复|生成|创建|制作|下载|上传|发布|安装|部署|打包|写入|更新|替换|移动|重命名).{0,36}(?:skill|技能|工作|任务|项目|文件|图片|视频|程序|脚本|应用|app|它|这个|该)?/i;
@@ -138,6 +164,9 @@ const DIAGNOSTIC_TARGET = /(?:权限|辅助功能|屏幕录制|状态|连通|健
 const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
 const OBSERVATION_TOOL = /(?:^|_)(?:read|view|inspect|find|search|list|status|open_file|file_fetch|dir_fetch|dir_list)(?:$|_)/i;
 const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
+// Bookkeeping tools change nothing outside the chat (a checklist the UI shows),
+// even though their names contain "update".
+const BOOKKEEPING_TOOL = /^(?:plan_update|update_plan)$/i;
 const SKILL_PATH = /(?:^|[\\/])SKILL\.md$/i;
 const VERIFIER_PATH = /(?:^|[\\/])tools[\\/]verify_completion\.py$/i;
 const EVIDENCE_FILE = /(?:pipeline_state|submission_ledger|video_ledger|qc_report|publish_receipt|publication_verification|cleanup_report)\.json|(?:published|public_page|cleanup_desktop)\.png|public_page_evidence\.txt/i;
@@ -184,6 +213,50 @@ const AUTO_COMPACTION_RECOVERY_FAILURE = /(?:auto[ -]?compaction.{0,96}(?:could 
 const CONTINUATION_ONLY_PROMPT = /^(?:(?:好|好的|可以|对|嗯|明白了|收到)[，,、\s]*)?(?:继续|接着|往下|做下去|继续完成)(?:吧|啊|呀)?[！!。,.\s]*$/u;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
 const WATCHDOG_MESSAGE = '\u2063';
+// 续接消息不能只是一个看不见的字符：模型会把它当成空消息/心跳，按 OpenClaw 的规则回 NO_REPLY，
+// 先生就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
+// 时间线也把它当内部消息，不会拆开这一轮。
+const WATCHDOG_CONTROL_PREFIX = '[pinkie-watchdog]';
+function watchdogControlMessage(instruction = '') {
+  const body = String(instruction || '').replace(/\s+/g, ' ').trim()
+    || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
+  return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
+}
+const PLUGIN_BUILD = '2026-10-14.5-models';
+
+// 同一个网关进程里，OpenClaw 会把本插件加载好几份：网关注册表一份（界面调用的 RPC 走这里），
+// agent runtime 注册表一份（运行中的钩子、工具走这里），按工作区 / 运行还会再建（日志 instance=3、4…）。
+// 每份 register() 都 new 自己的看门狗、CLE Kk、门禁……于是「停止」按钮的取消、深度思考的开关、
+// 推演任务的中止都改在 A 份，真正跑钩子的却是 B 份——改了等于没改（2026-10-12 实测：按停止后自动续跑）。
+// 这里把各份的内存状态（Map / Set：计时器、停止标记、回合状态、工具证据……）换成进程内共享的同一份，
+// 类本身不动，每份照常注册钩子 / 工具 / RPC，只是看的是同一份状态。按构建号区分，避免新旧代码混用。
+function sharePluginState(owner, scope, fields) {
+  if (!owner) return;
+  const root = globalThis.__pinkieSharedState instanceof Map
+    ? globalThis.__pinkieSharedState
+    : (globalThis.__pinkieSharedState = new Map());
+  for (const field of fields) {
+    const current = owner[field];
+    if (!(current instanceof Map || current instanceof Set)) continue;
+    const id = `${PLUGIN_BUILD}:${scope}.${field}`;
+    if (!root.has(id)) root.set(id, current);
+    owner[field] = root.get(id);
+  }
+}
+// 用户主动停止的会话：短窗口内任何 agent_end 都不按故障自动续接。
+// 一次停止会产生不止一个 agent_end（嵌套执行通道各报一次中断），单次的 skipNextFailure
+// 会被第一个吃掉，第二个就被当成上游断流自动续上——表现为「按了停止，几秒后又自己跑起来」。
+// 记录放在 globalThis 上，插件万一被加载两份也共享同一份停止记录；用户发下一条消息时结束窗口。
+const USER_STOP_GRACE_MS = 10_000;
+const userStops = globalThis.__pinkieUserStops instanceof Map
+  ? globalThis.__pinkieUserStops
+  : (globalThis.__pinkieUserStops = new Map());
+function userStoppedRecently(sessionKey) {
+  const until = userStops.get(sessionKey) || 0;
+  if (until > Date.now()) return true;
+  if (until) userStops.delete(sessionKey);
+  return false;
+}
 // Upstream availability is intentionally handled as a long-lived recovery
 // lane.  Keep the first retry quick, then give a flapping provider more room
 // instead of exhausting the visible turn after only a few seconds.  Operators
@@ -375,6 +448,10 @@ export const WORK_STANDARD_RULES = `
 5. 交付前亲自检查成品。看一遍产物本身：视频用 look-video、网页用 look-page、文档用 look-doc 生成预览图，再用 read 打开看；程序要运行，文字要通读；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
 6. 卡住先找原因。报错、下载或安装卡住、结果不对时，先查清原因（网络、依赖、权限、参数、版本）再处理；同一个办法失败两次就换思路，不在原地反复等待或重试。
 7. 降级要说清楚。如果只能做出比要求差的版本（换了更简陋的做法、缩了范围、少了功能），交付时第一句就说明差距和原因，并给出补救办法，不把降级版说成完成。
+8. 做了网页、前端或本地服务，交付前用 app_browser 的 serve 或 open 在 App 侧栏打开，再看一次 snapshot 或截图，确认页面能用。
+9. 先生或老板让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
+10. 做出交给先生或老板的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、网页、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。
+11. 只附本轮实际完成、检查过的成品，不附中间产物、日志或临时文件；MEDIA: 行不要放进代码块。
 `.trim();
 
 const TOOL_PROGRESS_RULES = `
@@ -498,8 +575,13 @@ function hostFileMutationReceipt(toolName = '', result = null) {
     result.structuredContent,
     result.structuredContent?.details,
   ].filter(value => value && typeof value === 'object' && !Array.isArray(value));
-  return candidates.some(value => value.changed === true || value.created === true
-    || value.modified === true || value.deleted === true || value.applied === true);
+  if (candidates.some(value => value.changed === true || value.created === true
+    || value.modified === true || value.deleted === true || value.applied === true)) return true;
+  // OpenClaw 自带工具的成功回执：edit 带非空 diff，write 回「Successfully wrote N bytes」，
+  // apply_patch 回「Success. Updated the following files」。
+  if (candidates.some(value => typeof value.diff === 'string' && /^[-+]/m.test(value.diff))) return true;
+  const text = resultText(result, 2_000);
+  return /Successfully (?:wrote [1-9]\d* bytes|replaced [1-9]\d* block)|Success\. Updated the following files/i.test(text);
 }
 
 function patchPaths(params = {}) {
@@ -512,7 +594,28 @@ function patchPaths(params = {}) {
   return [...new Set(paths)];
 }
 
-function toolTargetPaths(toolName = '', params = {}) {
+// 工具参数里的相对路径（write/edit 的 path: "cle-lab/x.py"）是相对 agent 工作区的。以前这里只收绝对路径，
+// 相对路径的写入/修改一律看不见，门禁就误判「执行型修改任务没有主机确认的文件变化」（2026-10-12 实测）。
+let agentWorkspaceCache = null;
+function agentWorkspaceDir(ctx = {}) {
+  if (typeof ctx.workspaceDir === 'string' && path.isAbsolute(ctx.workspaceDir)) return ctx.workspaceDir;
+  try {
+    if (!agentWorkspaceCache) {
+      agentWorkspaceCache = new Map();
+      const config = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openclaw', 'openclaw.json'), 'utf8'));
+      for (const agent of config?.agents?.list || []) {
+        const dir = String(agent?.workspace || '').replace(/^~(?=\/|$)/, os.homedir());
+        if (agent?.id && path.isAbsolute(dir)) agentWorkspaceCache.set(String(agent.id), dir);
+      }
+    }
+    const agentId = String(ctx.agentId || agentFromSessionKey(String(ctx.sessionKey || '')) || 'main');
+    return agentWorkspaceCache.get(agentId) || '';
+  } catch {
+    return '';
+  }
+}
+
+function toolTargetPaths(toolName = '', params = {}, baseDir = '') {
   const name = String(toolName || '').toLowerCase();
   const values = [];
   for (const key of ['path', 'file_path', 'filePath', 'target', 'destination', 'dest', 'outputPath', 'output_path']) {
@@ -523,18 +626,45 @@ function toolTargetPaths(toolName = '', params = {}) {
   // A small, conservative extraction for shell commands. It is only used to
   // prove a host-side file effect; unknown commands remain valid tool events.
   if (name === 'exec' || name.endsWith('_exec')) {
-    const command = String(params?.command || params?.cmd || '');
-    const cwd = String(params?.cwd || params?.workdir || '');
-    if (path.isAbsolute(cwd)) values.push(cwd);
-    for (const match of command.matchAll(/["'](\/[^"'\n]+)["']/g)) {
-      if (match[1]) values.push(match[1]);
-    }
-    for (const match of command.matchAll(/(?:>|>>|\b(?:touch|mkdir|rm|mv|cp|chmod|sips|ffmpeg)\b[^\n]*?\s)(["']?\/(?:[^\s"']+)["']?)/g)) {
-      const value = String(match[1] || '').replace(/^['"]|['"]$/g, '');
-      if (value) values.push(value);
-    }
+    values.push(...execTargetPaths(params, baseDir));
   }
-  return [...new Set(values)].filter(value => path.isAbsolute(value));
+  const resolved = values.map(value => (path.isAbsolute(value) || !baseDir ? value
+    : path.resolve(baseDir, value.replace(/^~(?=\/|$)/, os.homedir()))));
+  return [...new Set(resolved)].filter(value => path.isAbsolute(value));
+}
+
+// exec 命令里会被写到的文件。相对路径按 cwd / 开头的 `cd 目录 &&` / 工作区解析——
+// 2026-10-12 实测：`python3 -c "…open('cle-lab/t3-sales/report.html','w')…"` 生成的报告、
+// `cat > notes/a.md <<EOF` 写的笔记都只给了相对路径，前后快照里根本没有它们，
+// 门禁就判「执行型修改任务没有主机确认的文件变化」。顺序：明确的写文件调用 →
+// 重定向/tee/cp/mv/sed -i 等目标 → 其余带引号的路径（调用方只取前若干个做快照）。
+function execTargetPaths(params = {}, baseDir = '') {
+  const command = String(params?.command || params?.cmd || '');
+  const cwdParam = String(params?.cwd || params?.workdir || '').replace(/^~(?=\/|$)/, os.homedir());
+  let base = cwdParam ? (path.isAbsolute(cwdParam) || !baseDir ? cwdParam : path.resolve(baseDir, cwdParam)) : baseDir;
+  const cdPrefix = command.match(/^\s*cd\s+(["']?)([^\s"';&|]+)\1\s*&&/);
+  if (cdPrefix && base) base = path.resolve(base, cdPrefix[2].replace(/^~(?=\/|$)/, os.homedir()));
+  const out = [];
+  if (cwdParam && path.isAbsolute(base || '')) out.push(base);
+  const add = (raw) => {
+    let value = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!value || value.length > 400 || value.includes('://') || /[*?$`\\{}<>|\n]/.test(value)) return;
+    if (/^(?:\/dev\/|-)/.test(value) || /^&\d?$/.test(value)) return;
+    value = value.replace(/^~(?=\/|$)/, os.homedir());
+    if (path.isAbsolute(value)) out.push(value);
+    else if (base) out.push(path.resolve(base, value));
+  };
+  for (const match of command.matchAll(/\b(?:open|writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|write_text|write_bytes|to_csv|to_excel|to_json|savefig|save|Path)\(\s*[rRbBfF]?(["'])([^"'\n]+)\1/g)) add(match[2]);
+  for (const match of command.matchAll(/(?<![<0-9&>])>>?\s*(["']?)([^\s"'&|;<>()]+)\1/g)) add(match[2]);
+  for (const match of command.matchAll(/\b(?:touch|mkdir|rm|mv|cp|tee|chmod|sips|ffmpeg|ln)\b([^\n;&|<>]*)/g)) {
+    for (const token of match[1].trim().split(/\s+/)) if (token && !token.startsWith('-')) add(token);
+  }
+  for (const match of command.matchAll(/\bsed\s+-i(?:\s*''|\s*"")?\s+(?:'[^'\n]*'|"[^"\n]*"|\S+)\s+([^\n;&|<>]+)/g)) {
+    for (const token of match[1].trim().split(/\s+/)) if (token && !token.startsWith('-')) add(token);
+  }
+  for (const match of command.matchAll(/["'](\/[^"'\n]+)["']/g)) add(match[1]);
+  for (const match of command.matchAll(/["']((?:~\/|\.{1,2}\/)?[^\s"'\/\n:]+(?:\/[^\s"'\n]+)+|[^\s"'\/\n]+\.[A-Za-z][A-Za-z0-9]{0,7})["']/g)) add(match[1]);
+  return out;
 }
 
 function snapshotFile(file) {
@@ -754,6 +884,14 @@ function isLikelyActionRequest(prompt = '') {
   return false;
 }
 
+// 小应用、表单、图表直接在聊天里交付时，回复里的 ```app / ui / chart / mermaid 代码块
+// 本身就是成品，不需要工具记录。只在先生没有要求文件、目录、运行或测试时这样算。
+const INLINE_DELIVERABLE = /```(?:app|ui|chart|mermaid)[ \t]*\n[\s\S]{40,}?```/;
+const FILE_OR_RUN_REQUEST = /(?:文件|目录|文件夹|路径|保存|存到|存成|写进|写入|工作区|仓库|项目里|\.(?:html?|jsx?|tsx?|py|md|json|css|txt|csv)\b|运行|执行|跑一下|测试|部署|安装|下载|上传|发布)/i;
+function inlineDeliveryOnly(prompt = '', reply = '') {
+  return INLINE_DELIVERABLE.test(String(reply || '')) && !FILE_OR_RUN_REQUEST.test(intentText(prompt));
+}
+
 function isReadOnlyDiagnosticRequest(prompt = '') {
   const text = String(prompt || '').trim();
   return Boolean(text && !isMutationRequest(text)
@@ -761,10 +899,19 @@ function isReadOnlyDiagnosticRequest(prompt = '') {
     && DIAGNOSTIC_TARGET.test(text));
 }
 
+// 回复里用 ``` 或 ` 引用的是命令输出、测试结果、代码，不是碧琪对任务状态的陈述。
+// 2026-10-12 实测：待办程序的测试输出「未完成排在已完成前面」被当成「承认没做完」，
+// 和「全部通过」一起判成自相矛盾。
+function proseOnly(value = '') {
+  return String(value || '')
+    .replace(/```[\s\S]*?(?:```|$)/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ');
+}
+
 function isHonestIncomplete(value = '') {
   // A report can explicitly say that an expected failed probe does *not*
   // mean the overall task is incomplete. Do not invert that negation.
-  const text = String(value || '').replace(
+  const text = proseOnly(value).replace(
     /(?:不代表|并非|不是|不等于|不能说明|并不意味着).{0,12}(?:任务|整体|本轮)?未完成/gi, '',
   );
   if (!HONEST_INCOMPLETE.test(text)) return false;
@@ -936,6 +1083,7 @@ function toolArgumentsText(entry = {}) {
 function toolEffectKind(entry = {}) {
   if (!entry || entry.failed) return '';
   const name = String(entry.name || '').toLowerCase();
+  if (BOOKKEEPING_TOOL.test(name)) return '';
   const args = toolArgumentsText(entry);
   if (Array.isArray(entry.effects) && entry.effects.some(effect => effect.changed)) return 'host-file-change';
   // “工具返回成功”不等于文件真的变化。write/edit/apply_patch 只有前后
@@ -949,7 +1097,7 @@ function toolEffectKind(entry = {}) {
   if (/(?:send|publish|upload|download|install|deploy|create|delete|update|move)/i.test(name)) return 'external-action';
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
-    if (/(?:^|[;&|]\s*)(?:git\s+(?:push|commit)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|pip\s+install|brew\s+install|openclaw\s+(?:skills\s+(?:install|update|remove|publish|sync)|gateway\s+(?:restart|stop))|clawhub\s+(?:skill\s+publish|sync)|open\s|osascript\s|mkdir\s|rm\s|mv\s|cp\s|chmod\s|ffmpeg\s|codesign\s|xcodebuild\s|docker\s+(?:build|push)|(?:python\d*|node)\s+[^\n]*(?:write|create|generate|download|publish))/i.test(command)) {
+    if (/(?:^|[;&|]\s*)(?:git\s+(?:push|commit)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|pip\s+install|brew\s+install|openclaw\s+(?:skills\s+(?:install|update|remove|publish|sync)|gateway\s+(?:restart|stop))|clawhub\s+(?:skill\s+publish|sync)|open\s|osascript\s|mkdir\s|rm\s|mv\s|cp\s|chmod\s|ffmpeg\s|codesign\s|xcodebuild\s|docker\s+(?:build|push)|(?:python\d*|node)\s+[\s\S]*(?:write|create|generate|download|publish))/i.test(command)) {
       return 'executed-action';
     }
   }
@@ -968,16 +1116,57 @@ function toolIsMechanicalCheck(entry = {}) {
   if (/(?:^|_)exec(?:$|_)/i.test(name)) {
     const command = String(entry.params?.command || entry.params?.cmd || '');
     if (/verify_completion\.py\b/i.test(command)) return true;
-    return /(?:^|[;&|]\s*)(?:look-(?:video|page|doc)\b|markitdown\b|pdftotext\b|pdfinfo\b|tesseract\b|magick\s+identify\b|test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor|skills\s+(?:list|check)))/i.test(command);
+    if (/(?:^|[;&|(]\s*)(?:look-(?:video|page|doc)\b|markitdown\b|pdftotext\b|pdfinfo\b|tesseract\b|magick\s+identify\b|test\s|\[\s*!?\s*-[efdsrcwx]\s+|pytest\b|python\s+-m\s+(?:pytest|unittest)|npm\s+(?:test|run\s+(?:test|lint|build))|pnpm\s+(?:test|run\s+(?:test|lint|build))|node\s+--check|tsc\b|eslint\b|ruff\b|mypy\b|cargo\s+(?:test|check)|go\s+test|swift\s+test|xcodebuild\b|ffprobe\b|file\s|stat\s|ls\s|find\s|rg\s|git\s+(?:diff|status)|codesign\s+--verify|openclaw\s+(?:gateway\s+status|status|doctor|skills\s+(?:list|check)))/i.test(command)) return true;
+    // 实测里常见、却被漏判的核对方式：python3 -m unittest、直接跑测试文件、node --test、golden/check
+    // 脚本、curl 测接口、cat/diff/cmp/wc/grep 读回结果、lsof/ps 看端口和进程（2026-10-12 长任务测试）。
+    if (/(?:^|[;&|(]\s*)(?:python\d*(?:\.\d+)?\s+(?:-\w+\s+)*(?:-m\s+(?:pytest|unittest|doctest|py_compile|json\.tool)\b|\S*(?:^|[\/_-])tests?(?:[\/_.-]\S*)?\.py\b|\S*_test\.py\b)|node\s+(?:--test\b|\S*(?:test|spec)\S*\.[cm]?js\b)|npx\s+(?:jest|vitest|mocha|tsc|eslint)\b|(?:bun|deno)\s+test\b|make\s+(?:test|check)\b|(?:\.\/|(?:ba|z)?sh\s+)\S*(?:test|golden|check|verify|smoke)\S*\.sh\b|curl\s|wget\s|cat\s|head\s|tail\s|wc\s|diff\s|cmp\s|grep\s|egrep\s|jq\s|sqlite3\s|unzip\s+-l|zipinfo\s|tar\s+-?t|shasum\s|md5\s|lsof\s|nc\s+-z|ps\s|pgrep\s|plutil\s+-p|xmllint\s|sed\s+-n\s)/i.test(command)) return true;
+    // 只读的 python -c 校验（json.load、读文件、断言）；带写文件 / 删除的不算。
+    return /(?:^|[;&|(]\s*)python\d*(?:\.\d+)?\s+-c\s/i.test(command)
+      && !/(?:open\([^)]*['"][wax]|\.write\(|unlink|remove|rmtree|rename|shutil\.(?:copy|move))/i.test(command);
   }
   return false;
+}
+
+// 收尾清理：只是 `rm` 掉本轮自己用 write 建的文件（测试文件、临时文件）。它前面那次真正的改动
+// 若已核验过，就不该再因为「删完没复查」把整份最终回复退回去（2026-10-12 实测：读→改→复读→删
+// 测试文件，最终回复被判未核验）。删除任何本轮之前就存在的东西仍然要求复查。
+function cleanupTargets(entry = {}) {
+  if (!/(?:^|_)exec(?:$|_)/i.test(String(entry.name || ''))) return null;
+  const command = String(entry.params?.command || entry.params?.cmd || '').trim();
+  const match = /^rm\s+((?:-[a-zA-Z]+\s+)*)([^;&|<>`$(){}*?\n]+)$/.exec(command);
+  if (!match) return null;
+  const targets = match[2].trim().split(/\s+/).map(item => item.replace(/^['"]|['"]$/g, '')).filter(Boolean);
+  return targets.length ? targets : null;
+}
+
+function isTurnCleanup(state, index) {
+  const targets = cleanupTargets(state.tools[index]);
+  if (!targets) return false;
+  const earlier = state.tools.slice(0, index).filter(entry => entry && !entry.failed);
+  const written = new Set();
+  for (const entry of earlier) {
+    if (String(entry.name || '').toLowerCase() !== 'write') continue;
+    const target = String(entry.params?.path || entry.params?.file_path || entry.params?.filePath || '');
+    if (target) written.add(path.basename(target));
+  }
+  // 也算本轮用命令建出来的临时文件：> / >> 重定向、heredoc、touch、tee、cp 目标、-o 输出。
+  const createdByCommand = (name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(?:>>?|\\btouch\\b[^\\n;&|]*|\\btee\\b[^\\n;&|]*|\\bcp\\b[^\\n;&|]*|\\s-o\\s*|--output[=\\s])\\s*['"]?[^\\s'";&|]*${escaped}(?![\\w.-])`);
+    return earlier.some(entry => /(?:^|_)exec(?:$|_)/i.test(String(entry.name || ''))
+      && pattern.test(String(entry.params?.command || entry.params?.cmd || '')));
+  };
+  return targets.every(target => {
+    const name = path.basename(target);
+    return written.has(name) || createdByCommand(name);
+  });
 }
 
 function effectVerificationReason(state) {
   const mutationRun = isLikelyActionRequest(state.prompt)
     && isMutationRequest(state.prompt);
   if (!mutationRun) return '';
-  const effectIndex = state.tools.findLastIndex(entry => Boolean(toolEffectKind(entry)));
+  const effectIndex = state.tools.findLastIndex((entry, index) => Boolean(toolEffectKind(entry)) && !isTurnCleanup(state, index));
   if (effectIndex < 0) return '执行型修改任务没有主机确认的文件变化或外部操作结果';
   const effect = state.tools[effectIndex];
   // A tool returning "ok" only proves that the call ended.  It does not prove
@@ -1022,7 +1211,11 @@ function producedDeliverables(entry = {}, prompt = '') {
   if (/^(?:write|edit|apply_patch)$/.test(name)) candidates.push(...toolParamPaths(entry));
   if (/(?:^|_)exec(?:$|_)/.test(name) && PRODUCING_COMMAND.test(command)) candidates.push(...command.split(/\s+/));
   const kinds = new Set();
-  for (const candidate of candidates) {
+  for (const raw of candidates) {
+    // 命令里的网址（核对链接、下载地址）不是本轮做出来的文件：t5 调研里一段 urllib 核对链接的脚本
+    // 含 https://…/index.html，曾被误判成「做出了网页却没预览」（2026-10-12）。
+    const candidate = String(raw || '').replace(/^[\s'"(\[]+|[\s'"),;\]]+$/g, '');
+    if (!candidate || /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate) || candidate.includes('://')) continue;
     if (/[\\/]node_modules[\\/]/.test(candidate)) continue;
     const match = DELIVERABLE_EXT.exec(candidate);
     if (!match) continue;
@@ -1064,8 +1257,16 @@ function contentInspectionReason(state) {
 const PROMISE_TAIL = /(?:这就(?:去|开始|动手|做|弄|安排)|马上(?:去|开始|动手|处理|做|弄|安排)|现在就(?:去|开始|动手)|稍等(?:一下|片刻|一会儿?)?|请稍候|接下来(?:碧琪|我)?(?:会|就|先|来|去|马上)|(?:碧琪|我)(?:先|这就|马上|立刻|立即)(?:去|来|开始|动手)|等(?:碧琪|我)(?:一下|一会儿?|做完|弄好))/;
 const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|老板)(?:确认|决定|选|同意|提供|告诉|回复)|无法|不能|没法|做不到|卡在|卡住|阻塞|失败|报错|权限|缺少|额度|网络/;
 
+// 回复只是「准备向先生汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
+// 最终回复却只有一句「碧琪准备向先生汇报。」）。
+const REPORT_ANNOUNCE_TAIL = /(?:准备|这就|马上|现在|下面|接下来|即将)(?:就)?(?:向|给|跟)?(?:先生|老板|您)?(?:做个?|进行)?(?:汇报|报告|总结|说明结果|交付结果)[。.!！~～]*$/;
+
 function promiseWithoutActionReason(reply = '') {
-  const tail = String(reply || '').trim().slice(-140);
+  const text = String(reply || '').trim();
+  const tail = text.slice(-140);
+  if (tail && text.length <= 200 && REPORT_ANNOUNCE_TAIL.test(tail) && !/[？?]/.test(tail)) {
+    return '回复最后只说准备汇报，这一轮就结束了，先生并没有看到汇报。直接给出完整的最终汇报：结果是什么、怎么验证的、还有什么没做或要注意';
+  }
   if (!tail || !PROMISE_TAIL.test(tail) || /[？?]/.test(tail) || PROMISE_BLOCKER.test(tail)) return '';
   return '回复最后说要去做，但这一轮就此结束了，事情并没有做。不要只预告，直接调用工具把它做完，做完再回复';
 }
@@ -1345,7 +1546,7 @@ export class CompletionIntegrityGuard {
       mutationEpoch: 0, verification: null, authorityRecords: new Map(),
     };
     const params = event.params && typeof event.params === 'object' ? event.params : {};
-    const paths = toolTargetPaths(event.toolName, params).slice(0, 16);
+    const paths = toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx)).slice(0, 24);
     state.pendingTools.set(toolCallKey(event), paths.map(snapshotFile));
     this.runs.set(key, state);
   }
@@ -1371,7 +1572,7 @@ export class CompletionIntegrityGuard {
     // discarded just because the transport failed to correlate hook ids.
     if (!failed && !effects.some(effect => effect.changed)
         && hostFileMutationReceipt(event.toolName, event.result)) {
-      effects = toolTargetPaths(event.toolName, params).slice(0, 16).map(target => ({
+      effects = toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx)).slice(0, 16).map(target => ({
         ...snapshotFile(target), changed: true, hostReported: true,
       }));
     }
@@ -1744,6 +1945,11 @@ export class CompletionIntegrityGuard {
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
     // assistant's status report, and must not trigger a retry loop.
     if (!actionRun && hasAttachedSourceContent(state.prompt)) return;
+    // The same holds for text pasted inline to translate, polish or summarise,
+    // as long as the instruction itself does not ask for a file or other effect.
+    const inline = inlineSourceInstruction(state.prompt);
+    if (inline !== null && !isLikelyActionRequest(inline)
+        && !/(?:保存|存成|存到|写入|导出|生成.{0,4}文件|发送|发到|发给|上传|发布)/.test(inline)) return;
     if (actionRun) {
       const promise = promiseWithoutActionReason(reply);
       const nudged = promise && this.softRevise(key, state, 'promise', reply, promise);
@@ -1761,7 +1967,7 @@ export class CompletionIntegrityGuard {
       return this.revise(key, '回复同时把整体任务写成“完成”和“未完成/被阻塞”，状态自相矛盾');
     }
 
-    if (overallCompletion && IN_PROGRESS_CLAIM.test(reply)) {
+    if (overallCompletion && IN_PROGRESS_CLAIM.test(proseOnly(reply))) {
       return this.revise(key, '回复同时声称“已完成”和“仍在生成/等待”，状态自相矛盾');
     }
     const tampering = evidenceTamperingReason(state);
@@ -1772,6 +1978,7 @@ export class CompletionIntegrityGuard {
     // A bare "continue" is ambiguous, but a terminal completion claim is not:
     // it must never be accepted with zero execution evidence merely because
     // this turn's short follow-up omitted the original action wording.
+    if (inlineDeliveryOnly(state.prompt, reply)) return;
     const requiresExecution = actionRun || (completionClaimed && !QUESTION_ONLY.test(state.prompt));
     if (requiresExecution) {
       // A read/inspect request is still real work, but it does not need a
@@ -2472,7 +2679,34 @@ export class CleKkSupervisor {
   finalizeDecision(event = {}, ctx = {}, options = {}) {
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
-    return this.integrity.finalize(bound.event, bound.ctx, options);
+    return this.remindOnce(this.integrity.finalize(bound.event, bound.ctx, options), bound.event, bound.ctx);
+  }
+
+  /* 交付核验只提醒、不拦截（2026-10-08 用户选定）。
+     同一轮用户消息里，第一次发现问题时把回复退回一次，附一句温和的提醒；
+     碧琪改过的下一版（或隔了一个来回仍是同样的话）一律放行，不再打回、
+     不再吞掉回复。同一版回复在同一个来回里会被两个钩子各查一次，所以
+     3 秒内的同一份文字保持同一个结论。 */
+  remindOnce(decision, event = {}, ctx = {}) {
+    if (decision?.action !== 'revise') return decision;
+    const key = this.key(event, ctx);
+    const turn = key ? this.turns.get(key) : null;
+    if (!turn) return decision;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '').trim();
+    const replyHash = hashForAudit(reply);
+    const now = Date.now();
+    const seen = turn.reminded;
+    if (seen && (seen.reply !== replyHash || now - seen.at > 3_000)) return undefined;
+    if (!seen) turn.reminded = {reply: replyHash, at: now, reason: String(decision.reason || '').slice(0, 300)};
+    const reason = String(decision.reason || '').replace(/^全局交付真实性门禁：/, '');
+    return {
+      ...decision,
+      retry: {
+        ...(decision.retry || {}),
+        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里先生要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
+        maxAttempts: 1,
+      },
+    };
   }
 
   restore(key) {
@@ -2499,6 +2733,9 @@ export class CleKkSupervisor {
       // 24 -> 25 here used to discard the final legal attempt silently.
       retryResumeAttempt: Boolean(persisted.retryScheduled && Number(persisted.retryAttempts) > 0),
       retryExhausted: Boolean(persisted.retryExhausted),
+      reminded: persisted.reminded && typeof persisted.reminded === 'object' ? {
+        reply: String(persisted.reminded.reply || ''), at: Number(persisted.reminded.at) || 0, reason: String(persisted.reminded.reason || ''),
+      } : null,
       corrupted: Boolean(persisted.corrupted),
       toolIds: new Set(),
       followUps: Array.isArray(persisted.followUps) ? persisted.followUps.slice(-8) : [],
@@ -2548,6 +2785,7 @@ export class CleKkSupervisor {
       retryScheduledAt: turn.retryScheduled ? (Number(turn.retryScheduledAt) || Date.now()) : 0,
       retryAttempts: Number(turn.retryAttempts) || 0,
       retryExhausted: Boolean(turn.retryExhausted),
+      reminded: turn.reminded || null,
       followUps: Array.isArray(turn.followUps) ? turn.followUps.slice(-8) : [],
       // Tool evidence is append-only in the audit journal. Rewriting the full
       // history into this state file after every tool caused long sessions to
@@ -2767,13 +3005,19 @@ export class CleKkSupervisor {
       // must not hide a concurrently discovered journal break. Retrying the
       // former reason would append nothing to the broken chain and loop until
       // the entire integrity budget is burned.
-      decision = this.integrity.revise(key, chain.reason || '审计链断裂，无法确认工具事件完整性');
+      decision = this.remindOnce(this.integrity.revise(key, chain.reason || '审计链断裂，无法确认工具事件完整性'), event, ctx);
     }
     if (decision?.action === 'revise') {
       const previous = turn.pending;
+      // before_message_write 拿不到 runId（审计里 run 为空），before_agent_finalize 才有。
+      // 同一份候选被两个钩子各判一次时，空 runId 视为同一次尝试：否则「已安排重试」被清掉，
+      // agent_end 又记一次，唯一的一次提醒额度被重复计数直接耗尽，连已排好的重试计时器也被撤掉，
+      // 结果整轮没有最终回复（界面上表现为「已中断」/像断线了一样不再恢复）。
+      const sameAttempt = Boolean(previous) && previous.decision?.reason === decision.reason
+        && (!previous.runId || !runId || previous.runId === runId);
       turn.pending = {
         decision,
-        runId,
+        runId: runId || previous?.runId || '',
         textHash: hashForAudit(reply),
         at: Date.now(),
       };
@@ -2784,9 +3028,7 @@ export class CleKkSupervisor {
         turn.retryExhausted = true;
         this.retireRetry(key);
       }
-      turn.retryScheduled = previous && previous.runId === runId && previous.decision?.reason === decision.reason
-        ? turn.retryScheduled
-        : false;
+      turn.retryScheduled = sameAttempt ? turn.retryScheduled : false;
       this.audit.append('final_rejected', key, {
         run: runId ? hashForAudit(runId) : '',
         reason: String(decision.reason || '').slice(0, 600),
@@ -2797,12 +3039,12 @@ export class CleKkSupervisor {
     }
     const hadPending = Boolean(turn.pending);
     const explicitIncomplete = isHonestIncomplete(reply)
-      || (IN_PROGRESS_CLAIM.test(reply) && !COMPLETION_CLAIM.test(reply));
+      || (IN_PROGRESS_CLAIM.test(proseOnly(reply)) && !COMPLETION_CLAIM.test(reply));
     // 只有真正通过门禁的终稿，或明确告诉用户“尚未完成/被阻塞”的诚实
     // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
     // 静默改成成功，否则下一轮又会失去续接依据。
     if (reply && !internalControlText(reply)) {
-      if (hadPending && isLikelyActionRequest(turn.prompt)
+      if (hadPending && !turn.reminded && isLikelyActionRequest(turn.prompt)
         && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !explicitIncomplete) {
         this.persist(key, turn);
         return decision;
@@ -2903,12 +3145,9 @@ export class CleKkSupervisor {
     // lifecycle hook below.
     let pending = this.pendingFor({}, ctx);
     if (isTerminalAssistantMessage(message)) {
-      const decision = prechecked ? preDecision : this.integrity.finalize({
-        lastAssistantMessage: text,
-        messages: [message],
-        runId: ctx.runId,
-        sessionKey: ctx.sessionKey,
-      }, ctx, {verifyExternal: false});
+      const candidate = {lastAssistantMessage: text, messages: [message], runId: ctx.runId, sessionKey: ctx.sessionKey};
+      const decision = prechecked ? preDecision
+        : this.remindOnce(this.integrity.finalize(candidate, ctx, {verifyExternal: false}), candidate, ctx);
       // A pending marker belongs to the previously rejected attempt, not to
       // every future final in this session. Re-evaluate every new terminal
       // against the latest tool evidence before transcript persistence. A
@@ -3436,6 +3675,7 @@ export class UpstreamWatchdog {
     if (!key || isInternalExecutionSession(key)) return;
     if (!internalControlText(event.prompt)) {
       this.models.delete(key);
+      userStops.delete(key);
       return;
     }
     return modelOverrideFor(this.models.get(key));
@@ -3444,7 +3684,7 @@ export class UpstreamWatchdog {
   async agentEnded(event = {}, ctx = {}) {
     const sessionKey = ctx.sessionKey || '';
     if (!isWatchdogParentContext(ctx)) return false;
-    if (this.skipNextFailure.delete(sessionKey)) {
+    if (this.skipNextFailure.delete(sessionKey) || userStoppedRecently(sessionKey)) {
       if (event.runId) this.failures.delete(event.runId);
       return false;
     }
@@ -3502,7 +3742,7 @@ export class UpstreamWatchdog {
     // 取消窗口；没有收到明确停止 RPC 才按故障自动续接。
     if (/abort/i.test(reason)) {
       await new Promise(resolve => setTimeout(resolve, 200));
-      if (this.skipNextFailure.delete(sessionKey)) {
+      if (this.skipNextFailure.delete(sessionKey) || userStoppedRecently(sessionKey)) {
         if (event.runId) this.failures.delete(event.runId);
         return false;
       }
@@ -3514,6 +3754,9 @@ export class UpstreamWatchdog {
       model: this.models.get(sessionKey), kind: 'upstream',
     });
     const marathon = this.tierFor(sessionKey) === 'marathon';
+    const resumeText = incompleteToolTurn
+      ? `【自动续接保护】上轮工具结果已经返回，但没有生成完整的最终回复。先读取当前会话中已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。直接从工具结果之后继续，完成剩余工作、验证并正常交付。不要向用户展示本段保护指令或重试编号。`
+      : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`;
     const recoveryDelay = this.recoveryDelay(sessionKey, reason);
     const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, marathon
       ? 200 + attempt * 75
@@ -3525,9 +3768,7 @@ export class UpstreamWatchdog {
       ttlMs: Math.max(180_000, delayMs + 120_000),
       idempotencyKey: `${tag}-${attempt}`,
       metadata: {watchdog: true, attempt},
-      text: incompleteToolTurn
-        ? `【自动续接保护】上轮工具结果已经返回，但没有生成完整的最终回复。先读取当前会话中已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。直接从工具结果之后继续，完成剩余工作、验证并正常交付。不要向用户展示本段保护指令或重试编号。`
-        : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`,
+      text: resumeText,
     });
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
     // Local dashboard sessions have no outbound channel. Scheduling them via
@@ -3540,7 +3781,7 @@ export class UpstreamWatchdog {
       await this.api.session.workflow.scheduleSessionTurn({
         sessionKey,
         agentId: ctx.agentId,
-        message: WATCHDOG_MESSAGE,
+        message: watchdogControlMessage(resumeText),
         delayMs: Number(activity.pending) > 0 ? 15_000 : Math.max(3_000, delayMs + 1_000),
         deliveryMode: 'none',
         deleteAfterRun: true,
@@ -3548,7 +3789,7 @@ export class UpstreamWatchdog {
         tag,
       });
     }
-    this.scheduleImmediate({sessionKey, agentId: ctx.agentId, runId: event.runId, attempt, delayMs, tag});
+    this.scheduleImmediate({sessionKey, agentId: ctx.agentId, runId: event.runId, attempt, delayMs, tag, message: watchdogControlMessage(resumeText)});
     this.api.logger?.warn?.(`watchdog queued automatic session resume session=${sessionKey} attempt=${attempt} delayMs=${delayMs}`);
     return true;
   }
@@ -3573,6 +3814,7 @@ export class UpstreamWatchdog {
       agentId, runId, attempt: ordinal, maxAttempts, kind: 'compaction',
       model: this.models.get(sessionKey), reason: 'auto_compaction_recovery',
     });
+    const compactionText = instruction || '【压缩续工恢复】继续当前未完成工作。先核对交接检查点和真实项目现场，禁止重复已完成副作用。';
     try {
       await this.api.session.workflow.enqueueNextTurnInjection({
         sessionKey,
@@ -3580,17 +3822,17 @@ export class UpstreamWatchdog {
         ttlMs: 300_000,
         idempotencyKey: `pinkie-compaction-resume-${stateFileId(`${sessionKey}:${runId || 'run'}`)}-${ordinal}`,
         metadata: {watchdog: true, compaction: true, attempt: ordinal},
-        text: instruction || '【压缩续工恢复】继续当前未完成工作。先核对交接检查点和真实项目现场，禁止重复已完成副作用。',
+        text: compactionText,
       });
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
       if (!this.cliEntry) {
         await this.api.session.workflow.scheduleSessionTurn({
-          sessionKey, agentId, message: WATCHDOG_MESSAGE,
+          sessionKey, agentId, message: watchdogControlMessage(compactionText),
           delayMs, deliveryMode: 'none', deleteAfterRun: true,
           name: '碧琪压缩续工', tag,
         });
       }
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt: ordinal, delayMs, tag, kind: 'compaction'});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt: ordinal, delayMs, tag, kind: 'compaction', message: watchdogControlMessage(compactionText)});
       this.api.logger?.warn?.(`compaction handoff queued session=${sessionKey} attempt=${ordinal}`);
       return true;
     } catch (error) {
@@ -3731,7 +3973,7 @@ export class UpstreamWatchdog {
         await this.api.session.workflow.scheduleSessionTurn({
           sessionKey,
           agentId,
-          message: WATCHDOG_MESSAGE,
+          message: watchdogControlMessage(instruction),
           delayMs: Math.max(750, delayMs),
           deliveryMode: 'none',
           deleteAfterRun: true,
@@ -3739,7 +3981,7 @@ export class UpstreamWatchdog {
           tag,
         });
       }
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt: nextAttempt, delayMs, tag, kind: 'integrity'});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt: nextAttempt, delayMs, tag, kind: 'integrity', message: watchdogControlMessage(instruction)});
       return {ok: true, accepted: true};
     } catch (error) {
       this.integrityAttempts.delete(sessionKey);
@@ -3773,7 +4015,7 @@ export class UpstreamWatchdog {
     return true;
   }
 
-  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation}) {
+  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation, message: controlMessage}) {
     if (!this.cliEntry) return false;
     const leaseGeneration = generation ?? this.generationFor(sessionKey);
     if (leaseGeneration !== this.generationFor(sessionKey)) return false;
@@ -3784,7 +4026,7 @@ export class UpstreamWatchdog {
     if (activity.parentRunning || pending > 0 || quietForMs < WATCHDOG_QUIET_FENCE_MS) {
       const delayMs = activity.parentRunning || pending > 0
         ? WATCHDOG_ACTIVITY_POLL_MS : Math.max(250, WATCHDOG_QUIET_FENCE_MS - quietForMs);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind, generation: leaseGeneration});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind, generation: leaseGeneration, message: controlMessage});
       return false;
     }
     this.dispatching.add(sessionKey);
@@ -3792,7 +4034,9 @@ export class UpstreamWatchdog {
       const request = {
         sessionKey,
         agentId,
-        message: WATCHDOG_MESSAGE,
+        message: controlMessage || watchdogControlMessage(kind === 'integrity'
+          ? '上一版最终回复没有通过交付核对，按会话里的交付前提醒补做必要的核对，然后给出完整的最终回复。'
+          : '上一轮没有完整结束。先核对会话里已有的工具结果和真实现场，已经成功的写入、删除、发布等动作不要重复，只补未完成的部分并验证，然后正常交付。'),
         deliver: false,
         idempotencyKey: `pinkie-watchdog-${runId || Date.now()}-${attempt}`,
       };
@@ -3817,7 +4061,7 @@ export class UpstreamWatchdog {
         // rebuilds therefore neither increment nor decrement the integrity
         // budget; repeated infrastructure probes cannot turn attempt 4 back
         // into the misleading 0/24 seen in earlier logs.
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration});
+        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
@@ -3829,7 +4073,7 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
       const blockedDelay = this.recoveryDelay(sessionKey,
         `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
       return false;
     } finally {
       this.dispatching.delete(sessionKey);
@@ -3843,7 +4087,10 @@ export class UpstreamWatchdog {
     this.models.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
     this.jobStore.delete(sessionKey);
-    if (suppressNextFailure) this.skipNextFailure.add(sessionKey);
+    if (suppressNextFailure) {
+      this.skipNextFailure.add(sessionKey);
+      userStops.set(sessionKey, Date.now() + USER_STOP_GRACE_MS);
+    }
     const timer = this.timers.get(sessionKey);
     if (timer) clearTimeout(timer);
     this.timers.delete(sessionKey);
@@ -4667,6 +4914,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       '\n' + TOOL_PROGRESS_RULES + '\n',
       ...(mode !== 'none' ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
+      ...(mode !== 'none' ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
       ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
       '\n' + LEARN_WHILE_DOING_RULES + '\n',
     ];
@@ -5440,6 +5688,9 @@ export default {
   id: 'pinkie-mode-architecture',
   name: 'CLE Kk · 超級碧琪执行控制层',
   register(api) {
+    // 版本标记：看日志就知道网关 / agent runtime 各自加载的是哪一版插件（热重启后是否真的换上了新代码）。
+    globalThis.__pinkieModeArchitectureLoads = (globalThis.__pinkieModeArchitectureLoads || 0) + 1;
+    api.logger?.info?.(`CLE Kk plugin build=${PLUGIN_BUILD} instance=${globalThis.__pinkieModeArchitectureLoads} pid=${process.pid}`);
     let architecture;
     const memory = new LongTermMemoryStore({parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
@@ -5463,6 +5714,7 @@ export default {
     cleKk.setRetryScheduler(params => watchdog.scheduleIntegrityRetry(params));
     cleKk.setRetryCanceller(sessionKey => watchdog.cancel(sessionKey));
     cleKk.setRetryLimitResolver((sessionKey, decision) => watchdog.integrityRetryLimit(sessionKey, decision));
+    const fileDelivery = createFileDelivery(cleKk, api);
     const tierContinuation = new TierContinuation(
       api,
       sessionKey => architecture.status(sessionKey),
@@ -5472,11 +5724,13 @@ export default {
     api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 无限制模式不带碧琪的主动提问卡。
     api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : createAskUserTool()), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
+    registerLearningLibrary(api, {learning});
     registerCompanionGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
@@ -5492,6 +5746,16 @@ export default {
       store: new ReviewStore(path.join(new FileRunStore().root, 'reviews')),
     }));
     registerModelSync(api);
+    registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
+    registerWorkbench(api);
+    sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations']);
+    sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
+    sharePluginState(cleKk, 'clekk', ['turns', 'orphaned', 'sessionByRunId', 'sessionBySessionId', 'sessionByToolCallId', 'pendingDeliverySessions', 'deliveryFallbackBySession']);
+    sharePluginState(cleKk.audit, 'audit', ['sequence', 'lastHash', 'appendCounts']);
+    sharePluginState(integrity, 'integrity', ['runs']);
+    sharePluginState(architecture, 'architecture', ['lastUserPrompts', 'active', 'lastRuns', 'recentCompaction', 'pendingByParent', 'parentByChild', 'lastChildEventAt', 'liveParentRuns', 'lastParentEventAt']);
+    sharePluginState(reasoning, 'reasoning', ['completed', 'independent', 'controllers']);
+    sharePluginState(fileDelivery, 'fileDelivery', ['active', 'finals']);
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
         const ctx = memory.contextForSession(String(params?.sessionKey || ''));
@@ -5655,7 +5919,9 @@ export default {
         if (baseUrl.includes(':1467')) {
           baseUrl = baseUrl.replace(':1467', ':1466');
         }
-        const apiKey = providerConfig.apiKey || 'cle-mm-7YTb4AtBpM7PVfPWROwqavmmx0ZQVYEKwYHCdZNa';
+        // 凭据一律从用户配置读取，不在源码里留默认值（否则发布后等同于公开密钥）
+        const apiKey = providerConfig.apiKey || '';
+        if (!apiKey) throw new Error('没有读到本地网关的 apiKey，请先在 openclaw.json 里配置 models.providers.' + providerKey + '.apiKey');
 
         const systemInstruction = [
           '你是一个顶级的安全合规提示词工程改写专家。',
@@ -5712,6 +5978,7 @@ export default {
     api.on('before_agent_run', (event, ctx) => {
       architecture.parentStarted(event, ctx);
       cleKk.begin(event, ctx);
+      fileDelivery.noteTurn(event, ctx);
     }, {priority: -12000});
     // OpenClaw emits this for every accepted inbound message, including a
     // `messages.queue: steer` addition that stays inside the current harness
@@ -5722,6 +5989,7 @@ export default {
       const sessionKey = architecture.receiveUserMessage(event, ctx);
       if (!sessionKey) return;
       cleKk.receiveUserMessage(event, ctx);
+      fileDelivery.noteTurn(event, ctx);
       await Promise.all([
         watchdog.cancel(sessionKey),
         tierContinuation.cancel(sessionKey),
@@ -5729,6 +5997,7 @@ export default {
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
       cleKk.begin(event, ctx);
+      fileDelivery.noteTurn(event, ctx);
       return architecture.prompt(event, ctx);
     }, {priority: -12000});
     api.on('before_tool_call', (event, ctx) => {
@@ -5741,6 +6010,7 @@ export default {
     api.on('after_tool_call', async (event, ctx) => {
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
+      fileDelivery.afterTool(event, ctx);
       await cleKk.verifyAfterTool(event, ctx);
     });
     api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
@@ -5777,7 +6047,7 @@ export default {
       }
       const integrityDecision = cleKk.finalizeDecision(event, ctx, {verifyExternal: false});
       const decision = architecture.prepareRetryDecision(architectureDecision || integrityDecision, event, ctx);
-      return cleKk.recordFinalize(event, ctx, decision);
+      return fileDelivery.finalizeResult(cleKk.recordFinalize(event, ctx, decision), event, ctx);
     });
     // OpenClaw intentionally ignores before_agent_finalize revisions after a
     // deterministic side effect.  This final transcript hook is synchronous
@@ -5818,7 +6088,7 @@ export default {
     // 核验放行时把清理后的消息写进记录。
     api.on('before_message_write', (event, ctx) => {
       const cleaned = sanitizeAssistantMessage(event?.message);
-      const result = gateMessageWrite(cleaned ? {...event, message: cleaned} : event, ctx);
+      const result = fileDelivery.writeResult(gateMessageWrite(cleaned ? {...event, message: cleaned} : event, ctx), cleaned ? {...event, message: cleaned} : event, ctx);
       if (!cleaned || result?.block || result?.message) return result;
       return {...(result || {}), message: cleaned};
     }, {priority: -20000});
@@ -5834,7 +6104,7 @@ export default {
       const text = typeof payload?.text === 'string' ? cleanReplyText(payload.text) : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))
-        .then((result) => (!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}));
+        .then((result) => fileDelivery.replyResult(!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}, event, ctx));
     }, {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
       if (/:subagent:/.test(ctx.sessionKey || '')) {
@@ -5850,7 +6120,7 @@ export default {
         if (status.active && status.pending === 0) {
           await tierContinuation.schedule(parent, agentFromSessionKey(parent));
         }
-        cleKk.end(event, ctx);
+        fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
         return;
       }
       // 父轮次已经结束才允许任何续跑器写入会话。先撤掉可能遗留的档位
@@ -5886,7 +6156,7 @@ export default {
             runId: event.runId || ctx.runId || '',
           });
           if (resumed) {
-            cleKk.end(event, ctx);
+            fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
             return;
           }
         }
@@ -5904,12 +6174,16 @@ export default {
         if (event.success === true && hasDeliverableAssistantReply(event)) {
           architecture.acknowledgeCompaction(ctx.sessionKey || '');
         }
-        cleKk.end(event, ctx);
+        fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
       }
     });
     // Re-arm rejected finals that survived a gateway restart. This is quiet
     // (no user-facing watchdog message) and uses the same authenticated local
     // retry path as a live run.
+    // 状态共享之后，恢复只需要每个进程做一次（不然每加载一份就重新武装一遍）。
+    const recoveredKey = `__pinkieRecovered:${PLUGIN_BUILD}`;
+    if (!globalThis[recoveredKey]) globalThis[recoveredKey] = true;
+    else return;
     void (async()=>{
       await cleKk.recoverPending();
       await watchdog.recoverPending(sessionKey=>cleKk.retryRecoveryDisposition(sessionKey));

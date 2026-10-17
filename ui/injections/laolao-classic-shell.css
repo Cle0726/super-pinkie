@@ -6,6 +6,9 @@ html[data-laolao-classic-shell="1"] {
 
 html[data-laolao-classic-shell="1"] .shell.shell--chat {
   grid-template-columns: 258px minmax(0, 1fr) !important;
+  /* The desktop shell keeps two columns at narrow widths; upstream's mobile
+     one-column areas must not put the conversation inside the sidebar cell. */
+  grid-template-areas: "nav topbar" "nav content" !important;
 }
 
 html[data-laolao-classic-shell="1"] .shell.shell--chat > main.content {
@@ -475,6 +478,15 @@ html[data-laolao-classic-shell="1"] .agent-chat__input {
   html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-usage-key="cacheRead"],
   html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-usage-key="output"] {
     display: none;
+  }
+}
+
+/* At the runtime's mobile breakpoint navigation is already a drawer. Give
+   that overlay no permanent grid track, including 860px verification. */
+@media (max-width: 1100px) {
+  html[data-laolao-classic-shell="1"]:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"])
+    body .shell.shell--chat {
+    grid-template-columns: 0 minmax(0, 1fr) !important;
   }
 }
 
