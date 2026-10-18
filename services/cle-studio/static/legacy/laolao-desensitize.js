@@ -212,18 +212,18 @@
   display:inline-flex;align-items:center;justify-content:center;gap:3px;
   height:28px;min-width:28px;padding:0 8px;
   border:1px solid rgba(255,255,255,.56);border-radius:999px;
-  background:linear-gradient(135deg,rgba(255,252,253,.72),rgba(250,224,238,.58));
+  background:linear-gradient(135deg,var(--cle-surface),var(--cle-surface));
   -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);
-  color:#8c4a6a;cursor:pointer;
+  color:var(--cle-gaze);cursor:pointer;
   font:600 10.5px/1 ui-sans-serif,system-ui,sans-serif;
   white-space:nowrap;
-  box-shadow:0 1px 3px rgba(84,42,65,.08),inset 0 1px rgba(255,255,255,.7);
+  box-shadow:0 1px 3px var(--cle-shadow),inset 0 1px rgba(255,255,255,.7);
   transition:all .18s ease;order:7;
 }
 .laolao-desensitize-btn:hover,.laolao-desensitize-btn.is-open {
-  background:linear-gradient(135deg,rgba(255,252,253,.88),rgba(246,212,232,.76));
-  border-color:rgba(255,255,255,.78);color:#6d3650;
-  box-shadow:0 3px 10px rgba(84,42,65,.13),inset 0 1px rgba(255,255,255,.82);
+  background:linear-gradient(135deg,var(--cle-gaze-soft),var(--cle-gaze-soft));
+  border-color:rgba(255,255,255,.78);color:var(--cle-gaze);
+  box-shadow:0 3px 10px var(--cle-shadow),inset 0 1px rgba(255,255,255,.82);
 }
 .ds-btn-icon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linejoin:round;stroke-linecap:round}
 .ds-btn-shield{fill:currentColor;fill-opacity:.12}
@@ -236,11 +236,11 @@
   width:min(310px,calc(100vw - 20px));
   padding:10px;
   color:#57364a;
-  background:linear-gradient(145deg,rgba(255,252,253,.82),rgba(251,228,241,.68));
+  background:linear-gradient(145deg,var(--cle-surface),var(--cle-surface));
   border:1px solid rgba(255,255,255,.76);
   -webkit-backdrop-filter:blur(28px) saturate(1.16);backdrop-filter:blur(28px) saturate(1.16);
   border-radius:18px;
-  box-shadow:0 16px 40px rgba(84,42,65,.16),inset 0 1px rgba(255,255,255,.78);
+  box-shadow:0 16px 40px var(--cle-shadow),inset 0 1px rgba(255,255,255,.78);
   display:flex;flex-direction:column;gap:7px;
   animation:ds-pop-in .2s cubic-bezier(.2,.78,.28,1) both;
 }
@@ -248,37 +248,37 @@
 
 .ds-head{display:flex;align-items:center;gap:6px}
 .ds-head__title{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:680;color:rgba(87,54,74,.78);letter-spacing:.04em;white-space:nowrap}
-.ds-head__title svg{width:14px;height:14px;stroke:#ca4e84;fill:none;stroke-width:1.4;stroke-linejoin:round}
-.ds-head__title svg path:first-child{fill:#ca4e84;fill-opacity:.14}
-.ds-bolt{fill:#ca4e84;stroke:none!important}
+.ds-head__title svg{width:14px;height:14px;stroke:var(--cle-surface);fill:none;stroke-width:1.4;stroke-linejoin:round}
+.ds-head__title svg path:first-child{fill:var(--cle-surface);fill-opacity:.14}
+.ds-bolt{fill:var(--cle-surface);stroke:none!important}
 
 .ds-select{
   flex:1;min-width:0;height:24px;padding:0 6px;
-  border-radius:8px;border:1px solid rgba(176,95,131,.18);
-  background:linear-gradient(135deg,rgba(255,255,255,.48),rgba(255,240,248,.4));
+  border-radius:8px;border:1px solid var(--cle-line);
+  background:linear-gradient(135deg,rgba(255,255,255,.48),var(--cle-gaze-soft));
   color:#57364a;font-size:10.5px;font-weight:500;outline:none;
   transition:border-color .16s;
 }
-.ds-select:focus{border-color:rgba(202,78,132,.45)}
+.ds-select:focus{border-color:var(--cle-line-strong)}
 
 .ds-input{
   width:100%;box-sizing:border-box;
   padding:7px 9px;border-radius:10px;
-  border:1px solid rgba(176,95,131,.16);
-  background:linear-gradient(145deg,rgba(255,255,255,.42),rgba(255,240,248,.32));
+  border:1px solid var(--cle-line);
+  background:linear-gradient(145deg,rgba(255,255,255,.42),var(--cle-gaze-soft));
   color:#57364a;font:12px/1.45 ui-sans-serif,system-ui,sans-serif;
   resize:vertical;outline:none;
   transition:border-color .16s,background .16s;
 }
 .ds-input:focus{
-  border-color:rgba(202,78,132,.42);
-  background:linear-gradient(145deg,rgba(255,255,255,.68),rgba(255,240,248,.52));
+  border-color:var(--cle-line-strong);
+  background:linear-gradient(145deg,rgba(255,255,255,.68),var(--cle-surface));
 }
 .ds-input::placeholder{color:rgba(87,54,74,.36)}
 
 .ds-output{
-  background:linear-gradient(145deg,rgba(255,248,252,.52),rgba(251,228,241,.38));
-  border-color:rgba(202,78,132,.22);
+  background:linear-gradient(145deg,var(--cle-surface),var(--cle-surface));
+  border-color:var(--cle-line);
   font-size:11.5px;
 }
 
@@ -290,14 +290,14 @@
   display:inline-flex;align-items:center;gap:4px;
   height:26px;padding:0 10px;
   border:1px solid rgba(255,255,255,.28);border-radius:999px;
-  background:linear-gradient(135deg,rgba(216,91,145,.82),rgba(202,78,132,.88));
+  background:linear-gradient(135deg,var(--cle-gaze-soft),var(--cle-gaze-soft));
   color:#fff;font-size:11px;font-weight:680;cursor:pointer;
-  box-shadow:0 2px 8px rgba(202,78,132,.22);
+  box-shadow:0 2px 8px var(--cle-shadow);
   transition:all .16s ease;
 }
 .ds-run:hover:not(:disabled){
-  background:linear-gradient(135deg,rgba(226,105,159,.9),rgba(212,88,142,.94));
-  box-shadow:0 4px 14px rgba(202,78,132,.3);
+  background:linear-gradient(135deg,var(--cle-surface),var(--cle-surface));
+  box-shadow:0 4px 14px var(--cle-shadow);
 }
 .ds-run:disabled{opacity:.6;cursor:wait}
 
@@ -322,13 +322,13 @@
 /* 暗色模式 —— 保持粉色调(同 deep-think) */
 html[data-theme-mode="dark"] #laolao-desensitize-pop{
   color:#57364a;
-  background:linear-gradient(145deg,rgba(255,249,252,.84),rgba(245,218,234,.72));
+  background:linear-gradient(145deg,var(--cle-gaze-soft),var(--cle-gaze-soft));
   border-color:rgba(255,255,255,.62);
-  box-shadow:0 14px 38px rgba(84,42,65,.18),inset 0 1px rgba(255,255,255,.66);
+  box-shadow:0 14px 38px var(--cle-shadow),inset 0 1px rgba(255,255,255,.66);
 }
 html[data-theme-mode="dark"] .laolao-desensitize-btn{
-  background:linear-gradient(135deg,rgba(255,249,252,.68),rgba(248,220,236,.55));
-  border-color:rgba(255,255,255,.48);color:#8c4a6a;
+  background:linear-gradient(135deg,var(--cle-gaze-soft),var(--cle-gaze-soft));
+  border-color:rgba(255,255,255,.48);color:var(--cle-gaze);
 }
 
 @keyframes ds-pop-in{from{opacity:0;transform:translateY(6px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
