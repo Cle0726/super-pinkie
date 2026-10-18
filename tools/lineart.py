@@ -68,7 +68,10 @@ for i in range(len(cand)):
         if score > bs: best, bs = [cand[i], cand[j]], score
 if best: cand = best
 elif cand:
-    cand = [min(sorted(cand, key=lambda t: -t[0])[:3], key=lambda t: t[1])]
+    # a lone eye must look like one: an almond, clearly wider than tall (a moon or a mouth loop is not)
+    def almond(c): x_, y_, w_, h_ = cv2.boundingRect(c); return w_ / max(1, h_) >= 1.35
+    lone = [t for t in sorted(cand, key=lambda t: -t[0])[:3] if almond(t[2])]
+    cand = [min(lone, key=lambda t: t[1])] if lone else []
 for ar, _, c in cand:
     eyes.append(cv2.approxPolyDP(c, 1.0, True)[:, 0, :])
     cv2.drawContours(eye_mask, [c], -1, 1, thickness=int(width * 2.5) + 2)

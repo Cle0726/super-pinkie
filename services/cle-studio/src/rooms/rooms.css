@@ -174,3 +174,6 @@ html[data-cle-split] .chat-split-view__cell--active { box-shadow: inset 0 2px 0 
 .cle-history__new { appearance: none; border: 0; border-top: 1px solid var(--cle-line); background: transparent; padding: 11px 14px; text-align: left;
   font: 500 12.5px/1 var(--cle-sans); color: var(--cle-ink-2); cursor: default; }
 .cle-history__new:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 4%, transparent); }
+/* 线描 welcome: the arch is a window of paper, the drawing in ink, the gold rule kept */
+.cle-welcome__arch.is-line { background: var(--cle-surface); box-shadow: inset 0 0 0 1px var(--cle-line), 0 28px 60px -34px rgba(10, 12, 18, .35); display: grid; place-items: center; }
+.cle-welcome__arch.is-line .cle-line { width: 86%; height: 86%; color: var(--cle-ink); }

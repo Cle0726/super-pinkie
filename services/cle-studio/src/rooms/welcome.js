@@ -2,6 +2,8 @@
 // in its voice, and a few things worth asking here. Replaces the stock avatar and suggestions.
 import {ROOMS, roomArt} from './rooms.js';
 import {paneRoom, visiblePanes} from './split.js';
+import {lineArt, loadLine} from '../line/line.js';
+import {artStyle, onArtStyle} from '../core/modes.js';
 
 const SUGGEST = {
   chat: ['今天过得怎么样？', '陪我想想周末去哪', '给我讲个冷知识'],
@@ -21,6 +23,14 @@ export function mountWelcome(host, signal) {
       <p class="cle-welcome__label"><span>${room.zh}</span><em>${room.fr}</em></p>
       <h2 class="cle-welcome__line">${room.line}</h2>
       <div class="cle-welcome__asks">${(SUGGEST[room.id] || []).map((s) => `<button type="button" class="cle-welcome__ask">${s}</button>`).join('')}</div>`;
+    // 线描: the room drawn in ink on the paper inside the arch, drawing itself as you arrive
+    if (artStyle() === 'line') loadLine(`room-${room.id}`).then((d) => {
+      if (!d || artStyle() !== 'line') return;
+      const fig = el.querySelector('.cle-welcome__arch');
+      fig.classList.add('is-line'); fig.querySelector('img')?.remove();
+      fig.prepend(lineArt(`room-${room.id}`, {speed: 120}));
+    });
+    el.dataset.art = artStyle();
     const img = el.querySelector('img');
     img.addEventListener('error', () => {
       img.addEventListener('error', () => img.closest('figure').classList.add('is-empty'), {once: true});
@@ -43,7 +53,7 @@ export function mountWelcome(host, signal) {
       if (!host_) continue;
       const roomId = paneRoom(pane)?.id || (pane.classList.contains('chat-pane-cache__pane--active') ? fallback : null) || fallback;
       const cur = host_.querySelector(':scope > .cle-welcome');
-      if (cur?.dataset.room === roomId) continue;
+      if (cur?.dataset.room === roomId && cur.dataset.art === artStyle()) continue;
       cur?.remove();
       host_.prepend(build(ROOMS.find((r) => r.id === roomId) || ROOMS[0]));
     }
@@ -57,6 +67,7 @@ export function mountWelcome(host, signal) {
   // cached panes swap which one is active without adding nodes
   const paneObserver = new MutationObserver(schedule);
   paneObserver.observe(document.body, {subtree: true, attributes: true, attributeFilter: ['class']});
+  const offArt = onArtStyle(sync);
   sync();
-  signal.addEventListener('abort', () => { mo.disconnect(); roomObserver.disconnect(); paneObserver.disconnect(); document.querySelectorAll('.cle-welcome').forEach((w) => w.remove()); }, {once: true});
+  signal.addEventListener('abort', () => { offArt(); mo.disconnect(); roomObserver.disconnect(); paneObserver.disconnect(); document.querySelectorAll('.cle-welcome').forEach((w) => w.remove()); }, {once: true});
 }
