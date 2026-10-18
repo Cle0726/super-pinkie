@@ -128,6 +128,10 @@
   }
 
   const isPicker = (node) => node?.closest?.("details.chat-controls__model, details.chat-controls__model-picker");
+  /* 2026.10 draws a different picker: a search box, provider sections and a native
+     group toggle, all inside a wa-popup. It already owns selection, routing, defaults
+     and keyboard; re-implementing that would fight Lit. Only presentation is ours. */
+  const isModernPicker = (node) => Boolean(node?.matches?.("details.chat-controls__model-picker"));
   const isMax = (range) => range && !range.disabled && Number(range.max) > Number(range.min)
     && Number(range.value) >= Number(range.max);
 
@@ -334,7 +338,7 @@
     brand: modelBrand,
   });
 
-  function syncModelBrands(browser) {
+  function syncModelBrands(browser, hideRetired = true) {
     browser?.querySelectorAll?.("[data-chat-model-option]")?.forEach((option) => {
       const value = option.getAttribute?.("data-chat-model-option") || "";
       const separator = value.indexOf("/");
@@ -342,7 +346,9 @@
       const id = separator < 0 ? value : value.slice(separator + 1);
       if (option.dataset) {
         option.dataset.pinkieBrand = modelBrand(provider, id);
-        if (hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
+        // The native 2026.10 catalog is authoritative: hiding a row would desync its
+        // counts, search and 1-9 shortcuts. Retirement filtering stays on the old list.
+        if (hideRetired && hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
         else delete option.dataset.pinkieHiddenModel;
       }
     });
@@ -681,11 +687,13 @@
   function watchPicker(details) {
     if (!details || triggerObservers.has(details)) return;
     const watcher = new MutationObserver(() => {
+      if (isModernPicker(details)) { if (details.open) schedule(details); return; }
       syncTrigger(details);
       if (details.open) schedule(details);
     });
     watcher.observe(details, {childList: true, subtree: true, characterData: true});
     triggerObservers.set(details, watcher);
+    if (isModernPicker(details)) { sync(details); return; }
     syncTrigger(details);
     const browser = details.querySelector?.(".chat-controls__model-browser, .chat-controls__model-options");
     if (browser) ensureFallbackData(details, browser);
@@ -1098,7 +1106,43 @@
     }).catch(() => {}).finally(() => { state.refreshing = false; });
   }
 
+  /* 2026.10: the native picker is complete (search, provider sections, per-section
+     collapse, default marker, capability badges). We touch presentation only: brand
+     marks on the trigger and on each row, plus a layout that fits the pane. Injecting
+     the old canvas frames, a duplicate catalog or a second "current model" button here
+     is what produced the grey slab and the doubled list. */
+  function syncModern(details) {
+    if (!details.isConnected) return;
+    const summary = details.querySelector(":scope > summary.chat-controls__model-trigger");
+    const menu = details.querySelector(":scope > wa-popup .chat-controls__model-menu")
+      || details.querySelector(".chat-controls__model-menu");
+    // The trigger's brand mark must exist while the menu is shut: that is the only
+    // place most users ever see it.
+    let selected = menu?.querySelector('[data-chat-model-option][aria-selected="true"]');
+    const wanted = summary?.dataset?.chatSelectValue || "";
+    if (!selected && wanted && menu) {
+      selected = menu.querySelector(`[data-chat-model-option="${CSS.escape(wanted)}"]`);
+    }
+    const value = selected?.getAttribute("data-chat-model-option") || wanted || "";
+    if (summary?.dataset && value) {
+      const separator = value.indexOf("/");
+      const brand = modelBrand(separator < 0 ? "" : value.slice(0, separator),
+        separator < 0 ? value : value.slice(separator + 1));
+      if (brand && summary.dataset.pinkieBrand !== brand) summary.dataset.pinkieBrand = brand;
+    }
+    if (!details.open || !menu) return;
+    syncModelBrands(menu, false);
+    // a stray space in a catalog name would push the badge lines apart
+    menu.querySelectorAll(".chat-controls__model-option-name").forEach((title) => {
+      const text = title.textContent || "";
+      if (text !== text.trim()) title.textContent = text.trim();
+    });
+    details.dataset.pinkieEnhanced = "1";
+    details.dataset.pinkiePicker = "modern";
+  }
+
   function sync(details) {
+    if (isModernPicker(details)) { syncModern(details); return; }
     syncTrigger(details);
     if (!details?.isConnected || !details.open) {
       if (details && !details.open) finishPicker(details);
@@ -1112,7 +1156,7 @@
     if (!menu || !browser) return;
     const fallback = ensureFallbackData(details, browser);
     syncModelBrands(browser);
-    /* 2026.10 renders its own provider groups instead of a flat list, so the
+    /* 2026.7 renders its own provider groups instead of a flat list, so the
        fallback catalog's brand tabs never appear on a healthy gateway. Group
        the native sections under the same tabs without touching their nodes. */
     if (!fallback) syncNativeBrandTabs(details, menu, browser);
@@ -1167,7 +1211,11 @@
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
-      sync(details?.isConnected ? details : document.querySelector?.("details.chat-controls__model[open], details.chat-controls__model-picker[open]"));
+      const target = details?.isConnected ? details
+        : document.querySelector?.("details.chat-controls__model[open], details.chat-controls__model-picker[open]");
+      sync(target);
+      // keep the trigger mark current even when nothing is open (model changed elsewhere)
+      if (!target) document.querySelectorAll?.("details.chat-controls__model-picker")?.forEach(sync);
     });
   }
 
@@ -1186,10 +1234,14 @@
     const details = isPicker(event.target);
     if (!details) {
       for (const picker of triggerObservers.keys()) {
+        // 2026.10's own click-away handling closes its popup; forcing `open` off here
+        // would also drop the user's in-flight selection in the middle of the transition.
+        if (isModernPicker(picker)) continue;
         if (picker.open && !picker.contains?.(event.target)) closePicker(picker);
       }
       return;
     }
+    if (isModernPicker(details)) return;
     const summary = event.target.closest?.(".chat-controls__inline-select-trigger");
     if (summary?.parentElement === details && details.open) {
       event.preventDefault();
@@ -1297,6 +1349,8 @@
     if (event.key !== "Escape") return;
     for (const picker of triggerObservers.keys()) {
       if (!picker.open) continue;
+      // the 2026.10 picker handles Escape itself (clearing search first, then closing)
+      if (isModernPicker(picker)) continue;
       event.preventDefault();
       closePicker(picker);
     }
@@ -1305,6 +1359,7 @@
   function syncAllPickers() {
     scanPickers();
     for (const details of triggerObservers.keys()) {
+      if (isModernPicker(details)) { sync(details); continue; }
       const browser = details.querySelector?.(".chat-controls__model-browser, .chat-controls__model-options");
       if (browser) ensureFallbackData(details, browser);
       sync(details);
@@ -1358,6 +1413,9 @@
   document.addEventListener("input", (event) => {
     const details = isPicker(event.target);
     if (!details) return;
+    // 2026.10's picker already commits its own value on input; a second patch would
+    // race the native save and could desync the visible slider from the session.
+    if (isModernPicker(details)) return;
     if (event.target.matches?.(".chat-controls__reasoning-range")) {
       const range = event.target;
       if (range.dataset?.pinkieFallback === "1") {
@@ -1421,7 +1479,7 @@
     const range = event.target;
     if (!range?.matches?.(".chat-controls__reasoning-range")) return;
     const details = isPicker(range);
-    if (!details) return;
+    if (!details || isModernPicker(details)) return;
     if (range.dataset?.pinkieFallback === "1") {
       event.stopImmediatePropagation?.();
       return;
