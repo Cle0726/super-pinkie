@@ -1072,7 +1072,7 @@
         const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 40;
         const max = Math.max(...totals, 1);
         // 网格
-        ctx.strokeStyle = "rgba(232,79,154,.18)";
+        ctx.strokeStyle = "rgba(42, 99, 232, 0.45)";
         ctx.lineWidth = 1;
         for (let ring = 1; ring <= 3; ring++) {
           const r = R * ring / 3;
@@ -1109,8 +1109,8 @@
         ctx.closePath(); ctx.fill(); ctx.stroke();
         // 错题区域（粉）
         const maxM = Math.max(...mistakes, 1);
-        ctx.fillStyle = "rgba(232,79,154,.3)";
-        ctx.strokeStyle = "rgba(232,79,154,.7)";
+        ctx.fillStyle = "rgba(42, 99, 232, 0.3)";
+        ctx.strokeStyle = "rgba(42, 99, 232, 0.7)";
         ctx.beginPath();
         labels.forEach((_, i) => {
           const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
@@ -1121,7 +1121,7 @@
         ctx.closePath(); ctx.fill(); ctx.stroke();
         // 图例
         const legend = el("div", "laolao-learning-radar__legend");
-        legend.innerHTML = "<span style='color:#7b63c8'>● 笔记数</span> <span style='color:#e84f9a'>● 错题数</span>";
+        legend.innerHTML = "<span style='color:#7b63c8'>● 笔记数</span> <span style='color:var(--cle-gaze)'>● 错题数</span>";
         panel.append(legend);
         // 错题列表
         const wrong = notes.filter(n => Number(n.lapses) > 0).sort((a, b) => Number(b.lapses) - Number(a.lapses)).slice(0, 10);
