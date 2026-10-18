@@ -5,6 +5,7 @@ import './rooms/rooms.css';
 import './composer/composer.css';
 import './styles/bridge.css';
 import './process/status.css';
+import './process/effects.css';
 import './learning/study.css';
 import './styles/tiers.css';
 import './line/line.css';
