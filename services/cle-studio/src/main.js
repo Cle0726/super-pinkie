@@ -28,23 +28,25 @@ export default {
     const controller = new AbortController();
     const html = document.documentElement;
     html.dataset.cle = VERSION;
-    startBrandGuard(controller.signal);
+    try { startBrandGuard(controller.signal); } catch (error) { console.error('[cle] brand guard failed', error); }
     // the 2026.7 modules key night mode on data-pinkie-night; mirror the native theme mode
     const syncNight = () => html.toggleAttribute('data-pinkie-night', html.dataset.themeMode === 'dark');
     syncNight();
     const nightObserver = new MutationObserver(syncNight);
     nightObserver.observe(html, {attributes: true, attributeFilter: ['data-theme-mode']});
     controller.signal.addEventListener('abort', () => nightObserver.disconnect(), {once: true});
-    const rooms = mountRooms(host, controller.signal);
-    mountWelcome(host, controller.signal);
-    mountComposer(host, controller.signal);
-    mountGaze(controller.signal);
-    mountStatus(host, controller.signal);
-    mountStudy(host, controller.signal);
-    installLegacyShim(host, controller.signal);
-    const utilities = mountUtilities(host, controller.signal);
+    // each part stands alone: one failing module must never take the brand, the rooms or the composer down
+    const safe = (name, fn) => { try { return fn(); } catch (error) { console.error(`[cle] ${name} failed`, error); return null; } };
+    const rooms = safe('rooms', () => mountRooms(host, controller.signal));
+    safe('welcome', () => mountWelcome(host, controller.signal));
+    safe('composer', () => mountComposer(host, controller.signal));
+    safe('gaze', () => mountGaze(controller.signal));
+    safe('status', () => mountStatus(host, controller.signal));
+    safe('study', () => mountStudy(host, controller.signal));
+    safe('shim', () => installLegacyShim(host, controller.signal));
+    const utilities = safe('utilities', () => mountUtilities(host, controller.signal));
     const legacy = {};
-    loadLegacy(legacy);
+    safe('legacy', () => loadLegacy(legacy));
     window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink, legacy, composer, utilities});
     return () => {
       controller.abort();

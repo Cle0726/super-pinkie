@@ -40,7 +40,7 @@ export function particleGlyph(signal) {
       if (signal.aborted || reduce.matches || !mount.isConnected) return;
       mount.textContent = '';
       // The same count, framing and point size as the original status effect.
-      space = new CleSpace(mount, {palette: 'cle', count: 1100, size: .17, fitW: 10.2, fitH: 5.4, interactive: false});
+      space = new CleSpace(mount, {palette: 'cle', count: 1500, size: .17, fitW: 10.2, fitH: 5.4, interactive: false});
       space.set(desired);
     } catch (error) { mount.textContent = 'C.le.'; console.warn('[cle] particle fallback:', error.message); }
     finally { pending = false; }

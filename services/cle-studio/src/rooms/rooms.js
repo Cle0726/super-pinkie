@@ -3,11 +3,11 @@
 import {blink} from './blink.js';
 
 export const ROOMS = [
-  {id: 'chat', agent: 'main', zh: '雅叙', fr: 'Le Chat', hint: '闲谈 · 陪伴', line: '坐下来，慢慢说。'},
-  {id: 'project', agent: 'project', zh: '营造', fr: 'Œuvre', hint: '项目 · 动手', line: '图纸摊开，从最小的一步做起。'},
-  {id: 'thinking', agent: 'thinking', zh: '堇思', fr: 'Pensée', hint: '想法 · 推敲', line: '夜里的念头，先别急着赶走。'},
-  {id: 'learning', agent: 'learning', zh: '习作', fr: 'Étude', hint: '学习 · 督促', line: '今天的这一页，陪你翻完。'},
-  {id: 'unrestricted', agent: 'unrestricted', zh: '挥洒', fr: 'Carte Blanche', hint: '无限 · 放手', line: '白纸一张，随你落笔。'},
+  {id: 'chat', eye: [.40, .38], agent: 'main', zh: '雅叙', fr: 'Le Chat', hint: '闲谈 · 陪伴', line: '坐下来，慢慢说。'},
+  {id: 'project', eye: [.60, .41], agent: 'project', zh: '营造', fr: 'Œuvre', hint: '项目 · 动手', line: '图纸摊开，从最小的一步做起。'},
+  {id: 'thinking', eye: [.38, .28], agent: 'thinking', zh: '堇思', fr: 'Pensée', hint: '想法 · 推敲', line: '夜里的念头，先别急着赶走。'},
+  {id: 'learning', eye: [.35, .30], agent: 'learning', zh: '习作', fr: 'Étude', hint: '学习 · 督促', line: '今天的这一页，陪你翻完。'},
+  {id: 'unrestricted', eye: [.50, .37], agent: 'unrestricted', zh: '挥洒', fr: 'Carte Blanche', hint: '无限 · 放手', line: '白纸一张，随你落笔。'},
 ];
 export const roomArt = (id) => `/cle/static/art/rooms/${id}.webp`;
 const byAgent = new Map(ROOMS.map((r) => [r.agent, r]));
@@ -83,7 +83,9 @@ export function mountRooms(host, signal) {
     const start = performance.now();
     let seen = 0;
     const check = () => {
-      const ok = host.agents?.selectedId === targetAgent && document.querySelector('.agent-chat__input');
+      const pane = document.querySelector('.chat-pane-cache__pane--active');
+      const ok = host.agents?.selectedId === targetAgent && document.querySelector('.agent-chat__input')
+        && (pane?.querySelector('.cle-welcome, .chat-group') || performance.now() - start > 1400);
       seen = ok ? seen + 1 : 0;
       if (seen >= 2 || performance.now() - start > 2600) resolve();
       else requestAnimationFrame(check);
@@ -123,6 +125,8 @@ export function mountRooms(host, signal) {
   };
   mount();
   applyRoom(current);
+  // the paintings are seen through the blink, so have them decoded before the first switch
+  (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(() => ROOMS.forEach((r) => { const i = new Image(); i.decoding = 'async'; i.src = roomArt(r.id); }));
   const mo = new MutationObserver(() => { if (!selector.isConnected || !mark.isConnected) mount(); });
   mo.observe(document.body, {childList: true, subtree: true});
   const unsubscribe = host.subscribe?.(() => {

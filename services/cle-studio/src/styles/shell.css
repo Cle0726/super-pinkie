@@ -80,3 +80,7 @@ html[data-cle] .sidebar-workspace-header__mark {
   background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat !important;
   border-radius: 50% !important; box-shadow: 0 0 0 1px var(--cle-gold-soft);
 }
+
+/* the resize handle: invisible until the pointer finds it */
+html[data-cle] .sidebar-resizer { opacity: 0; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .sidebar-resizer:hover, html[data-cle] .sidebar-resizer:active { opacity: 1; }
