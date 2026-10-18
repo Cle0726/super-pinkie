@@ -430,58 +430,89 @@
     caption.classList.add("is-shown");
   };
 
-  /* ── 按模式的发送 / 完成点缀 ───────────────────────────────────────── */
+  /* ── 点缀：白色花瓣与金箔（C.le. 油画世界里唯一的漂浮物） ─────────────────
+     花瓣是一片带渐变的泪滴，翻转时用 cos(翻转角) 压扁宽度，看起来在空中翻面；
+     金箔是不规则的小多边形，正对光的那一下会闪亮。贴图预先画好，每帧只做变换和透明度。 */
+  const matter = (() => {
+    const cache = new Map();
+    const make = (key, size, paint) => {
+      if (cache.has(key)) return cache.get(key);
+      const c = document.createElement("canvas"); c.width = c.height = size;
+      const x = c.getContext("2d"); x.translate(size / 2, size / 2); paint(x, size / 2); cache.set(key, c); return c;
+    };
+    const night = () => document.documentElement.getAttribute("data-theme-mode") === "dark";
+    const petal = () => make("petal", 64, (x, r) => {
+      const g = x.createLinearGradient(0, -r, 0, r);
+      g.addColorStop(0, "#fffdf6"); g.addColorStop(.62, "#f3ead6"); g.addColorStop(1, "#d9c49a");
+      x.fillStyle = g; x.beginPath(); x.moveTo(0, -r * .92);
+      x.bezierCurveTo(r * .78, -r * .6, r * .62, r * .55, 0, r * .9);
+      x.bezierCurveTo(-r * .62, r * .55, -r * .78, -r * .6, 0, -r * .92); x.fill();
+      x.strokeStyle = "rgba(170,140,80,.35)"; x.lineWidth = 1.2; x.beginPath(); x.moveTo(0, r * .82); x.quadraticCurveTo(r * .06, 0, 0, -r * .55); x.stroke();
+    });
+    const blossom = () => make("blossom", 96, (x, r) => {
+      for (let k = 0; k < 5; k++) {
+        x.save(); x.rotate(k * Math.PI * 2 / 5);
+        const g = x.createLinearGradient(0, 0, 0, -r); g.addColorStop(0, "#efe2c4"); g.addColorStop(1, "#fffdf7");
+        x.fillStyle = g; x.beginPath(); x.moveTo(0, 0); x.bezierCurveTo(r * .42, -r * .3, r * .38, -r * .9, 0, -r * .86);
+        x.bezierCurveTo(-r * .38, -r * .9, -r * .42, -r * .3, 0, 0); x.fill(); x.restore();
+      }
+      const c = x.createRadialGradient(0, 0, 0, 0, 0, r * .22); c.addColorStop(0, "#f6d27a"); c.addColorStop(1, "rgba(201,162,74,0)");
+      x.fillStyle = c; x.beginPath(); x.arc(0, 0, r * .22, 0, 6.29); x.fill();
+      x.fillStyle = "#b8862e"; for (let k = 0; k < 7; k++) { const a = k * .9; x.beginPath(); x.arc(Math.cos(a) * r * .1, Math.sin(a) * r * .1, r * .025, 0, 6.29); x.fill(); }
+    });
+    const flake = (v) => make(`flake${v}`, 48, (x, r) => {
+      const pts = 6 + v; x.beginPath();
+      for (let k = 0; k < pts; k++) { const a = k / pts * 6.283, rr = r * (.45 + .4 * Math.abs(Math.sin(k * 2.7 + v))); x.lineTo(Math.cos(a) * rr, Math.sin(a) * rr * .8); }
+      x.closePath();
+      const g = x.createLinearGradient(-r, -r, r, r); g.addColorStop(0, "#8a6a26"); g.addColorStop(.45, "#f3d488"); g.addColorStop(.55, "#fff2c4"); g.addColorStop(1, "#a37b2c");
+      x.fillStyle = g; x.fill();
+    });
+    const mote = () => make("mote", 48, (x, r) => {
+      const g = x.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, "rgba(190,225,255,.95)"); g.addColorStop(.25, "rgba(90,168,255,.45)"); g.addColorStop(1, "rgba(47,107,255,0)");
+      x.fillStyle = g; x.fillRect(-r, -r, r * 2, r * 2);
+    });
+    /* 画一个粒子：p = {kind, x, y, s, rot, flip, a} */
+    const draw = (ctx, p) => {
+      const img = p.kind === "petal" ? petal() : p.kind === "blossom" ? blossom() : p.kind === "mote" ? mote() : flake(p.v || 0);
+      const fx = Math.cos(p.flip);                                   // 翻面：宽度随翻转角变化
+      let alpha = p.a;
+      if (p.kind === "flake") alpha *= .55 + .45 * Math.pow(Math.abs(fx), 6) + (Math.abs(fx) > .96 ? .5 : 0);  // 正对光时一闪
+      if (p.kind === "petal" && night()) alpha *= .85;
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.scale(p.kind === "mote" || p.kind === "blossom" ? 1 : Math.max(.08, Math.abs(fx)), 1);
+      ctx.drawImage(img, -p.s, -p.s, p.s * 2, p.s * 2); ctx.restore();
+    };
+    return {draw};
+  })();
+
+  /* ── 发送 / 完成：一小撮花瓣与金箔 ───────────────────────────────────── */
   const fx = (() => {
     let canvas, ctx, parts = [], raf = 0;
     const fit = () => { const d = Math.min(2, devicePixelRatio || 1); canvas.width = innerWidth * d; canvas.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
     const ensure = () => { if (canvas) return; canvas = el("canvas", "pinkie-burst"); document.body.append(canvas); ctx = canvas.getContext("2d"); fit(); addEventListener("resize", fit); };
-    const PALETTE = {
-      chat: ["#ff8fbf", "#ffd36e", "#8fd3ff", "#c9a7ff"], project: ["#59b7b4", "#a8e0dc", "#ffd9a0", "#7fa8d6"],
-      thinking: ["#c8a8ff", "#fff3b0", "#ffd1f0", "#a9c8ff"], learning: ["#ffd27a", "#ffb2c8", "#b9a7ff", "#ffe7b8"],
-      unrestricted: ["#ff5f9e", "#ffb84d", "#ffe45c", "#5fd38d", "#59b6ff", "#a77bff"],
-    };
-    const SHAPE = {chat: "balloon", project: "spark", thinking: "star", learning: "star", unrestricted: "ribbon"};
     const spawn = (x, y, kind) => {
       ensure();
-      const m = mode(), colors = PALETTE[m], shape = SHAPE[m];
-      // 发送只点到为止：四粒、小、飞得近；完成时多一点
-      const send = kind === "send", n = send ? 4 : 16;
+      // 发送只点到为止：三片、飞得近；完成时一捧，像有人在身后轻轻扬起
+      const send = kind === "send", n = send ? 5 : 14;
       for (let i = 0; i < n; i++) {
-        const spread = send ? .7 : 1.25, ang = -Math.PI / 2 + (Math.random() - .5) * Math.PI * spread;
-        const sp = (send ? 1.1 : 2.2) + Math.random() * (shape === "balloon" ? (send ? .6 : 1.2) : (send ? 1.1 : 2.4));
-        parts.push({x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, rot: Math.random() * 6, vr: (Math.random() - .5) * .2,
-          c: colors[i % colors.length], s: (shape === "balloon" ? 5 + Math.random() * 3 : 2.5 + Math.random() * 2.5) * (send ? .75 : 1), life: send ? .8 : 1,
-          decay: (shape === "balloon" ? .007 : .013) * (send ? 1.6 : 1), shape, ph: Math.random() * 6});
+        const ang = -Math.PI / 2 + (Math.random() - .5) * Math.PI * (send ? .6 : 1.1);
+        const sp = (send ? 1.2 : 2) + Math.random() * (send ? 1 : 2.2);
+        const k = i % 3 === 0 ? "petal" : "flake";
+        parts.push({kind: k, v: i % 3, x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, rot: Math.random() * 6.28, vr: (Math.random() - .5) * .08,
+          flip: Math.random() * 6.28, vf: .08 + Math.random() * .12, s: k === "petal" ? 5 + Math.random() * 3 : 2.2 + Math.random() * 2.2,
+          a: 1, life: 1, decay: send ? .016 : .009});
       }
       if (!raf) raf = requestAnimationFrame(tick);
-    };
-    const draw = (p) => {
-      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.4));
-      ctx.fillStyle = p.c; ctx.strokeStyle = p.c;
-      ctx.save(); ctx.translate(p.x, p.y);
-      if (p.shape === "balloon") {
-        ctx.beginPath(); ctx.ellipse(0, 0, p.s * .82, p.s, Math.sin(p.ph) * .15, 0, 6.29); ctx.fill();
-        ctx.globalAlpha *= .6; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(0, p.s); ctx.quadraticCurveTo(3, p.s + 6, -1, p.s + 11); ctx.stroke();
-        ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(-p.s * .3, -p.s * .35, p.s * .18, p.s * .28, -.5, 0, 6.29); ctx.fill();
-      } else if (p.shape === "ribbon") {
-        ctx.rotate(p.rot); ctx.lineWidth = 2.2; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(-p.s * 1.6, 0); ctx.bezierCurveTo(-p.s * .5, -p.s * 1.4, p.s * .5, p.s * 1.4, p.s * 1.6, 0); ctx.stroke();
-      } else if (p.shape === "star") {
-        ctx.rotate(p.rot); const r = p.s * 1.25;
-        ctx.beginPath(); for (let k = 0; k < 8; k++) { const rr = k % 2 ? r * .32 : r; const a = k * Math.PI / 4; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill();
-      } else {
-        ctx.rotate(p.rot); ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
-        ctx.globalAlpha *= .7; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-p.s * 1.4, 0); ctx.lineTo(p.s * 1.4, 0); ctx.moveTo(0, -p.s * 1.4); ctx.lineTo(0, p.s * 1.4); ctx.stroke();
-      }
-      ctx.restore();
     };
     const tick = () => {
       ctx.clearRect(0, 0, innerWidth, innerHeight);
       parts = parts.filter((p) => p.life > 0);
       for (const p of parts) {
-        if (p.shape === "balloon") { p.vy = p.vy * .985 - .02; p.vx *= .985; p.ph += .05; p.x += Math.sin(p.ph) * .25; }
-        else { p.vy += .07; p.vx *= .99; }
-        p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= p.decay; draw(p);
+        // 空气阻力大、重力小：先冲出去，再像纸片一样飘落
+        p.vx *= .955; p.vy = p.vy * .955 + .035; p.x += p.vx + Math.sin(p.flip) * .25; p.y += p.vy;
+        p.rot += p.vr; p.flip += p.vf; p.life -= p.decay; p.a = Math.min(1, p.life * 1.6);
+        matter.draw(ctx, p);
       }
       ctx.globalAlpha = 1;
       raf = parts.length ? requestAnimationFrame(tick) : 0;
@@ -605,115 +636,69 @@
     run: selected => selected.library ? void window.__pinkieLibrary.askSelection(selected).catch(error => say(esc(error.message))) : explain(selected.text),
   });
 
-  /* ── 氛围画布 ─────────────────────────────────────────────────────────── */
+  /* ── 氛围画布：五个房间同一个世界，只换「空气里飘着什么」 ───────────────
+     雅叙：几片白色花瓣慢慢落；营造：金箔在暖光里缓缓翻；堇思：夜里几粒蓝色微光往上浮；
+     习作：金粉顺着光的方向斜飘；挥洒：花瓣与金箔沿着一条看不见的 ∞ 轨迹流动。
+     粒子很少（8–18 个），30 帧，页面不可见、转场、开屏时停。 */
   const ambient = (() => {
     let canvas = null, ctx = null, raf = 0, last = 0, flow = 1, w = 0, h = 0, currentMode = "", parts = [], t0 = performance.now();
-    let layer = null, resizeObserver = null;   // 不动的部分只画一次，每帧贴上去
+    let resizeObserver = null;
     const rnd = (a, b) => a + Math.random() * (b - a);
-    /* 柔光点预先画成小贴图，每帧只贴图、调透明度，不再每个点每帧新建渐变 */
-    const sprites = new Map();
-    const glow = (key, inner, outer, size = 64) => {
-      if (sprites.has(key)) return sprites.get(key);
-      const c = document.createElement("canvas"); c.width = c.height = size;
-      const x = c.getContext("2d"), g = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      g.addColorStop(0, inner); g.addColorStop(1, outer); x.fillStyle = g; x.fillRect(0, 0, size, size);
-      sprites.set(key, c); return c;
+    const ROOM = {
+      chat: {n: 9, kinds: ["petal", "petal", "petal", "blossom"]},
+      project: {n: 12, kinds: ["flake"]},
+      thinking: {n: 16, kinds: ["mote", "mote", "mote", "flake"]},
+      learning: {n: 18, kinds: ["flake", "flake", "petal"]},
+      unrestricted: {n: 14, kinds: ["petal", "flake", "flake"]},
     };
-    const seed = () => {
-      parts = []; const m = currentMode;
-      if (m === "chat") for (let i = 0; i < 7; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(9, 16), v: rnd(6, 13), sway: rnd(0, 6.28), hue: [340, 50, 200, 280][i % 4]});
-      if (m === "thinking") for (let i = 0; i < 26; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(1.5, 4.5), vx: rnd(-4, 4), vy: rnd(-7, -2), ph: rnd(0, 6.28)});
-      if (m === "learning") for (let i = 0; i < 34; i++) parts.push({x: rnd(0, w * .75), y: rnd(0, h), r: rnd(1.2, 3.2), vx: rnd(2, 7), vy: rnd(-3, 3), ph: rnd(0, 6.28)});
-      if (m === "unrestricted") for (let i = 0; i < 3; i++) parts.push({ph: rnd(0, 6.28), sp: rnd(.05, .12), hue: [330, 270, 190][i]});
+    const make = (m, fresh) => {
+      const R = ROOM[m] || ROOM.chat, kind = R.kinds[Math.floor(Math.random() * R.kinds.length)];
+      const big = kind === "petal" ? rnd(4, 7.5) : kind === "blossom" ? rnd(7, 10) : kind === "mote" ? rnd(5, 11) : rnd(1.8, 3.6);
+      return {kind, v: Math.floor(rnd(0, 3)), x: rnd(0, w), y: fresh ? rnd(0, h) : (m === "thinking" ? h + 20 : -20), s: big,
+        rot: rnd(0, 6.28), vr: rnd(-.25, .25), flip: rnd(0, 6.28), vf: rnd(.4, 1.1), ph: rnd(0, 6.28), sp: rnd(.6, 1.2),
+        a: kind === "mote" ? rnd(.25, .5) : rnd(.35, .7), lane: rnd(0, 1)};
     };
-    const bakeLayer = (d) => {
-      layer = null;
-      const m = currentMode;
-      if (m !== "learning" && m !== "project") return;
-      layer = document.createElement("canvas");
-      const pad = m === "project" ? 36 : 0;
-      layer.width = Math.round((w + pad) * d); layer.height = Math.round(h * d);
-      const x = layer.getContext("2d"); x.setTransform(d, 0, 0, d, 0, 0);
-      if (m === "learning") {
-        // 三道斜光按满透明度画好，每帧用整体透明度做呼吸
-        x.translate(w * .08, -h * .05); x.rotate(.52);
-        for (let i = 0; i < 3; i++) {
-          const bx = i * w * .16, bw = w * (.09 + i * .03), g = x.createLinearGradient(bx, 0, bx + bw, 0), a = 1 - i * .22;
-          g.addColorStop(0, "rgba(255,222,170,0)"); g.addColorStop(.5, `rgba(255,222,170,${a})`); g.addColorStop(1, "rgba(255,222,170,0)"); x.fillStyle = g; x.fillRect(bx, 0, bw, h * 1.6);
-        }
-      } else {
-        const grid = 36; x.strokeStyle = "rgba(63,143,146,.07)"; x.lineWidth = 1; x.beginPath();
-        for (let gx = 0; gx < w + pad; gx += grid) { x.moveTo(gx, 0); x.lineTo(gx, h); }
-        for (let gy = 0; gy < h; gy += grid) { x.moveTo(0, gy); x.lineTo(w + pad, gy); }
-        x.stroke();
-      }
-    };
+    const seed = () => { parts = []; const R = ROOM[currentMode] || ROOM.chat; for (let i = 0; i < R.n; i++) parts.push(make(currentMode, true)); };
     const resize = () => {
       const r = canvas.parentElement.getBoundingClientRect();
-      // 柔光类（学习、想法、无限制）糊糊的，一倍分辨率看不出差别，像素少一半多；气球和网格保留高清
-      const soft = ["learning", "thinking", "unrestricted"].includes(currentMode);
-      const d = soft ? 1 : Math.min(1.5, devicePixelRatio || 1);
+      const d = Math.min(1.5, devicePixelRatio || 1);
       w = r.width; h = r.height; canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); ctx.setTransform(d, 0, 0, d, 0, 0);
-      seed(); bakeLayer(d);
+      seed();
     };
     const draw = (now) => {
       raf = requestAnimationFrame(draw);
       if (now - last < 33) return;
       const imm = window.__pinkieImmersion, ptr = imm?.pointer && now - imm.pointer.t < 1500 ? imm.pointer : null;
-      // 你打字、碧琪干活时，氛围跟着稍微快一点；停下来又慢慢回到原样
-      const boost = 1 + (document.documentElement.hasAttribute("data-pinkie-running") ? .7 : 0) + (imm?.energy || 0) * .9;
-      flow += (boost - flow) * .06;
+      // 你打字、Li An 干活时，空气稍微流动得快一点；停下来又慢慢回到原样
+      const boost = 1 + (document.documentElement.hasAttribute("data-pinkie-running") ? .6 : 0) + (imm?.energy || 0) * .8;
+      flow += (boost - flow) * .05;
       const dt = Math.min(.1, (now - last) / 1000) * flow; last = now;
       const t = (now - t0) / 1000, m = currentMode;
-      // 鼠标附近的粒子会被轻轻推开
-      const repel = (p, radius = 120, force = 60) => {
-        if (!ptr) return;
-        const dx = p.x - ptr.x, dy = p.y - ptr.y, d = Math.hypot(dx, dy);
-        if (d > radius || d < 1) return;
-        const k = (1 - d / radius) * force * dt / d; p.x += dx * k; p.y += dy * k;
-      };
-      ctx.clearRect(0, 0, w, h); ctx.globalAlpha = 1;
-      if (m === "chat") {
-        for (const p of parts) {
-          p.y -= p.v * dt; p.sway += dt * .8; repel(p, 140, 90); if (p.y < -40) { p.y = h + 30; p.x = rnd(0, w); }
-          const x = p.x + Math.sin(p.sway) * 10;
-          ctx.globalAlpha = .22; ctx.fillStyle = `hsl(${p.hue} 80% 75%)`; ctx.beginPath(); ctx.ellipse(x, p.y, p.r * .82, p.r, 0, 0, 6.29); ctx.fill();
-          ctx.globalAlpha = .16; ctx.strokeStyle = `hsl(${p.hue} 40% 55%)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, p.y + p.r); ctx.quadraticCurveTo(x + 4, p.y + p.r + 12, x - 2, p.y + p.r + 24); ctx.stroke();
-        }
-      } else if (m === "thinking") {
-        const dot = glow("thinking", "rgba(255,250,255,1)", "rgba(200,170,240,0)");
-        for (const p of parts) {
-          p.x += p.vx * dt; p.y += p.vy * dt; p.ph += dt; repel(p); if (p.y < -10) { p.y = h + 10; p.x = rnd(0, w); }
-          const r = p.r * 4;
-          ctx.globalAlpha = Math.min(1, .38 + .14 * Math.sin(p.ph)); ctx.drawImage(dot, p.x - r, p.y - r, r * 2, r * 2);
-        }
-      } else if (m === "learning") {
-        const breathe = .5 + .5 * Math.sin(t * .35);
-        if (layer) { ctx.globalAlpha = .07 + .03 * breathe; ctx.drawImage(layer, 0, 0, w, h); }
-        const dot = glow("learning", "rgba(255,236,190,1)", "rgba(255,226,170,0)");
-        for (const p of parts) {
-          p.x += p.vx * dt; p.y += p.vy * dt + Math.sin(p.ph) * .08; p.ph += dt * .6; repel(p, 100, 45); if (p.x > w * .85) { p.x = rnd(-20, w * .2); p.y = rnd(0, h); }
-          const r = p.r * 3;
-          ctx.globalAlpha = Math.max(0, .35 + .25 * Math.sin(p.ph * 1.7)); ctx.drawImage(dot, p.x - r, p.y - r, r * 2, r * 2);
-        }
-      } else if (m === "project") {
-        const grid = 36;
-        if (layer) { ctx.globalAlpha = 1; ctx.drawImage(layer, (t * 2) % grid - grid, 0, w + grid, h); }
-        const s = (t % 14) / 14, sx = -w * .3 + s * w * 1.6, sweep = glow("project-sweep", "rgba(140,220,220,.12)", "rgba(140,220,220,0)");
-        ctx.globalAlpha = 1; ctx.drawImage(sweep, 0, 31, 64, 2, sx - 160, 0, 320, h);
-      } else if (m === "unrestricted") {
-        for (const p of parts) {
-          p.ph += p.sp * dt; const cx = w * (.5 + .38 * Math.sin(p.ph)), cy = h * (.25 + .18 * Math.cos(p.ph * 1.3)), r = Math.max(w, h) * .45;
-          const blob = glow(`unrestricted-${p.hue}`, `hsla(${p.hue}, 90%, 78%, .16)`, `hsla(${p.hue}, 90%, 78%, 0)`, 128);
-          ctx.globalAlpha = 1; ctx.drawImage(blob, cx - r, cy - r, r * 2, r * 2);
-        }
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        p.ph += dt * p.sp; p.rot += p.vr * dt; p.flip += p.vf * dt;
+        if (m === "thinking") { p.y -= (p.kind === "mote" ? 9 : 5) * p.sp * dt; p.x += Math.sin(p.ph * .7) * 6 * dt; }
+        else if (m === "learning") { p.x += 14 * p.sp * dt; p.y += (5 + Math.sin(p.ph) * 4) * dt; }
+        else if (m === "unrestricted") {
+          // ∞：每个粒子走在同一条双纽线的不同相位上，带一点各自的偏移
+          const u = t * .06 * p.sp + p.lane * 6.283, sc = Math.min(w, h * 1.6) * .42, den = 1 + Math.sin(u) ** 2;
+          const tx = w / 2 + sc * Math.cos(u) / den, ty = h * .42 + sc * .55 * Math.sin(u) * Math.cos(u) / den;
+          p.x += (tx + Math.sin(p.ph) * 24 - p.x) * Math.min(1, dt * .8); p.y += (ty + Math.cos(p.ph) * 18 - p.y) * Math.min(1, dt * .8);
+        } else { p.y += (p.kind === "flake" ? 7 : 11) * p.sp * dt; p.x += Math.sin(p.ph) * 9 * dt; }
+        if (ptr) { const dx = p.x - ptr.x, dy = p.y - ptr.y, d = Math.hypot(dx, dy); if (d < 120 && d > 1) { const k = (1 - d / 120) * 50 * dt / d; p.x += dx * k; p.y += dy * k; } }
+        if (p.y > h + 30 || p.y < -30 || p.x > w + 30 || p.x < -30) parts[i] = Object.assign(make(m, false), m === "learning" ? {x: -10, y: rnd(0, h * .8)} : {});
+        // 靠近顶部和底部渐隐，避开输入框与标题栏
+        const edge = Math.min(1, p.y / (h * .12), (h - p.y) / (h * .22));
+        const q = parts[i]; const a0 = q.a; q.a = a0 * Math.max(0, edge);
+        matter.draw(ctx, q); q.a = a0;
       }
       ctx.globalAlpha = 1;
     };
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
     const sync = () => {
       const card = document.querySelector(".chat-pane-cache__pane--active .chat-main");
-      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-cle-room-pending") && !document.getElementById("laolao-splash");
+      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-cle-room-pending") && !document.getElementById("laolao-splash") && !document.getElementById("cle-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       if (!canvas || canvas.parentElement !== card) { resizeObserver?.disconnect(); canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; resizeObserver = new ResizeObserver(() => requestAnimationFrame(() => canvas && resize())); resizeObserver.observe(card); }
       if (currentMode !== mode()) { currentMode = mode(); resize(); }

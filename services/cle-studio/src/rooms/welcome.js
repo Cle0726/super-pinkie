@@ -1,8 +1,7 @@
 // The empty room: an arched window holding the room's painting, the room's name and one line
 // in its voice, and a few things worth asking here. Replaces the stock avatar and suggestions.
-import {ROOMS} from './rooms.js';
+import {ROOMS, roomArt} from './rooms.js';
 
-const ART = '/cle/static/art/rooms/';
 const SUGGEST = {
   chat: ['今天过得怎么样？', '陪我想想周末去哪', '给我讲个冷知识'],
   project: ['看看这个项目现在的状态', '帮我把这件事拆成三步', '跑一遍测试，找出最先坏的地方'],
@@ -17,14 +16,14 @@ export function mountWelcome(host, signal) {
     el.className = 'cle-welcome';
     el.dataset.room = room.id;
     el.innerHTML = `
-      <figure class="cle-welcome__arch"><img alt="" decoding="async" src="${ART}${room.id}.png"><span class="cle-welcome__rule" aria-hidden="true"></span></figure>
-      <p class="cle-welcome__label cle-label">${room.fr} · ${room.zh}</p>
+      <figure class="cle-welcome__arch"><img alt="" decoding="async" src="${roomArt(room.id)}"><span class="cle-welcome__rule" aria-hidden="true"></span></figure>
+      <p class="cle-welcome__label"><span>${room.zh}</span><em>${room.fr}</em></p>
       <h2 class="cle-welcome__line">${room.line}</h2>
       <div class="cle-welcome__asks">${(SUGGEST[room.id] || []).map((s) => `<button type="button" class="cle-welcome__ask">${s}</button>`).join('')}</div>`;
     const img = el.querySelector('img');
     img.addEventListener('error', () => {
       img.addEventListener('error', () => img.closest('figure').classList.add('is-empty'), {once: true});
-      img.src = '/cle/static/art/identity.png';
+      img.src = '/cle/static/art/identity.webp';
     }, {once: true});
     el.addEventListener('click', (e) => {
       const ask = e.target.closest('.cle-welcome__ask');
