@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {agentEntries, agentWorkspace, runtimeConfig} from './openclaw-paths.mjs';
+import {registerLearningPactGateway} from './learning-pact.mjs';
 
 const MAX_TEXT = 12_000;
 const MAX_OPTIONS = 8;
@@ -65,6 +66,12 @@ function writeJsonAtomic(file, value) {
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {encoding: 'utf8', mode: 0o600});
   fs.renameSync(temporary, file);
   try { fs.chmodSync(file, 0o600); } catch {}
+}
+
+// Le Pacte 的账本写入绝不能反噬学习本身：钩子失败只记日志，题卡照常工作。
+function pactLedger(store, operation, argument = {}) {
+  if (!store?.pact) return;
+  try { store.pact[operation](argument); } catch {}
 }
 
 function normalizedKind(value) {
@@ -321,13 +328,15 @@ function sessionFromContext(context = {}) {
 }
 
 export class LearningInteractionStore {
-  constructor({root = path.join(stateRoot(), 'learning'), workspace = workspaceRoot()} = {}) {
+  constructor({root = path.join(stateRoot(), 'learning'), workspace = workspaceRoot(), pact = null} = {}) {
     this.root = path.resolve(root);
     this.workspace = path.resolve(workspace);
     this.activityRoot = path.join(this.root, 'sessions');
     this.notesFile = path.join(this.root, 'notes.json');
     this.notesMarkdown = path.join(this.workspace, 'notes', '学习笔记.md');
     this.notesBackupRoot = path.join(this.root, 'notes-backups');
+    // 由插件装载时注入 LearningPact；单独构造的存储（例如旧测试）保持无账本。
+    this.pact = pact || null;
   }
 
   assertLearningSession(sessionKey) {
@@ -459,6 +468,8 @@ export class LearningInteractionStore {
     };
     current.phase = 'evaluating';
     state.current = current;
+    // Le Pacte：每道真正作答的题记一次；同一题卡重复提交由上面的 submissionId 挡住。
+    pactLedger(this, 'recordQuestion', {correct: correctness});
     return this.publicState(this.write(sessionKey, state));
   }
 
@@ -680,6 +691,7 @@ export class LearningInteractionStore {
     });
     const next = [note, ...state.notes.filter(item => item.id !== note.id)];
     this.writeNotes(next);
+    if (!existing) pactLedger(this, 'recordNote', {count: 1});
     return {ok: true, note, markdownPath: this.markdownPathForSession(sessionKey)};
   }
 
@@ -763,6 +775,7 @@ export class LearningInteractionStore {
     const updated = {...current, ...schedule, updatedAt: now};
     const state = this.readNotesState();
     this.writeNotes(state.notes.map(note => note.id === updated.id ? updated : note));
+    pactLedger(this, 'recordReview', {count: 1});
     return {ok: true, note: withReviewDefaults(updated)};
   }
 
@@ -1229,6 +1242,7 @@ export function registerLearningGateway(api, store, {organizer = new LearningNot
     const result = store.undoOrganization(sessionKey, params.backupId);
     organizer.invalidate(sessionKey); return result;
   });
+  if (store.pact) registerLearningPactGateway(api, store.pact);
 }
 
 export function learningPrompt(store, sessionKey) {
