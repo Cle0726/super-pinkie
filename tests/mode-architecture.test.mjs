@@ -142,7 +142,7 @@ test('tool progress rules and learn-while-doing apply independently in all five 
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
     if(mode==='learning'){
-      assert.match(result.appendSystemContext,/学习模式方法模块/);
+      assert.match(result.appendSystemContext,/习作模式方法模块/);
       assert.match(result.appendSystemContext,/默认讲解要短、白话、口语化/);
       assert.match(result.appendSystemContext,/能三句话讲清就不写三段/);
       assert.match(result.appendSystemContext,/最小实验/);

@@ -49,6 +49,8 @@ test('settings use the native config RPC and do not destructively edit Lit-owned
   assert.match(source, /laolaoModelPickerCatalog/);
   assert.doesNotMatch(source, /(?:\.textContent|\.innerHTML|\.innerText)\s*=(?!=)/);
   assert.doesNotMatch(source, /replaceChildren\(|\.remove\(\)/);
+  // ui/injections/** is the old live app and keeps the old character name;
+  // this page must keep matching the labels it actually ships.
   for (const label of ['碧琪', '模型与思考', '碧琪能做什么', '外观与声音', '连接', '关于与更新']) {
     assert.ok(source.includes(`"${label}"`), `missing settings group: ${label}`);
   }

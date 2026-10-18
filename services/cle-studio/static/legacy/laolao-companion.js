@@ -1,9 +1,9 @@
-/* 碧琪小伙伴 + 模式氛围 + 输入框动效。
-   - 碧琪趴在输入框上边沿偏右：平时安静（只有很轻的呼吸），你打字时抬头看，碧琪输出时托腮，
-     完成时欢呼一下，很久没操作会睡着。点她打开功能菜单。
+/* Li An小伙伴 + 模式氛围 + 输入框动效。
+   - Li An趴在输入框上边沿偏右：平时安静（只有很轻的呼吸），你打字时抬头看，Li An输出时托腮，
+     完成时欢呼一下，很久没操作会睡着。点他打开功能菜单。
    - 功能：这是啥意思 / 一句话总结 / 帮我把问题问清楚 / 专注 25 分钟；模型请求走插件方法
      pinkie.companion.ask（独立模型），右键可设置模型与参数，只有测试预览使用演示回答。
-   - 发送、完成时按模式放一点点缀（气球、彩带、光点…）；氛围画布很轻，页面不可见或切换模式时停。 */
+   - 发送、完成时扬起几片花瓣与金箔；氛围画布很轻，页面不可见或切换模式时停。 */
 (() => {
   "use strict";
   if (window.__pinkieBuddy) return;
@@ -50,8 +50,8 @@
 
   /* ── 模型请求 ─────────────────────────────────────────────────────────── */
   const DEMO = {
-    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，碧琪会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
-    summary: () => `一句话：碧琪把这周学习排成每天不超过 50 分钟，周三只复习 15 分钟，周末空着。<div class="muted">样板演示回答</div>`,
+    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，Li An会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
+    summary: () => `一句话：Li An把这周学习排成每天不超过 50 分钟，周三只复习 15 分钟，周末空着。<div class="muted">样板演示回答</div>`,
   };
   const helperRequests = new Set();
   const ask = async (kind, payload) => {
@@ -68,16 +68,16 @@
       try {
         const res = await rpc("pinkie.companion.ask", {kind, mode: job.mode, ...payload}, 135000);
         if (res && typeof res.text === "string" && res.text.trim()) return {html: esc(res.text).replace(/\n/g, "<br>"), text: res.text};
-        if (res?.error) return {html: `碧琪这次没想出来：${esc(res.error)}`};
+        if (res?.error) return {html: `这次没想出来：${esc(res.error)}`};
       } catch (error) {
-        if (!/unknown method|not found|invalid/i.test(String(error?.message || ""))) return {html: `碧琪这次没连上：${esc(error?.message || error)}`};
+        if (!/unknown method|not found|invalid/i.test(String(error?.message || ""))) return {html: `这次没连上：${esc(error?.message || error)}`};
       }
     }
     return {html: "小帮手还没连接独立模型，先保留你正在写的内容。"};
     } finally { helperRequests.delete(job); }
   };
 
-  /* ── 碧琪本体：两张图交替淡入淡出，换表情不闪 ───────────────────────── */
+  /* ── Li An本体：两张图交替淡入淡出，换表情不闪 ───────────────────────── */
   const build = () => {
     buddy = el("div", "pinkie-buddy");
     buddy.dataset.state = "rest";
@@ -118,7 +118,7 @@
       event.preventDefault(); items[index]?.focus();
     });
   };
-  /* 会动的碧琪（laolao-buddy-rig.js，加载先后不限）：画出第一帧后才把静态图藏起来；不可用时一直用静态图 */
+  /* 会动的Li An（laolao-buddy-rig.js，加载先后不限）：画出第一帧后才把静态图藏起来；不可用时一直用静态图 */
   // 创建画布要编译着色器（二三十毫秒），等开场画面结束、页面渲染完再做，免得和首屏抢时间；最多等 8 秒。
   let rigTried = false, firstMountAt = 0;
   const pageSettled = () => {
@@ -158,7 +158,7 @@
     }
     preload();
     ensureRig();
-    // 追加卡留在她左侧；她始终趴在输入框上沿。
+    // 追加卡留在他左侧；他始终趴在输入框上沿。
     const queue = document.querySelector(".chat-pane-cache__pane--active .chat-queue");
     const qr = queue?.getBoundingClientRect();
     document.documentElement.toggleAttribute("data-pinkie-queue", Boolean(qr?.height));
@@ -253,10 +253,10 @@
     const dialog=el("dialog","pinkie-buddy-settings"); settingsDialog=dialog;
     dialog.setAttribute("aria-labelledby","pinkie-buddy-settings-title");
     const heading=el("div","pinkie-buddy-settings__heading");
-    const title=el("h2","",`${MODE_NAMES[originMode]}小碧琪 · 模型与参数`); title.id="pinkie-buddy-settings-title";
+    const title=el("h2","",`${MODE_NAMES[originMode]} · Li An 的模型与参数`); title.id="pinkie-buddy-settings-title";
     const close=el("button","pinkie-buddy-settings__close","×"); close.type="button"; close.setAttribute("aria-label","关闭模型设置");
     close.addEventListener("click",()=>dialog.close()); heading.append(title,close);
-    const note=el("p","pinkie-buddy-settings__note","这组设置用于小碧琪的解释、总结和提问整理。");
+    const note=el("p","pinkie-buddy-settings__note","这组设置用于 Li An 在输入框旁的解释、总结和提问整理。");
     const form=el("form","pinkie-buddy-settings__form"), fields=el("fieldset","pinkie-buddy-settings__fields");
     fields.disabled=true;
     const field=(label,input,hint="")=>{const row=el("label","pinkie-buddy-settings__field");row.append(el("span","",label),input);if(hint)row.append(el("small","",hint));fields.append(row);return input;};
@@ -303,7 +303,7 @@
     form.addEventListener("submit",async(event)=>{
       event.preventDefault();if(!live())return;
       const settings=values(), syncAll=allModes.checked;fields.disabled=allModes.disabled=true;test.disabled=save.disabled=true;showStatus("正在保存…");
-      try{const result=await helperRpc("pinkie.companion.settings.set",{mode:originMode,settings,allModes:syncAll});if(live()){render(result);showStatus(syncAll?"已保存到所有模式。":"已保存。下一次小碧琪回复会使用这组设置。");}}
+      try{const result=await helperRpc("pinkie.companion.settings.set",{mode:originMode,settings,allModes:syncAll});if(live()){render(result);showStatus(syncAll?"已保存到所有模式。":"已保存。下一次小Li An回复会使用这组设置。");}}
       catch(error){if(live())showStatus(error.message || "保存失败，请再试一次。",true);}
       finally{if(live()){fields.disabled=allModes.disabled=false;test.disabled=save.disabled=!catalog.length;}}
     });
@@ -340,7 +340,7 @@
   const explain = async (term) => {
     const ticket = ++requestVersion, originMode = mode();
     setState("working");
-    say(`碧琪在想「${esc(term)}」怎么说最好懂 ${thinkingDots}`, {sticky: true, close: false});
+    say(`我在想「${esc(term)}」怎么说最好懂 ${thinkingDots}`, {sticky: true, close: false});
     const res = await ask("explain", {text: term, context: latestReply().text.slice(0, 1200)});
     if (ticket !== requestVersion || originMode !== mode()) return;
     happyUntil = Date.now() + 1800; setState("happy");
@@ -350,16 +350,16 @@
     const sel = String(window.getSelection?.() || "").trim();
     if (sel && sel.length <= 60) return explain(sel);
     const terms = pickTerms(latestReply().group);
-    if (!terms.length) return say(`${callUser()}在聊天里选中看不懂的词，碧琪就用大白话讲给你听。`);
+    if (!terms.length) return say(`${callUser()}在聊天里选中看不懂的词，我用大白话讲给你听。`);
     say(`最新回复里这几个词可能不好懂，点一个：<div class="pinkie-buddy__chips"></div>`, {sticky: true});
     const box = bubble.querySelector(".pinkie-buddy__chips");
     terms.forEach((t) => { const c = el("button", "pinkie-buddy__chip", t); c.type = "button"; c.addEventListener("click", (e) => { e.stopPropagation(); explain(t); }); box.append(c); });
   };
   const summaryFlow = async () => {
     const reply = latestReply().text;
-    if (reply.length < 120) return say("最新这条回复本来就挺短的，碧琪就不画蛇添足啦。");
+    if (reply.length < 120) return say("最新这条回复本来就很短，不用再缩了。");
     const ticket = ++requestVersion, originMode = mode();
-    setState("working"); say(`碧琪正在把它缩成一句话 ${thinkingDots}`, {sticky: true, close: false});
+    setState("working"); say(`正在把它缩成一句话 ${thinkingDots}`, {sticky: true, close: false});
     const res = await ask("summary", {text: reply.slice(0, 6000)});
     if (ticket !== requestVersion || originMode !== mode()) return;
     happyUntil = Date.now() + 1800; setState("happy"); say(res.html, {sticky: true});
@@ -367,9 +367,9 @@
   const clarifyFlow = async () => {
     const ta = document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-combobox textarea");
     const draft = (ta?.value || "").trim();
-    if (!draft) return say(`${callUser()}先在输入框里随便写几句，碧琪帮你整理成更清楚的问题。`);
+    if (!draft) return say(`${callUser()}先在输入框里随便写几句，我帮你整理成更清楚的问题。`);
     const ticket = ++requestVersion, originMode = mode();
-    setState("working"); say(`碧琪在帮你理一理 ${thinkingDots}`, {sticky: true, close: false});
+    setState("working"); say(`我在帮你理一理 ${thinkingDots}`, {sticky: true, close: false});
     const res = await ask("clarify", {text: draft, context: latestReply().text.slice(0, 1200)});
     if (ticket !== requestVersion || originMode !== mode()) return;
     setState("rest");
@@ -377,14 +377,14 @@
       say(`这样问会更清楚：<div class="pinkie-buddy__quote">${esc(res.text)}</div><div class="pinkie-buddy__chips"><button class="pinkie-buddy__chip is-primary" type="button" data-use>用这个</button><button class="pinkie-buddy__chip" type="button" data-keep>保留原来的</button></div>`, {sticky: true});
       bubble.querySelector("[data-use]").addEventListener("click", (e) => {
         e.stopPropagation();
-        if (ta.value.trim() !== draft) return say("输入框里的内容已经变了，碧琪先保留你现在写的。", {sticky: true});
+        if (ta.value.trim() !== draft) return say("输入框里的内容已经变了，先保留你现在写的。", {sticky: true});
         ta.value = res.text; ta.dispatchEvent(new Event("input", {bubbles: true})); ta.focus(); hideBubble();
       });
       bubble.querySelector("[data-keep]").addEventListener("click", (e) => { e.stopPropagation(); hideBubble(); });
-    } else say(res.html || "碧琪这次没整理出来。", {sticky: true});
+    } else say(res.html || "这次没整理出来。", {sticky: true});
   };
 
-  /* 专注计时：输入框上边沿一条细细的进度线 + 碧琪身边的小时间 */
+  /* 专注计时：输入框上边沿一条细细的进度线 + Li An身边的小时间 */
   const startFocus = async () => {
     if (mode() === 'learning') {
       try {
@@ -393,7 +393,7 @@
       } catch (error) { say(esc(error.message)); return; }
     } else focus = {start: Date.now(), end: Date.now() + FOCUS_MINUTES * 60_000};
     document.documentElement.setAttribute("data-pinkie-focus", "");
-    say(`好，接下来 ${FOCUS_MINUTES} 分钟碧琪陪${callUser()}专心，时间到了叫你休息。`);
+    say(`好，接下来 ${FOCUS_MINUTES} 分钟我陪${callUser()}专心，时间到了叫你休息。`);
   };
   const stopFocus = (done = false) => {
     const finished = focus;
@@ -401,7 +401,7 @@
     focus = null; document.documentElement.removeAttribute("data-pinkie-focus");
     document.documentElement.style.removeProperty("--pinkie-focus-progress");
     caption.classList.remove("is-shown");
-    if (done === true) { happyUntil = Date.now() + 3000; setState("happy"); burstFrom(figure, "done"); say(`${callUser()}专注了 ${FOCUS_MINUTES} 分钟，超棒！起来伸个懒腰、看看远处、喝口水吧。`, {sticky: true}); }
+    if (done === true) { happyUntil = Date.now() + 3000; setState("happy"); burstFrom(figure, "done"); say(`${callUser()}专注了 ${FOCUS_MINUTES} 分钟，好。起来伸个懒腰、看看远处、喝口水吧。`, {sticky: true}); }
   };
   const tickFocus = () => {
     if (!focus) return;
@@ -428,7 +428,7 @@
     if (!raw || raw === lastNarrated || Date.now() - lastNarrateAt < 2500) return;
     lastNarrated = raw; lastNarrateAt = Date.now();
     const hit = PLAIN.find(([re]) => re.test(raw));
-    caption.textContent = `碧琪${hit ? hit[1] : "在忙一个小步骤"}`;
+    caption.textContent = `Li An ${hit ? hit[1] : "在忙一个小步骤"}`;
     caption.classList.add("is-shown");
   };
 
@@ -544,7 +544,7 @@
     if (ta && ta.value.trim()) onSend();
   }, true);
 
-  /* 视线：碧琪在写回复时看着回复，你在打字时看你打的字，刚发出去时抬头看一眼聊天 */
+  /* 视线：Li An在写回复时看着回复，你在打字时看你打的字，刚发出去时抬头看一眼聊天 */
   let lookUpUntil = 0;
   const gaze = (run, typing, ta) => {
     if (!rig) return;
@@ -607,7 +607,7 @@
     if (run) narrate(); else if (!focus) caption.classList.remove("is-shown");
     tickFocus();
   };
-  /* 会动的碧琪：打字时每敲一下跟着点一下头；鼠标靠近时头偏向鼠标 */
+  /* 会动的Li An：打字时每敲一下跟着点一下头；鼠标靠近时头偏向鼠标 */
   document.addEventListener("input", (e) => { if (rig && e.target.closest?.(".chat-pane-cache__pane--active .agent-chat__composer-combobox textarea")) rig.impulse("key"); }, true);
   let lookPending = false, lookAt = null;
   document.addEventListener("pointermove", (e) => {
@@ -625,14 +625,14 @@
     if (previewState === "happy") burstFrom(figure, "done");
   });
 
-  /* 选中聊天文字时出现「问碧琪」 */
+  /* 选中聊天文字时出现「问Li An」 */
   window.__pinkieSelectionActions?.register('ask', {
     order: 2,
     when: ({text, library}) => library ? text.length <= 20000 : text.length <= 60,
     create: () => {
       const askChip = el("button", "pinkie-buddy-ask");
       const ico = el("span", "pinkie-buddy__ico"); ico.innerHTML = ICON.explain;
-      askChip.append(ico, el("span", "", "问碧琪"));
+      askChip.append(ico, el("span", "", "问 Li An"));
       return askChip;
     },
     run: selected => selected.library ? void window.__pinkieLibrary.askSelection(selected).catch(error => say(esc(error.message))) : explain(selected.text),

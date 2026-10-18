@@ -1,4 +1,4 @@
-// 碧琪主动提问：给先生一张带 2–4 个选项的提问卡。
+// Li An 主动提问：给先生一张带 2–4 个选项的提问卡。
 //
 // 这个工具不阻塞等待。它把问题写进工具结果后立即返回，模型随即结束本轮；
 // 先生在聊天页点选后，选择作为下一条普通消息发回来。这样提问不会让一轮
@@ -9,7 +9,7 @@
 
 export const ASK_USER_TOOL = 'ask_user';
 export const ASK_MARKER = '[[PINKIE_ASK_V1]]';
-export const ASK_ANSWER_PREFIX = '【回答碧琪的提问】';
+export const ASK_ANSWER_PREFIX = '【回答 Li An 的提问】';
 
 const MAX_QUESTION = 400;
 const MAX_HEADER = 12;

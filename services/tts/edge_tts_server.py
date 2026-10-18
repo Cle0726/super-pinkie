@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""碧琪本地语音服务：OpenAI 兼容的 /v1/audio/speech 接口。"""
+"""Li An 本地语音服务：OpenAI 兼容的 /v1/audio/speech 接口。"""
 
 import json
 import os

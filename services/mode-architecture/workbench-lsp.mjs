@@ -367,7 +367,7 @@ export class CodeAssistant {
   }
 }
 
-/* ───────── 代码检查（给碧琪的 code_check 工具，也给工作台的「问题」用） ───────── */
+/* ───────── 代码检查（给 Li An 的 code_check 工具，也给工作台的「问题」用） ───────── */
 // 每种语言用本机现成的权威检查器；只读，不改文件。输出统一成 {file,line,column,severity,message,source}。
 const runFile = (file, args, options) => new Promise(resolve => {
   execFile(file, args, {maxBuffer: 16 * 1024 * 1024, timeout: options.timeout || 120000, cwd: options.cwd, env: {...process.env, PATH: childPath(), HOME, NO_COLOR: '1', CLICOLOR: '0', TERM: 'dumb'}}, (error, stdout, stderr) => {

@@ -39,7 +39,7 @@ TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
 MODEL_LOCK = threading.Lock()
 MEMBERS = {
-    'pinkie': {'name': '碧琪', 'role': '主持与破题', 'scene': '碧琪把新的问题放到了圆桌中央。'},
+    'pinkie': {'name': 'Li An', 'role': '主持与破题', 'scene': 'Li An 把新的问题放到了圆桌中央。'},
     'twilight': {'name': '紫悦', 'role': '分析与结构', 'scene': '紫悦翻开笔记，开始梳理线索。'},
     'applejack': {'name': '苹果嘉儿', 'role': '事实与可行性', 'scene': '苹果嘉儿轻轻敲了敲桌面，核对实际条件。'},
     'rainbow': {'name': '云宝', 'role': '反方与压力测试', 'scene': '云宝绕着方案飞了一圈，专挑薄弱处看。'},
@@ -299,7 +299,7 @@ class Store:
             raise ValueError('圆桌名称请填写 1–60 个字')
         selected = list(dict.fromkeys(member for member in (members or DEFAULT_MEMBERS) if member in MEMBERS))
         if len(selected) < 3:
-            raise ValueError('至少邀请三位小马，才适合开圆桌')
+            raise ValueError('至少邀请三位伙伴，才适合开圆桌')
         picked = self.validate_models(models or {}, selected, allow_blank=True)
         project = self.validate_project(project) if str(project).strip() else ''
         session_id = uuid.uuid4().hex
@@ -319,7 +319,7 @@ class Store:
             if value and value not in allowed:
                 raise ValueError('席位模型已不可用，请刷新后重选')
             if not value and not allow_blank:
-                raise ValueError('请先给每位出席的小马选择模型')
+                raise ValueError('请先给每位出席的伙伴选择模型')
             result[member] = value
         return result
 

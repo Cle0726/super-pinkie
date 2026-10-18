@@ -161,7 +161,7 @@
     if (!current || !stage) return;
     const answer = selectedAnswer(stage);
     if ((!Array.isArray(answer) && !answer) || (Array.isArray(answer) && !answer.length)) {
-      statusLine(stage, "先选一个答案，碧琪才知道从哪里讲起呀。", true);
+      statusLine(stage, "先选一个答案，Li An 才知道从哪里讲起呀。", true);
       return;
     }
     const confidence = Number(stage.querySelector(".laolao-learning-stage__confidence")?.value || 50);
@@ -212,7 +212,7 @@
     setBusy(button, true, "准备中…");
     try {
       await sendControl(`${NEXT_MARKER}\n请根据刚才的表现与当前学习主题，调用 learning_activity present 给一题难度合适的变式题。一次只出一题。`);
-      statusLine(state.stage, "碧琪正在按刚才的表现准备下一题…");
+      statusLine(state.stage, "Li An 正在按刚才的表现准备下一题…");
     } catch (error) {
       statusLine(state.stage, error.message || "下一题暂时没有送出去", true);
       setBusy(button, false, "下一题");
@@ -256,11 +256,11 @@
 
     const art = el("img", "laolao-learning-stage__art");
     art.hidden = true;
-    art.alt = "碧琪拿着学习笔记本";
+    art.alt = "Li An 拿着学习笔记本";
     art.decoding = "async";
     art.draggable = false;
     const body = el("div", "laolao-learning-stage__body");
-    const eyebrow = el("div", "laolao-learning-stage__eyebrow", current?.topic || "碧琪互动学习");
+    const eyebrow = el("div", "laolao-learning-stage__eyebrow", current?.topic || "Li An 互动学习");
     body.append(eyebrow);
 
     if (!current) {
@@ -277,7 +277,7 @@
         body.append(banner);
       }
       body.append(el("h3", "laolao-learning-stage__question", "想先练哪一个知识点？"));
-      body.append(el("p", "laolao-learning-stage__lead", "直接继续聊天也可以；需要练习时，碧琪会把当前内容变成一张可作答的题卡。"));
+      body.append(el("p", "laolao-learning-stage__lead", "直接继续聊天也可以；需要练习时，Li An 会把当前内容变成一张可作答的题卡。"));
       const actions = el("div", "laolao-learning-stage__actions");
       const begin = el("button", "laolao-learning-button laolao-learning-button--primary", "从当前内容出一题");
       begin.type = "button";
@@ -325,7 +325,7 @@
       body.append(actions);
     } else if (current.phase === "evaluating") {
       const immediate = current.submission?.correctness;
-      body.append(el("div", `laolao-learning-result ${immediate === true ? "is-correct" : immediate === false ? "is-incorrect" : ""}`, immediate === true ? "答对啦，碧琪正在把关键原因讲清楚…" : immediate === false ? "这次没选对，但错因马上就能弄明白…" : "碧琪正在看你的思路…"));
+      body.append(el("div", `laolao-learning-result ${immediate === true ? "is-correct" : immediate === false ? "is-incorrect" : ""}`, immediate === true ? "答对啦，Li An 正在把关键原因讲清楚…" : immediate === false ? "这次没选对，但错因马上就能弄明白…" : "Li An 正在看你的思路…"));
     } else {
       const result = current.result || {};
       const verdict = result.correct === true ? "答对啦！" : result.correct === false ? "差一点，正好抓住这个坑。" : "这题已经讲清楚啦。";
@@ -1060,7 +1060,7 @@
       const panel = el("section", "laolao-learning-radar");
       panel.append(el("div", "laolao-learning-radar__eyebrow", "薄弱点雷达"));
       if (!top.length) {
-        panel.append(el("p", "laolao-learning-radar__empty", "还没有带标签的笔记。先让碧琪帮你自动打标签，或者手动加几条标签。"));
+        panel.append(el("p", "laolao-learning-radar__empty", "还没有带标签的笔记。先让 Li An 帮你自动打标签，或者手动加几条标签。"));
       } else {
         const canvas = el("canvas", "laolao-learning-radar__canvas");
         canvas.width = 360; canvas.height = 280;
@@ -1180,7 +1180,7 @@
     const download = el("button", "laolao-learning-button", "导出整理稿"); download.type = "button";
     download.addEventListener("click", () => {
       const url = URL.createObjectURL(new Blob([notebook.markdown], {type: "text/markdown;charset=utf-8"}));
-      const link = el("a"); link.href = url; link.download = "碧琪学习笔记-整理稿.md";
+      const link = el("a"); link.href = url; link.download = "Li An 学习笔记-整理稿.md";
       document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     });
     actions.append(copy, download); return actions;
@@ -1251,7 +1251,7 @@
       for (const item of plan.discarded) discarded.append(el("p", "", `${item.type}：${item.reason}`));
       panel.append(discarded);
     }
-    if (!plan.operations?.length && !plan.notebook) panel.append(el("p", "laolao-learning-notes__empty", "碧琪没有找到可以执行的整理建议。原笔记保持不变。"));
+    if (!plan.operations?.length && !plan.notebook) panel.append(el("p", "laolao-learning-notes__empty", "Li An 没有找到可以执行的整理建议。原笔记保持不变。"));
     const actions = el("div", "laolao-learning-organize-preview__actions");
     const applyLabel = plan.notebook ? "保存整理稿" : "应用所选";
     const apply = el("button", "laolao-learning-button laolao-learning-button--primary", applyLabel); apply.type = "button"; apply.disabled = !checked.length && !plan.notebook;
@@ -1501,7 +1501,7 @@
     ];
     const csv = "\ufeff" + cells.map(row => row.map(value => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
-    const link = el("a"); link.href = url; link.download = "碧琪学习笔记-Anki.csv"; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    const link = el("a"); link.href = url; link.download = "Li An 学习笔记-Anki.csv"; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
   const revealMarkdown = () => {
@@ -1526,7 +1526,7 @@
       drawer.setAttribute("aria-hidden", "true");
       drawer.inert = true;
       const header = el("header", "laolao-learning-notes__header");
-      header.append(el("div", "laolao-learning-notes__title", "碧琪学习笔记"));
+      header.append(el("div", "laolao-learning-notes__title", "Li An 学习笔记"));
       const close = el("button", "", "×"); close.type = "button"; close.setAttribute("aria-label", "关闭笔记本"); close.addEventListener("click", closeNotebook); header.append(close);
       const contentWrap = el("div", "laolao-learning-notes__content");
       const reviewBar = el("div", "laolao-learning-notes__review-bar");
@@ -1698,7 +1698,7 @@
       const {text, assistant, library} = selected;
       if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
       state.selectionText = text;
-      state.selectionLabel = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答";
+      state.selectionLabel = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "Li An 回答";
       void saveSelection();
     },
   });
