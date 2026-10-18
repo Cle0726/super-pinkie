@@ -313,7 +313,9 @@ function hasActivity(day) {
 function dayState(day, pact, todayDate) {
   if (day.date > todayDate) return 'future';
   if (day.completedAt != null) return 'complete';
-  if (meetsGoals(day, {...pact, daily: {...pact.daily, reviews: 'skip'}}, 0)) return 'complete';
+  // Without a recorded completion we cannot assume that yesterday's due reviews
+  // were done. Today's due count cannot prove a historical completion either.
+  if (!needsDueReviews(pact) && meetsGoals(day, pact, 0)) return 'complete';
   return hasActivity(day) ? 'partial' : 'missed';
 }
 
@@ -326,6 +328,7 @@ function todayPayload(pact, day, {dueReviews = 0, best = 0, current = 0, weakTop
     progress: {
       minutes: day.minutes,
       questions: day.questions.answered,
+      correct: day.questions.correct,
       reviewsDone: day.reviews.done,
       dueReviews,
       notesAdded: day.notes.added,
@@ -639,8 +642,9 @@ export class LearningPact {
     }
     const elapsedMinutes = Math.floor((now - active.start) / 60_000);
     // 计时最多记到计划时长 + 10 分钟，防止忘了停就记上一整天。
-    const credited = Math.max(1, Math.min(elapsedMinutes, active.plannedMinutes + 10));
+    const credited = Math.max(0, Math.min(elapsedMinutes, active.plannedMinutes + 10));
     this.clearFocus();
+    if (credited === 0) return {minutes: 0, today: this.today({now})};
     const pact = this.get();
     const date = active.date && DATE_PATTERN.test(active.date) ? active.date : dayInZone(now, pact.timezone);
     this.mutateDay(date, day => {
