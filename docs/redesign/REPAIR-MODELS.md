@@ -115,6 +115,58 @@
 - 窄窗 300px：label 仍显示 `Max`（10.5px，宽 21px），未变成只剩眼睛。
 - 聚焦：`outline: 2px solid rgb(42,99,232)`。
 
+## 三点五、第二轮返修（主控 CUA 实测后）
+
+主控在 19789 实测确认模型菜单已通过（368×440、灰块消失、品牌路径正确、搜索保留精确路由），
+但思考菜单未过观感：368×117 面板里滑杆是很粗的亮蓝胶囊加强辉光，档位文字又非常小。
+本轮只修这一处根因，不加末尾 `!important` 补丁。
+
+### 根因：这一个控件被原生样式画了三个地方
+
+我直接读了 2026.10.4 的 `control-ui-boot-shared-styles-*.css`，三条规则叠加：
+
+| # | 选择器 | 它做了什么 | 视觉后果 |
+|---|---|---|---|
+| 1 | `.chat-controls__reasoning-slider:has([data-effort-boost=max],[data-effort-boost=ultra])` | 给**整个 30px 容器**铺 220% 宽的蓝色 `linear-gradient`，`border-radius: var(--radius-full)`，再加 `animation: chat-effort-flow 6s/4s infinite alternate` | 这一条才是“粗亮蓝胶囊”，和轨道无关；只要停在 Max/Ultra 就出现 |
+| 2 | `.chat-controls__reasoning-range[data-effort-boost=max]` / `[=ultra]` | `box-shadow: 0 0 0 1px …accent 45%, 0 0 12px …24%`（ultra 再加 18px 与 inset） | range 自身发光，叠在 1 上面 |
+| 3 | `::-webkit-slider-runnable-track` / `::-webkit-slider-thumb` | 26px 高胶囊轨 + 28×20 拇指 | 轨道本身就很粗 |
+
+上一版只改了 3 的尺寸与颜色，没有复位 1 和 2，所以无论轨道多细，容器仍是一整块亮蓝。
+
+### 修改
+
+- `models.css`：`html[data-cle]` 前缀天然高于原生选择器，逐条复位而不加 `!important`：
+  - 容器：`background/background-image: none`、`animation: none`、`box-shadow: none`（含 `:has([data-effort-boost])` 变体）；
+  - range：`box-shadow: none`、`background: none`、`filter: none`（含 `[data-effort-boost=max]`、`[=ultra]`）；
+  - 轨道：3px、圆角 3px，已填充部分 ink 72%、未填充 ink 14%——一条可见的细线，不是色块；
+  - 拇指：11×11 墨点 + 1.5px 纸色描边，`margin-top: -4px` 精确坐落在细线上；
+  - 焦点：环画在墨点上（纸环 + 冰蓝外环），不再整条控件发光。
+- 停点改为**独立刻度**：2×7px 竖向 tick，当前档 2×9px 且取冰蓝**纯色**（`box-shadow: none`），
+  不再是会连成一片的横向色条；已过的档位 tick 加深到 ink 52%。
+- 档位字号：常见 508px 双栏此前落在 `@container (max-width: 520px)` 里被压到 9px——
+  这正是主控说的“文字非常小”。改为 10.5px；仅当模型真的暴露 6–7 档降到 10px、8–10 档降到 9.5px
+  （由 `gaze.js` 写入 `data-cle-stops`），按档数分级而不是一刀切。
+- `gaze.js`：新增 `host.dataset.cleStops = String(values.length)`，供上面的分级使用；原生 range、
+  `min/max/step/value`、键盘、`disabled` 全部未动，未伪造任何档位。
+
+### 本轮自测
+
+- 结构测试新增 2 条（共 10 条）全通过：三条注入点都有对应复位规则、track 3px / thumb 11px、
+  当前档 tick 是纯色且无 `box-shadow`、520px 容器查询不再出现 9px、`data-cle-stops` 被写入。
+- 既有 38 条 picker 测试 + 5 条 DOM 测试 + 13 条结构测试全通过。
+- 浏览器实测（本地原生 CSS + 构建 CSS 同层加载）：
+  - `data-effort-boost=max` 时容器 `background-image: none`、`animation: none`、range `box-shadow: none`；
+  - 档位字号 10.5px（4 档）/ 9.5px（8 档），8 档时最宽名 35px、容器 316px 无截断；
+  - 眼睛随档位 0 → 0.34 → 0.93 → 1 开合，Max/Ultra 点亮虹膜；
+  - 方向键改变档位时停点高亮跟随（Low → Medium）；
+  - 对比度：当前档 17.05:1（深色 14.92:1）、未选中 6.48:1（深色 6.74:1）、刻度说明 6.48:1（深色 6.74:1）。
+
+### 遗留 / 交主控
+
+- 更亮的 `--cle-gaze` 只在“当前档 tick”与“聚焦环”出现，不再有大面积蓝色；若主控仍觉得蓝色偏艳，
+  改 `--cle-gaze` 一处即可，不需要动结构。
+- 我未看图。以上是层叠规则 + computed style + 几何测量，观感仍需主控 CUA 判定。
+
 ## 四、自主发现（本轮新增，非任务书原文）
 
 | # | 文件 / 选择器 | 触发条件 | 问题依据 | 修复 | 验证 |

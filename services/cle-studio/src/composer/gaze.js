@@ -88,6 +88,9 @@ function renderStops(details, stops) {
     host.classList.remove('is-note');
     delete host.dataset.cleNote;
     host.dataset.cleSignature = values.join(',');
+    // how many stops this model really exposes: the stylesheet uses it to keep the names
+    // legible on a nine-stop ladder instead of shrinking all of them to one size
+    host.dataset.cleStops = String(values.length);
     host.setAttribute('role', 'list');
     host.setAttribute('aria-label', '可用思考档位');
     const frag = document.createDocumentFragment();
