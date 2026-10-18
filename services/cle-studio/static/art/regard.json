@@ -1,0 +1,51 @@
+{
+ "macro": {
+  "open": "splash-macro-open.webp",
+  "closed": "splash-macro-closed.webp",
+  "eyes": [
+   {
+    "cx": 1791.39,
+    "cy": 586.41,
+    "w": 329.19,
+    "h": 195.98,
+    "angle": -14
+   },
+   {
+    "cx": 1791.39,
+    "cy": 586.41,
+    "w": 329.19,
+    "h": 195.98,
+    "angle": -14
+   }
+  ],
+  "size": [
+   2560,
+   1441
+  ]
+ },
+ "wide": {
+  "open": "splash-wide-open.webp",
+  "closed": "splash-wide-closed.webp",
+  "centerY": 0.45,
+  "eyes": [
+   {
+    "cx": 968.5,
+    "cy": 345.83,
+    "w": 50.0,
+    "h": 36.67,
+    "angle": -6
+   },
+   {
+    "cx": 1097.0,
+    "cy": 354.5,
+    "w": 51.67,
+    "h": 35.0,
+    "angle": 6
+   }
+  ],
+  "size": [
+   2560,
+   1707
+  ]
+ }
+}
