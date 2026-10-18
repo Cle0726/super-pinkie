@@ -470,7 +470,7 @@ test('传入已 aborted 的 signal：零 observer/订阅、直接离线', async 
 });
 
 // ── 审查 5：facade 订阅必须由桥持有并在换代后重绑 ────────────────────────────
-test('facade 订阅在第二次 activation 后仍收到新变化，旧 host 事件零次', async () => {
+test('facade 订阅换代后仍生效；退役前捕获的实际 wrapper 不再进入', async () => {
   const env = makeEnv();
   await withGlobals(env, async () => {
     const A = makeStrictHost({selectedKey: 'agent:main:one'});
@@ -478,15 +478,21 @@ test('facade 订阅在第二次 activation 后仍收到新变化，旧 host 事�
     const api = shim.installLegacyShim(A.host, cA.signal);
     const facade = api.hostFacade();
 
-    const seenPath = [];
-    // classic 只在 boot 订阅一次；记下这个回调，用来确认它被绑到了哪个 host
-    const external = () => seenPath.push('hit');
+    const seen = [];
+    const external = () => seen.push('hit');
     const unsub = facade.subscribe(external);
 
-    A.setSelectedKey('agent:main:one-b');
-    assert.ok(A.state.subs.includes(external), '第一轮应把外部回调绑到 host A');
-    external();
-    assert.equal(seenPath.length, 1, '第一轮应收到');
+    // host 上会有两条订阅：桥自己的 syncSelection（第一条），以及外部 wrapper。
+    // 外部那条必须是 wrapper，不能是外部原件。
+    assert.equal(A.state.subs.length, 2, '第一轮应有桥订阅 + 外部 wrapper');
+    // 按身份识别，不依赖数组顺序：外部 wrapper 一定不是 external 原件
+    const wrapperA = A.state.subs.find((f) => f !== external && f.name !== 'syncSelection');
+    assert.ok(wrapperA, '外部 wrapper 必须绑在 host 上');
+    assert.notEqual(wrapperA, external, '外部原件不得直接绑到 host');
+
+    // 通过 host 真实触发 wrapper（不是手动调 external）
+    wrapperA();
+    assert.equal(seen.length, 1, '第一轮 wrapper 应把事件交给外部回调');
 
     // 换代
     A.retire();
@@ -494,17 +500,24 @@ test('facade 订阅在第二次 activation 后仍收到新变化，旧 host 事�
     const cB = new AbortController();
     api.rebind(B.host, cB.signal);
 
-    // 同一个外部回调必须被重绑到新 host B（这正是 classic 只在 boot 订阅一次的缺口）
-    assert.ok(B.state.subs.includes(external), '重连后同一外部回调必须绑到新 host');
-    external();
-    assert.equal(seenPath.length, 2, '重连后同一订阅应仍收到新变化');
+    assert.ok(!A.state.subs.includes(wrapperA), '旧 host 上的外部 wrapper 必须已解绑');
+    const wrapperB = B.state.subs.find((f) => f.name !== 'syncSelection');
+    assert.ok(wrapperB, '新 host 应重新绑一次外部 wrapper');
+    assert.notEqual(wrapperB, wrapperA, '换代必须换新 wrapper');
 
-    // 旧 host 上的订阅必须已真正断开（off 被调用过），不能只是逻辑上忽略
-    assert.ok(A.state.eventOffs.includes('sub'), '旧 host 的 subscribe 句柄必须被调用解绑');
+    // 关键：调用退役前捕获的旧 wrapper —— 即使它已被 host 保存过，也不能再进入
+    wrapperA();
+    assert.equal(seen.length, 1, '退役前捕获的旧 wrapper 必须零次进入');
 
-    // unsubscribe 有效：桥不再持有它，也不再绑到 host
+    // 新 wrapper 正常
+    wrapperB();
+    assert.equal(seen.length, 2, '新 wrapper 应正常送达');
+
+    // 外部 unsubscribe 依旧有效
     unsub();
-    assert.ok(!B.state.subs.includes(external), 'unsubscribe 后桥应解绑');
+    assert.ok(!B.state.subs.includes(wrapperB), 'unsubscribe 后桥应解绑新 host 上的 wrapper');
+    wrapperB();
+    assert.equal(seen.length, 2, 'unsubscribe 后旧 wrapper 也不得再进入');
 
     cA.abort(); cB.abort();
   });
@@ -595,5 +608,141 @@ test('读到空 key 时如实记为空，不沿用上一个 session', async () =
     // 空 key 的 host 确实在线
     assert.equal(window.__cleBridge.isOnline(), true, '能读到空 key 说明 host 还活着');
     cA.abort(); cB.abort();
+  });
+});
+
+// ── 审查 1（本轮）：reinstall 时"替换失败"也必须完整回收 ─────────────────────
+// 不是 fresh install：先有活跃 host + 永不 settle 的请求 + facade 订阅，
+// 再用 rebind(newHost, 已终止 signal) 替换 —— 这一轮其实没装上，旧资源必须全收。
+test('reinstall 用已终止 signal 替换失败时，旧 pending 与外部订阅都要回收', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:live'});
+    const cA = new AbortController();
+    const api = shim.installLegacyShim(A.host, cA.signal);
+
+    const stamp = document.__cleBridgeSlot_v1;
+    const realST = globalThis.setTimeout, realCT = globalThis.clearTimeout;
+    const live = new Set();
+    globalThis.setTimeout = (fn, ms, ...r) => { const id = realST(fn, ms, ...r); live.add(id); return id; };
+    globalThis.clearTimeout = (id) => { live.delete(id); return realCT(id); };
+    try {
+      // 永不 settle 的在途请求
+      const inflight = window.__laolaoSidebar.gwRequest('sessions.list', {}, 15000);
+      await new Promise((r) => realST(r, 10));
+      assert.ok(live.size >= 1, '应有 pending 计时器');
+
+      // 外部订阅
+      const seen = [];
+      api.hostFacade().subscribe(() => seen.push('x'));
+      const wrapperA = A.state.subs.find((f) => f.name !== 'syncSelection');
+      assert.ok(wrapperA, '外部 wrapper 应已绑上');
+      assert.equal(stamp.externals.size, 1);
+
+      // 替换失败：新 signal 一上来就是 terminated
+      const dead = new AbortController(); dead.abort();
+      const B = makeStrictHost();
+      api.rebind(B.host, dead.signal);
+
+      // 旧 pending 必须被结算为"未确认"，计时器取消
+      await assert.rejects(inflight, /未确认/);
+      assert.equal(live.size, 0, '替换失败也必须取消旧 pending 计时器');
+
+      // 旧外部订阅必须解绑，且旧 wrapper 不能再进入
+      assert.ok(!A.state.subs.includes(wrapperA), '替换失败后旧 host 的外部 wrapper 必须解绑');
+      assert.equal(stamp.externals.size, 0, '外部订阅登记必须清空');
+      wrapperA();
+      assert.equal(seen.length, 0, '旧 wrapper 不得再进入');
+
+      // 而且新 host 一个资源都没装
+      assert.equal(B.state.subs.length, 0, '替换失败的新 host 不应建立订阅');
+      assert.equal(window.__cleBridge.isOnline(), false);
+    } finally {
+      globalThis.setTimeout = realST; globalThis.clearTimeout = realCT;
+    }
+    cA.abort();
+  });
+});
+
+// ── 审查 2（本轮）：正常 abort 也要解绑外部订阅 ───────────────────────────────
+test('正常 abort 后，退役前捕获的外部 wrapper 零次进入', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:x'});
+    const ctrl = new AbortController();
+    const api = shim.installLegacyShim(A.host, ctrl.signal);
+
+    const seen = [];
+    api.hostFacade().subscribe(() => seen.push('x'));
+    const wrapperA = A.state.subs.find((f) => f.name !== 'syncSelection');
+    wrapperA();
+    assert.equal(seen.length, 1);
+
+    ctrl.abort();
+    // 即使 host 仍保存着这个 wrapper（off 不保证立刻生效），也不能进入
+    wrapperA();
+    assert.equal(seen.length, 1, 'abort 后旧 wrapper 必须零次进入');
+    assert.ok(!A.state.subs.includes(wrapperA), 'abort 应解绑旧 host 上的订阅');
+    // 登记要保留：classic 只在 boot 订阅一次，重连后桥必须能按新 host 重绑。
+    assert.equal(document.__cleBridgeSlot_v1.externals.size, 1, 'abort 只解绑，不丢弃登记');
+
+    // 重连：同一个外部订阅必须被重绑到新 host，并再次生效
+    const B = makeStrictHost({selectedKey: 'agent:main:y'});
+    const cB = new AbortController();
+    shim.installLegacyShim(B.host, cB.signal);
+    const wrapperB = B.state.subs.find((f) => f.name !== 'syncSelection');
+    assert.ok(wrapperB, '重连后同一个外部订阅必须被重绑');
+    wrapperB();
+    assert.equal(seen.length, 2, '重连后外部订阅应再次生效');
+    cB.abort();
+  });
+});
+
+// ── 审查 3（本轮）：modechange 监听者要读到新 key，且重装补一次通知 ─────────────
+test('modechange 监听者在回调里读到的是新 key（先提交快照再通知）', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const host = makeStrictHost({selectedKey: 'agent:main:before'});
+    const ctrl = new AbortController();
+    const api = shim.installLegacyShim(host.host, ctrl.signal);
+    const facade = api.hostFacade();
+
+    let seenKey = null;
+    window.addEventListener('laolao:modechange', () => {
+      seenKey = facade.sessions.selectedKey; // 监听者通过 facade 读
+    });
+
+    // 同一轮里 mode 和 key 同时换
+    host.setSelectedKey('agent:main:after');
+    document.documentElement.dataset.cleRoom = 'unrestricted';
+    host.state.subs[0](); // 一次 publish 里两者都变
+
+    assert.equal(seenKey, 'agent:main:after', 'modechange 回调里必须已能读到新 key');
+    ctrl.abort();
+  });
+});
+
+test('重装时 mode 已在离线期间变化，也要补一次正确通知', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:m'});
+    const cA = new AbortController();
+    shim.installLegacyShim(A.host, cA.signal);
+    document.documentElement.dataset.cleRoom = 'code';
+
+    const modes = [];
+    window.addEventListener('laolao:modechange', (e) => modes.push(e.detail?.mode));
+
+    // 离线期间 mode 变了，且没有触发任何 publish
+    cA.abort();
+    document.documentElement.dataset.cleRoom = 'unrestricted';
+    assert.equal(modes.length, 0, '离线期间不应有通知');
+
+    // 重装：应补一次正确通知
+    const B = makeStrictHost({selectedKey: 'agent:main:m'});
+    const cB = new AbortController();
+    shim.installLegacyShim(B.host, cB.signal);
+    assert.deepEqual(modes, ['unrestricted'], '重装应补一次 modechange，且是新 mode');
+    cB.abort();
   });
 });
