@@ -124,6 +124,9 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 | 21 | **首屏标题的窗口不在插件内，而在 plugin 之前。** 实机第一份 AX 是 `New session — OpenClaw`，插件加载后才变 C.le.；断线时更是一直保持 `(已断开连接) … — OpenClaw` 直到重连。原因是 `syncDocumentTitle()` 在 Lit 的 `updated()` 里、模块求值后立刻跑，而 `brand.js` 要等 `activate()`——这两段都在窗口之后；断线时插件卸载还会 `disconnect` 掉它的 observer | `control-ui-core-*` 的 `updated()` / `Uc()`；插件 `activate`/teardown | 高（用户第一眼就看到旧品牌，断线期间持续） | 先查了原生是否提供品牌入口：**没有**。`Uc()` 把产品名硬编码为 `${context} — OpenClaw`，`theme.branding` 只在插件主题渲染时下发给客户端，走不到这条路径。改用同源外部脚本 `/cle-early.js`（`script-src 'self'` 允许，未放宽 CSP）：以 classic script 放在 module 入口之前，解析期即执行；页面级存活，不受插件卸载影响 |
 | 22 | **离线壳引用了早期脚本，但 worker 没预缓存它。** 只把 `<script>` 写进 `OFFLINE_BOOT.html` 的话，断线重载会向网络要一个不存在的文件，守护静默失效——恰好是最需要它的时刻 | `sw.js` 的 `precacheOfflineShell()`；它遍历 `OFFLINE_BOOT.assets` 并校验 `integrity` | 高（断线路径等于没修） | 把 `cle-early.js` 同时加入 `OFFLINE_BOOT.assets`（带真实 sha256 integrity）与 `publicAssets`，并按上游的**普通码点序**插入（不是 `localeCompare`，我一开始写错并用真实清单核对后改正） |
 
+| 23 | **预缓存行只新增不更新，脚本改动后 integrity 是旧的。** 主控隔离复现：只在 donor 的 `early-guard.js` 追加一行注释（CSS/HTML 不变）再 apply，结果 `earlyGuard=patched` 但 `integrityMatchesBytes=false`、`cacheIdChanged=false`、`offlineShell=unchanged`。根因是 `boot.assets` 只做"不存在才添加"，没做 upsert；而 `boot.id` 只 hash `offline.html`，脚本改了 HTML 没改，缓存名不动 | `apply-startup.mjs` 的 SW 分支 | 高（脚本更新后 worker 仍取旧缓存，守护静默失效） | 行改为 **upsert**（字节变了就更新 integrity）；缓存代际改为 hash **文档 + 脚本字节**；id 仍是输入的确定性摘要——同内容再跑 `changed=false`，不靠随机 id 换新鲜度。`result.changed` 计入 `earlyGuard === 'patched'` |
+| 24 | **缺早期脚本时先写了 index，再抛错。** donor 只有 `startup.css`、没有 `early-guard.js` 时，`index.html` 已被写入带 `data-cle-early` 的引用，随后才在缺源检查处抛错，留下指向不存在脚本的半部署页面（`missingSourceMutatedIndex=true`） | `apply-startup.mjs` 的写入顺序 | 高（半部署页面 = 404 + 标题窗口重新打开） | 改为**先规划后提交**：任何写入前先校验脚本源存在/非空/形状正确、三个图标 donor 存在且格式正确，并对 `index.html`、`cle-early.js`、`sw.js`、`manifest.webmanifest`、`asset-manifest.json` 全部过 `assertWritableTarget`（拒绝符号链接与越界）。被拒绝的目标同样在零写入下失败 |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -262,6 +265,32 @@ node patch/apply-all.mjs --keep              → 17 patches, patches failed: 0
 **为什么不是"在插件里更早 mount"**：`activate()` 要等 bundle 求值后才跑，而断线时插件卸载会
 断掉它的 observer；观察到的断线场景需要页面级的所有者。插件内的 guard 仍负责侧栏标签与内容清扫。
 
+### 重复部署闭环（本轮修正，响应第五轮复现）
+
+```
+node --test tests/cle-startup.test.mjs     → 48 pass / 0 fail
+node --test tests/cle-early-guard.test.mjs → 12 pass / 0 fail
+node --test tests/cle-brand-guard.test.mjs → 21 pass / 0 fail
+node --test tests/brand-ui.test.cjs        →  6 pass / 0 fail
+合计 87 项
+```
+
+隔离复现结果（用主控同一套 fixture 形状，`/tmp` 临时目录，未写 19789/App/live）：
+
+| 场景 | 修正前 | 修正后 |
+|---|---|---|
+| donor 只追加一行注释再 apply | `integrityMatchesBytes=false`、`cacheIdChanged=false`、`offlineShell=unchanged` | `true` / `true` / `patched`，且 `rowCount=1`（upsert 不追加） |
+| 相同内容再 apply（第三次） | — | `changed=false`、`early=unchanged`、`offline=unchanged`（id 不变） |
+| donor 缺 `early-guard.js` | `missingSourceMutatedIndex=true` | `false`，且 `indexHasEarlyRef=false`，连备份目录都不建 |
+| 图标目标为越界符号链接 | 会先写 index | 抛错，`index.html` 字节不变，链接目标未被写入 |
+
+新增 6 项回归，其中 **4 项在 07ce6e9 上失败**（existing row upsert、脚本-only 代际移动、
+缺源零写入、越界目标零写入），说明它们锚定缺陷而非复述实现；另 2 项覆盖既有正确性
+（同内容幂等、twin/ledger 闭环）。
+
+真实包副本另测：首次 patch → 二次 `changed=false` → 预缓存 integrity 与落盘字节一致 →
+`--revert` 八个文件逐字节还原。全链 `apply-all`：17 补丁 0 失败。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -373,3 +402,15 @@ tests/cle-startup.test.mjs                  42 项（+3 注入顺序/预缓存/�
 - 断线期间的重载路径依赖 SW 预缓存，已按上游 `assets` + `integrity` 结构写入并在本地校验
   hash 正确；真实 worker 的预缓存成功与否需要一次实际断线重载确认。
 - service worker 换代时序（`OFFLINE_BOOT.id` 变化 → 新 worker 安装）仍未在真实浏览器跑过。
+- **首帧视觉与首份 AX 仍需主控在 19789 用网关 + CUA 实测。** 本轮所有结论来自 fixture、真实包
+  副本与单测；`install()` 之后浏览器是否真的先显示 C.le. 标题，本路不声称已验证。
+
+补充 commit #4（3ac6479，重复部署闭环）：
+
+```
+services/cle-studio/scripts/apply-startup.mjs
+    预缓存行 upsert（字节变则 integrity 变）；缓存代际 = hash(文档 + 脚本字节)；
+    changed 计入早期脚本；所有输入与写入目标在首次写入前完成校验
+tests/cle-startup.test.mjs   48 项（+6：upsert / 脚本-only 代际 / 同内容幂等 /
+                             缺源零写入 / 越界目标零写入 / twin-ledger）
+```
