@@ -8,8 +8,12 @@
 
 html[data-cle] .cle-composer .agent-chat__input {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Two explicit tracks. The old `auto minmax(0,1fr) auto` put the lead in an auto column, so the
+     column was sized by the lead's max-content (≈359px on an 864px composer) and the tools wrapped
+     into three rows while most of the row stayed empty. The lead now lives in the flexible track. */
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
+  grid-template-areas: "words actions" "tools utils";
   align-items: center;
   column-gap: 6px;
   background: transparent !important;
@@ -21,7 +25,7 @@ html[data-cle] .cle-composer .agent-chat__input {
 }
 /* the pill itself is drawn by a pseudo-element spanning only the first row */
 html[data-cle] .cle-composer .agent-chat__input::before {
-  content: ""; grid-area: 1 / 1 / 2 / 4; align-self: stretch; z-index: -1;
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: stretch; z-index: -1;
   background: var(--cle-surface);
   border: 1px solid var(--cle-line-strong);
   border-radius: var(--cle-radius-composer);
@@ -33,7 +37,7 @@ html[data-cle] .cle-composer .agent-chat__input:focus-within::before {
   box-shadow: 0 0 0 4px var(--cle-gaze-glow), var(--cle-shadow);
 }
 html[data-cle] .cle-composer .agent-chat__composer-input-row {
-  grid-area: 1 / 1 / 2 / 3; min-width: 0;
+  grid-area: words; min-width: 0;
   padding: 13px 4px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center;
 }
 html[data-cle] .cle-composer .agent-chat__composer-combobox { min-width: 0; }
@@ -45,9 +49,9 @@ html[data-cle] .cle-composer .agent-chat__composer-placeholder { font: 400 15.5p
 
 html[data-cle] .cle-composer .agent-chat__composer-footer,
 html[data-cle] .cle-composer .agent-chat__composer-trail { display: contents !important; }
-html[data-cle] .cle-composer .agent-chat__composer-actions { grid-area: 1 / 3 / 2 / 4; padding-right: 9px; align-self: center; display: flex; gap: 4px; }
+html[data-cle] .cle-composer .agent-chat__composer-actions { grid-area: actions; padding-right: 9px; align-self: center; display: flex; gap: 4px; }
 html[data-cle] .cle-composer .agent-chat__composer-lead {
-  grid-area: 2 / 1 / 3 / 2; padding: 8px 0 0 12px;
+  grid-area: tools; padding: 8px 0 0 12px;
   display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
   min-width: 0; max-width: 100%;
 }
@@ -55,7 +59,13 @@ html[data-cle] .cle-composer .agent-chat__composer-lead {
    window is wide, and a narrow window still has a full-width composer. The lead owns its width. */
 html[data-cle] .cle-composer .agent-chat__composer-footer .agent-chat__composer-lead { max-width: 100%; }
 html[data-cle] .cle-composer .agent-chat__composer-footer .agent-chat__composer-lead > * { flex: 0 1 auto; min-width: 0; }
-html[data-cle] .cle-composer .agent-chat__composer-controls { grid-area: 2 / 2 / 3 / 4; padding: 8px 10px 0 0; justify-self: end; min-width: 0; }
+html[data-cle] .cle-composer .agent-chat__composer-controls { grid-area: utils; padding: 8px 10px 0 0; justify-self: end; min-width: 0; }
+/* The native mobile toolbar turns the footer into a flex row and gives the lead `flex:none`, which
+   pinned it to max-content. Our grid owns this layout; keep the ordering but never the sizing. */
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-footer { display: contents !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-lead { flex: 1 1 auto !important; order: 0 !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-controls { flex: 0 1 auto !important; order: 0 !important; margin-inline-start: 0 !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-actions { order: 0 !important; }
 
 /* tools: plain text, quiet until touched */
 html[data-cle] .cle-composer .agent-chat__input-btn,
@@ -107,6 +117,10 @@ html[data-cle] .context-ring { display: none !important; }
    Only low-priority controls carry data-cle-priority="low" (composer.js classifies them by
    meaning: browser, voice, notes). The menu proxies a click to the real control in the same
    pane, so the panel opens where the composer is and sends to that pane's session. */
+/* Occupancy-driven fold: composer.js measures the real widths and flags the composer, so a wide
+   composer whose tool row still overflows folds too, and a narrow one with few tools does not. */
+html[data-cle] .cle-composer.is-crowded.has-low-tools .cle-tools-more { display: inline-grid; }
+html[data-cle] .cle-composer.is-crowded .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
 .cle-tools-more {
   display: none; appearance: none; border: 0; background: transparent; color: var(--cle-ink-3);
   width: 28px; min-width: 28px; height: 26px; border-radius: 8px; place-items: center; cursor: pointer; padding: 0;
@@ -140,10 +154,12 @@ html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
   html[data-cle] .cle-welcome__arch { width: min(200px, 30vh, 44cqw); }
   html[data-cle] .agent-chat__welcome .cle-welcome__line { font-size: 21px !important; }
   html[data-cle] .cle-welcome__ask { padding: 7px 12px; font-size: 12.5px; }
-  .cle-pane-badge em { display: none; }
+  html[data-cle] .cle-pane-badge em { display: none; }
 }
 @container cle-pane (max-width: 620px) {
-  /* the rarely used tools fold behind ⋯ — chosen by role, never by position */
+  /* the rarely used tools fold behind ⋯ — chosen by role, never by position. Fold happens at any
+     width where the low-priority tools do not fit (composer.js measures real occupancy); this
+     narrow-pane rule is the floor for the first paint, before any width has been measured. */
   html[data-cle] .cle-composer.has-low-tools .cle-tools-more { display: inline-grid; }
   html[data-cle] .cle-composer .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
   /* the essentials stay, but two panes at ~508px share the row: compact them instead of wrapping
@@ -154,7 +170,7 @@ html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
   html[data-cle] .cle-composer .agent-chat__composer-lead .laolao-learning-tools { flex: 0 0 auto; }
   html[data-cle] .cle-composer .chat-controls__effort-trigger .chat-controls__inline-select-label { display: none !important; }
   html[data-cle] .chat-pane__workspace-chip { display: none !important; }
-  .cle-pane-badge b { display: none; }
+  html[data-cle] .cle-pane-badge b { display: none; }
 }
 @container cle-pane (max-width: 520px) {
   html[data-cle] .cle-composer .chat-controls__inline-select-label { max-width: 11ch; }
