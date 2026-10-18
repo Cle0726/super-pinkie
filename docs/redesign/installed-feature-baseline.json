@@ -1,0 +1,261 @@
+{
+  "captured": "2026-10-18",
+  "source": "installed app Control UI script order; original source retained",
+  "scripts": [
+    {
+      "script": "laolao-night.js",
+      "source": "ui/injections/laolao-night.js",
+      "sha256": "6b230827ae01c632c80990f9f1e12c04a626c71c99315a1dc5dc182129366376"
+    },
+    {
+      "script": "laolao-session-list.js",
+      "source": "ui/injections/laolao-session-list.js",
+      "sha256": "dddf96ec7e274f180e83ffc6ca29130453d7b8b01390b809b46ef7494291d103"
+    },
+    {
+      "script": "laolao-sidebar.js",
+      "source": "ui/injections/laolao-sidebar.js",
+      "sha256": "bf421015aff021aa349f792a578447f76cd5f1fb49a069e933366f070ed7770e"
+    },
+    {
+      "script": "laolao-side-layout.js",
+      "source": "ui/injections/laolao-side-layout.js",
+      "sha256": "033e37682f0f97906351d053fd7bb4f0bd30286572f8764805363cad1a5566ca"
+    },
+    {
+      "script": "laolao-usage-stats.js",
+      "source": "ui/injections/laolao-usage-stats.js",
+      "sha256": "5376321257ac4a5b3ba9b2ee08aeab9cc411fb17f0896624be170d6ef9dc9ebc"
+    },
+    {
+      "script": "laolao-phrases.js",
+      "source": "ui/injections/laolao-phrases.js",
+      "sha256": "d9a81dc10b5ab30518d8e6f2473888e8f17dcaa797c5524f3f2f7c2a62a909fe"
+    },
+    {
+      "script": "laolao-live-voice.js",
+      "source": "ui/injections/laolao-live-voice.js",
+      "sha256": "165a13dd54bad953343bbdee28471580dd34f7713595bb5a2162ee97897b8fe1"
+    },
+    {
+      "script": "laolao-image-viewer.js",
+      "source": "ui/injections/laolao-image-viewer.js",
+      "sha256": "0dced73e5f830f50ad6cbfa6e9b13eb8b1787df201ce446b881956c2fe9a8cb5"
+    },
+    {
+      "script": "laolao-mode-transition-fx.js",
+      "source": "ui/injections/laolao-mode-transition-fx.js",
+      "sha256": "71f402ae21bb11c925d79e10419b08c8a04e78b75f4ab615ddf25d1541dd3446"
+    },
+    {
+      "script": "laolao-mode-switcher.js",
+      "source": "ui/injections/laolao-mode-switcher.js",
+      "sha256": "8be236bd921381dcc1077c1ae2e85e07e26a8ad1e7894a3030187ac05a81756e"
+    },
+    {
+      "script": "laolao-model-picker.js",
+      "source": "ui/injections/laolao-model-picker.js",
+      "sha256": "c823aa80f4dc33f00d104cbfd71b0788bd2f2dbc8e91fa7546995f6a2c281e86"
+    },
+    {
+      "script": "laolao-party-entry.js",
+      "source": "ui/injections/laolao-party-entry.js",
+      "sha256": "64409f266c572a6408208917a98497bac29dafdf7c8fbeccb99574f6b794bd7f"
+    },
+    {
+      "script": "laolao-motion.js",
+      "source": "ui/injections/laolao-motion.js",
+      "sha256": "de379cd6cf71c4337c5276c5ebdcc7a0ea1b6315dec0074e8cff5f3d923cc73c"
+    },
+    {
+      "script": "laolao-progress.js",
+      "source": "ui/injections/laolao-progress.js",
+      "sha256": "961a643ee08570078988f3a8c7ebd547ef0f118db76fd6ae80dab5e75983b809"
+    },
+    {
+      "script": "laolao-stream-fx.js",
+      "source": "ui/injections/laolao-stream-fx.js",
+      "sha256": "beb5171c55cab7073afae41ef04715f1569b8bcedb9c1a80f1b80ef1fe01e44c"
+    },
+    {
+      "script": "laolao-link-viewer.js",
+      "source": "ui/injections/laolao-link-viewer.js",
+      "sha256": "a3df19b4219853529983ea25e3c342060e43740d9ff6c1db15f9b27a17948190"
+    },
+    {
+      "script": "laolao-roundtable-entry.js",
+      "source": "ui/injections/laolao-roundtable-entry.js",
+      "sha256": "3b4f5ac6665e3e62281fd3bc6ebc4e785fa765a97414599849bf364bd650d24d"
+    },
+    {
+      "script": "laolao-resume.js",
+      "source": "ui/injections/laolao-resume.js",
+      "sha256": "8f1e1a95be9ca586e0009e072c73f3d747fb4d92c59ba5a933b1ebcc3fef78bc"
+    },
+    {
+      "script": "laolao-tool-stream.js",
+      "source": "ui/injections/laolao-tool-stream.js",
+      "sha256": "aeca5d9f5e6c42374b17fc7dff9a75ef27c12312ac479a8b5e591dbbb3049d26"
+    },
+    {
+      "script": "laolao-deep-think.js",
+      "source": "ui/injections/laolao-deep-think.js",
+      "sha256": "cada95acaba29e0f6799fa44821003fafc09e7208714653c3e7aa79ba074c3d8"
+    },
+    {
+      "script": "laolao-context-compact.js",
+      "source": "ui/injections/laolao-context-compact.js",
+      "sha256": "7e200f62649358b655fe53be7988b3fc500f48565990b116a4419fb447aa66d5"
+    },
+    {
+      "script": "laolao-classic-shell.js",
+      "source": "ui/injections/laolao-classic-shell.js",
+      "sha256": "e7655d106016c6e00d73d405b489899e0cae4036b42688e8e8eefa53f6348e22"
+    },
+    {
+      "script": "laolao-memory.js",
+      "source": "ui/injections/laolao-memory.js",
+      "sha256": "71a63bcf8956d26b100d5be197a106c83bb376e802467dfbabaabf27a16c1951"
+    },
+    {
+      "script": "laolao-material-preview.js",
+      "source": "ui/injections/laolao-material-preview.js",
+      "sha256": "765a40c1ea34b3519eb12b3fa5cee3af16f5e4d755c687d0344f416187d8776e"
+    },
+    {
+      "script": "laolao-workspace-focus.js",
+      "source": "ui/injections/laolao-workspace-focus.js",
+      "sha256": "fb88ee5f6ee546c2d647b61d2706a1e386e2100caad75051e60b5dcec8bcad98"
+    },
+    {
+      "script": "laolao-page-warmup.js",
+      "source": "ui/injections/laolao-page-warmup.js",
+      "sha256": "a2f48fc9d12c5e6b25c43a6e9ffdf55c7df7cc2b18723ebce6421ebc5b822bff"
+    },
+    {
+      "script": "laolao-learning-stage.js",
+      "source": "ui/injections/laolao-learning-stage.js",
+      "sha256": "5eaac1f12eed87af1ffb2063e0f4a07edc7aa65274f3bcbf5b14b2eebd47f252"
+    },
+    {
+      "script": "laolao-web-gpt-collab.js",
+      "source": "ui/injections/laolao-web-gpt-collab.js",
+      "sha256": "970140c2f1c17abaa5e7fa4f0a57614414d1bec8fca81a272d2a3be07733dbcb"
+    },
+    {
+      "script": "laolao-settings-user.js",
+      "source": "ui/injections/laolao-settings-user.js",
+      "sha256": "5d097de004f30f490215e50081c82cd2fa012e5ff10e9ad1bae518d5efcaf92e"
+    },
+    {
+      "script": "laolao-queue-steer.js",
+      "source": "ui/injections/laolao-queue-steer.js",
+      "sha256": "86cb20c8c94b18926b0108493d2dda0e7dca2b6f028ec19a00b4d274276d6123"
+    },
+    {
+      "script": "laolao-ask-user.js",
+      "source": "ui/injections/laolao-ask-user.js",
+      "sha256": "3b62de4e3c1bb1b6964ba25067e16afd6036bb6875dc5c13bc5b4094657736df"
+    },
+    {
+      "script": "laolao-process-card.js",
+      "source": "ui/injections/laolao-process-card.js",
+      "sha256": "480a25edccb772c3d02e362d27e81d9f1d0ecc07f9599edd01f2ecb64b2783df"
+    },
+    {
+      "script": "laolao-laser-pointer.js",
+      "source": "ui/injections/laolao-laser-pointer.js",
+      "sha256": "a65ec0b4cef174ad2e0067e91605ddff3687c4ff76923be2add66428003aca0d"
+    },
+    {
+      "script": "laolao-desensitize.js",
+      "source": "ui/injections/laolao-desensitize.js",
+      "sha256": "ec55d4428f4affa6a29a227af94d34791949474e7e1fd338fbbecd80d0cfa8dc"
+    },
+    {
+      "script": "laolao-sidebar-autohide.js",
+      "source": "ui/injections/laolao-sidebar-autohide.js",
+      "sha256": "63346df92093ea19eba1c5d55f10c99bd688ce9179c1f13376882aa775eec14a"
+    },
+    {
+      "script": "laolao-buddy-rig.js",
+      "source": "ui/injections/laolao-buddy-rig.js",
+      "sha256": "1fe2045cebe93b041cd615a7a538cf2e75a241edfb54e6c5d79e292cd40f3932"
+    },
+    {
+      "script": "laolao-companion.js",
+      "source": "ui/injections/laolao-companion.js",
+      "sha256": "b7aa9ae43a6827685d8a7205ed2a2aaaafc4d6d5ab82c4c3e6108658fd9eda30"
+    },
+    {
+      "script": "laolao-immersion.js",
+      "source": "ui/injections/laolao-immersion.js",
+      "sha256": "45d95121051cac0dd562ca96784c6c0e03358883d043e0086d9adba5baddd4ef"
+    },
+    {
+      "script": "laolao-startup-home.js",
+      "source": "ui/injections/laolao-startup-home.js",
+      "sha256": "2f55cb33f9911ae7225688430d953c8e9b0e6cdc86e41fcaf02f91afda65303e"
+    },
+    {
+      "script": "laolao-splash-fx.js",
+      "source": "ui/injections/laolao-splash-fx.js",
+      "sha256": "2913f172fe234607b4bf9729917b95993fd43c0090dad235fa28a78c8de55b35"
+    },
+    {
+      "script": "laolao-splash.js",
+      "source": "ui/injections/laolao-splash.js",
+      "sha256": "c8325f757a35b263a4d6191ea7ec980fec0c1ba9fcc8b8b4cd5b4030a02a20c1"
+    },
+    {
+      "script": "laolao-perf.js",
+      "source": "ui/injections/laolao-perf.js",
+      "sha256": "838e981b7ed9488a1d290f755fd1e7ff31356ca152c717c86b958b947f957b42"
+    },
+    {
+      "script": "laolao-cle-signature.js",
+      "source": "ui/injections/laolao-cle-signature.js",
+      "sha256": "3c07f4a333e1fc531c3cb406e1fa8e2aa10c6cf1588ec9e114563293b89517cb"
+    },
+    {
+      "script": "laolao-cle-stage.js",
+      "source": "ui/injections/laolao-cle-stage.js",
+      "sha256": "fb8f1cc3c88a40b0c384383b53aef95da9fcbe22ead93e94ea942812cda9dec1"
+    },
+    {
+      "script": "laolao-rich.js",
+      "source": "ui/injections/laolao-rich.js",
+      "sha256": "3818c19538fa5c7986eb725d894721fbc4dabc029892c6babe6095a47f4551a3"
+    },
+    {
+      "script": "laolao-plan.js",
+      "source": "ui/injections/laolao-plan.js",
+      "sha256": "71d39ba3a96221e07a8bfcfcefafa6c6b1fea5a78b5e330a50f6e1800822b917"
+    },
+    {
+      "script": "laolao-capabilities.js",
+      "source": "ui/injections/laolao-capabilities.js",
+      "sha256": "eb401361c471e82ded8e07f1c6d56b91c603b6f4363a70add7f25f56913f5e9a"
+    },
+    {
+      "script": "laolao-selection-actions.js",
+      "source": "ui/injections/laolao-selection-actions.js",
+      "sha256": "cea2f8f07290065ae21260035dd5c4b52a6aacad7eea5738e7bf22fb48ec13b0"
+    },
+    {
+      "script": "laolao-learning-library.js",
+      "source": "ui/injections/laolao-learning-library.js",
+      "sha256": "bf17ac353b7041941de464b8a1907d446d09771c3be174266b9f934d0f2f5824"
+    },
+    {
+      "script": "laolao-workbench.js",
+      "source": "ui/injections/laolao-workbench.js",
+      "sha256": "2c5f873ea9dead1c980004b05144023609f961365f828be5b9ab6d2ba6cd0cc3"
+    },
+    {
+      "script": "laolao-handoff-bootstrap.js",
+      "source": "ui/injections/laolao-handoff-bootstrap.js",
+      "sha256": "191a1d6dc3eae0a0de04dd84b613eefd3e05c89e943f39d596c35e696512d9c1"
+    }
+  ]
+}
