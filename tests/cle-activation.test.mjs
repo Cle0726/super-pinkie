@@ -75,6 +75,7 @@ test('new activation survives the native mount-next / dispose-previous order', a
     const nextDispose = app.activate({id: 'single'});
     oldDispose();
     assert.equal(f.doc.documentElement.dataset.cle, '0.1.0');
+    assert.equal(f.doc.documentElement.dataset.cleActive, '1');
     assert.equal(f.doc.documentElement.dataset.cleRoom, 'single');
     assert.equal(f.doc.composer, 'single');
     assert.deepEqual([...f.doc.live], ['single']);
@@ -83,6 +84,7 @@ test('new activation survives the native mount-next / dispose-previous order', a
     assert.equal(f.doc.composer, 'single', 'a repeated late dispose must be harmless');
     nextDispose();
     assert.equal(f.doc.documentElement.dataset.cle, '0.1.0', 'static document skin survives disconnect');
+    assert.equal(f.doc.documentElement.dataset.cleActive, undefined, 'live controls are explicitly retired');
     assert.equal(f.doc.live.size, 0);
     assert.equal(f.doc.composer, null);
   } finally { f.restore(); }

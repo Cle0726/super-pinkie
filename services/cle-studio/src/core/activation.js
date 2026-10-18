@@ -15,6 +15,7 @@ export function beginActivation(doc = document) {
       // Connection loss also retires the host activation. The document's skin is
       // static presentation, not a live registration: keep it while the native
       // app disables its controls and reconnects.
+      delete doc.documentElement.dataset.cleActive;
       delete doc[KEY];
     },
   };

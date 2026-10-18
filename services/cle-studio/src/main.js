@@ -42,6 +42,7 @@ export default {
     if (!ensureTheme()) return controller.dispose;
     const html = document.documentElement;
     html.dataset.cle = VERSION;
+    html.dataset.cleActive = '1';
     retainSkin(import.meta.url);
     initModes();
     // the 2026.7 modules key night mode on data-pinkie-night; mirror the native theme mode
