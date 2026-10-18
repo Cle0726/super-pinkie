@@ -20,6 +20,7 @@ import {loadLegacy} from './legacy/loader.js';
 import {installLegacyShim} from './legacy/shim.js';
 import {mountUtilities} from './legacy/utilities.js';
 import {mountStatus} from './process/status.js';
+import {mountRecovery} from './recovery/recovery.js';
 import {mountStudy} from './learning/study.js';
 import {mountSplash} from './splash/splash.js';
 import {initModes} from './core/modes.js';
@@ -52,6 +53,7 @@ export default {
     safe('gaze', () => mountGaze(controller.signal));
     safe('tool-fold', () => mountToolFold(controller.signal));
     safe('status', () => mountStatus(host, controller.signal));
+    safe('recovery', () => mountRecovery(host, controller.signal));
     safe('study', () => mountStudy(host, controller.signal));
     safe('shim', () => installLegacyShim(host, controller.signal));
     const utilities = safe('utilities', () => mountUtilities(host, controller.signal));
