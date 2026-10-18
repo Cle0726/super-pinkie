@@ -325,3 +325,48 @@ cd services/cle-studio && node build.mjs         → ui 1a0183a8b349
 | D13 | 启动占位页同时有字标与 `C.le.` 文字，重复品牌 | 观感冗余 | 副标题改为 `Li An` |
 | D14 | 旧厚块的真正成因是宽高比而非路径错误 | 只调 stroke-width 治不好 | 直接弃用自拼 SVG，改用应用既有文字字标 |
 
+---
+
+## 10. 第四轮：收纳标签可访问性 + under-page 配色（主控新报告）
+
+主控 CUA 已实测通过：新字标清楚、无旧粉外框、语音文案为 Li An、本机页 744 CSSpx 真实 100% → 适应窗口 1942 CSSpx、forceDark 黑白真实切换、拖动与四边四角缩放、右/顶/底向外推收纳并拖回、关闭再开保留页面与输入。
+
+### 10.1 `BrowserEdgeTab` 声明为按钮却没有 press 实现（已修）
+问题（主控准确指出，是代码缺口而非自动化怪癖）：标签 `setAccessibilityRole(.button)`，但只要 `drag`/`mouseDown`/`mouseUp` 与 `mouseEntered`/`mouseExited`。没有 `accessibilityPerformPress`，不能成为第一响应者，也没有 keyDown —— 对 VoiceOver 与 CUA 激活都是空操作。CUA 点击无展开、原地 2px 拖动无半幅，正是因为“点击”在这条路径上根本不存在。
+
+修法：
+- `accessibilityPerformPress() -> Bool` → 走与 hover 相同的开关。
+- `acceptsFirstResponder` + Space / Return 触发同一动作。
+- 自定义 `mouseDown`/`mouseDragged`/`mouseUp`：位移 ≤3pt 视为点击，>3pt 才交给拖拽基类。这样点击不再被拖拽生命周期吞掉，也不给自动化留任何后门。
+- 焦点态在 `draw` 里画 token 色描边，键盘用户能看见焦点。
+- 状态变化 `NSAccessibility.post(.valueChanged)` 播报。
+
+**顺带发现的真实缺陷**：按下后面板从指针下方滑出，标签随之移动，`mouseExited` 立刻触发 0.22s 后的收回，把刚展开的半幅撤销掉。因此引入 `browserEdgePinned`：显式激活时置位，hover 退出路径在置位期间不收回；指针真正进入面板/标签时清除。`clearBrowserEdgeDock` 与重新贴边都会重置它。hover 离开照样收回，向内拖出照样恢复悬浮——两者未被破坏。
+
+几何核验（真实枚举代码，非重写）：
+```
+right  collapsed=0.0 revealed=320.0   （面板宽 640）
+top    collapsed=0.0 revealed=260.0   （面板高 520）
+bottom collapsed=0.0 revealed=260.0
+```
+四种位置（内置、贴右、贴顶、贴底）全部成立。
+
+### 10.2 `underPageBackgroundColor` 仍是第三套色（已修）
+`makeBrowserWebView` 里硬编码暗 `0.10/0.075/0.115`、浅 `1/.985/.993`。这是 WebKit 在加载中与弹性滚动时露出的底色，落在任何 token 之外。改为 `CleBrowserPalette.paper(nightAppearance).withAlphaComponent(0.97)`。
+
+全文件已无手写 `srgbRed: … green: …` 组合，`systemPink`、`217/89/143`、`efcbd3`、旧厚块路径均为 0。
+
+### 10.3 本轮验证
+```
+xcrun swiftc -typecheck（三源文件）      → exit 0
+browser-test-host.sh --build/--check     → 构建并 5 项隔离检查 ok
+node --test（4 个浏览器测试文件）        → tests 25  pass 25  fail 0
+```
+新增测试（真实风险，非镜像实现）：
+- `edge-docked reveal exposes exactly half and collapsed exposes none`：编译并运行真实 `edgeDockedFrame`，断言收起可见 0、展开恰好半幅。
+- `the edge tab is a real activatable control`：press/AX/keyDown/焦点/点击与拖拽分离/pinned 存在性。
+- `the browser under-page colour follows the same tokens`。
+
+### 10.4 仍然不声称通过
+主控列出尚未验证的：cookie 跨 App 重启（不是真实账号登录）、拖拽手感细节、贴边收纳在真实鼠标 hover 下的自动露出（CUA 可能不派发 tracking 事件）。标签的键盘/AX 路径我只能从代码与几何上证明，真实 VoiceOver 播报与 CUA 点击仍要主控验。
+
