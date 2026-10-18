@@ -7,6 +7,7 @@ import './styles/bridge.css';
 import './process/status.css';
 import './learning/study.css';
 import './styles/tiers.css';
+import './line/line.css';
 import {ensureTheme} from './core/theme.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
