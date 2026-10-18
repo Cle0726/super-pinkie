@@ -647,3 +647,103 @@ test('a link inside protected content is never touched', async () => {
     assert.equal(anchor.hasAttribute('href'), true, 'a link the user sent keeps its href');
   });
 });
+
+test('an aria-label-only change is corrected, with no other DOM mutation', async () => {
+  // The reported gap: the attributes branch set a dirty flag but never queued the target, and
+  // flush only walks queued nodes — so a label restored by the native app on its own stayed
+  // upstream forever. This case changes *only* the attribute, nothing else.
+  await withDom('Main Session — C.le.', async (document) => {
+    const brand = await import(MODULE);
+    const flusher = makeFlusher();
+    flusher.install();
+    const {button} = makeSidebar(document, {name: 'OpenClaw'});
+    const stop = brand.startBrandGuard();
+    assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+
+    // the native app re-renders the label on a session switch: attribute write only
+    button.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+    // peek without draining — taking the records here would hand them to nobody
+    const pending = observers.flatMap((observer) => observer.pending);
+    assert.ok(pending.length > 0, 'the attribute change produced a record');
+    assert.equal(pending.every((record) => record.type === 'attributes'), true, 'and nothing else');
+
+    await deliver(flusher);
+    assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'label fixed from the attribute record');
+    stop?.();
+  });
+});
+
+test('an attribute-only change on a node that is not chrome is ignored', async () => {
+  await withDom('Main Session — C.le.', async (document) => {
+    const brand = await import(MODULE);
+    const flusher = makeFlusher();
+    flusher.install();
+    const stop = brand.startBrandGuard();
+    const plain = new Element('div', {class: 'unrelated', 'aria-label': 'OpenClaw · something'});
+    document.body.appendChild(plain);
+    await deliver(flusher);
+    // not a sidebar block, so the label is left as the app wrote it
+    assert.equal(plain.getAttribute('aria-label'), 'OpenClaw · something');
+    stop?.();
+  });
+});
+
+test('a label that is already correct is not rewritten again', async () => {
+  await withDom('Main Session — C.le.', async (document) => {
+    const brand = await import(MODULE);
+    const flusher = makeFlusher();
+    flusher.install();
+    const {button} = makeSidebar(document, {name: 'C.le.'});
+    const stop = brand.startBrandGuard();
+    button.setAttribute('aria-label', 'C.le. · 工作区菜单');
+    await deliver(flusher);
+    assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+    stop?.();
+  });
+});
+
+test('the title rewrite leaves the session context alone and only moves the brand tail', async () => {
+  // Reported example: a session the user named after the upstream project must keep its name.
+  const brand = await import(MODULE);
+  const cases = [
+    // startup form: the whole title is the brand
+    ['OpenClaw', 'C.le.'],
+    ['OpenClaw Control', 'C.le.'],
+    // native tail after the em dash
+    ['Main Session — OpenClaw', 'Main Session — C.le.'],
+    ['(2) Chat — OpenClaw', '(2) Chat — C.le.'],
+    // environment suffix appended afterwards
+    ['Main Session — OpenClaw · Production', 'Main Session — C.le. · Production'],
+    ['Session — OpenClaw Control · Staging', 'Session — C.le. · Staging'],
+    // the reported failure: the *user's* word must survive
+    ['关于OpenClaw的笔记 — OpenClaw', '关于OpenClaw的笔记 — C.le.'],
+    ['关于OpenClaw的笔记', '关于OpenClaw的笔记'],
+    // a context that itself contains the middot separator
+    ['Meeting · Q3 — OpenClaw', 'Meeting · Q3 — C.le.'],
+    ['Meeting · Q3 — OpenClaw · Production', 'Meeting · Q3 — C.le. · Production'],
+    ['关于OpenClaw · 笔记 — OpenClaw', '关于OpenClaw · 笔记 — C.le.'],
+    // already-localised titles are stable
+    ['C.le.', 'C.le.'],
+    ['Main Session — C.le. · Production', 'Main Session — C.le. · Production'],
+  ];
+  for (const [input, want] of cases) {
+    assert.equal(brand.localTitle(input), want, `localTitle(${JSON.stringify(input)})`);
+  }
+  // and it is idempotent
+  for (const [, want] of cases) assert.equal(brand.localTitle(want), want);
+});
+
+test('a live session named after the upstream project keeps its name while the tail is rebranded', async () => {
+  await withDom('关于OpenClaw的笔记 — OpenClaw', async (document) => {
+    const brand = await import(MODULE);
+    const flusher = makeFlusher();
+    flusher.install();
+    const stop = brand.startBrandGuard();
+    assert.equal(document.title, '关于OpenClaw的笔记 — C.le.', 'context preserved on activation');
+
+    document.title = '关于OpenClaw的笔记 — OpenClaw';
+    await deliver(flusher);
+    assert.equal(document.title, '关于OpenClaw的笔记 — C.le.', 'context preserved on the rewrite too');
+    stop?.();
+  });
+});
