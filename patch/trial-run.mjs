@@ -29,12 +29,13 @@ function walk(dir, out = []) {
   return out;
 }
 
+const MANIFEST_NAME = 'asset-manifest.json';
 const skip = (name) => /\.(br|gz)$/.test(name) || name === '.DS_Store';
 
 export function hashes(dir) {
   const map = new Map();
   for (const file of walk(dir)) {
-    if (skip(file)) continue;
+    if (skip(file) || path.basename(file) === MANIFEST_NAME) continue;
     map.set(path.relative(dir, file), crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
   }
   return map;
