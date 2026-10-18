@@ -1,6 +1,8 @@
 // Le regard — the C.le. opening, shot like a film close-up.
-// Two full-bleed oil keyframes (a macro on the eyes, then a medium close-up), each with an
-// eyes-closed twin. The painting never warps; the camera moves, and only the eyes live.
+// Two full-bleed oil keyframes, each with an eyes-closed twin: a macro on one eye, then the wide
+// portrait. The painting never warps; the camera breathes, and only the eyes live.
+// The cut between the shots is his own blink: the eye opens in the macro, closes slowly, and when
+// it opens again we are standing back, looking at all of him.
 //
 //   const r = await createRegard(canvas, {base: './art/', signature});
 //   r.play();  r.hold();  await r.exit();  r.renderAt(seconds, {exitAfter});  r.dispose();
@@ -41,7 +43,8 @@ float region(vec2 p, vec4 eye, float ang){
 vec3 shot(sampler2D o, sampler2D c, vec2 size, vec3 cam, vec4 e0, vec4 e1, float a0, float a1, vec2 frag, out float glowOut){
   vec2 p = cam.xy + (frag - uRes * .5) / cam.z * vec2(1., -1.);
   vec2 uv = clamp(p / size, vec2(0.), vec2(1.));
-  vec3 open = texture(o, uv).rgb, closed = texture(c, uv).rgb;
+  float lod = max(0., log2(1. / max(cam.z, 1e-4)));      // explicit LOD: derivatives are unreliable on some WebKit GPUs
+  vec3 open = textureLod(o, uv, lod).rgb, closed = textureLod(c, uv, lod).rgb;
   float rg = max(region(p, e0, a0), region(p, e1, a1));
   float m = max(lid(p, e0, a0, uLid), lid(p, e1, a1, uLid)) * rg;
   vec3 col = mix(closed, open, m);
@@ -89,16 +92,17 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const seg = (t, a, b) => clamp01((t - a) / (b - a));
 const lerp = (a, b, k) => a + (b - a) * k;
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => (img.decode ? img.decode().catch(() => {}).then(() => resolve(img)) : resolve(img));
-    img.onerror = () => reject(new Error('regard: failed to load ' + src));
-    img.src = src;
-  });
+// Decode fully before upload: WebKit may hand WebGL a partially decoded, tiled large <img>.
+async function loadImage(src) {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error('regard: failed to load ' + src);
+  const blob = await res.blob();
+  if (self.createImageBitmap) return createImageBitmap(blob);
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image(); img.src = url; await img.decode(); return img;
+  } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
-
 export async function createRegard(canvas, {base = './art/', signature = null, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches} = {}) {
   const gl = canvas.getContext('webgl2', {premultipliedAlpha: true, alpha: true, antialias: false});
   if (!gl) throw new Error('regard: webgl2 unavailable');
@@ -143,30 +147,31 @@ export async function createRegard(canvas, {base = './art/', signature = null, r
   const eyeU = (u, e) => gl.uniform4f(u, e.cx, e.cy, e.w, e.h);
   eyeU(U.uEyeA0, A.eyes[0]); eyeU(U.uEyeA1, A.eyes[1]); eyeU(U.uEyeB0, B.eyes[0]); eyeU(U.uEyeB1, B.eyes[1]);
   gl.uniform4f(U.uAngs, A.eyes[0].angle * deg, A.eyes[1].angle * deg, B.eyes[0].angle * deg, B.eyes[1].angle * deg);
-  const mid = (s) => ({x: (s.eyes[0].cx + s.eyes[1].cx) / 2, y: (s.eyes[0].cy + s.eyes[1].cy) / 2, span: Math.hypot(s.eyes[1].cx - s.eyes[0].cx, s.eyes[1].cy - s.eyes[0].cy)});
-  const mA = mid(A), mB = mid(B);
+  const mid = (s) => ({x: (s.eyes[0].cx + s.eyes[1].cx) / 2, y: (s.eyes[0].cy + s.eyes[1].cy) / 2});
+  const mB = mid(B);
 
   // ---- the shot list (seconds) ----
-  // 0.0 black · 0.3–1.4 the macro emerges, eyes shut · 1.3–2.1 the lids part, the gaze ignites
-  // 2.0–3.4 the camera draws back; the macro dissolves into the medium close-up, eyes locked
-  // 3.4– hold: the glow breathes, a slow blink now and then; the signature writes itself
-  const T = {emerge: [0.3, 1.4], open: [1.3, 2.1], pull: [2.0, 4.0], dissolve: [2.35, 3.3], hold: 3.4, sign: [3.0, 4.5]};
+  // 0.0 black · 0.25–1.2 the macro emerges, eye shut · 1.05–1.8 the lid parts, the gaze ignites
+  // 2.55–2.95 a slow blink closes it · 2.75–3.35 under the closed lid the macro dissolves to the wide shot
+  // 3.25–3.85 his eyes open again, all of him in frame · 3.9– hold: the glow breathes, a blink now and
+  // then; the signature writes itself underneath
+  const T = {emerge: [0.25, 1.2], open: [1.05, 1.8], shut: [2.55, 2.95], dissolve: [2.75, 3.35], reopen: [3.25, 3.85], hold: 3.9, sign: [3.5, 5.0]};
   let mode = 'idle', startedAt = 0, exitAt = 0, exitResolve = null, raf = 0, disposed = false;
   let nextBlink = 0, blinkAt = -10;
 
   const state = (t) => {
-    const s = {expose: 0, lid: 0, glow: 0, mix: 0, pull: 0, reveal: 0, sign: 0};
+    const s = {expose: 0, lid: 0, glow: 0, mix: 0, t, reveal: 0, sign: 0};
     const live = mode !== 'frame' && mode !== 'exit-frame';
     if (mode === 'held') {
-      s.expose = 1; s.mix = 1; s.pull = 1; s.sign = 1; s.lid = 1;
+      s.expose = 1; s.mix = 1; s.sign = 1; s.lid = 1;
     } else {
       s.expose = ease.sine(seg(t, ...T.emerge));
-      s.lid = ease.expo(seg(t, ...T.open));
-      s.pull = ease.inOut(seg(t, ...T.pull));
+      const opened = ease.expo(seg(t, ...T.open)), shut = ease.inOut(seg(t, ...T.shut)), again = ease.out(seg(t, ...T.reopen));
+      s.lid = t < T.shut[0] ? opened : t < T.reopen[0] ? 1 - shut : again;
       s.mix = ease.inOut(seg(t, ...T.dissolve));
       s.sign = seg(t, ...T.sign);
     }
-    const flare = Math.exp(-Math.pow((t - 2.05) / .26, 2));
+    const flare = Math.exp(-Math.pow((t - 1.75) / .24, 2)) + .7 * Math.exp(-Math.pow((t - 3.8) / .3, 2));
     s.glow = (mode === 'held' ? 1 : ease.out(seg(t, T.open[0] + .1, T.open[1] + .3))) * (.78 + .12 * Math.sin(t * 1.2) + (mode === 'held' ? 0 : .5 * flare));
     if (t >= T.hold || mode === 'held') {
       if (live && t >= nextBlink) { blinkAt = t; nextBlink = t + 5.5 + Math.random() * 3.5; }
@@ -193,21 +198,17 @@ export async function createRegard(canvas, {base = './art/', signature = null, r
     resize();
     const s = state(t);
     const W = canvas.width, H = canvas.height;
-    // A, the macro: a slow push-out (a camera breathes, it never stops dead)
-    const zA = cover(A.size, W, H) * lerp(1.14, 1.0, s.pull);
-    // B, the medium close-up: at the dissolve its eyes sit exactly where A's are; then it
-    // keeps drawing back to its own cover framing
-    const zLock = zA * (mA.span / mB.span);
-    const zHome = cover(B.size, W, H) * 1.03;
-    const k = ease.inOut(seg(s.pull, .25, 1));
-    const zB = zLock * Math.pow(zHome / zLock, k);
-    const camB = {x: lerp(mB.x, B.size[0] / 2, k), y: lerp(mB.y, B.size[1] / 2, k)};
-    // keep B's frame edges inside the image while it is settling
+    // A, the macro: framed as painted, the camera leans in a little while we look
+    const zA = cover(A.size, W, H) * lerp(1.0, 1.07, ease.sine(seg(s.t, 0, 3.4)));
+    const camA = {x: A.size[0] / 2, y: A.size[1] / 2};
+    // B, the wide shot: arrives a touch close and settles back, slowly, the whole time we hold
+    const zB = cover(B.size, W, H) * (mode === 'held' ? 1.0 : lerp(1.09, 1.0, ease.out(seg(s.t, T.dissolve[0], T.hold + 2.5))));
+    const camB = {x: B.size[0] / 2, y: B.size[1] * (B.centerY ?? .5)};
     const halfW = W / 2 / zB, halfH = H / 2 / zB;
     camB.x = Math.min(Math.max(camB.x, halfW), B.size[0] - halfW);
     camB.y = Math.min(Math.max(camB.y, halfH), B.size[1] - halfH);
     gl.uniform2f(U.uRes, W, H);
-    gl.uniform3f(U.uCamA, mA.x, mA.y, zA);
+    gl.uniform3f(U.uCamA, camA.x, camA.y, zA);
     gl.uniform3f(U.uCamB, camB.x, camB.y, zB);
     gl.uniform1f(U.uMix, s.mix);
     gl.uniform1f(U.uExpose, s.expose);
@@ -222,10 +223,10 @@ export async function createRegard(canvas, {base = './art/', signature = null, r
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     if (signature) {
       const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
-      const width = Math.min(240, cssW * .17);
+      const width = Math.min(320, cssW * .22);
       const el = signature.svg;
       el.style.left = `${cssW / 2 - width / 2}px`;
-      el.style.top = `${cssH * .82}px`;
+      el.style.top = `${cssH * .8}px`;
       el.style.width = `${width}px`;
       el.style.opacity = String(Math.max(0, 1 - s.reveal * 3) * Math.min(1, s.sign * 6));
       signature.write(s.sign);
