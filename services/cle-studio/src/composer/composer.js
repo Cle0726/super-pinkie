@@ -5,6 +5,8 @@
 // its role and a priority, and the fold only hides the low-priority ones in narrow panes.
 // The panel belongs to one composer (one pane); opening it never moves or re-parents the
 // native buttons, so a click still lands in the composer of the pane it came from.
+import {mountPaneRooms} from './panes.js';
+
 let active = null;
 // the composer currently on screen: its canonical draft/send operations (tests and the welcome asks use these)
 export const composer = {
@@ -16,6 +18,8 @@ export const composer = {
 };
 
 export function mountComposer(host, signal, {onStage} = {}) {
+  // each pane carries its own room (双模式 can show two rooms at once); type and spacing read it
+  mountPaneRooms(signal);
   const dispose = host.ui.registerReplacement({
     id: 'cle-composer',
     label: 'C.le.',
@@ -79,6 +83,18 @@ export function classifyTool(el) {
 const toolName = (el, fallback) => (el.getAttribute?.('aria-label') || el.getAttribute?.('title') || el.dataset?.cleToolName || el.textContent?.trim() || fallback || '').slice(0, 28);
 const isHidden = (el) => el.hidden || el.getAttribute?.('aria-hidden') === 'true';
 
+// The menu is a projection of the low-priority controls. A signature lets refresh() answer
+// "did anything actually change?" — rebuilding on every frame would throw away focus and, since
+// the rebuild mutates the page, feed the observer that triggered it.
+const signatureOf = (rows) => rows
+  .map((control) => [
+    control.dataset?.cleTool || '',
+    control.dataset?.cleToolName || '',
+    control.disabled ? '1' : '0',
+    control.getAttribute?.('aria-pressed') || '',
+  ].join('|'))
+  .join('~');
+
 // Tag every control in one composer's lead; keep the existing tags when nothing changed so
 // the MutationObserver cannot loop on itself.
 function tagLead(composerEl, lead) {
@@ -98,7 +114,7 @@ function tagLead(composerEl, lead) {
 
 // One menu per composer. Items are proxies: activating one clicks the real control in this
 // same lead, so state, aria and behaviour stay with the native button.
-function buildMenu(composerEl, lead, trigger) {
+function buildMenu(composerEl, lead, trigger, signal) {
   const menu = document.createElement('div');
   menu.className = 'cle-tools-menu';
   menu.setAttribute('role', 'menu');
@@ -107,6 +123,8 @@ function buildMenu(composerEl, lead, trigger) {
   document.body.append(menu);
 
   const items = () => [...lead.querySelectorAll(':scope > [data-cle-priority="low"]')].filter((el) => !isHidden(el));
+  // what is on screen right now: the signature plus the row nodes, so focus can be kept
+  let rendered = {signature: null, rows: []};
   const place = () => {
     const r = trigger.getBoundingClientRect();
     const width = Math.max(180, Math.min(260, window.innerWidth - 24));
@@ -118,13 +136,14 @@ function buildMenu(composerEl, lead, trigger) {
   const close = ({restore = false} = {}) => {
     if (menu.hidden) return;
     menu.hidden = true;
+    rendered = {signature: null, rows: []};
     trigger.setAttribute('aria-expanded', 'false');
     if (restore) trigger.focus({preventScroll: true});
   };
-  const open = () => {
+  // Rebuild only when the set of controls changed. `focusIndex` keeps the keyboard where it was.
+  const render = (rows, focusIndex = 0) => {
     menu.replaceChildren();
-    const rows = items();
-    if (!rows.length) return;
+    rendered = {signature: signatureOf(rows), rows};
     for (const control of rows) {
       const item = document.createElement('button');
       item.type = 'button';
@@ -141,10 +160,25 @@ function buildMenu(composerEl, lead, trigger) {
       });
       menu.append(item);
     }
+    menu.querySelectorAll('.cle-tools-menu__item')[focusIndex]?.focus({preventScroll: true});
+  };
+  const open = () => {
+    const rows = items();
+    if (!rows.length) return;
+    render(rows, 0);
     menu.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
     place();
-    menu.querySelector('.cle-tools-menu__item')?.focus({preventScroll: true});
+  };
+  // called on every observer pass: reposition, and rebuild only if the controls really changed
+  const refresh = () => {
+    if (menu.hidden) return;
+    const rows = items();
+    if (!rows.length) { close(); return; }
+    if (signatureOf(rows) === rendered.signature) { place(); return; }
+    const active = [...menu.children].indexOf(document.activeElement);
+    render(rows, Math.max(0, Math.min(active, rows.length - 1)));
+    place();
   };
 
   trigger.addEventListener('click', (event) => {
@@ -164,16 +198,58 @@ function buildMenu(composerEl, lead, trigger) {
     if (event.key === 'Tab') close();
   });
   const outside = (event) => { if (!menu.hidden && !menu.contains(event.target) && !trigger.contains(event.target)) close(); };
+  const onResize = () => close();
+  const onScroll = () => close();
   document.addEventListener('pointerdown', outside, true);
-  window.addEventListener('resize', () => close());
-  window.addEventListener('scroll', () => close(), true);
+  window.addEventListener('resize', onResize);
+  window.addEventListener('scroll', onScroll, true);
+  // every listener this menu added is bound to the controller, so a remount cannot accumulate them
+  const controller = new AbortController();
+  const abort = signal || controller.signal;
+  const dispose = () => {
+    document.removeEventListener('pointerdown', outside, true);
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('scroll', onScroll, true);
+    close();
+    menu.remove();
+  };
+  abort.addEventListener?.('abort', dispose, {once: true});
+  if (abort.aborted) dispose();
 
-  return {menu, close, open, refresh() { if (!menu.hidden) open(); }};
+  return {menu, close, open, refresh, dispose, get signature() { return rendered.signature; }};
 }
 
 // narrow panes fold the rarely used tools behind ⋯ (CSS decides when it is shown)
 export function mountToolFold(signal) {
   const stages = new Map();
+  // nodes this module wrote: the trigger buttons and the menus themselves
+  const ownNodes = new WeakSet();
+  // Widths measured while the low-priority controls were still visible. Folding hides them, so
+  // without this cache the next measurement would read 0 and immediately unfold again.
+  const lowWidth = new WeakMap();
+  const GAP = 2;
+
+  // Fold on real occupancy, not on a pane-width guess: an 864px composer fits the tools on one
+  // row, while a 508px split pane does not. Essential controls keep their measured width; low
+  // ones use the last visible width (or a conservative estimate before the first measurement).
+  const measure = (composerEl, lead, more) => {
+    const available = lead.clientWidth;
+    if (!available) return null;
+    let essential = 0;
+    let low = 0;
+    for (const child of lead.children) {
+      if (child === more) continue;
+      const width = child.getBoundingClientRect().width;
+      if (child.dataset.clePriority === 'low') {
+        if (width > 0) lowWidth.set(child, width);
+        low += width > 0 ? width : lowWidth.get(child) || 88;
+      } else if (width > 0) {
+        essential += width + GAP;
+      }
+    }
+    const moreWidth = 28 + GAP;
+    return {fits: essential + low + moreWidth <= available, tight: essential + moreWidth > available};
+  };
   const sync = () => {
     for (const composerEl of document.querySelectorAll('.cle-composer')) {
       const lead = composerEl.querySelector('.agent-chat__composer-lead');
@@ -189,28 +265,60 @@ export function mountToolFold(signal) {
         more.setAttribute('aria-expanded', 'false');
         more.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>';
         lead.append(more);
-        stage = {...buildMenu(composerEl, lead, more), more};
+        stage = {...buildMenu(composerEl, lead, more, signal), more};
+        ownNodes.add(more);
+        ownNodes.add(stage.menu);
         stages.set(composerEl, stage);
       }
       if (stage.more.parentElement !== lead) lead.append(stage.more);
       const low = tagLead(composerEl, lead);
       stage.more.hidden = low === 0;
+      const fit = low ? measure(composerEl, lead, stage.more) : null;
+      if (fit) {
+        // `tight` means even the essentials do not fit: keep the low entries folded and let the
+        // lead wrap rather than dropping controls the product requires.
+        const crowded = !fit.fits || fit.tight;
+        if (composerEl.classList.contains('is-crowded') !== crowded) composerEl.classList.toggle('is-crowded', crowded);
+      } else if (composerEl.classList.contains('is-crowded')) {
+        composerEl.classList.remove('is-crowded');
+      }
       stage.refresh();
     }
     for (const [composerEl, stage] of stages) {
       if (composerEl.isConnected) continue;
-      stage.close();
-      stage.menu.remove();
+      stage.dispose();
       stages.delete(composerEl);
     }
   };
   let q = false;
-  const mo = new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(() => { q = false; sync(); }); } });
+  // Our own menu and trigger live in the observed tree. Without filtering, opening the menu
+  // (replaceChildren + append) wakes the observer, which calls refresh(), which would rebuild
+  // again — a loop that also reset the keyboard selection every frame.
+  const isOwnNode = (node) => {
+    if (!node) return false;
+    if (ownNodes.has(node)) return true;
+    const element = node.nodeType === 1 ? node : node.parentElement;
+    return Boolean(element?.closest?.('.cle-tools-menu, .cle-tools-more'));
+  };
+  // A record is "ours" when it happened inside our own menu/trigger, or when the only nodes it
+  // added or removed are ours. Records touching native controls still schedule a real sync.
+  const isOurs = (record) => {
+    if (record.type !== 'childList') return isOwnNode(record.target);
+    const touched = [...record.addedNodes, ...record.removedNodes];
+    if (isOwnNode(record.target)) return true;
+    return touched.length > 0 && touched.every(isOwnNode);
+  };
+  const mo = new MutationObserver((records) => {
+    if (records.every(isOurs)) return;
+    if (q) return;
+    q = true;
+    requestAnimationFrame(() => { q = false; sync(); });
+  });
   mo.observe(document.body, {childList: true, subtree: true});
   sync();
   signal.addEventListener('abort', () => {
     mo.disconnect();
-    for (const stage of stages.values()) { stage.close(); stage.menu.remove(); }
+    for (const stage of stages.values()) stage.dispose();
     stages.clear();
     document.querySelectorAll('.cle-tools-more').forEach((b) => b.remove());
   }, {once: true});
