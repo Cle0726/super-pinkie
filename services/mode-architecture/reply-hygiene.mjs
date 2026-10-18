@@ -15,7 +15,7 @@ const GATE_HEADER = new RegExp(`^\\s*(?:[-*•+]\\s*)?(?:\\*\\*)?(?:严格)?(?:�
 const GATE_LINE = new RegExp(`^\\s*(?:[-*•+]\\s*)?[（(]?\\s*(?:\\*\\*)?(?:严格)?(?:执行|启动|进行|完成)\\s*${GATE}`, 'u');
 const LIST_ITEM = /^\s*(?:[-*•+]|\d+[.)、])\s+/u;
 // 写给先生看的话总会称呼先生；解题草稿不会。
-const ADDRESSED = /先生|碧琪/u;
+const ADDRESSED = /先生|Li An/u;
 const MIN_KEPT = 30;   // 去掉草稿前，后面至少要剩这么多正文
 const MIN_LEFT = 12;   // 清理后至少要剩这么多字
 

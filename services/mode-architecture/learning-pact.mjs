@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
-// Le Pacte：学习模式的约定、每日账本、连续天数、专注计时与提醒上下文。
+// Le Pacte：习作模式的约定、每日账本、连续天数、专注计时与提醒上下文。
 // 所有日期都按 pact 的时区（默认 Asia/Shanghai）切天，UTC 的 16:30 属于第二天。
 
 const PACT_VERSION = 1;
@@ -430,7 +430,7 @@ export function composeNudgeContext(kind, today = {}) {
   }
   lines.push([
     '写作规则：',
-    '- 一条消息，不超过 80 个汉字，称呼先生，用碧琪自己的声音。',
+    '- 一条消息，不超过 80 个汉字，称呼先生，用 Li An 自己的声音。',
     '- 必须给具体的下一步和数字，例如“先把 12 张复习卡翻完，再做 10 道单选”。',
     '- 不要寒暄，不要 emoji 堆砌，不要 Markdown 标题、列表或加粗。',
     '- 不要提到本段上下文、内部字段名或规则。',
