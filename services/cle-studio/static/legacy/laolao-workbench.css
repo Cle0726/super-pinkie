@@ -1,4 +1,4 @@
-/* laolao-workbench:v1 —— Li An 工作台（项目模式 / 无限模式）
+/* laolao-workbench:v1 —— Li An 工作台（营造模式 / 挥洒模式）
  * 全部颜色取页面现有变量（--bg-elevated / --text / --accent / --cle-accent …），
  * 所以五个模式、白天夜间自动跟随。C.le. 签名：粉 → 蓝 的细线，只出现在当前标签和活动栏指示条上。 */
 @import url("./laolao-vendor-codicons/codicon.css");
@@ -525,14 +525,14 @@ html[data-pinkie-wb="on"] .chat-composer-model-control { max-width: 150px; min-w
 .pk-wb-side:hover .pk-wb-project__tag { display: none; }
 .pk-wb-tabs__bench .pk-wb-icon.is-on { color: var(--wb-accent); background: color-mix(in srgb, var(--wb-accent) 14%, transparent); }
 .pk-wb-side__actions:empty { display: none; }
-/* 无限模式输入框里多了「脱敏」按钮：开着工作台时只留图标，模型名再收一点 */
+/* 挥洒模式输入框里多了「脱敏」按钮：开着工作台时只留图标，模型名再收一点 */
 html[data-pinkie-wb="on"] .agent-chat__composer-shell .ds-btn-text { display: none; }
 html[data-pinkie-wb="on"][data-cle-room="unrestricted"] .chat-composer-model-control .chat-controls__inline-select-label { max-width: 84px; }
 html[data-pinkie-wb="on"][data-cle-room="unrestricted"] .chat-composer-model-control { max-width: 128px; }
 /* 视图标签上的角标收小，贴在图标右上，不压到旁边 */
 .pk-wb-badge { right: -1px; top: -2px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 9px; line-height: 14px; }
 
-/* 项目 / 无限模式的紧凑工作布局；其它模式不应用这些外层规则。 */
+/* 营造 / 挥洒模式的紧凑工作布局；其它模式不应用这些外层规则。 */
 html[data-pinkie-wb="on"] .sidebar-brand { min-height: 52px !important; padding-top: 5px !important; padding-bottom: 5px !important; }
 html[data-pinkie-wb="on"] .sidebar-brand__identity { min-height: 42px !important; gap: 6px !important; }
 html[data-pinkie-wb="on"] .sidebar .laolao-mode-switcher { min-height: 40px !important; height: 40px !important; padding: 3px 8px !important; border-radius: 10px !important; box-shadow: none !important; }

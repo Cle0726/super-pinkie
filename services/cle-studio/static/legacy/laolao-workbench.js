@@ -1,5 +1,5 @@
 // Ported for the C.le. native host.
-/* laolao-workbench:v1 —— 项目模式 / 学习模式 / 无限模式的 VS Code 式工作台
+/* laolao-workbench:v1 —— 营造模式 / 习作模式 / 挥洒模式的 VS Code 式工作台
  *
  *  ┌──┬────────────┬──────────────────────────────┬───────────────┐
  *  │活│ 资源管理器 │ 标签  app.js ●  README.md     │               │
@@ -9,12 +9,12 @@
  *  │  │            ├──────────────────────────────┤               │
  *  │  │            │ 终端 · 问题                  │               │
  *  ├──┴────────────┴──────────────────────────────┴───────────────┤
- *  │ C.le. 无限模式  ⎇ main ↑1   ⊗0 ⚠0          行 3，列 9  UTF-8  │
+ *  │ C.le. 挥洒模式  ⎇ main ↑1   ⊗0 ⚠0          行 3，列 9  UTF-8  │
  *  └──────────────────────────────────────────────────────────────┘
  *
  * 工作台是挂在 body 上的独立一层，不改 Lit 渲染的聊天页；聊天只是被挤到右边（main.content 加左内边距）。
  * 编辑器 Monaco、终端复用应用自带的 openclaw-terminal-panel（ghostty），文件读写走插件的 pinkie.fs.*。
- * 无限模式不弹任何确认；删除和放弃改动都进 Li An 的回收站，提示条里一键撤销。 */
+ * 挥洒模式不弹任何确认；删除和放弃改动都进 Li An 的回收站，提示条里一键撤销。 */
 (() => {
   'use strict';
   if (window.__pinkieWorkbench) return;
@@ -22,7 +22,7 @@
   const MONACO = BASE + 'laolao-vendor-monaco/';
   const WORKERS = {json: 'json.worker-Csf_TLih.js', css: 'css.worker-BpD9FCKP.js', html: 'html.worker-CLuInTTy.js', ts: 'ts.worker-g3pjEjl4.js', editor: 'editor.worker-_vAIFJDs.js'};
   const MODES = new Set(['project', 'learning', 'unrestricted']);
-  const MODE_NAME = {project: '项目模式', learning: '学习模式', unrestricted: '无限模式'};
+  const MODE_NAME = {project: '营造模式', learning: '习作模式', unrestricted: '挥洒模式'};
   const TEXT_LIMIT = 8 * 1024 * 1024;
 
   /* ───────── 小工具 ───────── */
@@ -762,7 +762,7 @@
       toast('已把「' + basename(path) + '」放进 Li An 的回收站', {label: '撤销', run: async () => { try { await rpc('pinkie.fs.restore', {trashId: result.trashId}); await loadDir(dirname(path)); renderTree(); refreshGit(); toast('已恢复「' + basename(path) + '」'); } catch (e) { toast(e.message); } }});
     } catch (error) { toast(error.message); }
   }
-  // 项目模式用的「再按一次」：不是弹窗，只是第二次确认
+  // 营造模式用的「再按一次」：不是弹窗，只是第二次确认
   const armed = new Map();
   function confirmTwice(id, message) {
     const at = armed.get(id);

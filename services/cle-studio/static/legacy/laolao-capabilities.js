@@ -14,7 +14,7 @@
   const ZONE_NAME = {'America/Los_Angeles': '洛杉矶时间', 'America/New_York': '纽约时间', 'Asia/Shanghai': '北京时间', 'Asia/Hong_Kong': '香港时间', 'Asia/Taipei': '台北时间', 'Asia/Tokyo': '东京时间', 'Europe/London': '伦敦时间', UTC: 'UTC'};
   const zoneName = (tz) => ZONE_NAME[tz] || tz;
   const CHANNEL = {'openclaw-weixin': '微信', feishu: '飞书', qqbot: 'QQ', last: '最近聊天的地方'};
-  const MODES = [['main', '唠嗑'], ['project', '项目'], ['thinking', '想法'], ['learning', '学习'], ['unrestricted', '无限制']];
+  const MODES = [['main', '雅叙'], ['project', '营造'], ['thinking', '堇思'], ['learning', '习作'], ['unrestricted', '挥洒']];
   const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   const pad = (n) => String(n).padStart(2, '0');
   const clock = (ms) => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
@@ -257,7 +257,7 @@
       const meta = [];
       const d = job.delivery;
       meta.push(d?.mode === 'announce' ? '推送到' + (CHANNEL[d.channel] || d.channel || '最近聊天的地方') : '不推送');
-      meta.push((MODES.find(([id]) => id === job.agentId) || [, job.agentId || '唠嗑'])[1] + '模式');
+      meta.push((MODES.find(([id]) => id === job.agentId) || [, job.agentId || '雅叙'])[1] + '模式');
       if (job.enabled && job.state?.nextRunAtMs) meta.push('下次 ' + when(job.state.nextRunAtMs));
       const last = job.state?.lastRunAtMs;
       if (last) meta.push('上次 ' + when(last) + (job.state.lastStatus === 'ok' ? ' 做完了' : job.state.lastStatus ? ' 没做成' : ''));
