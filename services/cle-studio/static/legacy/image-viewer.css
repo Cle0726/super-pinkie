@@ -1,0 +1,46 @@
+.laolao-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 42px;
+  background: rgba(54, 23, 42, 0.42);
+  opacity: 0;
+  backdrop-filter: blur(12px) saturate(112%);
+  -webkit-backdrop-filter: blur(12px) saturate(112%);
+  transition: opacity 160ms ease;
+}
+
+.laolao-image-viewer.is-open {
+  opacity: 1;
+}
+
+.laolao-image-viewer__image {
+  display: block;
+  max-width: min(94vw, 1500px);
+  max-height: 88vh;
+  border: 1px solid rgba(255, 255, 255, 0.70);
+  border-radius: 16px;
+  object-fit: contain;
+  background: rgba(255, 252, 253, 0.92);
+  box-shadow: 0 26px 90px rgba(51, 17, 36, 0.36);
+  cursor: zoom-out;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.laolao-image-viewer__close {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 50%;
+  background: rgba(255, 250, 252, 0.76);
+  color: #a82f66;
+  font: 500 26px/28px -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+}
+

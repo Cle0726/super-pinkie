@@ -3,14 +3,17 @@
 import {LEGACY_MODULES} from './modules.js';
 
 const BASE = '/cle/static/legacy/';
-const loaded = new Set();
+// A native UI hot reload must not execute classic scripts a second time: they
+// own timers and listeners which survive the module replacement.
+const loaded = window.__cleLegacyLoaded || (window.__cleLegacyLoaded = new Set());
 
 function addStyle(href) {
   if (document.querySelector(`link[data-cle-legacy="${href}"]`)) return Promise.resolve();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = BASE + href; link.dataset.cleLegacy = href;
-    link.onload = link.onerror = () => resolve();
+    link.onload = () => resolve();
+    link.onerror = () => { link.remove(); reject(new Error(`stylesheet ${href}`)); };
     document.head.append(link);
   });
 }
