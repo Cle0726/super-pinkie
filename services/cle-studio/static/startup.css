@@ -1,0 +1,215 @@
+/* C.le. startup layer — first paint, before any plugin module runs.
+ *
+ * The Control UI ships upstream branding in index.html itself: the "OpenClaw Control" window
+ * title, a lobster favicon, dark #0e1015 html/body and the claw red accent. The plugin can only fix
+ * that after its bundle downloads, so the first frames show the old product. This sheet travels
+ * *inside* index.html (apply-startup.mjs inlines it before </head>), so it is parsed before the
+ * first paint and needs no extra request and no inline script (the gateway CSP allows inline
+ * style, not inline script).
+ *
+ * Two tiers, deliberately different in lifetime:
+ *   1. Brand cleanup  — permanent, idempotent with the plugin's own rules. Old mascot, the
+ *      upstream wordmark and the promo cards must never appear, at any tick.
+ *   2. Startup tokens — scoped to html:not([data-cle]); the plugin sets data-cle first thing in
+ *      activate(), so these become the floor for first paint and step aside the moment the real
+ *      C.le. palette lands. A plugin hot reload removes data-cle and the floor returns.
+ *
+ * Nothing here hides openclaw-app as a whole: a failed bundle still reaches the native
+ * mount-fallback, and that panel inherits the same tokens so the real error stays readable.
+ */
+
+/* ---------- 1a. brand and promotion: permanent ---------- */
+/* These must never be visible at any tick, plugin loaded or not. The plugin repeats the
+   invite rules; the welcome mascot rule is what actually removes the old layer, because the
+   room welcome replaces the identity block but leaves the native mascot node in place. */
+.sidebar-shell__invite,
+.community-invite-card,
+aside.invite { display: none !important; }
+.agent-chat__welcome-clawd { display: none !important; }
+
+/* Login gate: the plugin cannot reach this DOM (it renders before a session exists), and the
+   native mark is the upstream lobster. Replace it with the supplied portrait and the name. */
+.login-gate__logo,
+.login-gate__logo--neutral { display: none !important; }
+.login-gate__brand-name { font-size: 0 !important; letter-spacing: 0 !important; }
+.login-gate__brand-name::after {
+  content: "C.le.";
+  font: 600 15px/1 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .02em;
+  color: var(--text-strong, #15161A);
+}
+
+/* ---------- 1b. the workspace mark when native renders it as an image ---------- */
+/* The native header draws either a span mark (theme mascot "none", which the plugin paints)
+   or an img pointing at the upstream icon — the lobster. The plugin's shell.css only covers the
+   span case, so the image is replaced here instead of hidden: hiding it leaves an empty circle. */
+img.sidebar-workspace-header__mark {
+  content: url('/cle/static/art/avatar.webp');
+  object-fit: cover;
+}
+
+/* ---------- 2. first-paint tokens ---------- */
+/* Values mirror themes/cle.json so the handover to the real palette is invisible.
+   Specificity (0,1,1) beats the upstream `:root` block wherever it sits; the plugin's
+   own inline palette on <html> still outranks this once data-cle is set. */
+html:not([data-cle]) {
+  color-scheme: light;
+  --bg: #F4EFE4;
+  --bg-accent: #EFE9DC;
+  --bg-elevated: #FBF8F1;
+  --bg-hover: #EBE4D5;
+  --bg-muted: #EDE6D8;
+  --card: #FBF8F1;
+  --card-foreground: #15161A;
+  --popover: #FFFDF8;
+  --popover-foreground: #15161A;
+  --panel: #F4EFE4;
+  --panel-strong: #FBF8F1;
+  --text: #15161A;
+  --text-strong: #15161A;
+  --chat-text: #15161A;
+  --muted: #6A665E;
+  --muted-strong: #6A665E;
+  --muted-foreground: #6A665E;
+  --border: #DED6C6;
+  --border-strong: #CFC5B2;
+  --input: #D7CEBD;
+  --ring: #2A63E8;
+  --accent: #2A63E8;
+  --accent-hover: #245BD8;
+  --accent-foreground: #FFFFFF;
+  --accent-subtle: rgba(42, 99, 232, .08);
+  --primary: #15161A;
+  --primary-hover: #2A2C33;
+  --primary-foreground: #FBF8F1;
+  --skeleton-base: #EDE6D8;
+  --skeleton-highlight: rgba(20, 18, 15, .07);
+  background: var(--bg);
+}
+
+html:not([data-cle])[data-theme-mode="dark"] {
+  color-scheme: dark;
+  --bg: #0A0D16;
+  --bg-accent: #0E1220;
+  --bg-elevated: #111522;
+  --bg-hover: #171C2B;
+  --bg-muted: #141927;
+  --card: #111522;
+  --card-foreground: #EFE8DA;
+  --popover: #161B2A;
+  --popover-foreground: #EFE8DA;
+  --panel: #0A0D16;
+  --panel-strong: #111522;
+  --text: #EFE8DA;
+  --text-strong: #EFE8DA;
+  --chat-text: #EFE8DA;
+  --muted: #A39D90;
+  --muted-strong: #A39D90;
+  --muted-foreground: #A39D90;
+  --border: #232A3B;
+  --border-strong: #2E3752;
+  --input: #283044;
+  --ring: #5AA8FF;
+  --accent: #5AA8FF;
+  --accent-hover: #74B6FF;
+  --accent-foreground: #04121F;
+  --accent-subtle: rgba(56, 174, 255, .10);
+  --primary: #EFE8DA;
+  --primary-hover: #F6F1E6;
+  --primary-foreground: #0A0D16;
+  --skeleton-base: #141927;
+  --skeleton-highlight: rgba(239, 232, 218, .06);
+  background: var(--bg);
+}
+
+html:not([data-cle]) body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 3. the wait, in our own hand ---------- */
+/* Between navigation and the first render, the app mount is empty: that is the only window
+   where the native loading skeleton cannot speak. A quiet wordmark carries it, and it is gone
+   the instant the app renders (:empty) or the real fallback takes over. */
+html:not([data-cle]) openclaw-app:empty {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+}
+html:not([data-cle]) openclaw-app:empty::before {
+  content: "C.le.";
+  display: block;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  font: 400 21px/1.2 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .16em;
+  text-indent: .16em;
+  color: var(--muted);
+  pointer-events: none;
+  animation: cle-boot-breathe 1.9s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+/* A real error must never be covered by the waiting mark. */
+body.openclaw-mount-fallback-active openclaw-app:empty::before { display: none; }
+
+@keyframes cle-boot-breathe {
+  0%, 100% { opacity: .42; }
+  50% { opacity: .78; }
+}
+
+/* ---------- 4. the stock welcome identity ---------- */
+/* The stock welcome names the agent "OpenClaw" above a lobster avatar. The plugin's rooms.css
+   hides this block once data-cle is set, so leaving it visible means the old product shows
+   through on every refresh and again during a plugin hot reload.
+ *
+ * It is hidden unscoped, but only for as long as a plugin is plausibly still arriving: the same
+ * 11s budget the native mount-fallback waits for. After that the native identity returns, and
+ * if the bundle really failed the fallback panel is already on screen. Long silence never
+ * stands in for a real error.
+ *
+ * The setup notice ("connect a model") is deliberately not touched: hiding it would remove the
+ * one instruction a half-configured install has. */
+.agent-chat__welcome-identity {
+  visibility: hidden;
+  animation: cle-brand-return 0s linear 11s forwards;
+}
+@keyframes cle-brand-return { to { visibility: visible; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-cle]) openclaw-app:empty::before { animation: none; opacity: .6; }
+  .agent-chat__welcome-identity { animation-duration: 0s; }
+}
+
+/* ---------- 5. the failure panel ---------- */
+/* C.le. chrome on the native error card: paper, ink and gold instead of the claw accent, with
+   the same actions and the same text the native bundle writes. Nothing is hidden or renamed —
+   only the surface belongs to us, so a real failure still reads as a real failure. */
+body.openclaw-mount-fallback-active .mount-fallback__panel {
+  border-radius: 16px;
+  box-shadow: 0 18px 48px -18px rgba(30, 24, 14, .28), 0 2px 6px rgba(30, 24, 14, .06);
+}
+html:not([data-theme-mode="dark"]) body.openclaw-mount-fallback-active .mount-fallback__panel {
+  border-color: rgba(20, 18, 15, .10);
+}
+body.openclaw-mount-fallback-active .mount-fallback__eyebrow {
+  font: 500 10.5px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: .14em;
+}
+body.openclaw-mount-fallback-active .mount-fallback__panel h1 {
+  font-family: ui-serif, "New York", "Songti SC", "STSong", serif;
+  font-weight: 400;
+  letter-spacing: .01em;
+}
+body.openclaw-mount-fallback-active .mount-fallback__button {
+  border-radius: 10px;
+  font-family: -apple-system, "PingFang SC", system-ui, sans-serif;
+}
+body.openclaw-mount-fallback-active .mount-fallback__button--primary {
+  background: var(--text-strong, #15161A);
+  color: var(--bg, #F4EFE4);
+}
+@media (hover: hover) {
+  body.openclaw-mount-fallback-active .mount-fallback__button--primary:hover {
+    background: color-mix(in srgb, var(--text-strong, #15161A) 88%, var(--bg, #F4EFE4));
+  }
+}
