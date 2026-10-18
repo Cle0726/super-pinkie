@@ -47,6 +47,19 @@ img.sidebar-workspace-header__mark {
   content: url('/cle/static/art/avatar.webp');
   object-fit: cover;
 }
+/* The other branch: theme branding.mascot === "none" renders
+     span.sidebar-workspace-header__mark.sidebar-workspace-header__mark--neutral
+   holding an inline <svg> glyph. A background on the span would sit *under* that glyph, so the
+   glyph is hidden and the portrait is painted on the span itself. Hiding the span instead would
+   leave the header without any mark. */
+span.sidebar-workspace-header__mark--neutral {
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+  border-radius: 50%;
+  overflow: hidden;
+}
+span.sidebar-workspace-header__mark--neutral > svg {
+  opacity: 0 !important;
+}
 
 /* ---------- 1c. the workspace header's *text* mark ---------- */
 /* The header's name falls back to the upstream product name when the gateway publishes no
@@ -64,9 +77,18 @@ html:not([data-cle]) .sidebar-agent-card__name-text::after {
   letter-spacing: .06em;
   color: var(--text-strong, #15161A);
 }
-/* The chevron lives inside the name span; keep it visible and normally sized. */
+/* The name is not bare text. control-ui-boot-shared wraps it with the hover-marquee helper:
+     span.sidebar-agent-card__name-text.hover-marquee
+       > span.hover-marquee__text      ← the actual string
+   Zeroing the outer font-size is inherited, but the inner node still contributes its own font
+   metrics to the line box, so it is zeroed explicitly. The ::after above supplies the wordmark.
+   The chevron is a sibling of the marquee wrapper in the header branch and a child in the
+   roster branch; it keeps a real glyph size either way. */
+html:not([data-cle]) .sidebar-agent-card__name-text .hover-marquee__text {
+  font-size: 0 !important;
+}
 html:not([data-cle]) .sidebar-agent-card__name-text .sidebar-agent-card__chevron {
-  font-size: 0;
+  font-size: 12px;
 }
 
 /* ---------- 2. first-paint tokens ---------- */
