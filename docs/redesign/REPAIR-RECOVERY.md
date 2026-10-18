@@ -241,6 +241,8 @@ recovery smoke: all checks passed
 10. **「已中断」状态条只有 5 秒窗口**（原生 `vT()` 里 `Date.now()-e.occurredAt>=5e3`），超时即消失。这是原生行为，本路未延长——延长会变成“假进度”式常驻提示。
 11. **P1 修复待主控在现存真实会话复验**。本路已用主控保存的同一字节串做单测、也在 headless Chrome 里确认含 `<pre><code>` 的真实控制消息被折叠；但本路不能操作 GUI/live，19789 gen30 上那条已存在的 QA 气泡需要主控重载后直接看：期望 `data-cle-internal-turn="1"`、`display:none`、AX 不再读出内部提醒。
 12. **`isExternallyQuoted` 假设控制消息总以 `[pinkie-` 开头**。若后端将来改成别的引导词，需同步扩展 `QUOTE_OPEN` 之外的判定；失效方向仍是“可能误折外层引用”，因此后端改引导词时要一并告知本路。
+13. **断线展示修复待主控复验**。本路已用行为测试坐实 abort 不再撤标记/删样式，并在真实浏览器确认折叠存活；但 19789 上“真实断线 → 激活退役 → 重连”的整链路必须由主控重载后复验（截图 `第四轮-真实断线待重连队列.png` 那个场景）。
+14. **折叠标记在 abort 后会残留于 DOM**（这是有意设计）。若主控将来需要“彻底卸载不留痕迹”的语义，必须同时接受“退役瞬间重新公开控制消息”的代价；本路选择保留展示结论。
 
 ---
 
@@ -282,3 +284,54 @@ recovery smoke: all checks passed
 | 5 | 真实内部命令因草稿含 code 而漏出（P1，实际 DOM 复现） | 判定依据从「DOM 里有 pre/code」改为「源文本以引用/围栏/引号开头」；`isExternallyQuoted` | 真实 fixture 折叠 + 四种外层包装显示，单测与浏览器冒烟各一组 |
 
 审查文件：`/Users/Admin/Documents/Codex/2026-10-18/new-chat/work/review-recovery-real-code-1804.md`；fixture：`tests/fixtures/qa-watchdog-with-code.txt`（仅该 QA 会话）。
+
+### 补充轮次（断线 / 热重载生命周期）
+
+主控在 19789 的真实断线演练中确认了**投递**这条路径：停掉测试网关 → 用户离线发一条 → 发件箱出现「正在等待重新连接」→ 重启网关自动送出、无需点重试 → 结果 667 到达 → `chat.history` 里用户消息 1 份、667 回复 1 份。**这一项本路不重做、也不声称亲自操作过 GUI**。
+
+但同一轮暴露了**展示**回退（P1）：host activation 结束时重新露出了 322 字控制消息与 437 字上一稿，旧蓝色气泡/头像与猫的位置也回退。
+
+根因不是我“在线时没识别”，而是 abort 清理方向错了：
+
+```js
+// 旧代码（有问题）
+for (const el of document.querySelectorAll('[data-cle-internal-turn], ...')) {
+  delete el.dataset.cleInternalTurn;      // ← 把已经证实的折叠撤掉了
+  el.removeAttribute('aria-hidden');
+}
+document.getElementById(STYLE_ID)?.remove();   // ← 连折叠规则一起删掉
+```
+
+激活退役时，原生历史 DOM 里的消息**原样还在**；撤标记 + 删样式 = 立刻重新公开。断线、热重载、插件重挂都会走这条路径。
+
+修正为「停止行为，保留结论」：
+
+| 类别 | abort 时 | 理由 |
+|---|---|---|
+| 观察器 / 轮询 / 事件订阅 / 所有定时器 / 待执行 rAF | **全部停止并释放** | 退役的激活不得再调度、写 DOM、发请求 |
+| 已证实的 `data-cle-internal-turn` / `-internal-only` / `aria-hidden` | **保留** | 这是静态、幂等的展示结论；撤销它才是泄漏 |
+| `#cle-recovery-style` 折叠规则 | **保留** | 同上；下次激活会重新计算同一个答案 |
+| 普通消息、引用、代码、真实故障 | 从不标记，故始终可见 | 与之前一致 |
+
+不做全局强隐藏、不改会话数据：标记只落在本模块**正面识别**过的行上；新激活会重新读 `data-message-text`，判错也能自行纠正。
+
+同时补齐了此前确实存在的生命周期漏洞（不是仅搜源码）：
+
+| 位置 | 旧问题 | 现在 |
+|---|---|---|
+| `start()` 的 900ms timeout | abort 后仍会执行，写 placeholder | 走 `after()`，触发时再查 `aborted` |
+| terminal 事件 700ms 回调 | abort 后仍会 `schedule()` | 同上 |
+| `requestAnimationFrame` | 只置 `frame = 0`，未取消 | `cancelAnimationFrame` |
+| `schedule()` 的 pane 定时器 | 逐个清 `timers`，漏掉已排队的独立 timeout | 统一 `timeouts` 集合，abort 全清 |
+| `DOMContentLoaded` 监听 | abort 早于加载时会残留 | 保存 handle，abort 时 `removeEventListener` |
+| `await` 中的恢复请求 | 只在外层 `pass()` 检查，内层仍可调用原生 retry | `recoverPaneDetailed` 接受 `isActive()`，await 前后各查一次 |
+
+**验证**（29 项单测 + 13 项真实浏览器）：
+
+- `abort keeps proven internal rows folded and leaves no live work behind`：abort 后标记、`aria-hidden`、样式仍在；observer 已 disconnect；无 interval、无 rAF、无存活 timer。
+- `a retired activation cannot retry the gateway or touch the DOM again`：abort 后推进 60 秒，零重试、零 `sessions.list`。
+- `abort during an in-flight recovery request does not arm a cooldown or repaint`：请求挂起时 abort，再 resolve——**不重试**（这条抓到了真实缺陷并已修）。
+- `terminal callbacks scheduled before abort never run`、`a hot reload leaves exactly one live activation, not two`。
+- 浏览器冒烟新增 6 项 abort 检查，含「折叠行 abort 后仍 `display:none`」「规则未删」「引用与普通消息仍可见」。
+
+**仍未验证**：本路不能操作 GUI/live，19789 上真实的“断线 → 激活退役 → 重连”全过程需要主控重载后复验；我能提供的证据是同一 abort 代码路径的行为测试与真实浏览器样式结果，不是亲眼观察。
