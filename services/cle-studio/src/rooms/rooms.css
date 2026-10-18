@@ -77,18 +77,17 @@ html[data-cle] .sidebar-workspace-header__mark { width: 22px !important; height:
 }
 .cle-blink__vision {
   position: absolute; left: 50%; top: 50%; width: min(46vw, 620px); height: min(15vw, 200px); translate: -50% -58%;
-  clip-path: ellipse(50% 50% at 50% 50%); opacity: 0; transform: scale(.6, 0); will-change: transform, opacity;
-  filter: drop-shadow(0 0 22px rgba(90, 168, 255, .35));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22C18 2 70 -4 100 16C82 38 26 42 0 22Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22C18 2 70 -4 100 16C82 38 26 42 0 22Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat; opacity: 0; transform: scale(.6, 0); will-change: transform, opacity;
 }
 .cle-blink__vision i { position: absolute; inset: -20% 0; background: #0A0D16 center 34% / cover no-repeat; }
-.cle-blink__vision::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(191, 227, 255, .55), inset 0 0 40px 10px rgba(6, 8, 14, .7); }
+.cle-blink__vision::after { content: ""; position: absolute; inset: 0;
+  background: radial-gradient(60% 70% at 50% 50%, transparent 55%, rgba(6, 8, 14, .75) 100%); }
 .cle-blink__card {
   position: absolute; left: 50%; top: calc(50% + min(7.5vw, 100px) + 18px); translate: -50% 0;
   display: grid; justify-items: center; row-gap: 10px; color: #F1EADB; opacity: 0;
 }
-.cle-blink__zh { font: 400 28px/1 var(--cle-serif); letter-spacing: .32em; padding-left: .32em; }
-.cle-blink__fr { font: italic 400 15px/1 var(--cle-serif); color: #C9A24A; letter-spacing: .06em; }
+.cle-blink__zh { font: 400 30px/1 var(--cle-serif); letter-spacing: .32em; padding-left: .32em; color: #F6F0E2; text-shadow: 0 0 24px rgba(90, 168, 255, .25); }
+.cle-blink__fr { font: italic 400 16px/1 var(--cle-serif); color: #D8B562; letter-spacing: .06em; }
 
 /* ---------- the empty room ---------- */
 html[data-cle] .agent-chat__welcome-identity,

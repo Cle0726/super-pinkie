@@ -1,11 +1,11 @@
 /* The live status line. Transform/opacity only. */
 html[data-cle] .chat-working-indicator:has(> .cle-status) > :not(.cle-status) { display: none !important; }
-.cle-status { display: inline-flex; align-items: center; gap: 9px; min-height: 34px; color: var(--cle-ink-2); }
-.cle-status__glyph { display: inline-block; width: 64px; height: 34px; flex: 0 0 64px; }
-.cle-status__particles { display: block; position: relative; width: 64px; height: 34px; font: italic 15px/34px var(--cle-serif); color: var(--cle-ink); }
+.cle-status { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--cle-ink-2); }
+.cle-status__glyph { display: inline-block; width: 84px; height: 44px; flex: 0 0 84px; margin-left: -8px; }
+.cle-status__particles { display: block; position: relative; width: 84px; height: 44px; font: italic 16px/44px var(--cle-serif); color: var(--cle-ink); }
 .cle-status__verb {
-  font: italic 400 14px/1 var(--cle-serif); letter-spacing: .08em; color: var(--cle-ink);
-  background: linear-gradient(100deg, var(--cle-ink) 0%, var(--cle-ink) 40%, color-mix(in srgb, var(--cle-gaze) 70%, var(--cle-paper)) 50%, var(--cle-ink) 60%, var(--cle-ink) 100%);
+  font: italic 400 15px/1 var(--cle-serif); letter-spacing: .08em; color: var(--cle-ink);
+  background: linear-gradient(100deg, var(--cle-ink) 0%, var(--cle-ink) 38%, var(--cle-gold) 46%, color-mix(in srgb, var(--cle-gaze) 70%, var(--cle-paper)) 52%, var(--cle-ink) 60%, var(--cle-ink) 100%);
   background-size: 260% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   animation: cle-sheen 2.8s linear infinite;
 }

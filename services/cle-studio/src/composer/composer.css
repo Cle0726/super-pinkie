@@ -76,3 +76,7 @@ html[data-cle] .chat-controls__reasoning-panel[data-cle-hint]::after {
   font: 400 12px/1.4 var(--cle-sans); color: var(--cle-ink-3);
 }
 html[data-cle] .cle-composer .chat-controls__permission-icon { color: var(--cle-ink-3) !important; }
+
+/* stop: the same ink coin as send, with an ivory square — never alarm red */
+html[data-cle] .cle-composer .chat-send-btn--stop { background: var(--cle-ink) !important; color: var(--cle-paper) !important; border: 0 !important; box-shadow: 0 0 0 4px var(--cle-gaze-soft) !important; }
+html[data-cle] .cle-composer .chat-send-btn--stop svg, html[data-cle] .cle-composer .chat-send-btn--stop rect { color: var(--cle-paper) !important; fill: currentColor; }

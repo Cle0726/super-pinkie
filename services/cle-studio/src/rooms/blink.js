@@ -20,13 +20,31 @@ function ensureLayer() {
   return layer;
 }
 
+// look him in the eye: zoom the painting so his eyes sit in the middle of the almond
+const sizes = new Map();
+function frameEye(vision, room) {
+  const src = roomArt(room.id), img = vision.firstElementChild;
+  img.style.backgroundImage = `url("${src}")`;
+  const place = (nw, nh) => {
+    const w = vision.offsetWidth, h = vision.offsetHeight * 1.4;          // the <i> is 140% tall (inset -20%)
+    const iw = w * 1.9, ih = iw * nh / nw, [ex, ey] = room.eye || [.5, .3];
+    img.style.backgroundSize = `${iw}px ${ih}px`;
+    img.style.backgroundPosition = `${Math.round(w / 2 - ex * iw)}px ${Math.round(h / 2 - ey * ih)}px`;
+  };
+  if (sizes.has(src)) return place(...sizes.get(src));
+  const probe = new Image();
+  probe.onload = () => { sizes.set(src, [probe.naturalWidth, probe.naturalHeight]); place(probe.naturalWidth, probe.naturalHeight); };
+  probe.src = src;
+  place(900, 1600);
+}
+
 export async function blink(room, during) {
   if (reduce()) { await during(); return; }
   const el = ensureLayer();
   const $ = (s) => el.querySelector(s);
   const top = $('.cle-blink__lid--top'), bottom = $('.cle-blink__lid--bottom'), seam = $('.cle-blink__seam');
   const vision = $('.cle-blink__vision'), card = $('.cle-blink__card');
-  vision.firstElementChild.style.backgroundImage = `url("${roomArt(room.id)}")`;
+  frameEye(vision, room);
   $('.cle-blink__zh').textContent = room.zh;
   $('.cle-blink__fr').textContent = room.fr;
   el.dataset.room = room.id;

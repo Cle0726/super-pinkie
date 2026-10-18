@@ -36,7 +36,7 @@ export function mountWelcome(host, signal) {
 
   let current = null;
   const sync = () => {
-    const host_ = document.querySelector('.agent-chat__welcome');
+    const host_ = document.querySelector('.chat-pane-cache__pane--active .agent-chat__welcome') || document.querySelector('.agent-chat__welcome');
     const roomId = document.documentElement.dataset.cleRoom || 'chat';
     if (!host_) { current = null; return; }
     if (current?.isConnected && current.dataset.room === roomId && current.parentElement === host_) return;
@@ -46,10 +46,14 @@ export function mountWelcome(host, signal) {
     host_.prepend(current);
   };
   let queued = false;
-  const mo = new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } });
+  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } };
+  const mo = new MutationObserver(schedule);
   mo.observe(document.body, {childList: true, subtree: true});
   const roomObserver = new MutationObserver(sync);
   roomObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-room']});
+  // cached panes swap which one is active without adding nodes
+  const paneObserver = new MutationObserver(schedule);
+  paneObserver.observe(document.body, {subtree: true, attributes: true, attributeFilter: ['class']});
   sync();
-  signal.addEventListener('abort', () => { mo.disconnect(); roomObserver.disconnect(); current?.remove(); }, {once: true});
+  signal.addEventListener('abort', () => { mo.disconnect(); roomObserver.disconnect(); paneObserver.disconnect(); current?.remove(); }, {once: true});
 }

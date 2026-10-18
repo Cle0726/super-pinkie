@@ -10,7 +10,8 @@
 
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const mode = () => { const m = document.documentElement.getAttribute("data-cle-room"); return MODES.includes(m) ? m : "chat"; };
-  const ART = () => "/cle/static/art/loaf.png";
+  // Li An on the composer: lies in a loaf; sits up while working; eyes closed when sleepy; blinks now and then
+  const ART = (_mode, st = state) => `/cle/static/art/${st === "working" ? "pet-sit" : st === "sleepy" ? "pet-loaf-closed" : "pet-loaf"}.webp`;
   const CALL = {project: "老板"};
   const callUser = () => CALL[mode()] || "先生";
   const PREF_KEY = "pinkie-buddy-prefs-v1";
@@ -80,11 +81,12 @@
   const build = () => {
     buddy = el("div", "pinkie-buddy");
     buddy.dataset.state = "rest";
-    figure = el("button", "pinkie-buddy__figure"); figure.type = "button"; figure.setAttribute("aria-label", "碧琪小伙伴，点我打开小菜单");
+    figure = el("button", "pinkie-buddy__figure"); figure.type = "button"; figure.setAttribute("aria-label", "Li An，点我打开小菜单");
     figure.setAttribute("aria-haspopup", "menu"); figure.setAttribute("aria-expanded", "false"); figure.setAttribute("aria-controls", "pinkie-buddy-menu");
     imgA = el("img", "pinkie-buddy__img is-front"); imgB = el("img", "pinkie-buddy__img"); imgA.alt = imgB.alt = "";
     imgA.src = ART(mode(), "rest"); frontImg = imgA;
-    figure.append(imgA, imgB);
+    const lids = el("img", "pinkie-buddy__lids"); lids.alt = ""; lids.src = "/cle/static/art/pet-loaf-closed.webp";
+    figure.append(imgA, imgB, lids);
     caption = el("div", "pinkie-buddy__caption");
     bubble = el("div", "pinkie-buddy__bubble"); bubble.setAttribute("role", "status");
     menu = el("div", "pinkie-buddy__menu"); menu.setAttribute("role", "menu");

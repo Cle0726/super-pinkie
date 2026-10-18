@@ -22,8 +22,9 @@ const QUILL_SHARE = .34;
 
 const PALETTES = {
   cle: {
-    night: {a: '#e4ebff', b: '#8aa8ff', glow: '#62b4ff', ink: '#e9eeff', blend: 'add'},
-    day: {a: '#2c2945', b: '#15131f', glow: '#2f7bff', ink: '#1a1826', blend: 'normal'},
+    // v5: gold-leaf cores on black fur (day) / gold and sapphire light (night); the glow is his eye
+    night: {a: '#f3dc9c', b: '#7d9be0', glow: '#5aa8ff', ink: '#efe8da', blend: 'add'},
+    day: {a: '#a98232', b: '#171a24', glow: '#2a63e8', ink: '#15161a', blend: 'normal'},
   },
   pinkie: {
     night: {a: '#ffd8e8', b: '#ff7ab3', glow: '#ffa3cb', ink: '#ffd3e6', blend: 'add'},
