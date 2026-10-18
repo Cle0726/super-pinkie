@@ -17,6 +17,7 @@ export const LEGACY_MODULES = [
   {id: 'usage', css: ['laolao-usage-stats.css'], js: ['laolao-usage-stats.js']},
   {id: 'voice', js: ['laolao-live-voice.js']},
   {id: 'desensitize', js: ['laolao-desensitize.js']},
+  {id: 'presentation', css: ['presentation.css'], js: ['laolao-laser-pointer.js']},
   {id: 'companion', css: ['laolao-companion.css'], js: ['laolao-companion.js']},
   // Model + reasoning picker: brand tabs, per-family slider stops, route-preserving save.
   // Shell look is being redesigned, so this ships behaviour without a stylesheet for now.

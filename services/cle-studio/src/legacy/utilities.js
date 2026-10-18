@@ -33,7 +33,31 @@ export function mountUtilities(host, signal) {
   usage.setAttribute('aria-label', '本机用量统计');
   usage.append(node('h3', '', '本机用量'), node('p', '', '沿用原 App 的累计统计，费用显示为估算。'));
   const cards = node('div', 'cle-utilities__cards');
-  scroll.append(memory, usage, cards);
+  const shortcuts = node('section', 'cle-utilities__shortcuts');
+  shortcuts.setAttribute('aria-label', '原 App 的空间与演示工具');
+  shortcuts.append(node('h3', '', '空间与演示'));
+  for (const [label, port, handler] of [['派对空间', 18889, 'laolaoParty'], ['灵感圆桌', 18891, 'laolaoRoundtable']]) {
+    const link = node('a', 'cle-utilities__shortcut', label);
+    link.href = `http://127.0.0.1:${port}/`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.addEventListener('click', event => {
+      const bridge = window.webkit?.messageHandlers?.[handler];
+      if (bridge) { event.preventDefault(); bridge.postMessage({action: 'open'}); close(false); }
+    });
+    shortcuts.append(link);
+  }
+  const presentation = node('button', 'cle-utilities__shortcut', '演示工具：激光笔、画笔、荧光笔、聚光灯、放大镜');
+  presentation.type = 'button';
+  const presentationLabel = presentation.textContent;
+  presentation.addEventListener('click', () => {
+    if (!window.__laolaoLaser?.toggle) { presentation.textContent = '演示工具正在加载，请稍后重试'; return; }
+    presentation.textContent = presentationLabel;
+    close(false);
+    window.__laolaoLaser.toggle();
+  });
+  shortcuts.append(presentation);
+  scroll.append(memory, shortcuts, usage, cards);
   panel.append(head, scroll);
   layer.append(panel);
   document.body.append(layer);
