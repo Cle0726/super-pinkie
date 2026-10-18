@@ -25,9 +25,33 @@ const TIER_PREFIX = '[pinkie-tier-control]';
 // `[pinkie-tier]`, `[pinkie-tier-report]`, … are the same control family.
 const TIER_ANY = /^\[pinkie-tier[\w-]*\]/i;
 const RESTART_NOTICE = '[System] Your previous turn was interrupted by a gateway restart';
-const SESSION_FENCE = /^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
 // Runs that are internal continuations, not a turn the user started.
 const CONTROL_SEGMENT = /\[pinkie-(?:watchdog|tier[\w-]*)\]/i;
+
+// The prefixes above are short, so on their own they are not evidence: anyone can
+// type “[pinkie-watchdog] 这个是什么意思”. A real control turn is a machine-written
+// instruction, and every builder in services/mode-architecture ends it with one of
+// these sentences. Recognising the whole shape — leading prefix AND the trailing
+// instruction — is what separates the gateway's own message from a reader quoting it.
+const WATCHDOG_TAIL = /这是当前用户轮次的内部续跑命令[，,]?\s*先生看不到这条消息[；;]\s*不要回复\s*NO_REPLY[，,]?\s*也不要在回复里提到这条命令。?\s*$/u;
+const TIER_TAIL = /这是当前用户轮次的内部续跑命令[。.]?\s*$/u;
+const TIER_TAIL_YIELD = /这是当前用户轮次的内部续跑命令[。.]?\s*立即用\s*sessions_spawn\s*补齐缺失角色[\s\S]*绝对不得输出\s*NO_REPLY\s*规避缺口[。.]?\s*$/u;
+// The gateway's own control turns: leading prefix plus the instruction tail every
+// builder appends. A short line that merely starts with the prefix is a person talking
+// about the mechanism, and it stays on screen.
+//
+// Order matters: the yield variant puts more text after the “内部续跑命令” sentence, so
+// the simple tail (which is anchored at the end) is checked last.
+//
+// The length gate is only a cheap pre-filter, not the evidence: a real tier message can
+// sit under 60 characters once its scaffold is short. The anchored tails decide.
+const CONTROL_MIN_CHARS = 40;
+
+// The gateway's restart notice is a real instruction to the model, and the reader does
+// not need to act on it — but the *failure* it describes is real. Only the exact
+// upstream sentence is treated as an internal turn; anything a person or the model
+// writes about it stays.
+const RESTART_EXACT = /^\[System\] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool\/model work\. Continue from the existing transcript and finish the interrupted response\.?\s*$/u;
 
 // A user bubble prints the whole message through .chat-text; the row carries the raw
 // text in data-message-text. Read the attribute: it is the untouched source, so a
@@ -44,11 +68,20 @@ export function isInternalTurnText(raw) {
   if (source.replace(/[\u200B-\u200D\u2060\uFEFF]/gu, '').trim() === '\u2063') return true;
   const text = source.replace(/[\u200B-\u200D\u2060\u2063\uFEFF]/gu, '').trim();
   if (!text) return false;
-  if (text.startsWith(WATCHDOG_PREFIX)) return true;
-  if (text.startsWith(TIER_PREFIX)) return true;
-  if (TIER_ANY.test(text)) return true;
-  if (text.startsWith(RESTART_NOTICE)) return true;
-  return SESSION_FENCE.test(text);
+
+  // Only the exact upstream restart sentence. Its subject is a real interruption, so a
+  // reader-written or model-written sentence about it must stay visible.
+  if (RESTART_EXACT.test(text)) return true;
+
+  // The gateway's own control turns: leading prefix plus the instruction tail that
+  // every builder appends. A short line that merely starts with the prefix is a person
+  // talking about the mechanism, and it stays on screen.
+  if (text.length < CONTROL_MIN_CHARS) return false;
+  if (text.startsWith(WATCHDOG_PREFIX)) return WATCHDOG_TAIL.test(text);
+  if (text.startsWith(TIER_PREFIX) || TIER_ANY.test(text)) {
+    return TIER_TAIL_YIELD.test(text) || TIER_TAIL.test(text);
+  }
+  return false;
 }
 
 // A code block or a quote is the user showing the text, not the gateway sending it.
@@ -73,6 +106,10 @@ const markInternal = (bubble, internal) => {
 
 // Group-level fold: a turn made only of control text must not leave the avatar row
 // and the footer behind. Count only the bubbles this pane actually rendered.
+//
+// The guard matters: a real failure bubble is never marked internal, so a group that
+// holds one keeps itself visible even when every other bubble in it was folded. That
+// is the difference between "this turn was machine-written" and "hide this error".
 const syncGroup = (group) => {
   if (!group || group.classList.contains('chat-group--typing')) return;
   const bubbles = [...group.querySelectorAll('.chat-bubble[data-message-text]')];
@@ -207,39 +244,61 @@ export async function sessionIdle(host, sessionKey) {
   return ['done', 'failed', 'interrupted', 'killed', 'timeout'].includes(status);
 }
 
-// One recovery pass for one pane. Returns the ids that were retried.
-export async function recoverPane(pane, host, options = {}) {
+// One recovery pass for one pane. Returns what actually happened, so the caller can
+// back off on failure as well as on success. A pass that never reached the native
+// retry (busy pane, unknown backend state, nothing stuck) reports `attempted: false`,
+// which must NOT start a cooldown — otherwise a transient busy moment would freeze
+// recovery for seconds after the pane went idle again.
+export async function recoverPaneDetailed(pane, host, options = {}) {
   const state = pane?.state;
   const sessionKey = paneSessionKey(pane) || options.sessionKey || '';
-  if (!state || !sessionKey) return [];
-  if (state.sessionKey && state.sessionKey !== sessionKey) return [];
-  if (paneBusy(pane)) return [];
+  if (!state || !sessionKey) return {retried: [], removed: [], attempted: false};
+  if (state.sessionKey && state.sessionKey !== sessionKey) return {retried: [], removed: [], attempted: false};
+  if (paneBusy(pane)) return {retried: [], removed: [], attempted: false};
   const stuck = queueOf(pane).filter(isStuckItem);
-  if (!stuck.length) return [];
-  if (!(await sessionIdle(host, sessionKey))) return [];
+  if (!stuck.length) return {retried: [], removed: [], attempted: false};
+  if (!(await sessionIdle(host, sessionKey))) return {retried: [], removed: [], attempted: false};
   // Re-read after the await: the pane may have started a run, changed session, or
   // drained the queue while the roster was in flight.
-  if (pane.state !== state || paneBusy(pane)) return [];
-  if ((paneSessionKey(pane) || options.sessionKey || '') !== sessionKey) return [];
+  if (pane.state !== state || paneBusy(pane)) return {retried: [], removed: [], attempted: false};
+  if ((paneSessionKey(pane) || options.sessionKey || '') !== sessionKey) {
+    return {retried: [], removed: [], attempted: false};
+  }
 
   const messages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
   const retried = [];
+  const removed = [];
+  let attempted = false;
   for (const item of queueOf(pane).filter(isStuckItem)) {
     if (item.sessionKey && item.sessionKey !== sessionKey) continue;
     // Already delivered: drop the card through the native remover, never resend.
     if (appearsInTranscript(item, messages)) {
       const remove = nativeAction(pane, 'removeQueuedMessage', item.id);
-      if (remove) { try { await remove(); } catch {} }
+      if (!remove) continue;
+      attempted = true;
+      try { await remove(); removed.push(item.id); } catch {}
       continue;
     }
     const retry = nativeRetry(pane, item.id);
     if (!retry) break;
+    // A synchronous throw and a rejected promise are the same thing here: the retry
+    // was really attempted, so the caller has to back off either way. Swallowing the
+    // error is deliberate — the card still carries the gateway's own message.
+    attempted = true;
+    let ok = false;
+    try { await retry(); ok = true; } catch {}
+    if (ok) retried.push(item.id);
     // Retry is serial on purpose: the native path starts a run, and a second item
     // must wait for that run's own queue drain.
-    try { await retry(); retried.push(item.id); } catch {}
     break;
   }
-  if (retried.length) repaint(pane);
+  if (retried.length || removed.length) repaint(pane);
+  return {retried, removed, attempted};
+}
+
+// Kept as the simple shape the tests and the first report used.
+export async function recoverPane(pane, host, options = {}) {
+  const {retried} = await recoverPaneDetailed(pane, host, options);
   return retried;
 }
 
@@ -333,15 +392,16 @@ export function mountRecovery(host, signal) {
 
   const pass = async (pane) => {
     if (pending.has(pane)) return;
-    const attempted = lastAttempt.get(pane) || 0;
-    if (Date.now() - attempted < RETRY_COOLDOWN_MS) return;
+    if (!shouldAttempt(lastAttempt.get(pane), Date.now(), RETRY_COOLDOWN_MS)) return;
     pending.add(pane);
     try {
       projectPane(pane);
-      const retried = await recoverPane(pane, host);
-      // Only a real attempt starts the cooldown; a pane that was simply busy is
-      // allowed to be looked at again on the next terminal event.
-      if (retried.length) lastAttempt.set(pane, Date.now());
+      const result = await recoverPaneDetailed(pane, host);
+      // Back off on every real attempt, not just on a success. A native retry that
+      // throws or rejects has already started whatever it was going to do; letting the
+      // next mutation or reconnect event try again immediately is how a flapping
+      // socket turns one stuck card into a request storm.
+      if (result.attempted) lastAttempt.set(pane, Date.now());
     } catch (error) {
       // A recovery attempt is best-effort by definition; never let it surface as a
       // chat error or stop the pane from rendering.
@@ -437,3 +497,9 @@ export function mountRecovery(host, signal) {
 }
 
 export const __test = {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, CONTROL_SEGMENT};
+
+// The backoff itself is worth testing without a real DOM/timer harness: it is the one
+// piece that, if wrong, turns a flapping gateway into a request storm.
+export function shouldAttempt(lastAttemptAt, now, cooldown = 6000) {
+  return now - (lastAttemptAt || 0) >= cooldown;
+}
