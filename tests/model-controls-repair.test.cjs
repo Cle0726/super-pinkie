@@ -1,0 +1,136 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {pathToFileURL} = require('node:url');
+
+const root = path.join(__dirname, '..');
+const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const exists = (rel) => fs.existsSync(path.join(root, rel));
+
+const gazeSrc = read('services/cle-studio/src/composer/gaze-levels.js');
+// gaze-levels.js is ESM with no imports of its own: load it once for the pure assertions.
+function levels() {
+  const mod = {};
+  vm.runInNewContext(gazeSrc.replace(/export (const|function)/g, '$1') + '\nthis.__m={LEVELS,levelOf,eyeSvg,tierLabel,tierWord,stopIndex};',
+    mod, {});
+  return mod.__m;
+}
+
+test('every standard effort name maps to one level, in both English ids and zh labels', () => {
+  const {levelOf} = levels();
+  for (const [label, want] of [
+    ['off', 'off'], ['minimal', 'minimal'], ['low', 'low'], ['medium', 'medium'],
+    ['high', 'high'], ['xhigh', 'xhigh'], ['extra high', 'xhigh'], ['max', 'max'], ['ultra', 'ultra'],
+    ['adaptive', 'adaptive'],
+    ['关闭', 'off'], ['极浅', 'minimal'], ['低', 'low'], ['中', 'medium'], ['高', 'high'],
+    ['很高', 'xhigh'], ['最高', 'max'], ['极限', 'ultra'], ['自适应', 'adaptive'],
+  ]) assert.equal(levelOf(label), want, label);
+  assert.equal(levelOf(''), null, 'an unknown label is never silently treated as a level');
+  assert.equal(levelOf('something else'), null);
+});
+
+test('the eye opens monotonically, and the deepest tier is the only one with the halo', () => {
+  const {LEVELS, eyeSvg} = levels();
+  const order = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+  for (let i = 1; i < order.length; i += 1) {
+    assert.ok(LEVELS[order[i]].open > LEVELS[order[i - 1]].open,
+      `${order[i]} must open further than ${order[i - 1]}`);
+  }
+  assert.match(eyeSvg('off'), /M3\.2 11\.2/, 'off is a closed lid, not an empty box');
+  assert.doesNotMatch(eyeSvg('off'), /cle-eye__halo/);
+  assert.match(eyeSvg('ultra'), /cle-eye__halo/);
+  assert.doesNotMatch(eyeSvg('high'), /cle-eye__halo/);
+  for (const level of order) {
+    const svg = eyeSvg(level);
+    assert.match(svg, /viewBox="0 0 24 24"/);
+    assert.equal((svg.match(/<clipPath id="/g) || []).length, svg.includes('<clipPath') ? 1 : 0,
+      'each eye declares at most one clip path');
+  }
+});
+
+test('the visible tier name is the standard one — a poetic word can never replace it', () => {
+  const {tierLabel, LEVELS} = levels();
+  assert.equal(tierLabel('high'), 'High');
+  assert.equal(tierLabel('max'), 'Max');
+  assert.equal(tierLabel('ultra'), 'Ultra');
+  for (const level of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']) {
+    assert.match(LEVELS[level].tier, /^[A-Za-z]+$/, `${level} keeps a Latin standard name`);
+    assert.ok(LEVELS[level].zh.length <= 3, 'the Chinese word stays a short suffix');
+  }
+});
+
+test('a shorter native stop list never renders as if it reached Ultra', () => {
+  // the 2026.10 picker exposes whatever the model supports; index comes from min/max/value
+  const src = gazeSrc;
+  const stopIndex = new Function(`${src.replace(/export const/g, 'const').replace(/export function/g, 'function')}
+    return stopIndex;`)();
+  assert.equal(stopIndex({min: 0, max: 2, value: 2, count: 3}), 2);
+  assert.equal(stopIndex({min: 0, max: 2, value: 0, count: 3}), 0);
+  assert.equal(stopIndex({min: 0, max: 2, value: 1, count: 3}), 1);
+  // four real stops, clamped at the end instead of overflowing a fixed ladder
+  assert.equal(stopIndex({min: 0, max: 3, value: 3, count: 4}), 3);
+  assert.equal(stopIndex({min: 0, max: 0, value: 0, count: 1}), 0);
+});
+
+test('the composer styles the eye, the stops and both themes without a fixed rainbow palette', () => {
+  const css = read('services/cle-studio/src/composer/models.css');
+  assert.match(css, /html\[data-cle\] \.cle-eye/);
+  assert.match(css, /\.cle-eye\[data-lit="true"\] \.cle-eye__iris \{ fill: var\(--cle-gaze\)/);
+  assert.match(css, /\.cle-gaze-stop\[data-current\] \.cle-gaze-stop__tick \{[\s\S]*?background: var\(--cle-gaze\)/);
+  assert.match(css, /\.cle-gaze-stops__why/);
+  assert.doesNotMatch(css, /#[0-9a-fA-F]{6}/, 'the palette comes from tokens, not literal hex values');
+  assert.doesNotMatch(css, /(linear-gradient\([^)]*(#ff|#f0[0-9a-f]|pink|magenta))/i, 'no leftover pink glass');
+  // reduced motion must be honoured for both the floating mark and the eye transitions
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test('brand marks keep the original artwork: every referenced file exists and the coloured ones stay unmasked', () => {
+  const css = read('services/cle-studio/src/composer/models.css');
+  const referenced = [...css.matchAll(/url\("\/cle\/static\/legacy\/brand\/([a-z-]+)\.svg"\)/g)].map((m) => m[1]);
+  assert.ok(referenced.length >= 15, `expected the full provider set, found ${referenced.length}`);
+  for (const name of new Set(referenced)) {
+    assert.ok(exists(`services/cle-studio/static/legacy/brand/${name}.svg`), `missing brand/${name}.svg`);
+  }
+  for (const name of ['gemini', 'claude', 'deepseek', 'mistral', 'doubao']) {
+    const svg = read(`services/cle-studio/static/legacy/brand/${name}.svg`);
+    assert.match(svg, /fill="#[0-9A-Fa-f]{3,8}"/, `${name} keeps its brand colour in the source`);
+    assert.match(css, new RegExp(`data-pinkie-brand="${name}"\\] \\{ --pinkie-brand-img: url`),
+      `${name} is drawn as its own coloured artwork`);
+  }
+  // a coloured mark must not travel through the mask channel at all, or it loses its colours
+  const coloured = css.slice(css.indexOf('coloured set'), css.indexOf('/* the native provider glyph'));
+  assert.match(coloured, /--pinkie-brand-mono: none/);
+  assert.match(coloured, /--pinkie-brand-ink: transparent/);
+  assert.doesNotMatch(coloured, /--pinkie-brand-mono: url\(/);
+  for (const name of ['openai', 'codex', 'grok', 'kimi', 'zai']) {
+    const svg = read(`services/cle-studio/static/legacy/brand/${name}.svg`);
+    assert.match(svg, /fill="currentColor"/, `${name} is a monochrome mark and is masked`);
+  }
+});
+
+test('the 2026.10 picker is enhanced, never rebuilt or double-driven', () => {
+  const src = read('services/cle-studio/static/legacy/laolao-model-picker.js');
+  const modern = src.slice(src.indexOf('function syncModern'), src.indexOf('function sync(details)'));
+  assert.match(modern, /syncModelBrands\(menu, false\)/,
+    'the native catalog keeps its rows; retired-model filtering belongs to the old list only');
+  assert.doesNotMatch(modern, /pinkie-model-current|pinkie-model-frame|prepareFrame|syncFrame/,
+    'no duplicate current-model button or canvas frame in the native menu');
+  assert.doesNotMatch(modern, /syncNativeBrandTabs/,
+    'native provider groups are not display:none behind our tabs');
+  // the native picker owns its own save; our input handler must not patch a second time
+  assert.match(src, /if \(isModernPicker\(details\)\) return;/);
+  assert.match(src, /if \(!details \|\| isModernPicker\(details\)\) return;/);
+  // and our Escape / click-away must not fight the native one
+  assert.match(src, /if \(isModernPicker\(picker\)\) continue;/);
+});
+
+test('the brand mark reaches the closed trigger, not only an open menu', () => {
+  const src = read('services/cle-studio/static/legacy/laolao-model-picker.js');
+  const modern = src.slice(src.indexOf('function syncModern'), src.indexOf('function sync(details)'));
+  const triggerAt = modern.indexOf('summary.dataset.pinkieBrand');
+  const openGuard = modern.indexOf('if (!details.open || !menu) return;');
+  assert.ok(triggerAt > 0 && openGuard > triggerAt,
+    'the trigger brand is written before the open-state early return');
+});
