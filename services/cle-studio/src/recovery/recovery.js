@@ -274,6 +274,10 @@ export async function recoverPaneDetailed(pane, host, options = {}) {
   const stuck = queueOf(pane).filter(isStuckItem);
   if (!stuck.length) return {retried: [], removed: [], attempted: false};
   if (!(await sessionIdle(host, sessionKey))) return {retried: [], removed: [], attempted: false};
+  // A retired activation must not send. `options.isActive` is supplied by mountRecovery
+  // so this function can also be called directly (tests, diagnostics) without one.
+  const active = () => options.isActive?.() !== false;
+  if (!active()) return {retried: [], removed: [], attempted: false};
   // Re-read after the await: the pane may have started a run, changed session, or
   // drained the queue while the roster was in flight.
   if (pane.state !== state || paneBusy(pane)) return {retried: [], removed: [], attempted: false};
@@ -286,6 +290,7 @@ export async function recoverPaneDetailed(pane, host, options = {}) {
   const removed = [];
   let attempted = false;
   for (const item of queueOf(pane).filter(isStuckItem)) {
+    if (!active()) break;
     if (item.sessionKey && item.sessionKey !== sessionKey) continue;
     // Already delivered: drop the card through the native remover, never resend.
     if (appearsInTranscript(item, messages)) {
@@ -391,28 +396,56 @@ ensureStyle();
 
 export function mountRecovery(host, signal) {
   ensureStyle();
-  const timers = new WeakMap();
+  // One activation owns one set of handles. After abort nothing in this closure may
+  // schedule work, write the DOM or ask the gateway to send: a retired activation that
+  // still polls is how a hot reload produced duplicate retries.
+  let aborted = Boolean(signal?.aborted);
+  const timers = new WeakMap();      // pane -> pending schedule() id
+  const timeouts = new Set();        // every one-shot timer, so abort can clear all
   const lastAttempt = new WeakMap();
   const pending = new WeakSet();
   let frame = 0;
+  let observer = null;
+  let tick = 0;
+  let offEvent = null;
+  let offSubscribe = null;
+  const afterCleanup = [];
   // A retry that the gateway rejects must not turn into a request per frame. The
   // card keeps its own error text, so waiting is honest; six seconds is short
   // enough that a real reconnect is still picked up promptly.
   const RETRY_COOLDOWN_MS = 6000;
 
+  // Every delayed callback goes through here so `aborted` is checked both when the
+  // timer is created and when it fires. A timer already in the queue is not a licence
+  // to run after the activation retired.
+  const after = (fn, delay) => {
+    if (aborted) return 0;
+    const id = setTimeout(() => {
+      timeouts.delete(id);
+      if (aborted) return;
+      fn();
+    }, delay);
+    timeouts.add(id);
+    return id;
+  };
+
   const schedule = (pane, delay) => {
-    if (!pane?.isConnected || timers.has(pane)) return;
-    const timer = setTimeout(() => { timers.delete(pane); void pass(pane); }, delay);
-    timers.set(pane, timer);
+    if (aborted || !pane?.isConnected || timers.has(pane)) return;
+    const id = after(() => { timers.delete(pane); void pass(pane); }, delay);
+    if (id) timers.set(pane, id);
   };
 
   const pass = async (pane) => {
-    if (pending.has(pane)) return;
+    if (aborted || pending.has(pane)) return;
     if (!shouldAttempt(lastAttempt.get(pane), Date.now(), RETRY_COOLDOWN_MS)) return;
     pending.add(pane);
     try {
       projectPane(pane);
-      const result = await recoverPaneDetailed(pane, host);
+      const result = await recoverPaneDetailed(pane, host, {isActive: () => !aborted});
+      // The await can outlive the activation. Re-check before touching anything: a
+      // retired activation must not repaint or re-arm a cooldown on a pane it no
+      // longer owns.
+      if (aborted) return;
       // Back off on every real attempt, not just on a success. A native retry that
       // throws or rejects has already started whatever it was going to do; letting the
       // next mutation or reconnect event try again immediately is how a flapping
@@ -421,7 +454,7 @@ export function mountRecovery(host, signal) {
     } catch (error) {
       // A recovery attempt is best-effort by definition; never let it surface as a
       // chat error or stop the pane from rendering.
-      console.warn('[cle] recovery pass skipped', error?.message || error);
+      if (!aborted) console.warn('[cle] recovery pass skipped', error?.message || error);
     } finally {
       pending.delete(pane);
     }
@@ -431,6 +464,7 @@ export function mountRecovery(host, signal) {
   // the gateway round-trip happens later, in `pass`, and only for a pane whose own
   // card is stuck. This keeps a healthy run in the other half completely untouched.
   const sweep = () => {
+    if (aborted) return;
     for (const pane of visiblePanes()) {
       projectPane(pane);
       if (!queueOf(pane).some(isStuckItem)) continue;
@@ -438,7 +472,8 @@ export function mountRecovery(host, signal) {
     }
   };
 
-  const onEvent = host.onEvent?.('agent', (payload) => {
+  offEvent = host.onEvent?.('agent', (payload) => {
+    if (aborted) return;
     // A run ending is exactly when the native one-shot queue drain can be missed.
     const phase = payload?.data?.phase;
     if (phase !== 'end' && phase !== 'error' && phase !== 'aborted') return;
@@ -447,13 +482,14 @@ export function mountRecovery(host, signal) {
     for (const pane of visiblePanes()) {
       if (paneSessionKey(pane) !== sessionKey) continue;
       // Let native terminal handling run first; only then look for leftovers.
-      setTimeout(() => { if (pane.isConnected) schedule(pane, 0); }, 700);
+      after(() => { if (pane.isConnected) schedule(pane, 0); }, 700);
     }
   });
 
   // The pane re-renders constantly during streaming. Project only the subtrees that
   // actually changed; this is the difference between O(changed) and O(transcript).
-  const observer = new MutationObserver((records) => {
+  observer = new MutationObserver((records) => {
+    if (aborted) return;
     const seen = new Set();
     for (const record of records) {
       const target = record.target;
@@ -476,39 +512,63 @@ export function mountRecovery(host, signal) {
       pane.dataset.cleRecoveryProjected = '1';
       projectPane(pane);
     }
-    if (!frame) frame = requestAnimationFrame(() => { frame = 0; sweep(); });
+    if (!frame) {
+      frame = requestAnimationFrame(() => { frame = 0; if (!aborted) sweep(); });
+    }
   });
   observer.observe(document.body, {childList: true, subtree: true, characterData: true});
 
   // Reconnect: the native socket lifecycle is the only moment a waiting-reconnect
   // card becomes sendable again. `connection` is the host's snapshot signal.
-  const offSubscribe = host.subscribe?.(() => {
+  offSubscribe = host.subscribe?.(() => {
+    if (aborted) return;
     if (!host.connection?.connected) return;
     for (const pane of visiblePanes()) if (queueOf(pane).some(isStuckItem)) schedule(pane, 600);
   });
 
-  const tick = setInterval(sweep, 4000);
+  tick = setInterval(() => { if (!aborted) sweep(); }, 4000);
   const start = () => {
+    if (aborted) return;
     for (const pane of visiblePanes()) { projectPane(pane); schedule(pane, 1200); }
     // The pane mounts its composer after this module runs, so retry the two chrome
-    // strings once the DOM settles, and again whenever a pane appears.
+    // strings once the DOM settles.
     localizeRecoveryChrome(document);
-    setTimeout(() => localizeRecoveryChrome(document), 900);
+    after(() => localizeRecoveryChrome(document), 900);
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
-  else start();
+  if (document.readyState === 'loading') {
+    // `once` removes the listener after it fires, but abort can happen first: keep a
+    // handle so a retired activation leaves no DOMContentLoaded hook behind.
+    document.addEventListener('DOMContentLoaded', start, {once: true});
+    afterCleanup.push(() => document.removeEventListener('DOMContentLoaded', start));
+  } else {
+    start();
+  }
 
   signal?.addEventListener('abort', () => {
-    observer.disconnect();
+    aborted = true;
+    observer?.disconnect();
+    observer = null;
     clearInterval(tick);
+    tick = 0;
+    offEvent?.();
+    offEvent = null;
     offSubscribe?.();
-    for (const pane of visiblePanes()) timers.has(pane) && (clearTimeout(timers.get(pane)), timers.delete(pane));
-    for (const el of document.querySelectorAll('[data-cle-internal-turn], [data-cle-internal-only]')) {
-      delete el.dataset.cleInternalTurn;
-      delete el.dataset.cleInternalOnly;
-      el.removeAttribute('aria-hidden');
-    }
-    document.getElementById(STYLE_ID)?.remove();
+    offSubscribe = null;
+    for (const id of timeouts) clearTimeout(id);
+    timeouts.clear();
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    for (const extra of afterCleanup) { try { extra(); } catch {} }
+    afterCleanup.length = 0;
+    // Deliberately NOT undone:
+    //   - the fold markers on rows already proven internal,
+    //   - the stylesheet that folds them.
+    // A hot reload retires the activation while the native history DOM still holds the
+    // control message. Stripping the markers is exactly what re-published it during a
+    // real disconnect (review: 第四轮-真实断线待重连队列.png). The projection is
+    // static and idempotent: it only ever hides rows this module positively identified,
+    // and the next activation recomputes the same answer. Message data is untouched, so
+    // a fresh mount still sees the real text and can un-fold a mistake.
+    for (const pane of visiblePanes()) timers.delete(pane);
   }, {once: true});
 }
 

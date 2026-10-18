@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, __test} from '../services/cle-studio/src/recovery/recovery.js';
+import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, mountRecovery, __test} from '../services/cle-studio/src/recovery/recovery.js';
 import {queueText, queueErrorText, localizeQueueNode} from '../services/cle-studio/src/recovery/queue-copy.js';
 
 const WATCHDOG = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作，完成后正常交付。这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。';
@@ -509,4 +509,235 @@ test('upstream brand names are renamed only in exact chrome placeholders', async
   assert.equal(doc.nodes[1].attrs.get('placeholder'), '李岸正在思考');
   // Anything not exactly known is left alone rather than partially rewritten.
   assert.equal(doc.nodes[2].attrs.get('placeholder'), '描述你看到的情况');
+});
+
+/* ---- activation lifecycle (real abort behaviour, not a source grep) ---- */
+// mountRecovery touches document.body, MutationObserver, timers, rAF and the host
+// event bus. To test retirement honestly we install a controllable set of globals,
+// run one activation, abort it, and then assert nothing it owned still runs.
+function lifecycleHarness({queue = [], panels = []} = {}) {
+  const timers = new Map();       // id -> {fn, at}
+  const intervals = new Map();
+  const frames = new Map();
+  let nextId = 1;
+  let now = 0;
+
+  const runTimers = (untilMs) => {
+    for (;;) {
+      const due = [...timers.entries()]
+        .filter(([, t]) => t.at <= untilMs)
+        .sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      const [id, t] = due;
+      timers.delete(id);
+      now = t.at;
+      t.fn();
+    }
+    now = untilMs;
+  };
+
+  const pane = el('openclaw-chat-pane', 'chat-pane-cache__pane--visible chat-pane-cache__pane--active');
+  pane.dataset.mcpAppOwnerKey = JSON.stringify(['x', 'agent:project:main']);
+  pane.isConnected = true;
+  pane.state = {
+    sessionKey: 'agent:project:main', connected: true, chatMessages: [],
+    chatRunId: null, chatQueue: queue.map((item) => ({...item})),
+  };
+  const retries = [];
+  const removals = [];
+  pane.retryQueuedChatMessage = async (id) => { retries.push(id); };
+  pane.removeQueuedMessage = (id) => { removals.push(id); };
+
+  const body = el('div', 'body');
+  const head = el('head', '');
+  const styleIds = new Map();
+  const observed = [];
+  let listeners = 0;
+
+  const document = {
+    readyState: 'complete',
+    body, head,
+    documentElement: el('html', ''),
+    getElementById: (id) => styleIds.get(id) || null,
+    createElement: (tag) => {
+      const node = el(tag, '');
+      if (tag === 'style') node.textContent = '';
+      return node;
+    },
+    querySelectorAll: (sel) => {
+      // visiblePanes() asks the real document for cached panes; the harness has exactly
+      // one, so answer that selector instead of pretending the pane list is empty.
+      if (sel.includes('chat-pane-cache__pane--visible') || sel.includes('chat-pane-cache__pane--active')) return [pane];
+      if (sel.includes('data-cle-internal')) return [];
+      if (sel.includes('placeholder')) return [];
+      return [];
+    },
+    querySelector: () => null,
+    addEventListener: () => { listeners += 1; },
+    removeEventListener: () => { listeners -= 1; },
+  };
+  // document.head.append(style) registers the stylesheet the same way the browser does
+  head.append = (...kids) => {
+    for (const kid of kids) { kid.parentElement = head; head.children.push(kid); if (kid.id) styleIds.set(kid.id, kid); }
+    return head;
+  };
+
+  document.body.append(pane);
+
+  const g = globalThis;
+  const saved = {
+    document: g.document, MutationObserver: g.MutationObserver,
+    setTimeout: g.setTimeout, clearTimeout: g.clearTimeout,
+    setInterval: g.setInterval, clearInterval: g.clearInterval,
+    requestAnimationFrame: g.requestAnimationFrame, cancelAnimationFrame: g.cancelAnimationFrame,
+  };
+  g.document = document;
+  g.setTimeout = (fn, delay = 0) => { const id = nextId++; timers.set(id, {fn, at: now + delay}); return id; };
+  g.clearTimeout = (id) => { timers.delete(id); };
+  g.setInterval = (fn, delay = 0) => { const id = nextId++; intervals.set(id, {fn, delay}); return id; };
+  g.clearInterval = (id) => { intervals.delete(id); };
+  g.requestAnimationFrame = (fn) => { const id = nextId++; frames.set(id, fn); return id; };
+  g.cancelAnimationFrame = (id) => { frames.delete(id); };
+  g.MutationObserver = class { constructor(cb) { this.cb = cb; observed.push(this); } observe() {} disconnect() { this.disconnected = true; } };
+
+  const events = [];
+  const subs = [];
+  const host = {
+    connection: {connected: true},
+    request: async (method, params) => {
+      events.push(['request', method]);
+      return {sessions: panels};
+    },
+    onEvent: (name, fn) => { events.push(['on', name]); return () => events.push(['off', name]); },
+    subscribe: (fn) => { subs.push(fn); return () => events.push(['off-sub']); },
+  };
+
+  const restore = () => { for (const [k, v] of Object.entries(saved)) g[k] = v; };
+  return {pane, host, timers, intervals, frames, observed, events, subs, retries, removals, runTimers,
+    advance: (ms) => runTimers(now + ms), now: () => now, restore, document, paneState: pane.state};
+}
+
+test('abort keeps proven internal rows folded and leaves no live work behind', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+    panels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const controller = new AbortController();
+  try {
+    const group = el('div', 'chat-group user', h.pane);
+    const control = el('div', 'chat-bubble', el('div', 'chat-group-messages', group));
+    control.setAttribute('data-message-text', WATCHDOG);
+    const real = el('div', 'chat-bubble', el('div', 'chat-group-messages', group));
+    real.setAttribute('data-message-text', '把报告发我');
+
+    mountRecovery(h.host, controller.signal);
+    // Activation projects immediately.
+    assert.equal(control.getAttribute('data-cle-internal-turn'), '1');
+    assert.equal(real.getAttribute('data-cle-internal-turn'), null);
+
+    controller.abort();
+
+    // The row this module positively identified must stay folded: a hot reload retires
+    // the activation while the native history DOM still holds the message.
+    assert.equal(control.getAttribute('data-cle-internal-turn'), '1',
+      'a retired activation must not re-publish a verified internal row');
+    assert.equal(control.getAttribute('aria-hidden'), 'true');
+    assert.equal(real.getAttribute('data-cle-internal-turn'), null,
+      'an ordinary message was never marked, so it stays visible');
+    // The stylesheet that does the folding has to survive too.
+    assert.ok(h.document.getElementById('cle-recovery-style'), 'fold rule must remain');
+
+    // Every owned handle is released.
+    assert.equal(h.observed.length, 1);
+    assert.equal(h.observed[0].disconnected, true, 'observer disconnected');
+    assert.equal(h.intervals.size, 0, 'no polling interval left');
+    assert.equal(h.frames.size, 0, 'no pending animation frame');
+    for (const [, t] of h.timers) assert.fail('a timer survived abort');
+  } finally { h.restore(); }
+});
+
+test('a retired activation cannot retry the gateway or touch the DOM again', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+    panels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const controller = new AbortController();
+  try {
+    mountRecovery(h.host, controller.signal);
+    const requestsBefore = h.events.filter((e) => e[0] === 'request').length;
+
+    // Abort while the initial 1200ms projection timer is still pending.
+    controller.abort();
+    h.advance(60_000);
+
+    assert.equal(h.retries.length, 0, 'no retry may be issued after abort');
+    assert.equal(h.events.filter((e) => e[0] === 'request').length, requestsBefore,
+      'no sessions.list after abort');
+  } finally { h.restore(); }
+});
+
+test('abort during an in-flight recovery request does not arm a cooldown or repaint', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+  });
+  const controller = new AbortController();
+  let release;
+  try {
+    // The host hangs until we let it resolve, so abort lands mid-await.
+    h.host.request = (method) => new Promise((resolve) => {
+      h.events.push(['request', method]);
+      release = () => resolve({sessions: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}]});
+    });
+    mountRecovery(h.host, controller.signal);
+    h.advance(1_300);              // fires the initial projection pass
+    assert.ok(release, 'the recovery request should be in flight');
+
+    controller.abort();
+    release();                     // resolve after retirement
+    await new Promise((r) => setImmediate(r));
+
+    assert.equal(h.retries.length, 0, 'a resolved-but-retired pass must not retry');
+  } finally { h.restore(); }
+});
+
+test('terminal callbacks scheduled before abort never run', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+    panels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const controller = new AbortController();
+  try {
+    mountRecovery(h.host, controller.signal);
+    // Simulate the 700ms "run ended" path being armed, then abort, then let time pass.
+    h.events.push(['on', 'agent']);
+    controller.abort();
+    h.advance(60_000);
+    assert.equal(h.retries.length, 0);
+  } finally { h.restore(); }
+});
+
+test('a hot reload leaves exactly one live activation, not two', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+    panels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const first = new AbortController();
+  const second = new AbortController();
+  try {
+    mountRecovery(h.host, first.signal);
+    first.abort();
+    const intervalsAfterFirst = h.intervals.size;
+    mountRecovery(h.host, second.signal);
+    second.abort();
+
+    // Both activations released their own polling; nothing accumulates per reload.
+    assert.equal(intervalsAfterFirst, 0);
+    assert.equal(h.intervals.size, 0, 'no interval survives either activation');
+    // Two observers were created, one per activation, and both are disconnected.
+    assert.equal(h.observed.length, 2);
+    assert.deepEqual(h.observed.map((o) => o.disconnected), [true, true]);
+    for (const [, t] of h.timers) assert.fail('a timer survived both aborts');
+    h.advance(60_000);
+    assert.equal(h.retries.length, 0, 'a retired activation never sends');
+  } finally { h.restore(); }
 });
