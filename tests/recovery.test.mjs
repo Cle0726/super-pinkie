@@ -4,6 +4,7 @@
 // with the selector bits these functions use (matches/closest/querySelectorAll).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, __test} from '../services/cle-studio/src/recovery/recovery.js';
 import {queueText, queueErrorText, localizeQueueNode} from '../services/cle-studio/src/recovery/queue-copy.js';
 
@@ -122,10 +123,14 @@ const el = (tag, cls = '', parent = null) => {
   return node;
 };
 
-const bubble = (group, text) => {
+const bubble = (group, text, {code = false} = {}) => {
   const b = el('div', 'chat-bubble', el('div', 'chat-group-messages', group));
   b.setAttribute('data-message-text', text);
-  el('div', 'chat-text', b).append({nodeType: 3, nodeValue: text, parentElement: null});
+  const text_ = el('div', 'chat-text', b);
+  text_.append({nodeType: 3, nodeValue: text, parentElement: null});
+  // A draft embedded in a control message renders its code block as real <pre>/<code>.
+  // The regression below depends on that being present in the DOM.
+  if (code) { const pre = el('pre', '', text_); el('code', 'language-javascript', pre); }
   return b;
 };
 
@@ -148,15 +153,29 @@ test('an internal turn is folded away; a real turn in the same pane is not', () 
   assert.equal(real.getAttribute('data-cle-internal-only'), null);
 });
 
-test('a user quoting the prefix inside a code block stays visible', () => {
+test('a reader showing the control text in a fence keeps it visible', () => {
+  // Behaviour pinned by review 1804: the wrapper, not the presence of a <pre>, decides.
+  // A user demonstrating the text writes a fence, so the raw markdown starts with one
+  // and the bubble renders code — and it must stay readable.
   const pane = paneOf();
   const group = el('div', 'chat-group user', pane);
-  const quoted = bubble(group, WATCHDOG);
-  el('pre', '', quoted);
+  const quoted = bubble(group, '```\n' + WATCHDOG + '\n```', {code: true});
   bubble(group, '这条是普通消息');
 
   assert.equal(projectPane(pane), 0);
+  assert.equal(quoted.getAttribute('data-cle-internal-turn'), null);
   assert.equal(group.getAttribute('data-cle-internal-only'), null);
+});
+
+test('a bare control text that merely renders code is still the gateway\'s turn', () => {
+  // Same DOM shape as above (a real <pre> inside the bubble) but no wrapper in the
+  // source: this is the internal command whose draft embeds code, so it folds.
+  const pane = paneOf();
+  const group = el('div', 'chat-group user', pane);
+  const control = bubble(group, WATCHDOG, {code: true});
+  assert.equal(projectPane(pane), 1);
+  assert.equal(control.getAttribute('data-cle-internal-turn'), '1');
+  assert.equal(group.getAttribute('data-cle-internal-only'), '1');
 });
 
 test('a turn that was internal and later gets a real reply is shown again', () => {
@@ -284,6 +303,58 @@ test('a gateway error, a missing row or a row without status means "unknown"', a
     activePanels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
   });
   assert.deepEqual(await recoverPane(other.pane, other.host), []);
+});
+
+test('a real control message whose draft contains code is still folded (review 1804)', () => {
+  // The actual text captured from the QA session. Its embedded final draft holds a
+  // ```javascript block, so the rendered bubble contains a <pre><code>. That used to
+  // veto the fold and leak the whole internal reminder plus the draft.
+  const raw = fs.readFileSync(new URL('./fixtures/qa-watchdog-with-code.txt', import.meta.url), 'utf8');
+  assert.ok(raw.length > 1000, 'fixture should be the real captured length');
+  assert.ok(/这是当前用户轮次的内部续跑命令/u.test(raw), 'fixture should carry the canonical tail');
+  assert.ok(raw.includes('```javascript'), 'the draft really does embed a code block');
+
+  // Recognised as a control turn regardless of the code inside it.
+  assert.equal(isInternalTurnText(raw), true);
+
+  const pane = paneOf();
+  const group = el('div', 'chat-group user', pane);
+  const control = bubble(group, raw, {code: true});
+  // Prove the DOM really has the code the old check looked for.
+  assert.equal(control.querySelectorAll('code').length, 1);
+
+  projectPane(pane);
+  assert.equal(control.getAttribute('data-cle-internal-turn'), '1');
+  assert.equal(group.getAttribute('data-cle-internal-only'), '1');
+  assert.equal(group.getAttribute('aria-hidden'), 'true');
+});
+
+test('the same control text is not folded when the reader wraps it', () => {
+  const raw = fs.readFileSync(new URL('./fixtures/qa-watchdog-with-code.txt', import.meta.url), 'utf8');
+  // Every wrapper a reader can produce while showing the text to someone.
+  for (const wrapped of [`> ${raw}`, '```\n' + raw + '\n```', `“${raw}”`, `「${raw}」`]) {
+    assert.equal(isInternalTurnText(wrapped), false, wrapped.slice(0, 24));
+  }
+  // Wrapped in a fence, the bubble also holds <pre>; it must stay visible.
+  const pane = paneOf();
+  const group = el('div', 'chat-group user', pane);
+  const quoted = bubble(group, '```\n' + raw + '\n```', {code: true});
+  projectPane(pane);
+  assert.equal(quoted.getAttribute('data-cle-internal-turn'), null);
+  assert.equal(group.getAttribute('data-cle-internal-only'), null);
+});
+
+test('a real failure with a stack stays visible even beside a folded control turn', () => {
+  const pane = paneOf();
+  const group = el('div', 'chat-group assistant', pane);
+  const control = bubble(group, TIER, {code: true});
+  const failure = bubble(group, FENCE, {code: true});
+  projectPane(pane);
+  assert.equal(control.getAttribute('data-cle-internal-turn'), '1');
+  // The failure is not internal, so the group cannot be folded as a whole.
+  assert.equal(failure.getAttribute('data-cle-internal-turn'), null);
+  assert.equal(group.getAttribute('data-cle-internal-only'), null);
+  assert.equal(group.getAttribute('aria-hidden'), null);
 });
 
 /* ---- retry attempt accounting (backoff on failure, not just on success) ---- */
