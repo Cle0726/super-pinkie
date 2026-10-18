@@ -1,0 +1,35 @@
+{
+  "id": "cle-studio",
+  "name": "C.le. Studio",
+  "description": "The C.le. interface for 碧琪: the guardian cat, five rooms, gaze motion.",
+  "version": "0.1.0",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "uiCapabilities": [
+    "page",
+    "navigation",
+    "panel",
+    "action",
+    "accessory",
+    "replacement"
+  ],
+  "themes": [
+    {
+      "id": "cle",
+      "name": "C.le.",
+      "description": "Paper and ink, one ice-blue gaze. A black cat guards a white flower.",
+      "source": "themes/cle.json"
+    }
+  ],
+  "controlUi": {
+    "entry": "dist/control-ui/bf085dd8473e/index.js",
+    "styles": [
+      "dist/control-ui/bf085dd8473e/index.css"
+    ]
+  }
+}
