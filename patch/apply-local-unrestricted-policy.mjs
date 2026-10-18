@@ -50,6 +50,8 @@ function resolveRoot() {
   }
   // The self-contained launchers execute this script with their bundled
   // Node. Resolve the sibling OpenClaw package even when no global CLI exists.
+  // The .app folder name is part of the shipped bundle path and does not follow
+  // the product's display name; keep it exactly in sync with the launchers.
   candidates.push(path.resolve(path.dirname(process.execPath), '..', 'openclaw'));
   if (process.platform === 'darwin') {
     candidates.push('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw');
