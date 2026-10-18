@@ -752,3 +752,141 @@ test('the early-guard precache row is idempotent across runs', () => {
   assert.equal(twice.publicAssets.filter((name) => name === 'cle-early.js').length, 1);
   assert.equal(twice.id, once.id, 'the cache id is stable, so the worker is not churned');
 });
+
+/* ---------- redeploy closed loop (review fifth) ---------- */
+
+/** A donor directory: the patch's own inputs, copied so a test can mutate them in isolation. */
+function makeDonor(overrides = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-donor-'));
+  const css = path.join(dir, 'startup.css');
+  const guard = path.join(dir, 'early-guard.js');
+  fs.writeFileSync(css, fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup.css')));
+  if (overrides.guard !== false) {
+    fs.writeFileSync(guard, fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/early-guard.js')));
+  }
+  return {dir, css, guard};
+}
+
+test('a changed guard script upserts the existing precache row integrity', () => {
+  // Reported: the row was only added when absent, so a script-only change left a stale integrity
+  // and the worker would reject the cached script.
+  const {root} = makeRoot();
+  const donor = makeDonor();
+  const first = applyLayer(root, {cssPath: donor.css});
+  assert.equal(first.earlyGuard, 'patched');
+  const boot1 = readBootSw(root);
+  const row1 = boot1.assets.find((entry) => entry.path === 'cle-early.js');
+  assert.ok(row1, 'row exists after the first run');
+
+  // byte change in the guard only — the html the patch injects is identical
+  fs.appendFileSync(donor.guard, '\n// one extra comment line\n');
+  const second = applyLayer(root, {cssPath: donor.css});
+  assert.equal(second.earlyGuard, 'patched');
+  const boot2 = readBootSw(root);
+  const row2 = boot2.assets.find((entry) => entry.path === 'cle-early.js');
+
+  const served = fs.readFileSync(path.join(root, 'cle-early.js'));
+  const actual = `sha256-${crypto.createHash('sha256').update(served).digest('base64')}`;
+  assert.equal(row2.integrity, actual, 'integrity follows the served bytes');
+  assert.notEqual(row2.integrity, row1.integrity, 'and it actually moved');
+  assert.equal(boot2.assets.filter((entry) => entry.path === 'cle-early.js').length, 1, 'upsert, not append');
+});
+
+test('a script-only change moves the offline cache generation and reports changed', () => {
+  const {root} = makeRoot();
+  const donor = makeDonor();
+  applyLayer(root, {cssPath: donor.css});
+  const boot1 = readBootSw(root);
+  const index1 = fs.readFileSync(path.join(root, 'index.html'));
+
+  fs.appendFileSync(donor.guard, '\n// comment\n');
+  const second = applyLayer(root, {cssPath: donor.css});
+  const boot2 = readBootSw(root);
+
+  assert.ok(fs.readFileSync(path.join(root, 'index.html')).equals(index1), 'index.html is untouched');
+  assert.notEqual(boot2.id, boot1.id, 'the cache name must move with the script bytes');
+  assert.equal(boot2.id.length, 16);
+  assert.equal(second.changed, true, 'a script-only deployment is a change');
+  assert.equal(second.offlineShell, 'patched', 'and the worker was rewritten');
+});
+
+test('re-applying identical inputs is a no-op, including the cache id', () => {
+  // The id must be deterministic: a random value per run would defeat idempotency.
+  const {root} = makeRoot();
+  const donor = makeDonor();
+  applyLayer(root, {cssPath: donor.css});
+  const boot1 = readBootSw(root);
+  const index1 = fs.readFileSync(path.join(root, 'index.html'));
+  const guard1 = fs.readFileSync(path.join(root, 'cle-early.js'));
+
+  const again = applyLayer(root, {cssPath: donor.css});
+  const boot2 = readBootSw(root);
+
+  assert.equal(again.changed, false);
+  assert.equal(again.earlyGuard, 'unchanged');
+  assert.equal(again.offlineShell, 'unchanged');
+  assert.equal(again.index, 'unchanged');
+  assert.equal(boot2.id, boot1.id, 'same bytes, same generation');
+  assert.ok(fs.readFileSync(path.join(root, 'index.html')).equals(index1));
+  assert.ok(fs.readFileSync(path.join(root, 'cle-early.js')).equals(guard1));
+});
+
+test('a missing guard source fails before any byte of the root is written', () => {
+  // Reported: index.html was written with a <script data-cle-early> reference, then the run threw
+  // on the missing file — leaving a page that points at a script which does not exist.
+  const {root} = makeRoot();
+  const donor = makeDonor({guard: false});
+  const before = {
+    index: fs.readFileSync(path.join(root, 'index.html')),
+    sw: fs.readFileSync(path.join(root, 'sw.js')),
+    webmanifest: fs.readFileSync(path.join(root, 'manifest.webmanifest')),
+    icon: fs.readFileSync(path.join(root, 'favicon-32.png')),
+    manifest: fs.readFileSync(path.join(root, 'asset-manifest.json')),
+  };
+  assert.throws(() => applyLayer(root, {cssPath: donor.css}), /missing early guard source/u);
+
+  assert.ok(fs.readFileSync(path.join(root, 'index.html')).equals(before.index), 'index.html untouched');
+  assert.ok(fs.readFileSync(path.join(root, 'sw.js')).equals(before.sw), 'sw.js untouched');
+  assert.ok(fs.readFileSync(path.join(root, 'manifest.webmanifest')).equals(before.webmanifest));
+  assert.ok(fs.readFileSync(path.join(root, 'favicon-32.png')).equals(before.icon), 'no half-substituted icons');
+  assert.ok(fs.readFileSync(path.join(root, 'asset-manifest.json')).equals(before.manifest));
+  assert.equal(fs.existsSync(path.join(root, 'cle-early.js')), false);
+  assert.equal(fs.existsSync(path.join(root, '.pinkie-startup-backup')), false, 'not even a backup dir');
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), /data-cle-early/u);
+});
+
+test('a refused write target fails before the document is touched', () => {
+  // Same class of bug as the missing source: the target check must precede the write, and a
+  // symlinked target is refused rather than followed.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-guardlink-'));
+  const root = path.join(dir, 'control-ui');
+  const scratch = makeRoot();
+  fs.cpSync(scratch.root, root, {recursive: true});
+  fs.rmSync(path.join(root, '.pinkie-startup-backup'), {recursive: true, force: true});
+  const outside = path.join(dir, 'outside.js');
+  fs.writeFileSync(outside, '// not ours\n');
+  fs.symlinkSync(outside, path.join(root, 'cle-early.js'));
+
+  const before = fs.readFileSync(path.join(root, 'index.html'));
+  const donor = makeDonor();
+  assert.throws(() => applyLayer(root, {cssPath: donor.css}), /symlink|outside/u);
+  assert.ok(fs.readFileSync(path.join(root, 'index.html')).equals(before), 'index.html untouched');
+  assert.equal(fs.readFileSync(outside, 'utf8'), '// not ours\n', 'the symlink target was not written');
+});
+
+test('the guard twin and manifest row follow a script-only change too', () => {
+  // Give the shipped file a precompressed twin, as a packaged runtime might.
+  const {root} = makeRoot();
+  const donor = makeDonor();
+  applyLayer(root, {cssPath: donor.css});
+  const guardPath = path.join(root, 'cle-early.js');
+  fs.writeFileSync(`${guardPath}.br`, zlib.brotliCompressSync(fs.readFileSync(guardPath)));
+
+  fs.appendFileSync(donor.guard, '\n// twin check\n');
+  applyLayer(root, {cssPath: donor.css});
+
+  const served = fs.readFileSync(guardPath);
+  assert.ok(zlib.brotliDecompressSync(fs.readFileSync(`${guardPath}.br`)).equals(served), 'twin refreshed');
+  const ledger = JSON.parse(fs.readFileSync(path.join(root, '.pinkie-startup-backup', 'ledger.json'), 'utf8'));
+  assert.ok(ledger.files['cle-early.js.br'], 'the twin is in the ledger so revert can restore it');
+});

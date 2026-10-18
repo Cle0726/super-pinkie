@@ -525,6 +525,39 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
     return result;
   }
 
+  // ---- validate every input and every write target before touching the root ----
+  //
+  // A half-applied document is worse than no deployment: if index.html gained a <script> that
+  // points at a file we then failed to write, the browser 404s and the title window reopens. So
+  // the whole run is planned first and committed only after every precondition holds.
+  const earlySource = path.join(path.dirname(cssPath), 'early-guard.js');
+  if (!fs.existsSync(earlySource)) throw new Error(`missing early guard source: ${earlySource}`);
+  const earlyBytes = fs.readFileSync(earlySource);
+  if (!earlyBytes.length) throw new Error(`early guard source is empty: ${earlySource}`);
+  if (!earlyBytes.toString('utf8').includes('cleEarlyBrandGuard')) {
+    throw new Error(`early guard source does not look like the guard: ${earlySource}`);
+  }
+  const earlyTarget = path.join(root, 'cle-early.js');
+  const swTarget = path.join(root, 'sw.js');
+  const webmanifestTarget = path.join(root, 'manifest.webmanifest');
+
+  // Icon donors are read before any write, so a missing or corrupt donor cannot leave a
+  // half-substituted icon set behind.
+  for (const [target, source] of Object.entries(ICON_ASSETS)) {
+    const donor = path.join(ICON_DIR, source);
+    if (!fs.existsSync(donor)) throw new Error(`missing supplied icon ${donor}`);
+    const bytes = fs.readFileSync(donor);
+    const png = bytes[0] === 0x89 && bytes.toString('latin1', 1, 4) === 'PNG';
+    const svg = /^\s*<svg[\s>]/u.test(bytes.toString('utf8', 0, 32));
+    if (!bytes.length || (target.endsWith('.svg') ? !svg : !png)) {
+      throw new Error(`${donor} is not ${target.endsWith('.svg') ? 'an SVG' : 'a PNG'}`);
+    }
+    assertWritableTarget(root, path.join(root, target));
+  }
+  for (const file of [indexFile, earlyTarget, swTarget, webmanifestTarget, manifestFile]) {
+    assertWritableTarget(root, file);
+  }
+
   if (indexChanged) {
     assertWritableTarget(root, indexFile);
     backupOnce(root, indexFile);
@@ -532,10 +565,6 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
     Object.assign(result, refreshTwins(root, indexFile));
   }
   // The referenced file has to exist, or the browser would 404 and the window would reopen.
-  const earlySource = path.join(path.dirname(cssPath), 'early-guard.js');
-  if (!fs.existsSync(earlySource)) throw new Error(`missing early guard source: ${earlySource}`);
-  const earlyBytes = fs.readFileSync(earlySource);
-  const earlyTarget = path.join(root, 'cle-early.js');
   const earlyStale = !fs.existsSync(earlyTarget) || !fs.readFileSync(earlyTarget).equals(earlyBytes);
   if (earlyStale) {
     assertWritableTarget(root, earlyTarget);
@@ -571,23 +600,36 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
         assetsDirty = true;
       }
       // The precache loop iterates OFFLINE_BOOT.assets and verifies each entry's integrity, so the
-      // file needs a row there too — publicAssets alone only feeds the version metadata.
+      // file needs a row there too — publicAssets alone only feeds the version metadata. The row
+      // is *upserted*, not merely added: when the script bytes change the integrity must move with
+      // them, or the worker rejects the cached copy and the guard silently stops running.
+      const earlyForBoot = fs.existsSync(earlyTarget) ? fs.readFileSync(earlyTarget) : earlyBytes;
+      const earlyIntegrity = `sha256-${crypto.createHash('sha256').update(earlyForBoot).digest('base64')}`;
       if (Array.isArray(boot.assets)) {
-        const earlyFile = path.join(root, earlyName);
-        if (fs.existsSync(earlyFile) && !boot.assets.some((entry) => entry?.path === earlyName)) {
-          const digest = crypto.createHash('sha256').update(fs.readFileSync(earlyFile)).digest('base64');
-          boot.assets = [...boot.assets, {path: earlyName, integrity: `sha256-${digest}`}]
+        const existingRow = boot.assets.find((entry) => entry?.path === earlyName);
+        if (!existingRow) {
+          boot.assets = [...boot.assets, {path: earlyName, integrity: earlyIntegrity}]
             // The shipped list is sorted by plain codepoint order (not localeCompare), so match
             // that exactly and keep the array comparable with the upstream one.
             .sort((left, right) => (String(left?.path) < String(right?.path) ? -1 : String(left?.path) > String(right?.path) ? 1 : 0));
           assetsDirty = true;
+        } else if (existingRow.integrity !== earlyIntegrity) {
+          existingRow.integrity = earlyIntegrity;
+          assetsDirty = true;
         }
       }
-      if (String(boot.html) !== offline.html || assetsDirty) {
+      // The cache name must move when any byte the shell depends on moves — the document *or*
+      // the guard script. Hashing only the HTML left a stale cache id after a script-only change,
+      // so a worker would keep serving the previous script from its cache.
+      const cacheSalt = crypto.createHash('sha256').update(offline.html).update(earlyForBoot).digest('hex');
+      const nextId = cacheSalt.slice(0, 16);
+      const idDirty = boot.id !== nextId;
+      if (String(boot.html) !== offline.html || assetsDirty || idDirty) {
         boot.html = offline.html;
-        // The worker names its cache after this id; moving it retires the stale shell
-        // instead of letting a previous build's HTML win offline.
-        boot.id = crypto.createHash('sha256').update(offline.html).digest('hex').slice(0, 16);
+        // The worker names its cache after this id; moving it retires the stale shell instead of
+        // letting a previous build's HTML or script win offline. Deterministic: identical inputs
+        // produce the identical id, so a re-run with the same bytes reports no change.
+        boot.id = nextId;
         assertWritableTarget(root, swFile);
         backupOnce(root, swFile);
         writeAtomic(root, swFile, sw.slice(0, literal.start) + JSON.stringify(boot) + sw.slice(literal.end));
@@ -625,7 +667,10 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
   result.changed = indexChanged
     || result.offlineShell === 'patched'
     || result.manifest === 'patched'
-    || result.icons.length > 0;
+    || result.icons.length > 0
+    // A script-only update is still a real deployment change: the file, its twin and the worker's
+    // cache generation all moved, even though index.html stayed byte-identical.
+    || result.earlyGuard === 'patched';
   return result;
 }
 
