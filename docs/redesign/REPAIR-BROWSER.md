@@ -195,3 +195,81 @@ OK
 | `services/cle-studio/src/composer/composer.css` `@container cle-pane (max-width:520px)` | composer lead 用 `:nth-child(n+5)` 折进 ⋯，我新加的 `.laolao-browser-entry` 若排在第五位会被一并折起 | 主控确认后把入口显式列为不折叠（`:not(.laolao-browser-entry)`），属 composer 所有权 |
 | `services/cle-studio/static/legacy/laolao-material-preview.js` `RAIL` 常量 | 仍只匹配 `.chat-workbench > .chat-workspace-rail`；若新版 rail 层级变化，文件菜单会失效 | 与侧栏任务统一 rail 选择器；本轮未改以免与其冲突 |
 | 原版 `ui/injections/laolao-link-viewer.js` | 仍是全局 id 版本（原版 App 并行运行，不能动） | 主控合并时以本 worktree 的 `static/legacy` 版本为准，原版保持原样 |
+
+---
+
+## 8. 融合修订（增量 commit，主控验收前补做）
+
+### 8.1 测试产物天然隔离（阻断级，优先于外观）
+问题：上一版只有 shell 的 `--run` 注入 `PINKIE_TEST_HOST`/`PINKIE_STATE_ROOT`。
+直接双击 .app、或经 Finder / CUA / LaunchServices 打开，会走生产分支：读 live 配置、写 live 状态、默认连 18789。这会让"不碰 live"的边界取决于操作者是否记得环境变量。
+
+修法：把隔离编译进二进制。
+- 测试构建加 `-D CLE_BROWSER_TEST_HOST`；`RuntimeConfig.isTestHost` 在该构建 **恒为 true**，与环境变量无关。
+- 测试构建的默认值同时改为：stateRoot 落在 `.../SuperPinkie/browser-test`、gateway 默认 `127.0.0.1:19789`、配置只读自身 state 目录下的 `config.json`。
+- 生产构建（无该 flag）保持原默认：18789、live state、`.config/super-pinkie/config.json`。
+- 环境变量仍可显式覆盖，但不再是唯一保险；即使误传 18789 也会被拒绝并回落到 19789。
+- 新增 `--browser-test-self-check`：用 `env -i`（清空环境）运行真实二进制，打印解析结果后退出，不开窗口、不启服务。这就是 Finder/CUA 打开时会走的同一段代码。
+
+可核查证据（本轮实测）：
+
+```
+$ ./desktop/macos/browser-test-host.sh --check
+  ok   test-host compiled in (marker present)
+  ok   bundle id com.cle0726.super-pinkie.browser-test
+  ok   default state root stays under browser-test
+  ok   default gateway port 19789 (never 18789)
+  ok   runtime self-check (clean environment)
+       isTestHost=true
+       marker=CLE_BROWSER_TEST_HOST_ALWAYS=1
+       gateway=http://127.0.0.1:19789/
+       state=/Users/Admin/Library/Application Support/SuperPinkie/browser-test
+exit=0
+
+# 同一份源码、不带 flag 的生产构建，同样清空环境：
+isTestHost=false
+marker=CLE_BROWSER_TEST_HOST_ALWAYS=0
+gateway=http://127.0.0.1:18789/
+state=/Users/Admin/Library/Application Support/SuperPinkie
+exit=1   ← 正确地“不是测试宿主”
+```
+
+产物内不含旧品牌与旧粉底，且含新 token 与官方字形（`strings` 核对）：
+`efcbd3`=0、`超級碧琪`=0、`#F4EFE4`=1、`#0A0D16`=1、签名路径 `M55 25C53 17 44 13 34 16`=1。
+
+主控从 CUA 直接打开 `.app` 即可，无需 shell、无需 AppleScript、无需任何环境变量。
+
+### 8.2 原生 palette 与真实 tokens 同步
+问题：上一版我自造了暖棕夜间（paper `#161412`、surface `#1f1c19`），与 `src/styles/tokens.css` / `themes/cle.json` 的 `#0A0D16` / `#111522` / gaze `#5AA8FF` 明显割裂，等于在旧粉和新版之外又造了第三套。
+
+修法：`CleBrowserPalette` 按 token 的当前值重写（白天 `#F4EFE4` / `#FBF8F1` / ink `#15161A` / gaze `#2A63E8` / gold `#A9842F`；夜间 `#0A0D16` / `#111522` / ink `#EFE8DA` / gaze `#5AA8FF` / gold `#C9A24A`），并补 `ink3`、`gold` 两档。
+起始页、错误页、`clekk-material` 文件预览页三处不再各自写色值，统一注入 `CleBrowserPalette.cssVariables`。
+
+防再漂移：新增 `tests/browser-palette-tokens.test.cjs`，解析 `tokens.css` 与 Swift 常量逐通道比对（容差 0.003），并检查三处内嵌页面都引用同一张表。已用"故意改回暖棕"验证它会失败并报出确切差异，随后恢复。
+
+### 8.3 起始页品牌图形
+`◷` 时钟字符已移除。改用仓库内既有的 C.le. 签名几何（`static/legacy/laolao-cle-signature.js` 与 `static/splash/signature.js` 的同一组中心线、同一 12° 斜度、同两个点），只换渲染方式：AppKit 无法测量路径，故以固定笔宽的描边呈现，不新造图标、不画猫、不生成占位图。
+
+### 8.4 启动页不再闪旧品牌
+问题：`showStartupScreen` 仍加载 `ui/launcher-loading.html`（旧粉色小马视频 + `超級碧琪正在准备`），fallback 也是 `#efcbd3` 粉底。第七路只负责新版 web 首屏，不拥有 `Launcher.swift`。
+
+修法（限定在测试宿主分支，live App 路径不变）：
+- `RuntimeConfig.isTestHost` 时直接渲染 `startupPlaceholderHTML`：纸白/墨黑 + 官方签名 + 一条极细进度线 + `C.le.` 小字，**完全不加载**旧 loading 页，因此不会有旧资产闪现。
+- 同一张占位页也替换了原先的粉色 fallback 字符串，所以生产环境在缺少 bundled 页面时同样不会退回旧粉底。
+- Claude 的新开场仍由 web 首屏负责，这里只是启动前的原生过渡，没有复制或覆盖任何美术资源。
+
+### 8.5 融合修订后的自测
+```
+xcrun swiftc -typecheck（三源文件）        → 无输出，exit 0
+./browser-test-host.sh --build             → 成功签名
+./browser-test-host.sh --check             → 5 项全 ok，exit 0
+node --test browser-entry-panes / browser-test-host / browser-palette-tokens / browser-workspace
+                                            → tests 21  pass 21  fail 0
+cd services/cle-studio && node build.mjs   → ui 1a0183a8b349
+```
+
+### 8.6 本轮新增未验证项
+1. **CUA 实际打开 .app 的观感未验证**：隔离已由无环境变量的运行时自检证明；窗口渲染、启动占位页是否存在一帧旧内容、签名在两档外观下的比例，仍需主控目视。
+2. **`-D` 构建与生产构建的二进制差异只核对了标记与解析值**，未做二进制逐字节比对（不必要，也不稳定）。
+3. **签名在 start page 的静态描边**是几何复用而非笔压轮廓，视觉粗细需目视确认；若主控认为太粗/太细，只调 `stroke-width`，不要重画路径。
+4. 启动占位页与 Claude 新版首屏的衔接时序（谁先消失、是否重叠）未验证。
