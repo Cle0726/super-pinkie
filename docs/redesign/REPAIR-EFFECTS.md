@@ -179,3 +179,76 @@ import './process/effects.css';   // 本任务：动效/配色/标记，必须�
 ## 七、Commit
 
 见本轮提交（`repair/effects`）。报告随代码一并提交。
+
+---
+
+# 补充提交 · 真实协议接线与双 pane 收尾
+
+主控审查 `d35e038` 后指出三类问题。以下为补充差异。
+
+## 一、真实 chat payload（原实现读错了字段）
+
+**核对依据**：从运行时 `dist/chat-broadcast-*.mjs`、`chat-abort-*.mjs`、`chat-send-handler-*.mjs` 查到的实际广播帧是
+
+```js
+{runId, sessionKey, agentId?, seq, state, message?, text?, stopReason?, errorMessage?}
+```
+
+`state ∈ delta | final | error | aborted`。**没有 `stream` 字段**。旧 `applyEvent` 只在 `p.stream === 'chat'` 时处理，等于真实终端帧全部丢弃，运行永不结束。
+
+**修改**（`model.js`）：
+- 新增 `normalizeChat(p)`：顶层 `state` 归一化成 `{stream:'chat', data:{state}}`；非 chat 帧返回 `null`。
+- 新增 `isLiveEvent(p)`：只有真正表示「正在工作」的事件才允许创建 run。
+
+## 二、幽灵 run
+
+**问题**：`onAgent` 在 `applyEvent` 返回 false **之前**就 `newRun()`。任何带 `sessionKey` 的未知事件（`usage`、裸 `final`）都会留下 `on: true` 的 run，帧循环永不停止。
+
+**修改**（`status.js`）：
+- 未知/终端事件不再创建 run（`isLiveEvent` 门控）。
+- 新增墓碑 `tombstones`：run 结束后，DOM 里残留的 working indicator 不会被误判为新一轮（`RESUME_AFTER = 8000ms` 后或真实 `start` 才允许重建）。这是本轮最重要的修复 —— 没有它，每次运行结束都会立刻生出新的忙态。
+
+## 三、双 pane 收尾
+
+**问题**：`focus.set(runs)` 只在「所有 run 都不 live」时清空所有 pane。左侧完成、右侧继续时，左侧的 `data-cle-focus-run` / `data-cle-focus` 永远留着。`focus.clear` 从未被调用。
+
+**修改**：
+- `focus.set(liveKeys)` 改为按 pane 自己的 session key 逐个释放，不再等全局静止。
+- 根节点 `data-cle-live` 由「仍有标记的 pane 数」决定，缓存/不可见 pane 不再钉住它。
+- `focus.note` 不再依赖整秒节流（原来同一秒内的重渲染会整秒跳过标焦点）。
+- pane 标记不再依赖能否立刻找到 turn：turn 尚未渲染时仍会先打 pane 标记，下次再补。
+
+## 四、旧历史污染当前轮
+
+**问题**：`endedAsStopped` 查整个 pane，历史里任何 `.chat-group--error` 都会让之后成功的一轮误报「已中断」。
+
+**修改**：run 自行记录它真正拥有过的 turn 集合（`run.turns`），只有这些 turn 上的停止/错误标记才算定论。
+
+## 五、本轮新增测试
+
+真实浏览器双 pane 行为测试 `.harness/panes.html`（18 项）：
+
+| 断言 | 结果 |
+| --- | --- |
+| 两 pane 同时工作时根节点 live | PASS |
+| 两 pane 各自获得焦点标记 | PASS |
+| 两条线各自落在自己的 indicator 内 | PASS |
+| 左侧结束后根节点仍 live（右侧在工作） | PASS |
+| 左侧结束后释放自己的 run/turn 标记 | PASS |
+| 旧错误不污染后续成功轮（`kind=done`） | PASS |
+| 全部结束 → 根节点释放、无 pane 残留标记 | PASS |
+| 裸 `final`/`aborted` chat 帧不产生忙态 | PASS |
+| 未知 stream 不产生幽灵 run | PASS |
+| 真实 `chat final` 能结束运行 | PASS |
+| 空闲后帧循环不空转（600ms 内 2 帧） | PASS |
+
+模型层新增 4 项（`cle-effects-model.test.mjs`，共 16 项）：chat 帧归一化、真实终端帧结束运行、aborted/error/final 三态、`isLiveEvent` 门控。
+
+合计：`node --test` 23 项全通过；`.harness` 三个页面（effects / perf / panes）全通过；`node build.mjs` 成功（62.9 KB / 59.8 KB）。
+
+## 六、本轮未验项
+
+1. `RESUME_AFTER = 8000ms` 是经验值。真实场景中「页面中途打开、indicator 已在」的恢复依赖它；若原生 indicator 的生命周期短于该值，可能漏接一次恢复。需要主控用真实窗口观察刷新后的首屏状态。
+2. `run.turns` 依赖 `anchor.closest('.chat-thread-inner > .chat-group')` 能命中。若上游改变回合容器层级，撤回逻辑会退化为「不撤回」（不会误报停止，但也不会纠正）。
+3. 双 pane 测试用的是自建 DOM，结构和 class 按当前 `control-ui` 产物抄写；上游改 class 名会失效。
+4. 视觉仍未经我目测：本轮所有结论来自 DOM 状态与计数，不涉及观感。
