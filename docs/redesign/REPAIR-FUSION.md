@@ -498,3 +498,90 @@ currentSessionKey, hostFacade}`，主控也可以直接用返回值而不是 `wi
 7. 绑定已退役的 host **不会假装在线**；
 8. `laolao-sidebar` 兼容入口不再直接读 raw host（静态契约 + 行为契约双断言）；
 9. 重连后正常请求只发一次，旧请求不重放。
+
+### 8. 按主控审查返修桥（3992a8c 之后，不宣称可验收）
+
+主控对 `3992a8c` 的审查指出：桥根因找对了，但增量丢了旧行为，还有资源与换代缺口。
+以下逐条对应，全部用行为测试锁住（`tests/cle-bridge-lifecycle.test.mjs`，19 项）。
+
+#### 1) P1 消息风暴与功能回退（已修）
+
+我上一版把 `syncSelection` 写成了「每次 `host.subscribe` 都无条件发 `sessions-changed`」，
+而且把 `laolao:modechange` 与"scope 变更关闭记忆编辑器"整段删掉了。后果是真实的：
+`laolao-session-list.js:1171` 监听 `sessions-changed` 会 `fetchMode(..., true)` 拉会话，
+等于每次运行事件都强制刷新。
+
+现在恢复旧的精确变化判定：
+- `mode !== lastMode` 才发 `laolao:modechange`（6 个真实消费者：session-list / plan /
+  learning-library / companion / memory / utilities）；
+- `key !== lastSessionKey` 才发 `laolao:sessions-changed`，并 `__clekkMemoryUI?.close()`。
+
+测试：同 key 同 mode 连发 12 次 → `sessions-changed` 与 `modechange` 均为 0 次；
+key 变化 → 只发 1 次且关闭记忆 1 次；同 key 再发 → 不重复；mode 变化 → 只发 1 次。
+
+#### 2) P1 document 常驻桥并未跨 bundle 版本稳定（已修）
+
+`const bridge` 在模块级，每个 ESM 副本各一份。热更新后旧 classic 捕获的 `gwRequest`/facade
+永远指向旧 host —— 之前的 rebind 测试证明不了这一点，因为它只在同一模块内 rebind。
+
+改为把状态、facade、外部订阅所有权放进 document 上的单例 slot（`__cleBridgeSlot_v1`，
+`defineProperty` 不可枚举），模块本身不持有任何 host 引用。
+
+测试**真的 import 两个 revision**（同一份源码 + 一处注释差异 → 两个 ESM 实例），
+A 装旧 host 后 classic 捕获 `gwRequest`，B 接管新 host：
+旧句柄读到的 key 变成 v2、旧 `gwRequest` 发到新 host；随后 A 的 disposer 晚到，
+新轮仍在线。这直接覆盖了热更新场景。
+
+#### 3) pending timer 未在退役回收（已修）
+
+`round.dispose` 原来只收订阅/observer，`gwRequest` 的 timer 不在任何所有权里；
+`host.request` 永不 settle 时，abort/rebind 仍会挂 15s。
+
+现在 pending 请求登记在单例槽的 `pending` 集合里，`abortPending` 统一处理：
+取消计时器、结算调用方、忽略旧结果、绝不重发。
+
+并且区分两种诚实语义：
+- **发送前就离线** → `与 Li An 的连接已断开，操作未执行。`
+- **已发出后断线** → `连接在请求发出后断开，这次操作的结果未确认。重连后请先确认再重试。`
+  不能声称"未执行"，因为副作用可能已经发生。
+
+测试：永不 settle 的请求 + abort → 调用方收到"未确认"，且 live timer 集合归零；
+另有专门用例断言"发送前说未执行、发出后说未确认"。
+
+#### 4) 已 aborted 的 signal 仍装全部资源（已修）
+
+原实现会照常 `observe`/`subscribe` 并置 `online=true`，而 abort 监听再也不会触发。
+现在提前返回：零 observer、零订阅、直接离线，但句柄仍可用（否则调用方连查在线状态都做不到）。
+
+测试：先 abort 再 install → 未断开的 observer 为 0、`subs` 为 0、`eventOffs` 为 0、
+`isOnline()` 为 false、请求报"未执行"。
+
+#### 5) facade 订阅换代后丢失（已修）
+
+原来 `facade.subscribe/onEvent` 直接返回原 host 句柄；classic 只在 boot 订阅一次，
+换 host 后旧订阅就丢了，也不会重绑。
+
+现在桥自己持有外部订阅（`externals`）：退役时解绑旧 host，重连时按新 host 重绑，
+外部 `unsubscribe` 始终有效（且重复调用安全）。
+
+测试：第一轮的 facade 订阅在第二次 activation 后仍收到新变化；旧 host 的老回调
+被手动触发后 `pinkie:gateway-event` **零次**进入；新 host 的事件正常转达；
+`unsubscribe` 后桥不再绑定。
+
+#### 6) 同步 throw 未封 Promise / 发明空 UI 实现 / raw host 外泄 / 空 key（已修）
+
+- `sessions.open/create` 现在把同步 throw 封成 rejected Promise，**真实业务错误原样传回**
+  （测试用 `session is locked by another pane` 断言 message 完全一致）；
+- 删掉凭空发明的 `ui.registerReplacement` noop —— classic 不需要就不提供，
+  免得"返回 noop 假装成功"（测试断言 `facade.ui === undefined`）；
+- `__cleGateway` 不再挂 raw host，只留 `{request, isOnline}`；
+  全仓已无 `__cleGateway.host` 读者；
+- 读到空 key 时如实记为空字符串，不再沿用上一个 session
+  （`readSelectedKey` 用 `{ok, key}` 区分"读不到"与"读到空"，且只有 `ok=false` 才判离线）。
+
+#### 边界
+
+`main.js` 接线仍由主控持有；`laolao-*` 中直接读 `window.CLE?.host` 的 4 处
+（learning-library:8 / learning-stage:71 / session-list:46,1169 / workbench:286）
+接上 `makeHostFacade()` 后自动变安全读，本轮未越界改。
+未操作 GUI/live/权限/美术，未改 `data-cle-active` 静态皮肤逻辑。
