@@ -61,9 +61,25 @@ function el(tag, className = '') {
       if (at >= 0) this.parentElement.children.splice(at, 1);
       this.parentElement = null;
     },
-    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    setAttribute(name, value) {
+      this.attributes.set(name, String(value));
+      // the real DOM reflects data-* onto dataset; gaze.js reads dataset, the tests set attributes
+      if (name.startsWith('data-')) {
+        const key = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        this.dataset[key] = String(value);
+      }
+    },
     getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; },
-    removeAttribute(name) { this.attributes.delete(name); },
+    // the real DOM reflects title as both property and attribute; the tests rely on that
+    get title() { return this.attributes.get('title') || ''; },
+    set title(value) { this.attributes.set('title', String(value)); },
+    removeAttribute(name) {
+      this.attributes.delete(name);
+      if (name.startsWith('data-')) {
+        const key = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        delete this.dataset[key];
+      }
+    },
     hasAttribute(name) { return this.attributes.has(name); },
     toggleAttribute(name, on) { if (on === undefined ? !this.attributes.has(name) : on) this.attributes.set(name, ''); else this.attributes.delete(name); return this.attributes.has(name); },
     matches(selector) { return matches(this, selector, this.parentElement); },
@@ -158,6 +174,8 @@ test('a disabled slider states its reason instead of looking broken', () => {
   const {decoratePicker} = loadGaze();
   const {details, range, panel} = picker();
   range.disabled = true;
+  // the real picker marks the trigger when thinking is locked, exactly as the CUA snapshot showed
+  details.querySelector(':scope > summary').setAttribute('data-chat-thinking-disabled', 'true');
   details.querySelector(':scope > summary').setAttribute('title', '会话运行中，暂不可调整');
   decoratePicker(details);
   const host = panel.querySelector('.cle-gaze-stops');
@@ -166,6 +184,35 @@ test('a disabled slider states its reason instead of looking broken', () => {
   assert.ok(why, 'the reason is shown, not just a dimmed control');
   assert.equal(why.textContent, '会话运行中，暂不可调整');
   assert.equal(host.title, '会话运行中，暂不可调整');
+});
+
+test('our own tier description is never reported as the reason a control is locked', () => {
+  const {decoratePicker} = loadGaze();
+  const {details, summary, panel} = picker();
+  // a first pass writes our descriptive title
+  decoratePicker(details);
+  assert.match(summary.getAttribute('title'), /思考强度 · High/);
+  // then the native picker locks the control and publishes the real reason
+  summary.setAttribute('data-chat-thinking-disabled', 'true');
+  summary.setAttribute('title', '会话运行中，暂不可调整');
+  decoratePicker(details);
+  const why = panel.querySelector('.cle-gaze-stops__why');
+  assert.ok(why, 'a reason is shown');
+  assert.equal(why.textContent, '会话运行中，暂不可调整',
+    'the live native reason wins over our own description');
+  assert.doesNotMatch(why.textContent, /思考强度/);
+});
+
+test('a disabled control with no native reason still says something honest', () => {
+  const {decoratePicker} = loadGaze();
+  const {details, summary, panel} = picker();
+  decoratePicker(details);
+  summary.setAttribute('data-chat-thinking-disabled', 'true');
+  // the native build left our descriptive title in place and published no other reason
+  decoratePicker(details);
+  const why = panel.querySelector('.cle-gaze-stops__why');
+  assert.ok(why);
+  assert.doesNotMatch(why.textContent, /认真推敲/, 'a tier hint is not a lock reason');
 });
 
 test('a model with one level says so and never draws a fake ladder', () => {

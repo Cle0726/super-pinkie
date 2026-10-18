@@ -109,11 +109,27 @@ function makeDocument() {
   doc.__raf = rafQueue;
   doc.__cancelled = cancelled;
   class MO {
-    constructor(cb) { this.cb = cb; this.records = []; this.connected = false; observers.push(this); }
-    observe() { this.connected = true; }
+    constructor(cb) { this.cb = cb; this.records = []; this.connected = false; this.options = null; observers.push(this); }
+    observe(target, options) { this.connected = true; this.options = options || {}; }
     disconnect() { this.connected = false; }
     takeRecords() { const r = this.records; this.records = []; return r; }
-    emit(records) { if (this.connected) this.cb(records, this); }
+    /* Deliver records the way a real MutationObserver would: drop types this observer
+       never subscribed to, and attributes outside its filter. Without this the harness
+       would "pass" even when the production observer never asked for attributes. */
+    emit(records) {
+      if (!this.connected) return;
+      const opts = this.options || {};
+      const accepted = records.filter((r) => {
+        if (r.type === 'attributes') {
+          if (!opts.attributes) return false;
+          if (Array.isArray(opts.attributeFilter) && !opts.attributeFilter.includes(r.attributeName)) return false;
+          return true;
+        }
+        return Boolean(opts.childList);
+      });
+      this.accepted = (this.accepted || 0) + accepted.length;
+      if (accepted.length) this.cb(accepted, this);
+    }
   }
   return {
     Node: Node_, MO, doc, observers,
@@ -259,4 +275,97 @@ test('aborting cancels the pending frame and never writes to the DOM afterwards'
   runFrames();
   assert.equal(late.summary.querySelector('.cle-eye'), null);
   assert.ok(env.observers.every((mo) => !mo.connected), 'observers are disconnected on abort');
+});
+
+/* The real order seen in CUA: pressing Left fires input while the native picker still shows
+   the old level; the session patch commits later and the picker then rewrites only its own
+   summary attribute and label text — no node is added. A childList-only observer never sees
+   that, so the eye kept the old level indefinitely. */
+test('a level committed after input, with no added element, still reaches the eye', () => {
+  const env = makeDocument();
+  const {Node, doc, runFrames} = env;
+  const {details, summary, label} = pickerEls(Node);   // starts at High
+  doc.append(details);
+  const gaze = loadGaze(env);
+  gaze.mountGaze(new AbortController().signal);
+  runFrames();
+  const eye = summary.querySelector('.cle-eye');
+  assert.equal(eye.dataset.cleOpen, '0.68');
+  assert.equal(summary.dataset.cleLevel, 'high');
+
+  // 1. the user presses Left: native input fires, but the committed value has not changed yet
+  summary.dataset.chatThinkingValue = 'high';
+  for (const mo of env.observers) mo.emit([{type: 'childList', target: summary, addedNodes: [], removedNodes: []}]);
+  runFrames();
+  assert.equal(eye.dataset.cleOpen, '0.68', 'a premature input does not invent a new level');
+  assert.equal(summary.dataset.cleLevel, 'high');
+
+  // 2. the patch commits: only an attribute and the label text change, nothing is added
+  summary.dataset.chatThinkingValue = 'medium';
+  label.textContent = 'Medium';
+  for (const mo of env.observers) mo.emit([{
+    type: 'attributes', target: summary, attributeName: 'data-chat-thinking-value',
+    addedNodes: [], removedNodes: [], oldValue: 'high',
+  }]);
+  runFrames();
+  assert.equal(summary.dataset.cleLevel, 'medium', 'the eye now follows the committed value');
+  assert.equal(eye.dataset.cleOpen, '0.52', 'Medium opens less than High');
+  assert.equal(eye.dataset.cleSig, 'medium|0');
+  assert.equal(label.textContent, 'Medium');
+});
+
+test('reverting to High updates only that pane, and abort leaves the DOM alone', () => {
+  const env = makeDocument();
+  const {Node, doc, runFrames} = env;
+  const left = pickerEls(Node);
+  const right = pickerEls(Node);
+  right.summary.dataset.chatThinkingValue = 'medium';
+  right.label.textContent = 'Medium';
+  const paneL = new Node('div'); paneL.append(left.details);
+  const paneR = new Node('div'); paneR.append(right.details);
+  doc.append(paneL, paneR);
+  const gaze = loadGaze(env);
+  const controller = new AbortController();
+  gaze.mountGaze(controller.signal);
+  runFrames();
+  assert.equal(left.summary.dataset.cleLevel, 'high');
+  assert.equal(right.summary.dataset.cleLevel, 'medium');
+
+  // the right session is restored to High; the left pane must not move
+  right.summary.dataset.chatThinkingValue = 'high';
+  right.label.textContent = 'High';
+  for (const mo of env.observers) mo.emit([{
+    type: 'attributes', target: right.summary, attributeName: 'data-chat-thinking-value',
+    addedNodes: [], removedNodes: [],
+  }]);
+  runFrames();
+  assert.equal(right.summary.dataset.cleLevel, 'high');
+  assert.equal(right.summary.querySelector('.cle-eye').dataset.cleOpen, '0.68');
+  assert.equal(left.summary.dataset.cleLevel, 'high', 'the other pane is untouched');
+  assert.equal(left.summary.querySelector('.cle-eye').dataset.cleOpen, '0.68');
+
+  // after abort a committed change must not repaint anything
+  controller.abort();
+  right.summary.dataset.chatThinkingValue = 'ultra';
+  const before = right.summary.querySelector('.cle-eye').dataset.cleSig;
+  for (const mo of env.observers) mo.emit([{
+    type: 'attributes', target: right.summary, attributeName: 'data-chat-thinking-value',
+    addedNodes: [], removedNodes: [],
+  }]);
+  runFrames();
+  assert.equal(right.summary.querySelector('.cle-eye').dataset.cleSig, before, 'no write after abort');
+  assert.equal(right.summary.dataset.cleLevel, 'high');
+});
+
+test('the observer watches only the picker attribute whitelist, not document text', () => {
+  const src = read('services/cle-studio/src/composer/gaze.js');
+  assert.match(src, /attributes: true, attributeFilter: WATCHED_ATTRS/);
+  const list = src.slice(src.indexOf('const WATCHED_ATTRS'), src.indexOf('];', src.indexOf('const WATCHED_ATTRS')));
+  assert.match(list, /'data-chat-thinking-value'/);
+  assert.match(list, /'data-chat-thinking-disabled'/);
+  assert.doesNotMatch(list, /'data-cle-level'|'data-cle-open'|'class'/,
+    'our own writes and class churn must not re-arm the observer');
+  // oldValue is needed to tell our own hint title from a native reason without guessing
+  assert.match(src, /attributeOldValue: true/);
+  assert.doesNotMatch(src, /characterData:\s*true/);
 });
