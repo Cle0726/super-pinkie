@@ -456,6 +456,7 @@ export class LearningInteractionStore {
     if (cleanId(payload.activityId || payload.activity_id) !== current.id) throw new Error('题卡已经更新，请按当前题卡作答');
     const submissionId = cleanId(payload.submissionId || payload.submission_id) || randomUUID();
     if (current.submission?.id === submissionId) return this.publicState(state);
+    const firstSubmission = !current.submission;
     const answer = normalizeAnswer(payload.answer);
     if ((Array.isArray(answer) && answer.length === 0) || (!Array.isArray(answer) && !answer)) throw new Error('请先填写答案');
     const correctness = sameAnswer(current.correctAnswer, answer, current.kind);
@@ -469,7 +470,7 @@ export class LearningInteractionStore {
     current.phase = 'evaluating';
     state.current = current;
     // Le Pacte：每道真正作答的题记一次；同一题卡重复提交由上面的 submissionId 挡住。
-    pactLedger(this, 'recordQuestion', {correct: correctness});
+    if (firstSubmission) pactLedger(this, 'recordQuestion', {correct: correctness});
     return this.publicState(this.write(sessionKey, state));
   }
 

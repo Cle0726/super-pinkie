@@ -101,6 +101,8 @@ test('ledger counts answered questions, reviews and new notes on the pact day', 
   store.submit(SESSION, {activityId: shown.current.id, answer: '2', submissionId: 's1'});
   // 同一 submissionId 重放不再计数。
   store.submit(SESSION, {activityId: shown.current.id, answer: '2', submissionId: 's1'});
+  // 两个页面重发同一道题时，即使请求 ID 不同也只能算一道题。
+  store.submit(SESSION, {activityId: shown.current.id, answer: '2', submissionId: 'second-page'});
   const second = store.present(SESSION, {kind: 'fill_blank', question: 'fill', correct_answer: 'x'});
   store.submit(SESSION, {activityId: second.current.id, answer: 'y', submissionId: 's2'});
   const note = store.saveNote(SESSION, {title: 'put off', content: 'put off = 推迟'}).note;
@@ -114,7 +116,7 @@ test('ledger counts answered questions, reviews and new notes on the pact day', 
   assert.ok(day.firstActivityAt);
   const today = pact.today();
   assert.equal(today.date, '2026-10-19');
-  assert.deepEqual(today.progress, {minutes: 0, questions: 2, reviewsDone: 1, dueReviews: 0, notesAdded: 1});
+  assert.deepEqual(today.progress, {minutes: 0, questions: 2, correct: 1, reviewsDone: 1, dueReviews: 0, notesAdded: 1});
   assert.deepEqual(today.goals, {minutes: 30, questions: 20});
   assert.equal(today.complete, false);
 });
@@ -215,6 +217,27 @@ test('focus sessions are single-flight, credited in whole minutes and capped', t
   assert.equal(capped.today.progress.minutes, 27);
   // 没有进行中的会话时停止是空操作。
   assert.equal(pact.focusStop({}).minutes, 0);
+});
+
+test('stopping before a full minute does not create study credit or an active day', t => {
+  const {pact, setClock} = fixture(t);
+  const started = pact.focusStart({minutes: 25});
+  setClock(MORNING + 59_999);
+  const stopped = pact.focusStop({id: started.focus.id});
+  assert.equal(stopped.minutes, 0);
+  assert.equal(stopped.today.progress.minutes, 0);
+  assert.deepEqual(pact.focusStatus(), {active: null});
+  assert.equal(pact.history({days: 1})[0].state, 'missed');
+});
+
+test('unreviewed days cannot extend a streak when time and question goals are met', t => {
+  const ref = fixture(t);
+  seedNotes(ref, [seedNote('overdue')]);
+  seedDay(ref, '2026-10-18', {completed: false});
+  seedDay(ref, '2026-10-19', {completed: false});
+  assert.equal(ref.pact.today().complete, false);
+  assert.deepEqual(ref.pact.history({days: 2}).map(day => day.state), ['partial', 'partial']);
+  assert.deepEqual(ref.pact.streak(), {current: 0, best: 0});
 });
 
 test('corrupt pact and day files are backed up and replaced, never silently overwritten', t => {
