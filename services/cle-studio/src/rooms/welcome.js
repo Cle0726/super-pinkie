@@ -1,6 +1,7 @@
 // The empty room: an arched window holding the room's painting, the room's name and one line
 // in its voice, and a few things worth asking here. Replaces the stock avatar and suggestions.
 import {ROOMS, roomArt} from './rooms.js';
+import {paneRoom, visiblePanes} from './split.js';
 
 const SUGGEST = {
   chat: ['今天过得怎么样？', '陪我想想周末去哪', '给我讲个冷知识'],
@@ -34,16 +35,18 @@ export function mountWelcome(host, signal) {
     return el;
   };
 
-  let current = null;
+  // one welcome per visible pane, each in its own room (two in 双模式)
   const sync = () => {
-    const host_ = document.querySelector('.chat-pane-cache__pane--active .agent-chat__welcome') || document.querySelector('.agent-chat__welcome');
-    const roomId = document.documentElement.dataset.cleRoom || 'chat';
-    if (!host_) { current = null; return; }
-    if (current?.isConnected && current.dataset.room === roomId && current.parentElement === host_) return;
-    current?.remove();
-    const room = ROOMS.find((r) => r.id === roomId) || ROOMS[0];
-    current = build(room);
-    host_.prepend(current);
+    const fallback = document.documentElement.dataset.cleRoom || 'chat';
+    for (const pane of visiblePanes()) {
+      const host_ = pane.querySelector('.agent-chat__welcome');
+      if (!host_) continue;
+      const roomId = paneRoom(pane)?.id || (pane.classList.contains('chat-pane-cache__pane--active') ? fallback : null) || fallback;
+      const cur = host_.querySelector(':scope > .cle-welcome');
+      if (cur?.dataset.room === roomId) continue;
+      cur?.remove();
+      host_.prepend(build(ROOMS.find((r) => r.id === roomId) || ROOMS[0]));
+    }
   };
   let queued = false;
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } };
@@ -55,5 +58,5 @@ export function mountWelcome(host, signal) {
   const paneObserver = new MutationObserver(schedule);
   paneObserver.observe(document.body, {subtree: true, attributes: true, attributeFilter: ['class']});
   sync();
-  signal.addEventListener('abort', () => { mo.disconnect(); roomObserver.disconnect(); paneObserver.disconnect(); current?.remove(); }, {once: true});
+  signal.addEventListener('abort', () => { mo.disconnect(); roomObserver.disconnect(); paneObserver.disconnect(); document.querySelectorAll('.cle-welcome').forEach((w) => w.remove()); }, {once: true});
 }

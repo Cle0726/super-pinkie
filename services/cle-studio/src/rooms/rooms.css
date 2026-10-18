@@ -127,3 +127,31 @@ html[data-cle] .agent-chat__welcome .cle-welcome__line { margin: 0 0 26px; font:
 .cle-room-menu__item[aria-current="true"] .cle-room-menu__thumb.is-line { box-shadow: none; }
 .cle-room-menu__item[aria-current="true"] .cle-line { color: var(--cle-ink); }
 .cle-room-menu__item:not([aria-current="true"]) .cle-line { color: var(--cle-ink-2); }
+
+/* ---------- the two switches at the foot of the room menu ---------- */
+.cle-modes { display: flex; justify-content: space-between; gap: 10px; margin: 6px 4px 2px; padding-top: 8px; border-top: 1px solid var(--cle-line); }
+.cle-seg { display: inline-flex; padding: 2px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--cle-line-strong); }
+.cle-seg button { appearance: none; border: 0; background: transparent; color: var(--cle-ink-3); font: 500 12px/1 var(--cle-serif); letter-spacing: .12em;
+  padding: 6px 12px 6px 13px; border-radius: 999px; cursor: default; transition: background-color var(--cle-t-quick), color var(--cle-t-quick); }
+.cle-seg button[aria-checked="true"] { background: var(--cle-ink); color: var(--cle-paper); }
+.cle-seg button:not([aria-checked="true"]):hover { color: var(--cle-ink); }
+
+/* ---------- 双模式: two rooms side by side ---------- */
+.cle-room-menu__dual { appearance: none; border: 0; background: transparent; width: 100%; display: flex; align-items: center; gap: 10px;
+  height: 40px; padding: 0 10px; border-radius: 10px; color: var(--cle-ink-2); font: 500 13px/1 var(--cle-serif); letter-spacing: .14em; cursor: default; }
+.cle-room-menu__dual:hover { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+.cle-room-menu__dual em { font: italic 400 12px/1 var(--cle-serif); letter-spacing: .02em; color: var(--cle-ink-3); }
+.cle-room-menu__dual svg { width: 18px; height: 18px; }
+.cle-room-menu[data-picking="dual"] .cle-room-menu__item[aria-current="true"] { opacity: .35; pointer-events: none; }
+.cle-room-menu__pickhint { display: none; padding: 6px 10px 8px; font: italic 400 12px/1.3 var(--cle-serif); color: var(--cle-gold); }
+.cle-room-menu[data-picking="dual"] .cle-room-menu__pickhint { display: block; }
+.chat-split-view__cell { position: relative; }
+.cle-pane-badge { position: absolute; z-index: 5; top: 9px; right: 118px; display: flex; align-items: center; gap: 8px;
+  padding: 4px 12px 4px 6px; border-radius: 999px; background: var(--cle-surface); box-shadow: 0 0 0 1px var(--cle-line), var(--cle-shadow); pointer-events: none;
+  opacity: .9; transition: opacity var(--cle-t-quick); }
+.chat-split-view__cell:not(.chat-split-view__cell--active) .cle-pane-badge { opacity: .55; }
+.cle-pane-badge__icon { width: 24px; height: 24px; display: grid; border-radius: 50%; background: center / cover; }
+.cle-pane-badge__icon .cle-line { width: 24px; height: 24px; }
+.cle-pane-badge b { font: 500 13px/1 var(--cle-serif); letter-spacing: .14em; color: var(--cle-ink); }
+.cle-pane-badge em { font: italic 400 11.5px/1 var(--cle-serif); color: var(--cle-ink-3); }
+html[data-cle-split] .chat-split-view__cell--active { box-shadow: inset 0 2px 0 var(--cle-gaze-soft); }

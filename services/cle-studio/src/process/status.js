@@ -2,6 +2,7 @@
 // or file, and elapsed time. The adapter follows the native active session.
 // Driven by the gateway's agent events for the session on screen; replaces the stock dots.
 import {particleGlyph} from './particles.js';
+import {paneSessionKey, visiblePanes} from '../rooms/split.js';
 
 const TOOL_VERBS = [
   [/^(exec|bash|shell|process|terminal)/i, '执行'],
@@ -30,7 +31,9 @@ const detailFor = (data) => {
 const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export function mountStatus(host, signal) {
-  const glyph = particleGlyph(signal);
+  // one particle glyph per visible pane (two in 双模式), created on demand
+  const glyphs = [particleGlyph(signal)];
+  const glyph = glyphs[0];
   const runs = new Map();                 // sessionKey → {startedAt, mode, verb, detail}
   let thinkIdx = 0;
   const current = () => runs.get(host.sessions?.selectedKey || '');
@@ -56,17 +59,21 @@ export function mountStatus(host, signal) {
 
   // mount into the native working indicator of the pane on screen
   const sync = () => {
-    const pane = document.querySelector('.chat-pane-cache__pane--active') || document;
-    const indicators = pane.querySelectorAll('.chat-working-indicator');
-    if (!indicators.length) glyph.park();
-    for (const ind of indicators) {
-      let el = ind.querySelector(':scope > .cle-status');
-      if (!el) { el = build(); ind.append(el); }
-      const run = current() || {startedAt: Date.now(), mode: 'think', verb: THINK[0], detail: ''};
-      if (!current()) runs.set(host.sessions?.selectedKey || '', run);
-      render(el, run);
-      glyph.attach(el.querySelector('.cle-status__glyph'), run);
+    // every visible pane shows its own run (two panes in 双模式); the particle glyph lives in the focused one
+    let used = 0;
+    for (const pane of visiblePanes()) {
+      const key = paneSessionKey(pane) || host.sessions?.selectedKey || '';
+      const active = pane.classList.contains('chat-pane-cache__pane--active');
+      for (const ind of pane.querySelectorAll('.chat-working-indicator')) {
+        let el = ind.querySelector(':scope > .cle-status');
+        if (!el) { el = build(); ind.append(el); }
+        let run = runs.get(key);
+        if (!run) { run = {startedAt: Date.now(), mode: 'think', verb: THINK[0], detail: ''}; runs.set(key, run); }
+        render(el, run);
+        if (used < 2) { const g = glyphs[used] || (glyphs[used] = particleGlyph(signal)); g.attach(el.querySelector('.cle-status__glyph'), run); used++; }
+      }
     }
+    for (let i = used; i < glyphs.length; i++) glyphs[i].park();
   };
 
   const onAgent = (p) => {

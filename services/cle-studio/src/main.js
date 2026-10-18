@@ -21,6 +21,7 @@ import {mountUtilities} from './legacy/utilities.js';
 import {mountStatus} from './process/status.js';
 import {mountStudy} from './learning/study.js';
 import {mountSplash} from './splash/splash.js';
+import {initModes} from './core/modes.js';
 
 const VERSION = '0.1.0';
 
@@ -31,6 +32,7 @@ export default {
     const controller = new AbortController();
     const html = document.documentElement;
     html.dataset.cle = VERSION;
+    initModes();
     try { startBrandGuard(controller.signal); } catch (error) { console.error('[cle] brand guard failed', error); }
     // the 2026.7 modules key night mode on data-pinkie-night; mirror the native theme mode
     const syncNight = () => html.toggleAttribute('data-pinkie-night', html.dataset.themeMode === 'dark');
