@@ -520,6 +520,13 @@ export class LearningPact {
     });
   }
 
+  recordQuestionResult({date, previousCorrect = false, correct = false} = {}) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) || correct === previousCorrect) return;
+    return this.mutateDay(date, day => {
+      day.questions.correct = Math.max(0, Math.min(day.questions.answered, day.questions.correct + (correct ? 1 : -1)));
+    });
+  }
+
   recordReview({count = 1} = {}) {
     return this.mutateDay(this.todayDate(), day => { day.reviews.done += Math.max(1, Math.round(finite(count, 1))); });
   }

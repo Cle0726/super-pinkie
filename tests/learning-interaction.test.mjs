@@ -40,6 +40,20 @@ test('submissions are idempotent and reject stale activity ids', t => {
   assert.throws(() => store.submit(sessionKey, {activityId: 'old-card', answer: '2'}), /题卡已经更新/);
 });
 
+test('choice grading maps model letters to the option ids returned by the UI', t => {
+  const store = fixture(t);
+  const key = 'agent:learning:choice-labels';
+  store.setEnabled(key, true);
+  for (const options of [['A. quick', 'B. quickly', 'C. quicker'], ['quick', 'quickly', 'quicker']]) {
+    const shown = store.present(key, {kind: 'single_choice', question: 'He ran ___', options, correct_answer: 'B'});
+    assert.equal(store.submit(key, {activityId: shown.current.id, answer: '2'}).current.submission.correctness, true);
+  }
+  const multi = store.present(key, {kind: 'multiple_choice', question: 'Pick two', options: ['A. first', 'B. second', 'C. third'], correct_answer: ['C', 'A']});
+  assert.equal(store.submit(key, {activityId: multi.current.id, answer: ['1', '3']}).current.submission.correctness, true);
+  const custom = store.present(key, {kind: 'single_choice', question: 'Use explicit ids', options: [{id: 'B', label: 'First'}, {id: 'A', label: 'Second'}], correct_answer: 'B'});
+  assert.equal(store.submit(key, {activityId: custom.current.id, answer: 'B'}).current.submission.correctness, true);
+});
+
 test('resolved key points and selected text persist outside chat history', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:notes';
@@ -145,7 +159,9 @@ test('frontend keeps one native card, restores by revision, and avoids subtree o
   assert.match(source, /chat\.abort/);
   assert.match(source, /preserveSideRuns: false/);
   assert.match(source, /Promise\.allSettled/);
-  assert.match(source, /\.chat-group\.assistant/);
+  assert.match(source, /__pinkieSelectionActions\?\.register\('note'/);
+  const selection = fs.readFileSync(new URL('../ui/injections/laolao-selection-actions.js', import.meta.url), 'utf8');
+  assert.match(selection, /\.chat-group\.assistant/);
   assert.doesNotMatch(source, /new MutationObserver/);
 });
 

@@ -121,6 +121,22 @@ test('ledger counts answered questions, reviews and new notes on the pact day', 
   assert.equal(today.complete, false);
 });
 
+test('a later model grade updates the original day without double counting', t => {
+  const {store, pact, setClock, days} = fixture(t);
+  store.setEnabled(SESSION, true);
+  const shown = store.present(SESSION, {kind: 'short_answer', question: 'Explain'});
+  const submitted = store.submit(SESSION, {activityId: shown.current.id, answer: 'An explanation'});
+  assert.equal('pactQuestion' in submitted.current, false);
+  assert.equal(pact.today().progress.questions, 1);
+  setClock(MORNING + 24 * 60 * 60_000);
+  store.resolve(SESSION, {activityId: shown.current.id, correct: true});
+  store.resolve(SESSION, {activityId: shown.current.id, correct: true});
+  assert.deepEqual(days('2026-10-19').questions, {answered: 1, correct: 1});
+  assert.equal(pact.today().progress.questions, 0);
+  store.resolve(SESSION, {activityId: shown.current.id, correct: false});
+  assert.deepEqual(days('2026-10-19').questions, {answered: 1, correct: 0});
+});
+
 test('a day is complete only when minutes, questions and due reviews are all satisfied', t => {
   const {pact, setClock, days} = fixture(t);
   pact.set({daily: {minutes: 10, questions: 2}});
