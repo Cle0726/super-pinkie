@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 42px;
-  background: rgba(54, 23, 42, 0.42);
+  background: rgba(12, 12, 14, .32);
   opacity: 0;
   backdrop-filter: blur(12px) saturate(112%);
   -webkit-backdrop-filter: blur(12px) saturate(112%);
@@ -23,8 +23,8 @@
   border: 1px solid rgba(255, 255, 255, 0.70);
   border-radius: 16px;
   object-fit: contain;
-  background: rgba(255, 252, 253, 0.92);
-  box-shadow: 0 26px 90px rgba(51, 17, 36, 0.36);
+  background: var(--cle-surface);
+  box-shadow: 0 26px 90px var(--cle-shadow);
   cursor: zoom-out;
   -webkit-user-select: none;
   user-select: none;
@@ -38,8 +38,8 @@
   height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 50%;
-  background: rgba(255, 250, 252, 0.76);
-  color: #a82f66;
+  background: var(--cle-surface);
+  color: var(--cle-gaze);
   font: 500 26px/28px -apple-system, BlinkMacSystemFont, sans-serif;
   cursor: pointer;
 }

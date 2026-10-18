@@ -250,9 +250,9 @@
       transition:color .18s ease,background .18s ease,transform .18s ease;
     }
     #laolao-browser-workspace-entry svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
-    #laolao-browser-workspace-entry:hover{color:#4f7f8d;background:rgba(255,250,253,.72)}
+    #laolao-browser-workspace-entry:hover{color:#4f7f8d;background:var(--cle-surface)}
     #laolao-browser-workspace-entry:active{transform:scale(.96)}
-    #laolao-browser-workspace-entry:focus-visible{outline:2px solid rgba(207,66,130,.45);outline-offset:-2px}
+    #laolao-browser-workspace-entry:focus-visible{outline:2px solid var(--cle-line-strong);outline-offset:-2px}
     .laolao-video-workspace-open{align-self:flex-start;border:1px solid var(--border,rgba(145,100,121,.2));border-radius:8px;padding:5px 10px;background:var(--bg-surface,transparent);color:var(--text-strong);cursor:pointer}
     .laolao-video-workspace-open:hover{color:var(--accent)}
     html[data-pinkie-night] .laolao-video-workspace-open{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
