@@ -4,25 +4,62 @@
 // with the selector bits these functions use (matches/closest/querySelectorAll).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, __test} from '../services/cle-studio/src/recovery/recovery.js';
+import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, __test} from '../services/cle-studio/src/recovery/recovery.js';
 import {queueText, queueErrorText, localizeQueueNode} from '../services/cle-studio/src/recovery/queue-copy.js';
 
-const WATCHDOG = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作，完成后正常交付。这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。';const TIER = '[pinkie-tier-control] 本轮仍未通过后端硬验收：缺少实际产物。这是当前用户轮次的内部续跑命令。';
+const WATCHDOG = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作，完成后正常交付。这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。';
+const TIER = '[pinkie-tier-control] 本轮仍未通过后端硬验收：缺少实际产物。这是当前用户轮次的内部续跑命令。';
+const TIER_YIELD = '[pinkie-tier-control] 本轮仍未通过后端硬验收：缺少实际产物；角色不足。这是当前用户轮次的内部续跑命令。立即用 sessions_spawn 补齐缺失角色，并用 sessions_yield 结束当前批次。sessions_spawn 结果中有关“Auto-announce”或“NO_REPLY”的通用备注在本插件模式下已失效：子结果由插件收集，绝对不得输出 NO_REPLY 规避缺口。';
+const RESTART = '[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
 
-test('control turns are recognised only by their own prefixes', () => {
+// A real failure: the reader must be able to read what broke.
+const FENCE = '⚠️ Agent failed before reply: EmbeddedAttemptSessionTakeoverError: session file changed while embedded prompt lock was released: /Users/x/session.jsonl';
+
+test('only a whole machine-written control turn is folded', () => {
+  // The two real builders from services/mode-architecture, byte for byte.
   assert.equal(isInternalTurnText(WATCHDOG), true);
   assert.equal(isInternalTurnText(TIER), true);
-  assert.equal(isInternalTurnText('[pinkie-tier] 报告'), true);
+  assert.equal(isInternalTurnText(TIER_YIELD), true);
   assert.equal(isInternalTurnText('\u2063'), true);
-  assert.equal(isInternalTurnText('[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.'), true);
-  assert.equal(isInternalTurnText('⚠️ Agent failed before reply: EmbeddedAttemptSessionTakeoverError: session file changed while embedded prompt lock was released: /x'), true);
+  assert.equal(isInternalTurnText(RESTART), true);
 
-  // A user writing about the mechanism is not the mechanism.
+  // A reader asking about the mechanism, with no code fence, is not the mechanism.
+  // The prefix alone is not evidence: these are short and have no instruction tail.
+  assert.equal(isInternalTurnText('[pinkie-watchdog] 这个是什么意思'), false);
+  assert.equal(isInternalTurnText('[pinkie-watchdog] 这个是什么意思？'), false);
+  assert.equal(isInternalTurnText('[pinkie-tier-control] 又跑了一遍？'), false);
+  assert.equal(isInternalTurnText('[pinkie-tier] 报告'), false);
+  assert.equal(isInternalTurnText('[pinkie-watchdog] 继续完成当前这一轮先生交代的工作'), false);
   assert.equal(isInternalTurnText('为什么这里会出现 [pinkie-watchdog] 这种字样？'), false);
   assert.equal(isInternalTurnText('看看 [pinkie-watchdog] 前缀是怎么加的'), false);
   assert.equal(isInternalTurnText('pinkie-watchdog 是什么'), false);
+
+  // An assistant restating the instruction for the reader is a reply, not a control turn.
+  // It has the prefix and even the words, but not the exact trailing scaffold.
+  assert.equal(isInternalTurnText('[pinkie-watchdog] 是网关内部续跑用的前缀，我自己不会发。'), false);
+  assert.equal(isInternalTurnText('刚才那条 [pinkie-watchdog] 消息是系统自己发的，你看不到它是正常的。'), false);
+
+  // Empty and ordinary text.
   assert.equal(isInternalTurnText(''), false);
   assert.equal(isInternalTurnText('继续完成当前这一轮先生交代的工作'), false);
+});
+
+test('a real failure stays visible while an internal turn is folded', () => {
+  // The session-fence error is a real fault the reader needs. It used to be hidden by
+  // a prefix test; now only the exact restart sentence and the control scaffold fold.
+  assert.equal(isInternalTurnText(FENCE), false);
+  assert.equal(isInternalTurnText('Agent failed before reply: session file changed while embedded prompt lock was released: /x'), false);
+  assert.equal(isInternalTurnText('⚠️ gateway restart 之后这轮就断了'), false);
+
+  const pane = paneOf();
+  const group = el('div', 'chat-group assistant', pane);
+  const failure = bubble(group, FENCE);
+  bubble(group, RESTART);
+  projectPane(pane);
+  // The internal one folds, the failure does not, so the group stays on screen.
+  assert.equal(group.getAttribute('data-cle-internal-only'), null);
+  assert.equal(failure.getAttribute('data-cle-internal-turn'), null);
+  assert.equal(group.getAttribute('aria-hidden'), null);
 });
 
 const kebab = (key) => key.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
@@ -247,6 +284,66 @@ test('a gateway error, a missing row or a row without status means "unknown"', a
     activePanels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
   });
   assert.deepEqual(await recoverPane(other.pane, other.host), []);
+});
+
+/* ---- retry attempt accounting (backoff on failure, not just on success) ---- */
+test('a retry that throws is still counted as an attempt', async () => {
+  const {pane, host} = harness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: Date.now()}],
+    activePanels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  // The native path can throw synchronously or reject; both mean it was attempted.
+  pane.retryQueuedChatMessage = () => { throw new Error('gateway refused'); };
+  const sync = await recoverPaneDetailed(pane, host);
+  assert.deepEqual(sync.retried, []);
+  assert.equal(sync.attempted, true);
+
+  const rejecting = harness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: Date.now()}],
+    activePanels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  rejecting.pane.retryQueuedChatMessage = async () => { throw new Error('gateway refused'); };
+  const async = await recoverPaneDetailed(rejecting.pane, rejecting.host);
+  assert.deepEqual(async.retried, []);
+  assert.equal(async.attempted, true);
+
+  // A pass that never reached the retry must not claim one.
+  const idle = harness({
+    queue: [{id: 'q1', sendState: 'sending', text: '在', createdAt: Date.now()}],
+    activePanels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const none = await recoverPaneDetailed(idle.pane, idle.host);
+  assert.equal(none.attempted, false);
+});
+
+test('a failed attempt still starts the cooldown that stops a retry storm', async () => {
+  const calls = [];
+  const at = 1_000_000;
+  const pane = el('openclaw-chat-pane', '');
+  pane.dataset.mcpAppOwnerKey = JSON.stringify(['x', 'agent:project:main']);
+  pane.isConnected = true;
+  pane.state = {
+    sessionKey: 'agent:project:main', chatMessages: [], chatRunId: null,
+    chatQueue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: at}],
+  };
+  pane.retryQueuedChatMessage = async () => { calls.push(1); throw new Error('refused'); };
+  const host = {request: async () => ({sessions: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}]})};
+
+  const first = await recoverPaneDetailed(pane, host);
+  // The attempt failed, but it happened — that is what has to arm the backoff.
+  assert.equal(first.attempted, true);
+  assert.deepEqual(first.retried, []);
+  assert.equal(calls.length, 1);
+
+  // With the attempt recorded, a burst of DOM/reconnect events inside the window is
+  // rejected before it ever reaches the gateway.
+  const lastAttemptAt = at;
+  for (const delta of [0, 50, 400, 2_000, 5_999]) {
+    assert.equal(shouldAttempt(lastAttemptAt, at + delta, 6_000), false, `${delta}ms must not retry`);
+  }
+  assert.equal(shouldAttempt(lastAttemptAt, at + 6_000, 6_000), true);
+  // A pane that was never attempted is free to try immediately.
+  assert.equal(shouldAttempt(undefined, at, 6_000), true);
 });
 
 /* ---- queue copy ---- */
