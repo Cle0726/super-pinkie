@@ -1,0 +1,1 @@
+{"result":{"linked":["0951d1b3","55180d07"],"confirm":{"title":"删除项目「oc-test-proj」","body":"会移除这个项目分组，并删除其中的 2 个会话和聊天记录（归档中的 0 个也会永久删除）。此操作不可撤销。"},"after":{"toast":"已删除项目「oc-test-proj」及其 2 个会话","sessionsGone":true,"projectGone":true,"groupGone":true,"folderStillExists":true}},"errors":[]}
