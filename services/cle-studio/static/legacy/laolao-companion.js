@@ -85,7 +85,12 @@
     ART.set(state, FALLBACK[state]);
     return FALLBACK[state];
   };
-  const artNow = (state) => ART.get(state) || FALLBACK[state];
+  // 线描（默认画风）：Codex 线稿做成的墨色剪影，昼夜各一张；油画：上面的猫图
+  const lineMode = () => document.documentElement.dataset.cleArt !== "paint";
+  const night = () => document.documentElement.hasAttribute("data-pinkie-night") || /dark/.test(document.documentElement.dataset.theme || "");
+  const LINE = (state) => `/cle/static/art/pet-line/${state === "sleepy" ? "sleep" : "loaf"}-${night() ? "night" : "day"}.png`;
+  const artNow = (state) => (lineMode() ? LINE(state) : ART.get(state) || FALLBACK[state]);
+  const closedNow = (state) => (state === "rest" && !lineMode() ? CLOSED : "");
 
   /* ── 动作引擎的载入 ──────────────────────────────────────────────────
      laolao-cat-rig.js 应该由模块表排在本文件之前（主控注册）。在它还没被注册时，
@@ -224,7 +229,7 @@
       this.imgA = el("img", "pinkie-buddy__img is-front");
       this.imgB = el("img", "pinkie-buddy__img");
       this.imgA.alt = this.imgB.alt = "";
-      this.imgA.src = FALLBACK.rest;
+      this.imgA.src = artNow("rest");
       this.frontImg = this.imgA;
       figure.append(this.imgA, this.imgB);
 
@@ -294,7 +299,7 @@
       this.rig.onReady = () => this.buddy.classList.add("is-rig");
       this.rig.onDead = () => { this.buddy.classList.remove("is-rig"); this.rig = null; };
       this.rig.setMood(this.state);
-      this.rig.setImage(this.frontImg.src, this.state === "rest" ? CLOSED : "");
+      this.rig.setImage(this.frontImg.src, closedNow(this.state));
       window.__pinkieCatRig.warm(STATES.map((s) => artNow(s)));
     }
 
@@ -302,7 +307,7 @@
       // 首次进入某状态时先用已知素材，v2 探测成功再无声升级，不阻塞动作
       if (!ART.has(state)) artFor(state).then(() => { if (this.connected && this.state === state) this.apply(state, true); });
       const src = artNow(state);
-      if (!force && this.frontImg.getAttribute("src") === src) { this.rig?.setImage(src, state === "rest" ? CLOSED : ""); return; }
+      if (!force && this.frontImg.getAttribute("src") === src) { this.rig?.setImage(src, closedNow(state)); return; }
       const back = this.frontImg === this.imgA ? this.imgB : this.imgA;
       const ticket = ++this.imageVersion;
       back.onload = () => {
@@ -310,10 +315,10 @@
         back.onload = null;
         back.classList.add("is-front"); this.frontImg.classList.remove("is-front"); this.frontImg = back;
       };
-      back.onerror = () => { back.onerror = null; if (ticket === this.imageVersion && src !== FALLBACK[state]) { back.setAttribute("src", FALLBACK[state]); } };
+      back.onerror = () => { back.onerror = null; if (ticket === this.imageVersion && src !== FALLBACK[state] && !lineMode()) { back.setAttribute("src", FALLBACK[state]); } };
       back.setAttribute("src", src);
       if (back.complete && back.naturalWidth) back.onload?.();
-      this.rig?.setImage(src, state === "rest" ? CLOSED : "");
+      this.rig?.setImage(src, closedNow(state));
     }
 
     setName(room) {
@@ -731,6 +736,10 @@
     [/\btest\b|测试|pytest/i, "在跑测试"], [/\bgit\b/i, "在看改动记录"], [/npm|pip|brew|install|安装/i, "在装工具"],
     [/exec|执行命令/i, "在电脑上执行命令"],
   ];
+
+  // 线描/油画、昼/夜一换，猫跟着换（不重建实例、不打断动作）
+  new MutationObserver(() => { for (const i of instances.values()) if (i.connected) i.apply(i.state, true); })
+    .observe(document.documentElement, {attributes: true, attributeFilter: ["data-cle-art", "data-pinkie-night", "data-theme"]});
 
   /* ── 挂载 / 卸下：以可见 pane 为准，不再用第一个 pane ───────────────── */
   const mount = () => {

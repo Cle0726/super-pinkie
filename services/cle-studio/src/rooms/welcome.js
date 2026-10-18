@@ -28,7 +28,7 @@ export function mountWelcome(host, signal) {
       if (!d || artStyle() !== 'line') return;
       const fig = el.querySelector('.cle-welcome__arch');
       fig.classList.add('is-line'); fig.querySelector('img')?.remove();
-      fig.prepend(lineArt(`room-${room.id}`, {speed: 120}));
+      fig.prepend(lineArt(`room-${room.id}`, {speed: 460}));
     });
     el.dataset.art = artStyle();
     const img = el.querySelector('img');
