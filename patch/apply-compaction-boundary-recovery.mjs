@@ -101,9 +101,105 @@ function replaceOnce(text,from,to){
   if(text.split(from).length!==2)throw new Error('OpenClaw 压缩保护结构已变化，未覆盖：'+from.slice(0,100));
   return text.replace(from,to);
 }
+const CURRENT_MARKER='/* pinkie-compaction-boundary-recovery:v3 */';
+const currentCollect=`function collectSessionBranchMessages(sessionManager) {
+	const getBranch = sessionManager?.getBranch;
+	if (typeof getBranch !== "function") return [];
+	let entries;
+	try {
+		entries = getBranch.call(sessionManager);
+	} catch {
+		return [];
+	}
+	if (!Array.isArray(entries)) return [];
+	return entries.map((entry) => entry && typeof entry === "object" ? sessionBranchEntryToMessage(entry) : void 0).filter((message) => Boolean(message));
+}`;
+const currentResolver=`function estimateRecoveryEntryPressure(entry) {
+	try {
+		return Math.max(1, JSON.stringify(entry?.message ?? entry ?? "").length);
+	} catch {
+		return 4096;
+	}
+}
+function resolveRecoveryFirstKeptEntryId(sessionManager, fallbackId, options = {}) {
+	const getBranch = sessionManager?.getBranch;
+	if (typeof getBranch !== "function") return fallbackId;
+	let entries;
+	try {
+		entries = getBranch.call(sessionManager);
+	} catch {
+		return fallbackId;
+	}
+	if (!Array.isArray(entries) || entries.length === 0) return fallbackId;
+	const keepTurns = Math.max(1, Number.isFinite(options.recentTurnsPreserve) ? Math.floor(options.recentTurnsPreserve) : 3);
+	const contextWindowTokens = Math.max(1, Number.isFinite(options.contextWindowTokens) ? Math.floor(options.contextWindowTokens) : 2e5);
+	const configuredKeepTokens = Number.isFinite(options.keepRecentTokens) && options.keepRecentTokens > 0 ? Math.floor(options.keepRecentTokens) : contextWindowTokens;
+	// The normal token boundary runs first. Only when it leaves no real
+	// conversation does this path bound the raw suffix: by the requested tail
+	// and by half the model window, using JSON characters as a deliberately
+	// conservative proxy so image/tool payloads cannot refill the context.
+	const maxTailChars = Math.max(4096, Math.min(Math.floor(contextWindowTokens * .5), Math.floor(configuredKeepTokens * 2)));
+	let pressure = 0;
+	let keptUserTurns = 0;
+	let oldestTailId;
+	let oldestUserBoundaryId;
+	for (let index = entries.length - 1; index >= 0; index -= 1) {
+		const entry = entries[index];
+		if (entry?.type !== "message" || typeof entry.id !== "string" || !entry.id) continue;
+		const isUser = entry.message?.role === "user";
+		if (isUser && keptUserTurns >= keepTurns) break;
+		const nextPressure = pressure + estimateRecoveryEntryPressure(entry);
+		if (nextPressure > maxTailChars && oldestTailId) break;
+		pressure = nextPressure;
+		oldestTailId = entry.id;
+		if (isUser) {
+			keptUserTurns += 1;
+			oldestUserBoundaryId = entry.id;
+		}
+	}
+	return oldestUserBoundaryId ?? oldestTailId ?? fallbackId;
+}`;
+
+/**
+ * OpenClaw 2026.10 keeps the safeguard in dist/builtin-openclaw-*.mjs and
+ * rewrote the recovery path: it summarizes the boundary-scoped preparation
+ * range and only falls back to a structured empty summary. Both of those keep
+ * `preparation.firstKeptEntryId`, which is exactly the stale boundary this
+ * patch repairs. Earlier releases are handled by transform() above.
+ */
+export function transformCurrent(original){
+  if(original.includes(CURRENT_MARKER))return original;
+  const hook='\t\tconst { preparation, customInstructions: eventInstructions, signal, thinkingLevel, streamFn } = event;\n';
+  if(original.split(hook).length!==2)return null;
+  let text=original.replace(hook,
+    hook+'\t\tconst pinkieBoundaryRuntime = getCompactionSafeguardRuntime(ctx.sessionManager);\n'
+    + '\t\tconst pinkieRecoveryBoundary = () => resolveRecoveryFirstKeptEntryId(ctx.sessionManager, preparation.firstKeptEntryId, { recentTurnsPreserve: resolveRecentTurnsPreserve(pinkieBoundaryRuntime?.recentTurnsPreserve), contextWindowTokens: pinkieBoundaryRuntime?.contextWindowTokens, keepRecentTokens: preparation.settings?.keepRecentTokens });\n');
+  const empty='\t\tif (!hasRealConversation) {\n';
+  if(text.split(empty).length!==2)return null;
+  text=text.replace(empty,
+    empty+'\t\t\tconst pinkieFirstKeptEntryId = pinkieRecoveryBoundary();\n');
+  const emptyBoundary='\t\t\t\tfirstKeptEntryId: preparation.firstKeptEntryId,\n\t\t\t\ttokensBefore: preparation.tokensBefore\n\t\t\t} };\n';
+  if(text.split(emptyBoundary).length!==2)return null;
+  text=text.replace(emptyBoundary,
+    '\t\t\t\tfirstKeptEntryId: pinkieFirstKeptEntryId,\n\t\t\t\ttokensBefore: preparation.tokensBefore\n\t\t\t} };\n');
+  const resultBoundary='\t\tconst compactionResult = (summary) => ({ compaction: {\n\t\t\tsummary,\n\t\t\tfirstKeptEntryId: preparation.firstKeptEntryId,\n';
+  if(text.split(resultBoundary).length!==2)return null;
+  text=text.replace(resultBoundary,
+    '\t\tconst pinkieResultBoundary = resolveRecoveryFirstKeptEntryId(ctx.sessionManager, preparation.firstKeptEntryId, { recentTurnsPreserve, contextWindowTokens: pinkieBoundaryRuntime?.contextWindowTokens, keepRecentTokens: preparation.settings?.keepRecentTokens });\n'
+    + '\t\tconst compactionResult = (summary) => ({ compaction: {\n\t\t\tsummary,\n\t\t\tfirstKeptEntryId: pinkieResultBoundary,\n');
+  // Helper functions go right before the extension factory; they are hoisted.
+  const factory='function compactionSafeguardExtension(api) {';
+  const at=text.indexOf(factory);
+  if(at<0)return null;
+  text=text.slice(0,at)+currentCollect+'\n'+currentResolver+'\n'+text.slice(at);
+  return CURRENT_MARKER+'\n'+text;
+}
+
 
 export function transform(original){
-  if(original.includes(marker))return original;
+  if(original.includes(marker)||original.includes(CURRENT_MARKER))return original;
+  const current=transformCurrent(original);
+  if(current)return current;
   if(original.includes(legacyMarker)){
     let text=replaceOnce(original,legacyMarker,marker);
     text=replaceOnce(text,legacyResolver,resolver);
@@ -139,9 +235,13 @@ export function transform(original){
 
 export function apply(root,{backupRoot}={}){
   const dist=path.join(root,'dist');
-  const names=fs.readdirSync(dist).filter(name=>name.startsWith('attempt.model-diagnostic-events-')&&name.endsWith('.js')).filter(name=>{
+  // 2026.7: attempt.model-diagnostic-events-*.js
+  // 2026.10: the safeguard lives in builtin-openclaw-*.mjs
+  const names=fs.readdirSync(dist).filter(name=>/^attempt\.model-diagnostic-events-.*\.js$/.test(name)||/^builtin-openclaw-.*\.mjs$/.test(name)).filter(name=>{
     const source=fs.readFileSync(path.join(dist,name),'utf8');
-    return source.includes(marker)||source.includes(legacyMarker)||source.includes('Compaction safeguard: using session branch messages after compaction preparation omitted real conversation content.');
+    return source.includes(marker)||source.includes(CURRENT_MARKER)||source.includes(legacyMarker)
+      ||source.includes('Compaction safeguard: using session branch messages after compaction preparation omitted real conversation content.')
+      ||source.includes('Compaction safeguard: no real conversation messages to summarize; writing compaction boundary to suppress re-trigger loop.');
   });
   if(names.length!==1)throw new Error('OpenClaw 压缩保护模块无法唯一确认');
   const file=path.join(dist,names[0]);
