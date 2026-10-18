@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>C.le. effects harness</title>
+<style>
+  :root { --cle-ink:#15161A; --cle-ink-2:#5C5A57; --cle-ink-3:#9A958B; --cle-paper:#F4EFE4;
+          --cle-gold:#A9842F; --cle-gaze:#2A63E8; --cle-serif: ui-serif, serif; --cle-mono: ui-monospace, monospace;
+          --cle-ease: cubic-bezier(.2,.7,0,1); --cle-line: rgba(20,18,15,.1); --cle-surface:#FBF8F1; }
+  body { margin:0; font-family: system-ui; background: var(--cle-paper); }
+  .chat-pane-cache__pane { container: cle-pane / inline-size; width: 700px; padding: 20px; display:flex; flex-direction:column; }
+  .chat-thread-inner { display:flex; flex-direction:column; gap:8px; }
+  .chat-group { border-bottom: 1px dashed var(--cle-line); padding: 6px 0; }
+  .chat-working-indicator { min-height: 28px; display:inline-flex; align-items:center; }
+  .mono { font: 12px/1.5 var(--cle-mono); color:#666; }
+</style>
+<link rel="stylesheet" href="/effects.css">
+</head>
+<script>document.documentElement.dataset.cle = "0.1.0";</script>
+<body>
+<div class="chat-pane-cache__pane chat-pane-cache__pane--visible chat-pane-cache__pane--active"
+     data-mcp-app-owner-key='["owner","agent:main:main"]'>
+  <div class="chat-thread-inner">
+    <div class="chat-group user" data-chat-row-key="u1"><div class="chat-group-messages">先看看这份文件</div></div>
+    <div class="chat-group assistant" data-chat-row-key="a1"><div class="chat-group-messages">好，我读一下。</div></div>
+  </div>
+  <div class="chat-footer"><div id="slot"></div></div>
+</div>
+<pre id="log" class="mono"></pre>
+<script type="module">
+const log = (...a) => { document.getElementById('log').textContent += a.join(' ') + '\n'; };
+window.__log = log;
+
+// Track real WebGL context creation, so the harness can prove the pool stays bounded.
+const orig = HTMLCanvasElement.prototype.getContext;
+let glCreated = 0;
+const liveGl = new Set();
+window.__glCount = () => liveGl.size;
+window.__glCreated = () => glCreated;
+HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+  const ctx = orig.call(this, type, ...rest);
+  if (String(type).startsWith('webgl') && ctx) {
+    glCreated += 1;
+    liveGl.add(ctx);
+    const lose = ctx.getExtension('WEBGL_lose_context');
+    if (lose) {
+      const origLose = lose.loseContext.bind(lose);
+      lose.loseContext = () => { liveGl.delete(ctx); origLose(); };
+    }
+    // a context the browser drops on its own also stops counting
+    this.addEventListener('webglcontextlost', () => liveGl.delete(ctx), {once: true});
+  }
+  return ctx;
+};
+
+const pane = document.querySelector('.chat-pane-cache__pane');
+const slot = document.getElementById('slot');
+const {mountStatus} = await import('/status.js');
+const {applyEvent, newRun} = await import('/model.js');
+
+// A fake host with the two event streams the real plugin API exposes.
+const listeners = new Map();
+const host = {
+  onEvent(name, fn) { (listeners.get(name) || listeners.set(name, []).get(name)).push(fn); return () => {}; },
+  sessions: {selectedKey: 'agent:main:main'},
+};
+const emit = (name, payload) => (listeners.get(name) || []).forEach((fn) => fn(payload));
+
+const ctrl = new AbortController();
+mountStatus(host, ctrl.signal);
+
+// simulate a real run: start → read a file → exec → end
+pane.insertAdjacentHTML('beforeend', '<div class="chat-working-indicator"><span class="native">working…</span></div>');
+emit('agent', {sessionKey: 'agent:main:main', stream: 'lifecycle', data: {phase: 'start', startedAt: Date.now()}});
+await new Promise((r) => setTimeout(r, 300));
+emit('agent', {sessionKey: 'agent:main:main', stream: 'tool', data: {phase: 'start', name: 'read', toolCallId: 'a', args: {path: '/Users/Admin/TOOLS.md'}}});
+await new Promise((r) => setTimeout(r, 400));
+emit('agent', {sessionKey: 'agent:main:main', stream: 'tool', data: {phase: 'result', name: 'read', toolCallId: 'a'}});
+emit('agent', {sessionKey: 'agent:main:main', stream: 'tool', data: {phase: 'start', name: 'exec', toolCallId: 'b', args: {command: 'npm test -- --watch=false'}}});
+await new Promise((r) => setTimeout(r, 900));
+
+const live = document.querySelector('.chat-working-indicator .cle-status');
+log('LIVE_LINE', live ? 'present' : 'MISSING');
+log('VERB', live?.querySelector('.cle-status__verb')?.textContent || '-');
+log('CHIP', live?.querySelector('.cle-status__chip')?.textContent || '-');
+log('ANCHOR', live?.dataset.anchor || '-');
+log('NATIVE_HIDDEN', getComputedStyle(document.querySelector('.chat-working-indicator .native')).display);
+log('GL_AFTER_RUN', window.__glCount());
+
+// the run ends: indicator removed, turn re-rendered a beat later
+emit('agent', {sessionKey: 'agent:main:main', stream: 'lifecycle', data: {phase: 'end'}});
+document.querySelector('.chat-working-indicator')?.remove();
+await new Promise((r) => setTimeout(r, 200));
+log('GLYPHS_WHILE_GAP', document.querySelectorAll('.cle-status').length);
+pane.querySelector('.chat-thread-inner').insertAdjacentHTML('beforeend',
+  '<div class="chat-group assistant" data-chat-row-key="a2"><div class="chat-group-messages">读完了。</div><div class="chat-turn-recap"><span>完成</span></div></div>');
+await new Promise((r) => setTimeout(r, 700));
+for (let i = 0; i < 20 && !document.querySelector('.chat-turn-recap .cle-status'); i++) await new Promise((r) => setTimeout(r, 100));
+const done = document.querySelector('.chat-turn-recap .cle-status');
+log('DONE_LINE', done ? 'present' : 'MISSING');
+log('DONE_KIND', done?.dataset.kind || '-');
+log('DONE_VERB', done?.querySelector('.cle-status__verb')?.textContent || '-');
+log('GL_END', window.__glCount());
+
+// a second pane must get its own run and its own (reused-or-new) context, never more than 2
+const pane2 = pane.cloneNode(false);
+pane2.dataset.mcpAppOwnerKey = '["owner","agent:project:main"]';
+pane2.removeAttribute('data-cle-focus-run');
+pane2.innerHTML = '<div class="chat-thread-inner"></div><div class="chat-working-indicator"><span class="native">working…</span></div>';
+document.body.append(pane2);
+await new Promise((r) => setTimeout(r, 1400));
+log('TWO_PANES_LINES', document.querySelectorAll('.cle-status').length);
+log('GL_TWO_PANES', window.__glCount());
+log('DONE_MARKER');
+</script>
+</body>
+</html>
