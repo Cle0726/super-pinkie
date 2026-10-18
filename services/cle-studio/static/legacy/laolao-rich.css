@@ -8,7 +8,7 @@ html:not(#p1):not(#p2):not(#p3) {
   --pk-good: #16956f; --pk-shadow: 0 1px 2px rgba(42, 34, 51, .04), 0 8px 24px -16px rgba(42, 34, 51, .18);
 }
 html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) {
-  --pk-fg: #ece3e8; --pk-mute: rgba(236, 223, 230, .56); --pk-faint: rgba(236, 223, 230, .1);
+  --pk-fg: #ece3e8; --pk-mute: var(--cle-ink-2); --pk-faint: var(--cle-ink-2);
   --pk-panel: rgba(255, 255, 255, .035); --pk-chip: rgba(255, 255, 255, .05); --pk-hover: rgba(142, 192, 255, .08);
   --pk-accent: #8ec0ff; --pk-accent-ink: #a9d0ff; --pk-on: rgba(142, 192, 255, .14); --pk-on-line: rgba(142, 192, 255, .45);
   --pk-good: #6fdcb5; --pk-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px -18px rgba(0, 0, 0, .6);
