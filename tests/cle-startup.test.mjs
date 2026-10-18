@@ -13,7 +13,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import {applyLayer, revert, refuseReason, styleAllowed, readJsonLiteral, injectLayer, replaceIcons} from '../services/cle-studio/scripts/apply-startup.mjs';
+import crypto from 'node:crypto';
+import zlib from 'node:zlib';
+import {applyLayer, revert, refuseReason, styleAllowed, readJsonLiteral, injectLayer, replaceIcons, assertWritableTarget, refreshTwins} from '../services/cle-studio/scripts/apply-startup.mjs';
 
 const CSS = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup.css'), 'utf8');
 
@@ -63,31 +65,85 @@ const TAIL = `    <script data-cfasync="false" type="module" crossorigin src="./
 const BUILD_ID = '2026.10.4-release-383c124cc32f-2026-10-15T17-18-22.749Z';
 const CSP = "default-src 'self'; script-src 'self' 'sha256-g30CWRMlZumMHvjOkMce6NnzY9k1/zZU+9vzyMq8ETQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:";
 
-function makeRoot({html = HEAD(BUILD_ID) + TAIL, csp = CSP, buildId = BUILD_ID, sw = true} = {}) {
+function sha256(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+/** The gateway's own derivation: rows are localeCompare-sorted, then hashed with NUL separators. */
+function generationOf(assets) {
+  const sorted = [...assets].sort((a, b) => a.path.localeCompare(b.path));
+  return crypto.createHash('sha256').update(sorted.map((row) => `${row.path}\0${row.size}\0${row.sha256}\n`).join('')).digest('hex');
+}
+
+/**
+ * A fixture shaped like the shipped package: index.html with a real precompressed pair, a
+ * manifest whose sha256/size/generation rows describe those exact bytes, and sw.js.
+ */
+function makeRoot({html = HEAD(BUILD_ID) + TAIL, csp = CSP, buildId = BUILD_ID, sw = true, twins = true, manifest = false} = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-startup-'));
   const root = path.join(dir, 'control-ui');
   const dist = path.dirname(root);
   fs.mkdirSync(root, {recursive: true});
   fs.writeFileSync(path.join(root, 'index.html'), html);
-  fs.writeFileSync(path.join(root, 'asset-manifest.json'), JSON.stringify({generation: 'g', assets: []}));
+  if (twins) {
+    fs.writeFileSync(path.join(root, 'index.html.br'), zlib.brotliCompressSync(Buffer.from(html)));
+    fs.writeFileSync(path.join(root, 'index.html.gz'), zlib.gzipSync(Buffer.from(html)));
+  }
+  // the packaged lobster icons the app rewrites its <link> hrefs to
+  fs.writeFileSync(path.join(root, 'favicon-32.png'), Buffer.from('lobster'));
+  fs.writeFileSync(path.join(root, 'apple-touch-icon.png'), Buffer.from('lobster'));
+  fs.writeFileSync(path.join(root, 'favicon.svg'), '<svg viewBox="0 0 120 120"><!-- lobster --></svg>');
+  if (sw) {
+    const boot = {html: html.replace(/^<!doctype html>\n/, ''), assets: [], csp, publicAssetVersion: 'v1', publicAssets: [], id: 'abc123'};
+    fs.writeFileSync(path.join(root, 'sw.js'),
+      `const CACHE_PREFIX = "openclaw-control-";\nconst OFFLINE_BOOT = ${JSON.stringify(boot)};\nconst CACHE_NAME = \`x\`;\n`);
+  }
+  // The manifest rows have to describe the bytes that are on disk *now*, which is why it is
+  // written after the icons and the worker exist.
+  // The real manifest only lists `assets/**` (the gateway rejects any other path), so the
+  // fixture must too — including one asset the patch itself rewrites, to prove rows follow bytes.
+  const rows = [];
+  if (manifest) {
+    fs.mkdirSync(path.join(root, 'assets'), {recursive: true});
+    const asset = path.join(root, 'assets', 'index-test.js');
+    fs.writeFileSync(asset, html);
+    for (const file of [asset]) {
+      const bytes = fs.readFileSync(file);
+      rows.push({path: path.relative(root, file).split(path.sep).join('/'), sha256: sha256(bytes), size: bytes.length});
+    }
+  }
+  fs.writeFileSync(path.join(root, 'asset-manifest.json'), JSON.stringify({version: 1, generation: generationOf(rows), assets: rows}));
   fs.writeFileSync(path.join(root, 'manifest.webmanifest'), JSON.stringify({
     name: 'OpenClaw Control', short_name: 'OpenClaw', theme_color: '#0a0a0a', background_color: '#0a0a0a',
     icons: [{src: './favicon.svg', sizes: 'any', type: 'image/svg+xml'},
       {src: './favicon-32.png', sizes: '32x32', type: 'image/png'},
       {src: './apple-touch-icon.png', sizes: '180x180', type: 'image/png'}],
   }, null, 2));
-  if (sw) {
-    const boot = {html: html.replace(/^<!doctype html>\n/, ''), assets: [], csp, publicAssetVersion: 'v1', publicAssets: [], id: 'abc123'};
-    fs.writeFileSync(path.join(root, 'sw.js'),
-      `const CACHE_PREFIX = "openclaw-control-";\nconst OFFLINE_BOOT = ${JSON.stringify(boot)};\nconst CACHE_NAME = \`x\`;\n`);
-  }
-  // the packaged lobster icons the app rewrites its <link> hrefs to
-  fs.writeFileSync(path.join(root, 'favicon-32.png'), Buffer.from('lobster'));
-  fs.writeFileSync(path.join(root, 'apple-touch-icon.png'), Buffer.from('lobster'));
-  fs.writeFileSync(path.join(root, 'favicon.svg'), '<svg viewBox="0 0 120 120"><!-- lobster --></svg>');
   // the CSP source chunk the fallback reader looks for
   fs.writeFileSync(path.join(dist, 'control-ui-TestChunk.mjs'), `function buildControlUiCspHeader(){} function t(){ return [\n\t\t"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",\n].join("; "); }\n`);
   return {dir, root, buildId};
+}
+
+/** Everything the patch can touch, for byte-exact restore assertions. */
+function snapshot(root, names) {
+  const out = {};
+  for (const name of names) {
+    const file = path.join(root, name);
+    out[name] = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  }
+  return out;
+}
+
+function assertSnapshot(root, before, label) {
+  for (const [name, bytes] of Object.entries(before)) {
+    const file = path.join(root, name);
+    if (bytes === null) {
+      assert.equal(fs.existsSync(file), false, `${label}: ${name} should not exist`);
+      continue;
+    }
+    assert.ok(fs.existsSync(file), `${label}: ${name} should exist`);
+    assert.ok(fs.readFileSync(file).equals(bytes), `${label}: ${name} must be byte-identical`);
+  }
 }
 
 function readBootSw(root) {
@@ -110,6 +166,33 @@ test('first paint is C.le.: title, icons and window colour travel in the served 
   assert.match(html, /content="#0A0D16"/);
   assert.equal((html.match(/rel="icon"/gu) || []).length, 2, 'both icon links kept');
   assert.match(html, /type="image\/png"/, 'declared type matches the supplied PNG');
+});
+
+test('each icon href carries a content token, so no browser serves the cached lobster', () => {
+  // The gateway rewrites a bare `href="./favicon-32.png"` to `?v=<build-id>` and serves it
+  // immutable for a year. A token makes the first request a different URL entirely.
+  const {root} = makeRoot();
+  applyLayer(root);
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const token = /href="\.\/favicon-32\.png\?cle=([a-f0-9]{12})"/u.exec(html)?.[1];
+  assert.ok(token, 'favicon-32.png carries a token');
+  for (const name of ['favicon.svg', 'apple-touch-icon.png']) {
+    assert.match(html, new RegExp(`href="\\./${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\?cle=${token}"`, 'u'), `${name} shares the token`);
+  }
+  // the build id is untouched: the gateway parses it as <base>-<64 hex> and would call this a
+  // stale asset tree otherwise, rebuilding the UI
+  assert.match(html, /data-openclaw-control-ui-build-id="2026\.10\.4-release-383c124cc32f-2026-10-15T17-18-22\.749Z"/);
+  assert.doesNotMatch(html, /data-openclaw-control-ui-build-id="[^"]*cle=/u);
+  // the token is derived from the donor bytes, so it moves when the art moves
+  assert.match(token, /^[a-f0-9]{12}$/u);
+});
+
+test('the token is stable across runs, so re-entry does not churn the document', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const once = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  applyLayer(root);
+  assert.equal(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), once);
 });
 
 test('the layer sits last in <head>, so it beats the core stylesheet in the cascade', () => {
@@ -205,15 +288,143 @@ test('the installed window drops the upstream name and colours', () => {
   }
 });
 
-test('revert restores the original bytes for every touched file', () => {
-  const {root} = makeRoot();
-  const before = Object.fromEntries(['index.html', 'sw.js', 'manifest.webmanifest']
-    .map((name) => [name, fs.readFileSync(path.join(root, name), 'utf8')]));
+const TOUCHED = ['index.html', 'index.html.br', 'index.html.gz', 'sw.js', 'manifest.webmanifest',
+  'asset-manifest.json', 'favicon-32.png', 'apple-touch-icon.png', 'favicon.svg'];
+
+test('revert restores every touched file byte for byte, including twins and the manifest', () => {
+  // The earlier version of this test only kept plain text files in the fixture, so it could not
+  // have caught a twin or manifest row that never got backed up. This one ships a real
+  // precompressed pair and a real sha256/size/generation manifest.
+  const {root} = makeRoot({manifest: true});
+  const before = snapshot(root, TOUCHED);
+  assert.ok(before['index.html.br'] && before['index.html.gz'], 'fixture ships twins');
+  assert.ok(JSON.parse(before['asset-manifest.json'].toString()).assets.length > 0, 'fixture ships manifest rows');
+
   applyLayer(root);
+  // the patch really did move the twins …
+  assert.ok(!fs.readFileSync(path.join(root, 'index.html.br')).equals(before['index.html.br']));
+  assert.ok(!fs.readFileSync(path.join(root, 'index.html.gz')).equals(before['index.html.gz']));
+  // … and left the manifest alone, because root documents are not manifest assets. Anything else
+  // would produce a row the gateway's parser rejects.
+  assert.ok(fs.readFileSync(path.join(root, 'asset-manifest.json')).equals(before['asset-manifest.json']));
+
   revert(root);
-  for (const [name, text] of Object.entries(before)) {
-    assert.equal(fs.readFileSync(path.join(root, name), 'utf8'), text, name);
+  assertSnapshot(root, before, 'revert');
+});
+
+test('the backup covers the compressed twins, so revert can regenerate them exactly', () => {
+  const {root} = makeRoot({manifest: true});
+  applyLayer(root);
+  const backupDir = path.join(root, '.pinkie-startup-backup');
+  const ledger = JSON.parse(fs.readFileSync(path.join(backupDir, 'ledger.json'), 'utf8'));
+  for (const key of ['index.html', 'index.html.br', 'index.html.gz', 'favicon-32.png', 'apple-touch-icon.png', 'favicon.svg']) {
+    assert.ok(ledger.files[key], `${key} is in the ledger`);
+    assert.equal(ledger.files[key].existed, true);
+    assert.ok(fs.existsSync(path.join(backupDir, `${key.replaceAll('/', '__')}.orig`)), `${key} has a backup`);
   }
+  // The manifest is not a touched file here: nothing it tracks changed.
+  assert.equal(ledger.files['asset-manifest.json'], undefined, 'manifest untouched when no asset row moves');
+});
+
+test('twin files refresh to match the patched document, not the pre-patch one', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const index = fs.readFileSync(path.join(root, 'index.html'));
+  assert.ok(zlib.brotliDecompressSync(fs.readFileSync(path.join(root, 'index.html.br'))).equals(index));
+  assert.ok(zlib.gunzipSync(fs.readFileSync(path.join(root, 'index.html.gz'))).equals(index));
+});
+
+test('manifest rows and generation follow the new bytes', () => {
+  const {root} = makeRoot({manifest: true});
+  // A file the manifest tracks, which the patch rewrites through refreshTwins.
+  const asset = path.join(root, 'assets', 'index-test.js');
+  const before = JSON.parse(fs.readFileSync(path.join(root, 'asset-manifest.json'), 'utf8'));
+  assert.equal(generationOf(before.assets), before.generation, 'fixture generation is derivable');
+
+  fs.writeFileSync(asset, 'changed bytes');
+  refreshTwins(root, asset);
+
+  const after = JSON.parse(fs.readFileSync(path.join(root, 'asset-manifest.json'), 'utf8'));
+  const row = after.assets.find((entry) => entry.path === 'assets/index-test.js');
+  const bytes = fs.readFileSync(asset);
+  assert.equal(row.size, bytes.length, 'size follows the bytes');
+  assert.equal(row.sha256, sha256(bytes), 'sha256 follows the bytes');
+  assert.equal(after.generation, generationOf(after.assets), 'generation is re-derived, not left stale');
+});
+
+test('the manifest is never given rows the gateway would reject', () => {
+  // `parseControlUiAssetManifest` only accepts paths under assets/ and rows with exactly
+  // {path, sha256, size}. Writing a row for index.html or an icon would make the whole manifest
+  // unparseable — worse than leaving it stale.
+  const {root} = makeRoot({manifest: true});
+  applyLayer(root);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'asset-manifest.json'), 'utf8'));
+  assert.deepEqual(Object.keys(manifest).sort(), ['assets', 'generation', 'version']);
+  for (const row of manifest.assets) {
+    assert.deepEqual(Object.keys(row).sort(), ['path', 'sha256', 'size'], 'exact key set');
+    assert.ok(row.path.startsWith('assets/'), `${row.path} stays under assets/`);
+    assert.match(row.sha256, /^[a-f0-9]{64}$/u);
+    assert.ok(Number.isSafeInteger(row.size));
+  }
+  assert.match(manifest.generation, /^[a-f0-9]{64}$/u);
+});
+
+test('an icon-only change counts as a change, and still refreshes any twin it has', () => {
+  // The reported gap: index/sw/manifest were already correct, only the icon bytes differed, so
+  // `changed` came back false and the run looked like a no-op.
+  const {root} = makeRoot({manifest: true});
+  applyLayer(root);
+
+  const lobster = Buffer.from('lobster');
+  fs.writeFileSync(path.join(root, 'favicon-32.png'), lobster);
+  // give the icon a precompressed twin, which is what a packaged runtime may ship
+  fs.writeFileSync(path.join(root, 'favicon-32.png.br'), zlib.brotliCompressSync(lobster));
+
+  const result = applyLayer(root);
+  assert.equal(result.changed, true, 'an icon-only update is still a change');
+  assert.deepEqual(result.icons, ['favicon-32.png']);
+  assert.equal(result.index, 'unchanged');
+  assert.equal(result.offlineShell, 'unchanged');
+
+  // the twin followed the new bytes instead of keeping the lobster
+  const donor = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup/icon-32.png'));
+  assert.ok(zlib.brotliDecompressSync(fs.readFileSync(path.join(root, 'favicon-32.png.br'))).equals(donor));
+  // and it is backed up, so revert can put the lobster twin back
+  const ledger = JSON.parse(fs.readFileSync(path.join(root, '.pinkie-startup-backup', 'ledger.json'), 'utf8'));
+  assert.ok(ledger.files['favicon-32.png.br'], 'icon twin is in the ledger');
+  revert(root);
+  assert.ok(zlib.brotliDecompressSync(fs.readFileSync(path.join(root, 'favicon-32.png.br'))).equals(lobster));
+});
+
+test('a plain re-run reports no change at all', () => {
+  const {root} = makeRoot({manifest: true});
+  applyLayer(root);
+  const again = applyLayer(root);
+  assert.equal(again.changed, false);
+  assert.deepEqual(again.icons, []);
+  assert.equal(again.index, 'unchanged');
+  assert.equal(again.offlineShell, 'unchanged');
+  assert.equal(again.manifest, 'unchanged');
+});
+
+test('a backup left by an earlier run is never overwritten by a later one', () => {
+  // A runtime that was patched before this ledger existed already holds `.orig` files with the
+  // pristine bytes and no ledger entry. Re-running must keep them: overwriting would replace the
+  // original with an already-patched copy and turn revert into a silent no-op.
+  const {root} = makeRoot();
+  const pristine = fs.readFileSync(path.join(root, 'favicon-32.png'));
+  const backupDir = path.join(root, '.pinkie-startup-backup');
+  fs.mkdirSync(backupDir, {recursive: true});
+  fs.writeFileSync(path.join(backupDir, 'favicon-32.png.orig'), pristine);
+  // simulate a tree that was already patched: the live bytes are the donor, not the lobster
+  const donor = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup/icon-32.png'));
+  fs.writeFileSync(path.join(root, 'favicon-32.png'), donor);
+
+  applyLayer(root);
+  // the stale-but-pristine backup survived the run
+  assert.ok(fs.readFileSync(path.join(backupDir, 'favicon-32.png.orig')).equals(pristine));
+  revert(root);
+  assert.ok(fs.readFileSync(path.join(root, 'favicon-32.png')).equals(pristine), 'revert reaches the real original');
 });
 
 test('a build the patch does not understand is refused, not silently half-applied', () => {
@@ -233,6 +444,57 @@ test('the signed App and the live profile are refused by path', () => {
   assert.match(refuseReason('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui'), /SuperPinkie|\.app/);
   assert.match(refuseReason(path.join(os.homedir(), '.openclaw', 'dist', 'control-ui')), /live/);
   assert.equal(refuseReason('/tmp/cle-stage/control-ui'), null);
+});
+
+test('a relative path is refused instead of being silently resolved', () => {
+  // path.resolve() would have turned both of these into absolute paths and let them through,
+  // which made the old isAbsolute check unreachable.
+  assert.match(refuseReason('dist/control-ui'), /must be absolute/);
+  assert.match(refuseReason('./control-ui'), /must be absolute/);
+  assert.match(refuseReason('../control-ui'), /must be absolute/);
+  assert.match(refuseReason(''), /required/);
+  assert.match(refuseReason(undefined), /required/);
+});
+
+test('a symlink pointing at a protected tree is refused', () => {
+  // The protected root here is a scratch directory, not the real live profile: the boundary
+  // logic is what is under test, and nothing is written near ~/.openclaw.
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-boundary-'));
+  const protectedRoot = path.join(scratch, 'live-profile');
+  fs.mkdirSync(protectedRoot, {recursive: true});
+  fs.writeFileSync(path.join(protectedRoot, 'index.html'), 'live');
+  const link = path.join(scratch, 'innocent');
+  fs.symlinkSync(protectedRoot, link, 'dir');
+
+  assert.equal(refuseReason(protectedRoot, {extraProtected: [protectedRoot]}), `refusing the protected path ${protectedRoot}`);
+  // the symlink is absolute and its literal path is clean, so only the real-path check catches it
+  assert.match(refuseReason(link, {extraProtected: [protectedRoot]}), /refusing the protected path/);
+});
+
+test('a file symlink inside the root is refused instead of followed', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-filelink-'));
+  const root = path.join(scratch, 'control-ui');
+  const outside = path.join(scratch, 'outside');
+  fs.mkdirSync(root, {recursive: true});
+  fs.mkdirSync(outside, {recursive: true});
+  fs.writeFileSync(path.join(outside, 'index.html'), 'outside');
+  fs.symlinkSync(path.join(outside, 'index.html'), path.join(root, 'index.html'));
+
+  assert.throws(() => assertWritableTarget(root, path.join(root, 'index.html')), /symlink/);
+  assert.equal(fs.readFileSync(path.join(outside, 'index.html'), 'utf8'), 'outside', 'target untouched');
+});
+
+test('writes outside the root are refused even without symlinks', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-escape-'));
+  const root = path.join(scratch, 'control-ui');
+  fs.mkdirSync(root, {recursive: true});
+  assert.throws(() => assertWritableTarget(root, path.join(scratch, 'elsewhere.txt')), /outside/);
+  // and a root reached through a symlink still accepts writes inside its real tree
+  const real = path.join(scratch, 'real-ui');
+  fs.mkdirSync(real, {recursive: true});
+  const alias = path.join(scratch, 'alias-ui');
+  fs.symlinkSync(real, alias, 'dir');
+  assert.doesNotThrow(() => assertWritableTarget(alias, path.join(alias, 'file.txt')));
 });
 
 test('startup.css cannot drift into hiding the app or dropping the brand rules', () => {
@@ -264,18 +526,54 @@ test('brand cleanup that outlives the plugin never blanks a node the plugin stil
   assert.match(CSS, /\.agent-chat__welcome-clawd \{ display: none !important; \}/);
 });
 
-test('a failed plugin still ends in a real error, not a permanently blank welcome', () => {
-  // The stock identity is hidden unscoped (a scoped rule would let it return on hot reload),
-  // so the layer must hand it back on the same budget the native fallback uses.
-  const rule = /\.agent-chat__welcome-identity\s*\{([^}]*)\}/u.exec(CSS);
-  assert.ok(rule, 'identity rule present');
-  assert.match(rule[1], /visibility:\s*hidden/);
-  assert.match(rule[1], /animation:\s*cle-brand-return\s+0s\s+linear\s+(\d+)s/u);
-  const delay = Number(/animation:\s*cle-brand-return\s+0s\s+linear\s+(\d+)s/u.exec(rule[1])[1]);
-  assert.ok(delay >= 10 && delay <= 12, `return delay ${delay}s should match the native 12s mount fallback`);
-  assert.match(CSS, /@keyframes cle-brand-return[^}]*\{[^}]*visibility:\s*visible/u);
+test('the welcome identity is always C.le., never blank and never the old wordmark', () => {
+  // Neither hiding the block (blank stands in for an error) nor revealing it later (the old
+  // product returns) is acceptable. It stays in place and is rebranded in CSS instead.
+  assert.doesNotMatch(CSS, /cle-brand-return/u, 'no timeout that brings the old identity back');
+  assert.doesNotMatch(CSS, /\.agent-chat__welcome-identity\s*\{[^}]*visibility:\s*hidden/u);
+
+  // the avatar becomes the supplied portrait and hides whatever the native renderer put in it
+  const avatar = /html:not\(\[data-cle\]\) \.agent-chat__welcome-avatar\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(avatar, 'avatar rule present');
+  assert.match(avatar[1], /background:[^;]*avatar\.webp/u);
+  const avatarChild = /html:not\(\[data-cle\]\) \.agent-chat__welcome-avatar > \*\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(avatarChild, 'native avatar content is neutralised');
+  assert.match(avatarChild[1], /opacity:\s*0/);
+
+  // the name line becomes the wordmark, and the original text is not left visible behind it
+  const name = /html:not\(\[data-cle\]\) \.agent-chat__welcome-identity-copy > h2\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(name, 'identity copy rule present');
+  assert.match(name[1], /font-size:\s*0/);
+  const wordmark = /html:not\(\[data-cle\]\) \.agent-chat__welcome-identity-copy > h2::after\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(wordmark, 'wordmark present');
+  assert.match(wordmark[1], /content:\s*"C\.le\."/);
+
+  // every one of these is scoped, so the real agent name returns with the plugin
+  for (const selector of ['.agent-chat__welcome-avatar', '.agent-chat__welcome-identity-copy > h2']) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const unscoped = new RegExp(`(?:^|\\n)${escaped}\\s*\\{`, 'u');
+    assert.doesNotMatch(CSS, unscoped, `${selector} must not appear unscoped`);
+  }
+
   // the model-setup notice is the only instruction a half-configured install has
-  assert.doesNotMatch(CSS, /welcome--setup\s*>\s*h2[^{]*\{[^}]*visibility:\s*hidden/u);
+  assert.doesNotMatch(CSS, /welcome--setup[^}]*font-size:\s*0/u);
+  // and the failure panel is a separate element, so this never covers a real error
+  assert.doesNotMatch(CSS, /\.mount-fallback(?:__panel)?\s*\{[^}]*display:\s*none/u);
+});
+
+test('the sidebar workspace text mark is branded before the plugin loads, and only then', () => {
+  // The native header falls back to the upstream product name when no display name is known.
+  // Scoping matters: unscoped, the plugin's real agent name would be replaced by the wordmark.
+  const rule = /html:not\(\[data-cle\]\) \.sidebar-agent-card__name-text\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(rule, 'text mark rule present');
+  assert.match(rule[1], /font-size:\s*0/);
+  const wordmark = /html:not\(\[data-cle\]\) \.sidebar-agent-card__name-text::after\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(wordmark, 'text mark wordmark present');
+  assert.match(wordmark[1], /content:\s*"C\.le\."/);
+  // the chevron sits inside the same span and must not be squashed away with the text
+  assert.match(CSS, /sidebar-agent-card__chevron/);
+  // no unscoped rule may flatten the agent name
+  assert.doesNotMatch(CSS, /(?:^|\n)\.sidebar-agent-card__name-text\s*\{/u);
 });
 
 test('declared icon sizes match the files on disk, and the files are real PNGs', () => {
@@ -306,10 +604,10 @@ test('icon bytes are replaced, because the app rewrites the <link> hrefs at boot
   const {root} = makeRoot();
   assert.equal(fs.readFileSync(path.join(root, 'favicon-32.png'), 'latin1'), 'lobster');
   const replaced = replaceIcons(root);
-  assert.deepEqual(replaced.sort(), ['apple-touch-icon.png', 'favicon-32.png', 'favicon.svg']);
+  assert.deepEqual(replaced.replaced.sort(), ['apple-touch-icon.png', 'favicon-32.png', 'favicon.svg']);
   const donor = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup/icon-32.png'));
   assert.ok(fs.readFileSync(path.join(root, 'favicon-32.png')).equals(donor));
-  assert.equal(replaceIcons(root).length, 0, 'idempotent: identical bytes are left alone');
+  assert.equal(replaceIcons(root).replaced.length, 0, 'idempotent: identical bytes are left alone');
   // and a revert puts the original bytes back
   revert(root);
   assert.equal(fs.readFileSync(path.join(root, 'favicon-32.png'), 'latin1'), 'lobster');

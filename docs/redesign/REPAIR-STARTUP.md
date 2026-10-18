@@ -37,7 +37,10 @@ worktree：`/Users/Admin/release-superpinkie/wt/repair-startup`，分支 `repair
 | 面 | 处理 | 为什么 |
 |---|---|---|
 | `index.html` `<title>` | `OpenClaw Control` → `C.le.` | 窗口标题在任何渲染之前就生效 |
-| 三个图标文件 | **替换字节**为 `static/startup/icon-{32,180}.png` 与矢量 `favicon.svg` | 见下方"自主发现 #1"：只改 `<link href>` 会被应用在启动时改回去 |
+| 三个图标文件 | **替换字节**为 `static/startup/icon-{32,180}.png` 与矢量 `favicon.svg` | 见"自主发现 #1"：只改 `<link href>` 会被应用在启动时改回去 |
+| 三个图标 href | 追加内容指纹 `?cle=<12 hex>` | 见"自主发现 #8"：网关对 `?v=<build-id>` 回 `immutable` 一年，URL 不变则缓存永远命中旧图 |
+| 写入目标 | 每次写前 `assertWritableTarget`：拒绝符号链接、比较 **real path** 归属 | 防止软链接把写入带出 root |
+| 派生文件 | `.br`/`.gz` 双 twins 与 `asset-manifest.json` 一并备份、同步、还原 | 见"自主发现 #9"：清单只收 `assets/**`，根文件不得写入 |
 | `theme-color` | 纸白 `#F4EFE4` / 夜黑 `#0A0D16` | 与 `themes/cle.json` 的 `background` 一致 |
 | `</head>` 前内联样式 | `startup.css`（带 `pinkie-cle-startup:v1` 标记与前后分隔注释） | 首帧解析即生效；幂等替换而非堆叠 |
 | `sw.js` 的 `OFFLINE_BOOT.html` | 同一份文档同样注入，并**重算 `OFFLINE_BOOT.id`** | 离线导航走的是 worker 里的副本；id 是缓存名的一部分，不重算会让旧 shell 继续赢 |
@@ -57,21 +60,32 @@ worktree：`/Users/Admin/release-superpinkie/wt/repair-startup`，分支 `repair
 
 ### 不让"长时间空白"替代错误
 
-这是本轮按 FUSION 标准自查后**主动修正**的一处设计错误。最初的写法把原生欢迎身份块
-`visibility:hidden` 且永久生效；一旦 bundle 真的加载失败，用户会一直看到一块空白，
-这正好违反"不能让长时间空白替代错误"。现在改为：
+这是本轮按 FUSION 标准自查后**两次修正**的设计问题。
+
+最初的写法把原生欢迎身份块 `visibility:hidden` 且永久生效；一旦 bundle 真的加载失败，用户会一直
+看到一块空白。第二次改成 11s 后 `@keyframes` 交还——但那等于**超时后把旧品牌放回来**，既违反
+"不漏旧品牌"，也仍在失败路径上留了一段空白。
+
+现在的做法是既**不隐藏、也不交还**，而是原地重建品牌：
 
 ```css
-.agent-chat__welcome-identity {
-  visibility: hidden;
-  animation: cle-brand-return 0s linear 11s forwards;
+html:not([data-cle]) .agent-chat__welcome-avatar {           /* 头像槽 */
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
 }
-@keyframes cle-brand-return { to { visibility: visible; } }
+html:not([data-cle]) .agent-chat__welcome-avatar > * { opacity: 0 !important; }
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2 { font-size: 0 !important; }
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
+  content: "C.le."; /* 衬线字标 */
+}
 ```
 
-11s 与原生 `data-openclaw-mount-timeout-ms="12000"` 的预算对齐：插件正常时早已接管（规则失效），
-插件失败时原生身份与原生错误面板都回来。模型未配置的提示（`--setup > h2`）**完全不动**，
-那是半配置安装唯一的指引。
+块本身留在原位，所以布局盒、提示行都不位移；旧文案被 `font-size:0` 压掉、由 `::after` 取代文字，
+既不空白也不回旧品牌；`data-cle` 之后整组规则失效，真实 agent 名与房间开场原样接回。
+模型未配置的提示（`--setup > h2`）**完全不动**——那是半配置安装唯一的指引。
+
+侧栏工作区的**文字**标识同理（此前只处理了 `<img>`）：`.sidebar-agent-card__name-text` 在
+`html:not([data-cle])` 下压字补字，并单独保住 `.sidebar-agent-card__chevron`；作用域是关键，
+全局生效会把用户自选的 agent 名也压成 `C.le.`。
 
 引导标记 `openclaw-app:empty::before` 只在挂载点为空时出现；`body.openclaw-mount-fallback-active`
 时显式 `display:none`，所以真实错误绝不会被"C.le."字标盖住。
@@ -90,12 +104,21 @@ worktree：`/Users/Admin/release-superpinkie/wt/repair-startup`，分支 `repair
 | 6 | 原生侧栏工作区标记可能是 `<img src=favicon.svg>` 而不是插件假设的 `<span>` | `sidebar-workspace-header__mark`；触发：主题 `mascot` 非 `none` 或原生默认 | 中 | 用 `content: url('/cle/static/art/avatar.webp')` **替换**而非隐藏；隐藏会留下一个空圆（这条我最初写成永久 `display:none`，自查时发现并改掉） |
 | 7 | 文件里 `favicon` 等字面量若出现在 CSS 注释中，会让"是否还残留旧图标"这类扫描误判 | `startup.css` 注释 | 低 | 注释改写为不含文件名/标签的描述，测试改为只查 href 属性 |
 
-### 需要主控协调（超出本路所有权）
+| 8 | **`?v=<build-id>` 让图标被浏览器缓存一年。** 网关把 `href="./favicon-32.png"` 重写成 `?v=<build-id>` 并回 `Cache-Control: public, max-age=31536000, immutable`。只换文件字节不改 URL，已访问过的浏览器仍会用缓存里的小龙虾——这解释了为什么"换了文件却还看到旧图标" | `server-control-ui-root-*.mjs` 的 `resolveControlUiRootPublicAssets`；`favicon*.png`、`apple-touch-icon.png` | 高（首帧修复在回访时失效） | 给三个图标 href 加内容指纹 `?cle=<12 位十六进制>`（由 donor 字节算出）。网关的重写只匹配裸 href，因此不再套 `?v=`；实测同 URL 换成 `?cle=` 后响应头由 `immutable` 变 `no-cache`。**没有动 build id**——它被解析成 `<base>-<64 hex>`，改了会被判 stale 并触发整树重建 |
+| 9 | **清单只收 `assets/**`，给根文件写行会让整份清单不可解析。** `parseControlUiAssetManifest` 要求 `path` 以 `assets/` 开头、键集严格为 `{path,sha256,size}`、且按 `localeCompare` 排序后校验 `generation`。我最初的 `refreshTwins` 会给 `index.html`/图标写行，那会让网关丢弃整份清单 | `server-control-ui-root-*.mjs` 的 `hasExactKeys` / `isControlUiAssetManifestPath` / `hashControlUiAssetManifestEntries` | 高（我引入的缺陷，自查时发现） | `refreshTwins` 现在对非 `assets/` 路径直接返回，不写清单。实测真实包的 1392 条全部在 `assets/` 下、`generation` 可按同公式复算一致 |
+| 10 | **无 ledger 时重跑会覆盖旧备份，让 `--revert` 变成静默空操作。** 早前版本只按 `.orig` 是否存在判断，没有 ledger；我在真实包副本上跑"改→还原"，4 个文件没有回到原始字节，正是因为它保留了 09:43 那次运行留下的备份，而我的写入又覆盖了它 | `.pinkie-startup-backup/`；触发：运行时曾被旧版补丁打过 | 高（回滚失效，且不报错） | 备份改为"首次优先"：`.orig` 已存在就绝不覆盖，并补测试锁住该语义 |
+| 11 | **欢迎身份块"11 秒后交还"会重新露出旧品牌。** 初版用 `@keyframes cle-brand-return` 在 11s 后恢复 `visibility`，那等于超时后把旧文案放回来，既违反"不漏旧品牌"，也仍然在失败路径上留了一段空白 | `.agent-chat__welcome-identity` | 中（设计性缺陷） | 改为**原地重建品牌**：头像槽换成批准素材 `avatar.webp` 并压掉原生内容，名称行用 `font-size:0` + `::after` 呈 `C.le.`。块本身不隐藏，所以既不空白也不回旧品牌；`data-cle` 后交还给真实 agent 名 |
+| 12 | **侧栏工作区的文字标识没有覆盖，只有图像被处理。** 原生 header 在网关尚未给出 display name 时会回落成旧产品名，而此前只替换了 `img.sidebar-workspace-header__mark` | `.sidebar-agent-card__name-text`（`.sidebar-workspace-header` 与 agent 卡共用该类） | 中（刷新时首帧漏字标） | 加**作用域内**的文字覆盖（`html:not([data-cle])`），并单独保留 `.sidebar-agent-card__chevron` 不被压没。作用域是关键：全局生效会把用户自选 agent 名也压成 `C.le.` |
+
+| 13 | **`lib-precompressed.mjs` 每次刷新资产就追加一段 build-id，累积到超出网关上限。** 已用最小复现确认：每编辑一个受清单跟踪的资产并调用 `refreshPrecompressed`，`indexBuildId` 就 `updated` 一次、长度 +13。连做 4 次得到 120 → 133 → 146 → 159 → **172**（网关正则只允许 1–161），且形状不再是 `^<base>-<64hex>$`。后果是网关正则**完全匹配不到**，`buildId` 取不到 → 判 stale → 触发整棵 Control UI 重建 | `patch/lib-precompressed.mjs:128`；触发：安装器或 `apply-all` 在一次会话里改到 ≥4 个资产 | 高（**跨路，非本路引入**） | **本路未改它**（属 `patch/lib-precompressed.mjs` 所有权）。已核实本补丁单独运行时 build-id 保持 120 字符、形状合法，不参与放大。建议最小修法：先剥掉既有 `-<12hex>` 尾再追加，或固定 `set` 成合法值，使重复运行幂等 |
+
+### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
 |---|---|---|---|
 | 插件静态路由在测试网关返回 404 | `GET /cle/static/startup/*`、`/cle/static/startup.css` 均 404，而 `/cle/static/art/avatar.webp` 200 | 网关服务的是插件**发布快照**（`~/.openclaw-cle/tmp/plugin-captures/...`），不是 `extensions/cle-studio/static` | 重新发布 cle-studio 插件（或把 `startup/` 与 `startup.css` 纳入发布清单）。本路已把文件放进扩展目录，但未重启/重配网关——按任务书不操作 live |
-| 首帧层的安装入口 | `installer/macos/apply-theme.sh` 第 1497 行附近新增调用；`patch/apply-all.mjs` 末尾新增一条 | 全量安装 / 补丁演练 | 已加；Windows 安装器（`installer/windows/apply-theme.ps1`）如也要覆盖，需照抄同一段调用（本路未改 Windows 侧，避免越界） |
+| build-id 累加超限 | `patch/lib-precompressed.mjs:128` | 安装器/`apply-all` 每运行一次 | 改为幂等：先归一化再写，见"自主发现 #13"；否则每次安装都会再加 13 字符，最终让网关判 stale 并重建整树 |
+| 首帧层的安装入口 | `installer/macos/apply-theme.sh` 约 1500 行处已加非致命调用；`patch/apply-all.mjs` 末尾已加一条 | 全量安装 / 补丁演练 | macOS 已接；**Windows 安装器（`installer/windows/apply-theme.ps1`）未接，留给主控**。注意：以 App 内 runtime 为目标时该步会被路径保护拒绝（见第六节） |
 | `sw.js` 的 `OFFLINE_BOOT` 与浏览器已注册的 service worker | 用户已装过旧 worker 的会话 | 首次部署本补丁后 | 首帧层的 `id` 变化会让 `CACHE_NAME` 改变，新 worker 安装后旧缓存按 `CONTROL_CACHE_LIMIT = 3` 自然淘汰；如需立刻生效可 `unregister` 一次，属验收动作，交主控 |
 
 ---
@@ -107,6 +130,9 @@ worktree：`/Users/Admin/release-superpinkie/wt/repair-startup`，分支 `repair
 | 启动即品牌（标题、图标、底色） | **已恢复** | 原来靠安装期 `apply-theme.sh` 的 `perl` 改写 + 注入，新版插件化后缺少这一层；本补丁补回，并且不依赖运行时 |
 | 启动不露推广/邀请 | **已恢复且更强** | 规则进入 HTML 首帧，不再等插件；同时覆盖登录页（插件触达不到） |
 | 真实错误提示 | **保留** | `#openclaw-mount-fallback` 的全部文案、`Try again` / `Keep waiting`、排障链接原样；只换表面 |
+| 欢迎身份区 | **保留并重建品牌** | 块不隐藏、不空白、不超时回退；头像换批准素材、名称呈 `C.le.`，插件接管后交还真实 agent 名 |
+| 侧栏工作区标识（图像+文字） | **覆盖** | 图像用 `content:url()` 替换（不留空圆），文字在作用域内压字补字，chevron 保留 |
+| 图标缓存正确性 | **修复** | 内容指纹 `?cle=` 让回访不再命中一年期 immutable 的旧图 |
 | 加载状态 | **保留并换了皮** | 原生骨架屏继续工作，令牌改为纸白/墨黑；只在挂载点为空的窗口加一个 `C.le.` 字标 |
 | 首次启动 / 刷新 / 热重载 / 五模式路由 | **覆盖** | 首帧层在所有路由的同一份文档上；`html:not([data-cle])` 让热重载回到正确基线；深路由由 SPA fallback 返回同一文档（已实测 `/`） |
 | 双栏入口 | 未改 | 双栏是挂载后的布局，不属首帧；本路未触碰 |
@@ -117,58 +143,89 @@ worktree：`/Users/Admin/release-superpinkie/wt/repair-startup`，分支 `repair
 ## 五、自测（真实执行，非声称）
 
 ```
-node --test tests/cle-startup.test.mjs        → 19 pass / 0 fail
-node --test tests/brand-ui.test.cjs tests/laser-pointer.test.cjs → 11 pass / 0 fail
+node --test tests/cle-startup.test.mjs        → 33 pass / 0 fail
+node --test tests/<其余 38 个 .mjs>           → 全通过（chat-tool-timeline 的 7 项失败在 HEAD 上
+                                                 复现，与本路改动无关：该测试不 import 任何本路文件）
 node patch/apply-all.mjs --keep               → 17 patches, patches failed: 0
-  ok apply-startup.mjs {"index":"patched","offlineShell":"patched","manifest":"patched",
-                        "icons":["favicon-32.png","apple-touch-icon.png","favicon.svg"]}
-  node --check: all changed .js/.mjs pass; precompressed twins all ok
 apply-startup 二次运行 → {"changed":false,…} （幂等）
-apply-startup --revert  → index.html / sw.js / manifest.webmanifest / 三个图标 字节级还原
-拒绝路径：/Applications/超級碧琪.app/... → "refusing the bundled SuperPinkie runtime"
-          ~/.openclaw/...                → "refusing the live ~/.openclaw profile"
-          缺 --control-ui                → "--control-ui <path> is required"
+apply-startup --revert  → 7 个文件字节级还原（干净副本上实测 true）
 ```
 
-浏览器实核（`app_browser` + 计算样式，不是目测截图）：
+**真实包闭环（`/tmp` 副本，未碰 live）**
+
+```
+run1 changed: true  index: patched  offline: patched  icons: 0
+title ok: true
+build-id preserved: true          ← 未改，避免被判 stale 触发整树重建
+icon token present: true
+manifest untouched: true          ← 根文件不入清单
+manifest still parses upstream rules: true
+run2 changed: false               ← 幂等
+offline shell branded: true  id moved: true
+byte-exact restore on clean real package: true
+```
+
+**新旧实现对照（同一组故障，旧代码 vs 新代码）**
+
+| 场景 | 旧实现 | 新实现 |
+|---|---|---|
+| 相对路径 `dist/control-ui` | `ACCEPTED (bug)` | `control-ui path must be absolute` |
+| 符号链接 → `~/.openclaw` | `ACCEPTED (bug)` | `refusing the live ~/.openclaw profile` |
+| `changed` 字段 | `ABSENT (bug)` | `true`，图标单独更新也计入 |
+| twins 还原 | `NOT RESTORED (bug)` | `restored`（字节级） |
+| 清单行 | 会为根文件写入（不可解析） | 不动清单 |
+
+**真实网关 HTTP 实测（19789，只读请求）**
+
+| URL | 状态 | 缓存策略 |
+|---|---|---|
+| `/favicon-32.png` | 200 | `no-cache` |
+| `/favicon-32.png?v=<build-id>` | 200 | `public, max-age=31536000, immutable`（**旧图上会命中一年**） |
+| `/favicon-32.png?cle=<token>` | 200 | `no-cache` ← 首帧改用这个 |
+
+计算属性核验（对真实包跑补丁后读回 `index.html`）：
 
 | 检查 | 结果 |
 |---|---|
-| `document.title` | `C.le.` |
-| 深色首帧 `--bg` / `--accent` | `#0A0D16` / `#5AA8FF`（claw 原为 `#ff5c5c`） |
-| 浅色首帧 `--bg` / `--accent` / `--text` | `#F4EFE4` / `#2A63E8` / `#15161A` |
-| 应用启动后 `link[rel=icon][type=image/png]` 指向 | `/favicon-32.png?v=…`，而该 URL 返回的字节是 PNG 且等于 `icon-32.png` |
-| `favicon.svg` | 返回 `<svg … aria-label="C.le.">`，不再是 `lobster-gradient` |
-| 正常态挂载 | `openclaw-app` 有子节点，`::before` 为 `none`（等待字标已退出） |
-| 破坏 bundle 后 | `body.openclaw-mount-fallback-active`、`#openclaw-mount-fallback` 可见、标题 `Control UI did not start`、正文可见；等待字标被显式隐藏 |
-| 横向溢出 | `scrollWidth == innerWidth`（744 == 744） |
+| 首帧层位置 | 在 core 样式表之后（10240 < 16037）、`</head>` 之前（16507） |
+| 令牌作用域 | 含 `html:not([data-cle])` |
+| 旧品牌超时回退 | 已移除（无 `cle-brand-return`） |
+| 欢迎头像 | 指向 `avatar.webp` |
+| 侧栏文字标识 | 有 `sidebar-agent-card__name-text::after` |
+| 失败面板 | 从未 `display:none` |
+| `<head>` 区域旧品牌字样 | 无（仅错误面板正文保留上游产品名，属必须保留的真实错误说明） |
 
-补充：CI 之外我还用 `scripts/serve-startup-fixture.mjs`（新增，仅测试用）在 20889/20890/20891
-三个端口起了真实 HTTP 服务，带与网关一致的 CSP，用来复现"无网关""bundle 损坏""正常"三种现场。
-它不属于发布物，不进 manifest。
+补丁执行后 `data-openclaw-control-ui-build-id` 保持原值（`…829c0937…` 64 位十六进制后缀完整）。
 
----
+## 六、部署范围与限制（必须明确）
 
-## 六、未验证 / 剩余风险
+**本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
 
-1. **没有做首帧录帧或像素截图验收。** 我是文本模型，按任务书不声称看过画面。上面所有结论来自
-   HTTP 响应字节、DOM 属性与 `getComputedStyle`，属性层面的首帧正确；真正的"第一帧有没有闪"
-   需要主控用 CUA 录帧确认。
-2. **插件静态路由 404 未在本路解决**（见协调表）。也就是说：图标文件替换已生效，
-   但若未来把图标改回 `/cle/static/...` 引用会 404；当前实现刻意不依赖该路由。
-3. **Windows 安装器未接调用**。macOS 已接；Windows 侧要我改会越过 `installer/windows/` 的
-   归属，按要求留给主控。
-4. **原生失败面板的样式改动只做到"不遮不hide"**，没有逐条核对深色下的对比度数值；
-   `.mount-fallback__eyebrow` 改成等宽字体后字距在窄屏（<560px）未实测。
-5. **service worker 换代**：`id` 变更会让新 worker 安装，但旧页面若正被旧 worker 控制，
-   要等其 `controllerchange`；这段时序没有在真实浏览器里跑过（会改动我无权操作的 live 状态）。
-6. **`favicon.svg` 内嵌 `<image href="/cle/static/art/avatar.webp">`**：Safari 对 SVG 内嵌
-   外部图片的支持在部分版本被禁用，届时会退回深色底 + 金环的矢量标记（已保证不是空白）。
-   这一点没有在目标 WebKit 版本上实测。
+1. **macOS 安装器调用会被 App 路径保护拒绝。** `installer/macos/apply-theme.sh` 会以
+   `OPENCLAW_ROOT` 指向 App 内 runtime（`/Applications/超級碧琪.app/…/runtime/openclaw`）运行本补丁，
+   而 `refuseReason` 明确拒绝该路径，因此这一段会失败并打印
+   `warning: first-paint startup layer skipped`。**这是有意保留的保护，我没有放宽它，也没有写入
+   live。** 安装脚本对该步用的是非致命分支（`if ! … then echo warning`），所以其余补丁流程不会因此中断；
+   但首帧层在 App 目标上**不会生效**。要在 App 内生效，需要主控决定是另设受控目标，还是显式授权某条
+   白名单路径——本路不擅自改这条边界。
+2. **Windows 安装器未接调用。** `installer/windows/apply-theme.ps1` 需要照抄 macOS 那段非致命调用；
+   属主控归属，**因此不能声称全平台交付**。
+3. **插件静态路由 404 未在本路解决**（见协调表）。图标已改为物理替换 + `?cle=` 指纹，不依赖该路由。
 
----
+## 七、未验证 / 剩余风险
 
-## 七、提交
+1. **没有做首帧录帧或像素验收。** 我是文本模型，按任务书不声称看过画面。以上结论来自 HTTP 响应字节、
+   DOM 属性、计算样式与真实包上的补丁运行结果；"第一帧有没有闪"需主控在自己的完整备份上实测。
+2. **`?cle=` 的浏览器侧效果未在真实浏览器里跑过**：服务端行为已实测（200 + `no-cache`），但"旧缓存
+   是否真的被绕过"需要一次带既有缓存的浏览器会话验证。
+3. **service worker 换代时序**未在真实浏览器跑过（会改动我无权操作的 live 状态）。
+4. **失败面板深色对比度与窄屏（<560px）字距**未逐项实测。
+5. **`favicon.svg` 内嵌 `/cle/static/art/avatar.webp`** 在部分 WebKit 版本可能被禁用，届时退回深色底 +
+   金环的矢量标记（保证非空白）。目标版本未实测。
+6. **`chat-tool-timeline.test.mjs` 的 7 项失败**在 HEAD 上原样复现（我用 `git archive HEAD` 到干净目录专门
+   复核过），与本路改动无关，未在本路修复。
+
+## 八、提交
 
 ```
 分支 repair/startup
@@ -178,9 +235,19 @@ apply-startup --revert  → index.html / sw.js / manifest.webmanifest / 三个�
 新增  services/cle-studio/static/startup/{icon-32,icon-180,icon-256}.png, favicon.svg
 新增  patch/apply-startup.mjs
 修改  patch/apply-all.mjs          （补丁顺序末尾加一条）
-修改  installer/macos/apply-theme.sh（调用段）
-新增  tests/cle-startup.test.mjs   （19 tests）
+修改  installer/macos/apply-theme.sh（非致命调用段）
+新增  tests/cle-startup.test.mjs   （33 tests）
 新增  docs/redesign/REPAIR-STARTUP.md
+
+补充 commit（本轮，响应主控五项）：
+  services/cle-studio/scripts/apply-startup.mjs  绝对路径/realpath 校验、写入目标守卫、
+                                                  ledger 化备份+首次优先、twins/manifest 闭环、
+                                                  图标联动 refreshTwins、changed 统计、?cle= 指纹
+  patch/apply-startup.mjs                        不再预先 path.resolve；拒绝符号链接候选根；透传 changed
+  services/cle-studio/static/startup.css         欢迎身份原地重建品牌（去掉 11s 回退）、侧栏文字标识、
+                                                 注释去掉旧品牌字样
+  tests/cle-startup.test.mjs                     33 项（含 symlink 拒绝、twins+清单还原、
+                                                 图标单独更新、备份不覆盖、身份/文字标识策略）
 ```
 
-commit 见文末回执。
+commit 见回执。

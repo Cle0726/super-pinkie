@@ -22,15 +22,24 @@ const CSS = path.join(REPO, 'services', 'cle-studio', 'static', 'startup.css');
 
 export function apply(root) {
   if (!root) throw new Error('OPENCLAW_ROOT is required');
-  const resolved = path.resolve(root);
-  const reason = refuseReason(resolved);
+  // Do not normalise before the boundary check: the check itself requires the caller's absolute
+  // path, and path.resolve() would silently accept a relative one.
+  const reason = refuseReason(root);
   if (reason) throw new Error(reason);
+  const resolved = path.resolve(root);
   // A packaged runtime keeps the UI at dist/control-ui; a source checkout may nest it.
   const candidates = [path.join(resolved, 'dist', 'control-ui'), path.join(resolved, 'control-ui')];
+  // A symlinked candidate would resolve past the root; the patcher re-checks each write anyway,
+  // but refusing here keeps the error message about the candidate the caller actually passed.
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    if (fs.lstatSync(candidate).isSymbolicLink()) throw new Error(`refusing a symlinked Control UI root: ${candidate}`);
+  }
   const controlUi = candidates.find((candidate) => fs.existsSync(path.join(candidate, 'index.html')));
   if (!controlUi) throw new Error(`no dist/control-ui/index.html under ${resolved}`);
   const result = applyLayer(controlUi, {cssPath: CSS});
-  return {changed: result.index === 'patched' || result.offlineShell === 'patched' || result.manifest === 'patched', ...result, controlUi};
+  // `changed` comes from the patcher: an icon-only update counts too.
+  return {...result, controlUi};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
