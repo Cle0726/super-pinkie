@@ -15,7 +15,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
-import {applyLayer, revert, refuseReason, styleAllowed, readJsonLiteral, injectLayer, replaceIcons, assertWritableTarget, refreshTwins} from '../services/cle-studio/scripts/apply-startup.mjs';
+import {applyLayer, revert, refuseReason, styleAllowed, readJsonLiteral, injectLayer, replaceIcons, assertWritableTarget, refreshTwins, injectEarlyGuard} from '../services/cle-studio/scripts/apply-startup.mjs';
 
 const CSS = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup.css'), 'utf8');
 
@@ -649,4 +649,106 @@ test('icon replacement refuses a non-PNG donor instead of writing garbage over a
   fs.writeFileSync(path.join(dir, 'favicon.svg'), 'not a png');
   assert.throws(() => replaceIcons(root, {iconDir: dir}), /not a PNG/);
   assert.equal(fs.readFileSync(path.join(root, 'favicon-32.png'), 'latin1'), 'lobster');
+});
+
+test('the early guard is a same-origin external script placed before the deferred module', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  // external, not inline: CSP here is script-src 'self'
+  const tag = /<script[^>]*data-cle-early[^>]*>/u.exec(html);
+  assert.ok(tag, 'early guard tag present');
+  assert.match(tag[0], /src="\/cle-early\.js"/u, 'loaded from the same origin');
+  assert.doesNotMatch(tag[0], />\s*[^\s<]/u, 'no inline body');
+  // and it must precede the module entry, which is what buys the earlier execution
+  const early = html.indexOf('data-cle-early');
+  const module = html.search(/<script[^>]*type="module"/u);
+  assert.ok(early < module, 'early guard precedes the module entry');
+  // the stylesheet layer still sits last in the cascade
+  assert.ok(html.indexOf('data-cle-startup') > html.indexOf('control-ui-core'));
+});
+
+test('the early guard file is written into the served root, backed up, and removed on revert', () => {
+  const {root} = makeRoot();
+  const before = snapshot(root, ['cle-early.js']);
+  assert.equal(before['cle-early.js'], null, 'fixture does not ship it');
+
+  applyLayer(root);
+  const shipped = path.join(root, 'cle-early.js');
+  assert.ok(fs.existsSync(shipped), 'written next to index.html so the same route serves it');
+  const donor = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio/static/early-guard.js'));
+  assert.ok(fs.readFileSync(shipped).equals(donor), 'byte-identical to the source');
+
+  const ledger = JSON.parse(fs.readFileSync(path.join(root, '.pinkie-startup-backup', 'ledger.json'), 'utf8'));
+  assert.equal(ledger.files['cle-early.js'].existed, false, 'ledger records that it is new');
+
+  revert(root);
+  assert.equal(fs.existsSync(shipped), false, 'revert removes the file it created');
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), /data-cle-early/u);
+});
+
+test('the offline shell carries the early guard as well', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const boot = readBootSw(root);
+  assert.match(boot.html, /data-cle-early/u);
+  const early = boot.html.indexOf('data-cle-early');
+  const module = boot.html.search(/<script[^>]*type="module"/u);
+  assert.ok(early < module, 'ordering holds offline too, or an offline navigation reopens the window');
+});
+
+test('a re-run neither duplicates the tag nor rewrites the file', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const once = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const guardOnce = fs.readFileSync(path.join(root, 'cle-early.js'));
+  applyLayer(root);
+  assert.equal(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), once);
+  assert.ok(fs.readFileSync(path.join(root, 'cle-early.js')).equals(guardOnce));
+  assert.equal((fs.readFileSync(path.join(root, 'index.html'), 'utf8').match(/data-cle-early/gu) || []).length, 1);
+});
+
+test('rewriting the layer replaces the early block instead of stacking a second one', () => {
+  const base = HEAD(BUILD_ID) + TAIL;
+  const once = injectEarlyGuard(base).html;
+  const twice = injectEarlyGuard(once).html;
+  assert.equal((twice.match(/data-cle-early/gu) || []).length, 1);
+  assert.equal(twice, once);
+});
+
+test('a document without exactly one module entry is refused, not guessed at', () => {
+  // Inserting "somewhere near the top" would risk landing after the entry and losing the race.
+  const twoModules = (HEAD(BUILD_ID) + TAIL).replace(
+    '</head>', '<script type="module" src="./a.js"></script>\n</head>',
+  );
+  assert.throws(() => injectEarlyGuard(twoModules), /module entry 必须唯一/u);
+});
+
+test('the offline shell precaches the early guard with a real integrity hash', () => {
+  // An offline reload must still get the script, or the guard silently never runs when the
+  // network is gone — which is exactly the disconnected-state window that was observed.
+  const {root} = makeRoot();
+  applyLayer(root);
+  const boot = readBootSw(root);
+  const row = boot.assets.find((entry) => entry.path === 'cle-early.js');
+  assert.ok(row, 'the file has a precache row');
+  const bytes = fs.readFileSync(path.join(root, 'cle-early.js'));
+  assert.equal(row.integrity, `sha256-${crypto.createHash('sha256').update(bytes).digest('base64')}`);
+  assert.ok(boot.publicAssets.includes('cle-early.js'), 'and it is listed as a public asset');
+  // the shipped list is sorted by plain codepoint order; keep that invariant
+  const paths = boot.assets.map((entry) => entry.path);
+  assert.deepEqual(paths, [...paths].sort());
+  // the worker must still parse with the added row
+  assert.doesNotThrow(() => new vm.Script(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')));
+});
+
+test('the early-guard precache row is idempotent across runs', () => {
+  const {root} = makeRoot();
+  applyLayer(root);
+  const once = readBootSw(root);
+  applyLayer(root);
+  const twice = readBootSw(root);
+  assert.equal(twice.assets.filter((entry) => entry.path === 'cle-early.js').length, 1);
+  assert.equal(twice.publicAssets.filter((name) => name === 'cle-early.js').length, 1);
+  assert.equal(twice.id, once.id, 'the cache id is stable, so the worker is not churned');
 });
