@@ -4,6 +4,11 @@
  * retry the entire relay request again can multiply a bounded recovery window
  * into several minutes while the UI correctly remains busy. Explicit runtime
  * maxRetries still wins; remote providers retain their upstream defaults.
+ *
+ * 2026.10 ships the transport body in `openai-completions-transport-*.mjs` and
+ * builds request options in `buildOpenAISdkRequestOptions` (no maxRetries
+ * override left to anchor on). The loopback decision is therefore attached
+ * right after the payload hook of the completions transport.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,24 +19,29 @@ import {execFileSync} from 'node:child_process';
 const marker = '/* pinkie-loopback-model-reliability:v1 */';
 const originalRetry = '...options?.maxRetries !== void 0 ? { maxRetries: options.maxRetries } : {}';
 const loopbackRetry = `${marker}\n\t\t\t\t...options?.maxRetries !== void 0 ? { maxRetries: options.maxRetries } : /^https?:\\/\\/(?:127(?:\\.\\d{1,3}){3}|localhost|\\[::1\\])(?::|\\/|$)/i.test(String(model.baseUrl || "")) ? { maxRetries: 0 } : {}`;
+// 2026.10: replace the SDK request options for loopback relays. `options` is a
+// function parameter of the completions transport, so rebinding it is the
+// narrowest way to make the SDK see maxRetries: 0.
+const currentAnchor = '\t\t\tconst { data: responseStream, response } = await client.chat.completions.create(params, requestOptions).withResponse();';
+const currentInjection = `${marker}\n\t\t\tif (requestOptions && options?.maxRetries === void 0 && /^https?:\\/\\/(?:127(?:\\.\\d{1,3}){3}|localhost|\\[::1\\])(?::|\\/|$)/i.test(String(model.baseUrl || ""))) requestOptions.maxRetries = 0;\n`;
 
 export function transform(source) {
   if (source.includes(marker)) return source;
   const matches = source.split(originalRetry).length - 1;
-  if (matches !== 1) {
-    throw new Error(`OpenClaw 模型传输代码结构已变化，未覆盖（maxRetries matches=${matches}）`);
+  if (matches === 1) return source.replace(originalRetry, loopbackRetry);
+  if (source.split(currentAnchor).length === 2) {
+    return source.replace(currentAnchor, currentInjection + currentAnchor);
   }
-  return source.replace(originalRetry, loopbackRetry);
+  throw new Error(`OpenClaw 模型传输代码结构已变化，未覆盖（maxRetries matches=${matches}, request options=0）`);
 }
 
 export function apply(root, {backupRoot} = {}) {
   const dist = path.join(root, 'node_modules', '@openclaw', 'ai', 'dist');
   if (!fs.existsSync(dist)) throw new Error(`缺少 @openclaw/ai 运行时：${dist}`);
-  const candidates = fs.readdirSync(dist)
-    .filter((name) => /^openai-completions-[^.]+\.mjs$/.test(name));
+  const candidates = fs.readdirSync(dist).filter((name) => /^openai-completions-.*\.mjs$/.test(name));
   const targets = candidates.filter((name) => {
     const source = fs.readFileSync(path.join(dist, name), 'utf8');
-    return source.includes(marker) || source.includes(originalRetry);
+    return source.includes(marker) || source.includes(originalRetry) || source.includes(currentAnchor);
   });
   if (targets.length !== 1) {
     throw new Error(`无法唯一确认 OpenAI completions 传输模块：${targets.join(', ') || 'none'}`);
