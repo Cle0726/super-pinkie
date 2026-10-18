@@ -91,7 +91,8 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const browserAvailable = fs.existsSync(CHROME) && process.env.CLE_SKIP_BROWSER !== '1';
 
 test('headless Chrome 量到的对比度与命中区达到 4.5:1 / 原生 30×30', {skip: !browserAvailable && 'no Chrome on this host'}, async () => {
-  const port = 18831;
+  const port = 18980 + Math.floor(Math.random() * 40);
+  const cdp = 9500 + Math.floor(Math.random() * 300);
   const server = spawn(process.execPath, [path.join(studio, '.harness/serve-fusion.mjs')], {
     env: {...process.env, FUSION_HARNESS_PORT: String(port)}, stdio: 'ignore',
   });
@@ -106,7 +107,7 @@ test('headless Chrome 量到的对比度与命中区达到 4.5:1 / 原生 30×30
     assert.ok(up, 'harness 服务应已启动');
 
     const run = spawn(process.execPath, [path.join(studio, '.harness/run-fusion.mjs')], {
-      env: {...process.env, FUSION_HARNESS_URL: `http://127.0.0.1:${port}/`},
+      env: {...process.env, FUSION_HARNESS_URL: `http://127.0.0.1:${port}/`, CLE_AUDIT_CDP: String(cdp)},
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -158,7 +159,8 @@ test('headless Chrome 量到的对比度与命中区达到 4.5:1 / 原生 30×30
    一旦有人修好 src/core/brand.js，最后一条会失败并提醒主控更新交接单——
    这正是我们要的通知，而不是悄悄放过。 */
 test('brand 审计：正文受保护，但属性与 ClawHub 仍是 chrome 残留', {skip: !browserAvailable && 'no Chrome on this host'}, async () => {
-  const port = 18832;
+  const port = 19020 + Math.floor(Math.random() * 40);
+  const cdp = 9800 + Math.floor(Math.random() * 300);
   const server = spawn(process.execPath, [path.join(studio, '.harness/serve-fusion.mjs')], {
     env: {...process.env, FUSION_HARNESS_PORT: String(port)}, stdio: 'ignore',
   });
@@ -171,7 +173,7 @@ test('brand 审计：正文受保护，但属性与 ClawHub 仍是 chrome 残留
     }
     assert.ok(up, 'harness 服务应已启动');
     const run = spawn(process.execPath, [path.join(studio, '.harness/run-fusion.mjs')], {
-      env: {...process.env, FUSION_HARNESS_URL: `http://127.0.0.1:${port}/brand-audit.html`},
+      env: {...process.env, FUSION_HARNESS_URL: `http://127.0.0.1:${port}/brand-audit.html`, CLE_AUDIT_CDP: String(cdp)},
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
