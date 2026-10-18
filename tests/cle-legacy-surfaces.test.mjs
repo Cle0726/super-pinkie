@@ -75,7 +75,12 @@ test('表面验收：token 类型正确，所有文字对比 >= 4.5，焦点环�
     assert.match(out, /CARD input focus-ring valid=yes/);
     assert.match(out, /NIGHT focus-ring valid=yes resolved=rgb\(\d+, \d+, \d+\) solid 2px/);
 
-    // 4) 运行时注入样式的模块（样式写在 JS 里）：深浅两套都要真的量到，且不含低对比行
+    // 4) 采样必须建立在"已稳定"上，而不是睡够墙钟时间。
+    //    这条断言的意义：如果哪天有人把 settle 改回固定 sleep，负载下会先出现
+    //    SETTLE FAILED 或 1.0x 的对比度，这条会先炸，而不是偶发漂移。
+    assert.doesNotMatch(out, /SETTLE FAILED/, '主题切换后未在预算内稳定（不能靠加长 sleep 掩盖）');
+
+    // 5) 运行时注入样式的模块（样式写在 JS 里）：深浅两套都要真的量到，且不含低对比行
     assert.match(out, /^MODULE LIGHT DS pop injected=yes/m);
     assert.match(out, /^MODULE LIGHT THINK menu injected=yes/m);
     assert.match(out, /^MODULE NIGHT DS pop injected=yes/m);
@@ -84,7 +89,7 @@ test('表面验收：token 类型正确，所有文字对比 >= 4.5，焦点环�
     assert.match(out, /^MODULE LIGHT THINK menu ring=yes/m);
     assert.match(out, /^MODULE NIGHT THINK menu ring=yes/m);
 
-    // 5) 深浅两套都必须真的被量到
+    // 6) 深浅两套都必须真的被量到
     assert.match(out, /^NIGHT ASK surface/m);
     assert.match(out, /^NIGHT MEM primary/m);
     assert.match(out, /^NIGHT USAGE cost/m);
