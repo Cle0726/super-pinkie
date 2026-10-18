@@ -55,6 +55,14 @@ export function transform(source) {
   return `${marker}\n${next}`;
 }
 
+const currentImageDirective = '"img-src \'self\' data: blob: https: clekk-material:",';
+const currentFrameDirective = '"frame-src \'self\' blob: http: https: clekk-material:",';
+
+/** True when the CSP table already permits the shell's material scheme. */
+export function isCurrentPatched(source) {
+  return source.includes(marker) || (source.includes(currentImageDirective) && source.includes(currentFrameDirective));
+}
+
 export function apply(root) {
   const dist = path.join(root, "dist");
   // 2026.10 emits .mjs bundles; the chunk that builds the CSP header is unique.
@@ -65,8 +73,10 @@ export function apply(root) {
   if (candidates.length !== 1) throw new Error(`无法唯一确认 control-ui 模块: ${candidates.join(", ")}`);
   const file = path.join(dist, candidates[0]);
   const source = fs.readFileSync(file, "utf8");
-  const next = transform(source);
+  const next = isCurrentPatched(source) ? source : transform(source);
   if (source === next) return { changed: false, file: candidates[0] };
+  // A CSP table that already lists the shell scheme is patched (the marker may
+  // sit elsewhere in the chunk after a previous reapply).
   if (fs.readFileSync(file, "utf8") !== source) throw new Error("control-ui 模块正在被更新，未覆盖");
   fs.writeFileSync(file, next);
   return { changed: true, file: candidates[0] };
