@@ -103,3 +103,71 @@ test('browser width remains bounded through full-screen, drag and ordinary-windo
   `});
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('edge-docked reveal exposes exactly half and collapsed exposes none', {skip: process.platform !== 'darwin'}, () => {
+  const source = read('desktop/macos/Sources/Launcher.swift');
+  const geoStart = source.indexOf('enum BrowserWorkspaceGeometry {');
+  const geoEnd = source.indexOf('private final class MaterialDownloadContext', geoStart);
+  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
+  const dock = 'enum BrowserDockEdge: String { case top, bottom, right }\n';
+  assert.ok(geoStart >= 0 && geoEnd > geoStart);
+
+  // `swift -` treats input as top-level code, so no @main here.
+  const result = spawnSync('xcrun', ['swift', '-'], {encoding: 'utf8', input: `import AppKit\n${edges}\n${dock}\n${source.slice(geoStart, geoEnd)}
+    do {
+        let bounds = NSRect(x: 0, y: 0, width: 1624, height: 900)
+        let samples = [
+          NSRect(x: 700, y: 200, width: 640, height: 520),
+          NSRect(x: 984, y: 200, width: 640, height: 520),
+          NSRect(x: 300, y: 380, width: 640, height: 520),
+          NSRect(x: 300, y: 0, width: 640, height: 520),
+        ]
+        func visible(_ r: NSRect, _ edge: BrowserDockEdge) -> CGFloat {
+          switch edge {
+          case .right:  return bounds.maxX - r.minX
+          case .top:    return bounds.maxY - r.minY
+          case .bottom: return r.maxY - bounds.minY
+          }
+        }
+        for edge in [BrowserDockEdge.right, .top, .bottom] {
+          for (i, floating) in samples.enumerated() {
+            let hidden = BrowserWorkspaceGeometry.edgeDockedFrame(in: bounds, frame: floating, edge: edge, revealed: false)
+            let shown  = BrowserWorkspaceGeometry.edgeDockedFrame(in: bounds, frame: floating, edge: edge, revealed: true)
+            let span: (NSRect) -> CGFloat = { edge == .right ? $0.width : $0.height }
+            let h = min(max(visible(hidden, edge), 0), span(hidden))
+            let s = min(max(visible(shown, edge), 0), span(shown))
+            precondition(h == 0, "collapsed must be fully outside (\(edge) sample \\(i))")
+            // Half the panel, not all of it: a reveal that shows everything would
+            // mean the tab silently un-docked the browser.
+            precondition(abs(s - span(shown) / 2) < 0.01, "reveal must be half (\(edge) sample \\(i))")
+          }
+        }
+    }
+  `});
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('the edge tab is a real activatable control, not a drag-only surface', () => {
+  const source = read('desktop/macos/Sources/Launcher.swift');
+  const start = source.indexOf('private final class BrowserEdgeTab');
+  const end = source.indexOf('struct BrowserResizeEdges', start);
+  const tab = source.slice(start, end);
+  // Announced as a button but with no press implementation, it did nothing for
+  // VoiceOver and for CUA activation — the reported gap.
+  assert.match(tab, /setAccessibilityRole\(\.button\)/);
+  assert.match(tab, /override func accessibilityPerformPress\(\) -> Bool/);
+  assert.match(tab, /onActivate\?\(\)/);
+  assert.match(tab, /override var acceptsFirstResponder: Bool \{ true \}/);
+  assert.match(tab, /override func keyDown\(with event: NSEvent\)/);
+  // A click must not be swallowed by the drag base class, and jitter must not
+  // count as a drag.
+  assert.match(tab, /pressMoved/);
+  assert.match(tab, /hypot\(/);
+  // The activation is wired to the same toggle the hover path uses.
+  assert.match(source, /tab\.onActivate = \{ \[weak self\] in self\?\.toggleBrowserEdgeReveal\(\) \}/);
+  assert.match(source, /private func toggleBrowserEdgeReveal\(\)/);
+  // Explicit activation must not be undone by the hover-exit retract it
+  // accidentally causes (the panel slides out from under the pointer).
+  assert.match(source, /browserEdgePinned/);
+  assert.match(source, /!self\.browserEdgePinned else \{ return \}/);
+});
