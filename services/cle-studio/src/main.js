@@ -11,6 +11,7 @@ import './styles/tiers.css';
 import './line/line.css';
 import {ensureTheme} from './core/theme.js';
 import {beginActivation} from './core/activation.js';
+import {retainSkin} from './core/skin.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
 import {mountWelcome} from './rooms/welcome.js';
@@ -41,6 +42,7 @@ export default {
     if (!ensureTheme()) return controller.dispose;
     const html = document.documentElement;
     html.dataset.cle = VERSION;
+    retainSkin(import.meta.url);
     initModes();
     // the 2026.7 modules key night mode on data-pinkie-night; mirror the native theme mode
     const syncNight = () => html.toggleAttribute('data-pinkie-night', html.dataset.themeMode === 'dark');
