@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {refreshPrecompressed} from './lib-precompressed.mjs';
 
 export const marker = '/* pinkie-chat-timeline:v17 */';
 // Installed bundles keep their old runtime between the marker and the history
@@ -938,6 +939,14 @@ function upgradeBundle(original, previousMarker) {
   }
 }
 
+export function transform(original) {
+  return transformBundle(String(original || '')).text;
+}
+
+export function transformWithStatus(original) {
+  return transformBundle(String(original || ''));
+}
+
 function sourceWithReplacement(source, start, end, replacement) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
@@ -1048,12 +1057,125 @@ function transformBundle(original) {
   }
 }
 
-export function transform(original) {
-  return transformBundle(String(original || '')).text;
+
+
+/* ---------------------------------------------------------------------------
+ * OpenClaw 2026.10 port (control-ui-boot-chat-*.js).
+ *
+ * Every helper is minified differently on each build, so this port only uses
+ * stable product facts:
+ *   - `data-chat-row-key=${e.key}` identifies the message group being rendered,
+ *   - `toolmsg:${t}` is the per-message tool card id,
+ *   - `chat-group ${v} chat-group--with-footer…` marks a user/assistant group,
+ *   - `chat-group tool chat-group--turn-block…` marks a tool preview block.
+ * Tool cards are folded into a `.chat-timeline-tool-row` placed before their own
+ * message inside the group, so a tool call sits between the user turn and the
+ * assistant reply. Conversation markup and content are not otherwise changed.
+ * ------------------------------------------------------------------------- */
+const currentMarker = '/* pinkie-chat-timeline-2026:v1 */';
+const GROUP_ROW_KEY = 'data-chat-row-key=${e.key}';
+const TOOL_BLOCK_HEAD = 'class="chat-group tool chat-group--turn-block';
+
+export function currentTimelineCss() {
+  return `/* pinkie-chat-timeline-2026:v1 */ #chat-messages{display:flex;flex-direction:column;gap:.35rem}
+#chat-messages .chat-timeline-tool-row{display:flex;flex-direction:column;gap:.25rem;opacity:.92}
+#chat-messages .chat-timeline-tool-row>.chat-bubble,#chat-messages .chat-timeline-tool-row>.chat-tool-card{margin:0}
+#chat-messages .chat-group--timeline-tools .chat-tool-card> :first-child,#chat-messages .chat-timeline-tool-row .chat-tool-card> :first-child{margin-top:0}
+`;
 }
 
-export function transformWithStatus(original) {
-  return transformBundle(String(original || ''));
+/** Runtime hook: fold tool cards into per-message timeline rows. */
+export function currentTimelineRuntimeSource() {
+  return `function __pkTimelineGroupId(key) {
+  return "turn-" + String(key == null ? "" : key).replace(/[^\\w:-]/g, "_");
+}
+function __pkTimelineFold(turn) {
+  try {
+    const cards = Array.prototype.slice.call(turn.querySelectorAll('[id^="toolmsg:"]'));
+    for (const card of cards) {
+      const messageId = (card.getAttribute("id") || "").slice(8);
+      const owner = Array.prototype.slice.call(turn.querySelectorAll("[data-message-id]"))
+        .find((node) => String(node.getAttribute("data-message-id") || "") === messageId);
+      const host = owner && owner.parentElement ? owner.parentElement : turn.querySelector(".chat-group-messages") || turn;
+      let row = host.querySelector(":scope > .chat-timeline-tool-row");
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "chat-timeline-tool-row";
+        row.setAttribute("data-pinkie-timeline", "tool-row");
+        if (owner && owner.parentElement) host.insertBefore(row, owner);
+        else host.insertBefore(row, host.firstChild);
+      }
+      if (row.contains(card)) continue;
+      row.appendChild(card);
+      row.setAttribute("data-pinkie-message", messageId);
+    }
+    if (turn.querySelector(".chat-group--timeline-tools")) turn.classList.add("chat-group--has-timeline-tools");
+  } catch (error) {}
+}
+/** Re-run after every transcript commit; idempotent by construction. */
+function __pkTimelineInstall(root) {
+  const run = () => {
+    const turns = Array.prototype.slice.call(root.querySelectorAll(".chat-group:not(.chat-group--turn-block):not(.chat-group--timeline-tools)"));
+    for (const turn of turns) __pkTimelineFold(turn);
+  };
+  run();
+  if (root.__pkTimelineObserver || typeof MutationObserver !== "function") return;
+  let queued = false;
+  root.__pkTimelineObserver = new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    const flush = () => { queued = false; run(); };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+    else Promise.resolve().then(flush);
+  });
+  root.__pkTimelineObserver.observe(root, { childList: true, subtree: true });
+}
+export { __pkTimelineInstall as installTimeline };
+export default __pkTimelineInstall;`;
+}
+
+/** Status variant used by apply(): DOM projection for 2026.10 renderers. */
+export function transformCurrentWithStatus(original) {
+  const text = String(original || '');
+  if (text.includes(currentMarker)) return {text, changed: false, reason: 'already-patched'};
+  const groupKey = /chat-group--with-footer[\s\S]{0,400}?data-chat-row-key=\$\{e\.key\}/u;
+  const match = groupKey.exec(text);
+  if (!match) return {text, changed: false, reason: 'chat group row key not found'};
+  const keyAt = match.index + match[0].lastIndexOf(GROUP_ROW_KEY);
+  const install = '${(globalThis.__pkTimelineRoot??=globalThis.document?.body,globalThis.document?.body?__pkTimelineInstall(globalThis.__pkTimelineRoot):"")}';
+  let output = text.slice(0, keyAt + GROUP_ROW_KEY.length)
+    + `\n      data-timeline-group-id=\${__pkTimelineGroupId(e.key)}\n      ${install}`
+    + text.slice(keyAt + GROUP_ROW_KEY.length);
+  if (output.split(TOOL_BLOCK_HEAD).length === 2) {
+    output = output.replace(TOOL_BLOCK_HEAD, `${TOOL_BLOCK_HEAD} chat-group--timeline-tools`);
+  }
+  const head = /\/\/#region [^\n]*\n?/u.exec(output);
+  const at = head ? head.index : 0;
+  output = `${output.slice(0, at)}${currentMarker}\n${currentTimelineRuntimeSource()}\n${output.slice(at)}`;
+  return {text: output, changed: true, reason: 'patched-2026'};
+}
+
+/** 2026.10: DOM projection instead of the 2026.7 pipeline rewrite. */
+function applyCurrent(root, file, name, {backupRoot} = {}) {
+  const original = fs.readFileSync(file, 'utf8');
+  const result = transformCurrentWithStatus(original);
+  if (!result.changed) return {changed: false, skipped: true, reason: result.reason, file: name};
+  const backupBase = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'SuperPinkie', 'backups')
+    : path.join(os.homedir(), 'Library/Application Support/SuperPinkie/backups');
+  const backup = backupRoot || path.join(backupBase, `chat-timeline-${Date.now()}`);
+  fs.mkdirSync(backup, {recursive: true, mode: 0o700});
+  fs.copyFileSync(file, path.join(backup, name));
+  fs.writeFileSync(file, result.text);
+  refreshPrecompressed(file);
+  // The projection's CSS travels with the skin stylesheet: no markup or inline
+  // style is added to the transcript itself.
+  const css = path.join(root, 'dist', 'control-ui', 'laolao-theme.css');
+  if (fs.existsSync(css)) {
+    const sheet = fs.readFileSync(css, 'utf8');
+    if (!sheet.includes(currentMarker)) fs.writeFileSync(css, `${sheet}\n${currentTimelineCss()}`);
+  }
+  return {changed: true, backup, file: name, mode: '2026-dom'};
 }
 
 export function apply(root, {backupRoot} = {}) {
@@ -1061,7 +1183,16 @@ export function apply(root, {backupRoot} = {}) {
   if (!fs.existsSync(assets) || !fs.statSync(assets).isDirectory()) {
     return {changed: false, skipped: true, reason: 'native chat assets not found'};
   }
-  const candidates = fs.readdirSync(assets).filter((name) => /^chat-page-[\w-]+\.js$/u.test(name));
+  const files = fs.readdirSync(assets);
+  const legacyChunks = files.filter((name) => /^chat-page-[\w-]+\.js$/u.test(name));
+  // 2026.10 renderer chunk: control-ui-boot-chat-*.js without the style shard.
+  // Its message pipeline differs from 2026.7, so the DOM projection runs.
+  const currentChunks = files.filter((name) => /^control-ui-boot-chat-(?!styles)[\w-]+\.js$/u.test(name)
+    && fs.readFileSync(path.join(assets, name), 'utf8').includes(GROUP_ROW_KEY));
+  if (!legacyChunks.length && currentChunks.length === 1) {
+    return applyCurrent(root, path.join(assets, currentChunks[0]), currentChunks[0], {backupRoot});
+  }
+  const candidates = legacyChunks;
   if (candidates.length !== 1) {
     return {changed: false, skipped: true, reason: `expected one chat-page chunk, found ${candidates.length}`};
   }
