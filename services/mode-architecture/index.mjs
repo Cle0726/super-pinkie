@@ -6,6 +6,7 @@ import {execFile, spawnSync} from 'node:child_process';
 import {LongTermMemoryStore, memorySystemRules, renderRetrievedMemory} from './memory.mjs';
 import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runtimeConfig} from './openclaw-paths.mjs';
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
+import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
@@ -4926,6 +4927,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       blocks.push('\n' + LEARNING_MODE_RULES + '\n');
       const interactionRules = this.learning ? learningPrompt(this.learning, String(ctx.sessionKey || '')) : '';
       if (interactionRules) blocks.push('\n' + interactionRules + '\n');
+      if (this.learning?.pact) blocks.push('\n' + learningPactPrompt(this.learning.pact) + '\n');
     }
     if (injectWorkspaceMarkdown && this.memory) {
       try {
@@ -5703,6 +5705,10 @@ export default {
     };
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
+    // Le Pacte（学习约定 + 每日账本 + 连续天数）：账本挂在学习存储上，由后者的
+    // 作答 / 复习 / 新建笔记路径顺手记录；所有遗留存储没有 pact 时保持原行为。
+    const learningPact = new LearningPact(learning);
+    learning.pact = learningPact;
     const webGptActivity = new WebGptActivityStore();
     const webGptConnection = new WebGptConnectionManager();
     architecture = new ModeArchitecture(new FileRunStore(), memory, null, learning);
@@ -5742,6 +5748,16 @@ export default {
     api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : createAskUserTool()), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerLearningLibrary(api, {learning});
+    // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；
+    // 这里把当天的真实进度换成给碧琪的系统上下文，用完即弃。
+    api.on('before_prompt_build', (event, ctx) => {
+      if (ctx.agentId !== 'learning' && !String(ctx.sessionKey || '').startsWith('agent:learning:')) return;
+      const kind = nudgeKindFromPrompt(event?.prompt);
+      if (!kind) return;
+      const nudge = nudgeContextFor(learningPact);
+      if (!nudge) return;
+      return {appendSystemContext: `\n${composeNudgeContext(kind, nudge.today)}\n`};
+    }, {priority: -10870});
     registerCompanionGateway(api, learning);
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
