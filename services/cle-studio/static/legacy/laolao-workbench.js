@@ -813,7 +813,7 @@
     const v = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const elevated = cssColor(v('--bg-elevated') || '#2a2030', {r: 42, g: 32, b: 48, a: 1});
     const text = cssColor(v('--text') || '#efe5ea', {r: 239, g: 229, b: 234, a: 1});
-    const accent = cssColor(v('--accent') || '#ff7aa2', {r: 255, g: 122, b: 162, a: 1});
+    const accent = cssColor(v('--accent') || '#2A63E8', {r: 255, g: 122, b: 162, a: 1});
     const cle = cssColor(v('--cle-accent') || '#62b4ff', {r: 98, g: 180, b: 255, a: 1});
     const dark = luma(elevated) < 0.5;
     const bg = dark ? mix(elevated, {r: 12, g: 8, b: 14}, 0.38) : mix(elevated, {r: 255, g: 255, b: 255}, 0.55);
@@ -873,7 +873,7 @@
         'minimap.background': hex(c.bg), 'minimapSlider.background': hex(c.text, 0.07),
         'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': hex(c.accent, 0.22),
         'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': hex(c.accent, 0.09),
-        'editorOverviewRuler.border': '#00000000', 'editorError.foreground': '#ff6b81', 'editorWarning.foreground': '#f6c76f', 'editorInfo.foreground': hex(c.cle),
+        'editorOverviewRuler.border': '#00000000', 'editorError.foreground': '#2A63E8', 'editorWarning.foreground': '#f6c76f', 'editorInfo.foreground': hex(c.cle),
         'peekViewEditor.background': hex(c.widget), 'peekViewResult.background': hex(c.widget), 'peekView.border': hex(c.accent, 0.6),
       },
     });
@@ -1879,8 +1879,8 @@
     const dark = c.dark;
     return {
       background: hex(c.bg), foreground: hex(c.text), cursor: hex(c.accent), cursorAccent: hex(c.bg), selectionBackground: hex(c.accent, 0.3),
-      black: dark ? '#2a2130' : '#3b3340', red: '#ff6b81', green: dark ? '#5fd3a8' : '#0f9f72', yellow: dark ? '#f6c76f' : '#b7791f', blue: hex(c.cle), magenta: hex(c.accent), cyan: dark ? '#7bd3dd' : '#0e8a96', white: dark ? '#e9e2e7' : '#5c5360',
-      brightBlack: dark ? '#6f6070' : '#8a7f8c', brightRed: '#ff8fa0', brightGreen: '#7fe0bb', brightYellow: '#ffd98a', brightBlue: '#8ccaff', brightMagenta: '#ff9cbc', brightCyan: '#9be3ea', brightWhite: dark ? '#ffffff' : '#2a2130',
+      black: dark ? '#2a2130' : '#3b3340', red: '#2A63E8', green: dark ? '#5fd3a8' : '#0f9f72', yellow: dark ? '#f6c76f' : '#b7791f', blue: hex(c.cle), magenta: hex(c.accent), cyan: dark ? '#7bd3dd' : '#0e8a96', white: dark ? '#e9e2e7' : '#5c5360',
+      brightBlack: dark ? '#6f6070' : '#8a7f8c', brightRed: '#2A63E8', brightGreen: '#7fe0bb', brightYellow: '#ffd98a', brightBlue: '#8ccaff', brightMagenta: '#2A63E8', brightCyan: '#9be3ea', brightWhite: dark ? '#ffffff' : '#2a2130',
     };
   }
   // ghostty-web 的终端打开后不支持换配色（源码里明确写了），所以在 Terminal.prototype.open 前面套一层：
