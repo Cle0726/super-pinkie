@@ -22,6 +22,7 @@ function makeStrictHost({selectedKey = 'agent:main:main', requests = [], asyncRe
     pending: [],          // 未结算的 promise 控制器
     subs: [],
     eventOffs: [],
+    eventHandlers: new Map(),
     log: [],
   };
 
@@ -49,11 +50,26 @@ function makeStrictHost({selectedKey = 'agent:main:main', requests = [], asyncRe
         state.pending.push({method, params, resolve, reject});
       });
     },
-    subscribe(fn) { guard('subscribe'); state.subs.push(fn); return () => { state.eventOffs.push('sub'); }; },
+    subscribe(fn) {
+      guard('subscribe');
+      state.subs.push(fn);
+      // 真实 host 的 off 会真的解绑；这里如实模拟，否则测试只能测到"桥以为自己解绑了"。
+      return () => {
+        const i = state.subs.indexOf(fn);
+        if (i >= 0) state.subs.splice(i, 1);
+        state.eventOffs.push('sub');
+      };
+    },
     onEvent(name, fn) {
       guard('onEvent ' + name);
       state.eventOffs.push(name);
-      return () => { state.log.push('off:' + name); };
+      // 记下回调，测试才能模拟"旧 host 的老回调在换代后仍被调用"
+      if (!state.eventHandlers) state.eventHandlers = new Map();
+      state.eventHandlers.set(name, fn);
+      return () => {
+        state.eventHandlers?.delete(name);
+        state.log.push('off:' + name);
+      };
     },
     ui: {
       registerReplacement() { guard('ui.registerReplacement'); return () => { state.log.push('ui.replace.dispose'); }; },
@@ -64,6 +80,7 @@ function makeStrictHost({selectedKey = 'agent:main:main', requests = [], asyncRe
   return {
     host,
     state,
+    setSelectedKey(next) { selectedKey = next; },
     retire() { state.retired = true; },
     // 模拟"在途请求被网关拒绝"
     rejectAll(error = 'gateway closed') {
