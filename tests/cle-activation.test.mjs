@@ -12,6 +12,7 @@ export const blink = {}, composer = {};
 export function ensureTheme() { return document.themeReady !== false; }
 export function startBrandGuard() {}
 export function initModes() {}
+export function retainSkin() {}
 export function mountRooms(host, signal) {
   document.events.push('rooms:' + host.id);
   document.live.add(host.id);
@@ -81,7 +82,7 @@ test('new activation survives the native mount-next / dispose-previous order', a
     oldDispose();
     assert.equal(f.doc.composer, 'single', 'a repeated late dispose must be harmless');
     nextDispose();
-    assert.equal(f.doc.documentElement.dataset.cle, undefined);
+    assert.equal(f.doc.documentElement.dataset.cle, '0.1.0', 'static document skin survives disconnect');
     assert.equal(f.doc.live.size, 0);
     assert.equal(f.doc.composer, null);
   } finally { f.restore(); }
@@ -110,7 +111,7 @@ test('a theme-reload activation retires the previous UI and disposes safely', as
     f.doc.themeReady = false;
     const reloadDispose = app.activate({id: 'reload'});
     assert.equal(f.doc.live.size, 0);
-    assert.equal(f.doc.documentElement.dataset.cle, undefined);
+    assert.equal(f.doc.documentElement.dataset.cle, '0.1.0', 'theme reload keeps the last good skin until navigation');
     reloadDispose(); oldDispose();
     f.doc.themeReady = true;
     const finalDispose = app.activate({id: 'connected'});

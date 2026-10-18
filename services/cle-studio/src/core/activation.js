@@ -12,7 +12,9 @@ export function beginActivation(doc = document) {
       if (controller.signal.aborted) return;
       controller.abort();
       if (doc[KEY] !== activation) return;
-      delete doc.documentElement.dataset.cle;
+      // Connection loss also retires the host activation. The document's skin is
+      // static presentation, not a live registration: keep it while the native
+      // app disables its controls and reconnects.
       delete doc[KEY];
     },
   };
