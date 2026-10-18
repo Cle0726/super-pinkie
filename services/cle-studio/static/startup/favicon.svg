@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="C.le.">
+  <!-- C.le. tab mark: the portrait in a paper ring, so a vector icon scales without the
+       packaged lobster. The raster portrait itself is served from /cle/static/art/avatar.webp. -->
+  <rect width="120" height="120" rx="26" fill="#0A0D16"/>
+  <circle cx="60" cy="60" r="42" fill="none" stroke="#C9A24A" stroke-width="2.5" opacity=".85"/>
+  <image href="/cle/static/art/avatar.webp" x="18" y="18" width="84" height="84"
+         preserveAspectRatio="xMidYMid slice" clip-path="circle(42px at 60px 60px)"/>
+</svg>

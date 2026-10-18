@@ -1494,6 +1494,14 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     if ! OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-computer-v2.mjs"; then
       echo "warning: Computer Use v2 patch skipped because this runtime has no matching chunk" >&2
     fi
+    # 首帧：插件是异步加载的，旧标题/旧图标/旧小龙虾图层会先画一帧。
+    # 这一步把 C.le. 的首帧样式直接写进 index.html（以及离线 shell 和窗口
+    # manifest），必须排在上面所有也改 Control UI 入口的补丁之后。
+    if [[ -f "$REPO_ROOT/patch/apply-startup.mjs" ]]; then
+      if ! OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-startup.mjs"; then
+        echo "warning: first-paint startup layer skipped (see the error above)" >&2
+      fi
+    fi
   fi
   # apply-context-budget/apply-image-access may regenerate the control-ui
   # entrypoint, so refresh the skin cache key after all runtime patches finish.
