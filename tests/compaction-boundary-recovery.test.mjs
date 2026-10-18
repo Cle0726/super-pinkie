@@ -94,3 +94,63 @@ test('apply backs up and patches exactly one safeguard bundle',()=>{
     assert.equal(apply(root,{backupRoot:backup}).changed,false);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+// OpenClaw 2026.10 shape (dist/builtin-openclaw-*.mjs): the recovery path
+// summarizes the boundary-scoped preparation range, and both the empty and
+// the summarized results keep preparation.firstKeptEntryId.
+const current2026=`function compactionSafeguardExtension(api) {
+\tapi.on("session_before_compact", async (event, ctx) => {
+\t\tconst { preparation, customInstructions: eventInstructions, signal, thinkingLevel, streamFn } = event;
+\t\tconst previousSummary = normalizeLegacySplitTurnSummary(preparation.previousSummary?.trim());
+\t\tlet baseMessagesToSummarize = stripRuntimeContextCustomMessages(preparation.messagesToSummarize);
+\t\tlet baseTurnPrefixMessages = stripRuntimeContextCustomMessages(preparation.turnPrefixMessages ?? []);
+\t\tconst latestUnresolvedUserRequest = preparation.latestUnresolvedUserRequest ?? null;
+\t\tif (!containsRealConversation([...baseMessagesToSummarize, ...baseTurnPrefixMessages])) {
+\t\t\tconst rangeMessages = stripRuntimeContextCustomMessages(collectPreparationRangeMessages(ctx.sessionManager, preparation.firstKeptEntryId));
+\t\t\tif (containsRealConversation(rangeMessages)) {
+\t\t\t\tlog.info("Compaction safeguard: summarizing the boundary-scoped preparation range after compaction preparation omitted real conversation content.");
+\t\t\t\tbaseMessagesToSummarize = rangeMessages;
+\t\t\t\tbaseTurnPrefixMessages = [];
+\t\t\t}
+\t\t}
+\t\tconst hasRealConversation = containsRealConversation([...baseMessagesToSummarize, ...baseTurnPrefixMessages]) || containsRealConversation(stripRuntimeContextCustomMessages(collectSessionContextMessages(ctx.sessionManager)));
+\t\tsetCompactionSafeguardCancellation(ctx.sessionManager, void 0);
+\t\tconst cancelCompaction = (reason, error) => {
+\t\t\tsetCompactionSafeguardCancellation(ctx.sessionManager, reason, error);
+\t\t\treturn { cancel: true };
+\t\t};
+\t\tif (!hasRealConversation) {
+\t\t\tlog.info("Compaction safeguard: no real conversation messages to summarize; writing compaction boundary to suppress re-trigger loop.");
+\t\t\treturn { compaction: {
+\t\t\t\tsummary: buildStructuredFallbackSummary(previousSummary),
+\t\t\t\tfirstKeptEntryId: preparation.firstKeptEntryId,
+\t\t\t\ttokensBefore: preparation.tokensBefore
+\t\t\t} };
+\t\t}
+\t\tconst runtime = getCompactionSafeguardRuntime(ctx.sessionManager);
+\t\tconst customInstructions = resolveCompactionInstructions(eventInstructions, runtime?.customInstructions);
+\t\tconst turnPrefixMessages = baseTurnPrefixMessages;
+\t\tconst recentTurnsPreserve = resolveRecentTurnsPreserve(runtime?.recentTurnsPreserve);
+\t\tconst compactionResult = (summary) => ({ compaction: {
+\t\t\tsummary,
+\t\t\tfirstKeptEntryId: preparation.firstKeptEntryId,
+\t\t\ttokensBefore: preparation.tokensBefore,
+\t\t\tdetails: { readFiles: [], modifiedFiles: [] }
+\t\t} });
+\t\treturn compactionResult("done");
+\t});
+}`;
+
+test('2026.10 safeguard recovery moves the stale boundary onto the recent-turn tail',()=>{
+  const output=transform(current2026);
+  assert.notEqual(output,current2026);
+  assert.match(output,/pinkie-compaction-boundary-recovery:v3/);
+  assert.match(output,/const pinkieRecoveryBoundary = \(\) => resolveRecoveryFirstKeptEntryId\(/);
+  assert.match(output,/const pinkieResultBoundary = resolveRecoveryFirstKeptEntryId\(ctx\.sessionManager, preparation\.firstKeptEntryId, \{ recentTurnsPreserve,/);
+  assert.match(output,/firstKeptEntryId: pinkieFirstKeptEntryId,/);
+  assert.match(output,/firstKeptEntryId: pinkieResultBoundary,/);
+  assert.doesNotMatch(output,/firstKeptEntryId: preparation\.firstKeptEntryId,/,'every returned boundary uses the recovered id');
+  assert.equal(transform(output),output,'idempotent');
+  assert.match(output,/function resolveRecoveryFirstKeptEntryId\(sessionManager, fallbackId, options = \{\}\)/);
+  assert.match(output,/maxTailChars/);
+});
