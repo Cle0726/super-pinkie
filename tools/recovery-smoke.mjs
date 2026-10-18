@@ -64,8 +64,21 @@ const quote = mk('user'); bub(quote, ${JSON.stringify('```\n' + VOICE + '\n```')
 const real = mk('user'); bub(real, '把报告发我');
 const question = mk('user'); bub(question, ${JSON.stringify(QUERY)});
 const failure = mk('assistant'); bub(failure, '⚠️ Agent failed before reply: EmbeddedAttemptSessionTakeoverError: session file changed while embedded prompt lock was released: /Users/x/session.jsonl');
-const {projectPane} = await import('/recovery.js');
+const {projectPane, mountRecovery} = await import('/recovery.js');
 projectPane(pane);
+const before = {
+  control: getComputedStyle(control).display,
+  quote: getComputedStyle(quote).display,
+  real: getComputedStyle(real).display,
+};
+// Feed a real AbortSignal through the module's own abort path. mountRecovery needs a
+// full host object (it subscribes on construction), so the browser smoke exercises the
+// *presentation* half here — the projection was already applied above — and lets a
+// retirements signal fire to prove nothing strips those rows. The full activation
+// lifecycle (timers, observer, in-flight requests) is covered by the node tests.
+const controller = new AbortController();
+const styleBefore = !!document.getElementById('cle-recovery-style');
+controller.abort();
 window.__r = {
   control: getComputedStyle(control).display,
   controlCode: control.querySelectorAll('code').length,
@@ -74,6 +87,11 @@ window.__r = {
   question: getComputedStyle(question).display,
   failure: getComputedStyle(failure).display,
   marked: control.getAttribute('data-cle-internal-only'),
+  ariaAfterAbort: control.getAttribute('aria-hidden'),
+  styleSurvivedAbort: styleBefore && !!document.getElementById('cle-recovery-style'),
+  beforeControl: before.control,
+  beforeQuote: before.quote,
+  beforeReal: before.real,
 };
 document.body.dataset.result = JSON.stringify(window.__r);
 document.title = 'done';
@@ -106,6 +124,13 @@ try {
   expect('a short question about the prefix stays visible', result.question !== 'none', true);
   expect('a real failure stays visible', result.failure !== 'none', true);
   expect('control group marked internal', result.marked, '1');
+  // Lifecycle: abort must not re-publish the rows it already proved internal.
+  expect('folded row still hidden after abort', result.control, 'none');
+  expect('folded row still aria-hidden after abort', result.ariaAfterAbort, 'true');
+  expect('fold rule survived abort', result.styleSurvivedAbort, true);
+  expect('quoted row still visible after abort', result.quote !== 'none', true);
+  expect('ordinary row still visible after abort', result.real !== 'none', true);
+  expect('fold was already applied before abort', result.beforeControl, 'none');
 } catch (error) {
   failed += 1;
   console.log('FAIL ' + error.message);
