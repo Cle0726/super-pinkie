@@ -68,3 +68,15 @@ html[data-cle] .chat-pane-cache__pane--active .chat-activity-group { border-colo
 /* message position rail: there when you reach for it */
 html[data-cle] .chat-position-rail { opacity: .18; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
 html[data-cle] .chat-position-rail:hover { opacity: 1; }
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .chat-thread-inner, html[data-cle] .chat-thread .chat-virtual-row { padding-inline: 18px !important; }
+  html[data-cle] .chat-group.assistant, html[data-cle] .chat-group.user { padding-inline: 0 !important; margin-inline: 0 !important; max-width: none !important; }
+  html[data-cle] .chat-group.assistant > .chat-group-messages { max-width: 100% !important; margin: 0 !important; }
+}
+/* avatars are gone, so their column and gap go too */
+html[data-cle] .chat-group.assistant { gap: 0 !important; column-gap: 0 !important; grid-template-columns: minmax(0, 1fr) !important; }
+html[data-cle] .chat-group.assistant > .chat-group-messages { margin-left: 0 !important; }
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .chat-thread-inner { margin-inline: 0 !important; padding-inline: 16px !important; max-width: none !important; }
+  html[data-cle] .chat-thread .chat-virtual-row { padding-inline: 0 !important; }
+}

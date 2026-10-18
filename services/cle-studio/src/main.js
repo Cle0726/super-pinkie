@@ -13,7 +13,7 @@ import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
 import {mountWelcome} from './rooms/welcome.js';
 import {blink} from './rooms/blink.js';
-import {mountComposer, composer} from './composer/composer.js';
+import {mountComposer, composer, mountToolFold} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
 import {loadLegacy} from './legacy/loader.js';
 import {installLegacyShim} from './legacy/shim.js';
@@ -22,6 +22,7 @@ import {mountStatus} from './process/status.js';
 import {mountStudy} from './learning/study.js';
 import {mountSplash} from './splash/splash.js';
 import {initModes} from './core/modes.js';
+import {mountLineDecor} from './line/decorate.js';
 
 const VERSION = '0.1.0';
 
@@ -43,10 +44,12 @@ export default {
     // each part stands alone: one failing module must never take the brand, the rooms or the composer down
     const safe = (name, fn) => { try { return fn(); } catch (error) { console.error(`[cle] ${name} failed`, error); return null; } };
     safe('splash', () => mountSplash(controller.signal));
+    safe('line-decor', () => mountLineDecor(controller.signal));
     const rooms = safe('rooms', () => mountRooms(host, controller.signal));
     safe('welcome', () => mountWelcome(host, controller.signal));
     safe('composer', () => mountComposer(host, controller.signal));
     safe('gaze', () => mountGaze(controller.signal));
+    safe('tool-fold', () => mountToolFold(controller.signal));
     safe('status', () => mountStatus(host, controller.signal));
     safe('study', () => mountStudy(host, controller.signal));
     safe('shim', () => installLegacyShim(host, controller.signal));
