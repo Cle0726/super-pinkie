@@ -14,7 +14,7 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
   - 底边钉住：`drawPlate` 把 `y` 钳在 `H - hgt`，常态下猫不会掉出输入框上沿，只有跃起向上。
   - 眨眼用同目录的闭眼图短暂叠一层（没有闭眼图就不眨），不做逐像素眼皮手术。
   - 性能：默认 30fps，有动作时才 58fps；`IntersectionObserver` + `document.hidden` + `checkVisibility` 暂停；`prefers-reduced-motion` 直接不 attach，退回静态图。
-  - 载入：`build.companion` 会在 rig 未注册时按 `/cle/static/legacy/laolao-cat-rig.js` 自取一次（幂等守卫 `window.__pinkieCatRig`），避免“文件写好但永远不加载”。
+  - 载入：`laolao-companion.js` 会在 rig 未注册时按 `/cle/static/legacy/laolao-cat-rig.js` 自取一次（幂等守卫 `window.__pinkieCatRig`），避免“文件写好但永远不加载”。
 
 ### 1.2 猫压住回答末尾（150×102 挡正文）
 - **修改**：`--buddy-w: 168px` + `aspect-ratio: 168/90`，与任务书给的原小马尺寸/舒展比例一致；`reserve()` 按**实测**高度（量不到时按比例推算，保底 72px）往所属 pane 写 `--pinkie-safe`，CSS 只在 `[data-pinkie-safe]` 的 pane 上给 `.chat-thread-inner` 加 `padding-bottom` / `scroll-padding-bottom`，所以最后一条回复能滚到猫上方，输入框本身不动。数值不变时不重写样式，避免每 400ms 触发样式重算。
@@ -45,7 +45,7 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 
 ## 2. 自测结果
 
-新增 `tests/companion-cat-rig.test.mjs`（10 项，`node --test` 全绿）。它不是对源码做正则，而是用最小 DOM 跑**真实的两个脚本文件**：
+新增 `tests/companion-cat-rig.test.mjs`（11 项，`node --test` 全绿）。它不是对源码做正则，而是用最小 DOM 跑**真实的两个脚本文件**：
 
 | 测试 | 覆盖的真实风险 |
 |---|---|
@@ -55,6 +55,7 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 | `a cached hidden pane keeps its cat alive…` | 缓存侧保留实例但暂停、不再推进状态、恢复后仍是同一只并接回自己的 run、pane 销毁只回收该侧 |
 | `chat keeps a real safe gap…` | `--pinkie-safe` 数字合法且 ≥72px、同步到线程、追加卡抬高与清除、销毁后变量回滚 |
 | `a long label does not push the menu out of its own pane` | 横向推回 pane 内、纵向顶出可视区时下移 |
+| `opening the settings dialog does not throw away an answer already in flight` | 开/关设置不动提问世代号，换房间才作废 |
 | `the menu uses the shell type and colour tokens…` | 菜单区无 emoji、颜色走 `--cle-ink`、字体走 `--cle-sans` |
 | `the cat attaches the motion rig once the page has settled…` | 首屏未 settle 不编译、settle 后只 attach 一次 |
 | `companion-v2 art wins when Claude ships it…` | v2 存在时优先、某状态缺图时该状态仍回退 |
@@ -63,7 +64,8 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 其他检查：
 - `node --check` 三个脚本（companion / cat-rig）通过。
 - `cd services/cle-studio && node build.mjs` 通过（复用主仓库 `node_modules`，未安装新依赖）：`ui 1a0183a8b349  js 53.7 KB  css 54.6 KB`。
-- 回归：`tests/night-mode.test.cjs`（含 companion 25 姿态/让位规则）、`tests/ui-d-sweep.test.cjs` 共 11 项通过。
+- 回归：`tests/night-mode.test.cjs` + `tests/model-picker.test.cjs` + 本路测试共 57 项通过。
+- 全量 `tests/*.test.*`：831 通过、11 失败，失败全部在 `chat-tool-timeline` / `native-glass` / `material-preview` / `party-room-art` / `sidebar-sessions`，主仓库同一基线同样失败（已核对 `tests/chat-tool-timeline.test.mjs` 在主仓库 7 失败），与本路文件无关。
 
 ## 3. 自主发现（FUSION 要求）
 
@@ -78,6 +80,8 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 | A7 | `pet-sit.webp` 314×420 | 竖构图被塞进 168×90 的位子，实际渲染只有一条细窄的猫，与 `pet-loaf` 616×420 交替时尺寸跳变 | 已从状态回退表移除，只留横构图两张；真正五张表情等 Claude |
 | A8 | 氛围画布 `z-index: 0` + 未建层叠上下文 | 在部分 pane 里会盖住正文（正文未显式定位时） | 改 `-1` + 宿主 `isolation: isolate` |
 | A9 | `data-pinkie-queue` 属性 | 旧脚本写这个属性，但新版没有任何 CSS 读它，等于死代码，猫也不会给追加卡让位 | 改为写 `--buddy-lift` 并同步 `data-pinkie-queue`，真正抬高猫 |
+| A10 | `Buddy.requestVersion` | 设置对话框与 explain/summary/clarify 共用一个世代号：打开或关闭设置，会把正在等模型的那条解释结果当成过期丢掉 | 已拆成 `askTicket`（提问）与 `settingsRequest`（设置）；只有换房间才作废在途回答 |
+| A11 | 设置窗 `×` 按钮 aria | 只有 `aria-label`，没有 `aria-hidden` 的图标语义，读屏会把 SVG 当图形念 | SVG 已加 `aria-hidden="true"`，文本仅由 `aria-label` 提供 |
 
 ### 跨所有权问题（不在本路文件范围，交主控分派）
 

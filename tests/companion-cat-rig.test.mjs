@@ -138,6 +138,9 @@ class Element {
   getBoundingClientRect() { return this._rect || {left: 100, top: 100, right: 860, bottom: 140, width: 760, height: 40}; }
   focus() {}
   checkVisibility() { return true; }
+  // <dialog> 的最小实现：只记录 open，showModal/close 触发同一个 close 回调
+  showModal() { this.open = true; }
+  close() { if (!this.open) return; this.open = false; this.fire("close"); }
   addEventListener(type, fn) { if (!this.listeners.has(type)) this.listeners.set(type, []); this.listeners.get(type).push(fn); }
   removeEventListener() {}
   fire(type, event = {}) { for (const fn of this.listeners.get(type) || []) fn({target: this, stopPropagation() {}, preventDefault() {}, ...event}); }
@@ -450,6 +453,27 @@ test("the menu uses the shell type and colour tokens, not ad-hoc fonts or emoji"
   assert.doesNotMatch(menu, /[\u{1F300}-\u{1FAFF}]/u, "no emoji in the menu");
   assert.match(menu, /color: var\(--cle-ink/);
   assert.match(css, /\.pinkie-buddy__item \{[^}]*font: [^;]*var\(--cle-sans/);
+});
+
+test("opening the settings dialog does not throw away an answer already in flight", async () => {
+  const pane = paneWith();
+  const {window} = boot({panes: [pane]});
+  const buddy = window.__pinkieBuddy;
+  buddy.mount();
+  const inst = buddy.instances[0];
+  inst.setState("rest");
+  // 模拟「解释」正在等模型：请求世代号在等待期间必须保持不变
+  const before = inst.askTicket;
+  inst.openSettings();
+  assert.equal(inst.askTicket, before, "settings does not bump the ask generation");
+  assert.ok(inst.settingsRequest > 0, "settings has its own generation counter");
+  inst.settingsDialog?.close?.();
+  assert.equal(inst.askTicket, before, "closing settings does not cancel the in-flight ask either");
+
+  // 换房间才应该作废在途回答
+  pane.dataset.mcpAppOwnerKey = JSON.stringify(["x", "agent:learning:main"]);
+  inst.tick();
+  assert.equal(inst.askTicket, before + 1, "a room change still invalidates stale answers");
 });
 
 test("the cat attaches the motion rig once the page has settled, and never twice", async () => {
