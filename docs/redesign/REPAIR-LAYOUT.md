@@ -289,6 +289,123 @@ native patch、installer cache-bust 等），在未改动的 HEAD 上同样失�
   再展开；若主控看到闪动，可在 `document.fonts.ready` 后再触发一次同步。
 - 未起网关，未做真实模型轮次与题卡/笔记联动验证。
 
+
+## 九、第三轮返修（主控原生 CUA 复验，增量）
+
+主控合入 ecc36d8 / bundle 72fedd3a6730 后在 1280×720 实测：双栏 16px inset 与 per-pane 字号已确认，
+菜单不再重建保留；但单栏仍散三排、输入区回退成被第二行压窄。逐项根因与修复如下。
+
+### 9.1 权限 trigger 占满整行（lead 三排、composer 153px）
+
+**根因**（真实运行时计算样式）：`.chat-controls__permission-picker` 是 `<wa-dropdown>`，宿主
+`display: contents`，自身 rect 为 0×0，所以旧 `measure()` 直接跳过它、认为它不占宽。
+但该宿主里的真实按钮 `.chat-controls__permission-trigger` 同时带有原生类
+`chat-controls__inline-select-trigger`，原生规则给这个类 `width: 100%`；由于宿主是
+`display: contents`，这个 100% 直接按 **lead 的宽度**解析，实测宽 532.2px（离屏测得 720px@864），
+独自占满一整行，把其它工具推到第三排。
+
+**修改**（两层都要）：
+
+1. CSS 针对真实控件：`… .chat-controls__permission-trigger` 显式
+   `width/min-width/max-width: var(--chat-composer-control-size)` + `flex: 0 0 auto`。
+   宿主仍是 `display: contents`，不去改它——改宿主无效，因为 100% 是它子元素自己的声明。
+2. `measure()` 不再信任单个节点的 rect：宽为 0 时递归累加子节点宽度。这样 `display: contents`
+   宿主和已吸收项都不会被当成“不占位”。
+
+### 9.2 输入文字被第二行压窄、发送按钮偏中
+
+**根因**：一行两列的共享模板让第二行的 model controls（313.8px）决定了第 2 列宽度，第一行的
+textarea 因此只剩 544px；同时 actions 落在 313.8px 的列里且 `justify-content: normal`，
+按钮贴列左缘（x≈900），pill 到 1201，右侧留出 200px+ 空白。
+
+**修改**：第一行改为横跨两列（`"words words"`），actions 与 textarea 同一个网格区域但
+`justify-self: end` 靠右；textarea 预留的是 **发送/语音这组按钮的真实宽度**（`padding-right: 92px`），
+而不是另一行控件的宽度。第二行才是 `"tools utils"`。
+另外发现并修掉一个自己引入的缺陷：基础模板曾使用未声明的 `utils` 区域，浏览器会生成隐式行，
+实测 composer 变成 134px——现在基础模板与 `@container` 模板都完整声明所用区域。
+
+### 9.3 `@container 720` 残留旧 grid-area 造成隐式第三轨
+
+`grid-area: 2 / 1 / 3 / 4`、`3 / 1 / 4 / 4` 引用的是早先四列模板的行列号，新模板没有这些轨道，
+于是浏览器补出隐式轨道（实测 381px 83px 0px）。改为按命名区域重写：
+`"words actions" / "tools tools" / "utils utils"`，`tools`、`utils` 各自独立成行。
+
+### 9.4 键盘打开菜单时焦点没有进入菜单
+
+**根因**：`render()` 在 `menu.hidden === true` 时先调用 `focus()`，之后才把 `menu.hidden = false`。
+浏览器不会把焦点交给 `hidden` 容器内的元素，所以 `document.activeElement` 仍是 `.cle-tools-more`。
+
+**修改**：拆成 `render()`（只构建）与 `focusRow(index)`（只聚焦）；`open()` 的顺序改为
+构建 → `hidden = false` → 定位 → `focusRow(0)`；签名变化后的重建也用同样顺序，并保留原焦点索引。
+
+### 9.5 折叠菜单重复出现已吸收的学习入口
+
+`laolao-learning--absorbed` 的按钮（“资料”“打开学习笔记本”）由学习胶囊接管，只靠 CSS 隐藏，
+没有 `hidden` 属性，因此被当成 low 工具再次代理。现在 `items()` 按
+`.laolao-learning--absorbed` 类显式排除——**不**用 computed `display: none` 泛删，因为折叠本身
+就会把 low 工具变成 `display: none`，那样会把所有待折叠项一并过滤掉。
+
+### 9.6 dispose 后不残留全局 abort 监听
+
+上一轮每个 stage 都往插件全局 `signal` 上挂 `abort` 监听，`dispose()` 只移除 DOM 与三个 UI 监听，
+全局 signal 上的闭包会永久持有 stage 和已移除的菜单。现在每个 stage 持有**自己的**
+`AbortController`，`dispose()` 先清理再 `abort()` 自己，且重复调用是幂等的；
+全局 signal 只在卸载时统一遍历 `stages` 调 `dispose()`。
+
+### 9.7 本轮新增：离屏真实计算样式回归
+
+`tests/cle-layout-computed.test.cjs` 不再依赖 mini DOM 的假设。它用 headless Chrome（无窗口、
+不接触用户 GUI）加载**当前 runtime 的真实原生 CSS**（`control-ui-boot-shared-*`、
+`control-ui-boot-chat-*`、`chat-transcript-styles-*`）加我们的 `tokens/status/composer`，
+按真实层级拼装 composer DOM（含 `display:contents` 的 `<wa-dropdown>` 与 100% 宽的 trigger），
+然后断言实测盒子。Chrome 缺失时整组自动跳过。
+
+覆盖与实测：
+
+| 用例 | 断言 | 修复前 | 修复后 |
+| --- | --- | --- | --- |
+| permission trigger | ≤44px | **720px** | 36px |
+| 工具单排 | lead 高度 ≤46px | **114px（四排）** | 44px（一排） |
+| 文字宽度 | textarea ≥ row−130 且 ≥700px | 被压到 544px | 752px / 864px 行 |
+| 发送靠右 | 结束位置 ≥ composer 右缘−24px | x900 偏中 | 靠右 |
+| 窄 pane 列轨 | 列轨 ≤2 | 有隐式第三轨 | 2 轨 |
+| 双栏 inset | shell 内缩 ≥12px 且 ≤508−24 | 贴边 | 476px |
+
+行为用例（同样在真实浏览器里跑）：
+- 关闭态按 `ArrowDown` → `menu.hidden === false`、`getComputedStyle(menu).display !== 'none'`、
+  `document.activeElement === 第一项`，再连续 4 帧后焦点不变。
+  **把 `open()` 的焦点顺序改回“先 focus 再取消 hidden”后该用例立即失败**（`focus went to `），
+  说明它真的覆盖了可见性，而不是断言源码里有没有 `ArrowDown`。
+- 菜单项不包含 `.laolao-learning--absorbed` 的入口，同时“浏览器”正常出现在菜单里。
+
+### 9.8 回归结果
+
+- `cle-layout*` 四套（含新增 computed 测试）共 41 例全部通过。
+- 全量 873 例、862 通过；剩余 11 例与前两轮完全相同（pony 命名、v1–v4 bundle 升级、
+  native patch、installer cache-bust 等），在未改动的 HEAD 上同样失败，与本范围无关。
+- `node --check` 三个改动 JS 通过；`node build.mjs` 成功（js 61.2 KB / css 60.1 KB）。
+- 修复前/后对照：把 `composer.css` 还原到 HEAD，computed 套件 6 例中 5 例失败；
+  还原 `composer.js` 的焦点顺序，焦点用例失败。
+
+### 9.9 仍未验证
+
+- 仍未做人工视觉验收；本轮所有数字来自离屏 Chrome 的实测盒子，与主控 CUA 的真实窗口
+  可能存在亚像素或字体差异（例如 `--chat-composer-control-size` 在窄 composer 上是否仍为 36px）。
+- 未在真实网关跑模型轮次；菜单代理点击的真实控件行为仍由主控验收。
+- 若后续原生 CSS 改掉 `chat-controls__inline-select-trigger` 的 `width:100%` 或把
+  `<wa-dropdown>` 移出 `display:contents`，9.1 的多余约束应一并复查。
+
+### 9.10 本轮文件
+
+| 文件 | 说明 | 注册需求 |
+| --- | --- | --- |
+| `src/composer/composer.css` | 网格解耦、permission trigger 尺寸、命名区域、922 行预留、吸收项 | 已 import |
+| `src/composer/composer.js` | 焦点顺序、吸收项过滤、递归测宽、每 stage 独立 AbortController | 已 import |
+| `tests/cle-layout-computed.test.cjs` | **新增** headless Chrome 计算样式与行为回归 | 自动发现 |
+| `tests/cle-layout-pane-room.test.cjs` | 更新网格/trigger/容器断言 | 自动发现 |
+
+合并后仍需主控跑一次 `node build.mjs` 再提交 `openclaw.plugin.json`（本轮已再次还原）。
+
 ## 七、Commit
 
 见本分支最后一次提交（`repair(layout): …`）。报告文件本身随该提交入库。

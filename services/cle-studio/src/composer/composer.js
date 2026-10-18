@@ -82,6 +82,11 @@ export function classifyTool(el) {
 
 const toolName = (el, fallback) => (el.getAttribute?.('aria-label') || el.getAttribute?.('title') || el.dataset?.cleToolName || el.textContent?.trim() || fallback || '').slice(0, 28);
 const isHidden = (el) => el.hidden || el.getAttribute?.('aria-hidden') === 'true';
+// Entries the learning module absorbed into its own capsule stay in the lead for state, but they
+// are visually merged with 学习工具. They must not reappear as fold proxies. Class-based on
+// purpose: a computed `display:none` filter would also drop the low-priority controls that the
+// fold itself hides.
+const isAbsorbed = (el) => Boolean(el.classList?.contains('laolao-learning--absorbed'));
 
 // The menu is a projection of the low-priority controls. A signature lets refresh() answer
 // "did anything actually change?" — rebuilding on every frame would throw away focus and, since
@@ -114,7 +119,7 @@ function tagLead(composerEl, lead) {
 
 // One menu per composer. Items are proxies: activating one clicks the real control in this
 // same lead, so state, aria and behaviour stay with the native button.
-function buildMenu(composerEl, lead, trigger, signal) {
+function buildMenu(composerEl, lead, trigger) {
   const menu = document.createElement('div');
   menu.className = 'cle-tools-menu';
   menu.setAttribute('role', 'menu');
@@ -122,7 +127,8 @@ function buildMenu(composerEl, lead, trigger, signal) {
   menu.hidden = true;
   document.body.append(menu);
 
-  const items = () => [...lead.querySelectorAll(':scope > [data-cle-priority="low"]')].filter((el) => !isHidden(el));
+  const items = () => [...lead.querySelectorAll(':scope > [data-cle-priority="low"]')]
+    .filter((el) => !isHidden(el) && !isAbsorbed(el));
   // what is on screen right now: the signature plus the row nodes, so focus can be kept
   let rendered = {signature: null, rows: []};
   const place = () => {
@@ -141,7 +147,9 @@ function buildMenu(composerEl, lead, trigger, signal) {
     if (restore) trigger.focus({preventScroll: true});
   };
   // Rebuild only when the set of controls changed. `focusIndex` keeps the keyboard where it was.
-  const render = (rows, focusIndex = 0) => {
+  // Focus is applied by the caller *after* the menu is shown: focusing an element inside a
+  // `hidden` container is a no-op in every browser, which left ArrowDown focusing the trigger.
+  const render = (rows) => {
     menu.replaceChildren();
     rendered = {signature: signatureOf(rows), rows};
     for (const control of rows) {
@@ -160,15 +168,20 @@ function buildMenu(composerEl, lead, trigger, signal) {
       });
       menu.append(item);
     }
-    menu.querySelectorAll('.cle-tools-menu__item')[focusIndex]?.focus({preventScroll: true});
+  };
+  const focusRow = (index = 0) => {
+    const rows = [...menu.querySelectorAll('.cle-tools-menu__item')];
+    if (!rows.length) return;
+    rows[Math.max(0, Math.min(index, rows.length - 1))].focus({preventScroll: true});
   };
   const open = () => {
     const rows = items();
     if (!rows.length) return;
-    render(rows, 0);
+    render(rows);
     menu.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
     place();
+    focusRow(0);
   };
   // called on every observer pass: reposition, and rebuild only if the controls really changed
   const refresh = () => {
@@ -177,8 +190,9 @@ function buildMenu(composerEl, lead, trigger, signal) {
     if (!rows.length) { close(); return; }
     if (signatureOf(rows) === rendered.signature) { place(); return; }
     const active = [...menu.children].indexOf(document.activeElement);
-    render(rows, Math.max(0, Math.min(active, rows.length - 1)));
+    render(rows);
     place();
+    if (active >= 0) focusRow(active);
   };
 
   trigger.addEventListener('click', (event) => {
@@ -203,18 +217,19 @@ function buildMenu(composerEl, lead, trigger, signal) {
   document.addEventListener('pointerdown', outside, true);
   window.addEventListener('resize', onResize);
   window.addEventListener('scroll', onScroll, true);
-  // every listener this menu added is bound to the controller, so a remount cannot accumulate them
+  // This stage owns its own controller. Binding stages to the plugin's global signal would leave
+  // one abort listener per stage on that signal forever: a re-rendered pane disposes its stage but
+  // the signal keeps the closure (and the removed DOM) alive, and the next mount adds another.
   const controller = new AbortController();
-  const abort = signal || controller.signal;
   const dispose = () => {
+    if (controller.signal.aborted) return;
     document.removeEventListener('pointerdown', outside, true);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('scroll', onScroll, true);
     close();
     menu.remove();
+    controller.abort();
   };
-  abort.addEventListener?.('abort', dispose, {once: true});
-  if (abort.aborted) dispose();
 
   return {menu, close, open, refresh, dispose, get signature() { return rendered.signature; }};
 }
@@ -237,9 +252,20 @@ export function mountToolFold(signal) {
     if (!available) return null;
     let essential = 0;
     let low = 0;
+    // A control whose own rect is 0x0 contributes nothing of its own: either it is hidden
+    // (display:contents hosts, absorbed entries) or its visible children carry the box. Measure
+    // the descendants in that case, otherwise a `display:contents` host hides a 532px trigger
+    // from the accounting and the fold believes there is room it does not have.
+    const widthOf = (el) => {
+      const own = el.getBoundingClientRect().width;
+      if (own > 0) return own;
+      let total = 0;
+      for (const child of el.children || []) total += widthOf(child);
+      return total;
+    };
     for (const child of lead.children) {
       if (child === more) continue;
-      const width = child.getBoundingClientRect().width;
+      const width = widthOf(child);
       if (child.dataset.clePriority === 'low') {
         if (width > 0) lowWidth.set(child, width);
         low += width > 0 ? width : lowWidth.get(child) || 88;
@@ -265,7 +291,7 @@ export function mountToolFold(signal) {
         more.setAttribute('aria-expanded', 'false');
         more.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>';
         lead.append(more);
-        stage = {...buildMenu(composerEl, lead, more, signal), more};
+        stage = {...buildMenu(composerEl, lead, more), more};
         ownNodes.add(more);
         ownNodes.add(stage.menu);
         stages.set(composerEl, stage);
