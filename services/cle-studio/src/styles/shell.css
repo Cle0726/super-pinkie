@@ -1,0 +1,94 @@
+/* C.le. shell — first pass over the native Control UI (2026.10.4 light DOM). */
+
+/* ---------- promotion never shows ---------- */
+.sidebar-shell__invite, .community-invite-card, aside.invite { display: none !important; }
+
+/* ---------- page ---------- */
+html[data-cle] body { background: var(--cle-paper); color: var(--cle-ink); -webkit-font-smoothing: antialiased; }
+html[data-cle] ::selection { background: var(--cle-gaze-soft); }
+
+/* ---------- sidebar ---------- */
+html[data-cle] aside.sidebar {
+  background: transparent;
+  border-right: 1px solid var(--cle-line);
+}
+html[data-cle] .sidebar-shell { background: transparent; }
+html[data-cle] .sidebar-resizer { opacity: 0; }
+html[data-cle] .nav-section__items a,
+html[data-cle] .nav-section__items button {
+  border-radius: var(--cle-radius-ctl);
+  color: var(--cle-ink-2);
+  transition: color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .nav-section__items a:hover,
+html[data-cle] .nav-section__items button:hover { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+html[data-cle] .nav-section__items [aria-current="page"],
+html[data-cle] .nav-section__items .active,
+html[data-cle] .nav-section__items [data-active="true"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: inset 2px 0 0 var(--cle-gaze);
+  color: var(--cle-ink) !important;
+  font-weight: 600;
+}
+html[data-cle] .sidebar-online, html[data-cle] .sidebar-sessions { --cle-head: 1; }
+html[data-cle] .sidebar-online > :first-child,
+html[data-cle] .sidebar-sessions > :first-child {
+  font: 500 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--cle-ink-3);
+}
+html[data-cle] .sidebar-footer-bar { border-top: 1px solid var(--cle-line); background: transparent; }
+
+/* ---------- pane header ---------- */
+html[data-cle] .chat-pane__header { background: transparent; border-bottom: 0; }
+html[data-cle] .chat-pane__session-title-text { font: 500 15px/1.2 var(--cle-serif); letter-spacing: .01em; color: var(--cle-ink); }
+
+/* ---------- welcome ---------- */
+html[data-cle] .agent-chat__welcome h2 {
+  font: 400 34px/1.15 var(--cle-serif);
+  letter-spacing: .02em;
+  color: var(--cle-ink);
+}
+html[data-cle] .agent-chat__hint { color: var(--cle-ink-3); font-size: 12.5px; }
+html[data-cle] .agent-chat__suggestion {
+  background: transparent;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 999px;
+  color: var(--cle-ink-2);
+  font-size: 13px;
+  box-shadow: none;
+  transition: border-color var(--cle-t-quick) var(--cle-ease-soft), color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .agent-chat__suggestion:hover { border-color: var(--cle-ink); color: var(--cle-ink); background: color-mix(in srgb, var(--cle-surface) 70%, transparent); }
+
+/* ---------- composer: one quiet pill; blue only when the cat is looking ---------- */
+html[data-cle] .chat-footer { background: transparent; }
+html[data-cle] .agent-chat__input {
+  background: var(--cle-surface) !important;
+  border: 1px solid var(--cle-line-strong) !important;
+  border-radius: var(--cle-radius-composer) !important;
+  box-shadow: var(--cle-shadow) !important;
+  transition: border-color var(--cle-t-base) var(--cle-ease-soft), box-shadow var(--cle-t-base) var(--cle-ease-soft);
+}
+html[data-cle] .agent-chat__input:focus-within {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong)) !important;
+  box-shadow: 0 0 0 4px var(--cle-gaze-glow), var(--cle-shadow) !important;
+}
+html[data-cle] .agent-chat__composer-combobox textarea { caret-color: var(--cle-gaze); font-size: 15px; line-height: 1.55; color: var(--cle-ink); }
+html[data-cle] .agent-chat__composer-placeholder { color: var(--cle-ink-3); font-size: 15px; }
+html[data-cle] .agent-chat__input-btn,
+html[data-cle] .chat-controls__inline-select-trigger { color: var(--cle-ink-2); border-radius: var(--cle-radius-ctl); }
+html[data-cle] .agent-chat__input-btn:hover,
+html[data-cle] .chat-controls__inline-select-trigger:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
+html[data-cle] .chat-controls__inline-select-label { font-size: 12.5px; }
+html[data-cle] .chat-send-btn--send {
+  background: var(--cle-ink) !important;
+  color: var(--cle-paper) !important;
+  border-radius: 999px;
+  transition: transform var(--cle-t-press) var(--cle-ease-soft), opacity var(--cle-t-quick);
+}
+html[data-cle] .chat-send-btn--send:active { transform: scale(.94); }
+html[data-cle] .chat-send-btn--send:disabled { opacity: .28; }
+html[data-cle] .chat-send-btn--voice { color: var(--cle-ink-2); background: transparent !important; }

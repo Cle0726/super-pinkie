@@ -1,0 +1,32 @@
+{
+  "name": "C.le.",
+  "description": "Paper and ink, one ice-blue gaze. A black cat guards a white flower.",
+  "mascot": "none",
+  "workingPhrases": ["凝视中", "竖起耳朵", "嗅一嗅线索", "理一理思路", "守着这朵花", "慢慢靠近", "尾巴一扫", "落笔"],
+  "light": {
+    "background": "#F3F0EA", "foreground": "#15130F",
+    "card": "#FBFAF7", "card-foreground": "#15130F",
+    "popover": "#FFFFFF", "popover-foreground": "#15130F",
+    "primary": "#15130F", "primary-foreground": "#FBFAF7",
+    "secondary": "#EAE6DE", "secondary-foreground": "#15130F",
+    "muted": "#ECE8E0", "muted-foreground": "#6A655C",
+    "accent": "#1C7FE0", "accent-foreground": "#FFFFFF",
+    "destructive": "#B23A33", "destructive-foreground": "#FFFFFF",
+    "border": "#DDD8CE", "input": "#D6D0C5", "ring": "#1C7FE0",
+    "font-sans": "-apple-system, \"PingFang SC\", system-ui, sans-serif",
+    "font-mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "dark": {
+    "background": "#0B0C0F", "foreground": "#ECE8E1",
+    "card": "#131418", "card-foreground": "#ECE8E1",
+    "popover": "#1A1B20", "popover-foreground": "#ECE8E1",
+    "primary": "#ECE8E1", "primary-foreground": "#0B0C0F",
+    "secondary": "#1C1D22", "secondary-foreground": "#ECE8E1",
+    "muted": "#17181C", "muted-foreground": "#9A958C",
+    "accent": "#38AEFF", "accent-foreground": "#04121F",
+    "destructive": "#E0645B", "destructive-foreground": "#1A0605",
+    "border": "#26272D", "input": "#2A2B31", "ring": "#38AEFF",
+    "font-sans": "-apple-system, \"PingFang SC\", system-ui, sans-serif",
+    "font-mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  }
+}

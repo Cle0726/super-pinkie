@@ -1,0 +1,10 @@
+{
+  "name": "cle-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "C.le. interface for 超級碧琪: guardian cat, rooms, gaze motion.",
+  "openclaw": { "extensions": ["./index.mjs"] },
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}
