@@ -1,6 +1,7 @@
 // The five rooms. Each room is one agent with its own sessions, model and tiers;
 // switching rooms is a blink: the lids close, the room changes underneath, they open.
 import {blink} from './blink.js';
+import {lineArt, drawLine, loadLine} from '../line/line.js';
 
 export const ROOMS = [
   {id: 'chat', eye: [.40, .38], agent: 'main', zh: '雅叙', fr: 'Le Chat', hint: '闲谈 · 陪伴', line: '坐下来，慢慢说。'},
@@ -25,10 +26,20 @@ export function mountRooms(host, signal) {
     html.dataset.cleRoom = room.id;
     selector.querySelector('.cle-room__zh').textContent = room.zh;
     selector.querySelector('.cle-room__fr').textContent = room.fr;
-    selector.querySelector('.cle-room__thumb').style.backgroundImage = `url("${roomArt(room.id)}")`;
+    setThumb(selector.querySelector('.cle-room__thumb'), room, true);
     selector.title = `${room.zh} · ${room.fr} — ${room.hint}`;
     for (const item of menu.querySelectorAll('[data-room]')) item.setAttribute('aria-current', String(item.dataset.room === room.id));
   };
+
+  // a close-up of his face in line, one state per room; the painting stands in until the drawing exists
+  function setThumb(el, room, animate) {
+    loadLine(`mode-${room.id}`).then((data) => {
+      if (!data) { el.classList.remove('is-line'); el.style.backgroundImage = `url("${roomArt(room.id)}")`; return; }
+      el.classList.add('is-line'); el.style.backgroundImage = '';
+      if (el.firstChild?.dataset?.line === `mode-${room.id}`) { if (animate) drawLine(el.firstChild); return; }
+      el.replaceChildren(lineArt(`mode-${room.id}`, {draw: animate, speed: 170}));
+    });
+  }
 
   // ---- selector (top of the sidebar) ----
   const selector = document.createElement('button');
@@ -41,8 +52,9 @@ export function mountRooms(host, signal) {
   menu.className = 'cle-room-menu';
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
-  menu.innerHTML = ROOMS.map((r, i) => `<button type="button" role="menuitemradio" class="cle-room-menu__item" data-room="${r.id}"><span class="cle-room-menu__thumb" style="background-image:url('${roomArt(r.id)}')"></span><span class="cle-room-menu__names"><span class="cle-room-menu__zh">${r.zh}<em>${r.fr}</em></span><span class="cle-room-menu__hint">${r.hint}</span></span><kbd class="cle-room-menu__key">⌘${i + 1}</kbd></button>`).join('');
+  menu.innerHTML = ROOMS.map((r, i) => `<button type="button" role="menuitemradio" class="cle-room-menu__item" data-room="${r.id}"><span class="cle-room-menu__thumb"></span><span class="cle-room-menu__names"><span class="cle-room-menu__zh">${r.zh}<em>${r.fr}</em></span><span class="cle-room-menu__hint">${r.hint}</span></span><kbd class="cle-room-menu__key">⌘${i + 1}</kbd></button>`).join('');
   document.body.append(menu);
+  for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room), false);
 
   const placeMenu = () => {
     const r = selector.getBoundingClientRect();
@@ -53,7 +65,7 @@ export function mountRooms(host, signal) {
   const openMenu = (open) => {
     menu.hidden = !open;
     selector.setAttribute('aria-expanded', String(open));
-    if (open) { placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
+    if (open) { menu.querySelectorAll('.cle-line').forEach((l) => drawLine(l, {quick: true})); placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
   };
   selector.addEventListener('click', () => openMenu(menu.hidden));
   menu.addEventListener('click', (e) => {

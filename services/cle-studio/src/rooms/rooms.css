@@ -120,3 +120,10 @@ html[data-cle] .agent-chat__welcome .cle-welcome__line { margin: 0 0 26px; font:
 }
 .cle-welcome__ask:hover { border-color: var(--cle-ink); color: var(--cle-ink); }
 @media (max-height: 760px) { .cle-welcome__arch { width: min(180px, 26vh); } .cle-welcome__line { font-size: 22px; } }
+/* line close-ups: ink on the paper, no frame needed */
+.cle-room__thumb.is-line, .cle-room-menu__thumb.is-line { background: transparent; box-shadow: none; border-radius: 0; display: grid; place-items: center; }
+.cle-room__thumb.is-line .cle-line { width: 42px; height: 42px; --cle-line-w: 1.15px; }
+.cle-room-menu__thumb.is-line .cle-line { width: 38px; height: 38px; --cle-line-w: 1.1px; }
+.cle-room-menu__item[aria-current="true"] .cle-room-menu__thumb.is-line { box-shadow: none; }
+.cle-room-menu__item[aria-current="true"] .cle-line { color: var(--cle-ink); }
+.cle-room-menu__item:not([aria-current="true"]) .cle-line { color: var(--cle-ink-2); }
