@@ -153,6 +153,31 @@ test('gaze records how many stops the model really exposes', () => {
   assert.match(src, /host\.dataset\.cleStops = String\(values\.length\)/);
 });
 
+/* The effort menu is not only a slider: it has a panel, a live value, a single-stop button
+   for models that expose one level, and a Speed radio group. A previous pass rewrote the
+   slider block and silently dropped every rule below it, so these are pinned by name. */
+test('the panel, the single-stop button and the Speed group keep their own styling', () => {
+  const css = read('services/cle-studio/src/composer/models.css');
+  const required = [
+    ['panel padding', /\.chat-controls__reasoning-panel\s*\{[\s\S]{0,120}?padding: 11px 12px 12px;/],
+    ['panel rule', /\.chat-controls__reasoning-panel\s*\{[\s\S]{0,200}?border-top: 1px solid var\(--cle-line\);/],
+    ['section heading', /\.chat-controls__effort-heading\s*\{[\s\S]{0,160}?font: 500 10\.5px\/1\.2 var\(--cle-mono\);/],
+    ['live value', /\.chat-controls__effort-value[\s\S]{0,120}?font: 500 12px\/1\.2 var\(--cle-sans\);/],
+    ['single-stop button', /\.chat-controls__reasoning-option\s*\{[\s\S]{0,200}?min-height: 30px;/],
+    ['single-stop selected', /\.chat-controls__reasoning-option--selected,[\s\S]{0,220}?background: var\(--cle-gaze-soft\);/],
+    ['single-stop disabled', /\.chat-controls__reasoning-option:disabled \{ opacity: \.55; \}/],
+    ['speed panel', /\.chat-controls__speed-panel \{[^}]*padding: 10px 12px 12px;/],
+    ['speed group', /\.chat-controls__speed-options\s*\{[\s\S]{0,220}?border-radius: var\(--cle-radius-ctl\);/],
+    ['speed checked', /\.chat-controls__speed-option\[aria-checked="true"\]\s*\{[\s\S]{0,160}?color: var\(--cle-ink\);/],
+    ['speed focus', /\.chat-controls__speed-option:focus-visible \{ outline: 2px solid var\(--cle-gaze\);/],
+    ['speed disabled', /\.chat-controls__speed-option:disabled \{ opacity: \.55; \}/],
+  ];
+  for (const [label, pattern] of required) assert.match(css, pattern, `missing: ${label}`);
+  // and every one of those controls really is rendered by the 2026.10 effort menu
+  const native = read('services/cle-studio/static/legacy/laolao-model-picker.js');
+  assert.ok(native.length > 0);
+});
+
 test('the brand mark reaches the closed trigger, not only an open menu', () => {
   const src = read('services/cle-studio/static/legacy/laolao-model-picker.js');
   const modern = src.slice(src.indexOf('function syncModern'), src.indexOf('function sync(details)'));

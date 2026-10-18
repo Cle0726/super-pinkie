@@ -167,6 +167,69 @@
   改 `--cle-gaze` 一处即可，不需要动结构。
 - 我未看图。以上是层叠规则 + computed style + 几何测量，观感仍需主控 CUA 判定。
 
+## 三点六、aa4ad65 的范围回归（主控发现，已修）
+
+主控核对 aa4ad65 时指出：该 commit 还整段删掉了 `models.css` 里
+`.chat-controls__reasoning-panel`、`.chat-controls__effort-heading/value`、
+`reasoning-default/option`、`speed-panel/options/option` 等控件区样式，而报告没有解释，
+且这并非改 track/thumb 所必需。
+
+**这是我的实现错误，不是设计决定。** 上一轮用「取起点/终点索引后整段替换」的方式重写滑杆块，
+结束锚点落在 `/* very narrow` 而不是 `/* headings … */`，于是把夹在两者之间的整个控件区一并吞掉。
+`git show 7f12598:…models.css | grep -c` 与当前文件的对比可直接复现（reasoning-panel 1→0、
+speed-option 5→0 等）。
+
+### 恢复内容（只撤去与新细轨确实冲突的部分；实际一条都不冲突）
+
+全部按 7f12598 原文恢复，并按 2026.10 的真实 DOM 补强：
+
+| 规则 | 恢复后职责 |
+|---|---|
+| `.chat-controls__reasoning-panel` | 内边距 11/12/12、`border-top` 分隔线、透明底（避免在纸白菜单里叠出第二层灰） |
+| `.chat-controls__effort-heading` | 10.5px mono、大写、`--cle-ink-2`（“推理强度 / 速度”两处小标题） |
+| `.chat-controls__effort-value`、`.chat-controls__reasoning-value` | 当前档实时值，12px、`--cle-ink` |
+| `.chat-controls__reasoning-option` | 单档模型用按钮代替滑杆：30px 高、纸底、描边 |
+| `…--selected` / `[aria-pressed=true]` | 冰蓝底 + 冰蓝描边，明确“已选”，不用粗发光 |
+| `…:disabled` / `:focus-visible` | 0.55 不透明 + 冰蓝 2px 环 |
+| `.chat-controls__speed-panel` / `-options` / `-option` | 速度组：分隔线、10px 圆角容器、28px 按钮 |
+| `…[aria-checked=true]` | 选中为纸白抬升；`ultrafast` 选中才用冰蓝底 |
+| `…:focus-visible` / `:disabled` | 键盘环与禁用态 |
+
+补充：`reasoning-value` 是本轮新增的并列选择器（模型菜单里那处实时值），原生 2026.10 给
+`effort-value` 的是 `--accent` 蓝色，这里统一为墨色。
+
+### 用原生 DOM 证明这些规则不是死代码
+
+直接对 2026.10.4 的 `control-ui-boot-shared-D3oo_6Fq.js` 中 effort 菜单渲染块做字符串核对：
+
+| 选择器 | 在原生模板中 |
+|---|---|
+| `chat-controls__reasoning-panel` | 出现 1 次 |
+| `chat-controls__effort-heading` | 2 次（推理强度 + 速度） |
+| `chat-controls__effort-value` | 1 次 |
+| `chat-controls__reasoning-option` | 2 次（含 `--selected`） |
+| `chat-controls__speed-panel` / `-options` / `-option` | 各 1 / 1 / 2 次 |
+
+两个**不**存在于 2026.10.4 产物的选择器，已在 CSS 注释中明确标注为旧版兼容，不再当作现行能力：
+
+- `.chat-controls__reasoning-default`：全产物 0 次。
+- `.chat-controls__reasoning-scale`（“更快 / 更智能”）：全产物 0 次。
+  两者仅用于同一份脚本仍服务的旧版 combined 菜单，注释已写明依据。
+
+### 实测（原生 CSS 与构建 CSS 同层）
+
+- effort 菜单：容器 `background-image: none` / `animation: none`、range `box-shadow: none`、
+  track 3px、thumb 11×11、panel padding `11px 12px 12px`、档位名 10.5px、速度按钮 28px 高。
+- 模型菜单注入同构面板后：panel padding 同上、标题 10.5px、实时值 17.05:1、
+  选中项 `rgba(42,99,232,.08)` + 冰蓝描边 + 30px 高、禁用项 `opacity .55 / not-allowed`。
+- 深色：标题 6.74:1、实时值 14.92:1、选中 14.92:1、速度项 14.92 / 6.74:1。
+- 既有能力未动：原生 range 的 value/min/max/step、方向键、`aria-checked` 单选语义、`disabled` 全部保留。
+
+### 测试
+
+新增 1 条（共 11 条）按名钉住上述 12 条规则，任何一条再次被整段吞掉都会失败。
+62 → **63 项**相关测试全通过。
+
 ## 四、自主发现（本轮新增，非任务书原文）
 
 | # | 文件 / 选择器 | 触发条件 | 问题依据 | 修复 | 验证 |

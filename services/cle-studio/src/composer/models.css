@@ -444,7 +444,10 @@ html[data-cle] .cle-gaze-stops.is-note {
   font: 400 11px/1.4 var(--cle-sans);
   text-align: left;
 }
-/* the native "更快 / 更智能" pair under the track */
+/* The "更快 / 更智能" pair under the track. Verified against the 2026.10.4 bundle: this
+   element is NOT rendered by the current effort menu (no `reasoning-scale` in any shipped
+   js/css). The rule is kept only so the older combined menu, which the same picker script
+   also serves, does not fall back to an unstyled 11px --muted line. */
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-scale {
   margin: 4px 2px 0;
   color: var(--cle-ink-2);
@@ -551,6 +554,96 @@ html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .cha
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--unanchored::-webkit-slider-thumb { opacity: .55; }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider:has(.chat-controls__reasoning-range:disabled) { opacity: .55; }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:disabled { cursor: not-allowed; }
+
+/* ---------- the panel around the slider, and every option beside it ----------
+   These are the same controls in both menus: the effort menu has the reasoning panel plus a
+   Speed group; the model menu embeds a reasoning panel plus the same Speed group. They were
+   dropped by accident in the previous pass and are restored here unchanged, except where a
+   rule genuinely conflicted with the hairline track (none of them did). */
+html[data-cle] .chat-controls__reasoning-panel {
+  gap: 2px;
+  padding: 11px 12px 12px;
+  border-top: 1px solid var(--cle-line);
+  background: transparent;
+}
+html[data-cle] .chat-controls__effort-heading {
+  color: var(--cle-ink-2);
+  font: 500 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+html[data-cle] .chat-controls__effort-value,
+html[data-cle] .chat-controls__reasoning-value {
+  color: var(--cle-ink);
+  font: 500 12px/1.2 var(--cle-sans);
+}
+/* "(Default is …)". Verified against the 2026.10.4 bundle: no `reasoning-default` exists in
+   any shipped js/css — the current menu exposes the default through its search/row state
+   instead. The rule is retained for the older combined menu that this picker still serves,
+   and is deliberately not claimed as a current native control. */
+html[data-cle] .chat-controls__reasoning-default {
+  color: var(--cle-ink-2);
+  font: 400 10.5px/1.2 var(--cle-sans);
+  border-radius: var(--cle-radius-chip);
+  padding: 2px 4px;
+}
+html[data-cle] .chat-controls__reasoning-default:hover:not(:disabled) {
+  color: var(--cle-ink);
+  background: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+}
+html[data-cle] .chat-controls__reasoning-default:focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 1px;
+}
+html[data-cle] .chat-controls__reasoning-default:disabled { opacity: .55; }
+
+/* a model that exposes a single stop renders a button here instead of a slider */
+html[data-cle] .chat-controls__reasoning-option {
+  min-height: 30px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-chip);
+  background: var(--cle-paper);
+  color: var(--cle-ink-2);
+  font: 500 12px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__reasoning-option:hover:not(:disabled) { color: var(--cle-ink); border-color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__reasoning-option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+html[data-cle] .chat-controls__reasoning-option:disabled { opacity: .55; }
+html[data-cle] .chat-controls__reasoning-option--selected,
+html[data-cle] .chat-controls__reasoning-option[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, transparent);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+}
+
+/* Speed: standard / fast / ultrafast, native radio semantics kept */
+html[data-cle] .chat-controls__speed-panel { border-top: 1px solid var(--cle-line); padding: 10px 12px 12px; }
+html[data-cle] .chat-controls__speed-options {
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-ctl);
+  background: var(--cle-paper);
+  gap: 2px;
+  padding: 3px;
+}
+html[data-cle] .chat-controls__speed-option {
+  min-height: 28px;
+  border-radius: 6px;
+  color: var(--cle-ink-2);
+  font: 500 11.5px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__speed-option:hover:not(:disabled) { color: var(--cle-ink); }
+html[data-cle] .chat-controls__speed-option[aria-checked="true"] {
+  border-color: var(--cle-line-strong);
+  background: var(--cle-surface);
+  color: var(--cle-ink);
+}
+html[data-cle] .chat-controls__speed-option[aria-checked="true"][data-chat-speed-option="ultrafast"] {
+  border-color: color-mix(in srgb, var(--cle-gaze) 50%, transparent);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+}
+html[data-cle] .chat-controls__speed-option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+html[data-cle] .chat-controls__speed-option:disabled { opacity: .55; }
 
 /* very narrow: the tier word is dropped, the tier name is not */
 @container cle-pane (max-width: 520px) {
