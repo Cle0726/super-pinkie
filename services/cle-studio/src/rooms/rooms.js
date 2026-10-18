@@ -2,6 +2,8 @@
 // switching rooms is a blink: the lids close, the room changes underneath, they open.
 import {blink} from './blink.js';
 import {lineArt, drawLine, loadLine} from '../line/line.js';
+import {modeSwitches, artStyle, onArtStyle} from '../core/modes.js';
+import {openBeside, mountSplitBadges} from './split.js';
 
 export const ROOMS = [
   {id: 'chat', eye: [.40, .38], agent: 'main', zh: '雅叙', fr: 'Le Chat', hint: '闲谈 · 陪伴', line: '坐下来，慢慢说。'},
@@ -34,7 +36,7 @@ export function mountRooms(host, signal) {
   // a close-up of his face in line, one state per room; the painting stands in until the drawing exists
   function setThumb(el, room, animate) {
     loadLine(`mode-${room.id}`).then((data) => {
-      if (!data) { el.classList.remove('is-line'); el.style.backgroundImage = `url("${roomArt(room.id)}")`; return; }
+      if (!data || artStyle() !== 'line') { el.replaceChildren(); el.classList.remove('is-line'); el.style.backgroundImage = `url("${roomArt(room.id)}")`; return; }
       el.classList.add('is-line'); el.style.backgroundImage = '';
       if (el.firstChild?.dataset?.line === `mode-${room.id}`) { if (animate) drawLine(el.firstChild); return; }
       el.replaceChildren(lineArt(`mode-${room.id}`, {draw: animate, speed: 170}));
@@ -53,7 +55,17 @@ export function mountRooms(host, signal) {
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
   menu.innerHTML = ROOMS.map((r, i) => `<button type="button" role="menuitemradio" class="cle-room-menu__item" data-room="${r.id}"><span class="cle-room-menu__thumb"></span><span class="cle-room-menu__names"><span class="cle-room-menu__zh">${r.zh}<em>${r.fr}</em></span><span class="cle-room-menu__hint">${r.hint}</span></span><kbd class="cle-room-menu__key">⌘${i + 1}</kbd></button>`).join('');
+  // 双模式: pick a second room to open beside this one
+  const dual = document.createElement('button');
+  dual.type = 'button'; dual.className = 'cle-room-menu__dual';
+  dual.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14"/></svg>双模式<em>Deux pièces</em>';
+  const pickHint = document.createElement('div'); pickHint.className = 'cle-room-menu__pickhint'; pickHint.textContent = '选另一间，放在旁边同时进行';
+  dual.addEventListener('click', (e) => { e.stopPropagation(); menu.dataset.picking = menu.dataset.picking === 'dual' ? '' : 'dual'; });
+  menu.prepend(pickHint);
+  const switches = modeSwitches();
+  menu.append(dual, switches);
   document.body.append(menu);
+  const offArt = onArtStyle(() => { setThumb(selector.querySelector('.cle-room__thumb'), current, true); for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room), false); });
   for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room), false);
 
   const placeMenu = () => {
@@ -63,22 +75,32 @@ export function mountRooms(host, signal) {
     menu.style.minWidth = `${Math.max(220, Math.round(r.width))}px`;
   };
   const openMenu = (open) => {
+    if (!open) menu.dataset.picking = '';
     menu.hidden = !open;
     selector.setAttribute('aria-expanded', String(open));
-    if (open) { menu.querySelectorAll('.cle-line').forEach((l) => drawLine(l, {quick: true})); placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
+    if (open) { switches.refresh(); menu.querySelectorAll('.cle-line').forEach((l) => drawLine(l, {quick: true})); placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
   };
   selector.addEventListener('click', () => openMenu(menu.hidden));
   menu.addEventListener('click', (e) => {
     const item = e.target.closest('[data-room]');
     if (!item) return;
+    const target = ROOMS.find((r) => r.id === item.dataset.room);
+    const picking = menu.dataset.picking === 'dual';
+    menu.dataset.picking = '';
     openMenu(false);
-    go(ROOMS.find((r) => r.id === item.dataset.room));
+    if (picking) openBeside(host, target).catch((err) => console.warn('[cle] dual', err));
+    else go(target);
   });
   document.addEventListener('pointerdown', (e) => {
     if (!menu.hidden && !menu.contains(e.target) && !selector.contains(e.target)) openMenu(false);
   }, {signal});
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !menu.hidden) { openMenu(false); selector.focus(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && /^Digit[1-5]$/.test(e.code)) {
+      e.preventDefault();
+      openBeside(host, ROOMS[Number(e.code.slice(5)) - 1]).catch((err) => console.warn('[cle] dual', err));
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[1-5]$/.test(e.key)) {
       e.preventDefault();
       go(ROOMS[Number(e.key) - 1]);
@@ -137,6 +159,7 @@ export function mountRooms(host, signal) {
   };
   mount();
   applyRoom(current);
+  mountSplitBadges(signal);
   // the paintings are seen through the blink, so have them decoded before the first switch
   (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(() => ROOMS.forEach((r) => { const i = new Image(); i.decoding = 'async'; i.src = roomArt(r.id); }));
   const mo = new MutationObserver(() => { if (!selector.isConnected || !mark.isConnected) mount(); });
@@ -148,7 +171,7 @@ export function mountRooms(host, signal) {
   });
 
   signal.addEventListener('abort', () => {
-    mo.disconnect(); unsubscribe?.(); selector.remove(); mark.remove(); menu.remove(); delete html.dataset.cleRoom;
+    mo.disconnect(); unsubscribe?.(); offArt(); selector.remove(); mark.remove(); menu.remove(); delete html.dataset.cleRoom;
   }, {once: true});
   return {go, get current() { return current; }};
 }
