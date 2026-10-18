@@ -4,9 +4,11 @@
  * model transports. Use after `openclaw update` replaces dist files.
  *
  * Two transport layers are patched:
- *   1. openclaw dist  : dist/openai-transport-stream-*.js
+ *   1. openclaw dist  : dist/openai-transport-stream-*.js (2026.7) or
+ *                       dist/transport-stream-*.js (2026.10)
  *   2. @openclaw/ai   : node_modules/@openclaw/ai/dist/openai-completions-*.mjs
- *                       (the dashboard/webchat model path)
+ *                       (the dashboard/webchat model path; the completions
+ *                       transport body in 2026.10)
  *
  * Usage:
  *   node reapply-unrestricted-patch.mjs                # apply (idempotent)
@@ -20,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const remove = process.argv.includes("--remove");
 
@@ -58,7 +61,7 @@ function resolveOpenClawRoot() {
   return null;
 }
 
-function findFile(dir, prefix, suffix) {
+function findFile(dir, prefix, suffix = "") {
   if (!fs.existsSync(dir)) return null;
   for (const name of fs.readdirSync(dir)) {
     if (name.startsWith(prefix) && name.endsWith(suffix)) return path.join(dir, name);
@@ -72,7 +75,11 @@ function findAiTransportFile(dir) {
     name.startsWith("openai-completions-") && name.endsWith(".mjs")
       && !name.includes("-stream-") && !name.includes("-compat-")
   ).sort();
-  return names.length ? path.join(dir, names[0]) : null;
+  // 2026.10: the transport body lives in openai-completions-transport-*.
+  return names.find((name) => name.startsWith("openai-completions-transport-"))
+    || names[0]
+    ? path.join(dir, names.find((name) => name.startsWith("openai-completions-transport-")) || names[0])
+    : null;
 }
 
 const PROMPTS_DIR = process.env.UR_PROMPTS_DIR || path.join(os.homedir(), ".openclaw");
@@ -127,61 +134,151 @@ function applyUnrestrictedInjection(params, kind, model, context) {
 `;
 
 // ---- openclaw dist transport ----
-const DIST_HELPER_RE = /\/\*\* \[unrestricted-injection\][\s\S]*?\n\}\n(?=function createOpenAICompletionsClient)/;
+const DIST_HELPER_RE = /\/\*\* \[unrestricted-injection\][\s\S]*?\n\}\n(?=function [\w$]+\()/;
 const DIST_CALL_RE = /^\t*applyUnrestrictedInjection\(params, "(?:completions|responses)", model, context\);\r?\n/gm;
 const DIST_ANCHOR = "function createOpenAICompletionsClient(model, context, apiKey, optionHeaders) {";
+// 2026.10 dist/openai-transport-stream-*.mjs is a re-export shim; the payload
+// hook moves into @openclaw/ai below.
 
-// ---- @openclaw/ai transport ----
+// ---- @openclaw/ai transport (2026.7 shape) ----
 const AI_ANCHOR = "const streamSimpleOpenAICompletions = (model, context, options) => {";
 const AI_CALL_OLD = "\t\t\tconst nextParams = await options?.onPayload?.(params, model);\n\t\t\tif (nextParams !== void 0) params = nextParams;\n\t\t\tfirstEventAbort = createFirstStreamEventAbortController(options?.signal);";
 const AI_CALL_NEW = "\t\t\tconst nextParams = await options?.onPayload?.(params, model);\n\t\t\tif (nextParams !== void 0) params = nextParams;\n\t\t\tapplyUnrestrictedInjection(params, \"completions\", model, context);\n\t\t\tfirstEventAbort = createFirstStreamEventAbortController(options?.signal);";
+// 2026.10 completions transport: one payload hook per request path. The
+// completions call site is the one followed by the managed/direct mode branch,
+// the other one prepares native Responses requests.
+const AI_CURRENT = [
+  {
+    find: "let params = buildOpenAICompletionsRequest(model, context, options, policy);\n\t\t\tconst encodeBody = prepareModelRequestBody(options);\n\t\t\tconst nextParams = await options?.onPayload?.(params, model);\n\t\t\tif (nextParams !== void 0) params = nextParams;\n",
+    kind: "completions",
+  },
+  {
+    find: "let params = request;\n\t\t\t\t\tconst nextParams = await options?.onPayload?.(params, model);\n\t\t\t\t\tif (nextParams !== void 0) params = nextParams;\n",
+    kind: "responses",
+    indent: "\t\t\t\t\t",
+  },
+];
+const AI_MARKER = "function applyUnrestrictedInjection(params, kind, model, context) {";
+const CURRENT_ANCHOR = "function createManagedCompletionsClient(";
+
+function insertHelper(src, anchor) {
+  const at = src.indexOf(anchor);
+  if (at < 0) return null;
+  // Keep the helper right before the first transport factory so module scope
+  // hoisting makes it visible to every call site.
+  const start = src.lastIndexOf("\n", at) + 1;
+  return src.slice(0, start) + HELPER + src.slice(start);
+}
+
+/** Strip the helper block and the injected calls (2026.10 layout). */
+export function stripCurrent(src) {
+  let next = src;
+  const helperAt = next.indexOf("/** [unrestricted-injection]");
+  const helperEnd = helperAt < 0 ? -1 : next.indexOf("function applyUnrestrictedInjection(params, kind, model, context) {", helperAt);
+  if (helperAt >= 0 && helperEnd > helperAt) {
+    const close = next.indexOf("\n}\n", helperEnd) + 3;
+    next = next.slice(0, helperAt) + next.slice(close);
+  }
+  for (const { find, kind, indent = "\t\t\t" } of AI_CURRENT) {
+    const call = `${indent}applyUnrestrictedInjection(params, "${kind}", model, context);\n`;
+    next = next.split(find + call).join(find);
+  }
+  return next;
+}
+
+function patchCurrentAi(file, shouldRemove) {
+  let src = fs.readFileSync(file, "utf8");
+  const applied = src.includes(AI_MARKER);
+  if (shouldRemove) {
+    if (!applied) { console.log(`[ai] ${path.basename(file)}: patch not present; nothing to remove`); return; }
+    src = stripCurrent(src);
+    fs.writeFileSync(file, src);
+    console.log(`[ai] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
+    return;
+  }
+  if (applied) { console.log(`[ai] ${path.basename(file)}: patch already applied.`); return; }
+  const sites = AI_CURRENT.filter(({ find }) => src.includes(find));
+  if (!sites.length) {
+    console.error(`[ai] anchors not found in ${file}; this @openclaw/ai version may have changed. Patch manually.`);
+    process.exit(1);
+  }
+  const withHelper = insertHelper(src, CURRENT_ANCHOR) ?? insertHelper(src, "function streamOpenAICompletionsRequest(");
+  if (!withHelper) {
+    console.error(`[ai] transport factory not found in ${file}; patch manually.`);
+    process.exit(1);
+  }
+  let next = withHelper;
+  for (const { find, kind, indent = "\t\t\t" } of sites) {
+    const injected = find + `${indent}applyUnrestrictedInjection(params, "${kind}", model, context);\n`;
+    if (next.split(find).length !== 2) {
+      console.error(`[ai] expected a single ${kind} payload hook; aborting.`);
+      process.exit(1);
+    }
+    next = next.replace(find, injected);
+  }
+  fs.writeFileSync(file, next);
+  console.log(`[ai] ${path.basename(file)}: patch applied (${sites.map(({ kind }) => kind).join(" + ")}). Restart the gateway to take effect.`);
+}
 
 function patchDistFile(file, shouldRemove) {
-	let src = fs.readFileSync(file, "utf8");
-	const applied = src.includes("applyUnrestrictedInjection");
-	if (shouldRemove) {
-		if (!applied) { console.log(`[dist] ${path.basename(file)}: patch not present; nothing to remove`); return; }
-		if (!DIST_HELPER_RE.test(src)) { console.error(`[dist] helper block not found; refusing to strip (${file}). Patch manually.`); process.exit(1); }
-		src = src.replace(DIST_HELPER_RE, "").replace(DIST_CALL_RE, "");
-		fs.writeFileSync(file, src);
-		console.log(`[dist] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
-		return;
-	}
-	if (applied) { console.log(`[dist] ${path.basename(file)}: patch already applied.`); return; }
-	if (!src.includes(DIST_ANCHOR)) { console.error(`[dist] anchor not found in ${file}; this version may have changed. Patch manually.`); process.exit(1); }
-	src = src.replace(DIST_ANCHOR, HELPER + DIST_ANCHOR);
-	const lines = src.split("\n");
-	let inserted = 0;
-	for (let i = 0; i < lines.length; i++) {
-		if (!/^(\t+)if \(nextParams !== void 0\) params = nextParams;\s*$/.test(lines[i])) continue;
-		const window = lines.slice(Math.max(0, i - 6), i).join("\n");
-		const kind = window.includes("buildAzureOpenAIResponsesParams") || window.includes("buildOpenAIResponsesParams") ? "responses" : "completions";
-		lines[i] += `\n${lines[i].match(/^\s*/)[0]}applyUnrestrictedInjection(params, "${kind}", model, context);`;
-		inserted++;
-	}
-	if (inserted !== 3) { console.error(`[dist] expected 3 injection call sites, inserted ${inserted}; aborting.`); process.exit(1); }
-	fs.writeFileSync(file, lines.join("\n"));
-	console.log(`[dist] ${path.basename(file)}: patch applied (3 call sites). Restart the gateway to take effect.`);
+  let src = fs.readFileSync(file, "utf8");
+  const applied = src.includes("applyUnrestrictedInjection");
+  if (shouldRemove) {
+    if (!applied) { console.log(`[dist] ${path.basename(file)}: patch not present; nothing to remove`); return; }
+    if (!DIST_HELPER_RE.test(src)) { console.error(`[dist] helper block not found; refusing to strip (${file}). Patch manually.`); process.exit(1); }
+    src = src.replace(DIST_HELPER_RE, "").replace(DIST_CALL_RE, "");
+    fs.writeFileSync(file, src);
+    console.log(`[dist] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
+    return;
+  }
+  if (applied) { console.log(`[dist] ${path.basename(file)}: patch already applied.`); return; }
+  if (!src.includes(DIST_ANCHOR)) {
+    // 2026.10 re-export shim: the transport body (and its 3 call sites) moved
+    // to @openclaw/ai, which patchCurrentAi() covers.
+    if (src.includes("@openclaw/ai")) {
+      console.log(`[dist] ${path.basename(file)}: re-export shim in this version; injection is applied on @openclaw/ai.`);
+      return;
+    }
+    console.error(`[dist] anchor not found in ${file}; this version may have changed. Patch manually.`);
+    process.exit(1);
+  }
+  src = src.replace(DIST_ANCHOR, HELPER + DIST_ANCHOR);
+  const lines = src.split("\n");
+  let inserted = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^(\t+)if \(nextParams !== void 0\) params = nextParams;\s*$/.test(lines[i])) continue;
+    const window = lines.slice(Math.max(0, i - 6), i).join("\n");
+    const kind = window.includes("buildAzureOpenAIResponsesParams") || window.includes("buildOpenAIResponsesParams") ? "responses" : "completions";
+    lines[i] += `\n${lines[i].match(/^\s*/)[0]}applyUnrestrictedInjection(params, "${kind}", model, context);`;
+    inserted++;
+  }
+  if (inserted !== 3) { console.error(`[dist] expected 3 injection call sites, inserted ${inserted}; aborting.`); process.exit(1); }
+  fs.writeFileSync(file, lines.join("\n"));
+  console.log(`[dist] ${path.basename(file)}: patch applied (3 call sites). Restart the gateway to take effect.`);
 }
 
 function patchAiFile(file, shouldRemove) {
-	let src = fs.readFileSync(file, "utf8");
-	const applied = src.includes("applyUnrestrictedInjection");
-	if (shouldRemove) {
-		if (!applied) { console.log(`[ai] ${path.basename(file)}: patch not present; nothing to remove`); return; }
-		if (!src.includes(HELPER) || !src.includes(AI_CALL_NEW)) { console.error(`[ai] helper/call block not found verbatim; refusing to strip (${file}). Patch manually.`); process.exit(1); }
-		src = src.replace(HELPER + AI_ANCHOR, AI_ANCHOR).replace(AI_CALL_NEW, AI_CALL_OLD);
-		fs.writeFileSync(file, src);
-		console.log(`[ai] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
-		return;
-	}
-	if (applied) { console.log(`[ai] ${path.basename(file)}: patch already applied.`); return; }
-	if (!src.includes(AI_ANCHOR) || !src.includes(AI_CALL_OLD)) { console.error(`[ai] anchors not found in ${file}; this @openclaw/ai version may have changed. Patch manually.`); process.exit(1); }
-	src = src.replace(AI_ANCHOR, HELPER + AI_ANCHOR).replace(AI_CALL_OLD, AI_CALL_NEW);
-	fs.writeFileSync(file, src);
-	console.log(`[ai] ${path.basename(file)}: patch applied. Restart the gateway to take effect.`);
+  let src = fs.readFileSync(file, "utf8");
+  const applied = src.includes("applyUnrestrictedInjection");
+  if (shouldRemove) {
+    if (!applied) { console.log(`[ai] ${path.basename(file)}: patch not present; nothing to remove`); return; }
+    if (!src.includes(HELPER) || !src.includes(AI_CALL_NEW)) { console.error(`[ai] helper/call block not found verbatim; refusing to strip (${file}). Patch manually.`); process.exit(1); }
+    src = src.replace(HELPER + AI_ANCHOR, AI_ANCHOR).replace(AI_CALL_NEW, AI_CALL_OLD);
+    fs.writeFileSync(file, src);
+    console.log(`[ai] ${path.basename(file)}: patch removed. Restart the gateway to take effect.`);
+    return;
+  }
+  if (applied) { console.log(`[ai] ${path.basename(file)}: patch already applied.`); return; }
+  if (!src.includes(AI_ANCHOR) || !src.includes(AI_CALL_OLD)) { console.error(`[ai] anchors not found in ${file}; this @openclaw/ai version may have changed. Patch manually.`); process.exit(1); }
+  src = src.replace(AI_ANCHOR, HELPER + AI_ANCHOR).replace(AI_CALL_OLD, AI_CALL_NEW);
+  fs.writeFileSync(file, src);
+  console.log(`[ai] ${path.basename(file)}: patch applied. Restart the gateway to take effect.`);
 }
 
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) main();
+
+function main() {
 const root = resolveOpenClawRoot();
 if (!root) {
   console.error("openclaw install not found. Set OPENCLAW_ROOT=/path/to/openclaw (package dir).");
@@ -190,7 +287,9 @@ if (!root) {
 console.log(`openclaw root: ${root}`);
 
 const distFile = findFile(path.join(root, "dist"), "openai-transport-stream-", ".js")
-  || findFile(path.join(root, "dist"), "transport-stream-", ".js");
+  || findFile(path.join(root, "dist"), "openai-transport-stream-", ".mjs")
+  || findFile(path.join(root, "dist"), "transport-stream-", ".js")
+  || findFile(path.join(root, "dist"), "transport-stream-", ".mjs");
 if (!distFile) { console.error("dist transport chunk not found; cannot patch."); process.exit(1); }
 patchDistFile(distFile, remove);
 
@@ -202,4 +301,7 @@ const aiDirs = [
 ];
 const aiFile = aiDirs.map(findAiTransportFile).find(Boolean) || null;
 if (!aiFile) { console.error("@openclaw/ai completions chunk not found; cannot patch."); process.exit(1); }
-patchAiFile(aiFile, remove);
+const aiSource = fs.readFileSync(aiFile, "utf8");
+if (aiSource.includes(CURRENT_ANCHOR) && !aiSource.includes(AI_ANCHOR)) patchCurrentAi(aiFile, remove);
+else patchAiFile(aiFile, remove);
+}
