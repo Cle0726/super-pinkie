@@ -121,6 +121,9 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 | 19 | **只改 `aria-label` 时标签实际不会被修。** observer 的 attributes 分支只置 `dirty=true` 然后 `continue`，而 `flush()` 只遍历队列里的节点——属性变更既没有 addedNode 也没有文本变更，队列是空的，`chromeScopeFor`/`sweepChrome` 根本没跑。会话切换时原生把 `OpenClaw · 工作区菜单` 写回来，标签就一直是旧的 | `core/brand.js` 的 MutationObserver 回调 | 高（本轮上一条修复的核心场景仍然失效） | attributes 记录也把 `r.target` 入队；队列仍是有界的（只有一个元素及其所属 chrome 块） |
 | 20 | **`localTitle` 会把用户自己的会话名一起改掉。** 原来对整串跑 `replace(WORD)`：用户把会话命名为"关于OpenClaw的笔记"时，原生标题"关于OpenClaw的笔记 — OpenClaw"会被改成"关于C.le.的笔记 — C.le."，上下文被重命名 | `core/brand.js` 的 `localTitle` | 高（篡改用户内容） | 只重写原生填充产品名的位置：裸 `OpenClaw`/`OpenClaw Control`（启动标题）、`<context> — <brand>`（原生尾巴）、以及其后的 ` · <environment>`。上下文里出现该词不动，无原生尾巴的标题原样返回 |
 
+| 21 | **首屏标题的窗口不在插件内，而在 plugin 之前。** 实机第一份 AX 是 `New session — OpenClaw`，插件加载后才变 C.le.；断线时更是一直保持 `(已断开连接) … — OpenClaw` 直到重连。原因是 `syncDocumentTitle()` 在 Lit 的 `updated()` 里、模块求值后立刻跑，而 `brand.js` 要等 `activate()`——这两段都在窗口之后；断线时插件卸载还会 `disconnect` 掉它的 observer | `control-ui-core-*` 的 `updated()` / `Uc()`；插件 `activate`/teardown | 高（用户第一眼就看到旧品牌，断线期间持续） | 先查了原生是否提供品牌入口：**没有**。`Uc()` 把产品名硬编码为 `${context} — OpenClaw`，`theme.branding` 只在插件主题渲染时下发给客户端，走不到这条路径。改用同源外部脚本 `/cle-early.js`（`script-src 'self'` 允许，未放宽 CSP）：以 classic script 放在 module 入口之前，解析期即执行；页面级存活，不受插件卸载影响 |
+| 22 | **离线壳引用了早期脚本，但 worker 没预缓存它。** 只把 `<script>` 写进 `OFFLINE_BOOT.html` 的话，断线重载会向网络要一个不存在的文件，守护静默失效——恰好是最需要它的时刻 | `sw.js` 的 `precacheOfflineShell()`；它遍历 `OFFLINE_BOOT.assets` 并校验 `integrity` | 高（断线路径等于没修） | 把 `cle-early.js` 同时加入 `OFFLINE_BOOT.assets`（带真实 sha256 integrity）与 `publicAssets`，并按上游的**普通码点序**插入（不是 `localeCompare`，我一开始写错并用真实清单核对后改正） |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -232,6 +235,33 @@ CSS 侧栏选择器已对照 core 实际 DOM 重写（发现 #16）：名字是
 mark 是 `img` / `span--neutral > svg` 两个分支，测试直接断言这两条规则存在且只引用
 `/cle/static/art/avatar.webp`（无新造图形）。真实包注入后实测四个探针全部命中。
 
+### 早期标题守护（本轮新增：`services/cle-studio/static/early-guard.js`）
+
+```
+node --test tests/cle-early-guard.test.mjs   → 12 pass / 0 fail
+node --test tests/cle-brand-guard.test.mjs   → 21 pass / 0 fail
+node --test tests/cle-startup.test.mjs       → 42 pass / 0 fail
+node --test tests/brand-ui.test.cjs          →  6 pass / 0 fail
+合计 81 项（前轮 55 项全部保留且通过）
+node patch/apply-all.mjs --keep              → 17 patches, patches failed: 0
+```
+
+真实浏览器实测（fixture server，无网关；用 `app_browser` 读回 AX 与 `document.title`）：
+
+| 写入的原始标题 | 实测结果 |
+|---|---|
+| `New session — OpenClaw` | `New session — C.le.` |
+| `(已断开连接) Codex独立验收·右栏状态 — OpenClaw` | `(已断开连接) Codex独立验收·右栏状态 — C.le.` |
+| `关于OpenClaw的笔记 — OpenClaw` | `关于OpenClaw的笔记 — C.le.` |
+| `Codex独立验收·右栏状态 — OpenClaw · Production` | `Codex独立验收·右栏状态 — C.le. · Production` |
+| 重复加载 `/cle-early.js` 后再写 `New session — OpenClaw` | `New session — C.le.`（未因双 observer 出错） |
+
+同时确认原生错误面板（`#openclaw-mount-fallback`，真实文案 "无法连接到 Gateway"）全程可见，
+没有被任何覆盖层挡住——没有用隐藏页面来伪造成功。
+
+**为什么不是"在插件里更早 mount"**：`activate()` 要等 bundle 求值后才跑，而断线时插件卸载会
+断掉它的 observer；观察到的断线场景需要页面级的所有者。插件内的 guard 仍负责侧栏标签与内容清扫。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -323,3 +353,23 @@ tests/cle-brand-guard.test.mjs         21 项（+4：属性-only 修复、非 ch
 （12 个 `safe()` 调用，已 diff 核对），只调整了 guard 的注册位置。
 
 首帧视觉仍由主控验，本路不声称已通过视觉验收。
+
+补充 commit #3（07ce6e9，首屏标题时序）：
+
+```
+services/cle-studio/static/early-guard.js   新增：同源 classic 脚本，解析期接管标题
+services/cle-studio/scripts/apply-startup.mjs
+    注入 <script data-cle-early> 于 module 入口之前；写入 cle-early.js 到服务根；
+    离线壳同步注入；OFFLINE_BOOT.assets 增加带 integrity 的预缓存行 + publicAssets；
+    备份/回滚/twins/changed 一并纳入
+tests/cle-early-guard.test.mjs              新增 12 项
+tests/cle-startup.test.mjs                  42 项（+3 注入顺序/预缓存/幂等）
+```
+
+未验证项（不虚构）：
+
+- 主控 19789 的实际首份 AX 仍需实测；本轮在 fixture server + 真实浏览器里验证了标题规则与
+  observer 生命周期，但没有在网关真实断线场景下录帧。
+- 断线期间的重载路径依赖 SW 预缓存，已按上游 `assets` + `integrity` 结构写入并在本地校验
+  hash 正确；真实 worker 的预缓存成功与否需要一次实际断线重载确认。
+- service worker 换代时序（`OFFLINE_BOOT.id` 变化 → 新 worker 安装）仍未在真实浏览器跑过。
