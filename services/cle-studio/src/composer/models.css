@@ -251,7 +251,15 @@ html[data-cle] [data-pinkie-brand] {
   --pinkie-brand-ink: var(--cle-ink);
 }
 
-/* one shared drawing rule for the trigger, the rows and the brand tabs */
+/* One shared drawing rule for the trigger, the rows and the brand tabs.
+   The geometry reset is not cosmetic: the native composer always carries
+   `.agent-chat__input--mobile-toolbar`, and that build paints EVERY
+   `:is(.chat-controls__model-trigger,.chat-controls__effort-trigger)::before` as
+   `position: absolute; inset: 0` — a full-size hit layer. An in-flow mark that only sets
+   display/flex therefore leaves that absolute positioning in place, drops out of the flex
+   line, and paints at the summary's top-left corner while the text starts on the next row.
+   So position is reset per host class: the trigger flows in the row, rows and tabs keep
+   their own offsets where they are absolute by design. */
 html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > summary[data-pinkie-brand]::before,
 html[data-cle] [data-chat-model-option][data-pinkie-brand]::before,
 html[data-cle] .pinkie-model-brand-tab[data-pinkie-brand]::before,
@@ -270,6 +278,24 @@ html[data-cle] .pinkie-model-current[data-pinkie-brand]::before {
   -webkit-mask: var(--pinkie-brand-mono) center / contain no-repeat;
   mask: var(--pinkie-brand-mono) center / contain no-repeat;
   pointer-events: none;
+}
+/* the trigger: back into the flex line so it occupies a slot and shares the text baseline */
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > summary[data-pinkie-brand]::before {
+  position: static;
+  inset: auto;
+  left: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  transform: none;
+  align-self: center;
+}
+/* the native mobile-toolbar rule also forces 44×44 on the trigger, which would centre a
+   16px mark inside a 44px box; the quiet C.le. row keeps its own comfortable size */
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model, .chat-controls__effort-picker) > summary[data-pinkie-brand] {
+  min-width: 0;
+  min-height: 27px;
 }
 
 /* monochrome set — masked, inked by the surrounding text colour */

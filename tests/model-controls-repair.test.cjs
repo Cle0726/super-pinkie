@@ -186,3 +186,41 @@ test('the brand mark reaches the closed trigger, not only an open menu', () => {
   assert.ok(triggerAt > 0 && openGuard > triggerAt,
     'the trigger brand is written before the open-state early return');
 });
+
+/* The native composer always carries `.agent-chat__input--mobile-toolbar`, and that build
+   paints every model/effort trigger's ::before as `position: absolute; inset: 0`. A brand
+   mark that only sets display/flex therefore stays absolute, leaves the flex line and lands
+   on the summary's top-left corner while the label starts on the next row. */
+test('the trigger brand mark is put back in flow, per host class, without a global summary reset', () => {
+  const css = read('services/cle-studio/src/composer/models.css');
+  const triggerRule = css.slice(css.indexOf('the trigger: back into the flex line'));
+  assert.match(triggerRule, /position: static;/);
+  assert.match(triggerRule, /inset: auto;/);
+  assert.match(triggerRule, /left: auto;/);
+  assert.match(triggerRule, /top: auto;/);
+  // the reset is scoped to the picker's own summary, never to every summary in the app
+  assert.doesNotMatch(css, /(^|\n)\s*summary::before\s*\{/m,
+    'a global summary::before reset would hit chat disclosures and tool cards too');
+  const scoped = css.slice(css.indexOf('the trigger: back into the flex line'), css.indexOf('the native mobile-toolbar rule'));
+  assert.match(scoped, /chat-controls__model-picker/);
+  assert.match(scoped, /> summary\[data-pinkie-brand\]::before/);
+  // the 44x44 mobile-toolbar trigger box is neutralised for our quiet row
+  assert.match(css, /min-width: 0;\s*\n\s*min-height: 27px;/);
+});
+
+test('mountGaze reacts to pickers that appear after activation, in batches, without losing roots', () => {
+  const src = read('services/cle-studio/src/composer/gaze.js');
+  // a set of pending pickers, not a single boolean that drops later roots
+  assert.match(src, /const pending = new Set\(\)/);
+  assert.match(src, /for \(const picker of pickersFor\(node\)\) \{ pending\.add\(picker\);/);
+  // every added node is normalised to its owning picker
+  assert.match(src, /function pickersFor\(node\)/);
+  assert.match(src, /const own = node\.closest\?\.\(PICKER\)/);
+  // our own insertions are ignored so decorating cannot re-arm the observer
+  assert.match(src, /node\.dataset\?\.cleOwned === '1'/);
+  // abort cancels the pending frame and clears the queue
+  assert.match(src, /cancelAnimationFrame\(frame\)/);
+  assert.match(src, /pending\.clear\(\)/);
+  // no characterData observation (streaming would re-scan the document per token)
+  assert.doesNotMatch(src, /characterData:\s*true/);
+});
