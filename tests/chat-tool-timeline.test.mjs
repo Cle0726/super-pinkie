@@ -6,13 +6,17 @@ import os from 'node:os';
 import path from 'node:path';
 import {apply, pinkieBuildTimeline, pinkieSelectMessageWindow, pinkieSplitTimelineMessage, transform, transformWithStatus} from '../patch/apply-chat-timeline.mjs';
 
-const message = (role, content, id) => ({role, content, timestamp: 1, __openclaw: {id}});
+const message = (role, content, id, timestamp = 1) => ({role, content, timestamp, __openclaw: {id}});
 const group = (role, key, messages) => ({
   kind: 'group', key, role, timestamp: 1,
   messages: messages.map((entry, index) => ({message: entry, key: `${key}:${index}`})),
 });
 // A turn's steps now live inside one process card; expand it back into rows.
 const flat = (timeline) => timeline.flatMap((item) => (item.isProcessCard ? item.processRows : [item]));
+// 每一轮被拆成独立消息项后，顶层 key 是 "<owner>:<index>"，紧凑的行键是
+// "<owner>:timeline:…"。断言关心的是属于哪一轮，而不是索引，所以比较前先把
+// 结尾的 ":<digits>" 去掉，避免把行序变化也当成回归。
+const own = (key) => String(key ?? '').replace(/:\d+$/, '');
 
 function parseToolRows(value) {
   const content = Array.isArray(value.content) ? value.content : [];
@@ -57,9 +61,9 @@ test('the current user turn is split into chronological text and single-tool row
   ];
 
   const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
-  assert.equal(timeline.some((item) => item.key === 'image-only-user'), true);
-  assert.equal(timeline.some((item) => item.key === 'watchdog' || item.key === 'tier-control'), false);
-  const current = timeline.findIndex((item) => item.key === 'current-user');
+  assert.equal(timeline.some((item) => own(item.key) === 'image-only-user'), true);
+  assert.equal(timeline.some((item) => own(item.key) === 'watchdog' || own(item.key) === 'tier-control'), false);
+  const current = timeline.findIndex((item) => own(item.key) === 'current-user');
   assert.ok(current >= 0);
   const rows = timeline.slice(current + 1);
   assert.deepEqual(rows.map((item) => item.role), ['assistant', 'assistant', 'tool', 'tool', 'assistant']);
@@ -94,11 +98,11 @@ test('a window that starts inside a task puts the orphaned prefix in a process c
   const firstCard = timeline.find((item) => item.isProcessCard);
   assert.equal(firstCard?.processTitle, '接着之前的工作');
   assert.deepEqual(firstCard?.processRows.map((row) => row.role), ['assistant', 'tool']);
-  const projectedCompaction = timeline.find((item) => item.key === 'compact');
+  const projectedCompaction = timeline.find((item) => own(item.key) === 'compact');
   assert.equal(projectedCompaction?.messages[0].message.__openclaw.kind, 'compaction');
-  assert.equal(timeline.some((item) => item.key === 'orphan-tail'), false);
-  assert.equal(timeline.some((item) => item.key === 'visible-user'), true);
-  assert.equal(timeline.some((item) => item.isProcessCard && item.processRows.some((row) => row.key === 'orphan-tail:0')), true);
+  assert.equal(timeline.some((item) => own(item.key) === 'orphan-tail'), false);
+  assert.equal(timeline.some((item) => own(item.key) === 'visible-user'), true);
+  assert.equal(timeline.some((item) => item.isProcessCard && item.processRows.some((row) => own(row.key) === 'orphan-tail')), true);
 });
 
 test('an incomplete historical tool turn is marked stopped instead of live', () => {
@@ -171,7 +175,16 @@ test('assistant messages containing only thoughts or no content leave no blank b
     group('assistant', 'blank-thinking', [message('assistant', [{type: 'reasoning', text: 'private'}], 'blank-thinking')]),
     group('assistant', 'blank-message', [message('assistant', '', 'blank-message')]),
   ], parseToolRows);
-  assert.deepEqual(timeline.map((item) => item.key), ['blank-user']);
+  // No blank assistant bubble survives; the user row stays. The turn still
+  // gets a card because the page recorded thinking for it, and that thinking
+  // lives inside the card — an empty-step card without thinking is the only
+  // shape we forbid.
+  assert.deepEqual(timeline.map((item) => own(item.key)), ['blank-user', 'pinkie:process::blank-user']);
+  const card = timeline.find((item) => item.isProcessCard);
+  assert.equal(card.processRows.length, 0);
+  assert.equal(card.processThinking, 'private', 'the card exists only to carry the recorded thinking');
+  assert.equal(timeline.some((item) => own(item.key) === 'blank-thinking' || own(item.key) === 'blank-message'), false,
+    'thinking-only and empty assistant groups leave no bubble');
 });
 
 test('older real turns use the same timeline rows and internal user messages do not split them', () => {
@@ -195,7 +208,7 @@ test('older real turns use the same timeline rows and internal user messages do 
   ];
 
   const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
-  const second = timeline.findIndex((item) => item.key === 'second-user');
+  const second = timeline.findIndex((item) => own(item.key) === 'second-user');
   assert.ok(second > 0);
   assert.deepEqual(timeline.slice(0, second).map((item) => item.role), [
     'user', 'assistant', 'tool', 'assistant',
@@ -205,7 +218,7 @@ test('older real turns use the same timeline rows and internal user messages do 
   assert.equal(timeline[2].isTimelineStep, true);
   assert.equal(timeline[2].messages[0].message.content[0].name, 'read');
   assert.equal(timeline[2].messages[0].message.content.some((part) => part.type === 'tool_result'), true);
-  assert.equal(timeline[3].key, 'first-final');
+  assert.equal(own(timeline[3].key), 'first-final');
   assert.equal(timeline[3].isTimelineStep, undefined);
 });
 
@@ -221,13 +234,13 @@ test('each historical turn has its own stable overflow row', () => {
 
   const first = flat(pinkieBuildTimeline(entries, parseToolRows));
   const second = flat(pinkieBuildTimeline(entries, parseToolRows));
-  const latest = first.findIndex((item) => item.key === 'latest-user');
+  const latest = first.findIndex((item) => own(item.key) === 'latest-user');
   const oldRows = first.slice(0, latest);
   // user + overflow + 79 trailing steps + the final answer outside the card
   assert.equal(oldRows.length, 82);
   assert.equal(oldRows[1].timelineOverflow, true);
   assert.equal(oldRows[1].overflowCount, 20);
-  assert.equal(oldRows[1].key, 'pinkie:timeline:overflow:old-user');
+  assert.equal(own(oldRows[1].key), 'pinkie:timeline:overflow:old-user');
   assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
 });
 
@@ -245,12 +258,12 @@ test('stream and reading indicators are retained only for the latest real turn',
 
   const projected = pinkieBuildTimeline(entries, parseToolRows);
   const timeline = flat(projected);
-  assert.equal(timeline.some((item) => item.key === 'stale-stream' || item.key === 'stale-reading'), false);
+  assert.equal(timeline.some((item) => own(item.key) === 'stale-stream' || own(item.key) === 'stale-reading'), false);
   // The live reply streams below the card as a normal bubble.
-  assert.equal(timeline.find((item) => item.key === 'live-stream')?.isTimelineStep, undefined);
-  assert.equal(timeline.find((item) => item.key === 'live-reading')?.kind, 'reading-indicator');
+  assert.equal(timeline.find((item) => own(item.key) === 'live-stream')?.isTimelineStep, undefined);
+  assert.equal(timeline.find((item) => own(item.key) === 'live-reading')?.kind, 'reading-indicator');
   const live = projected.find((item) => item.isProcessCard);
-  assert.equal(live?.key, 'pinkie:process:latest-user');
+  assert.equal(own(live?.key), 'pinkie:process::latest-user');
   assert.equal(live?.processLive, true);
   assert.equal(projected.filter((item) => item.isProcessCard).length, 1);
 });
@@ -276,8 +289,8 @@ test('a user steer between a tool call and its result remains chronological with
   const second = flat(pinkieBuildTimeline(entries, parseToolRows));
   assert.deepEqual(first.map((item) => item.key), second.map((item) => item.key));
   assert.deepEqual(first.map((item) => item.key), [
-    'first-user', 'narrate:0', 'call:0:timeline:tool:0', 'steer-user',
-    'result:0', 'after-steer:0', 'final',
+    'first-user:0', 'narrate:0', 'call:0:timeline:tool:0', 'steer-user:0',
+    'result:0', 'after-steer:0', 'final:0',
   ]);
   const call = first.find((item) => item.key === 'call:0:timeline:tool:0');
   const result = first.find((item) => item.key === 'result:0');
@@ -286,7 +299,7 @@ test('a user steer between a tool call and its result remains chronological with
   assert.equal(call?.role, 'tool');
   assert.equal(result?.role, 'tool');
   assert.equal(first.find((item) => item.key === 'after-steer:0')?.isTimelineStep, true);
-  assert.equal(first.find((item) => item.key === 'final')?.isTimelineStep, undefined);
+  assert.equal(first.find((item) => own(item.key) === 'final')?.isTimelineStep, undefined);
 });
 
 test('messages mixing prose and multiple tool calls split in source order', () => {
@@ -315,7 +328,7 @@ test('turns beyond 80 rows collapse older steps into one expandable row', () => 
     entries.push(group('assistant', `step-${index}`, [message('assistant', `step ${index}`, `step-${index}`)]));
   }
   const timeline = flat(pinkieBuildTimeline(entries, parseToolRows));
-  const start = timeline.findIndex((item) => item.key === 'turn-user');
+  const start = timeline.findIndex((item) => own(item.key) === 'turn-user');
   const rows = timeline.slice(start);
   assert.equal(rows.length, 82);
   assert.equal(rows[1].timelineOverflow, true);
@@ -502,18 +515,18 @@ test('history tool results without their call part render as named tool rows', (
 
 test('a turn with steps becomes user · process card · final reply', () => {
   const entries = [
-    {...group('user', 'u1', [message('user', '跑一下测试', 'u1')]), timestamp: 1000},
-    group('tool', 'tools', [
+    {...group('user', 'u1', [message('user', '跑一下测试', 'u1', 1000)]), timestamp: 1000},
+    {...group('tool', 'tools', [
       message('assistant', [
         {type: 'text', text: '我先跑测试。'},
         {type: 'tool_call', callId: 'e1', name: 'exec', arguments: {command: 'npm test'}},
-      ], 'call'),
-      message('tool', [{type: 'tool_result', callId: 'e1', name: 'exec', text: 'ok'}], 'result'),
-    ]),
-    {...group('assistant', 'final', [message('assistant', '全部通过。', 'final')]), timestamp: 19000},
+      ], 'call', 2000),
+      message('tool', [{type: 'tool_result', callId: 'e1', name: 'exec', text: 'ok'}], 'result', 3000),
+    ]), timestamp: 2000},
+    {...group('assistant', 'final', [message('assistant', '全部通过。', 'final', 19000)]), timestamp: 19000},
   ];
   const timeline = pinkieBuildTimeline(entries, parseToolRows);
-  assert.deepEqual(timeline.map((item) => item.key), ['u1', 'pinkie:process:u1', 'final']);
+  assert.deepEqual(timeline.map((item) => own(item.key)), ['u1', 'pinkie:process::u1', 'final']);
   const card = timeline[1];
   assert.equal(card.isProcessCard, true);
   assert.equal(card.processLive, false);
@@ -531,12 +544,12 @@ test('plain answers keep the native layout unless the page recorded their thinki
     group('assistant', 'next-final', [message('assistant', '拜拜！', 'next-final')]),
   ];
   assert.deepEqual(pinkieBuildTimeline(entries, parseToolRows).map((item) => item.key),
-    ['chat-user', 'chat-final', 'next-user', 'next-final']);
+    ['chat-user:0', 'chat-final:0', 'next-user:0', 'next-final:0']);
   globalThis.__pinkieProcessKeep = new Set(['pinkie:process:chat-user']);
   try {
     const kept = pinkieBuildTimeline(entries, parseToolRows);
     assert.deepEqual(kept.map((item) => item.key),
-      ['chat-user', 'pinkie:process:chat-user', 'chat-final', 'next-user', 'next-final']);
+      ['chat-user:0', 'pinkie:process::chat-user', 'chat-final:0', 'next-user:0', 'next-final:0']);
     assert.equal(kept[1].processRows.length, 0);
     assert.equal(kept[1].processLive, false);
   } finally {
@@ -555,7 +568,7 @@ test('narration streamed before a later tool call is already a card row while li
     {kind: 'reading-indicator', key: 'reading'},
   ];
   const timeline = pinkieBuildTimeline(entries, parseToolRows);
-  assert.deepEqual(timeline.map((item) => item.key), ['live-user', 'pinkie:process:live-user', 'reply', 'reading']);
+  assert.deepEqual(timeline.map((item) => own(item.key)), ['live-user', 'pinkie:process::live-user', 'reply', 'reading']);
   const card = timeline[1];
   assert.equal(card.processLive, true);
   assert.equal(card.processTitle, '碧琪正在干活');
