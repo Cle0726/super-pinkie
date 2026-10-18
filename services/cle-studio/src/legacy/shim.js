@@ -3,188 +3,281 @@
 //  - window 'pinkie:gateway-event' {detail: {event, payload}}      ← host.onEvent relay
 //  - laolao:sessions-changed when the session list changes
 //
-// ── 生命周期（这是本文件的重点）──────────────────────────────────────────────
+// ── 生命周期 ────────────────────────────────────────────────────────────────
 // classic legacy 脚本是 document 常驻，但插件 UI activation 会退役。退役后 host 的
 // getter / 方法会**同步 throw** `This plugin UI activation has ended. Use the current
-// activation.`。旧实现把 host 闭包在 currentSessionKey 和 gwRequest 里，于是断线期间
-// 那几个常驻模块不断出 uncaught；gwRequest 的 setTimeout 还会因为同步 throw 漏掉。
+// activation.`。所有 legacy 模块只通过这一层桥访问 host：
+//   - 读 selectedKey 走缓存，永不触碰可能已退役的 host；
+//   - 离线 RPC 立刻明确失败（发送前）；已发出的请求断线后标为"未确认"，不谎称没发生；
+//   - 重连 rebind 到新 host，旧 disposer 晚到不会摘掉新桥；
+//   - 退役/换代时完整回收订阅、observer 与 **pending 定时器**。
 //
-// 现在所有 legacy 模块只通过这一层桥访问 host：
-//   - 读 selectedKey 走"最后已知值"，永不触碰可能已退役的 host；
-//   - 离线时的 RPC 立刻以明确的离线错误失败（不假成功、不排队、不重放）；
-//   - 重连时 rebind 到新 host，旧 disposer 晚到不会把新桥摘掉；
-//   - 每次 rebind/abort 都完整回收上一轮的订阅与定时器。
+// ── 为什么状态挂在 window 上 ─────────────────────────────────────────────────
+// 构建产物是 ESM，热更新/版本切换后同一份代码可能以**两个 module 实例**同时存在。
+// 如果状态放在模块级 `const bridge`，两个实例各持一份，旧 classic 捕获的 gwRequest
+// 永远指向旧 host —— 这正是"rebind 测不出热更新"的原因。所以状态、facade、订阅所有权
+// 统一放在 document 上的单例 slot，重复导入共享同一份。
 
+const SLOT = '__cleBridgeSlot_v1';
 const OFFLINE_MESSAGE = '与 Li An 的连接已断开，操作未执行。等重新连上再试。';
+const UNCONFIRMED_MESSAGE = '连接在请求发出后断开，这次操作的结果未确认。重连后请先确认再重试。';
 
 const RELAYED = ['agent', 'chat', 'session.message', 'session.tool', 'sessions.changed', 'plugin.pinkie.lsp.message', 'plugin.pinkie.ext.progress', 'plugin.pinkie.ai.scan'];
 
-// 单个桥实例：持有"当前 host + 是否在线"这两个可变状态。
-// 之所以做成对象而不是闭包变量，是为了让 rebind 能整体换掉状态而不改动任何外部引用。
-const bridge = {
-  host: null,
-  online: false,
-  lastSessionKey: '',
-  round: null,      // 当前这一轮 activation 的身份（用来识别"旧 disposer 晚到"）
-};
+// ── 单例槽 ───────────────────────────────────────────────────────────────────
+// 只用 document 上这一个对象承载可变状态；模块本身不持有任何 host 引用。
+function slot() {
+  const doc = globalThis.document;
+  let s = doc[SLOT];
+  if (!s) {
+    s = {
+      host: null,
+      online: false,
+      lastSessionKey: '',
+      // 当前这一轮的回收句柄（订阅 / observer / pending 定时器）
+      round: null,
+      // 外部（classic 脚本）通过 facade 建立的订阅：{kind, name, fn}
+      externals: new Set(),
+      // pending 请求：{timer, resolve, reject, method, sent}
+      pending: new Set(),
+    };
+    Object.defineProperty(doc, SLOT, {value: s, configurable: true, enumerable: false, writable: false});
+  }
+  return s;
+}
 
-// 安全读 selectedKey：只在 online 时访问 host，且任何同步 throw 都降级为"沿用最后已知值"。
-// 这里用 try 是因为 getter 的 throw 是外部契约，没别的办法探测；
-// 但它是**唯一**的降级点，调用方不需要各自 try/catch。
+// 安全读 selectedKey：返回 {ok, key}。ok=false 表示 getter 同步抛了（host 已退役），
+// 与"读到空字符串"（ok=true, key='') 严格区分 —— 空 key 要如实记成空，不能沿用旧值。
 function readSelectedKey(host) {
   try {
     const key = host?.sessions?.selectedKey;
-    return typeof key === 'string' ? key : '';
+    return {ok: true, key: typeof key === 'string' ? key : ''};
   } catch {
-    return null; // null 表示"这次读不到"，区别于"读到空字符串"
+    return {ok: false, key: ''};
   }
 }
 
-function detachCurrent() {
-  const current = bridge.round;
-  bridge.round = null;
+// ── pending 请求的回收 ───────────────────────────────────────────────────────
+// 退役/换代时必须：取消定时器、结算调用方、忽略旧结果、绝不重发。
+// 已经发出去的请求不能声称"未执行"，只能诚实标为"未确认"。
+function abortPending(state, reason) {
+  for (const entry of [...state.pending]) {
+    if (entry.timer !== null) { clearTimeout(entry.timer); entry.timer = null; }
+    state.pending.delete(entry);
+    if (entry.settled) continue;
+    entry.settled = true;
+    if (entry.sent) entry.reject(new Error(UNCONFIRMED_MESSAGE));
+    else entry.reject(new Error(reason));
+  }
+}
+
+function detachRound(state) {
+  const current = state.round;
+  state.round = null;
   if (current) {
     try { current.dispose(); } catch {}
   }
 }
 
-// 给 legacy 脚本一个"退役也安全"的 host facade。
-//
-// 为什么需要它：classic 脚本里直接写 window.CLE?.host?.sessions?.selectedKey 的地方有好几处，
-// 都在 document 常驻，退役后 getter 会同步 throw。逐个改调用点等于在十几处堆 try/catch，
-// 而且以后新加的脚本还会再犯。把 CLE.host 从 raw host 换成这层 facade 才是桥根因修复。
-//
-// facade 只做两件事：
-//   1) 读 selectedKey 走缓存（不碰可能已退役的 host）；
-//   2) 其余方法在离线时立刻返回明确的失败，在线时原样转发。
-// 它不编造任何数据：读不到就是空/最后已知值，写操作就是明确失败。
-export function makeHostFacade() {
-  const offline = () => new Error(OFFLINE_MESSAGE);
-  return {
-    get sessions() {
-      return {
-        // 唯一允许离线读的东西：最后已知的选中会话（只读归属）
-        get selectedKey() { return bridge.lastSessionKey; },
-        open: (args) => {
-          if (!bridge.online || !bridge.host) return Promise.reject(offline());
-          return Promise.resolve(bridge.host.sessions?.open?.(args));
-        },
-        create: (args) => {
-          if (!bridge.online || !bridge.host) return Promise.reject(offline());
-          return Promise.resolve(bridge.host.sessions?.create?.(args));
-        },
-      };
-    },
-    request: (method, params) => gwRequest(method, params),
-    subscribe: (fn) => {
-      if (!bridge.online || !bridge.host) return () => {};
-      try { return bridge.host.subscribe?.(fn); } catch { return () => {}; }
-    },
-    onEvent: (name, fn) => {
-      if (!bridge.online || !bridge.host) return () => {};
-      try { return bridge.host.onEvent?.(name, fn); } catch { return () => {}; }
-    },
-    get ui() {
-      const ui = () => (bridge.online && bridge.host ? bridge.host.ui : null);
-      return {
-        registerReplacement: (...a) => {
-          const u = ui();
-          if (!u) return () => {};
-          try { return u.registerReplacement?.(...a); } catch { return () => {}; }
-        },
-        selectReplacement: (...a) => {
-          const u = ui();
-          if (!u) return false;
-          try { return u.selectReplacement?.(...a); } catch { return false; }
-        },
-      };
-    },
-    get online() { return bridge.online; },
-  };
-}
-
-// gwRequest：同步 throw 与异步 reject 都要处理，且绝不遗留定时器。
+// gwRequest：同步 throw / 异步 reject / 超时 / 断线四条路径都要 clearTimeout。
 export function gwRequest(method, params, timeoutMs = 15000) {
-  if (!bridge.online || !bridge.host) {
-    // 立即失败：不发、不排队、不重放。用真实 Error 并且给出离线原因（不是伪装 timeout）。
+  const state = slot();
+  if (!state.online || !state.host) {
     return Promise.reject(new Error(OFFLINE_MESSAGE));
   }
-  const host = bridge.host;
+  const host = state.host;
   return new Promise((resolve, reject) => {
-    let settled = false;
-    let timer = null;
+    const entry = {timer: null, settled: false, sent: false, method, reject: null};
+    entry.reject = reject;
     const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      if (timer !== null) { clearTimeout(timer); timer = null; }
+      if (entry.settled) return;
+      entry.settled = true;
+      if (entry.timer !== null) { clearTimeout(entry.timer); entry.timer = null; }
+      state.pending.delete(entry);
       fn(value);
     };
+    state.pending.add(entry);
     try {
-      timer = setTimeout(() => finish(reject, new Error('gateway timeout')), timeoutMs);
-      // host.request 可能在调用点同步 throw（退役竞态）。必须同层捕获，
-      // 否则这个 timer 会一直挂着，15s 后再 reject 一个已经没人管的 promise。
+      entry.timer = setTimeout(() => finish(reject, new Error('gateway timeout')), timeoutMs);
+      // 标记为"已发出"，此后若断线只能报未确认，不能说没执行。
+      entry.sent = true;
       const result = host.request(method, params || {});
       Promise.resolve(result).then(
         (v) => finish(resolve, v),
         (e) => finish(reject, e),
       );
     } catch (error) {
-      // 同步 throw：清掉 timer 并把真实原因交回调用方。
+      // 同步 throw：这条其实没送出去，按"未执行"处理，但保留真实原因。
+      entry.sent = false;
       finish(reject, error);
     }
   });
 }
 
-// 主动标记离线：保留最后只读 key，之后的 RPC 一律明确失败。
-export function goOffline() {
-  const current = bridge.round;
-  bridge.online = false;
-  bridge.host = null;
-  bridge.round = null;
-  if (current) safeCall(() => current.dispose());
+// 给 legacy 脚本一个"退役也安全"的 host facade。
+//
+// 只暴露 legacy 真正用到的 API（sessions.selectedKey / open / create, request,
+// subscribe, onEvent）。不发明空的 UI 实现：classic 不需要的接口就不提供，
+// 免得"返回 noop 假装成功"。
+export function makeHostFacade() {
+  const state = slot();
+  const requireOnline = () => {
+    if (!state.online || !state.host) throw new Error(OFFLINE_MESSAGE);
+    return state.host;
+  };
+  // 把同步 throw 封成 rejected Promise，绝不把异常漏到调用方同步栈上。
+  const asPromise = (fn) => {
+    try { return Promise.resolve(fn()); } catch (e) { return Promise.reject(e); }
+  };
+  return {
+    get sessions() {
+      const h = state.host;
+      return {
+        // 唯一允许离线读的东西：最后已知的选中会话（只读归属）
+        get selectedKey() { return state.lastSessionKey; },
+        open: (args) => asPromise(() => requireOnline().sessions?.open?.(args)),
+        create: (args) => asPromise(() => requireOnline().sessions?.create?.(args)),
+      };
+    },
+    request: (method, params) => gwRequest(method, params),
+    online: () => state.online,
+    // 外部订阅由桥持有：退役时断开 host，重连后按新 host 重绑，unsubscribe 始终有效。
+    subscribe: (fn) => addExternal('subscribe', null, fn),
+    onEvent: (name, fn) => addExternal('onEvent', name, fn),
+  };
 }
 
-function installOn(host, signal) {
-  // 先把上一轮的订阅/通知整体收掉，再装新的。旧轮次的 disposer 之后只会作用在自己身上。
-  detachCurrent();
-  const cached = readSelectedKey(host);
-  // readSelectedKey 返回 null 表示"sessions 的 getter 同步抛了"，即这个 host 已经退役。
-  // 不能因为拿到了一个对象就当它可用：否则界面会显示"已连接"，直到用户点下去才失败。
-  const alive = cached !== null;
-  if (typeof cached === 'string' && cached) bridge.lastSessionKey = cached;
-  bridge.host = alive ? host : null;
-  bridge.online = alive;
+// 外部订阅登记：返回的 unsubscribe 只影响自己，且重复调用安全。
+function addExternal(kind, name, fn) {
+  const state = slot();
+  const record = {kind, name, fn, off: null};
+  state.externals.add(record);
+  const bind = () => {
+    const host = state.online ? state.host : null;
+    if (!host) { record.off = null; return; }
+    try {
+      record.off = kind === 'subscribe'
+        ? host.subscribe?.(fn)
+        : host.onEvent?.(name, fn);
+    } catch {
+      record.off = null; // host 已退役：先记下，重连时再绑
+    }
+  };
+  bind();
+  record.bind = bind;
+  return () => {
+    state.externals.delete(record);
+    const off = record.off;
+    record.off = null;
+    if (off) { try { off(); } catch {} }
+  };
+}
 
+// 只解绑，不重绑：换代时先把旧 host 上的句柄全部撤掉。
+function unbindExternals(state) {
+  for (const record of state.externals) {
+    const off = record.off;
+    record.off = null;
+    if (off) { try { off(); } catch {} }
+  }
+}
+
+function rebindExternals(state) {
+  for (const record of state.externals) {
+    const off = record.off;
+    record.off = null;
+    if (off) { try { off(); } catch {} }
+    if (record.bind) record.bind();
+  }
+}
+
+// 主动标记离线：保留最后只读 key；已发出的请求标未确认；回收 pending 与订阅。
+export function goOffline() {
+  const state = slot();
+  state.online = false;
+  state.host = null;
+  abortPending(state, OFFLINE_MESSAGE);
+  for (const record of state.externals) {
+    const off = record.off;
+    record.off = null;
+    if (off) { try { off(); } catch {} }
+  }
+  detachRound(state);
+}
+
+// 把所有对外句柄挂好。句柄本身不持有 host，只读单例槽，所以可以随时重挂。
+function publishHandles() {
+  const state = slot();
   const sidebar = window.__laolaoSidebar || {};
-  // 读 key 走桥，不直接摸 host：退役后仍返回最后已知值，且不产生任何 host 访问。
-  sidebar.currentSessionKey = () => bridge.lastSessionKey;
+  // 读 key 走缓存，不碰 host：退役后不会抛，调用方不需要 try/catch。
+  sidebar.currentSessionKey = () => state.lastSessionKey;
   sidebar.gwRequest = gwRequest;
-  sidebar.isOnline = () => bridge.online;
+  sidebar.isOnline = () => state.online;
   window.__laolaoSidebar = sidebar;
-  window.__cleGateway = {request: gwRequest, host, isOnline: () => bridge.online};
-
-  // 供 main.js 在重新 activate 时调用（主控只需一行接线）。
-  // 注意：rebind 必须接收**新一轮 activation** 的 signal。
-  // 如果这里复用旧 signal，旧 activation 的 abort 会把刚接上的新桥一起打掉
-  // （实测现象：重连后一切看似正常，旧 disposer 一到就整体离线）。
+  // 不再把 raw host 挂到 __cleGateway 上：那是安全桥边界之外的东西。
+  window.__cleGateway = {request: gwRequest, isOnline: () => state.online};
   window.__cleBridge = {
     gwRequest,
     rebind: (nextHost, nextSignal) => installOn(nextHost, nextSignal),
     goOffline,
-    isOnline: () => bridge.online,
-    currentSessionKey: () => bridge.lastSessionKey,
+    isOnline: () => state.online,
+    currentSessionKey: () => state.lastSessionKey,
+    hostFacade: makeHostFacade,
   };
+}
 
-  const stillMine = () => bridge.round === round && bridge.host === host;
+function installOn(host, signal) {
+  const state = slot();
 
+  // 已经 aborted 的 signal：零资源装上，直接离线。不能装完 observe/subscribe 再等一个
+  // 永远不会再触发的 abort 事件。
+  if (signal && signal.aborted) {
+    detachRound(state);
+    state.host = null;
+    state.online = false;
+    // 零资源，但句柄仍要可用：调用方需要能查在线状态、拿到明确的离线错误。
+    publishHandles();
+    return installOn;
+  }
+
+  // 上一轮整体收掉（含 pending 定时器与旧 host 上的外部订阅）。
+  abortPending(state, UNCONFIRMED_MESSAGE);
+  detachRound(state);
+  unbindExternals(state);
+
+  const probe = readSelectedKey(host);
+  // probe.ok=false 说明这个 host 的 getter 已经同步抛了 —— 它已退役。
+  // 不能因为"拿到了一个对象"就当连上了，否则界面显示已连接、用户点下去才失败。
+  const alive = probe.ok;
+  if (alive) state.lastSessionKey = probe.key; // 空 key 也如实记为空
+  state.host = alive ? host : null;
+  state.online = alive;
+
+  publishHandles();
+
+  // 重连后把外部订阅重绑到新 host（classic 只在 boot 订阅一次，不会自己重绑）。
+  rebindExternals(state);
+
+  const stillMine = () => state.round === round;
+
+  // 精确变化判定：同 key 同 mode 的重复 publish 必须零通知、零重新 fetch。
+  // 旧实现就是这样，被这轮重写弄丢了，导致常驻 sidebar 每次运行事件都强制 fetchMode(true)。
+  const lastMode = {value: document.documentElement.dataset.cleRoom};
   const syncSelection = () => {
-    if (!stillMine() || !bridge.online) return; // 已被新桥取代，立刻让位
-    const key = readSelectedKey(host);
-    if (typeof key === 'string') {
-      bridge.lastSessionKey = key;
-      if (key) window.dispatchEvent(new CustomEvent('pinkie:session-key', {detail: {sessionKey: key}}));
+    if (!stillMine() || !state.online) return;
+    const mode = document.documentElement.dataset.cleRoom;
+    if (mode !== lastMode.value) {
+      lastMode.value = mode;
+      window.dispatchEvent(new CustomEvent('laolao:modechange', {detail: {mode}}));
     }
-    window.dispatchEvent(new CustomEvent('laolao:sessions-changed'));
+    const read = readSelectedKey(state.host);
+    if (!read.ok) return; // 已经读不到，交给 abort 流程，不制造假变化
+    if (read.key !== state.lastSessionKey) {
+      state.lastSessionKey = read.key;
+      window.dispatchEvent(new CustomEvent('laolao:sessions-changed'));
+      // 记忆编辑器属于打开它的那个 scope：scope 变了就关掉。
+      window.__clekkMemoryUI?.close();
+    }
   };
 
   const offSelection = safeCall(() => host.subscribe?.(syncSelection));
@@ -197,7 +290,6 @@ function installOn(host, signal) {
     if (name === 'sessions.changed') syncSelection();
   }))).filter(Boolean);
 
-  // 这一轮自己的回收句柄。注意这里不做在线状态判断：dispose 只负责撤订阅。
   const round = {
     dispose() {
       for (const off of offs) safeCall(() => off?.());
@@ -205,15 +297,14 @@ function installOn(host, signal) {
       try { modeObserver.disconnect(); } catch {}
     },
   };
-  bridge.round = round;
+  state.round = round;
 
-  // 外层 activation 结束：只有"这一轮仍是当前轮"时才把桥标记为离线。
-  // 若期间已经 rebind 到新 host，旧 activation 的 abort 不得影响新桥。
   const onOuterAbort = () => {
-    if (bridge.round !== round) return; // 已被新桥取代
-    bridge.online = false;
-    bridge.host = null;
-    bridge.round = null;
+    if (state.round !== round) return; // 已被新桥取代，旧 activation 结束不得影响新桥
+    state.online = false;
+    state.host = null;
+    state.round = null;
+    abortPending(state, UNCONFIRMED_MESSAGE);
     round.dispose();
   };
   if (signal) signal.addEventListener('abort', onOuterAbort, {once: true});
@@ -230,11 +321,10 @@ export function installLegacyShim(host, signal) {
     gwRequest,
     rebind: (nextHost, nextSignal) => installOn(nextHost, nextSignal),
     goOffline,
-    isOnline: () => bridge.online,
-    currentSessionKey: () => bridge.lastSessionKey,
-    // 主控接线：window.CLE = Object.assign(window.CLE||{}, {host: bridge.hostFacade(), ...})
+    isOnline: () => slot().online,
+    currentSessionKey: () => slot().lastSessionKey,
     hostFacade: makeHostFacade,
   };
 }
 
-export {OFFLINE_MESSAGE};
+export {OFFLINE_MESSAGE, UNCONFIRMED_MESSAGE};
