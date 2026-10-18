@@ -41,10 +41,39 @@ enum BrowserControlPolicy {
     }
 }
 
+/// The C.le. palette used by the native browser chrome. The web UI owns its own
+/// tokens; this keeps the surrounding window (toolbar, start page, error page,
+/// resize seams) from drifting back to the old pink skin.
+enum CleBrowserPalette {
+    static let paper = NSColor(srgbRed: 0.984, green: 0.980, blue: 0.961, alpha: 1)
+    static let surface = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+    static let ink = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 1)
+    static let ink2 = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.62)
+    static let ink3 = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.42)
+    static let line = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.12)
+    static let gaze = NSColor(srgbRed: 0.165, green: 0.388, blue: 0.910, alpha: 1)
+    static let gold = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.290, alpha: 1)
+
+    // Night: warm near-black paper, ivory ink (matches the web night tokens).
+    static let nightPaper = NSColor(srgbRed: 0.086, green: 0.078, blue: 0.071, alpha: 1)
+    static let nightSurface = NSColor(srgbRed: 0.122, green: 0.110, blue: 0.098, alpha: 1)
+    static let nightInk = NSColor(srgbRed: 0.941, green: 0.925, blue: 0.894, alpha: 1)
+    static let nightInk2 = NSColor(srgbRed: 0.941, green: 0.925, blue: 0.894, alpha: 0.66)
+    static let nightLine = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.13)
+    static let nightGaze = NSColor(srgbRed: 0.475, green: 0.627, blue: 0.980, alpha: 1)
+
+    static func paper(_ dark: Bool) -> NSColor { dark ? nightPaper : paper }
+    static func surface(_ dark: Bool) -> NSColor { dark ? nightSurface : surface }
+    static func ink(_ dark: Bool) -> NSColor { dark ? nightInk : ink }
+    static func ink2(_ dark: Bool) -> NSColor { dark ? nightInk2 : ink2 }
+    static func line(_ dark: Bool) -> NSColor { dark ? nightLine : line }
+    static func gaze(_ dark: Bool) -> NSColor { dark ? nightGaze : gaze }
+}
+
 /// Shared by the App toolbar and the separate WebKit test host. It does not blink.
 final class BrowserActivityIndicator: NSStackView {
     private let dot = NSView(frame: .zero)
-    private let label = NSTextField(labelWithString: "碧琪正在使用浏览器")
+    private let label = NSTextField(labelWithString: "Li An 正在使用浏览器")
 
     init() {
         super.init(frame: .zero)
@@ -67,10 +96,9 @@ final class BrowserActivityIndicator: NSStackView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func setNight(_ dark: Bool) {
-        let accent = dark ? NSColor(srgbRed: 1, green: 0.61, blue: 0.77, alpha: 1)
-            : NSColor(srgbRed: 0.82, green: 0.33, blue: 0.57, alpha: 1)
+        let accent = CleBrowserPalette.gaze(dark)
         dot.layer?.backgroundColor = accent.cgColor
-        label.textColor = accent
+        label.textColor = CleBrowserPalette.ink2(dark)
     }
 }
 
@@ -83,11 +111,13 @@ enum BrowserClickFeedback {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               x.isFinite, y.isFinite else { return }
         let spot = BrowserFeedbackView(frame: NSRect(x: x - 12, y: Double(browser.bounds.height) - y - 12, width: 24, height: 24))
+        let night = browser.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let accent = CleBrowserPalette.gaze(night)
         spot.wantsLayer = true
         spot.layer?.cornerRadius = 12
-        spot.layer?.backgroundColor = NSColor(srgbRed: 0.88, green: 0.40, blue: 0.63, alpha: 0.18).cgColor
+        spot.layer?.backgroundColor = accent.withAlphaComponent(0.14).cgColor
         spot.layer?.borderWidth = 1
-        spot.layer?.borderColor = NSColor(srgbRed: 0.88, green: 0.40, blue: 0.63, alpha: 0.28).cgColor
+        spot.layer?.borderColor = accent.withAlphaComponent(0.34).cgColor
         browser.addSubview(spot)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { spot.removeFromSuperview() }
     }
@@ -372,8 +402,7 @@ final class BrowserControlController {
         }
     }
 
-    private func screenshot(_ body: [String: Any], browser: WKWebView, request: Request) {
-        let capture = { [weak self, weak request] (width: Double, height: Double, restore: (() -> Void)?) in
+    private func screenshot(_ body: [String: Any], browser: WKWebView, request: Request) {        let capture = { [weak self, weak request] (width: Double, height: Double, restore: (() -> Void)?) in
             guard let self, let request, self.live(request) else { restore?(); return }
             guard width > 0, height > 0, width <= 16384, height <= 16384, width * height <= 64_000_000 else {
                 restore?()

@@ -1,0 +1,197 @@
+# BROWSER 修复报告
+
+worktree：`~/release-superpinkie/wt/repair-browser`（分支 `repair/browser`，起点 `253fc10`）
+范围：`desktop/macos/Sources/Launcher.swift`、`BrowserControl.swift`、`MaterialPreview.swift`、`desktop/macos/build.sh`、新增 `desktop/macos/browser-test-host.sh`、`services/cle-studio/static/legacy/laolao-link-viewer.js`、`browser.css`、`laolao-material-preview.js`、测试与本文。
+未改：模块注册/主入口/模式后端/原版 `ui/injections` 与 `ui/assets`/美术/`personas`/任何 live 配置或 App。
+
+模型：DeepSeek V4.1 Flash · WB。本报告不含视觉验收结论——我没有也不可能看过截图，最终 GUI 与真实模型验收由主控执行。
+
+---
+
+## 1. 根因（按严重度）
+
+### R1 · 原生浏览器控制器根本没被编译进 App（阻断级）
+`desktop/macos/build.sh` 的 `swiftc` 只列出 `MaterialPreview.swift` 和 `Launcher.swift`。
+`BrowserControl.swift`（`BrowserControlController` / `BrowserControlEndpoint` / `BrowserActivityIndicator` / `BrowserClickFeedback` / `BrowserControlPolicy`）从未参与编译。
+
+证据：在修复前用构建参数做类型检查会直接失败：
+
+```
+Sources/Launcher.swift:1886:43: error: cannot find type 'BrowserActivityIndicator' in scope
+Sources/Launcher.swift:1926:34: error: cannot find 'BrowserControlController' in scope
+Sources/Launcher.swift:1927:35: error: cannot find 'BrowserControlEndpoint' in scope
+```
+
+影响：`laolaoBrowserWorkspace` 的 `show-file`、`chatgpt-control`、模型 `open/click/type/press/scroll/screenshot/status` 全部落空；Agent 控制浏览器与文件预览都没有后端。这解释了"桥在、能力不在"的现象。
+
+修法：`build.sh` 增加 `"$SCRIPT_DIR/Sources/BrowserControl.swift"`。修复后同一组参数 `-typecheck` 零输出（exit 0），产物里 `nm` 能查到 `CleBrowserPalette` 等浏览器符号 297 处。
+
+### R2 · 双栏时一个全局 id 在 pane 间搬动，另一侧丢工具
+`laolao-link-viewer.js` 用 `document.getElementById("laolao-browser-workspace-entry")`，且 `mountBrowserLauncher` 只取
+`.chat-pane-cache__pane--active .agent-chat__composer-lead`，再把按钮 `insertBefore` 到"当前这个" rail。
+
+影响：切到另一侧时，按钮从旧 pane 上被 `remove()` 后搬走；旧 pane 恢复时按钮要等下一次 1.5s 轮询才可能回来。缓存 pane（`inert`）也会被挂上一个看不见的工具。
+
+修法：入口改为每 pane 各一个 `button.laolao-browser-entry`，不再有全局 id：
+- `railFor(pane)` 只在本 pane 内找 composer lead；
+- 已存在就只更新 `data-native`，不搬动；
+- `inert`（缓存但不可见）pane 跳过；
+- 任一侧点击都 `postMessage({action:"open"})` 打开**同一个**原生工作区，页面与登录态仍在单个 `browserWebView` 里。
+
+### R3 · 无原生桥时假装原生，降级提示误导
+- 视频卡片按钮固定写"在侧栏打开"，没有桥时仍这样承诺；
+- 回退 iframe 的标题是"网页预览"，`aria-label` 也是"网页预览"，无法区分"页内嵌入"与"App 浮窗"；
+- iframe 被站点拒绝后提示只说"该网站拒绝了嵌入预览"，容易被理解成原生浏览器坏了。
+
+修法：`isNative()` 区分能力；无桥时入口 `title` 为"页内预览（当前环境无原生浏览器）"、`data-native="false"`，回退面板加 `页内预览 · 未连接原生浏览器` 角标，`aria-label` 写明"页内预览（非原生浏览器）"，拒绝嵌入的说明明确写"这不是原生浮窗失败：当前环境没有 App 浏览器桥，只能页内嵌入"。
+
+### R4 · 原生文件预览可能双开
+`laolao-material-preview.js` 的 `requestSidebarPreview` 只等 1500ms，超时就 `resolve(false)`，调用方随即 `openPreview()` 再开一个页内面板。大 PDF、首次加载 `clekk-material` scheme 时很容易超时，结果原生与页内两份预览同时存在。
+
+修法：有桥时超时返回 `"unknown"`（不再等同"原生拒绝"），调用方对 `"unknown"` 也只关闭页内面板，不重复打开；无桥时才 `false`。超时放宽到 8000ms。
+
+### R5 · Agent 活动提示从未显示
+`BrowserActivityIndicator` 实例被创建、被赋给 `browserActivityIndicator`、`activityChanged` 也会改它的 `isHidden`，但它从未被加入任何视图层级（`statusStack = NSStackView(views: [loading])`）。
+
+影响：模型操作浏览器时工具栏没有任何"Li An 正在使用浏览器"反馈，用户只知道页面自己在动。
+
+修法：`statusStack = NSStackView(views: [loading, activity])`；`updateBrowserToolbarLayout` 改为两个子视图都隐藏时才隐藏整个 stack（`detachesHiddenViews` 已开启，不会留空白）；`activityChanged` 里补一次工具栏布局刷新。
+
+### R6 · 原生 chrome 仍是旧粉色皮肤，与新版割裂
+浏览器面板底、工具栏底、地址栏、边缘收纳手柄、悬浮/停靠/铺满的选中态、模型点击反馈点、起始页、错误页、`clekk-material` 文件预览页，全部是旧粉色（`systemPink`、`#fffafd`/`#70425b`、`#fb8`…）。
+
+修法：新增 `CleBrowserPalette`（纸白/墨黑/金/冰蓝 + 夜间对应值），上述所有位置改用它；起始页与错误页改成 `color-scheme` + `prefers-color-scheme` 的同一套变量；文件预览页同样改纸白/墨黑。品牌文案 `碧琪正在使用浏览器` → `Li An 正在使用浏览器`，起始页标题改为 `Li An 的浏览器`。
+
+### R7 · 没有可复用的隔离验收宿主
+任务要求为主控提供独立测试宿主，仓库里既没有脚本也没有隔离入口。
+
+修法：新增 `desktop/macos/browser-test-host.sh`（`--build` / `--run` / `--print-env`）与 `Launcher` 的 `PINKIE_TEST_HOST=1` 分支。
+
+---
+
+## 2. 测试宿主的设计与安全边界
+
+`browser-test-host.sh` 复用**同一份** `Launcher.swift` / `BrowserControl.swift` / `MaterialPreview.swift`，不复刻浏览器：
+
+| 项 | live App | 测试宿主 |
+|---|---|---|
+| bundle id | `com.cle0726.super-pinkie` | `com.cle0726.super-pinkie.browser-test` |
+| 网关 | 18789（自管） | 只连 `127.0.0.1:19789`，**只 attach，不 spawn/kill** |
+| 状态/日志 | `~/Library/Application Support/SuperPinkie` | `.../SuperPinkie/browser-test` |
+| CUA 桌面执行器 | 启动 | **不启动、不回收** |
+| TTS/派对/圆桌 | 启动 | 不启动 |
+| 捆绑安装脚本 | 首次运行执行 | 不执行 |
+| 自动更新 | 可用 | 关闭且菜单项直接返回 |
+
+`RuntimeConfig.gatewayURL` 在测试模式下会拒绝非 loopback 和 `18789`，直接回落到 `19789` 并打日志——即使有人误传了 live 地址，也连不到 live 网关。
+
+已实际执行 `--build`（只编译，不启动 GUI），产物 `dist/browser-test/C.le. Browser Test.app`：
+
+```
+$ /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' .../Info.plist
+com.cle0726.super-pinkie.browser-test
+$ codesign -dvv ... | grep Identifier
+Identifier=com.cle0726.super-pinkie.browser-test
+$ nm -C .../MacOS/Launcher | grep -c BrowserControl
+297
+```
+
+主控命令：
+
+```
+cd ~/release-superpinkie/wt/repair-browser
+./desktop/macos/browser-test-host.sh --print-env   # 先确认路径
+./desktop/macos/browser-test-host.sh --build
+./desktop/macos/browser-test-host.sh --run         # 连 19789，不碰 live
+```
+
+前提：19789/profile cle 的测试网关需已在运行（当前实测 `/healthz` 返回 200）。网关没起时宿主只显示恢复提示，不会自行拉起。
+
+---
+
+## 3. 原能力逐项对照
+
+| 原能力 | 状态 | 说明 / 证据 |
+|---|---|---|
+| 悬浮小窗、拖动 | 保留 | `BrowserPanelDragHandle`/`moveBrowserFloating` 未改；geometry 测试覆盖越界钳制 |
+| 停靠侧边（`.side`） | 保留 | `changeBrowserPresentation(.side)` 未改；宽度约束测试覆盖 860–4036pt |
+| 铺满工作区（`.full`） | 保留 | 同上 |
+| 四边+四角缩放 | 保留 | `BrowserResizeEdges.allHandles` 已由 Swift 子进程测试覆盖 |
+| 贴边收纳 / hover 露半幅 / 拖出 | 保留 | `edgeDockedFrame`/`updateBrowserEdgeHover` 未改；测试覆盖 `revealed` 两态 |
+| 适应窗口 / 恢复 100% | 保留 | `browserToggleFit` / `browserActualSize` 未改 |
+| 网页强制深色 | 保留 | `browserForceDarkScript` 未改；菜单项与状态保留 |
+| 同一 WKWebView 保留页面与登录 | 保留 | `configuration.websiteDataStore = .default()`；`detachBrowserWorkspace` 不清 `browserWebView`/`lastBrowserURL`（测试断言其不含 `= nil`） |
+| 前进/后退/刷新/外部打开 | 保留 | 未改；`createWebViewWith` 把 `target=_blank` 接进工作区 |
+| 模型操作提示 | **已修** | 活动指示器进栈（R5），文案改 Li An |
+| 点击反馈 / 真人操作让行 | 保留 | `BrowserClickFeedback` + `userDidInteract` 10s 窗口未改；反馈点配色并入新版 |
+| ChatGPT 网页协作 | 保留 | `chatgpt-control` / `reset-chatgpt-session` 分支与前端 `laolao-web-gpt-collab.js` 对接未改 |
+| 本地文件/服务预览 | **已修** | 双开问题（R4）；预览页配色并入新版 |
+| 双栏每侧入口 | **已修** | 每 pane 独立按钮（R2），切分屏时由 MutationObserver 立即补齐而非等 1.5s |
+| 无桥时友好提示 | **已修** | 入口/角标/回退文案区分 native 与页内（R3） |
+
+---
+
+## 4. 自主发现（本轮新增，非任务书列出）
+
+| # | 发现 | 位置 / 触发 | 修法 | 状态 |
+|---|---|---|---|---|
+| D1 | `BrowserControl.swift` 未被任何构建脚本编译，全部浏览器控制符号缺失 | `build.sh:169` | 加入编译列表 | 已修，类型检查+符号核对通过 |
+| D2 | 活动指示器创建后从未入视图层级，Agent 提示永远不可见 | `makeBrowserPanel()` `statusStack` | 放入 stack 并修可见性联动 | 已修，编译通过 |
+| D3 | 状态栈隐藏条件只看 spinner，activity 显示时整栈仍可能被隐藏 | `updateBrowserToolbarLayout` | 两子视图均隐藏才隐藏整栈 | 已修 |
+| D4 | 原生文件预览 1.5s 超时被当成"拒绝"，导致页内面板叠加 | `laolao-material-preview.js:216` | 有桥时返回 `"unknown"` | 已修，语法检查通过 |
+| D5 | 无桥时视频按钮仍写"在侧栏打开" | `mountMediaWorkspaceActions` | 按能力改文案 | 已修 |
+| D6 | 双栏/切模式后新 pane 最多 1.5s 没有入口 | `setInterval(...,1500)` 单一通道 | 加 `MutationObserver`，仅缺失时补 | 已修，含专门测试 |
+| D7 | 浏览器相关原生 UI 全部旧粉色（面板/工具栏/地址栏/手柄/选中态/起始页/错误页/文件预览页） | `Launcher.swift`、`MaterialPreview.swift` | `CleBrowserPalette` 统一 | 已改，编译通过 |
+| D8 | 悬浮 resize 手柄与边缘 tab 用 `systemPink`，夜间下与新版冲突 | `BrowserEdgeTab.draw`、`applyNightAppearance` | 并入 palette，夜间取冰蓝 | 已修 |
+| D9 | 起始页没有说明浏览器会保留登录态与快捷键 | `loadBrowserStartPage` | 补一行说明（⌘⇧B / 登录保留） | 已改 |
+| D10 | 测试宿主若误配 live 端口会直连 live 网关 | `RuntimeConfig.gatewayURL` | 测试模式硬拒绝 18789 与非 loopback | 已修，含测试断言 |
+
+---
+
+## 5. 自测结果（真实执行）
+
+```
+$ cd desktop/macos && xcrun swiftc -parse-as-library -typecheck \
+    Sources/BrowserControl.swift Sources/MaterialPreview.swift Sources/Launcher.swift \
+    -framework AppKit -framework AVFoundation -framework Foundation -framework Speech -framework WebKit
+（无输出，exit 0）
+
+$ ./desktop/macos/browser-test-host.sh --build
+built: .../dist/browser-test/C.le. Browser Test.app
+（bundle id = com.cle0726.super-pinkie.browser-test，nm 命中 BrowserControl 符号 297 处）
+
+$ node --test tests/browser-entry-panes.test.cjs tests/browser-test-host.test.cjs tests/browser-workspace.test.cjs
+ℹ tests 16   pass 16   fail 0
+
+$ cd services/cle-studio && node build.mjs
+cle-studio ui 1a0183a8b349  js 53.7 KB  css 54.6 KB
+
+$ node --check services/cle-studio/static/legacy/{laolao-link-viewer,laolao-material-preview}.js
+OK
+```
+
+新增测试只覆盖真实风险，不镜像实现：
+- `browser-entry-panes.test.cjs`：双栏两个 pane 各一个按钮且不是同一个节点；`inert` 缓存 pane 不挂工具；重复挂载不叠加；无桥时 `data-native="false"` 且回退面板自称页内预览；分屏新 pane 由观察器立即补齐。
+- `browser-test-host.test.cjs`：构建必须包含 `BrowserControl.swift`；测试模式拒绝 live 端口；`start`/`repair`/`attach` 不 spawn、不 kill、不 terminate；测试宿主不启动 CUA/TTS/派对/圆桌/安装脚本。
+
+---
+
+## 6. 未验证项与剩余风险
+
+1. **GUI 与真实模型验收未做**（我按约定不操作 GUI，也看不到图像）。需主控在测试宿主里确认：拖拽/四角缩放/贴边收纳手感、深浅色下的对比度、地址栏与工具按钮在 360pt 窄面板下的排布、`⌘⇧B` 行为。
+2. **原生浮窗里 agent 活动的实际观感未验证**：代码路径已通，但没有真实模型回合驱动过它。
+3. **ChatGPT 登录持久与换号未实测**：`WKWebsiteDataStore.default()` 与 `reset-chatgpt-session` 逻辑未改，只确认了接线；需要真实登录环境验证。
+4. **`clekk-material` 文件预览的视觉未验证**：配色已换，未在 WebKit 里实际渲染确认。
+5. **双栏与原生浮窗同时打开时的层级**：`updateWorkspaceZOrder` 未改动，未在真实分屏下验证遮挡关系。
+6. **测试宿主依赖外部网关**：19789 未运行时宿主只提示、不自启；这是刻意设计，但主控需先确保测试网关在线。
+7. **`dist/browser-test` 属构建产物**，已在 `.gitignore` 的 `dist/` 规则内，未提交。
+
+---
+
+## 7. 跨所有权问题（交主控分派，我未改）
+
+| 位置 | 问题 | 最小修法 |
+|---|---|---|
+| `services/cle-studio/src/composer/composer.css` `@container cle-pane (max-width:520px)` | composer lead 用 `:nth-child(n+5)` 折进 ⋯，我新加的 `.laolao-browser-entry` 若排在第五位会被一并折起 | 主控确认后把入口显式列为不折叠（`:not(.laolao-browser-entry)`），属 composer 所有权 |
+| `services/cle-studio/static/legacy/laolao-material-preview.js` `RAIL` 常量 | 仍只匹配 `.chat-workbench > .chat-workspace-rail`；若新版 rail 层级变化，文件菜单会失效 | 与侧栏任务统一 rail 选择器；本轮未改以免与其冲突 |
+| 原版 `ui/injections/laolao-link-viewer.js` | 仍是全局 id 版本（原版 App 并行运行，不能动） | 主控合并时以本 worktree 的 `static/legacy` 版本为准，原版保持原样 |

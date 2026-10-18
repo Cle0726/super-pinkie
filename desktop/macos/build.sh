@@ -168,6 +168,7 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 xcrun swiftc -parse-as-library -O \
   "$SCRIPT_DIR/Sources/MaterialPreview.swift" \
+  "$SCRIPT_DIR/Sources/BrowserControl.swift" \
   "$SCRIPT_DIR/Sources/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \
