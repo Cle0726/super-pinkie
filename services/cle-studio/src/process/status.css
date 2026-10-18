@@ -20,8 +20,43 @@ html[data-cle] .chat-working-indicator:has(> .cle-status) > :not(.cle-status) { 
 .cle-status__time { font: 400 11px/1 var(--cle-mono); color: var(--cle-ink-3); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .cle-status__verb { animation: none !important; } }
 
-/* the user's own words: paper, a hairline, no tint (blue is only for the gaze) */
-html[data-cle] .chat-group.user .chat-bubble {
-  background: var(--cle-surface) !important; color: var(--cle-ink) !important;
-  border: 1px solid var(--cle-line-strong); box-shadow: none !important; border-radius: 18px 18px 6px 18px;
+/* ---------- the transcript: words on the canvas, no bubbles (as in the original app) ---------- */
+html[data-cle] .chat-avatar-slot, html[data-cle] .chat-group > .chat-avatar { display: none !important; }
+html[data-cle] .chat-group .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator) {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important;
 }
+html[data-cle] .chat-group.assistant > .chat-group-messages { max-width: min(100%, 760px) !important; width: 100% !important; flex: 1 1 auto; }
+html[data-cle] .chat-group.assistant .chat-bubble { width: 100% !important; max-width: 100% !important; }
+html[data-cle] .chat-group.assistant .chat-text {
+  font: 400 15.5px/1.8 var(--cle-sans) !important; color: var(--cle-ink); letter-spacing: .005em; text-wrap: pretty;
+}
+html[data-cle][data-cle-room="learning"] .chat-group.assistant .chat-text { font-size: 16px !important; line-height: 1.9 !important; }
+html[data-cle] .chat-group.assistant .chat-text p { margin: 0 0 .85em !important; }
+html[data-cle] .chat-group.assistant .chat-text > :first-child { margin-top: 0 !important; }
+html[data-cle] .chat-group.assistant .chat-text > :last-child { margin-bottom: 0 !important; }
+html[data-cle] .chat-group.assistant .chat-text :is(strong, b) { font-weight: 600; color: var(--cle-ink); }
+html[data-cle] .chat-group.assistant .chat-text :is(h1, h2, h3, h4) { font-family: var(--cle-serif); font-weight: 600; line-height: 1.4; margin: 1.4em 0 .55em !important; letter-spacing: .02em; }
+html[data-cle] .chat-group.assistant .chat-text h1 { font-size: 1.35em; } html[data-cle] .chat-group.assistant .chat-text h2 { font-size: 1.18em; }
+html[data-cle] .chat-group.assistant .chat-text h3 { font-size: 1.05em; }
+html[data-cle] .chat-group.assistant .chat-text :is(ul, ol) { margin: .2em 0 .9em !important; padding-left: 1.4em !important; }
+html[data-cle] .chat-group.assistant .chat-text li { margin: .3em 0 !important; }
+html[data-cle] .chat-group.assistant .chat-text li::marker { color: var(--cle-gold); }
+html[data-cle] .chat-group.assistant .chat-text hr { border: 0; height: 1px; margin: 1.4em 0; background: linear-gradient(90deg, transparent, var(--cle-gold-soft) 15% 85%, transparent); }
+html[data-cle] .chat-group.assistant .chat-text blockquote { margin: 1em 0; padding: 0 0 0 16px; border-left: 1px solid var(--cle-gold-soft); color: var(--cle-ink-2); font-family: var(--cle-serif); font-style: italic; }
+html[data-cle] .chat-group.assistant .chat-text a { color: var(--cle-gaze); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--cle-gaze) 35%, transparent); }
+html[data-cle] .chat-group.assistant .chat-text :not(pre) > code { font: 400 .88em/1 var(--cle-mono); padding: .15em .4em; border-radius: 5px; background: color-mix(in srgb, var(--cle-ink) 6%, transparent); color: var(--cle-ink); }
+html[data-cle] .chat-group.assistant .chat-text pre { background: var(--cle-surface) !important; border: 1px solid var(--cle-line); border-radius: var(--cle-radius-card); padding: 14px 16px !important; font: 400 12.5px/1.65 var(--cle-mono); }
+html[data-cle] .chat-group.assistant .chat-text table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 14px; margin: .6em 0 1em; }
+html[data-cle] .chat-group.assistant .chat-text :is(th, td) { border: 0; border-bottom: 1px solid var(--cle-line); padding: 9px 14px 9px 0; text-align: left; vertical-align: top; }
+html[data-cle] .chat-group.assistant .chat-text th { font: 500 11.5px/1.3 var(--cle-sans); letter-spacing: .08em; color: var(--cle-ink-3); border-bottom-color: var(--cle-line-strong); }
+
+/* the user's own words: right-aligned, quieter, a gold thread on the right edge — no bubble */
+html[data-cle] .chat-group.user > .chat-group-messages { max-width: min(72%, 620px) !important; }
+html[data-cle] .chat-group.user .chat-bubble { padding: 2px 14px 2px 0 !important; border-right: 1px solid var(--cle-gold-soft) !important; }
+html[data-cle] .chat-group.user .chat-text { font: 400 15px/1.7 var(--cle-sans) !important; color: var(--cle-ink-2) !important; text-align: right; }
+html[data-cle] .chat-group.user .chat-text p { margin: 0 0 .5em; } html[data-cle] .chat-group.user .chat-text p:last-child { margin: 0; }
+
+/* message actions only when you reach for them */
+html[data-cle] .chat-group-footer { opacity: 0; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .chat-group:hover .chat-group-footer, html[data-cle] .chat-group:focus-within .chat-group-footer { opacity: 1; }
+html[data-cle] .chat-sender-name { display: none; }

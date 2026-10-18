@@ -11,13 +11,8 @@
   if (window.__laolaoAskUser) return;
 
   const MARKER = "[[PINKIE_ASK_V1]]";
-<<<<<<< HEAD
-  const ANSWER_PREFIX = "【回答碧琪的提问】";
-  const STICKER = "/cle/static/art/avatar.webp";
-=======
   const ANSWER_PREFIX = "【回答 Li An 的提问】";
-  const STICKER = "/cle/static/art/identity.png";
->>>>>>> oc/rename
+  const STICKER = "/cle/static/art/avatar.webp";
   const STORE = "laolao:ask-user:closed:v1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
