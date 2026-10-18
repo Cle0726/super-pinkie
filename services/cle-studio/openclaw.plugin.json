@@ -1,7 +1,7 @@
 {
   "id": "cle-studio",
   "name": "C.le. Studio",
-  "description": "The C.le. interface for 碧琪: the guardian cat, five rooms, gaze motion.",
+  "description": "The C.le. interface for Li An: the guardian cat, five rooms, gaze motion.",
   "version": "0.1.0",
   "activation": {
     "onStartup": true
