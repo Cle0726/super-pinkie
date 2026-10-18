@@ -6,6 +6,11 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 
 const marker = '/* pinkie-same-session-recovery:v1 */';
+// 2026.10 copy lives in agent-runner.runtime-*.mjs as a single helper; the
+// older `${options?.includeDetails…}` template no longer exists.
+const currentMarker = '/* pinkie-same-session-recovery:v2 */';
+const currentFrom = '\treturn "⚠️ Auto-compaction could not recover this turn. I kept this conversation mapped to the current session. Please try again, use /compact, or use /new to start a fresh session." + ((!params.runtimeProvider';
+const currentTo = '\treturn "⚠️ 当前会话已保留。上下文压缩暂时未完成，系统会在当前会话内继续恢复；请稍后重试，通常不需要使用 /new。" + ((!params.runtimeProvider';
 const replacements = [
   [
     'return `⚠️ Context is too large and auto-compaction could not recover this turn.${options?.includeDetails && reason ? ` Reason: ${reason}.` : ""} Try again, use /compact, or use /new to start a fresh session.`;',
@@ -17,7 +22,17 @@ const replacements = [
   ]
 ];
 export function transform(source) {
-  if (source.includes(marker)) return source;
+  if (source.includes(marker) || source.includes(currentMarker)) return source;
+  // The "+ hint" suffix (heartbeat/model advice) is intentionally kept so the
+  // rest of the recovery guidance still reaches the user.
+  if (source.split(currentFrom).length === 2) {
+    return currentMarker + '\n' + source.replace(currentFrom, currentTo);
+  }
+  // An installed 2026.10 copy can also be recognised by its translated text.
+  if (source.includes('当前会话已保留。上下文压缩暂时未完成') && source.includes('Auto-compaction could not recover this turn.')) {
+    return currentMarker + '\n' + source.replace(/⚠️ Auto-compaction could not recover this turn\. I kept this conversation mapped to the current session\. Please try again, use \/compact, or use \/new to start a fresh session\./u,
+      '⚠️ 当前会话已保留。上下文压缩暂时未完成，系统会在当前会话内继续恢复；请稍后重试，通常不需要使用 /new。');
+  }
   if (source.includes('当前会话已保留。上下文压缩暂时未完成')) return marker + '\n' + source;
   let next = source;
   for (const [from, to] of replacements) {
@@ -27,8 +42,15 @@ export function transform(source) {
   return marker + '\n' + next;
 }
 export function apply(root, {backupRoot} = {}) {
+  backupRoot = backupRoot || process.env.PINKIE_PATCH_BACKUP_ROOT || undefined;
   const dist = path.join(root, 'dist');
-  const names = fs.readdirSync(dist).filter((name) => name.startsWith('agent-runner.runtime-') && name.endsWith('.js'));
+  // 2026.10 emits agent-runner.runtime-*.mjs; 2026.7 used .js.
+  const names = fs.readdirSync(dist).filter((name) => /^agent-runner\.runtime-.*\.(?:m?js)$/u.test(name))
+    .filter((name) => {
+      const source = fs.readFileSync(path.join(dist, name), 'utf8');
+      return source.includes(marker) || source.includes(currentMarker) || source.includes(currentFrom)
+        || source.includes('Auto-compaction could not recover this turn.');
+    });
   if (names.length !== 1) throw new Error('OpenClaw runner bundle cannot be uniquely identified');
   const file = path.join(dist, names[0]);
   const original = fs.readFileSync(file, 'utf8');
