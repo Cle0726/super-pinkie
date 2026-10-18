@@ -50,8 +50,9 @@ test('successful send or manual clearing cannot resurrect old text after reload'
 });
 
 test('page lifecycle flushes pending edits and disconnect removes its listeners',()=>{
-  const h=harness();
-  for(const event of ['pagehide','beforeunload','visibilitychange']){h.state.chatMessage=event+' 草稿';h.controller.schedule();h.listeners.get(event)();assert.equal(h.native.load(h.state,h.state.sessionKey).draft,h.state.chatMessage);}
+  const h=harness();const flush=h.listeners.get('visibilitychange');
+  assert.equal(typeof flush,'function');
+  for(const event of ['pagehide','beforeunload','visibilitychange']){h.state.chatMessage=event+' 草稿';h.controller.schedule();flush();assert.equal(h.native.load(h.state,h.state.sessionKey).draft,h.state.chatMessage);}
   h.state.chatMessage='最后一次输入';h.controller.schedule();h.controller.hostDisconnected();
   assert.equal(h.native.load(h.state,h.state.sessionKey).draft,'最后一次输入');assert.equal(h.listeners.size,0);assert.equal(h.timers.size,0);
 });
@@ -70,11 +71,65 @@ test('runtime patch is atomic on unknown structures, backed up, cache refreshed 
     const ui=path.join(root,'dist/control-ui'),assets=path.join(ui,'assets'),backupRoot=path.join(root,'backup');fs.mkdirSync(assets,{recursive:true});
     const moduleFile=path.join(assets,'chat-page-test.js'),importFile=path.join(assets,'index-test.js'),indexFile=path.join(ui,'index.html');
     const importer='import("./chat-page-test.js?v=existing-patch");';const index='<script type="module" src="/assets/index-test.js?v=existing-root"></script>';
-    fs.writeFileSync(moduleFile,original.replace('persistChangedState()', 'futureChangedState()'));fs.writeFileSync(importFile,importer);fs.writeFileSync(indexFile,index);
+    const broken=original.replace('persistChangedState()', 'futureChangedState()');
+    fs.writeFileSync(moduleFile,broken);fs.writeFileSync(importFile,importer);fs.writeFileSync(indexFile,index);
     assert.throws(()=>apply(root,{backupRoot}),/结构已变化/);assert.equal(fs.readFileSync(importFile,'utf8'),importer);assert.equal(fs.readFileSync(indexFile,'utf8'),index);
     fs.writeFileSync(moduleFile,original);assert.equal(apply(root,{backupRoot}).changed,true);
     assert.equal(fs.readFileSync(path.join(backupRoot,'chat-page-test.js'),'utf8'),original);
     assert.match(fs.readFileSync(importFile,'utf8'),/chat-page-test\.js\?v=existing-patch&pinkie-drafts=1/);assert.match(fs.readFileSync(indexFile,'utf8'),/index-test\.js\?v=existing-root&pinkie-drafts=1/);
     assert.equal(apply(root,{backupRoot}).changed,false);assert.equal(transform(transform(original)),transform(original));
   }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+// OpenClaw 2026.10 rewrote the store around `pending`, a durable IndexedDB
+// mirror and revision fences. Only the page-lifecycle flush and the
+// change-detection guard may change; the native pending snapshot must survive.
+const current=fs.readFileSync(new URL('./fixtures/openclaw-native-composer-2026.10.js',import.meta.url),'utf8').split('\n').slice(1).join('\n');
+
+test('2026.10 store persists every change and flushes on page hide',()=>{
+  const output=transform(current);
+  const start=/start\(\)\{let e=this\.getState\(\);if\(!e\)return;this\.ready=!0,this\.pending=null;([\s\S]*?)let\{revisions/u.exec(output);
+  assert.ok(start,'native start() shape is kept');
+  assert.match(start[1],/\.addEventListener\?\.\("visibilitychange",this\.pinkieDraftFlush,\{capture:!0\}\);$/u,
+    'start() arms the flush before the native setup continues');
+  const stop=/\.persistNow\(\),this\.ready=!1,this\.pending=null,this\.clearTimer\(\)([\s\S]*?)\}restore\(/u.exec(output);
+  assert.ok(stop,'native stop() shape is kept');
+  assert.match(stop[1],/removeEventListener\?\.\("visibilitychange",this\.pinkieDraftFlush,\{capture:!0\}\);/u);
+  assert.match(output,/persistChangedState\(\)\{this\.persistNow\(\);this\.synchronizeDurablePersistence\?\.\(\);this\.persistNow\(\)\}/u);
+  assert.match(output,/this\.persistSnapshot\(e,t\)\}persistChangedState/u,'native pending publish is untouched');
+  assert.match(output,/synchronizeDurablePersistence\(\)\}/u,'native durable mirror call in start() is untouched');
+  assert.equal(transform(output),output,'idempotent');
+});
+
+test('2026.10 store runs without a browser: pending snapshots and flush listener behave',()=>{
+  const listeners=new Map(),published=[],timers=new Map();let seq=0;
+  const context=vm.createContext({
+    document:{addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name,fn)=>{if(listeners.get(name)===fn)listeners.delete(name);}},
+    setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
+  });
+  vm.runInContext(`var dp=(e,t)=>({revisions:{committed:1,latestAttempt:1},snapshot:{draft:''}}),Op=200,E=(e,t)=>t,Kf=()=>!1,rp=e=>e,Hf=e=>e??'',Ki=e=>e+1,mp=()=>{},Gf=()=>!0;var Ap=class{${transform(current)}};globalThis.Store=Ap;`,context);
+  // Only the persistence edges are stubbed; the store body under test is the
+  // one this patch produces from the pinned 2026.10 excerpt.
+  const state={sessionKey:'agent:main:one',chatMessage:'',chatGoalDraftMode:null,chatReplyTarget:null,chatAttachments:[],chatMentions:[]};
+  const store=new context.Store({addController(){}},()=>state);
+  store.readDraftRevisions=()=>({committed:1,latestAttempt:1});
+  store.snapshot=(e)=>({chatMessage:e.chatMessage});
+  store.synchronizeDurablePersistence=()=>{};
+  store.matchesCurrentContent=(pending,e)=>pending.chatMessage===e.chatMessage;
+  store.resolveDurableScope=()=>null;
+  store.isUnchanged=(e)=>store.pending===null&&(store.lastPersisted?.chatMessage??null)===e.chatMessage;
+  store.clearTimer=()=>{if(store.timer!=null){clearTimeout(store.timer);store.timer=null;}};
+  store.persistSnapshot=(e,t)=>{published.push(t.chatMessage);store.pending=null;store.lastPersisted=t;return {status:'persisted'};};
+  store.start();
+  assert.equal(listeners.size,1,'starting the store flushes pending edits on page hide');
+  state.chatMessage='第一行';store.start();
+  assert.equal(listeners.size,1,'restarting keeps exactly one flush listener');
+  state.chatMessage='第二行';store.persistChangedState();
+  assert.deepEqual(published,['第二行'],'a change is published immediately, without waiting for the debounce');
+  state.chatMessage='第三行';store.schedule();assert.equal(timers.size,1,'typing still debounces');
+  listeners.get('visibilitychange')();
+  assert.deepEqual(published,['第二行','第三行'],'page hide publishes the pending edit synchronously');
+  assert.equal(store.pending,null,'the stop() that follows page hide finds nothing pending to drop');
+  store.stop();
+  assert.equal(listeners.size,0,'disconnect removes the flush listener');
 });
