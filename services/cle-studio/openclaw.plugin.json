@@ -27,9 +27,9 @@
     }
   ],
   "controlUi": {
-    "entry": "dist/control-ui/9b886168e89a/index.js",
+    "entry": "dist/control-ui/7b6469736bec/index.js",
     "styles": [
-      "dist/control-ui/9b886168e89a/index.css"
+      "dist/control-ui/7b6469736bec/index.css"
     ]
   }
 }
