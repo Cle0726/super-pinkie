@@ -10,6 +10,7 @@ import './learning/study.css';
 import './styles/tiers.css';
 import './line/line.css';
 import {ensureTheme} from './core/theme.js';
+import {beginActivation} from './core/activation.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
 import {mountWelcome} from './rooms/welcome.js';
@@ -31,13 +32,13 @@ const VERSION = '0.1.0';
 export default {
   id: 'cle-studio',
   activate(host) {
-    const controller = new AbortController();
+    const controller = beginActivation();
     // The brand guard has to run even on the activation that decides to reload for the theme:
     // that activation still paints a document, and the router writes "— OpenClaw" into the title
     // on its first render. Leaving the guard until after ensureTheme() returns true meant the
     // very first session kept the upstream title and sidebar labels.
     try { startBrandGuard(controller.signal); } catch (error) { console.error('[cle] brand guard failed', error); }
-    if (!ensureTheme()) return () => controller.abort();
+    if (!ensureTheme()) return controller.dispose;
     const html = document.documentElement;
     html.dataset.cle = VERSION;
     initModes();
@@ -64,9 +65,6 @@ export default {
     const legacy = {};
     safe('legacy', () => loadLegacy(legacy));
     window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink, legacy, composer, utilities});
-    return () => {
-      controller.abort();
-      delete html.dataset.cle;
-    };
+    return controller.dispose;
   },
 };
