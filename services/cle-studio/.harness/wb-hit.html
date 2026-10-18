@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN" data-cle="0.1.0" data-theme-mode="light" data-cle-room="project">
+<head>
+<meta charset="utf-8">
+<title>workbench reopen hit test</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/workbench.css">
+<style>
+  /* 复刻 1280×720 双栏：左 256 侧栏，右栏 508，独立会话输入可增高。
+     发送/语音的几何按主控实测（send x1235..1271 y517.8..551.8，voice x1197..1231 同 y）。 */
+  html, body { margin: 0; height: 100%; background: var(--cle-paper); font: 13px/1.5 var(--cle-sans); }
+  .shell { display: grid; grid-template-columns: 256px 1024px; height: 720px; width: 1280px; }
+  aside { border-right: 1px solid var(--cle-line); }
+  main.content.content--chat { display: grid; grid-template-columns: minmax(0, 1fr) 508px; min-width: 0; width: 1024px; }
+  .chat-pane-cache__pane--active { min-width: 0; }
+  .chat-pane { display: flex; flex-direction: column; min-height: 0; height: 100%; position: relative; min-width: 0; overflow: hidden; }
+  .chat-thread { flex: 1 1 auto; overflow: auto; padding: 12px 20px; }
+  .agent-chat__composer-shell {
+    flex: 0 0 auto; margin: 0 16px 14px; border: 1px solid var(--cle-line-strong);
+    border-radius: 22px; background: var(--cle-surface); padding: 8px 10px;
+  }
+  .agent-chat__composer-input-row { display: flex; align-items: flex-end; gap: 8px; }
+  .agent-chat__composer-combobox { flex: 1 1 auto; min-width: 0; }
+  .agent-chat__composer-combobox textarea {
+    width: 100%; box-sizing: border-box; resize: none; border: 0; outline: none;
+    background: transparent; color: var(--cle-ink); font: 15px/1.6 var(--cle-sans);
+    min-height: 24px; max-height: 168px; overflow-y: auto; display: block;
+  }
+  .agent-chat__composer-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  /* 真实按钮几何：语音 34×34，发送 36×34，两者同一行 */
+  .chat-voice-btn, .chat-send-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 34px; border: 1px solid var(--cle-line-strong); border-radius: 10px;
+    background: var(--cle-paper); color: var(--cle-ink-2); cursor: pointer;
+  }
+  .chat-voice-btn { width: 34px; }
+  .chat-send-btn { width: 36px; background: var(--cle-ink); color: var(--cle-paper); border-color: var(--cle-ink); }
+  .agent-chat__composer-footer { display: flex; align-items: center; gap: 8px; padding: 6px 2px 0; }
+  .agent-chat__composer-controls { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+  .agent-chat__composer-meta { color: var(--cle-ink-2); font-size: 11px; }
+  .chat-workspace-rail { display: none; }
+  #probe { position: absolute; width: 0; height: 0; }
+  #log { white-space: pre-wrap; font: 11px/1.45 var(--cle-mono); color: var(--cle-ink-2); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside></aside>
+  <main class="content content--chat">
+    <section class="chat-pane-cache__pane--active chat-pane">
+      <div class="chat-thread"><p>右栏是一个独立会话。</p></div>
+      <div class="agent-chat__composer-shell">
+        <div class="agent-chat__composer-input-row">
+          <div class="agent-chat__composer-combobox"><textarea id="ta" rows="1" placeholder="发消息…"></textarea></div>
+          <div class="agent-chat__composer-actions">
+            <button class="chat-voice-btn" id="voice" type="button" aria-label="语音">◍</button>
+            <button class="chat-send-btn" id="send" type="button" aria-label="发送消息">↑</button>
+          </div>
+        </div>
+        <div class="agent-chat__composer-footer">
+          <div class="agent-chat__composer-controls" id="controls"></div>
+          <div class="agent-chat__composer-meta">Enter 发送</div>
+        </div>
+      </div>
+    </section>
+    <div class="chat-workspace-rail" style="display:none"></div>
+  </main>
+</div>
+<pre id="log"></pre>
+<script type="module">
+  const log = [];
+  const say = (l) => { log.push(l); document.getElementById('log').textContent = log.join('\n'); };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const state0 = () => ({ds: document.documentElement.dataset.pinkieWb});
+  const rect = (el) => { const r = el.getBoundingClientRect(); return {x1: Math.round(r.left), x2: Math.round(r.right), y1: Math.round(r.top * 10) / 10, y2: Math.round(r.bottom * 10) / 10, w: Math.round(r.width), h: Math.round(r.height)}; };
+  const fmt = (r) => `x${r.x1}..${r.x2} y${r.y1}..${r.y2}`;
+  const centre = (el) => { const r = el.getBoundingClientRect(); return {x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2}; };
+  const hits = (el) => {
+    const c = centre(el);
+    const at = document.elementFromPoint(c.x, c.y);
+    return {at, ok: !!at && (at === el || el.contains(at))};
+  };
+
+  // 让输入区真实长高：220 字（主控实测的触发条件）
+  const ta = document.getElementById('ta');
+  ta.value = '这是一段用来把输入框撑高的文字，'.repeat(14).slice(0, 220);
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 168) + 'px';
+  await wait(50);
+
+  const send = document.getElementById('send');
+  const voice = document.getElementById('voice');
+  const shell = document.querySelector('.shell');
+  const main = document.querySelector('main.content');
+  const pane = document.querySelector('.chat-pane-cache__pane--active');
+  const shellEl = document.querySelector('.agent-chat__composer-shell');
+  say(`GEOMETRY shell ${fmt(rect(shell))} main ${fmt(rect(main))} pane ${fmt(rect(pane))} shellEl ${fmt(rect(shellEl))}`);
+  say(`GEOMETRY textarea ${fmt(rect(ta))} h=${rect(ta).h}`);
+  say(`GEOMETRY send ${fmt(rect(send))}`);
+  say(`GEOMETRY voice ${fmt(rect(voice))}`);
+
+  // 用真实模块产生重入口。没有网关也要能看到它：直接调用 placeReopen 的等价路径 ——
+  // 通过模块暴露的状态把状态置为"可见但未打开"，再触发一次 sync。
+  // 让 wanted() 的条件真实成立：/chat 路由 + project 模式 + 一个 project 会话
+  window.CLE = {host: {sessions: {selectedKey: 'agent:project:demo'}}};
+  // 场景本身就是"营造模式的一个 project 会话"，所以路径也要对得上
+  if (!location.pathname.startsWith('/chat')) history.replaceState(null, '', '/chat/wb-hit');
+  const mod = await import('/workbench.js').catch((e) => { say('WORKBENCH import failed ' + e.message); return null; });
+  await wait(600);
+  // 复现主控的状态：工作台先打开过，然后被收起 —— 这时才有"重入口"。
+  // 与用户实际动作一致：先点开工作台，再收起（走它自己的关闭按钮语义）
+  try {
+    const openIt = document.querySelector('.pk-wb-act[aria-label*="收起"], .pk-wb-act');
+    const before = state0();
+    // 直接用它暴露的键位路径：先开，再关
+    window.dispatchEvent(new KeyboardEvent('keydown', {key: 'b', code: 'KeyB', altKey: true, metaKey: true, bubbles: true}));
+    await wait(500);
+    say(`WB opened? dataset=${document.documentElement.dataset.pinkieWb} rootHidden=${document.querySelector('.pk-wb')?.hidden}`);
+  } catch (e) { say('WB open failed ' + e.message); }
+  try {
+    // 真实路径：点它自己的"收起工作台"按钮
+    const closeBtn = [...document.querySelectorAll('button')].find((b) => /收起工作台/.test(b.getAttribute('aria-label') || b.title || ''));
+    say(`WB close button ${closeBtn ? 'found' : 'MISSING'}`);
+    closeBtn?.click();
+    await wait(500);
+    say(`WB closed? dataset=${document.documentElement.dataset.pinkieWb} reopenHidden=${document.querySelector('.pk-wb-reopen')?.hidden}`);
+  } catch (e) { say('WB close failed ' + e.message); }
+  let btn = document.querySelector('.pk-wb-reopen');
+  for (let i = 0; i < 40 && (!btn || btn.hidden); i++) { await wait(100); btn = document.querySelector('.pk-wb-reopen'); }
+  if (!btn) { say('REOPEN missing after module load'); say('AUDIT_DONE'); throw new Error('no reopen'); }
+  say(`REOPEN hidden=${btn.hidden} mode=${document.documentElement.dataset.cleRoom} path=${location.pathname} canSee=${!!document.querySelector('main.content.content--chat')}`);
+  say(`DEBUG key=${JSON.stringify(window.CLE?.host?.sessions?.selectedKey)} innerW=${innerWidth} split=${document.documentElement.getAttribute('data-laolao-workspace-split')}`);
+
+  say(`REOPEN parent=${btn.parentElement?.className || btn.parentElement?.tagName}`);
+  say(`REOPEN inComposer=${btn.classList.contains('is-in-composer')} hidden=${btn.hidden} position=${getComputedStyle(btn).position}`);
+  say(`REOPEN rect ${fmt(rect(btn))}`);
+
+  // 主控的判据：点发送/语音的中心，命中的必须是它们自己
+  for (const [name, el] of [['send', send], ['voice', voice]]) {
+    const h = hits(el);
+    say(`HIT ${name} centre=${Math.round(centre(el).x)},${Math.round(centre(el).y)} -> ${h.at?.className || h.at?.tagName} ok=${h.ok}`);
+  }
+  // 以及：按钮之间不重叠
+  const br = btn.getBoundingClientRect();
+  for (const [name, el] of [['send', send], ['voice', voice]]) {
+    const r = el.getBoundingClientRect();
+    const overlap = !(br.right <= r.left || br.left >= r.right || br.bottom <= r.top || br.top >= r.bottom);
+    say(`OVERLAP reopen-vs-${name} ${overlap ? 'YES' : 'no'}`);
+  }
+  // 文本光标区域也不能被压
+  {
+    const r = ta.getBoundingClientRect();
+    const overlap = !(br.right <= r.left || br.left >= r.right || br.bottom <= r.top || br.top >= r.bottom);
+    say(`OVERLAP reopen-vs-textarea ${overlap ? 'YES' : 'no'}`);
+  }
+
+  // 窄一点的双栏（右栏 380）仍不能压
+  document.querySelector('main.content.content--chat').style.gridTemplateColumns = 'minmax(0, 1fr) 380px';
+  window.dispatchEvent(new Event('resize'));
+  await wait(400);
+  say(`NARROW reopen ${fmt(rect(btn))}`);
+  {
+    const h = hits(send);
+    say(`NARROW HIT send -> ${h.at?.className || h.at?.tagName} ok=${h.ok}`);
+  }
+
+  // 单栏（rail 消失、宽度更小）也要成立
+  document.querySelector('main.content.content--chat').style.gridTemplateColumns = 'minmax(0, 1fr)';
+  document.querySelector('.chat-workspace-rail').style.display = 'none';
+  window.dispatchEvent(new Event('resize'));
+  await wait(400);
+  const h = hits(send);
+  say(`SINGLE HIT send -> ${h.at?.className || h.at?.tagName} ok=${h.ok}`);
+  say(`SINGLE reopen parent=${btn.parentElement?.className || btn.parentElement?.tagName}`);
+
+  // 极窄（右栏 300px，双栏挤压）：入口必须仍在 controls 行内，不越界到 pane 外
+  document.querySelector('main.content.content--chat').style.gridTemplateColumns = 'minmax(0, 1fr) 300px';
+  window.dispatchEvent(new Event('resize'));
+  await wait(400);
+  {
+    const pr = document.querySelector('.chat-pane-cache__pane--active').getBoundingClientRect();
+    const r = btn.getBoundingClientRect();
+    const inside = r.left >= pr.left - 0.5 && r.right <= pr.right + 0.5;
+    const h2 = hits(send);
+    say(`TIGHT reopen ${fmt(rect(btn))} insidePane=${inside} hitSend=${h2.ok}`);
+    say(`TIGHT overlapsText ${!(r.right <= ta.getBoundingClientRect().left || r.left >= ta.getBoundingClientRect().right || r.bottom <= ta.getBoundingClientRect().top || r.top >= ta.getBoundingClientRect().bottom)}`);
+  }
+
+  // 输入继续变高（用户继续打字到上限），入口必须还在 controls 里且不遮发送
+  ta.value = '再来一段更长的文字，'.repeat(30);
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 168) + 'px';
+  await wait(300);
+  {
+    const h3 = hits(send);
+    const r = btn.getBoundingClientRect();
+    const over = !(r.right <= send.getBoundingClientRect().left || r.left >= send.getBoundingClientRect().right || r.bottom <= send.getBoundingClientRect().top || r.top >= send.getBoundingClientRect().bottom);
+    say(`GROWN textareaH=${Math.round(ta.getBoundingClientRect().height)} hitSend=${h3.ok} overlapSend=${over} parent=${btn.parentElement?.className}`);
+  }
+
+  say('AUDIT_DONE');
+</script>
+</body>
+</html>

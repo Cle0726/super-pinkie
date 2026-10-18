@@ -374,15 +374,36 @@ button.pk-wb-status__item:hover { color: var(--wb-text); background: color-mix(i
 .pk-wb-toast__act:hover { background: color-mix(in srgb, var(--wb-accent) 34%, transparent); }
 @keyframes pk-wb-toast { from { opacity: 0; transform: translateY(8px); } }
 
+/* 工作台重入口：默认是"输入区里的一枚小按钮"，不是浮在界面上的胶囊。
+   位置由脚本插进真实 chrome（composer-controls / footer / pane header），
+   所以这里不再用 position:fixed + bottom 硬偏移——那会在多行输入长高后压住语音/发送键。 */
 .pk-wb-reopen {
-  position: fixed; z-index: 24; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 9px; border-radius: 14px;
-  border: 1px solid var(--border-strong, rgba(255,255,255,.14)); color: var(--text, #efe5ea); font: 12.5px/1 var(--font-body, Inter, system-ui, sans-serif); cursor: pointer;
-  background: color-mix(in srgb, var(--bg-elevated, #2a2030) 70%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-  box-shadow: 0 8px 24px -14px rgba(0,0,0,.5); transition: background .15s, transform .15s;
+  position: static; z-index: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: 0 0 auto; max-width: 100%;
+  height: 28px; padding: 0 9px 0 8px; margin: 0 2px;
+  border: 1px solid var(--cle-line-strong, var(--border-strong, rgba(20,18,15,.18)));
+  border-radius: var(--cle-radius-ctl, 10px);
+  color: var(--cle-ink-2, var(--text, #5C5A57));
+  font: 500 12px/1 var(--cle-sans, var(--font-body, system-ui));
+  cursor: pointer;
+  background: var(--cle-surface, var(--bg-elevated, #FBF8F1));
+  box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  transition: background .15s, border-color .15s, color .15s;
 }
 .pk-wb-reopen[hidden] { display: none; }
-.pk-wb-reopen:hover { background: color-mix(in srgb, var(--accent, #ff7aa2) 18%, var(--bg-elevated, #2a2030)); transform: translateY(-1px); }
-.pk-wb-reopen .codicon { font-size: 15px; color: var(--accent, #ff7aa2); }
+.pk-wb-reopen:hover {
+  color: var(--cle-ink, var(--text));
+  border-color: var(--cle-gaze, var(--accent));
+  background: var(--cle-gaze-soft, rgba(42,99,232,.08));
+  transform: none;
+}
+.pk-wb-reopen:focus-visible { outline: 2px solid var(--cle-gaze, var(--accent)); outline-offset: 2px; }
+.pk-wb-reopen .codicon { font-size: 14px; color: currentColor; }
+.pk-wb-reopen > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 极窄的输入区：只留图标，命中区仍是 28px */
+@media (max-width: 720px) { .pk-wb-reopen > span { display: none; } .pk-wb-reopen { padding: 0 7px; } }
 
 /* 对话里能在工作台打开的文件名 */
 html[data-pinkie-wb="on"] .chat-thread .pk-wb-filelink { cursor: pointer; text-decoration: underline dotted color-mix(in srgb, var(--cle-accent, #62b4ff) 70%, transparent); text-underline-offset: 3px; }
@@ -627,8 +648,21 @@ html[data-pinkie-wb="on"] body .pk-workspace-header .laolao-mode-button__portrai
 html[data-pinkie-wb="on"] body .pk-workspace-header .laolao-mode-button__portrait > img { width: 100% !important; height: 100% !important; max-width: 100% !important; object-fit: cover; }
 
 /* Stable re-entry in the existing right rail, with a safe rail-free fallback. */
-body .pk-wb-reopen { left: auto; top: auto; right: 14px; bottom: 160px; }
-body .chat-workspace-rail > .pk-wb-reopen.is-in-rail { position: static !important; flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; padding: 0; margin: 2px 0; justify-content: center; border: 0; border-radius: 8px; background: transparent; backdrop-filter: none; }
+/* 只有脚本连 composer/footer/header 都拿不到时才会退回 body。
+   这时它是真的浮层，需要给足避让：用 --pk-wb-fallback-bottom 由脚本按真实 compose 高度写入，
+   没有该变量时留一个保守值，绝不覆盖发送/语音。 */
+body > .pk-wb-reopen:not(.is-in-composer) {
+  position: fixed; left: auto; top: auto; right: 14px;
+  bottom: var(--pk-wb-fallback-bottom, 200px);
+  z-index: 24;
+  box-shadow: var(--cle-shadow, 0 8px 24px -14px rgba(0,0,0,.5));
+}
+/* 旧位置：右栏 rail 里的安放（保留以防 rail 存在时脚本仍选它） */
+body .chat-workspace-rail > .pk-wb-reopen.is-in-rail {
+  position: static !important; flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px;
+  padding: 0; margin: 2px 0; justify-content: center; border: 0; border-radius: 8px;
+  background: transparent; backdrop-filter: none;
+}
 .pk-wb-reopen.is-in-rail > span { display: none; }
 /* Mode names can shrink; the split control always has its own hit area. */
 html[data-pinkie-wb="on"] body .pk-workspace-header__identity { display: flex; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 100%; }
