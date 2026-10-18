@@ -453,7 +453,7 @@ tests/cle-startup.test.mjs                  42 项（+3 注入顺序/预缓存/�
   按现有证据**判断不需要为此再加修补**（早期脚本已在 module 之前接管标题），但记为待观察项：
   若后续出现可见帧级别的时间戳证据，再评估是否需要在 `document.title` 之外补偿。本轮不声称
   已看渲染帧。
-- **退役态 composer 排版**属 layout 会话（`.agent-cream__composer-shell` 重锚定）。本路为本地
+- **退役态 composer 排版**属 layout 会话（`.agent-chat__composer-shell` 重锚定）。本路为本地
   验证临时改过 `composer.css`，已撤回、未提交；如需生产差异由 layout 合入。
 
 补充 commit #4（3ac6479，重复部署闭环）：
