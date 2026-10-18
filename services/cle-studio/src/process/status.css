@@ -1,0 +1,39 @@
+/* The live status line. Transform/opacity only. */
+html[data-cle] .chat-working-indicator:has(> .cle-status) > :not(.cle-status) { display: none !important; }
+.cle-status { display: inline-flex; align-items: center; gap: 9px; height: 26px; color: var(--cle-ink-2); }
+.cle-status__eye { width: 22px; height: 22px; overflow: visible; color: var(--cle-ink); }
+.cle-status__iris { fill: var(--cle-gaze); fill-opacity: .9; }
+.cle-status__lids { transform-box: fill-box; transform-origin: 50% 55%; animation: cle-blink 6.4s var(--cle-ease-soft) infinite; }
+.cle-status__look { transform-box: view-box; animation: cle-scan 3.6s cubic-bezier(.45,0,.55,1) infinite; }
+.cle-status__pupil { transform-box: fill-box; transform-origin: center; transition: transform var(--cle-t-base) var(--cle-ease); }
+@keyframes cle-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+@keyframes cle-scan { 0%, 100% { transform: translateX(-1.6px); } 50% { transform: translateX(1.6px); } }
+/* a tool is running: the gaze holds still and the slit narrows */
+.cle-status[data-mode="tool"] .cle-status__look { animation: none; transform: none; }
+.cle-status[data-mode="tool"] .cle-status__pupil { transform: scaleX(.55); }
+.cle-status[data-mode="write"] .cle-status__look { animation-duration: 1.8s; }
+.cle-status[data-mode="done"] .cle-status__lids { animation: cle-blink-once .9s var(--cle-ease-soft) 1 both; }
+@keyframes cle-blink-once { 0%, 100% { transform: scaleY(1); } 35%, 55% { transform: scaleY(.06); } }
+
+.cle-status__verb {
+  font: italic 400 14px/1 var(--cle-serif); letter-spacing: .08em; color: var(--cle-ink);
+  background: linear-gradient(100deg, var(--cle-ink) 0%, var(--cle-ink) 40%, color-mix(in srgb, var(--cle-gaze) 70%, var(--cle-paper)) 50%, var(--cle-ink) 60%, var(--cle-ink) 100%);
+  background-size: 260% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: cle-sheen 2.8s linear infinite;
+}
+.cle-status__verb.is-new { animation: cle-sheen 2.8s linear infinite, cle-verb-in var(--cle-t-base) var(--cle-ease) 1; }
+@keyframes cle-sheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+@keyframes cle-verb-in { from { opacity: 0; translate: 0 3px; } }
+.cle-status__chip {
+  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 11px/1 var(--cle-mono); color: var(--cle-ink-2);
+  padding: 4px 7px; border-radius: 6px; background: color-mix(in srgb, var(--cle-ink) 6%, transparent);
+}
+.cle-status__time { font: 400 11px/1 var(--cle-mono); color: var(--cle-ink-3); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .cle-status__lids, .cle-status__look, .cle-status__verb { animation: none !important; } }
+
+/* the user's own words: paper, a hairline, no tint (blue is only for the gaze) */
+html[data-cle] .chat-group.user .chat-bubble {
+  background: var(--cle-surface) !important; color: var(--cle-ink) !important;
+  border: 1px solid var(--cle-line-strong); box-shadow: none !important; border-radius: 18px 18px 6px 18px;
+}
