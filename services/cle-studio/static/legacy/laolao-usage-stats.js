@@ -262,9 +262,9 @@
       { transform: "scale(1)" },
       {
         transform: "scale(1.18)",
-        background: "var(--accent, #e94f91)",
+        background: "var(--accent, var(--cle-gaze))",
         color: "#ffffff",
-        boxShadow: "0 0 0 4px var(--accent-glow, rgba(233, 79, 145, 0.2))",
+        boxShadow: "0 0 0 4px var(--accent-glow, var(--cle-gaze-soft))",
         offset: 0.35,
       },
       { transform: "scale(1)" },
