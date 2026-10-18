@@ -25,6 +25,8 @@ function ensureEye(summary) {
   if (!eye) {
     eye = document.createElement('span');
     eye.className = 'cle-eye';
+    // marked so the mount observer can tell our own insertion from a Lit re-render
+    eye.dataset.cleOwned = '1';
     eye.setAttribute('aria-hidden', 'true');
     const label = summary.querySelector('.chat-controls__inline-select-label');
     if (label) summary.insertBefore(eye, label); else summary.prepend(eye);
@@ -75,7 +77,7 @@ function renderStops(details, stops) {
     const only = LEVELS[levelOf(values[0]) || 'medium']?.tier || values[0];
     const note = `此模型只有一个思考档位 · ${only}`;
     if (!host || !host.classList.contains('is-note') || host.dataset.cleNote !== note) {
-      if (!host) { host = document.createElement('div'); host.className = 'cle-gaze-stops is-note'; panel.append(host); }
+      if (!host) { host = document.createElement('div'); host.className = 'cle-gaze-stops is-note'; host.dataset.cleOwned = '1'; panel.append(host); }
       host.classList.add('is-note');
       host.removeAttribute('role');
       host.dataset.cleNote = note;
@@ -84,7 +86,7 @@ function renderStops(details, stops) {
     return;
   }
   if (!host || host.dataset.cleSignature !== values.join(',')) {
-    if (!host) { host = document.createElement('div'); host.className = 'cle-gaze-stops'; panel.append(host); }
+    if (!host) { host = document.createElement('div'); host.className = 'cle-gaze-stops'; host.dataset.cleOwned = '1'; panel.append(host); }
     host.classList.remove('is-note');
     delete host.dataset.cleNote;
     host.dataset.cleSignature = values.join(',');
@@ -101,13 +103,16 @@ function renderStops(details, stops) {
       names.push(name);
       const item = document.createElement('span');
       item.className = 'cle-gaze-stop';
+      item.dataset.cleOwned = '1';
       item.setAttribute('role', 'listitem');
       item.dataset.stop = String(index);
       const tick = document.createElement('span');
       tick.className = 'cle-gaze-stop__tick';
+      tick.dataset.cleOwned = '1';
       tick.setAttribute('aria-hidden', 'true');
       const text = document.createElement('span');
       text.className = 'cle-gaze-stop__name';
+      text.dataset.cleOwned = '1';
       text.textContent = name;
       item.append(tick, text);
       frag.append(item);
@@ -127,7 +132,7 @@ function renderStops(details, stops) {
   if (why) {
     if (host.dataset.cleWhy !== why) { host.dataset.cleWhy = why; host.title = why; }
     let note = host.querySelector(':scope > .cle-gaze-stops__why');
-    if (!note) { note = document.createElement('span'); note.className = 'cle-gaze-stops__why'; host.append(note); }
+    if (!note) { note = document.createElement('span'); note.className = 'cle-gaze-stops__why'; note.dataset.cleOwned = '1'; host.append(note); }
     if (note.textContent !== why) note.textContent = why;
   } else {
     delete host.dataset.cleWhy;
@@ -201,34 +206,93 @@ function eachPicker(root, fn) {
   root.querySelectorAll?.(PICKER)?.forEach(fn);
 }
 
+/* Which pickers does an added node actually affect? A Lit re-render can add the summary
+   itself, a label inside it, or a whole pane; and several pickers can arrive in one frame.
+   Every added node is normalised to the picker it belongs to, so no root is ever dropped and
+   nothing outside a picker is scanned. */
+function pickersFor(node) {
+  if (!node || node.nodeType !== 1) return [];
+  const own = node.closest?.(PICKER);
+  if (own) return [own];
+  const found = [];
+  if (node.matches?.(PICKER)) found.push(node);
+  node.querySelectorAll?.(PICKER)?.forEach((picker) => found.push(picker));
+  return found;
+}
+
 export function mountGaze(signal) {
-  const sweep = (root = document) => { try { eachPicker(root, decoratePicker); } catch (e) { console.warn('[cle] gaze', e); } };
-  sweep();
-  // Streaming rewrites text on every token; observing characterData would re-decorate the
-  // document dozens of times a second. Structure changes are rare, and real level changes
-  // arrive as input/click/toggle events, so those are handled directly per picker.
-  let queued = false;
-  const schedule = (root) => {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => { queued = false; sweep(root); });
-  };
-  const mo = new MutationObserver((records) => {
-    for (const record of records) {
-      for (const node of record.addedNodes || []) if (node.nodeType === 1) { schedule(node); return; }
+  if (signal?.aborted) return;
+  const pending = new Set();
+  let frame = 0;
+  let stopped = false;
+
+  const flush = () => {
+    frame = 0;
+    if (stopped) return;
+    const batch = [...pending];
+    pending.clear();
+    // Snapshot first: decorating one picker can add nodes that would otherwise grow the
+    // set while it is being iterated.
+    for (const picker of batch) {
+      if (!picker?.isConnected) continue;
+      try { decoratePicker(picker); } catch (e) { console.warn('[cle] gaze', e); }
     }
+  };
+
+  const schedule = (...nodes) => {
+    if (stopped) return;
+    let added = false;
+    for (const node of nodes) {
+      for (const picker of pickersFor(node)) { pending.add(picker); added = true; }
+    }
+    if (!added) return;
+    if (!frame) frame = requestAnimationFrame(flush);
+  };
+
+  // First paint: both panes can already be mounted, or arrive one frame later.
+  for (const picker of document.querySelectorAll(PICKER)) { pending.add(picker); }
+  if (pending.size) frame = requestAnimationFrame(flush);
+
+  // Streaming rewrites text on every token; observing characterData would re-decorate the
+  // document dozens of times a second. Structure changes are rare and this only looks at
+  // picker subtrees, so the cost stays bounded even in a long reply.
+  const mo = new MutationObserver((records) => {
+    if (stopped) return;
+    const roots = [];
+    for (const record of records) {
+      const target = record.target;
+      const owner = target?.nodeType === 1 ? target.closest?.(PICKER) : null;
+      for (const node of record.addedNodes || []) {
+        if (node.nodeType !== 1) continue;
+        // our own eye / stop row being attached must not schedule another pass
+        if (node.dataset?.cleOwned === '1') continue;
+        roots.push(node);
+      }
+      if (owner && record.removedNodes?.length) roots.push(owner);
+    }
+    if (roots.length) schedule(...roots);
   });
   mo.observe(document.body, {childList: true, subtree: true});
+
   const onEvent = (event) => {
     const picker = event.target?.closest?.(PICKER);
-    if (picker) decoratePicker(picker);
+    if (picker && !stopped) {
+      try { decoratePicker(picker); } catch (e) { console.warn('[cle] gaze', e); }
+    }
   };
   for (const type of ['input', 'change', 'click', 'toggle']) document.addEventListener(type, onEvent, true);
-  const onVisibility = () => { if (!document.hidden) sweep(); };
+  const onVisibility = () => { if (!document.hidden && !stopped) schedule(...document.querySelectorAll(PICKER)); };
   document.addEventListener('visibilitychange', onVisibility);
-  signal.addEventListener('abort', () => {
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
     mo.disconnect();
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    pending.clear();
     for (const type of ['input', 'change', 'click', 'toggle']) document.removeEventListener(type, onEvent, true);
     document.removeEventListener('visibilitychange', onVisibility);
-  }, {once: true});
+  };
+  signal?.addEventListener('abort', stop, {once: true});
+  return stop;
 }
