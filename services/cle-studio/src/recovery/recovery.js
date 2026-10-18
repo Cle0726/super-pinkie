@@ -61,8 +61,26 @@ const rowText = (bubble) => {
   return typeof raw === 'string' ? raw : '';
 };
 
+// Is the whole message wrapped as a quote? Decide from the *source*, not from whether
+// the bubble happens to contain a <pre>: a genuine control message embeds the previous
+// draft, and that draft can hold a code block. Judging by "any code present" hid no
+// real command and leaked a real one (review 1804).
+//
+// An outer quote shows up as a leading marker in the stored markdown:
+//   > …            blockquote
+//   ```lang …      fenced block
+//   “…” / "…" / 「…」  quoted text
+// A real control message always starts with its own [pinkie-…] prefix, so any of these
+// markers in first position already means the reader is showing the text.
+const QUOTE_OPEN = /^(?:>|```|~~~|["“「『])/u;
+export const isExternallyQuoted = (raw) => QUOTE_OPEN.test(String(raw || '').trimStart());
+
 export function isInternalTurnText(raw) {
   const source = String(raw || '');
+  // An outer quote or fence means the reader is showing this text, not the gateway
+  // sending it. Checked before anything else: a real control message always starts with
+  // its own prefix, so a leading quote marker can only be the reader's wrapper.
+  if (isExternallyQuoted(source)) return false;
   // A lone U+2063 is the older watchdog sentinel; it carries no visible text, so it
   // has to be checked before the empty-after-strip guard below.
   if (source.replace(/[\u200B-\u200D\u2060\uFEFF]/gu, '').trim() === '\u2063') return true;
@@ -84,13 +102,11 @@ export function isInternalTurnText(raw) {
   return false;
 }
 
-// A code block or a quote is the user showing the text, not the gateway sending it.
-// Check the rendered markdown: the native bubble keeps code inside .chat-text, and a
-// user quoting the instruction will have a <pre> or <code> in the same bubble.
-const isQuoted = (bubble) => Boolean(bubble.querySelector?.('pre, code, blockquote'));
-
 const markInternal = (bubble, internal) => {
-  if (internal && !isQuoted(bubble)) {
+  // `internal` already reflects the full control shape *and* the absence of an outer
+  // quote. A code block inside the message is the embedded draft, not evidence that the
+  // reader wrote it, so it must not veto the fold.
+  if (internal) {
     if (bubble.dataset.cleInternalTurn !== '1') {
       bubble.dataset.cleInternalTurn = '1';
       bubble.setAttribute('aria-hidden', 'true');
