@@ -38,7 +38,11 @@ execFileSync(path.join(STUDIO, 'node_modules/.bin/esbuild'), [
   '--bundle', '--format=esm', '--target=safari17', `--outfile=${bundle}`,
 ], {stdio: 'pipe'});
 
-const VOICE = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作。这是当前用户轮次的内部续跑命令。';
+// The full machine-written shape, exactly as services/mode-architecture builds it.
+// A short “'[pinkie-watchdog] 这个是什么意思” must NOT fold, and the smoke covers that
+// separately below.
+const VOICE = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作，完成后正常交付。这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。';
+const QUERY = '[pinkie-watchdog] 这个是什么意思';
 fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><title>pending</title></head>
 <body><openclaw-chat-pane id="pane"></openclaw-chat-pane>
 <script type="module" src="/recovery.js"></script>
@@ -54,12 +58,16 @@ const bub = (g, text, quote) => {
 const control = mk('user'); bub(control, ${JSON.stringify(VOICE)});
 const quote = mk('user'); bub(quote, ${JSON.stringify(VOICE)}, true);
 const real = mk('user'); bub(real, '把报告发我');
+const question = mk('user'); bub(question, ${JSON.stringify(QUERY)});
+const failure = mk('assistant'); bub(failure, '⚠️ Agent failed before reply: EmbeddedAttemptSessionTakeoverError: session file changed while embedded prompt lock was released: /Users/x/session.jsonl');
 const {projectPane} = await import('/recovery.js');
 projectPane(pane);
 window.__r = {
   control: getComputedStyle(control).display,
   quote: getComputedStyle(quote).display,
   real: getComputedStyle(real).display,
+  question: getComputedStyle(question).display,
+  failure: getComputedStyle(failure).display,
   marked: control.getAttribute('data-cle-internal-only'),
 };
 document.body.dataset.result = JSON.stringify(window.__r);
@@ -89,6 +97,8 @@ try {
   expect('control turn folded', result.control, 'none');
   expect('quoted control text kept visible', result.quote !== 'none', true);
   expect('ordinary message kept visible', result.real !== 'none', true);
+  expect('a short question about the prefix stays visible', result.question !== 'none', true);
+  expect('a real failure stays visible', result.failure !== 'none', true);
   expect('control group marked internal', result.marked, '1');
 } catch (error) {
   failed += 1;
