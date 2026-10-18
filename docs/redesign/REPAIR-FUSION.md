@@ -412,3 +412,89 @@ T+320/500/800ms 数值完全一致       ← 终态稳定，且与 240ms 相同
   - 输出里出现 `SETTLE FAILED` 直接失败（要求的是"稳定"，不是"跑完"）；
   - 夜间样本背景亮度必须 < 0.5，覆盖"文字也还停在浅色、对比度恰好不低"的中途采样。
     说明：主控那 5 条本来就会被 4.5 阈值拦住（1.06/2.35/1.07），这条是额外一层。
+
+### 7. 修桥的生命周期：退役 host → 离线 → 重连（本轮新增）
+
+主控在 19789 做真实断线/重连时，dev.logs 里抓到的是**连续 uncaught**，不是偶发告警：
+插件 UI activation 退役后 host 的 getter 同步抛
+`This plugin UI activation has ended. Use the current activation.`，
+而 classic legacy 脚本是 document 常驻、不跟插件退役，
+`window.CLE.host` 与 `__laolaoSidebar.currentSessionKey` 的闭包都还攥着旧 host。
+
+根因有三个，都在桥这一层，不在调用点：
+
+1. `shim.js` 把 `host` 闭包进 `currentSessionKey` 与 `gwRequest`，退役后必抛；
+2. `gwRequest` 里 `setTimeout` 先建、`host.request` 后调，**同步 throw 会漏掉那个 timer**
+   （15s 后再 reject 一个已经没人接收的 promise）；
+3. `laolao-sidebar.js:17` 自己定义了 `currentSessionKey`，直接读 `window.CLE?.host`，
+   把 shim 提供的安全 getter **覆盖**掉 —— 这就是"改了桥却还在抛"的原因。
+
+#### 改法：把状态收进桥，调用点不再各自防御
+
+- 桥持有 `{host, online, lastSessionKey, round}`，`window.__laolaoSidebar.currentSessionKey`
+  改为读缓存。**离线读 selectedKey 完全不触碰 host**，因此不可能再触发同步 throw，
+  也不需要靠 try/catch 吞错。
+- 所有 getter 的 throw 只在一个地方降级（`readSelectedKey`）。它返回 `null` 表示
+  "这次读不到"，用来区分"读到空字符串"。
+- `gwRequest` 用 `settled` 闸门 + 单一 `finish()`：同步 throw / 异步 reject / 超时
+  三条路径都会 `clearTimeout`，不会漏 timer。
+- 离线时 RPC **立即以明确错误失败**：`与 Li An 的连接已断开，操作未执行。等重新连上再试。`
+  —— 不是伪装 timeout，不排队，不重放。
+- `rebind(newHost, newSignal)` 必须接**新一轮 activation 的 signal**。这点我第一版写错成复用旧
+  signal，被测试抓到：重连后一切看似正常，旧 activation 一 abort 就把新桥整体打掉。
+  每一轮有独立 `round`，旧 disposer 只可能关掉自己那一轮。
+- 绑定 host 时先探活：`readSelectedKey` 返回 `null` 说明 host 已退役，此时**判离线**而不是
+  "有对象就当连上了"，否则界面会显示已连接、直到用户点下去才失败。
+
+#### 保留的东西（不编造数据）
+
+- 离线时仍可读**最后已知的选中会话**作为界面归属，但不会凭空造新值；
+- 在线/离线状态通过 `isOnline()` / `facade.online` 显式暴露，界面可以如实显示已断开；
+- 正常的 session 与房间独立性不变（`syncSelection` 只在 `stillMine()` 时更新）。
+
+#### 主控接线（main.js 属主控，这里只给导出）
+
+`shim.js` 现在导出 `hostFacade`，把 `window.CLE.host` 从 raw host 换成 facade 即可
+（否则 legacy 脚本里那 4 处 `window.CLE?.host?.sessions?.selectedKey` 仍会抛）：
+
+```js
+import {installLegacyShim, makeHostFacade} from './legacy/shim.js';
+
+// activate 里，installLegacyShim 之后
+safe('shim', () => installLegacyShim(host, controller.signal));
+// ...
+window.CLE = Object.assign(window.CLE || {}, {
+  version: VERSION, rooms, blink, legacy, composer, utilities,
+  host: makeHostFacade(),            // ← 唯一改动：raw host → 安全 facade
+});
+```
+
+重新 activate 时补一次 rebind（新 host + 新 signal）：
+
+```js
+window.__cleBridge?.rebind(nextHost, nextController.signal);
+```
+
+facade 只做两件事：读 `selectedKey` 走缓存，其余方法离线时立刻明确失败、在线时原样转发。
+`installLegacyShim` 的返回值同样带 `{gwRequest, rebind, goOffline, isOnline,
+currentSessionKey, hostFacade}`，主控也可以直接用返回值而不是 `window.__cleBridge`。
+
+#### 仍是主控所有权的读取点（本轮未越界改）
+
+`laolao-learning-library.js:8`、`laolao-learning-stage.js:71`、
+`laolao-session-list.js:46`、`laolao-session-list.js:1169`、`laolao-workbench.js:286`
+都直接读 `window.CLE?.host`。接上 facade 后这四处自动转为安全读，不需要逐个改。
+
+#### 测试（`tests/cle-bridge-lifecycle.test.mjs`，9 项）
+
+用的是**比真机更严**的 host fixture：退役后任何属性访问/方法调用/订阅都同步 throw。
+
+1. 退役后读 key 返回最后已知值，且**零 host 访问**（用调用计数与 getter 访问日志断言）；
+2. 退役后 `gwRequest` 立即明确失败，不打旧 host，重连后也不补发；
+3. `host.request` 同步 throw：真实原因原样上报，且**没有遗留 timer**（直接盯 live timer 集合）；
+4. 在途请求被网关拒绝：调用方拿到真实错误；
+5. 重连指向新 host，旧 disposer 晚到**不得**覆盖或打掉新桥；
+6. facade 离线只读不抛、写操作明确失败、重连后原样转发；
+7. 绑定已退役的 host **不会假装在线**；
+8. `laolao-sidebar` 兼容入口不再直接读 raw host（静态契约 + 行为契约双断言）；
+9. 重连后正常请求只发一次，旧请求不重放。
