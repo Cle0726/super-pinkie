@@ -46,6 +46,7 @@ function main() {
   for (const name of fs.readdirSync(assets).filter(n=>/^markdown-[\w-]+\.js$/.test(n))) {
     const file=path.join(assets,name), result=patchSource(fs.readFileSync(file,'utf8'));
     if (result.changed) { fs.writeFileSync(file,result.out); console.log('chat-linebreaks: patched '+name); }
+    else if (result.reason !== 'already patched') console.log('chat-linebreaks: '+name+': '+result.reason+'; unchanged');
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) main();
