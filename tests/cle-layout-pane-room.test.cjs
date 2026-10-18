@@ -142,8 +142,32 @@ test('the composer grid gives the lead a flexible track instead of an auto colum
   const rule = composerCss.match(/\.cle-composer \.agent-chat__input \{([\s\S]*?)\n\}/)[1];
   assert.match(rule, /grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
   assert.ok(!/grid-template-columns:\s*auto minmax/.test(rule), 'an auto first column sized by max-content caused the 359px lead');
-  assert.match(rule, /grid-template-areas:\s*"words actions"\s*"tools utils"/);
+  // row 1 spans both tracks so the model controls in row 2 cannot size the text row
+  assert.match(rule, /grid-template-areas:\s*"words words"\s*"tools utils"/);
   assert.match(composerCss, /\.agent-chat__composer-lead \{[^}]*grid-area:\s*tools/);
+  // the send cluster shares row 1 and is pinned to the end
+  assert.match(composerCss, /\.agent-chat__composer-actions \{[^}]*grid-area:\s*words[^}]*justify-self:\s*end/);
+  // the text reserves the cluster's width instead of a column defined by another row
+  assert.match(composerCss, /\.agent-chat__composer-input-row \{[^}]*padding:\s*13px 92px 13px 20px/);
+});
+
+test('the permission trigger is sized as a coin, not stretched by its display:contents host', () => {
+  // <wa-dropdown> is display:contents, so the trigger's native width:100% resolves against the
+  // whole lead (532px measured live). The trigger itself must be constrained.
+  const rule = composerCss.match(/\.agent-chat__composer-lead \.chat-controls__permission-trigger \{([\s\S]*?)\n\}/)[1];
+  assert.match(rule, /width:\s*var\(--chat-composer-control-size[^)]*\)[^;]*!important/);
+  assert.match(rule, /min-width:\s*var\(--chat-composer-control-size/);
+  assert.match(rule, /max-width:\s*var\(--chat-composer-control-size/);
+  assert.match(rule, /flex:\s*0 0 auto/);
+});
+
+test('the narrow-pane block addresses declared areas instead of a four-column index', () => {
+  const block = composerCss.match(/@container cle-pane \(max-width: 720px\) \{([\s\S]*?)\n\}/)[1];
+  assert.ok(!/grid-area:\s*\d+\s*\/\s*\d+\s*\/\s*\d+\s*\/\s*\d+/.test(block),
+    'numeric grid-area indices reference tracks the template does not have and create implicit ones');
+  assert.match(block, /grid-template-areas:\s*"words actions"\s*"tools tools"\s*"utils utils"/);
+  assert.match(block, /agent-chat__composer-lead \{ grid-area: tools;/);
+  assert.match(block, /agent-chat__composer-controls \{ grid-area: utils;/);
 });
 
 test('the native mobile-toolbar sizing is overridden where it would pin the lead', () => {
