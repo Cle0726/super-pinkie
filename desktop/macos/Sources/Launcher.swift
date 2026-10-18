@@ -6,10 +6,21 @@ import Speech
 import WebKit
 
 private enum RuntimeConfig {
+    /// A separate acceptance host must never read, write or signal anything that
+    /// belongs to the installed app: no live config, no live state directory, no
+    /// live services, no ownership of the gateway on 18789. Everything below is
+    /// driven by explicit environment, so the normal app keeps its old defaults.
+    static let isTestHost = ProcessInfo.processInfo.environment["PINKIE_TEST_HOST"] == "1"
+
     private static let values: [String: String] = {
-        let configURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/super-pinkie/config.json")
-        guard let data = try? Data(contentsOf: configURL),
+        // The acceptance host talks to an already-running test gateway
+        // (19789/profile cle). Reading the installed app's config here would
+        // silently point it at live state and live services.
+        if isTestHost, ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"] == nil { return [:] }
+        let path = ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"]
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/super-pinkie/config.json").path
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
         }
@@ -22,9 +33,30 @@ private enum RuntimeConfig {
         ProcessInfo.processInfo.environment[environmentKey] ?? values[configKey] ?? fallback
     }
 
-    static let gatewayURL = URL(string: string(
-        "PINKIE_GATEWAY_URL", "gatewayURL", fallback: "http://127.0.0.1:18789/"
-    ))!
+    /// Application Support root. The installed app uses the historical path; the
+    /// acceptance host is redirected so logs, snapshots and caches stay apart.
+    static let stateRoot: URL = {
+        if let custom = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !custom.isEmpty {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
+    }()
+
+    static let gatewayURL: URL = {
+        let url = URL(string: string(
+            "PINKIE_GATEWAY_URL", "gatewayURL", fallback: "http://127.0.0.1:18789/"
+        ))!
+        guard isTestHost else { return url }
+        // The acceptance host must never attach to the installed app's gateway.
+        // Refuse the live port outright instead of silently touching live state.
+        let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
+        if !loopback || url.port == 18789 {
+            NSLog("[CLE Kk test host] 拒绝连接到非测试网关：%@", url.absoluteString)
+            return URL(string: "http://127.0.0.1:19789/")!
+        }
+        return url
+    }()
     static let speechURL = URL(string: string(
         "PINKIE_SPEECH_URL", "speechURL", fallback: "http://127.0.0.1:18888/v1/audio/speech"
     ))!
@@ -101,8 +133,7 @@ private enum BundledRuntime {
     }
 
     static func logHandle(named name: String) -> FileHandle? {
-        let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SuperPinkie/logs", isDirectory: true)
+        let directory = RuntimeConfig.stateRoot.appendingPathComponent("logs", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = directory.appendingPathComponent(name + ".log")
@@ -435,7 +466,8 @@ private final class BrowserEdgeTab: BrowserPanelDragHandle {
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.systemPink.withAlphaComponent(0.82).setFill()
+        let night = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        CleBrowserPalette.gaze(night).withAlphaComponent(0.78).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 0), xRadius: 8, yRadius: 8).fill()
         let symbol = edge == .right ? "chevron.left" : edge == .top ? "chevron.down" : "chevron.up"
         NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX-6, y: bounds.midY-6, width: 12, height: 12))
@@ -982,7 +1014,26 @@ private enum Gateway {
         }
     }
 
+    /// Acceptance-host attachment: wait for the test gateway that is already
+    /// running. Never spawn, signal or replace a listener, so a live app's
+    /// gateway on another port and the test gateway on 19789 both stay intact.
+    static func attachToExisting(timeout: TimeInterval = 30, completion: @escaping (Bool) -> Void) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            isReady { ready in
+                if ready { completion(true); return }
+                guard Date() < deadline else { completion(false); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: poll)
+            }
+        }
+        poll()
+    }
+
     static func start() {
+        guard !RuntimeConfig.isTestHost else {
+            lastError = "验收宿主不创建网关；请先启动测试网关。"
+            return
+        }
         guard process?.isRunning != true else { return }
         let task = Process()
         if BundledRuntime.exists(BundledRuntime.nodeURL),
@@ -1069,6 +1120,7 @@ private enum Gateway {
         // process may only be draining/rebuilding its transcript; killing it
         // here creates another drain and can hide a completed reply for five
         // minutes. If our child really exited, start it again.
+        guard !RuntimeConfig.isTestHost else { return }
         guard process?.isRunning != true else { return }
         start()
     }
@@ -1187,12 +1239,16 @@ private final class DesktopControlService {
     }
 
     func start() {
+        // The acceptance host never owns a desktop driver: starting one would
+        // re-use the live CUA identity and could interrupt the user's session.
+        guard !RuntimeConfig.isTestHost else { return }
         stopping = false
         guard driverProcess?.isRunning != true else { return }
         startDriver()
     }
 
     func stop() {
+        guard !RuntimeConfig.isTestHost else { return }
         stopping = true
         generation += 1
         pairingProbe?.cancel()
@@ -2185,6 +2241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc func checkForUpdates(_ sender: Any?) {
+        guard !RuntimeConfig.isTestHost else { return }
         guard !updateLaunchInProgress else { return }
         let confirmation = NSAlert()
         confirmation.messageText = "主动拉取 CLE Kk 更新？"
@@ -2196,9 +2253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         guard let root = BundledRuntime.resourceRoot else { return }
         let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
-        let stateRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
-        let updateRoot = stateRoot.appendingPathComponent("updates", isDirectory: true)
+        let updateRoot = RuntimeConfig.stateRoot.appendingPathComponent("updates", isDirectory: true)
         let helper = updateRoot.appendingPathComponent("manual-update.sh")
         let task = Process()
         do {
@@ -2315,6 +2370,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         NSApp.activate(ignoringOtherApps: true)
 
         showStartupScreen()
+        if RuntimeConfig.isTestHost {
+            // The acceptance host attaches to an already-running test gateway and
+            // touches nothing else: no bundled installer, no live services, no
+            // desktop driver, no gateway child process.
+            startTestHostServices()
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             BundledSetup.apply()
             DispatchQueue.main.async {
@@ -2416,6 +2478,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
         }
         webView?.loadHTMLString("<html lang=\"zh-CN\"><body style=\"display:grid;place-items:center;height:100%;margin:0;background:#efcbd3;color:#76465f;font:14px -apple-system\">超級碧琪正在准备</body></html>", baseURL: nil)
+    }
+
+    /// Readiness-only attachment used by the acceptance host. Everything that
+    /// could mutate live state (installer, TTS/party/roundtable servers, CUA
+    /// driver, gateway spawn/kill) stays off; only the browser workspace and the
+    /// web UI bridge are initialised.
+    private func startTestHostServices() {
+        configureBrowserControl()
+        Gateway.attachToExisting { [weak self] ready in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if ready { self.activateGatewayDashboard() } else { self.showGatewayRecoveryFailure() }
+            }
+        }
     }
 
     private func startBundledServices() {
@@ -2561,6 +2637,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             self.browserAgentActive = active
             self.browserActivityIndicator?.isHidden = !active
             self.browserStatusLabel?.isHidden = active || self.browserStatusLabel?.stringValue.isEmpty == true
+            // The status stack owns both the spinner and the activity chip;
+            // hiding only its children would leave an empty 140pt gap in the
+            // toolbar once an agent turn finished.
+            self.updateBrowserToolbarLayout(width: self.browserPanel?.bounds.width ?? 600)
         }
         browserControl.collaborationActive = { [weak self] done in
             guard let self else { done(false); return }
@@ -2780,11 +2860,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
-          main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid #d8679b38;border-radius:20px;background:#fff9;box-shadow:0 16px 45px #9f4c741c;text-align:center}
-          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;background:#f8dfea;color:#ad4a76;font-size:22px}
-          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:#997487;line-height:1.65}.detail{margin-top:12px;font-size:11px;color:#ad8799}
-          @media(prefers-color-scheme:dark){body{background:linear-gradient(145deg,#1a131e,#251b2b);color:#efe5ea}main{background:#2a2030;border-color:#ffffff18;box-shadow:0 16px 45px #0006}.mark{background:#ff7fb322;color:#ff9cc6}p,.detail{color:#b3a1ab}}
+          :root{--paper:#fbfaf5;--surface:#fff;--ink:#15161a;--ink2:#15161a9e;--line:#15161a1f;--gaze:#2a63e8}
+          @media(prefers-color-scheme:dark){:root{--paper:#161412;--surface:#1f1c19;--ink:#f0ebe4;--ink2:#f0ebe4a8;--line:#ffffff21;--gaze:#79a0fa}}
+          *{box-sizing:border-box}html,body{height:100%}
+          body{margin:0;display:grid;place-items:center;background:var(--paper);font:14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--ink)}
+          main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid var(--line);border-radius:20px;background:var(--surface);text-align:center}
+          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;border:1px solid var(--line);background:transparent;color:var(--gaze);font-size:22px}
+          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:var(--ink2);line-height:1.65}.detail{margin-top:12px;font-size:11px;color:var(--ink2);opacity:.8;word-break:break-word}
         </style><main><div class="mark">!</div><h1>页面没有加载成功</h1><p>点上方的重新加载再试；如果登录页仍被网络验证拦住，可点右上角“在默认浏览器打开”。</p><p class="detail">\#(detail)</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -2801,12 +2883,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.wantsLayer = true
-        panel.layer?.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.975,
-            blue: 0.988,
-            alpha: 0.97
-        ).cgColor
+        panel.layer?.backgroundColor = CleBrowserPalette.paper(nightAppearance).withAlphaComponent(0.97).cgColor
         panel.layer?.masksToBounds = true
         panel.appearance = NSAppearance(named: .aqua)
 
@@ -2832,12 +2909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let toolbar = header
         toolbar.appearance = NSAppearance(named: .aqua)
         toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.93,
-            blue: 0.97,
-            alpha: 0.96
-        ).cgColor
+        toolbar.layer?.backgroundColor = CleBrowserPalette.surface(nightAppearance).withAlphaComponent(0.96).cgColor
 
         let back = browserToolbarButton(symbol: "chevron.left", label: "后退", action: #selector(browserGoBack(_:)))
         let forward = browserToolbarButton(symbol: "chevron.right", label: "前进", action: #selector(browserGoForward(_:)))
@@ -2854,10 +2926,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         status.translatesAutoresizingMaskIntoConstraints = false
         status.isHidden = true
         status.lineBreakMode = .byTruncatingTail
-        status.textColor = NSColor(srgbRed: 0.58, green: 0.42, blue: 0.50, alpha: 1)
+        status.textColor = CleBrowserPalette.ink2(nightAppearance)
         status.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
         let activity = BrowserActivityIndicator()
-        let statusStack = NSStackView(views: [loading])
+        let statusStack = NSStackView(views: [loading, activity])
         statusStack.translatesAutoresizingMaskIntoConstraints = false
         statusStack.orientation = .horizontal
         statusStack.alignment = .centerY
@@ -2872,29 +2944,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         address.focusRingType = .none
         (address.cell as? NSSearchFieldCell)?.cancelButtonCell = nil
         address.appearance = NSAppearance(named: .aqua)
-        address.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.985,
-            blue: 0.993,
-            alpha: 0.92
-        )
-        address.textColor = NSColor(
-            srgbRed: 0.39,
-            green: 0.29,
-            blue: 0.35,
-            alpha: 1.0
-        )
+        address.backgroundColor = CleBrowserPalette.paper(nightAppearance)
+        address.textColor = CleBrowserPalette.ink(nightAppearance)
 
         let browser = makeBrowserWebView()
         let resize = BrowserResizeHandle(frame: .zero)
         resize.translatesAutoresizingMaskIntoConstraints = false
         resize.wantsLayer = true
-        resize.layer?.backgroundColor = NSColor(
-            srgbRed: 0.83,
-            green: 0.33,
-            blue: 0.57,
-            alpha: 0.18
-        ).cgColor
+        resize.layer?.backgroundColor = CleBrowserPalette.gaze(nightAppearance).withAlphaComponent(0.16).cgColor
         resize.onDrag = { [weak self] delta in
             guard let self,
                   let window = self.window,
@@ -3038,8 +3095,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browserExternalButton?.isHidden = true
         browserPresentationMenu?.isHidden = false
         for button in browserPresentationButtons.values { button.isHidden = true }
-        browserStatusStack?.isHidden = browserLoadingIndicator?.isHidden != false
-        browserPresentationMenu?.toolTip = browserAgentActive ? "碧琪正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
+        browserStatusStack?.isHidden = (browserLoadingIndicator?.isHidden != false) && (browserActivityIndicator?.isHidden != false)
+        browserPresentationMenu?.toolTip = browserAgentActive ? "Li An 正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
         updateBrowserToolbarVisibility()
     }
 
@@ -3053,41 +3110,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.appearance = followSystem ? nil : appearance
         for button in [browserBackButton, browserForwardButton, browserReloadButton, browserCloseButton, browserExternalButton] {
             button?.appearance = appearance
-            button?.contentTintColor = dark ? rgb(0.81, 0.74, 0.79, 1) : rgb(0.39, 0.55, 0.59, 1)
+            button?.contentTintColor = CleBrowserPalette.ink2(dark)
         }
         browserTitlebar?.appearance = appearance
         browserPresentationMenu?.appearance = appearance
         for button in browserPresentationButtons.values {
             button.appearance = appearance
-            button.contentTintColor = button.state == .on ? .systemPink : (dark ? rgb(0.81, 0.74, 0.79, 1) : rgb(0.39, 0.55, 0.59, 1))
+            button.contentTintColor = button.state == .on ? CleBrowserPalette.gaze(dark) : CleBrowserPalette.ink2(dark)
         }
         browserLoadingIndicator?.appearance = appearance
         // WebView 自身也要跟着换外观，否则深色下页面里的原生控件和
         // prefers-color-scheme 仍按浅色渲染。
         browserWebView?.appearance = appearance
         if #available(macOS 12.0, *) {
-            browserWebView?.underPageBackgroundColor = dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.985, 0.993, 0.97)
+            browserWebView?.underPageBackgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(0.97)
         }
         if let panel = browserPanel {
             panel.appearance = appearance
-            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.975, 0.988, 0.97)).cgColor
+            panel.layer?.backgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(0.97).cgColor
         }
         if let toolbar = browserToolbarView {
             toolbar.appearance = appearance
-            toolbar.layer?.backgroundColor = (dark ? rgb(0.14, 0.105, 0.16, 0.96) : rgb(1.0, 0.93, 0.97, 0.96)).cgColor
+            toolbar.layer?.backgroundColor = CleBrowserPalette.surface(dark).withAlphaComponent(0.96).cgColor
         }
         if let address = browserAddressField {
             address.appearance = appearance
-            address.backgroundColor = dark ? rgb(1, 1, 1, 0.07) : rgb(1.0, 0.985, 0.993, 0.92)
-            address.textColor = dark ? rgb(0.94, 0.90, 0.92, 1) : rgb(0.39, 0.29, 0.35, 1)
+            address.backgroundColor = dark ? CleBrowserPalette.surface(dark) : CleBrowserPalette.paper(false)
+            address.textColor = CleBrowserPalette.ink(dark)
         }
-        browserStatusLabel?.textColor = dark ? rgb(0.72, 0.62, 0.68, 1) : rgb(0.58, 0.42, 0.50, 1)
+        browserStatusLabel?.textColor = CleBrowserPalette.ink2(dark)
         browserActivityIndicator?.setNight(dark)
         applyBrowserForceDark()
-        browserResizeView?.layer?.backgroundColor = (dark ? rgb(1.0, 0.5, 0.7, 0.16) : rgb(0.83, 0.33, 0.57, 0.18)).cgColor
+        browserResizeView?.layer?.backgroundColor = CleBrowserPalette.gaze(dark).withAlphaComponent(dark ? 0.20 : 0.16).cgColor
         if let panel = companionPanel {
             panel.appearance = appearance
-            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.6) : rgb(1.0, 0.93, 0.97, 0.52)).cgColor
+            panel.layer?.backgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(dark ? 0.60 : 0.52).cgColor
         }
     }
 
@@ -3611,15 +3668,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     private func loadBrowserStartPage() {
-        // 起始页用 color-scheme + 媒体查询跟着全局深色走，不再写死浅色。
+        // 起始页用 color-scheme + 媒体查询跟着全局深色走。配色用 C.le. 的
+        // 纸白/墨黑/金/冰蓝，不再回到旧版的粉色渐变。
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
-          main{text-align:center;padding:36px}.mark{width:58px;height:58px;margin:0 auto 18px;display:grid;place-items:center;border:1px solid #d8679b45;border-radius:20px;background:#fff9;box-shadow:0 14px 38px #9f4c7420;font-size:25px}
-          p{margin:0;color:#9a7187}
-          @media(prefers-color-scheme:dark){body{background:linear-gradient(145deg,#151016,#211825);color:#f2e7ec}main{background:#0000}.mark{background:#ffffff0f;border-color:#ff7fb340;box-shadow:0 14px 38px #0006}p{color:#b09aa3}}
-        </style><main><div class="mark">◎</div><p>在上方输入网址或搜索内容</p></main>
+          :root{--paper:#fbfaf5;--surface:#fff;--ink:#15161a;--ink2:#15161a9e;--line:#15161a1f;--gaze:#2a63e8;--gold:#c9a24a}
+          @media(prefers-color-scheme:dark){:root{--paper:#161412;--surface:#1f1c19;--ink:#f0ebe4;--ink2:#f0ebe4a8;--line:#ffffff21;--gaze:#79a0fa;--gold:#d7b467}}
+          *{box-sizing:border-box}
+          html,body{height:100%}
+          body{margin:0;display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+          main{text-align:center;padding:36px;max-width:380px}
+          .mark{width:58px;height:58px;margin:0 auto 18px;display:grid;place-items:center;border:1px solid var(--line);border-radius:20px;background:var(--surface);color:var(--gold);font-size:24px}
+          h1{margin:0 0 6px;font-size:15px;font-weight:600;letter-spacing:.01em}
+          p{margin:0;color:var(--ink2);font-size:13px}
+          .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink2)}
+          kbd{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:2px 5px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)}
+        </style>
+        <main><div class="mark">◷</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+        <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
         browserAddressField?.stringValue = ""
@@ -3820,7 +3887,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         updateBrowserPanelInput()
         panel.layer?.cornerRadius = browserPresentation == .floating ? 14 : 0
         panel.layer?.borderWidth = browserPresentation == .floating ? 1 : 0
-        panel.layer?.borderColor = NSColor.systemPink.withAlphaComponent(0.25).cgColor
+        panel.layer?.borderColor = CleBrowserPalette.line(nightAppearance).cgColor
         for (mode, button) in browserPresentationButtons { button.state = mode == browserPresentation ? .on : .off }
         for (mode, item) in browserPresentationMenuItems { item.state = mode == browserPresentation ? .on : .off }
         let toolbarWidth = browserPresentation == .side ? browserWidthConstraint?.constant ?? content.bounds.width : browserPresentation == .floating ? browserFloatingFrame?.width ?? content.bounds.width : content.bounds.width
