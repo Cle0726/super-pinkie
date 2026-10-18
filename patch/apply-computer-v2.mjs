@@ -45,7 +45,8 @@ if (!root) {
 const distDir = path.join(root, "dist");
 const files = fs.existsSync(distDir)
   ? fs.readdirSync(distDir)
-      .filter((name) => /^computer-tool-.*\.js$/.test(name))
+      // 2026.10 emits .mjs bundles; 2026.7 used .js.
+      .filter((name) => /^computer-tool-(?!control|outcome|shared)[^/]*\.(?:m?js)$/.test(name))
       .map((name) => path.join(distDir, name))
   : [];
 
