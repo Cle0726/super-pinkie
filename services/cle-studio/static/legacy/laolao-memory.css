@@ -1,0 +1,181 @@
+.laolao-memory-entry {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #b14f7b;
+  background: transparent;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.laolao-memory-entry:hover,
+.laolao-memory-entry:focus-visible {
+  border-color: rgba(206, 94, 143, .22);
+  background: rgba(255, 244, 249, .66);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.laolao-memory-entry::before {
+  width: 13px;
+  height: 15px;
+  border: 1.4px solid currentColor;
+  border-radius: 4px 4px 5px 5px;
+  box-shadow: inset 0 -4px 0 rgba(214, 93, 147, .11);
+  content: "";
+}
+
+.laolao-memory-entry::after {
+  position: absolute;
+  top: 7px;
+  width: 6px;
+  height: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 3px 0 rgba(177, 79, 123, .75);
+  content: "";
+}
+
+.laolao-memory-layer {
+  position: fixed;
+  z-index: 2147483600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(92, 46, 72, .14);
+  backdrop-filter: blur(10px) saturate(112%);
+  -webkit-backdrop-filter: blur(10px) saturate(112%);
+  animation: laolao-memory-layer-in 180ms ease-out both;
+}
+
+.laolao-memory-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(680px, calc(100vw - 56px));
+  height: min(690px, calc(100vh - 56px));
+  overflow: hidden;
+  border: 1px solid rgba(211, 101, 151, .28);
+  border-radius: 24px;
+  color: #5f344a;
+  background:
+    radial-gradient(circle at 92% 4%, rgba(246, 162, 204, .20), transparent 30%),
+    rgba(255, 250, 252, .93);
+  box-shadow: 0 26px 74px rgba(91, 40, 67, .22), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.laolao-memory-head,
+.laolao-memory-toolbar,
+.laolao-memory-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(210, 112, 155, .14);
+}
+
+.laolao-memory-head { padding-top: 17px; }
+.laolao-memory-title { min-width: 0; flex: 1; }
+.laolao-memory-title strong { display: block; color: #a82f68; font-size: 17px; }
+.laolao-memory-title span { display: block; margin-top: 3px; color: #9c7589; font-size: 11px; }
+
+.laolao-memory-close,
+.laolao-memory-button {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid rgba(196, 86, 136, .22);
+  border-radius: 11px;
+  color: #a83c6d;
+  background: rgba(255, 255, 255, .56);
+  cursor: pointer;
+}
+
+.laolao-memory-close { width: 32px; padding: 0; border-radius: 50%; font-size: 18px; }
+.laolao-memory-button:hover,
+.laolao-memory-close:hover { background: rgba(255, 235, 245, .82); }
+.laolao-memory-button--primary { color: white; border-color: #dc5d99; background: linear-gradient(135deg, #e56ca5, #c84c86); }
+.laolao-memory-button--danger { color: #bb4465; }
+
+.laolao-memory-search,
+.laolao-memory-editor textarea,
+.laolao-memory-editor input,
+.laolao-memory-editor select {
+  box-sizing: border-box;
+  border: 1px solid rgba(195, 101, 144, .20);
+  border-radius: 11px;
+  color: #5d3b4d;
+  background: rgba(255,255,255,.66);
+  outline: none;
+}
+
+.laolao-memory-search { min-width: 0; height: 34px; flex: 1; padding: 0 12px; }
+.laolao-memory-search:focus,
+.laolao-memory-editor textarea:focus,
+.laolao-memory-editor input:focus,
+.laolao-memory-editor select:focus { border-color: rgba(213, 67, 128, .52); box-shadow: 0 0 0 3px rgba(231, 111, 164, .10); }
+
+.laolao-memory-list {
+  min-height: 0;
+  padding: 14px 18px 24px;
+  overflow: auto;
+}
+
+.laolao-memory-empty { padding: 64px 20px; color: #a57c90; text-align: center; }
+.laolao-memory-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+  padding: 13px 14px;
+  border: 1px solid rgba(204, 106, 149, .15);
+  border-radius: 15px;
+  background: rgba(255,255,255,.52);
+}
+
+.laolao-memory-card__meta { display: flex; align-items: center; gap: 7px; color: #aa6685; font-size: 10px; }
+.laolao-memory-card__kind { padding: 2px 6px; border-radius: 99px; background: rgba(232, 121, 171, .12); }
+.laolao-memory-card__text { grid-column: 1; margin: 0; color: #684054; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.laolao-memory-card__actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: start; gap: 4px; }
+.laolao-memory-card__actions button { min-width: 30px; height: 28px; padding: 0 7px; border: 0; border-radius: 9px; color: #ad6685; background: transparent; cursor: pointer; }
+.laolao-memory-card__actions button:hover { background: rgba(238, 135, 180, .12); }
+
+.laolao-memory-editor {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(210, 112, 155, .14);
+  background: rgba(255,244,249,.44);
+}
+
+.laolao-memory-editor[hidden] { display: none; }
+.laolao-memory-editor textarea { grid-column: 1 / -1; min-height: 100px; padding: 10px 12px; resize: vertical; font: inherit; }
+.laolao-memory-editor input,
+.laolao-memory-editor select { height: 34px; padding: 0 10px; }
+.laolao-memory-editor__checks { display: flex; align-items: center; gap: 6px; color: #8d6377; font-size: 12px; }
+.laolao-memory-editor__actions { grid-column: 1 / -1; display: flex; justify-content: end; gap: 8px; }
+
+.laolao-memory-foot { justify-content: space-between; border-top: 1px solid rgba(210, 112, 155, .14); border-bottom: 0; color: #9b7488; font-size: 11px; }
+.laolao-memory-confirm { display: flex; align-items: center; gap: 8px; }
+.laolao-memory-confirm[hidden] { display: none; }
+.laolao-memory-status[data-error="1"] { color: #b84662; }
+
+@keyframes laolao-memory-layer-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 720px) {
+  .laolao-memory-layer { padding: 10px; }
+  .laolao-memory-panel { width: calc(100vw - 20px); height: calc(100vh - 20px); border-radius: 18px; }
+  .laolao-memory-editor { grid-template-columns: 1fr; }
+  .laolao-memory-editor textarea,
+  .laolao-memory-editor__actions { grid-column: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-memory-layer { animation: none; }
+  .laolao-memory-entry { transition: none; }
+}
