@@ -5,6 +5,7 @@ import './rooms/rooms.css';
 import './composer/composer.css';
 import './styles/bridge.css';
 import './process/status.css';
+import './learning/study.css';
 import {ensureTheme} from './core/theme.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
@@ -14,7 +15,9 @@ import {mountComposer, composer} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
 import {loadLegacy} from './legacy/loader.js';
 import {installLegacyShim} from './legacy/shim.js';
+import {mountUtilities} from './legacy/utilities.js';
 import {mountStatus} from './process/status.js';
+import {mountStudy} from './learning/study.js';
 
 const VERSION = '0.1.0';
 
@@ -37,10 +40,12 @@ export default {
     mountComposer(host, controller.signal);
     mountGaze(controller.signal);
     mountStatus(host, controller.signal);
+    mountStudy(host, controller.signal);
     installLegacyShim(host, controller.signal);
+    const utilities = mountUtilities(host, controller.signal);
     const legacy = {};
     loadLegacy(legacy);
-    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink, legacy, composer});
+    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink, legacy, composer, utilities});
     return () => {
       controller.abort();
       delete html.dataset.cle;

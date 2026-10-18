@@ -17,12 +17,15 @@ export function mountWelcome(host, signal) {
     el.className = 'cle-welcome';
     el.dataset.room = room.id;
     el.innerHTML = `
-      <figure class="cle-welcome__arch"><img alt="" decoding="async" src="${ART}${room.id}.webp"><span class="cle-welcome__rule" aria-hidden="true"></span></figure>
+      <figure class="cle-welcome__arch"><img alt="" decoding="async" src="${ART}${room.id}.png"><span class="cle-welcome__rule" aria-hidden="true"></span></figure>
       <p class="cle-welcome__label cle-label">${room.fr} · ${room.zh}</p>
       <h2 class="cle-welcome__line">${room.line}</h2>
       <div class="cle-welcome__asks">${(SUGGEST[room.id] || []).map((s) => `<button type="button" class="cle-welcome__ask">${s}</button>`).join('')}</div>`;
     const img = el.querySelector('img');
-    img.addEventListener('error', () => img.closest('figure').classList.add('is-empty'), {once: true});
+    img.addEventListener('error', () => {
+      img.addEventListener('error', () => img.closest('figure').classList.add('is-empty'), {once: true});
+      img.src = '/cle/static/art/identity.png';
+    }, {once: true});
     el.addEventListener('click', (e) => {
       const ask = e.target.closest('.cle-welcome__ask');
       if (!ask) return;

@@ -12,6 +12,7 @@ await build({
   bundle: true, format: 'esm', target: 'safari17', minify: true, legalComments: 'none',
   outfile: path.join(out, 'index.js'),
   loader: {'.svg': 'text', '.glsl': 'text', '.html': 'text'},
+  external: ['/cle/static/*'],
   logLevel: 'warning',
 });
 const js = fs.readFileSync(path.join(out, 'index.js'));
