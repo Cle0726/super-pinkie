@@ -118,6 +118,9 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 | 17 | **首次激活若触发主题 reload，品牌守卫根本不启动。** `activate()` 里 `if (!ensureTheme()) return () => {}` 在 `startBrandGuard()` 之前；`ensureTheme()` 换主题后会 `location.reload()` 并返回 false，而这一帧仍然会被绘制，标题与标签就留在旧值 | `services/cle-studio/src/main.js:32` | 中（首次安装的第一次会话） | 把 `startBrandGuard()` 提到 `ensureTheme()` 之前，reload 分支返回 `() => controller.abort()` 以正确回收 |
 | 18 | **外链黑名单没有锚定域名结尾。** `openclaw\.ai` 会匹配 `openclaw.ai.example.com`，把无关链接当成上游推广隐藏掉——违反"不重写正常链接" | `core/brand.js` 的 `EXTERNAL` | 中（误伤用户内容） | 改为按完整主机名锚定 `(?:[/?#]|$)`；`github.com` 单独按 `github\.com/openclaw` 全路径前缀匹配 |
 
+| 19 | **只改 `aria-label` 时标签实际不会被修。** observer 的 attributes 分支只置 `dirty=true` 然后 `continue`，而 `flush()` 只遍历队列里的节点——属性变更既没有 addedNode 也没有文本变更，队列是空的，`chromeScopeFor`/`sweepChrome` 根本没跑。会话切换时原生把 `OpenClaw · 工作区菜单` 写回来，标签就一直是旧的 | `core/brand.js` 的 MutationObserver 回调 | 高（本轮上一条修复的核心场景仍然失效） | attributes 记录也把 `r.target` 入队；队列仍是有界的（只有一个元素及其所属 chrome 块） |
+| 20 | **`localTitle` 会把用户自己的会话名一起改掉。** 原来对整串跑 `replace(WORD)`：用户把会话命名为"关于OpenClaw的笔记"时，原生标题"关于OpenClaw的笔记 — OpenClaw"会被改成"关于C.le.的笔记 — C.le."，上下文被重命名 | `core/brand.js` 的 `localTitle` | 高（篡改用户内容） | 只重写原生填充产品名的位置：裸 `OpenClaw`/`OpenClaw Control`（启动标题）、`<context> — <brand>`（原生尾巴）、以及其后的 ` · <environment>`。上下文里出现该词不动，无原生尾巴的标题原样返回 |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -303,4 +306,20 @@ tests/cle-startup.test.mjs              34 项（新增"选择器对照真实 DO
 - 守卫的 `sweep()` 仍保留既有行为：命中黑名单的推广链接会被移除 `href`；黑名单现已锚定，
   但「哪些链接算推广」是产品判断，未扩大范围。
 
-commit 见回执。
+补充 commit #2（6480642，响应主控两处代码缺口）：
+
+```
+services/cle-studio/src/core/brand.js   attributes 记录把 r.target 入队（只改 aria-label 也能修）；
+                                       localTitle 只重写原生品牌位置，保留会话上下文中的用户字样
+tests/cle-brand-guard.test.mjs         21 项（+4：属性-only 修复、非 chrome 属性忽略、
+                                       标题上下文保留表 13 例、真实会话名端到端）
+```
+
+两处缺陷都用"退回旧逻辑"验证过：在临时副本里分别还原 attributes 分支与旧 `localTitle`，
+新增用例均失败，说明用例锚定的是缺陷而不是实现。
+
+`openclaw.plugin.json` 保持 bc1ed9c 的取值：打包产物由主控最终 build 生成，
+不在每次源提交里带 dist 引用。`main.js` 的挂载列表与 bc1ed9c 逐项一致
+（12 个 `safe()` 调用，已 diff 核对），只调整了 guard 的注册位置。
+
+首帧视觉仍由主控验，本路不声称已通过视觉验收。
