@@ -8,18 +8,54 @@ import WebKit
 private enum RuntimeConfig {
     /// A separate acceptance host must never read, write or signal anything that
     /// belongs to the installed app: no live config, no live state directory, no
-    /// live services, no ownership of the gateway on 18789. Everything below is
-    /// driven by explicit environment, so the normal app keeps its old defaults.
-    static let isTestHost = ProcessInfo.processInfo.environment["PINKIE_TEST_HOST"] == "1"
+    /// live services, no ownership of the gateway on 18789.
+    ///
+    /// The test build is compiled with `-D CLE_BROWSER_TEST_HOST`, so isolation is
+    /// a property of the binary itself. Double-clicking the .app from Finder, from
+    /// CUA or through LaunchServices therefore behaves exactly like the `--run`
+    /// shell path; nobody has to remember an environment variable.
+    static let isTestHost: Bool = {
+        #if CLE_BROWSER_TEST_HOST
+        return true
+        #else
+        return ProcessInfo.processInfo.environment["PINKIE_TEST_HOST"] == "1"
+        #endif
+    }()
+
+    /// Compiled into the test binary only. `strings` on the executable is the
+    /// checkable proof that a delivered .app is the isolated build. Kept as a
+    /// computed value used at launch so the optimiser cannot drop it.
+    static var testHostBuildMarker: String {
+        #if CLE_BROWSER_TEST_HOST
+        return "CLE_BROWSER_TEST_HOST_ALWAYS=1"
+        #else
+        return "CLE_BROWSER_TEST_HOST_ALWAYS=0"
+        #endif
+    }
+    /// Application Support root. The installed app uses the historical path; the
+    /// acceptance host is redirected so logs, snapshots and caches stay apart,
+    /// including when no environment is provided at all.
+    static let stateRoot: URL = {
+        if let custom = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !custom.isEmpty {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        let base = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
+        return isTestHost ? base.appendingPathComponent("browser-test", isDirectory: true) : base
+    }()
 
     private static let values: [String: String] = {
-        // The acceptance host talks to an already-running test gateway
-        // (19789/profile cle). Reading the installed app's config here would
-        // silently point it at live state and live services.
-        if isTestHost, ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"] == nil { return [:] }
-        let path = ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"]
-            ?? FileManager.default.homeDirectoryForCurrentUser
+        // The acceptance host never reads the installed app's config unless a
+        // path is given explicitly; by default it reads only its own state dir.
+        let path: String
+        if let explicit = ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"] {
+            path = explicit
+        } else if isTestHost {
+            path = stateRoot.appendingPathComponent("config.json").path
+        } else {
+            path = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".config/super-pinkie/config.json").path
+        }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
@@ -33,27 +69,16 @@ private enum RuntimeConfig {
         ProcessInfo.processInfo.environment[environmentKey] ?? values[configKey] ?? fallback
     }
 
-    /// Application Support root. The installed app uses the historical path; the
-    /// acceptance host is redirected so logs, snapshots and caches stay apart.
-    static let stateRoot: URL = {
-        if let custom = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !custom.isEmpty {
-            return URL(fileURLWithPath: custom, isDirectory: true)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
-    }()
-
     static let gatewayURL: URL = {
-        let url = URL(string: string(
-            "PINKIE_GATEWAY_URL", "gatewayURL", fallback: "http://127.0.0.1:18789/"
-        ))!
+        let fallback = isTestHost ? "http://127.0.0.1:19789/" : "http://127.0.0.1:18789/"
+        var url = URL(string: string("PINKIE_GATEWAY_URL", "gatewayURL", fallback: fallback))!
         guard isTestHost else { return url }
-        // The acceptance host must never attach to the installed app's gateway.
-        // Refuse the live port outright instead of silently touching live state.
+        // An explicit override is still checked: a mistyped port must not attach
+        // the acceptance host to the installed app's gateway.
         let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
         if !loopback || url.port == 18789 {
             NSLog("[CLE Kk test host] 拒绝连接到非测试网关：%@", url.absoluteString)
-            return URL(string: "http://127.0.0.1:19789/")!
+            url = URL(string: "http://127.0.0.1:19789/")!
         }
         return url
     }()
@@ -1751,6 +1776,20 @@ private enum BundledSetup {
 @main
 struct LauncherMain {
     static func main() {
+        // Headless proof used by the acceptance build: prints the resolved
+        // isolation facts and exits before any window, service or gateway work.
+        // It runs with no environment, so it proves what a Finder/CUA launch
+        // would do rather than what a shell wrapper injects.
+        if CommandLine.arguments.contains("--browser-test-self-check") {
+            let test = RuntimeConfig.isTestHost
+            print("isTestHost=\(test)")
+            print("marker=\(RuntimeConfig.testHostBuildMarker)")
+            print("gateway=\(RuntimeConfig.gatewayURL.absoluteString)")
+            print("state=\(RuntimeConfig.stateRoot.path)")
+            // A test binary that reported production defaults would defeat the
+            // whole point of compiling it in.
+            exit(test && RuntimeConfig.testHostBuildMarker == "CLE_BROWSER_TEST_HOST_ALWAYS=1" ? 0 : 1)
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.setActivationPolicy(.regular)
@@ -2470,6 +2509,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func showStartupScreen() {
         startupVideoStartedAt = Date()
+        // The acceptance host must never show the installed app's pink-pony
+        // opening title or its old wordmark. It renders the C.le. signature on
+        // paper instead, so nothing from the previous brand flashes before the
+        // new first screen loads. The shipped app keeps its original path.
+        if RuntimeConfig.isTestHost {
+            webView?.loadHTMLString(startupPlaceholderHTML, baseURL: nil)
+            return
+        }
         if let root = BundledRuntime.resourceRoot {
             let page = root.appendingPathComponent("ui/launcher-loading.html")
             if FileManager.default.fileExists(atPath: page.path) {
@@ -2477,7 +2524,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 return
             }
         }
-        webView?.loadHTMLString("<html lang=\"zh-CN\"><body style=\"display:grid;place-items:center;height:100%;margin:0;background:#efcbd3;color:#76465f;font:14px -apple-system\">超級碧琪正在准备</body></html>", baseURL: nil)
+        webView?.loadHTMLString(startupPlaceholderHTML, baseURL: nil)
+    }
+
+    /// Brand-neutral startup/fallback page. Colours come from the one palette
+    /// table; the mark is the shipped C.le. signature, not an emoji or a "正在准备"
+    /// pink card. Used by the test host and by the production fallback when the
+    /// bundled loading page is missing, so neither can fall back to old art.
+    private var startupPlaceholderHTML: String {
+        #"""
+        <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+        <style>
+          \#(CleBrowserPalette.cssVariables)
+          *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}
+          body{display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+          main{display:grid;justify-items:center;gap:18px;padding:32px;text-align:center}
+          .mark{width:96px;color:var(--ink)}
+          .mark svg{width:96px;height:auto;display:block}
+          .word{font:500 11px/1 var(--cle-mono,ui-monospace);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+          .bar{width:96px;height:1px;background:var(--line-strong);overflow:hidden;position:relative}
+          .bar::after{content:"";position:absolute;inset:0;background:var(--gaze);transform-origin:left;animation:prep 1.4s cubic-bezier(.45,0,.2,1) infinite}
+          @keyframes prep{0%{transform:scaleX(0)}55%{transform:scaleX(.72)}100%{transform:scaleX(0);transform-origin:right}}
+          @media(prefers-reduced-motion:reduce){.bar::after{animation:none;transform:scaleX(.5)}}
+        </style></head>
+        <body><main><div class="mark">\#(CleWordmark.startPageSVG)</div><div class="bar"></div><div class="word">C.le.</div></main></body></html>
+        """#
     }
 
     /// Readiness-only attachment used by the acceptance host. Everything that
@@ -2485,6 +2556,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// driver, gateway spawn/kill) stays off; only the browser workspace and the
     /// web UI bridge are initialised.
     private func startTestHostServices() {
+        // Touch the marker so the linker keeps it; `strings` on the built binary
+        // is how the controller proves a delivered .app is the isolated build.
+        NSLog("[CLE Kk test host] %@", RuntimeConfig.testHostBuildMarker)
         configureBrowserControl()
         Gateway.attachToExisting { [weak self] ready in
             DispatchQueue.main.async {
@@ -2860,13 +2934,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          :root{--paper:#fbfaf5;--surface:#fff;--ink:#15161a;--ink2:#15161a9e;--line:#15161a1f;--gaze:#2a63e8}
-          @media(prefers-color-scheme:dark){:root{--paper:#161412;--surface:#1f1c19;--ink:#f0ebe4;--ink2:#f0ebe4a8;--line:#ffffff21;--gaze:#79a0fa}}
+          \#(CleBrowserPalette.cssVariables)
           *{box-sizing:border-box}html,body{height:100%}
           body{margin:0;display:grid;place-items:center;background:var(--paper);font:14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--ink)}
           main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid var(--line);border-radius:20px;background:var(--surface);text-align:center}
-          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;border:1px solid var(--line);background:transparent;color:var(--gaze);font-size:22px}
-          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:var(--ink2);line-height:1.65}.detail{margin-top:12px;font-size:11px;color:var(--ink2);opacity:.8;word-break:break-word}
+          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;border:1px solid var(--line);color:var(--gaze);font-size:22px}
+          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:var(--ink2);line-height:1.65}.detail{margin-top:12px;font-size:11px;color:var(--ink3);word-break:break-word}
         </style><main><div class="mark">!</div><h1>页面没有加载成功</h1><p>点上方的重新加载再试；如果登录页仍被网络验证拦住，可点右上角“在默认浏览器打开”。</p><p class="detail">\#(detail)</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -3668,24 +3741,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     private func loadBrowserStartPage() {
-        // 起始页用 color-scheme + 媒体查询跟着全局深色走。配色用 C.le. 的
-        // 纸白/墨黑/金/冰蓝，不再回到旧版的粉色渐变。
+        // 起始页的颜色来自同一份 palette（与 tokens.css / cle.json 同步），
+        // 不再在任何页面里另写一套色值。
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          :root{--paper:#fbfaf5;--surface:#fff;--ink:#15161a;--ink2:#15161a9e;--line:#15161a1f;--gaze:#2a63e8;--gold:#c9a24a}
-          @media(prefers-color-scheme:dark){:root{--paper:#161412;--surface:#1f1c19;--ink:#f0ebe4;--ink2:#f0ebe4a8;--line:#ffffff21;--gaze:#79a0fa;--gold:#d7b467}}
+          \#(CleBrowserPalette.cssVariables)
           *{box-sizing:border-box}
           html,body{height:100%}
           body{margin:0;display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
           main{text-align:center;padding:36px;max-width:380px}
-          .mark{width:58px;height:58px;margin:0 auto 18px;display:grid;place-items:center;border:1px solid var(--line);border-radius:20px;background:var(--surface);color:var(--gold);font-size:24px}
-          h1{margin:0 0 6px;font-size:15px;font-weight:600;letter-spacing:.01em}
+          .mark{width:74px;margin:0 auto 18px;display:grid;place-items:center;color:var(--ink)}
+          .mark svg{width:74px;height:auto;display:block}
+          .mark svg path,.mark svg circle{fill:currentColor}
+          h1{margin:0 0 6px;font:600 15px/1.5 var(--cle-sans,-apple-system),"PingFang SC",sans-serif;letter-spacing:.01em}
           p{margin:0;color:var(--ink2);font-size:13px}
-          .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink2)}
-          kbd{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:2px 5px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)}
+          .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
         </style>
-        <main><div class="mark">◷</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+        <main><div class="mark">\#(CleWordmark.startPageSVG)</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
         <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
