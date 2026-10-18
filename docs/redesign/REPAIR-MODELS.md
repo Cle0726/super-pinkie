@@ -230,6 +230,91 @@ speed-option 5→0 等）。
 新增 1 条（共 11 条）按名钉住上述 12 条规则，任何一条再次被整段吞掉都会失败。
 62 → **63 项**相关测试全通过。
 
+## 三点七、第四轮：品牌图标错位与单侧缺眼（主控验收发现）
+
+主控在 1280×720、每 pane 508px、左 learning 右 project 的双栏下发现两个真实缺口；
+细轨、V4.1 六档、方向键、搜索精确 WB 已通过，本轮不做改动。
+
+### 缺口 1：品牌图标浮到文字左上角
+
+主控给的几何：`summary` 为 `(485.523, 673.898, 181.227, 32)`，
+文字 rect `(485.523, 682.398, 161.227, 15)` —— **两者左边界完全相同**，说明图标没有占位；
+`::before` computed 为 `position: absolute; left: 0; top: 0`，16×16。
+
+**层叠根因（不是我的规则写错位置，是少了一条复位）**：
+原生 2026.10 的 composer 模板里 `agent-chat__input--mobile-toolbar` 是**硬编码常量**
+（`control-ui-boot-chat-XcDaYmck.js`，无宽度条件），而该形态的 CSS 有一条：
+
+```css
+.agent-chat__input--mobile-toolbar
+  :is(.chat-controls__model-trigger, .chat-controls__effort-trigger)::before {
+    content: ""; background: 0 0; border-radius: var(--radius-full);
+    position: absolute; inset: 0;
+  }
+```
+
+我上一版的共享绘图规则只设了 `display: block` / `flex: 0 0 16px`，没有复位
+`position`。伪元素因此仍是**绝对定位**：脱离 flex 行、`left/top: 0` 贴到 summary
+左上角，而文字从下一行同一 x 开始 —— 正是主控看到的“鲸鱼在第一行左上、文字第二行”。
+
+**修复**：在**同一宿主类作用域内**复位，不做全局 `summary::before` 粗改：
+
+- 触发器：`position: static; inset: auto; left/top/right/bottom: auto; margin: 0;
+  transform: none; align-self: center` —— 图标回到 flex 行内，占 16px 槽位并与文字同 baseline；
+- 同时把原生该形态强制的 `min-width/min-height: 44px` 收回为 `27px`，否则 16px 图标会在
+  44px 盒子里居中偏移；
+- 行（`[data-chat-model-option]`）与 brand tab 保持各自的 absolute 定位不动 —— 它们本来就是
+  按行内偏移设计的，只统一 16×16 与 `background/mask` 双通道；
+- 未改任何厂牌色：彩色仍走 `--pinkie-brand-img`，单色仍走 `--pinkie-brand-mono`。
+
+**实测（原生 CSS 与构建 CSS 同层，且 composer 带 `--mobile-toolbar`）**：
+
+| 对象 | position | 尺寸 | 与文字关系 |
+|---|---|---|---|
+| trigger（deepseek） | `static` | 16×16 | 文字相对 summary 左移 27px = 16 图标 + 6 gap + 内边距，垂直居中 |
+| 4 个模型行 | `static` | 16×16 | 文字偏移一致 34px，四行 `centered: true` |
+
+### 缺口 2：刷新后两侧 eyes=0，点开右侧才出现 1 个
+
+**根因**：`mountGaze` 的观察器有两个缺陷：
+
+1. `for (const node of addedNodes) if (nodeType===1) { schedule(node); return; }`
+   —— **遇到第一个元素就 return**，同一批 mutation 里其余的 pane/summary 直接丢弃；
+2. `schedule()` 用单个布尔 `queued`，`queued === true` 时**后续 root 被丢掉**；
+3. 首帧只扫 `document` 一次，之后若 Lit 重建 summary 或 picker 晚一帧出现，
+   就没有任何机制补扫 —— 所以“必须点一下”才出现眼睛。
+
+**修复**（仍不逐 token 全扫）：
+
+- `pickersFor(node)`：把每个新增节点归一化成它所属的 picker（`closest(PICKER)`，
+  否则在自身/子树里找），**不再丢 root**；
+- `pending: Set<picker>` 去重收集，一帧合并 flush；flush 时**先快照再遍历**，
+  防止装饰过程中新增节点改变集合；
+- 自建节点（eye / stop 行 / tick / 原因行）全部打 `data-cle-owned="1"`，
+  观察器跳过它们，**杜绝自观察循环**；
+- `abort` 时 `disconnect()` + `cancelAnimationFrame(frame)` + `pending.clear()`，
+  abort 后不再写 DOM；
+- 仍只观察 `childList`，不观察 `characterData`，长回复流式输出不会重复全扫。
+
+**实测**：清空所有 `.cle-eye` 后 `mountGaze` → 两帧后 `eyes 0 → 2`，
+左 pane `high/open .68`、右 pane `max/open .93`，无需任何点击；重复 mount 仍为每侧 1 个（无叠加）。
+
+### 本轮测试
+
+新增 `tests/gaze-mount.test.cjs`（5 项，带 childList MutationObserver + rAF 的最小 DOM）：
+
+1. `mount` 时已存在的 picker **无需点击**即被装饰；
+2. **先 mount、后异步出现两个 picker**，且同一帧多条 mutation / 多 root，两侧都装饰；
+3. 原生 summary **被整体重建**后重新装饰；
+4. 自建节点不触发新的调度帧；
+5. abort 取消 pending 帧，之后不再写 DOM。
+
+`tests/model-controls-repair.test.cjs` 再增 2 条：图标必须 `position: static` 且作用域限定在
+picker 的 summary（禁止全局 `summary::before`）、`mountGaze` 必须是 `Set` 收集 + `cancelAnimationFrame`
++ 跳过 `cleOwned` 且不观察 `characterData`。
+
+相关测试 63 → **70 项全通过**；构建 `js 59.7 KB / css 77.6 KB`。
+
 ## 四、自主发现（本轮新增，非任务书原文）
 
 | # | 文件 / 选择器 | 触发条件 | 问题依据 | 修复 | 验证 |
