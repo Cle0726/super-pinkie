@@ -1,4 +1,36 @@
-# 并发修复验收记录 · 2026-10-18 · 第四轮
+# 并发修复验收记录 · 2026-10-18 · 第五轮
+
+**整体未通过，原会话继续返修。以下是最新状态，优先于全部历史记录。** 测试限定19789，未修改原版App/18789、权限、无限模式、全局模型或Claude艺术。
+
+| 范围 | 本轮实际通过 | 新发现 / 仍待处理 |
+|---|---|---|
+| 正文与输入比例 | 1280窗口中pane1022、正文与输入外壳均864px，已从原370px偏列恢复；学习正文16.5px/29.7px，6列表格864、长代码局部滚动、页面不横溢 | 麦克风参数通过键盘展开28px后，actions81→109，压文字17px；已带截图/测量交原layout修，设备选择功能保留 |
+| 分栏与入口交接 | 双栏各508，权限32px；菜单首项键盘焦点、已吸收工具不重复；真实开/关分栏后仍1只眼睛、1个功能入口、864px排版 | host实际先新activate后old dispose，旧main会抹新根标记，主控已用document lease修97826cd；不能拿旧失败截图当新通过 |
+| 模型与思考 | 0ae26ed已合；右High→Medium时真实参数、cle-level与eyeOpen=.52同步，左High/.68独立；已恢复自己的两QA High。思考强度4档菜单实际打开、未改档 | 真实工具运行中标签短暂变mm/deepseek-v4.1-flash，结束回WB；原models继续修可读名称，不改真实路由 |
+| 工作台与融合面板 | 多行实际点发送得到「收到」，工作台入口已在composer controls文档流中、没有盖send/voice；深浅功能面板620×688、记忆空态与思考菜单实看 | 全部legacy入口尚未穷举。常驻legacy拿退役host持续报错，原fusion的桥修订3992a8c又丢modechange/记忆关闭并重复刷新，审查退回未合 |
+| 断线与内部消息 | 1703字带代码、1778字无代码内部续跑两group，真实断线始终display:none/aria-hidden=true，正常答案保留；标题保持(已断开连接)…—C.le. | 学习条的已排队rAF在abort后重新挂DOM并暴露activation英文错误，重连会累积；原layout正在修，不冒充完整恢复通过。第4轮离线投递仅一份成功证据仍有效，本轮没重复 |
+| 离线表现 | 主控908945e保留document-owned CSS，实断线仅1份留存link，正文/输入外壳864px与配色字号保持；b317524加data-cle-active区分静态皮肤与活跃host | 退役后native composer内排版仍变矩形，侧栏原房间入口移除后空圈；已分别交layout/startup。不能靠保留皮肤假装在线或冻结旧操作 |
+| 启动与品牌 | 已合early guard、重复部署integrity/cache更新及preflight修订；明确stage根apply，同源/cle-early.js实际200；刷新首AX标题与断线标题C.le. | 首屏/断线工作区aria仍OpenClaw · 工作区菜单；startup扩展page lifetime chrome guard。一次goto的tab元数据瞬时旧名但同次AX已新名，未据此冒称可见帧闪烁 |
+| 真实特效与工具 | 本轮新增一次指定本地fixture的真实read工具，14秒返回CUA_TOOL_STATE_CHECK_20261018，结束live/停止按钮已清除；此前两侧并发及独立停止实际证据保留 | 本次采到think与read工具记录，未采到转瞬read视觉帧；暂停/性能/全阶段还不能声称实机穷举 |
+| 陪伴与原生浏览器 | 前轮五模式归属、各pane猫/rig、菜单/设置、native小窗四边四角/半幅AX键盘/fit/dark/本机存储持久证据有效 | 全陪伴动作/素材完整性、纯hover、真实第三方登录、模型协作/真人让行仍未完整实际覆盖；美术继续保留Claude成果 |
+
+本轮整合源：layout5f5cdf2、models0ae26ed、recovery2bd713c/7704a5f、fusion4f2c82c/8accc4c/bd844fc、startup07ce6e9/e100681/3ac6479/c493f5f/76f910d/e4cf6fb；公共入口97826cd/908945e/b317524。3992a8c桥**未合**：主控独立行为复现同key10次publish产生10次刷新、mode通知0、记忆关闭0、pre-aborted仍分配observer/订阅且online=true、跨ESM revision旧facade仍指向旧key。证据workspace outputs/bridge-review-fifth.json。
+
+验证记录：
+
+- layout相关41/41、models75/75（本轮早段）；recovery29+浏览器13，随后补pre-aborted修订并与activation/brand/startup合跑103/103；独立early guard12/12。
+- 融合旧并行73项有1项夜间采样波动；bd844fc改为等真实有限动画与3帧稳定，主控相关4套26/26复跑通过。没有降对比度阈值，也不冒称旧73/73。
+- 公共activation旧实现3项回归失败，修后3/3；后续skin与activation6/6通过。全量仍有历史11项基线失败，未声称全量绿。
+
+当前stage bundle **50553a5fede7**，日志stage-fifth-checkpoint.log；包含b317524活动标记。CUA实测active=1、retained link1、composer/眼睛/功能入口各1、空草稿、停止按钮0，检查点qa-checkpoint-fifth.json。热更期间仍有一次旧host失效toast，桥修订尚未通过。
+
+当前测试网关在线，live18789监听PID32067全程未变。每次只停官方完整20会话无active且cwd/PID核对通过的19789；测试PID96479→49385→52550→61201。未启动native Test.app或19894 fixture。原8个修复会话模型仍workbuddy/deepseek-v4.1-flash；layout/startup/models/fusion在原会话修新缺陷，不建替代会话，不反复重发原单。ACK见workspace manifest.cuaReviews。
+
+证据根目录：`/Users/Admin/Documents/Codex/2026-10-18/new-chat/outputs/`。主要测量qa-activation-fifth.json、qa-typography-fifth.json、qa-expanded-mic-fifth.json、qa-panels-fifth.json、qa-recovery-fifth.json、qa-offline-skin-fifth.json、qa-tool-phase-fifth.json、startup-http-fifth.json；汇总acceptance-measurements-round5.json。实际截图在验收/第五轮-*；其中“第五轮-单栏排版.png”为早先失败证据，通过图是“第五轮-交接修复后单栏.png”。
+
+后续先审查新增量与旧行为保留，补main公共桥接，再部署到19789并CUA复验。不收报告当通过，不生成改图。自动化保持ACTIVE，全部授权修复与实际验收完成后才停止回访。
+
+## 第四轮历史记录（以下不是最新状态）
 
 **整体未通过，继续修复与验收。下表优先于后面的历史记录。** Claude美术、原版18789、安装包、权限和无限模式配置保持原样。
 
