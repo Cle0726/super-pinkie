@@ -40,6 +40,12 @@ function slot() {
       externals: new Set(),
       // pending 请求：{timer, resolve, reject, method, sent}
       pending: new Set(),
+      // 每一代安装递增；外部订阅 wrapper 用它判断"我是否已被换掉"
+      generation: 0,
+      // 上一次通知出去的 mode。放在 slot 里而不是每次安装的局部，
+      // 因为重装 activation 时若 mode 已经变了，document 常驻消费者
+      // 也应得到一次正确通知，而不是等下一次无关 publish。
+      lastMode: null,
     };
     Object.defineProperty(doc, SLOT, {value: s, configurable: true, enumerable: false, writable: false});
   }
@@ -150,15 +156,26 @@ export function makeHostFacade() {
 // 外部订阅登记：返回的 unsubscribe 只影响自己，且重复调用安全。
 function addExternal(kind, name, fn) {
   const state = slot();
-  const record = {kind, name, fn, off: null};
+  const record = {kind, name, fn, off: null, wrapper: null};
   state.externals.add(record);
   const bind = () => {
     const host = state.online ? state.host : null;
     if (!host) { record.off = null; return; }
+    // 绑到 host 的必须是 wrapper，不能是原件：off 被调用之前，
+    // 旧一代已经排队的回调仍可能被 host 触发，没有 guard 就会作用到新/离线界面。
+    const generation = state.generation;
+    const boundTo = host;
+    const wrapper = (payload) => {
+      if (!state.externals.has(record)) return; // 外部已 unsubscribe
+      if (state.generation !== generation) return; // 已换代 / 已退役
+      if (state.host !== boundTo || !state.online) return;
+      try { fn(payload); } catch {}
+    };
+    record.wrapper = wrapper;
     try {
       record.off = kind === 'subscribe'
-        ? host.subscribe?.(fn)
-        : host.onEvent?.(name, fn);
+        ? host.subscribe?.(wrapper)
+        : host.onEvent?.(name, wrapper);
     } catch {
       record.off = null; // host 已退役：先记下，重连时再绑
     }
@@ -171,6 +188,17 @@ function addExternal(kind, name, fn) {
     record.off = null;
     if (off) { try { off(); } catch {} }
   };
+}
+
+// 彻底丢弃外部订阅登记：用于"这次安装没有活下来"的场景（已终止 signal）。
+// 与 unbindExternals 的区别：后者只撤 host 上的句柄，登记要留着给重连重绑。
+function clearExternals(state) {
+  for (const record of state.externals) {
+    const off = record.off;
+    record.off = null;
+    if (off) { try { off(); } catch {} }
+  }
+  state.externals.clear();
 }
 
 // 只解绑，不重绑：换代时先把旧 host 上的句柄全部撤掉。
@@ -194,14 +222,12 @@ function rebindExternals(state) {
 // 主动标记离线：保留最后只读 key；已发出的请求标未确认；回收 pending 与订阅。
 export function goOffline() {
   const state = slot();
+  state.generation++;
   state.online = false;
   state.host = null;
   abortPending(state, OFFLINE_MESSAGE);
-  for (const record of state.externals) {
-    const off = record.off;
-    record.off = null;
-    if (off) { try { off(); } catch {} }
-  }
+  // 显式下线没有"稍后重连同一代"，登记一并丢弃。
+  clearExternals(state);
   detachRound(state);
 }
 
@@ -232,15 +258,24 @@ function installOn(host, signal) {
   // 已经 aborted 的 signal：零资源装上，直接离线。不能装完 observe/subscribe 再等一个
   // 永远不会再触发的 abort 事件。
   if (signal && signal.aborted) {
-    detachRound(state);
+    // 已终止的 signal 意味着"这次安装立刻就是死的"。
+    // 它可能是 reinstall 时的替换失败：旧 host 上还有 pending 请求与外部订阅，
+    // 必须一并回收，否则 timer 挂着、调用方永不 settle、外部订阅还活在新界面上。
+    state.generation++;
     state.host = null;
     state.online = false;
+    abortPending(state, UNCONFIRMED_MESSAGE);
+    detachRound(state);
+    // 这一代没装上：外部订阅彻底丢弃（不是留着等重连，因为重连是另一次安装）。
+    clearExternals(state);
     // 零资源，但句柄仍要可用：调用方需要能查在线状态、拿到明确的离线错误。
     publishHandles();
     return installOn;
   }
 
   // 上一轮整体收掉（含 pending 定时器与旧 host 上的外部订阅）。
+  // generation++ 让所有旧 wrapper 立即失效，即使它们的 off 还没被 host 执行。
+  state.generation++;
   abortPending(state, UNCONFIRMED_MESSAGE);
   detachRound(state);
   unbindExternals(state);
@@ -253,6 +288,11 @@ function installOn(host, signal) {
   state.host = alive ? host : null;
   state.online = alive;
 
+  // 离线期间 mode 可能变过：document 常驻消费者不该等到下一次无关 publish 才知道。
+  // 首次安装（lastMode 还是 null）只建立基线，不补发——启动不该凭空造一次通知。
+  const currentMode = document.documentElement.dataset.cleRoom;
+  const needsModeCatchUp = alive && state.lastMode !== null && state.lastMode !== currentMode;
+
   publishHandles();
 
   // 重连后把外部订阅重绑到新 host（classic 只在 boot 订阅一次，不会自己重绑）。
@@ -261,19 +301,26 @@ function installOn(host, signal) {
   const stillMine = () => state.round === round;
 
   // 精确变化判定：同 key 同 mode 的重复 publish 必须零通知、零重新 fetch。
-  // 旧实现就是这样，被这轮重写弄丢了，导致常驻 sidebar 每次运行事件都强制 fetchMode(true)。
-  const lastMode = {value: document.documentElement.dataset.cleRoom};
+  // 顺序很关键：先把这一轮的 mode/key **快照提交**，再按变化各通知一次。
+  // 反过来（先 dispatch 再更新缓存）会让 modechange 的监听者在回调里通过 facade
+  // 读到上一轮的旧 key —— 这正是审查指出的竞态。
   const syncSelection = () => {
     if (!stillMine() || !state.online) return;
     const mode = document.documentElement.dataset.cleRoom;
-    if (mode !== lastMode.value) {
-      lastMode.value = mode;
+    const read = readSelectedKey(state.host);
+
+    // 先提交快照。lastMode === null 表示还没有基线：只记录，不算变化。
+    const hasBaseline = state.lastMode !== null;
+    const modeChanged = hasBaseline && state.lastMode !== mode;
+    if (!hasBaseline || modeChanged) state.lastMode = mode;
+    const keyChanged = read.ok && read.key !== state.lastSessionKey;
+    if (read.ok) state.lastSessionKey = read.key;
+
+    // 再通知（每个变化只发一次）
+    if (modeChanged) {
       window.dispatchEvent(new CustomEvent('laolao:modechange', {detail: {mode}}));
     }
-    const read = readSelectedKey(state.host);
-    if (!read.ok) return; // 已经读不到，交给 abort 流程，不制造假变化
-    if (read.key !== state.lastSessionKey) {
-      state.lastSessionKey = read.key;
+    if (keyChanged) {
       window.dispatchEvent(new CustomEvent('laolao:sessions-changed'));
       // 记忆编辑器属于打开它的那个 scope：scope 变了就关掉。
       window.__clekkMemoryUI?.close();
@@ -282,6 +329,13 @@ function installOn(host, signal) {
 
   const offSelection = safeCall(() => host.subscribe?.(syncSelection));
   const modeObserver = new MutationObserver(syncSelection);
+
+  // 建立基线；若是重装且 mode 已在离线期间变化，补发一次正确通知。
+  if (alive && state.lastMode === null) state.lastMode = currentMode;
+  if (needsModeCatchUp) {
+    state.lastMode = currentMode;
+    window.dispatchEvent(new CustomEvent('laolao:modechange', {detail: {mode: currentMode}}));
+  }
   modeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-room']});
 
   const offs = RELAYED.map((name) => safeCall(() => host.onEvent(name, (payload) => {
@@ -301,10 +355,14 @@ function installOn(host, signal) {
 
   const onOuterAbort = () => {
     if (state.round !== round) return; // 已被新桥取代，旧 activation 结束不得影响新桥
+    state.generation++;
     state.online = false;
     state.host = null;
     state.round = null;
     abortPending(state, UNCONFIRMED_MESSAGE);
+    // 只解绑、保留登记：classic 只在 boot 订阅一次，重连时必须能按新 host 重绑。
+    // 旧 wrapper 不会因此复活 —— 它的 guard 比对 generation 与 host，flush 后即失效。
+    unbindExternals(state);
     round.dispose();
   };
   if (signal) signal.addEventListener('abort', onOuterAbort, {once: true});
