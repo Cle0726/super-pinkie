@@ -1,11 +1,11 @@
 /* C.le. startup layer — first paint, before any plugin module runs.
  *
- * The Control UI ships upstream branding in index.html itself: the "OpenClaw Control" window
- * title, a lobster favicon, dark #0e1015 html/body and the claw red accent. The plugin can only fix
- * that after its bundle downloads, so the first frames show the old product. This sheet travels
- * *inside* index.html (apply-startup.mjs inlines it before </head>), so it is parsed before the
- * first paint and needs no extra request and no inline script (the gateway CSP allows inline
- * style, not inline script).
+ * The Control UI ships the previous product's branding in index.html itself: its window title, a
+ * lobster favicon, a near-black html/body and a red accent. The plugin can only fix that after its
+ * bundle downloads, so the first frames show the old product. This sheet travels *inside*
+ * index.html (apply-startup.mjs inlines it before </head>), so it is parsed before the first paint
+ * and needs no extra request and no inline script (the gateway CSP allows inline style, not
+ * inline script).
  *
  * Two tiers, deliberately different in lifetime:
  *   1. Brand cleanup  — permanent, idempotent with the plugin's own rules. Old mascot, the
@@ -46,6 +46,27 @@ aside.invite { display: none !important; }
 img.sidebar-workspace-header__mark {
   content: url('/cle/static/art/avatar.webp');
   object-fit: cover;
+}
+
+/* ---------- 1c. the workspace header's *text* mark ---------- */
+/* The header's name falls back to the upstream product name when the gateway publishes no
+   display name (the paint happens before any gateway answer). Until the plugin takes over, the
+   slot shows the C.le. wordmark instead of that string; afterwards the real agent name returns
+   unchanged, because this rule is scoped. Scoping matters: the plugin's own brand pass rewrites
+   only the literal word, and a permanent rule would flatten a user-chosen name. */
+html:not([data-cle]) .sidebar-agent-card__name-text {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+}
+html:not([data-cle]) .sidebar-agent-card__name-text::after {
+  content: "C.le.";
+  font: 500 13px/1.2 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .06em;
+  color: var(--text-strong, #15161A);
+}
+/* The chevron lives inside the name span; keep it visible and normally sized. */
+html:not([data-cle]) .sidebar-agent-card__name-text .sidebar-agent-card__chevron {
+  font-size: 0;
 }
 
 /* ---------- 2. first-paint tokens ---------- */
@@ -157,27 +178,41 @@ body.openclaw-mount-fallback-active openclaw-app:empty::before { display: none; 
   50% { opacity: .78; }
 }
 
-/* ---------- 4. the stock welcome identity ---------- */
-/* The stock welcome names the agent "OpenClaw" above a lobster avatar. The plugin's rooms.css
-   hides this block once data-cle is set, so leaving it visible means the old product shows
-   through on every refresh and again during a plugin hot reload.
+/* ---------- 4. the welcome identity ---------- */
+/* The stock welcome names the agent with the previous product's wordmark, above a lobster avatar.
+   Hiding the block is not enough — a hidden block is blank while the plugin loads, and revealing
+   it later puts the old wordmark back. Neither is acceptable: blank stands in for an error, and
+   the old brand must not return at any point.
  *
- * It is hidden unscoped, but only for as long as a plugin is plausibly still arriving: the same
- * 11s budget the native mount-fallback waits for. After that the native identity returns, and
- * if the bundle really failed the fallback panel is already on screen. Long silence never
- * stands in for a real error.
+ * So the block stays in place and is *rebranded in CSS*: the portrait museum-supplied by the
+ * project replaces the lobster avatar, and the copy line becomes the C.le. wordmark. The layout
+ * box, the hint line and everything around it stay exactly where the native renderer put them,
+ * so nothing shifts when the plugin takes over and swaps in the room's own opening.
  *
- * The setup notice ("connect a model") is deliberately not touched: hiding it would remove the
- * one instruction a half-configured install has. */
-.agent-chat__welcome-identity {
-  visibility: hidden;
-  animation: cle-brand-return 0s linear 11s forwards;
+ * The model-setup notice is untouched: it is the only instruction a half-configured install has,
+ * and it is not a brand element. A real failure is unaffected — the native fallback panel is a
+ * separate element and is never covered by this block. */
+html:not([data-cle]) .agent-chat__welcome-avatar {
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+  overflow: hidden;
 }
-@keyframes cle-brand-return { to { visibility: visible; } }
+/* The native avatar is an <img>, an inline <svg> or a text initial, depending on the build. */
+html:not([data-cle]) .agent-chat__welcome-avatar > * {
+  opacity: 0 !important;
+}
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2 {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+}
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
+  content: "C.le.";
+  font: 400 30px/1.15 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .04em;
+  color: var(--text-strong, #15161A);
+}
 
 @media (prefers-reduced-motion: reduce) {
   html:not([data-cle]) openclaw-app:empty::before { animation: none; opacity: .6; }
-  .agent-chat__welcome-identity { animation-duration: 0s; }
 }
 
 /* ---------- 5. the failure panel ---------- */
