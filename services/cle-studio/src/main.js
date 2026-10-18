@@ -1,8 +1,11 @@
 // C.le. Studio — browser entry. Loaded by OpenClaw as native plugin UI.
 import './styles/tokens.css';
 import './styles/shell.css';
+import './rooms/rooms.css';
 import {ensureTheme} from './core/theme.js';
 import {startBrandGuard} from './core/brand.js';
+import {mountRooms} from './rooms/rooms.js';
+import {blink} from './rooms/blink.js';
 
 const VERSION = '0.1.0';
 
@@ -14,7 +17,8 @@ export default {
     const html = document.documentElement;
     html.dataset.cle = VERSION;
     startBrandGuard(controller.signal);
-    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host});
+    const rooms = mountRooms(host, controller.signal);
+    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink});
     return () => {
       controller.abort();
       delete html.dataset.cle;

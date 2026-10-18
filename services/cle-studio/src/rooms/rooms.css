@@ -1,0 +1,64 @@
+/* ---------- room selector: replaces the stock agent card ---------- */
+html[data-cle] .sidebar-agent-card { display: none !important; }
+.cle-room {
+  appearance: none; border: 0; background: transparent; cursor: default;
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 9px;
+  height: 38px; padding: 0 8px 0 6px; margin: 0; border-radius: var(--cle-radius-ctl);
+  color: var(--cle-ink); text-align: left; min-width: 0; flex: 1 1 auto;
+  transition: background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+.cle-room:hover, .cle-room[aria-expanded="true"] { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
+.cle-room:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+.cle-room__mark { font: italic 400 17px/1 var(--cle-serif); letter-spacing: -.01em; color: var(--cle-ink); padding-right: 2px; }
+.cle-room__flower { width: 18px; height: 18px; color: var(--cle-ink-2); display: grid; }
+.cle-room__flower svg { width: 18px; height: 18px; }
+.cle-room__names { display: grid; line-height: 1.1; min-width: 0; }
+.cle-room__zh { font: 500 13.5px/1.1 var(--cle-serif); letter-spacing: .04em; white-space: nowrap; }
+.cle-room__fr { margin-top: 2px; font-size: 9.5px; }
+.cle-room__chev { width: 12px; height: 12px; color: var(--cle-ink-3); }
+
+/* ---------- room menu ---------- */
+.cle-room-menu {
+  position: fixed; z-index: 2147483000; padding: 6px;
+  background: var(--cle-surface); border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-card); box-shadow: var(--cle-shadow-pop);
+  animation: cle-pop var(--cle-t-base) var(--cle-ease);
+}
+.cle-room-menu[hidden] { display: none; }
+@keyframes cle-pop { from { opacity: 0; transform: translateY(-4px) scale(.985); } }
+.cle-room-menu__item {
+  appearance: none; border: 0; background: transparent; width: 100%;
+  display: grid; grid-template-columns: 20px auto 1fr auto; align-items: center; column-gap: 10px;
+  height: 36px; padding: 0 10px; border-radius: 9px; color: var(--cle-ink-2); text-align: left; cursor: default;
+}
+.cle-room-menu__item:hover, .cle-room-menu__item:focus-visible { outline: none; background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+.cle-room-menu__item[aria-current="true"] { color: var(--cle-ink); }
+.cle-room-menu__item[aria-current="true"] .cle-room-menu__flower { color: var(--cle-gaze); }
+.cle-room-menu__flower { width: 18px; height: 18px; display: grid; }
+.cle-room-menu__flower svg { width: 18px; height: 18px; }
+.cle-room-menu__zh { font: 500 14px/1 var(--cle-serif); letter-spacing: .05em; }
+.cle-room-menu__key { font: 10px/1 var(--cle-mono); color: var(--cle-ink-3); background: none; border: 0; }
+
+/* ---------- clin d'œil ---------- */
+.cle-blink { position: fixed; inset: 0; z-index: 2147483600; pointer-events: none; visibility: hidden; contain: strict; }
+.cle-blink.is-on { visibility: visible; pointer-events: auto; }
+.cle-blink__lid {
+  position: absolute; left: -4vw; right: -4vw; height: 66vh;
+  background: #08090C; will-change: transform;
+  box-shadow: 0 0 60px 30px rgba(8, 9, 12, .55);
+}
+.cle-blink__lid--top { top: 0; border-radius: 0 0 50% 50% / 0 0 14vh 14vh; transform: translateY(-101%); background: linear-gradient(180deg, #07080B 0%, #0A0C10 82%, #11141A 100%); }
+.cle-blink__lid--bottom { bottom: 0; border-radius: 50% 50% 0 0 / 14vh 14vh 0 0; transform: translateY(101%); background: linear-gradient(0deg, #07080B 0%, #0A0C10 82%, #11141A 100%); }
+.cle-blink__seam {
+  position: absolute; left: 18vw; right: 18vw; top: 50%; height: 1px; margin-top: -.5px;
+  background: linear-gradient(90deg, transparent, #38AEFF 30%, #9BE7FF 50%, #38AEFF 70%, transparent);
+  box-shadow: 0 0 18px 2px rgba(56, 174, 255, .45); opacity: 0; transform: scaleX(0);
+}
+.cle-blink__card {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  display: grid; justify-items: center; row-gap: 10px; color: #ECE8E1; opacity: 0;
+}
+.cle-blink__flower { width: 30px; height: 30px; color: #9BE7FF; display: grid; }
+.cle-blink__flower svg { width: 30px; height: 30px; }
+.cle-blink__zh { font: 400 30px/1 var(--cle-serif); letter-spacing: .32em; padding-left: .32em; }
+.cle-blink__fr { color: #8F8B84; letter-spacing: .3em; }

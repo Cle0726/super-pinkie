@@ -37,7 +37,7 @@ float lid(vec2 p, vec4 eye, float ang, float aperture){
   vec2 q = d / (vec2(eye.z, eye.w) * vec2(.62, .78));
   float across = clamp(1. - q.x*q.x, 0., 1.);
   float half_ = aperture * pow(across, .55);
-  float edge = .10 + .06 * (1. - aperture);
+  float edge = .025 + .09 * (1. - aperture);
   return (1. - smoothstep(half_ - edge, half_ + edge, abs(q.y))) * step(abs(q.x), 1.08);
 }
 float region(vec2 p, vec4 eye, float ang){
@@ -88,7 +88,7 @@ void main(){
 
     col = mix(col, lit, a);
     float g = texture(uGlow, uv).r * uGlowAmt * (.82 + .18 * uLid);
-    col += vec3(.10, .55, 1.) * g * .30 + vec3(.6, .9, 1.) * g * g * .10;
+    col += vec3(.08, .50, 1.) * g * .22 + vec3(.55, .88, 1.) * g * g * .06;
   }
 
   // film-like grain keeps the paint alive at any scale
@@ -98,10 +98,13 @@ void main(){
   float alpha = 1.;
   if (uReveal > 0.) {
     vec2 d = frag - uRevealAt; float r = length(d) / length(uRes);
-    float ang = atan(d.y, d.x);
-    float brush = fbm(vec2(ang * 3.2, r * 6.) + 3.1) * .11 + fbm(frag * .02) * .04;
-    float edge = uReveal * 1.25;
-    alpha = smoothstep(edge - .035, edge + .035, r + brush);
+    vec2 dir = d / max(length(d), 1e-3);
+    float fade = smoothstep(.0, .06, r);
+    // dry-brush: bristle streaks pushed outward, broken by canvas tooth (seamless: no angle wrap)
+    float bristle = fbm(dir * 46. + r * 2.2) * .10 + fbm(dir * 5. + r * 1.1 + 7.) * .035;
+    float brush = (bristle + (noise(frag * .06) - .5) * .025) * fade;
+    float edge = uReveal * .72 - .10;
+    alpha = smoothstep(edge - .012, edge + .012, r + brush);
   }
   outColor = vec4(col * alpha, alpha);
 }`;
@@ -124,7 +127,7 @@ function loadImage(src) {
   });
 }
 
-export async function createRegard(canvas, {base = './art/', reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches} = {}) {
+export async function createRegard(canvas, {base = './art/', signature = null, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches} = {}) {
   const gl = canvas.getContext('webgl2', {premultipliedAlpha: true, alpha: true, antialias: false});
   if (!gl) throw new Error('regard: webgl2 unavailable');
   const [meta, open, closed, glow] = await Promise.all([
@@ -182,7 +185,8 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
   let nextBlink = 0, blinkAt = -10;
 
   const state = (t) => {
-    const s = {expose: 0, lid: 0, glow: 0, rim: 0, reveal: 0, zoomK: 0, blink: 0};
+    const s = {expose: 0, lid: 0, glow: 0, rim: 0, reveal: 0, zoomK: 0, blink: 0, sign: 0};
+    s.sign = (mode === 'held' || mode === 'exit') && t >= T.hold ? 1 : seg(t, 2.65, 4.15);
     if (mode === 'held' || t >= T.hold) {
       const h = t - holdFrom;
       s.expose = 1; s.rim = 1; s.zoomK = 1;
@@ -219,10 +223,12 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
     const s = state(t);
     const W = canvas.width, H = canvas.height;
     // settled framing: head height ≈ 62% of the viewport; start: eyes fill ~70% of width
-    const settled = (H * .80) / (meta.size[1] * .62);
-    const close = (W * .72) / (eb.cx - ea.cx + ea.w * 1.6);
-    const zoom = close + (settled - close) * s.zoomK;
-    const cy = eyeMid.y + (meta.size[1] * .53 - eyeMid.y) * s.zoomK;
+    const box = meta.bbox || [0, 0, meta.size[0], meta.size[1]];
+    const settled = Math.min((H * .78) / box[3], (W * .70) / box[2]);
+    const close = (W * .46) / (eb.cx - ea.cx + ea.w * 2.2);
+    const k = s.zoomK;
+    const zoom = close * Math.pow(settled / close, k);          // log-space zoom feels like a steady dolly
+    const cy = eyeMid.y + (box[1] + box[3] * .5 - eyeMid.y) * k;
     gl.uniform2f(U.uRes, W, H);
     gl.uniform2f(U.uCenter, eyeMid.x, cy);
     gl.uniform1f(U.uZoom, zoom);
@@ -236,6 +242,17 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
     // reveal origin = between the eyes on screen
     const ex = W * .5 + (eyeMid.x - eyeMid.x) * zoom, ey = H * .5 - (eyeMid.y - cy) * zoom;
     gl.uniform2f(U.uRevealAt, ex, ey);
+    if (signature) {
+      const dpr = canvas.width / Math.max(1, canvas.clientWidth);
+      const bottom = (H * .5 + (box[1] + box[3] - cy) * zoom) / dpr;
+      const width = Math.min(220, box[2] * zoom / dpr * .46);
+      const el = signature.svg;
+      el.style.left = `${canvas.clientWidth / 2 - width / 2}px`;
+      el.style.top = `${Math.min(canvas.clientHeight - width * .5, bottom - width * .06)}px`;
+      el.style.width = `${width}px`;
+      el.style.opacity = String(Math.max(0, 1 - s.reveal * 3) * Math.min(1, s.sign * 6));
+      signature.write(s.sign);
+    }
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
