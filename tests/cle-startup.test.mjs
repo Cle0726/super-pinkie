@@ -890,3 +890,25 @@ test('the guard twin and manifest row follow a script-only change too', () => {
   const ledger = JSON.parse(fs.readFileSync(path.join(root, '.pinkie-startup-backup', 'ledger.json'), 'utf8'));
   assert.ok(ledger.files['cle-early.js.br'], 'the twin is in the ledger so revert can restore it');
 });
+
+test('the login gate removes the upstream name from the accessibility tree, not just the pixels', () => {
+  // font-size:0 hid the glyphs but left the string readable by a screen reader — the AX snapshot
+  // still started with "OpenClaw". Hiding the element removes it from that tree.
+  const nameRule = /\.login-gate__brand-name\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(nameRule, 'login gate name rule present');
+  assert.match(nameRule[1], /display:\s*none/u, 'removed from layout and from the AX tree');
+  assert.doesNotMatch(nameRule[1], /font-size:\s*0/u, 'the old pixels-only trick is gone');
+
+  // the brand is supplied on the header instead: approved portrait + wordmark
+  const before = /\.login-gate__brand::before\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(before, 'portrait rule present');
+  assert.match(before[1], /background:[^;]*avatar\.webp/u);
+  const after = /\.login-gate__brand::after\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(after, 'wordmark rule present');
+  assert.match(after[1], /content:\s*"C\.le\."/u);
+
+  // and the layer still only ever points at the approved artwork
+  for (const url of CSS.matchAll(/url\(['"]?([^'")]+)['"]?\)/gu)) {
+    assert.equal(url[1], '/cle/static/art/avatar.webp', `unexpected asset ${url[1]}`);
+  }
+});
