@@ -61,10 +61,16 @@ function summaryDisabled(details) {
 
 function reasonFor(details) {
   const summary = details.querySelector(':scope > summary');
-  // a reason captured before we ever touched the title outranks our own description
-  const title = summary?.dataset?.cleNativeTitle?.trim() || summary?.getAttribute('title')?.trim();
+  /* The live title first: the native picker rewrites it whenever the reason changes. Only if
+     it is still our own description do we fall back to a reason captured earlier, so a
+     stale "high 认真推敲" can never masquerade as the reason a control is locked. */
+  const live = summary?.getAttribute('title')?.trim() || '';
+  const own = summary?.dataset?.cleOwnTitle?.trim() || '';
+  const captured = summary?.dataset?.cleNativeTitle?.trim() || '';
+  const liveIsOurs = Boolean(live) && live === own;
+  const title = live && !liveIsOurs ? live : captured && captured !== own ? captured : '';
   if (title) return title;
-  return '此模型没有更多思考档位，或会话运行中不可调整';
+  return '此刻不可调整（会话运行中，或此模型不支持更多档位）';
 }
 
 function renderStops(details, stops) {
@@ -167,9 +173,15 @@ function decorateEffort(details) {
       || summary.classList.contains('chat-controls__inline-select-trigger--disabled');
     const nativeTitle = summary.getAttribute('title');
     if (disabled) {
-      // Ignore a title we wrote ourselves in an earlier pass; only a real native reason counts.
-      if (nativeTitle && nativeTitle !== summary.dataset.cleOwnTitle && summary.dataset.cleNativeTitle !== nativeTitle) {
+      /* Only a real native reason may be remembered. A descriptive title we wrote in an
+         earlier pass is not a reason, and capturing it would later hide the genuine one. */
+      const ours = summary.dataset.cleOwnTitle;
+      const looksOurs = Boolean(nativeTitle) && nativeTitle === ours;
+      if (nativeTitle && !looksOurs) {
         summary.dataset.cleNativeTitle = nativeTitle;
+      } else if (looksOurs) {
+        // keep whatever real reason was captured before; never let our own text win
+        delete summary.dataset.cleNativeTitle;
       }
     } else {
       const title = `思考强度 · ${L.tier}（${L.zh}）：${L.hint}`;
@@ -253,14 +265,28 @@ export function mountGaze(signal) {
   for (const picker of document.querySelectorAll(PICKER)) { pending.add(picker); }
   if (pending.size) frame = requestAnimationFrame(flush);
 
-  // Streaming rewrites text on every token; observing characterData would re-decorate the
-  // document dozens of times a second. Structure changes are rare and this only looks at
-  // picker subtrees, so the cost stays bounded even in a long reply.
+  /* The native picker commits a new level by rewriting summary attributes and its label
+     text — no node is added, so a childList-only observer never hears about it. Those
+     attribute names are exact and only ever appear on a picker trigger, so watching just
+     them is bounded: streaming prose changes text nodes, not these attributes. */
+  const WATCHED_ATTRS = [
+    'data-chat-thinking-value', 'data-chat-thinking-values',
+    'data-chat-thinking-disabled', 'aria-disabled', 'aria-label', 'title',
+  ];
   const mo = new MutationObserver((records) => {
     if (stopped) return;
     const roots = [];
     for (const record of records) {
       const target = record.target;
+      if (record.type === 'attributes') {
+        // Our own hint title must not re-arm the observer. Compare against the stored copy:
+        // by the time a record is delivered the attribute may already hold a newer value.
+        if (record.attributeName === 'title' && record.oldValue
+            && record.oldValue === target?.dataset?.cleOwnTitle) continue;
+        const owner = target?.nodeType === 1 ? target.closest?.(PICKER) : null;
+        if (owner) roots.push(owner);
+        continue;
+      }
       const owner = target?.nodeType === 1 ? target.closest?.(PICKER) : null;
       for (const node of record.addedNodes || []) {
         if (node.nodeType !== 1) continue;
@@ -272,7 +298,10 @@ export function mountGaze(signal) {
     }
     if (roots.length) schedule(...roots);
   });
-  mo.observe(document.body, {childList: true, subtree: true});
+  mo.observe(document.body, {
+    childList: true, subtree: true,
+    attributes: true, attributeFilter: WATCHED_ATTRS, attributeOldValue: true,
+  });
 
   const onEvent = (event) => {
     const picker = event.target?.closest?.(PICKER);

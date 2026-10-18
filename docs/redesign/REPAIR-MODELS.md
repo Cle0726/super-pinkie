@@ -315,6 +315,83 @@ picker 的 summary（禁止全局 `summary::before`）、`mountGaze` 必须是 `
 
 相关测试 63 → **70 项全通过**；构建 `js 59.7 KB / css 77.6 KB`。
 
+## 三点八、第五轮：方向键改档后眼睛不跟随（主控 CUA 复现）
+
+图标流内复位与双栏自动挂载已通过主控验收（`::before` position static、16×16、
+文字偏移 22px；单栏/双栏刷新后两个 picker 各 1 只眼睛），本轮只修参数同步，未改动已通过项。
+
+### 现象（主控给的实测序列）
+
+左学习 QA 保持 High；右项目 QA 打开思考菜单，原生 range 4 → 按 Left 变 3：
+
+- **原生已提交**：AX/参数 = Medium，`summary data-chat-thinking-value=medium`、label=Medium、title=Medium；
+- **我们没跟上**：`data-cle-level` 仍是 `high`，`.cle-eye` 仍 `data-cle-open=0.68`、`data-cle-sig=high|0`；
+- 隔一帧及后续独立 DOM 读取仍相同 —— **不是瞬态**，而是再也不会更新。
+
+### 根因
+
+`mountGaze` 的观察器只订阅 `childList`：
+
+```js
+mo.observe(document.body, {childList: true, subtree: true});
+```
+
+原生在会话 patch 完成后**只改 summary 的属性与 label 文本节点**，没有任何节点新增，
+所以观察器收不到任何记录。`input`/`change` 回调又发生在异步提交之前，那一刻
+`data-chat-thinking-value` 还是旧值，读到 Old 属正常；而提交后没有任何补扫 ——
+于是眼睛永久停在旧档位。
+
+### 修复
+
+1. **只观察精确属性白名单**（仍在 picker 子树内，不碰正文）：
+
+   ```js
+   const WATCHED_ATTRS = ['data-chat-thinking-value', 'data-chat-thinking-values',
+     'data-chat-thinking-disabled', 'aria-disabled', 'aria-label', 'title'];
+   mo.observe(document.body, {childList: true, subtree: true,
+     attributes: true, attributeFilter: WATCHED_ATTRS});
+   ```
+
+   流式正文只改文本节点、不改这些属性，因此长回复不会触发扫描；`characterData` 始终未观察。
+2. **属性记录归一化到所属 picker**：`target.closest(PICKER)` 后入 `pending: Set`，
+   与 childList 路径共用同一帧 flush、同样去重、同样在 `abort` 时取消。
+3. **自写属性不回声**：`data-cle-*`、`class` 均不在白名单；`title` 若是我们自己写的
+   描述（`data-cle-own-title` 相等）则跳过，避免“写 title → 触发观察 → 再写”的循环。
+4. **禁用原因以原生为准**：`reasonFor()` 先读实时 `title`；若它仍是我们自己的档位描述，
+   才回落到此前捕获的原生原因，否则给出诚实的通用说明。绝不把 “High 认真推敲”
+   当成锁定理由。
+
+### 新增行为测试（按真实顺序，不假定异步已完成）
+
+`tests/gaze-mount.test.cjs` 增 3 条：
+
+| 测试 | 覆盖 |
+|---|---|
+| `a level committed after input, with no added element, still reaches the eye` | 先 dispatch input 但 summary 仍 High（眼睛保持 0.68、不提前编造档位）→ 稍后**只改** `data-chat-thinking-value=medium` 与 label 文本（无 addedNodes）→ 眼睛最终 `0.52`、`sig` 为 `medium` 档 |
+| `reverting to High updates only that pane, and abort leaves the DOM alone` | 反向恢复 High 生效；另一侧不再被波及；abort 后再改属性不写 DOM |
+| `the observer watches only the picker attribute whitelist, not document text` | 订阅确实带 `attributeFilter`，且不含 `data-cle-*` / `class`，也没有 `characterData` |
+
+`tests/gaze-dom.test.cjs` 增 2 条并修好测试夹具（属性 ↔ `dataset` 反射、`title` property 反射）：
+
+- 我们自己写的档位描述永远不会被当作锁定原因；
+- 原生没有给出原因时，给出的是一句诚实的通用说明，而不是档位提示。
+
+**反向验证**：把 `observe` 退回只有 `childList` 后，上述 3 条立即失败（5 pass / 3 fail），
+确认它们真的锁住了这个根因，而不是跟着实现走的空断言。
+
+### 实测（原生 CSS 与构建 CSS 同层）
+
+- 主控序列复现：`max/.93` → 原生 input（属性未变，保持 `.93`）→ 只改属性为 medium
+  → **`medium/.52`，`sig` 为 `medium` 档**。
+- 六档往返 High → XHigh → Medium → Max → Ultra → High：
+  眼睛依次 `0.68 → 0.82 → 0.52 → 0.93 → 1 → 0.68`，`sig` 与原生属性逐档一致。
+- 单侧变化不影响另一侧；重复装饰不叠加眼睛（仍每侧 1 个，无自观察循环）。
+- 禁用切换：`data-chat-thinking-disabled=true` 时显示原生 “会话运行中，暂不可调整”，
+  解除后原因消失、`data-disabled` 清除。
+
+相关测试 70 → **75 项全通过**；构建 `js 60.2 KB / css 77.6 KB`。
+High 等真实标签、原生 range 参数、禁用理由、厂牌色、已通过的图标与挂载行为均未改动。
+
 ## 四、自主发现（本轮新增，非任务书原文）
 
 | # | 文件 / 选择器 | 触发条件 | 问题依据 | 修复 | 验证 |
