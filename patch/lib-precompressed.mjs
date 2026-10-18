@@ -120,6 +120,17 @@ function refreshManifest(root, files, report) {
   manifest.assets = sorted;
   manifest.generation = hash.digest('hex');
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  // 2026.10 index.html pins the build id; the gateway serves the newer local
+  // index.html only when that id moves with the manifest.
+  const indexPath = path.join(root, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    const html = fs.readFileSync(indexPath, 'utf8');
+    const bumped = html.replace(/(data-openclaw-control-ui-build-id="[^"\s]+)/u, `$1-${manifest.generation.slice(0, 12)}`);
+    if (bumped !== html) {
+      fs.writeFileSync(indexPath, bumped);
+      report.indexBuildId = 'updated';
+    }
+  }
   report.manifest = 'updated';
 }
 
