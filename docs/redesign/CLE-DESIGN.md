@@ -2,6 +2,14 @@
 
 Status: working document for the 2026-10 redesign (branch `redesign/cle`). Target runtime: OpenClaw 2026.10.4, auto-update off.
 
+## Latest user direction · 2026-10-18 (overrides older descriptions below)
+
+- The guardian is a **male**, jet-black Maine Coon with ice-blue eyes: handsome, strong and natural. Fine semi-realistic oil-painted fur with restrained gold/silver leaf. No flower on his head; one separate white camellia. References specify fur technique only; backgrounds and compositions are original.
+- The character's new name is not reliably confirmed. Older feminine 碧琪 naming and different flower species per mode below are historical design notes, not approved current requirements.
+- Preserve the original app's mature features and their usable entry points. Reuse its C.le. particle renderer, native browser, learning tools, workbench, rich content, companion actions, memory, research, connectors, automation and voice. Styling is not a reason to reduce functionality; area/radar fills, independent spaces and workflows remain available.
+- Native upstream replacements require behavior verification. The installed baseline and the open acceptance checklist are in `installed-feature-baseline.json` and `FEATURE-PARITY.md`; takeover progress is in `TAKEOVER.md`.
+- The opening remains a full-frame cinematic close-up with changes in framing. The simple composer and guardian companion both stay. This redesign is in staging and has not passed final delivery acceptance.
+
 ## 1. Idea
 
 **The guardian.** A black Maine Coon guards one small white flower. The interface is a quiet sheet of paper (day) or a dark ink room (night). The cat is ink. The flower is the work the user is protecting: a thought, a project, a lesson. Ice blue is the cat's gaze, and it has one job:
