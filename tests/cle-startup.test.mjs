@@ -576,6 +576,34 @@ test('the sidebar workspace text mark is branded before the plugin loads, and on
   assert.doesNotMatch(CSS, /(?:^|\n)\.sidebar-agent-card__name-text\s*\{/u);
 });
 
+test('the sidebar rules match the markup the 2026.10 boot bundle actually renders', () => {
+  // The name is wrapped by the hover-marquee helper, so the string lives one level deeper than
+  // the class the header passes in:
+  //   span.sidebar-agent-card__name-text.hover-marquee > span.hover-marquee__text
+  // A rule that only zeroed the outer span would leave the inner node contributing its own font
+  // metrics, so both levels are asserted here.
+  assert.match(CSS, /\.sidebar-agent-card__name-text \.hover-marquee__text\s*\{[^}]*font-size:\s*0/u);
+
+  // The header's mark has two branches: an <img src=favicon.svg> (default) and
+  // span.sidebar-workspace-header__mark--neutral holding an inline <svg> (theme mascot "none").
+  // Neither may be hidden — both must end up showing the approved portrait.
+  const imgRule = /\nimg\.sidebar-workspace-header__mark\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(imgRule, 'img branch handled');
+  assert.match(imgRule[1], /content:\s*url\(/);
+  assert.doesNotMatch(imgRule[1], /display:\s*none/);
+  const spanRule = /span\.sidebar-workspace-header__mark--neutral\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(spanRule, 'span branch handled');
+  assert.match(spanRule[1], /background:[^;]*avatar\.webp/u);
+  const glyphRule = /span\.sidebar-workspace-header__mark--neutral > svg\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(glyphRule, 'the inline glyph is neutralised rather than the whole mark');
+  assert.match(glyphRule[1], /opacity:\s*0/);
+
+  // only approved art is referenced — no new artwork invented for the startup layer
+  for (const url of CSS.matchAll(/url\(['"]?([^'")]+)['"]?\)/gu)) {
+    assert.match(url[1], /^\/cle\/static\/art\/avatar\.webp$/u, `unexpected asset ${url[1]}`);
+  }
+});
+
 test('declared icon sizes match the files on disk, and the files are real PNGs', () => {
   const dir = path.join(import.meta.dirname, '..', 'services/cle-studio/static/startup');
   const files = fs.readdirSync(dir).filter((name) => name.endsWith('.png')).sort();

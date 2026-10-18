@@ -31,12 +31,16 @@ const VERSION = '0.1.0';
 export default {
   id: 'cle-studio',
   activate(host) {
-    if (!ensureTheme()) return () => {};
     const controller = new AbortController();
+    // The brand guard has to run even on the activation that decides to reload for the theme:
+    // that activation still paints a document, and the router writes "— OpenClaw" into the title
+    // on its first render. Leaving the guard until after ensureTheme() returns true meant the
+    // very first session kept the upstream title and sidebar labels.
+    try { startBrandGuard(controller.signal); } catch (error) { console.error('[cle] brand guard failed', error); }
+    if (!ensureTheme()) return () => controller.abort();
     const html = document.documentElement;
     html.dataset.cle = VERSION;
     initModes();
-    try { startBrandGuard(controller.signal); } catch (error) { console.error('[cle] brand guard failed', error); }
     // the 2026.7 modules key night mode on data-pinkie-night; mirror the native theme mode
     const syncNight = () => html.toggleAttribute('data-pinkie-night', html.dataset.themeMode === 'dark');
     syncNight();

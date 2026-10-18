@@ -112,6 +112,12 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 
 | 13 | **`lib-precompressed.mjs` 每次刷新资产就追加一段 build-id，累积到超出网关上限。** 已用最小复现确认：每编辑一个受清单跟踪的资产并调用 `refreshPrecompressed`，`indexBuildId` 就 `updated` 一次、长度 +13。连做 4 次得到 120 → 133 → 146 → 159 → **172**（网关正则只允许 1–161），且形状不再是 `^<base>-<64hex>$`。后果是网关正则**完全匹配不到**，`buildId` 取不到 → 判 stale → 触发整棵 Control UI 重建 | `patch/lib-precompressed.mjs:128`；触发：安装器或 `apply-all` 在一次会话里改到 ≥4 个资产 | 高（**跨路，非本路引入**） | **本路未改它**（属 `patch/lib-precompressed.mjs` 所有权）。已核实本补丁单独运行时 build-id 保持 120 字符、形状合法，不参与放大。建议最小修法：先剥掉既有 `-<12hex>` 尾再追加，或固定 `set` 成合法值，使重复运行幂等 |
 
+| 14 | **运行时字标不是"隐藏得晚"，是根本没在被监听的地方改写。** 实测新开页面第一份 AX 仍是 `Main Session — OpenClaw` / `OpenClaw · 工作区菜单`，加载完成后才变 C.le.，打开拆分又短暂回到 `learning — OpenClaw`。根因：`core/brand.js` 只 `observe(document.body, {childList, subtree})`，而标题写在 `<head><title>` 里；且原生 `syncDocumentTitle()` 在 Lit 的 `updated()` 钩子上**每次导航都重写一遍** `${context} — OpenClaw`，再由 `applyControlUiPresentation()` 追加 ` · ${environment.label}`。一次性修补必然被覆盖 | `control-ui-core-9qYjK5B2.js` 的 `updated(e){this.syncDocumentTitle()...}` 与 `Uc()`；`control-ui-boot-shared-xfDhIVun.js` 的 `pu()` | 高（每次导航/拆分都闪回，用户可见） | 观察 `<head>` 与 `<title>`，并把 `syncTitle()` 提到**每个批次都跑**（标题是单次字符串比较，代价可忽略）；调度从 `requestIdleCallback(timeout:400)` 改为微任务，保证在本次任务之后、下一次绘制之前完成 |
+| 15 | **侧栏标签从未被覆盖，只处理了文本节点。** `aria-label` 由原生拼成 `${name} · 工作区菜单`，而 name 在网关应答前回落为产品名。`sweep()` 只改文本节点，`aria-label` 是属性，永远不会命中——这正是辅助功能树（AX）里仍读到旧名的原因 | `dv()`、`$h.renderContent()`；`aria-label="${t} · ${j('agentChip.workspaceMenuLabel')}"` | 中高（读屏用户持续看到旧标识） | 新增 `sweepChrome()` 只读侧栏块内的 `[aria-label]`，用 `localLabel()` **只替换前导产品名**；`OpenClaw Notes · 工作区菜单` 这类用户自选名保持原样 |
+| 16 | **CSS 侧栏选择器建立在旧类名假设上。** 名字实际是 `span.sidebar-agent-card__name-text.hover-marquee > span.hover-marquee__text`，只压外层仍会让内层用自身字体度量撑开行盒；工作区 mark 有**两个分支**：默认 `img[src=favicon.svg]`，主题 `mascot:"none"` 时是 `span.sidebar-workspace-header__mark--neutral > svg` | `dv()` 与 `jl()`（hover-marquee 助手） | 中（首帧可能残留小字或空圆） | 补 `.hover-marquee__text` 规则；span 分支改为在 span 上铺肖像并把内联 `svg` 设 `opacity:0`（隐藏整个 span 会留下没有标记的表头）；chevron 给回 12px 而不是跟着归零 |
+| 17 | **首次激活若触发主题 reload，品牌守卫根本不启动。** `activate()` 里 `if (!ensureTheme()) return () => {}` 在 `startBrandGuard()` 之前；`ensureTheme()` 换主题后会 `location.reload()` 并返回 false，而这一帧仍然会被绘制，标题与标签就留在旧值 | `services/cle-studio/src/main.js:32` | 中（首次安装的第一次会话） | 把 `startBrandGuard()` 提到 `ensureTheme()` 之前，reload 分支返回 `() => controller.abort()` 以正确回收 |
+| 18 | **外链黑名单没有锚定域名结尾。** `openclaw\.ai` 会匹配 `openclaw.ai.example.com`，把无关链接当成上游推广隐藏掉——违反"不重写正常链接" | `core/brand.js` 的 `EXTERNAL` | 中（误伤用户内容） | 改为按完整主机名锚定 `(?:[/?#]|$)`；`github.com` 单独按 `github\.com/openclaw` 全路径前缀匹配 |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -197,6 +203,32 @@ byte-exact restore on clean real package: true
 
 补丁执行后 `data-openclaw-control-ui-build-id` 保持原值（`…829c0937…` 64 位十六进制后缀完整）。
 
+### 品牌守卫（本轮扩展所有权：`services/cle-studio/src/core/brand.js`）
+
+```
+node --test tests/cle-brand-guard.test.mjs   → 16 pass / 0 fail
+同一套测试在 HEAD 的旧实现上            → 16 fail / 0 fail pass（证明用例真的抓得住缺陷）
+node --test tests/cle-startup.test.mjs       → 34 pass / 0 fail
+node patch/apply-all.mjs --keep              → 17 patches, patches failed: 0
+```
+
+守卫的边界与代价（都有对应用例）：
+
+| 约束 | 做法 | 验证 |
+|---|---|---|
+| 即时性 | 微任务调度，不依赖 `requestIdleCallback`；`syncTitle()` 每批次都跑 | 「written after activation is corrected on the next microtask batch」 |
+| 覆盖 `<head>` | 单独观察 `<title>`（childList + characterData）与 `<head>` childList | 「the environment suffix appended to the title is corrected too」 |
+| 不整页扫描 | 批次只重读该变更所属的侧栏块 + 该节点子树，`<body>` 上零次 `querySelectorAll` | 「does not scan the whole body…」「a batch only re-reads the chrome block it belongs to」 |
+| 卸载回收 | `AbortSignal` → `disconnect()` + 丢弃队列 | 「stops observing once the plugin unloads」「drops queued work」 |
+| 不碰用户内容 | `.chat-group/.chat-text/pre/code/textarea/[contenteditable]/.monaco-editor` 等一律跳过 | 「message bodies, code and documents are never rewritten」 |
+| 不碰用户自选名 | 只替换前导产品名，`OpenClaw Notes` 保留 | 「a user-chosen agent name is never rewritten」 |
+| 不误伤链接 | 主机名完整锚定 | 「promotion links are matched by full host」 |
+
+CSS 侧栏选择器已对照 core 实际 DOM 重写（发现 #16）：名字是
+`span.sidebar-agent-card__name-text.hover-marquee > span.hover-marquee__text`，
+mark 是 `img` / `span--neutral > svg` 两个分支，测试直接断言这两条规则存在且只引用
+`/cle/static/art/avatar.webp`（无新造图形）。真实包注入后实测四个探针全部命中。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -249,5 +281,26 @@ byte-exact restore on clean real package: true
   tests/cle-startup.test.mjs                     33 项（含 symlink 拒绝、twins+清单还原、
                                                  图标单独更新、备份不覆盖、身份/文字标识策略）
 ```
+
+补充 commit（本轮，运行时字标与侧栏所有权扩展）：
+
+```
+services/cle-studio/src/core/brand.js   观察 head/title、每批次同步标题、微任务调度、
+                                        sweepChrome 覆盖 aria-label、只替换前导产品名、
+                                        外链主机名完整锚定、abort 回收
+services/cle-studio/src/main.js         品牌守卫提到 ensureTheme() 之前（首次激活 reload 也生效）
+services/cle-studio/static/startup.css  按真实 DOM 补 hover-marquee__text 与 mark--neutral 分支
+tests/cle-brand-guard.test.mjs          新增 16 项（专用回归，含旧实现反向验证）
+tests/cle-startup.test.mjs              34 项（新增"选择器对照真实 DOM"一节）
+```
+
+未验证项（不虚构）：
+
+- **第一份 AX 的实际取值**需要主控在新开页面上读一次；本轮只验证了「原生写入后同一批次内被改写」的
+  时序与语义，微任务在绘制前完成是基于任务队列语义的推断，没有在真实 WebKit 上录帧。
+- **拆分开场 `learning — OpenClaw`** 同样走 `syncDocumentTitle()`，理论上已被同一路径覆盖，
+  但没有对拆分路由单独做端到端观察。
+- 守卫的 `sweep()` 仍保留既有行为：命中黑名单的推广链接会被移除 `href`；黑名单现已锚定，
+  但「哪些链接算推广」是产品判断，未扩大范围。
 
 commit 见回执。
