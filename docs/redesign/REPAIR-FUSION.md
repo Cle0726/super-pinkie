@@ -359,3 +359,56 @@ web-gpt-collab / user-settings / night-mode   45/45
 ```
 
 所有对比度断言的下限是 4.5:1，当前最低实测 4.52:1（用量胶囊强调态）。
+
+### 6. 补修：夜间对比度采样的稳定条件（主控并行 73 项时 1 失败）
+
+主控并行跑 73 项时 `cle-legacy-surfaces` 第 1 项失败，5 条夜间样本停在上一主题：
+
+```
+NIGHT ASK option strong  contrast=1.06   bg=rgb(244,239,228)  ← 浅色纸面
+NIGHT USAGE chip         contrast=2.35   bg=rgb(244,239,228)
+NIGHT USAGE cost         contrast=1.07   bg=rgb(21,22,26)
+NIGHT CARD primary       contrast=1.07   bg=rgb(21,22,26)
+NIGHT MEM primary        contrast=1.07   bg=rgb(21,22,26)
+```
+
+单独复跑同一套件 3 项全过 —— 说明不是 CSS 终态错，而是**采样窗口**不稳。
+我上一版用 `setTimeout(320)` 等主题过渡，那是等墙上时间，不是等过渡完成。
+
+**先量了真实时序**（无头 Chrome，逐帧记录 `transitionstart`/`transitionend`）：
+
+```
+T0   (切主题同步)   opt 仍是浅色，文字已变夜间
+T+60ms  started=12 ended=0
+T+180ms started=12 ended=0        ← 过渡还在跑
+T+240ms started=12 ended=12       ← 这时才真正结束
+T+320/500/800ms 数值完全一致       ← 终态稳定，且与 240ms 相同
+```
+
+结论：终态 CSS 是对的（`rgb(239,232,218)` 字 / `rgb(10,13,22)` 底 / 15.92:1），
+空闲时要 ~240ms，负载下更久。320ms 是余量问题，不是确定性。
+
+**改成确定的稳定条件**（不是加长 sleep、不是跳过夜间、不是降阈值）：
+
+1. 用 `getAnimations({subtree:true})` 等整棵子树里**有限时长**的过渡/动画归零；
+2. 再要求连续 3 帧的样式快照完全一致（排除"过渡已结束但首帧被 paint 推迟"）；
+3. 有界预算 4000ms，超时**判失败并输出当时还没停的动画名**，不是超时后照旧采样。
+
+这里有两个非显然的坑，也是之前只能靠 sleep 的原因：
+
+- 页面里有 **`laolao-runtime-dot` 1s infinite** 脉冲点（用量胶囊）。若把"所有动画都结束"
+  当条件，永远等不到 —— 所以只等 finite 动画，用 `effect.getComputedTiming().endTime` 判有限性。
+- 快照不能包含 `opacity`/`transform`：它们被无限脉冲持续改写，会让"稳定"永远不可达。
+  只用会因主题切换而过渡的属性（`color`/`background-color`/`border-*`/`box-shadow`/
+  `outline-color`/`fill`/`stroke`）。
+
+**复现与验证**：
+
+- 单跑 3 次：全过。
+- 并发 6 个 `cle-fusion-seams` + 3 个 `cle-utilities` + 3 个模块套件做重负载，
+  同时跑本套件：通过。
+- 相关 5 个套件全量复跑：通过。
+- 新增断言（防止有人改回 sleep）：
+  - 输出里出现 `SETTLE FAILED` 直接失败（要求的是"稳定"，不是"跑完"）；
+  - 夜间样本背景亮度必须 < 0.5，覆盖"文字也还停在浅色、对比度恰好不低"的中途采样。
+    说明：主控那 5 条本来就会被 4.5 阈值拦住（1.06/2.35/1.07），这条是额外一层。

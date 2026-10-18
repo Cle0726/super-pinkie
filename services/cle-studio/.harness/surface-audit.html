@@ -134,6 +134,55 @@
   const log = [];
   const say = (l) => { log.push(l); document.getElementById('audit').textContent = log.join('\n'); };
 
+  /* ── 主题切换后的确定稳定条件 ────────────────────────────────────────────
+     不能用固定 sleep：实测这些组件带 background/border-color 过渡，空闲时要 ~240ms
+     才走完，负载高时更久；320ms 只是"墙上时间"，不是"过渡已完成"。
+     这里用两层判定，任一不满足都算失败而不是静默通过：
+       1) 该元素没有正在运行的 transition/animation；
+       2) 连续若干帧读到的计算值完全一致（排除过渡已结束但首帧被 paint 推迟）。
+     始终有界：超过 BUDGET_MS 抛错，并把当时的未完成动画名带进失败输出。 */
+  const SETTLE_FRAMES = 3;
+  const SETTLE_BUDGET_MS = 4000;
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  // 只能等"有限时长"的过渡/动画。页面里有 1s infinite 的脉冲点（laolao-runtime-dot），
+  // 如果连无限循环也等，就永远等不到稳定——那正是之前只能靠 sleep 硬凑的根因。
+  const isFiniteAnim = (a) => {
+    const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : null;
+    if (!t) return true;
+    return Number.isFinite(t.endTime) || Number.isFinite(t.activeDuration);
+  };
+  const pendingFinite = (anims) => anims.filter((a) =>
+    (a.playState === 'running' || a.playState === 'pending') && isFiniteAnim(a));
+
+  // 参与稳定性判定的样式量：只管会因主题切换而过渡的那些属性。
+  // 不把 opacity/transform 放进来：它们被无限脉冲动画持续改写，放进来会让"稳定"永远不可达。
+  const THEME_PROPS = ['color', 'backgroundColor', 'borderTopColor', 'borderRightColor',
+    'borderBottomColor', 'borderLeftColor', 'boxShadow', 'outlineColor', 'fill', 'stroke'];
+  const snapshot = (el) => {
+    const cs = getComputedStyle(el);
+    return THEME_PROPS.map((p) => cs[p]).join('|');
+  };
+
+  async function settleTree(root, label) {
+    const started = performance.now();
+    const stuck = new Set();
+    let prev = null, stable = 0;
+    while (performance.now() - started < SETTLE_BUDGET_MS) {
+      await frame();
+      const all = root && root.getAnimations ? root.getAnimations({subtree: true}) : [];
+      const running = pendingFinite(all);
+      if (running.length) {
+        stable = 0; prev = null;
+        for (const a of running) stuck.add(a.transitionProperty || a.animationName || a.constructor.name);
+        continue;
+      }
+      const now = Array.from(root.querySelectorAll('*')).slice(0, 500).map(snapshot).join('\n');
+      if (now === prev) { if (++stable >= SETTLE_FRAMES) return {ok: true, waited: Math.round(performance.now() - started)}; }
+      else { prev = now; stable = 1; }
+    }
+    return {ok: false, reason: `${label} 在 ${SETTLE_BUDGET_MS}ms 内未稳定`, running: [...stuck].join(',')};
+  }
+
   /* 让浏览器自己解析 var()：把声明写到一个探针元素上，读回 computed style。
      返回 null 表示"浏览器在解析后丢弃了这条声明"（正是无效声明的特征）。 */
   function probe(el, prop, value) {
@@ -352,10 +401,10 @@
   /* ── 夜间：每个元素在切主题前先克隆一份，避免量到旧的样式对象 ── */
   document.documentElement.dataset.themeMode = 'dark';
   void document.body.offsetHeight;
-  // 组件上有 background 过渡（0.18s）：必须等过渡结束再量，否则读到的是过渡起点。
-  await new Promise((r) => setTimeout(r, 320));
-
+  // 等真实过渡结束（不是等墙钟）：整棵 stage 子树的 transition/animation 归零后再等计算值稳 3 帧。
+  const nightSettle = await settleTree(document.getElementById('stage'), 'NIGHT 主题');
   const night = [];
+  if (!nightSettle.ok) night.push(`NIGHT SETTLE FAILED ${nightSettle.reason} running=[${nightSettle.running}]`);
   const darkBgOf = (el) => {
     for (let n = el; n; n = n.parentElement) {
       const bg = getComputedStyle(n).backgroundColor;
@@ -459,11 +508,12 @@
   await runModules('LIGHT');
   document.documentElement.dataset.themeMode = 'dark';
   void document.body.offsetHeight;
-  await new Promise((r) => setTimeout(r, 320));
+  const moduleNightSettle = await settleTree(document.getElementById('stage'), 'NIGHT 模块');
   await runModules('NIGHT');
+  if (!moduleNightSettle.ok) say(`MODULE NIGHT SETTLE FAILED ${moduleNightSettle.reason} running=[${moduleNightSettle.running}]`);
   document.documentElement.dataset.themeMode = 'light';
   void document.body.offsetHeight;
-  await new Promise((r) => setTimeout(r, 320));
+  await settleTree(document.getElementById('stage'), 'LIGHT 复原');
 
   moduleProbes.forEach(say);
 
