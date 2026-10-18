@@ -80,11 +80,25 @@ class Text extends Node {
 }
 
 class Element extends Node {
-  constructor(tag) {
+  constructor(tag, attrs = {}) {
     super(1, tag.toUpperCase());
     this.tagName = tag.toUpperCase();
     this.localName = tag.toLowerCase();
-    this.className = '';
+    this.className = attrs.class ?? '';
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === 'class') continue;
+      this.attrs.set(key, String(value));
+    }
+  }
+  setAttribute(name, value) {
+    this.attrs.set(name, String(value));
+    notify(this, 'attributes');
+  }
+  getAttribute(name) { return this.attrs.has(name) ? this.attrs.get(name) : null; }
+  hasAttribute(name) { return this.attrs.has(name); }
+  removeAttribute(name) {
+    this.attrs.delete(name);
+    notify(this, 'attributes');
   }
 }
 
@@ -354,4 +368,129 @@ test('the guard survives a document-level title reset without a plugin', async (
   document._title.appendChild(new Text('Sidebar — OpenClaw'));
   await deliver();
   assert.equal(document.title, 'Sidebar — C.le.');
+});
+
+/* ---------- product chrome across the plugin lifecycle ---------- */
+
+/** Build the sidebar exactly as control-ui-boot-shared renders it. */
+function makeSidebar(document, {name = 'OpenClaw'} = {}) {
+  const header = new Element('div', {class: 'sidebar-workspace-header'});
+  const button = new Element('button', {class: 'sidebar-workspace-header__main'});
+  button.setAttribute('aria-label', `${name} · 工作区菜单`);
+  const mark = new Element('span', {class: 'sidebar-workspace-header__mark'});
+  const text = new Element('span', {class: 'sidebar-agent-card__text'});
+  const nameWrap = new Element('span', {class: 'sidebar-agent-card__name'});
+  const marquee = new Element('span', {class: 'sidebar-agent-card__name-text hover-marquee'});
+  marquee.appendChild(new Text(name));
+  nameWrap.appendChild(marquee);
+  text.appendChild(nameWrap);
+  button.appendChild(mark);
+  button.appendChild(text);
+  header.appendChild(button);
+  document.body.appendChild(header);
+  return {header, button, marquee};
+}
+
+test('the workspace label is rebranded at first paint, before any plugin code', async () => {
+  const document = makeDocument('C.le.');
+  const {button} = makeSidebar(document, {name: 'OpenClaw'});
+  loadGuard(document);
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+});
+
+test('the label is rebranded again after the plugin retires and the app restores it', async () => {
+  // The reported failure: a disconnect ends activation, the plugin's guard is gone, and the native
+  // sidebar re-render put the upstream name back — visible in the first disconnected AX sample.
+  const document = makeDocument('C.le.');
+  const {button} = makeSidebar(document, {name: 'OpenClaw'});
+  loadGuard(document);
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+
+  // the native app re-renders the label verbatim; no plugin is alive to help
+  button.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'page-level guard still owns it');
+});
+
+test('an attribute-only label update is corrected without any other DOM change', async () => {
+  const document = makeDocument('C.le.');
+  const {button} = makeSidebar(document, {name: 'C.le.'});
+  loadGuard(document);
+  button.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+});
+
+test('the fallback marker follows the name slot, and clears for a chosen name', async () => {
+  const document = makeDocument('C.le.');
+  const {marquee} = makeSidebar(document, {name: 'OpenClaw'});
+  loadGuard(document);
+  assert.equal(marquee.hasAttribute('data-cle-fallback'), true, 'fallback is marked so CSS brands it');
+
+  // the gateway answers with the user's own name
+  marquee.childNodes.length = 0;
+  marquee.appendChild(new Text('碧琪的工作区'));
+  await deliver();
+  assert.equal(marquee.hasAttribute('data-cle-fallback'), false, 'a chosen name keeps its own glyphs');
+  assert.equal(marquee.textContent, '碧琪的工作区', 'and is not rewritten');
+
+  // and it re-marks if the app falls back again (e.g. after a disconnect clears the identity)
+  marquee.childNodes.length = 0;
+  marquee.appendChild(new Text('OpenClaw'));
+  await deliver();
+  assert.equal(marquee.hasAttribute('data-cle-fallback'), true);
+});
+
+test('a user-named agent keeps its label across every sync', async () => {
+  const document = makeDocument('C.le.');
+  const {button} = makeSidebar(document, {name: 'OpenClaw Notes'});
+  loadGuard(document);
+  assert.equal(button.getAttribute('aria-label'), 'OpenClaw Notes · 工作区菜单');
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'OpenClaw Notes · 工作区菜单');
+  button.setAttribute('aria-label', 'OpenClaw Notes · 工作区菜单');
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'OpenClaw Notes · 工作区菜单');
+});
+
+test('the chrome rules and the plugin rules agree on every label shape', async () => {
+  const {pathToFileURL} = await import('node:url');
+  const mod = await import(pathToFileURL(
+    path.join(import.meta.dirname, '..', 'services', 'cle-studio', 'src', 'core', 'brand.js'),
+  ).href);
+  const document = makeDocument('x');
+  const {sandbox} = loadGuard(document);
+  const early = sandbox.__cleEarlyBrandGuard.localLabel;
+  const inputs = [
+    'OpenClaw · 工作区菜单', 'OpenClaw · 智能体菜单', 'OpenClaw',
+    'OpenClaw Control', 'OpenClaw Control · 工作区菜单',
+    'OpenClaw Notes · 工作区菜单', 'My OpenClaw · 工作区菜单',
+    'OpenClaw Controls · 工作区菜单', '碧琪 · 工作区菜单', '',
+  ];
+  for (const input of inputs) {
+    assert.equal(early(input), mod.localLabel(input), `disagree on ${JSON.stringify(input)}`);
+  }
+  // and the round trip is stable
+  for (const input of inputs) {
+    const once = mod.localLabel(input);
+    assert.equal(mod.localLabel(once), once, `not idempotent: ${JSON.stringify(input)}`);
+  }
+});
+
+test('messages, code and third-party labels are never rewritten', async () => {
+  const document = makeDocument('C.le.');
+  // a user message that mentions the product, and an unrelated labelled control
+  const chat = new Element('div', {class: 'chat-group'});
+  const bubble = new Element('div', {class: 'chat-text'});
+  bubble.appendChild(new Text('OpenClaw 是上游项目名'));
+  chat.appendChild(bubble);
+  document.body.appendChild(chat);
+  const other = new Element('button', {class: 'third-party-action'});
+  other.setAttribute('aria-label', 'OpenClaw · 第三方控件');
+  document.body.appendChild(other);
+
+  loadGuard(document);
+  await deliver();
+  assert.equal(bubble.textContent, 'OpenClaw 是上游项目名', 'user message intact');
+  assert.equal(other.getAttribute('aria-label'), 'OpenClaw · 第三方控件', 'third-party label untouched');
 });

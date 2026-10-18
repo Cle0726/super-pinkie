@@ -42,7 +42,7 @@ const CONTENT = '.chat-group, .chat-text, .chat-bubble, pre, code, textarea, inp
 // so a rule that only targets the outer span has to zero the font-size to reach the inner text.
 const CHROME = '.sidebar-workspace-header__main, .sidebar-agent-card__main, .sidebar-workspace-header, .sidebar-agent-card';
 // Separator the native app uses between chrome parts in labels ("name · 工作区菜单").
-const LABEL_SEP = ' · ';
+const LABEL_SEPARATORS = [' · ', ' — '];
 
 export function brandStyles() {
   return `${HIDE.join(',')}{display:none!important}`;
@@ -101,10 +101,17 @@ export function localLabel(label) {
   if (typeof label !== 'string') return label;
   if (!label.startsWith('OpenClaw')) return label;
   const rest = label.slice('OpenClaw'.length);
+  // The bare product token, optionally followed by " Control" (the app's own longer form).
+  if (rest === '') return 'C.le.';
+  if (rest.startsWith(' Control')) {
+    const afterControl = rest.slice(' Control'.length);
+    if (afterControl === '') return 'C.le.';
+    // "OpenClaw Controls …" is a different word, not the product token.
+    return LABEL_SEPARATORS.some((sep) => afterControl.startsWith(sep)) ? `C.le.${afterControl}` : label;
+  }
   // Only a separator or the end of the string may follow the product name. Anything else means
   // this is not the product-name prefix (e.g. a user-named agent called "OpenClaw Notes").
-  if (rest !== '' && !rest.startsWith(LABEL_SEP) && !rest.startsWith(' — ')) return label;
-  return `C.le.${rest}`;
+  return LABEL_SEPARATORS.some((sep) => rest.startsWith(sep)) ? `C.le.${rest}` : label;
 }
 
 function sweep(root) {
@@ -157,6 +164,29 @@ function chromeScopeFor(node) {
   return element?.closest?.(CHROME) ?? null;
 }
 
+/**
+ * Mark the name slot only while it still shows the upstream fallback.
+ *
+ * The stylesheet keys the wordmark rule on this attribute rather than on html:not([data-cle]),
+ * because the latter made the brand disappear the moment the plugin retired. A user-chosen name
+ * clears the mark and keeps its own glyphs.
+ */
+const FALLBACK_ATTR = 'data-cle-fallback';
+const FALLBACK_TEXT = /^\s*OpenClaw(?:\s+Control)?\s*$/u;
+export function syncNameFallback(root = document) {
+  let changed = 0;
+  for (const slot of root.querySelectorAll?.('.sidebar-agent-card__name-text') || []) {
+    const isFallback = FALLBACK_TEXT.test(slot.textContent || '');
+    if (isFallback) {
+      if (!slot.hasAttribute(FALLBACK_ATTR)) { slot.setAttribute(FALLBACK_ATTR, ''); changed += 1; }
+    } else if (slot.hasAttribute(FALLBACK_ATTR)) {
+      slot.removeAttribute(FALLBACK_ATTR);
+      changed += 1;
+    }
+  }
+  return changed;
+}
+
 /** Chrome-only pass: sidebar labels and marks. Returns how many nodes it changed. */
 export function sweepChrome(root = document) {
   let changed = 0;
@@ -181,6 +211,7 @@ export function sweepChrome(root = document) {
     const next = localLabel(label);
     if (next !== label) { node.setAttribute('aria-label', next); changed += 1; }
   }
+  changed += syncNameFallback(root);
   return changed;
 }
 

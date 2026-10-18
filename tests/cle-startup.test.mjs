@@ -561,18 +561,23 @@ test('the welcome identity is always C.le., never blank and never the old wordma
   assert.doesNotMatch(CSS, /\.mount-fallback(?:__panel)?\s*\{[^}]*display:\s*none/u);
 });
 
-test('the sidebar workspace text mark is branded before the plugin loads, and only then', () => {
-  // The native header falls back to the upstream product name when no display name is known.
-  // Scoping matters: unscoped, the plugin's real agent name would be replaced by the wordmark.
-  const rule = /html:not\(\[data-cle\]\) \.sidebar-agent-card__name-text\s*\{([^}]*)\}/u.exec(CSS);
-  assert.ok(rule, 'text mark rule present');
+test('the sidebar text mark survives the plugin retiring, and still spares a chosen name', () => {
+  // The rule used to be scoped to html:not([data-cle]); that meant a disconnect (which ends
+  // activation) brought the upstream wordmark back. It is now keyed on the fallback state instead,
+  // so the brand outlives the plugin without flattening a user-chosen name.
+  const rule = /\.sidebar-agent-card__name-text\[data-cle-fallback\]\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(rule, 'fallback-keyed rule present');
   assert.match(rule[1], /font-size:\s*0/);
-  const wordmark = /html:not\(\[data-cle\]\) \.sidebar-agent-card__name-text::after\s*\{([^}]*)\}/u.exec(CSS);
-  assert.ok(wordmark, 'text mark wordmark present');
+  const wordmark = /\.sidebar-agent-card__name-text\[data-cle-fallback\]::after\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(wordmark, 'wordmark present');
   assert.match(wordmark[1], /content:\s*"C\.le\."/);
+
+  // it must NOT be gated on the plugin being alive any more
+  assert.doesNotMatch(CSS, /html:not\(\[data-cle\]\) \.sidebar-agent-card__name-text/u);
+
   // the chevron sits inside the same span and must not be squashed away with the text
   assert.match(CSS, /sidebar-agent-card__chevron/);
-  // no unscoped rule may flatten the agent name
+  // no unconditional rule may flatten the agent name
   assert.doesNotMatch(CSS, /(?:^|\n)\.sidebar-agent-card__name-text\s*\{/u);
 });
 
@@ -582,7 +587,7 @@ test('the sidebar rules match the markup the 2026.10 boot bundle actually render
   //   span.sidebar-agent-card__name-text.hover-marquee > span.hover-marquee__text
   // A rule that only zeroed the outer span would leave the inner node contributing its own font
   // metrics, so both levels are asserted here.
-  assert.match(CSS, /\.sidebar-agent-card__name-text \.hover-marquee__text\s*\{[^}]*font-size:\s*0/u);
+  assert.match(CSS, /\.sidebar-agent-card__name-text\[data-cle-fallback\] \.hover-marquee__text\s*\{[^}]*font-size:\s*0/u);
 
   // The header's mark has two branches: an <img src=favicon.svg> (default) and
   // span.sidebar-workspace-header__mark--neutral holding an inline <svg> (theme mascot "none").
@@ -911,4 +916,47 @@ test('the login gate removes the upstream name from the accessibility tree, not 
   for (const url of CSS.matchAll(/url\(['"]?([^'")]+)['"]?\)/gu)) {
     assert.equal(url[1], '/cle/static/art/avatar.webp', `unexpected asset ${url[1]}`);
   }
+});
+
+/* ---------- retired document skin (data-cle retained, data-cle-active removed) ---------- */
+
+const ROOMS_CSS = fs.readFileSync(path.join(import.meta.dirname, '..', 'services/cle-studio', 'src', 'rooms', 'rooms.css'), 'utf8');
+
+test('the sidebar keeps a wordmark name while the plugin is retired, without depending on :has()', () => {
+  // rooms.css hides the native header text under [data-cle] and its .cle-brandmark only exists
+  // while a plugin instance is mounted; after a disconnect the corner was an empty gold ring.
+  const rule = /html\[data-cle\]:not\(\[data-cle-active\]\) \.sidebar-brand::before\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(rule, 'retired-state fallback present');
+  assert.match(rule[1], /content:\s*"C\.le\."/u);
+  // it must not be an image or a mask — a real string is what reaches the accessibility tree
+  assert.doesNotMatch(rule[1], /background|mask|url\(/u);
+  // and the rule must not rely on :has(), which the target WebKit cannot be trusted with here.
+  // Strip comments first: the explanation above the rule mentions :has() on purpose.
+  const block = CSS.replace(/\/\*[\s\S]*?\*\//gu, '');
+  assert.doesNotMatch(block, /:has\(/u, 'no :has() in the live rules');
+
+  // the header button also gets an accessible name, visually hidden but present
+  const name = /html\[data-cle\]:not\(\[data-cle-active\]\) \.sidebar-workspace-header__main::after\s*\{([^}]*)\}/u.exec(CSS);
+  assert.ok(name, 'header accessible name present');
+  assert.match(name[1], /content:\s*"C\.le\."/u);
+  assert.match(name[1], /clip-path:\s*inset\(50%\)|clip:\s*rect/u, 'visually hidden, not display:none');
+});
+
+test('the retired fallback is gated on the active marker, so it never fights a live plugin', () => {
+  // data-cle alone means "document skin retained"; only data-cle-active means a live instance.
+  for (const match of CSS.matchAll(/html\[data-cle\]:not\(\[data-cle-active\]\)[^{]*\{/gu)) {
+    assert.ok(match[0].includes('data-cle-active'), match[0]);
+  }
+  // and nothing may treat a retained data-cle as "plugin online"
+  assert.doesNotMatch(CSS, /html\[data-cle\]\s+\.agent-chat__composer-shell/u);
+});
+
+test('Claude\'s welcome art and the rooms file are untouched by the startup layer', () => {
+  // rooms.css belongs to the art pass; startup.css must not restate its selectors.
+  for (const selector of ['.cle-brandmark {', '.cle-room {', '.cle-welcome__line']) {
+    assert.doesNotMatch(CSS, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'), `startup must not own ${selector}`);
+  }
+  // and it never hides the app or the failure panel
+  assert.doesNotMatch(CSS, /openclaw-app\s*\{[^}]*display:\s*none/u);
+  assert.doesNotMatch(CSS, /\.mount-fallback(?:__panel)?\s*\{[^}]*display:\s*none/u);
 });
