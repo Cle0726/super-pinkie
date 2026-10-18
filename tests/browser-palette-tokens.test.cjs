@@ -100,3 +100,12 @@ test('inline native pages read the same table, not their own literals', () => {
     assert.ok(delta <= 0.003, `cssVariables --${token} (${hex[1]}) drifted from tokens.css (${light.get(`cle-${token}`)})`);
   }
 });
+
+test('the browser under-page colour follows the same tokens', () => {
+  const launcher = fs.readFileSync(path.join(root, 'desktop/macos/Sources/Launcher.swift'), 'utf8');
+  // WebKit paints this behind the page during load and rubber-band scrolling.
+  // It used to be a separate hand-mixed pair and showed as a third colour.
+  assert.doesNotMatch(launcher, /srgbRed: nightAppearance \? 0\.10 : 1\.0/, 'old hand-mixed under-page colour removed');
+  const set = launcher.slice(launcher.indexOf('browser.underPageBackgroundColor'));
+  assert.match(set.slice(0, 200), /CleBrowserPalette\.paper\(nightAppearance\)/);
+});

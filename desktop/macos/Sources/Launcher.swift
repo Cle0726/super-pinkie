@@ -473,7 +473,12 @@ private final class BrowserPanelContainer: NSView {
 private final class BrowserEdgeTab: BrowserPanelDragHandle {
     var edge: BrowserDockEdge = .right { didSet { needsDisplay = true } }
     var onHover: ((Bool) -> Void)?
+    /// Press / click / Space / Return all mean the same thing here: toggle the
+    /// half-revealed state. Dragging still detaches the panel as before.
+    var onActivate: (() -> Void)?
     private var hoverArea: NSTrackingArea?
+    private var pressOrigin: NSPoint?
+    private var pressMoved = false
     override init(frame: NSRect) {
         super.init(frame: frame)
         setAccessibilityElement(true)
@@ -482,6 +487,57 @@ private final class BrowserEdgeTab: BrowserPanelDragHandle {
         setAccessibilityHelp("鼠标靠近露出半幅；向工作区拖动恢复悬浮")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // Without these the tab was announced as a button that did nothing: no
+    // keyboard focus, no press action, so VoiceOver and CUA activation were both
+    // no-ops. It is a real control now, not only a drag surface.
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.becomeFirstResponder()
+    }
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.resignFirstResponder()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onActivate?()
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Space (49) and Return (36) are the two keys AppKit conventions expect
+        // a focused button to answer to.
+        if event.keyCode == 49 || event.keyCode == 36 {
+            onActivate?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressOrigin = event.locationInWindow
+        pressMoved = false
+        super.mouseDown(with: event)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        // A couple of points of jitter must not turn a click into a drag.
+        if let origin = pressOrigin, hypot(event.locationInWindow.x - origin.x, event.locationInWindow.y - origin.y) > 3 {
+            pressMoved = true
+        }
+        super.mouseDragged(with: event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        let wasClick = pressOrigin != nil && !pressMoved
+        pressOrigin = nil
+        pressMoved = false
+        super.mouseUp(with: event)
+        // After super.mouseUp the drag lifecycle may have scheduled a retract;
+        // onActivate bumps the hover generation, which cancels it.
+        if wasClick { onActivate?() }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea { removeTrackingArea(hoverArea) }
@@ -496,6 +552,12 @@ private final class BrowserEdgeTab: BrowserPanelDragHandle {
         NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 0), xRadius: 8, yRadius: 8).fill()
         let symbol = edge == .right ? "chevron.left" : edge == .top ? "chevron.down" : "chevron.up"
         NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX-6, y: bounds.midY-6, width: 12, height: 12))
+        if window?.firstResponder === self {
+            CleBrowserPalette.gaze(night).setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 1), xRadius: 7, yRadius: 7)
+            ring.lineWidth = 1.5
+            ring.stroke()
+        }
     }
 }
 struct BrowserResizeEdges: OptionSet {
@@ -1943,6 +2005,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var browserFloatingFrame: NSRect?
     private var browserDockEdge: BrowserDockEdge?
     private var browserEdgeRevealed = false
+    /// True when the tab was opened by press/keyboard/AX rather than hover. A
+    /// keyboard user has their pointer elsewhere, so the panel moves out from
+    /// under the cursor and the hover-exit path would instantly retract it again.
+    /// Cleared as soon as the pointer legitimately enters the panel or the tab.
+    private var browserEdgePinned = false
     private var browserEdgeTab: BrowserEdgeTab?
     private var browserEdgeHoveringPanel = false
     private var browserEdgeHoveringTab = false
@@ -2787,12 +2854,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browser.appearance = NSAppearance(named: nightAppearance ? .darkAqua : .aqua)
         browser.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) {
-            browser.underPageBackgroundColor = NSColor(
-                srgbRed: nightAppearance ? 0.10 : 1.0,
-                green: nightAppearance ? 0.075 : 0.985,
-                blue: nightAppearance ? 0.115 : 0.993,
-                alpha: 0.97
-            )
+            // This is the colour WebKit paints behind the page during load and
+            // rubber-band scrolling. It used to be a third, hand-mixed pair
+            // (0.10/0.075/0.115 and 1/.985/.993) that flashed next to the token
+            // chrome; keep it on the same palette as the panel.
+            browser.underPageBackgroundColor = CleBrowserPalette.paper(nightAppearance).withAlphaComponent(0.97)
         }
         return browser
     }
@@ -4002,7 +4068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         scheduleBrowserFit()
     }
     private func clearBrowserEdgeDock() {
-        browserDockEdge = nil; browserEdgeRevealed = false
+        browserDockEdge = nil; browserEdgeRevealed = false; browserEdgePinned = false
         updateBrowserPanelInput()
         browserEdgeHoveringPanel = false; browserEdgeHoveringTab = false
         browserEdgeHoverGeneration += 1
@@ -4037,6 +4103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             tab.onDragBegan = { [weak self] in self?.beginBrowserFloatingDrag() }
             tab.onDrag = { [weak self] delta in self?.moveBrowserFloating(by: delta) }
             tab.onDragEnded = { [weak self] in self?.endBrowserFloatingDrag() }
+            // Press/Space/Return/AX press: the same toggle the hover path uses.
+            // Hover-out still retracts on its own; detaching by dragging inwards
+            // is untouched because that runs through the drag callbacks above.
+            tab.onActivate = { [weak self] in self?.toggleBrowserEdgeReveal() }
             browserEdgeTab = tab
         }
         tab.edge = edge
@@ -4051,17 +4121,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if tab.superview == nil { content.addSubview(tab) }
         for handle in browserFloatingResizeHandles { handle.isHidden = true; handle.enabled = false }
     }
-    private func updateBrowserEdgeHover() {
-        guard browserDockEdge != nil, !browserDragging else { return }
+    /// Explicit toggle used by keyboard and accessibility activation. It bumps the
+    /// hover generation so a previously scheduled retract cannot undo the reveal,
+    /// and it leaves `browserDockEdge` intact so the panel stays docked to the edge.
+    private func toggleBrowserEdgeReveal() {
+        guard browserPresentation == .floating, browserDockEdge != nil else { return }
+        browserEdgeHoverGeneration += 1
+        browserEdgeRevealed.toggle()
+        browserEdgePinned = browserEdgeRevealed
+        if let frame = browserFloatingFrame { setBrowserFloatingFrame(frame, animated: true) }
+        if browserEdgeRevealed { browserEdgeTab?.window?.makeFirstResponder(browserEdgeTab) }
+        // Tell assistive tech what just happened; the label alone described the
+        // resting state, not the result of pressing it.
+        NSAccessibility.post(element: browserEdgeTab as Any, notification: .valueChanged)
+    }
+
+    private func updateBrowserEdgeHover() {        guard browserDockEdge != nil, !browserDragging else { return }
         browserEdgeHoverGeneration += 1
         let generation = browserEdgeHoverGeneration
         if browserEdgeHoveringPanel || browserEdgeHoveringTab {
+            browserEdgePinned = false
             browserEdgeRevealed = true
             if let frame = browserFloatingFrame { setBrowserFloatingFrame(frame, animated: true) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now()+0.22) { [weak self] in
                 guard let self, generation == self.browserEdgeHoverGeneration,
-                      self.browserDockEdge != nil, !self.browserDragging else { return }
+                      self.browserDockEdge != nil, !self.browserDragging,
+                      // An explicit activation keeps the panel out until the user
+                      // dismisses it (another press, or moving the pointer in and
+                      // back out again).
+                      !self.browserEdgePinned else { return }
                 self.browserEdgeRevealed = false
                 if let frame = self.browserFloatingFrame { self.setBrowserFloatingFrame(frame, animated: true) }
             }
@@ -4094,7 +4183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if pushed.minY <= bounds.minY-52 && browserDragDelta.y < 0 { candidates.append((.bottom,bounds.minY-pushed.minY)) }
         let edge = candidates.max(by:{$0.1 < $1.1})?.0
         if let edge {
-            browserDockEdge = edge; browserEdgeRevealed = false
+            browserDockEdge = edge; browserEdgeRevealed = false; browserEdgePinned = false
             browserEdgeHoveringPanel = false; browserEdgeHoveringTab = false
             setBrowserFloatingFrame(frame, animated: true)
         }
