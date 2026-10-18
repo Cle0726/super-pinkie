@@ -262,3 +262,100 @@ CLE_TOOLBOX_SOURCE=… node --test tests/laser-pointer.test.cjs   5 pass
 node --test tests/cle-sidebar.test.cjs tests/brand-ui.test.cjs tests/memory-ui.test.cjs tests/party-usage-ui.test.cjs   19 pass
 npm run build                                           cle-studio ui 0faf48248dd7  js 58.7 KB  css 65.5 KB
 ```
+
+---
+
+## 本轮返修（续 ad783aa）：P1 工作台遮挡 + 已移植模块表现层闭环
+
+### 1. P1 覆盖发送/语音 —— 从占位根因修，不再用固定 bottom 凑
+
+`review-fusion-hit-target-1800.md` 记录的现象：1280×720 双栏、约 220 字后 textarea 增高，
+`send`（x1235..1271 y517.8..551.8）与 `voice`（x1197..1231 同 y）的中心点命中都是
+`.pk-wb-reopen`（rect x1184.5..1266 y532..560）—— 入口 `position:fixed` 浮在输入区上。
+
+修法不是把 `bottom` 挪几个像素，而是换掉**挂载根**：
+
+- `placeReopen()` 逐 pane 找真实 chrome，按优先级依次尝试
+  `.agent-chat__composer-controls` → `.agent-chat__composer-footer` →
+  `.chat-pane__actions` → `.chat-pane__header`；
+- 进 composer 后清掉 `left/top/right/bottom` 全部内联偏移，`position:static`；
+- 多 pane 时按当前 active pane 各自插入，不写死第一个；
+- 拿不到任何 chrome 才退回 body 固定定位（保留兜底，但正常路径不走）。
+
+因为入口现在是被 composer 布局驱动的，所以**单栏/双栏、宽/窄、多行输入增高、
+工作台开/合** 都会自动跟着走，不需要为每种情况再补一个偏移量。
+
+验证（headless Chrome 真几何 + `elementFromPoint`，1280×720，textarea 增到 168px）：
+
+```
+GEOMETRY send x709..745 y640.5..674.5
+GEOMETRY voice x671..705 y640.5..674.5
+REOPEN parent=agent-chat__composer-controls position=static rect x287..348 y669..697
+HIT send centre=727,646 -> chat-send-btn ok=true
+HIT voice centre=688,646 -> chat-voice-btn ok=true
+OVERLAP reopen-vs-send no / reopen-vs-voice no / reopen-vs-textarea no
+NARROW / SINGLE / TIGHT / GROWN 四种布局：hitSend=true，parent 仍是 composer-controls
+```
+
+### 2. 修掉的"整组阴影进颜色槽"与软色焦点环
+
+`--cle-shadow` / `--cle-shadow-pop` 是整组阴影值，放进颜色槽会整条声明失效。
+验收页用真实样式引擎判定（赋值后读 computed），`--cle-shadow-as-colour` 解析为 `none` 即无效：
+
+```
+SHADOW --cle-shadow valid=yes
+SHADOW --cle-shadow-as-colour valid=no reason=resolved to none
+SHADOW combined valid=yes resolved=rgba(20,18,15,.1) 0px 0px 0px 1px inset, …
+```
+
+焦点环统一到实色 `--cle-gaze`；`--cle-gaze-soft`（8% 不透明）只允许做底不做描边。
+`tests/cle-legacy-surfaces.test.mjs` 现在会静态扫描 9 个样式源文件，任何把
+`var(--cle-shadow*)` 写进颜色槽的声明都会失败。
+
+### 3. 12 个模块的表面与文字
+
+| 模块 | 原状 | 现在 |
+|---|---|---|
+| 记忆匣 | 粉渐变面板 + `#a82f68` 标题 | `--cle-surface` 面板 / `--cle-ink` 文字，夜间 15.92:1 |
+| 提问卡 | 珍珠玻璃 `backdrop-filter` + 白字压粉底 | 纸面墨色；禁用态从 2.81:1 修到 5.99:1 |
+| 功能面板 | 主按钮丢掉层级（被 `:is()` 通用规则压平） | 通用规则加 `:not(--primary):not(--danger)`，主/危险各走各的 |
+| 用量胶囊 | 白字压粉底 3.5:1；夜间胶囊取反 | 纸面胶囊 5.99:1，夜间 6.74/15.92 |
+| 定时任务/连接器 | `'⏰'` `'🔌'` emoji 当图标 | 自绘线性图标 |
+| deep-think | 深紫 `#57364a`；摘要/页脚 `--cle-ink-3` 只有 2.81:1 | 全 token；摘要/页脚提到 `--cle-ink-2`（`tiers.css` 的 `!important` 也一并改） |
+| desensitize | 粉玻璃浮窗 + `#57364a` | 纸面卡片 + `--cle-ink` |
+| context-compact | 粉渐变 popover/toast | 纸面/墨底，进度条 `--cle-gaze` |
+| web-gpt | 37 处粉紫字面量 | 只剩 3 个语义色回退值（ok/warn/danger） |
+| settings-user | 整份 `#63364c`/`#d9518d` 变量组 | 变量直接指向 C.le. token，删掉夜间第二套粉紫 |
+
+保留的品牌件不做 token 化：GitHub/Notion 磁贴保留品牌底色（实测 17.05 / 17.58 / 15.63:1），
+工作台 `--wb-accent` 仍跟随宿主 `--accent`。
+
+### 4. 测量方法本身也修了两处，否则会误判
+
+1. `audit-run.mjs` 只读 `#audit`，而工作台场景页的日志容器是 `#log` —— 页面跑完了也读不到
+   结果，表现为"超时"。改成两个 id 都读。
+2. 验收页里 `color(srgb 0.94 0.91 0.86)` 这种 `color-mix()` 计算值，分量是 0–1 小数。
+   按 0–255 解析会把 5.01:1 算成 3.53:1。修了解析器之后 `--cle-warn` 才被正确判定，
+   顺带发现它实际是 4.39:1（纸面）不达标，已把 `#8A6A24` 调深到 `#7F5F1B`（纸面 5.15:1）。
+3. 组件上有 `transition: background .18s`，切主题后立刻量会读到过渡起点（假 1.07:1）。
+   现在等过渡结束再量。
+
+### 5. 仍然交给主控的跨所有权项
+
+- `src/core/brand.js` 的 chrome 品牌残留：正文已排除，属性/ClawHub 仍在（`cle-fusion-seams`
+  的 brand 审计用例持续记录，一旦他人修好该用例会失败并提醒更新交接单）。
+- 工作台 `--wb-accent` 的粉/蓝取向属于美术决定，本轮不动。
+
+### 验证汇总
+
+```
+cle-workbench-reopen     3/3    P1 遮挡：真几何 + elementFromPoint
+cle-legacy-surfaces      3/3    token 类型 + 55 行对比度 + 模块内文字 + 焦点环
+cle-fusion-seams         9/9    含 brand 审计
+cle-presentation-behaviour 2/2
+cle-utilities           11/11
+memory-ui / ask-user-ui / deep-think-ui / context-compact-ui / context-compaction-ui
+web-gpt-collab / user-settings / night-mode   45/45
+```
+
+所有对比度断言的下限是 4.5:1，当前最低实测 4.52:1（用量胶囊强调态）。
