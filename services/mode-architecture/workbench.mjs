@@ -13,6 +13,7 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {LspHub, CodeAssistant, CodeChecker} from './workbench-lsp.mjs';
 import {ExtensionMarket, formatText, formatters} from './workbench-ext.mjs';
+import {agentWorkspace, openclawAgentEnvPath} from './openclaw-paths.mjs';
 
 const exec = promisify(execFile);
 export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
@@ -120,10 +121,8 @@ export class Workbench {
 
   agentWorkspace(agentId) {
     const config = this.config() || {};
-    const entry = (config.agents?.list || []).find(agent => agent?.id === agentId);
-    const raw = String(entry?.workspace || (agentId === 'main' ? config.agents?.defaults?.workspace : '') || '');
-    const dir = raw.replace(/^~(?=\/|$)/, this.home);
-    return path.isAbsolute(dir) ? dir : path.join(this.home, '.openclaw', 'workspace-' + agentId);
+    // 兼容数组和 entries 两种 agents 配置，缺省位置走 OpenClaw 当前状态目录（profile 感知）。
+    return agentWorkspace(config, agentId, {home: this.home});
   }
 
   binding(key) {
@@ -628,7 +627,7 @@ class NotebookProcess {
 
   pythonPath() {
     const candidates = [
-      path.join(os.homedir(), '.openclaw/agent-env/bin/python'),
+      openclawAgentEnvPath('bin/python'),
       '/usr/bin/python3',
     ];
     for (const item of candidates) {

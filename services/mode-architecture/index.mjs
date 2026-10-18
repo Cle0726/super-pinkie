@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFile, spawnSync} from 'node:child_process';
 import {LongTermMemoryStore, memorySystemRules, renderRetrievedMemory} from './memory.mjs';
+import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runtimeConfig} from './openclaw-paths.mjs';
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
@@ -597,19 +598,22 @@ function patchPaths(params = {}) {
 // 工具参数里的相对路径（write/edit 的 path: "cle-lab/x.py"）是相对 agent 工作区的。以前这里只收绝对路径，
 // 相对路径的写入/修改一律看不见，门禁就误判「执行型修改任务没有主机确认的文件变化」（2026-10-12 实测）。
 let agentWorkspaceCache = null;
+let agentWorkspaceConfig = null;
 function agentWorkspaceDir(ctx = {}) {
   if (typeof ctx.workspaceDir === 'string' && path.isAbsolute(ctx.workspaceDir)) return ctx.workspaceDir;
   try {
+    // `--profile` 之后状态目录不一定是 ~/.openclaw，config 也可能已经由插件 API 交过来。
+    const config = agentWorkspaceConfig || runtimeConfig(null);
+    agentWorkspaceConfig = config;
     if (!agentWorkspaceCache) {
       agentWorkspaceCache = new Map();
-      const config = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.openclaw', 'openclaw.json'), 'utf8'));
-      for (const agent of config?.agents?.list || []) {
-        const dir = String(agent?.workspace || '').replace(/^~(?=\/|$)/, os.homedir());
-        if (agent?.id && path.isAbsolute(dir)) agentWorkspaceCache.set(String(agent.id), dir);
+      for (const agent of agentEntries(config)) {
+        const dir = agentWorkspace(config, agent.id);
+        if (dir && path.isAbsolute(dir)) agentWorkspaceCache.set(agent.id, dir);
       }
     }
     const agentId = String(ctx.agentId || agentFromSessionKey(String(ctx.sessionKey || '')) || 'main');
-    return agentWorkspaceCache.get(agentId) || '';
+    return agentWorkspaceCache.get(agentId) || agentWorkspace(config, agentId) || '';
   } catch {
     return '';
   }
@@ -3366,7 +3370,7 @@ export function sessionCheckpointRelative(sessionKey = '') {
 export class FileRunStore {
   constructor(root = process.env.PINKIE_STATE_ROOT
     ? path.join(pinkieStateRoot(), 'cle-kk', 'deep-think')
-    : path.join(os.homedir(), '.openclaw', 'pinkie-deep-think')) {
+    : path.join(openclawStateDir(), 'pinkie-deep-think')) {
     this.root = root;
   }
 
@@ -5692,11 +5696,18 @@ export default {
     globalThis.__pinkieModeArchitectureLoads = (globalThis.__pinkieModeArchitectureLoads || 0) + 1;
     api.logger?.info?.(`CLE Kk plugin build=${PLUGIN_BUILD} instance=${globalThis.__pinkieModeArchitectureLoads} pid=${process.pid}`);
     let architecture;
-    const memory = new LongTermMemoryStore({parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
+    // 插件 API 的当前配置优先（profile 下配置文件不在 ~/.openclaw）；存储层只拿它做兜底。
+    const pluginConfig = () => {
+      const config = runtimeConfig(api, {allowFile: false});
+      return config && typeof config === 'object' ? config : {};
+    };
+    const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
     const webGptActivity = new WebGptActivityStore();
     const webGptConnection = new WebGptConnectionManager();
     architecture = new ModeArchitecture(new FileRunStore(), memory, null, learning);
+    // 门禁里解析相对路径的那个工作区解析器，也优先用 API 配置，不再只读 ~/.openclaw/openclaw.json。
+    agentWorkspaceConfig = pluginConfig();
     const integrity = new CompletionIntegrityGuard();
     // The compaction handoff keeps only a bounded snapshot of real tool
     // evidence.  This is intentionally a host-side capture, not a model-made
@@ -5909,9 +5920,13 @@ export default {
           targetModel = parts.slice(1).join('/');
         }
 
-        const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-        let config = {};
-        try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
+        // profile / OPENCLAW_CONFIG_PATH 下配置不在 ~/.openclaw；插件 API 有配置就直接用。
+        const pluginConfig = runtimeConfig(api);
+        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
+        if (!Object.keys(config).length) {
+          const configPath = openclawConfigPath();
+          try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
+        }
         const providerConfig = config?.models?.providers?.[providerKey] || config?.models?.providers?.mm || {};
         
         let baseUrl = providerConfig.baseUrl || 'http://127.0.0.1:1466/v1';
