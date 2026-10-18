@@ -41,6 +41,13 @@ import {fileURLToPath} from 'node:url';
 const MARKER = '/* pinkie-cle-startup:v1 */';
 const BEGIN = '<!-- pinkie-cle-startup:begin do not edit by hand -->';
 const END = '<!-- pinkie-cle-startup:end -->';
+// The early guard ships as its own same-origin file. It must be a classic script in <head>: the
+// app's entry is type="module", which the browser defers until the document is parsed, so a
+// synchronous classic script placed before it runs first. CSP allows `script-src 'self'` here, so
+// no inline script (and no policy change) is involved.
+const EARLY_BEGIN = '<!-- pinkie-cle-early:begin do not edit by hand -->';
+const EARLY_END = '<!-- pinkie-cle-early:end -->';
+const EARLY_SRC = '/cle-early.js';
 const BACKUP_DIR = '.pinkie-startup-backup';
 const LEDGER = 'ledger.json';
 // The supplied portrait, copied to the sizes a tab strip and an installed window ask for.
@@ -274,6 +281,29 @@ export function injectLayer(html, css) {
   return {html: html.replace('</head>', `${block}\n  </head>`), changed: true};
 }
 
+/**
+ * Insert the early-guard <script> before the app's module entry.
+ *
+ * Placement is the whole point: index.html loads the app as
+ *     <script type="module" crossorigin src="./assets/index-*.js"></script>
+ * and a module script is deferred by default, so a classic script that appears earlier in the
+ * document executes first. Anchoring to the module tag (rather than to </head>) keeps that
+ * ordering even if the head grows other scripts later.
+ */
+export function injectEarlyGuard(html, {src = EARLY_SRC} = {}) {
+  const block = `${EARLY_BEGIN}\n  <script data-cle-early src="${src}"></script>\n  ${EARLY_END}`;
+  const existing = new RegExp(`${EARLY_BEGIN.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[\\s\\S]*?${EARLY_END.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u');
+  if (existing.test(html)) {
+    const next = html.replace(existing, block);
+    return {html: next, changed: next !== html};
+  }
+  // A single module entry is the shape this patch targets; anything else is not ours to guess at.
+  const entries = [...html.matchAll(/<script[^>]*\btype="module"[^>]*><\/script>/gu)];
+  if (entries.length !== 1) throw new Error(`module entry 必须唯一（命中 ${entries.length}）`);
+  const at = entries[0].index;
+  return {html: `${html.slice(0, at)}${block}\n  ${html.slice(at)}`, changed: true};
+}
+
 /** True when this document already is the 2026.10 Control UI shape. */
 export function isTargetBuild(html) {
   const id = /data-openclaw-control-ui-build-id="([^"]+)"/u.exec(html)?.[1] || '';
@@ -475,12 +505,16 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
   const token = iconToken();
   const head = rewriteHead(original, {token});
   const injected = injectLayer(head.html, css);
-  const indexNext = injected.html;
+  // The early guard is inserted last so it also lands inside every document this patch writes
+  // (offline shell included), and always before the deferred module entry.
+  const early = injectEarlyGuard(injected.html);
+  const indexNext = early.html;
   const indexChanged = indexNext !== original;
 
-  const result = {root, csp: csp.slice(0, 120) + '…', headChanges: head.changes, index: indexChanged ? 'patched' : 'unchanged', offlineShell: 'skipped', manifest: 'unchanged', twins: [], icons: [], changed: false};
+  const result = {root, csp: csp.slice(0, 120) + '…', headChanges: head.changes, index: indexChanged ? 'patched' : 'unchanged', offlineShell: 'skipped', manifest: 'unchanged', twins: [], icons: [], earlyGuard: 'skipped', changed: false};
   if (check) {
     result.index = original.includes(MARKER) ? 'present' : 'missing';
+    result.earlyGuard = original.includes(EARLY_BEGIN) && fs.existsSync(path.join(root, 'cle-early.js')) ? 'present' : 'missing';
     const applied = [];
     for (const [target, source] of Object.entries(ICON_ASSETS)) {
       const file = path.join(root, target);
@@ -497,6 +531,18 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
     writeAtomic(root, indexFile, indexNext);
     Object.assign(result, refreshTwins(root, indexFile));
   }
+  // The referenced file has to exist, or the browser would 404 and the window would reopen.
+  const earlySource = path.join(path.dirname(cssPath), 'early-guard.js');
+  if (!fs.existsSync(earlySource)) throw new Error(`missing early guard source: ${earlySource}`);
+  const earlyBytes = fs.readFileSync(earlySource);
+  const earlyTarget = path.join(root, 'cle-early.js');
+  const earlyStale = !fs.existsSync(earlyTarget) || !fs.readFileSync(earlyTarget).equals(earlyBytes);
+  if (earlyStale) {
+    assertWritableTarget(root, earlyTarget);
+    backupOnce(root, earlyTarget);
+    writeAtomic(root, earlyTarget, earlyBytes);
+    Object.assign(result, {earlyGuard: 'patched'}, refreshTwins(root, earlyTarget));
+  } else result.earlyGuard = 'unchanged';
   // Files first: the app rewrites the <link> hrefs to these names at boot anyway.
   const icons = replaceIcons(root);
   result.icons = icons.replaced;
@@ -512,8 +558,32 @@ export function applyLayer(root, {cssPath = DEFAULT_CSS, check = false} = {}) {
     const literal = anchor < 0 ? null : readJsonLiteral(sw, anchor);
     if (literal) {
       const boot = JSON.parse(literal.text);
-      const offline = injectLayer(rewriteHead(String(boot.html), {token}).html, css);
-      if (String(boot.html) !== offline.html) {
+      // The offline shell must carry the early guard too: an offline navigation paints the same
+      // first frames, and without the script the title would sit on the upstream wordmark there.
+      const offline = injectEarlyGuard(injectLayer(rewriteHead(String(boot.html), {token}).html, css).html);
+      // …and the file it references has to be precached, or an offline reload of the shell asks
+      // the network for a script that is not there and the guard silently never runs. Adding it to
+      // publicAssets is what makes the worker treat it as a cacheable same-origin public asset.
+      const earlyName = 'cle-early.js';
+      let assetsDirty = false;
+      if (Array.isArray(boot.publicAssets) && !boot.publicAssets.includes(earlyName)) {
+        boot.publicAssets = [...boot.publicAssets, earlyName].sort();
+        assetsDirty = true;
+      }
+      // The precache loop iterates OFFLINE_BOOT.assets and verifies each entry's integrity, so the
+      // file needs a row there too — publicAssets alone only feeds the version metadata.
+      if (Array.isArray(boot.assets)) {
+        const earlyFile = path.join(root, earlyName);
+        if (fs.existsSync(earlyFile) && !boot.assets.some((entry) => entry?.path === earlyName)) {
+          const digest = crypto.createHash('sha256').update(fs.readFileSync(earlyFile)).digest('base64');
+          boot.assets = [...boot.assets, {path: earlyName, integrity: `sha256-${digest}`}]
+            // The shipped list is sorted by plain codepoint order (not localeCompare), so match
+            // that exactly and keep the array comparable with the upstream one.
+            .sort((left, right) => (String(left?.path) < String(right?.path) ? -1 : String(left?.path) > String(right?.path) ? 1 : 0));
+          assetsDirty = true;
+        }
+      }
+      if (String(boot.html) !== offline.html || assetsDirty) {
         boot.html = offline.html;
         // The worker names its cache after this id; moving it retires the stale shell
         // instead of letting a previous build's HTML win offline.
