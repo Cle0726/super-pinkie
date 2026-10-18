@@ -24,7 +24,7 @@ test('work stream presentation uses public events and native image previews with
   const progress=read('ui/injections/laolao-progress.js');
   const css=read('ui/injections/laolao-theme.css');
   const viewer=read('ui/injections/laolao-image-viewer.js');
-  assert.match(progress,/laolao:public-progress:v2/);
+  assert.match(progress,/laolao:public-progress:v3/);
   assert.match(progress,/chatShowToolCalls:true,chatPersistCommentary:true/);
   assert.doesNotMatch(progress,/chatShowThinking:true/);
   assert.match(css,/\.chat-bubble\.streaming/);
