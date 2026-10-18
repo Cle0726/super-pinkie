@@ -71,7 +71,7 @@ function writeJsonAtomic(file, value) {
 // Le Pacte 的账本写入绝不能反噬学习本身：钩子失败只记日志，题卡照常工作。
 function pactLedger(store, operation, argument = {}) {
   if (!store?.pact) return;
-  try { store.pact[operation](argument); } catch {}
+  try { return store.pact[operation](argument); } catch {}
 }
 
 function normalizedKind(value) {
@@ -100,7 +100,13 @@ function normalizeChoiceAnswer(value, options, multiple) {
   const values = (Array.isArray(value) ? value : [value]).map(item => cleanText(item, 200)).filter(Boolean);
   const mapped = values.map(item => {
     const match = options.find(option => comparable(option.id) === comparable(item) || comparable(option.label) === comparable(item));
-    return match?.id || item;
+    if (match) return match.id;
+    // Models often return the displayed letter while string options receive
+    // numeric ids. Prefer explicit labels, then the conventional A–H order.
+    const letter = item.normalize('NFKC').match(/^\s*([A-H])\s*[.、:：)）]?\s*$/i)?.[1]?.toUpperCase();
+    if (!letter) return item;
+    const labeled = options.find(option => option.label.normalize('NFKC').match(/^\s*([A-H])[.、:：)]\s*/i)?.[1]?.toUpperCase() === letter);
+    return labeled?.id || options[letter.charCodeAt(0) - 65]?.id || item;
   });
   return multiple ? mapped.sort() : (mapped[0] || '');
 }
@@ -315,7 +321,7 @@ function sameAnswer(expected, actual, kind) {
 
 function publicActivity(activity) {
   if (!activity) return null;
-  const {correctAnswer: _correctAnswer, rubric: _rubric, ...safe} = activity;
+  const {correctAnswer: _correctAnswer, rubric: _rubric, pactQuestion: _pactQuestion, ...safe} = activity;
   return safe;
 }
 
@@ -457,9 +463,11 @@ export class LearningInteractionStore {
     const submissionId = cleanId(payload.submissionId || payload.submission_id) || randomUUID();
     if (current.submission?.id === submissionId) return this.publicState(state);
     const firstSubmission = !current.submission;
-    const answer = normalizeAnswer(payload.answer);
+    const isChoice = current.kind === 'single_choice' || current.kind === 'multiple_choice';
+    const answer = isChoice ? normalizeChoiceAnswer(payload.answer, current.options, current.kind === 'multiple_choice') : normalizeAnswer(payload.answer);
     if ((Array.isArray(answer) && answer.length === 0) || (!Array.isArray(answer) && !answer)) throw new Error('请先填写答案');
-    const correctness = sameAnswer(current.correctAnswer, answer, current.kind);
+    const expected = isChoice ? normalizeChoiceAnswer(current.correctAnswer, current.options, current.kind === 'multiple_choice') : current.correctAnswer;
+    const correctness = sameAnswer(expected, answer, current.kind);
     current.submission = {
       id: submissionId,
       answer,
@@ -470,7 +478,10 @@ export class LearningInteractionStore {
     current.phase = 'evaluating';
     state.current = current;
     // Le Pacte：每道真正作答的题记一次；同一题卡重复提交由上面的 submissionId 挡住。
-    if (firstSubmission) pactLedger(this, 'recordQuestion', {correct: correctness});
+    if (firstSubmission) {
+      const day = pactLedger(this, 'recordQuestion', {correct: correctness});
+      if (day?.date) current.pactQuestion = {date: day.date, correct: correctness === true};
+    }
     return this.publicState(this.write(sessionKey, state));
   }
 
@@ -490,6 +501,12 @@ export class LearningInteractionStore {
       keyPoint: cleanText(payload.key_point || payload.keyPoint, 5000),
       resolvedAt: Date.now(),
     };
+    // Written answers are graded later. Correct the original day's score
+    // without counting another question, including resolutions after midnight.
+    if (current.pactQuestion && typeof current.result.correct === 'boolean') {
+      pactLedger(this, 'recordQuestionResult', {...current.pactQuestion, previousCorrect: current.pactQuestion.correct, correct: current.result.correct});
+      current.pactQuestion.correct = current.result.correct;
+    }
     if (!current.reviewRecordedAt && current.noteIds?.length) {
       this.recordQuizOutcome(sessionKey, current.noteIds, current.result.correct, current.notebookNoteIds);
       current.reviewRecordedAt = Date.now();
