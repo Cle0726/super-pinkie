@@ -17,6 +17,8 @@ ap.add_argument('src'); ap.add_argument('out')
 ap.add_argument('--size', type=float, default=96)
 ap.add_argument('--svg')
 ap.add_argument('--eps', type=float, default=1.4)
+ap.add_argument('--image', help='also write the original ink as an alpha PNG in the same frame')
+ap.add_argument('--image-px', type=int, default=384)
 a = ap.parse_args()
 
 img = cv2.imread(a.src, cv2.IMREAD_GRAYSCALE)
@@ -178,6 +180,25 @@ for poly in eyes:
     P = [(tx(x), ty(y)) for x, y in poly]
     eyes_d.append('M' + ' L'.join(f'{x:.2f} {y:.2f}' for x, y in P) + 'Z')
 data = {'viewBox': f'0 0 {a.size:g} {a.size:g}', 'width': round(width * S, 2), 'strokes': res, 'eyes': eyes_d}
+if a.image:
+    # the drawing itself, faithful: ink -> alpha, framed exactly like the strokes (viewBox 0..size)
+    from PIL import Image as _I
+    left, top = cx - side / 2, cy - side / 2
+    # paper is never pure white: cut the background tone first, so only ink becomes mask
+    alpha = ((255 - img.astype(np.float32) - 22) * 255 / 233).clip(0, 255).astype(np.uint8)
+    canvas = np.zeros((int(math.ceil(side)), int(math.ceil(side))), np.uint8)
+    sx0, sy0 = int(round(left)), int(round(top))
+    ys_, xs_ = slice(max(0, sy0), min(H0, sy0 + canvas.shape[0])), slice(max(0, sx0), min(W0, sx0 + canvas.shape[1]))
+    canvas[ys_.start - sy0:ys_.stop - sy0, xs_.start - sx0:xs_.stop - sx0] = alpha[ys_, xs_]
+    im = _I.fromarray(canvas).resize((a.image_px, a.image_px), _I.LANCZOS)
+    # small icons: keep the artist's relative weights but give hairlines enough ink to survive downscaling
+    from PIL import ImageFilter as _F
+    arr = np.asarray(im.filter(_F.MaxFilter(3))).astype(np.float32) / 255 * .55 + np.asarray(im).astype(np.float32) / 255 * .45
+    im = _I.fromarray((np.power(arr.clip(0, 1), .6) * 255).astype(np.uint8))
+    rgba = im.convert('L')   # opaque: white ink on black — a pure luminance mask (WebKit ignores alpha in luminance masks)
+    rgba.save(a.image, 'WEBP', lossless=True) if a.image.endswith('.webp') else rgba.save(a.image)
+    data['image'] = a.image.split('/')[-1]
+    data['reveal'] = round(width * S * 3.4, 2)
 json.dump(data, open(a.out, 'w'))
 if a.svg:
     body = ''.join(f'<path d="{s["d"]}"/>' for s in res)
