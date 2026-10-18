@@ -10,7 +10,7 @@ import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs'
 // 这类模型真正出错的地方在交付：没验证就说完成、漏掉要求、文件不存在却给出结果。
 // 所以这两档改成「答完之后核对交付」：
 //   Max   = 交付验收：回答结束后，独立验收员按用户原话逐条核对回复和本轮真实工具结果；
-//           只在发现有依据的具体问题时，自动让碧琪修一轮。没问题就只多一次很短的核对。
+//           只在发现有依据的具体问题时，自动让 Li An 修一轮。没问题就只多一次很短的核对。
 //   Ultra = 交付验收 + 独立复算：主回答进行的同时，并行做一份不带工具的独立解答（不增加等待），
 //           验收时两边结论对照，冲突必须拿证据解决；最多修两轮。
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;

@@ -347,7 +347,7 @@ export class LearningInteractionStore {
 
   assertLearningSession(sessionKey) {
     const key = String(sessionKey || '');
-    if (!isLearningSession(key)) throw new Error('互动学习只在学习模式会话中可用');
+    if (!isLearningSession(key)) throw new Error('互动学习只在习作模式会话中可用');
     return key;
   }
 
@@ -758,7 +758,7 @@ export class LearningInteractionStore {
       example: cleanText(structured.example, 4000) || current.example || '',
       note: cleanText(structured.note, 4000) || current.note || '',
       ...(tags.length ? {tags} : {}),
-      ...(supplement && !originalHasChinese ? {supplementalMeaning: `碧琪补充：${supplement}`} : {}),
+      ...(supplement && !originalHasChinese ? {supplementalMeaning: `Li An 补充：${supplement}`} : {}),
       lightOrganizedAt: Date.now(),
       updatedAt: Date.now(),
       original: current.original ?? current.content,
@@ -918,7 +918,7 @@ export class LearningInteractionStore {
           id: randomUUID(), title: operation.title, content, original: content,
           term: items.map(item => item.term).join(' / '), meaning: operation.differencePoints,
           example: '', note: '', kind: 'compare', compareItems: items, differencePoints: operation.differencePoints,
-          sourceSessionKey: sessionKey, sourceLabel: '碧琪整理的对比卡', createdAt: now, updatedAt: now,
+          sourceSessionKey: sessionKey, sourceLabel: 'Li An 整理的对比卡', createdAt: now, updatedAt: now,
           tags: ['易混'], status: 'active', deepOrganizedAt: now,
         });
         notes.unshift(card); byId.set(card.id, card);
@@ -985,7 +985,7 @@ export function createLearningActivityTool(store, initialContext = {}) {
   return {
     name: 'learning_activity',
     label: '互动学习',
-    description: '在学习模式中展示、结算或结束一张原生互动题卡。不要用 Markdown/HTML 模拟题卡。',
+    description: '在习作模式中展示、结算或结束一张原生互动题卡。不要用 Markdown/HTML 模拟题卡。',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -1268,7 +1268,7 @@ export function learningPrompt(store, sessionKey) {
   let state = {enabled: false};
   try { state = store.status(sessionKey); } catch { /* Keep the save-only notebook usable while status reloads. */ }
   const noteRules = `
-【碧琪学习笔记】
+【Li An 学习笔记】
 - 笔记抽屉使用独立整理模型，整理结果由抽屉直接显示。继续正常学习对话即可。
 `.trim();
   const questionHygieneRules = `
