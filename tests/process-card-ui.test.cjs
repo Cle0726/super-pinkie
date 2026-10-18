@@ -35,18 +35,23 @@ test('the card matches the original bubbles and respects reduced motion', () => 
   assert.match(css, /\.pinkie-process\[data-live="1"\]/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   for (const source of [read('ui/injections/laolao-head.fragment.html'), read('installer/macos/apply-theme.sh'), read('installer/windows/apply-theme.ps1')]) {
-    assert.match(source, /laolao-process-card\.css\?v=processcard3/);
-    assert.match(source, /laolao-process-card\.js\?v=processcard4/);
+    assert.match(source, /laolao-process-card\.css\?v=processcard5/);
+    assert.match(source, /laolao-process-card\.js\?v=processcard10/);
   }
 });
 
 test('a thought that arrives in one chunk is typed out instead of popping in', () => {
   // Gemini thinks silently and then delivers the whole thought right before acting.
   assert.match(script, /const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;/);
-  assert.match(script, /typeOut\(key, before, record\.text\.length\)/);
+  // A later chunk resumes from where the previous one stopped, so only the new
+  // text is typed out instead of the whole thought popping in.
+  assert.match(script, /typeOut\(key, Math\.max\(0, before - dropped\), record\.text\.length\)/);
   assert.match(script, /stopThinking\(\);\s*hurryTyping\(\);/);
-  assert.match(script, /const shown = isTyping \? record\.text\.slice\(0, typed\) : record\.text;/);
-  assert.match(script, /if \(reduced\(\)\) \{ typing\.delete\(key\); return; \}/);
+  assert.match(script, /const visibleText = isTyping \? record\.text\.slice\(0, typed\) : record\.text;/);
+  // Reduced motion collapses the type-out to zero duration instead of starting
+  // a timer, so the thought is shown immediately rather than animating.
+  assert.match(script, /typing\.set\(key, \{from: reduced\(\) \? length : from, to: length/);
+  assert.match(script, /dur: reduced\(\) \? 0 :/);
   assert.match(css, /\.pinkie-thinking\.is-typing \.pinkie-thinking__text::after/);
   assert.match(css, /\.pinkie-thinking\.is-entering \{ animation:/);
 });

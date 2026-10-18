@@ -1183,9 +1183,9 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume45/);
+    assert.match(installer,/laolao-resume\.js\?v=resume50/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
-    assert.match(installer,/clekk-history33/);
+    assert.match(installer,/clekk-history46/);
   }
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/LIVE_MESSAGE_WINDOW = 512/);
@@ -1215,8 +1215,8 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   assert.match(cacheRefresh,/let the current view stay put/);
   assert.doesNotMatch(cacheRefresh,/window\.location\.reload\(\)/);
   for(const installer of [mac,windows]){
-    assert.match(installer,/clekk-history-render-33/);
-    assert.match(installer,/clekk-history33/);
+    assert.match(installer,/clekk-history-render-46/);
+    assert.match(installer,/clekk-history46/);
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }
