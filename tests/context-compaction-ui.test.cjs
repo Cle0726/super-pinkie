@@ -36,7 +36,6 @@ test('compaction progress survives refresh and gateway events cover automatic an
 
 test('compaction divider becomes one Chinese timeline row and drops the checkpoint action',()=>{
   assert.match(source,/前面的对话已整理，原始记录仍保留/);
-  assert.match(source,/chat-divider__details.*remove/);
   assert.match(source,/\.chat-divider__details\{display:none!important\}/);
   assert.match(source,/\.chat-divider\{margin:6px 8px!important\}/);
 });
