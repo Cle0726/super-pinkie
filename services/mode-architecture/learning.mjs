@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
+import {agentEntries, agentWorkspace, runtimeConfig} from './openclaw-paths.mjs';
 
 const MAX_TEXT = 12_000;
 const MAX_OPTIONS = 8;
@@ -21,7 +22,7 @@ function stateRoot() {
 }
 
 function workspaceRoot() {
-  return process.env.PINKIE_LEARNING_WORKSPACE || path.join(os.homedir(), '.openclaw', 'workspace-learning');
+  return process.env.PINKIE_LEARNING_WORKSPACE || agentWorkspace(runtimeConfig(null), 'learning');
 }
 
 function cleanText(value, limit = MAX_TEXT) {
@@ -1075,7 +1076,7 @@ export class LearningNotesOrganizer {
         models.push({ref: `${providerId}/${model.id}`, name: model.name || model.id, model, provider, api, base, apiKey});
       }
     }
-    const agentModel = config.agents?.list?.find(agent => agent.id === 'learning')?.model ?? config.agents?.defaults?.model;
+    const agentModel = agentEntries(config).find(agent => agent.id === 'learning')?.model ?? config.agents?.defaults?.model;
     const defaultRef = typeof agentModel === 'string' ? agentModel : agentModel?.primary;
     return {models, defaultRef: models.find(model => model.ref === defaultRef)?.ref || models[0]?.ref || ''};
   }
