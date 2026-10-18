@@ -213,7 +213,12 @@
       const onResult = (event) => {
         if (event.detail?.path === target.path) finish(event.detail.ok === true);
       };
-      const timeout = window.setTimeout(() => finish(false), 1500);
+      // A local file can take longer than a web page to commit (large PDF,
+      // first-launch scheme handler). Timing out must not be read as "the
+      // native workspace refused": with a bridge present the native browser is
+      // already showing the file, and opening an in-page panel as well would
+      // leave two previews fighting for the same click.
+      const timeout = window.setTimeout(() => finish(handler ? "unknown" : false), 8000);
       window.addEventListener("laolao:browser-show-file", onResult);
       try { handler.postMessage({ action: "show-file", path: target.path }); }
       catch (_) { finish(false); }
@@ -227,7 +232,10 @@
     const selectedAction = action;
     if (selectedAction === "preview") {
       requestSidebarPreview(target).then((opened) => {
-        if (opened) closePreview(rail);
+        if (opened === true) closePreview(rail);
+        // "unknown" = native workspace is already loading this file; keep the
+        // in-page panel closed rather than duplicating it.
+        else if (opened === "unknown") closePreview(rail);
         else openPreview(rail, target);
       });
       return;

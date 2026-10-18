@@ -21,6 +21,11 @@
  * 跳过：# 锚点、mailto:、tel:、javascript:、相对路径、非 http/file
  * 协议。也只拦截聊天/markdown 内容里的链接，不动侧栏、设置页等
  * 应用内导航。
+ *
+ * 双栏：入口按 pane 各自挂载，不共用一个全局 id。同一个 id 在两个
+ * pane 之间搬动会让另一侧的工具凭空消失，也会在 pane 缓存重绘时
+ * 把按钮连根拔掉；这里每个 pane 各有一个按钮，点击都打开同一个原生
+ * 工作区（页面与登录状态继续留在那一个 WKWebView 里）。
  */
 (() => {
   "use strict";
@@ -31,7 +36,12 @@
   const SKIP_PROTOCOLS = /^(#|mailto:|tel:|javascript:|data:)/i;
   const ALLOW_PROTOCOLS = /^(https?:|file:)/i;
   const EMBED_TIMEOUT_MS = 5000;
+  const PANE_SELECTOR = ".chat-pane-cache__pane";
+  const ENTRY_CLASS = "laolao-browser-entry";
   const browserBridge = () => window.webkit?.messageHandlers?.laolaoBrowserWorkspace;
+  // 原生 App 才有这个桥；普通浏览器/嵌入式预览只能退回 iframe，
+  // 界面必须说清楚这是“页内预览”，不能假装原生浮窗已经打开。
+  const isNative = () => Boolean(browserBridge());
 
   let removeKeyListener = null;
   let loadTimer = null;
@@ -110,7 +120,9 @@
     viewer.className = "laolao-link-viewer";
     viewer.setAttribute("role", "dialog");
     viewer.setAttribute("aria-modal", "true");
-    viewer.setAttribute("aria-label", "网页预览");
+    // 无桥时这是页内 iframe，不是 App 的原生浮窗。标题和 aria-label
+    // 都按实际能力写，避免把“预览失败”当成“浏览器已打开”。
+    viewer.setAttribute("aria-label", "页内预览（非原生浏览器）");
 
     // 用 DOM API 构建而非 innerHTML，避免 URL 里的 < > 引号注入风险
     const header = document.createElement("div");
@@ -127,6 +139,12 @@
     externalBtn.textContent = "↗ 在浏览器打开";
     externalBtn.title = "尝试在系统浏览器打开";
 
+    // 明确的环境说明：没有原生桥时，这里只是页内嵌入预览。
+    const modeNote = document.createElement("div");
+    modeNote.className = "laolao-link-viewer__mode";
+    modeNote.textContent = "页内预览 · 未连接原生浏览器";
+    modeNote.title = "当前环境没有 App 原生浏览器桥，以下为页内嵌入预览；部分站点会拒绝嵌入。";
+
     const closeBtn = document.createElement("button");
     closeBtn.className = "laolao-link-viewer__close";
     closeBtn.type = "button";
@@ -134,7 +152,7 @@
     closeBtn.setAttribute("aria-label", "关闭预览");
     closeBtn.title = "关闭预览";
 
-    header.append(urlBox, externalBtn, closeBtn);
+    header.append(modeNote, urlBox, externalBtn, closeBtn);
 
     const body = document.createElement("div");
     body.className = "laolao-link-viewer__body";
@@ -166,7 +184,7 @@
 
     const fbHint = document.createElement("div");
     fbHint.className = "laolao-link-viewer__fallback-hint";
-    fbHint.textContent = "可能是 X-Frame-Options 或 CSP 限制。可以点上面「在浏览器打开」按钮，或者复制网址到浏览器手动打开。";
+    fbHint.textContent = "可能是 X-Frame-Options 或 CSP 限制。这不是原生浮窗失败：当前环境没有 App 浏览器桥，只能页内嵌入。可以点上面「在浏览器打开」按钮，或者复制网址到浏览器手动打开。";
 
     const fbUrl = document.createElement("input");
     fbUrl.className = "laolao-link-viewer__fallback-url";
@@ -243,49 +261,85 @@
 
   const launcherStyle = document.createElement("style");
   launcherStyle.textContent = `
-    #laolao-browser-workspace-entry{
+    .${ENTRY_CLASS}{
       display:flex;flex:0 0 28px;width:28px;height:28px;min-height:28px;
-      margin:0 auto;padding:0;align-items:center;justify-content:center;
-      border:0;border-radius:10px;color:#668b97;background:transparent;cursor:pointer;
+      margin:0;padding:0;align-items:center;justify-content:center;
+      border:0;border-radius:10px;color:var(--cle-ink-3,#668b97);background:transparent;cursor:pointer;
       transition:color .18s ease,background .18s ease,transform .18s ease;
     }
-    #laolao-browser-workspace-entry svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
-    #laolao-browser-workspace-entry:hover{color:#4f7f8d;background:rgba(255,250,253,.72)}
-    #laolao-browser-workspace-entry:active{transform:scale(.96)}
-    #laolao-browser-workspace-entry:focus-visible{outline:2px solid rgba(207,66,130,.45);outline-offset:-2px}
-    .laolao-video-workspace-open{align-self:flex-start;border:1px solid var(--border,rgba(145,100,121,.2));border-radius:8px;padding:5px 10px;background:var(--bg-surface,transparent);color:var(--text-strong);cursor:pointer}
-    .laolao-video-workspace-open:hover{color:var(--accent)}
-    html[data-pinkie-night] .laolao-video-workspace-open{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
-    .chat-workspace-rail:not(.chat-workspace-rail--collapsed)>#laolao-browser-workspace-entry{display:none}
-    html:is([data-laolao-workspace-split="1"],[data-laolao-workspace-dock="1"],[data-laolao-browser-workspace="1"]) .chat-workspace-rail>#laolao-browser-workspace-entry{display:flex!important}
-    @media(prefers-reduced-motion:reduce){#laolao-browser-workspace-entry{transition:none}}
+    .${ENTRY_CLASS} svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
+    .${ENTRY_CLASS}:hover{color:var(--cle-ink,#4f7f8d);background:color-mix(in srgb,var(--cle-ink,#000) 5%,transparent)}
+    .${ENTRY_CLASS}:active{transform:scale(.96)}
+    .${ENTRY_CLASS}:focus-visible{outline:2px solid var(--cle-gaze,#cf4282);outline-offset:-2px}
+    .${ENTRY_CLASS}[data-native="false"]{opacity:.6}
+    .laolao-video-workspace-open{align-self:flex-start;border:1px solid var(--cle-line,#e2ddd0);border-radius:8px;padding:5px 10px;background:var(--cle-surface,#fff);color:var(--cle-ink,#15161a);cursor:pointer}
+    .laolao-video-workspace-open:hover{color:var(--cle-gaze,#2a63e8)}
+    .laolao-link-viewer__mode{flex:0 0 auto;padding:2px 8px;border:1px solid var(--cle-line,#e2ddd0);border-radius:999px;color:var(--cle-ink-3,#8a8a80);font:500 10.5px/1.4 -apple-system,"PingFang SC",sans-serif;white-space:nowrap}
+    @media(prefers-reduced-motion:reduce){.${ENTRY_CLASS}{transition:none}}
+    @container cle-pane (max-width:420px){.${ENTRY_CLASS}{flex-basis:26px;width:26px;height:26px}}
   `;
   document.head.append(launcherStyle);
 
-  const mountBrowserLauncher = () => {
-    const rail = document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-lead") || document.querySelector(".chat-workbench > .chat-workspace-rail, .chat-workspace-rail");
-    let button = document.getElementById("laolao-browser-workspace-entry");
-    if (!rail) {
-      button?.remove();
+  // 每个 pane 各自一个入口。pane 是缓存的，DOM 节点会被上层重绘；
+  // 因此只检查“这个 pane 的 composer lead 里是否已经有自己的按钮”，
+  // 不再用全局 id 去别的 pane 里搬。
+  const railFor = (pane) => pane?.querySelector(".agent-chat__composer-lead")
+    || pane?.querySelector(".chat-workspace-rail");
+
+  const mountForPane = (pane) => {
+    if (!pane || pane.hasAttribute("inert")) return;
+    const rail = railFor(pane);
+    if (!rail) return;
+    mountOnRail(rail);
+  };
+
+  // 真正的挂载只依赖一个 rail，pane / 单栏 / body 都能复用；不依赖全局 id。
+  const mountOnRail = (rail) => {
+    if (!rail) return;
+    const existing = rail.querySelector(`:scope > .${ENTRY_CLASS}`);
+    if (existing) {
+      existing.dataset.native = String(isNative());
       return;
     }
-    if (button?.parentElement === rail) return;
-    button?.remove();
-    button = document.createElement("button");
-    button.id = "laolao-browser-workspace-entry";
+    const button = document.createElement("button");
     button.type = "button";
-    button.title = "打开浏览器";
-    button.setAttribute("aria-label", "打开浏览器");
+    button.className = ENTRY_CLASS;
+    button.dataset.native = String(isNative());
+    // 标题按能力区分：原生工作区 or 页内预览回退。
+    button.title = isNative() ? "打开浏览器工作区" : "页内预览（当前环境无原生浏览器）";
+    button.setAttribute("aria-label", button.title);
     button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"></circle><path d="M3.8 12h16.4M12 3.6c2.3 2.3 3.5 5.1 3.5 8.4S14.3 18.1 12 20.4M12 3.6C9.7 5.9 8.5 8.7 8.5 12s1.2 6.1 3.5 8.4"></path></svg>';
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       const bridge = browserBridge();
+      // 两侧入口打开同一个原生工作区；页面和登录状态都在那一个
+      // WKWebView 里，不因抛 pane 而重建。
       if (bridge) bridge.postMessage({ action: "open" });
       else open("https://www.google.com/");
     });
     const party = rail.querySelector("#pinkie-party-entry");
     rail.insertBefore(button, party || null);
+  };
+
+  const mountBrowserLauncher = () => {
+    const panes = document.querySelectorAll(PANE_SELECTOR);
+    if (!panes.length) {
+      // 单栏/旧 DOM：没有 pane 容器时直接挂到 composer lead 上。
+      for (const lead of document.querySelectorAll(".agent-chat__composer-lead")) {
+        if (lead.querySelector(`:scope > .${ENTRY_CLASS}`)) {
+          lead.querySelector(`:scope > .${ENTRY_CLASS}`).dataset.native = String(isNative());
+          continue;
+        }
+        mountOnRail(lead);
+      }
+      return;
+    }
+    for (const pane of panes) mountForPane(pane);
+    // 已不在任何 pane 里的旧按钮只由自己清理，不靠全局 id 搬迁。
+    for (const stale of document.querySelectorAll(`.${ENTRY_CLASS}`)) {
+      if (!stale.closest(PANE_SELECTOR)) stale.remove();
+    }
   };
 
   // Playback controls keep their normal behaviour. The separate entry also
@@ -297,7 +351,9 @@
       const button = document.createElement("button");
       button.className = "laolao-video-workspace-open";
       button.type = "button";
-      button.textContent = "在侧栏打开";
+      // 没有原生桥时不能写“在侧栏打开”：那会承诺一个并不存在的浮窗。
+      button.textContent = isNative() ? "在侧栏打开" : "页内预览";
+      button.title = isNative() ? "在 App 浏览器工作区打开" : "当前环境没有原生浏览器，将在页内预览";
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -316,15 +372,42 @@
   // this launcher after that local click update, instead of waiting 1.5s.
   let launcherMountFrame = 0;
   document.addEventListener("click", event => {
-    if (!event.target.closest?.(".chat-workspace-rail") || launcherMountFrame) return;
+    if (!event.target.closest?.(".chat-workspace-rail, .chat-pane-cache__pane") || launcherMountFrame) return;
     launcherMountFrame = requestAnimationFrame(() => {
       launcherMountFrame = 0;
       mountBrowserLauncher();
     });
   }, true);
 
+  // Pane caches are rebuilt on split on/off and on room switch; a 1.5s poll
+  // alone leaves the new side visibly without its button. Watch only for
+  // added nodes, and only schedule when a visible pane is actually missing one.
+  const needsMount = () => {
+    const panes = document.querySelectorAll(PANE_SELECTOR);
+    if (!panes.length) return true;
+    for (const pane of panes) {
+      if (pane.hasAttribute("inert")) continue;
+      const rail = railFor(pane);
+      if (rail && !rail.querySelector(`:scope > .${ENTRY_CLASS}`)) return true;
+    }
+    return false;
+  };
+  let mountQueued = false;
+  const scheduleMount = () => {
+    if (mountQueued) return;
+    mountQueued = true;
+    requestAnimationFrame(() => {
+      mountQueued = false;
+      if (needsMount()) mountBrowserLauncher();
+    });
+  };
+  if (typeof MutationObserver === "function") {
+    new MutationObserver(scheduleMount).observe(document.body, {childList: true, subtree: true});
+  }
+
   // The app swaps chat roots during mode/session changes. A low-frequency,
-  // idempotent mount avoids a subtree observer competing with streaming text.
+  // idempotent mount catches anything the observer cannot see (attribute-only
+  // changes, a pane reactivated from cache).
   setInterval(mountBrowserLauncher, 1500);
   setInterval(mountMediaWorkspaceActions, 1500);
   mountBrowserLauncher();
