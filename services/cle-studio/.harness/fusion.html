@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN" data-cle="0.1.0" data-theme-mode="light">
+<head>
+<meta charset="utf-8">
+<title>fusion seam harness</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/bridge.css">
+<link rel="stylesheet" href="/presentation.css">
+<!-- 被移植卡片自己的样式：验证接缝是否盖得住旧粉色字面量 -->
+<link rel="stylesheet" href="/settings-user.css">
+<link rel="stylesheet" href="/capabilities.css">
+<link rel="stylesheet" href="/usage.css">
+<link rel="stylesheet" href="/memory.css">
+<style>
+  /* 只搭出原生 shell 的最小骨架：aside.sidebar > .sidebar-shell__footer > .sidebar-footer-bar */
+  html, body { margin: 0; height: 100%; }
+  body { display: flex; background: var(--cle-paper); font: 13px/1.5 var(--cle-sans); }
+  aside.sidebar { width: 256px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .sidebar-shell { display: flex; flex-direction: column; }
+  .sidebar-shell__footer { padding: 10px; }
+  .sidebar-footer-bar { display: flex; align-items: center; gap: 2px; min-height: 34px; padding: 0 10px; }
+  .sidebar-footer-bar__spacer { flex: auto; }
+  .sidebar-footer-icon {
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border: 0; background: transparent; color: #6b6b6b; border-radius: 8px; cursor: pointer;
+  }
+  #native-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+  main { flex: 1; padding: 20px; }
+  #log { white-space: pre-wrap; font: 12px/1.5 var(--cle-mono); color: var(--cle-ink-2); }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-shell">
+    <div class="sidebar-shell__footer">
+      <div class="sidebar-footer-bar">
+        <span class="sidebar-footer-bar__spacer"></span>
+        <button id="native-icon" class="sidebar-footer-icon" aria-label="设置">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</aside>
+<main>
+  <div id="log"></div>
+</main>
+<script type="module">
+  // 和 main.js 一样由入口调用挂载，而不是仅仅把模块加载进来。
+  const {mountUtilities} = await import('/utilities.js');
+  const controller = new AbortController();
+  mountUtilities({}, controller.signal);
+
+  const log = [];
+  const say = (line) => { log.push(line); document.getElementById('log').textContent = log.join('\n'); };
+  const px = (v) => Math.round(parseFloat(v || '0') * 100) / 100;
+  const rgb = (v) => (v.match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+  const lum = ([r, g, b]) => {
+    const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const contrast = (a, b) => {
+    const [l1, l2] = [lum(rgb(a)), lum(rgb(b))].sort((x, y) => y - x);
+    return Math.round(((l1 + 0.05) / (l2 + 0.05)) * 100) / 100;
+  };
+  const pinkish = (value) => {
+    const [r, g, b] = rgb(value);
+    return r > g + 14 && b > g - 6 && r > 130;
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // utilities 模块在 activate 时自己挂载；这里等它把入口放进 footer。
+  let entry = null;
+  for (let i = 0; i < 60 && !entry; i++) {
+    await wait(50);
+    entry = document.querySelector('.cle-utilities-entry');
+  }
+  if (!entry) { say('MISSING entry'); say('DONE_MARKER'); throw new Error('no entry'); }
+
+  const nativeIcon = document.getElementById('native-icon');
+  const er = entry.getBoundingClientRect(), nr = nativeIcon.getBoundingClientRect();
+  say(`ENTRY size ${px(er.width)}x${px(er.height)} native ${px(nr.width)}x${px(nr.height)}`);
+  const es = getComputedStyle(entry);
+  say(`ENTRY color ${es.color} radius ${es.borderRadius} bg ${es.backgroundColor}`);
+  say(`ENTRY aligns ${Math.abs(er.top - nr.top) < 1 ? 'yes' : 'no'} heightMatch ${Math.abs(er.height - nr.height) < 1 ? 'yes' : 'no'}`);
+  say(`ENTRY pinkish ${pinkish(es.color) ? 'YES' : 'no'}`);
+  say(`ENTRY text "${entry.textContent.trim()}"`);
+
+  entry.click();
+  await wait(700);
+
+  const layer = document.querySelector('.cle-utilities-layer');
+  const panel = document.getElementById('cle-utilities');
+  if (!layer || !panel) { say('MISSING panel'); say('DONE_MARKER'); throw new Error('no panel'); }
+  const pr = panel.getBoundingClientRect();
+  say(`PANEL ${px(pr.width)}x${px(pr.height)} visible ${!panel.hidden}`);
+  const ps = getComputedStyle(panel);
+  say(`PANEL bg ${ps.backgroundColor} border ${ps.borderTopColor} radius ${ps.borderRadius}`);
+  say(`PANEL contrast-vs-surface ${contrast(ps.color, ps.backgroundColor)}`);
+
+  for (const sel of ['.cle-utilities__titles strong', '.cle-utilities__group-title', '.cle-utilities__hint', '.cle-utilities__action']) {
+    const el = panel.querySelector(sel);
+    if (!el) { say(`MISSING ${sel}`); continue; }
+    const cs = getComputedStyle(el);
+    const bg = getComputedStyle(panel).backgroundColor;
+    say(`TXT ${sel} color ${cs.color} size ${px(cs.fontSize)} contrast ${contrast(cs.color, bg)} pinkish ${pinkish(cs.color) ? 'YES' : 'no'}`);
+  }
+
+  // 空间入口：无原生桥时 data-native=0 且仍有真实地址
+  const party = panel.querySelector('a[href*="18889"]');
+  say(`PARTY ${party ? 'present' : 'MISSING'} native=${party?.dataset.native} target=${party?.target}`);
+  const partyCs = party ? getComputedStyle(party) : null;
+  if (partyCs) say(`PARTY bg ${partyCs.backgroundColor} pinkish ${pinkish(partyCs.backgroundColor) ? 'YES' : 'no'}`);
+
+  // 演示工具：模块未加载时必须说明状态，而不是把按钮文字换成加载中
+  const demo = [...panel.querySelectorAll('.cle-utilities__action')].find((b) => b.textContent === '打开演示工具');
+  say(`DEMO ${demo ? 'present' : 'MISSING'}`);
+  if (demo) {
+    demo.click();
+    await wait(60);
+    say(`DEMO label "${demo.textContent}" disabled ${demo.disabled}`);
+    const status = panel.parentElement.querySelector('.cle-utilities__status');
+    say(`DEMO status "${status?.textContent || ''}" state=${status?.dataset.state || ''}`);
+  }
+
+  // 卡片区：capabilities 未加载时应有说明
+  const hint = [...panel.querySelectorAll('.cle-utilities__hint')].find((n) => /定时任务和连接器/.test(n.textContent));
+  say(`CARDS hint "${hint?.textContent || 'MISSING'}" hidden=${hint?.hidden}`);
+
+  // 真实卡片：用 stub RPC 让 capabilities 挂上定时任务与连接器，再看接缝
+  window.__laolaoSidebar = {
+    gwRequest: async (method) => {
+      if (method === 'cron.status') return {enabled: true};
+      if (method === 'cron.list') return {jobs: []};
+      if (method === 'pinkie.cron.targets') return {targets: []};
+      if (method === 'pinkie.connectors.list') return {catalog: [], servers: []};
+      if (method === 'pinkie.usage.get') return {input: 1200, output: 340, cacheRead: 500, requests: 12, updatedAt: Date.now()};
+      return {};
+    },
+    currentSessionKey: () => 'agent:main:test',
+  };
+  await import('/capabilities.js').catch((e) => say(`CAPABILITIES import failed ${e.message}`));
+  await wait(300);
+  window.__pinkieCapabilities?.mount(panel.querySelector('.cle-utilities__cards'));
+  await wait(400);
+
+  const job = panel.querySelector('.pk-job');
+  say(`CARD job ${job ? 'present' : 'MISSING'} connector ${panel.querySelector('#pinkie-connectors') ? 'present' : 'MISSING'}`);
+  // 卡片表面实际吃到的变量（合并 oc/restyle 后这套变量可能被改成墨色）
+  const capCard = panel.querySelector('.pk-cap');
+  if (capCard) {
+    const cs = getComputedStyle(capCard);
+    const tokens = getComputedStyle(panel);
+    say(`CARD surface bg ${cs.backgroundColor} tokenCard ${tokens.getPropertyValue('--pinkie-settings-card').trim()} tokenSoft ${tokens.getPropertyValue('--pinkie-settings-soft').trim()} tokenMuted ${tokens.getPropertyValue('--pinkie-settings-muted').trim()}`);
+    say(`CARD surface contrast ${contrast(cs.color, cs.backgroundColor)}`);
+  }
+  const idea = panel.querySelector('.pk-cap__idea');
+  if (idea) {
+    const is = getComputedStyle(idea);
+    say(`CARD idea border ${is.borderTopColor} bg ${is.backgroundColor} pinkish ${pinkish(is.borderTopColor) ? 'YES' : 'no'}`);
+  }
+  const sw = panel.querySelector('.pk-cap__switch');
+  if (sw) {
+    const ss = getComputedStyle(sw);
+    say(`CARD switch bg ${ss.backgroundColor} pinkish ${pinkish(ss.backgroundColor) ? 'YES' : 'no'}`);
+  }
+  const tile = panel.querySelector('.pk-tile');
+  if (tile) {
+    const ts = getComputedStyle(tile);
+    say(`CARD tile class "${tile.className}" bg ${ts.backgroundColor} bgImage ${ts.backgroundImage.slice(0, 60)} color ${ts.color}`);
+  }
+  const mutedEl = panel.querySelector('.pinkie-user-settings__card-hint, .pk-cap__recipe-copy small, .pk-cap__note');
+  if (mutedEl) {
+    const ms2 = getComputedStyle(mutedEl);
+    const bg2 = getComputedStyle(panel).backgroundColor;
+    say(`CARD muted "${(mutedEl.textContent || '').trim().slice(0, 18)}" color ${ms2.color} contrast ${contrast(ms2.color, bg2)}`);
+  }
+  const formBtn = panel.querySelector('.pinkie-user-settings__button--primary, .pk-cap__actions button');
+  if (formBtn) {
+    const fs = getComputedStyle(formBtn);
+    say(`CARD action bg ${fs.backgroundColor} color ${fs.color} contrast ${contrast(fs.color, fs.backgroundColor)} pinkish ${pinkish(fs.backgroundColor) ? 'YES' : 'no'}`);
+  }
+
+  // Esc：面板收起，焦点回到入口
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+  await wait(60);
+  say(`ESC hidden ${layer.hidden} focusReturned ${document.activeElement === entry}`);
+
+  // 夜间：面板表面翻到墨色，文字对比仍达标
+  document.documentElement.dataset.themeMode = 'dark';
+  entry.click();
+  await wait(120);
+  const dPanel = getComputedStyle(panel);
+  say(`DARK bg ${dPanel.backgroundColor} text ${dPanel.color} contrast ${contrast(dPanel.color, dPanel.backgroundColor)}`);
+  const dAction = panel.querySelector('.cle-utilities__action');
+  if (dAction) {
+    const ds = getComputedStyle(dAction);
+    say(`DARK action color ${ds.color} bg ${ds.backgroundColor} contrast ${contrast(ds.color, ds.backgroundColor)}`);
+  }
+
+  // 演示工具：直接驱动真实模块的设置面板（右键入口 = 打开设置）
+  document.documentElement.dataset.themeMode = 'light';
+  document.querySelector('.cle-utilities-layer').hidden = true;
+  panel.hidden = true;
+  const laser = await import('/laser.js').catch(() => null);
+  if (!laser && !window.__laolaoLaser) {
+    say('LASER module unavailable — skipped seam measurement');
+  } else {
+    // 模块在加载时自己把入口挂到 footer；这里模拟右键打开设置
+    let laserEntry = null;
+    for (let i = 0; i < 40 && !laserEntry; i++) { await wait(50); laserEntry = document.getElementById('pinkie-laser-entry'); }
+    say(`LASER entry ${laserEntry ? 'present' : 'MISSING'}`);
+    if (laserEntry) {
+      const le = getComputedStyle(laserEntry);
+      say(`LASER entry size ${px(laserEntry.getBoundingClientRect().width)}x${px(laserEntry.getBoundingClientRect().height)} color ${le.color} pinkish ${pinkish(le.color) ? 'YES' : 'no'}`);
+      laserEntry.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}));
+      await wait(120);
+      const settings = document.getElementById('pinkie-laser-settings');
+      say(`LASER settings ${settings ? 'present' : 'MISSING'}`);
+      if (settings) {
+        const ss = getComputedStyle(settings);
+        say(`LASER settings bg ${ss.backgroundColor} color ${ss.color} contrast ${contrast(ss.color, ss.backgroundColor)} pinkish ${pinkish(ss.backgroundColor) ? 'YES' : 'no'}`);
+        const out = settings.querySelector('output');
+        if (out) {
+          const os = getComputedStyle(out);
+          say(`LASER output bg ${os.backgroundColor} color ${os.color} contrast ${contrast(os.color, os.backgroundColor)}`);
+        }
+        const swatch = settings.querySelector('.laser-swatch');
+        if (swatch) {
+          const sw = getComputedStyle(swatch);
+          // 色板本身必须保留功能色：第一个预设是玫粉 #e0407f
+          say(`LASER swatch bg ${sw.backgroundColor} border ${sw.borderTopColor} preservesPreset ${/224,\s*64,\s*127/.test(sw.backgroundColor) ? 'yes' : 'no'}`);
+        }
+        const range = settings.querySelector('input[type="range"]');
+        if (range) {
+          const rs = getComputedStyle(range);
+          say(`LASER range accent ${rs.getPropertyValue('--accent').trim()} trackCustom ${rs.getPropertyValue('--p').trim()}`);
+        }
+      }
+    }
+  }
+
+  // 记忆匣：需要 gwRequest 才肯渲染列表；给一个空结果就已经能看清表面与文字
+  await import('/memory.js').catch((e) => say(`MEMORY import failed ${e.message}`));
+  await wait(250);
+  if (window.__clekkMemoryUI?.open) {
+    window.__clekkMemoryUI.open();
+    await wait(220);
+    const mem = document.querySelector('.laolao-memory-panel');
+    say(`MEMORY panel ${mem ? 'present' : 'MISSING'}`);
+    if (mem) {
+      const ms = getComputedStyle(mem);
+      say(`MEMORY bg ${ms.backgroundColor} color ${ms.color} contrast ${contrast(ms.color, ms.backgroundColor)} pinkish ${pinkish(ms.color) ? 'YES' : 'no'}`);
+      const title = mem.querySelector('.laolao-memory-title strong');
+      if (title) {
+        const ts = getComputedStyle(title);
+        say(`MEMORY title color ${ts.color} contrast ${contrast(ts.color, ms.backgroundColor)} pinkish ${pinkish(ts.color) ? 'YES' : 'no'}`);
+      }
+      const btn = mem.querySelector('.laolao-memory-button--primary');
+      if (btn) {
+        const bs = getComputedStyle(btn);
+        say(`MEMORY primary bgImage ${bs.backgroundImage.slice(0, 70)} color ${bs.color} bg ${bs.backgroundColor} contrast ${contrast(bs.color, bs.backgroundColor)}`);
+      }
+      const input = mem.querySelector('.laolao-memory-search');
+      if (input) {
+        const is = getComputedStyle(input);
+        say(`MEMORY search color ${is.color} bg ${is.backgroundColor} contrast ${contrast(is.color, is.backgroundColor)}`);
+      }
+      window.__clekkMemoryUI.close();
+      await wait(80);
+    }
+  } else {
+    say('MEMORY module unavailable — skipped');
+  }
+
+  say('DONE_MARKER');
+</script>
+</body>
+</html>
