@@ -741,3 +741,39 @@ test('a hot reload leaves exactly one live activation, not two', async () => {
     assert.equal(h.retries.length, 0, 'a retired activation never sends');
   } finally { h.restore(); }
 });
+
+test('mounting with an already-aborted signal allocates nothing', async () => {
+  const h = lifecycleHarness({
+    queue: [{id: 'q1', sendState: 'waiting-reconnect', text: '在', createdAt: 1}],
+    panels: [{key: 'agent:project:main', status: 'done', hasActiveRun: false}],
+  });
+  const controller = new AbortController();
+  try {
+    // A row that WOULD be folded by a live activation: proves an early return is not
+    // sneaking in a projection either.
+    const group = el('div', 'chat-group user', h.pane);
+    const control = el('div', 'chat-bubble', el('div', 'chat-group-messages', group));
+    control.setAttribute('data-message-text', WATCHDOG);
+
+    controller.abort();                 // retire before mounting
+    mountRecovery(h.host, controller.signal);
+
+    // No resources created. addEventListener on an already-aborted signal would never
+    // fire, so every one of these would otherwise leak for the page's lifetime.
+    assert.equal(h.observed.length, 0, 'no MutationObserver');
+    assert.equal(h.intervals.size, 0, 'no polling interval');
+    assert.equal(h.timers.size, 0, 'no timeout');
+    assert.equal(h.frames.size, 0, 'no animation frame');
+    assert.equal(h.events.filter((e) => e[0] === 'on').length, 0, 'no onEvent subscription');
+    assert.equal(h.subs.length, 0, 'no host.subscribe');
+
+    // No behaviour: no RPC, and the DOM is left exactly as it was.
+    h.advance(60_000);
+    assert.equal(h.events.filter((e) => e[0] === 'request').length, 0, 'no sessions.list');
+    assert.equal(h.retries.length, 0);
+    assert.equal(control.getAttribute('data-cle-internal-turn'), null, 'no DOM writes');
+
+    // The fold rule itself must survive: it is static presentation, not a handle.
+    assert.ok(h.document.getElementById('cle-recovery-style'), 'fold rule retained');
+  } finally { h.restore(); }
+});

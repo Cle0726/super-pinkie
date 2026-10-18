@@ -166,7 +166,7 @@ safe('recovery', () => mountRecovery(host, controller.signal));
 
 ```
 node --test tests/recovery.test.mjs
-ℹ tests 24   ℹ pass 24   ℹ fail 0
+ℹ tests 30   ℹ pass 30   ℹ fail 0
 ```
 
 覆盖的真实风险（不是镜像实现）：
@@ -335,3 +335,39 @@ document.getElementById(STYLE_ID)?.remove();   // ← 连折叠规则一起删�
 - 浏览器冒烟新增 6 项 abort 检查，含「折叠行 abort 后仍 `display:none`」「规则未删」「引用与普通消息仍可见」。
 
 **仍未验证**：本路不能操作 GUI/live，19789 上真实的“断线 → 激活退役 → 重连”全过程需要主控重载后复验；我能提供的证据是同一 abort 代码路径的行为测试与真实浏览器样式结果，不是亲眼观察。
+
+### 补充轮次（pre-aborted signal 零资源）
+
+主控指出最后一个边界：`mountRecovery(host, alreadyAbortedSignal)` 时，旧代码只把 `aborted = true`，**之后仍然**创建 `MutationObserver`、`host.onEvent`、`host.subscribe`、`setInterval`。回调里虽然都因 `aborted` 直接返回，但这些句柄本身没有释放路径——`addEventListener('abort')` 在已中止的 signal 上不会再触发，所以 observer / interval 会活到页面结束。
+
+修法：在分配任何句柄之前早退。
+
+```js
+export function mountRecovery(host, signal) {
+  ensureStyle();                                  // 静态折叠规则，保留
+  if (signal?.aborted) return () => {};            // 已退役：不创建任何句柄
+  let aborted = false;
+  ...
+}
+```
+
+顺序有意为之：`ensureStyle()` 在前，所以“已验证的折叠样式”仍在；早退在**所有** `new MutationObserver`、`onEvent`、`subscribe`、`setInterval`、`setTimeout`、`requestAnimationFrame` 之前。没有恢复旧的在卸载时删除 markers 的做法。
+
+**验证**（沿用已有 lifecycle harness，不新建夹具）：
+
+`mounting with an already-aborted signal allocates nothing`
+
+| 断言 | 结果 |
+|---|---|
+| `MutationObserver` 实例数 | 0 |
+| `setInterval` 存活数 | 0 |
+| `setTimeout` 存活数 | 0 |
+| `requestAnimationFrame` 存活数 | 0 |
+| `host.onEvent` 订阅数 | 0 |
+| `host.subscribe` 订阅数 | 0 |
+| 推进 60 秒后的 `sessions.list` 调用 | 0 |
+| 原生重试调用 | 0 |
+| 候选内部行是否被写标记 | 未被写（证明早退后未做投影） |
+| `#cle-recovery-style` | 仍存在 |
+
+**反向验证这条测试真的有效**：临时把代码还原成旧的 `let aborted = Boolean(signal?.aborted)`（去掉早退），该测试立刻失败（29 pass / 1 fail），恢复修复后 30/30 通过。所以它断言的是行为，不是实现细节。
