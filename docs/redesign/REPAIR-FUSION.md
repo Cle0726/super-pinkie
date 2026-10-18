@@ -585,3 +585,60 @@ A 装旧 host 后 classic 捕获 `gwRequest`，B 接管新 host：
 （learning-library:8 / learning-stage:71 / session-list:46,1169 / workbench:286）
 接上 `makeHostFacade()` 后自动变安全读，本轮未越界改。
 未操作 GUI/live/权限/美术，未改 `data-cle-active` 静态皮肤逻辑。
+
+### 9. 最后一轮资源边界（959bfc6 之后）
+
+主控审查 959bfc6 指出三处资源边界没修到底。全部补上，测试增至 23 项。
+
+#### 1) reinstall 的"替换失败"路径没有回收
+
+`installOn` 的已 aborted 分支只做了 `detachRound` + `host=null` + `online=false`，
+**没有** `abortPending` 与 `unbindExternals`。这不是只有"空文档 preaborted"才出现：
+
+真实序列是「活跃 host 上有一个永不 settle 的请求 + 一条 facade 订阅 →
+`rebind(newHost, alreadyAbortedSignal)`」。旧 `round.dispose` 不含 pending 与外部订阅，
+结果 timer 继续挂、调用方永不 settle、外部订阅还活在新界面上。
+
+现在该分支依次执行 `generation++ / abortPending / detachRound / clearExternals`。
+与正常 abort 的区别是**清空登记**而不是只解绑：这一次安装根本没活下来，
+不该把订阅留着等"同一代的稍后重连"（重连是另一次安装）。
+
+测试用真实序列断言：在途请求收到"未确认"、live timer 归零、旧 wrapper 解绑且零进入、
+登记清空、新 host 一个资源都没装、`isOnline()` 为 false。
+
+#### 2) 正常 abort 没解绑外部订阅；wrapper 没有代际守卫
+
+原来 `facade.subscribe/onEvent` 把**外部原件**直接绑到 host。`off` 被调用之前，
+旧一代已排队的回调仍可能被 host 触发，直接作用到新/离线界面。
+
+现在绑到 host 的永远是 wrapper，带三重守卫：
+`externals.has(record)`（未被 unsubscribe）、`generation` 相同、`host` 相同且 `online`。
+
+关键取舍：**正常 abort 只解绑、保留登记**。因为生产上 classic 只在 boot 订阅一次
+（我核对了全仓，目前没有生产代码通过 facade 订阅），若 abort 就丢弃登记，
+重连后订阅会永久消失。旧 wrapper 不会因此复活——它的 generation/host 守卫已失效。
+
+`goOffline()` 仍走 `clearExternals`：显式下线没有"稍后重连同一代"。
+
+测试不再用 `host.subs.includes(originalFn)` 这种只能证明"函数被存了"的断言，
+而是取出**退役前真正绑到 host 的那个 wrapper** 并调用它：
+换代后旧 wrapper 零进入、新 wrapper 正常送达、unsubscribe 后两个都不进入。
+并验证 abort 后重连，同一个外部订阅会被重绑并再次生效。
+
+#### 3) modechange 先 dispatch 后更新 key 的竞态
+
+原来顺序是「发 modechange → 再更新 `lastSessionKey`」，监听者在 modechange 回调里
+通过 facade 读到的还是上一轮的旧 key。
+
+现在先把这一轮的 mode/key **快照提交**，再按变化各通知一次（每个变化仍只发一次）。
+测试在 modechange 监听器内部读 `facade.sessions.selectedKey`，断言已是新 key。
+
+另外 `lastMode` 从"每次安装的局部变量"移到单例槽：
+离线期间 mode 变了、又没有触发任何 publish 时，重装也应补一次正确通知，
+不能等下一次无关事件。首次安装只建立基线（不凭空发通知），重装才补发。
+测试分两段断言：离线期间零通知；重装后正好一次且是新 mode。
+
+#### 未改
+
+`main.js` 接线仍归主控；4 处直接读 `window.CLE?.host` 的点接上 `makeHostFacade()` 后自动安全。
+未动 `data-cle-active` 静态皮肤、艺术、GUI/live/权限。
