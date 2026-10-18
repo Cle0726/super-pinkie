@@ -15,7 +15,8 @@ test('native browser workspace is independent from chat modes and keeps one pers
   assert.match(source, /private var browserWebView: WKWebView\?/);
   assert.match(source, /configuration\.websiteDataStore = \.default\(\)/);
   assert.match(source, /private func openBrowserWorkspace\(url: URL\?\)/);
-  assert.match(source, /if companionPanel\?\.superview != nil \{\s*closeWorkspaceDock\(nil\)/);
+  assert.match(source, /private func ensureBrowserWorkspace\(url: URL\?, focus: Bool, showStartPage: Bool = true\)/);
+  assert.match(source, /browserPresentation = \.floating/);
   assert.match(source, /data-laolao-browser-workspace/);
 
   const closeStart = source.indexOf('private func detachBrowserWorkspace');
@@ -64,17 +65,19 @@ test('every mode gets the same sidebar browser launcher and chat links use it', 
 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
-  assert.match(mac, /laolao-link-viewer\.js\?v=link4/);
+  assert.match(mac, /laolao-link-viewer\.js\?v=link6/);
   assert.match(mac, /laolaoBrowserWorkspace/);
-  assert.match(windows, /laolao-link-viewer\.js\?v=link4/);
+  assert.match(windows, /laolao-link-viewer\.js\?v=link6/);
 });
 
 test('browser width remains bounded through full-screen, drag and ordinary-window sizes', {skip: process.platform !== 'darwin'}, () => {
   const source = read('desktop/macos/Sources/Launcher.swift');
   const start = source.indexOf('enum BrowserWorkspaceGeometry {');
   const end = source.indexOf('private final class MaterialDownloadContext', start);
+  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
+  const dock = source.slice(source.indexOf('enum BrowserDockEdge:'), start);
   assert.ok(start >= 0 && end > start);
-  const result = spawnSync('xcrun', ['swift', '-'], {encoding: 'utf8', input: `import Foundation\n${source.slice(start, end)}
+  const result = spawnSync('xcrun', ['swift', '-'], {encoding: 'utf8', input: `import AppKit\n${edges}\n${dock}\n${source.slice(start, end)}
     for size: CGFloat in [860, 1180, 1440, 1920, 2560, 4036] {
       for ratio: CGFloat in [0.15, 0.44, 0.7, 0.85, 1.0] {
         let browser = BrowserWorkspaceGeometry.browserWidth(totalWidth: size, fraction: ratio)
@@ -89,6 +92,14 @@ test('browser width remains bounded through full-screen, drag and ordinary-windo
     precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: 0, fraction: 0.44) == 0)
     precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: .nan, fraction: 0.44) == 0)
     precondition(BrowserWorkspaceGeometry.browserWidth(totalWidth: 860, fraction: .nan).isFinite)
+    let bounds = NSRect(x: 0, y: 0, width: 860, height: 600)
+    let fitted = BrowserWorkspaceGeometry.floatingFrame(in: bounds, proposed: NSRect(x: -500, y: 4000, width: 2000, height: 2000))
+    precondition(bounds.contains(fitted))
+    for edges in BrowserResizeEdges.allHandles {
+      let resized = BrowserWorkspaceGeometry.resizedFloatingFrame(in: bounds, frame: fitted, edges: edges, delta: NSPoint(x: -3000, y: 3000))
+      precondition(bounds.contains(resized))
+      precondition(resized.width >= 360 && resized.height >= 260)
+    }
   `});
   assert.equal(result.status, 0, result.stderr);
 });
