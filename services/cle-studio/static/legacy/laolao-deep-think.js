@@ -46,36 +46,36 @@
   const TIERS = [
     {
       id: "base",
-      label: "基础档",
+      label: "一瞥",
       numeral: "Ⅰ",
-      art: "/cle/static/art/identity.png",
+      art: "/cle/static/art/tiers/base.webp", fr: "Coup d’œil",
       motion: "",
       short: "按任务类型走流程",
       desc: "简单问题直接答；改代码先复现再修再测；难题用独立解法验算",
     },
     {
       id: "boost",
-      label: "加强档",
+      label: "守望",
       numeral: "Ⅱ",
-      art: "/cle/static/art/identity.png",
+      art: "/cle/static/art/tiers/boost.webp", fr: "Le Guet",
       motion: "",
       short: "完成必须有真实证据",
       desc: "基础流程 + 说完成前要有本轮的测试、运行或来源证据；拿不到就照实说没完成",
     },
     {
       id: "full",
-      label: "全开档",
+      label: "追猎",
       numeral: "Ⅲ",
-      art: "/cle/static/art/identity.png",
+      art: "/cle/static/art/tiers/full.webp", fr: "La Chasse",
       motion: "",
       short: "多版独立解法互相核对",
       desc: "加强档 + 有标准答案或要取舍的问题多做几版独立解法；批评必须附反例或失败的测试",
     },
     {
       id: "marathon",
-      label: "长跑档",
+      label: "夜巡",
       numeral: "Ⅳ",
-      art: "/cle/static/art/identity.png",
+      art: "/cle/static/art/tiers/marathon.webp", fr: "La Ronde de nuit",
       motion: "",
       short: "存档续跑直到做完",
       desc: "加强档 + 每个阶段写检查点，中断自动续跑，直到完成或报告明确卡点；适合长任务",
@@ -454,6 +454,7 @@
       const label = document.createElement("span");
       label.className = "laolao-deep-think-menu__label";
       label.textContent = tier.label;
+      if (tier.fr) { const fr = document.createElement("em"); fr.className = "laolao-deep-think-menu__fr"; fr.textContent = tier.fr; label.append(fr); }
       const summary = document.createElement("span");
       summary.className = "laolao-deep-think-menu__summary";
       summary.textContent = tier.short;

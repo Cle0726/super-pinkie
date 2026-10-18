@@ -1,15 +1,15 @@
 // The five rooms. Each room is one agent with its own sessions, model and tiers;
 // switching rooms is a blink: the lids close, the room changes underneath, they open.
-import {FLOWERS} from './flowers.js';
 import {blink} from './blink.js';
 
 export const ROOMS = [
-  {id: 'chat', agent: 'main', zh: '唠嗑', fr: 'Salon', flower: 'camellia', line: '坐下来，慢慢说。'},
-  {id: 'project', agent: 'project', zh: '项目', fr: 'Atelier', flower: 'camellia', line: '图纸摊开，从最小的一步做起。'},
-  {id: 'thinking', agent: 'thinking', zh: '想法', fr: 'Nocturne', flower: 'camellia', line: '夜里的念头，先别急着赶走。'},
-  {id: 'learning', agent: 'learning', zh: '学习', fr: 'Étude', flower: 'camellia', line: '今天的这一页，陪你翻完。'},
-  {id: 'unrestricted', agent: 'unrestricted', zh: '无限', fr: 'Infini', flower: 'camellia', line: '不设门槛，直接去做。'},
+  {id: 'chat', agent: 'main', zh: '雅叙', fr: 'Le Chat', hint: '闲谈 · 陪伴', line: '坐下来，慢慢说。'},
+  {id: 'project', agent: 'project', zh: '营造', fr: 'Œuvre', hint: '项目 · 动手', line: '图纸摊开，从最小的一步做起。'},
+  {id: 'thinking', agent: 'thinking', zh: '堇思', fr: 'Pensée', hint: '想法 · 推敲', line: '夜里的念头，先别急着赶走。'},
+  {id: 'learning', agent: 'learning', zh: '习作', fr: 'Étude', hint: '学习 · 督促', line: '今天的这一页，陪你翻完。'},
+  {id: 'unrestricted', agent: 'unrestricted', zh: '挥洒', fr: 'Carte Blanche', hint: '无限 · 放手', line: '白纸一张，随你落笔。'},
 ];
+export const roomArt = (id) => `/cle/static/art/rooms/${id}.webp`;
 const byAgent = new Map(ROOMS.map((r) => [r.agent, r]));
 const LAST = (room) => `cle:last-session:${room}`;
 
@@ -25,7 +25,8 @@ export function mountRooms(host, signal) {
     html.dataset.cleRoom = room.id;
     selector.querySelector('.cle-room__zh').textContent = room.zh;
     selector.querySelector('.cle-room__fr').textContent = room.fr;
-    selector.querySelector('.cle-room__flower').innerHTML = FLOWERS[room.flower];
+    selector.querySelector('.cle-room__thumb').style.backgroundImage = `url("${roomArt(room.id)}")`;
+    selector.title = `${room.zh} · ${room.fr} — ${room.hint}`;
     for (const item of menu.querySelectorAll('[data-room]')) item.setAttribute('aria-current', String(item.dataset.room === room.id));
   };
 
@@ -34,13 +35,13 @@ export function mountRooms(host, signal) {
   selector.type = 'button';
   selector.className = 'cle-room';
   selector.setAttribute('aria-haspopup', 'menu');
-  selector.innerHTML = `<span class="cle-room__mark" aria-hidden="true">C.le.</span><span class="cle-room__flower"></span><span class="cle-room__names"><span class="cle-room__zh"></span><span class="cle-room__fr cle-label"></span></span><svg class="cle-room__chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+  selector.innerHTML = `<span class="cle-room__thumb" aria-hidden="true"></span><span class="cle-room__names"><span class="cle-room__zh"></span><span class="cle-room__fr"></span></span><svg class="cle-room__chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 
   const menu = document.createElement('div');
   menu.className = 'cle-room-menu';
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
-  menu.innerHTML = ROOMS.map((r, i) => `<button type="button" role="menuitemradio" class="cle-room-menu__item" data-room="${r.id}"><span class="cle-room-menu__flower">${FLOWERS[r.flower]}</span><span class="cle-room-menu__zh">${r.zh}</span><span class="cle-room-menu__fr cle-label">${r.fr}</span><kbd class="cle-room-menu__key">⌘${i + 1}</kbd></button>`).join('');
+  menu.innerHTML = ROOMS.map((r, i) => `<button type="button" role="menuitemradio" class="cle-room-menu__item" data-room="${r.id}"><span class="cle-room-menu__thumb" style="background-image:url('${roomArt(r.id)}')"></span><span class="cle-room-menu__names"><span class="cle-room-menu__zh">${r.zh}<em>${r.fr}</em></span><span class="cle-room-menu__hint">${r.hint}</span></span><kbd class="cle-room-menu__key">⌘${i + 1}</kbd></button>`).join('');
   document.body.append(menu);
 
   const placeMenu = () => {
@@ -110,14 +111,19 @@ export function mountRooms(host, signal) {
   }
 
   // ---- keep the selector mounted in the native sidebar ----
+  const mark = document.createElement('span');
+  mark.className = 'cle-brandmark';
+  mark.setAttribute('aria-label', 'C.le.');
+  mark.textContent = 'C.le.';
   const mount = () => {
     const brand = document.querySelector('.sidebar-brand');
     if (!brand) return;
-    if (selector.parentElement !== brand) brand.prepend(selector);
+    if (mark.parentElement !== brand) brand.prepend(mark);
+    if (selector.parentElement !== brand) brand.append(selector);
   };
   mount();
   applyRoom(current);
-  const mo = new MutationObserver(() => { if (!selector.isConnected) mount(); });
+  const mo = new MutationObserver(() => { if (!selector.isConnected || !mark.isConnected) mount(); });
   mo.observe(document.body, {childList: true, subtree: true});
   const unsubscribe = host.subscribe?.(() => {
     const room = roomForAgent(host.agents?.selectedId);
@@ -126,7 +132,7 @@ export function mountRooms(host, signal) {
   });
 
   signal.addEventListener('abort', () => {
-    mo.disconnect(); unsubscribe?.(); selector.remove(); menu.remove(); delete html.dataset.cleRoom;
+    mo.disconnect(); unsubscribe?.(); selector.remove(); mark.remove(); menu.remove(); delete html.dataset.cleRoom;
   }, {once: true});
   return {go, get current() { return current; }};
 }

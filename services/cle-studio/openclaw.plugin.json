@@ -22,14 +22,14 @@
     {
       "id": "cle",
       "name": "C.le.",
-      "description": "Paper and ink, one ice-blue gaze. A black cat guards a white flower.",
+      "description": "Ivory and ink around an oil painting; one sapphire gaze. Li An, a black cat, guards the white blossoms.",
       "source": "themes/cle.json"
     }
   ],
   "controlUi": {
-    "entry": "dist/control-ui/93b858daeb51/index.js",
+    "entry": "dist/control-ui/945839aa6c56/index.js",
     "styles": [
-      "dist/control-ui/93b858daeb51/index.css"
+      "dist/control-ui/945839aa6c56/index.css"
     ]
   }
 }
