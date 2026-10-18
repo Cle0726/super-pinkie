@@ -1,0 +1,28 @@
+/* Keep the shipped presentation tools; their controls use the current UI palette. */
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-entry { color: var(--cle-ink-2); }
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-entry[aria-pressed="true"] {
+  color: var(--cle-gaze); background: var(--cle-gaze-soft) !important; box-shadow: none;
+}
+html[data-cle]:not(#p1):not(#p2):not(#p3) :is(#pinkie-laser-toolbar, #pinkie-laser-settings, #pinkie-laser-hint) {
+  color: var(--cle-ink); background: var(--cle-surface); border: 1px solid var(--cle-line-strong); box-shadow: var(--cle-shadow-pop);
+  font-family: var(--cle-sans);
+}
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-toolbar .laser-tool-btn { color: var(--cle-ink-2); }
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-toolbar .laser-tool-btn:hover {
+  color: var(--cle-ink); background: var(--cle-gaze-soft);
+}
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-toolbar .laser-tool-btn[aria-pressed="true"] {
+  color: var(--cle-gaze); background: var(--cle-gaze-soft); box-shadow: none;
+}
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-settings :is(h4, label) { color: var(--cle-ink); }
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-settings :is(h5, .laser-foot) { color: var(--cle-ink-2); }
+html[data-cle]:not(#p1):not(#p2):not(#p3) #pinkie-laser-settings output { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle]:not(#p1):not(#p2):not(#p3) :is(.laser-tool-sep, #pinkie-laser-settings .laser-foot) { border-color: var(--cle-line); }
+.cle-utilities__shortcuts { margin: 18px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cle-utilities__shortcuts h3 { width: 100%; font: 600 14px var(--cle-sans); margin: 0 0 3px; }
+.cle-utilities__shortcut {
+  padding: 9px 11px; border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-ctl);
+  background: var(--cle-paper); color: var(--cle-ink); font: 500 13px/1.5 var(--cle-sans); cursor: pointer; text-decoration: none;
+}
+.cle-utilities__shortcut:hover { background: var(--cle-gaze-soft); border-color: var(--cle-gaze); }
+.cle-utilities__shortcut:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
