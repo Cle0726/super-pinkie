@@ -27,3 +27,132 @@ html[data-cle][data-theme-mode="dark"]:not(#c1):not(#c2):not(#c3):not(#c4) {
   --pk-scrim: rgba(4, 4, 6, .6);
   --pk-good: #7FB08B;
 }
+
+/* The notebook and editor remain functional modules, but use the same paper,
+   ink and gaze as the native shell. Keep these outside their vendor styles. */
+html[data-cle]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --learning-pink: var(--cle-gaze);
+  --learning-pink-deep: var(--cle-gaze);
+  --learning-violet: var(--cle-gaze);
+  --learning-ink: var(--cle-ink);
+  --learning-paper: var(--cle-surface);
+}
+html[data-cle] .pk-wb {
+  --wb-line: var(--cle-line-strong);
+  --wb-text: var(--cle-ink);
+  --wb-mute: var(--cle-ink-2);
+  --wb-accent: var(--cle-gaze);
+  --wb-cle: var(--cle-gaze);
+  --wb-hover: var(--cle-gaze-soft);
+  --wb-glass: var(--cle-surface);
+  --wb-glass-2: var(--cle-surface);
+  --wb-editor: var(--cle-paper);
+  --wb-sig: var(--cle-gaze);
+  --wb-card: var(--cle-surface);
+  --wb-card-line: var(--cle-line);
+  --wb-card-shadow: var(--cle-shadow);
+  --wb-mono: var(--cle-mono);
+  --font-body: var(--cle-sans);
+}
+html[data-cle] :is(.laolao-learning-tools__tray, .laolao-learning-stage, .laolao-learning-notes, .pinkie-library, .pinkie-library-reader) {
+  color: var(--cle-ink);
+  background: var(--cle-surface);
+  border-color: var(--cle-line-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-cle] .laolao-learning-stage__art { display: none; }
+html[data-cle] .laolao-learning-stage {
+  flex: 0 0 auto;
+  width: min(768px, calc(100% - 36px));
+  min-height: 0;
+  max-height: min(45vh, 400px);
+  overflow-y: auto;
+  margin: 0 auto 12px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-card);
+  background: var(--cle-surface);
+  color: var(--cle-ink);
+  box-shadow: var(--cle-shadow);
+  animation: none;
+}
+html[data-cle] .laolao-learning-stage::before,
+html[data-cle] .laolao-learning-stage::after { display: none; }
+html[data-cle] .laolao-learning-stage__body { width: 100%; padding: 18px 20px; }
+html[data-cle] :is(.laolao-learning-stage__question, .laolao-learning-option__text, .laolao-learning-result) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-learning-stage__lead, .laolao-learning-result__explanation, .laolao-learning-result__feedback, .laolao-learning-stage__confidence-row) { color: var(--cle-ink-2); }
+html[data-cle] .laolao-learning-option { border-color: var(--cle-line-strong); background: var(--cle-paper); }
+html[data-cle] .laolao-learning-option:hover,
+html[data-cle] .laolao-learning-option:has(input:checked) { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); box-shadow: none; transform: none; }
+html[data-cle] .laolao-learning-option:has(input:focus-visible) { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+html[data-cle] .laolao-learning-option__badge { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle] .laolao-learning-button { color: var(--cle-ink); border-color: var(--cle-line-strong); background: var(--cle-surface); box-shadow: none; }
+html[data-cle] .laolao-learning-button--primary { color: var(--cle-paper); background: var(--cle-ink); border-color: var(--cle-ink); }
+
+/* Mature tools keep their own behavior and share the new paper/ink palette. */
+.cle-utilities-entry { flex: 0 0 auto; white-space: nowrap; margin-left: 4px; padding: 5px 8px; border: 1px solid var(--cle-line-strong); border-radius: 7px; color: var(--cle-ink-2); background: var(--cle-surface); font: 500 11px var(--cle-sans); cursor: pointer; }
+.cle-utilities-layer { position: fixed; inset: 0; z-index: 11000; background: var(--pk-scrim); }
+.cle-utilities-layer[hidden], html[data-cle] #cle-utilities[hidden] { display: none !important; }
+html[data-cle] #cle-utilities {
+  --pinkie-settings-ink: var(--cle-ink); --pinkie-settings-muted: var(--cle-ink-2); --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong); --pinkie-settings-card: var(--cle-surface); --pinkie-settings-control: var(--cle-paper); --pinkie-settings-soft: var(--cle-gaze-soft);
+  position: absolute; inset: 16px 16px 16px auto; width: min(640px, calc(100% - 32px)); z-index: 1; display: flex; flex-direction: column;
+  border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-card); background: var(--cle-surface); color: var(--cle-ink); box-shadow: var(--cle-shadow-pop); overflow: hidden;
+}
+.cle-utilities__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--cle-line); flex: 0 0 auto; }
+.cle-utilities__close { font: 400 25px var(--cle-sans); color: var(--cle-ink-2); background: transparent; border: 0; cursor: pointer; }
+html[data-cle] #cle-utilities .pinkie-user-settings__scroll { width: 100%; min-height: 0; height: auto; flex: 1; padding: 20px; overflow: auto; }
+.cle-utilities__memory { width: 100%; border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-ctl); background: var(--cle-paper); color: var(--cle-ink); padding: 12px; font: 500 13px var(--cle-sans); text-align: left; cursor: pointer; }
+.cle-utilities__usage { margin: 20px 0; }
+.cle-utilities__usage h3 { font: 600 14px var(--cle-sans); margin: 0 0 6px; }
+.cle-utilities__usage p { color: var(--cle-ink-2); font: 400 12px/1.5 var(--cle-sans); }
+.cle-utilities__usage .laolao-usage { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; max-width: 100%; margin: 8px 0; }
+html[data-cle] .cle-utilities__usage .laolao-usage__chip { color: var(--cle-ink-2); background: var(--cle-paper); border-color: var(--cle-line); box-shadow: none; }
+html[data-cle] .cle-utilities__usage .laolao-usage__value { color: var(--cle-ink); }
+html[data-cle] #cle-utilities :is(.pinkie-user-settings__card, .pk-cap__sheet, .pk-cap__job, .pk-cap__server, .pk-cap__recipe) { background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] :is(.laolao-memory-panel, .laolao-memory-editor, .laolao-memory-card, .laolao-web-gpt-panel, .laolao-deep-think-menu, #laolao-context-compact-popover, .laolao-context-viewer__popover) { color: var(--cle-ink); background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: var(--cle-shadow-pop); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-cle] :is(.laolao-memory-head, .laolao-memory-foot, .laolao-web-gpt-panel__head) { background: var(--cle-paper); border-color: var(--cle-line); }
+html[data-cle] :is(.laolao-memory-title strong, .laolao-memory-text, .laolao-memory-card__text, .laolao-web-gpt-panel__title strong, .laolao-deep-think-menu__name, .laolao-deep-think-menu__head) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-memory-title span, .laolao-memory-status, .laolao-memory-meta, .laolao-deep-think-menu__desc, .laolao-web-gpt-panel__status) { color: var(--cle-ink-2); }
+html[data-cle] :is(.laolao-memory-button, .laolao-memory-search, .laolao-memory-editor input, .laolao-memory-editor textarea, .laolao-memory-editor select) { background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] :is(.laolao-memory-entry, .laolao-memory-close, .laolao-deep-think-btn, .laolao-context-compact-btn, .laolao-web-gpt-collab, .laolao-research-btn) { color: var(--cle-ink-2); }
+html[data-cle] :is(.laolao-deep-think-btn.is-selected, .laolao-web-gpt-collab.is-active, .laolao-research-btn.is-on) { color: var(--cle-gaze); background: var(--cle-gaze-soft); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu { --tier-accent: var(--cle-gaze); }
+html[data-cle] .laolao-deep-think-menu__item { background: var(--cle-paper); border-color: var(--cle-line); }
+html[data-cle] .laolao-deep-think-menu__item[aria-checked="true"] { border-color: var(--cle-gaze); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu__icon { background: var(--cle-gaze-soft); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu__art { display: none; }
+html[data-cle] :is(.laolao-link-viewer__header, .laolao-link-viewer__body, .laolao-link-viewer__iframe) { background: var(--cle-surface); }
+html[data-cle] :is(.laolao-link-viewer__url, .laolao-link-viewer__loading, .laolao-link-viewer__fallback, .laolao-link-viewer__fallback-title) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-link-viewer__external, .laolao-link-viewer__close, .laolao-link-viewer__fallback-copy) { background: var(--cle-paper); color: var(--cle-gaze); border-color: var(--cle-line-strong); }
+html[data-cle] .laolao-research-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; }
+html[data-cle] .laolao-research-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+html[data-cle] .laolao-research-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+html[data-cle] .agent-chat__composer-lead :is(.laolao-deep-think-btn, .laolao-context-compact-btn, .laolao-web-gpt-collab, .laolao-research-btn, .laolao-browser-workspace-entry) { flex: 0 0 28px; width: 28px; height: 28px; margin: 0; }
+html[data-cle] #cle-utilities .pk-cap__switch[aria-checked="true"] { background: var(--cle-gaze); }
+html[data-cle] .cle-native-mermaid--bridged { display: none !important; }
+html[data-cle] .pk-chart { display: flex; flex-direction: column; }
+html[data-cle] .pk-chart__stage { flex: 0 0 260px; height: 260px; min-height: 0; }
+html[data-cle] .pk-mermaid-card.is-full { position: fixed; inset: 24px; z-index: 10000; padding: 44px 24px 24px; margin: 0; overflow: auto; background: var(--cle-surface); }
+html[data-cle] .pk-mermaid-card.is-full .pk-mermaid { display: grid; place-items: center; min-height: 100%; }
+html[data-cle] .pk-rich__tools .pk-app__tool { width: 26px; height: 24px; color: var(--cle-ink-2); background: var(--cle-surface); }
+html[data-cle] .pk-rich__tools .pk-app__tool svg { width: 16px; height: 16px; }
+html[data-cle] :is(.laolao-ask, .pinkie-buddy__menu, .pinkie-buddy__bubble, .pinkie-buddy-settings, #laolao-desensitize-pop) { color: var(--cle-ink); background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: var(--cle-shadow-pop); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-cle] :is(.laolao-ask__who, .laolao-ask__question, .laolao-ask__text strong, .pinkie-buddy__menu-title) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-ask__option, .laolao-ask__other-input, .pinkie-buddy__menu-item, .pinkie-buddy__chip) { color: var(--cle-ink); background: var(--cle-paper); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] .laolao-ask__option.is-picked { background: var(--cle-gaze-soft); box-shadow: inset 0 0 0 1px var(--cle-gaze); }
+html[data-cle] .laolao-ask__face { width: 28px; height: 28px; margin: 0; border-radius: 50%; animation: none; }
+html[data-cle] .pinkie-buddy { --accent: var(--cle-gaze); }
+html[data-cle] .laolao-image-viewer { background: var(--pk-scrim); }
+html[data-cle] :is(.pinkie-library, .pinkie-reader) { --lib-ink: var(--cle-ink); --lib-muted: var(--cle-ink-2); --lib-line: var(--cle-line-strong); --lib-paper: var(--cle-surface); --lib-soft: var(--cle-paper); --lib-accent: var(--cle-gaze); --lib-highlight: var(--cle-gaze-soft); }
+html[data-cle] :is(.laolao-learning-tools__trigger, .laolao-learning-toggle) { flex: 0 0 auto; color: var(--cle-ink-2); background: var(--cle-surface); border: 1px solid var(--cle-line-strong); box-shadow: none; font: 500 11px var(--cle-sans); min-height: 28px; }
+html[data-cle] :is(.laolao-learning-tools__item, .laolao-learning-tools__due.is-due) { color: var(--cle-ink-2); background: transparent; }
+html[data-cle] .laolao-learning-tools__item:hover { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle] .laolao-learning-toggle.is-active { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+.pinkie-selection-actions { position: fixed; z-index: 12000; display: flex; gap: 6px; margin: 0; padding: 5px; border: 1px solid var(--cle-line-strong); border-radius: 9px; background: var(--cle-surface); box-shadow: var(--cle-shadow-pop); }
+.pinkie-selection-actions[hidden] { display: none; }
+.pinkie-selection-actions button { border: 0; background: var(--cle-paper); color: var(--cle-ink); border-radius: 6px; padding: 6px 9px; font: 500 12px var(--cle-sans); cursor: pointer; }
+@media (max-width: 760px) {
+  html[data-cle] .cle-composer .agent-chat__composer-lead { flex-wrap: wrap; max-width: 180px; }
+  html[data-cle] #cle-utilities .pinkie-user-settings__scroll { padding: 14px; }
+}

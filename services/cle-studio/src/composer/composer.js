@@ -4,6 +4,7 @@ let active = null;
 // the composer currently on screen: its canonical draft/send operations (tests and the welcome asks use these)
 export const composer = {
   get props() { return active?.props || null; },
+  get element() { return active?.inner || null; },
   setDraft(text) { active?.props?.setDraft?.(text); },
   send() { return active?.props?.send?.(); },
   focus() { active?.inner.querySelector('textarea')?.focus(); },

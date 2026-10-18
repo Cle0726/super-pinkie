@@ -6,6 +6,11 @@
 /* ---------- page ---------- */
 html[data-cle] body { background: var(--cle-paper); color: var(--cle-ink); -webkit-font-smoothing: antialiased; }
 html[data-cle] ::selection { background: var(--cle-gaze-soft); }
+html[data-cle] img.chat-avatar.assistant {
+  content: url('/cle/static/art/identity.png');
+  object-fit: cover;
+  border-radius: 50%;
+}
 
 /* ---------- sidebar ---------- */
 html[data-cle] aside.sidebar {

@@ -7,6 +7,7 @@ const petals = (n, rx, ry, dist) => Array.from({length: n}, (_, i) => {
 }).join('');
 
 export const FLOWERS = {
+  camellia: svg(`${petals(8, 2.4, 4.0, 3.2)}${petals(5, 1.5, 2.5, 1.6)}<circle cx="12" cy="12" r="1.1"/>`),
   // SALON — marguerite: many slim petals, an open face
   marguerite: svg(`${petals(10, 1.35, 3.6, 5.2)}<circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/>`),
   // ATELIER — iris: three standards up, two falls down, a straight stem
