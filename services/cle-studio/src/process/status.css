@@ -60,3 +60,10 @@ html[data-cle] .chat-group.user .chat-text p { margin: 0 0 .5em; } html[data-cle
 html[data-cle] .chat-group-footer { opacity: 0; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
 html[data-cle] .chat-group:hover .chat-group-footer, html[data-cle] .chat-group:focus-within .chat-group-footer { opacity: 1; }
 html[data-cle] .chat-sender-name { display: none; }
+
+/* the activity group: narration and tool rows as part of the text, Claude-Code style */
+html[data-cle] .chat-activity-group__summary { font: 400 12px/1 var(--cle-sans) !important; color: var(--cle-ink-3) !important; letter-spacing: .02em; }
+html[data-cle] .chat-pane-cache__pane--active .chat-activity-group { border-color: var(--cle-line) !important; }
+/* message position rail: there when you reach for it */
+html[data-cle] .chat-position-rail { opacity: .18; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .chat-position-rail:hover { opacity: 1; }

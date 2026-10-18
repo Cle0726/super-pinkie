@@ -87,7 +87,14 @@ export function mountStatus(host, signal) {
   let queued = false;
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } };
   const off = host.onEvent('agent', onAgent);
-  const mo = new MutationObserver(schedule);
+  // the work is shown, not hidden: open each activity group once (the user can still fold it again)
+  const unfold = () => {
+    for (const b of document.querySelectorAll('.chat-pane-cache__pane--active .chat-activity-group__summary:not([data-cle-auto])')) {
+      b.dataset.cleAuto = '1';
+      if (b.getAttribute('aria-expanded') === 'false') b.click();
+    }
+  };
+  const mo = new MutationObserver(() => { schedule(); requestAnimationFrame(unfold); });
   mo.observe(document.body, {childList: true, subtree: true});
   const tick = setInterval(() => { if (document.querySelector('.chat-working-indicator')) schedule(); }, 1000);
   signal.addEventListener('abort', () => { off?.(); mo.disconnect(); clearInterval(tick); document.querySelectorAll('.cle-status').forEach((e) => e.remove()); }, {once: true});
