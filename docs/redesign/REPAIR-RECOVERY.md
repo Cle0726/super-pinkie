@@ -42,9 +42,35 @@
 
 **证据不足一律保留显示**：任何未同时命中“前缀 + 尾句”的文本都返回 `false`，不猜。
 
-另外两类不折叠：
-- **引用/代码块**：气泡内含 `pre`/`code`/`blockquote` 时一律不折（用户是在展示这段文字）。
-- **正常用户消息、助手回复、工具输出**：不进入任何替换路径；没有全局字符串替换。
+#### 外层引用看来源，不看 DOM 里有没有代码（`review-recovery-real-code-1804.md`）
+
+上一版用 `isQuoted = bubble.querySelector('pre, code, blockquote')` 当作“用户在引用”。真实 CUA 运行证明这是错的：watchdog 的控制消息会内嵌**上一版最终回复草稿**，而草稿里恰好有 ` ```javascript ` 代码块。于是：
+
+- 真正的内部命令 → 被误判为“用户引用” → 不折叠 → **整段提醒 + 草稿 leaked 到界面和 AX**（P1）；
+- 而它本来是我唯一想隐藏的那一类。
+
+实测现场（主控提供，仅该 QA 会话）：`rawLength 1489`、`canonicalTail true`、`codeElements 1`、`data-cle-internal-turn null`、`display block`。
+
+修正：判断依据换成**原始 markdown 的首字符**，不看渲染后的标签。真实控制消息一定以 `[pinkie-` 开头，所以只要源文本以引用/围栏标记开头，就是读者在展示它：
+
+```js
+const QUOTE_OPEN = /^(?:>|```|~~~|["“「『])/u;   // blockquote / fence / 引号
+export const isExternallyQuoted = (raw) => QUOTE_OPEN.test(String(raw || '').trimStart());
+```
+
+这样两类样本在 DOM 上完全同形（都含 `<pre><code>`），但判定相反：
+
+| 源文本 | DOM | 结果 |
+|---|---|---|
+| `[pinkie-watchdog] … ```javascript … ``` … 内部续跑命令。`（真实 fixture，1489 字符） | 含 `<pre><code>` | **折叠** |
+| ` ```\n[pinkie-watchdog] … 内部续跑命令。\n``` `（用户整体引用） | 含 `<pre><code>`（同形！） | **显示** |
+| `> [pinkie-watchdog] …` | 含 `<blockquote>` | **显示** |
+| `“[pinkie-watchdog] …”` / `「…」` | 引号文本 | **显示** |
+| `[pinkie-watchdog] 这个是什么意思` | 纯文本 | **显示** |
+
+回归 fixture 使用主控保存的真实控制文本（`tests/fixtures/qa-watchdog-with-code.txt`，仅该 QA 会话），断言就建在这个字节串上，不是手写的理想样本。
+
+不动的内容：正常用户消息、助手回复、工具输出，以及真实错误（见下节）。
 
 ### 2. 真实失败不再被吞掉（`review-recovery-1537.md` 第 2 条）
 
@@ -140,13 +166,17 @@ safe('recovery', () => mountRecovery(host, controller.signal));
 
 ```
 node --test tests/recovery.test.mjs
-ℹ tests 20   ℹ pass 20   ℹ fail 0
+ℹ tests 24   ℹ pass 24   ℹ fail 0
 ```
 
 覆盖的真实风险（不是镜像实现）：
 
 | 测试 | 防的是什么 |
 |---|---|
+| **真实 fixture（1489 字符，含 ```javascript）被折叠** | P1：内部命令因草稿含代码而漏出（本次 review 1804） |
+| **同一 fixture 加 `>` / fence / 双引号 / 「」外层引用后保持显示** | 矫正过度：把读者引用也当内部命令 |
+| 同形 DOM（都含 `<pre><code>`）的两个相反结果 | 证明依据是源文本而非标签 |
+| 真实 `Agent failed before reply` 与折叠项同组 | 真实故障被连带隐藏 |
 | 真实两段控制消息（含 yield 变体）被折叠 | 主页丢内部命令 |
 | `[pinkie-watchdog] 这个是什么意思`、`[pinkie-tier] 报告`、`[pinkie-tier-control] 又跑了一遍？` | 用户无围栏提问被隐藏（本次审查第 1 条） |
 | 助手复述内部前缀（带前缀、带词、无脚手架） | 正常回复被当成内部命令 |
@@ -167,6 +197,7 @@ node --test tests/recovery.test.mjs
 ```
 node tools/recovery-smoke.mjs
 ok   control turn folded: none
+ok   the folded control turn really contained code: true
 ok   quoted control text kept visible: true
 ok   ordinary message kept visible: true
 ok   a short question about the prefix stays visible: true
@@ -208,6 +239,8 @@ recovery smoke: all checks passed
 8. **控制消息识别绑定当前脚手架文案**。尾句取自 `mode-architecture` 当前的 `watchdogControlMessage()` / `tierControlMessage()`。若后端改写这句话，识别会失效——失效方向是**保留显示**（多一条噪声），而非误藏内容，符合“证据不足就保留”的要求。后端改文案时需同步更新 `WATCHDOG_TAIL` / `TIER_TAIL` / `TIER_TAIL_YIELD`；建议主控在 mode-architecture 侧改动时一并告知。
 9. **重试风暴退避只做到 pane 级 6 秒**。两个 pane 各自计时，不与全局共享；极端情况下两侧同时故障会有两次尝试/6 秒，仍然有界。若要更严可提到全局单例，但会牺牲分屏独立性，本路未做。
 10. **「已中断」状态条只有 5 秒窗口**（原生 `vT()` 里 `Date.now()-e.occurredAt>=5e3`），超时即消失。这是原生行为，本路未延长——延长会变成“假进度”式常驻提示。
+11. **P1 修复待主控在现存真实会话复验**。本路已用主控保存的同一字节串做单测、也在 headless Chrome 里确认含 `<pre><code>` 的真实控制消息被折叠；但本路不能操作 GUI/live，19789 gen30 上那条已存在的 QA 气泡需要主控重载后直接看：期望 `data-cle-internal-turn="1"`、`display:none`、AX 不再读出内部提醒。
+12. **`isExternallyQuoted` 假设控制消息总以 `[pinkie-` 开头**。若后端将来改成别的引导词，需同步扩展 `QUOTE_OPEN` 之外的判定；失效方向仍是“可能误折外层引用”，因此后端改引导词时要一并告知本路。
 
 ---
 
@@ -240,15 +273,12 @@ recovery smoke: all checks passed
 
 审查文件本身也是证据来源：`/Users/Admin/Documents/Codex/2026-10-18/new-chat/work/review-recovery-1537.md`。
 
+### 补充轮次（review-recovery-real-code-1804）
 
-| 原能力 | 新版落点 | 状态 |
-|---|---|---|
-| `laolao-phrases.js` 内部轮次隐藏 | `recovery.js` `isInternalTurnText` / `projectPane` | 已实现，单测 + 浏览器冒烟通过 |
-| `laolao-phrases.js` 中英对照表 | 由 zh-CN 语言包取代；仅保留队列词汇 + 英文 `sendError` | 有意缩减，理由见 §1.2 |
-| `laolao-phrases.js` Lit 安全写文本 | `queue-copy.js` 只写 `node.nodeValue` | 已实现，有测试断言不碰 `textContent`/`replaceChildren` |
-| `laolao-resume.js` 断线恢复、未聚焦分屏、卡生成 | `recovery.js` `recoverPaneDetailed` + `sessionIdle` | 已实现；端到端待主控验收 |
-| `laolao-resume.js` 失败哨兵本地化 | 原生已合并失败摘要（`formatFailureSummary`），**不重复实现**；真实失败**更不被本路隐藏** | 已核对 |
-| `laolao-resume.js` 看门狗状态丝带 | 原生已有 `agent-chat__run-status--interrupted`（「已中断」） | 已核对，不重复造 |
-| `laolao-queue-steer.js` 忙时追加委托 | 原生自带 steer + 队列动作，无需重复 | 已核对，不改 |
-| `laolao-queue-steer.js` 「改为结束后发」 | 原生已有 `followUpMode` = `steer` / `queue`（「引导当前运行」/「排队等待本次运行结束」），Enter/⌘Enter 切换 | 已核对，不重复造；文案统一见自主发现 #3 |
-| `laolao-resume.js` 渲染守卫（Lit 标记自愈） | 属 timeline/patch 路 | 不在本路 |
+主控在实际 CUA 运行中复现了 P1：控制消息的草稿里带 ` ```javascript `，于是气泡渲染出 `<pre><code>`，旧的 `isQuoted` 判定把整段内部提醒放行了。修法与证据见 §1.1「外层引用看来源，不看 DOM 里有没有代码」。
+
+| # | 审查意见 | 本轮做法 | 证据 |
+|---|---|---|---|
+| 5 | 真实内部命令因草稿含 code 而漏出（P1，实际 DOM 复现） | 判定依据从「DOM 里有 pre/code」改为「源文本以引用/围栏/引号开头」；`isExternallyQuoted` | 真实 fixture 折叠 + 四种外层包装显示，单测与浏览器冒烟各一组 |
+
+审查文件：`/Users/Admin/Documents/Codex/2026-10-18/new-chat/work/review-recovery-real-code-1804.md`；fixture：`tests/fixtures/qa-watchdog-with-code.txt`（仅该 QA 会话）。
