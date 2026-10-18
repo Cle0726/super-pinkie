@@ -48,10 +48,48 @@ export function brandStyles() {
   return `${HIDE.join(',')}{display:none!important}`;
 }
 
-/** Replace the product word in a document title, keeping any "(1)" or " · environment" parts. */
+// The brand token as the router writes it: "OpenClaw" or "OpenClaw Control".
+const BRAND_TOKEN = 'OpenClaw(?:\\s+Control)?';
+const BARE_BRAND = new RegExp(`^${BRAND_TOKEN}$`, 'u');
+// Native composition (control-ui-core Uc()): "[<n> ]<context> — <brand>", and
+// applyControlUiPresentation() may then append " · <environment>".
+const BRAND_TAIL = new RegExp(`^(.* — )(${BRAND_TOKEN})$`, 'u');
+// The trailing " · <environment>" segment. Non-greedy so the *last* middot wins, and a context
+// that itself contains " · " still lands on the brand tail in the fallback pass below.
+const ENV_TAIL = /^(.*?)( · [^·]+)$/u;
+
+/**
+ * Rebrand a document title without renaming the session it describes.
+ *
+ * Only the positions the native app itself fills with the product name are rewritten:
+ *
+ *   "OpenClaw"                          → "C.le."          (startup, no session context)
+ *   "OpenClaw Control"                  → "C.le."
+ *   "Main Session — OpenClaw"           → "Main Session — C.le."
+ *   "(2) Chat — OpenClaw · Production"  → "(2) Chat — C.le. · Production"
+ *
+ * A title whose *context* happens to contain the word is left alone, because that word is the
+ * user's: "关于OpenClaw的笔记 — OpenClaw" → "关于OpenClaw的笔记 — C.le.", and a bare
+ * "关于OpenClaw的笔记" (no native tail) is returned unchanged.
+ */
 export function localTitle(title) {
   if (typeof title !== 'string' || !title.includes('OpenClaw')) return title;
-  return title.replace(WORD, 'C.le.');
+
+  const rewriteCore = (core) => {
+    if (BARE_BRAND.test(core)) return 'C.le.';
+    const tail = BRAND_TAIL.exec(core);
+    if (tail) return `${tail[1]}C.le.`;
+    return null;
+  };
+
+  // Try the form with an environment suffix first; if that core is not a native brand tail, fall
+  // back to the whole string so a context containing " · " is still handled.
+  const withEnv = ENV_TAIL.exec(title);
+  if (withEnv) {
+    const core = rewriteCore(withEnv[1]);
+    if (core !== null) return `${core}${withEnv[2]}`;
+  }
+  return rewriteCore(title) ?? title;
 }
 
 /**
@@ -192,7 +230,14 @@ export function startBrandGuard(signal) {
     let dirty = false;
     for (const r of records) {
       if (r.type === 'characterData') { if (r.target) queued.add(r.target); dirty = true; continue; }
-      if (r.type === 'attributes') { dirty = true; continue; }
+      if (r.type === 'attributes') {
+        // An aria-label-only change carries no added node, so the target itself has to be queued:
+        // flush walks the queue, and a bare dirty flag would reach neither chromeScopeFor nor
+        // sweepChrome — the label would keep the upstream wordmark forever.
+        if (r.target) queued.add(r.target);
+        dirty = true;
+        continue;
+      }
       for (const n of r.addedNodes) if (n.nodeType === 1 || n.nodeType === 3) queued.add(n);
       dirty = true;
     }
