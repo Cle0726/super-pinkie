@@ -185,7 +185,8 @@
       this.happyUntil = 0;
       this.wasRunning = false;
       this.imageVersion = 0;
-      this.requestVersion = 0;
+      this.askTicket = 0;          // 解释/总结/澄清：打开设置不该打断正在等结果的请求
+      this.settingsRequest = 0;    // 设置窗口自己的世代号
       this.jobs = new Set();
       this.focus = null;
       this.rig = null;
@@ -424,7 +425,7 @@
       for (const other of instances.values()) {
         if (other !== this && other.settingsDialog?.open) other.settingsDialog.close();
       }
-      const originRoom = roomOfPane(this.pane), ticket = ++this.requestVersion;
+      const originRoom = roomOfPane(this.pane), ticket = ++this.settingsRequest;
       const dialog = el("dialog", "pinkie-buddy-settings");
       this.settingsDialog = dialog;
       const titleId = `pinkie-buddy-settings-title-${this.id}`;
@@ -449,10 +450,10 @@
       const actions = el("div", "pinkie-buddy-settings__actions"), test = el("button", "pinkie-buddy-settings__button", "测试连接"), save = el("button", "pinkie-buddy-settings__button is-primary", "保存设置");
       test.type = "button"; save.type = "submit"; test.disabled = save.disabled = true; actions.append(test, save);
       form.append(fields, sync, status, actions); dialog.append(heading, note, form); document.body.append(dialog);
-      dialog.addEventListener("close", () => { this.requestVersion += 1; if (this.figure?.isConnected) this.figure.focus(); });
+      dialog.addEventListener("close", () => { this.settingsRequest += 1; if (this.figure?.isConnected) this.figure.focus(); });
       dialog.showModal();
       let catalog = [], data = null;
-      const live = () => this.settingsDialog === dialog && dialog.open && this.requestVersion === ticket && roomOfPane(this.pane) === originRoom;
+      const live = () => this.settingsDialog === dialog && dialog.open && this.settingsRequest === ticket && roomOfPane(this.pane) === originRoom;
       const showStatus = (message, error = false) => { status.textContent = message; status.classList.toggle("is-error", error); };
       const capabilities = () => {
         const current = catalog.find((item) => item.id === (model.value || data?.defaultModel));
@@ -521,13 +522,13 @@
       return out.slice(0, 6);
     }
     async explain(term) {
-      const ticket = ++this.requestVersion, originRoom = this.room;
+      const ticket = ++this.askTicket, originRoom = this.room;
       const job = {room: originRoom}; this.jobs.add(job);
       this.setState("working");
       this.say(`我在想「${esc(term)}」怎么说最好懂 ${DOTS}`, {sticky: true, close: false});
       try {
         const res = await ask(job, "explain", {text: term, context: this.latestReply().text.slice(0, 1200)});
-        if (ticket !== this.requestVersion || originRoom !== this.room) return;
+        if (ticket !== this.askTicket || originRoom !== this.room) return;
         this.happyUntil = Date.now() + 1800; this.setState("happy");
         this.say(res.html, {sticky: true});
       } finally { this.jobs.delete(job); }
@@ -544,12 +545,12 @@
     async summaryFlow() {
       const reply = this.latestReply().text;
       if (reply.length < 120) return this.say("最新这条回复本来就很短，不用再缩了。");
-      const ticket = ++this.requestVersion, originRoom = this.room;
+      const ticket = ++this.askTicket, originRoom = this.room;
       const job = {room: originRoom}; this.jobs.add(job);
       this.setState("working"); this.say(`正在把它缩成一句话 ${DOTS}`, {sticky: true, close: false});
       try {
         const res = await ask(job, "summary", {text: reply.slice(0, 6000)});
-        if (ticket !== this.requestVersion || originRoom !== this.room) return;
+        if (ticket !== this.askTicket || originRoom !== this.room) return;
         this.happyUntil = Date.now() + 1800; this.setState("happy"); this.say(res.html, {sticky: true});
       } finally { this.jobs.delete(job); }
     }
@@ -557,12 +558,12 @@
       const ta = this.ta;
       const draft = (ta?.value || "").trim();
       if (!draft) return this.say(`${this.callUser()}先在输入框里随便写几句，我帮你整理成更清楚的问题。`);
-      const ticket = ++this.requestVersion, originRoom = this.room;
+      const ticket = ++this.askTicket, originRoom = this.room;
       const job = {room: originRoom}; this.jobs.add(job);
       this.setState("working"); this.say(`我在帮你理一理 ${DOTS}`, {sticky: true, close: false});
       try {
         const res = await ask(job, "clarify", {text: draft, context: this.latestReply().text.slice(0, 1200)});
-        if (ticket !== this.requestVersion || originRoom !== this.room) return;
+        if (ticket !== this.askTicket || originRoom !== this.room) return;
         this.setState("rest");
         if (res.text && ta) {
           this.say(`这样问会更清楚：<div class="pinkie-buddy__quote">${esc(res.text)}</div><div class="pinkie-buddy__chips"><button class="pinkie-buddy__chip is-primary" type="button" data-use>用这个</button><button class="pinkie-buddy__chip" type="button" data-keep>保留原来的</button></div>`, {sticky: true});
@@ -628,7 +629,7 @@
       const room = roomOfPane(this.pane);
       if (room !== this.room) {
         if (this.settingsDialog?.open) this.settingsDialog.close();
-        this.setName(room); this.requestVersion += 1; this.hideBubble(); this.hideMenu();
+        this.setName(room); this.askTicket += 1; this.settingsRequest += 1; this.hideBubble(); this.hideMenu();
         this.apply(this.state, true);
       }
       const run = this.running;
