@@ -63,32 +63,5 @@ html[data-cle] .agent-chat__suggestion {
 }
 html[data-cle] .agent-chat__suggestion:hover { border-color: var(--cle-ink); color: var(--cle-ink); background: color-mix(in srgb, var(--cle-surface) 70%, transparent); }
 
-/* ---------- composer: one quiet pill; blue only when the cat is looking ---------- */
+/* composer lives in composer/composer.css */
 html[data-cle] .chat-footer { background: transparent; }
-html[data-cle] .agent-chat__input {
-  background: var(--cle-surface) !important;
-  border: 1px solid var(--cle-line-strong) !important;
-  border-radius: var(--cle-radius-composer) !important;
-  box-shadow: var(--cle-shadow) !important;
-  transition: border-color var(--cle-t-base) var(--cle-ease-soft), box-shadow var(--cle-t-base) var(--cle-ease-soft);
-}
-html[data-cle] .agent-chat__input:focus-within {
-  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong)) !important;
-  box-shadow: 0 0 0 4px var(--cle-gaze-glow), var(--cle-shadow) !important;
-}
-html[data-cle] .agent-chat__composer-combobox textarea { caret-color: var(--cle-gaze); font-size: 15px; line-height: 1.55; color: var(--cle-ink); }
-html[data-cle] .agent-chat__composer-placeholder { color: var(--cle-ink-3); font-size: 15px; }
-html[data-cle] .agent-chat__input-btn,
-html[data-cle] .chat-controls__inline-select-trigger { color: var(--cle-ink-2); border-radius: var(--cle-radius-ctl); }
-html[data-cle] .agent-chat__input-btn:hover,
-html[data-cle] .chat-controls__inline-select-trigger:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
-html[data-cle] .chat-controls__inline-select-label { font-size: 12.5px; }
-html[data-cle] .chat-send-btn--send {
-  background: var(--cle-ink) !important;
-  color: var(--cle-paper) !important;
-  border-radius: 999px;
-  transition: transform var(--cle-t-press) var(--cle-ease-soft), opacity var(--cle-t-quick);
-}
-html[data-cle] .chat-send-btn--send:active { transform: scale(.94); }
-html[data-cle] .chat-send-btn--send:disabled { opacity: .28; }
-html[data-cle] .chat-send-btn--voice { color: var(--cle-ink-2); background: transparent !important; }

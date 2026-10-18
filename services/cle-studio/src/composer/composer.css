@@ -1,0 +1,78 @@
+/* C.le. composer — one quiet pill for the words and the send button; the tools sit
+   underneath as plain text. Native DOM untouched: re-flowed with grid + display:contents. */
+.cle-composer { position: relative; }
+.cle-composer__ledge { position: absolute; left: 0; right: 0; top: 0; height: 0; pointer-events: none; z-index: 3; }
+
+html[data-cle] .cle-composer .agent-chat__input {
+  display: grid !important;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 6px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  isolation: isolate;
+}
+/* the pill itself is drawn by a pseudo-element spanning only the first row */
+html[data-cle] .cle-composer .agent-chat__input::before {
+  content: ""; grid-area: 1 / 1 / 2 / 4; align-self: stretch; z-index: -1;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-composer);
+  box-shadow: var(--cle-shadow);
+  transition: border-color var(--cle-t-base) var(--cle-ease-soft), box-shadow var(--cle-t-base) var(--cle-ease-soft);
+}
+html[data-cle] .cle-composer .agent-chat__input:focus-within::before {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong));
+  box-shadow: 0 0 0 4px var(--cle-gaze-glow), var(--cle-shadow);
+}
+html[data-cle] .cle-composer .agent-chat__composer-input-row { grid-area: 1 / 1 / 2 / 3; padding: 13px 4px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center; }
+html[data-cle] .cle-composer .agent-chat__composer-combobox textarea {
+  font: 400 15px/1.55 var(--cle-sans); color: var(--cle-ink); caret-color: var(--cle-gaze);
+  min-height: 24px; padding: 0; background: transparent;
+}
+html[data-cle] .cle-composer .agent-chat__composer-placeholder { font: 400 15px/1.55 var(--cle-sans); color: var(--cle-ink-3); padding: 0; }
+
+html[data-cle] .cle-composer .agent-chat__composer-footer,
+html[data-cle] .cle-composer .agent-chat__composer-trail { display: contents !important; }
+html[data-cle] .cle-composer .agent-chat__composer-actions { grid-area: 1 / 3 / 2 / 4; padding-right: 9px; align-self: center; display: flex; gap: 4px; }
+html[data-cle] .cle-composer .agent-chat__composer-lead { grid-area: 2 / 1 / 3 / 2; padding: 8px 0 0 12px; display: flex; gap: 2px; }
+html[data-cle] .cle-composer .agent-chat__composer-controls { grid-area: 2 / 2 / 3 / 4; padding: 8px 10px 0 0; justify-self: end; }
+
+/* tools: plain text, quiet until touched */
+html[data-cle] .cle-composer .agent-chat__input-btn,
+html[data-cle] .cle-composer .chat-controls__inline-select-trigger {
+  color: var(--cle-ink-3); background: transparent; border: 0; border-radius: 8px; min-height: 26px;
+  transition: color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .cle-composer .agent-chat__input-btn:hover,
+html[data-cle] .cle-composer .chat-controls__inline-select-trigger:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
+html[data-cle] .cle-composer .chat-controls__inline-select-label { font: 500 12px/1 var(--cle-sans); letter-spacing: .01em; }
+
+html[data-cle] .cle-composer .chat-send-btn { width: 34px; height: 34px; border-radius: 999px; }
+html[data-cle] .cle-composer .chat-send-btn--send { background: var(--cle-ink) !important; color: var(--cle-paper) !important; transition: transform var(--cle-t-press) var(--cle-ease-soft), opacity var(--cle-t-quick); }
+html[data-cle] .cle-composer .chat-send-btn--send:active { transform: scale(.93); }
+html[data-cle] .cle-composer .chat-send-btn--send:disabled { opacity: .22; }
+html[data-cle] .cle-composer .chat-send-btn--voice { color: var(--cle-ink-3); background: transparent !important; }
+html[data-cle] .cle-composer .chat-send-btn--voice:hover { color: var(--cle-ink); }
+
+/* ---------- 凝视: the thinking level as an eye ---------- */
+html[data-cle] .chat-controls__effort-gauge > svg { display: none !important; }
+html[data-cle] .chat-controls__effort-gauge { display: inline-grid; place-items: center; width: 18px; height: 18px; }
+.cle-eye { display: grid; width: 18px; height: 18px; color: var(--cle-ink-2); transition: color var(--cle-t-quick) var(--cle-ease-soft); }
+.cle-eye svg { width: 18px; height: 18px; overflow: visible; }
+.cle-eye[data-lit="true"] .cle-eye__iris { fill: var(--cle-gaze); fill-opacity: .9; }
+.cle-eye[data-lit="true"] { filter: drop-shadow(0 0 3px var(--cle-gaze-glow)); }
+.cle-eye__halo { opacity: .7; }
+html[data-cle] .chat-controls__effort-trigger:hover .cle-eye { color: var(--cle-ink); }
+html[data-cle] .chat-controls__effort-trigger[data-cle-word] .chat-controls__inline-select-label { font-size: 0 !important; letter-spacing: 0; }
+html[data-cle] .chat-controls__effort-trigger[data-cle-word] .chat-controls__inline-select-label::after {
+  content: attr(data-cle-word); font: 500 12px/1 var(--cle-serif); letter-spacing: .06em;
+}
+html[data-cle] .chat-controls__reasoning-panel[data-cle-hint]::after {
+  content: attr(data-cle-word) " · " attr(data-cle-hint); display: block; margin-top: 8px;
+  font: 400 12px/1.4 var(--cle-sans); color: var(--cle-ink-3);
+}
+html[data-cle] .cle-composer .chat-controls__permission-icon { color: var(--cle-ink-3) !important; }
