@@ -7,7 +7,64 @@
   const NEXT_MARKER = "[[CLEKK_LEARNING_NEXT_V1]]";
   const BATCH_MARKER = "[[CLEKK_LEARNING_BATCH_V1]]";
   const ASSET = "";
+
+  // One controller per learning pane. 双模式 shows two panes at once; a single module-level
+  // state made the second pane steal the first pane's buttons, stage and session. Each
+  // controller owns its state, its DOM and its session key, and is disposed when its pane goes.
+  const instances = new Set();
+
+  // ---- panes ---------------------------------------------------------------
+  // 双模式 keeps two live chat panes side by side (one is active, the other stays visible).
+  // Every panel below belongs to the pane it was mounted into; a pane is addressed by its
+  // session key, so a click in one pane can never move, close or answer in the other.
+  const paneSession = pane => {
+    if (!pane) return "";
+    const direct = pane.sessionKey || pane.dataset?.sessionKey || "";
+    if (direct) return String(direct);
+    try {
+      const owner = JSON.parse(pane.dataset?.mcpAppOwnerKey || "null");
+      if (Array.isArray(owner) && owner[1]) return String(owner[1]);
+    } catch { /* not an owner-marked pane */ }
+    const inner = pane.querySelector?.('openclaw-chat-pane') || null;
+    return String(inner?.sessionKey || "");
+  };
+  const allPanes = () => Array.from(document.querySelectorAll("openclaw-chat-pane.chat-pane-cache__pane"));
+  const visiblePanes = () => allPanes().filter(pane => pane.classList.contains("chat-pane-cache__pane--visible")
+    || pane.classList.contains("chat-pane-cache__pane--active"));
+  const paneOf = node => node?.closest?.("openclaw-chat-pane") || null;
+  const paneRoot = pane => pane?.querySelector(".chat-main") || pane;
+
+  // Degradation only: before the native panes mount (or in an older host without split view)
+  // there is no pane to address, so the single visible chat is used. Everything after mount
+  // resolves through the owning pane instead.
+  const fallbackChat = () => document.querySelector(".chat-pane-cache__pane--active") || null;
+  const fallbackComposer = () => document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-shell");
+  const fallbackLead = () => document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-lead");
+
+  const focusedPane = () => paneOf(document.activeElement) || fallbackChat() || visiblePanes()[0] || null;
+
+  // the learning session this instance speaks for: its own pane, never "the first pane on the page".
+  // With no pane at all (first paint) fall back to the routed session.
+  const sessionKeyFor = (pane = null) => {
+    const own = paneSession(pane);
+    if (own) return own;
+    const routed = window.CLE?.host?.sessions?.selectedKey || new URL(location.href).searchParams.get("session") || "";
+    if (routed) return routed;
+    const active = document.querySelector(".sidebar-recent-session--active[data-session-key]");
+    return active?.dataset.sessionKey || document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot?.sessionKey || "";
+  };
+
+  const isLearningSession = key => /^agent:learning:/.test(String(key || ""));
+  // a room may differ per pane: the pane's own session wins over the global room badge
+  const inLearningMode = (pane = null) => {
+    if (pane) return isLearningSession(paneSession(pane));
+    const mode = document.documentElement.getAttribute("data-cle-room");
+    return mode === "learning" || isLearningSession(sessionKeyFor(null));
+  };
+
+  function createController() {
   const state = {
+    pane: null,
     sessionKey: "",
     revision: -1,
     remote: null,
@@ -61,23 +118,13 @@
     return value;
   };
 
+  // every call inside a controller means "this pane's session"
+  const pageSessionKey = () => sessionKeyFor(state.pane);
+
   const request = (method, params, timeout = 16000) => {
     const gateway = window.__laolaoSidebar?.gwRequest;
     if (typeof gateway !== "function") return Promise.reject(new Error("学习工作台正在连接，请稍后再试"));
     return gateway(method, params, timeout);
-  };
-
-  const pageSessionKey = () => {
-    const routed = window.CLE?.host?.sessions?.selectedKey || new URL(location.href).searchParams.get("session") || "";
-    if (routed) return routed;
-    const active = document.querySelector(".sidebar-recent-session--active[data-session-key]");
-    return active?.dataset.sessionKey || document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot?.sessionKey || "";
-  };
-
-  const inLearningMode = () => {
-    const mode = document.documentElement.getAttribute("data-cle-room");
-    const key = pageSessionKey();
-    return mode === "learning" || key.startsWith("agent:learning:");
   };
 
   const setBusy = (button, busy, label) => {
@@ -109,7 +156,8 @@
   };
 
   const hideControlMessages = () => {
-    const groups = Array.from(document.querySelectorAll(".chat-group.user")).slice(-8);
+    const scope = paneElement() || document;
+    const groups = Array.from(scope.querySelectorAll(".chat-group.user")).slice(-8);
     for (const group of groups) {
       const text = group.textContent || "";
       // Older saved chats can still contain note controls sent before the independent drawer model.
@@ -119,17 +167,22 @@
     }
   };
 
-  const composer = () => window.CLE?.composer?.element?.querySelector('.agent-chat__composer-shell')
-    || document.querySelector('.chat-pane-cache__pane--active .agent-chat__composer-shell');
+  // the composer of this controller's own pane (never the first composer on the page)
+  const paneElement = () => state.pane?.isConnected ? state.pane : null;
+  const composer = () => {
+    const pane = paneElement();
+    return pane ? pane.querySelector(".agent-chat__composer-shell") : fallbackComposer();
+  };
 
   const ensureStage = () => {
     const anchor = composer();
-    if (state.stage?.isConnected && state.stage.parentElement === anchor?.parentElement) return state.stage;
     if (!anchor?.parentElement) return null;
+    if (state.stage?.isConnected && state.stage.parentElement === anchor.parentElement) return state.stage;
     state.stage?.remove();
     const stage = el("section", "laolao-learning-stage");
     stage.setAttribute("aria-live", "polite");
     stage.hidden = true;
+    stage.dataset.clePaneSession = pageSessionKey();
     anchor.parentElement.insertBefore(stage, anchor);
     state.stage = stage;
     return stage;
@@ -229,7 +282,8 @@
       request("chat.abort", {sessionKey, preserveSideRuns: false}, 12000),
     ]);
     if (results[1]?.status === "fulfilled") return;
-    const nativeStop = document.querySelector(".chat-pane-cache__pane--active .chat-send-btn--stop");
+    const nativeStop = (paneElement() || document).querySelector(".chat-pane-cache__pane--active .chat-send-btn--stop")
+      || (paneElement() || document).querySelector(".chat-send-btn--stop");
     if (nativeStop && !nativeStop.disabled) nativeStop.click();
   };
 
@@ -372,7 +426,8 @@
   };
 
   const absorbLegacyButtons = () => {
-    const actions = document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-lead");
+    const pane = paneElement();
+    const actions = (pane || fallbackChat())?.querySelector(".agent-chat__composer-lead") || fallbackLead();
     if (!actions) return;
     for (const node of actions.querySelectorAll(".laolao-learning-notebook-button")) node.classList.add("laolao-learning--absorbed");
   };
@@ -403,9 +458,12 @@
 
   const ensureToolsCapsule = actions => {
     if (state.toolsCapsule?.isConnected) {
+      // the capsule follows the room: 学习工具 exists only on a learning pane
+      if (!inLearningMode(state.pane)) { state.toolsCapsule.remove(); state.toolsCapsule = null; state.toolsDue = null; return; }
       if (state.toolsCapsule.parentElement !== actions) actions.prepend(state.toolsCapsule);
       return;
     }
+    if (!inLearningMode(state.pane)) return;
     const capsule = el("div", "laolao-learning-tools");
     const trigger = el("button", "laolao-learning-tools__trigger", "学习工具");
     trigger.type = "button";
@@ -446,11 +504,25 @@
     absorbLegacyButtons();
   };
 
+  // Controls for one pane. 双模式 renders two composers: each controller owns the buttons in its
+  // own lead, adopts buttons already there after a cached re-render, and never touches the other
+  // side. Everything essential is (re)created locally, so a hidden or re-rendered lead cannot
+  // leave one side without 互动学习 / 学习工具.
   const ensureButtons = () => {
-    const actions = document.querySelector(".chat-pane-cache__pane--active .agent-chat__composer-lead");
+    const pane = paneElement();
+    const actions = (pane || fallbackChat())?.querySelector(".agent-chat__composer-lead") || fallbackLead();
     if (!actions) return;
+
+    // adopt surviving nodes from a previous render of this same pane
+    if (!state.toggle?.isConnected) state.toggle = actions.querySelector(".laolao-learning-toggle");
+    if (!state.notebookButton?.isConnected) state.notebookButton = actions.querySelector(".laolao-learning-notebook-button");
+    if (!state.toolsCapsule?.isConnected) state.toolsCapsule = actions.querySelector(".laolao-learning-tools");
+    if (state.toolsCapsule) state.toolsDue = state.toolsCapsule.querySelector(".laolao-learning-tools__due");
+
     ensureToolsCapsule(actions);
-    for (const button of [state.toggle, state.notebookButton]) if (button?.isConnected && button.parentElement !== actions) actions.prepend(button);
+    for (const button of [state.toggle, state.notebookButton]) {
+      if (button?.isConnected && button.parentElement !== actions) actions.prepend(button);
+    }
     if (!state.toggle?.isConnected) {
       const button = el("button", "laolao-learning-toggle", "互动学习");
       button.type = "button";
@@ -1511,6 +1583,23 @@
     reveal(file);
   };
 
+  // A drawer that always slid in from the window edge covered the other half of 双模式 and
+  // looked like it belonged to the wrong side. Keep it inside the pane that opened it.
+  const positionDrawer = () => {
+    const drawer = state.drawer;
+    const pane = paneElement();
+    if (!drawer || !pane) return;
+    const rect = pane.getBoundingClientRect();
+    if (!rect.width) return;
+    const width = Math.max(280, Math.min(390, rect.width - 24));
+    drawer.style.position = "fixed";
+    drawer.style.width = `${width}px`;
+    drawer.style.right = "auto";
+    drawer.style.left = `${Math.round(rect.right - width - 12)}px`;
+    drawer.style.top = `${Math.round(Math.max(8, rect.top + 12))}px`;
+    drawer.style.bottom = `${Math.round(Math.max(8, window.innerHeight - rect.bottom + 12))}px`;
+  };
+
   const closeNotebook = () => {
     closeNoteMenu();
     state.drawer?.classList.remove("is-open");
@@ -1518,7 +1607,18 @@
     if (state.drawer) state.drawer.inert = true;
   };
 
+  // every pane keeps its own instance; opening one closes the others (one notebook on screen),
+  // but each instance only ever touches its own drawer, stage and buttons.
+  const closeSiblingNotebooks = () => {
+    for (const instance of instances) {
+      if (instance === my) continue;
+      try { instance.closeNotebook(); } catch { /* sibling already torn down */ }
+    }
+  };
+
   function openNotebook() {
+    // one notebook at a time across panes; the open one belongs to the pane that asked
+    closeSiblingNotebooks();
     let drawer = state.drawer;
     if (!drawer?.isConnected) {
       drawer = el("aside", "laolao-learning-notes");
@@ -1676,6 +1776,10 @@
     drawer.classList.add("is-open");
     drawer.setAttribute("aria-hidden", "false");
     drawer.inert = false;
+    // the drawer stays anchored to the pane that opened it (side by side in 双模式)
+    const owner = paneElement() || focusedPane();
+    drawer.dataset.clePaneSession = paneSession(owner) || pageSessionKey(owner);
+    positionDrawer();
     loadNotes();
   }
 
@@ -1690,21 +1794,8 @@
     } catch (error) { showToast(error.message || "笔记保存失败", true); }
   };
 
-  window.__pinkieSelectionActions?.register('note', {
-    order: 1,
-    when: ({text, assistant, library}) => inLearningMode() && (!!assistant || !!library) && text.length >= 2,
-    create: () => el("button", "laolao-learning-selection-save", "记笔记"),
-    run: selected => {
-      const {text, assistant, library} = selected;
-      if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
-      state.selectionText = text;
-      state.selectionLabel = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "Li An 回答";
-      void saveSelection();
-    },
-  });
-
   const poll = async () => {
-    if (state.polling || !inLearningMode()) return;
+    if (state.polling || !inLearningMode(state.pane)) return;
     const sessionKey = pageSessionKey();
     if (!sessionKey) return;
     state.polling = true;
@@ -1739,31 +1830,136 @@
   };
 
   const reconcile = () => {
-    if (!inLearningMode()) return leaveLearningMode();
+    if (!inLearningMode(state.pane)) return leaveLearningMode();
     ensureButtons();
     if (state.remote?.enabled && !state.stage?.isConnected) renderStage(state.remote);
     hideControlMessages();
     poll();
   };
 
-  let lastHref = location.href;
-  setInterval(() => {
-    if (location.href !== lastHref) {
-      lastHref = location.href;
-      state.sessionKey = ""; state.revision = -1; state.remote = null;
-      state.stage?.remove(); state.stage = null;
-    }
+  const dispose = () => {
+    leaveLearningMode();
+    state.drawer?.remove(); state.drawer = null;
+    window.clearInterval(tickTimer);
+    window.removeEventListener("resize", placeNoteMenu);
+    instances.delete(instance);
+  };
+
+  const tickTimer = window.setInterval(() => {
+    if (!state.pane?.isConnected) { dispose(); return; }
     reconcile();
   }, 1200);
-  window.addEventListener("pinkie:session-selected", reconcile);
-  window.addEventListener("laolao:modechange", reconcile);
-  window.addEventListener("laolao:sessions-changed", () => { if (state.drawer?.classList.contains("is-open")) void loadNotes(); });
+
+  window.addEventListener("resize", () => { placeNoteMenu(); if (state.drawer?.classList.contains("is-open")) positionDrawer(); });
   document.addEventListener("mousedown", event => {
     if (state.noteMenu && !event.target.closest?.(".laolao-learning-note__menu, .laolao-learning-note__more")) closeNoteMenu();
   }, true);
-  window.addEventListener("resize", placeNoteMenu);
-  window.addEventListener("pinkie:library-note-saved", () => { if (state.drawer?.classList.contains("is-open")) void loadNotes(); });
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", reconcile, {once: true});
-  else reconcile();
+  const instance = {
+    get pane() { return state.pane; },
+    setPane(pane) { state.pane = pane; },
+    reconcile,
+    dispose,
+    closeNotebook,
+    reset() {
+      state.sessionKey = ""; state.revision = -1; state.remote = null; state.dueFetchedAt = 0;
+      state.stage?.remove(); state.stage = null;
+      closeNotebook();
+    },
+    refreshNotes() {
+      if (state.drawer?.classList.contains("is-open")) void loadNotes();
+    },
+    // the selection action belongs to the pane the selection came from
+    saveSelection(text, label) {
+      state.selectionText = text;
+      state.selectionLabel = label;
+      return saveSelection();
+    },
+    toast(message, error) { showToast(message, error); },
+    accepts(pane) { return !pane || !state.pane || pane === state.pane; },
+    // test seam: which session this side answers to
+    get sessionKey() { return pageSessionKey(); },
+  };
+  instances.add(instance);
+  return instance;
+  }
+
+  // ---- pane lifecycle -------------------------------------------------------
+  // A controller is bound to one chat pane and follows that pane's session: when the pane
+  // shows another session (history, new chat, cache swap), only that pane's controller
+  // resets. Panes that disappear are disposed, so no timer or listener outlives them.
+  const bootControllers = () => {
+    const panes = Array.from(document.querySelectorAll("openclaw-chat-pane.chat-pane-cache__pane"));
+    const live = new Set(panes);
+    for (const instance of [...instances]) {
+      if (!instance.pane || !live.has(instance.pane) || !instance.pane.isConnected) instance.dispose();
+    }
+    for (const pane of panes) {
+      const boundSession = paneSession(pane);
+      let instance = [...instances].find(item => item.pane === pane);
+      if (!instance) {
+        instance = createController();
+        instance.setPane(pane);
+        instance.lastSession = boundSession;
+      } else if (instance.lastSession !== boundSession) {
+        // the same pane now shows a different session: reset only this side
+        instance.setPane(pane);
+        instance.reset();
+        instance.lastSession = boundSession;
+      }
+      if (!isLearningSession(boundSession)) { instance.reconcile(); continue; }
+      instance.reconcile();
+    }
+    // no pane mounted yet (first paint): fall back to a page-scoped controller
+    if (!panes.length && !instances.size) {
+      const instance = createController();
+      instances.add(instance);
+      instance.reconcile();
+    }
+  };
+
+  let scheduled = false;
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; bootControllers(); });
+  };
+  const mo = new MutationObserver(schedule);
+  mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ["class"]});
+  window.addEventListener("pinkie:session-selected", schedule);
+  window.addEventListener("laolao:modechange", schedule);
+  window.addEventListener("laolao:sessions-changed", () => {
+    for (const instance of instances) instance.refreshNotes();
+  });
+
+  // ---- text selection: one registration for the page, routed to the pane that owns it ----
+  // Registering this inside the controller would add one action per pane and let two panes
+  // write the same note twice. The handler resolves the controller from the selected node.
+  const controllersFor = () => [...instances].filter(instance => instance.pane);
+  const controllerFor = node => {
+    const pane = paneOf(node);
+    const owner = pane ? controllersFor().find(instance => instance.pane === pane) : controllersFor().find(instance => instance.accepts(null));
+    return owner || controllersFor()[0] || null;
+  };
+  window.__pinkieSelectionActions?.register('note', {
+    order: 1,
+    when: ({text, assistant, library}) => {
+      const instance = controllerFor(assistant || library || document.body);
+      if (!instance || !(isLearningSession(instance.sessionKey) || document.documentElement.getAttribute("data-cle-room") === "learning")) return false;
+      return (!!assistant || !!library) && text.length >= 2;
+    },
+    create: () => el("button", "laolao-learning-selection-save", "记笔记"),
+    run: selected => {
+      const {text, assistant, library} = selected;
+      if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
+      const instance = controllerFor(assistant || document.body);
+      if (!instance) return showToast("没有找到对应的学习会话", true);
+      const label = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "Li An 回答";
+      void instance.saveSelection(text, label);
+    },
+  });
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootControllers, {once: true});
+  else bootControllers();
+  window.__cleLearningControllers = instances;
 })();

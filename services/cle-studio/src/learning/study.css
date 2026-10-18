@@ -45,3 +45,29 @@
 .cle-study-sheet__enable { display: flex; align-items: center; gap: 8px; padding-top: 8px; }
 .cle-study-sheet__enable input { accent-color: var(--cle-gaze); }
 @media (max-width: 700px) { .cle-study { margin: 8px 14px 0; gap: 8px; } .cle-study__summary { gap: 8px; } .cle-study-sheet { top: 16px; right: 16px; bottom: 16px; padding: 20px; } }
+
+/* 双模式: each pane carries its own bar, so the bar is measured by its pane, not the window.
+   Two panes at ~508px must both keep the gauges readable and never push the composer down. */
+html[data-cle] .chat-pane-cache__pane .cle-study {
+  margin: 8px 16px 0;
+  gap: 8px;
+  padding: 10px 0;
+  min-width: 0;
+}
+html[data-cle] .chat-pane-cache__pane .cle-study__summary,
+html[data-cle] .chat-pane-cache__pane .cle-study__progress { min-width: 0; flex-wrap: wrap; }
+html[data-cle] .chat-pane-cache__pane .cle-study__actions { flex: 0 0 auto; }
+html[data-cle] .chat-pane-cache__pane .cle-study__button { padding: 6px 11px !important; }
+html[data-cle] .chat-pane-cache__pane .cle-study__eyebrow em { display: none; }
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .cle-study { margin: 6px 14px 0; }
+  html[data-cle] .cle-study__progress { gap: 12px; }
+  html[data-cle] .cle-study__gauge i { width: 72px; }
+}
+@container cle-pane (max-width: 560px) {
+  html[data-cle] .cle-study__summary { flex-direction: column; align-items: flex-start; gap: 6px; }
+  html[data-cle] .cle-study__progress { gap: 10px 14px; }
+  html[data-cle] .cle-study__streak span { margin-left: 2px; }
+}
+/* the pact sheet is a single dialog for the page; keep it inside the visible area on short panes */
+@media (max-height: 640px) { .cle-study-sheet { top: 12px; bottom: 12px; } }
