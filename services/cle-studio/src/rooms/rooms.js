@@ -7,7 +7,7 @@ export const ROOMS = [
   {id: 'chat', agent: 'main', zh: '唠嗑', fr: 'Salon', flower: 'marguerite', line: '坐下来，慢慢说。'},
   {id: 'project', agent: 'project', zh: '项目', fr: 'Atelier', flower: 'iris', line: '图纸摊开，从最小的一步做起。'},
   {id: 'thinking', agent: 'thinking', zh: '想法', fr: 'Nocturne', flower: 'moonflower', line: '夜里的念头，先别急着赶走。'},
-  {id: 'learning', agent: 'learning', zh: '学习', fr: 'Étude', flower: 'myosotis', line: '今天的这一页，碧琪陪你翻完。'},
+  {id: 'learning', agent: 'learning', zh: '学习', fr: 'Étude', flower: 'myosotis', line: '今天的这一页，陪你翻完。'},
   {id: 'unrestricted', agent: 'unrestricted', zh: '无限', fr: 'Infini', flower: 'fleur', line: '不设门槛，直接去做。'},
 ];
 const byAgent = new Map(ROOMS.map((r) => [r.agent, r]));

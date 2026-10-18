@@ -62,3 +62,28 @@ html[data-cle] .sidebar-agent-card { display: none !important; }
 .cle-blink__flower svg { width: 30px; height: 30px; }
 .cle-blink__zh { font: 400 30px/1 var(--cle-serif); letter-spacing: .32em; padding-left: .32em; }
 .cle-blink__fr { color: #8F8B84; letter-spacing: .3em; }
+
+/* ---------- the empty room ---------- */
+html[data-cle] .agent-chat__welcome-identity,
+html[data-cle] .agent-chat__welcome-secondary { display: none !important; }
+html[data-cle] .agent-chat__welcome { display: grid; place-items: center; }
+.cle-welcome { display: grid; justify-items: center; text-align: center; padding: 6vh 16px 2vh; animation: cle-rise var(--cle-t-scene) var(--cle-ease) both; }
+@keyframes cle-rise { from { opacity: 0; translate: 0 10px; } }
+.cle-welcome__arch {
+  position: relative; margin: 0 0 22px; width: min(240px, 34vh); aspect-ratio: 3 / 4;
+  border-radius: 999px 999px 6px 6px; overflow: hidden; background: #0B0D12;
+  box-shadow: 0 28px 60px -30px rgba(10, 12, 18, .55);
+}
+.cle-welcome__arch img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cle-welcome__arch.is-empty img { display: none; }
+.cle-welcome__rule { position: absolute; inset: 7px; border-radius: 999px 999px 3px 3px; border: 1px solid rgba(201, 162, 74, .55); pointer-events: none; }
+.cle-welcome__label { margin: 0 0 10px; letter-spacing: .26em; }
+html[data-cle] .agent-chat__welcome .cle-welcome__line { margin: 0 0 26px; font: 400 26px/1.35 var(--cle-serif); letter-spacing: .06em; color: var(--cle-ink); max-width: 22em; }
+.cle-welcome__asks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 620px; }
+.cle-welcome__ask {
+  appearance: none; background: transparent; border: 1px solid var(--cle-line-strong); border-radius: 999px;
+  padding: 8px 15px; font: 400 13px/1 var(--cle-sans); color: var(--cle-ink-2); cursor: default;
+  transition: border-color var(--cle-t-quick) var(--cle-ease-soft), color var(--cle-t-quick) var(--cle-ease-soft);
+}
+.cle-welcome__ask:hover { border-color: var(--cle-ink); color: var(--cle-ink); }
+@media (max-height: 760px) { .cle-welcome__arch { width: min(180px, 26vh); } .cle-welcome__line { font-size: 22px; } }

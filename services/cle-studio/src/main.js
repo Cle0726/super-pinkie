@@ -7,6 +7,7 @@ import './styles/bridge.css';
 import {ensureTheme} from './core/theme.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
+import {mountWelcome} from './rooms/welcome.js';
 import {blink} from './rooms/blink.js';
 import {mountComposer} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
@@ -30,6 +31,7 @@ export default {
     nightObserver.observe(html, {attributes: true, attributeFilter: ['data-theme-mode']});
     controller.signal.addEventListener('abort', () => nightObserver.disconnect(), {once: true});
     const rooms = mountRooms(host, controller.signal);
+    mountWelcome(host, controller.signal);
     mountComposer(host, controller.signal);
     mountGaze(controller.signal);
     installLegacyShim(host, controller.signal);
