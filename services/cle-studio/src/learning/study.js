@@ -19,8 +19,10 @@ export function mountStudy(host, signal) {
   const strip = node('section', 'cle-study');
   strip.setAttribute('aria-label', '今日学习');
   const summary = node('div', 'cle-study__summary');
-  const eyebrow = node('span', 'cle-label', 'ÉTUDE · 今日');
+  const eyebrow = node('span', 'cle-study__eyebrow');
+  eyebrow.innerHTML = '<b>习作</b><em>Étude · 今日</em>';
   const progress = node('span', 'cle-study__progress', '正在读取学习进度…');
+  const streak = node('span', 'cle-study__streak');
   const timer = node('span', 'cle-study__timer');
   const notice = node('div', 'cle-study__notice'); notice.setAttribute('role', 'status');
   const focusButton = action('专注 25 分钟', async () => {
@@ -39,7 +41,7 @@ export function mountStudy(host, signal) {
     finally { focusButton.disabled = false; }
   });
   const settings = action('学习约定', () => openSheet());
-  summary.append(eyebrow, progress, timer);
+  summary.append(eyebrow, progress, streak, timer);
   const buttons = node('div', 'cle-study__actions'); buttons.append(focusButton, settings);
   strip.append(summary, buttons, notice);
 
@@ -56,9 +58,22 @@ export function mountStudy(host, signal) {
   function paint() {
     if (today) {
       const p = today.progress;
-      progress.textContent = `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${p.dueReviews} 张待复习`;
+      // three gauges: what the pact asks for today, and how much of it is real
+      const gauge = (label, value, goal, unit, invert = false) => {
+        const k = invert ? (value ? 0 : 1) : goal ? Math.min(1, value / goal) : 1;
+        const g = node('span', 'cle-study__gauge'); g.dataset.done = String(k >= 1);
+        g.innerHTML = `<span class="cle-study__gauge-label"></span><span class="cle-study__gauge-value"></span><i style="--k:${k.toFixed(3)}"></i>`;
+        g.firstChild.textContent = label; g.children[1].textContent = invert ? `${value} ${unit}` : `${value}/${goal} ${unit}`;
+        return g;
+      };
+      progress.replaceChildren(gauge('专注', p.minutes, today.goals.minutes, '分钟'), gauge('做题', p.questions, today.goals.questions, '道'), gauge('待复习', p.dueReviews, 0, '张', true));
+      progress.setAttribute('aria-label', `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${p.dueReviews} 张待复习`);
       strip.dataset.complete = String(today.complete);
-      eyebrow.textContent = today.complete ? 'ÉTUDE · 今日已完成' : `ÉTUDE · 连续 ${today.streak.current} 天`;
+      // the streak is a row of blossoms he has kept; seven at most, then a number
+      const n = today.streak.current || 0;
+      streak.replaceChildren(...Array.from({length: Math.min(7, n)}, () => node('i', 'cle-study__bloom')), node('span', '', n ? `连续 ${n} 天` : '今天开个头'));
+      streak.title = today.complete ? '今日已完成' : `连续 ${n} 天`;
+      eyebrow.querySelector('em').textContent = today.complete ? 'Étude · 今日已完成' : 'Étude · 今日';
     }
     focusButton.textContent = focus ? '结束本轮' : '专注 25 分钟'; clock();
   }
