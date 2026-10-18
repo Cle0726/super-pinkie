@@ -92,7 +92,7 @@ html[data-cle] .laolao-learning-button--primary { color: var(--cle-paper); backg
 /* Mature tools keep their own behavior and share the new paper/ink palette. */
 /* 语义色：成功 / 失败 / 警告。它们表达真实状态，所以不并入纸墨金的装饰色阶；
    取值保证在 --cle-surface 上达到 4.5:1（深色主题单独一套）。 */
-html[data-cle] { --cle-ok: #3F6B4F; --cle-danger: #B23A33; --cle-warn: #8A6A24; }
+html[data-cle] { --cle-ok: #3F6B4F; --cle-danger: #B23A33; --cle-warn: #7F5F1B; }
 html[data-cle][data-theme-mode="dark"] { --cle-ok: #8FC29E; --cle-danger: #E0645B; --cle-warn: #D7B36A; }
 
 /* ── 功能与连接 ──────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ html[data-cle] #cle-utilities {
 
 /* 唯一的异步反馈行：真实失败/降级才出现，成功后自动收起 */
 .cle-utilities__status { flex: 0 0 auto; margin: 0; padding: 8px 18px; border-bottom: 1px solid var(--cle-line); color: var(--cle-ink-2); background: var(--cle-paper); font: 400 12px/1.5 var(--cle-sans); }
-.cle-utilities__status[data-state="warn"] { color: var(--cle-warn, #8A6A24); }
+.cle-utilities__status[data-state="warn"] { color: var(--cle-warn, #7F5F1B); }
 .cle-utilities__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
 
 html[data-cle] #cle-utilities .pinkie-user-settings__scroll { width: 100%; min-height: 0; height: auto; flex: 1; padding: 16px 18px 20px; overflow: auto; overscroll-behavior: contain; }
@@ -175,7 +175,7 @@ html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__card-title { font: 
 html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__card-hint { margin: 4px 0 10px 26px; color: var(--cle-ink-2); font-size: 11.5px; line-height: 1.55; }
 html[data-cle] #cle-utilities :is(.pk-cap__status[data-state="ok"], .pk-conn__state[data-state="on"], .pk-job__history li span) { color: var(--cle-ok, #3F6B4F); }
 html[data-cle] #cle-utilities :is(.pk-cap__status[data-state="error"], .pk-conn__state[data-state="bad"], .pk-job__history li[data-ok="false"] span) { color: var(--cle-danger, #B23A33); }
-html[data-cle] #cle-utilities .pk-cap__warn { border: 1px solid color-mix(in srgb, var(--cle-warn, #8A6A24) 32%, transparent); background: color-mix(in srgb, var(--cle-warn, #8A6A24) 9%, var(--cle-surface)); color: var(--cle-warn, #8A6A24); }
+html[data-cle] #cle-utilities .pk-cap__warn { border: 1px solid color-mix(in srgb, var(--cle-warn, #7F5F1B) 32%, transparent); background: color-mix(in srgb, var(--cle-warn, #7F5F1B) 9%, var(--cle-surface)); color: var(--cle-warn, #7F5F1B); }
 html[data-cle] #cle-utilities .pk-cap__empty { color: var(--cle-ink-2); }
 html[data-cle] #cle-utilities .pk-cap__input { background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); }
 html[data-cle] #cle-utilities .pk-cap__input:focus { border-color: var(--cle-gaze); box-shadow: 0 0 0 3px var(--cle-gaze-soft); outline: none; }
@@ -268,10 +268,57 @@ html[data-cle] #cle-utilities .pinkie-user-settings__button--primary[disabled] {
   color: var(--cle-paper);
   opacity: .6;
 }
+/* 夜间：--cle-ink 是浅色、--cle-paper 是最深的底。
+   主按钮在夜间必须是"浅底深字"，否则会变成浅字压浅底（实测 1.07:1）。 */
 :root[data-theme-mode="dark"] #cle-utilities :is(.pinkie-user-settings__button--primary, .pk-cap__actions .pinkie-user-settings__button--primary) {
   border-color: var(--cle-ink);
   background: var(--cle-ink);
   color: var(--cle-paper);
+}
+/* laolao-settings-user.css 里 #cle-utilities .pinkie-user-settings__button--primary
+   与上面同特异性、且加载更晚，旧粉渐变会赢。这里提一级特异性把它压住，
+   深色和浅色都要，否则浅色下同样会露出粉色按钮。 */
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__button--primary,
+html[data-cle] #cle-utilities .pk-cap__actions .pinkie-user-settings__button--primary,
+:root[data-theme-mode="dark"] #cle-utilities .pk-cap .pinkie-user-settings__button--primary {
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
+  box-shadow: none;
+}
+/* 用量胶囊的夜间表面：laolao-usage-stats.css 的 html[data-theme-mode="dark"] .laolao-usage__chip
+   与这里的覆盖同特异性且更晚加载，所以在面板作用域内提一级特异性兜住。 */
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip {
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  color: var(--cle-ink-2);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__value { color: var(--cle-ink); }
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost {
+  background: var(--cle-ink);
+  border-color: var(--cle-ink);
+  color: var(--cle-paper);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost .laolao-usage__label,
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost .laolao-usage__value { color: var(--cle-paper); }
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--runtime[data-state="live"] {
+  background: var(--cle-gaze-soft);
+  border-color: color-mix(in srgb, var(--cle-gaze) 42%, var(--cle-line-strong));
+  color: var(--cle-gaze);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--runtime[data-state="live"] .laolao-usage__value { color: var(--cle-gaze); }
+
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__button--primary:hover,
+:root[data-theme-mode="dark"] #cle-utilities .pk-cap .pinkie-user-settings__button--primary:hover {
+  border-color: var(--cle-ink);
+  background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+  box-shadow: none;
+}
+:root[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__button--primary:disabled,
+:root[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__button--primary[disabled] {
+  background: var(--cle-surface);
+  border-color: var(--cle-line-strong);
+  color: var(--cle-ink-2);
 }
 /* 危险操作（清空记忆、移除连接）：保留红色语义，不用金或灰吞掉 */
 html[data-cle] #cle-utilities :is(.laolao-memory-button--danger, .pk-cap__danger) { color: var(--cle-danger, #B23A33); }
@@ -290,9 +337,15 @@ html[data-cle] :is(.laolao-memory-panel, .laolao-memory-editor, .laolao-memory-c
 html[data-cle] :is(.laolao-memory-head, .laolao-memory-foot, .laolao-web-gpt-panel__head) { background: var(--cle-paper); border-color: var(--cle-line); }
 html[data-cle] :is(.laolao-memory-title strong, .laolao-memory-text, .laolao-memory-card__text, .laolao-web-gpt-panel__title strong, .laolao-deep-think-menu__name, .laolao-deep-think-menu__head) { color: var(--cle-ink); }
 html[data-cle] :is(.laolao-memory-title span, .laolao-memory-status, .laolao-memory-meta, .laolao-deep-think-menu__desc, .laolao-web-gpt-panel__status) { color: var(--cle-ink-2); }
-html[data-cle] :is(.laolao-memory-button, .laolao-memory-search, .laolao-memory-editor input, .laolao-memory-editor textarea, .laolao-memory-editor select) { background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); box-shadow: none; }
+/* 只给"次要"按钮上纸面：主/危险操作必须走下面的层级规则。
+   否则 :is() 会按最高权重命中主按钮，把主次一起压平（这就是之前主按钮丢层级的根因）。 */
+html[data-cle] :is(.laolao-memory-button, .laolao-memory-search, .laolao-memory-editor input, .laolao-memory-editor textarea, .laolao-memory-editor select):not(.laolao-memory-button--primary):not(.laolao-memory-button--danger) {
+  background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); box-shadow: none;
+}
 /* 记忆匣的主/危险操作要保留层级：全都变成同一张纸，用户就分不出哪个是"保存" */
 html[data-cle] .laolao-memory-button.laolao-memory-button--primary { background: var(--cle-ink); color: var(--cle-paper); border-color: var(--cle-ink); }
+/* 夜间 --cle-ink 是浅色：浅底 + 深字，保持"主按钮最醒目"的层级 */
+html[data-cle][data-theme-mode="dark"] .laolao-memory-button.laolao-memory-button--primary { background: var(--cle-ink); color: var(--cle-paper); border-color: var(--cle-ink); }
 html[data-cle] .laolao-memory-button.laolao-memory-button--primary:hover { background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze)); border-color: var(--cle-ink); }
 html[data-cle] .laolao-memory-button.laolao-memory-button--danger { background: transparent; color: var(--cle-danger, #B23A33); border-color: color-mix(in srgb, var(--cle-danger, #B23A33) 38%, transparent); }
 html[data-cle] .laolao-memory-button.laolao-memory-button--danger:hover { background: color-mix(in srgb, var(--cle-danger, #B23A33) 8%, transparent); }
