@@ -372,13 +372,16 @@ html[data-cle] .chat-controls__effort-trigger .chat-controls__inline-select-labe
 }
 html[data-cle] .chat-controls__effort-trigger[data-cle-level="off"] .chat-controls__inline-select-label { color: var(--cle-ink-2); }
 
-/* ---------- the stops, in the model's real order ---------- */
+/* ---------- the stops, in the model's real order ----------
+   A stop is a small vertical mark plus its standard name — not a coloured bar, which read
+   as one continuous fill and competed with the track. The mark is ink; only the current
+   stop takes the ice blue, and it takes it as colour, not as a glow. */
 html[data-cle] .cle-gaze-stops {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 2px;
-  margin: 9px 1px 0;
+  gap: 4px;
+  margin: 10px 1px 0;
   padding: 0;
 }
 html[data-cle] .cle-gaze-stop {
@@ -386,18 +389,18 @@ html[data-cle] .cle-gaze-stop {
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 4px;
+  gap: 5px;
   color: var(--cle-ink-2);
-  font: 500 9.5px/1.1 var(--cle-mono);
-  letter-spacing: .02em;
+  font: 500 11px/1.15 var(--cle-sans);
+  letter-spacing: 0;
   text-align: center;
 }
 html[data-cle] .cle-gaze-stop__tick {
-  width: 100%;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--cle-line-strong);
-  transition: background-color var(--cle-t-quick) var(--cle-ease-soft);
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--cle-ink) 26%, transparent);
+  transition: background-color var(--cle-t-quick) var(--cle-ease-soft), height var(--cle-t-quick) var(--cle-ease-soft);
 }
 html[data-cle] .cle-gaze-stop__name {
   max-width: 100%;
@@ -406,156 +409,155 @@ html[data-cle] .cle-gaze-stop__name {
   white-space: nowrap;
 }
 html[data-cle] .cle-gaze-stop[data-past] { color: var(--cle-ink-2); }
-html[data-cle] .cle-gaze-stop[data-past] .cle-gaze-stop__tick { background: color-mix(in srgb, var(--cle-ink) 32%, transparent); }
+html[data-cle] .cle-gaze-stop[data-past] .cle-gaze-stop__tick { background: color-mix(in srgb, var(--cle-ink) 52%, transparent); }
 html[data-cle] .cle-gaze-stop[data-current] { color: var(--cle-ink); }
 html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__tick {
+  width: 2px;
+  height: 9px;
   background: var(--cle-gaze);
-  box-shadow: 0 0 0 2px var(--cle-gaze-soft);
-}
-html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__name { font-weight: 700; }
-html[data-cle] .cle-gaze-stops[data-disabled] { opacity: .72; }
-html[data-cle] .cle-gaze-stops[data-disabled] .cle-gaze-stop[data-current] .cle-gaze-stop__tick {
-  background: var(--cle-ink-3);
   box-shadow: none;
 }
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__name { font-weight: 650; }
+/* Many stops on a narrow pane: step the size down by the count the model actually exposes,
+   so a nine-stop ladder stays readable instead of every label being squeezed at once. */
+html[data-cle] .cle-gaze-stops[data-cle-stops="6"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="7"] .cle-gaze-stop { font-size: 10px; }
+html[data-cle] .cle-gaze-stops[data-cle-stops="8"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="9"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="10"] .cle-gaze-stop { font-size: 9.5px; }
+html[data-cle] .cle-gaze-stops[data-cle-stops="8"] .cle-gaze-stop__name,
+html[data-cle] .cle-gaze-stops[data-cle-stops="9"] .cle-gaze-stop__name,
+html[data-cle] .cle-gaze-stops[data-cle-stops="10"] .cle-gaze-stop__name { letter-spacing: -.01em; }
+html[data-cle] .cle-gaze-stops[data-disabled] { opacity: .72; }
+html[data-cle] .cle-gaze-stops[data-disabled] .cle-gaze-stop[data-current] .cle-gaze-stop__tick { background: var(--cle-ink-3); }
 html[data-cle] .cle-gaze-stops__why {
   flex: 1 0 100%;
   order: 9;
-  margin-top: 2px;
+  margin-top: 3px;
   color: var(--cle-ink-2);
-  font: 400 10px/1.35 var(--cle-sans);
+  font: 400 10.5px/1.35 var(--cle-sans);
   text-align: left;
 }
 html[data-cle] .cle-gaze-stops.is-note {
   justify-content: flex-start;
   color: var(--cle-ink-2);
-  font: 400 10.5px/1.4 var(--cle-sans);
+  font: 400 11px/1.4 var(--cle-sans);
   text-align: left;
 }
+/* the native "更快 / 更智能" pair under the track */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-scale {
+  margin: 4px 2px 0;
+  color: var(--cle-ink-2);
+  font: 400 10px/1.2 var(--cle-sans);
+}
 
-/* the native slider keeps its travel; only its skin changes */
+/* ---------- 思考强度滑杆：细轨、明确停点、安静层级 ----------
+   The 2026.10 build paints this one control in three separate places. All three have to be
+   answered, or a thinner track just disappears inside them:
+
+   1. `.chat-controls__reasoning-slider:has([data-effort-boost=max|ultra])` — the *container*
+      is filled with a 220%-wide blue gradient at full pill radius and given a 6s/4s
+      `chat-effort-flow` animation. This, not the track, is the thick bright blue capsule.
+   2. `.chat-controls__reasoning-range[data-effort-boost=max|ultra]` — the input carries
+      1px + 12px (max) or 1px + 18px + inset (ultra) blue glow.
+   3. `::-webkit-slider-runnable-track` / `::-webkit-slider-thumb` — a 26px pill and a
+      28×20 thumb.
+
+   The native input keeps its value, min/max/step, keyboard handling and disabled state; we
+   only take over the paint. `html[data-cle]` already outranks the native selectors, so no
+   !important is added here. */
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider {
   position: relative;
-  height: 30px;
-  margin: 8px 2px 0;
-}
-html[data-cle] .chat-controls__reasoning-dots { display: none; }
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range {
-  height: 30px;
-}
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-runnable-track {
-  height: 6px;
-  border: 0;
+  height: 22px;
+  margin: 10px 2px 0;
+  /* (1) undo the gradient capsule and its animation */
+  background: none;
+  background-image: none;
   border-radius: 999px;
+  animation: none;
+  box-shadow: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider:has([data-effort-boost]) {
+  background: none;
+  background-image: none;
+  animation: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-dots { display: none; }
+
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range {
+  height: 22px;
+  /* (2) undo the input's own glow; the stop marks carry the emphasis instead */
+  box-shadow: none;
+  background: none;
+  filter: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost],
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost="max"],
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost="ultra"] {
+  box-shadow: none;
+  background: none;
+}
+
+/* (3) the track: one hairline, filled part in ink, the rest a light rule */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border: 0;
+  border-radius: 3px;
   background:
     linear-gradient(90deg,
-      color-mix(in srgb, var(--cle-gaze) 62%, transparent) var(--reasoning-fill, 0%),
-      color-mix(in srgb, var(--cle-ink) 12%, transparent) var(--reasoning-fill, 0%));
-}
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-thumb {
-  width: 16px;
-  height: 16px;
-  margin-top: -5px;
-  border: 2px solid var(--cle-surface);
-  border-radius: 999px;
-  background: var(--cle-ink);
-  box-shadow: 0 1px 3px rgba(20, 18, 15, .28);
-  transition: transform var(--cle-t-press) var(--cle-ease-soft), box-shadow var(--cle-t-quick);
-}
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:hover::-webkit-slider-thumb,
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:active::-webkit-slider-thumb {
-  transform: scale(1.08);
-}
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px var(--cle-gaze-soft), 0 0 0 1px var(--cle-gaze);
+      color-mix(in srgb, var(--cle-ink) 72%, transparent) var(--reasoning-fill, 0%),
+      color-mix(in srgb, var(--cle-ink) 14%, transparent) var(--reasoning-fill, 0%));
 }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-track {
-  height: 6px;
+  height: 3px;
   border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--cle-ink) 12%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cle-ink) 14%, transparent);
 }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--cle-gaze) 62%, transparent);
+  height: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cle-ink) 72%, transparent);
 }
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--cle-surface);
+
+/* the thumb: a small ink bead with a paper ring, sized to sit on the hairline */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border: 1.5px solid var(--cle-surface);
   border-radius: 999px;
   background: var(--cle-ink);
+  box-shadow: 0 1px 2px rgba(20, 18, 15, .22);
+  transition: transform var(--cle-t-press) var(--cle-ease-soft);
 }
-html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--inherit::-webkit-slider-thumb { background: var(--cle-ink-3); }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--cle-surface);
+  border-radius: 999px;
+  background: var(--cle-ink);
+  box-shadow: 0 1px 2px rgba(20, 18, 15, .22);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:hover::-webkit-slider-thumb,
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:active::-webkit-slider-thumb { transform: scale(1.1); }
+/* focus is a ring on the bead, never a glow around the whole control */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:focus-visible { outline: none; }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--cle-surface), 0 0 0 4px color-mix(in srgb, var(--cle-gaze) 55%, transparent);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--inherit::-webkit-slider-thumb { background: var(--cle-ink-2); }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--unanchored::-webkit-slider-thumb { opacity: .55; }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider:has(.chat-controls__reasoning-range:disabled) { opacity: .55; }
 html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:disabled { cursor: not-allowed; }
 
-/* headings and the live value inside the effort menu */
-html[data-cle] .chat-controls__reasoning-panel {
-  gap: 2px;
-  padding: 11px 12px 12px;
-  border-top: 1px solid var(--cle-line);
-  background: transparent;
-}
-html[data-cle] .chat-controls__effort-heading {
-  color: var(--cle-ink-2);
-  font: 500 10.5px/1.2 var(--cle-mono);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-}
-html[data-cle] .chat-controls__effort-value {
-  color: var(--cle-ink);
-  font: 500 12px/1.2 var(--cle-sans);
-}
-html[data-cle] .chat-controls__reasoning-default {
-  color: var(--cle-ink-2);
-  font: 400 10.5px/1.2 var(--cle-sans);
-  border-radius: var(--cle-radius-chip);
-  padding: 2px 4px;
-}
-html[data-cle] .chat-controls__reasoning-default:hover:not(:disabled) { color: var(--cle-ink-2); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
-html[data-cle] .chat-controls__reasoning-default:disabled { opacity: .55; }
-html[data-cle] .chat-controls__reasoning-option {
-  min-height: 30px;
-  border: 1px solid var(--cle-line-strong);
-  border-radius: var(--cle-radius-chip);
-  background: var(--cle-paper);
-  color: var(--cle-ink-2);
-  font: 500 12px/1 var(--cle-sans);
-}
-html[data-cle] .chat-controls__reasoning-option:hover:not(:disabled) { color: var(--cle-ink); border-color: var(--cle-ink-3); }
-html[data-cle] .chat-controls__reasoning-option--selected,
-html[data-cle] .chat-controls__reasoning-option[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--cle-gaze) 55%, transparent);
-  background: var(--cle-gaze-soft);
-  color: var(--cle-ink);
-}
-html[data-cle] .chat-controls__speed-panel { border-top: 1px solid var(--cle-line); padding: 10px 12px 12px; }
-html[data-cle] .chat-controls__speed-options { border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-ctl); background: var(--cle-paper); gap: 2px; padding: 3px; }
-html[data-cle] .chat-controls__speed-option {
-  min-height: 28px;
-  border-radius: 6px;
-  color: var(--cle-ink-2);
-  font: 500 11.5px/1 var(--cle-sans);
-}
-html[data-cle] .chat-controls__speed-option[aria-checked="true"] {
-  border-color: var(--cle-line-strong);
-  background: var(--cle-surface);
-  color: var(--cle-ink);
-}
-html[data-cle] .chat-controls__speed-option[aria-checked="true"][data-chat-speed-option="ultrafast"] {
-  border-color: color-mix(in srgb, var(--cle-gaze) 50%, transparent);
-  background: var(--cle-gaze-soft);
-  color: var(--cle-ink);
-}
-html[data-cle] .chat-controls__speed-option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
-
 /* very narrow: the tier word is dropped, the tier name is not */
 @container cle-pane (max-width: 520px) {
   html[data-cle] .chat-controls__effort-trigger .chat-controls__inline-select-label[data-cle-tier]::after { content: ""; }
-  html[data-cle] .cle-gaze-stop { font-size: 9px; }
+  /* A 508px split pane is the normal case, not a cramped special case: the stop names keep
+     their size and are truncated only if they truly cannot fit. */
+  html[data-cle] .cle-gaze-stop { font-size: 10.5px; }
   /* composer.css hides the whole effort label at this width; an eye alone would leave
      Max and High indistinguishable, so the standard tier name stays and only shrinks.
      Same specificity as that rule and this file loads after it, so the name wins. */
