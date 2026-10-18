@@ -129,6 +129,9 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 
 | 25 | **登录页旧名只是被压成 0 号字，辅助功能树仍会念出来。** 用真实浏览器核对部署产物时发现：未登录卡片的 AX 快照第一条文本仍是 `OpenClaw`。`font-size:0` 只去掉字形，文本节点还在可访问性树里，读屏会照读——单测只比对 CSS 文本，看不到这一层 | `startup.css` 的 `.login-gate__brand-name` | 中（读屏用户仍听到旧品牌；视觉上已正确） | 改为 `display:none`，同时移出布局与 AX 树；品牌改由父级 `.login-gate__brand` 提供：`::before` 用已批准肖像、`::after` 用 `C.le.` 字标。**没有新造图形**，全表唯一 `url()` 仍是 `/cle/static/art/avatar.webp` |
 
+| 26 | **插件一退役，产品侧栏的 aria-label 就回到旧名。** 实机断线时首份 AX 可见 `OpenClaw · 工作区菜单`。原因：`brand.js` 随插件退役，而原生按钮的 `aria-label` 由 `${name} · 工作区菜单` 拼成、name 在网关未应答时回落为产品名；退役后无人维护该属性 | `control-ui-boot-shared-*` 的 `dv()` / `renderContent()` | 高（断线是常用状态，用户会看到旧品牌） | 由**页面级** `early-guard.js` 接管（不随 `activate` 退役）：只处理侧栏 header/card 白名单，`localLabel()` 只替换前导产品名；`OpenClaw Notes · …` 这类用户自选名与第三方标签原样保留 |
+| 27 | **首帧层的侧栏规则挂在 `html:not([data-cle])` 上，与"退役保留 data-cle"的新契约冲突。** 保留 `data-cle` 后这些规则在退役期不再生效；而 `rooms.css` 在 `[data-cle]` 下已隐藏原生 header 文本、把 mark 收成透明块，插件的 `.cle-brandmark` 又随 abort 消失——左上只剩空金圈 | `startup.css` 侧栏段 + `rooms.css:2-8` | 中高（退役/加载阶段没有可读品牌） | 规则改挂在回退状态标记 `data-cle-fallback` 上：两个 guard 在"仍显示产品回退名"时打标、拿到用户自选名时清除。这样品牌不依赖插件存活，且不会压掉用户命名（无条件规则会把名字也压平，这是陷阱）。另按主控契约 `html[data-cle]:not([data-cle-active])` 补退役态字标：`.sidebar-brand::before` 真实文本 `C.le.`（22px 墨色）、header 按钮补视觉隐藏的可访问名；活跃实例存在时两者都让位（实测均返回 `none`） |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -309,6 +312,29 @@ node --test tests/brand-ui.test.cjs        →  6 pass / 0 fail
 这一轮发现的 #25 正是靠"真的打开页面看一遍"才暴露——字节级断言与单测都通过，但读屏文本是
 另一层。
 
+### 生命周期边界（本轮：插件退役后品牌仍成立）
+
+浏览器实测（fixture server + 真实 DOM/CSS，按主控 b317524 的标记契约）：
+
+| 状态 | 观察结果 |
+|---|---|
+| 退役（保留 `data-cle`、移除 `data-cle-active`） | `.sidebar-brand::before` = `"C.le."`，22px，`rgb(21,22,26)`，渲染 744×40 |
+| 同上，header 按钮 | `::after` = `"C.le."`，视觉隐藏（`clip-path: inset(50%)`），仍在 AX 树 |
+| 活跃（`data-cle-active=1` + 插件 `.cle-brandmark` 存在） | 两个 fallback 均返回 `none`（完全让位） |
+
+标签生命周期（真实 DOM 观察）：
+
+| 阶段 | `aria-label` | 名字槽 |
+|---|---|---|
+| 首帧 | `C.le. · 工作区菜单` | 标记回退，显示 `C.le.` 字标 |
+| 退役后原生恢复旧标签 | `C.le. · 工作区菜单`（守卫仍在） | 仍标记 |
+| 重连、网关给出用户自选名 | `碧琪的工作区 · 工作区菜单` | 标记清除，14px，无字标 |
+| 二次断线回落 | `C.le. · 工作区菜单` | 重新标记并显示字标 |
+
+**所有权**：未改 `rooms.css`、`composer.css`、`main.js`、Launcher、recovery 模块与 Claude 美术。
+本轮为本地验证临时改过 `composer.css`，交付前已 `git checkout` 撤回，未进入任何提交；
+生成的 `openclaw.plugin.json` 同样保持在 pre-build 状态。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -421,7 +447,14 @@ tests/cle-startup.test.mjs                  42 项（+3 注入顺序/预缓存/�
   hash 正确；真实 worker 的预缓存成功与否需要一次实际断线重载确认。
 - service worker 换代时序（`OFFLINE_BOOT.id` 变化 → 新 worker 安装）仍未在真实浏览器跑过。
 - **首帧视觉与首份 AX 仍需主控在 19789 用网关 + CUA 实测。** 本轮所有结论来自 fixture、真实包
-  副本与单测；`install()` 之后浏览器是否真的先显示 C.le. 标题，本路不声称已验证。
+  副本、单测与本地浏览器；`install()` 之后浏览器是否真的先显示 C.le.，本路不声称已验证。
+- **主控报告的一次 CUA `tab` 元数据瞬时记录 `New session — OpenClaw`**：同次首份 AX 已是
+  `New session — C.le.`，后续标题全部正确。该记录来自标签页元数据的一次抓取，不是可见帧证据；
+  按现有证据**判断不需要为此再加修补**（早期脚本已在 module 之前接管标题），但记为待观察项：
+  若后续出现可见帧级别的时间戳证据，再评估是否需要在 `document.title` 之外补偿。本轮不声称
+  已看渲染帧。
+- **退役态 composer 排版**属 layout 会话（`.agent-cream__composer-shell` 重锚定）。本路为本地
+  验证临时改过 `composer.css`，已撤回、未提交；如需生产差异由 layout 合入。
 
 补充 commit #4（3ac6479，重复部署闭环）：
 
@@ -439,4 +472,15 @@ tests/cle-startup.test.mjs   48 项（+6：upsert / 脚本-only 代际 / 同内�
 services/cle-studio/static/startup.css   .login-gate__brand-name 改 display:none；
                                          品牌由父级 ::before（批准肖像）+ ::after（C.le.）提供
 tests/cle-startup.test.mjs               49 项（+1：登录页规则不得再用纯像素隐藏）
+```
+
+补充 commit #6（5528c47，插件退役后的品牌生命周期）：
+
+```
+services/cle-studio/static/early-guard.js   新增侧栏 chrome 标签接管（页面级，不随 activate 退役）
+services/cle-studio/src/core/brand.js       localLabel 与 guard 对齐；维护 data-cle-fallback 标记
+services/cle-studio/static/startup.css      字标规则改挂 data-cle-fallback；按 data-cle-active 补退役态 fallback
+tests/cle-early-guard.test.mjs              19 项（+7：首帧标签 / 退役恢复 / 属性-only /
+                                           回退标记跟随 / 用户命名 / 两实现一致 / 正文与第三方不动）
+tests/cle-startup.test.mjs                  52 项（+3：退役 fallback 契约与 :has() 约束）
 ```
