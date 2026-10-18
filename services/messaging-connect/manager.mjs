@@ -34,7 +34,7 @@ export function saveAccount(draft, options, credentials, resolveRoute) {
   section.accounts ||= {};
   section.enabled = true;
   const existing = section.accounts[accountId] || {};
-  const common = { ...existing, name: `碧琪 · ${label}`, enabled: true, appId: credentials.appId,
+  const common = { ...existing, name: `Li An · ${label}`, enabled: true, appId: credentials.appId,
     connectionMode: 'websocket', groupPolicy: 'disabled', streaming: true };
   if (channel === 'feishu') {
     section.accounts[accountId] = { ...common, domain: credentials.domain === 'lark' ? 'lark' : 'feishu',
@@ -202,7 +202,7 @@ export class MessagingLoginManager {
     for (let i = 0; i < 30 && this.isCurrent(job); i++) {
       const status = await this.status();
       if (status.accounts.some(account => account.connected && account.routeReady)) {
-        if (this.channel === 'feishu') { job.state = 'connected'; job.message = '飞书已连接到学习模式。'; job.waitingForConnection = false; }
+        if (this.channel === 'feishu') { job.state = 'connected'; job.message = '飞书已连接到习作模式。'; job.waitingForConnection = false; }
         return;
       }
       await delay(1000);
@@ -226,7 +226,7 @@ export class MessagingLoginManager {
     const request = (await this.listRequests()).find(item => item.code === code && item.meta?.accountId === this.accountId && item.meta?.pinkieAppId === appId);
     if (!request) throw new Error('配对码没有找到或已过期，请在QQ里重新发一句话。');
     const route = this.route(this.config(), request.id);
-    if (!route) throw new Error('QQ项目模式路由与已有设置冲突。');
+    if (!route) throw new Error('QQ 营造模式路由与已有设置冲突。');
     this.bindProject(route.sessionKey, root);
     if (this.stopped || this.job !== job) throw new Error('连接服务正在更新，请稍后再试。');
     if (!await this.approve(code)) throw new Error('配对码已过期，请重新获取。');
@@ -235,7 +235,7 @@ export class MessagingLoginManager {
       if (this.stopped || this.job !== job || account?.appId !== appId || !this.route(draft, request.id)) throw new Error('QQ应用信息已更新，请刷新后重试。');
       account.allowFrom = [...new Set([...(account.allowFrom || []).filter(id => typeof id === 'string' && id !== '*'), request.id])];
     });
-    if (job) { job.state = 'pairing'; job.waitingForConnection = true; job.message = 'QQ帐号已确认，正在接通项目模式…'; }
+    if (job) { job.state = 'pairing'; job.waitingForConnection = true; job.message = 'QQ帐号已确认，正在接通营造模式…'; }
     return this.status();
     } finally { this.verifying = false; }
   }

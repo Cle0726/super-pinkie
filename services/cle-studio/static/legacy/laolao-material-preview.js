@@ -641,7 +641,7 @@
     card.append(visual, info, actions);
     card.dispatchEvent(new CustomEvent("laolao-delivery-ready"));
     if (!nativeBridgeAvailable()) {
-      meta.textContent = `${deliveryType(target)} · 请在碧琪中打开`;
+      meta.textContent = `${deliveryType(target)} · 请在 Li An 中打开`;
       return;
     }
     requestNativeAction(target, "check").then((result) => {

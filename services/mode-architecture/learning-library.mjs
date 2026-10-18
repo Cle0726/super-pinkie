@@ -16,7 +16,7 @@ const compact = value => String(value ?? '').normalize('NFKC').replace(/\s+/gu, 
 const escape = value => String(value).replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const learningSession = key => {
-  if (!/^agent:learning:[^\r\n]{1,240}$/.test(String(key ?? ''))) throw new Error('资料库只在学习模式中使用');
+  if (!/^agent:learning:[^\r\n]{1,240}$/.test(String(key ?? ''))) throw new Error('资料库只在习作模式中使用');
   return key;
 };
 const idValue = id => {
