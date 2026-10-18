@@ -26,13 +26,8 @@ export function mountWelcome(host, signal) {
     el.addEventListener('click', (e) => {
       const ask = e.target.closest('.cle-welcome__ask');
       if (!ask) return;
-      const ta = document.querySelector('.cle-composer textarea, .agent-chat__composer-combobox textarea');
-      if (!ta) return;
-      // hand the words to the native composer as if typed; the native send stays in charge
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(ta, ask.textContent);
-      ta.dispatchEvent(new Event('input', {bubbles: true}));
-      ta.focus();
+      window.CLE?.composer?.setDraft(ask.textContent);
+      window.CLE?.composer?.focus();
     });
     return el;
   };
