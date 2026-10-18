@@ -14,7 +14,12 @@
   window.__cleSidebar = {
     get mode() { return getUI()?.mode; },
     get state() { return getUI()?.state; },
-    currentSessionKey: () => window.CLE?.host?.sessions?.selectedKey || '',
+    // 必须走公共桥：window.CLE.host 是 raw host，退役后 sessions 的 getter 会同步 throw。
+    // 旧实现在这里直接读 raw host，等于把安全 getter 覆盖掉，断线时就会不断出 uncaught。
+    // 桥在离线时返回最后已知的选中会话（只读归属），并且不会碰任何已退役的 host。
+    currentSessionKey: () => window.__cleBridge?.currentSessionKey?.()
+      ?? window.__laolaoSidebar?.currentSessionKey?.()
+      ?? '',
     get pages() { return pages(); },
   };
   window.__laolaoSidebar = Object.assign(window.__laolaoSidebar || {}, window.__cleSidebar);
