@@ -173,14 +173,15 @@ test('host facade：离线只读不抛、写操作明确失败、重连后原样
     // 离线：读不抛，仍是最后已知值；写立刻明确失败
     assert.doesNotThrow(() => facade.sessions.selectedKey);
     assert.equal(facade.sessions.selectedKey, 'agent:main:facade', '不编造数据，保留只读归属');
-    assert.equal(facade.online, false);
+    assert.equal(facade.online(), false);
     await assert.rejects(() => facade.sessions.open({sessionKey: 'x'}), /连接已断开/);
     await assert.rejects(() => facade.request('chat.send', {message: 'x'}), /连接已断开/);
     await assert.rejects(() => facade.sessions.create({label: 'x'}), /连接已断开/);
     // 订阅/UI 在离线时是"什么都不做"，不能抛
     assert.doesNotThrow(() => facade.subscribe(() => {}));
     assert.doesNotThrow(() => facade.onEvent('chat', () => {}));
-    assert.doesNotThrow(() => facade.ui.registerReplacement({}));
+    // 不发明空的 UI 实现：classic 不用就不要有，免得"返回 noop 假装成功"。
+    assert.equal(facade.ui, undefined, 'facade 不应提供未被使用的 UI 接口');
 
     // 重连：新 host 上正常转发
     const B = makeStrictHost({selectedKey: 'agent:main:after'});
@@ -188,7 +189,7 @@ test('host facade：离线只读不抛、写操作明确失败、重连后原样
     api.rebind(B.host, ctrlB.signal);
     const facade2 = api.hostFacade();
     A.retire();
-    assert.equal(facade2.online, true);
+    assert.equal(facade2.online(), true);
     assert.equal(facade2.sessions.selectedKey, 'agent:main:after');
     const p = facade2.request('sessions.list', {});
     assert.equal(B.state.calls.at(-1).method, 'sessions.list');
@@ -273,5 +274,326 @@ test('重连后正常请求只发一次，不重放旧请求', async () => {
     B.rejectAll();
     await fresh.catch(() => {});
     ctrl.abort();
+  });
+});
+
+// ── 审查 1：消息风暴 / 行为回退 ───────────────────────────────────────────────
+// 旧 syncSelection 只有真变化才发通知；重写时误成"每次 subscribe 都发"，
+// 而常驻 sidebar 监听 sessions-changed 会 fetchMode(..., true) 拉会话 —— 高频刷新。
+test('同 key 同 mode 的重复 publish 零通知、零重新拉取', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:same'});
+    const ctrl = new AbortController();
+    shim.installLegacyShim(A.host, ctrl.signal);
+
+    const counts = {sessions: 0, mode: 0};
+    window.addEventListener('laolao:sessions-changed', () => counts.sessions++);
+    window.addEventListener('laolao:modechange', () => counts.mode++);
+
+    // 模拟 host 反复发布回调（运行事件会把 subscribe 回调叫很多次）
+    assert.equal(A.state.subs.length, 1, '应该只订阅一次');
+    const fire = A.state.subs[0];
+    for (let i = 0; i < 12; i++) fire();
+    await new Promise((r) => setTimeout(r, 20));
+
+    assert.equal(counts.sessions, 0, '同 key 重复 publish 不得发 sessions-changed（否则 sidebar 反复 fetchMode）');
+    assert.equal(counts.mode, 0, 'mode 没变不得发 modechange');
+
+    // 真变化才发，且只发一次
+    A.state.retired = false;
+    A.state.calls.push({method: 'noop', params: {}}); // 保留计数语义
+    ctrl.abort();
+  });
+});
+
+test('session 真变化只发一次 sessions-changed 并关闭记忆编辑器；mode 变化发 modechange', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const host = makeStrictHost({selectedKey: 'agent:main:a'});
+    const ctrl = new AbortController();
+    shim.installLegacyShim(host.host, ctrl.signal);
+
+    const counts = {sessions: 0, mode: 0, closed: 0};
+    window.addEventListener('laolao:sessions-changed', () => counts.sessions++);
+    window.addEventListener('laolao:modechange', () => counts.mode++);
+    window.__clekkMemoryUI = {close: () => counts.closed++, open: () => {}};
+
+    const fire = host.state.subs[0];
+
+    // key 变化
+    host.setSelectedKey('agent:main:b');
+    fire();
+    assert.equal(counts.sessions, 1, 'key 变化应发一次');
+    assert.equal(counts.closed, 1, 'scope 变了要关掉记忆编辑器');
+
+    // 同 key 再 publish：不得重复
+    fire(); fire();
+    assert.equal(counts.sessions, 1, '同 key 不得重复通知');
+    assert.equal(counts.closed, 1, '同 key 不得重复关闭');
+
+    // mode 变化
+    document.documentElement.dataset.cleRoom = 'unrestricted';
+    fire();
+    assert.equal(counts.mode, 1, 'mode 变化应发 modechange');
+    fire();
+    assert.equal(counts.mode, 1, '同 mode 不得重复');
+
+    delete window.__clekkMemoryUI;
+    ctrl.abort();
+  });
+});
+
+// ── 审查 3：pending timer 必须在退役/换代时回收 ───────────────────────────────
+test('host.request 永不 settle 时，退役要取消计时并结算调用方（不挂 15s）', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    // 这个 host 的 request 永远不返回
+    const host = {
+      get sessions() { return {selectedKey: 'agent:main:hang'}; },
+      request() { return new Promise(() => {}); },
+      subscribe() { return () => {}; },
+      onEvent() { return () => {}; },
+    };
+    const ctrl = new AbortController();
+    shim.installLegacyShim(host, ctrl.signal);
+
+    const live = new Set();
+    const realST = globalThis.setTimeout, realCT = globalThis.clearTimeout;
+    globalThis.setTimeout = (fn, ms, ...r) => { const id = realST(fn, ms, ...r); live.add(id); return id; };
+    globalThis.clearTimeout = (id) => { live.delete(id); return realCT(id); };
+    try {
+      const inflight = window.__laolaoSidebar.gwRequest('sessions.list', {}, 15000);
+      await new Promise((r) => realST(r, 10));
+      assert.ok(live.size >= 1, '在途请求应有超时计时器');
+
+      ctrl.abort();
+      await assert.rejects(inflight, (err) => {
+        // 已经发出去的请求：不能说"未执行"，只能诚实标为未确认
+        assert.match(err.message, /未确认/, `实际：${err.message}`);
+        return true;
+      });
+      assert.equal(live.size, 0, '退役必须取消 pending 计时器');
+    } finally {
+      globalThis.setTimeout = realST; globalThis.clearTimeout = realCT;
+    }
+  });
+});
+
+test('发送前离线说"未执行"，发出后断线说"未确认"', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost();
+    const ctrl = new AbortController();
+    shim.installLegacyShim(A.host, ctrl.signal);
+
+    // 发出后断线
+    const sent = window.__laolaoSidebar.gwRequest('chat.send', {message: 'x'});
+    await new Promise((r) => setTimeout(r, 5));
+    ctrl.abort();
+    await assert.rejects(sent, /未确认/);
+
+    // 发送前就离线
+    await assert.rejects(() => window.__laolaoSidebar.gwRequest('chat.send', {message: 'y'}), /未执行/);
+  });
+});
+
+// ── 审查 2：document 常驻桥必须跨 bundle 版本稳定 ─────────────────────────────
+// 状态放在模块级 const 时，热更新后两个 ESM 实例各持一份，旧 classic 捕获的
+// gwRequest/facade 永远指向旧 host。这里真的 import 两个 revision 并共享 window。
+test('两个 revision 共享同一份桥状态：旧 classic 捕获的句柄会跟着新 host 走', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const {fileURLToPath} = await import('node:url');
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const srcPath = path.join(here, '..', 'services/cle-studio/src/legacy/shim.js');
+  const src = fs.readFileSync(srcPath, 'utf8');
+
+  // 造第二个 revision：内容等价但对 ESM 而言是不同模块实例
+  const revA = 'data:text/javascript;base64,' + Buffer.from(src, 'utf8').toString('base64');
+  const revB = 'data:text/javascript;base64,' + Buffer.from(
+    src.replace('// What the 2026.7 modules expected', '// revision B\n// What the 2026.7 modules expected'), 'utf8',
+  ).toString('base64');
+  const A = await import(revA);
+  const B = await import(revB);
+  assert.notEqual(A, B, '两个 revision 必须是不同模块实例');
+
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const h1 = makeStrictHost({selectedKey: 'agent:main:v1'});
+    const c1 = new AbortController();
+    // 旧 revision 安装，classic 捕获它的 gwRequest
+    A.installLegacyShim(h1.host, c1.signal);
+    const oldRequest = window.__laolaoSidebar.gwRequest;
+    const oldKey = window.__laolaoSidebar.currentSessionKey;
+
+    assert.equal(oldKey(), 'agent:main:v1');
+
+    // 热更新：新 revision 接管新 host
+    h1.retire();
+    const h2 = makeStrictHost({selectedKey: 'agent:main:v2'});
+    const c2 = new AbortController();
+    B.installLegacyShim(h2.host, c2.signal);
+
+    // 旧 classic 手里的函数必须已经指向新 host（同一份 slot）
+    assert.equal(oldKey(), 'agent:main:v2', '旧捕获的读 key 必须跟着新 host');
+    const p = oldRequest('sessions.list', {});
+    assert.equal(h2.state.calls.at(-1)?.method, 'sessions.list', '旧捕获的 gwRequest 必须发到新 host');
+    h2.rejectAll(); await p.catch(() => {});
+
+    // 旧 revision 的 disposer 晚到，不得关闭新轮
+    c1.abort();
+    assert.equal(oldKey(), 'agent:main:v2', '旧 revision 的 abort 不得打掉新轮');
+    assert.equal(window.__cleBridge.isOnline(), true);
+
+    c2.abort();
+  });
+});
+
+// ── 审查 4：已 aborted 的 signal 必须零资源早退 ───────────────────────────────
+test('传入已 aborted 的 signal：零 observer/订阅、直接离线', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const host = makeStrictHost({selectedKey: 'agent:main:dead'});
+    const ctrl = new AbortController();
+    ctrl.abort(); // 先 abort 再 install
+    env.observers.length = 0;
+
+    shim.installLegacyShim(host.host, ctrl.signal);
+
+    assert.equal(env.observers.filter((o) => !o.disconnected).length, 0, '不应留下未断开的 observer');
+    assert.equal(host.state.subs.length, 0, '不应建立 subscribe');
+    assert.equal(host.state.eventOffs.length, 0, '不应建立 onEvent');
+    assert.equal(window.__cleBridge.isOnline(), false, '应直接标记离线');
+    await assert.rejects(() => window.__laolaoSidebar.gwRequest('x', {}), /未执行/);
+  });
+});
+
+// ── 审查 5：facade 订阅必须由桥持有并在换代后重绑 ────────────────────────────
+test('facade 订阅在第二次 activation 后仍收到新变化，旧 host 事件零次', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:one'});
+    const cA = new AbortController();
+    const api = shim.installLegacyShim(A.host, cA.signal);
+    const facade = api.hostFacade();
+
+    const seenPath = [];
+    // classic 只在 boot 订阅一次；记下这个回调，用来确认它被绑到了哪个 host
+    const external = () => seenPath.push('hit');
+    const unsub = facade.subscribe(external);
+
+    A.setSelectedKey('agent:main:one-b');
+    assert.ok(A.state.subs.includes(external), '第一轮应把外部回调绑到 host A');
+    external();
+    assert.equal(seenPath.length, 1, '第一轮应收到');
+
+    // 换代
+    A.retire();
+    const B = makeStrictHost({selectedKey: 'agent:main:two'});
+    const cB = new AbortController();
+    api.rebind(B.host, cB.signal);
+
+    // 同一个外部回调必须被重绑到新 host B（这正是 classic 只在 boot 订阅一次的缺口）
+    assert.ok(B.state.subs.includes(external), '重连后同一外部回调必须绑到新 host');
+    external();
+    assert.equal(seenPath.length, 2, '重连后同一订阅应仍收到新变化');
+
+    // 旧 host 上的订阅必须已真正断开（off 被调用过），不能只是逻辑上忽略
+    assert.ok(A.state.eventOffs.includes('sub'), '旧 host 的 subscribe 句柄必须被调用解绑');
+
+    // unsubscribe 有效：桥不再持有它，也不再绑到 host
+    unsub();
+    assert.ok(!B.state.subs.includes(external), 'unsubscribe 后桥应解绑');
+
+    cA.abort(); cB.abort();
+  });
+});
+
+test('换代后旧 host 的 gateway 事件零次进入新界面', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:ev1'});
+    const cA = new AbortController();
+    const api = shim.installLegacyShim(A.host, cA.signal);
+
+    const relayed = [];
+    window.addEventListener('pinkie:gateway-event', (e) => relayed.push(e.detail?.event));
+
+    // 记下 A 的 onEvent 回调，换代后手动触发它们
+    const aCallbacks = Object.values(A.state.handlers || {});
+    const getAHandlers = () => A.state.eventHandlers || new Map();
+    const aHandlers = getAHandlers();
+
+    // 换代
+    A.retire();
+    const B = makeStrictHost({selectedKey: 'agent:main:ev2'});
+    const cB = new AbortController();
+    api.rebind(B.host, cB.signal);
+
+    // 旧 host 的事件回调若还活着，就会往新界面灌事件
+    for (const fn of aHandlers.values()) { try { fn({stale: true}); } catch {} }
+    assert.equal(relayed.length, 0, '旧 host 的事件必须是零次');
+
+    // 新 host 的事件正常进入
+    const bHandlers = B.state.eventHandlers || new Map();
+    for (const fn of bHandlers.values()) { try { fn({fresh: true}); } catch {} }
+    assert.ok(relayed.length > 0, '新 host 的事件应正常转达');
+
+    cA.abort(); cB.abort();
+  });
+});
+
+// ── 审查 6：真实业务错误原样传回；空 key 如实记为��� ──────────────────────────
+test('facade 把同步 throw 封成 rejection，真实业务错误原样传回', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const bizError = new Error('session is locked by another pane');
+    const host = {
+      get sessions() {
+        return {
+          selectedKey: 'agent:main:x',
+          open() { throw bizError; },                 // 同步 throw
+          create() { return Promise.reject(bizError); }, // 异步拒绝
+        };
+      },
+      request() { return Promise.resolve({}); },
+      subscribe() { return () => {}; },
+      onEvent() { return () => {}; },
+    };
+    const ctrl = new AbortController();
+    const api = shim.installLegacyShim(host, ctrl.signal);
+    const facade = api.hostFacade();
+
+    // 同步 throw 不能漏到调用方同步栈
+    const p = facade.sessions.open({sessionKey: 'x'});
+    assert.ok(p instanceof Promise, '同步 throw 必须被封成 Promise');
+    await assert.rejects(p, (e) => {
+      assert.equal(e.message, bizError.message, '真实业务错误必须原样传回');
+      return true;
+    });
+    await assert.rejects(() => facade.sessions.create({label: 'y'}), /locked by another pane/);
+    ctrl.abort();
+  });
+});
+
+test('读到空 key 时如实记为空，不沿用上一个 session', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:main:old'});
+    const cA = new AbortController();
+    shim.installLegacyShim(A.host, cA.signal);
+    assert.equal(window.__laolaoSidebar.currentSessionKey(), 'agent:main:old');
+
+    A.retire();
+    // 新 host 明确的"没有选中会话"
+    const B = makeStrictHost({selectedKey: ''});
+    const cB = new AbortController();
+    shim.installLegacyShim(B.host, cB.signal);
+    assert.equal(window.__laolaoSidebar.currentSessionKey(), '', '空 key 必须记成空，不能沿用旧值');
+
+    // 空 key 的 host 确实在线
+    assert.equal(window.__cleBridge.isOnline(), true, '能读到空 key 说明 host 还活着');
+    cA.abort(); cB.abort();
   });
 });
