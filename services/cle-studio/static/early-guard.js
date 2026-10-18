@@ -30,7 +30,7 @@
   // add another observer.
   var KEY = '__cleEarlyBrandGuard';
   if (global[KEY]) return;
-  global[KEY] = {version: 1, installed: true};
+  global[KEY] = {version: 2, installed: true};
 
   var BRAND_TOKEN = 'OpenClaw(?:\\s+Control)?';
   var BARE_BRAND = new RegExp('^' + BRAND_TOKEN + '$');
@@ -74,7 +74,106 @@
     if (next !== current) document.title = next;
   }
 
+  /* ---------- product chrome labels ---------- */
+
+  // Only the sidebar's own header/card carry a product-name prefix in their accessible label:
+  //   aria-label="${name} · <workspace menu label>"
+  // where `name` falls back to the product name until the gateway answers. Everything else in the
+  // document belongs to the user (messages, code, documents) or to a third party, and must not be
+  // rewritten — so this list is a whitelist of product chrome, never a document-wide sweep.
+  var CHROME_SELECTORS = [
+    '.sidebar-workspace-header__main',
+    '.sidebar-agent-card__main',
+    '.sidebar-workspace-header',
+    '.sidebar-agent-card',
+  ];
+  // Separators the native composer uses between chrome parts.
+  var SEPARATORS = [' · ', ' — '];
+
+  /**
+   * Rebrand a chrome label, keeping everything after the product name.
+   *
+   *   "OpenClaw · <workspace menu>"  -> "C.le. · <workspace menu>"
+   *   "OpenClaw"                     -> "C.le."
+   *   "OpenClaw Notes · …"           -> unchanged (a user-named agent)
+   *   "<anything else>"              -> unchanged
+   */
+  function localLabel(label) {
+    if (typeof label !== 'string') return label;
+    if (label.indexOf('OpenClaw') !== 0) return label;
+    var rest = label.slice('OpenClaw'.length);
+    // The bare product token, optionally followed by " Control" (the app's own longer form).
+    if (rest === '' ) return 'C.le.';
+    if (rest.indexOf(' Control') === 0) {
+      var afterControl = rest.slice(' Control'.length);
+      if (afterControl === '' ) return 'C.le.';
+      for (var c = 0; c < SEPARATORS.length; c += 1) {
+        if (afterControl.indexOf(SEPARATORS[c]) === 0) return 'C.le.' + afterControl;
+      }
+      // "OpenClaw Controls …" is a different word, not the product token.
+      return label;
+    }
+    // Only a separator may follow; anything else means this is a user-named agent.
+    for (var i = 0; i < SEPARATORS.length; i += 1) {
+      if (rest.indexOf(SEPARATORS[i]) === 0) return 'C.le.' + rest;
+    }
+    return label;
+  }
+
+  function chromeBlocks() {
+    var out = [];
+    for (var i = 0; i < CHROME_SELECTORS.length; i += 1) {
+      var nodes = document.querySelectorAll(CHROME_SELECTORS[i]);
+      for (var j = 0; j < nodes.length; j += 1) out.push(nodes[j]);
+    }
+    return out;
+  }
+
+  /** Rebrand the labels of the product chrome only. Cheap: a handful of nodes, no tree walk. */
+  function syncChromeLabels() {
+    var changed = 0;
+    var blocks = chromeBlocks();
+    for (var i = 0; i < blocks.length; i += 1) {
+      var block = blocks[i];
+      var nodes = [block];
+      var inner = block.querySelectorAll('[aria-label]');
+      for (var j = 0; j < inner.length; j += 1) nodes.push(inner[j]);
+      for (var k = 0; k < nodes.length; k += 1) {
+        var node = nodes[k];
+        var raw = node.getAttribute && node.getAttribute('aria-label');
+        var next = localLabel(raw);
+        if (next !== raw) { node.setAttribute('aria-label', next); changed += 1; }
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Mark the name slot only while it still shows the upstream fallback.
+   *
+   * CSS cannot read text, so the stylesheet keys the wordmark rule on this attribute instead of
+   * on html:not([data-cle]) — which is what made the brand vanish when the plugin retired. A
+   * user-chosen name clears the mark and keeps its own glyphs.
+   */
+  var FALLBACK_ATTR = 'data-cle-fallback';
+  var FALLBACK_TEXT = /^\s*OpenClaw(?:\s+Control)?\s*$/;
+  function syncNameFallback() {
+    var slots = document.querySelectorAll('.sidebar-agent-card__name-text');
+    for (var i = 0; i < slots.length; i += 1) {
+      var slot = slots[i];
+      var text = slot.textContent || '';
+      var isFallback = FALLBACK_TEXT.test(text);
+      if (isFallback) {
+        if (!slot.hasAttribute(FALLBACK_ATTR)) slot.setAttribute(FALLBACK_ATTR, '');
+      } else if (slot.hasAttribute(FALLBACK_ATTR)) {
+        slot.removeAttribute(FALLBACK_ATTR);
+      }
+    }
+  }
+
   syncTitle();
+  syncChromeLabels();
+  syncNameFallback();
 
   // The router assigns document.title (a childList/characterData change inside <title>) on every
   // navigation, so watching the element itself is enough and costs nothing on unrelated churn.
@@ -100,6 +199,32 @@
     new MutationObserver(attach).observe(document.documentElement, {childList: true});
   }
 
+  // Chrome labels are rewritten by the native app on sidebar re-render (and restored verbatim
+  // when the plugin retires). Watch attributes plus subtree churn, throttled to one microtask so
+  // a burst of renders costs one pass — and never a whole-document text walk.
+  var pending = false;
+  function scheduleLabels() {
+    if (pending) return;
+    pending = true;
+    Promise.resolve().then(function () {
+      pending = false;
+      syncChromeLabels();
+      syncNameFallback();
+    });
+  }
+  var chromeObserver = new MutationObserver(scheduleLabels);
+  if (document.body) {
+    chromeObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-label'],
+    });
+  }
+
   global[KEY].localTitle = localTitle;
+  global[KEY].localLabel = localLabel;
+  global[KEY].syncChromeLabels = syncChromeLabels;
+  global[KEY].syncNameFallback = syncNameFallback;
   global[KEY].syncTitle = syncTitle;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

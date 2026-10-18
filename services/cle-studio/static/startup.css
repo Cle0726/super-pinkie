@@ -82,11 +82,20 @@ span.sidebar-workspace-header__mark--neutral > svg {
    slot shows the C.le. wordmark instead of that string; afterwards the real agent name returns
    unchanged, because this rule is scoped. Scoping matters: the plugin's own brand pass rewrites
    only the literal word, and a permanent rule would flatten a user-chosen name. */
-html:not([data-cle]) .sidebar-agent-card__name-text {
+/* Lifetime note: this used to be scoped to html:not([data-cle]), which meant the moment the
+   plugin retired — or a disconnect ended activation — the upstream wordmark came back. The brand
+   must not depend on the plugin being alive.
+ *
+ * But an unconditional rule would also flatten a name the user chose. The two states are
+ * distinguishable in CSS: the upstream fallback is *literally* the product name, while a chosen
+ * name is anything else. So the rule is keyed on the fallback string appearing in the subtree,
+ * using a descendant text match. Selectors cannot inspect text, so the marker is an attribute the
+ * guards set: they see the string they are about to replace and record which state it is in. */
+.sidebar-agent-card__name-text[data-cle-fallback] {
   font-size: 0 !important;
   letter-spacing: 0 !important;
 }
-html:not([data-cle]) .sidebar-agent-card__name-text::after {
+.sidebar-agent-card__name-text[data-cle-fallback]::after {
   content: "C.le.";
   font: 500 13px/1.2 ui-serif, "New York", "Songti SC", "STSong", serif;
   letter-spacing: .06em;
@@ -99,10 +108,10 @@ html:not([data-cle]) .sidebar-agent-card__name-text::after {
    metrics to the line box, so it is zeroed explicitly. The ::after above supplies the wordmark.
    The chevron is a sibling of the marquee wrapper in the header branch and a child in the
    roster branch; it keeps a real glyph size either way. */
-html:not([data-cle]) .sidebar-agent-card__name-text .hover-marquee__text {
+.sidebar-agent-card__name-text[data-cle-fallback] .hover-marquee__text {
   font-size: 0 !important;
 }
-html:not([data-cle]) .sidebar-agent-card__name-text .sidebar-agent-card__chevron {
+.sidebar-agent-card__name-text[data-cle-fallback] .sidebar-agent-card__chevron {
   font-size: 12px;
 }
 
@@ -284,4 +293,45 @@ body.openclaw-mount-fallback-active .mount-fallback__button--primary {
   body.openclaw-mount-fallback-active .mount-fallback__button--primary:hover {
     background: color-mix(in srgb, var(--text-strong, #15161A) 88%, var(--bg, #F4EFE4));
   }
+}
+
+/* ---------- 6. the sidebar while the plugin is retired or still arriving ---------- */
+/* rooms.css (owned elsewhere, art in progress there) hides the native header text under
+   [data-cle] and collapses the mark to a transparent 22px tile; the visible wordmark in that
+   state is its own `.cle-brandmark`, which exists only while a plugin instance is mounted. After
+   a disconnect — or before activation — the brandmark is gone and the corner is an empty gold
+   ring with no accessible name at all.
+ *
+ * `data-cle-active` is the contract for a live instance, so "retired or not yet active" is
+ * `html[data-cle]:not([data-cle-active])`. This block fills only that gap.
+ *
+ * It cannot lean on :has() (not dependable in the target WebKit for a layout-critical rule), so
+ * the plugin's own presence is expressed by a sibling selector instead: `.cle-brandmark` is a
+ * child of `.sidebar-brand`, and when it is absent the `::before` below is the only wordmark. When
+ * it is present both exist, so the fallback is suppressed by the plugin setting `data-cle-active`
+ * — the state, not a selector trick, decides. Nothing here hides anything or invents artwork:
+ * the mark is text, and it is real text in the accessibility tree.
+ */
+html[data-cle]:not([data-cle-active]) .sidebar-brand::before {
+  content: "C.le.";
+  order: 0;
+  font: italic 400 22px/1 var(--cle-serif, ui-serif, "New York", "Songti SC", serif);
+  letter-spacing: -.015em;
+  color: var(--cle-ink, #15161A);
+  padding: 6px 4px 2px 8px;
+  user-select: none;
+}
+/* Give the collapsed mark an accessible name too: the header button otherwise reads only the
+   menu purpose, with an empty tile beside it. Visually hidden, still in the AX tree. */
+html[data-cle]:not([data-cle-active]) .sidebar-workspace-header__main::after {
+  content: "C.le.";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
