@@ -44,8 +44,7 @@ test('image access upgrades v2 so Control UI agent-scoped roots include exact wo
   assert.equal(transform(upgraded),upgraded);
 });
 
-test('image access patch validates before changing the runtime and is idempotent',()=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-'));
+test('image access patch validates before changing the runtime and is idempotent',()=>{  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-'));
   try{
     const dist=path.join(root,'dist');fs.mkdirSync(dist);
     const file=path.join(dist,'local-media-access-test.js');
@@ -54,5 +53,51 @@ test('image access patch validates before changing the runtime and is idempotent
     assert.equal(apply(root,{backupRoot:backup}).changed,true);
     assert.equal(fs.readFileSync(path.join(backup,path.basename(file)),'utf8'),current);
     assert.equal(apply(root,{backupRoot:backup}).changed,false);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+// OpenClaw 2026.10 layout: the managed-reference lookup is wrapped in
+// try/catch, defaults come from getDefaultMediaLocalRoots(), and the bundle is
+// a .mjs file (a sibling re-export shim shares the prefix).
+const current2026 = `import path from "node:path";
+async function resolveLocalMediaBoundary(mediaPath, localRoots, managedReferenceErrors, options) {
+\tif (localRoots === "any") return {roots: "any"};
+\tlet inboundReference;
+\ttry {
+\t\tinboundReference = await resolveInboundMediaReference(mediaPath);
+\t} catch (err) {
+\t\tif (!(err instanceof MediaReferenceError)) throw err;
+\t}
+\tif (inboundReference) return {roots: [path.dirname(inboundReference.physicalPath)]};
+\tconst roots = localRoots ?? getDefaultMediaLocalRoots();
+\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);
+\treturn {roots,resolved};
+}
+/** Verifies that a local media path is managed inbound media or lives under allowed roots. */
+async function assertLocalMediaAllowed(mediaPath, localRoots, options) {
+\tawait resolveLocalMediaBoundary(mediaPath, localRoots, "ignore", options);
+}
+`;
+
+test('2026.10 boundary check allows the extra roots before inbound resolution and in the default root list',()=>{
+  const patched=transform(current2026);
+  assert.notEqual(patched,current2026);
+  assert.match(patched,/pinkie-image-access:v3/);
+  assert.match(patched,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return \{\n\t\trejectHardlinks: false,\n\t\troots: \[path\.dirname\(path\.resolve\(mediaPath\)\)\]\n\t\};/);
+  assert.match(patched,/const roots = \[\.\.\.\(localRoots \?\? getDefaultMediaLocalRoots\(\)\), \.\.\._pinkieResolveExtraMediaRoots\(\)\];/);
+  assert.match(patched,/try \{\n\t\tinboundReference = await resolveInboundMediaReference\(mediaPath\);/,'the managed-reference branch is kept');
+  assert.equal(transform(patched),patched,'idempotent');
+});
+
+test('2026.10 picks the real .mjs chunk, not a re-export shim',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-2026-'));
+  try{
+    const dist=path.join(root,'dist');fs.mkdirSync(dist);
+    fs.writeFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'export { a as b } from "./local-media-access-REAL.mjs";\n');
+    const real=path.join(dist,'local-media-access-REAL.mjs');
+    fs.writeFileSync(real,current2026);
+    assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-REAL.mjs');
+    assert.match(fs.readFileSync(real,'utf8'),/pinkie-image-access:v3/);
+    assert.doesNotMatch(fs.readFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'utf8'),/pinkie/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
