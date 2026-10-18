@@ -1,11 +1,18 @@
-// Clin d'œil — the room transition. Two lids close (fast, decisive) and meet at a sapphire hairline.
-// In the dark an almond opens — his eye — and through it you see the next room's painting; the room's
-// name settles under it while the room loads, then the lids part and the room is there.
+// Clin d'œil — the room transition. A blink, told with restraint: two veils of frosted paper close
+// over the room from above and below and meet at a hairline of his ice-blue gaze. On the closed
+// lids his face is drawn, line by line, in the state of the next room, with the room's name set
+// beneath it; when the room is ready the veils part from that hairline and the new room is there.
+// No cut-outs, no cards: the room itself stays visible, blurred, behind the veils.
 import {roomArt} from './rooms.js';
+import {lineArt, loadLine} from '../line/line.js';
+import {artStyle} from '../core/modes.js';
 
 const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const anim = (el, frames, opts) => el.animate(frames, {fill: 'forwards', ...opts}).finished.catch(() => {});
+const EASE_CLOSE = 'cubic-bezier(.62,0,.78,.24)';      // a lid falls, it is not pulled
+const EASE_OPEN = 'cubic-bezier(.16,.84,.3,1)';        // and lifts slowly at the end
+const EASE_SOFT = 'cubic-bezier(.2,.7,0,1)';
 
 let layer = null;
 function ensureLayer() {
@@ -13,67 +20,74 @@ function ensureLayer() {
   layer = document.createElement('div');
   layer.className = 'cle-blink';
   layer.setAttribute('aria-hidden', 'true');
-  layer.innerHTML = `<div class="cle-blink__lid cle-blink__lid--top"></div><div class="cle-blink__lid cle-blink__lid--bottom"></div>`
-    + `<div class="cle-blink__seam"></div><div class="cle-blink__vision"><i></i></div>`
-    + `<div class="cle-blink__card"><span class="cle-blink__zh"></span><span class="cle-blink__fr"></span></div>`;
+  layer.innerHTML = `<div class="cle-blink__veil cle-blink__veil--top"><i></i></div><div class="cle-blink__veil cle-blink__veil--bottom"><i></i></div>`
+    + `<div class="cle-blink__seam"></div>`
+    + `<div class="cle-blink__face"><div class="cle-blink__drawing"></div>`
+    + `<div class="cle-blink__fr"></div><div class="cle-blink__zh"></div><div class="cle-blink__rule"></div><div class="cle-blink__line"></div></div>`;
   document.body.append(layer);
   return layer;
-}
-
-// look him in the eye: zoom the painting so his eyes sit in the middle of the almond
-const sizes = new Map();
-function frameEye(vision, room) {
-  const src = roomArt(room.id), img = vision.firstElementChild;
-  img.style.backgroundImage = `url("${src}")`;
-  const place = (nw, nh) => {
-    const w = vision.offsetWidth, h = vision.offsetHeight * 1.4;          // the <i> is 140% tall (inset -20%)
-    const iw = w * 1.9, ih = iw * nh / nw, [ex, ey] = room.eye || [.5, .3];
-    img.style.backgroundSize = `${iw}px ${ih}px`;
-    img.style.backgroundPosition = `${Math.round(w / 2 - ex * iw)}px ${Math.round(h / 2 - ey * ih)}px`;
-  };
-  if (sizes.has(src)) return place(...sizes.get(src));
-  const probe = new Image();
-  probe.onload = () => { sizes.set(src, [probe.naturalWidth, probe.naturalHeight]); place(probe.naturalWidth, probe.naturalHeight); };
-  probe.src = src;
-  place(900, 1600);
 }
 
 export async function blink(room, during) {
   if (reduce()) { await during(); return; }
   const el = ensureLayer();
   const $ = (s) => el.querySelector(s);
-  const top = $('.cle-blink__lid--top'), bottom = $('.cle-blink__lid--bottom'), seam = $('.cle-blink__seam');
-  const vision = $('.cle-blink__vision'), card = $('.cle-blink__card');
-  frameEye(vision, room);
-  $('.cle-blink__zh').textContent = room.zh;
+  const top = $('.cle-blink__veil--top'), bottom = $('.cle-blink__veil--bottom'), seam = $('.cle-blink__seam');
+  const face = $('.cle-blink__face'), drawing = $('.cle-blink__drawing');
+  const lineMode = artStyle() === 'line' && await Promise.race([loadLine(`mode-${room.id}`), wait(120).then(() => null)]);
+
+  // what is drawn on the closed lids: his face in this room's state (线描), or the room's painting
+  // seen as a wash through the paper (油画) — never a picture pasted on top
+  drawing.replaceChildren();
+  el.style.removeProperty('--cle-blink-wash');
+  if (!lineMode) el.style.setProperty('--cle-blink-wash', `url("${roomArt(room.id)}")`);
+  el.dataset.style = lineMode ? 'line' : 'oil';
   $('.cle-blink__fr').textContent = room.fr;
+  $('.cle-blink__zh').textContent = room.zh;
+  $('.cle-blink__line').textContent = room.line || '';
   el.dataset.room = room.id;
   el.classList.add('is-on');
 
-  const close = {duration: 300, easing: 'cubic-bezier(.55,0,.75,.2)'};
+  // 1 · the lids close (the gaze narrows to a line)
+  const close = {duration: 280, easing: EASE_CLOSE};
+  anim(seam, [{opacity: 0, transform: 'scaleX(.15)'}, {opacity: 1, transform: 'scaleX(1)'}], {duration: 300, easing: EASE_SOFT});
   await Promise.all([
-    anim(top, [{transform: 'translateY(-101%)'}, {transform: 'translateY(0)'}], close),
-    anim(bottom, [{transform: 'translateY(101%)'}, {transform: 'translateY(0)'}], close),
+    anim(top, [{transform: 'translateY(-100%)'}, {transform: 'translateY(0)'}], close),
+    anim(bottom, [{transform: 'translateY(100%)'}, {transform: 'translateY(0)'}], close),
   ]);
-  // the seam flares, then becomes the edge of the opening eye
-  anim(seam, [{transform: 'scaleX(0)', opacity: 0}, {transform: 'scaleX(1)', opacity: 1, offset: .35}, {transform: 'scaleX(1.05)', opacity: 0}], {duration: 620, easing: 'cubic-bezier(.2,.7,0,1)'});
-  anim(vision, [{transform: 'scale(.6, 0)', opacity: 0}, {transform: 'scale(.92, .5)', opacity: 1, offset: .45}, {transform: 'scale(1, 1)', opacity: 1}], {duration: 560, delay: 80, easing: 'cubic-bezier(.2,.7,0,1)'});
-  anim(vision.firstElementChild, [{transform: 'scale(1.18)'}, {transform: 'scale(1.04)'}], {duration: 1400, delay: 80, easing: 'cubic-bezier(.2,.7,0,1)'});
-  anim(card, [{opacity: 0, transform: 'translateY(8px)', letterSpacing: '.5em'}, {opacity: 1, transform: 'none', letterSpacing: '.32em'}], {duration: 420, delay: 220, easing: 'cubic-bezier(.2,.7,0,1)'});
+  // the hairline sinks into the closed lids
+  anim(seam, [{opacity: 1}, {opacity: .0}], {duration: 360, easing: 'ease-out'});
+
+  // 2 · in the dark of the closed eye, the next room is drawn
+  let drawn = Promise.resolve();
+  if (lineMode) {
+    const art = lineArt(`mode-${room.id}`, {draw: true, speed: 900});
+    drawing.append(art);
+    // the lids stay closed until his eyes have lit (bounded, so a slow decode never holds the room)
+    drawn = Promise.race([wait(1500), (async () => { while (!art.__anims) await wait(16); await Promise.all(art.__anims.map((a) => a.finished.catch(() => {}))); })()]);
+  }
+  anim(face, [{opacity: 0, transform: 'translateY(6px)'}, {opacity: 1, transform: 'none'}], {duration: 380, delay: 60, easing: EASE_SOFT});
+  anim($('.cle-blink__rule'), [{transform: 'scaleX(0)'}, {transform: 'scaleX(1)'}], {duration: 520, delay: 220, easing: EASE_SOFT});
+  anim($('.cle-blink__zh'), [{opacity: 0, letterSpacing: '.62em'}, {opacity: 1, letterSpacing: '.38em'}], {duration: 640, delay: 140, easing: EASE_SOFT});
+  anim($('.cle-blink__line'), [{opacity: 0}, {opacity: 1}], {duration: 420, delay: 420, easing: 'ease-out'});
 
   const shownAt = performance.now();
   try { await during(); } catch (e) { console.warn('[cle] room switch', e); }
-  // let the painting and the name be seen even when the room is instant
+  // long enough for the face to be drawn and the name read, even when the room is instant
   const held = performance.now() - shownAt;
-  if (held < 640) await wait(640 - held);
+  const hold = 640;
+  if (held < hold) await wait(hold - held);
+  await drawn;
+  await wait(lineMode ? 160 : 0);
 
-  const open = {duration: 520, easing: 'cubic-bezier(.2,.7,0,1)'};
-  anim(card, [{opacity: 1}, {opacity: 0}], {duration: 160, easing: 'ease-out'});
-  // the eye widens into the room as the lids part
-  anim(vision, [{transform: 'scale(1, 1)', opacity: 1}, {transform: 'scale(2.6, 3.4)', opacity: 0}], {duration: 520, easing: 'cubic-bezier(.4,0,.2,1)'});
+  // 3 · the lids lift from the hairline; the drawing recedes into the room
+  anim(seam, [{opacity: 0, transform: 'scaleX(1)'}, {opacity: 1, offset: .25}, {opacity: 0, transform: 'scaleX(1.08)'}], {duration: 520, easing: EASE_SOFT});
+  anim(face, [{opacity: 1, transform: 'none', filter: 'blur(0)'}, {opacity: 0, transform: 'scale(.97)', filter: 'blur(3px)'}], {duration: 300, easing: 'ease-in'});
+  const open = {duration: 640, delay: 90, easing: EASE_OPEN};
   await Promise.all([
-    anim(top, [{transform: 'translateY(0)'}, {transform: 'translateY(-101%)'}], open),
-    anim(bottom, [{transform: 'translateY(0)'}, {transform: 'translateY(101%)'}], open),
+    anim(top, [{transform: 'translateY(0)'}, {transform: 'translateY(-100%)'}], open),
+    anim(bottom, [{transform: 'translateY(0)'}, {transform: 'translateY(100%)'}], open),
   ]);
   el.classList.remove('is-on');
+  drawing.replaceChildren();
 }

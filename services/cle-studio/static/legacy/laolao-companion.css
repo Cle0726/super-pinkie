@@ -312,3 +312,11 @@ html[data-cle] .chat-pane-cache__pane[data-pinkie-safe] .chat-thread-inner {
   .pinkie-ambient, .pinkie-burst { display: none; }
   .pinkie-buddy__bubble, .pinkie-buddy__menu { transition: none !important; }
 }
+
+/* C.le. v5 · 线描：他是画在纸上的墨色剪影，不是贴上去的图 —— 没有投影、没有角标 */
+html:not([data-cle-art="paint"]) .pinkie-buddy__img,
+html:not([data-cle-art="paint"]) .pinkie-buddy__rig,
+html:not([data-cle-art="paint"]) .pinkie-buddy.is-rig .pinkie-buddy__figure:hover .pinkie-buddy__rig,
+html:not([data-cle-art="paint"]) .pinkie-buddy__figure:hover .pinkie-buddy__img { filter: none; }
+/* 模式角标在两种画风里都不要：房间已经写在侧栏和欢迎页上 */
+.pinkie-buddy__mark { display: none !important; }
