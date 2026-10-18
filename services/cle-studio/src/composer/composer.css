@@ -80,3 +80,33 @@ html[data-cle] .cle-composer .chat-controls__permission-icon { color: var(--cle-
 /* stop: the same ink coin as send, with an ivory square — never alarm red */
 html[data-cle] .cle-composer .chat-send-btn--stop { background: var(--cle-ink) !important; color: var(--cle-paper) !important; border: 0 !important; box-shadow: 0 0 0 4px var(--cle-gaze-soft) !important; }
 html[data-cle] .cle-composer .chat-send-btn--stop svg, html[data-cle] .cle-composer .chat-send-btn--stop rect { color: var(--cle-paper) !important; fill: currentColor; }
+
+/* ---------- one of each: duplicates hidden (the original browser and the compaction meter stay) ---------- */
+html[data-cle] .chat-browser-panel-toggle, html[data-cle] .context-ring { display: none !important; }
+
+/* ---------- responsive: every pane adapts to its own width (two panes in 双模式, a narrow window) ---------- */
+html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .cle-composer .agent-chat__input { grid-template-rows: auto auto auto; }
+  html[data-cle] .cle-composer .agent-chat__composer-lead { grid-area: 2 / 1 / 3 / 4; padding: 8px 6px 0 10px; flex-wrap: wrap; }
+  html[data-cle] .cle-composer .agent-chat__composer-controls { grid-area: 3 / 1 / 4 / 4; justify-self: end; padding: 4px 8px 0 0; }
+  html[data-cle] .cle-composer .chat-controls__inline-select-trigger .chat-controls__inline-select-label { max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html[data-cle] .cle-welcome__arch { width: min(200px, 30vh, 44cqw); }
+  html[data-cle] .agent-chat__welcome .cle-welcome__line { font-size: 21px !important; }
+  html[data-cle] .cle-welcome__ask { padding: 7px 12px; font-size: 12.5px; }
+  .pinkie-buddy { --buddy-w: 118px !important; right: 54px !important; }
+  .cle-pane-badge em { display: none; }
+}
+@container cle-pane (max-width: 520px) {
+  /* the rarely used tools fold behind ⋯ */
+  html[data-cle] .cle-composer .agent-chat__composer-lead:not(.is-open) > :nth-child(n+5):not(.cle-tools-more) { display: none !important; }
+  html[data-cle] .cle-composer .chat-controls__effort-trigger .chat-controls__inline-select-label { display: none !important; }
+  html[data-cle] .chat-pane__workspace-chip { display: none !important; }
+  .pinkie-buddy { --buddy-w: 96px !important; right: 46px !important; }
+  .cle-pane-badge b { display: none; }
+  html[data-cle] .chat-group.assistant .chat-text { font-size: 15px !important; }
+}
+.cle-tools-more { display: none; }
+@container cle-pane (max-width: 520px) { .cle-tools-more { display: inline-grid; } }
+.cle-tools-more { appearance: none; border: 0; background: transparent; color: var(--cle-ink-3); width: 28px; height: 26px; border-radius: 8px; place-items: center; cursor: default; }
+.cle-tools-more:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }

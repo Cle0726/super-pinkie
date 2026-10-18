@@ -42,3 +42,8 @@ html[data-cle] .laolao-deep-think-menu__footer { border-top: 1px solid var(--cle
 html[data-cle] .laolao-deep-think-btn__poster, html[data-cle] .laolao-deep-think-btn__art { border-radius: 999px 999px 3px 3px !important; height: 24px !important; width: 19px !important; filter: none !important; box-shadow: 0 0 0 1px var(--cle-gold-soft); }
 html[data-cle] #laolao-deep-think-toast { background: var(--cle-ink) !important; color: var(--cle-paper) !important; border: 0 !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: var(--cle-shadow-pop) !important; }
 html[data-cle] #laolao-deep-think-status { background: var(--cle-surface) !important; color: var(--cle-ink) !important; border: 1px solid var(--cle-line-strong) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: var(--cle-shadow-pop) !important; }
+/* 线描: the tier as a drawing on the card, the painting set aside */
+html[data-cle] .laolao-deep-think-menu__icon.is-line .laolao-deep-think-menu__poster,
+html[data-cle] .laolao-deep-think-menu__icon.is-line .laolao-deep-think-menu__art { display: none !important; }
+html[data-cle] .laolao-deep-think-menu__icon.is-line .cle-line { width: 52px; height: 58px; color: var(--cle-ink); }
+html[data-cle] .laolao-deep-think-menu__item.is-selected .laolao-deep-think-menu__icon.is-line .cle-line { color: var(--cle-gaze); }

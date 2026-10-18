@@ -159,7 +159,7 @@ export function mountRooms(host, signal) {
   };
   mount();
   applyRoom(current);
-  mountSplitBadges(signal);
+  mountSplitBadges(signal, host);
   // the paintings are seen through the blink, so have them decoded before the first switch
   (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(() => ROOMS.forEach((r) => { const i = new Image(); i.decoding = 'async'; i.src = roomArt(r.id); }));
   const mo = new MutationObserver(() => { if (!selector.isConnected || !mark.isConnected) mount(); });
