@@ -1739,6 +1739,9 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
     on:(name,fn)=>hooks.set(name,fn),
     registerGatewayMethod:(name,fn,opts)=>methods.set(name,{fn,opts}),
     registerTool:(factory,opts)=>tools.push({factory,opts}),
+    // The rich runtime resolves the plugin state dir through the host runtime.
+    runtime:{state:{resolveStateDir:()=>isolatedStateRoot},config:{current:()=>({})}},
+    registerHttpRoute:()=>({}),
     // Some compatible OpenClaw builds resolve a successful enqueue with no
     // payload; the control RPC must still stay usable in that case.
     session:{workflow:{
@@ -1750,7 +1753,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,6);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity','ask_user']);
+  assert.equal(tools.length,12);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1810,7 +1813,9 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
 
 test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
-  assert.deepEqual([...manifest.contracts.tools].sort(),['ask_user','clekk_memory','computer','delivery_guard','learning_activity','web_gpt_activity']);
+  // The manifest is the agent-facing contract: every tool the session actually
+  // exposes must be declared here first, or the host refuses to register it.
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_library','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -1856,6 +1861,7 @@ test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{
   const methods=new Map();
   plugin.register({
     on:()=>{},registerGatewayMethod:(name,fn)=>methods.set(name,fn),registerTool:()=>{},
+    runtime:{state:{resolveStateDir:()=>isolatedStateRoot},config:{current:()=>({})}},registerHttpRoute:()=>({}),
     session:{workflow:{enqueueNextTurnInjection:async()=>({enqueued:false})}},
   });
   let response;
@@ -1893,9 +1899,16 @@ test('upstream watchdog retries transient failures invisibly and ignores explici
   watchdog.modelEnded({runId:'r1',outcome:'error',failureKind:'connection_reset'});
   await watchdog.agentEnded({runId:'r1',success:false,error:'upstream network failed'},{agentId:'project',sessionKey:'agent:project:one'});
   assert.equal(injected.length,1);assert.match(injected[0].text,/已经完成.+禁止重复/);
-  assert.equal(scheduled.length,1);assert.equal(scheduled[0].message,'\u2063');assert.equal(scheduled[0].deliveryMode,'none');
+  // The scheduled continuation carries the guard text itself, not a bare
+  // placeholder, so the resumed turn knows what it must not repeat.
+  assert.equal(scheduled.length,1);assert.match(scheduled[0].message,/自动续接保护/);assert.equal(scheduled[0].deliveryMode,'none');
   assert.equal(removed[0].tag,scheduled[0].tag);
+  // A user stop leaves a grace window on the session; the next failure of that
+  // session must not schedule another invisible turn.
+  const stops = globalThis.__pinkieUserStops || (globalThis.__pinkieUserStops = new Map());
+  stops.set('agent:project:one', Date.now() + 60_000);
   await watchdog.agentEnded({runId:'r2',success:false,error:'user aborted'},{agentId:'project',sessionKey:'agent:project:one'});
+  stops.delete('agent:project:one');
   assert.equal(scheduled.length,1);
   assert.equal(isTransientFailure('connection_closed'),true);assert.equal(isTransientFailure('invalid api key'),false);
   assert.equal(isTransientFailure("You've reached your Codex subscription usage limit. Next reset in 2 hours"),true);
@@ -2197,7 +2210,8 @@ test('online watchdog uses the authenticated local CLI and removes its cron fall
   assert.ok(calls[0].options.timeout>=32_000);
   const params=JSON.parse(calls[0].args[calls[0].args.indexOf('--params')+1]);
   assert.equal(params.sessionKey,'agent:project:one');assert.equal(params.agentId,'project');
-  assert.equal(params.message,'\u2063');assert.equal(params.deliver,false);
+  // The resume turn is sent with the guard text, and never delivered to chat.
+  assert.match(params.message,/没有完整结束/);assert.equal(params.deliver,false);
   assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,32_000);
   assert.deepEqual(removed,[{sessionKey:'agent:project:one',tag:'pinkie-watchdog-test'}]);
 });
