@@ -8,6 +8,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const launcher = fs.readFileSync(path.join(root, 'desktop/macos/Sources/Launcher.swift'), 'utf8');
+const control = fs.readFileSync(path.join(root, 'desktop/macos/Sources/BrowserControl.swift'), 'utf8');
 const build = fs.readFileSync(path.join(root, 'desktop/macos/build.sh'), 'utf8');
 const hostScript = fs.readFileSync(path.join(root, 'desktop/macos/browser-test-host.sh'), 'utf8');
 
@@ -122,11 +123,39 @@ test('native chrome uses the real tokens, not a third hand-mixed palette', () =>
   assert.doesNotMatch(control, /#1f1c19/);
 });
 
-test('startup and start pages never fall back to the old brand', () => {
-  assert.doesNotMatch(launcher, /◷/, 'no unicode clock standing in for the brand mark');
+test('startup and start pages never fall back to the old brand', () => {  assert.doesNotMatch(launcher, /◷/, 'no unicode clock standing in for the brand mark');
   assert.doesNotMatch(launcher, /background:#efcbd3/, 'no pink startup fallback');
   assert.doesNotMatch(launcher, /超級碧琪正在准备/);
-  assert.match(launcher, /CleWordmark\.startPageSVG/, 'reuses the shipped signature geometry');
+  assert.match(launcher, /CleWordmark\.html\(pointSize:/, 'uses the app wordmark');
+  // The re-assembled pen-outline glyph read as a heavy block on screen; the
+  // wordmark must stay text, not a new SVG lettering.
+  assert.doesNotMatch(launcher, /CleWordmark\.startPageSVG/);
+  assert.doesNotMatch(control, /startPageSVG/);
+  assert.doesNotMatch(control, /M55 25C53 17 44 13 34 16/, 'no hand-reassembled signature path');
+  // Must match the app's own `.cle-brandmark` styling (italic serif, -.015em).
+  const wordmark = control.slice(control.indexOf('enum CleWordmark'), control.indexOf('final class BrowserActivityIndicator'));
+  assert.match(wordmark, /italic /);
+  assert.match(wordmark, /letter-spacing:-\.015em/);
+  assert.match(wordmark, /C\.le\./);
   // The shipped app keeps its original opening art; only the test host swaps it.
   assert.match(launcher, /if RuntimeConfig\.isTestHost \{\s*\n\s*webView\?\.loadHTMLString\(startupPlaceholderHTML/);
+});
+
+test('native window chrome and voice entry no longer use the old pink identity', () => {
+  // The outer window hairline was hard-coded to the pink (217,89,143) used by
+  // the previous skin, so the whole acceptance window still read as pink.
+  assert.doesNotMatch(launcher, /217\.0 \/ 255\.0,?\s*\n?\s*green: 89\.0/, 'pink window border removed');
+  const border = launcher.slice(launcher.indexOf('contentView.layer?.borderWidth = 1'));
+  assert.match(border.slice(0, 400), /CleBrowserPalette\.line\(nightAppearance\)/, 'border follows the token line');
+  assert.doesNotMatch(launcher, /NSColor\.systemPink/);
+
+  // Visible voice-entry copy is Li An now. macOS permission strings keep the
+  // bundle's real name on purpose: renaming them would send the user looking for
+  // a switch that does not exist in System Settings.
+  assert.doesNotMatch(launcher, /"碧琪听着呢"/);
+  assert.match(launcher, /"Li An 听着呢"/);
+  assert.doesNotMatch(launcher, /碧琪还没有麦克风权限/);
+  assert.match(launcher, /Li An 还没有麦克风权限/);
+  // Those permission strings must still name the app bundle the OS shows.
+  assert.match(launcher, /允许超級碧琪使用麦克风/);
 });
