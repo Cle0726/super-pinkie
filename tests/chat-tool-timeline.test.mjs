@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {apply, pinkieBuildTimeline, pinkieSelectMessageWindow, pinkieSplitTimelineMessage, transform, transformWithStatus} from '../patch/apply-chat-timeline.mjs';
+import {apply, pinkieBuildTimeline, pinkieSelectMessageWindow, pinkieSplitTimelineMessage, transform, transformCurrentWithStatus, transformWithStatus} from '../patch/apply-chat-timeline.mjs';
 
 const message = (role, content, id) => ({role, content, timestamp: 1, __openclaw: {id}});
 const group = (role, key, messages) => ({
@@ -595,4 +595,34 @@ test('an installed v4 bundle upgrades to v5 in place', () => {
   assert.equal(upgraded.reason, 'upgraded-v4');
   assert.equal(upgraded.text, v5);
   assert.equal(transformWithStatus(upgraded.text).reason, 'already-patched');
+});
+
+// OpenClaw 2026.10 renderer (control-ui-boot-chat-*.js) no longer exposes the
+// 2026.7 pipeline anchors. Its projection is a DOM pass keyed on stable markup.
+const current2026 = '//#region src/x\nfunction rv(e,t){return U`\n    <div\n      class="chat-group ${v} chat-group--with-footer${C?` chat-group--turn-block`:``}"\n      style=${A}\n      data-chat-row-key=${e.key}\n      data-file-session-key=${n??K}\n    >\n      <div class="chat-group-messages">${i}</div>\n    </div>`}\n'
+  + 'function av(e,t){return U`<div class="chat-group tool chat-group--turn-block chat-group--activity">${e}</div>`}\n'
+  + 'const id=`toolmsg:${t}`;';
+
+test('2026.10 renderer gets the DOM timeline projection instead of the pipeline rewrite', () => {
+  const result = transformCurrentWithStatus(current2026);
+  assert.equal(result.changed, true);
+  assert.equal(result.reason, 'patched-2026');
+  assert.match(result.text, /pinkie-chat-timeline-2026:v1/);
+  assert.match(result.text, /data-timeline-group-id=\$\{__pkTimelineGroupId\(e\.key\)\}/);
+  assert.match(result.text, /__pkTimelineInstall\(globalThis\.__pkTimelineRoot\)/);
+  assert.match(result.text, /class="chat-group tool chat-group--turn-block chat-group--timeline-tools chat-group--activity"/);
+  assert.match(result.text, /function __pkTimelineFold\(turn\)/);
+  assert.equal(transformCurrentWithStatus(result.text).changed, false);
+});
+
+test('2026.10 projection keeps the conversation markup untouched apart from attributes', () => {
+  const {text} = transformCurrentWithStatus(current2026);
+  assert.match(text, /<div class="chat-group-messages">\$\{i\}<\/div>/);
+  assert.match(text, /data-file-session-key=\$\{n\?\?K\}/);
+  // The 2026.7 pipeline helpers are not injected into a 2026.10 bundle.
+  assert.doesNotMatch(text, /pinkieBuildTimeline\(__pinkieTimelineEntries/);
+});
+
+test('a bundle without the 2026.10 group markup is reported, not guessed', () => {
+  assert.deepEqual(transformCurrentWithStatus('function other(){}'), {text: 'function other(){}', changed: false, reason: 'chat group row key not found'});
 });
