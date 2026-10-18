@@ -99,7 +99,8 @@ test('every room keeps one readable type scale', () => {
   const size = Number(body.match(/font:\s*400\s*([\d.]+)px/)?.[1]);
   assert.ok(size >= 15.5 && size <= 16.5, `body text ${size}px must stay near 16px`);
   assert.match(body, /line-height|1\.7[0-9]/);
-  const learning = rule(transcriptCss, 'html[data-cle][data-cle-room="learning"] .chat-group.assistant .chat-text');
+  // the larger learning measure is keyed on the pane's own session, not on the page-wide room
+  const learning = rule(transcriptCss, 'html[data-cle] .chat-pane-cache__pane[data-cle-pane-room="learning"] .chat-group.assistant .chat-text');
   assert.ok(learning, 'learning keeps its own slightly larger measure');
   assert.match(learning, /font-size:\s*16\.5px/);
 });

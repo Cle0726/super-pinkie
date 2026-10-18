@@ -41,9 +41,34 @@ function matchesCompound(el, compound) {
     return String(actual) === value;
   });
 }
-// "a b .c" -> [[a],[b],[.c]]; evaluated right to left over ancestors
+// "a b .c" -> [[a],[b],[.c]]; evaluated right to left over ancestors.
+// A leading ":scope" means "the element querySelectorAll was called on", which is the
+// parent of every match, so it only ever guards the first hop.
+// Split on top-level commas: ".a, .b" is a selector list, not one compound.
+function splitList(selector) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const char of selector) {
+    if (char === '(' || char === '[') depth += 1;
+    if (char === ')' || char === ']') depth -= 1;
+    if (char === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+    current += char;
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+// "a b .c" -> [[a],[b],[.c]]; evaluated right to left over ancestors.
+// A leading ":scope >" means "a direct child of the element querySelectorAll was called on".
 function parseSelector(selector) {
-  return selector.trim().split(/\s+/).map(parseCompound);
+  let rest = selector.trim();
+  let scoped = false;
+  if (rest.startsWith(':scope')) { scoped = true; rest = rest.slice(':scope'.length).trim(); }
+  let direct = false;
+  if (rest.startsWith('>')) { direct = true; rest = rest.slice(1).trim(); }
+  const parts = rest ? rest.split(/\s+/) : [];
+  return {scoped, direct, chain: parts.map(parseCompound), source: selector};
 }
 
 let uid = 0;
@@ -82,7 +107,12 @@ class FakeElement {
   set className(value) { this._classes = new Set(String(value || '').split(/\s+/).filter(Boolean)); }
   get id() { return this.attributes.get('id') || ''; }
   set id(value) { this.attributes.set('id', String(value)); }
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  setAttribute(name, value) {
+    const next = String(value);
+    const previous = this.attributes.has(name) ? this.attributes.get(name) : null;
+    this.attributes.set(name, next);
+    if (previous !== next) this._notify({type: 'attributes', target: this, attributeName: name, oldValue: previous});
+  }
   getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
   removeAttribute(name) { this.attributes.delete(name); }
   toggleAttribute(name, force) { if (force) this.setAttribute(name, ''); else this.removeAttribute(name); }
@@ -95,7 +125,11 @@ class FakeElement {
     if (list) this.listeners.set(type, list.filter((entry) => entry !== handler));
   }
   dispatch(type, event = {}) {
-    const payload = {...event, type, target: event.target || this, stopPropagation() { payload.propagationStopped = true; }};
+    const payload = {...event, type, target: event.target || this,
+      stopped: false,
+      stopPropagation() { payload.propagationStopped = true; payload.stopped = true; },
+      preventDefault() { payload.defaultPrevented = true; },
+    };
     for (let node = this; node; node = node.parentElement) {
       for (const handler of node.listeners.get(type) || []) handler(payload);
       if (payload.propagationStopped) break;
@@ -103,50 +137,79 @@ class FakeElement {
     return payload;
   }
   click() { if (!this.disabled) this.dispatch('click', {target: this}); }
+  _notify(record) { this.ownerDocument?.queueRecord?.(record); }
   append(...nodes) {
+    const added = [];
     for (const node of nodes) {
       if (typeof node === 'string') { this.textContent += node; continue; }
       node.parentElement?.removeChild(node);
       node.parentElement = this;
       this.children.push(node);
+      added.push(node);
     }
+    if (added.length) this._notify({type: 'childList', target: this, addedNodes: added, removedNodes: []});
   }
   prepend(...nodes) {
+    const added = [];
     for (const node of [...nodes].reverse()) {
       node.parentElement?.removeChild(node);
       node.parentElement = this;
       this.children.unshift(node);
+      added.push(node);
     }
+    if (added.length) this._notify({type: 'childList', target: this, addedNodes: added, removedNodes: []});
   }
   insertBefore(node, reference) {
     const index = reference ? this.children.indexOf(reference) : -1;
     node.parentElement?.removeChild(node);
     node.parentElement = this;
     if (index < 0) this.children.push(node); else this.children.splice(index, 0, node);
+    this._notify({type: 'childList', target: this, addedNodes: [node], removedNodes: []});
   }
   removeChild(node) {
     const index = this.children.indexOf(node);
     if (index >= 0) this.children.splice(index, 1);
     node.parentElement = null;
+    this._notify({type: 'childList', target: this, addedNodes: [], removedNodes: [node]});
   }
   remove() { this.parentElement?.removeChild(this); this.isConnected = false; }
-  replaceChildren(...nodes) { for (const child of [...this.children]) this.removeChild(child); this.append(...nodes); }
+  replaceChildren(...nodes) {
+    const removed = [...this.children];
+    for (const child of removed) {
+      const index = this.children.indexOf(child);
+      if (index >= 0) this.children.splice(index, 1);
+      child.parentElement = null;
+    }
+    const added = [];
+    for (const node of nodes) {
+      node.parentElement = this;
+      this.children.push(node);
+      added.push(node);
+    }
+    if (removed.length || added.length) this._notify({type: 'childList', target: this, addedNodes: added, removedNodes: removed});
+  }
   closest(selector) {
-    const chain = parseSelector(selector);
-    for (let node = this; node; node = node.parentElement) if (matchesChain(node, chain)) return node;
+    for (let node = this; node; node = node.parentElement) if (node.matches(selector)) return node;
     return null;
   }
-  matches(selector) { return matchesChain(this, parseSelector(selector)); }
+  matches(selector) {
+    return splitList(selector).some((part) => matchesChain(this, parseSelector(part).chain));
+  }
   querySelectorAll(selector) {
     const out = [];
-    const chain = parseSelector(selector);
-    const visit = (node) => {
-      for (const child of node.children) {
-        if (matchesChain(child, chain)) out.push(child);
-        visit(child);
-      }
-    };
-    visit(this);
+    for (const part of splitList(selector)) {
+      const {scoped, direct, chain} = parseSelector(part);
+      if (!chain.length) continue;
+      const visit = (node, depth) => {
+        for (const child of node.children) {
+          // ":scope > .x" only matches direct children; ":scope .x" matches any descendant
+          const eligible = scoped && direct ? depth === 0 : true;
+          if (eligible && matchesChain(child, chain) && !out.includes(child)) out.push(child);
+          visit(child, depth + 1);
+        }
+      };
+      visit(this, 0);
+    }
     return out;
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
@@ -185,6 +248,27 @@ function createDocument() {
       document.listeners.get(type).push(handler);
     },
     removeEventListener() {},
+    // MutationObserver plumbing: a real browser reports every DOM write to the observers watching
+    // that subtree. Without this, a self-triggered observer loop cannot be reproduced in a test.
+    _observers: [],
+    _pending: [],
+    addObserver(observer) { document._observers.push(observer); },
+    removeObserver(observer) { document._observers = document._observers.filter((entry) => entry !== observer); },
+    queueRecord(record) { document._pending.push(record); },
+    // deliver queued records, like the browser's microtask checkpoint
+    flushMutations() {
+      if (!document._pending.length) return 0;
+      const batch = document._pending.splice(0, document._pending.length);
+      let delivered = 0;
+      for (const observer of [...document._observers]) {
+        if (observer.disconnected) continue;
+        const seen = batch.filter((record) => observer.sees(record));
+        if (!seen.length) continue;
+        delivered += seen.length;
+        observer.callback(seen, observer);
+      }
+      return delivered;
+    },
   };
   document.documentElement = new FakeElement('html', document);
   document.documentElement.dataset = {};
