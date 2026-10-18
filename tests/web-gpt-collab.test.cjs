@@ -180,7 +180,10 @@ test('plain web conversation displays ChatGPT answer without starting the local 
   assert.match(ui, /if \(!switched\?\.selected\) return false/);
   assert.match(ui, /return "blocked"/);
   assert.match(ui, /if \(result === "blocked"\) return/);
-  assert.match(ui, /if \(result === "web-direct"\) \{[\s\S]*?return;[\s\S]*?\}\s*bypassOnce = true;\s*send\(\)/);
+  // A direct web reply refreshes the chat and returns before the local model
+  // is bypassed; anything else falls through to the native send.
+  assert.match(ui, /if \(result === "web-direct"\) \{[\s\S]*?__laolaoRefreshCurrentChat[\s\S]*?return \{status: 'web-direct'\}/);
+  assert.match(ui, /\}\s*bypassOnce = true;\s*return \{status: send\(\) === false \? 'cancelled' : 'native'\}/);
   assert.match(ui, /window\.__laolaoRefreshCurrentChat\?\.\(\)/);
 });
 
@@ -249,6 +252,9 @@ test('deep-think interception does not trigger a local run after direct web repl
   }
   const input = new TextArea();
   const context = {
+    // afterArm scopes disarm to the session it armed, so the stub must expose
+    // the same helper the module uses.
+    currentSessionKey: () => 'agent:main:one',
     latestStatus: null,
     armSelected: async () => { armed += 1; },
     disarmCurrent: async () => { disarmed += 1; },
@@ -344,7 +350,9 @@ test('bundled bridge stays read-only and isolated from Codex state', () => {
 test('macOS installer and App bundle include the collaboration UI, skill and runtime', () => {
   const installer = read('installer/macos/apply-theme.sh');
   const build = read('desktop/macos/build.sh');
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt32/);
+  // Cache key must match the installer's current version, otherwise a stale
+  // copy of the collaboration UI keeps loading after an update.
+  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt33/);
   assert.match(installer, /web-gpt-project-context\.mjs/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);
