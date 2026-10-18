@@ -120,12 +120,18 @@ function refreshManifest(root, files, report) {
   manifest.assets = sorted;
   manifest.generation = hash.digest('hex');
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
-  // 2026.10 index.html pins the build id; the gateway serves the newer local
-  // index.html only when that id moves with the manifest.
+  // The gateway parses this as <runtime-build>-<64-hex asset generation>.
+  // Replace the generation rather than appending a short digest: append-only
+  // updates break that shape and eventually exceed the 161-character limit.
   const indexPath = path.join(root, 'index.html');
   if (fs.existsSync(indexPath)) {
     const html = fs.readFileSync(indexPath, 'utf8');
-    const bumped = html.replace(/(data-openclaw-control-ui-build-id="[^"\s]+)/u, `$1-${manifest.generation.slice(0, 12)}`);
+    const bumped = html.replace(/(data-openclaw-control-ui-build-id=")([^"\s]+)(")/u, (attribute, before, id, after) => {
+      // Also repair suffixes left by earlier versions of this helper. Unknown
+      // build identifiers belong to a different runtime and stay untouched.
+      const parsed = /^([a-zA-Z0-9._-]{1,96})-[a-f0-9]{64}(?:-[a-f0-9]{12})*$/u.exec(id);
+      return parsed ? `${before}${parsed[1]}-${manifest.generation}${after}` : attribute;
+    });
     if (bumped !== html) {
       fs.writeFileSync(indexPath, bumped);
       report.indexBuildId = 'updated';
