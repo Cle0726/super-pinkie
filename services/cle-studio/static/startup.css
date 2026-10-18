@@ -31,9 +31,24 @@ aside.invite { display: none !important; }
    native mark is the upstream lobster. Replace it with the supplied portrait and the name. */
 .login-gate__logo,
 .login-gate__logo--neutral { display: none !important; }
-.login-gate__brand-name { font-size: 0 !important; letter-spacing: 0 !important; }
-.login-gate__brand-name::after {
+/* font-size:0 hides the glyphs but leaves the string in the accessibility tree, so a screen
+   reader still announced the upstream name. Removing the element from layout removes it from
+   that tree as well, and the header below supplies both the portrait and the wordmark. */
+.login-gate__brand-name { display: none !important; }
+.login-gate__brand::before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+}
+.login-gate__brand::after {
   content: "C.le.";
+  display: inline-block;
+  vertical-align: middle;
   font: 600 15px/1 ui-serif, "New York", "Songti SC", "STSong", serif;
   letter-spacing: .02em;
   color: var(--text-strong, #15161A);
