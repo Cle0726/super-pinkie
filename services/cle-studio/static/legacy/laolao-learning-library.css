@@ -1,13 +1,13 @@
 /* Reading surfaces reuse the learning notebook's paper, rose and plum. */
 .pinkie-library, .pinkie-reader {
-  --lib-paper: rgba(255,249,253,.97);
-  --lib-page: #fffdfd;
+  --lib-paper: var(--cle-ink);
+  --lib-page: var(--cle-ink);
   --lib-ink: #513c51;
   --lib-muted: #957889;
-  --lib-line: rgba(157,94,126,.16);
-  --lib-soft: rgba(230,154,190,.10);
-  --lib-accent: #b65381;
-  --lib-highlight: rgba(232,79,154,.23);
+  --lib-line: var(--cle-ink);
+  --lib-soft: var(--cle-ink-3);
+  --lib-accent: var(--cle-gaze);
+  --lib-highlight: var(--cle-gaze-soft);
   color: var(--lib-ink);
   font-family: -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
   box-sizing: border-box;
@@ -15,12 +15,12 @@
 html[data-pinkie-night] :is(.pinkie-library,.pinkie-reader) {
   --lib-paper: #302530;
   --lib-page: #382d37;
-  --lib-ink: #eee0e9;
+  --lib-ink: var(--cle-ink-2);
   --lib-muted: #b7a0b0;
-  --lib-line: rgba(220,169,198,.16);
-  --lib-soft: rgba(224,151,188,.10);
-  --lib-accent: #e6a6c7;
-  --lib-highlight: rgba(232,129,178,.28);
+  --lib-line: var(--cle-ink-3);
+  --lib-soft: var(--cle-ink-3);
+  --lib-accent: var(--cle-gaze);
+  --lib-highlight: var(--cle-gaze-soft);
 }
 .pinkie-library[hidden], .pinkie-library [hidden], .pinkie-reader[hidden], .pinkie-reader [hidden] { display:none !important; }
 :is(.pinkie-library,.pinkie-reader) * { box-sizing:border-box; }
@@ -42,7 +42,7 @@ html[data-pinkie-night] :is(.pinkie-library,.pinkie-reader) {
 .pinkie-library {
   position:fixed;inset:12px 12px 12px auto;width:min(430px,calc(100vw - 24px));
   z-index:2147481190;border:1px solid var(--lib-line);border-radius:24px;
-  box-shadow:0 26px 80px rgba(56,27,66,.24);background:var(--lib-paper);
+  box-shadow:0 26px 80px var(--cle-shadow);background:var(--lib-paper);
   display:flex;flex-direction:column;overflow:hidden;
 }
 .pinkie-library__header {display:flex;align-items:center;justify-content:space-between;padding:22px 24px 15px;gap:12px;}
@@ -87,7 +87,7 @@ html[data-cle-room="learning"] .pinkie-library-layout .cle-composer .chat-contro
 html[data-cle-room="learning"] .pinkie-library-layout .chat-thread {padding-left:18px!important;padding-right:18px!important;}
 .pinkie-library-layout > .pinkie-reader {flex:0 1 46%;min-width:300px;max-width:700px;}
 .pinkie-library-layout.chat-split-container--open > .pinkie-reader {flex-basis:35%;min-width:270px;}
-.pinkie-reader {display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--lib-line);border-radius:20px;background:var(--lib-paper);box-shadow:0 8px 26px rgba(88,43,65,.06);}
+.pinkie-reader {display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--lib-line);border-radius:20px;background:var(--lib-paper);box-shadow:0 8px 26px var(--cle-shadow);}
 .pinkie-reader__header {padding:18px 20px 12px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--lib-line);}
 .pinkie-reader__heading {flex:1;min-width:0;}
 .pinkie-reader__title {font-size:14px;font-weight:600;line-height:1.7;overflow-wrap:anywhere;margin:0;}
@@ -112,7 +112,7 @@ html[data-cle-room="learning"] .pinkie-library-layout .chat-thread {padding-left
 .pinkie-reader__content th,.pinkie-reader__content td {padding:6px;border-bottom:1px solid var(--lib-line);}
 .pinkie-reader__content ::selection {background:var(--lib-highlight);}
 .pinkie-reader__content mark {background:var(--lib-highlight);color:inherit;border-radius:3px;padding:1px 0;}
-.pinkie-reader__pdf {position:relative;margin:auto;background:#fff;box-shadow:0 4px 18px rgba(71,35,54,.07);flex-shrink:0;}
+.pinkie-reader__pdf {position:relative;margin:auto;background:#fff;box-shadow:0 4px 18px var(--cle-shadow);flex-shrink:0;}
 .pinkie-reader__pdf canvas {display:block;}
 .pinkie-reader__pdf .textLayer {position:absolute;inset:0;overflow:clip;line-height:1;letter-spacing:normal;word-spacing:normal;-webkit-text-size-adjust:none;transform-origin:0 0;--min-font-size:1;--text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size));--min-font-size-inv:calc(1 / var(--min-font-size));}
 .pinkie-reader__pdf .textLayer :is(span,br) {color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0;-webkit-user-select:text;user-select:text;}
@@ -125,8 +125,8 @@ html[data-pinkie-night] .pinkie-reader__pdf canvas {filter:invert(.85) hue-rotat
 .pinkie-reader__range {padding:12px 16px;border-top:1px solid var(--lib-line);font-size:11px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .pinkie-reader__range input {width:62px;padding:6px 9px!important;}
 .pinkie-reader__source {color:var(--lib-accent);text-decoration:none;font-size:11px;}
-.pinkie-library__source-jump {color:var(--learning-pink-deep,#a72c70)!important;font:inherit;border:0;background:transparent;text-align:left;padding:2px 0;cursor:pointer;font-size:11px;}
-html[data-pinkie-night] .pinkie-library__source-jump {color:#e6a6c7!important;}
+.pinkie-library__source-jump {color:var(--learning-pink-deep,var(--cle-ink))!important;font:inherit;border:0;background:transparent;text-align:left;padding:2px 0;cursor:pointer;font-size:11px;}
+html[data-pinkie-night] .pinkie-library__source-jump {color:var(--cle-gaze)!important;}
 @media (max-width:1050px) {
   .pinkie-library-layout {gap:10px!important;}
   .pinkie-library-layout > .pinkie-reader {min-width:250px;flex-basis:43%;}
