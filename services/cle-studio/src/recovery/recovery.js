@@ -396,10 +396,17 @@ ensureStyle();
 
 export function mountRecovery(host, signal) {
   ensureStyle();
+  // A signal that is already aborted means this activation was retired before it
+  // started — a race with a hot reload, or a caller that reuses a dead controller.
+  // Bail out before allocating anything: registering 'abort' on an already-aborted
+  // signal never fires, so the observer, subscriptions and interval created below
+  // would live forever. The fold stylesheet stays (ensureStyle ran), but this
+  // activation owns no handles and touches no rows.
+  if (signal?.aborted) return () => {};
   // One activation owns one set of handles. After abort nothing in this closure may
   // schedule work, write the DOM or ask the gateway to send: a retired activation that
   // still polls is how a hot reload produced duplicate retries.
-  let aborted = Boolean(signal?.aborted);
+  let aborted = false;
   const timers = new WeakMap();      // pane -> pending schedule() id
   const timeouts = new Set();        // every one-shot timer, so abort can clear all
   const lastAttempt = new WeakMap();
