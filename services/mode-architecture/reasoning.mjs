@@ -3,6 +3,7 @@ import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
+import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs';
 
 // 输入框思考等级滑块最右边的两档。2026-10 实测（真实 Gemini 3.7/3.8，12 道难题 + 6 道多约束写作）：
 // 原来「回答前先额外推演两三轮」的做法正确率与 High 一样（都全对），却多花 2.5～5 倍时间和额度。
@@ -27,7 +28,7 @@ const FIX_PREFIX = '[pinkie-tier] 交付验收';
 const FIELDS = ['requestId', 'tier', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'createdAt', 'updatedAt'];
 
 export class ReviewStore {
-  constructor(root = path.join(os.homedir(), '.openclaw', 'pinkie-deep-think', 'reviews')) {
+  constructor(root = path.join(openclawStateDir(), 'pinkie-deep-think', 'reviews')) {
     this.root = root;
   }
 
@@ -62,7 +63,7 @@ export class ReviewStore {
 const REVIEW_MARK = '[pinkie:delivery-review';
 
 function modelRef(config, entry, agentId) {
-  const agent = config?.agents?.list?.find((item) => item.id === agentId);
+  const agent = findAgent(config, agentId);
   const defaultModel = agent?.model ?? config?.agents?.defaults?.model;
   const fallback = typeof defaultModel === 'string' ? defaultModel : defaultModel?.primary;
   const selected = String(entry?.modelOverride || fallback || '').trim();
@@ -301,8 +302,7 @@ export class ReasoningEnhancer {
     const agentId = sessionKey.split(':')[1];
     const entry = api.runtime.agent.session.getSessionEntry({sessionKey, agentId, readConsistency: 'latest'});
     const {provider, model} = modelRef(api.config, entry, agentId);
-    const workspaceDir = api.config?.agents?.list?.find((item) => item.id === agentId)?.workspace
-      || api.config?.agents?.defaults?.workspace || process.cwd();
+    const workspaceDir = (api.config ? agentWorkspace(api.config, agentId) : '') || process.cwd();
     const authProfileId = entry?.authProfileOverride || undefined;
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pinkie-reasoning-'));
     try {

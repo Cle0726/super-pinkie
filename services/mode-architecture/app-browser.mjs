@@ -131,8 +131,11 @@ function within(parent, file) {
 function safeHomePath(home, file) {
   if (!within(home, file)) throw new Error('为保护系统文件，只能打开用户主目录里的文件。');
   const parts = path.relative(home, file).split(path.sep).map(part => part.toLowerCase());
-  const workspace = parts[0] === '.openclaw' && (parts[1] === 'workspace' || parts[1]?.startsWith('workspace-'));
-  if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (parts[0] === '.openclaw' && !workspace)) {
+  // ~/.openclaw/workspace* 和 --profile 的 ~/.openclaw-<名字>/workspace* 都算模式工作区。
+  const isWorkspace = (dir) => dir === 'workspace' || dir.startsWith('workspace-');
+  const stateFolder = /^\.openclaw(?:-.+)?$/.test(parts[0] || '');
+  const workspace = stateFolder && isWorkspace(parts[1] || '');
+  if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (stateFolder && !workspace)) {
     throw new Error('这个位置包含密钥或碧琪配置，不能从浏览器里打开。');
   }
 }
