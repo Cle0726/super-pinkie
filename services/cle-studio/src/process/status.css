@@ -92,7 +92,12 @@ html[data-cle] .chat-group .chat-text { min-width: 0; max-width: 100%; }
 html[data-cle] .chat-group.assistant .chat-text {
   font: 400 16px/1.75 var(--cle-sans) !important; color: var(--cle-ink); letter-spacing: .002em; text-wrap: pretty;
 }
-html[data-cle][data-cle-room="learning"] .chat-group.assistant .chat-text { font-size: 16.5px !important; line-height: 1.8 !important; }
+/* The room is per pane. In 双模式 one side can be 习作 while the other is 营造; keying type on
+   html[data-cle-room] changed both sides when focus moved. composer/panes.js stamps each pane
+   with the room of its own session. */
+html[data-cle] .chat-pane-cache__pane[data-cle-pane-room="learning"] .chat-group.assistant .chat-text {
+  font-size: 16.5px !important; line-height: 1.8 !important;
+}
 html[data-cle] .chat-group .chat-text p { margin: 0 0 .8em !important; }
 html[data-cle] .chat-group .chat-text > :first-child { margin-top: 0 !important; }
 html[data-cle] .chat-group .chat-text > :last-child { margin-bottom: 0 !important; }
@@ -165,12 +170,29 @@ html[data-cle] .chat-position-rail :is(button, [role="button"]):focus-visible { 
 
 /* ---------- width-adaptive: a pane wears its own width, in 双模式 and in a narrow window ---------- */
 @container cle-pane (max-width: 720px) {
-  html[data-cle] { --cle-read-gutter: 16px; }
-  html[data-cle] .chat-thread-inner { max-width: none; width: 100%; margin-inline: 0; padding-inline: 0; }
+  /* A container query's subject must live inside the container. `html[data-cle]` is the
+     container's ancestor, so `html[data-cle] { --cle-read-gutter: 16px }` written here never
+     matched; the gutter belongs to the pane's chat surface (.chat is inside the pane). */
+  html[data-cle] .chat { --cle-read-gutter: 16px; }
+  /* The column may use the whole pane, but it must still breathe: the edge margin lives on the
+     thread and the composer, so a 508px split pane is not border-to-border text. Without this the
+     reply and the input both ran from x=258 to x=766 with no margin at all. */
+  html[data-cle] .chat-thread-inner {
+    max-width: none; width: 100%; margin-inline: 0;
+    padding-inline: var(--cle-read-gutter);
+    box-sizing: border-box;
+  }
   html[data-cle] .chat-group, html[data-cle] .chat-group.user { max-width: none; margin-inline: 0; padding-inline: 0; }
   html[data-cle] .chat-group.user > .chat-group-messages { max-width: 88% !important; }
   html[data-cle] .chat-group.assistant .chat-text { font-size: 15.5px !important; }
-  html[data-cle][data-cle-room="learning"] .chat-group.assistant .chat-text { font-size: 16px !important; }
+  html[data-cle] .chat-pane-cache__pane[data-cle-pane-room="learning"] .chat-group.assistant .chat-text { font-size: 16px !important; }
+  /* same axis: the composer keeps the identical side inset */
+  html[data-cle] .agent-chat__composer-shell,
+  html[data-cle] .chat-footer > openclaw-plugin-view > .chat-footer__context {
+    width: calc(100% - 2 * var(--cle-read-gutter));
+    max-width: none;
+    margin-inline: auto;
+  }
 }
 
 /* reduced motion: the rail and the footer still resolve instantly */

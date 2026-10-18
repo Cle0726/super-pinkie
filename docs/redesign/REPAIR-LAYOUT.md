@@ -186,6 +186,109 @@
 | 工具栏按重要性收纳 | nth-child 位置折叠，吃掉浏览器入口 | 语义分类 + 可键盘的 `⋯` 菜单 |
 | 滚到底部按钮不挡末行 | 与末行重叠 | 在滚动容器上加底部 reserve |
 
+
+## 八、第二轮返修（主控 CUA 复验后，增量）
+
+主控在 19789 gen30、1280×720 实测给出三条新证据，全部在本轮修掉。
+
+### 8.1 单栏 864px 时工具散成三排（lead 只有 358.89px 宽、101px 高，输入区 153px）
+
+**根因（计算样式层面）**：我的网格写的是 `grid-template-columns: auto minmax(0,1fr) auto`，
+lead 落在**第一个 auto 列**。auto 列按 max-content 定宽，于是列宽由 lead 的内容宽度（≈359px）
+决定，剩余约 290px 留在空列里，工具只能换行成三排。原生
+`.agent-chat__input--mobile-toolbar` 又把 footer 变成 flex 行并给 lead `flex:none`、
+`order:1`，进一步把宽度钉在 max-content。
+
+**修改**：
+- 网格改成两列显式轨道 `minmax(0, 1fr) auto` + 命名区域
+  `"words actions" / "tools utils"`，lead 进入可变轨道；
+- 覆盖原生 mobile-toolbar 的 pin：footer `display:contents`、lead `flex:1 1 auto`、
+  controls `flex:0 1 auto`、去掉 `margin-inline-start:auto` 与 order；
+- 折叠改为**按实际占用**：`measure()` 读每个真实控件的 `getBoundingClientRect().width`，
+  用 low 控件的“上次可见宽度”缓存（折叠后会读到 0，必须缓存否则会来回抖动），
+  可用宽度 < 必需 + low + 28 时给 composer 加 `.is-crowded`，由 CSS 折叠 low 项。
+  620cqw 的容器规则降级为**首帧兜底**，不再是唯一判据；864px 有空间时不折叠。
+
+### 8.2 双栏 508px 时回答与输入完全贴边（x258 w508）
+
+**根因**：我在 720px 容器里写了 `html[data-cle] { --cle-read-gutter: 16px }`。容器查询的
+主体必须**在容器内部**，`html` 是容器的祖先，规则从未生效；同时我又把
+`.chat-thread-inner` 的 `padding-inline` 归零、宽度设成 100%，于是正文和 composer 都贴边。
+
+**修改**：gutter 设在 `.chat`（在 pane 内）上；`@container` 内 `.chat-thread-inner`
+保留 `padding-inline: var(--cle-read-gutter)` 且 `box-sizing: border-box`；
+composer shell 与 footer context 用 `width: calc(100% - 2 * var(--cle-read-gutter))` 居中，
+保证正文与输入同轴且两侧都有呼吸。
+
+### 8.3 字号按页面全局 room 影响两侧
+
+**根因**：`html[data-cle][data-cle-room="learning"]` 是页面级标记，双栏一侧习作、另一侧营造时，
+切焦点会同时改两侧字号。
+
+**修改**：新增 `src/composer/panes.js`：从每个 pane **自己的 session key**
+（`sessionKey` / `data-mcp-app-owner-key` / 内层 pane）解析 agent，映射成 room，
+写成 `data-cle-pane-room`；只在值变化时写入，避免喂回自己的 observer。
+`status.css` 的字号规则改为 `.chat-pane-cache__pane[data-cle-pane-room="learning"] ...`，
+页面级 room 不再参与排版。
+
+### 8.4 折叠菜单的自激循环与监听泄漏
+
+**根因（实测复现）**：`sync()` 每轮都 `stage.refresh()`，`refresh` 在菜单打开时无条件
+`open()`，`open()` 又 `replaceChildren` 重建并把焦点放到第一项——重建本身是 body 上的
+DOM 变更，又触发 observer，形成逐帧自激，方向键选中的焦点每帧被退回第一项。
+
+**修改**：
+- 菜单维护 `signature`（工具种类/名称/禁用/按下状态的串联），`refresh()` 只做重定位；
+  签名变化才重建，并保留原焦点索引；
+- observer 过滤自身写入：`ownNodes`（trigger/menu）+ `closest('.cle-tools-menu, .cle-tools-more')`
+  判定；childList 记录只有“增删的节点全是自己的”才算自写，真实控件变化仍会排一次同步；
+- 每个 stage 有 `dispose()`：移除 `document pointerdown`、`window resize`、`window scroll`
+  三个监听，关闭并移除菜单；stage 消失、以及 `mountToolFold` 的 abort 都走它。
+  abort 时不再由外部重复 remove。
+
+### 8.5 本轮自测
+
+| 文件 | 覆盖 |
+| --- | --- |
+| `tests/cle-layout-tools.test.cjs` | 打开菜单后连续 6 帧节点与焦点不变；ArrowDown 后连续 6 帧不复位；工具集合真变化时重建且焦点保留；abort 后 window 监听归零、菜单节点移除；重复挂载不累积监听；按占用折叠（宽行不折叠、窄行折叠、essential 永不标记 low） |
+| `tests/cle-layout-pane-room.test.cjs` | 两个 pane 各自按 session 打 room 标记、页面 room 变化不重写 pane；未绑定 pane 不继承 room；owner key 与内层 pane 两种来源；roomOfSession 全映射；字号不再引用页面 room；`@container` 内不存在以容器祖先为主体的规则；窄 pane 正文与 composer 同轴且都有 inset；composer 网格为 `minmax(0,1fr) auto`；mobile-toolbar 覆盖存在；折叠由 `.is-crowded` 驱动 |
+
+**回归对照（关键证据）**：
+- 把 `src/composer/composer.js` 换回 HEAD 后，`cle-layout-tools.test.cjs` **6/6 全失败**，
+  其中三个用例耗时 6.4s / 11.0s / 19.9s —— 正是逐帧重建卡住的真实表现。
+  换回新版本 6/6 通过。
+- 把 `static/legacy/laolao-learning-stage.js` 换回 HEAD 后，
+  `cle-layout-panes.test.cjs` 4/4 全失败。换回新版本全部通过。
+
+测试夹具 `tests/fixtures/mini-dom.cjs` 现在会像浏览器一样把 DOM 写入作为变更记录发给观察者
+（`flushMutations()` 在每帧前置），并支持 `:scope >`、选择器列表与事件 `preventDefault`，
+因此能真正复现“观察自身写入”的循环，而不是只搜索源码里有没有 `ArrowDown`。
+
+**全量**：863 例，852 通过；失败 11 例与第一轮完全相同（pony 命名、v1–v4 bundle 升级、
+native patch、installer cache-bust 等），在未改动的 HEAD 上同样失败。
+本次相关套件 `cle-layout*`（31 例）全部通过。
+
+### 8.6 本轮新增/修改文件
+
+| 文件 | 说明 | 是否需 import |
+| --- | --- | --- |
+| `src/composer/panes.js` | **新增**：按 pane 的 session 打 room 标记 | 不需要改 `main.js`：`composer.js` 已经 import 并在 `mountComposer` 里调用 |
+| `src/composer/composer.js` | 菜单签名/焦点保持、自身写入过滤、`dispose()` | 已 import |
+| `src/composer/composer.css` | 两列网格 + 命名区域、mobile-toolbar 覆盖、`.is-crowded` 折叠、gutter 同轴 | 已 import |
+| `src/process/status.css` | 按 pane 字号、gutter 设在 `.chat`、窄 pane 双边 inset | 已 import |
+| `tests/cle-layout-tools.test.cjs` | 新增行为测试 | 自动发现 |
+| `tests/cle-layout-pane-room.test.cjs` | 新增 pane/容器测试 | 自动发现 |
+| `tests/fixtures/mini-dom.cjs` | 变更通知、选择器列表、`:scope >` | 夹具 |
+
+**合并后仍需主控跑一次 `node build.mjs`** 再提交 `openclaw.plugin.json`（本轮已再次还原该文件）。
+
+### 8.7 仍未验证
+
+- 未做视觉验收；864px 下单排、508px 下 16px inset 的实际观感需主控目测。
+- `.is-crowded` 的判定依赖 `clientWidth` 与真实控件宽度，首帧在字体未加载时可能先折叠一次
+  再展开；若主控看到闪动，可在 `document.fonts.ready` 后再触发一次同步。
+- 未起网关，未做真实模型轮次与题卡/笔记联动验证。
+
 ## 七、Commit
 
 见本分支最后一次提交（`repair(layout): …`）。报告文件本身随该提交入库。
