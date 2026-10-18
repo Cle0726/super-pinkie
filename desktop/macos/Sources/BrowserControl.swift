@@ -41,33 +41,85 @@ enum BrowserControlPolicy {
     }
 }
 
-/// The C.le. palette used by the native browser chrome. The web UI owns its own
-/// tokens; this keeps the surrounding window (toolbar, start page, error page,
-/// resize seams) from drifting back to the old pink skin.
+/// The C.le. palette used by the native browser chrome.
+///
+/// These are the *current* values of `services/cle-studio/src/styles/tokens.css`
+/// and `themes/cle.json` (light and dark). They are duplicated here only because
+/// AppKit cannot read CSS variables; keeping one table is what stops the native
+/// chrome from drifting into a third, hand-mixed palette again.
+///
+/// light: paper #F4EFE4  ink #15161A  ink-2 #5C5A57  ink-3 #9A958B
+///        surface #FBF8F1  line rgba(20,18,15,.10)  gaze #2A63E8  gold #A9842F
+/// dark:  paper #0A0D16  ink #EFE8DA  ink-2 #A39D90  ink-3 #686457
+///        surface #111522  line rgba(255,255,255,.08)  gaze #5AA8FF  gold #C9A24A
 enum CleBrowserPalette {
-    static let paper = NSColor(srgbRed: 0.984, green: 0.980, blue: 0.961, alpha: 1)
-    static let surface = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+    static let paper = NSColor(srgbRed: 0.957, green: 0.937, blue: 0.894, alpha: 1)
+    static let surface = NSColor(srgbRed: 0.984, green: 0.973, blue: 0.945, alpha: 1)
     static let ink = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 1)
-    static let ink2 = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.62)
-    static let ink3 = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.42)
-    static let line = NSColor(srgbRed: 0.082, green: 0.086, blue: 0.102, alpha: 0.12)
+    static let ink2 = NSColor(srgbRed: 0.361, green: 0.353, blue: 0.341, alpha: 1)
+    static let ink3 = NSColor(srgbRed: 0.604, green: 0.584, blue: 0.545, alpha: 1)
+    static let line = NSColor(srgbRed: 0.078, green: 0.071, blue: 0.059, alpha: 0.10)
     static let gaze = NSColor(srgbRed: 0.165, green: 0.388, blue: 0.910, alpha: 1)
-    static let gold = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.290, alpha: 1)
+    static let gold = NSColor(srgbRed: 0.663, green: 0.518, blue: 0.184, alpha: 1)
 
-    // Night: warm near-black paper, ivory ink (matches the web night tokens).
-    static let nightPaper = NSColor(srgbRed: 0.086, green: 0.078, blue: 0.071, alpha: 1)
-    static let nightSurface = NSColor(srgbRed: 0.122, green: 0.110, blue: 0.098, alpha: 1)
-    static let nightInk = NSColor(srgbRed: 0.941, green: 0.925, blue: 0.894, alpha: 1)
-    static let nightInk2 = NSColor(srgbRed: 0.941, green: 0.925, blue: 0.894, alpha: 0.66)
-    static let nightLine = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.13)
-    static let nightGaze = NSColor(srgbRed: 0.475, green: 0.627, blue: 0.980, alpha: 1)
+    static let nightPaper = NSColor(srgbRed: 0.039, green: 0.051, blue: 0.086, alpha: 1)
+    static let nightSurface = NSColor(srgbRed: 0.067, green: 0.082, blue: 0.133, alpha: 1)
+    static let nightInk = NSColor(srgbRed: 0.937, green: 0.910, blue: 0.855, alpha: 1)
+    static let nightInk2 = NSColor(srgbRed: 0.639, green: 0.616, blue: 0.565, alpha: 1)
+    static let nightInk3 = NSColor(srgbRed: 0.408, green: 0.392, blue: 0.341, alpha: 1)
+    static let nightLine = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.08)
+    static let nightGaze = NSColor(srgbRed: 0.353, green: 0.659, blue: 1.0, alpha: 1)
+    static let nightGold = NSColor(srgbRed: 0.788, green: 0.635, blue: 0.290, alpha: 1)
 
     static func paper(_ dark: Bool) -> NSColor { dark ? nightPaper : paper }
     static func surface(_ dark: Bool) -> NSColor { dark ? nightSurface : surface }
     static func ink(_ dark: Bool) -> NSColor { dark ? nightInk : ink }
     static func ink2(_ dark: Bool) -> NSColor { dark ? nightInk2 : ink2 }
+    static func ink3(_ dark: Bool) -> NSColor { dark ? nightInk3 : ink3 }
     static func line(_ dark: Bool) -> NSColor { dark ? nightLine : line }
     static func gaze(_ dark: Bool) -> NSColor { dark ? nightGaze : gaze }
+    static func gold(_ dark: Bool) -> NSColor { dark ? nightGold : gold }
+
+    /// CSS custom properties for the native `loadHTMLString` pages (start page,
+    /// error page). One string so a page never invents its own colours again.
+    static var cssVariables: String {
+        """
+        :root{--paper:#F4EFE4;--surface:#FBF8F1;--ink:#15161A;--ink2:#5C5A57;--ink3:#9A958B;--line:rgba(20,18,15,.10);--line-strong:rgba(20,18,15,.18);--gaze:#2A63E8;--gold:#A9842F}
+        @media(prefers-color-scheme:dark){:root{--paper:#0A0D16;--surface:#111522;--ink:#EFE8DA;--ink2:#A39D90;--ink3:#686457;--line:rgba(255,255,255,.08);--line-strong:rgba(255,255,255,.14);--gaze:#5AA8FF;--gold:#C9A24A}}
+        """
+    }
+}
+
+/// The C.le. wordmark, reused (not redrawn) from the shipped signature geometry
+/// in `static/legacy/laolao-cle-signature.js` / `static/splash/signature.js`:
+/// same stroke order, same centre-line Béziers, same 12° pennant slant, same
+/// two dots. Only the rendering differs — a static stroke instead of the
+/// pressure-varied pen outline — because AppKit cannot measure a path here.
+enum CleWordmark {
+    // Original centre lines, verbatim from the signature module.
+    private static let strokes: [(d: String, width: Double)] = [
+        ("M55 25C53 17 44 13 34 16C20 20 12 36 15 52C18 67 33 74 47 68C53 65 57 60 59 55", 5.2),
+        ("M73 64C82 55 95 37 97 24C98.5 14 91 11 88 19C84 30 85 50 88 59C90 65 96 66 102 61C108 56 118 50 118 44C118 39 111 38 107 44C103 51 104 62 113 65C120 67 128 63 134 59C142 54 157 55 161 61C164 66 152 73 120 76.5C88 79.5 50 78 24 84", 4.6),
+    ]
+    private static let dots: [(x: Double, y: Double)] = [(67, 64), (168, 64)]
+    private static let slant = tan(12.0 * Double.pi / 180)
+
+    /// Pen slant as an SVG affine: x' = x + (64 - y)·tan12°.
+    private static var slantMatrix: String {
+        let e = 64 * slant
+        return "matrix(1,0,\(String(format: "%.6f", -slant)),1,\(String(format: "%.6f", e)),0)"
+    }
+
+    /// A wide, quiet signature for the browser start page.
+    static var startPageSVG: String {
+        let paths = strokes.map { stroke in
+            "<path d=\"\(stroke.d)\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"\(stroke.width)\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+        }.joined()
+        let marks = dots.map { dot in
+            "<ellipse cx=\"\(dot.x)\" cy=\"\(dot.y)\" rx=\"3.9\" ry=\"\(3.9 * 0.86)\" transform=\"rotate(-28 \(dot.x) \(dot.y))\" fill=\"currentColor\"/>"
+        }.joined()
+        return "<svg viewBox=\"0 0 200 96\" role=\"img\" aria-label=\"C.le.\"><g transform=\"\(slantMatrix)\">\(paths)\(marks)</g></svg>"
+    }
 }
 
 /// Shared by the App toolbar and the separate WebKit test host. It does not blink.

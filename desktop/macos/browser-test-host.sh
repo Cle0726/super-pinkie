@@ -91,8 +91,10 @@ build() {
   rm -rf "$APP_PATH"
   mkdir -p "$CONTENTS/MacOS" "$RESOURCES" "$RUNTIME/bin" "$STATE_ROOT/logs"
 
-  echo "==> compiling Launcher (same sources as the app)"
-  xcrun swiftc -parse-as-library -O \
+  echo "==> compiling Launcher (same sources as the app, test-host compiled in)"
+  # -D CLE_BROWSER_TEST_HOST makes isolation a property of the binary: opening
+  # this .app from Finder/CUA/LaunchServices cannot fall back to the live path.
+  xcrun swiftc -parse-as-library -O -D CLE_BROWSER_TEST_HOST \
     "$SCRIPT_DIR/Sources/MaterialPreview.swift" \
     "$SCRIPT_DIR/Sources/BrowserControl.swift" \
     "$SCRIPT_DIR/Sources/Launcher.swift" \
@@ -150,7 +152,6 @@ run() {
   [[ -d "$STATE_ROOT" ]] || mkdir -p "$STATE_ROOT/logs"
   echo "==> launching against 127.0.0.1:$PORT (no gateway is started or replaced)"
   env \
-    PINKIE_TEST_HOST=1 \
     PINKIE_GATEWAY_URL="http://127.0.0.1:$PORT/" \
     PINKIE_STATE_ROOT="$STATE_ROOT" \
     PINKIE_CONFIG_PATH="$STATE_ROOT/config.json" \
@@ -159,9 +160,61 @@ run() {
     "$CONTENTS/MacOS/Launcher"
 }
 
+# Proof that the delivered .app is safe with no environment at all.
+check() {
+  [[ -x "$CONTENTS/MacOS/Launcher" ]] || die "host not built; run --build first"
+  local ok=0
+  # `strings | grep -q` can report a false negative: grep exits on the first
+  # match, strings then dies of SIGPIPE and the pipeline carries that status.
+  # Capture the output first so the check is about the marker, not the pipe.
+  local markers
+  markers="$(strings -a "$CONTENTS/MacOS/Launcher" | grep "CLE_BROWSER_TEST_HOST_ALWAYS" || true)"
+  if [[ "$markers" == *"CLE_BROWSER_TEST_HOST_ALWAYS=1"* ]]; then
+    echo "  ok   test-host compiled in (marker present)"
+  else
+    echo "  FAIL marker missing: this binary would use the production path" >&2
+    ok=1
+  fi
+  local ident
+  ident="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTENTS/Info.plist" 2>/dev/null || true)"
+  if [[ "$ident" == "$BUNDLE_ID" ]]; then
+    echo "  ok   bundle id $ident"
+  else
+    echo "  FAIL bundle id is '$ident', expected '$BUNDLE_ID'" >&2
+    ok=1
+  fi
+  if [[ "$STATE_ROOT" == *"/SuperPinkie/browser-test"* ]]; then
+    echo "  ok   default state root stays under browser-test"
+  else
+    echo "  FAIL state root is '$STATE_ROOT'" >&2
+    ok=1
+  fi
+  if [[ "$PORT" == "19789" ]]; then
+    echo "  ok   default gateway port 19789 (never 18789)"
+  else
+    echo "  FAIL port is $PORT" >&2
+    ok=1
+  fi
+
+  # Runtime proof: run the real binary with a cleaned environment. This is the
+  # same code path a Finder/CUA launch takes; it prints the values it would use
+  # and exits before opening a window.
+  local selfcheck
+  if selfcheck="$(env -i HOME="$HOME" "$CONTENTS/MacOS/Launcher" --browser-test-self-check 2>&1)"; then
+    echo "  ok   runtime self-check (clean environment)"
+    while IFS= read -r line; do echo "       $line"; done <<< "$selfcheck"
+  else
+    echo "  FAIL runtime self-check: a launch without environment is not isolated" >&2
+    while IFS= read -r line; do echo "       $line" >&2; done <<< "$selfcheck"
+    ok=1
+  fi
+  return "$ok"
+}
+
 case "${1:---run}" in
   --build) build ;;
   --run) [[ -x "$CONTENTS/MacOS/Launcher" ]] || build; run ;;
+  --check) check ;;
   --print-env) print_env ;;
-  *) die "unknown option: $1 (use --build, --run or --print-env)" ;;
+  *) die "unknown option: $1 (use --build, --run, --check or --print-env)" ;;
 esac

@@ -20,9 +20,29 @@ test('the browser controller is actually compiled into the app', () => {
   assert.match(build, /Sources\/MaterialPreview\.swift/);
 });
 
-test('test-host mode is explicit and opt-in', () => {
-  assert.match(launcher, /static let isTestHost = ProcessInfo\.processInfo\.environment\["PINKIE_TEST_HOST"\] == "1"/);
-  assert.match(launcher, /PINKIE_STATE_ROOT/);
+test('test-host mode is compiled into the acceptance binary, not only injected', () => {
+  // A previously shipped host was only safe through the shell wrapper: opening
+  // the .app from Finder/CUA fell through to the production path (live config,
+  // live state, 18789). Isolation must be a property of the binary.
+  assert.match(launcher, /#if CLE_BROWSER_TEST_HOST/);
+  assert.match(launcher, /static let isTestHost: Bool = \{/);
+  assert.match(hostScript, /-D CLE_BROWSER_TEST_HOST/, 'the test build defines the flag');
+  assert.match(launcher, /CLE_BROWSER_TEST_HOST_ALWAYS=1/);
+  assert.match(launcher, /--browser-test-self-check/);
+});
+
+test('test host defaults derive from the build, before any environment', () => {
+  const start = launcher.indexOf('static let stateRoot');
+  const stateBlock = launcher.slice(start, launcher.indexOf('private static let values', start));
+  assert.match(stateBlock, /isTestHost \? base\.appendingPathComponent\("browser-test"/, 'default state root is isolated');
+
+  const gwStart = launcher.indexOf('static let gatewayURL');
+  const gwBlock = launcher.slice(gwStart, launcher.indexOf('static let speechURL', gwStart));
+  assert.match(gwBlock, /isTestHost \? "http:\/\/127\.0\.0\.1:19789\/" : "http:\/\/127\.0\.0\.1:18789\/"/);
+
+  const cfg = launcher.slice(launcher.indexOf('private static let values'), launcher.indexOf('private static func string('));
+  assert.match(cfg, /else if isTestHost \{/, 'config path branches on the compiled flag');
+  assert.doesNotMatch(cfg, /^\s*if isTestHost, ProcessInfo/, 'no longer requires an env var to skip live config');
 });
 
 test('test host refuses the live gateway port and non-loopback hosts', () => {
@@ -77,11 +97,36 @@ test('test host launch script targets 19789 with an isolated bundle id and state
   assert.match(hostScript, /CLE_TEST_PORT:-19789/);
   assert.match(hostScript, /com\.cle0726\.super-pinkie\.browser-test/);
   assert.match(hostScript, /SuperPinkie\/browser-test/);
-  assert.match(hostScript, /PINKIE_TEST_HOST=1/);
   // It must reuse the real sources rather than a re-implementation.
   assert.match(hostScript, /Sources\/BrowserControl\.swift/);
   assert.match(hostScript, /Sources\/Launcher\.swift/);
   // And must not touch the installed app or its state.
   assert.doesNotMatch(hostScript, /\/Applications\/超級碧琪\.app/);
   assert.doesNotMatch(hostScript, /open -a/);
+});
+
+test('native chrome uses the real tokens, not a third hand-mixed palette', () => {
+  const control = fs.readFileSync(path.join(root, 'desktop/macos/Sources/BrowserControl.swift'), 'utf8');
+  const tokens = fs.readFileSync(path.join(root, 'services/cle-studio/src/styles/tokens.css'), 'utf8');
+  // Light + dark values that must match the stylesheet exactly.
+  assert.match(tokens, /--cle-paper: #F4EFE4/);
+  assert.match(tokens, /--cle-paper: #0A0D16/);
+  assert.match(tokens, /--cle-surface: #111522/);
+  assert.match(tokens, /--cle-gaze: #5AA8FF/);
+  assert.match(control, /--paper:#F4EFE4/);
+  assert.match(control, /--paper:#0A0D16/);
+  assert.match(control, /--surface:#111522/);
+  assert.match(control, /--gaze:#5AA8FF/);
+  // The warm-brown night palette that drifted away from the tokens is gone.
+  assert.doesNotMatch(control, /#161412/);
+  assert.doesNotMatch(control, /#1f1c19/);
+});
+
+test('startup and start pages never fall back to the old brand', () => {
+  assert.doesNotMatch(launcher, /◷/, 'no unicode clock standing in for the brand mark');
+  assert.doesNotMatch(launcher, /background:#efcbd3/, 'no pink startup fallback');
+  assert.doesNotMatch(launcher, /超級碧琪正在准备/);
+  assert.match(launcher, /CleWordmark\.startPageSVG/, 'reuses the shipped signature geometry');
+  // The shipped app keeps its original opening art; only the test host swaps it.
+  assert.match(launcher, /if RuntimeConfig\.isTestHost \{\s*\n\s*webView\?\.loadHTMLString\(startupPlaceholderHTML/);
 });
