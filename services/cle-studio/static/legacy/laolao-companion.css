@@ -1,4 +1,4 @@
-/* 趴在输入框上的碧琪 + 菜单 + 点缀。颜色跟随每个模式的 --accent。 */
+/* 趴在输入框上的 Li An + 菜单 + 点缀。颜色跟随每个模式的 --accent。 */
 
 .pinkie-buddy {
   --buddy-w: 168px;
@@ -11,7 +11,7 @@
   pointer-events: none;
   transition: right .25s ease, opacity .2s ease, transform .25s ease, visibility .2s;
 }
-/* 输入框的弹层（模型、设置、附件、容量）往上展开时，碧琪先低头躲开，别挡住菜单 */
+/* 输入框的弹层（模型、设置、附件、容量）往上展开时，Li An 先低头躲开，别挡住菜单 */
 .agent-chat__composer-shell:has(details[open], .chat-settings-popover--open) > .pinkie-buddy {
   opacity: 0; visibility: hidden; transform: translateY(10px);
 }
@@ -31,7 +31,7 @@
   pointer-events: none;
 }
 .pinkie-buddy__img.is-front { opacity: 1; }
-/* 会动的碧琪（laolao-buddy-rig.js）：画布比图大一圈，留出蹦跳和歪头的空间；动作都在画布里，按钮本身不再做 CSS 动画 */
+/* 会动的 Li An（laolao-buddy-rig.js）：画布比图大一圈，留出蹦跳和歪头的空间；动作都在画布里，按钮本身不再做 CSS 动画 */
 .pinkie-buddy__rig {
   position: absolute; pointer-events: none;
   filter: drop-shadow(0 3px 5px color-mix(in srgb, var(--accent, #e94f91) 18%, transparent));
@@ -48,7 +48,7 @@
 .pinkie-buddy[data-state="sleepy"] .pinkie-buddy__figure { animation-duration: 6.5s; }
 .pinkie-buddy[data-state="working"] .pinkie-buddy__figure { animation: buddy-ponder 3.2s ease-in-out infinite; }
 
-/* 进度翻译 / 专注倒计时：在她左边贴着输入框的一枚小标签 */
+/* 进度翻译 / 专注倒计时：在他左边贴着输入框的一枚小标签 */
 .pinkie-buddy__caption {
   position: absolute; right: calc(100% - 6px); bottom: 12px;
   max-width: 200px; padding: 3px 10px;
@@ -63,7 +63,7 @@
 }
 .pinkie-buddy__caption.is-shown { opacity: 1; transform: none; }
 
-/* 说话气泡：从她头顶往上冒，尾巴指向她 */
+/* 说话气泡：从他头顶往上冒，尾巴指向他 */
 .pinkie-buddy__bubble {
   position: absolute; right: 18px; bottom: calc(100% + 4px);
   width: max-content; max-width: min(340px, 52vw);
@@ -145,7 +145,7 @@
 .ico--focus:hover .pinkie-buddy__ico .hand { transform-origin: 12px 13.5px; animation: ico-tick 1.2s steps(6) infinite; }
 .ico--narrate:hover .pinkie-buddy__ico .draw { animation: ico-wave .9s ease-in-out infinite; transform-origin: center; }
 
-/* 选中聊天文字时的「问碧琪」 */
+/* 选中聊天文字时的「问 Li An」 */
 .pinkie-buddy-settings {
   --buddy-settings-bg: #fffaf7; --buddy-settings-field: #fff; --buddy-settings-ink: #3a3230;
   --buddy-settings-muted: #84766e; --buddy-settings-line: rgba(121, 87, 109, .18);
