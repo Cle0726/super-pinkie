@@ -90,35 +90,20 @@ enum CleBrowserPalette {
     }
 }
 
-/// The C.le. wordmark, reused (not redrawn) from the shipped signature geometry
-/// in `static/legacy/laolao-cle-signature.js` / `static/splash/signature.js`:
-/// same stroke order, same centre-line Béziers, same 12° pennant slant, same
-/// two dots. Only the rendering differs — a static stroke instead of the
-/// pressure-varied pen outline — because AppKit cannot measure a path here.
+/// The C.le. wordmark as text, not as a re-drawn glyph.
+///
+/// The app's own brand mark is a plain italic serif wordmark:
+/// `.cle-brandmark { font: italic 400 22px/1 var(--cle-serif) }` in
+/// `src/rooms/rooms.css`, i.e. `C.le.` set in the serif face with a slight
+/// negative tracking. An earlier attempt re-assembled the pen-lettering SVG
+/// geometry with a fixed stroke and it read as a heavy block, so the mark is
+/// now the same wordmark the app itself renders, with no new icon invented.
 enum CleWordmark {
-    // Original centre lines, verbatim from the signature module.
-    private static let strokes: [(d: String, width: Double)] = [
-        ("M55 25C53 17 44 13 34 16C20 20 12 36 15 52C18 67 33 74 47 68C53 65 57 60 59 55", 5.2),
-        ("M73 64C82 55 95 37 97 24C98.5 14 91 11 88 19C84 30 85 50 88 59C90 65 96 66 102 61C108 56 118 50 118 44C118 39 111 38 107 44C103 51 104 62 113 65C120 67 128 63 134 59C142 54 157 55 161 61C164 66 152 73 120 76.5C88 79.5 50 78 24 84", 4.6),
-    ]
-    private static let dots: [(x: Double, y: Double)] = [(67, 64), (168, 64)]
-    private static let slant = tan(12.0 * Double.pi / 180)
-
-    /// Pen slant as an SVG affine: x' = x + (64 - y)·tan12°.
-    private static var slantMatrix: String {
-        let e = 64 * slant
-        return "matrix(1,0,\(String(format: "%.6f", -slant)),1,\(String(format: "%.6f", e)),0)"
-    }
-
-    /// A wide, quiet signature for the browser start page.
-    static var startPageSVG: String {
-        let paths = strokes.map { stroke in
-            "<path d=\"\(stroke.d)\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"\(stroke.width)\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
-        }.joined()
-        let marks = dots.map { dot in
-            "<ellipse cx=\"\(dot.x)\" cy=\"\(dot.y)\" rx=\"3.9\" ry=\"\(3.9 * 0.86)\" transform=\"rotate(-28 \(dot.x) \(dot.y))\" fill=\"currentColor\"/>"
-        }.joined()
-        return "<svg viewBox=\"0 0 200 96\" role=\"img\" aria-label=\"C.le.\"><g transform=\"\(slantMatrix)\">\(paths)\(marks)</g></svg>"
+    /// The wordmark as HTML, using the same face and tracking as `.cle-brandmark`.
+    static func html(pointSize: Double, tone: String = "ink", italic: Bool = true) -> String {
+        """
+        <span class="cle-word" style="font:\(italic ? "italic " : "")400 \(Int(pointSize))px/1 ui-serif, 'New York', 'Songti SC', 'STSong', serif;letter-spacing:-.015em;color:var(--\(tone))">C.le.</span>
+        """
     }
 }
 

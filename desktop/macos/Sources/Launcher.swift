@@ -611,7 +611,7 @@ private final class NativeDictationController {
             case .notDetermined:
                 AVCaptureDevice.requestAccess(for: .audio) { allowed in
                     DispatchQueue.main.async {
-                        completion(allowed, allowed ? nil : "碧琪还没有麦克风权限。")
+                        completion(allowed, allowed ? nil : "Li An 还没有麦克风权限。")
                     }
                 }
             default:
@@ -639,7 +639,7 @@ private final class NativeDictationController {
 
     private func beginRecording() {
         guard let recognizer, recognizer.isAvailable else {
-            send(state: "error", message: "语音识别暂时不可用，碧琪晚点再试试。")
+            send(state: "error", message: "语音识别暂时不可用，Li An 晚点再试试。")
             return
         }
 
@@ -647,7 +647,7 @@ private final class NativeDictationController {
         task = nil
         request = SFSpeechAudioBufferRecognitionRequest()
         guard let request else {
-            send(state: "error", message: "碧琪没能准备好听写小本本。")
+            send(state: "error", message: "Li An 没能准备好听写小本本。")
             return
         }
         request.shouldReportPartialResults = true
@@ -682,7 +682,7 @@ private final class NativeDictationController {
             }
         } catch {
             inputNode.removeTap(onBus: 0)
-            send(state: "error", message: "麦克风启动失败，碧琪没能听清。")
+            send(state: "error", message: "麦克风启动失败，Li An 没能听清。")
         }
     }
 
@@ -2371,12 +2371,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
         contentView.layer?.borderWidth = 1
-        contentView.layer?.borderColor = NSColor(
-            srgbRed: 217.0 / 255.0,
-            green: 89.0 / 255.0,
-            blue: 143.0 / 255.0,
-            alpha: 0.24
-        ).cgColor
+        // The outer window hairline used the old pink (217,89,143). It is now the
+        // same token line as every other hairline in the new shell.
+        contentView.layer?.borderColor = CleBrowserPalette.line(nightAppearance).cgColor
         contentView.layer?.masksToBounds = true
         contentView.addSubview(webView)
         primaryFullSizeConstraints = [
@@ -2539,15 +2536,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}
           body{display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
           main{display:grid;justify-items:center;gap:18px;padding:32px;text-align:center}
-          .mark{width:96px;color:var(--ink)}
-          .mark svg{width:96px;height:auto;display:block}
+          .mark{color:var(--ink);line-height:1}
           .word{font:500 11px/1 var(--cle-mono,ui-monospace);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
           .bar{width:96px;height:1px;background:var(--line-strong);overflow:hidden;position:relative}
           .bar::after{content:"";position:absolute;inset:0;background:var(--gaze);transform-origin:left;animation:prep 1.4s cubic-bezier(.45,0,.2,1) infinite}
           @keyframes prep{0%{transform:scaleX(0)}55%{transform:scaleX(.72)}100%{transform:scaleX(0);transform-origin:right}}
           @media(prefers-reduced-motion:reduce){.bar::after{animation:none;transform:scaleX(.5)}}
         </style></head>
-        <body><main><div class="mark">\#(CleWordmark.startPageSVG)</div><div class="bar"></div><div class="word">C.le.</div></main></body></html>
+        <body><main><div class="mark">\#(CleWordmark.html(pointSize: 44))</div><div class="bar"></div><div class="word">Li An</div></main></body></html>
         """#
     }
 
@@ -3751,14 +3747,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           html,body{height:100%}
           body{margin:0;display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
           main{text-align:center;padding:36px;max-width:380px}
-          .mark{width:74px;margin:0 auto 18px;display:grid;place-items:center;color:var(--ink)}
-          .mark svg{width:74px;height:auto;display:block}
-          .mark svg path,.mark svg circle{fill:currentColor}
-          h1{margin:0 0 6px;font:600 15px/1.5 var(--cle-sans,-apple-system),"PingFang SC",sans-serif;letter-spacing:.01em}
+          .mark{width:auto;margin:0 0 18px;color:var(--ink);line-height:1}
+          h1{margin:0 0 6px;font:600 15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;letter-spacing:.01em}
           p{margin:0;color:var(--ink2);font-size:13px}
           .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
         </style>
-        <main><div class="mark">\#(CleWordmark.startPageSVG)</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+        <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
         <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -4658,7 +4652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             case "roundtable":
                 panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
             default:
-                panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
+                panel.message = "选择一个文件夹，Li An 会把它放进左侧项目栏。"
             }
             panel.prompt = "选择"
             panel.canChooseFiles = false
@@ -4916,7 +4910,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           let active = false;
           let baseDraft = { value: "" };
 
-          const textForState = () => active ? "收好啦" : "碧琪听着呢";
+          const textForState = () => active ? "收好啦" : "Li An 听着呢";
           const updateButton = (message) => {
             const button = document.getElementById(buttonId);
             if (!button) return;
