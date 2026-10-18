@@ -1,6 +1,7 @@
-// The live status line while 碧琪 works: an eye that scans while she thinks, narrows when a
-// tool runs, blinks between steps; one verb; the real command or file; the elapsed time.
+// The live status line: the original C.le. particles, one verb, the actual command
+// or file, and elapsed time. The adapter follows the native active session.
 // Driven by the gateway's agent events for the session on screen; replaces the stock dots.
+import {particleGlyph} from './particles.js';
 
 const TOOL_VERBS = [
   [/^(exec|bash|shell|process|terminal)/i, '执行'],
@@ -28,12 +29,8 @@ const detailFor = (data) => {
 };
 const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-const EYE = `<svg class="cle-status__eye" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-<defs><clipPath id="cle-status-almond"><path d="M2.4 13.4C7 8.2 15.5 5.2 21.6 9.6C16 15 8 16.6 2.4 13.4Z"/></clipPath></defs>
-<g class="cle-status__lids"><g clip-path="url(#cle-status-almond)"><g class="cle-status__look"><circle cx="12.3" cy="11.5" r="4" class="cle-status__iris"/><ellipse cx="12.3" cy="11.5" rx=".55" ry="3.8" fill="currentColor" class="cle-status__pupil"/></g></g>
-<path d="M2.4 13.4C7 8.2 15.5 5.2 21.6 9.6" stroke="currentColor" stroke-width="1.5"/><path d="M2.4 13.4C8 16.6 16 15 21.6 9.6" stroke="currentColor" stroke-width=".95"/></g></svg>`;
-
 export function mountStatus(host, signal) {
+  const glyph = particleGlyph(signal);
   const runs = new Map();                 // sessionKey → {startedAt, mode, verb, detail}
   let thinkIdx = 0;
   const current = () => runs.get(host.sessions?.selectedKey || '');
@@ -53,19 +50,22 @@ export function mountStatus(host, signal) {
     const el = document.createElement('span');
     el.className = 'cle-status';
     el.setAttribute('role', 'status');
-    el.innerHTML = `${EYE}<span class="cle-status__verb"></span><span class="cle-status__chip" hidden></span><span class="cle-status__time"></span>`;
+    el.innerHTML = `<span class="cle-status__glyph" aria-hidden="true"></span><span class="cle-status__verb"></span><span class="cle-status__chip" hidden></span><span class="cle-status__time"></span>`;
     return el;
   };
 
   // mount into the native working indicator of the pane on screen
   const sync = () => {
     const pane = document.querySelector('.chat-pane-cache__pane--active') || document;
-    for (const ind of pane.querySelectorAll('.chat-working-indicator')) {
+    const indicators = pane.querySelectorAll('.chat-working-indicator');
+    if (!indicators.length) glyph.park();
+    for (const ind of indicators) {
       let el = ind.querySelector(':scope > .cle-status');
       if (!el) { el = build(); ind.append(el); }
       const run = current() || {startedAt: Date.now(), mode: 'think', verb: THINK[0], detail: ''};
       if (!current()) runs.set(host.sessions?.selectedKey || '', run);
       render(el, run);
+      glyph.attach(el.querySelector('.cle-status__glyph'), run);
     }
   };
 
@@ -77,7 +77,7 @@ export function mountStatus(host, signal) {
     if (!run) { run = {startedAt: p.ts || Date.now(), mode: 'think', verb: THINK[0], detail: ''}; runs.set(key, run); }
     if (p.stream === 'run_status' && PREP[d.phase]) Object.assign(run, {mode: 'prep', verb: PREP[d.phase], detail: ''});
     else if (p.stream === 'thinking') { if (run.mode !== 'think') Object.assign(run, {mode: 'think', verb: THINK[thinkIdx++ % THINK.length], detail: ''}); }
-    else if (p.stream === 'tool' && d.phase === 'start') Object.assign(run, {mode: 'tool', verb: verbFor(d.name), detail: detailFor(d)});
+    else if (p.stream === 'tool' && d.phase === 'start') Object.assign(run, {mode: 'tool', tool: d.name, verb: verbFor(d.name), detail: detailFor(d)});
     else if (p.stream === 'tool' && d.phase === 'result') Object.assign(run, {mode: 'think', verb: THINK[thinkIdx++ % THINK.length], detail: ''});
     else if (p.stream === 'assistant') Object.assign(run, {mode: 'write', verb: '落笔', detail: ''});
     else if (p.stream === 'lifecycle' && (d.phase === 'end' || d.phase === 'error')) { Object.assign(run, {mode: 'done', verb: d.phase === 'error' ? '停笔' : '落款', detail: ''}); setTimeout(() => runs.delete(key), 4000); }
