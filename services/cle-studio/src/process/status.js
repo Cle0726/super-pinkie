@@ -12,13 +12,16 @@
 // cached per pane, and a paint only touches the DOM when its signature changes. The frame loop
 // stops by itself when no run is live and no 落款 is playing.
 import {createGlyphPool} from './particles.js';
-import {applyEvent, pace, stateFor, fmtElapsed, newRun, shouldRescan, DONE_HOLD, STOP_HOLD} from './model.js';
+import {applyEvent, pace, stateFor, fmtElapsed, newRun, shouldRescan, isLiveEvent, DONE_HOLD, STOP_HOLD} from './model.js';
 import {mountFocus} from './focus.js';
 import {paneSessionKey, visiblePanes} from '../rooms/split.js';
 
 const OURS = '.cle-status';
 const ANCHOR_TTL = 1500;
 const GRACE = 2500;              // how long a finished run waits for the re-rendered turn
+// After a run ends, an indicator left in the DOM must not be mistaken for a new run. Only a
+// genuine new start (or a long quiet gap) may begin one again.
+const RESUME_AFTER = 8000;
 
 // `visiblePanes()` also returns cached panes the app keeps for a session switch. Those are
 // inert / aria-hidden and not on screen: painting into them would run a second renderer that
@@ -34,6 +37,7 @@ export function mountStatus(host, signal) {
   const pool = createGlyphPool(signal);
   const focus = mountFocus(signal);
   const runs = new Map();      // sessionKey → run
+  const tombstones = new Map(); // sessionKey → time the run last ended (no resurrection)
   const views = new Map();     // pane → view
   let queued = false, raf = 0, running = false, lastSecond = -1;
 
@@ -113,8 +117,25 @@ export function mountStatus(host, signal) {
 
   const summaryOf = (run) => (run.tools ? `${run.tools} 个步骤` : '');
 
-  // The app marks an interrupted turn. Once that mark exists, the run did not finish cleanly.
-  const endedAsStopped = (pane) => !!pane.querySelector('.chat-tasks-status, .chat-group--error, [data-run-stopped]');
+  // The app marks an interrupted turn. But a pane keeps its whole history, so only a marker
+  // that belongs to *this* run may count. A run that began after the pane last rendered must
+  // not inherit an error from an older turn, which is why the run's own start time is the
+  // boundary and not a positional guess.
+  // The app marks an interrupted turn, and a pane keeps its whole history. Only a marker that
+  // belongs to *this* run may count. Groups that already existed when the run started are not
+  // candidates, whatever class they carry.
+  const endedAsStopped = (pane, run, host_) => {
+    const marked = pane.querySelectorAll('.chat-tasks-status, [data-run-stopped], .chat-group--error');
+    if (!marked.length) return false;
+    const owner = host_?.closest?.('.chat-thread-inner > .chat-group');
+    for (const node of marked) {
+      const turn = node.closest?.('.chat-thread-inner > .chat-group') || node;
+      if (run.turns && run.turns.has(turn)) return true;
+      // a turn that carries no relation to this run is history, not verdict
+      if (turn === owner && host_ && run.anchorIsOurs) return true;
+    }
+    return false;
+  };
 
   const paint = (view, run, step, now, fresh) => {
     const kind = run.on ? step.kind : (run.stopped ? 'stopped' : 'done');
@@ -123,7 +144,7 @@ export function mountStatus(host, signal) {
     const detail = run.on ? (step.label ? '' : step.text) : summaryOf(run);
     const elapsed = run.on ? fmtElapsed(now - run.since) : (run.took ? fmtElapsed(run.took) : '');
     const mono = !!(run.on && detail && step.mono);
-    const sig = `${kind}|${live}|${word}|${detail}|${elapsed}|${mono}`;
+    const sig = `${run.key || ''}|${run.since}|${kind}|${live}|${word}|${detail}|${elapsed}|${mono}`;
     if (sig === view.sig && !fresh) return;
     view.sig = sig;
 
@@ -163,6 +184,7 @@ export function mountStatus(host, signal) {
     if (newSecond) lastSecond = second;
     const panes = shownPanes();
     const alive = new Set();
+    const liveKeys = new Set();
     let active = false, retry = false;
 
     for (const pane of panes) {
@@ -179,9 +201,15 @@ export function mountStatus(host, signal) {
       const indicator = pane.querySelector('.chat-working-indicator');
 
       // Opened in the middle of a run: no lifecycle start will arrive. The native indicator
-      // is the signal — nothing here invents progress.
-      if (!run && indicator) { run = newRun(now); runs.set(key, run); }
+      // is the signal — but only once. Without the tombstone, the indicator still being in the
+      // DOM after a run ends would recreate a fresh busy run on the very next pass and the
+      // pane would never settle.
+      if (!run && indicator) {
+        const endedAt = tombstones.get(key) || 0;
+        if (now - endedAt > RESUME_AFTER) { run = newRun(now); runs.set(key, run); }
+      }
       if (!run) { dropView(pane); continue; }
+      run.key = key;
 
       const view = viewFor(pane);
       if (view.key && view.key !== key) { pool.release(view.key); view.sig = ''; }
@@ -193,9 +221,19 @@ export function mountStatus(host, signal) {
         const host_ = anchorFor(pane, view, true, now);
         if (!host_) { retry = true; continue; }
         mount(view, host_);
+        // Remember which turns this run actually owns. History that was already there can
+        // never be mistaken for this run's verdict later.
+        const turn = host_.closest?.('.chat-thread-inner > .chat-group');
+        if (turn) {
+          if (!run.turns) run.turns = new Set();
+          run.turns.add(turn);
+        }
         paint(view, run, step, now, newSecond);
         pool.use(key, view.glyph, stateFor(step.kind));
-        if (newSecond) focus.note(pane, run, host_);
+        liveKeys.add(key);
+        // note() is already idempotent (it compares a signature), and gating it on the wall
+        // clock meant a re-render in the same second could skip the focus mark entirely.
+        focus.note(pane, run, host_);
         continue;
       }
 
@@ -212,7 +250,7 @@ export function mountStatus(host, signal) {
       // After a re-render the history is the verdict. If the app now says the run was
       // interrupted, withdraw the 完成 that was already on screen — never let it sit there
       // saying “finished” while the transcript says “interrupted”.
-      if (!run.stopped && endedAsStopped(pane)) {
+      if (!run.stopped && endedAsStopped(pane, run, host_)) {
         run.stopped = true;
         run.until = Math.min(run.until, now + STOP_HOLD);
         view.sig = '';
@@ -228,7 +266,8 @@ export function mountStatus(host, signal) {
     }
 
     for (const pane of [...views.keys()]) if (!alive.has(pane)) dropView(pane);
-    focus.set(runs);
+    // 收尾 is per pane: a finished side releases its mark while the other side keeps working.
+    focus.set(liveKeys);
     return active || retry;
   };
 
@@ -267,13 +306,30 @@ export function mountStatus(host, signal) {
     });
   };
 
+  // Only an event that proves activity may create a run. Creating one for any event with a
+  // sessionKey left `on: true` ghosts behind every unrelated or terminal message; each ghost
+  // kept the frame loop alive forever.
   const onAgent = (p) => {
     const key = String(p?.sessionKey || '');
     if (!key) return;
     let run = runs.get(key);
-    if (!run) { run = newRun(Number(p.ts) || Date.now()); runs.set(key, run); }
-    if (!applyEvent(run, p)) return;
-    if (!run.on && !run.until) finish(run, Date.now());
+    if (!run) {
+      if (!isLiveEvent(p)) return;               // unknown / terminal event: nothing to show
+      run = newRun(Number(p.ts) || Date.now());
+      runs.set(key, run);
+    }
+    const before = run.on;
+    if (!applyEvent(run, p)) {
+      // a terminal event for a run we already forgot must not resurrect the busy state
+      if (run.on && !before) runs.delete(key);
+      return;
+    }
+    if (!run.on && !run.until) {
+      finish(run, Date.now());
+      tombstones.set(key, Date.now());
+    }
+    // a real start clears the tombstone: this is a new run, not a leftover indicator
+    if (run.on) tombstones.delete(key);
     schedule();
     start();
   };

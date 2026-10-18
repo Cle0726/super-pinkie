@@ -85,9 +85,36 @@ const step = (kind, text, mono, extra) => ({kind, text: text || '', mono: !!mono
 // the page was opened in the middle of one (no lifecycle start will arrive).
 export const LIVE_STREAMS = new Set(['thinking', 'assistant', 'tool', 'execution', 'run_status', 'plan']);
 
+// The native `chat` payload carries no `stream` field: it is `{runId, sessionKey, state, …}`
+// with state ∈ delta | final | error | aborted (or a `message` for injected turns). Older
+// adapters (and our own previous version) expected `stream: 'chat'`, so terminal states from
+// the real bus were silently dropped and the run never ended.
+const CHAT_STATES = new Set(['delta', 'final', 'error', 'aborted']);
+
+export function normalizeChat(p) {
+  if (!p || typeof p !== 'object') return null;
+  if (p.stream === 'chat') return {stream: 'chat', data: {state: p.state ?? p.data?.state}, sessionKey: p.sessionKey};
+  const state = typeof p.state === 'string' ? p.state : '';
+  if (!CHAT_STATES.has(state)) return null;
+  return {stream: 'chat', data: {state}, sessionKey: p.sessionKey};
+}
+
+// Does this event prove the session is working right now? Used instead of assuming that any
+// event implies activity — an unknown or terminal event must never create a busy state.
+export function isLiveEvent(p) {
+  if (!p || typeof p !== 'object') return false;
+  const chat = normalizeChat(p);
+  if (chat) return chat.data.state === 'delta';
+  const stream = p.stream;
+  if (stream === 'lifecycle') return p.data?.phase === 'start';
+  return LIVE_STREAMS.has(stream);
+}
+
 // Apply one gateway agent event. Returns true when the run changed.
 export function applyEvent(run, p, now = Date.now()) {
   if (!run || !p) return false;
+  const chat = normalizeChat(p);
+  if (chat) p = chat;
   const stream = p.stream, d = p.data || {};
 
   if (stream === 'lifecycle') {
@@ -109,7 +136,7 @@ export function applyEvent(run, p, now = Date.now()) {
 
   if (stream === 'chat') {
     // the chat stream reports terminal states on the payload itself
-    const state = String(p.state || d.state || '');
+    const state = String(d.state || '');
     if (['aborted', 'error', 'final', 'completed'].includes(state)) {
       if (!run.on) return false;
       run.on = false;
@@ -118,6 +145,12 @@ export function applyEvent(run, p, now = Date.now()) {
       run.queue.length = 0;
       run.cur = null;
       return true;
+    }
+    if (state === 'delta') {
+      if (!run.on) return false;
+      const was = run.bg;
+      run.bg = 'reply';
+      return was !== 'reply';
     }
     return false;
   }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyEvent, pace, holdFor, stateFor, kindOf, argText, newRun, fmtElapsed,
-  MIN_STEP, DONE_HOLD, STOP_HOLD,
+  normalizeChat, isLiveEvent, MIN_STEP, DONE_HOLD, STOP_HOLD,
 } from '../services/cle-studio/src/process/model.js';
 
 const tool = (phase, name, args = {}, id = 't1') => ({
@@ -142,4 +142,55 @@ test('approval requests become 等你确认 and clear when resolved', () => {
   assert.equal(step.text, 'Run npm publish?');
   applyEvent(run, {sessionKey: 'k', stream: 'execution', data: {approval: {id: 'x', state: 'resolved'}}});
   assert.equal(run.cur.done, true, 'the step already on screen is the one that resolves');
+});
+
+// ── the real chat payload ────────────────────────────────────────────────────
+// Verified against the shipped gateway: broadcast frames are
+//   {runId, sessionKey, agentId?, seq, state, message?, text?, stopReason?, errorMessage?}
+// with state ∈ delta | final | error | aborted. There is NO `stream` field. The previous
+// adapter only read `stream === 'chat'`, so real terminal frames were dropped and the run
+// never ended.
+const chatFrame = (state, extra = {}) => ({
+  runId: 'run-1', sessionKey: 'agent:main:main', seq: 7, state, ...extra,
+});
+
+test('real chat frames are normalized: no stream field, state at the top level', () => {
+  const run = newRun(0);
+  // a working turn is streaming
+  assert.equal(normalizeChat(chatFrame('delta', {text: '写到这里'})).data.state, 'delta');
+  assert.equal(normalizeChat({state: 'final'}).data.state, 'final');
+  // unrelated payloads are not chat frames
+  assert.equal(normalizeChat({state: 'weird'}), null);
+  assert.equal(normalizeChat(null), null);
+  assert.equal(normalizeChat({stream: 'agent'}), null);
+});
+
+test('a real chat terminal frame ends the run (this is what used to be dropped)', () => {
+  const run = newRun(0);
+  assert.equal(applyEvent(run, chatFrame('delta', {text: 'a'}), 100), true, 'think → reply is a real change');
+  assert.equal(run.bg, 'reply');
+  assert.equal(applyEvent(run, chatFrame('delta', {text: 'ab'}), 150), false, 'a further delta does not repaint');
+  assert.equal(applyEvent(run, chatFrame('final', {message: {text: 'done'}}), 200), true);
+  assert.equal(run.on, false);
+  assert.equal(run.stopped, false);
+});
+
+test('aborted and error chat frames count as stopped, final does not', () => {
+  for (const [state, stopped] of [['aborted', true], ['error', true], ['final', false]]) {
+    const run = newRun(0);
+    applyEvent(run, chatFrame(state), 100);
+    assert.equal(run.on, false, state);
+    assert.equal(run.stopped, stopped, state);
+  }
+});
+
+test('an unknown or terminal event never creates a busy run', () => {
+  // isLiveEvent is the gate the view uses before allocating a run
+  assert.equal(isLiveEvent({sessionKey: 'k', stream: 'usage', data: {}}), false);
+  assert.equal(isLiveEvent(chatFrame('final')), false, 'a bare terminal frame is not activity');
+  assert.equal(isLiveEvent(chatFrame('aborted')), false);
+  assert.equal(isLiveEvent({sessionKey: 'k', stream: 'lifecycle', data: {phase: 'end'}}), false);
+  assert.equal(isLiveEvent({sessionKey: 'k', stream: 'lifecycle', data: {phase: 'start'}}), true);
+  assert.equal(isLiveEvent({sessionKey: 'k', stream: 'tool', data: {phase: 'start'}}), true);
+  assert.equal(isLiveEvent(chatFrame('delta')), true);
 });
