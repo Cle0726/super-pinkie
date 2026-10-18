@@ -127,6 +127,8 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 | 23 | **预缓存行只新增不更新，脚本改动后 integrity 是旧的。** 主控隔离复现：只在 donor 的 `early-guard.js` 追加一行注释（CSS/HTML 不变）再 apply，结果 `earlyGuard=patched` 但 `integrityMatchesBytes=false`、`cacheIdChanged=false`、`offlineShell=unchanged`。根因是 `boot.assets` 只做"不存在才添加"，没做 upsert；而 `boot.id` 只 hash `offline.html`，脚本改了 HTML 没改，缓存名不动 | `apply-startup.mjs` 的 SW 分支 | 高（脚本更新后 worker 仍取旧缓存，守护静默失效） | 行改为 **upsert**（字节变了就更新 integrity）；缓存代际改为 hash **文档 + 脚本字节**；id 仍是输入的确定性摘要——同内容再跑 `changed=false`，不靠随机 id 换新鲜度。`result.changed` 计入 `earlyGuard === 'patched'` |
 | 24 | **缺早期脚本时先写了 index，再抛错。** donor 只有 `startup.css`、没有 `early-guard.js` 时，`index.html` 已被写入带 `data-cle-early` 的引用，随后才在缺源检查处抛错，留下指向不存在脚本的半部署页面（`missingSourceMutatedIndex=true`） | `apply-startup.mjs` 的写入顺序 | 高（半部署页面 = 404 + 标题窗口重新打开） | 改为**先规划后提交**：任何写入前先校验脚本源存在/非空/形状正确、三个图标 donor 存在且格式正确，并对 `index.html`、`cle-early.js`、`sw.js`、`manifest.webmanifest`、`asset-manifest.json` 全部过 `assertWritableTarget`（拒绝符号链接与越界）。被拒绝的目标同样在零写入下失败 |
 
+| 25 | **登录页旧名只是被压成 0 号字，辅助功能树仍会念出来。** 用真实浏览器核对部署产物时发现：未登录卡片的 AX 快照第一条文本仍是 `OpenClaw`。`font-size:0` 只去掉字形，文本节点还在可访问性树里，读屏会照读——单测只比对 CSS 文本，看不到这一层 | `startup.css` 的 `.login-gate__brand-name` | 中（读屏用户仍听到旧品牌；视觉上已正确） | 改为 `display:none`，同时移出布局与 AX 树；品牌改由父级 `.login-gate__brand` 提供：`::before` 用已批准肖像、`::after` 用 `C.le.` 字标。**没有新造图形**，全表唯一 `url()` 仍是 `/cle/static/art/avatar.webp` |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -291,6 +293,22 @@ node --test tests/brand-ui.test.cjs        →  6 pass / 0 fail
 真实包副本另测：首次 patch → 二次 `changed=false` → 预缓存 integrity 与落盘字节一致 →
 `--revert` 八个文件逐字节还原。全链 `apply-all`：17 补丁 0 失败。
 
+### 浏览器实测（本轮，fixture server + 真实浏览器）
+
+用打过补丁的真实包起 fixture（无网关），用侧栏浏览器打开并读回 AX 与计算样式：
+
+| 检查 | 结果 |
+|---|---|
+| `document.title` | `C.le.` |
+| 首份 AX 文本开头 | 真实错误正文「无法连接到 Gateway…」，**不再以 OpenClaw 开头** |
+| 可见且含 `OpenClaw` 的文本节点 | 0 个 |
+| `.login-gate__brand-name` 的 `display` | `none`（同时移出 AX 树） |
+| `.login-gate__brand::after` | `"C.le."`，13px |
+| 原生错误面板 | 仍可见，文案与按钮原样保留 |
+
+这一轮发现的 #25 正是靠"真的打开页面看一遍"才暴露——字节级断言与单测都通过，但读屏文本是
+另一层。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -413,4 +431,12 @@ services/cle-studio/scripts/apply-startup.mjs
     changed 计入早期脚本；所有输入与写入目标在首次写入前完成校验
 tests/cle-startup.test.mjs   48 项（+6：upsert / 脚本-only 代际 / 同内容幂等 /
                              缺源零写入 / 越界目标零写入 / twin-ledger）
+```
+
+补充 commit #5（76f910d，登录页可访问性）：
+
+```
+services/cle-studio/static/startup.css   .login-gate__brand-name 改 display:none；
+                                         品牌由父级 ::before（批准肖像）+ ::after（C.le.）提供
+tests/cle-startup.test.mjs               49 项（+1：登录页规则不得再用纯像素隐藏）
 ```
