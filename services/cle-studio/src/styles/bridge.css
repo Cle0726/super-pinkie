@@ -1,0 +1,29 @@
+/* Bridge: the variables the 2026.7 modules were written against, redefined from C.le. tokens.
+   Four ids beat the old modules' three-id overrides, so a ported module re-skins without edits. */
+html[data-cle]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --pk-fg: var(--cle-ink);
+  --pk-mute: var(--cle-ink-2);
+  --pk-faint: var(--cle-line);
+  --pk-panel: color-mix(in srgb, var(--cle-surface) 82%, transparent);
+  --pk-chip: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+  --pk-hover: var(--cle-gaze-soft);
+  --pk-accent: var(--cle-gaze);
+  --pk-accent-ink: var(--cle-gaze);
+  --pk-on: var(--cle-gaze-soft);
+  --pk-on-line: color-mix(in srgb, var(--cle-gaze) 42%, transparent);
+  --pk-good: var(--cle-ok, #4F7D5C);
+  --pk-shadow: var(--cle-shadow);
+  --pk-solid: var(--cle-surface);
+  --pk-scrim: rgba(12, 12, 14, .32);
+  --pinkie-settings-ink: var(--cle-ink);
+  --pinkie-settings-muted: var(--cle-ink-2);
+  --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong);
+  --pinkie-settings-card: var(--cle-surface);
+  --pinkie-settings-soft: color-mix(in srgb, var(--cle-ink) 4%, var(--cle-surface));
+  --pinkie-settings-control: var(--cle-surface);
+}
+html[data-cle][data-theme-mode="dark"]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --pk-scrim: rgba(4, 4, 6, .6);
+  --pk-good: #7FB08B;
+}
