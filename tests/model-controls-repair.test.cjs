@@ -126,6 +126,33 @@ test('the 2026.10 picker is enhanced, never rebuilt or double-driven', () => {
   assert.match(src, /if \(isModernPicker\(picker\)\) continue;/);
 });
 
+test('the reasoning slider answers all three places the native build paints it', () => {
+  const css = read('services/cle-studio/src/composer/models.css');
+  // 1. the container's 220% blue gradient capsule and its flow animation
+  assert.match(css, /\.chat-controls__reasoning-slider:has\(\[data-effort-boost\]\)\s*\{[\s\S]*?background-image: none;[\s\S]*?animation: none;/,
+    'the container gradient and the chat-effort-flow animation must both be cleared');
+  // 2. the input's own 1px + 12/18px glow
+  assert.match(css, /\.chat-controls__reasoning-range\[data-effort-boost\]/,
+    'the boosted range keeps an explicit box-shadow: none rule');
+  assert.match(css, /\.chat-controls__reasoning-range\[data-effort-boost="ultra"\]\s*\{\s*box-shadow: none;/);
+  // 3. a hairline track and a small bead, not the 26px pill / 28x20 thumb
+  assert.match(css, /\.chat-controls__reasoning-range::-webkit-slider-runnable-track\s*\{\s*height: 3px;/);
+  assert.match(css, /\.chat-controls__reasoning-range::-webkit-slider-thumb\s*\{[\s\S]*?width: 11px;[\s\S]*?height: 11px;/);
+  // the current stop is a tick, never a filled bar or a glow
+  assert.match(css, /\.cle-gaze-stop\[data-current\] \.cle-gaze-stop__tick\s*\{[\s\S]*?background: var\(--cle-gaze\);[\s\S]*?box-shadow: none;/);
+  assert.match(css, /\.cle-gaze-stop__tick\s*\{\s*width: 2px;\s*height: 7px;/);
+  // the stop names stay readable on the common 508px split pane
+  assert.doesNotMatch(css, /@container cle-pane \(max-width: 520px\)[\s\S]{0,400}\.cle-gaze-stop \{ font-size: 9px; \}/,
+    'a 508px split pane must not shrink the stop names to 9px');
+  // and many-stop ladders step down by count instead of squeezing every label
+  assert.match(css, /data-cle-stops="9"/);
+});
+
+test('gaze records how many stops the model really exposes', () => {
+  const src = read('services/cle-studio/src/composer/gaze.js');
+  assert.match(src, /host\.dataset\.cleStops = String\(values\.length\)/);
+});
+
 test('the brand mark reaches the closed trigger, not only an open menu', () => {
   const src = read('services/cle-studio/static/legacy/laolao-model-picker.js');
   const modern = src.slice(src.indexOf('function syncModern'), src.indexOf('function sync(details)'));
