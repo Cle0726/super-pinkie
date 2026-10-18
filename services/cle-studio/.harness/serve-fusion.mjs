@@ -30,6 +30,27 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/brand-audit.html') {
       return send(fs.readFileSync(path.join(here, 'brand-audit.html')), 'text/html');
     }
+    if (url.pathname === '/surface-audit.html') {
+      return send(fs.readFileSync(path.join(here, 'surface-audit.html')), 'text/html');
+    }
+    // 工作台只在 /chat 路由下启用，所以这个场景也挂在 /chat/ 前缀下
+    if (url.pathname === '/wb-hit.html' || url.pathname === '/chat/wb-hit') {
+      return send(fs.readFileSync(path.join(here, 'wb-hit.html')), 'text/html');
+    }
+    if (url.pathname === '/desensitize.js') {
+      return send(fs.readFileSync(path.join(here, '..', 'static/legacy/laolao-desensitize.js')), 'text/javascript');
+    }
+    if (url.pathname === '/deep-think.js') {
+      return send(fs.readFileSync(path.join(here, '..', 'static/legacy/laolao-deep-think.js')), 'text/javascript');
+    }
+    if (url.pathname === '/workbench.js') {
+      // 工作台是 classic script；用 esbuild 原样打成 ESM 便于 import（不改变语义）
+      const out = await build({
+        entryPoints: [path.join(root, 'static/legacy/laolao-workbench.js')],
+        bundle: false, format: 'esm', write: false, target: 'safari17', logLevel: 'silent',
+      });
+      return send(out.outputFiles[0].text, 'text/javascript');
+    }
     if (url.pathname === '/utilities.js') {
       utilBundle ||= await bundleUtilities();
       return send(utilBundle, 'text/javascript');
@@ -59,6 +80,11 @@ http.createServer(async (req, res) => {
       '/usage.css': 'static/legacy/laolao-usage-stats.css',
       '/shell.css': 'src/styles/shell.css',
       '/memory.css': 'static/legacy/laolao-memory.css',
+      '/tiers.css': 'src/styles/tiers.css',
+      '/ask-user.css': 'static/legacy/laolao-ask-user.css',
+      '/rich.css': 'static/legacy/laolao-rich.css',
+      '/workbench.css': 'static/legacy/laolao-workbench.css',
+      '/notebook.css': 'static/legacy/laolao-workbench-notebook.css',
     };
     if (map[url.pathname]) {
       // 不缓存：改完样式立刻能量到，避免测到上一版
