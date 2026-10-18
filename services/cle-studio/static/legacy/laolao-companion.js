@@ -40,7 +40,7 @@
   let previewState = "", previewUntil = 0;
   const preloadedModes = new Set();
   let settingsDialog = null, settingsRequest = 0;
-  const MODE_NAMES = {chat:"聊天",project:"项目",thinking:"想法",learning:"学习",unrestricted:"自由"};
+  const MODE_NAMES = {chat:"雅叙",project:"营造",thinking:"堇思",learning:"习作",unrestricted:"挥洒"};
   const helperRpc = async (method, params, timeout=10000) => {
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (typeof rpc !== "function") throw new Error("设置服务暂时未连接，请稍后再试");
