@@ -21,7 +21,11 @@
   "size": [
    2560,
    1441
-  ]
+  ],
+  "pupil": {
+   "x": 1796,
+   "y": 552
+  }
  },
  "wide": {
   "open": "splash-wide-open.webp",

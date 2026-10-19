@@ -1,7 +1,7 @@
-// The opening: Le regard plays once per app launch over the booting UI, then the dark opens from
-// between his eyes onto the room. Never blocks: if WebGL or the art fails, the UI is simply there.
+// The opening: Le regard plays once per app launch over the booting UI — his eye opens, holds your
+// gaze, blinks, and the screen opens in the shape of his eye onto the room. Never blocks: if WebGL or the art fails, the UI is simply there.
 const KEY = 'cle:splash:shown';
-const MIN_HOLD = 600;            // ms the wide shot is held after the eyes settle, before the reveal
+const MIN_HOLD = 200;            // ms he holds your gaze once the UI is ready, before the blink
 
 export function mountSplash(signal) {
   try { if (sessionStorage.getItem(KEY)) return; sessionStorage.setItem(KEY, '1'); } catch {}
@@ -16,12 +16,8 @@ export function mountSplash(signal) {
   signal.addEventListener('abort', finish, {once: true});
   (async () => {
     try {
-      const [{createRegard}, {createSignature}] = await Promise.all([
-        import('/cle/static/splash/regard.js'), import('/cle/static/splash/signature.js')]);
-      const sig = createSignature('#F1EADB');
-      sig.svg.classList.add('cle-splash__sig');
-      layer.append(sig.svg);
-      regard = await createRegard(layer.querySelector('canvas'), {base: '/cle/static/art/', signature: sig});
+      const {createRegard} = await import('/cle/static/splash/regard.js');
+      regard = await createRegard(layer.querySelector('canvas'), {base: '/cle/static/art/'});
       regard.play();
       // leave once the UI underneath is ready (composer on screen), never before the eyes have settled
       const ready = new Promise((resolve) => {

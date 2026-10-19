@@ -17,8 +17,13 @@ export const LEGACY_MODULES = [
   {id: 'usage', css: ['laolao-usage-stats.css'], js: ['laolao-usage-stats.js']},
   {id: 'voice', js: ['laolao-live-voice.js']},
   {id: 'desensitize', js: ['laolao-desensitize.js']},
-  {id: 'companion', css: ['laolao-companion.css'], js: ['laolao-companion.js']},
+  {id: 'presentation', css: ['presentation.css'], js: ['laolao-laser-pointer.js']},
+  {id: 'companion', css: ['laolao-companion.css'], js: ['laolao-cat-rig.js', 'laolao-companion.js']},
   // Model + reasoning picker: brand tabs, per-family slider stops, route-preserving save.
   // Shell look is being redesigned, so this ships behaviour without a stylesheet for now.
   {id: 'model-picker', js: ['laolao-model-picker.js']},
+  // Sidebar: ejects the native nav/online/session lists and mounts the original grouped
+  // sidebar (pins, folder projects, search, archive, cleanup, more ›) under .sidebar-brand.
+  // Order: autohide needs #cle-sidebar to exist later; the entry mounts the list module.
+  {id: 'sidebar', css: ['laolao-sidebar.css', 'laolao-sidebar-surface.css'], js: ['laolao-sidebar-autohide.js', 'laolao-session-list.js', 'laolao-sidebar.js']},
 ];

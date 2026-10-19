@@ -273,6 +273,12 @@
     if (on) setTimeout(() => { if (state.visible && wanted()) (state.active ? editor?.focus() : sideBody.focus()); }, 60);
   }
   const mainContent = () => document.querySelector('main.content.content--chat');
+  // 缓存的 pane 和"当前可见的 pane"是两回事：必须优先拿 active 的那一个，
+  // 否则双栏时入口会插进另一个会话的输入区。
+  const activePane = () => document.querySelector('.chat-pane-cache__pane--active')
+    || document.querySelector('openclaw-chat-pane[active]')
+    || document.querySelector('openclaw-chat-pane')
+    || mainContent();
   function wanted() {
     const mode = document.documentElement.dataset.cleRoom || '';
     return MODES.has(mode) && !document.documentElement.matches('[data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]') && /^\/chat(?:\/|$)/.test(location.pathname) && !!mainContent() && innerWidth >= 600 && /^agent:(project|learning|unrestricted):/.test(sessionKey());
@@ -361,13 +367,27 @@
 
   }
   function placeReopen() {
-    // The rail belongs to the chat, and cannot cover a peeking history sidebar.
-    const rail = document.querySelector('.chat-workspace-rail');
-    const parent = rail || document.body;
-    if (toggleButton.parentElement !== parent) parent.prepend(toggleButton);
-    toggleButton.classList.toggle('is-in-rail', !!rail);
+    // 重新进入工作台的入口必须活在一个"随输入区一起长高"的容器里。
+    // 原来这里是 position:fixed + bottom:160px 的悬浮胶囊：多行输入把 composer 撑高后，
+    // 它就飘到语音/发送键上（实测 send x1235..1271 y517..551 的中心命中的是它）。
+    // 现在按优先级放进真实 chrome：composer-controls → composer-footer → 当前 pane 的 header，
+    // 三者都拿不到才退回 body 的固定定位（仍带避让量）。
+    const pane = activePane();
+    const host =
+      pane?.querySelector('.agent-chat__composer-controls') ||
+      pane?.querySelector('.agent-chat__composer-footer') ||
+      pane?.querySelector('.chat-pane__actions') ||
+      pane?.querySelector('.chat-pane__header');
+    const parent = host || document.body;
+    if (toggleButton.parentElement !== parent) parent.append(toggleButton);
+    toggleButton.classList.toggle('is-in-composer', !!host);
+    toggleButton.classList.remove('is-in-rail');
     toggleButton.style.removeProperty('left');
     toggleButton.style.removeProperty('top');
+    if (host) {
+      toggleButton.style.removeProperty('right');
+      toggleButton.style.removeProperty('bottom');
+    }
   }
   let cancelSashDrag = null;
   function dragSash(sash, onMove, onEnd) {

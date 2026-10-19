@@ -6,10 +6,8 @@ svg[role=img]{position:fixed;color:#ECE8E1;pointer-events:none}
 <body><div id="app">APP UNDERNEATH</div><canvas id="c"></canvas>
 <script type="module">
 import {createRegard} from './regard.js';
-import {createSignature} from './signature.js';
 const q = new URLSearchParams(location.search);
-const sig = createSignature('#ECE8E1'); document.body.append(sig.svg);
-const r = await createRegard(document.getElementById('c'), {base: '../art/', signature: sig});
+const r = await createRegard(document.getElementById('c'), {base: '../art/'});
 window.__regard = r;
 if (q.has('seq')) { const ex = Number(q.get('seq')); window.__frame = (t) => r.renderAt(t, {exitAfter: t >= ex ? ex : null}); document.title = 'ready'; }
 else if (q.has('t')) { const ex = q.has('exit') ? Number(q.get('exit')) : null; r.renderAt(Number(q.get('t')), {exitAfter: ex}); document.title = 'ready'; }

@@ -9,13 +9,13 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 }
 
 #cle-utilities {
-  --pinkie-settings-ink: #63364c;
-  --pinkie-settings-muted: #886b7c;
-  --pinkie-settings-accent: #d9518d;
-  --pinkie-settings-border: rgba(196, 119, 157, .23);
-  --pinkie-settings-card: rgba(255, 251, 253, .97);
-  --pinkie-settings-soft: rgba(255, 238, 247, .98);
-  --pinkie-settings-control: rgba(255, 255, 255, .96);
+  --pinkie-settings-ink: var(--cle-ink);
+  --pinkie-settings-muted: var(--cle-ink-2);
+  --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong);
+  --pinkie-settings-card: var(--cle-surface);
+  --pinkie-settings-soft: var(--cle-paper);
+  --pinkie-settings-control: var(--cle-surface);
   position: fixed;
   z-index: 8;
   right: auto;
@@ -44,7 +44,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__intro { margin: 2px 0 18px; }
 #cle-utilities .pinkie-user-settings__title {
   margin: 0;
-  color: #b84279;
+  color: var(--cle-ink);
   font-size: clamp(20px, 2.1vw, 27px);
   font-weight: 760;
   letter-spacing: -.035em;
@@ -65,7 +65,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   border: 1px solid var(--pinkie-settings-border);
   border-radius: 18px;
   background: var(--pinkie-settings-card);
-  box-shadow: 0 8px 26px rgba(114, 56, 83, .075);
+  box-shadow: none;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -90,7 +90,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   gap: 14px;
   min-height: 50px;
   padding: 8px 0;
-  border-top: 1px solid rgba(196, 119, 157, .14);
+  border-top: 1px solid var(--cle-line);
 }
 #cle-utilities .pinkie-user-settings__row-copy {
   display: grid;
@@ -137,20 +137,20 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__button:hover,
 #cle-utilities .pinkie-user-settings__text-button:hover,
 #cle-utilities .pinkie-user-settings__advanced-link:hover {
-  border-color: rgba(217, 81, 141, .56);
-  background: #fff0f7;
-  box-shadow: 0 3px 12px rgba(202, 91, 143, .12);
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  box-shadow: none;
 }
 #cle-utilities .pinkie-user-settings__choice.is-selected,
 #cle-utilities .pinkie-user-settings__brand.is-selected {
-  border-color: rgba(202, 70, 130, .48);
-  background: #ffe5f0;
-  color: #a63269;
-  box-shadow: inset 0 0 0 1px rgba(202, 70, 130, .12);
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 26%, transparent);
 }
 #cle-utilities button:focus-visible,
 #cle-utilities summary:focus-visible {
-  outline: 3px solid rgba(222, 91, 148, .34);
+  outline: 3px solid var(--cle-gaze);
   outline-offset: 2px;
 }
 
@@ -158,12 +158,12 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__status {
   min-height: 17px;
   margin: 7px 0 0;
-  color: #54846e;
+  color: var(--cle-ok, #3F6B4F);
   font-size: 11px;
   line-height: 1.45;
 }
-#cle-utilities .pinkie-user-settings__status[data-state="error"] { color: #b13d63; }
-#cle-utilities .pinkie-user-settings__status[data-state="busy"] { color: #947248; }
+#cle-utilities .pinkie-user-settings__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
+#cle-utilities .pinkie-user-settings__status[data-state="busy"] { color: var(--cle-ink-2); }
 
 #cle-utilities .pinkie-user-settings__wechat {
   display: grid;
@@ -262,7 +262,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   font-size: 13px;
 }
 #cle-utilities .pinkie-user-settings__messaging-input:focus-visible {
-  outline: 3px solid rgba(222, 91, 148, .34);
+  outline: 3px solid var(--cle-gaze);
   outline-offset: 2px;
 }
 #cle-utilities .pinkie-user-settings__messaging-input:disabled { opacity: .65; }
@@ -318,7 +318,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__brand { flex: 0 0 auto; min-height: 31px; padding: 5px 11px; }
 #cle-utilities .pinkie-user-settings__brand[data-brand="gemini"],
 #cle-utilities .pinkie-user-settings__brand[data-brand="claude"],
-#cle-utilities .pinkie-user-settings__brand[data-brand="codex"] { border-color: rgba(194, 121, 164, .32); }
+#cle-utilities .pinkie-user-settings__brand[data-brand="codex"] { border-color: var(--cle-line-strong); }
 #cle-utilities .pinkie-user-settings__model-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -329,7 +329,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__model-choice {
   min-height: 36px;
   padding: 7px 10px;
-  border: 1px solid rgba(196, 119, 157, .18);
+  border: 1px solid var(--cle-line);
   border-radius: 10px;
   background: var(--pinkie-settings-control);
   color: var(--pinkie-settings-ink);
@@ -360,11 +360,11 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   text-align: left;
   cursor: pointer;
 }
-#cle-utilities .pinkie-user-settings__preset:hover { border-color: rgba(217, 81, 141, .62); }
+#cle-utilities .pinkie-user-settings__preset:hover { border-color: var(--cle-gaze); }
 #cle-utilities .pinkie-user-settings__preset.is-selected {
-  border-color: rgba(202, 70, 130, .64);
-  background: #ffedf5;
-  box-shadow: inset 0 0 0 1px rgba(202, 70, 130, .16);
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 30%, transparent);
 }
 #cle-utilities .pinkie-user-settings__preset-title { font-size: 13px; font-weight: 730; }
 #cle-utilities .pinkie-user-settings__preset-detail { color: var(--pinkie-settings-muted); font-size: 11px; line-height: 1.45; }
@@ -373,25 +373,25 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--pinkie-settings-soft);
-  color: #8e5f76;
+  color: var(--cle-ink-2);
   font-size: 12px;
 }
 #cle-utilities .pinkie-user-settings__custom[hidden] { display: none !important; }
 
 #cle-utilities .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; }
 #cle-utilities .pinkie-user-settings__button--primary {
-  border-color: rgba(196, 65, 126, .35);
-  background: linear-gradient(135deg, #ffecf4, #fff8fb);
-  color: #a83c70;
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
 }
 #cle-utilities .pinkie-user-settings__button--small { min-height: 31px; padding: 5px 11px; }
 #cle-utilities .pinkie-user-settings__text-button,
 #cle-utilities .pinkie-user-settings__advanced-link {
   min-height: 33px;
   padding: 6px 13px;
-  color: #b84279;
+  color: var(--cle-ink);
 }
-#cle-utilities .pinkie-user-settings__channels { margin: 8px 0 0; border-top: 1px solid rgba(196, 119, 157, .14); }
+#cle-utilities .pinkie-user-settings__channels { margin: 8px 0 0; border-top: 1px solid var(--cle-line); }
 #cle-utilities .pinkie-user-settings__channels-summary {
   display: flex;
   align-items: center;
@@ -409,7 +409,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   height: 20px;
   border-radius: 999px;
   background: var(--pinkie-settings-soft);
-  color: #a84575;
+  color: var(--cle-ink);
   font-size: 10px;
 }
 #cle-utilities .pinkie-user-settings__channel-list { display: grid; gap: 6px; }
@@ -422,7 +422,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   background: var(--pinkie-settings-soft);
   font-size: 12px;
 }
-#cle-utilities .pinkie-user-settings__channel-state { color: #54846e; }
+#cle-utilities .pinkie-user-settings__channel-state { color: var(--cle-ok, #3F6B4F); }
 #cle-utilities .pinkie-user-settings__empty { margin: 2px 0 8px; color: var(--pinkie-settings-muted); font-size: 12px; }
 #cle-utilities .pinkie-user-settings__warning {
   display: grid;
@@ -431,10 +431,10 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   gap: 10px;
   margin: 12px 0 4px;
   padding: 11px 12px;
-  border: 1px solid rgba(201, 143, 73, .34);
+  border: 1px solid color-mix(in srgb, var(--cle-warn, #7F5F1B) 34%, transparent);
   border-radius: 12px;
-  background: rgba(255, 248, 230, .98);
-  color: #705a36;
+  background: color-mix(in srgb, var(--cle-warn, #7F5F1B) 8%, var(--cle-surface));
+  color: var(--cle-warn, #7F5F1B);
 }
 #cle-utilities .pinkie-user-settings__warning[hidden] { display: none !important; }
 #cle-utilities .pinkie-user-settings__warning-icon { font-size: 17px; }
@@ -452,7 +452,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   gap: 3px;
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid rgba(196, 119, 157, .17);
+  border: 1px solid var(--cle-line);
   border-radius: 11px;
   background: var(--pinkie-settings-soft);
 }
@@ -460,40 +460,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #cle-utilities .pinkie-user-settings__usage-value { overflow: hidden; color: var(--pinkie-settings-ink); font-size: 13px; text-overflow: ellipsis; }
 #cle-utilities .pinkie-user-settings__footer { display: flex; justify-content: center; padding: 7px 0 16px; }
 
-html[data-theme-mode="dark"] #cle-utilities,
-html[data-theme="dark"] #cle-utilities,
-html[data-color-scheme="dark"] #cle-utilities {
-  --pinkie-settings-ink: #f6e5ee;
-  --pinkie-settings-muted: #d1b3c2;
-  --pinkie-settings-accent: #ff87b8;
-  --pinkie-settings-border: rgba(243, 153, 195, .2);
-  --pinkie-settings-card: rgba(42, 29, 40, .97);
-  --pinkie-settings-soft: rgba(58, 38, 53, .98);
-  --pinkie-settings-control: rgba(52, 37, 50, .98);
-}
-html[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__title,
-html[data-theme="dark"] #cle-utilities .pinkie-user-settings__title,
-html[data-color-scheme="dark"] #cle-utilities .pinkie-user-settings__title { color: #ff9ac4; }
-html[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__choice.is-selected,
-html[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__brand.is-selected,
-html[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__preset.is-selected,
-html[data-theme="dark"] #cle-utilities .pinkie-user-settings__choice.is-selected,
-html[data-theme="dark"] #cle-utilities .pinkie-user-settings__brand.is-selected,
-html[data-theme="dark"] #cle-utilities .pinkie-user-settings__preset.is-selected,
-html[data-color-scheme="dark"] #cle-utilities .pinkie-user-settings__choice.is-selected,
-html[data-color-scheme="dark"] #cle-utilities .pinkie-user-settings__brand.is-selected,
-html[data-color-scheme="dark"] #cle-utilities .pinkie-user-settings__preset.is-selected {
-  border-color: rgba(255, 154, 196, .62);
-  background: rgba(119, 56, 88, .7);
-  color: #ffe3ef;
-}
-html[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__warning,
-html[data-theme="dark"] #cle-utilities .pinkie-user-settings__warning,
-html[data-color-scheme="dark"] #cle-utilities .pinkie-user-settings__warning {
-  border-color: rgba(235, 183, 107, .35);
-  background: rgba(75, 58, 34, .98);
-  color: #f3dfbb;
-}
+
 
 @media (max-width: 780px) {
   #cle-utilities .pinkie-user-settings__scroll { padding: 2px 14px 20px; }

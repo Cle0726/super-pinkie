@@ -68,7 +68,9 @@
   function card(parent, icon, title, hint) {
     const s = node('section', S + 'card pk-cap');
     const h = node('header', S + 'card-header');
-    const ic = node('span', S + 'icon', icon); ic.setAttribute('aria-hidden', 'true');
+    // 图标不再用 emoji：字体里的彩色字符既不受主题控制，也不符合线性图标的尺寸与基线。
+    // 这里先放空壳，由 CSS 按卡片 id 填线性 SVG（见 capabilities.css）。
+    const ic = node('span', S + 'icon', icon || ''); ic.setAttribute('aria-hidden', 'true');
     h.append(ic, node('h3', S + 'card-title', title));
     s.append(h, node('p', S + 'card-hint', hint)); parent.append(s); return s;
   }
@@ -110,7 +112,7 @@
   ];
 
   function cronPanel(parent) {
-    const box = card(parent, '⏰', '定时任务', '让 Li An 按时去做一件事，做完把结果推给你。也可以直接在聊天里说「每天早上 8 点把天气发我飞书」。');
+    const box = card(parent, '', '定时任务', '让 Li An 按时去做一件事，做完把结果推给你。也可以直接在聊天里说「每天早上 8 点把天气发我飞书」。');
     box.id = 'pinkie-schedules';
     const list = node('div', 'pk-cap__list'), sheet = node('div', 'pk-cap__sheet'), bar = node('div', 'pk-cap__bar');
     const out = status(box);
@@ -336,7 +338,7 @@
   }
 
   function connectorPanel(parent) {
-    const box = card(parent, '🔌', '连接器', '把你自己的账号和资料接给 Li An，他就能直接去查、去读。密钥只存在这台电脑上。');
+    const box = card(parent, '', '连接器', '把你自己的账号和资料接给 Li An，他就能直接去查、去读。密钥只存在这台电脑上。');
     box.id = 'pinkie-connectors';
     const list = node('div', 'pk-cap__list'), grid = node('div', 'pk-cap__grid'), sheet = node('div', 'pk-cap__sheet');
     const out = status(box);

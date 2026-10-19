@@ -258,15 +258,11 @@
     if (el.closest?.(".laolao-usage--live")) return;
     el.__pinkieUsagePulse?.cancel?.();
     if (typeof el.animate !== "function") return;
+    // 只做缩放。原来的关键帧会把底色临时刷成 --accent 并把字改成白色，
+    // 在纸面胶囊上等于每次数据变化都掉一次对比度；数值变化不需要抢视觉焦点。
     el.__pinkieUsagePulse = el.animate([
       { transform: "scale(1)" },
-      {
-        transform: "scale(1.18)",
-        background: "var(--accent, #e94f91)",
-        color: "#ffffff",
-        boxShadow: "0 0 0 4px var(--accent-glow, rgba(233, 79, 145, 0.2))",
-        offset: 0.35,
-      },
+      { transform: "scale(1.06)", offset: 0.35 },
       { transform: "scale(1)" },
     ], { duration: 600, easing: "ease-out" });
   }
