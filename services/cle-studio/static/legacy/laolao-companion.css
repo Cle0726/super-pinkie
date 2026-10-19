@@ -5,8 +5,8 @@
    - 五状态各自有可辨认的动作（CSS 只做 fallback 的轻动作；rig 在位时动作在画布里）。 */
 
 .pinkie-buddy {
-  --buddy-w: 124px;              /* Li An 取自用户的两张参考油画（坐 / 站），共用 420×438 画框，底边对齐 */
-  --buddy-ratio: 420 / 438;
+  --buddy-w: 150px;              /* Li An 照原版伴侣的卡通贴纸画风（趴姿），五态共用 450×233 画框，底边对齐 */
+  --buddy-ratio: 450 / 233;
   position: absolute;
   z-index: 40;
   right: 72px;

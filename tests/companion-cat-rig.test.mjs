@@ -513,7 +513,7 @@ test("the cat attaches the motion rig once the page has settled, and never twice
 });
 
 test("companion-v2 art wins when Claude ships it, per state, without a code change", async () => {
-  existing = new Set(["/companion-v2/rest.webp?v=20261019b", "/companion-v2/working.webp?v=20261019b"]);
+  existing = new Set(["/companion-v2/rest.webp?v=20261019d", "/companion-v2/working.webp?v=20261019d"]);
   try {
     const pane = paneWith();
     const {window} = boot({panes: [pane]});
