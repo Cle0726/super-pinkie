@@ -15,6 +15,7 @@
   const activeSaves = new WeakMap();
   const saveRevisions = new WeakMap();
   const triggerObservers = new Map();
+  const triggerWatchers = new WeakMap();
   const triggerStates = new WeakMap();
   const stopStates = new WeakMap();
   const pointerToggles = new WeakMap();
@@ -687,13 +688,45 @@
   function watchPicker(details) {
     if (!details || triggerObservers.has(details)) return;
     const watcher = new MutationObserver(() => {
-      if (isModernPicker(details)) { if (details.open) schedule(details); return; }
+      if (isModernPicker(details)) { schedule(details); return; }
       syncTrigger(details);
       if (details.open) schedule(details);
     });
     watcher.observe(details, {childList: true, subtree: true, characterData: true});
     triggerObservers.set(details, watcher);
-    if (isModernPicker(details)) { sync(details); return; }
+    if (isModernPicker(details)) {
+      /* A run in flight changes only the trigger: the label text and the summary's own
+         aria-label / title. Observing the whole picker would also fire on our sibling, so
+         the modern trigger gets its own small observer on the summary only, and only its
+         child list (the label is a child text node). Attribute churn is picked up by the
+         same observer through a whitelist; our own writes are filtered below. */
+      const summary = details.querySelector(":scope > summary.chat-controls__model-trigger");
+      if (summary) {
+        const triggerWatcher = new MutationObserver((records) => {
+          for (const record of records) {
+            if (record.type === 'attributes') {
+              if (record.attributeName === 'title' && record.oldValue === summary.dataset.pinkieOwnTitle) continue;
+              schedule(details);
+              return;
+            }
+            for (const node of record.addedNodes || []) {
+              if (node.nodeType === 1 && node.classList?.contains('pinkie-model-name')) continue;
+              schedule(details);
+              return;
+            }
+          }
+        });
+        triggerWatcher.observe(summary, {
+          childList: true, characterData: true, subtree: true,
+          attributes: true, attributeFilter: ['aria-label', 'title', 'data-chat-select-value'],
+          attributeOldValue: true,
+        });
+        // kept apart from the picker table so iteration over pickers never sees a non-picker
+        triggerWatchers.set(details, triggerWatcher);
+      }
+      sync(details);
+      return;
+    }
     syncTrigger(details);
     const browser = details.querySelector?.(".chat-controls__model-browser, .chat-controls__model-options");
     if (browser) ensureFallbackData(details, browser);
@@ -1111,11 +1144,147 @@
      marks on the trigger and on each row, plus a layout that fits the pane. Injecting
      the old canvas frames, a duplicate catalog or a second "current model" button here
      is what produced the grey slab and the doubled list. */
+  /* While a run is in flight the native trigger falls back to `ie || l` — the raw
+     `provider/id` of the running model — because its own catalog lookup uses that value
+     verbatim. A Work Buddy model is stored as `mm/workbuddy/deepseek-v4.1-flash` while the
+     running selection reports `mm/deepseek-v4.1-flash`, so the lookup misses and the raw id
+     is shown ("聊天模型: mm/deepseek-v4.1-flash"). Presentation only: we resolve a readable
+     name for the *same* model and never rewrite the value, the route or the session. */
+  const catalogCache = new Map();
+  // per picker: the catalog it may resolve names from, plus whether a fetch is in flight
+  const catalogStates = new WeakMap();
+  function catalogFor(agentId) {
+    const cached = catalogCache.get(agentId);
+    if (cached && Date.now() - cached.at < 300_000) return cached.promise;
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (typeof rpc !== "function") return null;
+    const promise = loadCatalog(rpc, agentId).catch(() => []);
+    catalogCache.set(agentId, {at: Date.now(), promise});
+    return promise;
+  }
+
+  /* Only needed to turn a running model id into a readable name. Fetched once per picker and
+     reused; a failure is not fatal — the trigger then simply keeps whatever the native
+     picker shows. */
+  function ensureCatalog(details) {
+    let state = catalogStates.get(details);
+    if (!state) {
+      // `null`, not "": a picker outside a session scope resolves to an empty agent id, and
+      // an empty sentinel would look like "already asked for it" and never fetch at all
+      state = {models: [], loading: false, askedFor: null};
+      catalogStates.set(details, state);
+    }
+    const agentId = agentIdOf(details);
+    if (state.loading || state.models.length || state.askedFor === agentId) return state;
+    const promise = catalogFor(agentId);
+    if (!promise) return state;
+    state.loading = true;
+    state.askedFor = agentId;
+    void promise.then((models) => {
+      state.loading = false;
+      if (!Array.isArray(models) || !models.length) return;
+      state.models = models;
+      schedule(details);
+    }).catch(() => { state.loading = false; });
+    return state;
+  }
+
+  function agentIdOf(details) {
+    const key = currentSessionKey(details);
+    return /^agent:([^:]+):/.exec(key)?.[1] || "";
+  }
+
+  /* Is `raw` the same model as `candidate`? Only an exact id match, or a candidate that
+     carries the raw id as its own last path segment with the same provider, qualifies.
+     Nothing here guesses a substitute model: an unknown model keeps its honest name. */
+  function sameModel(raw, candidate) {
+    if (!raw || !candidate) return false;
+    const sep = (value) => {
+      const at = String(value).indexOf("/");
+      return at < 0 ? {provider: "", id: String(value)} : {provider: value.slice(0, at), id: value.slice(at + 1)};
+    };
+    const a = sep(raw), b = sep(`${candidate.provider}/${candidate.id}`);
+    if (a.id.toLowerCase() === b.id.toLowerCase() && (!a.provider || !b.provider || a.provider === b.provider)) return true;
+    // `mm/deepseek-v4.1-flash` vs `mm/workbuddy/deepseek-v4.1-flash`: same provider, and the
+    // candidate id ends in the raw id as a complete path segment
+    if (a.provider && a.provider !== b.provider) return false;
+    return b.id.toLowerCase().endsWith(`/${a.id.toLowerCase()}`) || b.id.toLowerCase() === a.id.toLowerCase();
+  }
+
+  function readableModelName(details, models) {
+    const summary = details.querySelector(":scope > summary.chat-controls__model-trigger");
+    const raw = summary?.dataset?.chatSelectValue || "";
+    if (!raw || !Array.isArray(models) || !models.length) return "";
+    const hit = models.find((model) => sameModel(raw, model));
+    if (!hit) return "";
+    const name = String(hit.name || "").replace(/\s*[·•]\s*Work\s*Buddy\s*$/i, "").trim();
+    if (!name) return "";
+    if (/^workbuddy\/deepseek(?:[-_.:]|$)/i.test(hit.id) && !/\s*[·•]\s*WB$/i.test(name)) return `${name} · WB`;
+    return name;
+  }
+
+  /* Presentation of the trigger label. The native markup owns that text node (Lit rewrites
+     it), so we never assign to it: a sibling carries the readable name and hides the native
+     label, exactly like the ported reason label does. Only the *display* is corrected; the
+     route (`data-chat-select-value`), the session and the aria name of the control keep the
+     real value, and the exact id goes into the trigger's detail so it can still be checked. */
+  function looksLikeRawModelId(text) {
+    const value = String(text || "").trim();
+    if (!value) return false;
+    if (/^[a-z0-9_.-]+\/[a-z0-9_.:\/-]+$/i.test(value)) return true;
+    return /^[a-z0-9_.-]+\/[a-z0-9_.:\/-]+\s*·/i.test(value);
+  }
+
+  function presentTriggerName(details, summary, value) {
+    const native = summary.querySelector(":scope > .chat-controls__inline-select-label");
+    if (!native) return;
+    const nativeText = (native.textContent || "").trim();
+    const ours = summary.querySelector(":scope > .pinkie-model-name");
+    const models = catalogStates.get(details)?.models;
+    const readable = looksLikeRawModelId(nativeText) ? readableModelName(details, models) : "";
+    if (!readable) {
+      // back to the native text: the picker recovered on its own once the run settled
+      if (ours) { ours.remove(); native.style.removeProperty("display"); }
+      summary.removeAttribute("data-pinkie-model-label");
+      // the run-scoped tooltip must not outlive the run it described
+      if (summary.dataset.pinkieOwnTitle && summary.getAttribute("title") === summary.dataset.pinkieOwnTitle) {
+        summary.removeAttribute("title");
+      }
+      delete summary.dataset.pinkieOwnTitle;
+      const exact = summary.getAttribute("data-chat-select-value") || "";
+      if (exact && summary.dataset.pinkieExactId !== exact) summary.dataset.pinkieExactId = exact;
+      return;
+    }
+    if (!ours) {
+      const sibling = document.createElement("span");
+      sibling.className = "chat-controls__inline-select-label pinkie-model-name";
+      sibling.setAttribute("aria-hidden", "true");
+      native.after(sibling);
+    }
+    const node = summary.querySelector(":scope > .pinkie-model-name") || ours;
+    if (node.textContent !== readable) node.textContent = readable;
+    native.style.setProperty("display", "none", "important");
+    summary.dataset.pinkieModelLabel = "resolved";
+    const exact = value || summary.getAttribute("data-chat-select-value") || "";
+    if (exact) {
+      summary.dataset.pinkieExactId = exact;
+      const note = `运行中 · ${readable}（${exact}）`;
+      if (summary.getAttribute("title") !== note) {
+        // remembered so the trigger observer can tell our own tooltip from a native reason
+        summary.dataset.pinkieOwnTitle = note;
+        summary.title = note;
+      }
+    }
+  }
+
   function syncModern(details) {
     if (!details.isConnected) return;
     const summary = details.querySelector(":scope > summary.chat-controls__model-trigger");
     const menu = details.querySelector(":scope > wa-popup .chat-controls__model-menu")
       || details.querySelector(".chat-controls__model-menu");
+    // a readable name may need the catalog, but only when the trigger shows a raw id
+    const nativeLabel = summary?.querySelector(":scope > .chat-controls__inline-select-label")?.textContent?.trim();
+    if (looksLikeRawModelId(nativeLabel)) ensureCatalog(details);
     // The trigger's brand mark must exist while the menu is shut: that is the only
     // place most users ever see it.
     let selected = menu?.querySelector('[data-chat-model-option][aria-selected="true"]');
@@ -1130,6 +1299,7 @@
         separator < 0 ? value : value.slice(separator + 1));
       if (brand && summary.dataset.pinkieBrand !== brand) summary.dataset.pinkieBrand = brand;
     }
+    if (summary) presentTriggerName(details, summary, value);
     if (!details.open || !menu) return;
     syncModelBrands(menu, false);
     // a stray space in a catalog name would push the badge lines apart
@@ -1378,7 +1548,13 @@
   if (document.body) {
     new MutationObserver((changes) => {
       for (const [details, watcher] of triggerObservers) {
-        if (!details.isConnected) { watcher.disconnect(); triggerObservers.delete(details); releasePopupLayout(details); }
+        if (!details.isConnected) {
+          watcher.disconnect();
+          triggerWatchers.get(details)?.disconnect();
+          triggerWatchers.delete(details);
+          triggerObservers.delete(details);
+          releasePopupLayout(details);
+        }
       }
       for (const change of changes) {
         for (const node of change.addedNodes || []) if (node.nodeType === 1) scanPickers(node);
