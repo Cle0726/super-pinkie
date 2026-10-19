@@ -86,7 +86,7 @@
     return FALLBACK[state];
   };
   // 线描（默认画风）：Codex 线稿做成的墨色剪影，昼夜各一张；油画：上面的猫图
-  const lineMode = () => document.documentElement.dataset.cleArt !== "paint";
+  const lineMode = () => document.documentElement.dataset.cleArt === "line";
   const night = () => document.documentElement.hasAttribute("data-pinkie-night") || /dark/.test(document.documentElement.dataset.theme || "");
   const LINE = (state) => `/cle/static/art/pet-line/${state === "sleepy" ? "sleep" : "loaf"}-${night() ? "night" : "day"}.png`;
   const artNow = (state) => (lineMode() ? LINE(state) : ART.get(state) || FALLBACK[state]);
@@ -738,7 +738,7 @@
   ];
 
   // 线描/油画、昼/夜一换，猫跟着换（不重建实例、不打断动作）
-  new MutationObserver(() => { for (const i of instances.values()) if (i.connected) i.apply(i.state, true); })
+  if (typeof MutationObserver === "function") new MutationObserver(() => { for (const i of instances.values()) if (i.connected) i.apply(i.state, true); })
     .observe(document.documentElement, {attributes: true, attributeFilter: ["data-cle-art", "data-pinkie-night", "data-theme"]});
 
   /* ── 挂载 / 卸下：以可见 pane 为准，不再用第一个 pane ───────────────── */

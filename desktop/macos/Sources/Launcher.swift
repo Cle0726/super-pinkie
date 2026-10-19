@@ -2315,6 +2315,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.toggleFullScreen(sender)
     }
 
+    // The descriptor carries a live token; it must not outlive the endpoint.
+    private func removeTestEndpointDescriptor() {
+        guard let descriptor = testEndpointDescriptorURL else { return }
+        try? FileManager.default.removeItem(at: descriptor)
+        testEndpointDescriptorURL = nil
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         gatewayMonitor?.invalidate()
         gatewayMonitor = nil
@@ -2323,11 +2330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         roundtable.stop()
         desktopControl.stop()
         browserEndpoint.stop()
-        // The descriptor carries a live token; it must not outlive the endpoint.
-        if let descriptor = testEndpointDescriptorURL {
-            try? FileManager.default.removeItem(at: descriptor)
-            testEndpointDescriptorURL = nil
-        }
+        removeTestEndpointDescriptor()
         materialPreview.clearThumbnailCache()
         if let browserUserEventMonitor { NSEvent.removeMonitor(browserUserEventMonitor) }
         // CLE Kk owns this private loopback gateway. Leaving it alive preserves
