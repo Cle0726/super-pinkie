@@ -392,6 +392,90 @@ mo.observe(document.body, {childList: true, subtree: true});
 相关测试 70 → **75 项全通过**；构建 `js 60.2 KB / css 77.6 KB`。
 High 等真实标签、原生 range 参数、禁用理由、厂牌色、已通过的图标与挂载行为均未改动。
 
+## 三点九、第六轮：运行中的模型按钮暴露 provider 内部 id
+
+### 现象（主控在 19789 真实运行路径看到）
+
+选定 `DeepSeek V4.1 Flash · WB` / High 发一次只读 read 工具请求：
+
+- **运行中**：模型按钮变成 `聊天模型: mm/deepseek-v4.1-flash`，文字裸露 provider 内部 id；
+- **结束后**：又回到 `DeepSeek V4.1 Flash · WB`；
+- run 已结束、答案正常、停止按钮与 live 标记均回收，没有重发。
+  证据：`outputs/qa-tool-phase-fifth.json`（busy 阶段 `working` 有值，finish 阶段
+  `model` 已是可读名）。
+
+### 根因
+
+原生 `CV()` 的标签是 `triggerStatusLabel ?? triggerModelLabel`，而运行期
+`triggerModelLabel = OV(Ce)`、`Ce` 由 `DV(t.entry(ie || l), …)` 得出：
+
+- 运行中的选择值 `ie` 是 `mm/deepseek-v4.1-flash`；
+- 目录里这条模型存的是 `mm/workbuddy/deepseek-v4.1-flash`；
+- `t.entry("mm/deepseek-v4.1-flash")` 查不到条目 → `DV(undefined, ie)` → 原样输出 id。
+
+所以这是**目录查找键不匹配**，不是 CSS 或截断问题；原生在 run 结束后自己会恢复。
+
+### 修复：只改展示，不改路由
+
+`static/legacy/laolao-model-picker.js` 新增运行期名称解析：
+
+1. **只在触发器显示原始 id 时介入**（`looksLikeRawModelId`：`ns/path` 形态），
+   正常可读名一律不动。
+2. **同模型别名判定** `sameModel(raw, candidate)`：仅当 provider 相同且 candidate 的 id
+   以 raw 的 id 作为完整尾段时才视为同一条模型
+   （`mm/deepseek-v4.1-flash` ↔ `mm/workbuddy/deepseek-v4.1-flash`）。
+   不同变体（`…-pro`）、不同 provider 一律不匹配 —— **不把 fallback 伪装成原模型**。
+3. **未命中就保持诚实**：目录里没有该模型时不生成任何名字，原生 id 原样保留。
+   （已实测：`mm/some-unlisted-model-9b` 不会被替换。）
+4. **展示层兄弟节点**：原生标签文本节点归 Lit 所有，绝不赋值；新增
+   `.pinkie-model-name` 兄弟承载可读名并隐藏原生文本，run 结束后兄弟移除、原生文本回来。
+5. **精确 id 仍可核对**：写入 `data-pinkie-exact-id`，并在 `title` 给出
+   `运行中 · DeepSeek V4.1 Flash · WB（mm/deepseek-v4.1-flash）`；run 结束一并撤掉，
+   不残留过期 tooltip。
+6. **不改真实配置**：`data-chat-select-value`（真实路由）、session、参数档位、
+   全局模型配置全部保持原值；`aria-label` 也未被改动，屏幕阅读器仍能读到原生表述。
+
+配套：给现代 picker 的 `summary` 加了一个**范围极小的观察器**（只该 summary 的
+childList/characterData + `aria-label`/`title`/`data-chat-select-value` 三个属性，
+带 `attributeOldValue`），因为运行期只改文本与 aria/title、不新增节点。自写的
+`.pinkie-model-name` 与自写 title 都会被过滤，不产生观察循环。目录按 picker 惰性加载
+一次（5 分钟缓存），失败时静默退回原生显示。
+
+### 新增行为测试 `tests/model-trigger-name.test.cjs`（4 项）
+
+覆盖 selected → runtime → done 的真实顺序：
+
+| 测试 | 覆盖 |
+|---|---|
+| `a running model id is shown as its readable catalog name, never the raw id` | 运行期原生文本变 `mm/deepseek-v4.1-flash` → 兄弟节点显示 `DeepSeek V4.1 Flash · WB`；原生文本节点未被改写；精确 id 在 dataset 与 title 里；`data-chat-select-value` 保持真实运行值 |
+| `when the run settles the native readable label comes back and our override is removed` | run 结束 → 兄弟节点移除、原生可读名回来、`data-pinkie-model-label` 与 tooltip 一起清掉 |
+| `an unknown running model keeps an honest readable name instead of borrowing another one` | 目录无此模型 → 不替换、不借名，原始 id 保留 |
+| `sameModel accepts the workbuddy alias and rejects a different model` | 接受 WB 别名；拒绝 `…-pro` 变体与不同 provider |
+
+**反向验证**：把 `presentTriggerName` 调用去掉后，前两条立即失败（2 pass / 2 fail），
+说明它们锁的是这个行为而不是实现细节。
+
+### 实测（真实 DOM，非模板假设）
+
+预览页同层加载构建 CSS + 运行期脚本，走 `selected → running → done → unknown` 四段：
+
+| 阶段 | 原生文本 | 兄弟节点 | title | select-value |
+|---|---|---|---|---|
+| done | DeepSeek V4.1 Flash · WB | 无 | 无 | `mm/workbuddy/deepseek-v4.1-flash` |
+| **running** | `mm/deepseek-v4.1-flash` | **DeepSeek V4.1 Flash · WB** | 含精确 id | `mm/deepseek-v4.1-flash`（未改） |
+| after | DeepSeek V4.1 Flash · WB | 无 | **已清除** | `mm/workbuddy/deepseek-v4.1-flash` |
+| unknown | `mm/some-unlisted-model-9b` | 无 | 无 | 原值 |
+
+- **长名截断**：兄弟节点继承原生同层规则（`nowrap` + `overflow:hidden` +
+  `text-overflow:ellipsis`，`flex-shrink:1`），216px 触发器内 158px 文本不裁剪、不撑破；
+  超长目录名同样落在同一省略号规则内。
+- **运行中 disabled 态**：`aria-disabled`/`--disabled` 类存在时，可读名仍显示、颜色随原生
+  禁用样式转灰（`rgb(154,149,139)`），原生文本保持隐藏，`innerText` 只有一份，不重影。
+
+新增测试 4 项全通过；全量 449 项中 445 通过，4 项失败（`simulated assistant replay`、
+`installer cache-busts`、`six frontend pony names`、`folder project duplicate`）在本次改动
+**之前就已失败**（stash 后同样 4 条失败），与模型显示无关。
+
 ## 四、自主发现（本轮新增，非任务书原文）
 
 | # | 文件 / 选择器 | 触发条件 | 问题依据 | 修复 | 验证 |
