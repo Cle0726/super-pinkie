@@ -280,6 +280,8 @@ function installOn(host, signal) {
   detachRound(state);
   unbindExternals(state);
 
+  const previousKey = state.lastSessionKey;
+  const hadBaseline = state.lastMode !== null;
   const probe = readSelectedKey(host);
   // probe.ok=false 说明这个 host 的 getter 已经同步抛了 —— 它已退役。
   // 不能因为"拿到了一个对象"就当连上了，否则界面显示已连接、用户点下去才失败。
@@ -292,6 +294,7 @@ function installOn(host, signal) {
   // 首次安装（lastMode 还是 null）只建立基线，不补发——启动不该凭空造一次通知。
   const currentMode = document.documentElement.dataset.cleRoom;
   const needsModeCatchUp = alive && state.lastMode !== null && state.lastMode !== currentMode;
+  const needsKeyCatchUp = alive && hadBaseline && previousKey !== state.lastSessionKey;
 
   publishHandles();
 
@@ -330,12 +333,6 @@ function installOn(host, signal) {
   const offSelection = safeCall(() => host.subscribe?.(syncSelection));
   const modeObserver = new MutationObserver(syncSelection);
 
-  // 建立基线；若是重装且 mode 已在离线期间变化，补发一次正确通知。
-  if (alive && state.lastMode === null) state.lastMode = currentMode;
-  if (needsModeCatchUp) {
-    state.lastMode = currentMode;
-    window.dispatchEvent(new CustomEvent('laolao:modechange', {detail: {mode: currentMode}}));
-  }
   modeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-room']});
 
   const offs = RELAYED.map((name) => safeCall(() => host.onEvent(name, (payload) => {
@@ -366,6 +363,17 @@ function installOn(host, signal) {
     round.dispose();
   };
   if (signal) signal.addEventListener('abort', onOuterAbort, {once: true});
+  // Publish catch-up only after this round owns all of its callbacks. A new
+  // session in the same room also changes memory scope, even without modechange.
+  if (alive && state.lastMode === null) state.lastMode = currentMode;
+  if (needsModeCatchUp) {
+    state.lastMode = currentMode;
+    window.dispatchEvent(new CustomEvent('laolao:modechange', {detail: {mode: currentMode}}));
+  }
+  if (needsKeyCatchUp) {
+    window.dispatchEvent(new CustomEvent('laolao:sessions-changed'));
+    window.__clekkMemoryUI?.close();
+  }
   return installOn;
 }
 

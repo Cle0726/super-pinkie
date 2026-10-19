@@ -19,7 +19,7 @@ import {blink} from './rooms/blink.js';
 import {mountComposer, composer, mountToolFold} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
 import {loadLegacy} from './legacy/loader.js';
-import {installLegacyShim} from './legacy/shim.js';
+import {installLegacyShim, makeHostFacade} from './legacy/shim.js';
 import {mountUtilities} from './legacy/utilities.js';
 import {mountStatus} from './process/status.js';
 import {mountRecovery} from './recovery/recovery.js';
@@ -34,6 +34,10 @@ export default {
   id: 'cle-studio',
   activate(host) {
     const controller = beginActivation();
+    // Classic scripts outlive the host activation. Publish the safe facade before
+    // installLegacyShim can notify them about a new session or room.
+    const legacyHost = makeHostFacade();
+    window.CLE = Object.assign(window.CLE || {}, {host: legacyHost});
     // The brand guard has to run even on the activation that decides to reload for the theme:
     // that activation still paints a document, and the router writes "— OpenClaw" into the title
     // on its first render. Leaving the guard until after ensureTheme() returns true meant the
@@ -67,7 +71,7 @@ export default {
     const utilities = safe('utilities', () => mountUtilities(host, controller.signal));
     const legacy = {};
     safe('legacy', () => loadLegacy(legacy));
-    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host, rooms, blink, legacy, composer, utilities});
+    window.CLE = Object.assign(window.CLE || {}, {version: VERSION, host: legacyHost, rooms, blink, legacy, composer, utilities});
     return controller.dispose;
   },
 };

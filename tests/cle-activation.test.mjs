@@ -33,7 +33,8 @@ export function mountWelcome() {}
 export function mountGaze() {}
 export function mountToolFold() {}
 export function loadLegacy() {}
-export function installLegacyShim() {}
+export function makeHostFacade() { return {sessions: {selectedKey: 'safe-selected'}}; }
+export function installLegacyShim() { document.legacySelection = window.CLE?.host?.sessions?.selectedKey; }
 export function mountStatus() {}
 export function mountRecovery() {}
 export function mountStudy() {}
@@ -120,5 +121,17 @@ test('a theme-reload activation retires the previous UI and disposes safely', as
     reloadDispose();
     assert.equal(f.doc.composer, 'connected');
     finalDispose();
+  } finally { f.restore(); }
+});
+
+test('legacy notifications during install already see the safe host facade', async () => {
+  const app = await loadMain('facade-order');
+  const f = fixture();
+  try {
+    window.CLE = {host: {get sessions() { throw new Error('previous activation ended'); }}};
+    const dispose = app.activate({id: 'current'});
+    assert.equal(f.doc.legacySelection, 'safe-selected');
+    assert.equal(window.CLE.host.sessions.selectedKey, 'safe-selected');
+    dispose();
   } finally { f.restore(); }
 });
