@@ -44,6 +44,8 @@ export function mountBackdrop() {}
 export function mountGazeFx() {}
 export function mountKeys() {}
 export function mountReasoning() {}
+export function mountTranscript() {}
+export function mountPrune() {}
 `;
 async function loadMain(revision) {
   const result = await build({entryPoints: [main], bundle: true, write: false, format: 'esm',

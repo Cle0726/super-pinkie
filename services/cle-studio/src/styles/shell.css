@@ -1,7 +1,6 @@
 /* C.le. shell — first pass over the native Control UI (2026.10.4 light DOM). */
 
-/* ---------- promotion never shows ---------- */
-.sidebar-shell__invite, .community-invite-card, aside.invite { display: none !important; }
+/* promotion, the upstream mascot and the reply attribution are removed by core/prune.js */
 
 /* ---------- page ---------- */
 html[data-cle] body { background: var(--cle-paper); color: var(--cle-ink); -webkit-font-smoothing: antialiased; }

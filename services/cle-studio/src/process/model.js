@@ -165,7 +165,9 @@ export function applyEvent(run, p, now = Date.now()) {
     if (!word) return false;
     const id = `prep:${d.phase}`;
     if (run.queue.some((x) => x.id === id) || (run.cur && run.cur.id === id)) return false;
-    run.queue.push(step('think', '', false, {id, label: word}));
+    // a startup phase has no end event of its own: it is shown for one beat (MIN_STEP) and then
+    // gives way. Left open it held the line on 凝神 for the whole run, every tool queued behind it.
+    run.queue.push(step('think', '', false, {id, label: word, done: true}));
     return true;
   }
 

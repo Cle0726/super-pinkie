@@ -310,6 +310,8 @@ export function mountStatus(host, signal) {
   // sessionKey left `on: true` ghosts behind every unrelated or terminal message; each ghost
   // kept the frame loop alive forever.
   const onAgent = (p) => {
+    // last events, for diagnosing the line in a real run (window.__cleAgentLog)
+    try { const log = (window.__cleAgentLog ||= []); log.push({stream: p?.stream, phase: p?.data?.phase, state: p?.state, name: p?.data?.name, key: p?.sessionKey}); if (log.length > 200) log.shift(); } catch {}
     const key = String(p?.sessionKey || '');
     if (!key) return;
     let run = runs.get(key);

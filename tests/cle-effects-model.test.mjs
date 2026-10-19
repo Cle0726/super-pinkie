@@ -194,3 +194,12 @@ test('an unknown or terminal event never creates a busy run', () => {
   assert.equal(isLiveEvent({sessionKey: 'k', stream: 'tool', data: {phase: 'start'}}), true);
   assert.equal(isLiveEvent(chatFrame('delta')), true);
 });
+
+test('a startup phase holds one beat and then gives way to the real steps', () => {
+  const run = newRun(0);
+  applyEvent(run, {stream: 'run_status', data: {phase: 'starting_model'}}, 0);
+  applyEvent(run, {stream: 'tool', data: {phase: 'start', name: 'read', toolCallId: 't1', args: {path: '/Users/x/a.txt'}}}, 10);
+  assert.equal(pace(run, 20).label, '凝神');
+  // after MIN_STEP the startup word must yield to the tool, not hold the line for the whole run
+  assert.equal(pace(run, 20 + MIN_STEP).kind, 'read');
+});

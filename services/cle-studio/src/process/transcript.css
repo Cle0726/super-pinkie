@@ -1,0 +1,64 @@
+/* ---------- the transcript, as the original app wrote it (transcript.js) ----------
+   A dot per kind instead of the stock glyph; consecutive tools read "已运行 N 步 · details ›";
+   what just arrived is written in behind a transparent gradient. */
+html[data-cle] {
+  --cle-k-read: var(--cle-gaze, #2A63E8);
+  --cle-k-exec: var(--cle-ink, #15161A);
+  --cle-k-write: #B8862E;
+  --cle-k-edit: #4F7D5C;
+}
+html[data-cle][data-pinkie-night] { --cle-k-write: #D9B46A; --cle-k-edit: #7FB08B; }
+
+/* the dot */
+html[data-cle] :is(.chat-tool-row, .chat-activity-group) :is(.chat-tool-msg-summary__icon, .chat-activity-group__icon) {
+  width: 14px !important; height: 14px !important; min-width: 14px; display: inline-grid !important; place-items: center;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+}
+html[data-cle] :is(.chat-tool-row, .chat-activity-group) :is(.chat-tool-msg-summary__icon, .chat-activity-group__icon) > svg { display: none !important; }
+html[data-cle] :is(.chat-tool-row, .chat-activity-group) :is(.chat-tool-msg-summary__icon, .chat-activity-group__icon)::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--cle-k, var(--cle-k-exec));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cle-k, var(--cle-k-exec)) 12%, transparent);
+}
+html[data-cle] [data-cle-kind="read"] { --cle-k: var(--cle-k-read); }
+html[data-cle] [data-cle-kind="exec"] { --cle-k: var(--cle-k-exec); }
+html[data-cle] [data-cle-kind="write"] { --cle-k: var(--cle-k-write); }
+html[data-cle] [data-cle-kind="edit"] { --cle-k: var(--cle-k-edit); }
+
+/* a single tool: verb in ink, its argument in mono */
+html[data-cle] .chat-tool-row .chat-tool-row__verb { color: var(--cle-ink); font-weight: 500; }
+html[data-cle] .chat-tool-row :is(.chat-tool-row__file-link, code) {
+  font: 12px/1.3 ui-monospace, "SF Mono", Menlo, monospace !important; color: var(--cle-ink-2) !important;
+  text-decoration: none !important; background: none !important; padding: 0 !important;
+}
+
+/* consecutive tools: 已运行 N 步, then the details muted */
+html[data-cle] .chat-activity-group__label[data-cle-total] { color: var(--cle-ink-3) !important; }
+html[data-cle] .chat-activity-group__label[data-cle-total]::before {
+  content: "已运行 " attr(data-cle-total) " 步";
+  color: var(--cle-ink); font-weight: 500; margin-right: .7em;
+}
+
+/* ---------- what just arrived ---------- */
+/* each block is written in from the left behind a soft transparent edge */
+.cle-reveal {
+  -webkit-mask-image: linear-gradient(90deg, #000 0 40%, rgba(0, 0, 0, .35) 50%, transparent 60%);
+  mask-image: linear-gradient(90deg, #000 0 40%, rgba(0, 0, 0, .35) 50%, transparent 60%);
+  -webkit-mask-size: 260% 100%; mask-size: 260% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0; mask-position: 100% 0;
+  animation: cle-write-in 820ms cubic-bezier(.2, .7, 0, 1) var(--cle-reveal-delay, 0ms) both;
+}
+@keyframes cle-write-in {
+  from { -webkit-mask-position: 100% 0; mask-position: 100% 0; opacity: .2; translate: 0 3px; }
+  to   { -webkit-mask-position: 0 0; mask-position: 0 0; opacity: 1; translate: 0 0; }
+}
+/* a tool row or group simply settles in, in its turn */
+:is(.chat-tool-row, .chat-activity-group).cle-reveal {
+  -webkit-mask-image: none; mask-image: none;
+  animation: cle-step-in 420ms cubic-bezier(.2, .7, 0, 1) var(--cle-reveal-delay, 0ms) both;
+}
+@keyframes cle-step-in { from { opacity: 0; translate: 0 5px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cle-reveal { animation: none !important; -webkit-mask-image: none; mask-image: none; }
+}
