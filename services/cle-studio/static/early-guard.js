@@ -282,8 +282,8 @@
   }
 
   // The first chrome node may have been appended before this script ran (or arrive in the same
-  // parser turn): run once now, and once more when the document finishes parsing, which is still
-  // before the deferred module graph executes.
+  // parser turn): run once now and catch up at DOMContentLoaded. The root observer
+  // above already covers module renders that happen before DOMContentLoaded.
   syncChromeLabels();
   syncNameFallback();
   if (document.readyState === 'loading') {
