@@ -1,6 +1,7 @@
 // C.le. Studio — browser entry. Loaded by OpenClaw as native plugin UI.
 import './styles/tokens.css';
 import './styles/shell.css';
+import './styles/glass.css';
 import './rooms/rooms.css';
 import './rooms/backdrop.css';
 import './composer/composer.css';
