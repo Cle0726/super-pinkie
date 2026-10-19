@@ -503,6 +503,11 @@ test('startup.css cannot drift into hiding the app or dropping the brand rules',
   assert.match(CSS, /\.sidebar-shell__invite/);
   assert.match(CSS, /\.agent-chat__welcome-clawd/);
   assert.doesNotMatch(CSS, /openclaw-app\s*\{\s*(?:display|visibility)\s*:\s*(?:none|hidden)/);
+  // the boot curtain hides the rendered app only until C.le. is live, never the login gate or the
+  // mount fallback, and always gives the app back after the native fallback's 12 s budget
+  assert.match(CSS, /html:not\(\[data-cle-active\]\) body:not\(\.openclaw-mount-fallback-active\) > openclaw-app:not\(:empty\) \{\s*visibility: hidden;\s*animation: cle-boot-reveal 0s linear 12s forwards;/);
+  assert.match(CSS, /html:not\(\[data-cle-active\]\) openclaw-app \.login-gate \{ visibility: visible; \}/);
+  assert.match(CSS, /@keyframes cle-boot-reveal \{ to \{ visibility: visible; \} \}/);
   // both themes must define every token the skeleton and error panel read
   for (const token of ['--bg', '--card', '--text', '--text-strong', '--muted', '--border', '--skeleton-base']) {
     const count = (CSS.match(new RegExp(`${token}:`, 'gu')) || []).length;

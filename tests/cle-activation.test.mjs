@@ -72,7 +72,8 @@ function fixture() {
   }};
 }
 
-test('new activation survives the native mount-next / dispose-previous order', async () => {
+test('new activation survives the native mount-next / dispose-previous order', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout']});
   const app = await loadMain('same-module');
   const f = fixture();
   try {
@@ -88,6 +89,10 @@ test('new activation survives the native mount-next / dispose-previous order', a
     oldDispose();
     assert.equal(f.doc.composer, 'single', 'a repeated late dispose must be harmless');
     nextDispose();
+    // a connection loss keeps the UI through the reconnect grace: the upstream app must not show
+    assert.equal(f.doc.documentElement.dataset.cleActive, '1', 'the live UI waits out the reconnect grace');
+    assert.equal(f.doc.composer, 'single');
+    t.mock.timers.tick(10_000);
     assert.equal(f.doc.documentElement.dataset.cle, '0.1.0', 'static document skin survives disconnect');
     assert.equal(f.doc.documentElement.dataset.cleActive, undefined, 'live controls are explicitly retired');
     assert.equal(f.doc.live.size, 0);
@@ -95,7 +100,8 @@ test('new activation survives the native mount-next / dispose-previous order', a
   } finally { f.restore(); }
 });
 
-test('separately imported UI revisions still share the document handover', async () => {
+test('separately imported UI revisions still share the document handover', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout']});
   const [before, after] = await Promise.all([loadMain('old-bundle'), loadMain('new-bundle')]);
   const f = fixture();
   try {
@@ -106,6 +112,7 @@ test('separately imported UI revisions still share the document handover', async
     assert.equal(f.doc.documentElement.dataset.cleRoom, 'after-reload');
     assert.equal(f.doc.composer, 'after-reload');
     nextDispose(); nextDispose();
+    t.mock.timers.tick(10_000);
     assert.equal(f.doc.live.size, 0);
   } finally { f.restore(); }
 });
@@ -137,5 +144,24 @@ test('legacy notifications during install already see the safe host facade', asy
     assert.equal(f.doc.legacySelection, 'safe-selected');
     assert.equal(window.CLE.host.sessions.selectedKey, 'safe-selected');
     dispose();
+  } finally { f.restore(); }
+});
+
+test('a reconnect inside the grace hands over in one task, never showing the upstream app', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const app = await loadMain('reconnect');
+  const f = fixture();
+  try {
+    const lostDispose = app.activate({id: 'before'});
+    lostDispose();                                   // connection lost
+    assert.equal(f.doc.documentElement.dataset.cleActive, '1');
+    assert.deepEqual([...f.doc.live], ['before']);
+    t.mock.timers.tick(3000);
+    const backDispose = app.activate({id: 'after'}); // reconnected
+    assert.deepEqual(f.doc.events, ['rooms:before', 'dispose:before', 'rooms:after']);
+    t.mock.timers.tick(10_000);                      // the old grace timer must not retire the new UI
+    assert.equal(f.doc.composer, 'after');
+    assert.equal(f.doc.documentElement.dataset.cleActive, '1');
+    backDispose();
   } finally { f.restore(); }
 });

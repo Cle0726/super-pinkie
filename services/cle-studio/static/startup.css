@@ -227,6 +227,34 @@ html:not([data-cle]) openclaw-app:empty::before {
 /* A real error must never be covered by the waiting mark. */
 body.openclaw-mount-fallback-active openclaw-app:empty::before { display: none; }
 
+/* ---------- 3b. the upstream app is never painted before C.le. is live ----------
+   Once the app renders, its own chrome (首页 / 智能体 / 仪表盘 nav, skeletons, the stock composer)
+   would be on screen until the plugin activates — on every refresh, and again on the theme reload.
+   Until data-cle-active is set the rendered app is not painted; the ink ground and the wordmark
+   carry the wait, continuous with the native black start and the opening. The login gate is
+   painted regardless (the plugin cannot activate before a session exists), the mount fallback
+   lives outside the app, and if the plugin never comes the app is revealed after 12 s — the same
+   budget as the native fallback. No :has(): this sheet is evaluated on every DOM change. */
+html:not([data-cle]), html:not([data-cle]) body { background: #0B0C0F; }
+html:not([data-cle-active]) body:not(.openclaw-mount-fallback-active) > openclaw-app:not(:empty) {
+  visibility: hidden;
+  animation: cle-boot-reveal 0s linear 12s forwards;
+}
+html:not([data-cle-active]) openclaw-app .login-gate { visibility: visible; }
+@keyframes cle-boot-reveal { to { visibility: visible; } }
+html:not([data-cle-active]) body:not(.openclaw-mount-fallback-active) > openclaw-app:not(:empty)::before {
+  content: "C.le.";
+  visibility: visible;
+  position: fixed; inset: 0; z-index: 2147483647;
+  display: grid; place-items: center;
+  font: 400 21px/1.2 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .16em; text-indent: .16em;
+  color: rgba(236, 232, 225, .5);
+  pointer-events: none;
+  animation: cle-boot-breathe 1.9s cubic-bezier(.45, 0, .2, 1) infinite, cle-boot-hide 0s linear 12s forwards;
+}
+@keyframes cle-boot-hide { to { visibility: hidden; } }
+
 @keyframes cle-boot-breathe {
   0%, 100% { opacity: .42; }
   50% { opacity: .78; }
