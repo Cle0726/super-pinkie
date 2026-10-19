@@ -34,6 +34,9 @@ http.createServer(async (req, res) => {
       return send(fs.readFileSync(path.join(here, 'surface-audit.html')), 'text/html');
     }
     // 工作台只在 /chat 路由下启用，所以这个场景也挂在 /chat/ 前缀下
+    if (url.pathname === '/wb-gaze.html') {
+      return send(fs.readFileSync(path.join(here, 'wb-gaze.html')), 'text/html');
+    }
     if (url.pathname === '/wb-hit.html' || url.pathname === '/chat/wb-hit') {
       return send(fs.readFileSync(path.join(here, 'wb-hit.html')), 'text/html');
     }
