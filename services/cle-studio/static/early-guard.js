@@ -13,15 +13,21 @@
  * no inline script (the gateway CSP allows `script-src 'self'` but not unsafe-inline) and no
  * loosening of the policy.
  *
- * Scope is deliberately narrow — it owns the title and nothing else:
+ * Scope is deliberately narrow — the title plus the product chrome's accessible labels:
  *   - a MutationObserver on <title> catches every later rewrite, including the " · <environment>"
  *     suffix the presentation layer appends after the fact;
+ *   - the sidebar header/card labels are rebranded through a whitelist (no document-wide text
+ *     replacement); a label the user or a third party owns is left exactly as written;
  *   - it only rewrites the positions the native app fills with the product name, so a session the
  *     user named "关于OpenClaw的笔记" keeps its name (see localTitle below);
  *   - installing twice is a no-op: the app's own guard and a hot reload must not stack observers.
  *
- * The plugin guard stays authoritative for the sidebar labels and the content sweep; this file
- * fixes the title because the title is the one thing painted before any plugin code can run.
+ * Timing is the whole point: this runs from <head>, so `document.body` does not exist yet. Every
+ * observer therefore attaches to an ancestor that *does* exist (documentElement), and the first
+ * chrome node the parser appends is caught before it is ever painted.
+ *
+ * The plugin guard (src/core/brand.js) additionally owns the content sweep and retires with the
+ * plugin; this file is what keeps the product brand correct before activation and after teardown.
  */
 (function (global) {
   'use strict';
@@ -30,7 +36,7 @@
   // add another observer.
   var KEY = '__cleEarlyBrandGuard';
   if (global[KEY]) return;
-  global[KEY] = {version: 2, installed: true};
+  global[KEY] = {version: 3, installed: true};
 
   var BRAND_TOKEN = 'OpenClaw(?:\\s+Control)?';
   var BARE_BRAND = new RegExp('^' + BRAND_TOKEN + '$');
@@ -87,6 +93,8 @@
     '.sidebar-workspace-header',
     '.sidebar-agent-card',
   ];
+  // One combined selector for "is / contains product chrome" checks.
+  var CHROME_ALL = CHROME_SELECTORS.join(', ');
   // Separators the native composer uses between chrome parts.
   var SEPARATORS = [' · ', ' — '];
 
@@ -212,14 +220,77 @@
       syncNameFallback();
     });
   }
-  var chromeObserver = new MutationObserver(scheduleLabels);
-  if (document.body) {
-    chromeObserver.observe(document.body, {
+
+  /**
+   * Is this mutation record about the product chrome?
+   *
+   * The observer lives on documentElement (the only ancestor that exists while <head> is still
+   * being parsed), so it sees the whole document. Filtering here keeps the work bounded: only a
+   * label change or an inserted node that *is* / *contains* chrome is worth a pass. Message text,
+   * code and third-party nodes never match.
+   */
+  function touchesChrome(record) {
+    if (record.type === 'attributes') {
+      return record.attributeName === 'aria-label' && isChromeNode(record.target);
+    }
+    if (record.type === 'characterData') {
+      // Text inside the name slot can flip the fallback state.
+      return isNameSlot(nearestElement(record.target));
+    }
+    // A re-render that replaces the name's text arrives as childList on the slot itself, with the
+    // target *being* the chrome node rather than an ancestor of an added one.
+    if (isNameSlot(nearestElement(record.target))) return true;
+    for (var i = 0; i < record.addedNodes.length; i += 1) {
+      var node = record.addedNodes[i];
+      if (node.nodeType !== 1) continue;
+      if (isChromeNode(node) || (node.querySelector && node.querySelector(CHROME_ALL))) return true;
+    }
+    return false;
+  }
+
+  function nearestElement(node) {
+    var el = node;
+    while (el && el.nodeType !== 1) el = el.parentNode;
+    return el;
+  }
+  function isChromeNode(node) {
+    var el = nearestElement(node);
+    return !!(el && el.closest && el.closest(CHROME_ALL));
+  }
+  function isNameSlot(el) {
+    return !!(el && el.closest && el.closest('.sidebar-agent-card__name-text'));
+  }
+
+
+  var chromeObserver = new MutationObserver(function (records) {
+    for (var i = 0; i < records.length; i += 1) {
+      if (touchesChrome(records[i])) { scheduleLabels(); return; }
+    }
+  });
+  // documentElement exists at parse time even though <body> does not yet: a <head> script runs
+  // while the parser is still building the tree, so observing body here would silently never
+  // attach and every later chrome change would go unguarded.
+  var rootNode = document.documentElement || document.body;
+  if (rootNode) {
+    chromeObserver.observe(rootNode, {
       childList: true,
       subtree: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ['aria-label'],
     });
+  }
+
+  // The first chrome node may have been appended before this script ran (or arrive in the same
+  // parser turn): run once now, and once more when the document finishes parsing, which is still
+  // before the deferred module graph executes.
+  syncChromeLabels();
+  syncNameFallback();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      syncChromeLabels();
+      syncNameFallback();
+    }, {once: true});
   }
 
   global[KEY].localTitle = localTitle;

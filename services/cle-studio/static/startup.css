@@ -7,12 +7,20 @@
  * and needs no extra request and no inline script (the gateway CSP allows inline style, not
  * inline script).
  *
- * Two tiers, deliberately different in lifetime:
+ * Three tiers, deliberately different in lifetime:
  *   1. Brand cleanup  — permanent, idempotent with the plugin's own rules. Old mascot, the
  *      upstream wordmark and the promo cards must never appear, at any tick.
  *   2. Startup tokens — scoped to html:not([data-cle]); the plugin sets data-cle first thing in
  *      activate(), so these become the floor for first paint and step aside the moment the real
- *      C.le. palette lands. A plugin hot reload removes data-cle and the floor returns.
+ *      C.le. palette lands.
+ *   3. Retired-state fallback — scoped to html[data-cle]:not([data-cle-active]), i.e. the document
+ *      skin is retained but no plugin instance is live. data-cle survives a disconnect (the other
+ *      session's contract), so it can no longer mean "the plugin is online": the *active* marker
+ *      does. This tier keeps the product brand readable in exactly that state — see section 6.
+ *
+ * The sidebar wordmark is the one rule keyed on a state marker rather than on data-cle: the
+ * guards set data-cle-fallback while the slot still shows the upstream name, so the brand outlives
+ * the plugin without ever flattening a name the user chose.
  *
  * Nothing here hides openclaw-app as a whole: a failed bundle still reaches the native
  * mount-fallback, and that panel inherits the same tokens so the real error stays readable.
