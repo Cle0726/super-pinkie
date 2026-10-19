@@ -24,6 +24,7 @@ import {mountKeys} from './composer/keys.js';
 import {blink} from './rooms/blink.js';
 import {mountComposer, composer, mountToolFold} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
+import {mountReasoning} from './composer/reasoning.js';   // after gaze: its styles override models.css
 import {loadLegacy} from './legacy/loader.js';
 import {installLegacyShim, makeHostFacade} from './legacy/shim.js';
 import {mountUtilities} from './legacy/utilities.js';
@@ -72,6 +73,7 @@ export default {
     safe('gaze', () => mountGaze(controller.signal));
     safe('gazefx', () => mountGazeFx(controller.signal));
     safe('keys', () => mountKeys(controller.signal));
+    safe('reasoning', () => mountReasoning(controller.signal));
     safe('tool-fold', () => mountToolFold(controller.signal));
     safe('status', () => mountStatus(host, controller.signal));
     safe('recovery', () => mountRecovery(host, controller.signal));

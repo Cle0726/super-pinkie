@@ -1,0 +1,66 @@
+/* ---------- the reasoning slider: how hard he looks (reasoning.js) ----------
+   --cle-r is the level's intensity, 0 (off) → 1 (ultra). Everything here follows it: his
+   painted eyes above the track, the lit part of the track, the notches passed, the thumb. */
+
+/* his eyes: a strip of oil painting set into the panel, fading into the paper at its foot */
+html[data-cle] .chat-controls__reasoning-panel { position: relative; }
+.cle-reason-eyes {
+  position: relative; height: 92px; margin: -11px -12px 6px; overflow: hidden;
+  border-radius: inherit; border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  background: #07080c;
+  -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 58%, transparent 100%);
+}
+.cle-reason-eyes > i {
+  position: absolute; inset: -4px; background: center 48% / cover no-repeat; opacity: 0;
+  transform: scale(1.045); filter: brightness(.9) saturate(.95);
+  transition: opacity .34s cubic-bezier(.2, .7, 0, 1), transform .6s cubic-bezier(.2, .7, 0, 1);
+}
+.cle-reason-eyes > i.is-front { opacity: 1; transform: scale(1); }
+/* the light in the eyes breathes, faster and brighter as he looks harder */
+.cle-reason-eyes > b {
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+  background: radial-gradient(38% 60% at 50% 46%, rgba(70, 150, 255, calc(.05 + var(--cle-r, .5) * .22)), transparent 70%);
+  animation: cle-reason-breathe calc(5.2s - var(--cle-r, .5) * 2.6s) ease-in-out infinite alternate;
+}
+@keyframes cle-reason-breathe { from { opacity: .45; } to { opacity: 1; } }
+/* at the top of the scale gold leaf glints across the painting */
+.cle-reason-eyes.is-blaze > b::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 220, 160, .22) 48%, rgba(255, 244, 220, .32) 50%, rgba(255, 220, 160, .22) 52%, transparent 62%) -160% 0 / 260% 100% no-repeat;
+  animation: cle-reason-glint 3.4s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+@keyframes cle-reason-glint { 0%, 30% { background-position: -160% 0; } 100% { background-position: 160% 0; } }
+
+/* the track: ice-blue light up to the thumb, warming toward gold at the top of the scale */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-runnable-track {
+  height: 3px;
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, #2a63e8 82%, transparent) 0%,
+      color-mix(in srgb, #5aa8ff calc(60% + var(--cle-r, .5) * 40%), #d9b46a) var(--reasoning-fill, 0%),
+      color-mix(in srgb, var(--cle-ink) 12%, transparent) var(--reasoning-fill, 0%));
+  box-shadow: 0 0 calc(2px + var(--cle-r, .5) * 8px) color-mix(in srgb, #5aa8ff calc(var(--cle-r, .5) * 70%), transparent);
+}
+/* the thumb: a small lit eye — an ice-blue iris with a slit pupil in a gold-leaf ring */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-thumb {
+  width: 16px; height: 16px; margin-top: -6.5px;
+  border: 1.5px solid #c9a35c;
+  background:
+    linear-gradient(90deg, transparent calc(50% - .9px), #0b1020 calc(50% - .9px), #0b1020 calc(50% + .9px), transparent calc(50% + .9px)) center / 100% calc(30% + var(--cle-r, .5) * 55%) no-repeat,
+    radial-gradient(circle at 50% 42%, #e8f4ff 0 8%, #6fc0ff 22%, #2a63e8 62%, #0c1a46 100%);
+  box-shadow: 0 0 0 2px var(--cle-surface), 0 0 calc(4px + var(--cle-r, .5) * 14px) color-mix(in srgb, #5aa8ff calc(30% + var(--cle-r, .5) * 60%), transparent);
+  transition: transform var(--cle-t-press) var(--cle-ease-soft), box-shadow .3s ease;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:active::-webkit-slider-thumb { transform: scale(1.18); }
+
+/* the notches: the ones he has passed are gold leaf; the current one is his gaze */
+html[data-cle] .cle-gaze-stop[data-past] .cle-gaze-stop__tick { background: #c9a35c; box-shadow: 0 0 4px rgba(217, 180, 106, .5); }
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__tick { background: #4a8cff; box-shadow: 0 0 6px rgba(90, 168, 255, .8); transform: scaleY(1.35); }
+html[data-cle] .cle-gaze-stop__tick { transition: background .25s ease, box-shadow .25s ease, transform .25s ease; }
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__name { color: var(--cle-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cle-reason-eyes > i { transition: none; transform: none; }
+  .cle-reason-eyes > b, .cle-reason-eyes.is-blaze > b::after { animation: none; }
+}
