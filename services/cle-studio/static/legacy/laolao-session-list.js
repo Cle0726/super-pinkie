@@ -300,7 +300,16 @@
     }).filter((s) => typeof s.key === 'string' && s.key && !s.key.includes(':subagent:'));
   };
 
-  async function fetchMode(mode, {force = false, notice = ''} = {}) {
+  const inflight = new Map();          // mode → the fetch already running for it
+  let retryTimer = 0, failing = false;
+  function fetchMode(mode, options = {}) {
+    // one request per mode at a time: a render that happens while a fetch is pending waits for it
+    if (!options.force && inflight.has(mode)) return inflight.get(mode);
+    const run = fetchModeNow(mode, options).finally(() => { if (inflight.get(mode) === run) inflight.delete(mode); });
+    inflight.set(mode, run);
+    return run;
+  }
+  async function fetchModeNow(mode, {force = false, notice = ''} = {}) {
     const agentId = MODE_AGENT[mode];
     if (notice && mode === stateMode) refreshNotice = notice;
     const cache = loaded.get(mode);
@@ -330,12 +339,23 @@
       const rows = extractSessions(active).filter((s) => s.agentId === agentId);
       const archivedRows = extractSessions(archivedList).filter((s) => s.agentId === agentId)
         .map((s) => ({...s, archived: true})); // sessions.list(archived:true) omits archivedAt
+      failing = false;
       if (version === revision || !cache) loaded.set(mode, {rows, archivedRows, at: Date.now()});
       return loaded.get(mode);
     } catch (error) {
-      if (cache) { cache.error = error.message; return cache; }
-      toast('会话列表暂未刷新：' + error.message);
-      return {rows: [], archivedRows: [], at: Date.now(), error: error.message};
+      if (cache) { cache.error = error.message; cache.at = Date.now(); return cache; }
+      // Remember the failure as an (empty) cache entry. Without it renderNow() saw "no cache",
+      // fetched again, the request failed again at once, and finally{} rendered again: a microtask
+      // loop that froze the page for as long as the gateway was away (and after it came back).
+      // The entry ages out like any cache, so the next render after 8s retries once.
+      const failed = {rows: [], archivedRows: [], at: Date.now(), error: error.message, failed: true};
+      loaded.set(mode, failed);
+      // and come back for it: once the entry has aged, re-render, which fetches it again
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => { if (loaded.get(mode) === failed) { loaded.delete(mode); signature = ''; schedule(); } }, 8000);
+      if (!failing) toast('会话列表暂未刷新：' + error.message);   // once per outage, not every retry
+      failing = true;
+      return failed;
     } finally {
       loading = Math.max(0, loading - 1);
       signature = '';
