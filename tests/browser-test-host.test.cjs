@@ -159,3 +159,56 @@ test('native window chrome and voice entry no longer use the old pink identity',
   // Those permission strings must still name the app bundle the OS shows.
   assert.match(launcher, /允许超級碧琪使用麦克风/);
 });
+
+test('the test host can bind its browser endpoint to an already-running gateway', () => {
+  // The host never spawns a gateway, so the running 19789 process never received
+  // PINKIE_APP_BROWSER_ENDPOINT and was never an allowedPeer root. Without this
+  // path the real model simply cannot reach the native browser.
+  assert.match(launcher, /Gateway\.attachToExisting/);
+  assert.match(launcher, /adoptTestGatewayForBrowserControl\(\)/);
+  assert.match(launcher, /BrowserControlEndpoint\.adoptExistingGateway\(/);
+  assert.match(control, /static func adoptExistingGateway\(_ pid: pid_t\)/);
+  // The adopted gateway may ask for the credential it was never handed...
+  assert.match(control, /body\["op"\] as\? String == "handshake"/);
+  // ...but only after the ordinary peer checks, and only with its own proof.
+  const serve = control.slice(control.indexOf('private func serve(_ client: Int32'));
+  const handshakeAt = serve.indexOf('op"] as? String == "handshake"');
+  const allowedAt = serve.indexOf('Self.allowedPeer(peer)');
+  assert.ok(allowedAt > 0 && handshakeAt > allowedAt, 'peer check still precedes the handshake');
+  assert.match(serve, /Self\.adoptedPeerIsVerifiedGateway\(peer\)/);
+  // And the token still gates every real action.
+  assert.match(serve, /candidate == token/);
+});
+
+test('adoption refuses anything that is not the 19789 profile', () => {
+  // Port pinning: never the installed app's gateway.
+  assert.match(launcher, /guard port == 19789 else \{ return \.refuse/);
+  // Provenance by live state ownership, not by process name.
+  assert.match(launcher, /Gateway\.listenerOwnsState\(listener\.pid, stateRoot: expectedState\)/);
+  assert.match(launcher, /state\/openclaw\.sqlite/);
+  assert.match(launcher, /\.openclaw-cle/);
+  // Exact path equality: a prefix match would accept a lookalike directory.
+  assert.match(launcher, /canonicalActual == canonicalExpected/);
+  assert.doesNotMatch(launcher, /hasPrefix\(canonicalExpected\)/);
+  // Adoption must never spawn, signal or restart a gateway.
+  const adopt = launcher.slice(launcher.indexOf('private func adoptTestGatewayForBrowserControl'));
+  const body = adopt.slice(0, adopt.indexOf('enum TestGatewayDecision'));
+  assert.doesNotMatch(body, /Gateway\.start\(\)/);
+  assert.doesNotMatch(body, /\.terminate\(\)/);
+  assert.doesNotMatch(body, /Darwin\.kill/);
+});
+
+test('the endpoint descriptor stays private and is removed on quit', () => {
+  const publish = launcher.slice(launcher.indexOf('private func publishTestEndpointDescriptor'));
+  const body = publish.slice(0, publish.indexOf('func publishEndpointDescriptorForCheck'));
+  // Owner-only directory and file, and the file must not outlive the endpoint.
+  assert.match(body, /posixPermissions: 0o700/);
+  assert.match(body, /posixPermissions: 0o600/);
+  assert.match(launcher, /try\? FileManager\.default\.removeItem\(at: descriptor\)/);
+  // It is written only in the isolated host and only under browser-test.
+  assert.match(body, /guard RuntimeConfig\.isTestHost/);
+  assert.match(launcher, /browser-test/);
+  // The token must never be logged or printed.
+  assert.doesNotMatch(launcher, /print\([^)]*token/i);
+  assert.doesNotMatch(launcher, /NSLog\([^)]*endpoint[^)]*encoded/i);
+});
