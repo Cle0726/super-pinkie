@@ -7,7 +7,7 @@
 html[data-cle] body { background: var(--cle-paper); color: var(--cle-ink); -webkit-font-smoothing: antialiased; }
 html[data-cle] ::selection { background: var(--cle-gaze-soft); }
 html[data-cle] img.chat-avatar.assistant {
-  content: url('/cle/static/art/avatar.webp?v=20261019');
+  content: url('/cle/static/art/avatar.webp?v=20261019r');
   object-fit: cover;
   border-radius: 50%;
 }
@@ -111,7 +111,7 @@ html[data-cle] .shell { background-image: var(--cle-canvas, none) !important; ba
 /* ---------- workspace menu: his face instead of the stock mascot ---------- */
 html[data-cle] .sidebar-workspace-header__mark > svg { display: none !important; }
 html[data-cle] .sidebar-workspace-header__mark {
-  background: #0A0D16 url('/cle/static/art/avatar.webp?v=20261019') center / cover no-repeat !important;
+  background: #0A0D16 url('/cle/static/art/avatar.webp?v=20261019r') center / cover no-repeat !important;
   border-radius: 50% !important; box-shadow: 0 0 0 1px var(--cle-gold-soft);
 }
 

@@ -12,7 +12,7 @@ export const ROOMS = [
   {id: 'unrestricted', eye: [.50, .37], agent: 'unrestricted', zh: '挥洒', fr: 'Carte Blanche', hint: '无限 · 放手', line: '白纸一张，随你落笔。'},
 ];
 // the revision stamp makes a repainted room reach WebKit at once instead of after the cache expires
-export const ART_REV = '20261019';
+export const ART_REV = '20261019r';
 export const roomArt = (id) => `/cle/static/art/rooms/${id}.webp?v=${ART_REV}`;
 const byAgent = new Map(ROOMS.map((r) => [r.agent, r]));
 const LAST = (room) => `cle:last-session:${room}`;
