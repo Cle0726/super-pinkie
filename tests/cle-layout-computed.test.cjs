@@ -86,7 +86,12 @@ function page() {
                   </div></div>
                 </div>
                 <div class="agent-chat__composer-actions">
-                  <button type="button" class="chat-send-btn chat-send-btn--voice" aria-label="语音">v</button>
+                  <div class="chat-talk-control">
+                    <wa-dropdown class="chat-talk-input-picker" aria-label="麦克风输入">
+                      <button slot="trigger" type="button" class="chat-talk-input-picker__trigger" aria-label="麦克风输入">&#9834;</button>
+                    </wa-dropdown>
+                    <button type="button" class="chat-send-btn chat-send-btn--voice" aria-label="开始语音输入">v</button>
+                  </div>
                   <button type="button" class="chat-send-btn chat-send-btn--send" aria-label="发送">&uarr;</button>
                 </div>
               </div>
@@ -119,6 +124,9 @@ function page() {
       permissionTrigger: box('.chat-controls__permission-trigger'),
       controls: box('.agent-chat__composer-controls'),
       absorbed: box('.laolao-learning--absorbed'),
+      mic: box('.chat-talk-input-picker'),
+      micTrigger: box('.chat-talk-input-picker__trigger'),
+      talkControl: box('.chat-talk-control'),
       kids: [...document.querySelector('.agent-chat__composer-lead').children].map((el) => {
         const r = el.getBoundingClientRect();
         return {cls: el.className, w: +r.width.toFixed(1), h: +r.height.toFixed(1)};
@@ -139,7 +147,7 @@ async function withChrome(fn) {
   const child = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--hide-scrollbars', '--allow-file-access-from-files',
-    `--user-data-dir=${profile}`, '--remote-debugging-port=0', 'about:blank',
+    `--user-data-dir=${profile}`, '--window-size=1280,800', '--remote-debugging-port=0', 'about:blank',
   ], {stdio: ['ignore', 'ignore', 'pipe']});
   // --remote-debugging-port=0 prints the chosen port instead of a ws URL, so read the port and
   // ask /json/version for the browser endpoint.
@@ -368,5 +376,111 @@ test('the fold menu never lists learning entries the capsule absorbed', {skip}, 
     assert.ok(labels.includes('浏览器'), `the browser entry belongs in the menu: ${labels.join(',')}`);
     assert.equal(labels.some((label) => /学习笔记本/.test(label)), false,
       `an absorbed entry reappeared as a fold proxy: ${labels.join(',')}`);
+  });
+});
+
+test('microphone picker expansion yields 28px without overlapping textarea and hit-target is unblocked', {skip}, async () => {
+  await withChrome(async (client) => {
+    // 1. measure steady state at 864px
+    const steady = await measureAt(client, 864);
+    assert.ok(steady.mic.w <= 1, `in steady state mic width must be 0px, got ${steady.mic.w}px`);
+    const steadyTextRight = steady.textarea.x + steady.textarea.w;
+    assert.ok(steadyTextRight <= steady.actions.x,
+      `steady textarea (right: ${steadyTextRight}) overlaps actions (left: ${steady.actions.x})`);
+
+    // 2. simulate the expanded state (native trigger takes focus-visible or open)
+    const target = await client.send('Target.createTarget', {url: 'about:blank'});
+    const targetId = target.result.targetId;
+    const attached = await client.send('Target.attachToTarget', {targetId, flatten: true});
+    const sessionId = attached.result.sessionId;
+    await client.send('Runtime.enable', {}, sessionId);
+    await client.send('Page.enable', {}, sessionId);
+    await client.send('Emulation.setDeviceMetricsOverride', {width: 1280, height: 800, deviceScaleFactor: 1, mobile: false}, sessionId);
+    await client.send('Page.navigate', {url: 'data:text/html;charset=utf-8,' + encodeURIComponent(page())}, sessionId);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    // Open/focus the mic picker via native attribute & focus
+    const expanded = await evaluate(client, sessionId, `(async () => {
+      const picker = document.querySelector('.chat-talk-input-picker');
+      picker.setAttribute('open', '');
+      const trigger = document.querySelector('.chat-talk-input-picker__trigger');
+      trigger.scrollIntoView();
+      trigger.focus();
+      // wait for the 0.19s CSS width transition
+      await new Promise((r) => setTimeout(r, 260));
+      const m = window.__measure();
+      const send = document.querySelector('.chat-send-btn--send');
+      const tr = trigger.getBoundingClientRect();
+      const sr = send.getBoundingClientRect();
+      const micCenter = {x: tr.left + tr.width / 2, y: tr.top + tr.height / 2};
+      const sendCenter = {x: sr.left + sr.width / 2, y: sr.top + sr.height / 2};
+      let micClicked = false;
+      let sendClicked = false;
+      trigger.addEventListener('click', () => { micClicked = true; }, {once: true});
+      send.addEventListener('click', () => { sendClicked = true; }, {once: true});
+      trigger.click();
+      send.click();
+      return {
+        m,
+        micCenter,
+        sendCenter,
+        micClicked,
+        sendClicked,
+        textRight: m.textarea.x + m.textarea.w,
+        actionsLeft: m.actions.x,
+        overlap: Math.max(0, (m.textarea.x + m.textarea.w) - m.actions.x),
+      };
+    })()`, true);
+    await client.send('Target.closeTarget', {targetId});
+
+    assert.ok(expanded.m.mic.w >= 26, `in expanded state mic must be ~28px, got ${expanded.m.mic.w}px`);
+    assert.equal(expanded.overlap, 0, `textarea must not overlap actions, got ${expanded.overlap}px overlap`);
+    assert.ok(expanded.textRight <= expanded.actionsLeft,
+      `expanded textarea (right: ${expanded.textRight}) overlaps actions (left: ${expanded.actionsLeft})`);
+    assert.equal(expanded.micClicked, true, 'mic trigger must be clickable and unblocked');
+    assert.equal(expanded.sendClicked, true, 'send button must be clickable and unblocked');
+    assert.ok(expanded.textRight < expanded.micCenter.x, 'textarea must end before mic button center');
+    assert.ok(expanded.textRight < expanded.sendCenter.x, 'textarea must end before send button center');
+  });
+});
+
+test('retired native composer shell preserves single-pill geometry and 864px column without freezing buttons', {skip}, async () => {
+  await withChrome(async (client) => {
+    const target = await client.send('Target.createTarget', {url: 'about:blank'});
+    const targetId = target.result.targetId;
+    const attached = await client.send('Target.attachToTarget', {targetId, flatten: true});
+    const sessionId = attached.result.sessionId;
+    await client.send('Runtime.enable', {}, sessionId);
+    await client.send('Page.enable', {}, sessionId);
+    await client.send('Emulation.setDeviceMetricsOverride', {width: 1280, height: 800, deviceScaleFactor: 1, mobile: false}, sessionId);
+    await client.send('Page.navigate', {url: 'data:text/html;charset=utf-8,' + encodeURIComponent(page())}, sessionId);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    // Simulate retirement: .cle-composer element is removed, leaving native .agent-chat__composer-shell
+    const retired = await evaluate(client, sessionId, `(() => {
+      const shell = document.querySelector('.agent-chat__composer-shell');
+      const cle = document.querySelector('.cle-composer');
+      const input = document.querySelector('.agent-chat__input');
+      shell.replaceChildren(input); // remove .cle-composer wrapper
+      const cs = getComputedStyle(input);
+      const r = input.getBoundingClientRect();
+      const send = document.querySelector('.chat-send-btn--send');
+      const isDisabledBefore = send.disabled;
+      send.disabled = true;
+      const isDisabledAfter = send.disabled;
+      return {
+        display: cs.display,
+        cols: cs.gridTemplateColumns,
+        areas: cs.gridTemplateAreas,
+        w: +r.width.toFixed(1),
+        isDisabledBefore,
+        isDisabledAfter,
+      };
+    })()`);
+    await client.send('Target.closeTarget', {targetId});
+
+    assert.equal(retired.display, 'grid', 'retired native input must stay grid layout');
+    assert.equal(retired.w, 864, `retired native input width must be 768px (864px minus margins), got ${retired.w}px`);
+    assert.equal(retired.isDisabledAfter, true, 'buttons must respect native disabled state and not be frozen');
   });
 });
