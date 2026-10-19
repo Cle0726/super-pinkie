@@ -137,8 +137,9 @@ test('startup and start pages never fall back to the old brand', () => {  assert
   assert.match(wordmark, /italic /);
   assert.match(wordmark, /letter-spacing:-\.015em/);
   assert.match(wordmark, /C\.le\./);
-  // The shipped app keeps its original opening art; only the test host swaps it.
-  assert.match(launcher, /if RuntimeConfig\.isTestHost \{\s*\n\s*webView\?\.loadHTMLString\(startupPlaceholderHTML/);
+  // The original 超級碧琪 build keeps its opening art; the test host and the C.le. app
+  // (Info.plist CLEBrand = cle) open on the C.le. placeholder instead.
+  assert.match(launcher, /if RuntimeConfig\.isTestHost \|\| RuntimeConfig\.isCleBrand \{\s*\n\s*webView\?\.loadHTMLString\(startupPlaceholderHTML/);
 });
 
 test('native window chrome and voice entry no longer use the old pink identity', () => {

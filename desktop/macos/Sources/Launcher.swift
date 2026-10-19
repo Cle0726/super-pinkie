@@ -22,6 +22,12 @@ private enum RuntimeConfig {
         #endif
     }()
 
+    /// The C.le. app (its own bundle, released apart from 超級碧琪) declares `CLEBrand = cle` in
+    /// its Info.plist; the original app does not, so it keeps its own opening and art.
+    static let isCleBrand: Bool = {
+        (Bundle.main.object(forInfoDictionaryKey: "CLEBrand") as? String) == "cle"
+    }()
+
     /// Compiled into the test binary only. `strings` on the executable is the
     /// checkable proof that a delivered .app is the isolated build. Kept as a
     /// computed value used at launch so the optimiser cannot drop it.
@@ -2714,11 +2720,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func showStartupScreen() {
         startupVideoStartedAt = Date()
-        // The acceptance host must never show the installed app's pink-pony
-        // opening title or its old wordmark. It renders the C.le. signature on
-        // paper instead, so nothing from the previous brand flashes before the
-        // new first screen loads. The shipped app keeps its original path.
-        if RuntimeConfig.isTestHost {
+        // C.le. opens in the dark: the web opening (Le regard) begins on pure black, so the
+        // native screen before it is the same black — never the old pony movie or a paper flash.
+        // The acceptance host does the same. Only the original 超級碧琪 build keeps its movie.
+        if RuntimeConfig.isTestHost || RuntimeConfig.isCleBrand {
             webView?.loadHTMLString(startupPlaceholderHTML, baseURL: nil)
             return
         }
@@ -2738,20 +2743,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// bundled loading page is missing, so neither can fall back to old art.
     private var startupPlaceholderHTML: String {
         #"""
-        <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+        <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
         <style>
           \#(CleBrowserPalette.cssVariables)
-          *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}
-          body{display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
-          main{display:grid;justify-items:center;gap:18px;padding:32px;text-align:center}
-          .mark{color:var(--ink);line-height:1}
-          .word{font:500 11px/1 var(--cle-mono,ui-monospace);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
-          .bar{width:96px;height:1px;background:var(--line-strong);overflow:hidden;position:relative}
-          .bar::after{content:"";position:absolute;inset:0;background:var(--gaze);transform-origin:left;animation:prep 1.4s cubic-bezier(.45,0,.2,1) infinite}
-          @keyframes prep{0%{transform:scaleX(0)}55%{transform:scaleX(.72)}100%{transform:scaleX(0);transform-origin:right}}
-          @media(prefers-reduced-motion:reduce){.bar::after{animation:none;transform:scaleX(.5)}}
+          *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#050608}
+          body{display:grid;place-items:center;color:#cfd8e6;font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+          main{display:grid;justify-items:center;gap:16px;opacity:0;animation:wake .9s ease 1.2s forwards}
+          .bar{width:120px;height:1px;background:#ffffff12;overflow:hidden;position:relative}
+          .bar::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#7cc4ff,transparent);animation:prep 1.8s cubic-bezier(.45,0,.2,1) infinite}
+          .word{font:500 10px/1 var(--cle-mono,ui-monospace);letter-spacing:.32em;text-transform:uppercase;color:#8aa0b8}
+          @keyframes wake{to{opacity:1}}
+          @keyframes prep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+          @media(prefers-reduced-motion:reduce){.bar::after{animation:none}}
         </style></head>
-        <body><main><div class="mark">\#(CleWordmark.html(pointSize: 44))</div><div class="bar"></div><div class="word">Li An</div></main></body></html>
+        <body><main><div class="bar"></div><div class="word">Li An</div></main></body></html>
         """#
     }
 
