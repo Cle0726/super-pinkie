@@ -746,3 +746,26 @@ test('重装时 mode 已在离线期间变化，也要补一次正确通知', as
     cB.abort();
   });
 });
+
+test('reinstall with a different session in the same room closes the old memory scope once', async () => {
+  const env = makeEnv();
+  await withGlobals(env, async () => {
+    const A = makeStrictHost({selectedKey: 'agent:project:old'});
+    const cA = new AbortController();
+    const api = shim.installLegacyShim(A.host, cA.signal);
+    let closed = 0;
+    const notified = [];
+    window.__clekkMemoryUI = {close() { closed++; }};
+    window.addEventListener('laolao:sessions-changed', () => notified.push(api.currentSessionKey()));
+    cA.abort(); A.retire();
+    const B = makeStrictHost({selectedKey: 'agent:project:new'});
+    const cB = new AbortController();
+    api.rebind(B.host, cB.signal);
+    assert.deepEqual(notified, ['agent:project:new']);
+    assert.equal(closed, 1);
+    for (const fn of [...B.state.subs]) fn();
+    assert.deepEqual(notified, ['agent:project:new'], 'same selection must not notify again');
+    assert.equal(closed, 1);
+    cB.abort();
+  });
+});
