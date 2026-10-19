@@ -15,7 +15,7 @@
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const STATES = ["rest", "typing", "working", "happy", "sleepy"];
   const ROOM_OF_AGENT = {main: "chat", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted"};
-  const ART_V2 = (s) => `/cle/static/art/companion-v2/${s}.png`;
+  const ART_V2 = (s) => `/cle/static/art/companion-v2/${s}.webp`;
   // 现有素材作回退；将来 companion-v2 到位后自动优先使用，无需改代码。
   // 只用横构图的两张（616×420）：pet-sit 是竖构图（314×420），塞进 168×90 的位子会缩成一小团，
   // 五状态之间还会忽大忽小 —— 那正是「用整图缩放冒充动作」。状态的差别交给 rig 的动作、
@@ -28,6 +28,9 @@
     sleepy: "/cle/static/art/pet-loaf-closed.webp",
   };
   const CLOSED = "/cle/static/art/pet-loaf-closed.webp";
+  // v2: six poses cut to one shared frame (scripts/art/cutout-plate.py), so he keeps his size between
+  // states; the closed-eye frame belongs to the resting pose
+  const CLOSED_V2 = "/cle/static/art/companion-v2/closed.webp";
   const CALL = {project: "老板"};
   const PREF_KEY = "pinkie…s-v1";
   const SLEEPY_AFTER = 10 * 60_000;
@@ -90,7 +93,7 @@
   const night = () => document.documentElement.hasAttribute("data-pinkie-night") || /dark/.test(document.documentElement.dataset.theme || "");
   const LINE = (state) => `/cle/static/art/pet-line/${state === "sleepy" ? "sleep" : "loaf"}-${night() ? "night" : "day"}.png`;
   const artNow = (state) => (lineMode() ? LINE(state) : ART.get(state) || FALLBACK[state]);
-  const closedNow = (state) => (state === "rest" && !lineMode() ? CLOSED : "");
+  const closedNow = (state) => (state === "rest" && !lineMode() ? (ART.get("rest") === ART_V2("rest") ? CLOSED_V2 : CLOSED) : "");
 
   /* ── 动作引擎的载入 ──────────────────────────────────────────────────
      laolao-cat-rig.js 应该由模块表排在本文件之前（主控注册）。在它还没被注册时，
