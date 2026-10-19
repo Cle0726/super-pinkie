@@ -92,13 +92,13 @@ class Element extends Node {
   }
   setAttribute(name, value) {
     this.attrs.set(name, String(value));
-    notify(this, 'attributes');
+    notify(this, 'attributes', [], name);
   }
   getAttribute(name) { return this.attrs.has(name) ? this.attrs.get(name) : null; }
   hasAttribute(name) { return this.attrs.has(name); }
   removeAttribute(name) {
     this.attrs.delete(name);
-    notify(this, 'attributes');
+    notify(this, 'attributes', [], name);
   }
 }
 
@@ -122,14 +122,19 @@ class MutationObserver {
   disconnect() { this.active = false; this.pending = []; this.targets = []; }
   takeRecords() { const out = this.pending; this.pending = []; return out; }
 }
-function notify(target, type, added = []) {
+function notify(target, type, added = [], attributeName = null) {
   for (const ob of observers) {
     if (!ob.active) continue;
     for (const {target: root, options} of ob.targets) {
+      // real observers honour attributeFilter: a record for another attribute is not delivered
+      if (type === 'attributes' && options.attributeFilter && !options.attributeFilter.includes(attributeName)) continue;
       let n = target;
       while (n) {
         if (n === root) {
-          if (n === target || options.subtree) ob.pending.push({type, target, addedNodes: added});
+          if (n === target || options.subtree) {
+            // MutationRecord shape: attributeName is present for attribute records
+            ob.pending.push({type, target, addedNodes: added, attributeName});
+          }
           break;
         }
         n = n.parentNode;
@@ -154,24 +159,40 @@ async function deliver() {
 
 /* ---------- harness ---------- */
 
-function makeDocument(titleText) {
+function makeDocument(titleText, {withBody = true} = {}) {
   const html = new Element('html');
   const head = new Element('head');
-  const body = new Element('body');
   const title = new Element('title');
   title.appendChild(new Text(titleText));
   head.appendChild(title);
   html.appendChild(head);
-  html.appendChild(body);
+  // During parsing a <head> script runs before the parser has created <body>; the real document
+  // reports null there, so the fixture has to be able to reproduce that.
+  const body = withBody ? new Element('body') : null;
+  if (body) html.appendChild(body);
 
   const document = {
     documentElement: html,
     head,
     body,
+    readyState: withBody ? 'interactive' : 'loading',
+    _listeners: [],
     querySelector: (sel) => html.querySelector(sel),
     querySelectorAll: (sel) => html.querySelectorAll(sel),
     createTextNode: (v) => new Text(v),
     createElement: (t) => new Element(t),
+    addEventListener(type, fn) { if (type === 'DOMContentLoaded') document._listeners.push(fn); },
+    /** The parser creating <body> after a <head> script already ran. */
+    _appendBody() {
+      const created = new Element('body');
+      document.body = created;
+      document.readyState = 'interactive';
+      html.appendChild(created);
+      return created;
+    },
+    _fireDomContentLoaded() {
+      for (const fn of document._listeners.splice(0)) fn();
+    },
   };
   Object.defineProperty(document, 'title', {
     configurable: true,
@@ -427,16 +448,15 @@ test('the fallback marker follows the name slot, and clears for a chosen name', 
   loadGuard(document);
   assert.equal(marquee.hasAttribute('data-cle-fallback'), true, 'fallback is marked so CSS brands it');
 
-  // the gateway answers with the user's own name
-  marquee.childNodes.length = 0;
-  marquee.appendChild(new Text('碧琪的工作区'));
+  // the gateway answers with the user's own name (assigning textContent replaces the subtree,
+  // which is what a Lit re-render does and what the observer actually sees)
+  marquee.textContent = '碧琪的工作区';
   await deliver();
   assert.equal(marquee.hasAttribute('data-cle-fallback'), false, 'a chosen name keeps its own glyphs');
   assert.equal(marquee.textContent, '碧琪的工作区', 'and is not rewritten');
 
   // and it re-marks if the app falls back again (e.g. after a disconnect clears the identity)
-  marquee.childNodes.length = 0;
-  marquee.appendChild(new Text('OpenClaw'));
+  marquee.textContent = 'OpenClaw';
   await deliver();
   assert.equal(marquee.hasAttribute('data-cle-fallback'), true);
 });
@@ -494,3 +514,126 @@ test('messages, code and third-party labels are never rewritten', async () => {
   assert.equal(bubble.textContent, 'OpenClaw 是上游项目名', 'user message intact');
   assert.equal(other.getAttribute('aria-label'), 'OpenClaw · 第三方控件', 'third-party label untouched');
 });
+
+/* ---------- real parse order: the guard runs before <body> exists ---------- */
+
+test('the chrome observer attaches even though document.body is null at parse time', async () => {
+  // The published script is a synchronous classic <head> script: the parser has created <html> and
+  // <head> but not <body>. The earlier version guarded the observer with `if (document.body)`, so
+  // on a cold boot it never attached and every later label change went unguarded.
+  const document = makeDocument('C.le.', {withBody: false});
+  assert.equal(document.body, null, 'fixture reproduces the parse-time state');
+
+  loadGuard(document, {expectGlobal: true});
+  assert.ok(
+    observers.some((observer) => observer.active && observer.targets.some(({target}) => target === document.documentElement)),
+    'chrome observer is attached to documentElement',
+  );
+
+  // the parser now creates <body> and the app appends the sidebar
+  const body = document._appendBody();
+  const header = new Element('div', {class: 'sidebar-workspace-header'});
+  const button = new Element('button', {class: 'sidebar-workspace-header__main'});
+  button.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+  const textWrap = new Element('span', {class: 'sidebar-agent-card__text'});
+  const nameWrap = new Element('span', {class: 'sidebar-agent-card__name'});
+  const slot = new Element('span', {class: 'sidebar-agent-card__name-text hover-marquee'});
+  slot.appendChild(new Text('OpenClaw'));
+  nameWrap.appendChild(slot);
+  textWrap.appendChild(nameWrap);
+  button.appendChild(textWrap);
+  header.appendChild(button);
+  body.appendChild(header);
+
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'first label is caught before paint');
+  assert.equal(slot.hasAttribute('data-cle-fallback'), true, 'fallback marked for the wordmark rule');
+});
+
+test('after a cold boot the label still holds once the plugin never activated, and after it retires', async () => {
+  const document = makeDocument('C.le.', {withBody: false});
+  loadGuard(document, {expectGlobal: true});
+  const body = document._appendBody();
+
+  const makeHeader = (label) => {
+    const header = new Element('div', {class: 'sidebar-workspace-header'});
+    const button = new Element('button', {class: 'sidebar-workspace-header__main'});
+    button.setAttribute('aria-label', label);
+    header.appendChild(button);
+    body.appendChild(header);
+    return button;
+  };
+
+  // 1. plugin never activates: the app renders its own sidebar
+  const first = makeHeader('OpenClaw · 工作区菜单');
+  await deliver();
+  assert.equal(first.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+
+  // 2. plugin retires (no activate ever happened) and the app restores the label verbatim
+  first.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+  await deliver();
+  assert.equal(first.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'still owned after teardown');
+
+  // 3. a later reconnect re-renders the whole header
+  first.parentNode.childNodes.length = 0;
+  const second = makeHeader('OpenClaw · 工作区菜单');
+  await deliver();
+  assert.equal(second.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'new node caught too');
+});
+
+test('a cold-boot guard does not touch message text inserted afterwards', async () => {
+  const document = makeDocument('C.le.', {withBody: false});
+  loadGuard(document, {expectGlobal: true});
+  const body = document._appendBody();
+
+  const chat = new Element('div', {class: 'chat-group'});
+  const bubble = new Element('div', {class: 'chat-text'});
+  bubble.appendChild(new Text('OpenClaw 是上游项目名'));
+  chat.appendChild(bubble);
+  body.appendChild(chat);
+  await deliver();
+  assert.equal(bubble.textContent, 'OpenClaw 是上游项目名', 'user content untouched');
+});
+
+test('a cold-boot guard is bounded: unrelated insertions schedule no pass', async () => {
+  const document = makeDocument('C.le.', {withBody: false});
+  loadGuard(document, {expectGlobal: true});
+  const body = document._appendBody();
+
+  let passes = 0;
+  const original = Element.prototype.querySelectorAll;
+  Element.prototype.querySelectorAll = function patched(selector) {
+    if (String(selector).includes('aria-label')) passes += 1;
+    return original.call(this, selector);
+  };
+  try {
+    for (let i = 0; i < 5; i += 1) {
+      const junk = new Element('div', {class: 'unrelated'});
+      junk.appendChild(new Text(`row ${i}`));
+      body.appendChild(junk);
+    }
+    await deliver();
+  } finally {
+    Element.prototype.querySelectorAll = original;
+  }
+  assert.equal(passes, 0, 'no chrome pass for unrelated nodes');
+});
+
+test('the guard still catches the DOMContentLoaded pass without missing the module render', async () => {
+  // DOMContentLoaded fires after parsing and before the deferred module executes, so a pass there
+  // is still early enough; assert it runs and is idempotent with the observer's pass.
+  const document = makeDocument('C.le.', {withBody: false});
+  loadGuard(document, {expectGlobal: true});
+  const body = document._appendBody();
+  const header = new Element('div', {class: 'sidebar-workspace-header'});
+  const button = new Element('button', {class: 'sidebar-workspace-header__main'});
+  button.setAttribute('aria-label', 'OpenClaw · 工作区菜单');
+  header.appendChild(button);
+  body.appendChild(header);
+
+  document._fireDomContentLoaded();
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单');
+  await deliver();
+  assert.equal(button.getAttribute('aria-label'), 'C.le. · 工作区菜单', 'no double rewrite / no churn');
+});
+
