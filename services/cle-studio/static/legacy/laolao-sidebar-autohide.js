@@ -15,9 +15,10 @@
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const splitPane = () => root.getAttribute('data-laolao-workspace-split') === '1'
     || root.getAttribute('data-laolao-workspace-dock') === '1'
-    || root.getAttribute('data-laolao-browser-workspace') === '1'
-    || root.getAttribute('data-pinkie-wb') === 'on';
-  const desktop = () => innerWidth > 850 && !splitPane() && !!document.querySelector('.shell--chat');
+    || root.getAttribute('data-laolao-browser-workspace') === '1';
+  // the workbench has its own file tree on the left: the rooms sidebar always rides as a card there
+  const workbench = () => root.getAttribute('data-pinkie-wb') === 'on' && !!document.querySelector('.shell--chat');
+  const desktop = () => innerWidth > 850 && !splitPane() && !workbench() && !!document.querySelector('.shell--chat');
   const sidebar = () => document.querySelector('.shell--chat .sidebar');
   const COLLAPSE = ['收起侧边栏', '折叠侧边栏', '展开侧边栏', '固定侧边栏', 'Collapse sidebar', 'Expand sidebar'];
   const isToggle = (el) => !!el?.closest?.('.sidebar button') && COLLAPSE.includes(el.closest('button').getAttribute('data-cle-label') || el.closest('button').getAttribute('aria-label') || '');
@@ -54,7 +55,7 @@
 
   let edge = null;
   const paint = () => {
-    const active = desktop() && auto;
+    const active = (desktop() && auto) || workbench();
     setAttr('data-cle-sb-auto', active);
     setAttr('data-cle-sb-peek', active && peek);
     const bar = sidebar();
@@ -77,7 +78,7 @@
     if (!active && edge) { edge.remove(); edge = null; }
   };
   const reveal = () => {
-    if (!desktop() || !auto || peek) return;
+    if (!((desktop() && auto) || workbench()) || peek) return;
     clearTimeout(closeTimer);
     peek = true;
     paint();
@@ -109,7 +110,9 @@
 
   /* 原生按钮：固定时 = 收起，呼出时 = 固定 */
   document.addEventListener('click', (event) => {
-    if (internal || !desktop() || !isToggle(event.target)) return;
+    if (internal || !isToggle(event.target)) return;
+    if (workbench()) { event.preventDefault(); event.stopImmediatePropagation(); if (peek) conceal(); return; }
+    if (!desktop()) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (auto) pin(true); else pin(false);
   }, true);
@@ -125,7 +128,7 @@
   /* 把手：鼠标越靠近越长越亮 */
   let nearFrame = 0, nearX = 999;
   document.addEventListener('pointermove', (event) => {
-    if (!edge || !auto || peek) return;
+    if (!edge || peek) return;
     nearX = event.clientX;
     if (nearFrame) return;
     nearFrame = requestAnimationFrame(() => {
