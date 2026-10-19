@@ -642,3 +642,96 @@ A 装旧 host 后 classic 捕获 `gwRequest`，B 接管新 host：
 
 `main.js` 接线仍归主控；4 处直接读 `window.CLE?.host` 的点接上 `makeHostFacade()` 后自动安全。
 未动 `data-cle-active` 静态皮肤、艺术、GUI/live/权限。
+
+---
+
+## 工作台 gaze 滥用的修复（Claude 主控交接后第一轮）
+
+主控在 19789 WebKit 实拍（营造模式日间 1440×900）看到 gaze（#2A63E8）被当成普通图标色
+铺满工作台。品牌规则是：**gaze 是唯一强调色，只给「此刻正在被看/正在发生」的一处用**
+（焦点、运行中、选中指示的一条细线），不能当通用图标色，更不能当实心底。
+
+### 根因
+
+`src/styles/bridge.css` 里 `html[data-cle] .pk-wb` 把四个变量一起指向了 gaze：
+
+```css
+--wb-accent: var(--cle-gaze);   /* 活动栏选中底、主按钮、徽标… */
+--wb-cle: var(--cle-gaze);      /* 图标、标签、胶囊… */
+--wb-hover: var(--cle-gaze-soft);
+--wb-sig: var(--cle-gaze);
+```
+
+于是所有通过 `--wb-accent` / `--wb-cle` 取色的规则（活动栏选中实底 18%、状态栏胶囊 14%、
+「未打开」标签 12%、五个操作图标、扩展图标、徽标…）整片变蓝。
+
+### 改法：重新分配 token，只留一条线
+
+`bridge.css`：
+
+```css
+--wb-accent: var(--cle-ink-2);   /* 原来 = gaze */
+--wb-cle:    var(--cle-ink-3);   /* 原来 = gaze */
+--wb-hover:  color-mix(in srgb, var(--cle-ink) 6%, transparent);
+--wb-sig:    var(--cle-gaze);    /* 唯一保留 */
+```
+
+`laolao-workbench.css` 里 `--wb-sig` 也不再由 accent 派生，改为直连 gaze。
+
+### 主控点名的四处
+
+| 位置 | 原状 | 现在 |
+|---|---|---|
+| 「文件」活动栏选中 | accent 18% 实底 + 蓝色图标 | 墨字 + 7% 中性底 + 左侧 2px gaze 细线 |
+| 5 个操作图标 | `--wb-accent` 染色 | `--wb-mute`（悬停 `--wb-text`） |
+| 「未打开」标签 | cle 字 + 12% 实底胶囊 | 无底 + 1px 墨色描边 + ink-2 字 |
+| 状态栏「营造模式」 | accent 14% 实底胶囊 | 无底小字（ink-2） |
+| 欢迎区光斑 | radial-gradient + blur(4px) + 呼吸动画 | `content: none`，不换装饰 |
+
+### 连带处理（同样属于"蓝色当通用色"）
+
+活动栏选中指示线、徽标数字底、软徽标、快速项选中、菜单 hover、toast 动作按钮、
+搜索命中高亮、行内重命名输入框、diff 数字、编辑器闪烁、问题清单 info 级、空态图标、
+扩展 chip / 筛选 / 安装按钮、路由 chip 与首行高亮、底栏工具 is-on、分隔线渐变、
+toast 左侧色条、终端 `--accent`。
+
+保留 gaze 的两处（符合规则）：
+- 选中页签/面板页签底部那条 1px 指示线；
+- 底部状态栏「运行中」的脉冲点，以及进度条的细线。
+
+### 第 2 条：侧栏底部名字被挤成 30px
+
+`src/styles/shell.css` 新增：名字槽 `min-width: 8em`（约等于 8 个汉字宽），
+按钮容器 `flex: 0 0 auto` 且 `overflow-x: auto`（窄时按钮先横向收，不压缩名字）；
+`.sidebar-footer-icon` 强制 `background: transparent`，去掉灰色实底贴片。
+
+**顺带发现的真缺陷**：那些按钮只画 SVG，字符图标（⊞）会继承纯黑，
+夜间在深底上只有 **1.15:1**，等于看不见。已显式给 `color: var(--cle-ink-2)`。
+
+### 第 3 条：其它面板自查
+
+| 面板 | 是否有 iOS 蓝 / 实底胶囊 | 处理 |
+|---|---|---|
+| 搜索面板 | 无 iOS 蓝；命中高亮原为 cle 30% 蓝底 | 改中性 12% 底 |
+| Git 面板 | 无 iOS 蓝；M/U/D 用 `--wb-git-*` 语义色 | **不动**（状态语义色，非品牌强调） |
+| 扩展页签 | chip/筛选/安装按钮原为 accent 实底 | 改描边或墨底纸字 |
+| 底部状态栏 | 「营造模式」实底胶囊 | 改无底小字 |
+| 终端 | `--accent` 跟随 `--wb-accent`（原为蓝） | 改跟 `--wb-text` |
+| 计数徽标 | accent 10~24% 底 | 改墨色系 |
+| 分隔/吸附条 | accent→cle 渐变 | 改单色 `--wb-line` |
+
+### 验证（`tests/cle-workbench-gaze.test.mjs`）
+
+- 静态：`--wb-accent`/`--wb-cle` 不得指向 gaze、`--wb-sig` 必须保留 gaze、
+  光斑伪元素必须是 `content: none` 且不得用别的渐变/blur 替代。
+- 真实计算样式（无头 Chrome 1440×900，日/夜两段）：被点名的元素不得出现
+  `BG=GAZE` / `FG=GAZE`，光斑不得复活为渐变，名字槽 `≥ 8em`，三个底栏按钮底
+  必须是 `rgba(0,0,0,0)`。
+
+实测数值：名字槽 186.9px / 13px ≈ **14.4em**；「未打开」与底栏按钮日间 6.48:1、
+夜间 6.74:1；活动栏选中 17.05 / 14.92。
+
+### 说明
+
+我是 text-only，以上都是计算样式与几何数值，**不代表观感通过**；
+日夜两套的实际观感仍需主控在 19789 实拍确认。

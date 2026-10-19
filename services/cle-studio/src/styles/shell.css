@@ -46,6 +46,40 @@ html[data-cle] .sidebar-sessions > :first-child {
 }
 html[data-cle] .sidebar-footer-bar { border-top: 1px solid var(--cle-line); background: transparent; }
 
+/* ── 侧栏底部：名字必须完整可读，按钮不许挤掉它 ────────────────────────────
+   现象：右侧几个图标（空间入口 / 演示 / 魔杖）抢宽，名字被压到约 30px，
+   只剩「C.l」并带渐隐。这里给名字一个保底宽度，窄的时候先收按钮、再收名字。
+   按钮本身不要灰色实底方块（原生的 footer-icon 有时带 background），统一透明。 */
+html[data-cle] .sidebar-footer-actions {
+  flex: 0 0 auto;
+  gap: 2px;
+  min-width: 0;
+}
+/* 任何落在这排里的图标按钮：无实底，只有 hover 时的极淡中性底 */
+html[data-cle] :is(.sidebar-footer-actions, .sidebar-footer-bar) .sidebar-footer-icon {
+  background: transparent !important;
+  border-radius: 8px;
+  /* 必须显式给字色：原生的按钮只画 SVG，字符图标（⊞ 之类）会拿到继承的纯黑，
+     夜间在深底上只有 1.15:1，等于看不见。 */
+  color: var(--cle-ink-2);
+}
+html[data-cle] :is(.sidebar-footer-actions, .sidebar-footer-bar) .sidebar-footer-icon:hover {
+  background: color-mix(in srgb, var(--cle-ink) 6%, transparent) !important;
+  color: var(--cle-ink);
+}
+/* 名字槽：保底 8 个汉字宽（约 8em 于 11.5px ≈ 92px），不够时才省略 */
+html[data-cle] :is(.sidebar-workspace-header__name, .sidebar-agent-card__name-text, .sidebar-footer-bar .hover-marquee__text) {
+  min-width: 8em;
+  flex: 1 1 auto;
+}
+/* 窄侧栏：按钮先收成一条，不跟名字抢 */
+@media (max-width: 1180px) {
+  html[data-cle] .sidebar-footer-actions { gap: 0; }
+}
+/* 极窄仍要保证名字不被挤没：允许按钮横向滚动而不是压缩名字 */
+html[data-cle] .sidebar-footer-actions { overflow-x: auto; scrollbar-width: none; }
+html[data-cle] .sidebar-footer-actions::-webkit-scrollbar { display: none; }
+
 /* ---------- pane header ---------- */
 html[data-cle] .chat-pane__header { background: transparent; border-bottom: 0; }
 html[data-cle] .chat-pane__session-title-text { font: 500 15px/1.2 var(--cle-serif); letter-spacing: .01em; color: var(--cle-ink); }
