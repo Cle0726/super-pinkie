@@ -40,6 +40,9 @@ export function mountRecovery() {}
 export function mountStudy() {}
 export function mountSplash() {}
 export function mountLineDecor() {}
+export function mountBackdrop() {}
+export function mountGazeFx() {}
+export function mountKeys() {}
 `;
 async function loadMain(revision) {
   const result = await build({entryPoints: [main], bundle: true, write: false, format: 'esm',
