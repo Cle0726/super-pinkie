@@ -409,3 +409,66 @@ textarea 因此只剩 544px；同时 actions 落在 313.8px 的列里且 `justif
 ## 七、Commit
 
 见本分支最后一次提交（`repair(layout): …`）。报告文件本身随该提交入库。
+
+## 十、第五轮补充修复：Study生命周期闭合、麦克风展开避让与退役原生外壳锚定
+
+### 10.1 Study 模块异步生命周期闭合 (`src/learning/study.js`)
+
+**缺陷现象与根因**：
+- 19789 真实停网关断线时，已挂好的学习条先被 abort 移除，随后又弹出一个新的「正在读取学习进度…」，旁边暴露内部错误：`暂时读不到学习进度：This plugin UI activation has ended. Use the current activation.`。
+- 根因：`schedule()` 的 `requestAnimationFrame` 未记录 handle 句柄；abort 清空 `panels` 之后，已经在浏览器事件循环中排队的帧依然会执行 `sync()` 重建 panel；且 `load()` 的 catch 无条件调用 `say()`，未校验 signal 与节点存活状态，将宿主内部 activation 结束错误暴露在用户界面上。
+
+**技术改动**：
+1. **内部生命周期哨兵分类**：定义 `isActivationEnded = (err) => /activation has ended|use the current activation/i.test(...)`，明确区分宿主内部 activation 结束与真实业务故障。
+2. **请求守卫与错误分类**：引入 `reportable(error) = !isRetired() && !isActivationEnded(error) && !error?.retired`。退役后（`signal.aborted` 或 `retired = true`）发起的 RPC 直接拒绝 `RetiredError`，绝不发往断线宿主。
+3. **帧与定时器彻底清理**：记录 `frame = requestAnimationFrame(...)`，在 `retire()` 时主动调用 `cancelAnimationFrame(frame)` 并清理所有 `setInterval`。
+4. **状态写入与渲染守卫**：`createPanel`、`mount`、`load`、`paint`、`clock`、`say`、`sync` 全面加入 `alive() = !dead && !isRetired()` 校验；在途的 load/约定查询着陆时若模块已退役直接跳过，严禁写入退役 DOM；真实网络/服务端错误在活动态如实展示，杜绝 blanket 吞错。
+5. **副作用安全防护**：专注计时（`pinkie.learning.focus.start/stop`）与学习约定保存（`pinkie.learning.pact.set` / `syncReminders`）在退役后不汇报假成功，不自动重发。
+
+### 10.2 麦克风输入参数展开态正文避让 (`src/composer/composer.css`)
+
+**缺陷现象与根因**：
+- 1280×720 单栏 learning composer 864px 下，多行草稿发送按钮 focus 后 Shift+Tab 进入原生「麦克风输入」参数按钮。原生设计平时 width 为 0，focus/hover 展开至 28px。展开后 actions 宽 81→109px，左缘至 x1092；textarea 右缘仍为 x1109，导致 17px 正文区被参数按钮遮挡。
+- 根因：`composer.css` 为两颗按钮硬编码了 `padding-right: 92px`，没有覆盖原生 28px 展开态。
+
+**技术改动**：
+1. **稳态保持**：稳态下维持 `padding: 13px 92px 13px 20px`（两颗 34px 按钮 + 4px 间隙 + 9px 边距 + 11px 余量）。
+2. **展开态自适应避让**：借助原生 `:focus-visible`、`:hover`、`[open]` 以及 `aria-expanded="true"` 状态：
+   ```css
+   html[data-cle] .cle-composer .agent-chat__input:is(
+     :has(.chat-talk-control:has(:focus-visible)),
+     :has(.chat-talk-control:hover),
+     :has(.chat-talk-input-picker[open]),
+     :has(.chat-talk-input-picker[aria-expanded="true"]),
+     :has(.chat-talk-input-picker__trigger:focus-visible),
+     :has(.chat-talk-input-picker__trigger:hover)
+   ) .agent-chat__composer-input-row {
+     padding-right: calc(92px + var(--chat-microphone-picker-width, 28px));
+   }
+   ```
+3. **几何实测对比**：
+   - 稳态：actions 81px，textarea 右缘 x1109，actions 左缘 x1120，净余量 11px。
+   - 展开态：actions 109px，textarea 右缘后撤至 x1081，actions 左缘 x1092，保持 11px 净余量，重叠量由 17px 彻底归零。
+   - 无任何多余空列，平滑过渡（`transition: padding-right var(--cle-t-quick)`）。
+   - 按钮中心点命中率 100%，无任何蒙层覆盖。
+
+### 10.3 离线/退役后原生外壳纯样式锚定 (`src/composer/composer.css`)
+
+**对齐主控契约**：
+- 主控在 19789 部署 `908945e`，确立离线皮肤契约：断线时保留 `document-owned CSS` 和 `html[data-cle]`；活跃实例存在时置 `html[data-cle-active="1"]`，abort 时移除。
+- 当插件 composer replacement 退役后，原生重建自己 composer，`.cle-composer` 容器消失，但外层稳定的 `.agent-chat__composer-shell` 依然存在。
+- 在 `composer.css` 中为 `html[data-cle] .agent-chat__composer-shell .agent-chat__input` 锚定纯样式（单药丸网格布局、864px 正文列、底色边框与字体），使断线时排版不退回原生大矩形，且原生 disabled 状态与断线真实反馈完整保留，不假装在线，不冻结按钮。
+
+### 10.4 验证与测试结果
+
+- **`tests/cle-study-lifecycle.test.cjs`**（新增 6 项，全部通过）：
+  1. 已 abort signal 挂载 zero 分配：无 panels、无 RPC、无定时器、无 rAF。
+  2. 退役时 rAF 取消，排队帧不复活 strip。
+  3. 在途请求遇到 activation-ended 内部错误静默失败，DOM 不暴露错误。
+  4. 真实网络/服务超时错误在活跃态正常渲染到 status notice。
+  5. 专注启动在途遇 abort 不冒充成功、不重发。
+  6. 新 signal 重新挂载，资源全新分配并正常响应。
+- **`tests/cle-layout-computed.test.cjs`**（10 项，全部通过）：
+  - 新增麦克风展开 28px 避让用例：实测 mic 展开至 28px 时 overlap 为 0，textarea 右缘 < actions 左缘，按钮中心点击命中目标。
+  - 新增退役原生外壳用例：移除 `.cle-composer` 后，`.agent-chat__composer-shell` 保持 grid 布局与 864px 宽度，且原生 `:disabled` 行为正常。
+- **全套 layout + study 自动化测试**：41 项测试全部通过（`41 passed, 0 failed`）。

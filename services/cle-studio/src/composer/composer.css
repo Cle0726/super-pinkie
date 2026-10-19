@@ -46,10 +46,25 @@ html[data-cle] .cle-composer .agent-chat__input:focus-within::before {
 }
 html[data-cle] .cle-composer .agent-chat__composer-input-row {
   grid-area: words; min-width: 0;
-  /* 4px gap + the send/voice cluster (two 34px coins + 4px + 9px inset) so the text never runs
-     under the buttons while the row still spans the whole composer */
+  /* Steady state: 4px gap + the send/voice cluster (two 34px coins + 4px + 9px inset + 11px text clearance = 92px)
+     so the text never runs under the buttons while the row still spans the whole composer */
   padding: 13px 92px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center;
+  transition: padding-right var(--cle-t-quick, 0.15s) ease;
 }
+/* Expanded state: native microphone picker parameter button expands from 0 to 28px on focus-visible,
+   hover, or when open. Yield the exact 28px (120px total) so text never runs under the trigger,
+   preserving 100% button center hit-target and zero text overlap without hardcoding an empty column. */
+html[data-cle] .cle-composer .agent-chat__input:is(
+  :has(.chat-talk-control:has(:focus-visible)),
+  :has(.chat-talk-control:hover),
+  :has(.chat-talk-input-picker[open]),
+  :has(.chat-talk-input-picker[aria-expanded="true"]),
+  :has(.chat-talk-input-picker__trigger:focus-visible),
+  :has(.chat-talk-input-picker__trigger:hover)
+) .agent-chat__composer-input-row {
+  padding-right: calc(92px + var(--chat-microphone-picker-width, 28px));
+}
+
 html[data-cle] .cle-composer .agent-chat__composer-combobox { min-width: 0; }
 html[data-cle] .cle-composer .agent-chat__composer-combobox textarea {
   font: 400 15.5px/1.6 var(--cle-sans); color: var(--cle-ink); caret-color: var(--cle-gaze);
@@ -199,7 +214,7 @@ html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
      width where the low-priority tools do not fit (composer.js measures real occupancy); this
      narrow-pane rule is the floor for the first paint, before any width has been measured. */
   html[data-cle] .cle-composer.has-low-tools .cle-tools-more { display: inline-grid; }
-  html[data-cle] .cle-composer .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
+  html[data-cle] .cle-composer.is-crowded .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
   /* the essentials stay, but two panes at ~508px share the row: compact them instead of wrapping
      the whole lead into a second block of empty space */
   html[data-cle] .cle-composer .agent-chat__composer-lead :is(.laolao-learning-toggle, .laolao-learning-tools__trigger) {
@@ -212,4 +227,54 @@ html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
 }
 @container cle-pane (max-width: 520px) {
   html[data-cle] .cle-composer .chat-controls__inline-select-label { max-width: 11ch; }
+}
+
+/* ---------- 离线/退役后原生外壳兜底 (html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell) ----------
+   当插件 composer replacement 退役后，原生重建自己 composer，.cle-composer 容器消失，
+   由外层稳定的 .agent-chat__composer-shell 承载原生输入结构。保留单药丸版式、864px 正文列、
+   墨字纸底与视觉边距，保留原生 disabled 状态与断线真实反馈，不假装在线，不冻结按钮。 */
+html[data-cle] .agent-chat__composer-shell .agent-chat__input {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: "words words" "tools utils";
+  align-items: center;
+  column-gap: 6px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  isolation: isolate;
+  min-width: 0;
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__input::before {
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: stretch; z-index: -1;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-composer);
+  box-shadow: var(--cle-shadow);
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-input-row {
+  grid-area: words; min-width: 0;
+  padding: 13px 92px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center;
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-combobox { min-width: 0; }
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-combobox textarea {
+  font: 400 15.5px/1.6 var(--cle-sans); color: var(--cle-ink); caret-color: var(--cle-gaze);
+  min-height: 24px; padding: 0; background: transparent;
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-footer,
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-trail { display: contents !important; }
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-actions {
+  grid-area: words; justify-self: end; align-self: center;
+  padding-right: 9px; display: flex; gap: 4px;
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-lead {
+  grid-area: tools; padding: 8px 0 0 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  min-width: 0; max-width: 100%;
+}
+html[data-cle] .agent-chat__composer-shell .agent-chat__composer-controls {
+  grid-area: utils; padding: 8px 10px 0 0;
+  justify-self: end; align-self: center; min-width: 0;
 }
