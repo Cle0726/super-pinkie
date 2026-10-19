@@ -2750,21 +2750,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// pink card. Used by the test host and by the production fallback when the
     /// bundled loading page is missing, so neither can fall back to old art.
     private var startupPlaceholderHTML: String {
+        // C.le. opens straight into its opening: until the first page draws, the window is the same
+        // ink the opening starts from, with nothing on it (no mark, no progress bar, no name).
         #"""
         <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
-        <style>
-          \#(CleBrowserPalette.cssVariables)
-          *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#050608}
-          body{display:grid;place-items:center;color:#cfd8e6;font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
-          main{display:grid;justify-items:center;gap:16px;opacity:0;animation:wake .9s ease 1.2s forwards}
-          .bar{width:120px;height:1px;background:#ffffff12;overflow:hidden;position:relative}
-          .bar::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#7cc4ff,transparent);animation:prep 1.8s cubic-bezier(.45,0,.2,1) infinite}
-          .word{font:500 10px/1 var(--cle-mono,ui-monospace);letter-spacing:.32em;text-transform:uppercase;color:#8aa0b8}
-          @keyframes wake{to{opacity:1}}
-          @keyframes prep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-          @media(prefers-reduced-motion:reduce){.bar::after{animation:none}}
-        </style></head>
-        <body><main><div class="bar"></div><div class="word">Li An</div></main></body></html>
+        <style>html,body{width:100%;height:100%;margin:0;background:#050608}</style></head><body></body></html>
         """#
     }
 
