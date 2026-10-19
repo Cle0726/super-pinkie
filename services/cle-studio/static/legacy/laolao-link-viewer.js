@@ -271,7 +271,7 @@
     .${ENTRY_CLASS}:hover{color:var(--cle-ink,#4f7f8d);background:color-mix(in srgb,var(--cle-ink,#000) 5%,transparent)}
     .${ENTRY_CLASS}:active{transform:scale(.96)}
     .${ENTRY_CLASS}:focus-visible{outline:2px solid var(--cle-gaze,#cf4282);outline-offset:-2px}
-    .${ENTRY_CLASS}[data-native="false"]{opacity:.6}
+    .${ENTRY_CLASS}[data-native="false"]{}
     .laolao-video-workspace-open{align-self:flex-start;border:1px solid var(--cle-line,#e2ddd0);border-radius:8px;padding:5px 10px;background:var(--cle-surface,#fff);color:var(--cle-ink,#15161a);cursor:pointer}
     .laolao-video-workspace-open:hover{color:var(--cle-gaze,#2a63e8)}
     .laolao-link-viewer__mode{flex:0 0 auto;padding:2px 8px;border:1px solid var(--cle-line,#e2ddd0);border-radius:999px;color:var(--cle-ink-3,#8a8a80);font:500 10.5px/1.4 -apple-system,"PingFang SC",sans-serif;white-space:nowrap}
@@ -306,7 +306,7 @@
     button.className = ENTRY_CLASS;
     button.dataset.native = String(isNative());
     // 标题按能力区分：原生工作区 or 页内预览回退。
-    button.title = isNative() ? "打开浏览器工作区" : "页内预览（当前环境无原生浏览器）";
+    button.title = isNative() ? "打开浏览器（浮窗）" : "打开浏览器（与 Li An 共用）";
     button.setAttribute("aria-label", button.title);
     button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"></circle><path d="M3.8 12h16.4M12 3.6c2.3 2.3 3.5 5.1 3.5 8.4S14.3 18.1 12 20.4M12 3.6C9.7 5.9 8.5 8.7 8.5 12s1.2 6.1 3.5 8.4"></path></svg>';
     button.addEventListener("click", (event) => {
@@ -315,8 +315,12 @@
       const bridge = browserBridge();
       // 两侧入口打开同一个原生工作区；页面和登录状态都在那一个
       // WKWebView 里，不因抛 pane 而重建。
-      if (bridge) bridge.postMessage({ action: "open" });
-      else open("https://www.google.com/");
+      if (bridge) { bridge.postMessage({ action: "open" }); return; }
+      // 没有原生浮窗（Safari / 普通浏览器）：打开这一侧的真浏览器面板（与 Li An 共用，能真正打开网页），
+      // 而不是一个多数网站拒绝嵌入的 iframe。面板的原生开关已在页头隐藏，避免两个浏览器键。
+      const host = button.closest(".chat-pane-cache__pane, .chat-split-view__cell") || document;
+      const toggle = host.querySelector(".chat-browser-panel-toggle") || document.querySelector(".chat-browser-panel-toggle");
+      if (toggle) toggle.click(); else open("https://www.google.com/");
     });
     const party = rail.querySelector("#pinkie-party-entry");
     rail.insertBefore(button, party || null);

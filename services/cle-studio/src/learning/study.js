@@ -11,98 +11,190 @@ const action = (label, handler, cls = '') => {
   button.type = 'button'; button.addEventListener('click', handler); return button;
 };
 
-export function mountStudy(host, signal) {
-  const request = (method, params = {}) => host.request(method, params);
-  let today = null, focus = null, loading = false, sheet = null, backFocus = null;
-  let lastLoaded = 0, refreshTimer = 0;
-  const visible = () => document.documentElement.dataset.cleRoom === 'learning';
-  const strip = node('section', 'cle-study');
-  strip.setAttribute('aria-label', '今日学习');
-  const summary = node('div', 'cle-study__summary');
-  const eyebrow = node('span', 'cle-study__eyebrow');
-  eyebrow.innerHTML = '<b>习作</b><em>Étude · 今日</em>';
-  const progress = node('span', 'cle-study__progress', '正在读取学习进度…');
-  const streak = node('span', 'cle-study__streak');
-  const timer = node('span', 'cle-study__timer');
-  const notice = node('div', 'cle-study__notice'); notice.setAttribute('role', 'status');
-  const focusButton = action('专注 25 分钟', async () => {
-    focusButton.disabled = true;
-    try {
-      if (focus) {
-        const result = await request('pinkie.learning.focus.stop', {id: focus.id});
-        focus = null; today = result.today;
-        say(result.minutes ? `这一轮记下了 ${result.minutes} 分钟。` : '未满一分钟，这轮没有增加时长。');
-      } else {
-        const result = await request('pinkie.learning.focus.start', {minutes: 25});
-        focus = result.focus; say('计时开始。先专心做眼前这一小步。');
-      }
-      paint();
-    } catch (error) { say(error.message, true); }
-    finally { focusButton.disabled = false; }
-  });
-  const settings = action('学习约定', () => openSheet());
-  summary.append(eyebrow, progress, streak, timer);
-  const buttons = node('div', 'cle-study__actions'); buttons.append(focusButton, settings);
-  strip.append(summary, buttons, notice);
+// The pane a node belongs to. 双模式 runs two live chat panes; the study bar of each side is
+// its own strip, fed by that side's session, and it disappears with its pane.
+const paneOf = (element) => element?.closest?.('openclaw-chat-pane') || null;
+const paneSession = (pane) => {
+  if (!pane) return '';
+  const direct = pane.sessionKey || pane.dataset?.sessionKey || '';
+  if (direct) return String(direct);
+  try {
+    const owner = JSON.parse(pane.dataset?.mcpAppOwnerKey || 'null');
+    if (Array.isArray(owner) && owner[1]) return String(owner[1]);
+  } catch { /* not an owner-marked pane */ }
+  return String(pane.querySelector?.('openclaw-chat-pane')?.sessionKey || '');
+};
+const isLearning = (sessionKey) => /^agent:learning:/.test(String(sessionKey || ''));
+const panes = () => [...document.querySelectorAll('openclaw-chat-pane.chat-pane-cache__pane')];
 
-  function say(text, error = false) {
-    notice.textContent = text; notice.dataset.error = String(error); notice.hidden = !text;
-  }
-  function clock() {
-    if (!focus) { timer.textContent = ''; return; }
-    const seconds = Math.max(0, Math.floor((Date.now() - focus.start) / 1000));
-    const remaining = Math.max(0, focus.plannedMinutes * 60 - seconds);
-    timer.textContent = remaining > 0 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '本轮到时';
-    timer.setAttribute('aria-label', remaining > 0 ? `专注还剩 ${Math.ceil(remaining / 60)} 分钟` : '本轮专注已到时间，可以结束计时');
-  }
-  function paint() {
-    if (today) {
-      const p = today.progress;
-      // three gauges: what the pact asks for today, and how much of it is real
-      const gauge = (label, value, goal, unit, invert = false) => {
-        const k = invert ? (value ? 0 : 1) : goal ? Math.min(1, value / goal) : 1;
-        const g = node('span', 'cle-study__gauge'); g.dataset.done = String(k >= 1);
-        g.innerHTML = `<span class="cle-study__gauge-label"></span><span class="cle-study__gauge-value"></span><i style="--k:${k.toFixed(3)}"></i>`;
-        g.firstChild.textContent = label; g.children[1].textContent = invert ? `${value} ${unit}` : `${value}/${goal} ${unit}`;
-        return g;
-      };
-      progress.replaceChildren(gauge('专注', p.minutes, today.goals.minutes, '分钟'), gauge('做题', p.questions, today.goals.questions, '道'), gauge('待复习', p.dueReviews, 0, '张', true));
-      progress.setAttribute('aria-label', `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${p.dueReviews} 张待复习`);
-      strip.dataset.complete = String(today.complete);
-      // the streak is a row of blossoms he has kept; seven at most, then a number
-      const n = today.streak.current || 0;
-      streak.replaceChildren(...Array.from({length: Math.min(7, n)}, () => node('i', 'cle-study__bloom')), node('span', '', n ? `连续 ${n} 天` : '今天开个头'));
-      streak.title = today.complete ? '今日已完成' : `连续 ${n} 天`;
-      eyebrow.querySelector('em').textContent = today.complete ? 'Étude · 今日已完成' : 'Étude · 今日';
+// The host retires a plugin activation when the UI reloads or the gateway restarts. Requests made
+// afterwards reject with an internal sentence ("This plugin UI activation has ended. Use the
+// current activation.") that means "this activation is over" — not "your study progress is
+// broken". Treating it as a user-facing failure is what put that sentence in the transcript.
+const ACTIVATION_ENDED = /activation has ended|use the current activation/i;
+export const isActivationEnded = (error) => ACTIVATION_ENDED.test(String(error?.message ?? error ?? ''));
+
+// Thrown by the guarded request so a call that starts after retirement never reaches the host.
+class RetiredError extends Error {
+  constructor() { super('study panel retired'); this.retired = true; }
+}
+
+export function mountStudy(host, signal) {
+  const panels = new Map();      // pane element -> strip controller
+  // A mount that is already aborted must not allocate anything: no observers, no timers, no frame
+  // requests, and no RPC. Returning an empty registry keeps the shape callers expect.
+  if (signal?.aborted) return {panels, get retired() { return true; }};
+
+  let retired = false;
+  let sheet = null, backFocus = null;
+  let frame = 0;
+  const timers = new Set();
+  const isRetired = () => retired || Boolean(signal?.aborted);
+
+  // Every request goes through here: after retirement the host is never called, so a dead panel
+  // cannot keep talking to a dead activation.
+  const request = (method, params = {}) => {
+    if (isRetired()) return Promise.reject(new RetiredError());
+    return host.request(method, params);
+  };
+  // A failure worth showing the user: a real error while this activation is still alive.
+  const reportable = (error) => !isRetired() && !isActivationEnded(error) && !error?.retired;
+
+  function createPanel(pane) {
+    if (isRetired()) return null;
+    let dead = false;
+    let today = null, focus = null, loading = false, lastLoaded = 0, loadSeq = 0;
+    // `alive` gates every write and every request: a disposed panel or a retired activation is
+    // closed. It must NOT test strip.isConnected — the strip is legitimately detached until
+    // mount() places it, and a pane re-render detaches it for a moment.
+    const strip = node('section', 'cle-study');
+    const alive = () => !dead && !isRetired();
+    strip.setAttribute('aria-label', '今日学习');
+    strip.dataset.clePaneSession = paneSession(pane);
+    const summary = node('div', 'cle-study__summary');
+    const eyebrow = node('span', 'cle-study__eyebrow');
+    eyebrow.innerHTML = '<b>习作</b><em>Étude · 今日</em>';
+    const progress = node('span', 'cle-study__progress', '正在读取学习进度…');
+    const streak = node('span', 'cle-study__streak');
+    const timer = node('span', 'cle-study__timer');
+    const notice = node('div', 'cle-study__notice'); notice.setAttribute('role', 'status');
+    const focusButton = action('专注 25 分钟', async () => {
+      if (!alive()) return;
+      focusButton.disabled = true;
+      try {
+        if (focus) {
+          const result = await request('pinkie.learning.focus.stop', {id: focus.id});
+          // the activation may have ended while the focus stop was in flight: never claim a result
+          if (!alive()) return;
+          focus = null; today = result.today;
+          say(result.minutes ? `这一轮记下了 ${result.minutes} 分钟。` : '未满一分钟，这轮没有增加时长。');
+        } else {
+          const result = await request('pinkie.learning.focus.start', {minutes: 25});
+          if (!alive()) return;
+          focus = result.focus; say('计时开始。先专心做眼前这一小步。');
+        }
+        paint();
+      } catch (error) {
+        // a retired activation is not a failure to report, and the action is not retried
+        if (!reportable(error)) return;
+        say(error.message, true);
+      } finally { if (alive()) focusButton.disabled = false; }
+    });
+    const settings = action('学习约定', () => openSheet(paneSession(pane)));
+    summary.append(eyebrow, progress, streak, timer);
+    const buttons = node('div', 'cle-study__actions'); buttons.append(focusButton, settings);
+    strip.append(summary, buttons, notice);
+
+    function say(text, error = false) {
+      if (!alive()) return;
+      notice.textContent = text; notice.dataset.error = String(error); notice.hidden = !text;
     }
-    focusButton.textContent = focus ? '结束本轮' : '专注 25 分钟'; clock();
+    function clock() {
+      if (!alive()) return;
+      if (!focus) { timer.textContent = ''; return; }
+      const seconds = Math.max(0, Math.floor((Date.now() - focus.start) / 1000));
+      const remaining = Math.max(0, focus.plannedMinutes * 60 - seconds);
+      timer.textContent = remaining > 0 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '本轮到时';
+      timer.setAttribute('aria-label', remaining > 0 ? `专注还剩 ${Math.ceil(remaining / 60)} 分钟` : '本轮专注已到时间，可以结束计时');
+    }
+    function paint() {
+      if (!alive()) return;
+      if (today) {
+        const p = today.progress;
+        // three gauges: what the pact asks for today, and how much of it is real
+        const gauge = (label, value, goal, unit, invert = false) => {
+          const k = invert ? (value ? 0 : 1) : goal ? Math.min(1, value / goal) : 1;
+          const g = node('span', 'cle-study__gauge'); g.dataset.done = String(k >= 1);
+          g.innerHTML = `<span class="cle-study__gauge-label"></span><span class="cle-study__gauge-value"></span><i style="--k:${k.toFixed(3)}"></i>`;
+          g.firstChild.textContent = label; g.children[1].textContent = invert ? `${value} ${unit}` : `${value}/${goal} ${unit}`;
+          return g;
+        };
+        progress.replaceChildren(gauge('专注', p.minutes, today.goals.minutes, '分钟'), gauge('做题', p.questions, today.goals.questions, '道'), gauge('待复习', p.dueReviews, 0, '张', true));
+        progress.setAttribute('aria-label', `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${p.dueReviews} 张待复习`);
+        strip.dataset.complete = String(today.complete);
+        // the streak is a row of blossoms he has kept; seven at most, then a number
+        const n = today.streak.current || 0;
+        streak.replaceChildren(...Array.from({length: Math.min(7, n)}, () => node('i', 'cle-study__bloom')), node('span', '', n ? `连续 ${n} 天` : '今天开个头'));
+        streak.title = today.complete ? '今日已完成' : `连续 ${n} 天`;
+        eyebrow.querySelector('em').textContent = today.complete ? 'Étude · 今日已完成' : 'Étude · 今日';
+      }
+      focusButton.textContent = focus ? '结束本轮' : '专注 25 分钟'; clock();
+    }
+    async function load(force = false) {
+      if (!alive() || loading || (!force && Date.now() - lastLoaded < 15000)) return;
+      loading = true;
+      const seq = ++loadSeq;
+      try {
+        const [day, status] = await Promise.all([request('pinkie.learning.today'), request('pinkie.learning.focus.status')]);
+        // an in-flight answer that lands after retirement must not write a retired strip
+        if (!alive() || seq !== loadSeq) return;
+        today = day; focus = status.active; lastLoaded = Date.now(); paint();
+      } catch (error) {
+        // the activation-ended sentence is lifecycle noise, not progress trouble; a real error while
+        // this activation is alive is still surfaced
+        if (!reportable(error)) return;
+        say(`暂时读不到学习进度：${error.message}`, true);
+      } finally { loading = false; }
+    }
+    function mount() {
+      if (!alive()) return;
+      const learning = isLearning(paneSession(pane));
+      strip.hidden = !learning;
+      if (!learning) { closeSheet(); return; }
+      const root = pane.querySelector('.chat-main') || pane;
+      if (root && strip.parentElement !== root) root.prepend(strip);
+      load();
+    }
+    return {
+      element: strip,
+      mount,
+      load,
+      paint,
+      clock: () => { if (!isRetired() && !document.hidden) clock(); },
+      dispose() {
+        dead = true;
+        strip.remove();
+        if (sheet?.dataset?.clePaneSession === strip.dataset.clePaneSession) closeSheet();
+      },
+      get isDead() { return dead; },
+      get sessionKey() { return paneSession(pane); },
+    };
   }
-  async function load(force = false) {
-    if (loading || !visible() || (!force && Date.now() - lastLoaded < 15000)) return;
-    loading = true;
-    try {
-      const [day, status] = await Promise.all([request('pinkie.learning.today'), request('pinkie.learning.focus.status')]);
-      if (signal.aborted) return;
-      today = day; focus = status.active; lastLoaded = Date.now(); paint();
-    } catch (error) { say(`暂时读不到学习进度：${error.message}`, true); }
-    finally { loading = false; }
-  }
-  function mount() {
-    strip.hidden = !visible();
-    if (!visible()) { closeSheet(); return; }
-    const root = document.querySelector('.chat-pane-cache__pane--active .chat-main') || document.querySelector('.chat-main');
-    if (root && strip.parentElement !== root) root.prepend(strip);
-    load();
-  }
+
   function closeSheet() {
     if (!sheet) return;
-    sheet?.remove(); sheet = null;
+    const current = sheet; sheet = null;
+    current.remove();
     if (backFocus?.isConnected) backFocus.focus({preventScroll: true});
+    backFocus = null;
   }
-  async function openSheet() {
-    if (sheet || !visible()) return;
+  async function openSheet(ownerSession) {
+    if (sheet || isRetired()) return;
     backFocus = document.activeElement;
     const current = node('aside', 'cle-study-sheet'); sheet = current;
+    // the dialog is appended below, so liveness is "still the current sheet and not retired"
+    const sheetAlive = () => sheet === current && !isRetired();
+    current.dataset.clePaneSession = ownerSession || '';
     current.setAttribute('role', 'dialog'); current.setAttribute('aria-modal', 'false');
     current.setAttribute('aria-label', '学习约定');
     const header = node('header', 'cle-study-sheet__header');
@@ -111,14 +203,20 @@ export function mountStudy(host, signal) {
     const status = node('p', 'cle-study-sheet__status', '正在读取…'); status.setAttribute('role', 'status');
     current.append(header, status); document.body.append(current);
     current.querySelector('button').focus();
+    const fail = (error) => {
+      if (!sheetAlive()) return;
+      // never render the host's internal activation sentence into the dialog
+      if (!reportable(error)) { closeSheet(); return; }
+      status.textContent = error.message; status.dataset.error = 'true';
+    };
     try {
       const [day, history, receivers, schedules] = await Promise.all([
         request('pinkie.learning.today'), request('pinkie.learning.history', {days: 28}),
         request('pinkie.cron.targets').catch(() => ({targets: []})),
         request('cron.list', {includeDisabled: true}).catch(() => ({jobs: []})),
       ]);
-      if (sheet !== current || signal.aborted) return;
-      today = day; paint();
+      if (!sheetAlive()) return;
+      for (const panel of panels.values()) { panel.paint(); }
       const pact = day.pact;
       status.textContent = `${day.date} · ${pact.timezone}。今天的进度会自动记下来。`;
       const historyRow = node('div', 'cle-study-sheet__history'); historyRow.setAttribute('aria-label', '最近28天学习记录');
@@ -160,7 +258,10 @@ export function mountStudy(host, signal) {
       if (!targets.length && pact.channel.kind === 'none') form.append(node('p', 'cle-study-sheet__hint', '连接一个已有聊天后，就可以把学习提醒发过去。'));
       const save = node('button', 'cle-study__button cle-study__button--primary', '保存学习约定'); save.type = 'submit'; form.append(save);
       form.addEventListener('submit', async event => {
-        event.preventDefault(); save.disabled = true;
+        event.preventDefault();
+        // a retired panel must not repeat a side effect: no write, no reminder sync, no retry
+        if (!sheetAlive() || save.disabled) return;
+        save.disabled = true;
         const selected = targets.find(item => `${item.channel}|${item.to}` === target.value);
         const split = target.value.indexOf('|');
         const channel = split >= 0 ? {kind: target.value.slice(0, split), to: target.value.slice(split + 1)} : {kind: 'none', to: null};
@@ -170,31 +271,102 @@ export function mountStudy(host, signal) {
             intensity: fields.intensity.value, exam: {date: fields.exam.value || null}, timezone: fields.timezone.value.trim(),
             reminders: {morning: fields.morning.value, evening: fields.evening.value, lastCall: fields.lastCall.value}, channel,
           }});
+          if (!sheetAlive()) return;
           try { await syncReminders(request, updated, enable.checked, selected || {}); }
-          catch (error) { throw new Error(`学习目标已保存，提醒尚未同步：${error.message}`); }
+          catch (error) {
+            // half-applied: the pact saved, the reminders did not. Say so only while alive.
+            if (!sheetAlive()) return;
+            if (!reportable(error)) { closeSheet(); return; }
+            throw new Error(`学习目标已保存，提醒尚未同步：${error.message}`);
+          }
+          if (!sheetAlive()) return;
           status.textContent = enable.checked ? '已保存。到点会按当天的实际进度提醒你。' : '已保存学习约定，定时提醒已关闭。';
-          status.dataset.error = 'false'; await load(true);
-        } catch (error) { status.textContent = error.message; status.dataset.error = 'true'; }
-        finally { save.disabled = false; }
+          status.dataset.error = 'false';
+          for (const panel of panels.values()) await panel.load(true);
+        } catch (error) {
+          if (!sheetAlive()) return;
+          if (!reportable(error)) { closeSheet(); return; }
+          status.textContent = error.message; status.dataset.error = 'true';
+        } finally { if (sheetAlive()) save.disabled = false; }
       });
       current.append(form);
-    } catch (error) { if (sheet === current) { status.textContent = error.message; status.dataset.error = 'true'; } }
+    } catch (error) { fail(error); }
   }
 
-  const observer = new MutationObserver(mount);
+  // keep one strip per learning pane; panes that leave are disposed with their strip
+  function sync() {
+    if (isRetired()) return;
+    const live = new Set(panes());
+    for (const [pane, panel] of panels) {
+      if (!live.has(pane) || !pane.isConnected) { panel.dispose(); panels.delete(pane); }
+    }
+    for (const pane of live) {
+      let panel = panels.get(pane);
+      if (!panel || panel.isDead) { panel = createPanel(pane); if (!panel) return; panels.set(pane, panel); }
+      panel.mount();
+    }
+    if (!live.size) {
+      // first paint before the native panes mount: one page-scoped strip, removed on dispose
+      if (!panels.has(document.body)) {
+        const panel = createPanel(document.body);
+        if (!panel) return;
+        panel.mount();
+        // body scope: the strip is attached to the active chat main if one exists
+        const root = document.querySelector('.chat-pane-cache__pane--active .chat-main') || document.querySelector('.chat-main');
+        if (root && panel.element.parentElement !== root) root.prepend(panel.element);
+        panel.element.hidden = !(document.documentElement.dataset.cleRoom === 'learning');
+        panels.set(document.body, panel);
+      }
+    }
+  }
+
+  let queued = false;
+  const schedule = () => {
+    // after retirement nothing may be scheduled again — a frame queued before the abort is what
+    // recreated the strip behind the removed one
+    if (queued || isRetired()) return;
+    queued = true;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      queued = false;
+      if (isRetired()) return;
+      sync();
+    });
+  };
+  const observer = new MutationObserver(schedule);
   observer.observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-room']});
-  const unsubscribe = host.subscribe?.(mount);
-  const roomMount = new MutationObserver(() => { if (visible() && !strip.isConnected) mount(); });
-  roomMount.observe(document.body, {childList: true, subtree: true});
-  const clockTimer = setInterval(() => { if (visible() && !document.hidden) clock(); }, 1000);
-  refreshTimer = setInterval(() => { if (!document.hidden) load(); }, 20000);
+  const tree = new MutationObserver(schedule);
+  tree.observe(document.body, {childList: true, subtree: true});
+  const unsubscribe = host.subscribe?.(schedule);
+  const clockTimer = setInterval(() => {
+    if (isRetired() || document.hidden) return;
+    for (const panel of panels.values()) panel.clock();
+  }, 1000);
+  const refreshTimer = setInterval(() => {
+    if (isRetired() || document.hidden) return;
+    for (const panel of panels.values()) panel.load();
+  }, 20000);
+  timers.add(clockTimer); timers.add(refreshTimer);
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && sheet) { event.stopPropagation(); closeSheet(); } }, {signal});
   const offEvent = host.onEvent('chat', payload => {
-    if (String(payload?.sessionKey || '').startsWith('agent:learning:') && ['final', 'aborted', 'error'].includes(payload.state)) load(true);
+    if (isRetired()) return;
+    if (String(payload?.sessionKey || '').startsWith('agent:learning:') && ['final', 'aborted', 'error'].includes(payload.state)) {
+      for (const panel of panels.values()) panel.load(true);
+    }
   });
-  mount();
-  signal.addEventListener('abort', () => {
-    observer.disconnect(); roomMount.disconnect(); unsubscribe?.(); offEvent?.();
-    clearInterval(clockTimer); clearInterval(refreshTimer); strip.remove(); closeSheet();
-  }, {once: true});
+  sync();
+  const retire = () => {
+    if (retired) return;
+    retired = true;
+    observer.disconnect(); tree.disconnect(); unsubscribe?.(); offEvent?.();
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    queued = false;
+    for (const timer of timers) clearInterval(timer);
+    timers.clear();
+    for (const panel of panels.values()) panel.dispose();
+    panels.clear();
+    closeSheet();
+  };
+  signal?.addEventListener('abort', retire, {once: true});
+  return {panels, get retired() { return isRetired(); }, retire};
 }

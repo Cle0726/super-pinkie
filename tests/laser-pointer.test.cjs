@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
-const source = read('ui/injections/laolao-laser-pointer.js');
+const source = read(process.env.CLE_TOOLBOX_SOURCE || 'ui/injections/laolao-laser-pointer.js');
 
 test('presentation toolbox is deployed by both installers at the same version', () => {
   const mac = read('installer/macos/apply-theme.sh');

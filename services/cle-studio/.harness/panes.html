@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>C.le. dual-pane behaviour</title>
+<style>
+  :root { --cle-ink:#15161A; --cle-ink-2:#5C5A57; --cle-ink-3:#9A958B; --cle-paper:#F4EFE4;
+          --cle-gold:#A9842F; --cle-gaze:#2A63E8; --cle-serif: ui-serif, serif; --cle-mono: ui-monospace, monospace;
+          --cle-ease: cubic-bezier(.2,.7,0,1); --cle-line: rgba(20,18,15,.1); --cle-surface:#FBF8F1; }
+  body { margin:0; font-family: system-ui; background: var(--cle-paper); display: flex; }
+  .chat-pane-cache__pane { container: cle-pane / inline-size; width: 460px; padding: 12px; }
+  .chat-thread-inner { display:flex; flex-direction:column; gap:6px; }
+  .chat-group { border-bottom: 1px dashed var(--cle-line); padding: 4px 0; }
+  .chat-working-indicator { min-height: 26px; display:inline-flex; align-items:center; }
+  #log { position: fixed; right: 0; bottom: 0; width: 380px; height: 300px; overflow:auto; font: 11px monospace; background:#fff; }
+</style>
+<link rel="stylesheet" href="/effects.css">
+</head>
+<body>
+<script>document.documentElement.dataset.cle = '0.1.0';</script>
+
+<div class="chat-pane-cache__pane chat-pane-cache__pane--visible chat-pane-cache__pane--active"
+     data-mcp-app-owner-key='["owner","agent:main:main"]'>
+  <div class="chat-thread-inner">
+    <div class="chat-group assistant chat-group--error" data-chat-row-key="old-error">
+      <div class="chat-group-messages">上一轮失败了</div>
+    </div>
+  </div>
+</div>
+
+<div class="chat-pane-cache__pane chat-pane-cache__pane--visible"
+     data-mcp-app-owner-key='["owner","agent:project:main"]'>
+  <div class="chat-thread-inner"></div>
+</div>
+
+<pre id="log"></pre>
+
+<script type="module">
+const out = [];
+globalThis.__cleTrace = [];
+const log = (...a) => { out.push(a.join(' ')); document.getElementById('log').textContent = out.join('\n'); };
+const ok = (cond, label) => log((cond ? 'PASS ' : 'FAIL ') + label);
+
+const [leftPane, rightPane] = document.querySelectorAll('.chat-pane-cache__pane');
+const leftInner = leftPane.querySelector('.chat-thread-inner');
+const rightInner = rightPane.querySelector('.chat-thread-inner');
+
+const addIndicator = (pane) => {
+  const ind = document.createElement('div');
+  ind.className = 'chat-working-indicator';
+  ind.innerHTML = '<span class="native">working…</span>';
+  pane.querySelector('.chat-thread-inner').append(ind);
+  return ind;
+};
+
+const {mountStatus} = await import('/status.js');
+const listeners = new Map();
+const host = {
+  onEvent(name, fn) { (listeners.get(name) || listeners.set(name, []).get(name)).push(fn); return () => {}; },
+  sessions: {selectedKey: 'agent:main:main'},
+};
+const emit = (name, payload) => (listeners.get(name) || []).forEach((f) => f(payload));
+mountStatus(host, new AbortController().signal);
+
+const html = document.documentElement;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const start = (sessionKey) => emit('agent', {sessionKey, stream: 'lifecycle', data: {phase: 'start', startedAt: Date.now()}});
+const end = (sessionKey) => emit('agent', {sessionKey, stream: 'lifecycle', data: {phase: 'end'}});
+
+// ── 1. two panes working independently ────────────────────────────────────
+const leftInd = addIndicator(leftPane);
+const rightInd = addIndicator(rightPane);
+start('agent:main:main');
+start('agent:project:main');
+await wait(500);
+
+ok(html.hasAttribute('data-cle-live'), 'root is live while both panes work');
+ok(leftPane.hasAttribute('data-cle-focus-run'), 'left pane focused');
+ok(rightPane.hasAttribute('data-cle-focus-run'), 'right pane focused');
+ok(!!leftInd.querySelector('.cle-status'), 'left line in its own indicator');
+ok(!!rightInd.querySelector('.cle-status'), 'right line in its own indicator');
+ok(document.querySelectorAll('.cle-status').length === 2, 'exactly two lines');
+
+// ── 2. left finishes, right keeps working ─────────────────────────────────
+end('agent:main:main');
+await wait(250);
+// inside the 落款 hold (6.9 s), the finished line must read 完成 despite the older failed turn
+const leftLineAtHold = leftPane.querySelector('.cle-status');
+await wait(350);
+
+ok(html.hasAttribute('data-cle-live'), 'root stays live: the right side still works');
+ok(rightPane.hasAttribute('data-cle-focus-run'), 'right keeps focus');
+const leftFocus = leftPane.querySelectorAll('[data-cle-focus]');
+ok(!leftPane.hasAttribute('data-cle-focus-run'), 'finished pane released its run mark');
+ok(leftFocus.length === 0, 'finished pane released its turn mark');
+
+// ── 3. legacy error in the left history did not mark this run stopped ─────
+ok(leftLineAtHold && leftLineAtHold.dataset.kind === 'done', 'old error does not relabel a later successful run');
+
+// ── 4. right finishes too ────────────────────────────────────────────────
+end('agent:project:main');
+await wait(600);
+ok(!html.hasAttribute('data-cle-live'), 'root released when nothing works');
+ok(!leftPane.hasAttribute('data-cle-focus-run') && !rightPane.hasAttribute('data-cle-focus-run'), 'no pane keeps a mark');
+
+// ── 5. terminal chat frames with no stream field, for an unknown run ──────
+const before = document.querySelectorAll('.cle-status').length;
+emit('chat', {runId: 'ghost', sessionKey: 'agent:main:main', seq: 9, state: 'final', message: {text: 'x'}});
+emit('chat', {runId: 'ghost', sessionKey: 'agent:main:main', seq: 9, state: 'aborted', stopReason: 'user'});
+await wait(400);
+ok(!html.hasAttribute('data-cle-live'), 'terminal chat frames do not create a busy state');
+
+// ── 6. unknown stream does not create a run either ───────────────────────
+for (let i = 0; i < 5; i++) emit('agent', {sessionKey: 'agent:main:main', stream: 'usage', data: {tokens: i}});
+await wait(300);
+ok(!html.hasAttribute('data-cle-live'), 'unknown stream leaves no ghost run');
+
+// ── 7. a real chat final ends a working run ──────────────────────────────
+addIndicator(rightPane);
+start('agent:project:main');
+await wait(400);
+ok(html.hasAttribute('data-cle-live'), 'working again');
+emit('chat', {runId: 'r1', sessionKey: 'agent:project:main', seq: 2, state: 'delta', text: '写'});
+await wait(300);
+emit('chat', {runId: 'r1', sessionKey: 'agent:project:main', seq: 3, state: 'final', message: {text: '完了'}});
+await wait(500);
+ok(!html.hasAttribute('data-cle-live'), 'a real chat final ends the run');
+
+// ── 8. no runaway animation frames ───────────────────────────────────────
+let frames = 0;
+const tick = () => { frames += 1; requestAnimationFrame(tick); };
+requestAnimationFrame(tick);
+await wait(600);
+const settled = frames;
+await wait(600);
+ok(frames - settled < 30, `frame loop is not spinning after everything settled (${frames - settled} frames in 600ms)`);
+
+log('DONE_MARKER');
+</script>
+</body>
+</html>

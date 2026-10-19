@@ -1,0 +1,209 @@
+/* Effects: the working mark, the status line, the 落款, and what steps back while Li An works.
+ *
+ * This file owns motion and colour only. Layout of the transcript (widths, type, columns)
+ * lives in status.css and is another task's; nothing here changes where text sits.
+ *
+ * Load order for the entry point:
+ *   1. status.css      (layout / transcript)
+ *   2. effects.css     (this file — motion, colour, the mark)
+ * effects.css is written to win over status.css for the same properties, so it must come after.
+ */
+
+/* ── the line ───────────────────────────────────────────────────────────── */
+.cle-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 26px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--cle-ink-2);
+  /* the native indicator centres its own children; the line keeps its baseline */
+  align-self: stretch;
+  animation: cle-status-in 320ms var(--cle-ease) both;
+}
+@keyframes cle-status-in { from { opacity: 0; translate: 0 2px; } }
+
+/* the mark: 46×22 at the original proportion, wider only when the pane is narrow */
+.cle-status__glyph {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 52px;
+  height: 26px;
+  margin-left: -2px;
+}
+.cle-status__particles,
+.cle-status__mark {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--cle-ink);
+}
+.cle-status__particles canvas { pointer-events: none; }
+.cle-status__particles svg,
+.cle-status__mark svg { display: block; width: 100%; height: 100%; }
+.cle-status__mark { opacity: .78; }
+/* once the renderer is up the vector mark is gone; before that, and without WebGL, it stands in */
+.cle-status__particles[data-mode="particles"] .cle-status__mark { display: none; }
+.cle-status__particles[data-state="idle"] .cle-status__mark { opacity: .82; }
+.cle-status__particles[data-mode="particles"][data-state="idle"] .cle-status__mark { display: block; opacity: .55; }
+
+/* verb: the word that says what is happening, with a light travelling through it */
+.cle-status__verb {
+  flex: none;
+  font: italic 400 14px/1.4 var(--cle-serif);
+  letter-spacing: .06em;
+  color: var(--cle-ink);
+  background-image: linear-gradient(100deg,
+    currentColor 0 34%,
+    var(--cle-gold) 44%,
+    color-mix(in srgb, var(--cle-gaze) 76%, var(--cle-paper)) 51%,
+    currentColor 62% 100%);
+  background-size: 280% 100%;
+  background-position: 130% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.cle-status[data-live="1"] .cle-status__verb {
+  animation: cle-sweep 2.2s cubic-bezier(.45, .05, .35, 1) infinite;
+}
+.cle-status[data-live="0"] .cle-status__verb {
+  -webkit-text-fill-color: currentColor;
+  color: var(--cle-ink-2);
+  animation: none;
+}
+.cle-status__verb.is-new { animation-name: cle-sweep, cle-verb-in; animation-duration: 2.2s, 240ms; animation-iteration-count: infinite, 1; }
+@keyframes cle-sweep { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+@keyframes cle-verb-in { from { opacity: 0; translate: 0 3px; } }
+
+/* the actual command / file / query: a mono chip, and it floats in when it changes */
+.cle-status__chip {
+  min-width: 0;
+  max-width: min(52ch, 46vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font: 400 11.5px/1.5 var(--cle-mono);
+  color: var(--cle-ink-2);
+  background: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-ink) 7%, transparent);
+  animation: cle-chip-in 320ms var(--cle-ease) backwards;
+}
+.cle-status__chip[hidden] { display: none; }
+.cle-status__chip[data-mono] { color: var(--cle-ink); }
+@keyframes cle-chip-in { from { opacity: 0; transform: translateY(3px); } }
+
+.cle-status__time {
+  flex: none;
+  font: 400 11px/1 var(--cle-mono);
+  color: var(--cle-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* finished: quiet, no sheen, the mark plays 落款 once.
+   The word stays readable (ink-2, not the tertiary grey) — it is the outcome, not decoration. */
+.cle-status[data-kind="done"] .cle-status__verb { color: var(--cle-ink-2); }
+.cle-status[data-kind="done"] .cle-status__chip {
+  background: transparent;
+  box-shadow: none;
+  color: var(--cle-ink-3);
+  animation: none;
+}
+.cle-status[data-kind="stopped"] .cle-status__verb { color: var(--cle-ink-3); }
+.cle-status[data-kind="stopped"] .cle-status__chip { animation: none; }
+/* 完成 lands with a single breath, not a bounce */
+.cle-status[data-kind="done"] .cle-status__glyph { animation: cle-signed 900ms var(--cle-ease) both; }
+@keyframes cle-signed { from { opacity: .72; scale: .97; } to { opacity: 1; scale: 1; } }
+
+/* the line sits inside the native indicator: keep the app's own dots and label hidden there */
+html[data-cle] .chat-working-indicator:has(> .cle-status) > :not(.cle-status) { display: none !important; }
+html[data-cle] .chat-working-indicator:has(> .cle-status) { min-height: 30px; }
+/* the recap keeps its own claw/duration text; our line joins it instead of replacing it */
+html[data-cle] .chat-turn-recap:has(> .cle-status) { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* in the turn recap the line is a sibling, not the only child: let it breathe */
+html[data-cle] .chat-turn-recap > .cle-status { margin-left: 2px; }
+html[data-cle] .chat-activity-group__summary > .cle-status {
+  margin-left: 6px;
+  pointer-events: auto;
+}
+/* Last resort: a turn with only text has no recap and no tool row. The line then sits as its
+   own quiet row under the answer rather than inside the prose. */
+html[data-cle] .chat-group > .cle-status {
+  display: flex;
+  margin: 6px 0 2px;
+  order: 2;
+}
+html[data-cle] .chat-group > .cle-status .cle-status__glyph { width: 46px; height: 22px; }
+
+/* ── while a run is live: decoration steps back, the text you read does not ── */
+/* All of this is opacity on decoration. No blur, no filter on text, no full-page dim. */
+.pinkie-ambient,
+.pinkie-buddy,
+.chat-position-rail,
+aside.sidebar,
+.chat-workspace-rail {
+  transition: opacity 700ms ease;
+}
+html[data-cle-live] .pinkie-ambient { opacity: .18 !important; }
+html[data-cle-live] .pinkie-buddy { opacity: .28 !important; }
+html[data-cle-live] .chat-position-rail { opacity: .1 !important; }
+html[data-cle-live] aside.sidebar { opacity: .72 !important; }
+html[data-cle-live] .chat-workspace-rail { opacity: .6 !important; }
+html[data-cle-live] :is(.pinkie-ambient, .pinkie-buddy, aside.sidebar, .chat-workspace-rail):hover {
+  opacity: 1 !important;
+}
+
+/* Earlier turns in the pane being worked in step back a little; the working turn never does.
+   Only opacity — the text stays crisp and hover brings it straight back. */
+html[data-cle-live] .chat-pane-cache__pane[data-cle-focus-run] .chat-thread-inner > .chat-group {
+  transition: opacity 500ms ease;
+}
+html[data-cle-live] .chat-pane-cache__pane[data-cle-focus-run]
+  .chat-thread-inner > .chat-group:not([data-cle-focus]):not([data-cle-focus] ~ .chat-group) {
+  opacity: .72;
+}
+html[data-cle-live] .chat-pane-cache__pane[data-cle-focus-run]
+  .chat-thread-inner > .chat-group:hover { opacity: 1; }
+
+/* A pane that is not the one working is never dimmed: 双模式 keeps both sides readable. */
+html[data-cle-live] .chat-pane-cache__pane:not([data-cle-focus-run]) .chat-thread-inner > .chat-group { opacity: 1; }
+
+/* ── small screens: the chip gives way first, the mark and the verb stay ── */
+@container cle-pane (max-width: 560px) {
+  .cle-status__glyph { width: 44px; height: 24px; }
+  .cle-status__chip { max-width: 26ch; }
+}
+@container cle-pane (max-width: 400px) {
+  .cle-status__chip { display: none; }
+}
+
+/* ── night: the particles and the sheen are tuned for a dark ground ── */
+:root[data-theme-mode="dark"] .cle-status__verb {
+  background-image: linear-gradient(100deg,
+    currentColor 0 34%,
+    var(--cle-gold) 45%,
+    color-mix(in srgb, var(--cle-gaze) 84%, #fff) 51%,
+    currentColor 62% 100%);
+}
+:root[data-theme-mode="dark"] .cle-status__chip {
+  background: color-mix(in srgb, #fff 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 9%, transparent);
+}
+
+/* ── reduced motion: no sheen, no float-in, no particles, no retreat ── */
+@media (prefers-reduced-motion: reduce) {
+  .cle-status,
+  .cle-status__verb,
+  .cle-status__chip,
+  .cle-status__glyph { animation: none !important; }
+  .cle-status__verb { -webkit-text-fill-color: currentColor; background: none; }
+  html[data-cle-live] :is(.pinkie-ambient, .pinkie-buddy) { opacity: 1 !important; }
+  html[data-cle-live] .chat-thread-inner > .chat-group { opacity: 1 !important; }
+}
