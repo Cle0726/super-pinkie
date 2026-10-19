@@ -28,6 +28,15 @@ private enum RuntimeConfig {
         (Bundle.main.object(forInfoDictionaryKey: "CLEBrand") as? String) == "cle"
     }()
 
+    /// What the user reads in menus and dialogs.
+    static var productName: String { isCleBrand ? "C.le." : "超級碧琪" }
+    /// C.le. runs its own OpenClaw profile (state in ~/.openclaw-cle-studio), apart from 超級碧琪's
+    /// ~/.openclaw, on its own port: the two apps never share config, sessions or a gateway.
+    static let cleProfile = "cle-studio"
+    static var cleOpenClawState: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".openclaw-cle-studio", isDirectory: true)
+    }
+
     /// Compiled into the test binary only. `strings` on the executable is the
     /// checkable proof that a delivered .app is the isolated build. Kept as a
     /// computed value used at launch so the optimiser cannot drop it.
@@ -45,6 +54,10 @@ private enum RuntimeConfig {
         if let custom = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !custom.isEmpty {
             return URL(fileURLWithPath: custom, isDirectory: true)
         }
+        if isCleBrand && !isTestHost {
+            return FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/C.le.", isDirectory: true)
+        }
         let base = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
         return isTestHost ? base.appendingPathComponent("browser-test", isDirectory: true) : base
@@ -58,6 +71,9 @@ private enum RuntimeConfig {
             path = explicit
         } else if isTestHost {
             path = stateRoot.appendingPathComponent("config.json").path
+        } else if isCleBrand {
+            path = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/cle-studio/config.json").path
         } else {
             path = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".config/super-pinkie/config.json").path
@@ -76,8 +92,17 @@ private enum RuntimeConfig {
     }
 
     static let gatewayURL: URL = {
-        let fallback = isTestHost ? "http://127.0.0.1:19789/" : "http://127.0.0.1:18789/"
-        var url = URL(string: string("PINKIE_GATEWAY_URL", "gatewayURL", fallback: fallback))!
+        let fallback = isTestHost ? "http://127.0.0.1:19789/" : (isCleBrand ? "http://127.0.0.1:18809/" : "http://127.0.0.1:18789/")
+        // C.le. never adopts a gateway address that names 超級碧琪's port. Both apps can
+        // be launched from the same logged-in session, and a stale PINKIE_GATEWAY_URL
+        // inherited from that session must not point the second app at the first app's
+        // gateway — that would write C.le. traffic into 超級碧琪's state.
+        var raw = string("PINKIE_GATEWAY_URL", "gatewayURL", fallback: fallback)
+        if isCleBrand && !isTestHost, let adopted = URL(string: raw), adopted.port == 18789 {
+            NSLog("[C.le.] 拒绝使用 18789（超級碧琪的网关端口），改用 %@", fallback)
+            raw = fallback
+        }
+        var url = URL(string: raw)!
         guard isTestHost else { return url }
         // An explicit override is still checked: a mistyped port must not attach
         // the acceptance host to the installed app's gateway.
@@ -143,7 +168,12 @@ private enum BundledRuntime {
         // that a briefly installed 2026.9 build may have left behind.  The
         // setup helper removes only those schema-incompatible keys and keeps
         // every user model, prompt, memory and workspace setting intact.
-        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
+        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = RuntimeConfig.isCleBrand ? "2026.10" : "2026.7"
+        if RuntimeConfig.isCleBrand && !RuntimeConfig.isTestHost {
+            environment["OPENCLAW_PROFILE"] = RuntimeConfig.cleProfile
+            environment["OPENCLAW_GATEWAY_PORT"] = String(RuntimeConfig.gatewayURL.port ?? 18809)
+            environment["PINKIE_STATE_ROOT"] = RuntimeConfig.stateRoot.path
+        }
         environment["PINKIE_GATEWAY_URL"] = RuntimeConfig.gatewayURL.absoluteString
         // This App is a pinned CLE Kk release. Upstream OpenClaw/Cua update
         // notices must never replace its patched runtime behind the user's
@@ -683,7 +713,7 @@ private final class NativeDictationController {
                     }
                 }
             default:
-                completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用麦克风。")
+                completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用麦克风。")
             }
         }
 
@@ -694,14 +724,14 @@ private final class NativeDictationController {
             SFSpeechRecognizer.requestAuthorization { status in
                 DispatchQueue.main.async {
                     guard status == .authorized else {
-                        completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
+                        completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用语音识别。")
                         return
                     }
                     continueWithMicrophone()
                 }
             }
         default:
-            completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
+            completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用语音识别。")
         }
     }
 
@@ -1196,7 +1226,9 @@ private enum Gateway {
            let entry = BundledRuntime.openClawEntryURL,
            FileManager.default.fileExists(atPath: entry.path) {
             task.executableURL = node
-            task.arguments = [entry.path, "gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
+            task.arguments = [entry.path]
+                + (RuntimeConfig.isCleBrand ? ["--profile", RuntimeConfig.cleProfile] : [])
+                + ["gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
         } else if let external = ["/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw"]
             .map(URL.init(fileURLWithPath:))
             .first(where: { BundledRuntime.exists($0) }) {
@@ -1287,9 +1319,9 @@ private enum Gateway {
 /// this private endpoint directly as the `computer` tool; no extra node pairing
 /// or second gateway transport is required.
 private final class DesktopControlService {
-    private static let displayName = "超級碧琪桌面控制"
+    private static var displayName: String { "\(RuntimeConfig.productName)桌面控制" }
     private static let driverBundleIdentifier = "com.trycua.driver"
-    private static let hostBundleIdentifier = "com.cle0726.super-pinkie"
+    private static var hostBundleIdentifier: String { Bundle.main.bundleIdentifier ?? "com.cle0726.super-pinkie" }
 
     private var driverProcess: Process?
     private var nodeProcess: Process?
@@ -1879,6 +1911,32 @@ private final class TTSService {
     }
 }
 
+/// C.le.'s one-time copy of 超級碧琪's data into its own profile (installer/cle/cle-firstrun.py).
+/// Reads ~/.openclaw, never writes it; does nothing once ~/.openclaw-cle-studio is set up.
+private enum CleFirstRun {
+    static func runIfNeeded() {
+        let state = RuntimeConfig.cleOpenClawState
+        guard !FileManager.default.fileExists(atPath: state.appendingPathComponent("openclaw.json").path),
+              let root = BundledRuntime.resourceRoot,
+              let python = BundledRuntime.pythonExecutable(),
+              let node = BundledRuntime.nodeURL,
+              let entry = BundledRuntime.openClawEntryURL else { return }
+        let script = root.appendingPathComponent("installer/cle/cle-firstrun.py")
+        guard FileManager.default.fileExists(atPath: script.path) else { return }
+        let task = Process()
+        task.executableURL = python
+        task.arguments = [script.path, "--dst", state.path, "--bundle", root.path,
+                          "--node", node.path, "--openclaw", entry.path,
+                          "--profile", RuntimeConfig.cleProfile,
+                          "--port", String(RuntimeConfig.gatewayURL.port ?? 18809)]
+        task.environment = BundledRuntime.environment()
+        let log = BundledRuntime.logHandle(named: "first-run")
+        task.standardOutput = log ?? FileHandle.nullDevice
+        task.standardError = log ?? FileHandle.nullDevice
+        do { try task.run(); task.waitUntilExit() } catch { NSLog("[C.le.] first run failed: %@", error.localizedDescription) }
+    }
+}
+
 private enum BundledSetup {
     static func apply() {
         guard let resources = Bundle.main.resourceURL else { return }
@@ -2000,7 +2058,7 @@ struct LauncherMain {
     private static func makeMenu(_ delegate: AppDelegate) -> NSMenu {
         let menu = NSMenu()
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "超級碧琪")
+        let appMenu = NSMenu(title: RuntimeConfig.productName)
         let updateItem = appMenu.addItem(
             withTitle: "检查并安装更新…",
             action: #selector(AppDelegate.checkForUpdates(_:)),
@@ -2036,7 +2094,7 @@ struct LauncherMain {
         )
         fullScreenItem.keyEquivalentModifierMask = [.command, .control]
         fullScreenItem.target = delegate
-        appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 \(RuntimeConfig.productName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
 
@@ -2636,7 +2694,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             return
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            BundledSetup.apply()
+            // 超級碧琪's installer writes into ~/.openclaw; C.le. must never run it. Its own first
+            // run copies that data once into its own profile, as Li An.
+            if RuntimeConfig.isCleBrand { CleFirstRun.runIfNeeded() } else { BundledSetup.apply() }
             DispatchQueue.main.async {
                 self?.startBundledServices()
             }
@@ -2870,8 +2930,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         desktopControl.start()
         configureBrowserControl()
         tts.ready { _ in }
-        party.ready { _ in }
-        roundtable.ready { _ in }
+        if !RuntimeConfig.isCleBrand {
+            party.ready { _ in }
+            roundtable.ready { _ in }
+        }
 
         Gateway.isReady { [weak self] ready in
             DispatchQueue.main.async {
@@ -2922,8 +2984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func showGatewayRecoveryFailure() {
         let alert = NSAlert()
-        alert.messageText = "超級碧琪的网关还在恢复中"
-        alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
+        alert.messageText = "\(RuntimeConfig.productName) 的网关还在恢复中"
+        alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 \(RuntimeConfig.stateRoot.path)/logs/gateway.log。"
         alert.alertStyle = .warning
         alert.runModal()
     }
