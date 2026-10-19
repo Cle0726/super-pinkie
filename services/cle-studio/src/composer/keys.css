@@ -30,3 +30,6 @@ html[data-cle] .cle-keyed:is(.is-selected, .is-active, .is-on, [aria-pressed="tr
 /* inside the ink coins (send / voice) the drawing is paper-coloured */
 html[data-cle] .chat-send-btn.cle-keyed .cle-key { width: 18px; height: 18px; }
 html[data-cle] .chat-send-btn--send.cle-keyed { color: var(--cle-paper); }
+
+/* one browser key: the composer's. The header's native panel toggle is its fallback target, not a second key */
+html[data-cle] .chat-pane__header .chat-browser-panel-toggle, html[data-cle] .chat-browser-panel-toggle { display: none !important; }
