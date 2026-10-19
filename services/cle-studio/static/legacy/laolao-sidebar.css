@@ -140,11 +140,47 @@ html[data-cle-sidebar]:not([data-cle-sidebar-off]) .shell--nav-collapsed .cle-sb
 .cle-sb-restore svg { width: 14px; height: 14px; }
 
 /* ---------- 收起时的边缘把手 ---------- */
-.cle-sidebar-edge { display: none; }
-html[data-cle-sidebar-autohide] .cle-sidebar-edge { display: block; position: fixed; inset: 0 auto 0 0; z-index: 150; width: 10px; padding: 0; border: 0; background: transparent; cursor: pointer; }
-html[data-cle-sidebar-autohide] .cle-sidebar-edge::before { content: ""; position: absolute; left: 4px; top: 50%; width: 2px; height: 28px; border-radius: 2px; background: var(--cle-line-strong); transform: translateY(-50%); transition: height var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft); }
-html[data-cle-sidebar-autohide] .cle-sidebar-edge:hover::before, html[data-cle-sidebar-autohide] .cle-sidebar-edge:focus-visible::before { height: 64px; background: var(--cle-gaze); }
 
 @keyframes cle-sb-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes cle-sb-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .cle-sb-menu, .cle-sb-modal, .cle-sb-mask { animation: none !important; } }
+
+
+/* ---------- 收起与呼出（laolao-sidebar-autohide.js） ----------
+   收起：侧栏整块滑出去，正文铺满；呼出：同一块侧栏作为浮起的卡片滑回来。 */
+html[data-cle-sb-auto] .shell--chat { grid-template-columns: 0 minmax(0, 1fr) !important; }
+html[data-cle-sb-auto] .shell--chat > .shell-nav {
+  position: fixed !important; z-index: 140; top: 10px; bottom: 10px; left: 10px; width: 258px !important;
+  border-radius: 16px; overflow: hidden;
+  background: color-mix(in srgb, var(--cle-surface, #FBF8F1) 96%, transparent);
+  box-shadow: 0 24px 60px -18px rgba(10, 12, 18, .38), 0 0 0 1px color-mix(in srgb, var(--cle-ink, #15161A) 9%, transparent);
+  transform: translateX(calc(-100% - 24px)); opacity: .6;
+  transition: transform .3s cubic-bezier(.22, 1, .36, 1), opacity .24s ease;
+  will-change: transform;
+}
+html[data-cle-sb-auto][data-cle-sb-peek] .shell--chat > .shell-nav { transform: translateX(0); opacity: 1; }
+html[data-cle-sb-auto] .shell--chat > .shell-nav > .sidebar-r, html[data-cle-sb-auto] .shell--chat .sidebar { height: 100%; width: 100%; }
+
+/* the handle at the left edge: longer and brighter as the pointer comes near */
+.cle-sidebar-edge { position: fixed; inset: 0 auto 0 0; z-index: 139; width: 12px; padding: 0; border: 0; background: transparent; cursor: default; --edge-near: 0; }
+.cle-sidebar-edge::before {
+  content: ""; position: absolute; left: 4px; top: 50%; width: 3px; border-radius: 3px;
+  height: calc(28px + 92px * var(--edge-near)); translate: 0 -50%;
+  background: color-mix(in srgb, var(--cle-gaze, #2A63E8) calc(30% + 70% * var(--edge-near)), var(--cle-ink-3, #9C968C));
+  opacity: calc(.28 + .72 * var(--edge-near));
+  box-shadow: 0 0 calc(10px * var(--edge-near)) color-mix(in srgb, var(--cle-gaze, #2A63E8) 60%, transparent);
+  transition: height .18s ease, opacity .18s ease;
+}
+html[data-cle-sb-peek] .cle-sidebar-edge::before { opacity: 0; }
+
+/* the soft light that glides to the row under the pointer */
+.cle-sb-glide { position: absolute; z-index: 0; left: 0; top: 0; border-radius: 10px; pointer-events: none; opacity: 0;
+  background: color-mix(in srgb, var(--cle-ink, #15161A) 5.5%, transparent);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), width .22s ease, height .22s ease, opacity .18s ease; }
+.cle-sb-glide.is-on { opacity: 1; }
+html[data-pinkie-night] .cle-sb-glide { background: rgba(255, 255, 255, .06); }
+.shell--chat .sidebar { position: relative; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle-sb-auto] .shell--chat > .shell-nav { transition: none; }
+  .cle-sb-glide { transition: none; }
+}
