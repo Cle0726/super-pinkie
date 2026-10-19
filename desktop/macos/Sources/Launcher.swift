@@ -2092,7 +2092,10 @@ enum BrowserWorkspaceGeometry {
         guard bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return .zero }
         let inset = min(12, min(bounds.width, bounds.height) / 8)
         let available = bounds.insetBy(dx: inset, dy: inset)
-        let initial = NSRect(x: available.maxX - min(760, available.width * 0.65), y: available.maxY - min(650, available.height * 0.78), width: min(760, available.width * 0.65), height: min(650, available.height * 0.78))
+        // a small window by default: it floats in the upper right and leaves the conversation, the
+        // composer and Li An visible; it can be dragged larger, docked or made full from its toolbar
+        let w0 = min(540, available.width * 0.42), h0 = min(420, available.height * 0.56)
+        let initial = NSRect(x: available.maxX - w0, y: available.maxY - h0, width: w0, height: h0)
         let raw = proposed ?? initial
         let width = min(available.width, max(min(360, available.width), raw.width.isFinite ? raw.width : initial.width))
         let height = min(available.height, max(min(260, available.height), raw.height.isFinite ? raw.height : initial.height))
