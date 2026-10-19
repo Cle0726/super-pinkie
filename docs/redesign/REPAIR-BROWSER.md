@@ -370,3 +370,132 @@ node --test（4 个浏览器测试文件）        → tests 25  pass 25  fail 0
 ### 10.4 仍然不声称通过
 主控列出尚未验证的：cookie 跨 App 重启（不是真实账号登录）、拖拽手感细节、贴边收纳在真实鼠标 hover 下的自动露出（CUA 可能不派发 tracking 事件）。标签的键盘/AX 路径我只能从代码与几何上证明，真实 VoiceOver 播报与 CUA 点击仍要主控验。
 
+---
+
+## 11. 第五轮：真实模型浏览器 + 真人让行验收通路（端点接线）
+
+### 11.1 先核对主控的事实：成立
+主控判断准确。逐条核对如下：
+
+| 事实 | 核对结果 |
+|---|---|
+| 测试宿主的 `startTestHostServices` 只 `attachToExisting`，不 spawn 网关 | 成立（`Gateway.attachToExisting` 仅轮询 `readyz`） |
+| `BrowserControlEndpoint.authorizeGateway` 只在 `BundledRuntime` 成功 `task.run` 之后调用 | 成立（`Gateway.start()` 内，测试宿主不进入该分支） |
+| `PINKIE_APP_BROWSER_ENDPOINT` 只在那里注入子网关 | 成立 |
+| 因此 19789 的真实模型拿不到端点 | 成立（见 11.2 的实测证据） |
+| `allowedPeer` 没有测试网关 root | 成立（`gatewayPID` 从未被设置，一律 `false`） |
+
+额外实测：当前 19789 的监听者是 `openclaw-gateway`（PID 84617，ppid=1），
+可执行文件是 `~/.nvm/versions/node/v24.20.0/bin/node`，
+state 在 `~/.openclaw-cle`，cwd 是 `.../SuperPinkie/dev/cle-stage`。
+它**既不是** App 捆绑 Node（`isCLEKkBundledNode` 为 false），**也不是**本进程的子进程。
+所以：只靠原有父子校验或原有捆绑路径判据，都不可能合法绑定它。
+
+### 11.2 已实现的接线（不放松任何原有约束）
+
+**（a）端点侧：一次性只读握手**
+`BrowserControlEndpoint` 新增 `adoptExistingGateway(pid)` 与 `setAdoptedExecutable(path)`。
+`serve()` 里新增唯一例外分支：
+
+- 仍然先过 `getpeereid`（同 uid）+ `LOCAL_PEERPID` + `allowedPeer(peer)`；
+- 只有在 `isAdoptedGateway()` 为真、且 `adoptedPeerIsVerifiedGateway(peer)` 为真时，
+  才回应 `{"op":"handshake"}`；
+- `adoptedPeerIsVerifiedGateway` 要求：peer 的可执行文件仍等于登记的那个、且该 PID 仍是
+  对应监听者；
+- 握手只发凭证，不执行任何动作；token 对每个真实 action 仍然是必需的。
+
+没有 allow-all、没有跳过 token、没有放宽 uid、没有读取或借用 live 端点。
+
+**（b）宿主侧：可拒绝的认领判据**
+`testGatewayAdoptionDecision(port:)`：
+
+1. `port == 19789`，否则 `.refuse`；
+2. 用 lsof 找到该端口的监听 PID（只读）；
+3. 要求该 PID **当前打开着** `<测试 state 根>/state/openclaw.sqlite`（`listenerOwnsState`）。
+   这条把"只是占了端口"与"真的是这个 profile 的网关"区分开；
+4. state 根默认 `~/.openclaw-cle`，可用 `CLE_TEST_GATEWAY_STATE_DIR` 显式覆盖；
+   比较用 **规范化后完全相等**，不做前缀匹配。
+
+全程不 spawn、不 signal、不 restart。
+
+**（c）凭证传递：私有描述符**
+`browser-endpoint.json` 写在 `~/Library/Application Support/SuperPinkie/browser-test/`，
+目录 0700、文件 0600，退出时删除。内含一次性 token，**不打印、不写日志、不进命令行**。
+
+实测（`--browser-test-endpoint-check`）：
+```
+endpoint=started
+hasDescriptor=true
+descriptorMode=600
+dirMode=700
+```
+
+**（d）越权对照实测**
+用普通 python 进程（非被认领网关）连该 socket：
+```
+unauthorised handshake -> (空响应，连接被直接关闭)
+token leaked (unauthorised): False
+no-token action        -> (空响应)
+token leaked (action):   False
+```
+即未授权 peer 既拿不到 token，也执行不了 action。
+
+**（e）认领判据实测**
+```
+$ Launcher --browser-test-attach-check        # 干净环境
+isTestHost=true / port=19789 / stateRoot=.../.openclaw-cle
+decision=adopt / gatewayPid=84617 / exit=0
+
+$ CLE_TEST_GATEWAY_STATE_DIR=~/.openclaw ...  # 指向 live profile
+decision=refuse
+reason=listener 84617 does not own /Users/Admin/.openclaw/state/openclaw.sqlite
+exit=3
+
+$ PINKIE_GATEWAY_URL=http://127.0.0.1:18789/ ...
+日志：拒绝连接到非测试网关；仍回落 19789，未触碰 live
+```
+
+### 11.3 端到端还差的一步（由主控完成，我不执行）
+
+理由：网关只从**自身进程环境**读取 `PINKIE_APP_BROWSER_ENDPOINT`
+（`appBrowserEndpoint(this.environment)`），工具参数无法注入。所以要让真实模型用上，
+必须让 19789 进程带着这个 env 重新启动并来握手。这一步涉及重启空闲测试网关，
+按约定由主控做。
+
+确切步骤：
+
+1. 主控启动隔离宿主（CUA 或 `--run` 均可，隔离已编译进二进制）：
+   ```
+   ./desktop/macos/browser-test-host.sh --run
+   ```
+   宿主会认领 19789、启动端点并写出私有描述符。
+
+2. 读取描述符（只在本机终端，勿贴进日志/报告/聊天）：
+   ```
+   cat "$HOME/Library/Application Support/SuperPinkie/browser-test/browser-endpoint.json"
+   ```
+
+3. 让**空闲**的 19789 带着该值重启（profile `cle`，state `~/.openclaw-cle`），
+   env 名为 `PINKIE_APP_BROWSER_ENDPOINT`，值为上一文件内容原文。
+   重启后网关首次调用 `app_browser` 时会：
+   - 通过 socket 权限校验（目录 0700、socket 0600、同 uid）；
+   - 带 `{"op":"handshake"}` 连接；
+   - 端点校验它是被认领的 PID 与登记的可执行文件后，返回 `socketPath` + `token`；
+   - 之后所有 `app_browser` 调用使用该 token。
+
+4. 主控自建本机 fixture 页面（例如 `~/…/fixture.html`，含一个可读标记与一个输入框），
+   让模型 `app_browser` 依次 `open` → `snapshot` → `type`，用 CUA 对照页面实际内容。
+
+5. 真人让行验证：在面板内真实点击/输入一次，随后 10 秒内让模型再 `type`，
+   预期返回 `用户正在操作浏览器`；等过 10 秒再 `type`，预期成功。
+
+6. 结束：关闭宿主会删除描述符；若 19789 需要恢复原状，用不带该 env 的方式重启即可。
+
+### 11.4 本轮边界与未验证
+- 未启动/停止/接管 19789，未改 live 18789、未动原版 App，未操作 GUI。
+- 未执行模型调用，因此**真实模型端到端仍未验证**；本轮交付的是通路、判据与拒绝证据。
+- ChatGPT 真实第三方登录不在本次范围，也未要求任何用户凭证。
+- 顺手修掉一个真实泄漏面：异常退出的宿主会在 `/tmp` 留下 `pinkie-browser-*` 目录
+  （含 0600 socket）。新增 `removeStaleDirectories()`，只清理**同 uid、0700、且 connect()
+  返回 ECONNREFUSED** 的目录；实测 8 → 1，保留的那个确认仍有进程在监听。
+

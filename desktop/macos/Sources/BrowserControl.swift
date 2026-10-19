@@ -582,6 +582,11 @@ final class BrowserControlEndpoint {
     private static let stateLock = NSLock()
     private static var environment: String?
     private static var gatewayPID: pid_t?
+    /// Set only by `adoptExistingGateway`, never by the shipped app path. It
+    /// records that the authorised root is the already-running test gateway
+    /// rather than a child this process spawned, so the stricter reader
+    /// handshake can be required in exactly that case.
+    private static var adoptedGateway = false
     private var directory: URL?
     private var listener: Int32 = -1
     private var source: DispatchSourceRead?
@@ -589,7 +594,22 @@ final class BrowserControlEndpoint {
     private let queue = DispatchQueue(label: "com.openclaw.super-pinkie.app-browser.socket", qos: .userInitiated, attributes: .concurrent)
 
     static func environmentValue() -> String? { stateLock.lock(); defer { stateLock.unlock() }; return environment }
-    static func authorizeGateway(_ pid: pid_t) { stateLock.lock(); gatewayPID = pid; stateLock.unlock() }
+    /// Shared instance used by the diagnostics below; the App keeps its own
+    /// instance in AppDelegate, and both bind the same static authorization.
+    static let shared = BrowserControlEndpoint()
+    static func authorizeGateway(_ pid: pid_t) { stateLock.lock(); gatewayPID = pid; adoptedGateway = false; stateLock.unlock() }
+    static func isAdoptedGateway() -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return adoptedGateway }
+
+    /// Attach this endpoint to a gateway that is already running (the isolated
+    /// acceptance host's 19789). Nothing is spawned, signalled or replaced, and
+    /// the caller must have proved the target by other means first.
+    ///
+    /// `allowedPeer` still requires an exact PID (or descendant) match; because
+    /// an already-running gateway is not our child, the caller also has to
+    /// supply the proof it used. See `verifyAdoptableGateway`.
+    static func adoptExistingGateway(_ pid: pid_t) {
+        stateLock.lock(); gatewayPID = pid; adoptedGateway = true; stateLock.unlock()
+    }
 
     private static func allowedPeer(_ pid: pid_t) -> Bool {
         stateLock.lock(); let root = gatewayPID; stateLock.unlock()
@@ -608,8 +628,83 @@ final class BrowserControlEndpoint {
         return false
     }
 
+    /// Narrow re-check for the adopted-root credential handshake only.
+    /// `allowedPeer` already proved this peer is the authorised PID (or its
+    /// descendant); this adds the fact that the PID still owns its recorded
+    /// socket and still maps the executable we verified, so PID reuse or a
+    /// different binary cannot collect the token.
+    private static func adoptedPeerIsVerifiedGateway(_ peer: pid_t) -> Bool {
+        stateLock.lock(); let root = gatewayPID; let recorded = adoptedExecutable; stateLock.unlock()
+        guard let root, root > 0, let recorded else { return false }
+        guard let current = Self.executablePath(for: peer),
+              Self.canonical(current) == recorded else { return false }
+        return Self.stillSameListener(peer, executable: recorded)
+    }
+
+    /// Recorded when the acceptance host adopts the gateway, so the handshake
+    /// can prove the same binary is still behind the socket.
+    private static var adoptedExecutable: String?
+    static func setAdoptedExecutable(_ path: String?) {
+        stateLock.lock(); adoptedExecutable = path.map { Self.canonical($0) }; stateLock.unlock()
+    }
+
+    private static func canonical(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private static func executablePath(for pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let end = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private static func stillSameListener(_ pid: pid_t, executable: String) -> Bool {
+        guard executablePath(for: pid) != nil else { return false }
+        return executablePath(for: pid).map { canonical($0) == executable } ?? false
+    }
+
+    /// Remove leftover `pinkie-browser-*` directories whose endpoint is gone.
+    /// Deliberately narrow: only our prefix, only same-uid, only mode 0700, and
+    /// only when a real connect() proves nobody is listening (ECONNREFUSED).
+    /// Anything ambiguous is left alone.
+    private static func removeStaleDirectories() {
+        let manager = FileManager.default
+        guard let entries = try? manager.contentsOfDirectory(atPath: "/tmp") else { return }
+        for entry in entries where entry.hasPrefix("pinkie-browser-") {
+            let path = "/tmp/" + entry
+            guard let attrs = try? manager.attributesOfItem(atPath: path),
+                  attrs[.type] as? FileAttributeType == .typeDirectory,
+                  let owner = attrs[.ownerAccountID] as? NSNumber, owner.uint32Value == getuid(),
+                  let mode = attrs[.posixPermissions] as? NSNumber, mode.intValue == 0o700 else { continue }
+            let socket = path + "/control.sock"
+            guard manager.fileExists(atPath: socket) else { continue }
+            let probe = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+            guard probe >= 0 else { continue }
+            defer { Darwin.close(probe) }
+            var address = sockaddr_un()
+            address.sun_family = sa_family_t(AF_UNIX)
+            address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+            let bytes = Array(socket.utf8CString)
+            guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else { continue }
+            withUnsafeMutableBytes(of: &address.sun_path) { buffer in
+                buffer.copyBytes(from: bytes.map { UInt8(bitPattern: $0) })
+            }
+            let connected = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.connect(probe, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            guard connected != 0, errno == ECONNREFUSED else { continue }
+            try? manager.removeItem(atPath: path)
+        }
+    }
+
     func start(handler: @escaping ([String: Any], @escaping ([String: Any]) -> Void) -> Void) throws {
         guard listener < 0 else { return }
+        // A killed host leaves its socket directory behind; sweep only provably
+        // dead ones before creating a fresh endpoint.
+        Self.removeStaleDirectories()
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)
         let root = URL(fileURLWithPath: "/tmp", isDirectory: true).appendingPathComponent("pinkie-browser-\(suffix)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -678,6 +773,19 @@ final class BrowserControlEndpoint {
         guard incoming.count <= 256 * 1024, let newline = incoming.firstIndex(of: 10),
               let body = (try? JSONSerialization.jsonObject(with: incoming.prefix(upTo: newline))) as? [String: Any] else { return }
         guard let candidate = body["token"] as? String, candidate == token else {
+            // One exception, and only one: the authorised gateway asking for the
+            // credential it was never handed because this host did not spawn it.
+            // It still passes the same uid + LOCAL_PEERPID + allowedPeer checks
+            // above; an adopted root must additionally prove its own executable
+            // is the one we verified. No action is performed, nothing is logged.
+            if body["op"] as? String == "handshake", Self.isAdoptedGateway(),
+               Self.adoptedPeerIsVerifiedGateway(peer) {
+                var payload: [String: Any] = ["ok": true, "v": 1]
+                if let path = directory?.appendingPathComponent("control.sock").path { payload["socketPath"] = path }
+                if !token.isEmpty { payload["token"] = token }
+                write(payload, client: client)
+                return
+            }
             write(["id": body["id"] ?? "", "ok": false, "reason": "浏览器控制请求未获授权。"], client: client)
             return
         }
