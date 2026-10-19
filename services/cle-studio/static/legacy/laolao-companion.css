@@ -5,8 +5,8 @@
    - 五状态各自有可辨认的动作（CSS 只做 fallback 的轻动作；rig 在位时动作在画布里）。 */
 
 .pinkie-buddy {
-  --buddy-w: 150px;              /* Li An 照原版伴侣的卡通贴纸画风（趴姿），五态共用 450×233 画框，底边对齐 */
-  --buddy-ratio: 450 / 233;
+  --buddy-w: 78px;               /* Li An 取自用户的参考油画（坐姿），所有状态都坐着，共用 366×438 画框，底边对齐 */
+  --buddy-ratio: 366 / 438;
   position: absolute;
   z-index: 40;
   right: 72px;
@@ -275,7 +275,7 @@ html[data-cle] .chat-pane-cache__pane[data-pinkie-safe] .chat-thread-inner {
    由脚本 reflow() 用 --buddy-shift 把它们推回本 pane 内。 */
 
 @media (max-width: 850px) {
-  .pinkie-buddy { --buddy-w: 132px; right: 36px; }
+  .pinkie-buddy { --buddy-w: 70px; right: 36px; }
   .pinkie-buddy__caption { max-width: 140px; font-size: 11px; }
   .pinkie-buddy__bubble { max-width: min(320px, calc(100vw - 80px)); right: 0; }
   .pinkie-buddy__menu { right: 0; }
@@ -284,10 +284,10 @@ html[data-cle] .chat-pane-cache__pane[data-pinkie-safe] .chat-thread-inner {
    数值与 src/composer/composer.css 里的同名规则保持一致，谁先加载都不会跳一下
    （那边带 !important，属于另一个任务的接线；这里只做同值的兜底）。 */
 @container cle-pane (max-width: 720px) {
-  .pinkie-buddy { --buddy-w: 118px; right: 54px; }
+  .pinkie-buddy { --buddy-w: 72px; right: 54px; }
 }
 @container cle-pane (max-width: 520px) {
-  .pinkie-buddy { --buddy-w: 96px; right: 46px; }
+  .pinkie-buddy { --buddy-w: 64px; right: 46px; }
   .pinkie-buddy__mark { width: 18px; height: 18px; border-radius: 6px; }
   .pinkie-buddy__mark svg { width: 12px; height: 12px; }
 }

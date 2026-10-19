@@ -15,22 +15,22 @@
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const STATES = ["rest", "typing", "working", "happy", "sleepy"];
   const ROOM_OF_AGENT = {main: "chat", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted"};
-  const ART_V2 = (s) => `/cle/static/art/companion-v2/${s}.webp?v=20261019d`;
+  const ART_V2 = (s) => `/cle/static/art/companion-v2/${s}.webp?v=20261019e`;
   // 现有素材作回退；将来 companion-v2 到位后自动优先使用，无需改代码。
   // 只用横构图的两张（616×420）：pet-sit 是竖构图（314×420），塞进 168×90 的位子会缩成一小团，
   // 五状态之间还会忽大忽小 —— 那正是「用整图缩放冒充动作」。状态的差别交给 rig 的动作、
   // 模式小标记和状态文案；真正的五张表情由 Claude 的 companion-v2 提供。
   const FALLBACK = {
-    rest: "/cle/static/art/pet-loaf.webp?v=20261019d",
-    typing: "/cle/static/art/pet-loaf.webp?v=20261019d",
-    working: "/cle/static/art/pet-loaf.webp?v=20261019d",
-    happy: "/cle/static/art/pet-loaf.webp?v=20261019d",
-    sleepy: "/cle/static/art/pet-loaf-closed.webp?v=20261019d",
+    rest: "/cle/static/art/pet-loaf.webp?v=20261019e",
+    typing: "/cle/static/art/pet-loaf.webp?v=20261019e",
+    working: "/cle/static/art/pet-loaf.webp?v=20261019e",
+    happy: "/cle/static/art/pet-loaf.webp?v=20261019e",
+    sleepy: "/cle/static/art/pet-loaf-closed.webp?v=20261019e",
   };
-  const CLOSED = "/cle/static/art/pet-loaf-closed.webp?v=20261019d";
+  const CLOSED = "/cle/static/art/pet-loaf-closed.webp?v=20261019e";
   // v2: six poses cut to one shared frame (scripts/art/cutout-plate.py), so he keeps his size between
   // states; the closed-eye frame belongs to the resting pose
-  const CLOSED_V2 = "/cle/static/art/companion-v2/closed.webp?v=20261019d";
+  const CLOSED_V2 = "/cle/static/art/companion-v2/closed.webp?v=20261019e";
   const CALL = {project: "老板"};
   const PREF_KEY = "pinkie…s-v1";
   const SLEEPY_AFTER = 10 * 60_000;
@@ -690,7 +690,7 @@
       const inner = innerOf(this.pane);
       const rect = this.figure?.getBoundingClientRect() || {width: 0, height: 0};
       const w = rect.width || this.figure?.clientWidth || 168;
-      const h = rect.height > 8 && rect.height < 400 ? rect.height : w / (450 / 233);
+      const h = rect.height > 8 && rect.height < 400 ? rect.height : w / (366 / 438);
       // 追加卡（chat-queue）在输入框上方时，猫要跟着抬高，不压住待发内容
       const queue = own(this.pane, ".chat-queue");
       const qh = queue ? Math.round(queue.getBoundingClientRect().height || 0) : 0;
