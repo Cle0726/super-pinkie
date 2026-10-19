@@ -37,13 +37,19 @@ html[data-cle]:not(#c1):not(#c2):not(#c3):not(#c4) {
   --learning-ink: var(--cle-ink);
   --learning-paper: var(--cle-surface);
 }
+/* 品牌规则：gaze 是唯一强调色，只给"此刻正在被看/正在发生"的一处用
+   （焦点、运行中、选中指示的一条细线）。它不是通用图标色，更不能当实心底。
+   所以这里不再把 --wb-accent / --wb-cle 指向 gaze：
+     - 图标、胶囊、悬停底走墨色层级（ink-2 / ink-3 / ink）；
+     - 只有 --wb-sig（选中页签底部细线、分隔线渐变）保留 gaze。 */
 html[data-cle] .pk-wb {
   --wb-line: var(--cle-line-strong);
   --wb-text: var(--cle-ink);
   --wb-mute: var(--cle-ink-2);
-  --wb-accent: var(--cle-gaze);
-  --wb-cle: var(--cle-gaze);
-  --wb-hover: var(--cle-gaze-soft);
+  --wb-faint: var(--cle-ink-3);
+  --wb-accent: var(--cle-ink-2);
+  --wb-cle: var(--cle-ink-3);
+  --wb-hover: color-mix(in srgb, var(--cle-ink) 6%, transparent);
   --wb-glass: var(--cle-surface);
   --wb-glass-2: var(--cle-surface);
   --wb-editor: var(--cle-paper);
