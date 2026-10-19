@@ -513,13 +513,13 @@ test("the cat attaches the motion rig once the page has settled, and never twice
 });
 
 test("companion-v2 art wins when Claude ships it, per state, without a code change", async () => {
-  existing = new Set(["/companion-v2/rest.webp?v=20261019", "/companion-v2/working.webp?v=20261019"]);
+  existing = new Set(["/companion-v2/rest.webp?v=20261019b", "/companion-v2/working.webp?v=20261019b"]);
   try {
     const pane = paneWith();
     const {window} = boot({panes: [pane]});
     const buddy = window.__pinkieBuddy;
-    assert.match(await buddy.artFor("rest"), /companion-v2\/rest\.webp(\?v=\d+)?$/);
-    assert.match(await buddy.artFor("working"), /companion-v2\/working\.webp(\?v=\d+)?$/);
+    assert.match(await buddy.artFor("rest"), /companion-v2\/rest\.webp(\?v=\w+)?$/);
+    assert.match(await buddy.artFor("working"), /companion-v2\/working\.webp(\?v=\w+)?$/);
     // 该状态还没有 v2 图：仍然回退到现有素材，而不是空图
     assert.match(await buddy.artFor("typing"), /pet-/);
   } finally { existing = new Set(); }

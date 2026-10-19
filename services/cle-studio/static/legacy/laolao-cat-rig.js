@@ -245,7 +245,10 @@
     resize() {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const W = Math.max(1, this.figure.clientWidth || 1);
-      const H = Math.max(1, Math.round(W / (168 / 90) * (1 + PAD_TOP)));
+      // the canvas follows the figure's real box (the art's own proportions), never a fixed ratio:
+      // a hard-coded 168:90 stretched any other frame tall and thin
+      const boxH = this.figure.clientHeight || W / (168 / 90);
+      const H = Math.max(1, Math.round(boxH * (1 + PAD_TOP)));
       const w = Math.round(W * dpr), h = Math.round(H * dpr);
       if (this.canvas.width !== w || this.canvas.height !== h) {
         this.canvas.width = w; this.canvas.height = h;
