@@ -26,6 +26,8 @@ in vec2 vUv; out vec4 outColor;
 uniform sampler2D uO, uC, uF, uM;              // cat plate open / closed, branch (premultiplied), far mask
 uniform vec2 uRes, uSize, uPupil, uSeamAt, uFgOff;
 uniform vec3 uCam, uZl, uBlur;                 // centre + zoom · per-depth zoom (far, cat, branch) · per-depth defocus
+uniform float uLU[32], uLL[32], uLC[32];      // the blink: top / bottom of the open eye and the meeting crease, per column
+uniform vec2 uLX;                              // the columns those samples span (image px)
 uniform vec4 uEye, uSL;                        // eye ellipse · the painted crease of the closed lid (cx, cy, half length, angle)
 uniform float uAng, uKey, uReveal, uFgLight, uLid, uGlow, uDil, uTime, uGrain, uSheen, uRipple, uSeam, uAperture, uScale, uStroke;
 
@@ -77,13 +79,41 @@ void main(){
 
   // ---- the cat (focus plane) ----
   vec3 closed = textureLod(uC, uv, lod).rgb;
-  vec2 dp = p - uPupil;
-  float near = exp(-dot(dp / vec2(70., 120.), dp / vec2(70., 120.)) * 1.6) * region(p);
-  vec2 po = uPupil + dp / vec2(1. + uDil * 2.2 * near, 1. + uDil * .12 * near);
-  vec3 open = textureLod(uO, clamp(po / uSize, vec2(0.), vec2(1.)), lod).rgb;
-  float rg = region(p), lm = lid(p, uLid), m = lm * rg;
-  vec3 cat = mix(closed, open, m);
+  float rg = region(p);
 
+  // the blink, as layers: the fur of the upper and lower lid is lifted off the open painting and
+  // slides over the eyeball until the two edges meet on the painted crease. The lid fur stretches
+  // as it travels (it is skin, not a shutter), the lid casts a shadow on the eye beneath it and its
+  // wet rim catches a line of light. Only the very end hands over to the closed painting.
+  float k = clamp(1. - uLid, -.06, 1.);
+  float fi = clamp((p.x - uLX.x) / (uLX.y - uLX.x), 0., 1.) * 31.;
+  int i0 = int(floor(fi)); int i1 = min(i0 + 1, 31); float fr = fi - float(i0);
+  float U = mix(uLU[i0], uLU[i1], fr), Lb = mix(uLL[i0], uLL[i1], fr), Cm = mix(uLC[i0], uLC[i1], fr);
+  float inX = smoothstep(uLX.x - 40., uLX.x + 6., p.x) * (1. - smoothstep(uLX.y - 6., uLX.y + 40., p.x));
+  float Eu = mix(U, Cm, k), El = mix(Lb, Cm, k);
+  float Tt = U - 170., Bb = Lb + 110.;
+  vec2 q = p;
+  if (p.y > Tt && p.y < Eu) q.y = Tt + (p.y - Tt) * (U - Tt) / max(Eu - Tt, 1.);
+  else if (p.y > El && p.y < Bb) q.y = Bb - (Bb - p.y) * (Bb - Lb) / max(Bb - El, 1.);
+  q = mix(p, q, inX);
+  float ball = smoothstep(Eu - 1.2, Eu + 1.2, p.y) * (1. - smoothstep(El - 1.2, El + 1.2, p.y)) * inX;
+  // the pupil: dilated in the dark, it narrows to a slit as the light reaches it
+  vec2 dp = p - uPupil;
+  float near = exp(-dot(dp / vec2(70., 120.), dp / vec2(70., 120.)) * 1.6) * rg;
+  vec2 po = uPupil + dp / vec2(1. + uDil * 2.2 * near, 1. + uDil * .12 * near);
+  vec3 open = textureLod(uO, clamp(mix(q, po, ball) / uSize, vec2(0.), vec2(1.)), lod).rgb;
+  float over = max(k, 0.);
+  float shade = (exp(-max(p.y - Eu, 0.) / (14. + 26. * (1. - over))) * .62 + exp(-max(El - p.y, 0.) / 12.) * .3) * ball * smoothstep(.0, .12, over);
+  open *= 1. - shade;
+  // the lid margin: a dark line of skin, and only a faint wet glint on the eye just under it
+  float moving = smoothstep(.04, .25, over) * (1. - smoothstep(.8, .95, over));
+  float rimU = exp(-pow((p.y - Eu + 1.5) / 3.2, 2.)), rimL = exp(-pow((p.y - El - 1.) / 2.6, 2.));
+  open *= 1. - (rimU * .7 + rimL * .45) * moving * inX;
+  open += vec3(.45, .7, 1.) * exp(-pow((p.y - Eu - 4.) / 2.4, 2.)) * ball * moving * .09;
+  float hand = smoothstep(.8, 1., k) * smoothstep(0., 1., rg + inX);
+  vec3 cat = mix(open, closed, hand);
+  float m = ball * (1. - hand);
+  float lm = m;
   // the light finds him stroke by stroke; at its front only the paint ridges catch a cold glint
   float fc = front(p, 0.);
   float lit = smoothstep(0., 340., fc);
@@ -106,7 +136,7 @@ void main(){
   col = mix(col, irisCol * max(uKey, .6), iris);
   vec3 nearBlue = textureLod(uO, uv, 3.5).rgb;
   float onEye = clamp((nearBlue.b - nearBlue.r) * 3. - .1, 0., 1.);
-  float edge = 4. * lm * (1. - lm) * onEye * step(.02, uLid) * step(uLid, .995);
+  float edge = 0.;                          // the lid's wet rim is drawn with the lids above
   col += vec3(.55, .82, 1.) * edge * .55 * uGlow;
   // the seam: a hot filament along his painted crease — white-hot core, ice-blue falloff, brightest
   // at the middle of the lid and tapering to nothing at the corners, with light flowing along it
@@ -245,7 +275,7 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
     return t;
   });
   const U = {};
-  for (const n of ['uRes', 'uSize', 'uPupil', 'uSeamAt', 'uFgOff', 'uCam', 'uZl', 'uBlur', 'uEye', 'uAng', 'uKey', 'uReveal', 'uFgLight', 'uLid', 'uGlow', 'uDil', 'uTime', 'uGrain', 'uSheen', 'uRipple', 'uSeam', 'uAperture', 'uScale', 'uStroke', 'uSL']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['uRes', 'uSize', 'uPupil', 'uSeamAt', 'uFgOff', 'uCam', 'uZl', 'uBlur', 'uEye', 'uAng', 'uKey', 'uReveal', 'uFgLight', 'uLid', 'uGlow', 'uDil', 'uTime', 'uGrain', 'uSheen', 'uRipple', 'uSeam', 'uAperture', 'uScale', 'uStroke', 'uSL', 'uLX']) U[n] = gl.getUniformLocation(prog, n);
   const eye = A.eyes[0], deg = Math.PI / 180;
   const pupil = A.pupil || {x: eye.cx + 5, y: eye.cy - 34};
   gl.uniform2f(U.uSize, A.size[0], A.size[1]);
@@ -255,7 +285,13 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
   gl.uniform1f(U.uStroke, -28 * deg);
   // measured on splash-macro-closed: the crease runs (1630,505) → (1990,665)
   const sl = A.seam || {x: 1810, y: 585, half: 200, angle: 24};
-  gl.uniform4f(U.uSL, sl.x, sl.y, sl.half, sl.angle * deg);           // the knife strokes of his fur run down and back from the eye
+  gl.uniform4f(U.uSL, sl.x, sl.y, sl.half, sl.angle * deg);
+  // measured by scripts/art/eye-geometry.py
+  const lids = A.lids;
+  gl.uniform2f(U.uLX, lids.x[0], lids.x[1]);
+  gl.uniform1fv(gl.getUniformLocation(prog, 'uLU'), new Float32Array(lids.U));
+  gl.uniform1fv(gl.getUniformLocation(prog, 'uLL'), new Float32Array(lids.L));
+  gl.uniform1fv(gl.getUniformLocation(prog, 'uLC'), new Float32Array(lids.C));           // the knife strokes of his fur run down and back from the eye
 
   let mode = 'idle', startedAt = 0, exitAt = 0, exitResolve = null, raf = 0, disposed = false, nextBlink = 0, blinkAt = -10;
 
@@ -298,7 +334,7 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
     if (t >= T.hold || mode === 'held') {
       if (live && t >= nextBlink) { blinkAt = t; nextBlink = t + 5 + Math.random() * 3; }
       const b = t - blinkAt;
-      if (b >= 0 && b < .62) s.lid *= b < .15 ? 1 - ease.inOut(b / .15) : ease.out(clamp01((b - .25) / .37));
+      if (b >= 0 && b < .78) s.lid *= b < .2 ? 1 - ease.in(b / .2) * .98 - .02 * seg(b, .15, .2) : b < .3 ? 0 : ease.out(clamp01((b - .3) / .48));
       s.dil = Math.max(s.dil, .06 + .05 * Math.sin(t * .9));
     }
     s.breath = Math.sin(t * 1.25) * .0035 * seg(t, 2.6, 3.6);
@@ -456,8 +492,9 @@ export async function createRegard(canvas, {base = './art/', reducedMotion = mat
         else { mode = 'exit'; exitAt = t; }
       });
     },
-    renderAt(seconds, {exitAfter = null} = {}) {
+    renderAt(seconds, {exitAfter = null, blink = null} = {}) {
       mode = exitAfter == null ? 'frame' : 'exit-frame'; exitAt = exitAfter ?? 0; nextBlink = 1e9;
+      if (blink != null) blinkAt = blink;
       return draw(seconds);
     },
     dispose() {

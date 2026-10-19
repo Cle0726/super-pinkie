@@ -9,7 +9,7 @@ import {createRegard} from './regard.js';
 const q = new URLSearchParams(location.search);
 const r = await createRegard(document.getElementById('c'), {base: '../art/'});
 window.__regard = r;
-if (q.has('seq')) { const ex = Number(q.get('seq')); window.__frame = (t) => r.renderAt(t, {exitAfter: t >= ex ? ex : null}); document.title = 'ready'; }
+if (q.has('seq')) { const ex = Number(q.get('seq')); const bk = q.has('blink') ? Number(q.get('blink')) : null; window.__frame = (t) => r.renderAt(t, {exitAfter: t >= ex ? ex : null, blink: bk}); document.title = 'ready'; }
 else if (q.has('t')) { const ex = q.has('exit') ? Number(q.get('exit')) : null; r.renderAt(Number(q.get('t')), {exitAfter: ex}); document.title = 'ready'; }
 else { r.play(); if (q.has('auto')) setTimeout(() => r.exit(), Number(q.get('auto')) * 1000); }
 </script></body></html>
