@@ -862,6 +862,40 @@ private enum Gateway {
         let inode: UInt64
     }
 
+    /// Read-only lookup used by the acceptance host. Returns the listener that
+    /// actually owns `port`, with its executable identity, without signalling
+    /// anything. `listenerProcesses()` is hard-wired to the configured port; this
+    /// takes the port explicitly so the caller can be explicit about which
+    /// gateway it is adopting. Returns plain values so the private record type
+    /// stays inside this enum.
+    private static func describedListener(port: Int) -> (pid: pid_t, executable: String)? {        guard port > 0 else { return nil }
+        for pid in listenerPIDs(port: port) {
+            guard let executable = executablePath(for: pid) else { continue }
+            let path = canonicalPath(executable)
+            guard mappedExecutableIdentity(for: pid, matching: path) != nil else { continue }
+            return (pid, path)
+        }
+        return nil
+    }
+
+    static func adoptableListenerDescriptor(port: Int) -> (pid: pid_t, executable: String)? {
+        describedListener(port: port)
+    }
+
+    /// The same provenance rule the shipped app applies before trusting a
+    /// listener as its own runtime.
+    static func isOwnBundledNode(_ executablePath: String) -> Bool {
+        isCLEKkBundledNode(executablePath)
+    }
+
+    /// True when the process currently holds the project's own state database
+    /// open (for the test profile that is `<state root>/state/openclaw.sqlite`).
+    /// A listener that merely occupies the port fails this.
+    static func listenerOwnsState(_ pid: pid_t, stateRoot: String) -> Bool {
+        let marker = canonicalPath(stateRoot) + "/state/openclaw.sqlite"
+        return openStatePaths(pid: pid).contains { $0 == marker || $0.hasPrefix(marker + "-") }
+    }
+
     static let url = RuntimeConfig.gatewayURL
     // The gateway root is the upstream control-console landing page. CLE Kk
     // should always open the classic chat surface instead, while keeping the
@@ -1026,6 +1060,34 @@ private enum Gateway {
         // as ours merely because its process title says `openclaw-gateway`.
         executablePath.contains(".app" + bundledNodeSuffix)
             && executablePath.hasSuffix(bundledNodeSuffix)
+    }
+
+    /// The acceptance gateway on 19789 is a development OpenClaw started from
+    /// `.../SuperPinkie/dev/cle-stage` with its own profile, so its executable is
+    /// a plain node binary and `isCLEKkBundledNode` cannot prove it.
+    ///
+    /// Adopting it therefore needs a different, checkable provenance test. The
+    /// profile decides where session state lives, so requiring the expected state
+    /// root is what stops us from binding to the live gateway (different root)
+    /// or to some unrelated node process that merely listens on a port.
+    static func isTestGatewayStateRoot(_ path: String, expectedStateRoot: String) -> Bool {
+        let canonicalExpected = canonicalPath(expectedStateRoot)
+        let canonicalActual = canonicalPath(path)
+        guard !canonicalExpected.isEmpty, !canonicalActual.isEmpty else { return false }
+        // Exact match only: no prefix or "contains" leniency, which a path such as
+        // `.../.openclaw-cle-elsewhere` could otherwise satisfy.
+        return canonicalActual == canonicalExpected
+    }
+
+    /// Read-only filesystem evidence tied to the live process: the state database
+    /// it currently has open. This is what proves the PID really is the gateway
+    /// for that profile, not just a process whose argv happens to mention it.
+    static func openStatePaths(pid: pid_t) -> [String] {
+        guard let text = lsofOutput(["-nP", "-a", "-p", String(pid), "-Fn"]) else { return [] }
+        return text.split(separator: "\n").compactMap { line in
+            guard line.first == "n" else { return nil }
+            return canonicalPath(String(line.dropFirst()))
+        }
     }
 
     private static func stillSameProcess(_ listener: ListenerProcess) -> Bool {
@@ -1842,6 +1904,75 @@ struct LauncherMain {
         // isolation facts and exits before any window, service or gateway work.
         // It runs with no environment, so it proves what a Finder/CUA launch
         // would do rather than what a shell wrapper injects.
+        // Headless proof of the gateway-attach path. It performs the same
+        // read-only listener checks the running host does and reports them, so
+        // the wiring can be audited without opening a window or touching the
+        // gateway. It never signals, spawns or restarts anything.
+        if CommandLine.arguments.contains("--browser-test-attach-check") {
+            // Same decision the running host makes, minus the UI. Read-only.
+            let delegate = AppDelegate()
+            let decision = delegate.testGatewayAdoptionDecision(port: RuntimeConfig.gatewayURL.port ?? 19789)
+            print("isTestHost=\(RuntimeConfig.isTestHost)")
+            print("port=\(RuntimeConfig.gatewayURL.port ?? 19789)")
+            print("stateRoot=\(delegate.testProfileStateRoot())")
+            switch decision {
+            case .adopt(let pid, _):
+                print("decision=adopt")
+                print("gatewayPid=\(pid)")
+                exit(0)
+            case .refuse(let reason):
+                print("decision=refuse")
+                print("reason=\(reason)")
+                exit(3)
+            case nil:
+                print("decision=none")
+                exit(4)
+            }
+        }
+        if CommandLine.arguments.contains("--browser-test-endpoint-check") {
+            // Proves the credential descriptor round-trip without a window:
+            // start the real endpoint, publish the same descriptor the host
+            // publishes, report only shapes/permissions, then clean up.
+            let delegate = AppDelegate()
+            guard case let .adopt(pid, executable)? = delegate.testGatewayAdoptionDecision(port: RuntimeConfig.gatewayURL.port ?? 19789) else {
+                print("decision=refuse"); exit(3)
+            }
+            BrowserControlEndpoint.setAdoptedExecutable(executable)
+            BrowserControlEndpoint.adoptExistingGateway(pid)
+            var started = false
+            do {
+                try BrowserControlEndpoint.shared.start { _, done in done(["ok": false, "reason": "checker"] ) }
+                started = true
+            } catch {
+                print("endpoint=failed"); exit(5)
+            }
+            let encoded = BrowserControlEndpoint.environmentValue() ?? ""
+            let dir = RuntimeConfig.stateRoot
+            let file = dir.appendingPathComponent("browser-endpoint.json")
+            // Publish exactly what the running host publishes, so the check covers
+            // directory/file permissions rather than just string existence.
+            delegate.publishEndpointDescriptorForCheck()
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: file.path)) ?? [:]
+            let mode = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+            let dirMode = ((try? FileManager.default.attributesOfItem(atPath: dir.path))?[.posixPermissions] as? NSNumber)?.intValue ?? 0
+            print("endpoint=started")
+            print("hasDescriptor=\(!encoded.isEmpty)")
+            print("descriptorDir=\(dir.lastPathComponent)")
+            print("descriptorExists=\(FileManager.default.fileExists(atPath: file.path))")
+            print("descriptorMode=\(String(mode, radix: 8))")
+            print("dirMode=\(String(dirMode, radix: 8))")
+            if CommandLine.arguments.contains("--hold") {
+                // Keeps the endpoint alive so an authorised or unauthorised peer
+                // probe can run against it. Still no window and no gateway action.
+                print("holding=true")
+                fflush(stdout)
+                Thread.sleep(forTimeInterval: 600)
+            }
+            BrowserControlEndpoint.shared.stop()
+            try? FileManager.default.removeItem(at: file)
+            let ok = started
+            exit(ok ? 0 : 5)
+        }
         if CommandLine.arguments.contains("--browser-test-self-check") {
             let test = RuntimeConfig.isTestHost
             print("isTestHost=\(test)")
@@ -2089,6 +2220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let browserEndpoint = BrowserControlEndpoint()
     private var browserUserEventMonitor: Any?
     private var chatGPTControlUntil = Date.distantPast
+    /// Descriptor written for a controlled gateway attach; removed on quit.
+    private var testEndpointDescriptorURL: URL?
     private let materialPreview = MaterialPreviewSchemeHandler()
     private let materialPreviewAccess = MaterialPreviewFileAccess()
     private let materialDownloadLock = NSLock()
@@ -2190,6 +2323,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         roundtable.stop()
         desktopControl.stop()
         browserEndpoint.stop()
+        // The descriptor carries a live token; it must not outlive the endpoint.
+        if let descriptor = testEndpointDescriptorURL {
+            try? FileManager.default.removeItem(at: descriptor)
+            testEndpointDescriptorURL = nil
+        }
         materialPreview.clearThumbnailCache()
         if let browserUserEventMonitor { NSEvent.removeMonitor(browserUserEventMonitor) }
         // CLE Kk owns this private loopback gateway. Leaving it alive preserves
@@ -2626,10 +2764,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         Gateway.attachToExisting { [weak self] ready in
             DispatchQueue.main.async {
                 guard let self else { return }
+                // Bind the browser endpoint either way: if the gateway is already
+                // up we adopt it, otherwise we keep retrying so a restart that
+                // happens after we launch still gets a working endpoint.
+                self.adoptTestGatewayForBrowserControl()
                 if ready { self.activateGatewayDashboard() } else { self.showGatewayRecoveryFailure() }
             }
         }
     }
+
+    /// The test host does not spawn a gateway, so the running 19789 process never
+    /// received `PINKIE_APP_BROWSER_ENDPOINT` and is not our child. Authorise it
+    /// anyway, but only after proving what it is: the recorded listener on the
+    /// test port, not on 18789, whose executable is a CLE Kk bundled Node.
+    ///
+    /// This changes no other rule: uid, token and the private socket directory
+    /// still apply, and `allowedPeer` still requires an exact PID match. The only
+    /// extra is that an adopted root may ask this endpoint once for the
+    /// credential it was never handed, and it has to prove the same binary is
+    /// still behind the socket to get it.
+    private func adoptTestGatewayForBrowserControl() {
+        guard RuntimeConfig.isTestHost else { return }
+        guard let decision = testGatewayAdoptionDecision(port: Gateway.url.port ?? 19789) else {
+            publishTestEndpointDescriptor()
+            return
+        }
+        guard case let .adopt(pid, executable) = decision else {
+            if case let .refuse(reason) = decision { NSLog("[CLE Kk test host] not adopting: %@", reason) }
+            publishTestEndpointDescriptor()
+            return
+        }
+        BrowserControlEndpoint.setAdoptedExecutable(executable)
+        BrowserControlEndpoint.adoptExistingGateway(pid)
+        NSLog("[CLE Kk test host] browser endpoint bound to gateway pid %d on port %d", pid, Gateway.url.port ?? 19789)
+        publishTestEndpointDescriptor()
+    }
+
+    enum TestGatewayDecision: Equatable {
+        case adopt(pid: pid_t, executable: String)
+        case refuse(String)
+    }
+
+    /// Pure, headless-testable form of the adoption rule. Everything here is a
+    /// read: lsof for the listener, lsof for its open state DB. Nothing is
+    /// signalled, spawned or modified.
+    func testGatewayAdoptionDecision(port: Int) -> TestGatewayDecision? {
+        guard RuntimeConfig.isTestHost else { return nil }
+        guard port == 19789 else { return .refuse("port \(port) is not the test gateway port") }
+        guard let listener = Gateway.adoptableListenerDescriptor(port: port) else {
+            return .refuse("no listener on port \(port)")
+        }
+        let expectedState = testProfileStateRoot()
+        guard Gateway.listenerOwnsState(listener.pid, stateRoot: expectedState) else {
+            return .refuse("listener \(listener.pid) does not own \(expectedState)/state/openclaw.sqlite")
+        }
+        return .adopt(pid: listener.pid, executable: listener.executable)
+    }
+
+    /// Where the 19789 profile keeps its state. This is the one fact that
+    /// separates it from the installed app's gateway.
+    func testProfileStateRoot() -> String {
+        if let explicit = ProcessInfo.processInfo.environment["CLE_TEST_GATEWAY_STATE_DIR"], !explicit.isEmpty {
+            return explicit
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".openclaw-cle", isDirectory: true).path
+    }
+
+    /// The running 19789 gateway was started before this endpoint existed, so it
+    /// has no `PINKIE_APP_BROWSER_ENDPOINT` in its environment. Writing the
+    /// descriptor lets the operator hand it over with a controlled restart/env
+    /// instead of us taking over the gateway.
+    ///
+    /// Security: owner-only file inside the isolated browser-test state root (not
+    /// the live one), 0600, removed on quit. It contains the same one-shot token
+    /// the endpoint already generates; nothing is logged or printed.
+    private func publishTestEndpointDescriptor() {        guard RuntimeConfig.isTestHost, let encoded = BrowserControlEndpoint.environmentValue() else { return }
+        let directory = RuntimeConfig.stateRoot
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            // createDirectory does not tighten an existing directory, and this one
+            // holds a live token. Enforce owner-only on every publish.
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            let file = directory.appendingPathComponent("browser-endpoint.json")
+            guard let data = encoded.data(using: .utf8) else { return }
+            try data.write(to: file, options: [.atomic, .completeFileProtection])
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            testEndpointDescriptorURL = file
+            NSLog("[CLE Kk test host] endpoint descriptor written for a controlled gateway attach")
+        } catch {
+            NSLog("[CLE Kk test host] could not write endpoint descriptor: %@", error.localizedDescription)
+        }
+    }
+
+    /// Same publish path, callable from the headless endpoint check.
+    func publishEndpointDescriptorForCheck() { publishTestEndpointDescriptor() }
 
     private func startBundledServices() {
         desktopControl.start()
