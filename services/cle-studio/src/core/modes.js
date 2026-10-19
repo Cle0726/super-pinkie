@@ -1,9 +1,9 @@
-// The two switches the user wanted within reach: the art style (线描 line / 油画 painting) and day / night.
-// Art style is ours (html[data-cle-art]); day / night is the native theme mode, applied live and persisted.
+// C.le. is an oil painting: the art style is fixed to 'paint' (line drawing survives only on tiny
+// function keys). Day / night is the native theme mode, applied live and persisted.
 const ART_KEY = 'cle:art-style';
 const listeners = new Set();
 
-export const artStyle = () => document.documentElement.dataset.cleArt || 'line';
+export const artStyle = () => 'paint';
 export function setArtStyle(style) {
   document.documentElement.dataset.cleArt = style;
   try { localStorage.setItem(ART_KEY, style); } catch {}
@@ -23,17 +23,15 @@ export function setNight(night) {
 }
 
 export function initModes() {
-  let style = 'line';
-  try { style = localStorage.getItem(ART_KEY) || 'line'; } catch {}
-  document.documentElement.dataset.cleArt = style;
+  document.documentElement.dataset.cleArt = 'paint';
+  try { localStorage.removeItem(ART_KEY); } catch {}
 }
 
 // a pair of quiet segmented controls
 export function modeSwitches() {
   const box = document.createElement('div');
   box.className = 'cle-modes';
-  box.innerHTML = `<div class="cle-seg" role="radiogroup" aria-label="画风"><button type="button" role="radio" data-art="line">线描</button><button type="button" role="radio" data-art="paint">油画</button></div>
-    <div class="cle-seg" role="radiogroup" aria-label="昼夜"><button type="button" role="radio" data-night="0">昼</button><button type="button" role="radio" data-night="1">夜</button></div>`;
+  box.innerHTML = `<div class="cle-seg" role="radiogroup" aria-label="昼夜"><button type="button" role="radio" data-night="0">昼</button><button type="button" role="radio" data-night="1">夜</button></div>`;
   const paint = () => {
     for (const b of box.querySelectorAll('[data-art]')) b.setAttribute('aria-checked', String(b.dataset.art === artStyle()));
     for (const b of box.querySelectorAll('[data-night]')) b.setAttribute('aria-checked', String((b.dataset.night === '1') === isNight()));
