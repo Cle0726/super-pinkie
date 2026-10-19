@@ -2,8 +2,10 @@
 
 /* the workbench's chat column is one pane wide: a 双模式 split carried in from the rooms keeps
    only the pane you are working in (the native narrow-window rule, applied to the column) */
-html[data-pinkie-wb="on"] .chat-split-view__column:not(:has(.chat-split-view__cell--active)),
-html[data-pinkie-wb="on"] .chat-split-view__cell:not(.chat-split-view__cell--active) { display: none !important; }
+/* only when a split really is there (an active cell exists): a single pane carries no --active
+   mark, and hiding every unmarked cell left the workbench's chat column empty */
+html[data-pinkie-wb="on"] .chat-split-view:has(.chat-split-view__cell--active) .chat-split-view__column:not(:has(.chat-split-view__cell--active)),
+html[data-pinkie-wb="on"] .chat-split-view:has(.chat-split-view__cell--active) .chat-split-view__cell:not(.chat-split-view__cell--active) { display: none !important; }
 html[data-pinkie-wb="on"] :is(.chat-split-view__column:has(.chat-split-view__cell--active), .chat-split-view__cell--active) {
   flex: 1 1 auto !important; width: auto !important; max-width: none !important; min-width: 0 !important;
 }
