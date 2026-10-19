@@ -2,6 +2,7 @@
 import './styles/tokens.css';
 import './styles/shell.css';
 import './rooms/rooms.css';
+import './rooms/backdrop.css';
 import './composer/composer.css';
 import './styles/bridge.css';
 import './process/status.css';
@@ -15,6 +16,7 @@ import {retainSkin} from './core/skin.js';
 import {startBrandGuard} from './core/brand.js';
 import {mountRooms} from './rooms/rooms.js';
 import {mountWelcome} from './rooms/welcome.js';
+import {mountBackdrop} from './rooms/backdrop.js';
 import {blink} from './rooms/blink.js';
 import {mountComposer, composer, mountToolFold} from './composer/composer.js';
 import {mountGaze} from './composer/gaze.js';
@@ -60,6 +62,7 @@ export default {
     safe('splash', () => mountSplash(controller.signal));
     safe('line-decor', () => mountLineDecor(controller.signal));
     const rooms = safe('rooms', () => mountRooms(host, controller.signal));
+    safe('backdrop', () => mountBackdrop(controller.signal));
     safe('welcome', () => mountWelcome(host, controller.signal));
     safe('composer', () => mountComposer(host, controller.signal));
     safe('gaze', () => mountGaze(controller.signal));

@@ -1,8 +1,7 @@
 // The five rooms. Each room is one agent with its own sessions, model and tiers;
 // switching rooms is a blink: the lids close, the room changes underneath, they open.
 import {blink} from './blink.js';
-import {lineArt, drawLine, loadLine} from '../line/line.js';
-import {modeSwitches, artStyle, onArtStyle} from '../core/modes.js';
+import {modeSwitches} from '../core/modes.js';
 import {openBeside, mountSplitBadges} from './split.js';
 
 export const ROOMS = [
@@ -28,19 +27,16 @@ export function mountRooms(host, signal) {
     html.dataset.cleRoom = room.id;
     selector.querySelector('.cle-room__zh').textContent = room.zh;
     selector.querySelector('.cle-room__fr').textContent = room.fr;
-    setThumb(selector.querySelector('.cle-room__thumb'), room, true);
+    setThumb(selector.querySelector('.cle-room__thumb'), room);
     selector.title = `${room.zh} · ${room.fr} — ${room.hint}`;
     for (const item of menu.querySelectorAll('[data-room]')) item.setAttribute('aria-current', String(item.dataset.room === room.id));
   };
 
-  // a close-up of his face in line, one state per room; the painting stands in until the drawing exists
-  function setThumb(el, room, animate) {
-    loadLine(`mode-${room.id}`).then((data) => {
-      if (!data || artStyle() !== 'line') { el.replaceChildren(); el.classList.remove('is-line'); el.style.backgroundImage = `url("${roomArt(room.id)}")`; return; }
-      el.classList.add('is-line'); el.style.backgroundImage = '';
-      if (el.firstChild?.dataset?.line === `mode-${room.id}`) { if (animate) drawLine(el.firstChild); return; }
-      el.replaceChildren(lineArt(`mode-${room.id}`, {draw: animate, speed: 170}));
-    });
+  // the room's painting, whole, in a small arched window (painted close-ups of his face will
+  // replace it when Codex can paint them; never a crop of a full painting)
+  function setThumb(el, room) {
+    el.replaceChildren(); el.classList.remove('is-line');
+    el.style.backgroundImage = `url("${roomArt(room.id)}")`;
   }
 
   // ---- selector (top of the sidebar) ----
@@ -65,8 +61,7 @@ export function mountRooms(host, signal) {
   const switches = modeSwitches();
   menu.append(dual, switches);
   document.body.append(menu);
-  const offArt = onArtStyle(() => { setThumb(selector.querySelector('.cle-room__thumb'), current, true); for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room), false); });
-  for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room), false);
+  for (const item of menu.querySelectorAll('[data-room]')) setThumb(item.querySelector('.cle-room-menu__thumb'), ROOMS.find((r) => r.id === item.dataset.room));
 
   const placeMenu = () => {
     const r = selector.getBoundingClientRect();
@@ -78,7 +73,7 @@ export function mountRooms(host, signal) {
     if (!open) menu.dataset.picking = '';
     menu.hidden = !open;
     selector.setAttribute('aria-expanded', String(open));
-    if (open) { switches.refresh(); menu.querySelectorAll('.cle-line').forEach((l) => drawLine(l, {quick: true})); placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
+    if (open) { switches.refresh(); placeMenu(); menu.querySelector('[aria-current="true"]')?.focus({preventScroll: true}); }
   };
   selector.addEventListener('click', () => openMenu(menu.hidden));
   menu.addEventListener('click', (e) => {
@@ -171,7 +166,7 @@ export function mountRooms(host, signal) {
   });
 
   signal.addEventListener('abort', () => {
-    mo.disconnect(); unsubscribe?.(); offArt(); selector.remove(); mark.remove(); menu.remove(); delete html.dataset.cleRoom;
+    mo.disconnect(); unsubscribe?.(); selector.remove(); mark.remove(); menu.remove(); delete html.dataset.cleRoom;
   }, {once: true});
   return {go, get current() { return current; }};
 }
