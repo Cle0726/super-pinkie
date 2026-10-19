@@ -199,3 +199,4 @@ html[data-cle] .chat-position-rail :is(button, [role="button"]):focus-visible { 
 @media (prefers-reduced-motion: reduce) {
   html[data-cle] .chat-group-footer, html[data-cle] .chat-position-rail { transition: none !important; }
 }
+.cle-status[data-kind="done"] .cle-status__time { display: none; }   /* the app already states the time (and tokens) under the reply */

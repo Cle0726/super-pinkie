@@ -3,10 +3,11 @@
 // strip live, so the eyes open as you pull. The track's lit part, the passed notches and the
 // thumb follow the same intensity (see reasoning.css). The native input keeps every behaviour.
 import './reasoning.css';
+import './polish.css';   // last: the experience-pass corrections win over earlier sheets
 import {LEVELS, levelOf} from './gaze-levels.js';
 
 const ART = {off: 'off', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'ultra', ultra: 'ultra', adaptive: 'medium', fast: 'low'};
-const src = (level) => `/cle/static/art/think/${ART[level] || 'medium'}.webp`;
+const src = (level) => `/cle/static/art/think/${ART[level] || 'medium'}.webp?v=20261019`;
 const RANGE = 'input.chat-controls__reasoning-range';
 
 const levelAt = (range) => {

@@ -40,6 +40,7 @@ const TARGETS = [
   ['.laolao-deep-think-btn', 'deepthink'],
   ['.laolao-web-gpt-collab', 'collab'],
   ['.chat-send-btn--voice', 'voice'],
+  ['.chat-send-btn--laolao-dictation', 'voice'],
   ['.chat-send-btn--send', 'send'],
 ];
 

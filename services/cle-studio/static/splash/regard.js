@@ -232,10 +232,10 @@ const T = {
 export async function createRegard(canvas, {base = './art/', reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches} = {}) {
   const gl = canvas.getContext('webgl2', {premultipliedAlpha: true, alpha: true, antialias: false});
   if (!gl) throw new Error('regard: webgl2 unavailable');
-  const meta = await fetch(base + 'regard.json').then((r) => r.json());
+  const meta = await fetch(base + 'regard.json?v=20261019').then((r) => r.json());
   const A = meta.macro;
   const L = meta.layers || {open: 'splash-l-open.webp', closed: 'splash-l-closed.webp', fg: 'splash-l-fg.webp', mask: 'splash-l-mask.webp'};
-  const imgs = await Promise.all([L.open, L.closed, L.fg, L.mask].map((f) => loadImage(base + f)));
+  const imgs = await Promise.all([L.open, L.closed, L.fg, L.mask].map((f) => loadImage(base + f + '?v=20261019')));
 
   const leaf = document.createElement('canvas');
   leaf.className = 'cle-splash__leaf';

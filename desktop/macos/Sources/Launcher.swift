@@ -2582,6 +2582,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // 透明窗口的原生底层必须保持透明；聊天可读性由网页里的淡玻璃气泡负责。
         // 若这里铺不透明底色，所有 CSS 透明面都会退化成整块粉色背景。
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
+        // C.le. starts in the dark: until the first page has drawn, the window is ink-black instead of
+        // a see-through frame over the desktop. didFinish puts the glass (clear) back.
+        if RuntimeConfig.isTestHost || RuntimeConfig.isCleBrand {
+            contentView.layer?.backgroundColor = NSColor(red: 0.02, green: 0.024, blue: 0.031, alpha: 1).cgColor
+        }
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
         contentView.layer?.borderWidth = 1

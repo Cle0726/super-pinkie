@@ -22,9 +22,25 @@ export function setNight(night) {
   window.dispatchEvent(new StorageEvent('storage', {key: settingsKeys()[0] || null}));
 }
 
+// The native shell (its floating browser, window glass and scrollbars) follows the app's day /
+// night, not the system's: tell it whenever the page's own theme changes.
+let reported = null;
+const reportAppearance = () => {
+  const html = document.documentElement;
+  const dark = html.dataset.themeMode === 'dark' || html.hasAttribute('data-pinkie-night');
+  if (dark === reported) return;
+  reported = dark;
+  try { window.webkit?.messageHandlers?.laolaoWindowControl?.postMessage({action: 'appearance', dark, mode: dark ? 'dark' : 'light'}); } catch {}
+};
+
 export function initModes() {
   document.documentElement.dataset.cleArt = 'paint';
   try { localStorage.removeItem(ART_KEY); } catch {}
+  reportAppearance();
+  if (typeof MutationObserver === 'function' && !initModes.watching) {
+    initModes.watching = true;
+    new MutationObserver(reportAppearance).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme-mode', 'data-pinkie-night']});
+  }
 }
 
 // a pair of quiet segmented controls

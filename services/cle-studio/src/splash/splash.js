@@ -16,7 +16,7 @@ export function mountSplash(signal) {
   signal.addEventListener('abort', finish, {once: true});
   (async () => {
     try {
-      const {createRegard} = await import('/cle/static/splash/regard.js');
+      const {createRegard} = await import('/cle/static/splash/regard.js?v=20261019');
       regard = await createRegard(layer.querySelector('canvas'), {base: '/cle/static/art/'});
       regard.play();
       // leave once the UI underneath is ready (composer on screen), never before the eyes have settled
