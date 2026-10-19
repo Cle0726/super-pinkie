@@ -132,6 +132,10 @@ html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
 | 26 | **插件一退役，产品侧栏的 aria-label 就回到旧名。** 实机断线时首份 AX 可见 `OpenClaw · 工作区菜单`。原因：`brand.js` 随插件退役，而原生按钮的 `aria-label` 由 `${name} · 工作区菜单` 拼成、name 在网关未应答时回落为产品名；退役后无人维护该属性 | `control-ui-boot-shared-*` 的 `dv()` / `renderContent()` | 高（断线是常用状态，用户会看到旧品牌） | 由**页面级** `early-guard.js` 接管（不随 `activate` 退役）：只处理侧栏 header/card 白名单，`localLabel()` 只替换前导产品名；`OpenClaw Notes · …` 这类用户自选名与第三方标签原样保留 |
 | 27 | **首帧层的侧栏规则挂在 `html:not([data-cle])` 上，与"退役保留 data-cle"的新契约冲突。** 保留 `data-cle` 后这些规则在退役期不再生效；而 `rooms.css` 在 `[data-cle]` 下已隐藏原生 header 文本、把 mark 收成透明块，插件的 `.cle-brandmark` 又随 abort 消失——左上只剩空金圈 | `startup.css` 侧栏段 + `rooms.css:2-8` | 中高（退役/加载阶段没有可读品牌） | 规则改挂在回退状态标记 `data-cle-fallback` 上：两个 guard 在"仍显示产品回退名"时打标、拿到用户自选名时清除。这样品牌不依赖插件存活，且不会压掉用户命名（无条件规则会把名字也压平，这是陷阱）。另按主控契约 `html[data-cle]:not([data-cle-active])` 补退役态字标：`.sidebar-brand::before` 真实文本 `C.le.`（22px 墨色）、header 按钮补视觉隐藏的可访问名；活跃实例存在时两者都让位（实测均返回 `none`） |
 
+| 28 | **冷启动时 chrome observer 根本没装上。** 脚本是 `<head>` 内同步 classic，执行时 parser 还没创建 `<body>`，`document.body` 为 `null`；而安装代码写成 `if (document.body) { observe(...) }` 且没有后续安装分支。于是冷启动只跑了一次空树的 `syncChromeLabels()`，此后整个 document 的 chrome 变化永远无人 observe——插件活着时被 `brand.js` 遮住，断线退役后立刻暴露 | `early-guard.js` 的安装段 | 高（首屏与退役两条路径都失效，且被在线状态掩盖） | 改为观察 **`documentElement`**（解析期一定存在），`rootNode = documentElement \|\| document.body` 兼容两种形状；记录按 chrome 相关性过滤后才调度，避免全树文本替换；补一次初始 pass 与 `DOMContentLoaded` pass（后者在 deferred module 之前，不漏首轮渲染），不依赖任何 sleep |
+| 29 | **重渲染替换名字文本时，回退标记不会清除。** 真实语义下 `textContent =` 产生的是目标为名字槽本身的 childList 记录，而过滤逻辑只看 `addedNodes`，于是切到用户自选名后标记仍在、字标继续压住真名 | `early-guard.js` 的 `touchesChrome()` | 中（用户命名被覆盖） | 增加"记录目标本身就是名字槽"的分支；测试用 `textContent` 赋值走真实语义 |
+| 30 | **测试桩无法表达真实 MutationRecord，掩盖了上面两类缺陷。** 早期桩没有 `attributeName` / `attributeFilter`，`textContent` 赋值也不产生记录，且默认 body 一定存在——所以"解析期无 body"与"属性单独更新"两条路径从来没被真正覆盖 | `tests/cle-early-guard.test.mjs` 的 DOM 桩 | 中（测试过度宽松） | 桩补齐 `attributeName`、`attributeFilter`、`textContent` 替换语义，并支持 `{withBody: false}` 与 `_appendBody()` 复现真实解析顺序 |
+
 ### 需要主控协调（超出本路所有权）### 需要主控协调（超出本路所有权）
 
 | 问题 | 准确位置 | 触发条件 | 最小修法 |
@@ -335,6 +339,27 @@ node --test tests/brand-ui.test.cjs        →  6 pass / 0 fail
 本轮为本地验证临时改过 `composer.css`，交付前已 `git checkout` 撤回，未进入任何提交；
 生成的 `openclaw.plugin.json` 同样保持在 pre-build 状态。
 
+### 解析时序（本轮：`<body>` 尚不存在时就要生效）
+
+本轮先用**真实发布形状**复现再修：脚本在 `<head>` 内同步执行时 `document.body === null`。
+
+| 检查 | 修正前 | 修正后 |
+|---|---|---|
+| observer 挂载点 | 无（`if (document.body)` 直接跳过） | `documentElement`（解析期存在） |
+| 冷启动首个 aria | 不修 | 修（`C.le. · 工作区菜单`） |
+| 插件从未激活 / 退役后属性更新 | 不修 | 修 |
+| 消息文本 / 第三方标签 | — | 不动（白名单过滤，无全树文本替换） |
+| 5 次无关插入触发的 chrome pass | — | 0 |
+| `DOMContentLoaded` pass | — | 存在且不重复改写，早于 deferred module |
+
+浏览器实测（fixture，guard version 3）：加载后插入侧栏 → 标签变 `C.le. · 工作区菜单`、标记
+`data-cle-fallback`、字形 0px；退役后原生恢复旧标签 → 再次被修正；重连给出 `碧琪的工作区` →
+标签保留该名、14px、无字标。
+
+新增 5 项行为测试，其中 **3 项在 5528c47 上失败**（observer 未挂载、冷启动退役不守、
+`DOMContentLoaded` pass 缺失）。测试桩同步补齐真实 `MutationRecord` 语义——此前桩无法表达
+"仅属性变更"的记录，正是这类缺陷被放过的原因。
+
 ## 六、部署范围与限制（必须明确）
 
 **本路的目标只有 19789 staging（`dev/cle-stage`），不是全平台交付。**
@@ -483,4 +508,14 @@ services/cle-studio/static/startup.css      字标规则改挂 data-cle-fallback
 tests/cle-early-guard.test.mjs              19 项（+7：首帧标签 / 退役恢复 / 属性-only /
                                            回退标记跟随 / 用户命名 / 两实现一致 / 正文与第三方不动）
 tests/cle-startup.test.mjs                  52 项（+3：退役 fallback 契约与 :has() 约束）
+```
+
+补充 commit #7（0007a46，解析时序）：
+
+```
+services/cle-studio/static/early-guard.js   观察 documentElement；记录按 chrome 相关性过滤；
+                                            补初始/DOMContentLoaded pass；头部说明更新为 v3 职责
+services/cle-studio/static/startup.css      顶部注释改为三层生命周期（含退役层与 active 契约）
+tests/cle-early-guard.test.mjs              24 项（+5：无 body 冷启动、退役后仍守、
+                                            正文不动、无关插入零 pass、DOMContentLoaded 不重复）
 ```
