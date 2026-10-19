@@ -42,6 +42,8 @@ export async function blink(room, during) {
   el.style.removeProperty('--cle-blink-wash');
   if (!lineMode) el.style.setProperty('--cle-blink-wash', `url("${roomArt(room.id)}")`);
   el.dataset.style = lineMode ? 'line' : 'oil';
+  // the painting must already be decoded when the lids meet, or they close on an empty frame
+  if (!lineMode) { const img = new Image(); img.src = roomArt(room.id); await Promise.race([img.decode?.().catch(() => {}), wait(260)]); }
   $('.cle-blink__fr').textContent = room.fr;
   $('.cle-blink__zh').textContent = room.zh;
   $('.cle-blink__line').textContent = room.line || '';
