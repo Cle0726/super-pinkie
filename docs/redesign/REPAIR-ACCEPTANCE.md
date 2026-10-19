@@ -1,5 +1,22 @@
 # 并发修复验收记录 · 2026-10-18 · 第五轮
 
+## 第六轮 · 主控交接给 Claude（2026-10-18 18:10 起；本段优先于下文）
+
+Codex 额度用完，主控改由 Claude 担任；八路修复会话、分工与边界不变（仍在原版无限模式、DeepSeek V4.1 WB）。
+
+| 项 | 结果 |
+|---|---|
+| 合入 | layout 71cd496 → 54555ad；browser 273e834 → (cherry-pick)；均先审查 |
+| 审出并修 | layout 的「退役外壳兜底」选择器没限定退役态，插件在线时 `.agent-chat__input` 本就在 `.agent-chat__composer-shell` 里，`!important` 规则会压到在线输入框 → 限定 `:not([data-cle-active])`（c20ff52） |
+| 审出并修 | browser 把描述符清理写进 applicationWillTerminate，挤出 self-contained-app 断言窗口；行为没错，抽成 helper（347c6ac），Swift typecheck 通过 |
+| 自己的回归 | 线描陪伴在无 DOM 的测试里用了 MutationObserver，companion 10 项失败 → 已修，11/11（347c6ac） |
+| **新 P1（已修）** | 断线时整页卡死：侧栏会话列表首屏请求失败不留缓存，finally 立刻重渲染又请求 → 微任务死循环，主线程 100%+，重连后也不恢复（Chrome 与 WebKit 均复现，CDP 暂停定位到 fetchMode↔renderNow）。修：失败记为空缓存、每模式单飞、8 秒后重试、每次断线只提示一次（63a9d6b） |
+| 实测（真实停/启 19789） | 断线中页面可响应；重连后 data-cle-active=1、学习条 1、输入框 1、会话列表自动回填 3 行、无 activation 英文、无 OpenClaw |
+| 全量测试 | 1168 项，失败回到已知基线 11 项（另 1 项 utilities 在全量负载下偶发超时，单跑 3/3 通过） |
+| 已发返修 | fusion：工作台把 gaze 蓝当图标色铺满（页签实底、5 个操作图标、胶囊、模糊光斑）；侧栏底部用户名被挤成「C.l」（work/review-fusion-claude-1.md） |
+
+仍未验：麦克风参数展开态（需真实键盘 focus-visible，脚本 focus 不触发）；原生浏览器真实模型端到端（需带描述符重启 19789，见 REPAIR-BROWSER.md）。
+
 **整体未通过，原会话继续返修。以下是最新状态，优先于全部历史记录。** 测试限定19789，未修改原版App/18789、权限、无限模式、全局模型或Claude艺术。
 
 | 范围 | 本轮实际通过 | 新发现 / 仍待处理 |
