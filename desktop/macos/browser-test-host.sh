@@ -208,6 +208,16 @@ check() {
     while IFS= read -r line; do echo "       $line" >&2; done <<< "$selfcheck"
     ok=1
   fi
+
+  # Behavioral proof of adoption, revocation and handoff lifecycle:
+  local handoffcheck
+  if handoffcheck="$(env -i HOME="$HOME" "$CONTENTS/MacOS/Launcher" --browser-test-handoff-check 2>&1)"; then
+    echo "  ok   runtime handoff lifecycle check (A exits, B takes over, wrong profile refused, exit cleanup)"
+  else
+    echo "  FAIL runtime handoff lifecycle check failed" >&2
+    while IFS= read -r line; do echo "       $line" >&2; done <<< "$handoffcheck"
+    ok=1
+  fi
   return "$ok"
 }
 

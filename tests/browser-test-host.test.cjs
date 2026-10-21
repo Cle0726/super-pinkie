@@ -212,3 +212,36 @@ test('the endpoint descriptor stays private and is removed on quit', () => {
   assert.doesNotMatch(launcher, /print\([^)]*token/i);
   assert.doesNotMatch(launcher, /NSLog\([^)]*endpoint[^)]*encoded/i);
 });
+
+test('test host manages continuous adoption monitor and revokes expired authorization', () => {
+  // Continuous monitor runs only in test host, never shipped app.
+  assert.match(launcher, /private func startTestGatewayAdoptionMonitor\(\)/);
+  assert.match(launcher, /private func stopTestGatewayAdoptionMonitor\(\)/);
+  assert.match(launcher, /stopTestGatewayAdoptionMonitor\(\)/, 'stopped on applicationWillTerminate');
+  assert.match(launcher, /BrowserControlEndpoint\.revalidateAdoptedGatewayHook = nil/);
+
+  // Revocation on candidate rejection or listener exit
+  assert.match(control, /static func revokeAdoptedGateway\(\)/);
+  assert.match(control, /static func adoptedPID\(\) -> pid_t\?/);
+  assert.match(launcher, /BrowserControlEndpoint\.revokeAdoptedGateway\(\)/);
+
+  // Instantaneous hook on unrecognized peer connection
+  assert.match(control, /revalidateAdoptedGatewayHook\?\(\)/);
+
+  // stillSameListener verifies both executable identity and active port listener
+  assert.match(control, /private static func stillSameListener\(_ pid: pid_t, port: Int, executable: String\) -> Bool/);
+  assert.match(control, /isPortListener\(pid, port: port\)/);
+  assert.match(control, /Self\.canonical\(current\) == executable/);
+});
+
+test('runtime handoff lifecycle check passes (A exits, B takes over, wrong profile refused, exit cleanup)', () => {
+  const { execFileSync } = require('node:child_process');
+  const appBin = path.join(root, 'dist/browser-test/C.le. Browser Test.app/Contents/MacOS/Launcher');
+  if (fs.existsSync(appBin)) {
+    const output = execFileSync(appBin, ['--browser-test-handoff-check'], {
+      env: { HOME: process.env.HOME }
+    }).toString('utf8');
+    assert.match(output, /handoff_check=passed/);
+  }
+});
+
