@@ -499,3 +499,51 @@ $ PINKIE_GATEWAY_URL=http://127.0.0.1:18789/ ...
   （含 0600 socket）。新增 `removeStaleDirectories()`，只清理**同 uid、0700、且 connect()
   返回 ECONNREFUSED** 的目录；实测 8 → 1，保留的那个确认仍有进程在监听。
 
+---
+
+## 12. 第六轮：测试宿主网关重启授权交接闭环与实测
+
+### 12.1 主控审查断点核对
+主控审查 2ab87de 与 §11 后指出的交接断点完全成立：
+1. 静态认领只在宿主 attach 完成时执行一次，记录当时 19789 的 PID A；
+2. 19789 需重启后才能从环境拿到描述符，重启后 PID 为 B；
+3. `allowedPeer` 仍锁定 PID A，B 与 A 无父子关系，请求被拒；重开宿主又会产生新 socket/token，导致死锁；
+4. 原 `stillSameListener` 仅比对可执行文件路径，并未校验活跃端口 listener。
+
+### 12.2 交接闭环实现
+- **持续重试与瞬时交接双保险**：
+  - 测试宿主启动 1s 轮询定时器 `startTestGatewayAdoptionMonitor`；
+  - 端点收到未识别 peer 连接时触发 `revalidateAdoptedGatewayHook` 同步复核，消灭轮询等待间隙；
+- **严格撤销与迁移**：
+  - 当 19789 重启后出现合法的 PID B（拥有 `.openclaw-cle/state/openclaw.sqlite`，进程身份匹配），自动将授权迁移到 PID B；
+  - 当旧进程死亡、端口无 listener 或候选者不合法（错误 profile、错误端口）时，立即调用 `revokeAdoptedGateway()` 撤销过期授权；
+- **名副其实的 listener 校验**：
+  - `stillSameListener` 补齐真正的端口监听校验（`isPortListener(pid, port)`）与可执行文件规范化路径比对；
+- **严格隔离与退出回收**：
+  - 仅在 `CLE_BROWSER_TEST_HOST` 下生效，生产 App 与 live 18789 完全不启用；
+  - 退出时 `stopTestGatewayAdoptionMonitor` 回收定时器，撤销授权，删除描述符和私有 socket 目录，不残留后台任务。
+
+### 12.3 行为测试覆盖（7 项全过）
+新增 `--browser-test-handoff-check` 原生测试与 `tests/browser-test-host.test.cjs` 静态+动态测试：
+1. **Case 1 初始认领**：PID A (10001) 判定 `.adopt`，握手通过；
+2. **Case 2 A 退出**：19789 无 listener 时判定 `.refuse`，旧授权立即撤销，`adoptedPID() == nil`；
+3. **Case 3 正确 B 接替**：新进程 PID B (10002) 判定 `.adopt`，授权平滑交接至 PID B；
+4. **Case 4 错误 Profile**：非 `.openclaw-cle` 数据库持有者判定 `.refuse`，撤销授权并拒绝；
+5. **Case 5 错误端口**：18789 等非 19789 端口直接拒绝；
+6. **Case 6 未知候选**：非 19789 listener 或伪造 peer 坚决拒绝；
+7. **Case 7 退出清理**：退出时 stop() 清除所有内存授权、回收定时器与文件。
+
+实测结果：`browser-test-host.sh --check` 与 `node --test tests/browser-test-host.test.cjs` 15 项测试全部通过。
+
+### 12.4 实际执行步骤更新（主控受控重启与验收）
+1. 启动测试宿主：`./desktop/macos/browser-test-host.sh --run`；
+2. 查看私有描述符：`cat "$HOME/Library/Application Support/SuperPinkie/browser-test/browser-endpoint.json"`；
+3. 优雅重启空闲 19789 网关（带环境变量 `PINKIE_APP_BROWSER_ENDPOINT=<json内容>`，Profile 为 `cle`）；
+4. 宿主通过端口 19789、openStatePaths 精确路径比对，自动平滑交接认领新网关 PID B；
+5. 由主控使用真实模型与 CUA 发起 `app_browser` 端到端与真人让行验收；
+6. 验收完毕关闭宿主，描述符与 socket 自动删除回收。
+
+### 12.5 未验证项
+- 本轮遵循安全约束，不启停网关、不操作真实 GUI，因此真实模型通过 19789 调用 `app_browser` 的端到端执行结果仍待主控在受控重启后完成最终验收。
+
+

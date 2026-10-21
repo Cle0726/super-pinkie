@@ -844,7 +844,7 @@ private final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate 
     }
 }
 
-private enum Gateway {
+enum Gateway {
     enum ReadyRuntimeResult {
         case acceptExisting
         case restarted
@@ -952,6 +952,9 @@ private enum Gateway {
     }
 
     private static func executablePath(for pid: pid_t) -> String? {
+        #if DEBUG || CLE_BROWSER_TEST_HOST
+        if let override = executablePathOverride { return override(pid) }
+        #endif
         // PROC_PIDPATHINFO_MAXSIZE is a C macro that Swift cannot import.
         // 4096 is its documented macOS capacity (4 * MAXPATHLEN).
         var buffer = [CChar](repeating: 0, count: 4096)
@@ -981,7 +984,16 @@ private enum Gateway {
         }
     }
 
-    private static func listenerPIDs(port: Int) -> [pid_t] {
+    #if DEBUG || CLE_BROWSER_TEST_HOST
+    static var listenerPIDsOverride: ((Int) -> [pid_t])?
+    static var openStatePathsOverride: ((pid_t) -> [String])?
+    static var executablePathOverride: ((pid_t) -> String?)?
+    #endif
+
+    static func listenerPIDs(port: Int) -> [pid_t] {
+        #if DEBUG || CLE_BROWSER_TEST_HOST
+        if let override = listenerPIDsOverride { return override(port) }
+        #endif
         // -F p emits machine-readable records such as `p1234`. Restrict the
         // query to listening TCP sockets so an ordinary client is never used.
         guard let text = lsofOutput(["-nP", "-a", "-iTCP:\(port)", "-sTCP:LISTEN", "-Fp"]) else {
@@ -1001,6 +1013,11 @@ private enum Gateway {
     }
 
     private static func mappedExecutableIdentity(for pid: pid_t, matching executablePath: String) -> ExecutableIdentity? {
+        #if DEBUG || CLE_BROWSER_TEST_HOST
+        if executablePathOverride != nil {
+            return ExecutableIdentity(device: 1, inode: 1)
+        }
+        #endif
         // A bundle can be replaced at the same pathname while its old process
         // keeps the old executable vnode mapped. proc_pidpath alone cannot see
         // that difference, so read lsof's device + inode fields for the mapped
@@ -1083,6 +1100,9 @@ private enum Gateway {
     /// it currently has open. This is what proves the PID really is the gateway
     /// for that profile, not just a process whose argv happens to mention it.
     static func openStatePaths(pid: pid_t) -> [String] {
+        #if DEBUG || CLE_BROWSER_TEST_HOST
+        if let override = openStatePathsOverride { return override(pid) }
+        #endif
         guard let text = lsofOutput(["-nP", "-a", "-p", String(pid), "-Fn"]) else { return [] }
         return text.split(separator: "\n").compactMap { line in
             guard line.first == "n" else { return nil }
@@ -1908,6 +1928,107 @@ struct LauncherMain {
         // read-only listener checks the running host does and reports them, so
         // the wiring can be audited without opening a window or touching the
         // gateway. It never signals, spawns or restarts anything.
+        #if CLE_BROWSER_TEST_HOST
+        if CommandLine.arguments.contains("--browser-test-handoff-check") {
+            let delegate = AppDelegate()
+            let expectedStateRoot = delegate.testProfileStateRoot()
+            let mockNode = "/Users/Admin/.nvm/versions/node/v24.20.0/bin/node"
+
+            defer {
+                Gateway.listenerPIDsOverride = nil
+                Gateway.openStatePathsOverride = nil
+                Gateway.executablePathOverride = nil
+                BrowserControlEndpoint.listenerProbe = nil
+                BrowserControlEndpoint.revokeAdoptedGateway()
+            }
+
+            // 1. Initial adoption: PID A (10001)
+            let pidA: pid_t = 10001
+            Gateway.listenerPIDsOverride = { port in port == 19789 ? [pidA] : [] }
+            Gateway.executablePathOverride = { pid in pid == pidA ? mockNode : nil }
+            Gateway.openStatePathsOverride = { pid in
+                pid == pidA ? ["\(expectedStateRoot)/state/openclaw.sqlite"] : []
+            }
+            BrowserControlEndpoint.listenerProbe = { port in port == 19789 ? [pidA] : [] }
+
+            let decA = delegate.testGatewayAdoptionDecision(port: 19789)
+            guard decA == .adopt(pid: pidA, executable: mockNode) else {
+                print("fail: decA"); exit(1)
+            }
+            delegate.adoptTestGatewayForCheck()
+            guard BrowserControlEndpoint.isAdoptedGateway() && BrowserControlEndpoint.adoptedPID() == pidA else {
+                print("fail: adoptA"); exit(2)
+            }
+
+            // 2. PID A exits: no listener on 19789 -> revoke authorization
+            Gateway.listenerPIDsOverride = { _ in [] }
+            BrowserControlEndpoint.listenerProbe = { _ in [] }
+            let decEmpty = delegate.testGatewayAdoptionDecision(port: 19789)
+            guard decEmpty == .refuse("no listener on port 19789") else {
+                print("fail: decEmpty"); exit(3)
+            }
+            delegate.adoptTestGatewayForCheck()
+            guard BrowserControlEndpoint.adoptedPID() == nil else {
+                print("fail: revokeOnExit"); exit(4)
+            }
+
+            // 3. Correct PID B (10002) takes over: successful adoption
+            let pidB: pid_t = 10002
+            Gateway.listenerPIDsOverride = { port in port == 19789 ? [pidB] : [] }
+            Gateway.executablePathOverride = { pid in pid == pidB ? mockNode : nil }
+            Gateway.openStatePathsOverride = { pid in
+                pid == pidB ? ["\(expectedStateRoot)/state/openclaw.sqlite"] : []
+            }
+            BrowserControlEndpoint.listenerProbe = { port in port == 19789 ? [pidB] : [] }
+            let decB = delegate.testGatewayAdoptionDecision(port: 19789)
+            guard decB == .adopt(pid: pidB, executable: mockNode) else {
+                print("fail: decB"); exit(5)
+            }
+            delegate.adoptTestGatewayForCheck()
+            guard BrowserControlEndpoint.adoptedPID() == pidB else {
+                print("fail: adoptB"); exit(6)
+            }
+
+            // 4. Wrong Profile: does not own .openclaw-cle -> refuse & revoke
+            let pidWrong: pid_t = 10003
+            Gateway.listenerPIDsOverride = { port in port == 19789 ? [pidWrong] : [] }
+            Gateway.executablePathOverride = { pid in pid == pidWrong ? mockNode : nil }
+            Gateway.openStatePathsOverride = { pid in
+                pid == pidWrong ? ["/Users/Admin/.openclaw/state/openclaw.sqlite"] : []
+            }
+            BrowserControlEndpoint.listenerProbe = { port in port == 19789 ? [pidWrong] : [] }
+            let decWrong = delegate.testGatewayAdoptionDecision(port: 19789)
+            guard case let .refuse(reason)? = decWrong, reason.contains("does not own") else {
+                print("fail: decWrong"); exit(7)
+            }
+            delegate.adoptTestGatewayForCheck()
+            guard BrowserControlEndpoint.adoptedPID() == nil else {
+                print("fail: revokeOnWrongProfile"); exit(8)
+            }
+
+            // 5. Wrong Port: non-19789 refused
+            let decPort = delegate.testGatewayAdoptionDecision(port: 18789)
+            guard decPort == .refuse("port 18789 is not the test gateway port") else {
+                print("fail: decPort"); exit(9)
+            }
+
+            // 6. Unknown candidate
+            BrowserControlEndpoint.revokeAdoptedGateway()
+            guard BrowserControlEndpoint.adoptedPID() == nil else {
+                print("fail: revokeUnknown"); exit(10)
+            }
+
+            // 7. Exit cleanup: stop clears state
+            BrowserControlEndpoint.adoptExistingGateway(pidB, port: 19789, executable: mockNode)
+            BrowserControlEndpoint.shared.stop()
+            guard !BrowserControlEndpoint.isAdoptedGateway() && BrowserControlEndpoint.adoptedPID() == nil else {
+                print("fail: stopCleanup"); exit(11)
+            }
+
+            print("handoff_check=passed")
+            exit(0)
+        }
+        #endif
         if CommandLine.arguments.contains("--browser-test-attach-check") {
             // Same decision the running host makes, minus the UI. Read-only.
             let delegate = AppDelegate()
@@ -2325,6 +2446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applicationWillTerminate(_ notification: Notification) {
         gatewayMonitor?.invalidate()
         gatewayMonitor = nil
+        stopTestGatewayAdoptionMonitor()
+        BrowserControlEndpoint.revalidateAdoptedGatewayHook = nil
         tts.stop()
         party.stop()
         roundtable.stop()
@@ -2756,6 +2879,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         """#
     }
 
+    private var testGatewayAdoptionMonitor: DispatchSourceTimer?
+
+    private func startTestGatewayAdoptionMonitor() {
+        guard RuntimeConfig.isTestHost else { return }
+        stopTestGatewayAdoptionMonitor()
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(1000))
+        timer.setEventHandler { [weak self] in
+            self?.adoptTestGatewayForBrowserControl()
+        }
+        testGatewayAdoptionMonitor = timer
+        timer.resume()
+    }
+
+    private func stopTestGatewayAdoptionMonitor() {
+        testGatewayAdoptionMonitor?.cancel()
+        testGatewayAdoptionMonitor = nil
+    }
+
     /// Readiness-only attachment used by the acceptance host. Everything that
     /// could mutate live state (installer, TTS/party/roundtable servers, CUA
     /// driver, gateway spawn/kill) stays off; only the browser workspace and the
@@ -2765,6 +2907,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // is how the controller proves a delivered .app is the isolated build.
         NSLog("[CLE Kk test host] %@", RuntimeConfig.testHostBuildMarker)
         configureBrowserControl()
+        BrowserControlEndpoint.revalidateAdoptedGatewayHook = { [weak self] in
+            self?.adoptTestGatewayForBrowserControl()
+        }
+        startTestGatewayAdoptionMonitor()
         Gateway.attachToExisting { [weak self] ready in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -2789,19 +2935,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// still behind the socket to get it.
     private func adoptTestGatewayForBrowserControl() {
         guard RuntimeConfig.isTestHost else { return }
-        guard let decision = testGatewayAdoptionDecision(port: Gateway.url.port ?? 19789) else {
+        let port = Gateway.url.port ?? 19789
+        guard let decision = testGatewayAdoptionDecision(port: port) else {
+            BrowserControlEndpoint.revokeAdoptedGateway()
             publishTestEndpointDescriptor()
             return
         }
-        guard case let .adopt(pid, executable) = decision else {
-            if case let .refuse(reason) = decision { NSLog("[CLE Kk test host] not adopting: %@", reason) }
+        switch decision {
+        case let .adopt(pid, executable):
+            let previousPID = BrowserControlEndpoint.adoptedPID()
+            if previousPID != pid {
+                BrowserControlEndpoint.setAdoptedExecutable(executable)
+                BrowserControlEndpoint.adoptExistingGateway(pid, port: port, executable: executable)
+                NSLog("[CLE Kk test host] browser endpoint bound to gateway pid %d on port %d", pid, port)
+            }
             publishTestEndpointDescriptor()
-            return
+        case let .refuse(reason):
+            if BrowserControlEndpoint.adoptedPID() != nil {
+                BrowserControlEndpoint.revokeAdoptedGateway()
+                NSLog("[CLE Kk test host] revoked adopted gateway: %@", reason)
+            }
+            publishTestEndpointDescriptor()
         }
-        BrowserControlEndpoint.setAdoptedExecutable(executable)
-        BrowserControlEndpoint.adoptExistingGateway(pid)
-        NSLog("[CLE Kk test host] browser endpoint bound to gateway pid %d on port %d", pid, Gateway.url.port ?? 19789)
-        publishTestEndpointDescriptor()
+    }
+
+    func adoptTestGatewayForCheck() {
+        adoptTestGatewayForBrowserControl()
     }
 
     enum TestGatewayDecision: Equatable {

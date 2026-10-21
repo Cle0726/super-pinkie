@@ -587,6 +587,8 @@ final class BrowserControlEndpoint {
     /// rather than a child this process spawned, so the stricter reader
     /// handshake can be required in exactly that case.
     private static var adoptedGateway = false
+    private static var adoptedExecutable: String?
+    private static var adoptedPort: Int = 19789
     private var directory: URL?
     private var listener: Int32 = -1
     private var source: DispatchSourceRead?
@@ -608,8 +610,38 @@ final class BrowserControlEndpoint {
     /// an already-running gateway is not our child, the caller also has to
     /// supply the proof it used. See `verifyAdoptableGateway`.
     static func adoptExistingGateway(_ pid: pid_t) {
-        stateLock.lock(); gatewayPID = pid; adoptedGateway = true; stateLock.unlock()
+        adoptExistingGateway(pid, port: 19789, executable: nil)
     }
+
+    static func adoptExistingGateway(_ pid: pid_t, port: Int, executable: String?) {
+        stateLock.lock()
+        gatewayPID = pid
+        adoptedGateway = true
+        adoptedPort = port
+        if let executable { adoptedExecutable = Self.canonical(executable) }
+        stateLock.unlock()
+    }
+
+    /// Revoke an adopted gateway authorization when the candidate becomes invalid
+    /// or the former listener dies.
+    static func revokeAdoptedGateway() {
+        stateLock.lock()
+        if adoptedGateway {
+            gatewayPID = nil
+            adoptedExecutable = nil
+        }
+        stateLock.unlock()
+    }
+
+    /// The currently adopted gateway PID, if still authorized.
+    static func adoptedPID() -> pid_t? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return adoptedGateway ? gatewayPID : nil
+    }
+
+    /// Test host hook invoked when an unrecognised peer connects to the socket,
+    /// enabling instantaneous re-adoption right after a controlled restart.
+    static var revalidateAdoptedGatewayHook: (() -> Void)?
 
     private static func allowedPeer(_ pid: pid_t) -> Bool {
         stateLock.lock(); let root = gatewayPID; stateLock.unlock()
@@ -630,20 +662,17 @@ final class BrowserControlEndpoint {
 
     /// Narrow re-check for the adopted-root credential handshake only.
     /// `allowedPeer` already proved this peer is the authorised PID (or its
-    /// descendant); this adds the fact that the PID still owns its recorded
-    /// socket and still maps the executable we verified, so PID reuse or a
-    /// different binary cannot collect the token.
+    /// descendant); this adds the fact that the PID still actively listens on
+    /// the recorded test port and still maps the executable we verified, so
+    /// PID reuse or a different binary cannot collect the token.
     private static func adoptedPeerIsVerifiedGateway(_ peer: pid_t) -> Bool {
-        stateLock.lock(); let root = gatewayPID; let recorded = adoptedExecutable; stateLock.unlock()
-        guard let root, root > 0, let recorded else { return false }
-        guard let current = Self.executablePath(for: peer),
-              Self.canonical(current) == recorded else { return false }
-        return Self.stillSameListener(peer, executable: recorded)
+        stateLock.lock(); let root = gatewayPID; let recorded = adoptedExecutable; let port = adoptedPort; stateLock.unlock()
+        guard let root, root > 0, peer == root, let recorded else { return false }
+        return Self.stillSameListener(peer, port: port, executable: recorded)
     }
 
     /// Recorded when the acceptance host adopts the gateway, so the handshake
     /// can prove the same binary is still behind the socket.
-    private static var adoptedExecutable: String?
     static func setAdoptedExecutable(_ path: String?) {
         stateLock.lock(); adoptedExecutable = path.map { Self.canonical($0) }; stateLock.unlock()
     }
@@ -659,9 +688,24 @@ final class BrowserControlEndpoint {
         return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
-    private static func stillSameListener(_ pid: pid_t, executable: String) -> Bool {
-        guard executablePath(for: pid) != nil else { return false }
-        return executablePath(for: pid).map { canonical($0) == executable } ?? false
+    /// Pluggable probe for listener checks so unit/behavior tests can inject
+    /// simulated processes without touching the network or live gateways.
+    static var listenerProbe: ((_ port: Int) -> [pid_t])?
+
+    private static func isPortListener(_ pid: pid_t, port: Int) -> Bool {
+        if let probe = listenerProbe {
+            return probe(port).contains(pid)
+        }
+        return Gateway.listenerPIDs(port: port).contains(pid)
+    }
+
+    /// Prove the process is still listening on the intended port and its mapped
+    /// binary identity still matches what we recorded during adoption.
+    private static func stillSameListener(_ pid: pid_t, port: Int, executable: String) -> Bool {
+        guard let current = Self.executablePath(for: pid), Self.canonical(current) == executable else {
+            return false
+        }
+        return isPortListener(pid, port: port)
     }
 
     /// Remove leftover `pinkie-browser-*` directories whose endpoint is gone.
@@ -754,8 +798,13 @@ final class BrowserControlEndpoint {
         var uid: uid_t = 0, gid: gid_t = 0, peer: pid_t = 0
         var peerLength = socklen_t(MemoryLayout<pid_t>.size)
         guard getpeereid(client, &uid, &gid) == 0, uid == getuid(),
-              getsockopt(client, SOL_LOCAL, LOCAL_PEERPID, &peer, &peerLength) == 0,
-              Self.allowedPeer(peer) else {
+              getsockopt(client, SOL_LOCAL, LOCAL_PEERPID, &peer, &peerLength) == 0 else {
+            return
+        }
+        if !Self.allowedPeer(peer) && Self.isAdoptedGateway() {
+            Self.revalidateAdoptedGatewayHook?()
+        }
+        guard Self.allowedPeer(peer) else {
             NSLog("[碧琪浏览器] 拒绝非 App 网关的连接（进程 %d）。", peer)
             return
         }
@@ -816,7 +865,8 @@ final class BrowserControlEndpoint {
     }
 
     func stop() {
-        Self.stateLock.lock(); Self.environment = nil; Self.gatewayPID = nil; Self.stateLock.unlock()
+        Self.stateLock.lock(); Self.environment = nil; Self.gatewayPID = nil; Self.adoptedGateway = false; Self.adoptedExecutable = nil; Self.stateLock.unlock()
+        Self.revalidateAdoptedGatewayHook = nil
         if let source { source.cancel() } else if listener >= 0 { Darwin.close(listener) }
         source = nil
         listener = -1
