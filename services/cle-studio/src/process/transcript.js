@@ -21,6 +21,22 @@ const KIND_OF_WORD = [
 ];
 const kindOfText = (text) => (KIND_OF_WORD.find(([re]) => re.test(text)) || [, 'exec'])[1];
 
+export function summarizedTools(text) {
+  const parts = text.split(/[·•,，]/).map((s) => s.trim()).filter(Boolean);
+  let total = 0, top = 0, kind = 'exec';
+  for (const part of parts) {
+    // A work/process card can say "已处理 14秒钟". Its duration (or a
+    // filename/version number) says nothing about how many tools ran.
+    const count = part.match(/^(\d+)\s*(?:(?:条|次|个|项)\s*(?:命令|读取|写入|编辑|修改|搜索|查询|浏览|执行|运行|工具调用|步骤|操作)|commands?|reads?|writes?|edits?|search(?:es)?|tool\s+calls?|steps?)(?=\s|$)/i);
+    if (!count) continue;
+    const n = Number(count[1]);
+    if (!Number.isSafeInteger(n) || n <= 0) continue;
+    total += n;
+    if (n > top) { top = n; kind = kindOfText(part); }
+  }
+  return {total, kind};
+}
+
 const ROW = '.chat-tool-row';
 const GROUP = '.chat-activity-group';
 const BUBBLE = '.chat-bubble[data-message-id]';
@@ -47,13 +63,7 @@ export function mountTranscript(signal) {
       if (label.dataset.cleText === text) continue;
       label.dataset.cleText = text;
       // "1 条命令 · 2 次读取" → 3 steps; the dominant kind colours the dot
-      const parts = text.split(/[·•,，]/).map((s) => s.trim()).filter(Boolean);
-      let total = 0, top = 0, kind = 'exec';
-      for (const part of parts) {
-        const n = Number((part.match(/\d+/) || [0])[0]) || 0;
-        total += n;
-        if (n > top) { top = n; kind = kindOfText(part); }
-      }
+      const {total, kind} = summarizedTools(text);
       if (total) label.dataset.cleTotal = String(total); else delete label.dataset.cleTotal;
       group.dataset.cleKind = kind;
     }
