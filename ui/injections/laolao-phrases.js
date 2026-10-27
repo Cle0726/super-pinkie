@@ -13,6 +13,10 @@
   const watchdogSentinel='\u2063';
   const watchdogControlPrefix='[pinkie-watchdog]';
   const tierControlPrefix='[pinkie-tier-control]';
+  // chat.history swaps any single message over 128 KB for this placeholder.
+  // In practice that is the internal "background task completed" turn that
+  // carries a generated image for the model; it is never the user's words.
+  const oversizedHistoryPlaceholder='[chat.history omitted: message too large]';
   const restartRecoveryNotice='[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
   const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
@@ -489,7 +493,7 @@
       let hiddenCount=0;
       for(const bubble of bubbles){
         const raw=bubble.getAttribute('data-message-text');
-        const internal=raw===watchdogSentinel || raw===restartRecoveryNotice || raw?.startsWith(watchdogControlPrefix) || raw?.startsWith(tierControlPrefix);
+        const internal=raw===watchdogSentinel || raw===restartRecoveryNotice || raw===oversizedHistoryPlaceholder || raw?.startsWith(watchdogControlPrefix) || raw?.startsWith(tierControlPrefix);
         if(internal){
           bubble.hidden=true;
           bubble.dataset.pinkieInternalRecovery='true';
