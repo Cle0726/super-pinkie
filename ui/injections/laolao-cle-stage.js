@@ -20,7 +20,7 @@ if (!window.__laolaoCleStage) {
 
   const root = document.documentElement;
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)');
-  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', done: '完成', stopped: '已中断'};
+  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', image: '图片生成中', done: '完成', stopped: '已中断'};
   const STOPPED = /中断|失败|出错|错误|取消|interrupt|abort|fail|error|cancel/i;
   const DONE_HOLD = 6900;      // 落款全长（含回到签名）
   const NS = 'http://www.w3.org/2000/svg';
@@ -200,10 +200,56 @@ if (!window.__laolaoCleStage) {
     if (details !== live && details !== finishing) {
       details.removeAttribute('data-cle-run');
       const m = metaOf(details);
-      write(lab, m.stopped ? 'stopped' : 'done', m.text, '', false);
+      const images = details === latestCard() ? pendingImages() : null;
+      if (images && !m.stopped) write(lab, 'image', '已发起 ' + images + ' 张 · 好了会自动发出来', '', false);
+      else write(lab, m.stopped ? 'stopped' : 'done', m.text, '', false);
     }
     return sum;
   }
+
+  // image_generate 发起后台任务后这一轮就结束了，图片要再等一两分钟才会由
+  // 完成事件发回来。这段时间不能把最后一张卡片写成「完成」，否则先生会以为
+  // 碧琪忘了发图。依据：先生最后一句话之后，已发起的后台生图多于已交付的
+  // MEDIA 行。10 分钟后不再提示，免得失败的任务把状态永远挂住。
+  function messageText(m) {
+    const c = m && m.content;
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('\n');
+    return '';
+  }
+  function pendingImages() {
+    const BG_STARTED = /Background task started for \w+ generation\b/;
+    const INTERNAL_USER = /^(?:A background task completed|<<<BEGIN_OPENCLAW_INTERNAL|\[pinkie-|\u2063|\[chat\.history omitted|\[System\])/;
+    const BG_HINT_MAX_MS = 10 * 60 * 1000;
+    const pane = document.querySelector('openclaw-chat-pane');
+    const msgs = pane && pane.state && pane.state.chatMessages;
+    if (!Array.isArray(msgs) || !msgs.length) return 0;
+    let start = 0;
+    for (let k = msgs.length - 1; k >= 0; k--) {
+      const m = msgs[k];
+      if (m && m.role === 'user' && !INTERNAL_USER.test(messageText(m).trim())) { start = k + 1; break; }
+    }
+    let started = 0, delivered = 0, since = 0;
+    for (let k = start; k < msgs.length; k++) {
+      const m = msgs[k], t = messageText(m);
+      if (m.role === 'toolResult' && BG_STARTED.test(t)) {
+        started++;
+        if (!since) since = Number(m.timestamp) || Date.now();
+      } else if (m.role === 'assistant') {
+        delivered += (t.match(/^MEDIA:/gm) || []).length;
+      }
+    }
+    if (!started || delivered >= started || Date.now() - since > BG_HINT_MAX_MS) return 0;
+    return started - delivered;
+  }
+  function latestCard() {
+    const all = document.querySelectorAll('.chat-group--process details.pinkie-process');
+    return all.length ? all[all.length - 1] : null;
+  }
+  setInterval(() => {
+    const card = latestCard();
+    if (card && card !== live && card !== finishing) decorate(card);
+  }, 2000);
 
   // 把动画小标交给某张卡片（替换它的静态小标）
   function claim(details) {
