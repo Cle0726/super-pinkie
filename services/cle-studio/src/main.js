@@ -32,6 +32,7 @@ import {mountUtilities} from './legacy/utilities.js';
 import {mountStatus} from './process/status.js';
 import {mountTranscript} from './process/transcript.js';
 import {mountPrune} from './core/prune.js';
+import {mountViewport} from './core/viewport.js';
 import {mountRecovery} from './recovery/recovery.js';
 import {mountStudy} from './learning/study.js';
 import {mountSplash} from './splash/splash.js';
@@ -68,6 +69,7 @@ export default {
     // each part stands alone: one failing module must never take the brand, the rooms or the composer down
     const safe = (name, fn) => { try { return fn(); } catch (error) { console.error(`[cle] ${name} failed`, error); return null; } };
     safe('prune', () => mountPrune(controller.signal));
+    safe('viewport', () => mountViewport(controller.signal));
     safe('splash', () => mountSplash(controller.signal));
     safe('line-decor', () => mountLineDecor(controller.signal));
     const rooms = safe('rooms', () => mountRooms(host, controller.signal));

@@ -22,16 +22,63 @@ test('2026.7 bundle keeps the original transformation', () => {
   assert.equal(result.changed, true);
   assert.match(result.out, /__pkLineBreak\(n\)/);
   assert.match(result.out, /__pkCjkStrong\(wE\);/);
-  assert.match(result.out, /pinkie-chat-linebreaks:v2/);
+  assert.match(result.out, /pinkie-chat-linebreaks:v3/);
   assert.equal(patchSource(result.out).reason, 'already patched');
 });
 
 test('2026.10 bundle renders a lone <br> token as a line break', () => {
   const result = patchSource(current);
   assert.equal(result.changed, true);
-  assert.match(result.out, /e\.renderer\.rules\[Hi\]=\(e,t\)=>\{let n=e\[t\];return n\?__pkLineBreak\(n\)\?'<br>':n\(n\.content\):``\}/u);
+  assert.match(result.out, /e\.renderer\.rules\[Hi\]=\(e,t\)=>\{let n=e\[t\];return n\?__pkLineBreak\(n\)\?'<br>':xC\(n\.content\):``\}/u);
   assert.match(result.out, /__pkCjkStrong\(e\);/);
   assert.equal(patchSource(result.out).reason, 'already patched');
+});
+
+test('upgrades the installed v2 helper without touching neighboring patches', () => {
+  const old = 'prefix;/* pinkie-chat-linebreaks:v2 */\nfunction __pkCjkStrong(md) {\n'
+    + '  md.inline.ruler.before("emphasis", "pk_cjk_strong", (state, silent) => {\n'
+    + '    state.md.inline.parse(text, state.md, state.env, state.tokens);\n'
+    + '    state.pos = end+2; return true;\n  });\n}\nconst otherPatch = 42;';
+  const result = patchSource(old);
+  assert.equal(result.changed, true);
+  assert.ok(result.out.startsWith('prefix;'));
+  assert.ok(result.out.endsWith('const otherPatch = 42;'));
+  assert.ok(!result.out.includes('state.env, state.tokens'));
+  assert.match(result.out, /state\.env, children/);
+  assert.equal(patchSource(result.out).changed, false);
+  assert.equal(patchSource('/* pinkie-chat-linebreaks:v2 */ unknown').changed, false);
+});
+
+test('nested CJK parsing cannot alter outer emphasis delimiter positions', () => {
+  const source = patchSource(current).out;
+  const helper = source.slice(source.indexOf('function __pkCjkStrong'));
+  const install = new Function(`${helper};return __pkCjkStrong`)();
+  let rule,parseTarget;
+  const md = {inline:{ruler:{before:(name,id,fn)=>{rule=fn;}},parse:(text,owner,env,tokens)=>{
+    parseTarget=tokens;tokens.push({type:'text',tag:'',nesting:0,level:0,content:text});
+  }}};
+  install(md);
+  const state={src:'按**【四步法】**复盘',pos:1,posMax:12,level:0,tokens:[{type:'text',content:'按'}],md,env:{},push(type,tag,nesting){
+    if(nesting<0)this.level--;
+    const token={type,tag,nesting,level:this.level};this.tokens.push(token);
+    if(nesting>0)this.level++;
+    return token;
+  }};
+  assert.equal(rule(state,false),true);
+  assert.notEqual(parseTarget,state.tokens);
+  assert.deepEqual(state.tokens.map(token=>token.type),['text','strong_open','text','strong_close']);
+  assert.equal(state.tokens[2].level,1);
+  assert.equal(state.level,0);
+});
+
+test('newer inline HTML uses the escaping function instead of calling its token', () => {
+  const patched=patchSource(current).out;
+  const definition=patched.match(/function wC\(e\)\{[\s\S]*?\}\}/u)?.[0];
+  const install=new Function('Ii','Hi','xC',`${patched.slice(patched.indexOf('function __pkLineBreak'))};${definition};return wC`)(
+    {},'html_inline',s=>s.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  const md={use(){},renderer:{rules:{}}};install(md);
+  assert.equal(md.renderer.rules.html_inline([{type:'html_inline',content:'<br />'}],0),'<br>');
+  assert.equal(md.renderer.rules.html_inline([{type:'html_inline',content:'<script>'}],0),'&lt;script&gt;');
 });
 
 test('an unknown bundle is reported instead of silently skipped', () => {

@@ -4,19 +4,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import {apply, transform} from '../patch/apply-composer-drafts.mjs';
+import {apply, transform, pinkieComposerReadOnly, pinkieDurableComposerStore} from '../patch/apply-composer-drafts.mjs';
 
 const original=fs.readFileSync(new URL('./fixtures/openclaw-native-composer.js',import.meta.url),'utf8');
-function harness() {
+function harness({durable=new Map(),inputSupport=false,reading=false,modeDock=false}={}) {
   const saved=new Map(), listeners=new Map(), timers=new Map();let seq=0;
   const storage={getItem:key=>saved.get(key) ?? null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
   const events={addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name,fn)=>{if(listeners.get(name)===fn)listeners.delete(name);}};
-  const context=vm.createContext({...events,document:events,j:()=>storage,F:key=>({agentId:key.split(':')[1]}),L:id=>id.trim(),
+  const permanent={getItem:key=>durable.get(key)??null,setItem:(key,value)=>durable.set(key,value),removeItem:key=>durable.delete(key)};
+  const doc={...events,documentElement:{getAttribute:key=>key==='data-laolao-workspace-dock'&&modeDock?'1':null},...((inputSupport||reading||modeDock)?{querySelectorAll:()=>reading?[{state:{}},{state}]:[{state}]}: {})};
+  const context=vm.createContext({...events,document:doc,localStorage:permanent,j:()=>storage,F:key=>({agentId:key.split(':')[1]}),L:id=>id.trim(),
     setTimeout:fn=>{const id=++seq;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id)});
   vm.runInContext(transform(original)+';globalThis.native={save:Xu,load:Yu,restore:$u,Controller:ed};',context);
   const state={sessionKey:'agent:learning:dashboard:one',chatMessage:'',chatQueue:[],settings:{gatewayUrl:'ws://gateway-one'}};
   const controller=new context.native.Controller({addController(){}},()=>state);controller.start();
-  return {saved,listeners,timers,state,controller,native:context.native};
+  return {saved,durable,listeners,timers,state,controller,native:context.native};
 }
 
 test('typing persists immediately even when the native queue does not change',()=>{
@@ -76,7 +78,7 @@ test('runtime patch is atomic on unknown structures, backed up, cache refreshed 
     assert.throws(()=>apply(root,{backupRoot}),/结构已变化/);assert.equal(fs.readFileSync(importFile,'utf8'),importer);assert.equal(fs.readFileSync(indexFile,'utf8'),index);
     fs.writeFileSync(moduleFile,original);assert.equal(apply(root,{backupRoot}).changed,true);
     assert.equal(fs.readFileSync(path.join(backupRoot,'chat-page-test.js'),'utf8'),original);
-    assert.match(fs.readFileSync(importFile,'utf8'),/chat-page-test\.js\?v=existing-patch&pinkie-drafts=1/);assert.match(fs.readFileSync(indexFile,'utf8'),/index-test\.js\?v=existing-root&pinkie-drafts=1/);
+    assert.match(fs.readFileSync(importFile,'utf8'),/chat-page-test\.js\?v=existing-patch&pinkie-drafts=4/);assert.match(fs.readFileSync(indexFile,'utf8'),/index-test\.js\?v=existing-root&pinkie-drafts=4/);
     assert.equal(apply(root,{backupRoot}).changed,false);assert.equal(transform(transform(original)),transform(original));
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
@@ -132,4 +134,49 @@ test('2026.10 store runs without a browser: pending snapshots and flush listener
   assert.equal(store.pending,null,'the stop() that follows page hide finds nothing pending to drop');
   store.stop();
   assert.equal(listeners.size,0,'disconnect removes the flush listener');
+});
+
+test('draft text survives a fresh WebView session while queued messages do not become durable sends',()=>{
+ const first=harness();first.state.chatMessage='没有写完的中文\n第二段';first.state.chatQueue=[{id:'pending-1',text:'本次会话队列',createdAt:1}];first.controller.persistChangedState();
+ const restarted=harness({durable:first.durable});assert.equal(restarted.saved.size,0);assert.equal(restarted.controller.restore(),true);assert.equal(restarted.state.chatMessage,first.state.chatMessage);assert.equal(restarted.state.chatQueue.length,0);
+ restarted.state.chatMessage='';restarted.controller.persistChangedState();const again=harness({durable:first.durable});assert.equal(again.controller.restore(),false,'a sent or manually cleared draft stays cleared after restart');
+});
+
+test('an actual split reading pane cannot erase the primary composer backup',()=>{
+ const main=harness();main.state.chatMessage='主页面正在写的答案';main.controller.persistChangedState();
+ const reading=harness({durable:main.durable,reading:true});assert.equal(reading.controller.restore(),true);reading.state.chatMessage='';reading.controller.persistChangedState();
+ const restarted=harness({durable:main.durable});restarted.controller.restore();assert.equal(restarted.state.chatMessage,'主页面正在写的答案');
+});
+
+test('dual-open mode companions persist and clear their own drafts across restarts',()=>{
+ const left=harness(),right=harness({durable:left.durable,modeDock:true});
+ left.state.chatMessage='左侧未完成';left.controller.persistChangedState();
+ right.state.sessionKey='agent:unrestricted:dashboard:two';right.state.chatMessage='右侧未完成\n第二行';right.controller.persistChangedState();
+ const restartLeft=harness({durable:left.durable}),restartRight=harness({durable:left.durable,modeDock:true});
+ restartRight.state.sessionKey=right.state.sessionKey;
+ assert.equal(restartLeft.controller.restore(),true);assert.equal(restartRight.controller.restore(),true);
+ assert.equal(restartLeft.state.chatMessage,'左侧未完成');assert.equal(restartRight.state.chatMessage,'右侧未完成\n第二行');
+ restartRight.state.chatMessage='';restartRight.controller.persistChangedState();
+ const again=harness({durable:left.durable,modeDock:true});again.state.sessionKey=right.state.sessionKey;
+ assert.equal(again.controller.restore(),false);assert.equal(restartLeft.native.load(restartLeft.state,restartLeft.state.sessionKey).draft,'左侧未完成');
+});
+
+test('v3 upgrades only the draft read-only helper and keeps unrelated renderer bytes',()=>{
+ const current=transform(original),helper=pinkieComposerReadOnly.toString();
+ const oldHelper=helper.replace('  const doc = globalThis.document;','  const doc = globalThis.document;\n  if (doc?.documentElement?.getAttribute?.(\'data-laolao-workspace-dock\') === \'1\') return true;');
+ const legacy=current.replace('/* pinkie-composer-drafts:v4 */','/* pinkie-composer-drafts:v3 */').replace(helper,oldHelper);
+ assert.notEqual(legacy,current);assert.equal(transform(legacy+'\n/* unrelated renderer unchanged */'),current+'\n/* unrelated renderer unchanged */');
+ assert.equal(transform(transform(legacy)),transform(legacy));
+});
+
+test('input capture saves Chinese composition before native debounce or a forced close',()=>{
+ const first=harness({inputSupport:true});const pane={state:first.state};const textarea={value:'输入法还没结束的中文',closest:selector=>selector==='openclaw-chat-pane'?pane:textarea};
+ first.listeners.get('input')({target:textarea});assert.equal(first.state.chatMessage,'','input capture must not interrupt native IME state');
+ const restarted=harness({durable:first.durable});assert.equal(restarted.controller.restore(),true);assert.equal(restarted.state.chatMessage,textarea.value);
+});
+
+test('an internal secondary pane cannot write or remove the primary transient or durable draft',()=>{
+ const local=new Map(),session=new Map();const storage=m=>({getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)});const state={sessionKey:'a'},reader={sessionKey:'a'};const document={documentElement:{getAttribute:()=>null},querySelectorAll:()=>[{state},{state:reader}]};
+ const context=vm.createContext({document,localStorage:storage(local)});vm.runInContext(pinkieComposerReadOnly.toString()+';'+pinkieDurableComposerStore.toString()+';globalThis.store=pinkieDurableComposerStore',context);
+ const main=context.store(storage(session),'a',state);main.setItem('gateway',JSON.stringify({version:1,sessions:{a:{draft:'保留主输入',updatedAt:1}}}));const before=[...session];const secondary=context.store(storage(session),'a',reader);secondary.removeItem('gateway');secondary.setItem('gateway',JSON.stringify({version:1,sessions:{}}));assert.deepEqual([...session],before);assert.equal(local.size,1);
 });

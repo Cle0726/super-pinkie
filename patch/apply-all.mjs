@@ -22,6 +22,7 @@ const ORDER = [
   'apply-compaction-boundary-recovery.mjs',
   'apply-loopback-model-reliability.mjs',
   'apply-work-thinking.mjs',
+  'apply-thinking-capabilities.mjs',
   'apply-image-access.mjs',
   'apply-control-ui-workspace-media.mjs',
   'apply-control-ui-file-delivery.mjs',

@@ -26,10 +26,9 @@
   interpolate-size: allow-keywords;
 }
 .pinkie-process[data-live="1"] { box-shadow: inset 0 0 0 1px rgba(233, 79, 145, 0.26), 0 6px 22px rgba(233, 79, 145, 0.08); }
-/* Nothing to show yet (the very first second of a turn): only the status pill. */
-.pinkie-process:not(:has(.pinkie-process__rows > *)):not(:has(.pinkie-thinking)) { display: none; }
-.pinkie-process::details-content { transition: height 0.45s cubic-bezier(0.22, 1, 0.36, 1), content-visibility 0.45s allow-discrete; height: 0; overflow: clip; }
-.pinkie-process[open]::details-content { height: auto; }
+/* A closed card still has its summary; its body is intentionally unmounted. */
+/* Body mounting is owned by Lit; avoid an animated height changing the reading anchor. */
+.pinkie-process::details-content { transition: none; }
 
 .pinkie-process__summary {
   list-style: none;
@@ -85,7 +84,7 @@
 .pinkie-thinking__body {
   margin: 2px 0 6px 4px; padding-left: 12px; border-left: 2px solid rgba(233, 79, 145, 0.22);
   font-size: 13px; line-height: 1.75; color: #7a5068; white-space: pre-wrap;
-  max-height: 0; overflow: hidden; transition: max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  max-height: 0; overflow: hidden;
 }
 .pinkie-thinking.is-live .pinkie-thinking__body {
   max-height: 68px; overflow: hidden;

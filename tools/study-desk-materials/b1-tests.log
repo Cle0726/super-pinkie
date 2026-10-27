@@ -1,0 +1,111 @@
+✔ interactive cards are session-scoped and never expose the private answer (16.372125ms)
+✔ interaction starts on so 碧琪 can place cards herself, and only the student turns it off (9.901084ms)
+✔ submissions are idempotent and reject stale activity ids (20.290292ms)
+✔ choice grading maps model letters to the option ids returned by the UI (36.968167ms)
+✔ resolved key points and selected text persist outside chat history (74.400042ms)
+✔ tool binds the active learning session and updates the native card (15.520541ms)
+✔ stopping interaction clears the card and fences a delayed present call (3.852ms)
+✔ a legacy disabled card is cleaned before it can revive on the next launch (2.41125ms)
+✖ gateway methods are admin-scoped and ordinary learning chat stays normal until enabled (6.576292ms)
+✔ frontend keeps one native card, restores by revision, and avoids subtree observers (4.593792ms)
+✔ note saves strip title decorations, preserve the body, and keep an immutable original (8.632042ms)
+✔ notes are scoped to their learning session, including search and tag filters (96.646417ms)
+✔ update RPC changes editable fields but never replaces the saved original (27.95125ms)
+✔ light organization splits fields, suggests tags, and preserves both original and content (59.492042ms)
+✔ legacy notes remain readable and missing review fields mean never reviewed and due today (3.245667ms)
+✔ review scheduling uses spaced intervals and resets after forgetting (0.302625ms)
+✔ similar-note detection catches identical terms and comparison families (0.760375ms)
+✔ organization operations validate type, reason, ownership, and references (6.334666ms)
+✔ organization preview applies only selected operations, backs up, and can be undone (39.605166ms)
+✔ merge keeps source notes recoverable and compare makes a linked card (19.405292ms)
+✔ a legacy multi-note card keeps its explanation without applying one grade to every linked note (15.244458ms)
+✔ model image channel serializes openai-completions, preserves usage, and supports Markdown (19.229709ms)
+✔ model image channel serializes anthropic-messages, preserves usage, and supports Markdown (2.826209ms)
+✔ model image channel serializes openai-responses, preserves usage, and supports Markdown (2.218291ms)
+✔ material source guard blocks USB and registered indexes while preserving the original bank guard (2.535833ms)
+✔ active lesson check and bridge metadata survive submission; check does not update mastery or review schedules (31.001042ms)
+✔ survey counts form-feed pages using the 40 non-whitespace character threshold (6.111291ms)
+✔ survey audit includes hidden files, detects mtime changes, and never follows symlinks (69.956333ms)
+✔ survey rejects root and symlink outputs before opening a writable file (11.926084ms)
+✔ survey imports transcript numbering and same-name subtitles without guessing an ambiguous title (3.831667ms)
+✔ synthetic survey reads PDF PPTX GBK archives and encrypted flags while leaving all source metadata unchanged (1317.646333ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 30
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1682.837084
+
+✖ failing tests:
+
+test at tests/learning-interaction.test.mjs:135:1
+✖ gateway methods are admin-scoped and ordinary learning chat stays normal until enabled (6.576292ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'pinkie.learning.attempts.correct',
+      'pinkie.learning.attempts.list',
+      'pinkie.learning.attempts.retry',
+      'pinkie.learning.current',
+  +   'pinkie.learning.desk.lesson.abandon',
+  +   'pinkie.learning.desk.lesson.begin',
+  +   'pinkie.learning.desk.lesson.current',
+  +   'pinkie.learning.desk.lesson.event',
+  +   'pinkie.learning.desk.lesson.finish',
+  +   'pinkie.learning.desk.lesson.prepare',
+      'pinkie.learning.inline.draft',
+      'pinkie.learning.inline.get',
+      'pinkie.learning.inline.save',
+  +   'pinkie.learning.materials.jobs.control',
+  +   'pinkie.learning.materials.locate',
+  +   'pinkie.learning.materials.pageImage',
+  +   'pinkie.learning.materials.read',
+  +   'pinkie.learning.materials.reveal',
+  +   'pinkie.learning.materials.scan',
+  +   'pinkie.learning.materials.status',
+  +   'pinkie.learning.materials.unsupported',
+      'pinkie.learning.notes.delete',
+      'pinkie.learning.notes.list',
+      'pinkie.learning.notes.organize.apply',
+      'pinkie.learning.notes.organize.get',
+      'pinkie.learning.notes.organize.light',
+  
+      at TestContext.<anonymous> (file:///Users/Admin/release-superpinkie/repo/tests/learning-interaction.test.mjs:139:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [
+      'pinkie.learning.attempts.correct',         'pinkie.learning.attempts.list',
+      'pinkie.learning.attempts.retry',           'pinkie.learning.current',
+      'pinkie.learning.desk.lesson.abandon',      'pinkie.learning.desk.lesson.begin',
+      'pinkie.learning.desk.lesson.current',      'pinkie.learning.desk.lesson.event',
+      'pinkie.learning.desk.lesson.finish',       'pinkie.learning.desk.lesson.prepare',
+      'pinkie.learning.inline.draft',             'pinkie.learning.inline.get',
+      'pinkie.learning.inline.save',              'pinkie.learning.materials.jobs.control',
+      'pinkie.learning.materials.locate',         'pinkie.learning.materials.pageImage',
+      'pinkie.learning.materials.read',           'pinkie.learning.materials.reveal',
+      'pinkie.learning.materials.scan',           'pinkie.learning.materials.status',
+      'pinkie.learning.materials.unsupported',    'pinkie.learning.notes.delete',
+      'pinkie.learning.notes.list',               'pinkie.learning.notes.organize.apply',
+      'pinkie.learning.notes.organize.get',       'pinkie.learning.notes.organize.light',
+      'pinkie.learning.notes.organize.preview',   'pinkie.learning.notes.organize.undo',
+      'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status',
+      'pinkie.learning.notes.quiz.prepare',       'pinkie.learning.notes.restore',
+      'pinkie.learning.notes.review',             'pinkie.learning.notes.review.queue',
+      'pinkie.learning.notes.save',               'pinkie.learning.notes.update',
+      'pinkie.learning.practice.list',            'pinkie.learning.practice.open',
+      'pinkie.learning.practice.run',             'pinkie.learning.set',
+      'pinkie.learning.status',                   'pinkie.learning.submit'
+    ],
+    expected: [ 'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry', 'pinkie.learning.current', 'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save', 'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply', 'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview', 'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare', 'pinkie.learning.notes.restore', 'pinkie.learning.notes.review', 'pinkie.learning.notes.review.queue', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update', 'pinkie.learning.practice.list', 'pinkie.learning.practice.open', 'pinkie.learning.practice.run', 'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

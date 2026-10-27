@@ -11,6 +11,8 @@ import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
+import {BackgroundJobs} from './background-jobs.mjs';
+import {registerWorkGateway} from './work-status.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
@@ -464,6 +466,14 @@ const TOOL_PROGRESS_RULES = `
 - 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
+// 后台命令结束时由 background-jobs.mjs 发内部消息叫醒碧琪，所以长命令不必挂着干等。
+const BACKGROUND_WORK_RULES = `
+【长时间命令放后台】
+- 预计超过半分钟的命令（构建、渲染、下载、长测试、批量处理）用 exec 的 background: true 放到后台，不要反复 poll、不要 sleep 干等。
+- 启动后用一句话告诉用户在跑什么、大概要多久，然后可以先做别的，或直接结束这一轮；命令结束时系统会自动叫你继续，那时再读输出、核对结果并汇报。
+- 后台还没结束的事情不能说成已完成；也不要承诺一个具体时间点会主动汇报。
+`.trim();
+
 // Independent system module shared by all five modes. Keep it separate from
 // persona, aesthetics and opinion style so teaching can never dilute the
 // execution contract or subtly change a mode's character.
@@ -911,6 +921,23 @@ function proseOnly(value = '') {
   return String(value || '')
     .replace(/```[\s\S]*?(?:```|$)/g, ' ')
     .replace(/`[^`\n]*`/g, ' ');
+}
+
+// 本轮放到后台、还没看到结束的 exec 会话。命令结束时碧琪会被叫醒接着做（background-jobs.mjs），
+// 所以「已在后台运行，跑完告诉你」是诚实的进行中状态，不是只预告不做事。
+const BACKGROUND_FINISHED_CLAIM = /(?:已经?|全部|都|均)(?:完成|做完|跑完|搞定|结束)|(?<![等待])(?:做完|跑完|搞定|完成)了/;
+function backgroundStillRunning(state) {
+  const running = new Set();
+  for (const entry of state?.tools || []) {
+    const name = String(entry?.name || '').toLowerCase();
+    const output = String(entry?.output || '');
+    const started = /(?:^|_)exec$/.test(name) && !entry.failed && output.match(/Command still running \(session ([\w.-]+),/);
+    if (started) running.add(started[1]);
+    if (name !== 'process') continue;
+    const id = String(entry.params?.sessionId || '');
+    if (/Process exited with (?:code|signal)/.test(output) || ['kill', 'remove'].includes(String(entry.params?.action || ''))) running.delete(id);
+  }
+  return running.size > 0;
 }
 
 function isHonestIncomplete(value = '') {
@@ -1945,6 +1972,11 @@ export class CompletionIntegrityGuard {
     // Asking the user is a legitimate pause, not a delivery claim.
     const lastTool = state.tools.at(-1);
     if (lastTool && lastTool.name === ASK_USER_TOOL && !lastTool.failed) return;
+    // 学习题卡的出题和结算本身就是交付：卡片就在聊天里，不需要文件或命令证据。
+    // 否则“给我出 3 道程序阅读题”、卡片作答消息都会被当成执行任务再跑一轮。
+    // 只看先生自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
+    if (state.tools.some(entry => entry.name === 'learning_activity' && !entry.failed)
+        && !FILE_OR_RUN_REQUEST.test(intentText(state.prompt).split(/\n\s*【/)[0])) return;
     const actionRun = isLikelyActionRequest(state.prompt);
     // Reading or summarizing an attached document needs no tool/effect proof.
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
@@ -1955,6 +1987,7 @@ export class CompletionIntegrityGuard {
     const inline = inlineSourceInstruction(state.prompt);
     if (inline !== null && !isLikelyActionRequest(inline)
         && !/(?:保存|存成|存到|写入|导出|生成.{0,4}文件|发送|发到|发给|上传|发布)/.test(inline)) return;
+    if (backgroundStillRunning(state) && !BACKGROUND_FINISHED_CLAIM.test(proseOnly(reply)) && !DELIVERY_CLAIM.test(reply)) return;
     if (actionRun) {
       const promise = promiseWithoutActionReason(reply);
       const nudged = promise && this.softRevise(key, state, 'promise', reply, promise);
@@ -4894,9 +4927,25 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       required: progress.required,
       completed: progress.completed,
       roles: progress.roles,
+      children: Object.entries(state.childTimeline || {}).slice(-24).map(([key, row]) => ({
+        id: hashForAudit(key).slice(0, 12), role: row.role, roleLabel: ROLE_LABELS[row.role] || row.role || '协作', label: row.label,
+        model: row.model || state.childModels.get(key) || '', state: row.state, startedAt: row.startedAt, endedAt: row.endedAt,
+        summary: row.summary, hasOutput: Boolean(state.childResults.get(key)?.text),
+      })),
       updatedAt: Number(state.lastEventAt) || 0,
       endedAt: Number(state.endedAt) || 0,
     };
+  }
+
+  // 小面板点开某个子代理时看它的完整结果；只给父会话自己的子代理。
+  childOutput(sessionKey, id) {
+    const state = this.getRun(sessionKey);
+    if (!state) return {found: false};
+    for (const [key, row] of Object.entries(state.childTimeline || {})) {
+      if (hashForAudit(key).slice(0, 12) !== id) continue;
+      return {found: true, role: row.role, label: row.label, state: row.state, output: String(state.childResults.get(key)?.text || row.summary || '')};
+    }
+    return {found: false};
   }
 
   disarm(sessionKey) {
@@ -4918,6 +4967,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       '\n' + TOOL_PROGRESS_RULES + '\n',
+      '\n' + BACKGROUND_WORK_RULES + '\n',
       ...(mode !== 'none' ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
       ...(mode !== 'none' ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
       ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
@@ -5245,6 +5295,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       state.childModels.set(event.childSessionKey, resolvedModel);
       if (firstSeen) state.modelCounts.set(resolvedModel, (state.modelCounts.get(resolvedModel) || 0) + 1);
     }
+    // 后台工作小面板的一行：谁在做、用什么模型、做了多久。普通对象，随运行单一起落盘。
+    state.childTimeline ||= {};
+    if (firstSeen || !state.childTimeline[event.childSessionKey]) {
+      state.childTimeline[event.childSessionKey] = {role, label: String(event.label || ''), model: resolvedModel, startedAt: Date.now(), endedAt: 0, state: 'running', summary: ''};
+    }
     state.lastEventAt = Date.now();
     this.setRun(parent, state);
   }
@@ -5316,6 +5371,12 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           state.emptyChildren?.delete(event.targetSessionKey);
           if (role) state.completedRoles.set(role, (state.completedRoles.get(role) || 0) + 1);
         } else if (!lateEmpty) state.failedChildren += 1;
+      }
+      const row = state.childTimeline?.[event.targetSessionKey];
+      if (row) {
+        row.endedAt = row.endedAt || Date.now();
+        row.state = acceptedSuccess ? 'done' : 'failed';
+        row.summary = resultText.replace(/\s+/g, ' ').slice(0, 80);
       }
       state.lastEventAt = Date.now();
       this.setRun(parent, state);
@@ -5772,6 +5833,17 @@ export default {
       readyForReview: sessionKey => !architecture.status(sessionKey)?.active,
       store: new ReviewStore(path.join(new FileRunStore().root, 'reviews')),
     }));
+    // 后台命令结束时叫醒碧琪（OpenClaw 自带的心跳叫醒在这几个模式里不生效，见 background-jobs.mjs）。
+    const background = new BackgroundJobs({
+      runProcess,
+      cliEntry: resolveGatewayCliEntry(),
+      isBusy: sessionKey => {
+        const activity = architecture.activityFor(sessionKey) || {};
+        return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
+      },
+    });
+    // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
+    registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
@@ -6039,6 +6111,7 @@ export default {
       return decision;
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
+      background.afterTool(event, ctx);
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);

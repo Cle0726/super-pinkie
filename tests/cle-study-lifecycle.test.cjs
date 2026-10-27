@@ -21,9 +21,11 @@ function setupHarness({requestHandler = null} = {}) {
   let nextTimerId = 0;
   const intervals = new Map();
   const timeouts = new Map();
+  const events = [];
 
   const window = {
     document,
+    dispatchEvent(event) { events.push(event); },
     requestAnimationFrame(cb) {
       const id = ++nextFrameId;
       frames.set(id, cb);
@@ -96,6 +98,8 @@ function setupHarness({requestHandler = null} = {}) {
   // Build a bare vm context where study.js runs as standard code without imports
   const context = {
     document,
+    window,
+    CustomEvent: class CustomEvent { constructor(type, options = {}) { this.type = type; this.detail = options.detail; } },
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     setInterval: window.setInterval.bind(window),
@@ -141,6 +145,7 @@ function setupHarness({requestHandler = null} = {}) {
     mod,
     frames,
     intervals,
+    events,
     createLearningPane,
     flushFrames,
   };
@@ -159,6 +164,33 @@ test('an already-aborted signal allocates no panels, no timers, and no RPCs', ()
   assert.equal(host.calls.length, 0, 'no RPC may be issued on an aborted mount');
   assert.equal(intervals.size, 0, 'no interval timers may be set');
   assert.equal(frames.size, 0, 'no animation frame may be scheduled');
+});
+
+test('the next learning step routes to its own pane and the selected short focus duration reaches the gateway', async () => {
+  const h = setupHarness(); const pane = h.createLearningPane();
+  const controller = new AbortController(); h.mod.mountStudy(h.host, controller.signal); await new Promise(resolve => setTimeout(resolve, 10));
+  const duration = h.document.querySelector('.cle-study__duration'); duration.value = '5'; duration.dispatch('change');
+  h.document.querySelector('.cle-study__actions button').click(); await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(h.host.calls.find(call => call.method === 'pinkie.learning.focus.start').params.minutes, 5);
+  h.document.querySelector('.cle-study__button--primary').click();
+  assert.equal(h.events[0].type, 'pinkie:learning-continue');
+  assert.equal(h.events[0].detail.sessionKey, pane.sessionKey);
+  assert.equal(h.events[0].detail.step.kind, 'resume');
+  controller.abort();
+});
+
+test('today completion, daily review quota and mastery evidence remain separate from the backlog', async () => {
+  const h = setupHarness({requestHandler(method) {
+    if (method === 'pinkie.learning.today') return Promise.resolve({complete: true, progress: {minutes: 25, questions: 10, dueReviews: 50}, goals: {minutes: 25, questions: 10}, streak: {current: 3}, reviewPlan: {target: 20, done: 20, remaining: 0, backlog: 50}, mastery: {independentCorrect: 4, assistedCorrect: 1, needsPractice: 3}, nextStep: {kind: 'choice', label: '今日目标已完成', description: '可以休息，也可以自选继续练习。'}});
+    return Promise.resolve({active: null});
+  }});
+  h.createLearningPane(); const controller = new AbortController(); h.mod.mountStudy(h.host, controller.signal); await new Promise(resolve => setTimeout(resolve, 10));
+  const progress = h.document.querySelector('.cle-study__progress');
+  assert.match(progress.getAttribute('aria-label'), /今日复习 20\/20 张，另有 50 张分日完成/);
+  assert.match(h.document.querySelector('.cle-study__mastery').textContent, /独立答对 4/);
+  assert.match(h.document.querySelector('.cle-study__next-description').textContent, /50 张留到以后/);
+  assert.equal(h.document.querySelector('.cle-study').dataset.complete, 'true');
+  controller.abort();
 });
 
 test('retirement cancels queued animation frames and prevents panel/strip resurrection', () => {

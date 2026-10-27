@@ -45,52 +45,84 @@ const BLOCKS = ':scope .chat-text > :is(p, ul, ol, pre, blockquote, h1, h2, h3, 
 const STEP_MS = 90;          // stagger between blocks / rows
 const MAX_STAGGER = 14;      // a long reply does not keep the reader waiting
 
+// Only identities are retained across native row unmounts; node ownership stays
+// with Lit. The bound also covers sessions left open for days in the same window.
+const MAX_SEEN_IDS = 4096;
+const MAX_ACTIVE_REVEALS = 64;
+const CANDIDATES = `${BUBBLE}, ${ROW}, ${GROUP}`;
+const VISIBLE_PANE = '.chat-pane-cache__pane--visible, .chat-pane-cache__pane--active';
+
 export function mountTranscript(signal) {
-  const seen = new WeakSet();      // nodes already on screen (never revealed again)
-  const seenIds = new Set();       // message ids already shown in this document
+  if (signal.aborted) return;
+  const seen = new WeakSet();
+  const seenIds = new Set();
+  const pending = new Set();
+  const animations = new Map();
+  let frame = 0;
   let primed = false;
 
+  const including = (root, selector) => [
+    ...(root.matches?.(selector) ? [root] : []), ...root.querySelectorAll(selector),
+  ];
+  const remember = (node) => {
+    const id = node.dataset.messageId;
+    if (!id) return false;
+    const session = node.closest('openclaw-chat-pane')?.state?.sessionKey || '';
+    const key = `${session}\0${id}`;
+    if (seenIds.has(key)) return true;
+    seenIds.add(key);
+    if (seenIds.size > MAX_SEEN_IDS) seenIds.delete(seenIds.values().next().value);
+    return false;
+  };
   const tag = (root) => {
-    for (const row of root.querySelectorAll(`${ROW}:not([data-cle-kind])`)) {
+    for (const row of including(root, ROW)) {
       const icon = row.querySelector('.chat-tool-msg-summary__icon');
       const word = icon?.getAttribute('aria-label') || row.querySelector('.chat-tool-row__verb')?.textContent || '';
-      row.dataset.cleKind = /file/.test(row.className) && !/write|edit/.test(word) ? 'read' : kindOfText(word);
+      const kind = /file/.test(row.className) && !/write|edit/.test(word) ? 'read' : kindOfText(word);
+      if (row.dataset.cleKind !== kind) row.dataset.cleKind = kind;
     }
-    for (const group of root.querySelectorAll(GROUP)) {
+    for (const group of including(root, GROUP)) {
       const label = group.querySelector('.chat-activity-group__label');
       if (!label) continue;
       const text = label.textContent || '';
       if (label.dataset.cleText === text) continue;
       label.dataset.cleText = text;
-      // "1 条命令 · 2 次读取" → 3 steps; the dominant kind colours the dot
       const {total, kind} = summarizedTools(text);
       if (total) label.dataset.cleTotal = String(total); else delete label.dataset.cleTotal;
       group.dataset.cleKind = kind;
     }
   };
-
   const reveal = (node, delay) => {
+    if (animations.size >= MAX_ACTIVE_REVEALS || animations.has(node)) return;
     node.style.setProperty('--cle-reveal-delay', `${delay}ms`);
     node.classList.add('cle-reveal');
-    node.addEventListener('animationend', () => { node.classList.remove('cle-reveal'); node.style.removeProperty('--cle-reveal-delay'); }, {once: true});
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      node.removeEventListener('animationend', finish);
+      node.classList.remove('cle-reveal');
+      node.style.removeProperty('--cle-reveal-delay');
+      animations.delete(node);
+    };
+    animations.set(node, finish);
+    node.addEventListener('animationend', finish, {once: true});
+    // Reduced motion or a removed stylesheet may suppress animationend entirely.
+    timer = setTimeout(finish, delay + 2500);
   };
-
-  const scan = () => {
-    tag(document);
-    const fresh = [];
-    for (const pane of document.querySelectorAll('.chat-pane-cache__pane--visible, .chat-pane-cache__pane--active')) {
-      for (const node of pane.querySelectorAll(`${BUBBLE}, ${ROW}, ${GROUP}`)) {
-        if (seen.has(node)) continue;
-        seen.add(node);
-        const id = node.dataset.messageId;
-        const known = id && seenIds.has(id);
-        if (id) seenIds.add(id);
-        // first pass, a re-render of a message already shown, or anything outside the live
-        // turn: on screen as it is
-        if (!primed || known || !node.closest(LATEST)) continue;
-        if (node.matches(`${ROW}, ${GROUP}`) && node.parentElement?.closest(GROUP)) continue;
-        fresh.push(node);
-      }
+  const scan = (roots) => {
+    const fresh = [], candidates = new Set();
+    for (const root of roots) {
+      if (root !== document && !root.isConnected) continue;
+      tag(root);
+      for (const node of including(root, CANDIDATES)) candidates.add(node);
+    }
+    for (const node of candidates) {
+      if (seen.has(node)) continue;
+      seen.add(node);
+      const known = remember(node);
+      if (!primed || known || !node.closest(VISIBLE_PANE) || !node.closest(LATEST)) continue;
+      if (node.matches(`${ROW}, ${GROUP}`) && node.parentElement?.closest(GROUP)) continue;
+      fresh.push(node);
     }
     primed = true;
     let i = 0;
@@ -99,20 +131,56 @@ export function mountTranscript(signal) {
         const blocks = [...node.querySelectorAll(BLOCKS)];
         if (!blocks.length) { reveal(node, Math.min(i++, MAX_STAGGER) * STEP_MS); continue; }
         for (const block of blocks) reveal(block, Math.min(i++, MAX_STAGGER) * STEP_MS);
-      } else {
-        reveal(node, Math.min(i++, MAX_STAGGER) * STEP_MS);
-      }
+      } else reveal(node, Math.min(i++, MAX_STAGGER) * STEP_MS);
     }
   };
-
-  let queued = false;
-  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; if (!signal.aborted) scan(); }); } };
-  const mo = new MutationObserver(schedule);
-  mo.observe(document.body, {childList: true, subtree: true});
-  scan();
+  const flush = () => {
+    frame = 0;
+    if (signal.aborted) return;
+    for (const [node, finish] of animations) if (!node.isConnected) finish();
+    const roots = [...pending];
+    pending.clear();
+    // A newly inserted card already contains its inserted children. Visit that
+    // subtree once even when the browser reports each append as a separate record.
+    const rootSet = new Set(roots);
+    scan(roots.filter((root) => {
+      for (let parent = root.parentElement; parent; parent = parent.parentElement) {
+        if (rootSet.has(parent)) return false;
+      }
+      return true;
+    }));
+  };
+  const enqueue = (node, subtree = false) => {
+    const element = node?.nodeType === 3 ? node.parentElement : node;
+    if (!element?.querySelectorAll || !element.isConnected) return;
+    // A streamed text node belongs to one message/row/group. Never turn its
+    // parent .chat-thread or pane into a request to scan the full history.
+    const owner = element.closest?.(CANDIDATES);
+    if (owner) pending.add(owner);
+    else if (subtree) pending.add(element);
+  };
+  const observerRoot = document.querySelector('openclaw-app-shell') || document.querySelector('openclaw-app') || document.body;
+  const mo = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === 'childList') {
+        for (const node of record.addedNodes) enqueue(node, true);
+        enqueue(record.target);
+      } else enqueue(record.target);
+    }
+    // A removal can end an animation even when it introduces no new candidates.
+    if (!frame && (pending.size || animations.size)) frame = requestAnimationFrame(flush);
+  });
+  mo.observe(observerRoot, {childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ['aria-label']});
+  scan([document]);
   signal.addEventListener('abort', () => {
     mo.disconnect();
-    for (const n of document.querySelectorAll('.cle-reveal')) { n.classList.remove('cle-reveal'); n.style.removeProperty('--cle-reveal-delay'); }
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    pending.clear();
+    seenIds.clear();
+    for (const finish of animations.values()) finish();
+    // Teardown is a one-time sweep; streaming updates never query document history.
     for (const n of document.querySelectorAll('[data-cle-kind]')) delete n.dataset.cleKind;
     for (const n of document.querySelectorAll('[data-cle-total], [data-cle-text]')) { delete n.dataset.cleTotal; delete n.dataset.cleText; }
   }, {once: true});

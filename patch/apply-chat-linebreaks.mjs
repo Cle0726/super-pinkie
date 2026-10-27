@@ -3,9 +3,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
-export const marker = '/* pinkie-chat-linebreaks:v2 */';
+export const marker = '/* pinkie-chat-linebreaks:v3 */';
 export function patchSource(source) {
   if (source.includes(marker)) return {changed:false, reason:'already patched'};
+  // Upgrade only the old helper, leaving every other bundle patch intact.
+  // Parsing into the outer token array corrupts markdown-it's delimiter indices.
+  if (source.includes('/* pinkie-chat-linebreaks:v2 */')) {
+    const start = source.indexOf('function __pkCjkStrong(md) {');
+    const tail = '    state.pos = end+2; return true;\n  });\n}';
+    const end = source.indexOf(tail, start);
+    if (start < 0 || end < start || source.indexOf('function __pkCjkStrong(md) {', start+1) >= 0) {
+      return {changed:false, reason:'Old CJK helper does not match'};
+    }
+    const helper = CJK_RULE.slice(CJK_RULE.indexOf('function __pkCjkStrong'));
+    let out = source.slice(0,start)+helper.trimEnd()+source.slice(end+tail.length);
+    out = out.replace('/* pinkie-chat-linebreaks:v2 */',marker);
+    return {changed:true,out:readableFallback(out)};
+  }
   // 2026.7 bundle: `renderer.rules.html_inline=(t,i)=>{let node=t[i];return …}`.
   const rule = /\.renderer\.rules\.html_inline=\((\w+),(\w+)\)=>\{let (\w+)=\1\[\2\];return \3\.meta\?\.taskListPlugin===!0\?\3\.content:(\w+)\(\3\.content\)\}/;
   // 2026.10 bundle: the rule is installed through a plugin and looks the token
@@ -22,17 +36,24 @@ export function patchSource(source) {
     const [all,t,i,node,escape] = match;
     out = source.replace(all, `.renderer.rules.html_inline=(${t},${i})=>{let ${node}=${t}[${i}];return ${node}.meta?.taskListPlugin===!0?${node}.content:__pkLineBreak(${node})||${escape}(${node}.content)}`);
   } else if (currentMatch) {
-    // Capture 4 is both the token lookup (`n?…`) and the escaping call name
-    // (`xC(n.content)`); they are the same identifier in the bundled rule.
-    const [,head,array,index,escape] = currentMatch;
+    const [,head,array,index,token,,escape] = currentMatch;
     // Keep the native structural-HTML / inline-code escaping path untouched and
     // only swap a standalone `<br>` token for a real line break.
     out = source.replace(current,
-      `${head}(${array},${index})=>{let ${escape}=${array}[${index}];return ${escape}?__pkLineBreak(${escape})?'<br>':${escape}(${escape}.content):\`\`}`);
+      `${head}(${array},${index})=>{let ${token}=${array}[${index}];return ${token}?__pkLineBreak(${token})?'<br>':${escape}(${token}.content):\`\`}`);
   } else return {changed:false,reason:'HTML renderer not found'};
   if (!setup) return {changed:false,reason:'Markdown setup not found'};
   out = out.replace(setup[0], setup[0]+'__pkCjkStrong('+setup[1]+');');
-  return {changed:true,out:out+'\n'+marker+'\n'+CJK_RULE};
+  return {changed:true,out:readableFallback(out)+'\n'+marker+'\n'+CJK_RULE};
+}
+
+// A parser failure is ordinary readable text, not a pretend code block. Use
+// the native escaped, wrapping fallback; genuine code fences keep their renderer.
+function readableFallback(source) {
+  const fallback = /function ([\w$]+)\(e\)\{return`<div class="markdown-plain-text-fallback">/u.exec(source)?.[1];
+  if (!fallback) return source;
+  return source.replace(/([\w$]+)=`<pre class="code-block">\$\{[\w$]+\(([\w$]+\([\w$]+\))\)\}<\/pre>`/u,
+    (_,result,text) => `${result}=${fallback}(${text})`);
 }
 // CommonMark treats punctuation before a closing delimiter followed by a Han
 // character as literal. Accept that narrow Chinese prose case in inline text;
@@ -54,7 +75,14 @@ function __pkCjkStrong(md) {
     if (!(/\p{Script=Han}/u.test(before) && /^\p{P}/u.test(text)) && !(/\p{Script=Han}/u.test(after) && /\p{P}$/u.test(text))) return false;
     if (!silent) {
       const open = state.push("strong_open", "strong", 1); open.markup = "**";
-      state.md.inline.parse(text, state.md, state.env, state.tokens);
+      const children = [];
+      state.md.inline.parse(text, state.md, state.env, children);
+      for (const child of children) {
+        const token = state.push(child.type, child.tag, child.nesting);
+        const level = token.level;
+        Object.assign(token, child);
+        token.level = level;
+      }
       const close = state.push("strong_close", "strong", -1); close.markup = "**";
     }
     state.pos = end+2; return true;

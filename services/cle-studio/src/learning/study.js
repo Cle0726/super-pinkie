@@ -64,6 +64,7 @@ export function mountStudy(host, signal) {
     if (isRetired()) return null;
     let dead = false;
     let today = null, focus = null, loading = false, lastLoaded = 0, loadSeq = 0;
+    let plannedMinutes = 15;
     // `alive` gates every write and every request: a disposed panel or a retired activation is
     // closed. It must NOT test strip.isConnected — the strip is legitimately detached until
     // mount() places it, and a pane re-render detaches it for a moment.
@@ -73,12 +74,24 @@ export function mountStudy(host, signal) {
     strip.dataset.clePaneSession = paneSession(pane);
     const summary = node('div', 'cle-study__summary');
     const eyebrow = node('span', 'cle-study__eyebrow');
-    eyebrow.innerHTML = '<b>习作</b><em>Étude · 今日</em>';
+    eyebrow.append(node('b', '', '习作'), node('em', '', 'Étude · 今日'));
     const progress = node('span', 'cle-study__progress', '正在读取学习进度…');
     const streak = node('span', 'cle-study__streak');
     const timer = node('span', 'cle-study__timer');
+    const nextStep = node('div', 'cle-study__next-step');
+    const nextLabel = node('strong', 'cle-study__next-label', '今天先学一小步');
+    const nextDescription = node('span', 'cle-study__next-description', '正在整理下一步…');
+    const mastery = node('span', 'cle-study__mastery');
+    nextStep.append(nextLabel, nextDescription, mastery);
     const notice = node('div', 'cle-study__notice'); notice.setAttribute('role', 'status');
-    const focusButton = action('专注 25 分钟', async () => {
+    const duration = node('select', 'cle-study__duration');
+    duration.setAttribute('aria-label', '本轮学习时长');
+    for (const minutes of [5, 15, 25]) {
+      const option = node('option', '', `${minutes} 分钟`); option.value = String(minutes); duration.append(option);
+    }
+    duration.value = '15';
+    duration.addEventListener('change', () => { plannedMinutes = Number(duration.value) || 15; paint(); });
+    const focusButton = action('开始专注', async () => {
       if (!alive()) return;
       focusButton.disabled = true;
       try {
@@ -89,7 +102,7 @@ export function mountStudy(host, signal) {
           focus = null; today = result.today;
           say(result.minutes ? `这一轮记下了 ${result.minutes} 分钟。` : '未满一分钟，这轮没有增加时长。');
         } else {
-          const result = await request('pinkie.learning.focus.start', {minutes: 25});
+          const result = await request('pinkie.learning.focus.start', {minutes: plannedMinutes});
           if (!alive()) return;
           focus = result.focus; say('计时开始。先专心做眼前这一小步。');
         }
@@ -100,10 +113,18 @@ export function mountStudy(host, signal) {
         say(error.message, true);
       } finally { if (alive()) focusButton.disabled = false; }
     });
+    const continueButton = action('继续学习', () => {
+      if (!alive()) return;
+      const sessionKey = paneSession(pane);
+      const step = today?.nextStep || {kind: Number(today?.progress?.dueReviews) > 0 ? 'review' : 'resume'};
+      // The learning card controller owns answers and reader/review state. Route the single
+      // continuation action to its pane rather than issuing a second, competing question here.
+      window.dispatchEvent(new CustomEvent('pinkie:learning-continue', {detail: {sessionKey, step}}));
+    }, 'cle-study__button--primary');
     const settings = action('学习约定', () => openSheet(paneSession(pane)));
     summary.append(eyebrow, progress, streak, timer);
-    const buttons = node('div', 'cle-study__actions'); buttons.append(focusButton, settings);
-    strip.append(summary, buttons, notice);
+    const buttons = node('div', 'cle-study__actions'); buttons.append(focusButton, duration, continueButton, settings);
+    strip.append(summary, buttons, nextStep, notice);
 
     function say(text, error = false) {
       if (!alive()) return;
@@ -125,29 +146,37 @@ export function mountStudy(host, signal) {
         const gauge = (label, value, goal, unit, invert = false) => {
           const k = invert ? (value ? 0 : 1) : goal ? Math.min(1, value / goal) : 1;
           const g = node('span', 'cle-study__gauge'); g.dataset.done = String(k >= 1);
-          g.innerHTML = `<span class="cle-study__gauge-label"></span><span class="cle-study__gauge-value"></span><i style="--k:${k.toFixed(3)}"></i>`;
-          g.firstChild.textContent = label; g.children[1].textContent = invert ? `${value} ${unit}` : `${value}/${goal} ${unit}`;
+          const bar = node('i'); bar.setAttribute('style', `--k:${k.toFixed(3)}`);
+          g.append(node('span', 'cle-study__gauge-label', label), node('span', 'cle-study__gauge-value', invert ? `${value} ${unit}` : `${value}/${goal} ${unit}`), bar);
           return g;
         };
-        progress.replaceChildren(gauge('专注', p.minutes, today.goals.minutes, '分钟'), gauge('做题', p.questions, today.goals.questions, '道'), gauge('待复习', p.dueReviews, 0, '张', true));
-        progress.setAttribute('aria-label', `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${p.dueReviews} 张待复习`);
+        const reviews = today.reviewPlan;
+        progress.replaceChildren(gauge('专注', p.minutes, today.goals.minutes, '分钟'), gauge('做题', p.questions, today.goals.questions, '道'), reviews ? gauge('今日复习', reviews.done, reviews.target, '张') : gauge('待复习', p.dueReviews, 0, '张', true));
+        progress.setAttribute('aria-label', `${p.minutes}/${today.goals.minutes} 分钟 · ${p.questions}/${today.goals.questions} 道题 · ${reviews ? `今日复习 ${reviews.done}/${reviews.target} 张，另有 ${reviews.backlog} 张分日完成` : `${p.dueReviews} 张待复习`}`);
         strip.dataset.complete = String(today.complete);
         // the streak is a row of blossoms he has kept; seven at most, then a number
         const n = today.streak.current || 0;
         streak.replaceChildren(...Array.from({length: Math.min(7, n)}, () => node('i', 'cle-study__bloom')), node('span', '', n ? `连续 ${n} 天` : '今天开个头'));
-        streak.title = today.complete ? '今日已完成' : `连续 ${n} 天`;
-        eyebrow.querySelector('em').textContent = today.complete ? 'Étude · 今日已完成' : 'Étude · 今日';
+        streak.title = today.complete ? '今日任务已完成，掌握情况另计' : `连续 ${n} 天`;
+        eyebrow.querySelector('em').textContent = today.complete ? 'Étude · 今日任务已完成' : 'Étude · 今日';
+        const step = today.nextStep;
+        nextLabel.textContent = step?.label || (p.dueReviews ? `下一步：复习 ${Math.min(10, p.dueReviews)} 个知识点` : '下一步：继续当前题目或读到的地方');
+        nextDescription.textContent = `${step?.description || (p.dueReviews ? `共 ${p.dueReviews} 条待复习，分小轮完成。` : '接着当前进度，做一道题或学一个新知识点。')}${reviews?.backlog ? ` 另有 ${reviews.backlog} 张留到以后分批复习。` : ''}`;
+        const evidence = today.mastery;
+        mastery.textContent = evidence ? `掌握证据：独立答对 ${Number(evidence.independentCorrect) || 0} · 提示后答对 ${Number(evidence.assistedCorrect) || 0} · 答对待确认 ${Number(evidence.uncertainCorrect) || 0} · 待巩固 ${Number(evidence.needsPractice) || 0}${evidence.delayedVerified ? ` · 隔日验证 ${evidence.delayedVerified}` : ''}` : '做够题是完成任务，隔天还能独立答对才是掌握。';
+        continueButton.textContent = step?.kind === 'review' ? '开始这一轮' : '继续学习';
       }
-      focusButton.textContent = focus ? '结束本轮' : '专注 25 分钟'; clock();
+      focusButton.textContent = focus ? '结束本轮' : '开始专注'; duration.disabled = Boolean(focus); clock();
     }
     async function load(force = false) {
       if (!alive() || loading || (!force && Date.now() - lastLoaded < 15000)) return;
       loading = true;
       const seq = ++loadSeq;
       try {
-        const [day, status] = await Promise.all([request('pinkie.learning.today'), request('pinkie.learning.focus.status')]);
+        const sessionKey = paneSession(pane);
+        const [day, status] = await Promise.all([request('pinkie.learning.today', {sessionKey}), request('pinkie.learning.focus.status')]);
         // an in-flight answer that lands after retirement must not write a retired strip
-        if (!alive() || seq !== loadSeq) return;
+        if (!alive() || seq !== loadSeq || paneSession(pane) !== sessionKey) return;
         today = day; focus = status.active; lastLoaded = Date.now(); paint();
       } catch (error) {
         // the activation-ended sentence is lifecycle noise, not progress trouble; a real error while

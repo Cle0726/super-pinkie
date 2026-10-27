@@ -20,8 +20,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function pactDefaults(now = Date.now()) {
   return {
     version: PACT_VERSION,
-    exam: {name: 'PRETCO-B', date: null},
-    daily: {minutes: 30, questions: 20, reviews: 'due'},
+    exam: {name: 'PRETCO-B', date: null}, // 旧入口继续可用；exams 是学习台的权威字段。
+    exams: [{id: 'pretco-b', name: '英语 B 级', date: null}, {id: 'zsb', name: '专升本', date: null}],
+    daily: {minutes: 30, questions: 20, lessons: 2, reviews: 'due'},
     intensity: 'firm',
     timezone: 'Asia/Shanghai',
     reminders: {morning: '08:30', evening: '21:00', lastCall: '22:30'},
@@ -53,7 +54,8 @@ function validTimezone(value) {
 }
 
 function validDate(value) {
-  const match = DATE_PATTERN.exec(text(value, 10));
+  if (typeof value !== 'string' || value.length !== 10) return null;
+  const match = DATE_PATTERN.exec(value);
   if (!match) return null;
   const [, year, month, day] = match.map(Number);
   const stamp = Date.UTC(year, month - 1, day);
@@ -69,11 +71,23 @@ function validTime(value) {
 
 function fail(message) { throw new Error(message); }
 
+function sanitizeExams(raw, legacy = {}) {
+  const exams = new Map();
+  for (const exam of Array.isArray(raw) ? raw : []) {
+    if (!exam || !/^[a-z0-9-]{1,60}$/.test(String(exam.id || ''))) continue;
+    exams.set(exam.id, {id: exam.id, name: text(exam.name, 80) || exam.id, date: validDate(exam.date) || null});
+  }
+  if (!exams.has('pretco-b')) exams.set('pretco-b', {id: 'pretco-b', name: '英语 B 级', date: validDate(legacy.date) || null});
+  if (!exams.has('zsb')) exams.set('zsb', {id: 'zsb', name: '专升本', date: null});
+  return [...exams.values()];
+}
+
 function sanitizePact(raw, now = 0) {
   const base = pactDefaults(now);
   const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const tz = validTimezone(value.timezone) || base.timezone;
   const exam = value.exam && typeof value.exam === 'object' && !Array.isArray(value.exam) ? value.exam : {};
+  const exams = sanitizeExams(value.exams, exam);
   const daily = value.daily && typeof value.daily === 'object' && !Array.isArray(value.daily) ? value.daily : {};
   const reminders = value.reminders && typeof value.reminders === 'object' && !Array.isArray(value.reminders) ? value.reminders : {};
   const channel = value.channel && typeof value.channel === 'object' && !Array.isArray(value.channel) ? value.channel : {};
@@ -81,10 +95,13 @@ function sanitizePact(raw, now = 0) {
   const to = text(channel.to, 200);
   return {
     version: PACT_VERSION,
-    exam: {name: text(exam.name, 80) || base.exam.name, date: validDate(exam.date) || null},
+    exam: {name: text(exam.name, 80) || base.exam.name, date: exams.find(item => item.id === 'pretco-b').date},
+    exams,
+    ...(value.tomorrowPlan && validDate(value.tomorrowPlan.date) ? {tomorrowPlan: value.tomorrowPlan} : {}),
     daily: {
       minutes: clampInteger(daily.minutes, 5, 600, base.daily.minutes),
       questions: clampInteger(daily.questions, 0, 500, base.daily.questions),
+      lessons: clampInteger(daily.lessons, 0, 20, base.daily.lessons),
       reviews: daily.reviews === 'skip' ? 'skip' : 'due',
     },
     intensity: INTENSITIES.includes(value.intensity) ? value.intensity : base.intensity,
@@ -137,9 +154,33 @@ function validatePatch(patch) {
       out.exam = {name};
     }
   }
+  if (has('exams')) {
+    const input = Array.isArray(raw.exams) ? raw.exams : [raw.exams];
+    if (!input.length || input.length > 20) fail('exams 需要 1–20 场考试');
+    const seen = new Set();
+    out.exams = input.map(exam => {
+      if (!exam || typeof exam !== 'object' || !/^[a-z0-9-]{1,60}$/.test(String(exam.id || '')) || seen.has(exam.id)) fail('考试 id 无效或重复');
+      seen.add(exam.id);
+      const result = {id: exam.id};
+      if (exam.date !== undefined) {
+        if (exam.date !== null && (typeof exam.date !== 'string' || exam.date.length !== 10 || validDate(exam.date) === null)) fail('考试日期必须是 YYYY-MM-DD 或 null');
+        result.date = exam.date;
+      }
+      if (exam.name !== undefined) {
+        result.name = text(exam.name, 80);
+        if (!result.name) fail('考试名称不能为空');
+      }
+      return result;
+    });
+  }
   if (has('daily')) {
     if (!raw.daily || typeof raw.daily !== 'object' || Array.isArray(raw.daily)) fail('daily 必须是对象');
     out.daily = {};
+    if (raw.daily.lessons !== undefined) {
+      const lessons = Number(raw.daily.lessons);
+      if (!Number.isInteger(lessons) || lessons < 0 || lessons > 20) fail('每日课数必须是 0–20 的整数');
+      out.daily.lessons = lessons;
+    }
     if (raw.daily.minutes !== undefined) {
       const minutes = Number(raw.daily.minutes);
       if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) fail('每日分钟数必须是 5–600 的整数');
@@ -222,11 +263,13 @@ function writeJsonAtomic(file, value) {
 // en-CA 输出 YYYY-MM-DD；formatToParts 比字符串比较更稳妥，避免中文/短格式差异。
 const dayFormatters = new Map();
 export function dayInZone(instant, timeZone = 'Asia/Shanghai') {
-  const tz = validTimezone(timeZone) || 'Asia/Shanghai';
-  let formatter = dayFormatters.get(tz);
+  // 按传入名字缓存；校验时区要新建 Intl 对象，学习台算掌握度时每次都校验会很慢。
+  let formatter = dayFormatters.get(timeZone);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-CA', {timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'});
+    const tz = validTimezone(timeZone) || 'Asia/Shanghai';
+    formatter = dayFormatters.get(tz) || new Intl.DateTimeFormat('en-CA', {timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'});
     dayFormatters.set(tz, formatter);
+    if (typeof timeZone === 'string') dayFormatters.set(timeZone, formatter);
   }
   const parts = Object.fromEntries(formatter.formatToParts(new Date(Number(instant) || 0)).map(part => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
@@ -252,6 +295,8 @@ function emptyDay(date) {
   return {
     date,
     minutes: 0,
+    lessons: 0,
+    lessonReceipts: [],
     focus: [],
     questions: {answered: 0, correct: 0},
     reviews: {done: 0},
@@ -267,11 +312,16 @@ function sanitizeDay(raw, date) {
   return {
     date,
     minutes: Math.max(0, Math.round(finite(value.minutes))),
+    lessons: Math.max(0, Math.round(finite(value.lessons))),
+    lessonReceipts: Array.isArray(value.lessonReceipts) ? value.lessonReceipts.filter(id => typeof id === 'string') : [],
     focus: Array.isArray(value.focus) ? value.focus.filter(item => item && typeof item === 'object').slice(-200).map(item => ({
       start: Math.max(0, Number(item.start) || 0),
       end: Math.max(0, Number(item.end) || 0),
       minutes: Math.max(0, Math.round(finite(item.minutes))),
+      ...(item.subject ? {subject: text(item.subject, 12)} : {}),
+      ...(item.chapter ? {chapter: text(item.chapter, 16)} : {}),
     })) : [],
+    questionReceipts: Array.isArray(value.questionReceipts) ? value.questionReceipts.filter(id => typeof id === 'string') : [],
     questions: {
       answered: Math.max(0, Math.round(finite(value.questions?.answered))),
       correct: Math.max(0, Math.round(finite(value.questions?.correct))),
@@ -293,7 +343,8 @@ function needsDueReviews(pact) {
   return (pact?.daily?.reviews ?? 'due') === 'due';
 }
 
-// 当天完成 = 分钟与题量达标，且（复习目标为 due 时）检查那一刻没有到期卡。
+// 当天完成 = 分钟与题量达标，且（复习目标为 due 时）已清空到期卡，
+// 或已完成今天 20 张的复习预算。积压留在队列里，避免一次补完所有旧卡。
 // `dueAtCheck` 由调用方当场测量；历史天数一律按需要复习处理，避免用今天的
 // 到期数去改写昨天的完成状态。
 function meetsGoals(day, pact, dueAtCheck) {
@@ -301,7 +352,7 @@ function meetsGoals(day, pact, dueAtCheck) {
   if (!day) return false;
   if (day.minutes < (daily.minutes ?? 30)) return false;
   if (day.questions.answered < (daily.questions ?? 20)) return false;
-  if (needsDueReviews(pact) && dueAtCheck !== 0) return false;
+  if (needsDueReviews(pact) && dueAtCheck !== 0 && day.reviews.done < 20) return false;
   return true;
 }
 
@@ -366,6 +417,7 @@ export function composeNudgeContext(kind, today = {}) {
   const questions = Math.max(0, Math.round(finite(progress.questions)));
   const reviewsDone = Math.max(0, Math.round(finite(progress.reviewsDone)));
   const dueReviews = Math.max(0, Math.round(finite(progress.dueReviews)));
+  const dueForToday = Math.max(0, Math.min(dueReviews, finite(today.reviewPlan?.remaining, Math.max(0, 20 - reviewsDone))));
   const notesAdded = Math.max(0, Math.round(finite(progress.notesAdded)));
   const goalMinutes = Math.max(1, Math.round(finite(goals.minutes, 30)));
   const goalQuestions = Math.max(0, Math.round(finite(goals.questions, 20)));
@@ -380,7 +432,7 @@ export function composeNudgeContext(kind, today = {}) {
   const remainQuestions = Math.max(0, goalQuestions - questions);
   const started = minutes > 0 || questions > 0 || reviewsDone > 0 || notesAdded > 0;
   if (today.complete === undefined) {
-    const missing = (!(minutes >= goalMinutes)) || (!(questions >= goalQuestions)) || (daily.reviews === 'due' && dueReviews > 0);
+    const missing = (!(minutes >= goalMinutes)) || (!(questions >= goalQuestions)) || (daily.reviews === 'due' && dueForToday > 0);
     if (!missing) return composeNudgeContext(kind, {...today, complete: true});
   }
 
@@ -393,14 +445,18 @@ export function composeNudgeContext(kind, today = {}) {
     : countdown >= 0 ? `考试倒计时：距离 ${text(pact.exam?.name, 40) || 'PRETCO-B'} 还有 ${countdown} 天。` : `考试倒计时：考试日期已过去 ${-countdown} 天。`);
   lines.push(weakTopics.length ? `最薄弱的部分：${weakTopics.map(item => `${item.tag}（错 ${item.wrong}/${item.total}）`).join('、')}。`
     : '最薄弱的部分：还没有足够的错题记录。');
+  if (nudge === 'morning' && today.adoptedPlan) lines.push(`先生已采纳的今日计划：${text(today.adoptedPlan.text, 600)}。优先依据它提醒，不再替先生换计划。`);
+  if (nudge === 'morning' && today.adoptedPlan?.items?.some(item => item.kind === 'learn')) lines.push('已采纳的上课安排（数据）：' + JSON.stringify({items: today.adoptedPlan.items.filter(item => item.kind === 'learn').map(item => ({kind: 'learn', k: item.k, i: item.i}))}));
+  if (today.subjectWarnings?.length) lines.push(`偏科提醒（只按带科目的记录）：${today.subjectWarnings.map(item => `${text(item.name, 30)}已有 ${item.daysIdle} 天没有作答或专注记录`).join('；')}。`);
+  if (nudge === 'evening' && today.weeklyReport) lines.push(`周日晚间周报素材（真实摘要与最近分析，不编补缺失结论）：${JSON.stringify(today.weeklyReport)}`);
   lines.push(`强度：${intensity}。${INTENSITY_LINES[intensity]}`);
   const remainders = [];
   if (remainMinutes > 0) remainders.push(`${remainMinutes} 分钟专注`);
   if (remainQuestions > 0) remainders.push(`${remainQuestions} 道题`);
-  if (daily.reviews === 'due' && dueReviews > 0) remainders.push(`${dueReviews} 张到期复习`);
+  if (daily.reviews === 'due' && dueForToday > 0) remainders.push(`${dueForToday} 张今日到期复习`);
   if (nudge === 'morning') {
     const plan = [];
-    if (daily.reviews === 'due' && dueReviews > 0) plan.push(`先把 ${dueReviews} 张复习卡翻完`);
+    if (!complete && daily.reviews === 'due' && dueForToday > 0) plan.push(`先把 ${dueForToday} 张复习卡翻完`);
     if (remainQuestions > 0) plan.push(`再做 ${Math.min(10, remainQuestions)} 道单选`);
     if (remainMinutes > 0) plan.push(`凑满 ${goalMinutes} 分钟专注`);
     lines.push('morning：只报今天的计划，不催不骂，不说昨天。');
@@ -409,7 +465,7 @@ export function composeNudgeContext(kind, today = {}) {
     if (complete) {
       lines.push('evening：今天已经完成，只用一句话认可先生，不要布置新任务。');
     } else if (!started) {
-      const smallest = dueReviews > 0 ? `先把 ${Math.min(dueReviews, 12)} 张复习卡翻完`
+      const smallest = dueForToday > 0 ? `先把 ${Math.min(dueForToday, 12)} 张复习卡翻完`
         : remainQuestions > 0 ? `先做 10 道单选`
           : `先专注 ${Math.min(remainMinutes, 10)} 分钟`;
       lines.push('evening：今天还没开始，推先生现在就开始，只给最小的第一步。');
@@ -430,7 +486,7 @@ export function composeNudgeContext(kind, today = {}) {
   }
   lines.push([
     '写作规则：',
-    '- 一条消息，不超过 80 个汉字，称呼先生，用 Li An 自己的声音。',
+    '- 一条消息，不超过 80 个汉字，称呼先生，用碧琪自己的声音。',
     '- 必须给具体的下一步和数字，例如“先把 12 张复习卡翻完，再做 10 道单选”。',
     '- 不要寒暄，不要 emoji 堆砌，不要 Markdown 标题、列表或加粗。',
     '- 不要提到本段上下文、内部字段名或规则。',
@@ -462,6 +518,8 @@ export class LearningPact {
       return {pact, created: true};
     }
     const pact = sanitizePact(result.value, this.now());
+    // 首次读取旧格式时持久化迁移，保留原有 exam、目标和时间戳。
+    if (!Array.isArray(result.value.exams)) writeJsonAtomic(this.pactFile, {...result.value, ...pact});
     return {pact, created: false};
   }
 
@@ -471,6 +529,15 @@ export class LearningPact {
     const validated = validatePatch(patch);
     const current = this.get();
     const now = this.now();
+    // exams 补丁按 id 合并；只改一场日期不会删掉另外一场。
+    if (validated.exams) {
+      const exams = new Map(current.exams.map(exam => [exam.id, exam]));
+      for (const exam of validated.exams) exams.set(exam.id, {...exams.get(exam.id), ...exam});
+      validated.exams = [...exams.values()];
+    }
+    if (validated.exam?.date !== undefined) {
+      validated.exams = (validated.exams || current.exams).map(exam => exam.id === 'pretco-b' ? {...exam, date: validated.exam.date} : exam);
+    }
     const merged = sanitizePact(mergePatch(current, validated), now);
     const pact = {...merged, createdAt: current.createdAt || now, updatedAt: now};
     writeJsonAtomic(this.pactFile, pact);
@@ -513,10 +580,27 @@ export class LearningPact {
     return this.writeDay(day, {pact: activePact});
   }
 
-  recordQuestion({correct = null} = {}) {
-    return this.mutateDay(this.todayDate(), day => {
+  recordQuestion({correct = null, receiptId = '', date = this.todayDate()} = {}) {
+    const target = validDate(date);
+    if (!target) throw new Error('账本日期无效');
+    return this.mutateDay(target, day => {
+      day.questionReceipts ||= [];
+      if (receiptId && day.questionReceipts.includes(receiptId)) return;
+      if (receiptId) day.questionReceipts.push(text(receiptId, 180));
       day.questions.answered += 1;
       if (correct === true) day.questions.correct += 1;
+    });
+  }
+
+  recordLesson({lessonId, minutes = 0, subject = '', chapter = '', date = this.todayDate()} = {}) {
+    const target = validDate(date);
+    if (!target || !lessonId) throw new Error('课程记账参数无效');
+    return this.mutateDay(target, day => {
+      if (day.lessonReceipts.includes(lessonId)) return;
+      day.lessonReceipts.push(String(lessonId)); day.lessons++;
+      const credited = Math.max(0, Math.min(90, Math.floor(Number(minutes) || 0)));
+      day.minutes += credited;
+      day.focus.push({start: this.now() - credited * 60000, end: this.now(), minutes: credited, subject, chapter});
     });
   }
 
@@ -542,6 +626,23 @@ export class LearningPact {
   // 先按笔记自带的 topic / tags 归类；没有标签时退回到笔记的术语。
   weakTopics(limit = 5) {
     try {
+      const attempts = typeof this.store.allAttempts === 'function' ? this.store.allAttempts() : [];
+      if (attempts.length) {
+        const cutoff = this.now() - 30 * 86_400_000;
+        const buckets = new Map();
+        for (const attempt of [...attempts].sort((a, b) => b.createdAt - a.createdAt)) {
+          if (attempt.createdAt < cutoff || typeof attempt.result?.correct !== 'boolean') continue;
+          const tag = text(attempt.question?.topic, 60) || '未分类';
+          const bucket = buckets.get(tag) || {tag, wrong: 0, total: 0, evidence: 'recent_attempts', windowDays: 30};
+          if (bucket.total >= 20) continue;
+          bucket.total++;
+          if (attempt.result.correct === false && !attempt.verifiedBy) bucket.wrong++;
+          buckets.set(tag, bucket);
+        }
+        return [...buckets.values()].filter(bucket => bucket.wrong > 0)
+          .sort((a, b) => b.wrong / b.total - a.wrong / a.total || b.wrong - a.wrong || a.tag.localeCompare(b.tag))
+          .slice(0, Math.max(1, limit));
+      }
       const notes = this.store.readNotesState().notes.filter(note => note?.status !== 'merged');
       const buckets = new Map();
       for (const note of notes) {
@@ -592,13 +693,22 @@ export class LearningPact {
     return {current, best};
   }
 
-  today({now = this.now()} = {}) {
+  today({now = this.now(), sessionKey = ''} = {}) {
     const pact = this.get();
     const date = dayInZone(now, pact.timezone);
     const day = this.readDay(date);
     const dueReviews = this.dueReviews(now);
     const streak = this.streak({now, pact});
-    return todayPayload(pact, day, {dueReviews, best: streak.best, current: streak.current, weakTopics: this.weakTopics(5), now});
+    const payload = todayPayload(pact, day, {dueReviews, best: streak.best, current: streak.current, weakTopics: this.weakTopics(5), now});
+    const target = Math.min(20, day.reviews.done + dueReviews);
+    payload.activityComplete = payload.complete;
+    if (pact.tomorrowPlan?.date === date) payload.adoptedPlan = pact.tomorrowPlan;
+    if (this.desk) Object.assign(payload, this.desk.nudgeData({now}));
+    payload.reviewPlan = {target, done: Math.min(target, day.reviews.done), remaining: Math.max(0, target - day.reviews.done),
+      backlog: Math.max(0, dueReviews - Math.max(0, target - day.reviews.done)), dailyLimit: 20};
+    payload.mastery = typeof this.store.mastery === 'function' ? this.store.mastery() : null;
+    payload.nextStep = typeof this.store.nextStep === 'function' ? this.store.nextStep({sessionKey, now, reviewRemaining: payload.reviewPlan.remaining, activityComplete: payload.complete}) : null;
+    return payload;
   }
 
   focusStateFile() { return path.join(this.root, 'focus.json'); }
@@ -614,7 +724,8 @@ export class LearningPact {
     // 防止时钟回拨造成的负时长；超过一天的会话视为过期，避免永久卡住。
     if (now - start > 12 * 60 * 60 * 1000 || now < start) { this.clearFocus(); return null; }
     const planned = clampInteger(active.plannedMinutes, 1, 600, 25);
-    return {id: text(active.id, 80), start, plannedMinutes: planned, date: text(active.date, 10)};
+    return {id: text(active.id, 80), start, plannedMinutes: planned, date: text(active.date, 10),
+      ...(active.subject ? {subject: text(active.subject, 12)} : {}), ...(active.chapter ? {chapter: text(active.chapter, 16)} : {})};
   }
 
   writeFocus(active) {
@@ -629,12 +740,14 @@ export class LearningPact {
     return {active: {id: active.id, start: active.start, plannedMinutes: active.plannedMinutes, elapsedMinutes: Math.floor((now - active.start) / 60_000)}};
   }
 
-  focusStart({minutes = 25, now = this.now()} = {}) {
+  focusStart({minutes = 25, now = this.now(), subject = '', chapter = ''} = {}) {
     const existing = this.activeFocus(now);
     if (existing) return {focus: {id: existing.id, start: existing.start, plannedMinutes: existing.plannedMinutes}};
     const pact = this.get();
     const planned = clampInteger(minutes, 1, 600, 25);
-    const focus = {id: `focus-${randomUUID()}`, start: now, plannedMinutes: planned};
+    const focus = {id: `focus-${randomUUID()}`, start: now, plannedMinutes: planned,
+      ...(['ee', 'c', 'net', 'math', 'en'].includes(subject) ? {subject} : {}),
+      ...(/^(ee|c|net|m|e)\d{1,2}$/.test(chapter) ? {chapter} : {})};
     this.writeFocus({...focus, date: dayInZone(now, pact.timezone)});
     return {focus};
   }
@@ -656,9 +769,18 @@ export class LearningPact {
     const date = active.date && DATE_PATTERN.test(active.date) ? active.date : dayInZone(now, pact.timezone);
     this.mutateDay(date, day => {
       day.minutes += credited;
-      day.focus.push({start: active.start, end: now, minutes: credited});
+      day.focus.push({start: active.start, end: now, minutes: credited,
+        ...(active.subject ? {subject: active.subject} : {}), ...(active.chapter ? {chapter: active.chapter} : {})});
     }, {pact});
     return {minutes: credited, today: this.today({now})};
+  }
+
+  adoptTomorrowPlan(plan) {
+    if (!plan || !Array.isArray(plan.items) || !plan.items.length || !validDate(plan.date)) throw new Error('明天计划格式无效');
+    const current = this.get(), now = this.now();
+    writeJsonAtomic(this.pactFile, {...current, tomorrowPlan: {id: text(plan.id, 80), date: plan.date,
+      text: text(plan.text, 600), items: plan.items, adoptedAt: now}, updatedAt: now});
+    return {ok: true, reminderAt: current.reminders.morning};
   }
 
   nudgeContext(kind) {
@@ -704,9 +826,9 @@ export function registerLearningPactGateway(api, pact) {
   }, {scope});
   register('pinkie.learning.pact.get', () => ({pact: pact.get()}), 'operator.read');
   register('pinkie.learning.pact.set', params => pact.set(params.patch), 'operator.admin');
-  register('pinkie.learning.today', () => pact.today(), 'operator.read');
+  register('pinkie.learning.today', params => pact.today({sessionKey: params.sessionKey}), 'operator.read');
   register('pinkie.learning.history', params => ({days: pact.history({days: params.days})}), 'operator.read');
-  register('pinkie.learning.focus.start', params => pact.focusStart({minutes: params.minutes}), 'operator.admin');
+  register('pinkie.learning.focus.start', params => pact.focusStart({minutes: params.minutes, subject: params.subject, chapter: params.chapter}), 'operator.admin');
   register('pinkie.learning.focus.stop', params => {
     const result = pact.focusStop({id: String(params.id || '')});
     if (result.error) throw new Error(result.error);

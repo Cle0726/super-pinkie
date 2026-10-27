@@ -201,26 +201,133 @@ const messageText = (message) => {
   if (typeof message.content === 'string') return message.content;
   if (!Array.isArray(message.content)) return '';
   return message.content
-    .filter((part) => part && ['text', 'input_text'].includes(part.type) && typeof part.text === 'string')
+    .filter((part) => part && ['text', 'input_text', 'output_text'].includes(part.type) && typeof part.text === 'string')
     .map((part) => part.text)
     .join('');
 };
-const normalize = (value) => String(value || '').replace(/\s+/gu, ' ').trim();
+const normalize = (value) => String(value || '').trim();
 
-export function appearsInTranscript(item, messages) {
-  if (!Array.isArray(messages) || !messages.length) return false;
-  if (item?.sendRunId && messages.some((m) => m?.runId === item.sendRunId)) return true;
+const timestampMs = (value) => {
+  if (typeof value === 'string' && value.trim() && !Number.isFinite(Number(value))) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !numeric) return 0;
+  return Math.abs(numeric) < 100_000_000_000 ? numeric * 1000 : numeric;
+};
+const messageAt = (message) => timestampMs(message?.timestamp ?? message?.ts ?? message?.createdAt);
+const receiptKey = (message) => String(message?.idempotencyKey ?? message?.__openclaw?.idempotencyKey
+  ?? message?.metadata?.idempotencyKey ?? message?.meta?.idempotencyKey ?? '');
+const attachmentCount = (item) => {
+  const arrays = [item?.attachments, item?.media, item?.MediaPaths].filter(Array.isArray);
+  const direct = arrays.reduce((max, values) => Math.max(max, values.filter(Boolean).length), 0);
+  if (direct) return direct;
+  if (typeof item?.MediaPath === 'string' && item.MediaPath.trim()) return 1;
+  return Array.isArray(item?.content) ? item.content.filter((part) => part
+    && !['text', 'input_text', 'output_text', 'thinking', 'reasoning'].includes(part.type)).length : 0;
+};
+const matchesDelivery = (item, message) => {
+  if (String(message?.role || '').toLowerCase() !== 'user') return false;
+  const run = String(item?.sendRunId || '').trim();
+  if (run) return message?.runId === run || message?.__openclaw?.runId === run
+    || receiptKey(message) === `${run}:user`;
+  const createdAt = timestampMs(item?.createdAt);
+  if (!createdAt || messageAt(message) < createdAt) return false;
   const text = normalize(item?.text);
-  if (!text) return false;
-  const createdAt = Number(item.createdAt) || 0;
-  return messages.some((message) => {
-    if (String(message?.role || '').toLowerCase() !== 'user') return false;
-    if (normalize(messageText(message)) !== text) return false;
-    // Without a timestamp we cannot tell a replay from a coincidence; require one.
-    const at = Number(message.timestamp ?? message.ts ?? 0) || 0;
-    if (!createdAt || !at) return false;
-    return Math.abs(at - createdAt) <= 10 * 60_000;
-  });
+  const attachments = attachmentCount(item);
+  if (text && normalize(messageText(message)) !== text) return false;
+  if (attachments && attachmentCount(message) < attachments) return false;
+  return Boolean(text || attachments);
+};
+export function appearsInTranscript(item, messages) {
+  return Array.isArray(messages) && messages.some((message) => matchesDelivery(item, message));
+}
+
+// A proof can consume one card over its entire lifetime, including repeated polls
+// and a replacement pane that keeps the same controller. The state object fences
+// unrelated controllers that happen to use the same session key.
+const deliveryLedgers = new WeakMap();
+const deliveryPrunes = new WeakMap();
+const proofIdentity = (message) => {
+  const id = message?.__openclaw?.id ?? message?.messageId ?? message?.id;
+  if (id) return `id:${id}`;
+  const receipt = receiptKey(message);
+  if (receipt) return `receipt:${receipt}`;
+  if (message?.runId) return `run:${message.runId}:user`;
+  try { return `body:${messageAt(message)}:${JSON.stringify(message?.content ?? message?.text)}:${attachmentCount(message)}`; }
+  catch { return ''; }
+};
+const ledgerFor = (state, sessionKey) => {
+  const sessionId = state.currentSessionId || '';
+  let ledger = deliveryLedgers.get(state);
+  if (!ledger || ledger.sessionKey !== sessionKey || ledger.sessionId !== sessionId) {
+    ledger = {sessionKey, sessionId, consumed: new Set()};
+    deliveryLedgers.set(state, ledger);
+  }
+  return ledger;
+};
+const deliveryPairs = (state, sessionKey) => {
+  const consumed = ledgerFor(state, sessionKey).consumed;
+  const messages = (Array.isArray(state.chatMessages) ? state.chatMessages : [])
+    .filter((message) => String(message?.role || '').toLowerCase() === 'user'
+      && !consumed.has(proofIdentity(message)))
+    .sort((a, b) => messageAt(a) - messageAt(b));
+  const items = (Array.isArray(state.chatQueue) ? state.chatQueue : [])
+    .filter((item) => item?.id && !item.localCommandName && (!item.sessionKey || item.sessionKey === sessionKey))
+    .map((item, index) => ({item, index})).sort((a, b) =>
+      timestampMs(a.item.createdAt) - timestampMs(b.item.createdAt) || a.index - b.index);
+  const used = new Set();
+  const pairs = new Map();
+  const pair = (item) => {
+    const at = messages.findIndex((message, index) => !used.has(index) && matchesDelivery(item, message));
+    if (at < 0) return;
+    used.add(at);
+    pairs.set(item.id, proofIdentity(messages[at]));
+  };
+  // Reserve exact receipts before payload fallbacks can consume them.
+  for (const {item} of items) if (item.sendRunId) pair(item);
+  for (const {item} of items) if (!item.sendRunId) pair(item);
+  return pairs;
+};
+export async function pruneConfirmedQueue(pane, options = {}) {
+  const state = pane?.state;
+  const sessionKey = paneSessionKey(pane) || options.sessionKey || '';
+  const sessionId = state?.currentSessionId;
+  if (!state || !sessionKey) return [];
+  const current = () => options.isActive?.() !== false && pane.state === state
+    && state.currentSessionId === sessionId
+    && (paneSessionKey(pane) || options.sessionKey || '') === sessionKey
+    && (!state.sessionKey || state.sessionKey === sessionKey);
+  if (!current()) return [];
+  const prior = deliveryPrunes.get(state);
+  if (prior?.sessionKey === sessionKey) return prior.promise;
+  const prune = {sessionKey, promise: null};
+  deliveryPrunes.set(state, prune);
+  prune.promise = (async () => {
+    const removed = [];
+    try {
+      const ledger = ledgerFor(state, sessionKey);
+      for (const [id, proof] of deliveryPairs(state, sessionKey)) {
+        if (!current()) break;
+        if (!queueOf(pane).some((item) => item?.id === id)) continue;
+        const remove = nativeAction(pane, 'removeQueuedMessage', id);
+        if (!remove) continue;
+        try { await remove(); } catch { continue; }
+        if (!current()) break;
+        // Native removal owns persistence. A no-op is never called delivery.
+        if (queueOf(pane).some((item) => item?.id === id)) continue;
+        removed.push(id);
+        if (proof) ledger.consumed.add(proof);
+        while (ledger.consumed.size > 1024) ledger.consumed.delete(ledger.consumed.values().next().value);
+      }
+      if (removed.length && current()) repaint(pane);
+      return removed;
+    } finally {
+      if (deliveryPrunes.get(state) === prune) deliveryPrunes.delete(state);
+    }
+  })();
+  return prune.promise;
 }
 
 // The pane's own native retry. 2026.10 puts it on the custom element; older builds
@@ -268,53 +375,35 @@ export async function sessionIdle(host, sessionKey) {
 export async function recoverPaneDetailed(pane, host, options = {}) {
   const state = pane?.state;
   const sessionKey = paneSessionKey(pane) || options.sessionKey || '';
-  if (!state || !sessionKey) return {retried: [], removed: [], attempted: false};
-  if (state.sessionKey && state.sessionKey !== sessionKey) return {retried: [], removed: [], attempted: false};
-  if (paneBusy(pane)) return {retried: [], removed: [], attempted: false};
-  const stuck = queueOf(pane).filter(isStuckItem);
-  if (!stuck.length) return {retried: [], removed: [], attempted: false};
-  if (!(await sessionIdle(host, sessionKey))) return {retried: [], removed: [], attempted: false};
-  // A retired activation must not send. `options.isActive` is supplied by mountRecovery
-  // so this function can also be called directly (tests, diagnostics) without one.
+  const result = {retried: [], removed: [], attempted: false};
   const active = () => options.isActive?.() !== false;
-  if (!active()) return {retried: [], removed: [], attempted: false};
-  // Re-read after the await: the pane may have started a run, changed session, or
-  // drained the queue while the roster was in flight.
-  if (pane.state !== state || paneBusy(pane)) return {retried: [], removed: [], attempted: false};
-  if ((paneSessionKey(pane) || options.sessionKey || '') !== sessionKey) {
-    return {retried: [], removed: [], attempted: false};
-  }
-
-  const messages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
-  const retried = [];
-  const removed = [];
-  let attempted = false;
+  const current = () => active() && pane.state === state
+    && (paneSessionKey(pane) || options.sessionKey || '') === sessionKey
+    && (!state?.sessionKey || state.sessionKey === sessionKey);
+  if (!state || !sessionKey || !current()) return result;
+  // Confirmation/removal is safe during a live run and never sends anything.
+  result.removed.push(...await pruneConfirmedQueue(pane, {...options, sessionKey}));
+  if (!current() || paneBusy(pane) || options.allowRetry === false) return result;
+  if (!queueOf(pane).some(isStuckItem)) return result;
+  if (!(await sessionIdle(host, sessionKey)) || !current() || paneBusy(pane)) return result;
+  // A delivery may have arrived while sessions.list was in flight.
+  result.removed.push(...await pruneConfirmedQueue(pane, {...options, sessionKey}));
+  if (!current() || paneBusy(pane)) return result;
+  const proven = deliveryPairs(state, sessionKey);
   for (const item of queueOf(pane).filter(isStuckItem)) {
-    if (!active()) break;
+    if (!current() || paneBusy(pane)) break;
     if (item.sessionKey && item.sessionKey !== sessionKey) continue;
-    // Already delivered: drop the card through the native remover, never resend.
-    if (appearsInTranscript(item, messages)) {
-      const remove = nativeAction(pane, 'removeQueuedMessage', item.id);
-      if (!remove) continue;
-      attempted = true;
-      try { await remove(); removed.push(item.id); } catch {}
-      continue;
-    }
+    // A confirmed card whose native remover failed stays visible for repair;
+    // sending it again would manufacture a duplicate.
+    if (proven.has(item.id)) continue;
     const retry = nativeRetry(pane, item.id);
     if (!retry) break;
-    // A synchronous throw and a rejected promise are the same thing here: the retry
-    // was really attempted, so the caller has to back off either way. Swallowing the
-    // error is deliberate — the card still carries the gateway's own message.
-    attempted = true;
-    let ok = false;
-    try { await retry(); ok = true; } catch {}
-    if (ok) retried.push(item.id);
-    // Retry is serial on purpose: the native path starts a run, and a second item
-    // must wait for that run's own queue drain.
+    result.attempted = true;
+    try { await retry(); result.retried.push(item.id); } catch {}
     break;
   }
-  if (retried.length || removed.length) repaint(pane);
-  return {retried, removed, attempted};
+  if (result.retried.length && current()) repaint(pane);
+  return result;
 }
 
 // Kept as the simple shape the tests and the first report used.
@@ -444,11 +533,10 @@ export function mountRecovery(host, signal) {
 
   const pass = async (pane) => {
     if (aborted || pending.has(pane)) return;
-    if (!shouldAttempt(lastAttempt.get(pane), Date.now(), RETRY_COOLDOWN_MS)) return;
+    const allowRetry = shouldAttempt(lastAttempt.get(pane), Date.now(), RETRY_COOLDOWN_MS);
     pending.add(pane);
     try {
-      projectPane(pane);
-      const result = await recoverPaneDetailed(pane, host, {isActive: () => !aborted});
+      const result = await recoverPaneDetailed(pane, host, {isActive: () => !aborted, allowRetry});
       // The await can outlive the activation. Re-check before touching anything: a
       // retired activation must not repaint or re-arm a cooldown on a pane it no
       // longer owns.
@@ -467,14 +555,13 @@ export function mountRecovery(host, signal) {
     }
   };
 
-  // Which panes need work? `projectPane` is cheap and only runs on a mutation batch;
-  // the gateway round-trip happens later, in `pass`, and only for a pane whose own
-  // card is stuck. This keeps a healthy run in the other half completely untouched.
+  // Projection belongs to initial/new-pane/dirty-subtree handling below. A
+  // mutation sweep only schedules queue work; streamed tokens never re-walk
+  // the complete transcript. A live pane still needs delivery pruning.
   const sweep = () => {
     if (aborted) return;
     for (const pane of visiblePanes()) {
-      projectPane(pane);
-      if (!queueOf(pane).some(isStuckItem)) continue;
+      if (!queueOf(pane).length) continue;
       schedule(pane, 900);
     }
   };
@@ -536,7 +623,11 @@ export function mountRecovery(host, signal) {
   tick = setInterval(() => { if (!aborted) sweep(); }, 4000);
   const start = () => {
     if (aborted) return;
-    for (const pane of visiblePanes()) { projectPane(pane); schedule(pane, 1200); }
+    for (const pane of visiblePanes()) {
+      projectPane(pane);
+      pane.dataset.cleRecoveryProjected = '1';
+      schedule(pane, 1200);
+    }
     // The pane mounts its composer after this module runs, so retry the two chrome
     // strings once the DOM settles.
     localizeRecoveryChrome(document);

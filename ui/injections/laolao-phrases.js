@@ -252,16 +252,9 @@
   // until the app is reopened. Only rewrite the text node values in place.
   const toolLabels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
   const queueSteerBadge = (parent) => {
-    const pane=parent.closest?.('openclaw-chat-pane');
-    const state=pane?.state;
-    // A historical tool card can remain in chatToolMessages after its result;
-    // only an unfinished live stream means the next model boundary is after
-    // this tool step. Otherwise the steer is available for the next action.
-    const liveTool=state?.toolStreamById instanceof Map
-      && [...state.toolStreamById.values()].some((tool)=>tool?.runId===state.chatRunId&&tool.output===undefined);
-    return liveTool||state?.chatRunStatus?.phase==='tool'
-      ? '已追加 · 这一步结束后碧琪就会看到'
-      : '已追加 · 碧琪下一步就会看到';
+    // Accepted is not a model-consumption receipt. The card is removed when
+    // its durable user message is confirmed; never promise a particular step.
+    return '正在确认追加';
   };
   const litLabelText = (parent, core) => {
     if(parent.matches?.('.chat-activity-group__label')){

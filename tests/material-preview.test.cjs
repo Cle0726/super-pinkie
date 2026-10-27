@@ -127,7 +127,7 @@ test('simulated assistant replay offers actions only for a path accepted by the 
       closest(selector) {
         if (selector.includes('a[href]') && this.tagName === 'A' && this.getAttribute('href')) return this;
         if (selector.includes('pre, code') && ['PRE', 'CODE'].includes(this.tagName)) return this;
-        if (selector.includes('.chat-bubble') && this.tagName === 'CODE') return this.bubble;
+        if (selector.includes('.chat-bubble') && ['CODE', 'A'].includes(this.tagName)) return this.bubble;
         return null;
       }
       getBoundingClientRect() { return { left: 80, bottom: 110, width: 180, height: 30 }; }
@@ -193,11 +193,13 @@ test('simulated assistant replay offers actions only for a path accepted by the 
   const menu = valid.document.body.children.find((item) => item.className === 'laolao-material-menu');
   assert.ok(menu, 'existing assistant output path gets an action menu');
   menu.children[0].listeners.click[0]();
+  await tick();
   assert.equal(valid.posted[1].action, 'open');
   assert.equal(valid.posted[1].path, '/Users/Admin/work/answer.txt');
 
   const markdownLink = makeHarness();
   const linkedPath = new markdownLink.FakeElement('a', '生成的视频');
+  linkedPath.bubble = new markdownLink.FakeElement('div');
   linkedPath.setAttribute('href', '/Users/Admin/项目视频剪辑管理/133-cut.mp4');
   clickTarget(markdownLink, linkedPath);
   assert.equal(markdownLink.posted[0].action, 'check');
@@ -205,6 +207,7 @@ test('simulated assistant replay offers actions only for a path accepted by the 
 
   const windowsFileLink = makeHarness();
   const windowsFilePath = new windowsFileLink.FakeElement('a', '生成的表格');
+  windowsFilePath.bubble = new windowsFileLink.FakeElement('div');
   windowsFilePath.setAttribute('href', 'file:///C:/Users/Admin/Downloads/report%20final.csv');
   windowsFilePath.href = windowsFilePath.getAttribute('href');
   clickTarget(windowsFileLink, windowsFilePath);

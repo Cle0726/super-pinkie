@@ -1,3 +1,5 @@
+@import "../../../../ui/injections/laolao-model-picker.css";
+
 /* Model controls — the model menu, its trigger and the reasoning stops.
    Written for the 2026.10 picker (details.chat-controls__model-picker inside wa-popup),
    and still correct for the 2026.7 combined menu that the same script also serves.

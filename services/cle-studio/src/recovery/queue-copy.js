@@ -16,7 +16,7 @@
 // same word needs two readings. The element decides, not the string.
 const EXACT = new Map([
   ['Steer', '立即追加'],
-  ['Steered', '已追加'],
+  ['Steered', '正在确认追加'],
   ['Retry', '重试'],
   ['引导', '立即追加'],
   ['使用队列中的消息进行引导', '立即追加这条消息'],
@@ -34,7 +34,7 @@ const EXACT = new Map([
 ]);
 
 // The "steered" badge reuses the action word; it reports a past state, not an offer.
-const BADGE_STEERED = new Set(['引导', 'Steer', 'Steered', '已引导']);
+const BADGE_STEERED = new Set(['引导', 'Steer', 'Steered', '已引导', '已追加']);
 
 // Gateway error strings that reach `sendError` untranslated. Keep the meaning, drop
 // the RPC phrasing; the original stays available as a tooltip.
@@ -98,10 +98,10 @@ export function localizeQueueNode(node) {
     node.nodeValue = next;
     return true;
   }
-  // A steered badge reports what already happened; every other surface is an offer.
+  // A remaining steered card awaits durable confirmation; confirmed cards are removed.
   if (parent?.closest?.('.chat-queue__badge--steered') && BADGE_STEERED.has(node.nodeValue.trim())) {
     const raw = node.nodeValue;
-    node.nodeValue = raw.replace(raw.trim(), '已追加');
+    node.nodeValue = raw.replace(raw.trim(), '正在确认追加');
     return true;
   }
   const next = queueText(node.nodeValue);

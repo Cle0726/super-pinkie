@@ -265,9 +265,13 @@
   workspaceHeader.append(historyButton, workspaceIdentity);
 
   /* ───────── 何时出现 ───────── */
-  const enabledPref = mode => store.get('enabled.' + mode, true);
+  // Every new window starts on the chat home. Opening the editor is an
+  // explicit choice for this window; project files and tabs stay persisted.
+  const openWorkbenchModes = new Set();
+  const enabledPref = mode => openWorkbenchModes.has(mode);
   function setEnabled(on) {
-    store.set('enabled.' + state.mode, on);
+    if (on) openWorkbenchModes.add(state.mode);
+    else openWorkbenchModes.delete(state.mode);
     sync();
     if (on) setTimeout(() => { if (state.visible && wanted()) (state.active ? editor?.focus() : sideBody.focus()); }, 60);
   }
@@ -1097,7 +1101,7 @@
       if (!confirmTwice('close:' + path, '「' + tab.name + '」还没保存。再关一次会放弃改动（' + keyLabel('⌘S') + ' 保存）')) return;
     }
     const index = state.tabs.indexOf(tab);
-    if (editor?.getModel() === tab.model) editor.setModel(null);
+    if (editor && tab.model && editor.getModel() === tab.model) editor.setModel(null);
     if (tab.kind === 'diff' && diffEditor) diffEditor.setModel(null);
     disposeTab(tab);
     state.tabs.splice(index, 1);
@@ -1109,7 +1113,7 @@
     persistTabs();
   }
   function closeAllTabs(force) {
-    for (const tab of [...state.tabs]) { if (editor?.getModel() === tab.model) editor.setModel(null); if (tab.kind === 'diff') diffEditor?.setModel(null); disposeTab(tab); }
+    for (const tab of [...state.tabs]) { if (editor && tab.model && editor.getModel() === tab.model) editor.setModel(null); if (tab.kind === 'diff') diffEditor?.setModel(null); disposeTab(tab); }
     state.tabs = []; state.active = '';
     if (!force) persistTabs();
     renderTabs(); renderCrumbs(); renderWelcome();

@@ -110,7 +110,7 @@ test('brand marks keep the original artwork: every referenced file exists and th
   }
 });
 
-test('the 2026.10 picker is enhanced, never rebuilt or double-driven', () => {
+test('the 2026.10 catalog can fold routes while native control ownership is preserved', () => {
   const src = read('services/cle-studio/static/legacy/laolao-model-picker.js');
   const modern = src.slice(src.indexOf('function syncModern'), src.indexOf('function sync(details)'));
   assert.match(modern, /syncModelBrands\(menu, false\)/,
@@ -119,11 +119,11 @@ test('the 2026.10 picker is enhanced, never rebuilt or double-driven', () => {
     'no duplicate current-model button or canvas frame in the native menu');
   assert.doesNotMatch(modern, /syncNativeBrandTabs/,
     'native provider groups are not display:none behind our tabs');
-  // the native picker owns its own save; our input handler must not patch a second time
-  assert.match(src, /if \(isModernPicker\(details\)\) return;/);
-  assert.match(src, /if \(!details \|\| isModernPicker\(details\)\) return;/);
-  // and our Escape / click-away must not fight the native one
-  assert.match(src, /if \(isModernPicker\(picker\)\) continue;/);
+  // The folded rows use one save path. Native controls keep their owner and
+  // the native effort entrance is reused rather than moved or removed.
+  assert.match(src, /if \(fallbackOption\) \{[\s\S]{0,180}stopImmediatePropagation/);
+  assert.match(src, /button !== nativeButton/);
+  assert.match(src, /pinkieNativeEffort !== "1"/);
 });
 
 test('the reasoning slider answers all three places the native build paints it', () => {

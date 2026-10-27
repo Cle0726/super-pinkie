@@ -198,48 +198,147 @@
     node.dataset.error = error ? "1" : "0";
   };
 
-  const selectedAnswer = stage => {
-    const current = state.remote?.current;
-    if (!current) return "";
-    if (current.kind === "multiple_choice") {
-      return Array.from(stage.querySelectorAll('input[name="learning-answer"]:checked')).map(input => input.value);
+  const activityItems = current => Array.isArray(current?.items) && current.items.length ? current.items : current ? [current] : [];
+  const itemPhase = item => item?.phase === "evaluating" ? "evaluating" : item?.result ? "explained" : item?.submission ? "evaluating" : "asking";
+
+  const activeItem = (current = state.remote?.current) => {
+    const items = activityItems(current);
+    if (state.activityId !== current?.id) {
+      state.activityId = current?.id || "";
+      state.activeItemId = "";
+      state.answerDrafts = new Map();
     }
-    if (current.kind === "single_choice") return stage.querySelector('input[name="learning-answer"]:checked')?.value || "";
-    return stage.querySelector(".laolao-learning-stage__answer")?.value.trim() || "";
+    return items.find(item => item.id === state.activeItemId) || items.find(item => !item.submission) || items[0] || null;
   };
 
+  const itemDraft = item => {
+    state.answerDrafts ||= new Map();
+    const key = item?.id || state.remote?.current?.id;
+    if (!state.answerDrafts.has(key)) state.answerDrafts.set(key, {answer: "", confidence: null, hintUsed: false});
+    return state.answerDrafts.get(key);
+  };
+
+  const sameActivity = (sessionKey, activityId) => !state.disposed && pageSessionKey() === sessionKey && state.remote?.current?.id === activityId;
+
+  const answerLabel = (item, answer) => (Array.isArray(answer) ? answer : [answer]).map(value => {
+    const option = item?.options?.find(option => option.id === value);
+    return option ? `${option.id}. ${option.label}` : String(value ?? "");
+  }).join("；");
+
+
+  const explainAnswer = async (button, current = state.remote?.current, item = activeItem(current)) => {
+    const sessionKey = pageSessionKey();
+    if (!current || !item?.submission) return;
+    setBusy(button, true, "正在请求讲解…");
+    try {
+      const submission = item.submission;
+      await sendControl(`${ANSWER_MARKER}\nactivity_id: ${current.id}\nitem_id: ${item.id}\nanswer: ${JSON.stringify(submission.answer)}\nconfidence: ${submission.confidence ?? "not_provided"}\nhint_used: ${Boolean(submission.hintUsed)}\nserver_check: ${submission.correctness === true ? "correct" : submission.correctness === false ? "incorrect" : "needs_model"}\n请只对这一小题调用 learning_activity resolve，使用 item_results 并保留 item_id。给出评分点与具体错因；客观题以服务器判定为准，不要替其他小题判分。`, sessionKey);
+      if (sameActivity(sessionKey, current.id)) statusLine(state.stage, "答案已保存，正在准备讲解。可以继续做下一小题。");
+    } catch (error) {
+      if (sameActivity(sessionKey, current.id)) statusLine(state.stage, `答案已保存。讲解暂时没有送达：${error.message || "请重试讲解"}`, true);
+    } finally { if (sameActivity(sessionKey, current.id)) setBusy(button, false, "重试讲解"); }
+  };
+
+
+  const appendQuestionSources = (root, sources) => {
+    const anchors = Array.isArray(sources) ? sources.filter(source => source?.bookId && source?.location != null) : [];
+    if (!anchors.length) return;
+    const row = el("div", "laolao-learning-stage__sources");
+    for (const source of anchors.slice(0, 4)) {
+      const jump = el("button", "pinkie-library__source-jump", `查看原文 · ${source.title || "资料"}${source.label ? ` · ${source.label}` : ""}`);
+      jump.type = "button"; jump.addEventListener("click", async () => {
+        try { if (!window.__pinkieLibrary?.open) throw new Error("资料阅读器尚未连接，请稍后再试"); await window.__pinkieLibrary.open(source.bookId, {location: source.location, quote: source.quote || ""}); }
+        catch (error) { showToast(error.message, true); }
+      }); row.append(jump);
+    }
+    root.append(row);
+  };
+
+
+  const continueLearning = async (step = {}, button = null) => {
+    const sessionKey = pageSessionKey();
+    if (step.sessionKey && step.sessionKey !== sessionKey) { showToast("这一步属于另一个学习会话，请先切换到对应会话。", true); return; }
+    setBusy(button, true, "准备中…");
+    try {
+      if (step.kind === "review") { openNotebook(); await startReview(); return; }
+      if ((step.kind === "reading" || step.kind === "read") && step.bookId) { await window.__pinkieLibrary?.open(step.bookId, {location: step.location}); return; }
+      if (step.attemptId) { const result = await request("pinkie.learning.attempts.retry", {sessionKey, id: step.attemptId}); if (pageSessionKey() !== sessionKey) return; state.remote = result; state.revision = Number(result.revision) || state.revision; renderStage(result); closeNotebook(); return; }
+      const remote = await request("pinkie.learning.current", {sessionKey});
+      if (pageSessionKey() !== sessionKey) return;
+      if (remote.current && step.kind !== "practice" && step.kind !== "weak") { state.remote = remote; state.revision = Number(remote.revision) || state.revision; renderStage(remote); state.stage?.scrollIntoView({block: "nearest"}); return; }
+      if (!remote.enabled) { const enabled = await request("pinkie.learning.set", {sessionKey, enabled: true}); if (pageSessionKey() !== sessionKey) return; state.remote = enabled; state.revision = Number(enabled.revision) || state.revision; renderStage(enabled); }
+      await sendControl(`${START_MARKER}\n${step.topic ? `请先围绕薄弱点 ${JSON.stringify(step.topic)} ` : "请从当前对话选择一个值得巩固的知识点，"}调用 learning_activity present 出一道理解题；上下文不足时先问我要练什么。一次只出一题。`, sessionKey);
+    } catch (error) { if (pageSessionKey() === sessionKey) showToast(error.message || "暂时无法继续学习", true); }
+    finally { if (pageSessionKey() === sessionKey) setBusy(button, false, step.label || "继续学习"); }
+  };
+
+
+  const appendGradeCorrection = (root, attemptId, correct) => {
+    if (!attemptId) return;
+    const details = el("details", "laolao-learning-stage__correction"); details.append(el("summary", "", "评分有误？手动纠正"));
+    const reason = el("textarea", "laolao-learning-stage__answer"); reason.rows = 2; reason.placeholder = "说明依据，例如同义答案或评分点遗漏。"; reason.setAttribute("aria-label", "纠正评分的依据");
+    const save = el("button", "laolao-learning-button", correct === true ? "改为仍需巩固" : "改为回答正确"); save.type = "button";
+    save.addEventListener("click", async () => {
+      const sessionKey = currentSession();
+      if (!reason.value.trim()) { showToast("写一句纠正依据，再保存。", true); reason.focus(); return; }
+      setBusy(save, true, "正在保存…");
+      try {
+        const result = await request("pinkie.learning.attempts.correct", {sessionKey, id: attemptId, correct: correct !== true, reason: reason.value.trim()});
+        if (currentSession() !== sessionKey) return;
+        if (result.state?.current?.id === state.remote?.current?.id) { state.remote = result.state; state.revision = Number(result.state.revision) || state.revision; renderStage(state.remote); }
+        showToast("已保存人工纠正，原评分和依据仍会保留。");
+        if (state.radarMode) void openMistakesRadar();
+      } catch (error) { if (currentSession() === sessionKey) showToast(error.message || "纠正没有保存", true); }
+      finally { if (currentSession() === sessionKey) setBusy(save, false, "保存纠正"); }
+    });
+    details.append(reason, save); root.append(details);
+  };
+
+
+  const selectedAnswer = stage => {
+    const current = activeItem();
+    if (!current) return "";
+    const selected = Array.from(stage.querySelectorAll('input[data-learning-answer="1"]')).filter(input => input.checked).map(input => input.value);
+    if (current.kind === "multiple_choice") return selected;
+    if (current.kind === "single_choice") return selected[0] || "";
+    return stage.querySelector(".laolao-learning-stage__answer")?.value.trim() || "";
+  };
   const submitAnswer = async button => {
     const current = state.remote?.current;
+    const item = activeItem(current);
     const stage = state.stage;
-    if (!current || !stage) return;
+    const sessionKey = pageSessionKey();
+    if (!current || !item || !stage || item.submission) return;
     const answer = selectedAnswer(stage);
     if ((!Array.isArray(answer) && !answer) || (Array.isArray(answer) && !answer.length)) {
-      statusLine(stage, "先选一个答案，Li An 才知道从哪里讲起呀。", true);
+      statusLine(stage, "先写下或选好答案，再提交就好。", true);
       return;
     }
-    const confidence = Number(stage.querySelector(".laolao-learning-stage__confidence")?.value || 50);
-    setBusy(button, true, "正在判断…");
+    const draft = itemDraft(item);
+    draft.answer = answer;
+    draft.submissionId ||= crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    setBusy(button, true, "正在提交…");
     try {
       const result = await request("pinkie.learning.submit", {
-        sessionKey: pageSessionKey(),
-        activityId: current.id,
-        answer,
-        confidence,
-        submissionId: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        sessionKey, activityId: current.id, itemId: item.id, answer,
+        confidence: draft.confidence, hintUsed: draft.hintUsed, submissionId: draft.submissionId,
       });
+      if (!sameActivity(sessionKey, current.id)) return;
+      state.activeItemId = item.id;
       state.remote = result;
       state.revision = Number(result?.revision) || state.revision;
       renderStage(result);
-      const serverCheck = result?.current?.submission?.correctness;
-      await sendControl(`${ANSWER_MARKER}\nactivity_id: ${current.id}\nanswer: ${JSON.stringify(answer)}\nconfidence: ${confidence}\nserver_check: ${serverCheck === true ? "correct" : serverCheck === false ? "incorrect" : "needs_model"}\n请调用 learning_activity resolve，给出简短口语化反馈，再决定是否继续下一题。`);
+      const submitted = activityItems(result.current).find(entry => entry.id === item.id) || result.current;
+      await explainAnswer(null, result.current, submitted);
     } catch (error) {
+      if (!sameActivity(sessionKey, current.id)) return;
       statusLine(stage, error.message || "答案没有送出去，请再试一次", true);
       setBusy(button, false, "提交答案");
     }
   };
 
   const saveCurrentKeyPoint = async button => {
-    const current = state.remote?.current;
+    const current = activeItem();
     const content = current?.result?.keyPoint || current?.result?.explanation || current?.question;
     if (!content) return;
     setBusy(button, true, "保存中…");
@@ -250,6 +349,7 @@
         content,
         tags: current.topic ? [current.topic] : [],
         sourceLabel: "互动题卡",
+        sourceAnchor: current.sources?.find(source => source?.bookId && source.location != null),
         sourceSessionLabel: state.sessionLabels.get(pageSessionKey()) || "",
       });
       setBusy(button, false, "已记下");
@@ -262,13 +362,19 @@
   };
 
   const nextQuestion = async button => {
+    const sessionKey = pageSessionKey();
+    const current = state.remote?.current;
+    const item = activeItem(current);
+    if (!item) return;
     setBusy(button, true, "准备中…");
     try {
-      await sendControl(`${NEXT_MARKER}\n请根据刚才的表现与当前学习主题，调用 learning_activity present 给一题难度合适的变式题。一次只出一题。`);
-      statusLine(state.stage, "Li An 正在按刚才的表现准备下一题…");
+      const attemptId = item.submission?.attemptId || item.result?.attemptId || item.attemptId || "";
+      await sendControl(`${NEXT_MARKER}\n上题：${JSON.stringify({question: item.question, topic: item.topic, note_ids: item.noteIds || [], answer: item.submission?.answer, result: item.result, sources: item.sources || []})}\nretry_of: ${attemptId}\n请针对刚才暴露的知识点，调用 learning_activity present 给一道难度合适的变式题。present.retry_of 必须设为上面的作答 id，note_ids 只关联本题真正考察的笔记，来源保持真实。不要重复原题，也不要提前给答案。一次只出一题。`, sessionKey);
+      if (sameActivity(sessionKey, current.id)) statusLine(state.stage, "正在按刚才的表现准备变式题…");
     } catch (error) {
+      if (!sameActivity(sessionKey, current.id)) return;
       statusLine(state.stage, error.message || "下一题暂时没有送出去", true);
-      setBusy(button, false, "下一题");
+      setBusy(button, false, "再试一次");
     }
   };
 
@@ -291,7 +397,8 @@
     const label = el("label", "laolao-learning-option");
     const input = el("input");
     input.type = current.kind === "multiple_choice" ? "checkbox" : "radio";
-    input.name = "learning-answer";
+    input.name = `learning-answer:${pageSessionKey()}:${state.remote?.current?.id}:${current.id}`;
+    input.dataset.learningAnswer = "1";
     input.value = option.id;
     const badge = el("span", "laolao-learning-option__badge", option.id);
     const text = el("span", "laolao-learning-option__text", option.label);
@@ -300,107 +407,138 @@
   };
 
   const renderStage = remote => {
-    const stage = ensureStage();
-    if (!stage) return;
+    if (typeof CustomEvent === "function") window.dispatchEvent?.(new CustomEvent("pinkie:learning-state", {detail: remote}));
     const current = remote?.current;
-    stage.hidden = !remote?.enabled;
-    stage.classList.toggle("is-resolved", current?.phase === "explained" || current?.phase === "complete");
-    stage.replaceChildren();
-    if (!remote?.enabled) return;
-
-    const art = el("img", "laolao-learning-stage__art");
-    art.hidden = true;
-    art.alt = "Li An 拿着学习笔记本";
-    art.decoding = "async";
-    art.draggable = false;
-    const body = el("div", "laolao-learning-stage__body");
-    const eyebrow = el("div", "laolao-learning-stage__eyebrow", current?.topic || "Li An 互动学习");
-    body.append(eyebrow);
-
-    if (!current) {
-      const due = Number(state.dueCount) || 0;
-      if (due > 0) {
-        const banner = el("button", "laolao-learning-due-banner");
-        banner.type = "button";
-        banner.append(
-          el("strong", "laolao-learning-due-banner__count", `${due}`),
-          el("span", "laolao-learning-due-banner__text", "条笔记今天该复习啦"),
-          el("span", "laolao-learning-due-banner__go", "开始复习 →")
-        );
-        banner.addEventListener("click", () => { openNotebook(); startReview(); });
-        body.append(banner);
-      }
-      body.append(el("h3", "laolao-learning-stage__question", "想先练哪一个知识点？"));
-      body.append(el("p", "laolao-learning-stage__lead", "直接继续聊天也可以；需要练习时，Li An 会把当前内容变成一张可作答的题卡。"));
-      const actions = el("div", "laolao-learning-stage__actions");
-      const begin = el("button", "laolao-learning-button laolao-learning-button--primary", "从当前内容出一题");
-      begin.type = "button";
-      begin.addEventListener("click", async () => {
-        setBusy(begin, true, "准备中…");
-        try { await sendControl(`${START_MARKER}\n请从当前对话选择最值得巩固的知识点，调用 learning_activity present 出一道互动题；上下文不足时先用一句话问我要练什么。`); }
-        catch (error) { setBusy(begin, false, "从当前内容出一题"); statusLine(stage, error.message, true); }
-      });
-      actions.append(begin);
-      body.append(actions);
-      stage.append(body, art);
+    const item = activeItem(current);
+    const inline = current?.id && window.__pinkieLearningInline?.hasActivity?.(remote?.sessionKey || pageSessionKey(), current.id);
+    // Due notes belong in the notebook. Only an actual legacy activity needs
+    // this fallback; ordinary chat must not grow an unsolicited review banner.
+    if (!remote?.enabled || !item?.question || inline) {
+      state.stage?.remove(); state.stage = null;
       return;
     }
-
-    body.append(el("h3", "laolao-learning-stage__question", current.question));
-    if (current.phase === "asking") {
-      const answers = el("div", "laolao-learning-stage__answers");
-      if (current.kind === "single_choice" || current.kind === "multiple_choice") {
-        for (const option of current.options || []) answers.append(optionNode(current, option));
+    const stage = ensureStage();
+    if (!stage) return;
+    const phase = itemPhase(item);
+    stage.hidden = false;
+    stage.classList.toggle("is-resolved", phase === "explained");
+    stage.classList.toggle("has-no-art", !ASSET);
+    stage.replaceChildren();
+    const body = el("div", "laolao-learning-stage__body");
+    body.append(el("div", "laolao-learning-stage__eyebrow", item?.topic || current?.topic || "互动学习"));
+    if (item) {
+      const items = activityItems(current);
+      if (items.length > 1) {
+        const progress = el("nav", "laolao-learning-stage__items");
+        progress.setAttribute("aria-label", "题组进度，每题单独评分");
+        progress.append(el("span", "", `${items.filter(entry => itemPhase(entry) === "explained").length}/${items.length} 题已讲解`));
+        items.forEach((entry, index) => {
+          const stateLabel = itemPhase(entry) === "explained" ? entry.result.correct === true ? "答对" : entry.result.correct === false ? "待巩固" : "已讲解" : entry.submission ? "待讲解" : "未作答";
+          const tab = el("button", "laolao-learning-stage__item", `${index + 1}`);
+          tab.type = "button"; tab.dataset.state = itemPhase(entry) === "explained" ? entry.result.correct === true ? "correct" : "practice" : entry.submission ? "pending" : "asking";
+          tab.setAttribute("aria-label", `第 ${index + 1} 题，${stateLabel}`);
+          tab.setAttribute("aria-current", String(entry.id === item.id));
+          tab.addEventListener("click", () => { state.activeItemId = entry.id; renderStage(state.remote); });
+          progress.append(tab);
+        });
+        body.append(progress);
+      }
+      body.append(el("h3", "laolao-learning-stage__question", item.question));
+      appendQuestionSources(body, item.sources || current.sources || []);
+      if (phase === "asking") {
+        const draft = itemDraft(item);
+        const answers = el("div", "laolao-learning-stage__answers");
+        if (item.kind === "single_choice" || item.kind === "multiple_choice") {
+          for (const option of item.options || []) {
+            const label = optionNode(item, option);
+            const input = label.querySelector("input");
+            input.checked = Array.isArray(draft.answer) ? draft.answer.includes(option.id) : draft.answer === option.id;
+            input.addEventListener("change", () => { draft.answer = selectedAnswer(stage); });
+            answers.append(label);
+          }
+        } else {
+          const input = el("textarea", "laolao-learning-stage__answer");
+          input.rows = item.kind === "short_answer" ? 3 : 2;
+          input.value = typeof draft.answer === "string" ? draft.answer : "";
+          input.placeholder = item.kind === "fill_blank" ? "把答案填在这里…" : "用自己的话答，短一点也没关系…";
+          input.setAttribute("aria-label", "你的答案");
+          input.addEventListener("input", () => { draft.answer = input.value; });
+          answers.append(input);
+        }
+        body.append(answers);
+        if (item.hint) {
+          const details = el("details", "laolao-learning-stage__hint");
+          details.open = draft.hintUsed;
+          details.append(el("summary", "", "给一点提示"), el("p", "", item.hint));
+          details.addEventListener("toggle", () => { if (details.open) draft.hintUsed = true; });
+          body.append(details);
+        }
+        const confidence = el("fieldset", "laolao-learning-stage__confidence-row");
+        confidence.append(el("legend", "", "这题有多大把握？（可选）"));
+        for (const [value, label] of [[25, "没把握"], [60, "有点把握"], [90, "很确定"]]) {
+          const choose = el("button", "laolao-learning-stage__confidence", label);
+          choose.type = "button"; choose.setAttribute("aria-pressed", String(draft.confidence === value));
+          choose.addEventListener("click", () => {
+            draft.confidence = draft.confidence === value ? null : value;
+            for (const sibling of confidence.querySelectorAll("button")) sibling.setAttribute("aria-pressed", String(sibling === choose && draft.confidence === value));
+          });
+          confidence.append(choose);
+        }
+        const submit = el("button", "laolao-learning-button laolao-learning-button--primary", "提交答案");
+        submit.type = "button"; submit.addEventListener("click", () => submitAnswer(submit));
+        const actions = el("div", "laolao-learning-stage__actions"); actions.append(confidence, submit); body.append(actions);
       } else {
-        const input = el("textarea", "laolao-learning-stage__answer");
-        input.rows = current.kind === "short_answer" ? 3 : 2;
-        input.placeholder = current.kind === "fill_blank" ? "把答案填在这里…" : "用自己的话答，短一点也没关系…";
-        input.setAttribute("aria-label", "你的答案");
-        answers.append(input);
+        const answer = el("div", "laolao-learning-stage__submitted");
+        answer.append(el("strong", "", "你的答案"), el("p", "", answerLabel(item, item.submission?.answer)));
+        if (item.submission?.hintUsed) answer.append(el("small", "", "本次用了提示，会单独记录为提示后作答。"));
+        body.append(answer);
+        if (phase === "evaluating") {
+          const immediate = item.submission?.correctness;
+          body.append(el("div", `laolao-learning-result ${immediate === true ? "is-correct" : immediate === false ? "is-incorrect" : ""}`, immediate === true ? "答案正确，正在准备讲解…" : immediate === false ? "答案还不对，正在分析错因…" : "答案已保存，正在核对你的思路…"));
+          if (item.result?.feedback) body.append(el("p", "laolao-learning-result__feedback", item.result.feedback));
+          if (item.result?.criteria?.some(point => point.met == null)) body.append(el("p", "laolao-learning-stage__lead", "评分点还没核对完整，暂不更新掌握等级。可以重试讲解补齐。"));
+          const retry = el("button", "laolao-learning-button", "重试讲解"); retry.type = "button";
+          retry.addEventListener("click", () => explainAnswer(retry)); body.append(retry);
+        } else {
+          const result = item.result || {};
+          const verdict = result.correct === true ? (item.submission?.hintUsed ? "提示后答对，下次独立试试" : "这题答对了") : result.correct === false ? "这个知识点还需要巩固" : "这题已讲解，掌握情况待确认";
+          body.append(el("div", `laolao-learning-result ${result.correct === true ? "is-correct" : result.correct === false ? "is-incorrect" : ""}`, verdict));
+          let explanationRoot = body;
+          if (result.gradingConflict || result.gradeSource === "user_correction") {
+            body.append(el("p", "laolao-learning-result__error", result.gradeSource === "user_correction"
+              ? `已按你的人工纠正记录${result.correctionReason ? `：${result.correctionReason}` : "，原评分仍保留"}。`
+              : "答案已按标准答案核对，讲解存在分歧。可以查看原文或人工纠正评分。"));
+            explanationRoot = el("details", "laolao-learning-stage__original-explanation");
+            explanationRoot.append(el("summary", "", "查看原讲解（可能不适用于当前评分）")); body.append(explanationRoot);
+          }
+          appendGradeCorrection(body, result.attemptId || item.submission?.attemptId || item.attemptId, result.correct);
+          if (result.feedback) explanationRoot.append(el("p", "laolao-learning-result__feedback", result.feedback));
+          if (result.explanation) explanationRoot.append(el("p", "laolao-learning-result__explanation", result.explanation));
+          if (result.criteria?.length) {
+            const criteria = el("ul", "laolao-learning-result__criteria");
+            for (const point of result.criteria) criteria.append(el("li", "", `${point.met === true ? "✓" : point.met === false ? "待补" : "待确认"} ${point.label || point.id || "评分点"}${point.feedback ? `：${point.feedback}` : ""}`));
+            explanationRoot.append(criteria);
+          }
+          const rawError = result.errorType || result.error_type;
+          const errorLabel = ({concept: "概念理解",method: "解题方法",reading: "审题",careless: "疏漏",memory: "记忆"})[rawError] || rawError;
+          if (errorLabel) explanationRoot.append(el("p", "laolao-learning-result__error", `这次主要卡在：${errorLabel}`));
+          if (result.reviewMessage) body.append(el("p", "laolao-learning-stage__lead", result.reviewMessage));
+          const nextReview = Math.min(...(result.reviewedNotes || []).map(note => Number(note.nextReviewAt)).filter(value => value > 0));
+          if (Number.isFinite(nextReview)) body.append(el("p", "laolao-learning-stage__lead", `已安排复习：${new Date(nextReview).toLocaleDateString("zh-CN", {month: "long", day: "numeric"})}。答对一次只是一条证据，之后还会再核对。`));
+          if (result.keyPoint) { const point = el("div", "laolao-learning-keypoint"); point.append(el("strong", "", "记住这一点："), document.createTextNode(result.keyPoint)); explanationRoot.append(point); }
+          const actions = el("div", "laolao-learning-stage__actions");
+          const note = el("button", "laolao-learning-button", "记入笔记"); note.type = "button"; note.addEventListener("click", () => saveCurrentKeyPoint(note));
+          const next = el("button", "laolao-learning-button laolao-learning-button--primary", result.correct === false ? "换一道类似题" : "继续练习"); next.type = "button"; next.addEventListener("click", () => nextQuestion(next));
+          if (!result.gradingConflict && result.gradeSource !== "user_correction") actions.append(note);
+          if (items.every(entry => itemPhase(entry) === "explained")) actions.append(next);
+          body.append(actions);
+        }
+        const nextItem = items.find(entry => !entry.submission);
+        if (nextItem) { const next = el("button", "laolao-learning-button laolao-learning-button--primary", "继续下一小题"); next.type = "button"; next.addEventListener("click", () => { state.activeItemId = nextItem.id; renderStage(state.remote); }); body.append(next); }
       }
-      body.append(answers);
-      if (current.hint) {
-        const details = el("details", "laolao-learning-stage__hint");
-        details.append(el("summary", "", "给一点提示"), el("p", "", current.hint));
-        body.append(details);
-      }
-      const confidence = el("label", "laolao-learning-stage__confidence-row");
-      confidence.append(document.createTextNode("把握 "));
-      const range = el("input", "laolao-learning-stage__confidence");
-      range.type = "range"; range.min = "0"; range.max = "100"; range.value = "60";
-      const value = el("span", "", "60%");
-      range.addEventListener("input", () => { value.textContent = `${range.value}%`; });
-      confidence.append(range, value);
-      const actions = el("div", "laolao-learning-stage__actions");
-      const submit = el("button", "laolao-learning-button laolao-learning-button--primary", "提交答案");
-      submit.type = "button";
-      submit.addEventListener("click", () => submitAnswer(submit));
-      actions.append(confidence, submit);
-      body.append(actions);
-    } else if (current.phase === "evaluating") {
-      const immediate = current.submission?.correctness;
-      body.append(el("div", `laolao-learning-result ${immediate === true ? "is-correct" : immediate === false ? "is-incorrect" : ""}`, immediate === true ? "答对啦，Li An 正在把关键原因讲清楚…" : immediate === false ? "这次没选对，但错因马上就能弄明白…" : "Li An 正在看你的思路…"));
-    } else {
-      const result = current.result || {};
-      const verdict = result.correct === true ? "答对啦！" : result.correct === false ? "差一点，正好抓住这个坑。" : "这题已经讲清楚啦。";
-      body.append(el("div", `laolao-learning-result ${result.correct === true ? "is-correct" : result.correct === false ? "is-incorrect" : ""}`, verdict));
-      if (result.feedback) body.append(el("p", "laolao-learning-result__feedback", result.feedback));
-      if (result.explanation) body.append(el("p", "laolao-learning-result__explanation", result.explanation));
-      if (result.keyPoint) {
-        const point = el("div", "laolao-learning-keypoint");
-        point.append(el("strong", "", "这一句记住："), document.createTextNode(result.keyPoint));
-        body.append(point);
-      }
-      const actions = el("div", "laolao-learning-stage__actions");
-      const note = el("button", "laolao-learning-button", "记入笔记");
-      const next = el("button", "laolao-learning-button laolao-learning-button--primary", "下一题");
-      note.type = next.type = "button";
-      note.addEventListener("click", () => saveCurrentKeyPoint(note));
-      next.addEventListener("click", () => nextQuestion(next));
-      actions.append(note, next);
-      body.append(actions);
     }
-    stage.append(body, art);
+    stage.append(body);
+    if (ASSET) { const art = el("img", "laolao-learning-stage__art"); art.src = ASSET; art.alt = "学习伙伴拿着笔记本"; art.decoding = "async"; art.draggable = false; stage.append(art); }
   };
 
   const toggleInteraction = async button => {
@@ -409,6 +547,7 @@
     setBusy(button, true, enabled ? "开启中…" : "关闭中…");
     try {
       const result = await request("pinkie.learning.set", {sessionKey, enabled});
+      if (pageSessionKey() !== sessionKey) return;
       state.remote = result;
       state.revision = Number(result?.revision) || 0;
       renderStage(result);
@@ -496,7 +635,9 @@
     mistakes.type = "button";
     mistakes.addEventListener("click", () => openMistakesRadar());
 
-    tray.append(review, notes, library, packs, mistakes);
+    const practice=el("button","laolao-learning-tools__item","练习实验");practice.type="button";
+    practice.addEventListener("click",async()=>{try{await window.__pinkieLearningPractice?.open(pageSessionKey());}catch(error){showToast(error.message,true);}});
+    tray.append(review, notes, library, packs, mistakes, practice);
     capsule.append(trigger, tray);
     actions.prepend(capsule);
     state.toolsCapsule = capsule;
@@ -716,7 +857,7 @@
         state.revision = Number(state.remote?.revision) || state.revision;
       }
       closeNotebook();
-      const questionNote = {id: note.id, term: note.term || note.title || "", meaning: note.meaning || "", example: note.example || "", content: note.content || ""};
+      const questionNote = {id: note.id, term: note.term || note.title || "", meaning: note.meaning || "", example: note.example || "", content: note.content || "", sourceAnchor: note.sourceAnchor || null};
       await request("pinkie.learning.notes.quiz.prepare", {sessionKey: currentSession(), ids: [note.id]});
       await sendControl(`${START_MARKER}\n请围绕这条笔记调用 learning_activity present 出一道理解题，并将 note_ids 设为 JSON 中的 id。笔记：${JSON.stringify(questionNote)}`);
     } catch (error) { showToast(error.message || "出题失败", true); }
@@ -822,12 +963,12 @@
     const note = queue[state.reviewIndex];
     if (!note) {
       const done = el("section", "laolao-learning-review laolao-learning-review--done");
-      done.append(el("div", "laolao-learning-review__eyebrow", "今日复习完成"), el("h3", "", "太棒啦，这一轮都复习完了！"));
+      done.append(el("div", "laolao-learning-review__eyebrow", "这一轮复习完成"), el("h3", "", state.reviewDailyRemaining === 0 ? "今天的复习计划已完成，积压可以留到以后分批复习。" : state.reviewRemaining ? `本轮已完成，还有 ${state.reviewRemaining} 条，休息一下再继续。` : "这一轮都核对完了，隔天还能记得才更稳。"));
       const leave = el("button", "laolao-learning-button laolao-learning-button--primary", "回到笔记"); leave.type = "button"; leave.addEventListener("click", () => { state.reviewQueue = null; renderNotes(state.notes, state.noteData?.similar || []); });
       done.append(leave); list.replaceChildren(done); return;
     }
     const panel = el("section", "laolao-learning-review");
-    panel.append(el("div", "laolao-learning-review__eyebrow", `复习 ${state.reviewIndex + 1} / ${queue.length}`));
+    panel.append(el("div", "laolao-learning-review__eyebrow", `本轮 ${Number(state.reviewDone || 0) + 1} / ${state.reviewTotal || queue.length}`));
     const front = el("div", "laolao-learning-review__front");
     if (note.kind === "compare") {
       front.append(el("p", "", "想一想：下面这些表达分别怎么用，有什么区别？"));
@@ -843,16 +984,23 @@
         if (note.example) back.append(el("small", "", note.example));
         if (note.note) back.append(el("p", "", note.note));
       }
+      if (state.reviewRecall) { const own = el("p", "laolao-learning-review__own", `刚才的回忆：${state.reviewRecall}`); panel.append(own); }
       panel.append(back);
+      panel.append(el("small", "laolao-learning-review__self-rating", "对照原笔记自评；这里不会自动判定你的答案对错。"));
       const grades = el("div", "laolao-learning-review__grades");
       for (const [rating, label] of [["remembered", "记得"], ["fuzzy", "模糊"], ["forgot", "忘了"]]) {
         const button = el("button", `laolao-learning-button${rating === "remembered" ? " laolao-learning-button--primary" : ""}`, label); button.type = "button";
         button.addEventListener("click", async () => {
+          const ownerSession = currentSession();
           setBusy(button, true, "记录中…");
           try {
             const result = await request("pinkie.learning.notes.review", {sessionKey: notebookSession(), id: note.id, rating});
+            if (currentSession() !== ownerSession || state.reviewQueue?.[state.reviewIndex]?.id !== note.id) return;
+            if (Number.isFinite(state.reviewDailyRemaining)) state.reviewDailyRemaining = Math.max(0, state.reviewDailyRemaining - 1);
             state.notes = state.notes.map(item => item.id === note.id ? result.note : item);
             state.reviewQueue.splice(state.reviewIndex, 1);
+            state.reviewDone = Number(state.reviewDone || 0) + 1;
+            state.reviewRecall = "";
             state.reviewFlipped = false;
             await loadNotes();
           } catch (error) { setBusy(button, false, label); showToast(error.message || "复习记录失败", true); }
@@ -861,7 +1009,12 @@
       }
       panel.append(grades);
     } else {
-      const flip = el("button", "laolao-learning-button laolao-learning-button--primary", "翻面看释义"); flip.type = "button";
+      const recall = el("textarea", "laolao-learning-stage__answer laolao-learning-review__recall");
+      recall.rows = 2; recall.value = state.reviewRecall || "";
+      recall.placeholder = "先用自己的话回忆含义或用法，也可以先在心里想一遍。";
+      recall.setAttribute("aria-label", "先回忆，再核对");
+      recall.addEventListener("input", () => { state.reviewRecall = recall.value; }); panel.append(recall);
+      const flip = el("button", "laolao-learning-button laolao-learning-button--primary", "回忆好了，核对释义"); flip.type = "button";
       flip.addEventListener("click", () => { state.reviewFlipped = true; renderReview(list); }); panel.append(flip);
     }
     const exit = el("button", "laolao-learning-review__exit", "结束复习"); exit.type = "button";
@@ -870,13 +1023,18 @@
   };
 
   const startReview = async () => {
+    const sessionKey = notebookSession();
     try {
       state.radarMode = false;
-      const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500});
-      state.reviewQueue = (result.notes || []).filter(note => !Number(note.nextReviewAt) || Number(note.nextReviewAt) <= Date.now());
+      const result = await request("pinkie.learning.notes.review.queue", {sessionKey, limit: 10});
+      if (notebookSession() !== sessionKey) return;
+      state.reviewQueue = result.notes || [];
+      state.reviewRemaining = Number(result.remainingCount) || 0; state.reviewDailyRemaining = result.dailyRemaining;
+      state.reviewTotal = state.reviewQueue.length; state.reviewDone = 0; state.reviewRecall = "";
       state.reviewIndex = 0; state.reviewFlipped = false;
-      renderReview(state.drawer?.querySelector(".laolao-learning-notes__list"));
-    } catch (error) { showToast(error.message || "复习列表读取失败", true); }
+      const list = state.drawer?.querySelector(".laolao-learning-notes__list");
+      if (list) renderReview(list);
+    } catch (error) { if (notebookSession() === sessionKey) showToast(error.message || "复习列表读取失败", true); }
   };
 
   const normalizePackText = value => String(value ?? "").normalize("NFKC").toLowerCase();
@@ -1100,125 +1258,40 @@
   };
 
   const openMistakesRadar = async () => {
+    const sessionKey = currentSession();
     try {
       state.radarMode = true;
-      const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500});
-      const notes = result.notes || [];
-      const tagStats = {};
-      for (const n of notes) {
-        for (const t of n.tags || []) {
-          tagStats[t] = tagStats[t] || {total: 0, mistakes: 0};
-          tagStats[t].total++;
-          if (Number(n.lapses) > 0) tagStats[t].mistakes += Number(n.lapses);
-        }
-      }
-      const entries = Object.entries(tagStats).sort((a, b) => b[1].mistakes - a[1].mistakes);
-      const top = entries.slice(0, 8);
-      // 先打开笔记本并等它自己的异步渲染完成，再把雷达插进去（否则会被 loadNotes 覆盖）
-      let drawer = state.drawer;
-      if (!drawer?.classList.contains("is-open")) { openNotebook(); drawer = state.drawer; }
-      for (let i = 0; i < 40; i++) {
-        if (drawer?.querySelector(".laolao-learning-notes__list")?.children?.length) break;
-        await new Promise(r => setTimeout(r, 100));
-      }
+      if (!state.drawer?.classList.contains("is-open")) openNotebook();
+      const result = await request("pinkie.learning.attempts.list", {sessionKey, wrongOnly: true, limit: 20});
+      if (currentSession() !== sessionKey || !state.radarMode) return;
+      const drawer = state.drawer;
       const list = drawer?.querySelector(".laolao-learning-notes__list");
-      if (!list) throw new Error("笔记列表未就绪");
-      // 整理稿模式会把原笔记列表整个隐藏；雷达要挂进列表，必须先显式放开
+      if (!list) throw new Error("学习记录尚未就绪");
       list.hidden = false;
-      const manuscriptHost = drawer?.querySelector(".laolao-learning-notes__manuscript");
-      if (manuscriptHost) manuscriptHost.hidden = true;
-      const previewHost = drawer?.querySelector(".laolao-learning-notes__preview");
-      if (previewHost) previewHost.hidden = true;
+      for (const selector of [".laolao-learning-notes__manuscript", ".laolao-learning-notes__preview"]) { const host = drawer.querySelector(selector); if (host) host.hidden = true; }
       const panel = el("section", "laolao-learning-radar");
-      panel.append(el("div", "laolao-learning-radar__eyebrow", "薄弱点雷达"));
-      if (!top.length) {
-        panel.append(el("p", "laolao-learning-radar__empty", "还没有带标签的笔记。先让 Li An 帮你自动打标签，或者手动加几条标签。"));
-      } else {
-        const canvas = el("canvas", "laolao-learning-radar__canvas");
-        canvas.width = 360; canvas.height = 280;
-        panel.append(canvas);
-        const labels = top.map(([tag]) => tag);
-        const totals = top.map(([, s]) => s.total);
-        const mistakes = top.map(([, s]) => s.mistakes);
-        const ctx = canvas.getContext("2d");
-        const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 40;
-        const max = Math.max(...totals, 1);
-        // 网格
-        ctx.strokeStyle = "rgba(232,79,154,.18)";
-        ctx.lineWidth = 1;
-        for (let ring = 1; ring <= 3; ring++) {
-          const r = R * ring / 3;
-          ctx.beginPath();
-          for (let i = 0; i <= labels.length; i++) {
-            const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
-            const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-        }
-        // 轴线 + 标签
-        ctx.fillStyle = "rgba(63,49,89,.85)";
-        ctx.font = "12px -apple-system, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        labels.forEach((tag, i) => {
-          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
-          const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
-          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
-          const lx = cx + (R + 20) * Math.cos(a), ly = cy + (R + 20) * Math.sin(a);
-          ctx.fillText(tag, lx, ly);
-        });
-        // 总量区域（蓝）
-        ctx.fillStyle = "rgba(123,99,200,.28)";
-        ctx.strokeStyle = "rgba(123,99,200,.6)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        labels.forEach((_, i) => {
-          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
-          const r = R * totals[i] / max;
-          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        });
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // 错题区域（粉）
-        const maxM = Math.max(...mistakes, 1);
-        ctx.fillStyle = "rgba(232,79,154,.3)";
-        ctx.strokeStyle = "rgba(232,79,154,.7)";
-        ctx.beginPath();
-        labels.forEach((_, i) => {
-          const a = -Math.PI / 2 + i * 2 * Math.PI / labels.length;
-          const r = R * mistakes[i] / maxM;
-          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        });
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // 图例
-        const legend = el("div", "laolao-learning-radar__legend");
-        legend.innerHTML = "<span style='color:#7b63c8'>● 笔记数</span> <span style='color:#e84f9a'>● 错题数</span>";
-        panel.append(legend);
-        // 错题列表
-        const wrong = notes.filter(n => Number(n.lapses) > 0).sort((a, b) => Number(b.lapses) - Number(a.lapses)).slice(0, 10);
-        if (wrong.length) {
-          const wrongList = el("div", "laolao-learning-radar__wrong");
-          wrongList.append(el("h4", "", `高频错题（${wrong.length}）`));
-          for (const n of wrong) {
-            const item = el("div", "laolao-learning-radar__wrong-item");
-            item.append(el("strong", "", n.title || n.term || "无标题"));
-            item.append(el("small", "", `错 ${n.lapses} 次 · ${n.tags.join("、") || "无标签"}`));
-            wrongList.append(item);
-          }
-          panel.append(wrongList);
-        }
+      panel.append(el("div", "laolao-learning-radar__eyebrow", "最近需要巩固的题目"));
+      panel.append(el("p", "laolao-learning-stage__lead", "按最近作答记录补练。做错后先找原因，再独立试一次；累计错误次数不代表你现在的水平。"));
+      const attempts = result.attempts || [];
+      if (!attempts.length) panel.append(el("p", "laolao-learning-radar__empty", "暂时没有待巩固的作答记录。可以继续学习，或做一道题看看掌握情况。"));
+      for (const attempt of attempts) {
+        const card = el("article", "laolao-learning-radar__wrong-item");
+        card.append(el("strong", "", attempt.question || attempt.topic || "练习记录"));
+        card.append(el("p", "laolao-learning-result__feedback", `你的答案：${attempt.answerText || (Array.isArray(attempt.answer) ? attempt.answer.join("、") : attempt.answer || "未填写")}`));
+        const errorType = attempt.errorType || attempt.result?.errorType;
+        const errorLabel = ({concept: "概念理解", method: "解题方法", reading: "审题", careless: "疏漏", memory: "记忆"})[errorType] || errorType;
+        if (errorLabel) card.append(el("small", "", `先补这一点：${errorLabel}`));
+        if (attempt.result?.feedback) card.append(el("p", "laolao-learning-result__feedback", attempt.result.feedback));
+        appendQuestionSources(card, attempt.sources || []);
+        const retry = el("button", "laolao-learning-button laolao-learning-button--primary", "独立重做这题"); retry.type = "button";
+        retry.addEventListener("click", () => continueLearning({attemptId: attempt.id}, retry)); card.append(retry);
+        appendGradeCorrection(card, attempt.id, attempt.result?.correct);
+        panel.append(card);
       }
       const exit = el("button", "laolao-learning-button", "返回笔记"); exit.type = "button";
-      exit.addEventListener("click", () => { state.radarMode = false; renderNotes(state.notes, state.noteData?.similar || []); });
-      panel.append(exit);
-      list.replaceChildren(panel);
-      // 确保雷达可见：抽屉内部滚到顶
-      for (const node of [list, list.parentElement, drawer]) {
-        if (node) node.scrollTop = 0;
-      }
-      panel.scrollIntoView({ block: "center" });
-    } catch (error) { showToast(error.message || "雷达图读取失败", true); }
+      exit.addEventListener("click", () => { state.radarMode = false; renderNotes(state.notes, state.noteData?.similar || []); }); panel.append(exit);
+      list.replaceChildren(panel); list.scrollTop = 0;
+    } catch (error) { if (currentSession() === sessionKey) showToast(error.message || "作答记录读取失败", true); }
   };
 
   const notebookDocument = notebook => {
@@ -1536,8 +1609,8 @@
 
   const enterBatchQuiz = async () => {
     try {
-      const result = await request("pinkie.learning.notes.list", {sessionKey: notebookSession(), limit: 500});
-      const due = (result.notes || []).filter(note => !Number(note.nextReviewAt) || Number(note.nextReviewAt) <= Date.now());
+      const result = await request("pinkie.learning.notes.review.queue", {sessionKey: notebookSession(), limit: 10});
+      const due = result.notes || [];
       if (!due.length) return showToast("今天没有到期笔记");
       if (!state.remote?.enabled) {
         state.remote = await request("pinkie.learning.set", {sessionKey: currentSession(), enabled: true});
@@ -1547,10 +1620,10 @@
       const payload = due.map(note => ({
         id: note.id, term: note.term || note.title || "", meaning: note.meaning || "",
         example: note.example || "", note: note.note || "", content: (note.content || "").slice(0, 1400),
-        kind: note.kind || "note", compareItems: note.compareItems || [],
+        kind: note.kind || "note", compareItems: note.compareItems || [], sourceAnchor: note.sourceAnchor || null,
       }));
       await request("pinkie.learning.notes.quiz.prepare", {sessionKey: currentSession(), ids: payload.map(note => note.id)});
-      await sendControl(`${BATCH_MARKER}\nnote_ids: ${JSON.stringify(payload.map(note => note.id))}\n请把这些到期笔记一次编成一组练习，尽量每条都覆盖到，再用 learning_activity present 展示多小题题卡。笔记：${JSON.stringify(payload)}`);
+      await sendControl(`${BATCH_MARKER}\nnote_ids: ${JSON.stringify(payload.map(note => note.id))}\n请用 learning_activity present 的 items 数组出一组练习，每个 item 是独立可作答的小题，分别填写 note_ids、评分点和真实 sources。不要把多题塞进一个 question，也不要给整组统一判分。笔记：${JSON.stringify(payload)}`);
     } catch (error) { showToast(error.message || "批量出题失败", true); }
   };
 
@@ -1797,10 +1870,14 @@
   const poll = async () => {
     if (state.polling || !inLearningMode(state.pane)) return;
     const sessionKey = pageSessionKey();
-    if (!sessionKey) return;
+    if (!sessionKey || document.hidden || state.disposed) return;
+    const now = Date.now();
+    if (state.lastPollSession === sessionKey && now - (state.lastPollAt || 0) < 1200) return;
+    state.lastPollSession = sessionKey; state.lastPollAt = now;
     state.polling = true;
     try {
       const result = await request("pinkie.learning.current", {sessionKey}, 8000);
+      if (state.disposed || pageSessionKey() !== sessionKey) return;
       if (state.drawer?.classList.contains("is-open") && state.notesSessionKey !== notebookSession()) void loadNotes();
       if (state.sessionKey !== sessionKey || state.revision !== Number(result?.revision)) {
         state.sessionKey = sessionKey;
@@ -1812,7 +1889,7 @@
       // 每 30 秒顺带刷新一次今日复习数，让空态横幅和胶囊保持准确
       if (!state.dueFetchedAt || Date.now() - state.dueFetchedAt > 30_000) {
         state.dueFetchedAt = Date.now();
-        refreshDueCount().then(() => { if (!state.remote?.current) renderStage(state.remote); });
+        refreshDueCount().then(() => { if (!state.disposed && pageSessionKey() === sessionKey && !state.remote?.current) renderStage(state.remote); });
       }
     } catch {
       // 网关启动或重连期间保持现有题卡，下一轮自动恢复，不闪空白。
@@ -1826,7 +1903,7 @@
     state.toolsCapsule?.remove(); state.toolsCapsule = null; state.toolsDue = null;
     closeNotebook();
     state.selectionButton?.remove(); state.selectionButton = null;
-    state.sessionKey = ""; state.revision = -1; state.remote = null;
+    state.sessionKey = ""; state.revision = -1; state.remote = null; state.activityId = ""; state.answerDrafts = new Map();
   };
 
   const reconcile = () => {
@@ -1838,6 +1915,7 @@
   };
 
   const dispose = () => {
+    if(state.disposed)return;state.disposed=true;
     leaveLearningMode();
     state.drawer?.remove(); state.drawer = null;
     window.clearInterval(tickTimer);
@@ -1866,6 +1944,8 @@
       state.stage?.remove(); state.stage = null;
       closeNotebook();
     },
+    continueLearning(step) { return continueLearning(step); },
+    refreshInline(id) { if(id===state.remote?.current?.id)renderStage(state.remote); },
     refreshNotes() {
       if (state.drawer?.classList.contains("is-open")) void loadNotes();
     },
@@ -1927,6 +2007,8 @@
   const mo = new MutationObserver(schedule);
   mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ["class"]});
   window.addEventListener("pinkie:session-selected", schedule);
+  window.addEventListener("pinkie:learning-continue",event=>{for(const instance of instances)if(instance.sessionKey===event.detail?.sessionKey)void instance.continueLearning(event.detail.step||{});});
+  window.addEventListener("pinkie:learning-inline-mounted",event=>{for(const instance of instances)if(instance.sessionKey===event.detail?.sessionKey)instance.refreshInline(event.detail.id);});
   window.addEventListener("laolao:modechange", schedule);
   window.addEventListener("laolao:sessions-changed", () => {
     for (const instance of instances) instance.refreshNotes();

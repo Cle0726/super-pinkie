@@ -6,16 +6,21 @@
   window.__pinkieCompactModelPicker = true;
 
   let scheduled = false;
+  let nativeMotionActive = null;
   const ENHANCEMENT_KEY = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
   const rangeStates = new WeakMap();
   const pickerStates = new WeakMap();
   const nativeInputEvents = new WeakSet();
   const autoSaveTimers = new WeakMap();
   const pendingPatches = new WeakMap();
+  const pendingSessionKeys = new WeakMap();
   const activeSaves = new WeakMap();
   const saveRevisions = new WeakMap();
   const triggerObservers = new Map();
   const triggerStates = new WeakMap();
+  const effortTriggers = new WeakMap();
+  const effortOwners = new WeakMap();
+  const restartingMenus = new WeakSet();
   const stopStates = new WeakMap();
   const pointerToggles = new WeakMap();
   const fallbackStates = new WeakMap();
@@ -38,12 +43,15 @@
     const composer = details.closest(".agent-chat__composer-shell");
     const pane = details.closest(".chat-main") || details.closest(".card.chat");
     if (!menu || !composer || !pane) return;
+    // 档位按钮的文字随档位变宽变窄（Low ↔ Adaptive），会把这一行往左右推；
+    // 也盯着它，弹层才能在拖动时贴住原位，滑块不在指针下面移动。
+    const effortButton = effortTriggers.get(details) || null;
     let state = popupLayouts.get(details);
-    if (!state || state.menu !== menu || state.composer !== composer || state.pane !== pane) {
+    if (!state || state.menu !== menu || state.composer !== composer || state.pane !== pane || state.effortButton !== effortButton) {
       releasePopupLayout(details);
       const observer = typeof ResizeObserver === "function" ? new ResizeObserver(schedulePopupLayouts) : null;
-      for (const node of [menu, composer, pane]) observer?.observe(node);
-      state = {menu, composer, pane, observer};
+      for (const node of [menu, composer, pane, effortButton]) if (node) observer?.observe(node);
+      state = {menu, composer, pane, effortButton, observer};
       popupLayouts.set(details, state);
     }
 
@@ -56,19 +64,21 @@
     const bounds = pane.getBoundingClientRect(), anchor = composer.getBoundingClientRect();
     const left = Math.max(vx, bounds.left) + 8, right = Math.min(vx + vw, bounds.right) - 8;
     const top = Math.max(vy, bounds.top) + 8, bottom = Math.min(vy + vh, bounds.bottom) - 8;
-    const width = Math.max(1, Math.min(336, right - left));
-    const above = Math.max(0, anchor.top - top - 8), below = Math.max(0, bottom - anchor.bottom - 8);
+    const effortView = details.dataset.pinkiePickerView === "effort";
+    const trigger = (effortView ? effortTriggers.get(details) : details.querySelector(":scope > summary"))?.getBoundingClientRect() || anchor;
+    // Keep a fixed label column so changing tiers never shifts the slider under the pointer.
+    const width = Math.max(1, Math.min(effortView ? 296 : 360, right - left));
+    const above = Math.max(0, trigger.top - top - 8), below = Math.max(0, bottom - trigger.bottom - 8);
     const upward = above >= 148 || above >= below;
     const available = upward ? above : below;
     const set = (name, value) => {
       if (menu.style.getPropertyValue(name) !== value) menu.style.setProperty(name, value);
     };
     set("--pinkie-popup-width", `${width}px`);
-    set("--pinkie-popup-max-height", `${Math.max(1, Math.min(430, available))}px`);
+    set("--pinkie-popup-max-height", `${Math.max(1, Math.min(effortView ? 200 : 360, available))}px`);
     const height = menu.getBoundingClientRect().height;
-    const trigger = details.querySelector(":scope > summary")?.getBoundingClientRect() || anchor;
     const x = Math.max(left, Math.min(trigger.right - width, right - width));
-    const y = upward ? anchor.top - 8 - height : anchor.bottom + 8;
+    const y = Math.max(top, Math.min(upward ? trigger.top - 8 - height : trigger.bottom + 8, bottom - height));
     const parent = menu.offsetParent || details, origin = parent.getBoundingClientRect();
     set("--pinkie-popup-left", `${x - origin.left + parent.scrollLeft - parent.clientLeft}px`);
     set("--pinkie-popup-top", `${y - origin.top + parent.scrollTop - parent.clientTop}px`);
@@ -103,6 +113,8 @@
   function currentSessionKey(details) {
     const localKey = details?.closest?.("[data-session-key]")?.dataset?.sessionKey;
     if (localKey) return localKey;
+    const paneKey = typeof HTMLElement !== "undefined" && details instanceof HTMLElement ? details.closest("openclaw-chat-pane")?.state?.sessionKey : "";
+    if (paneKey) return paneKey;
     const encoded = window.location?.search?.match(/[?&]session=([^&]+)/)?.[1];
     if (encoded) {
       try { return decodeURIComponent(encoded.replace(/\+/g, " ")); } catch { /* fall through */ }
@@ -122,12 +134,12 @@
     if (!key) return false;
     try {
       if (tier) window.localStorage?.setItem(ENHANCEMENT_KEY(key), tier);
-      else window.localStorage?.removeItem(ENHANCEMENT_KEY(key));
+      else { window.localStorage?.removeItem(ENHANCEMENT_KEY(key)); saveTierChoice(null, key); }
       return true;
     } catch { return false; }
   }
 
-  const isPicker = (node) => node?.closest?.("details.chat-controls__model");
+  const isPicker = (node) => node?.closest?.("details.chat-controls__model, details.chat-controls__model-picker");
   const isMax = (range) => range && !range.disabled && Number(range.max) > Number(range.min)
     && Number(range.value) >= Number(range.max);
 
@@ -138,6 +150,49 @@
   const MATERIALS = ["off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max", "ultra"];
   const MATERIAL_RANK = new Map(MATERIALS.map((name, index) => [name, index]));
   const LEVEL_LABELS = {off: "关闭", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "XHigh", adaptive: "Adaptive", max: "Max", ultra: "Ultra"};
+  // The nine visual choices belong to Pinkie, not to a provider's effort
+  // enum. Keep the UI preference separate from the verified wire parameter.
+  const TIER_CHOICE_KEY = key => `pinkie:effort-choice:v1:${key}`;
+  function tierChoice(key = currentSessionKey()) {
+    try {
+      const value = JSON.parse(window.localStorage?.getItem(TIER_CHOICE_KEY(key)) || "null");
+      return value && MATERIALS.includes(value.tier) ? value : null;
+    } catch { return null; }
+  }
+  function saveTierChoice(value, key = currentSessionKey()) {
+    if (!key) return;
+    try {
+      if (value) window.localStorage?.setItem(TIER_CHOICE_KEY(key), JSON.stringify(value));
+      else window.localStorage?.removeItem(TIER_CHOICE_KEY(key));
+    } catch { /* Persistence is optional in a private web view. */ }
+  }
+  function chosenTier(state, key = state?.key || currentSessionKey()) {
+    const value = tierChoice(key);
+    if (!value) return "";
+    if (state?.selectedModel && value.model && value.model !== state.selectedModel) return "";
+    if (state?.session?.thinkingLevel && value.backend && value.backend !== state.session.thinkingLevel) return "";
+    return value.tier;
+  }
+  function nativeTierFor(tier, values, defaultLevel = "") {
+    const native = values.filter(value => MATERIAL_RANK.has(value));
+    if (!native.length) return "off";
+    if (native.includes(tier)) return tier;
+    if (tier === "adaptive") return native.includes(defaultLevel) ? defaultLevel
+      : native.includes("medium") ? "medium" : native.filter(value => value !== "off")[0] || native[0];
+    const target = MATERIAL_RANK.get(tier) ?? MATERIAL_RANK.get("high");
+    return [...native].sort((a, b) => Math.abs(MATERIAL_RANK.get(a) - target) - Math.abs(MATERIAL_RANK.get(b) - target)
+      || MATERIAL_RANK.get(a) - MATERIAL_RANK.get(b))[0];
+  }
+  function selectionFor(state, tier, backendValues) {
+    const model = familyTargetModel(state, tier) || state?.selectedModel || "";
+    const entry = state?.models?.find(item => `${item.provider}/${item.id}` === model);
+    const declared = entry?.compat?.supportedReasoningEfforts?.map(value => value === "none" ? "off" : value);
+    const targetValues = model && state?.selectedModel && model !== state.selectedModel
+      ? declared?.length ? declared : entry?.reasoning === false || FAMILY_SUFFIX.test(entry?.id || "") ? ["off"] : backendValues
+      : backendValues;
+    return {model, backend: nativeTierFor(tier, targetValues, state?.session?.thinkingDefault)};
+  }
+
   /* Fold endpoint-level effort variants into the existing reasoning slider.
      Lite, image, agent and fast endpoints remain distinct models. */
   const MODEL_FAMILIES = [
@@ -161,58 +216,79 @@
     },
   ];
 
-  const FAMILY_SUFFIX = /-(extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/;
+  // These six fixed-effort endpoints are the Antigravity source shown by the user.
+  // Their unsuffixed Claude 5.5 siblings are a different upstream source.
+  function modelOrigin(model) {
+    const provider = String(model?.provider || "").toLowerCase();
+    if (/^(?:antigravity|tab)$/.test(provider)) return "antigravity";
+    return provider === "mm" && /^claude-(?:sonnet|opus)-5-5-(?:low|medium|high)$/.test(model?.id || "") ? "antigravity" : "";
+  }
+  function modelSourceLabel(model, name) {
+    return modelOrigin(model) === "antigravity" ? String(name).replace(/\s*[·•]\s*At$/i, "") + " ·At" : name;
+  }
+
+  const FAMILY_SUFFIX = /-(extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|minimal|xhigh|high|medium|low|off|max|ultra)$/;
   function dynamicFamily(model, catalog) {
-    if (model.provider !== "mm") return null;
     const base = model.id.replace(FAMILY_SUFFIX, "");
-    const variants = catalog.filter((entry) => entry.provider === model.provider &&
+    const variants = catalog.filter(entry => entry.provider === model.provider && entry.available !== false && modelOrigin(entry) === modelOrigin(model) &&
       (entry.id === base || (FAMILY_SUFFIX.test(entry.id) && entry.id.replace(FAMILY_SUFFIX, "") === base)));
     if (variants.length < 2) return null;
-    const signature = (entry) => JSON.stringify([entry.input, entry.contextWindow]);
-    if (variants.some((entry) => signature(entry) !== signature(variants[0]))) return null;
-    const canonical = variants.find((entry) => entry.id === base || entry.id === `${base}-tiered`)?.id
-      || variants.find((entry) => entry.id === `${base}-reasoning` || entry.id === `${base}-thinking`)?.id
-      || variants.find((entry) => entry.id === `${base}-low`)?.id || variants[0].id;
-    const ids = variants.map((entry) => entry.id);
-    const byLevel = {};
-    const implied = {};
+    // Context length and reasoning flags can legitimately differ by effort
+    // endpoint. Modalities and API families still delimit distinct models.
+    const signatures = variants.filter(entry => Array.isArray(entry.input)).map(entry => JSON.stringify([...entry.input].sort()));
+    if (new Set(signatures).size > 1 || new Set(variants.map(entry => entry.api).filter(Boolean)).size > 1) return null;
+    const canonicalModel = variants.find(entry => entry.id === base)
+      || variants.find(entry => entry.id === `${base}-tiered`)
+      || variants.find(entry => entry.id === `${base}-reasoning` || entry.id === `${base}-thinking`)
+      || variants.find(entry => entry.id === `${base}-low`) || variants[0];
+    const ids = variants.map(entry => entry.id), byLevel = {}, implied = {};
+    let flexibleRoute = "";
     for (const entry of variants) {
-      const suffix = entry.id.slice(base.length + 1);
-      if (["extra-low", "low", "medium", "high", "xhigh", "adaptive"].includes(suffix)) {
+      const suffix = entry.id === base ? "" : entry.id.slice(base.length + 1);
+      if (MATERIAL_RANK.has(suffix) || suffix === "extra-low") {
         const level = suffix === "extra-low" ? "minimal" : suffix;
-        byLevel[level] = entry.id;
-        implied[entry.id] = level;
+        byLevel[level] = entry.id; implied[entry.id] = level;
       }
-      if (suffix === "non-reasoning") byLevel.off = entry.id;
-      if (suffix === "reasoning" || suffix === "thinking") {
-        for (const level of ["minimal", "low", "medium", "high", "xhigh", "adaptive"]) byLevel[level] ||= entry.id;
+      if (suffix === "non-reasoning") { byLevel.off = entry.id; implied[entry.id] = "off"; }
+      const nativeEfforts = entry.compat?.supportedReasoningEfforts?.length;
+      if (/^(?:reasoning|thinking)$/.test(suffix) && !nativeEfforts) {
+        byLevel.high ||= entry.id; implied[entry.id] = "high";
       }
+      if (suffix === "tiered" || (/^(?:reasoning|thinking)$/.test(suffix) && nativeEfforts)
+        || (!suffix && entry.reasoning !== false && nativeEfforts)) flexibleRoute ||= entry.id;
+      if (!suffix && entry.reasoning === false) byLevel.off ||= entry.id;
     }
-    byLevel.off ||= ids.includes(base) ? base : canonical;
-    byLevel.max = ids.includes(`${base}-tiered`) ? `${base}-tiered` : canonical;
-    byLevel.ultra = byLevel.max;
-    const label = variants.find((entry) => entry.id === base)?.name
-      || base.split("-").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ");
-    return {provider: model.provider, label, canonical, ids, byLevel, implied, dynamic: true};
+    flexibleRoute = variants.find(entry => entry.id === `${base}-tiered`)?.id
+      || variants.find(entry => (entry.id === `${base}-reasoning` || entry.id === `${base}-thinking`) && entry.compat?.supportedReasoningEfforts?.length)?.id || flexibleRoute;
+    const known = MODEL_FAMILIES.find(entry => entry.provider === model.provider && entry.ids.some(id => ids.includes(id)));
+    if (known?.byLevel.off === base && ids.includes(base)) byLevel.off ||= known.byLevel.off;
+    const endpointLevels = MATERIALS.filter(level => Object.hasOwn(byLevel, level));
+    const highest = [...endpointLevels].filter(level => !["off", "adaptive"].includes(level)).at(-1);
+    const enhancedRoute = flexibleRoute || byLevel[highest] || canonicalModel.id;
+    byLevel.max ||= enhancedRoute; byLevel.ultra ||= enhancedRoute;
+    const label = known?.label || String(canonicalModel.name && canonicalModel.name !== canonicalModel.id ? canonicalModel.name : base.split("-").map(part => part[0]?.toUpperCase() + part.slice(1)).join(" ")).replace(/\s*[·•]\s*At$/i, "").replace(/(?:[\s·_-]+)(?:extra[ -]low|non[ -]reasoning|reasoning|thinking|tiered|adaptive|minimal|xhigh|high|medium|low|off|max|ultra)$/i, "").trim();
+    return {provider: model.provider, label: modelSourceLabel(model, label || base), canonical: canonicalModel.id, ids, byLevel, implied,
+      endpointLevels, flexibleRoute, dynamic: true};
   }
 
   function modelFamily(model, catalog) {
-    if (!model || !Array.isArray(catalog)) return null;
-    const family = MODEL_FAMILIES.find((entry) => entry.provider === model.provider && entry.ids.includes(model.id))
-      || dynamicFamily(model, catalog);
-    if (!family) return null;
-    const variants = catalog.filter((entry) => entry.provider === family.provider && family.ids.includes(entry.id));
-    if (variants.length < 2 || !variants.some((entry) => entry.id === family.canonical)) return null;
-    const signature = (entry) => JSON.stringify([...(family.dynamic ? [] : [entry.reasoning]), entry.input, entry.contextWindow]);
-    if (variants.some((entry) => signature(entry) !== signature(variants[0]))) return null;
-    return family;
+    return model && Array.isArray(catalog) ? dynamicFamily(model, catalog) : null;
+  }
+
+  function routedFamilyId(family, level) {
+    if (family.byLevel[level]) return family.byLevel[level];
+    if (family.flexibleRoute) return family.flexibleRoute;
+    const ranked = family.endpointLevels.filter(value => value !== "adaptive");
+    return ranked.sort((a, b) => Math.abs(MATERIAL_RANK.get(a) - (MATERIAL_RANK.get(level) ?? 4))
+      - Math.abs(MATERIAL_RANK.get(b) - (MATERIAL_RANK.get(level) ?? 4)))[0]
+      ? family.byLevel[ranked[0]] : family.canonical;
   }
 
   function presentationModels(models, selectedModel = "") {
     models = models.map((model) => {
       let name = String(model.name || model.id).replace(/\s*[·•]\s*Work\s*Buddy\s*$/i, "");
       if (/^workbuddy\/deepseek(?:[-_.:]|$)/i.test(model.id) && !/\s*[·•]\s*WB$/i.test(name)) name += " · WB";
-      return {...model, name};
+      return {...model, name: modelSourceLabel(model, name)};
     });
     const seenFamilies = new Set();
     const folded = models.flatMap((model) => {
@@ -222,14 +298,16 @@
       const key = `${family.provider}/${family.canonical}`;
       if (seenFamilies.has(key)) return [];
       seenFamilies.add(key);
-      return [{...model, id: family.canonical, name: family.label, family,
-        sources: family.ids.map((id) => `${family.provider}/${id}`)}];
+      const representative = models.find(entry => entry.provider === family.provider && family.ids.includes(entry.id) && `${entry.provider}/${entry.id}` === selectedModel)
+        || models.find(entry => entry.provider === family.provider && entry.id === family.canonical) || model;
+      return [{...representative, id: family.canonical, name: family.label, family,
+        sources: family.ids.map(id => `${family.provider}/${id}`)}];
     });
     const byId = new Map();
     for (const model of folded) {
       // Provider names are routing details. The same model ID is one choice,
       // but keep every backing route so an existing session stays selected.
-      const key = model.id.toLowerCase();
+      const key = model.id.toLowerCase() + "|" + modelOrigin(model);
       const previous = byId.get(key);
       if (!previous) { byId.set(key, model); continue; }
       const sources = [...new Set([...previous.sources, ...model.sources])];
@@ -245,23 +323,9 @@
   const MODEL_GROUP_ORDER = ["GPT", "Codex", "Gemini", "Gemma", "Claude", "Grok",
     "DeepSeek", "Qwen", "Kimi", "GLM", "MiniMax", "混元", "Mistral", "Llama", "豆包", "Perplexity", "其他模型"];
   const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
-  /* Hide retired and user-pruned choices in the picker only. Keep the full
-     catalog for existing sessions, reasoning routes and proxy fallbacks. */
-  const HIDDEN_PICKER_MODEL_IDS = new Set([
-    "gemini-3-pro-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
-    "gemini-3.1-pro-preview", "gemini-pro-agent",
-  ]);
-  function hiddenPickerModel(model) {
-    const id = String(model?.id || "").toLowerCase();
-    return HIDDEN_PICKER_MODEL_IDS.has(id)
-      || /^tab(?:[-_.:]|$)/.test(id)
-      || /^workbuddy\/(?:auto|space-bunny)$/.test(id)
-      || /^gpt-4/.test(id) || /^gpt-5\.(?:4|5)(?:$|[.-])/.test(id)
-      || /^gemini-2\.5-/.test(id)
-      || /^gemini-3-flash(?:$|-)/.test(id)
-      || /^gemini-3\.5-flash(?:$|-(?!lite(?:$|-)))/.test(id)
-      || /^gemini-3\.[67]-flash(?:$|-)/.test(id);
-  }
+  // Availability comes from the gateway catalog, never a client-side list of
+  // model-name prefixes: an older model may still be deliberately configured.
+  function hiddenPickerModel(model) { return model?.available === false; }
   function modelGroup(model) {
     const fullId = String(model.id || "").toLowerCase();
     const id = fullId.split("/").at(-1);
@@ -334,7 +398,7 @@
     brand: modelBrand,
   });
 
-  function syncModelBrands(browser) {
+  function syncModelBrands(browser, hideRetired = true) {
     browser?.querySelectorAll?.("[data-chat-model-option]")?.forEach((option) => {
       const value = option.getAttribute?.("data-chat-model-option") || "";
       const separator = value.indexOf("/");
@@ -342,10 +406,28 @@
       const id = separator < 0 ? value : value.slice(separator + 1);
       if (option.dataset) {
         option.dataset.pinkieBrand = modelBrand(provider, id);
-        if (hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
+        if (hideRetired && hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
         else delete option.dataset.pinkieHiddenModel;
       }
     });
+  }
+
+  function fallbackThinkingLevel(state) {
+    const session = state?.session;
+    if (!session) return "";
+    const levels = session.thinkingLevels?.length ? session.thinkingLevels : session.thinkingOptions || [];
+    const first = levels[0];
+    return familyForSession(state)?.implied[session.model] || session.thinkingLevel
+      || session.thinkingDefault || (typeof first === "string" ? first : first?.id) || "";
+  }
+
+  // A model without native levels was forced to "off"; that is not a choice to carry into the next model.
+  function carriedThinkingLevel(state) {
+    const level = fallbackThinkingLevel(state), session = state?.session;
+    const levels = session?.thinkingLevels?.length ? session.thinkingLevels : session?.thinkingOptions || [];
+    if (level === "off" && !familyForSession(state)
+      && !levels.map(item => typeof item === "string" ? item : item?.id).some(item => item && item !== "off")) return "";
+    return level;
   }
 
   function familyForSession(state) {
@@ -357,7 +439,7 @@
   function familyTargetModel(state, level) {
     const family = familyForSession(state);
     if (!family) return "";
-    const id = family.byLevel[level] || family.canonical;
+    const id = routedFamilyId(family, level);
     return state.models.some((model) => model.provider === family.provider && model.id === id)
       ? `${family.provider}/${id}` : `${family.provider}/${family.canonical}`;
   }
@@ -477,7 +559,37 @@
     return fallback[Math.min(index, Math.min(count - 1, fallback.length - 1))];
   }
 
-  function syncStops(slider, values, selectedIndex) {
+  /* How a stop is actually carried out on the current route, mirroring
+     recipeFor() in services/mode-architecture/reasoning.mjs:
+     native = the model takes this effort directly; fill = the gap upward is
+     made up by process (independent solves, a critic, send-backs) on the same model;
+     down = the model cannot go this low, so only the answer gets shorter. */
+  function routeKind(level, natives) {
+    if (!MATERIAL_RANK.has(level)) return "native";
+    if (level === "max" || level === "ultra") return "fill";
+    const pool = natives.filter(value => MATERIAL_RANK.has(value));
+    if (!pool.length) return "native";
+    if (pool.includes(level)) return "native";
+    if (level === "adaptive") return "fill";
+    const nearest = nativeTierFor(level, pool);
+    return MATERIAL_RANK.get(nearest) > MATERIAL_RANK.get(level) ? "down" : "fill";
+  }
+
+  function routeDescription(level, natives) {
+    const pool = natives.filter(value => MATERIAL_RANK.has(value) && value !== "adaptive");
+    const top = pool.at(-1) || "off", bottom = pool[0] || "off";
+    const name = value => LEVEL_LABELS[value] || value;
+    const kind = routeKind(level, natives);
+    if (level === "max") return "用当前模型做 2 份独立解答（各换一种做法）+ 批评 + 交付验收，最多打回 2 轮";
+    if (level === "ultra") return "用当前模型做 3 份独立解答（直接解、换方法、列清单自查）+ 批评兼仲裁 + 交付验收，最多打回 3 轮";
+    if (kind === "native") return "当前模型原生支持这一档";
+    if (level === "adaptive") return "按每条消息的难度：难题按 XHigh 做，简单题按 Low 做（模拟）";
+    if (kind === "down") return `当前模型最低只到 ${name(bottom)}；这一档让回答直接给结论、更快（模拟）`;
+    if (level === "xhigh") return `当前模型原生最高到 ${name(top)}；另做 1 份独立解答 + 批评，打回 1 轮（模拟）`;
+    return `当前模型原生最高到 ${name(top)}；回答前先拆清要求和约束（模拟）`;
+  }
+
+  function syncStops(slider, values, selectedIndex, natives = []) {
     if (!slider?.querySelector || !document.createElement || values.length < 2) return;
     let layer = slider.querySelector(":scope > .pinkie-reasoning-stops");
     if (!layer) {
@@ -501,6 +613,9 @@
     }
     state.markers.forEach((marker, index) => {
       marker.dataset.pinkieCovered = index <= selectedIndex ? "1" : "0";
+      // Only the nine Pinkie stops get a route mark; a provider's own ladder is native by definition.
+      if (natives.length && MATERIAL_RANK.has(values[index])) marker.dataset.pinkieRoute = routeKind(values[index], natives);
+      else delete marker.dataset.pinkieRoute;
     });
   }
 
@@ -526,7 +641,9 @@
     const values = encodedValues ? encodedValues.split(",").map((value) => value.trim()) : [];
     const count = values.length || Math.max(1, Math.round(span / step) + 1);
     const index = Math.max(0, Math.min(count - 1, Math.round((Number(range.value || 0) - min) / step)));
-    syncStops(slider, values.length ? values : Array.from({length: count}, (_, index) => String(index)), index);
+    const natives = String(range.dataset?.pinkieRouteValues || range.dataset?.pinkieNativeValues || "").split(",").map(value => value.trim()).filter(Boolean);
+    syncStops(slider, values.length ? values : Array.from({length: count}, (_, index) => String(index)), index,
+      values.length === MATERIALS.length ? natives : []);
     const spokenValue = range.getAttribute?.("aria-valuetext") || range.ariaValueText || "";
     const nativeMaterial = normalizeMaterial(values[index] || spokenValue, index, count);
     const details = range.closest?.("details.chat-controls__model");
@@ -546,7 +663,7 @@
     let state = pickerStates.get(details);
     if (!state || state.key !== key) {
       const rangeState = rangeStates.get(range);
-      state = {key, initialTier: selectedEnhancement(key), initialNativeValue: rangeState?.nativeValue ?? Number(range?.value || 0)};
+      state = {key, initialTier: selectedEnhancement(key), initialChoice: tierChoice(key), initialNativeValue: rangeState?.nativeValue ?? Number(range?.value || 0)};
       pickerStates.set(details, state);
     }
     return state;
@@ -554,13 +671,18 @@
 
   function finishPicker(details) {
     releasePopupLayout(details);
+    if (details?.dataset) details.dataset.pinkiePickerView = "model";
+    const surface = surfaceStates.get(details);
+    if (surface) { surface.brand = "common"; const search = surface.menu.querySelector?.(".chat-controls__model-search"); if (search) search.value = ""; }
+    effortTriggers.get(details)?.setAttribute("aria-expanded", "false");
     const timer = autoSaveTimers.get(details);
     if (timer !== undefined) window.clearTimeout?.(timer);
     autoSaveTimers.delete(details);
     pendingPatches.delete(details);
+    pendingSessionKeys.delete(details);
     const state = pickerStates.get(details);
-    if (!state) return;
-    if (selectedEnhancement(state.key) !== state.initialTier) setEnhancement(state.initialTier, state.key);
+    if (state && selectedEnhancement(state.key) !== state.initialTier) setEnhancement(state.initialTier, state.key);
+    if (state) saveTierChoice(state.initialChoice, state.key);
     pickerStates.delete(details);
     syncTrigger(details);
   }
@@ -629,7 +751,94 @@
   }
 
   function syncBrandMotion(details) {
-    details?.toggleAttribute?.("data-pinkie-brand-motion-paused", Boolean(document.hidden));
+    // WKWebView can report hidden until after the native foreground event.
+    // Trust that event so a background launch cannot leave the material frozen.
+    const paused = nativeMotionActive === null ? Boolean(document.hidden) : !nativeMotionActive;
+    details?.toggleAttribute?.("data-pinkie-brand-motion-paused", paused);
+  }
+
+  function syncPickerMotion(active = nativeMotionActive) {
+    nativeMotionActive = active;
+    for (const details of triggerObservers.keys()) syncBrandMotion(details);
+  }
+
+  /* Keep the upstream details and all Lit-owned controls in place. Two quiet
+     sibling triggers choose which half of that popup is visible; no cloned range
+     or second save path can drift away from the session that owns the picker. */
+  function syncEffortTrigger(details, tier = "") {
+    const menu = details?.querySelector?.(":scope > .chat-controls__inline-select-menu--combined") || details?.querySelector?.(".chat-controls__inline-select-menu--combined");
+    if (!menu?.matches?.(".chat-controls__inline-select-menu--combined") || !details.after) return null;
+    let button = effortTriggers.get(details);
+    const nativeButton = details.dataset?.pinkieModern === "1" ? details.parentElement?.querySelector?.(".chat-controls__effort-trigger") || details.closest?.(".chat-controls")?.querySelector?.(".chat-controls__effort-trigger") : null;
+    if (nativeButton && button !== nativeButton) {
+      if (button && button.dataset?.pinkieNativeEffort !== "1") button.remove();
+      button = nativeButton; button.dataset.pinkieNativeEffort = "1"; button.classList.add("pinkie-effort-trigger");
+      effortTriggers.set(details, button); effortOwners.set(button, details);
+    }
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "pinkie-effort-trigger";
+      button.setAttribute("aria-haspopup", "dialog");
+      effortTriggers.set(details, button);
+      effortOwners.set(button, details);
+    }
+    if (button !== nativeButton && (button.parentElement !== details.parentElement || !button.isConnected)) details.after(button);
+    if (!details.dataset.pinkiePickerView) details.dataset.pinkiePickerView = "model";
+    const name = LEVEL_LABELS[tier] || tier || "默认";
+    let level = button.querySelector(":scope > .pinkie-external-tier");
+    if (!level) {
+      level = document.createElement("span");
+      level.className = "pinkie-external-tier";
+      if (button === nativeButton) {
+        for (const child of button.children) if (child.matches?.("span")) child.style.setProperty("display", "none", "important");
+        button.append(level);
+      } else button.replaceChildren(level);
+    }
+    if (level.textContent !== name) level.textContent = name;
+    if (button.dataset.pinkieMaterial !== (tier || "default")) button.dataset.pinkieMaterial = tier || "default";
+    const expanded = Boolean(details.open && details.dataset.pinkiePickerView === "effort");
+    const aria = `思考强度，当前 ${name}`;
+    if (button.getAttribute("aria-label") !== aria) button.setAttribute("aria-label", aria);
+    if (button.getAttribute("aria-expanded") !== String(expanded)) button.setAttribute("aria-expanded", String(expanded));
+    if (button.title !== aria) button.title = aria;
+    return button;
+  }
+
+  function restartPopupMotion(details) {
+    const menu = details?.querySelector?.(":scope > .chat-controls__inline-select-menu--combined");
+    if (!menu?.setAttribute || !window.getComputedStyle) return;
+    // WebKit can retain a stopped timeline after a details subtree is hidden.
+    // Commit a local animation reset before the next frame recreates it. Keep
+    // CSS in charge of playback so background and reduced-motion still apply.
+    menu.setAttribute("data-pinkie-motion-reset", "");
+    const probe = menu.querySelector?.(".chat-controls__reasoning-slider") || menu;
+    void window.getComputedStyle(probe, "::before").animationName;
+    if (restartingMenus.has(menu)) return;
+    restartingMenus.add(menu);
+    requestAnimationFrame(() => {
+      restartingMenus.delete(menu);
+      menu.removeAttribute("data-pinkie-motion-reset");
+    });
+  }
+
+  function openPickerView(details, view) {
+    // Opening an interactive picker is a fresh foreground signal. A missed
+    // native activation event must not carry a paused material into this open.
+    syncPickerMotion(true);
+    for (const picker of triggerObservers.keys()) {
+      if (picker !== details && picker.open && effortTriggers.has(picker)) closePicker(picker);
+    }
+    if (view === "model") {
+      const surface = surfaceStates.get(details);
+      if (surface) { surface.brand = "common"; const search = surface.menu.querySelector?.(".chat-controls__model-search"); if (search) search.value = ""; }
+    }
+    details.dataset.pinkiePickerView = view;
+    details.dataset.pinkieModelsOpen = view === "model" ? "1" : "0";
+    if (!details.open) details.setAttribute("open", "");
+    refreshFallbackSession(details);
+    sync(details);
+    if (view === "effort") restartPopupMotion(details);
   }
 
   function syncTrigger(details) {
@@ -650,9 +859,9 @@
     const native = splitModelTier(state.nativeText);
     const fallback = fallbackStates.get(details);
     const matchingFallback = fallback?.key === currentSessionKey(details) && fallback.session;
-    const fallbackTier = matchingFallback && !fallback.switchingModel && MATERIAL_RANK.has(fallback.session.thinkingLevel)
-      ? fallback.session.thinkingLevel : "";
-    const tier = selectedEnhancement(currentSessionKey(details)) || fallbackTier
+    const effectiveTier = matchingFallback && !fallback.switchingModel ? fallbackThinkingLevel(fallback) : "";
+    const fallbackTier = MATERIAL_RANK.has(effectiveTier) ? effectiveTier : "";
+    const tier = selectedEnhancement(currentSessionKey(details)) || (matchingFallback ? chosenTier(fallback) : chosenTier(null, currentSessionKey(details))) || fallbackTier
       || (matchingFallback && fallback.switchingModel ? "" : native.tier);
     if (tier) details?.setAttribute?.("data-pinkie-outside-material", tier);
     else details?.removeAttribute?.("data-pinkie-outside-material");
@@ -664,15 +873,13 @@
       separator < 0 ? selectedRef : selectedRef.slice(separator + 1))
       : modelBrand("", base.replace(/\s+/g, "-"));
     if (summary.dataset && summary.dataset.pinkieBrand !== brand) summary.dataset.pinkieBrand = brand;
-    const display = writeTriggerLabel(label, base, tier);
-    if (!matchingFallback && !tier) {
-      if (state.appliedAria && aria === state.appliedAria) summary.setAttribute("aria-label", state.nativeAria);
-      state.appliedText = "";
-      state.appliedAria = "";
-      return;
+    const display = writeTriggerLabel(label, base, "");
+    syncEffortTrigger(details, tier);
+    if (effortTriggers.has(details)) {
+      const expanded = Boolean(details.open && details.dataset.pinkiePickerView !== "effort");
+      if (summary.getAttribute?.("aria-expanded") !== String(expanded)) summary.setAttribute?.("aria-expanded", String(expanded));
     }
-    const colon = state.nativeAria.lastIndexOf(":");
-    const displayAria = colon >= 0 ? `${state.nativeAria.slice(0, colon + 1)} ${display}` : display;
+    const displayAria = `选择模型，当前 ${display}`;
     if (aria !== displayAria) summary.setAttribute?.("aria-label", displayAria);
     state.appliedText = display;
     state.appliedAria = displayAria;
@@ -680,20 +887,42 @@
 
   function watchPicker(details) {
     if (!details || triggerObservers.has(details)) return;
-    const watcher = new MutationObserver(() => {
+    prepareModernPicker(details);
+    const watcher = new MutationObserver((changes = []) => {
       syncTrigger(details);
+      if (details.open && changes.some((change) => change.type === "attributes" && change.attributeName === "disabled"
+        && change.target?.matches?.("[data-chat-model-option]:not(.pinkie-fallback-option)"))) refreshFallbackSession(details);
       if (details.open) schedule(details);
     });
-    watcher.observe(details, {childList: true, subtree: true, characterData: true});
+    watcher.observe(details, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["hidden", "aria-selected", "disabled"]});
     triggerObservers.set(details, watcher);
     syncTrigger(details);
     const browser = details.querySelector?.(".chat-controls__model-browser");
     if (browser) ensureFallbackData(details, browser);
   }
 
+  function prepareModernPicker(details) {
+    const summary = details?.querySelector?.(":scope > summary.chat-controls__model-trigger");
+    if (!summary || !details.classList) return;
+    details.dataset.pinkieModern = "1";
+    details.classList.add("chat-controls__model");
+    summary.classList?.add("chat-controls__inline-select-trigger");
+    details.querySelector?.(".chat-controls__model-menu")?.classList?.add("chat-controls__inline-select-menu--combined");
+    details.querySelector?.(".chat-controls__model-options")?.classList?.add("chat-controls__model-browser");
+    const native = details.parentElement?.querySelector?.(".chat-controls__effort-trigger")
+      || details.closest?.(".chat-controls")?.querySelector?.(".chat-controls__effort-trigger");
+    if (native) {
+      const previous = effortTriggers.get(details);
+      if (previous && previous !== native && previous.dataset?.pinkieNativeEffort !== "1") previous.remove();
+      native.dataset.pinkieNativeEffort = "1";
+      native.classList.add("pinkie-effort-trigger");
+      effortTriggers.set(details, native); effortOwners.set(native, details);
+    }
+  }
+
   function scanPickers(root = document) {
-    if (root.matches?.("details.chat-controls__model")) watchPicker(root);
-    root.querySelectorAll?.("details.chat-controls__model")?.forEach(watchPicker);
+    if (root.matches?.("details.chat-controls__model, details.chat-controls__model-picker")) watchPicker(root);
+    root.querySelectorAll?.("details.chat-controls__model, details.chat-controls__model-picker")?.forEach(watchPicker);
   }
 
   function extendNativeRange(range, details) {
@@ -701,17 +930,20 @@
     const encoded = String(range.dataset?.chatThinkingValues || range.getAttribute?.("data-chat-thinking-values") || "");
     let state = rangeStates.get(range);
     if (!state || (encoded !== state.extended && encoded !== state.nativeEncoded)) {
-      const values = encoded.split(",").map((value) => value.trim()).filter(Boolean);
-      if (values.length < 2 || values.includes("max") || values.includes("ultra")) return null;
-      state = {nativeEncoded: encoded, nativeMax: values.length - 1, nativeValue: Number(range.value || 0), extended: `${encoded},max,ultra`};
+      const values = encoded.split(",").map(value => value.trim()).filter(Boolean);
+      if (!values.length) return null;
+      state = {nativeEncoded: encoded, nativeMax: values.length - 1, nativeValue: Number(range.value || 0), extended: MATERIALS.join(",")};
       rangeStates.set(range, state);
+    } else if (encoded === state.nativeEncoded && encoded !== state.extended) {
+      state.nativeValue = Math.max(0, Math.min(state.nativeMax, Number(range.value || 0)));
     }
-    range.max = String(state.nativeMax + 2);
+    const values = state.nativeEncoded.split(",");
+    const tier = selectedEnhancement(currentSessionKey(details)) || chosenTier(null, currentSessionKey(details)) || values[state.nativeValue] || values[0];
+    range.max = String(MATERIALS.length - 1);
     range.dataset.chatThinkingValues = state.extended;
+    range.dataset.pinkieNativeValues = state.nativeEncoded;
     range.dataset.pinkieExtended = "1";
-    const tier = selectedEnhancement(currentSessionKey(details));
-    if (tier) range.value = String(state.nativeMax + (tier === "max" ? 1 : 2));
-    else if (Number(range.value) > state.nativeMax) range.value = String(state.nativeValue);
+    if (range.dataset.pinkieDragging !== "1") range.value = String(Math.max(0, MATERIALS.indexOf(tier)));
     return state;
   }
 
@@ -729,10 +961,29 @@
     const tier = selectedEnhancement(currentSessionKey(details));
     const material = tier || normalizeMaterial(values[index], index, values.length);
     const name = LEVEL_LABELS[material] || material;
-    const caption = `思考等级 · ${name}${range.disabled ? "（暂不可调整）" : ""}`;
+    const fallback = fallbackStates.get(details);
+    const native = String(range.dataset.pinkieNativeValues || "").split(",").filter(Boolean);
+    const actual = selectionFor(fallback, material, native);
+    // 还不知道模型原生支持哪几档时不下结论，免得把「关闭」说成原生支持。
+    const known = native.length > 0;
+    const endpoints = String(range.dataset.pinkieRouteValues || "").split(",").filter(Boolean);
+    const route = endpoints.length ? endpoints : known ? native : [actual.backend];
+    const kind = known ? routeKind(material, route) : "pending";
+    // Routing details belong in the tooltip; every visible tier uses the same compact label.
+    const caption = name;
     if (label.textContent !== caption) label.textContent = caption;
-    range.setAttribute?.("aria-valuetext", material === "max" ? "Max，答完后自动核对交付" : material === "ultra" ? "Ultra，核对交付并独立复算" : name);
+    label.dataset.pinkieRoute = kind;
+    const description = known ? routeDescription(material, route) : "正在读取当前模型支持的思考档位…";
+    range.setAttribute?.("aria-valuetext", `${name}，${description}`);
     details.dataset.pinkieEnhancement = tier || "off";
+    syncEffortTrigger(details, material);
+    const effective = familyForSession(fallback)?.implied[actual.model?.slice(actual.model.indexOf("/") + 1)] || actual.backend;
+    const captionNative = LEVEL_LABELS[effective] || effective;
+    const sent = effective !== material && !["max", "ultra"].includes(material) ? `；实际发送 ${captionNative}` : "";
+    const tooltip = `${name}：${description}${known ? sent : ""}`;
+    details.dataset.pinkieRoute = kind;
+    if (range.title !== tooltip) range.title = tooltip;
+    if (label.title !== tooltip) label.title = tooltip;
     pickerState(details, range);
   }
 
@@ -754,9 +1005,13 @@
     if (timer !== undefined) window.clearTimeout?.(timer);
     autoSaveTimers.delete(details);
     const patch = pendingPatches.get(details);
+    const key = pendingSessionKeys.get(details) || currentSessionKey(details);
     pendingPatches.delete(details);
+    pendingSessionKeys.delete(details);
     if (!patch) return activeSaves.get(details) || Promise.resolve(true);
-    const key = currentSessionKey(details);
+    // A queued click belongs to the session that was visible when it happened.
+    // Changing panes before the debounce fires must never save it to the new one.
+    if (!key || currentSessionKey(details) !== key) return Promise.resolve(false);
     const agentId = /^agent:([^:]+):/.exec(key)?.[1];
     const revision = saveRevisions.get(details) || 0;
     const current = () => currentSessionKey(details) === key && (saveRevisions.get(details) || 0) === revision;
@@ -794,7 +1049,7 @@
         }
       }
       const state = pickerStates.get(details);
-      if (state?.key === key) state.initialTier = selectedEnhancement(key);
+      if (state?.key === key) { state.initialTier = selectedEnhancement(key); state.initialChoice = tierChoice(key); }
       details.querySelector?.(".pinkie-picker-save-error")?.remove?.();
       window.PinkieSessionList?.invalidate?.();
       window.dispatchEvent?.(new Event("laolao:sessions-changed"));
@@ -802,7 +1057,7 @@
     }).catch((error) => {
       if (!current()) return false;
       const state = pickerStates.get(details);
-      if (state?.key === key) setEnhancement(state.initialTier, key);
+      if (state?.key === key) { setEnhancement(state.initialTier, key); saveTierChoice(state.initialChoice, key); }
       const fallback = fallbackStates.get(details);
       if (fallback?.key === key) {
         fallback.switchingModel = false;
@@ -821,17 +1076,31 @@
     return save;
   }
 
-  function modelSelectionPatch(value, family, models = []) {
-    const selected = models.find((model) => `${model.provider}/${model.id}` === value);
+  function modelSelectionPatch(value, family, models = [], level = "") {
+    let selected = models.find(model => `${model.provider}/${model.id}` === value);
+    const routeFamily = family && modelFamily(selected, models);
+    let thinkingLevel;
+    if (routeFamily) {
+      const id = routedFamilyId(routeFamily, level || routeFamily.implied[selected.id] || selected.thinkingDefault || "high");
+      value = `${routeFamily.provider}/${id}`;
+      selected = models.find(model => model.provider === routeFamily.provider && model.id === id) || selected;
+      const requested = routeFamily.implied[id] || level || "high";
+      const fixedEffort = FAMILY_SUFFIX.test(selected.id) && !selected.compat?.supportedReasoningEfforts?.length;
+      thinkingLevel = selected.reasoning === false || fixedEffort ? "off" : ["max", "ultra"].includes(requested) ? "high" : requested;
+    }
     const workBuddy = selected?.provider === "mm" && selected?.id?.startsWith("workbuddy/") && selected.reasoning === true;
     return {model: value || null,
-      ...(family ? {thinkingLevel: null} : {}),
+      ...(family ? {thinkingLevel: routeFamily ? thinkingLevel : null} : {}),
       ...(workBuddy ? {thinkingLevel: "high", reasoningLevel: "stream"} : {}),
     };
   }
 
   function scheduleAutoSave(details, patch) {
     if (!details?.open || !patch) return;
+    const key = currentSessionKey(details);
+    if (!key) return;
+    if (pendingSessionKeys.get(details) && pendingSessionKeys.get(details) !== key) pendingPatches.delete(details);
+    pendingSessionKeys.set(details, key);
     saveRevisions.set(details, (saveRevisions.get(details) || 0) + 1);
     pendingPatches.set(details, {...(pendingPatches.get(details) || {}), ...patch});
     const previous = autoSaveTimers.get(details);
@@ -862,6 +1131,7 @@
       list.className = "pinkie-fallback-catalog";
       browser.append(list);
     }
+    if (details.dataset) details.dataset.pinkieFoldedCatalog = "1";
     const items = groupedPresentationModels(state.models, state.selectedModel);
     const groups = [...new Set(items.map(modelGroup))];
     const selected = items.find((model) => model.sources.includes(state.selectedModel));
@@ -870,7 +1140,7 @@
     const activeGroup = groups.includes(state.activeGroup) ? state.activeGroup
       : groups.includes(selectedGroup) ? selectedGroup : groups[0] || "";
     state.activeGroup = activeGroup;
-    const signature = `${items.map((model) => `${model.provider}/${model.id}/${model.name}`).join("|")}:${state.selectedModel || ""}:${activeGroup}:${state.session?.hasActiveRun ? 1 : 0}`;
+    const signature = `${items.map((model) => `${model.provider}/${model.id}/${model.name}/${model.contextWindow || ""}`).join("|")}:${state.selectedModel || ""}:${activeGroup}:${state.session?.hasActiveRun ? 1 : 0}:${state.surface ? 1 : 0}`;
     if (list.dataset.signature === signature) return;
     list.dataset.signature = signature;
     const fragment = document.createDocumentFragment();
@@ -892,12 +1162,16 @@
     }
     brandTabs.replaceChildren(tabFragment);
     fragment.append(brandTabs);
-    for (const model of items.filter((item) => modelGroup(item) === activeGroup)) {
+    for (const model of items.filter((item) => state.surface || modelGroup(item) === activeGroup)) {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "chat-controls__combined-model-option pinkie-fallback-option";
       option.dataset.chatModelOption = `${model.provider}/${model.id}`;
+      option.dataset.pinkieSources = JSON.stringify(model.sources);
+      option.dataset.pinkieBackingRoute = model.sources.includes(state.selectedModel) ? state.selectedModel : `${model.provider}/${model.id}`;
       option.dataset.pinkieBrand = modelBrand(model.provider, model.id);
+      option.dataset.pinkieContext = formatModelContext(model.contextWindow);
+      option.dataset.pinkieCatalogContext = model.contextWindow || "";
       if (model.family) option.dataset.pinkieFamily = `${model.family.provider}/${model.family.canonical}`;
       const selected = model.sources.includes(state.selectedModel);
       option.setAttribute("aria-selected", String(selected));
@@ -914,10 +1188,13 @@
       || menu?.querySelector?.(".chat-controls__reasoning-slider");
     const rawLevels = state.session?.thinkingLevels?.length
       ? state.session.thinkingLevels : state.session?.thinkingOptions || [];
-    const values = rawLevels
+    const backendValues = rawLevels
       .map((value) => typeof value === "string" ? value : value?.id)
       .filter((value) => typeof value === "string" && value);
-    if (!slider && values.length > 1 && document.createElement) {
+    if (!backendValues.length) backendValues.push("off");
+    const family = familyForSession(state);
+    const values = MATERIALS;
+    if (!slider && values.length > 0 && document.createElement) {
       let panel = menu?.querySelector?.(".chat-controls__reasoning-panel");
       if (!panel) {
         panel = document.createElement("div");
@@ -930,10 +1207,10 @@
       slider.className = "chat-controls__reasoning-slider pinkie-fallback-slider";
       panel.append(slider);
     }
-    if (!slider || values.length < 2 || state.session?.hasActiveRun) {
+    if (!slider || !values.length || state.session?.hasActiveRun) {
       slider?.querySelector?.('.chat-controls__reasoning-range[data-pinkie-fallback]')?.remove?.();
       details.removeAttribute?.("data-pinkie-fallback-range");
-      if (details.dataset) details.dataset.pinkieNoReasoning = values.length < 2 && !state.session?.hasActiveRun ? "1" : "0";
+      if (details.dataset) details.dataset.pinkieNoReasoning = !values.length && !state.session?.hasActiveRun ? "1" : "0";
       return null;
     }
     details.dataset.pinkieNoReasoning = "0";
@@ -946,16 +1223,27 @@
       range.setAttribute("aria-label", "思考等级");
       slider.append(range);
     }
-    const tiers = [...values, ...(values.includes("max") ? [] : ["max"]), ...(values.includes("ultra") ? [] : ["ultra"])];
+    const tiers = MATERIALS;
     range.min = "0";
     range.max = String(tiers.length - 1);
     range.step = "1";
     range.dataset.chatThinkingValues = tiers.join(",");
-    range.dataset.pinkieNativeValues = values.join(",");
+    range.dataset.pinkieNativeValues = backendValues.join(",");
+    range.dataset.pinkieRouteValues = (family?.endpointLevels || []).join(",");
     const enhanced = selectedEnhancement(state.key);
-    const family = familyForSession(state);
-    const selected = enhanced || state.session?.thinkingLevel || family?.implied[state.session?.model]
-      || state.session?.thinkingDefault || values[0];
+    const choice = chosenTier(state);
+    const staleNativeTier = state.session?.thinkingLevel && !backendValues.includes(state.session.thinkingLevel);
+    if ((enhanced || staleNativeTier) && !family && !state.switchingModel && !state.session?.hasActiveRun) {
+      const requested = enhanced || choice || state.session?.thinkingDefault || "medium";
+      const target = nativeTierFor(requested, backendValues, state.session?.thinkingDefault);
+      if (state.session && state.session.thinkingLevel !== target) {
+        if (!state.previousSession) state.previousSession = {...state.session};
+        state.session.thinkingLevel = target;
+        if (choice) saveTierChoice({tier:choice,model:state.selectedModel,backend:target}, state.key);
+        scheduleAutoSave(details, {thinkingLevel: target});
+      }
+    }
+    const selected = enhanced || choice || fallbackThinkingLevel(state) || values[0];
     if (range.dataset.pinkieDragging !== "1") range.value = String(Math.max(0, tiers.indexOf(selected)));
     range.disabled = Boolean(state.switchingModel);
     details.dataset.pinkieFallbackRange = "1";
@@ -968,6 +1256,11 @@
     if (!key) return null;
     let state = fallbackStates.get(details);
     if (state?.key !== key) {
+      const timer = autoSaveTimers.get(details);
+      if (timer !== undefined) window.clearTimeout?.(timer);
+      autoSaveTimers.delete(details);
+      pendingPatches.delete(details);
+      pendingSessionKeys.delete(details);
       state = {key, models: [], session: null, selectedModel: "", modelName: "", loading: false};
       fallbackStates.set(details, state);
     }
@@ -976,6 +1269,7 @@
       const rpc = window.__laolaoSidebar?.gwRequest;
       if (typeof rpc === "function") {
         state.loading = true;
+        state.lastSessionRefreshAt = Date.now();
         const agentId = /^agent:([^:]+):/.exec(key)?.[1];
         void Promise.all([
           loadCatalog(rpc, agentId || ""),
@@ -1018,6 +1312,31 @@
     return state;
   }
 
+  function refreshFallbackSession(details, state = fallbackStates.get(details)) {
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!state?.models?.length || state.loading || state.sessionRefreshing || typeof rpc !== "function"
+      || pendingPatches.has(details) || activeSaves.has(details)
+      || Date.now() - (state.lastSessionRefreshAt || 0) < 250) return;
+    const key = state.key;
+    if (currentSessionKey(details) !== key) return;
+    state.sessionRefreshing = true;
+    state.lastSessionRefreshAt = Date.now();
+    const revision = saveRevisions.get(details) || 0;
+    const agentId = /^agent:([^:]+):/.exec(key)?.[1];
+    void rpc("sessions.list", agentId ? {agentId, limit: 1000} : {limit: 1000}, 15_000).then((listed) => {
+      if (fallbackStates.get(details) !== state || currentSessionKey(details) !== key
+        || (saveRevisions.get(details) || 0) !== revision
+        || pendingPatches.has(details) || activeSaves.has(details)) return;
+      const session = listed?.sessions?.find?.((entry) => entry.key === key);
+      if (!session) return;
+      state.session = session;
+      state.selectedModel = session.model ? `${session.modelProvider || ""}/${session.model}` : "";
+      state.modelName = fallbackModelName(state);
+      schedule(details);
+    }).catch(() => { /* Retain the last usable snapshot if a refresh fails. */ })
+      .finally(() => { state.sessionRefreshing = false; });
+  }
+
   function refreshFallbackCatalog(details) {
     const state = fallbackStates.get(details);
     const rpc = window.__laolaoSidebar?.gwRequest;
@@ -1036,31 +1355,285 @@
     }).catch(() => {}).finally(() => { state.refreshing = false; });
   }
 
+  /* One catalog surface for both host generations. Native buttons stay in place:
+     selection, authentication, runtime routing and saving remain with their owner. */
+  const surfaceStates = new WeakMap();
+  const RECENT_MODELS_KEY = "pinkie:model-picker:recent:v1";
+  const SURFACE_BRANDS = ["gemini", "openai", "codex", "deepseek", "minimax", "grok", "crossmodel", "zai", "kimi", "doubao", "claude", "alibaba", "mistral", "ollama", "hunyuan", "perplexity", "groq"];
+  const BRAND_NAMES = {gemini: "Gemini", openai: "OpenAI", codex: "Codex", deepseek: "DeepSeek", minimax: "MiniMax", grok: "Grok", crossmodel: "其他", zai: "GLM", kimi: "Kimi", doubao: "豆包", claude: "Claude", alibaba: "Qwen", mistral: "Mistral", ollama: "Llama", hunyuan: "混元", perplexity: "Perplexity", groq: "Groq"};
+  function recentModels() {
+    try {
+      const rows = JSON.parse(window.localStorage?.getItem(RECENT_MODELS_KEY) || "[]");
+      return Array.isArray(rows) ? rows.filter((value) => typeof value === "string").slice(0, 64) : [];
+    } catch { return []; }
+  }
+  function rememberModel(value) {
+    if (!value || value.length > 500) return;
+    try { window.localStorage?.setItem(RECENT_MODELS_KEY, JSON.stringify([value, ...recentModels().filter((item) => item !== value)].slice(0, 6))); } catch { /* private browsing still works */ }
+  }
+  function formatModelContext(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    return n >= 1_000_000 ? `${Number((n / 1_000_000).toFixed(1))}M` : `${Math.round(n / 1000)}k`;
+  }
+  function modelSurfaceRows(menu) {
+    // The old host keeps its Lit-owned options under a hidden provider panel.
+    // Its recovered catalog is the single visible, authoritative option set.
+    const catalog = menu.querySelector(".pinkie-fallback-catalog") || menu;
+    return [...catalog.querySelectorAll("[data-chat-model-option]")].filter((row) => row.dataset.pinkieHiddenModel !== "1");
+  }
+  function rowBrand(row) {
+    const value = row.getAttribute("data-chat-model-option") || "";
+    const slash = value.indexOf("/");
+    const brand = modelBrand(slash < 0 ? "" : value.slice(0, slash), slash < 0 ? value : value.slice(slash + 1));
+    return SURFACE_BRANDS.includes(brand) ? brand : "crossmodel";
+  }
+  function surfaceBrand(node, brand) {
+    if (node.dataset.pinkieBrand !== brand) node.dataset.pinkieBrand = brand;
+    const modern = document.documentElement.hasAttribute("data-cle");
+    const asset = modern ? `/cle/static/legacy/brand/${brand}.svg`
+      : brand === "crossmodel" ? "/provider-icons/ProviderIcon-crossmodel.svg" : `/laolao-provider-${brand}.svg`;
+    const mono = ["crossmodel", "openai", "codex", "grok", "groq", "kimi", "zai", "ollama"].includes(brand);
+    const set = (key, value) => { if (node.style.getPropertyValue(key) !== value) node.style.setProperty(key, value); };
+    set("--model-brand-mask", mono ? `url("${asset}")` : "none");
+    set("--model-brand-image", mono ? "none" : `url("${asset}")`);
+    set("--model-brand-ink", mono ? "currentColor" : "transparent");
+  }
+  function syncCatalogSurface(details, menu, browser) {
+    if (!menu?.querySelectorAll || !browser?.querySelectorAll || !document.createElement) return;
+    menu.dataset.pinkiePickerSurface = "1";
+    const rows = modelSurfaceRows(menu);
+    if (!rows.length) return;
+    let state = surfaceStates.get(details);
+    if (!state || state.menu !== menu) {
+      state = {menu, brand: "common", signature: "", bar: null, empty: null};
+      surfaceStates.set(details, state);
+    }
+    let search = menu.querySelector(".chat-controls__model-search");
+    if (!search) {
+      const wrap = document.createElement("div");
+      wrap.className = "chat-controls__model-search-wrap";
+      wrap.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"></circle><path d="m16 16 5 5"></path></svg>';
+      search = document.createElement("input");
+      search.type = "search";
+      search.className = "chat-controls__model-search";
+      search.dataset.pinkieFilterSearch = "1";
+      search.placeholder = "搜索模型";
+      search.setAttribute("aria-label", "搜索模型");
+      search.setAttribute("autocomplete", "off");
+      wrap.append(search);
+      menu.prepend(wrap);
+    }
+    for (const row of rows) {
+      const brand = rowBrand(row);
+      surfaceBrand(row, brand);
+      const route = row.dataset.pinkieBackingRoute || row.getAttribute("data-chat-model-option") || "";
+      const oldTitle = row.getAttribute("title") || "";
+      if (oldTitle !== row.dataset.pinkieOwnRouteTitle) row.dataset.pinkieNativeTitle = oldTitle;
+      const title = [row.dataset.pinkieNativeTitle, `模型来源：${route}`].filter(Boolean).join("\n");
+      if (oldTitle !== title) { row.setAttribute("title", title); row.dataset.pinkieOwnRouteTitle = title; }
+      const oldAria = row.getAttribute("aria-label") || "";
+      if (oldAria !== row.dataset.pinkieOwnRouteAria) row.dataset.pinkieNativeAria = oldAria || row.textContent.trim();
+      const aria = `${row.dataset.pinkieNativeAria}，模型来源 ${route}`;
+      if (oldAria !== aria) { row.setAttribute("aria-label", aria); row.dataset.pinkieOwnRouteAria = aria; }
+      const meta = row.querySelector(".chat-controls__model-option-meta")?.textContent?.trim() || "";
+      const context = meta.match(/(?:^|\s|·)(\d+(?:\.\d+)?\s*[kmb])(?:\b|$)/i)?.[1]?.replace(/\s/g, "") || formatModelContext(row.dataset.pinkieCatalogContext);
+      if (row.dataset.pinkieContext !== context) row.dataset.pinkieContext = context;
+    }
+    const brands = SURFACE_BRANDS.filter((brand) => rows.some((row) => row.dataset.pinkieBrand === brand));
+    if (!["all", "common"].includes(state.brand) && !brands.includes(state.brand)) state.brand = "common";
+    if (!state.bar?.isConnected) {
+      state.bar = document.createElement("div");
+      state.bar.className = "pinkie-model-filters";
+      state.bar.setAttribute("role", "group");
+      state.bar.setAttribute("aria-label", "按模型品牌筛选，左右方向键切换");
+      menu.insertBefore(state.bar, browser);
+    }
+    const signature = ["common", "all", ...brands].join("|") + rows.length;
+    if (state.signature !== signature) {
+      state.signature = signature;
+      const fragment = document.createDocumentFragment();
+      for (const brand of ["common", "all", ...brands]) {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "pinkie-model-filter";
+        tab.dataset.pinkieModelFilter = brand;
+        const label = brand === "all" ? `全部 ${rows.length}` : brand === "common" ? "常用模型" : BRAND_NAMES[brand] || "其他";
+        if (!["all", "common", "crossmodel"].includes(brand)) surfaceBrand(tab, brand);
+        tab.textContent = label;
+        tab.title = brand === "all" ? `全部 ${rows.length} 个可选项` : brand === "common" ? "最近使用的6个模型" : label;
+        tab.setAttribute("aria-label", label);
+        fragment.append(tab);
+      }
+      state.bar.replaceChildren(fragment);
+    }
+    const query = search.value.trim().toLocaleLowerCase();
+    const selected = rows.find(row => row.getAttribute("aria-selected") === "true");
+    const selectedValue = selected?.getAttribute("data-chat-model-option");
+    const normalize = value => rows.find(row => row.getAttribute("data-chat-model-option") === value
+      || (() => { try { return JSON.parse(row.dataset.pinkieSources || "[]").includes(value); } catch { return false; } })())?.getAttribute("data-chat-model-option");
+    const fallback = fallbackStates.get(details);
+    const confirmed = !fallback?.switchingModel && !activeSaves.has(details) && !pendingPatches.has(details);
+    const recentOrder = [...new Set([...(selectedValue && confirmed && state.selected !== selectedValue ? [selectedValue] : []),
+      ...recentModels().map(normalize).filter(Boolean), ...(selectedValue ? [selectedValue] : [])])].slice(0, 6);
+    if (confirmed) {
+      if (selectedValue) state.selected = selectedValue;
+      try {
+        const encoded = JSON.stringify(recentOrder);
+        if (window.localStorage?.getItem(RECENT_MODELS_KEY) !== encoded) window.localStorage?.setItem(RECENT_MODELS_KEY, encoded);
+      } catch { /* Browser storage can be unavailable. */ }
+    }
+    const common = new Set(recentOrder);
+    let visible = 0;
+    for (const [index, row] of rows.entries()) {
+      const value = row.getAttribute("data-chat-model-option");
+      const order = query ? Number(row.dataset.chatModelRank ?? index)
+        : state.brand === "common" ? row === selected ? -1 : recentOrder.indexOf(value) >= 0 ? recentOrder.indexOf(value) : rows.length + index : row === selected ? -1 : index;
+      if (row.style.getPropertyValue("--pinkie-model-order") !== String(order)) row.style.setProperty("--pinkie-model-order", String(order));
+      const haystack = [row.dataset.chatModelName, row.dataset.chatModelKeywords, row.dataset.chatModelProviderLabel,
+        row.getAttribute("data-chat-model-option"), row.dataset.pinkieSources, row.querySelector(".chat-controls__model-option-name")?.textContent || row.textContent].join(" ").toLocaleLowerCase();
+      // The default All tab always searches the authoritative complete catalog.
+      const included = state.brand === "all" || (state.brand === "common"
+        ? Boolean(query) || common.has(row.getAttribute("data-chat-model-option")) : row.dataset.pinkieBrand === state.brand);
+      const hidden = !included || Boolean(query && !haystack.includes(query));
+      if (row.hidden !== hidden) row.hidden = hidden;
+      if (row.hasAttribute("data-pinkie-filter-hidden") !== hidden) row.toggleAttribute("data-pinkie-filter-hidden", hidden);
+      if (!hidden) visible += 1;
+    }
+    state.bar.querySelectorAll("[data-pinkie-model-filter]").forEach((tab) => {
+      const active = tab.dataset.pinkieModelFilter === state.brand;
+      if (tab.getAttribute("aria-pressed") !== String(active)) tab.setAttribute("aria-pressed", String(active));
+    });
+    // Native search ranks options and owns ids. Keep its keyboard highlight on a
+    // visible row after a brand filter so Enter cannot select a hidden model.
+    const enabled = rows.filter((row) => !row.hidden && !row.disabled);
+    let highlighted = enabled.find((row) => row.hasAttribute("data-chat-model-highlighted"));
+    highlighted ||= enabled.find((row) => row.getAttribute("aria-selected") === "true") || enabled[0];
+    for (const row of rows) {
+      const active = row === highlighted;
+      if (row.hasAttribute("data-chat-model-highlighted") !== active) row.toggleAttribute("data-chat-model-highlighted", active);
+    }
+    if (highlighted?.id) search.setAttribute("aria-activedescendant", highlighted.id);
+    else search.removeAttribute("aria-activedescendant");
+    if (!state.empty?.isConnected) {
+      state.empty = document.createElement("div");
+      state.empty.className = "pinkie-model-empty";
+      state.empty.setAttribute("role", "status");
+      state.empty.textContent = "没有匹配的模型，试试其他关键词或品牌";
+      menu.insertBefore(state.empty, browser.nextSibling);
+    }
+    if (state.empty.hidden !== (visible > 0)) state.empty.hidden = visible > 0;
+    const nativeEmpty = menu.querySelector("[data-chat-model-search-empty]");
+    if (nativeEmpty && !nativeEmpty.hidden) nativeEmpty.hidden = true;
+    const settings = menu.querySelector("[data-chat-model-provider-settings]");
+    if (settings && !menu.querySelector(".pinkie-model-manage")) {
+      const manage = document.createElement("button");
+      manage.type = "button";
+      manage.className = "pinkie-model-manage";
+      manage.textContent = "管理模型来源";
+      manage.setAttribute("aria-expanded", "false");
+      manage.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = menu.toggleAttribute("data-pinkie-routes-open");
+        manage.setAttribute("aria-expanded", String(expanded));
+      });
+      menu.append(manage);
+    }
+  }
+
+  document.addEventListener("input", (event) => {
+    if (!event.target.matches?.(".chat-controls__model-search")) return;
+    const details = event.target.closest("details.chat-controls__model, details.chat-controls__model-picker");
+    if (details) schedule(details);
+  });
+  document.addEventListener("click", (event) => {
+    const tab = event.target.closest?.("[data-pinkie-model-filter]");
+    if (tab) {
+      const details = tab.closest("details.chat-controls__model, details.chat-controls__model-picker");
+      const state = surfaceStates.get(details);
+      if (!state) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      state.brand = tab.dataset.pinkieModelFilter;
+      const browser = state.menu.querySelector(".chat-controls__model-options, .chat-controls__model-browser");
+      syncCatalogSurface(details, state.menu, browser);
+      if (browser) browser.scrollTop = 0;
+      return;
+    }
+    const row = event.target.closest?.("[data-chat-model-option]");
+    if (row && !row.disabled && row.closest("[data-pinkie-picker-surface]")) {
+      // Remember confirmed native selection on the next render, not a failed save.
+      const details = row.closest("details");
+      window.setTimeout?.(() => {
+        if (row.isConnected && row.getAttribute("aria-selected") === "true") rememberModel(row.getAttribute("data-chat-model-option"));
+        if (details?.open) schedule(details);
+      }, 0);
+    }
+  }, true);
+  document.addEventListener("pointerdown", (event) => {
+    event.target.closest?.("[data-pinkie-picker-surface]")?.removeAttribute("data-pinkie-keyboard");
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    const menu = event.target.closest?.("[data-pinkie-picker-surface]");
+    if (!menu || event.isComposing || event.keyCode === 229) return;
+    const tab = event.target.closest?.("[data-pinkie-model-filter]");
+    if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      const tabs = [...tab.parentElement.querySelectorAll("[data-pinkie-model-filter]")];
+      const at = tabs.indexOf(tab), delta = event.key === "ArrowLeft" ? -1 : 1;
+      const index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (at + delta + tabs.length) % tabs.length;
+      event.preventDefault(); event.stopImmediatePropagation();
+      tabs[index].focus({preventScroll: true}); tabs[index].click();
+      tabs[index].scrollIntoView({block: "nearest", inline: "nearest"});
+      return;
+    }
+    if (!event.target.matches?.(".chat-controls__model-search") || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return;
+    const rows = modelSurfaceRows(menu).filter((row) => !row.hidden && !row.disabled)
+      .sort((a, b) => Number(a.style.getPropertyValue("--pinkie-model-order") || 0) - Number(b.style.getPropertyValue("--pinkie-model-order") || 0));
+    if (!rows.length) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    menu.dataset.pinkieKeyboard = "1";
+    const current = rows.findIndex((row) => row.hasAttribute("data-chat-model-highlighted"));
+    if (event.key === "Enter") { rows[Math.max(0, current)].click(); return; }
+    const index = current < 0 ? 0 : (current + (event.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length;
+    for (const row of modelSurfaceRows(menu)) row.toggleAttribute("data-chat-model-highlighted", row === rows[index]);
+    if (rows[index].id) event.target.setAttribute("aria-activedescendant", rows[index].id);
+    rows[index].scrollIntoView({block: "nearest"});
+  }, true);
+
+
   function sync(details) {
+    prepareModernPicker(details);
     syncTrigger(details);
     if (!details?.isConnected || !details.open) {
       if (details && !details.open) finishPicker(details);
       details?.removeAttribute("data-pinkie-max");
       return;
     }
-    const menu = details.querySelector(".chat-controls__inline-select-menu--combined");
+    const menu = details.querySelector(".chat-controls__inline-select-menu--combined") || details.querySelector(".chat-controls__inline-select-menu--combined, .chat-controls__model-menu");
     const nativeRange = menu?.querySelector('.chat-controls__reasoning-range:not([data-pinkie-fallback])')
       || menu?.querySelector('.chat-controls__reasoning-range');
-    const browser = menu?.querySelector(".chat-controls__model-browser");
+    const browser = menu?.querySelector(".chat-controls__model-browser") || menu?.querySelector(".chat-controls__model-browser, .chat-controls__model-options");
     if (!menu || !browser) return;
     const fallback = ensureFallbackData(details, browser);
-    syncModelBrands(browser);
-    if (!fallback) extendNativeRange(nativeRange, details);
+    if (fallback) {
+      fallback.surface = true;
+      if (fallback.models.length) renderFallbackCatalog(details, browser, fallback);
+    }
+    syncModelBrands(browser, false);
+    syncCatalogSurface(details, menu, browser);
+    // 模型目录已到、会话信息还没到时也要扩成 9 档：否则刚打开的几秒里只有原生几档，标记和提示也会算错。
+    if (!fallback?.session) extendNativeRange(nativeRange, details);
     const fallbackRange = fallback?.session ? ensureFallbackRange(details, menu, fallback) : null;
     const visibleRange = fallbackRange || nativeRange;
     syncReasoning(visibleRange);
 
     watchPicker(details);
 
-    if (!details.hasAttribute("data-pinkie-models-open")) details.dataset.pinkieModelsOpen = "0";
+    if (!details.dataset.pinkiePickerView) details.dataset.pinkiePickerView = "model";
+    details.dataset.pinkieModelsOpen = details.dataset.pinkiePickerView === "model" ? "1" : "0";
     details.dataset.pinkieEnhanced = "1";
     warmFrames();
-    if (fallback?.session && (fallback.session.thinkingOptions || []).length < 2 && !fallback.session.hasActiveRun) {
+    if (fallback?.session && !visibleRange && !fallback.session.hasActiveRun) {
       details.dataset.pinkieMaterial = "off";
       details.dataset.pinkieLevel = "0";
       syncFrame(details, "off");
@@ -1107,16 +1680,28 @@
 
   document.addEventListener("toggle", (event) => {
     const details = event.target;
-    if (!details?.matches?.("details.chat-controls__model")) return;
+    if (!details?.matches?.("details.chat-controls__model, details.chat-controls__model-picker")) return;
     watchPicker(details);
     if (!details.open) {
       finishPicker(details);
       details.removeAttribute("data-pinkie-models-open");
       details.removeAttribute("data-pinkie-max");
-    } else schedule(details);
+    } else {
+      refreshFallbackSession(details);
+      schedule(details);
+    }
   }, true);
 
   document.addEventListener("click", (event) => {
+    const effortButton = (event.target.closest?.(".pinkie-effort-trigger") || event.target.closest?.(".chat-controls__effort-trigger"));
+    const effortOwner = effortButton && effortOwners.get(effortButton);
+    if (effortOwner?.isConnected) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+      if (effortOwner.open && effortOwner.dataset.pinkiePickerView === "effort") closePicker(effortOwner);
+      else openPickerView(effortOwner, "effort");
+      return;
+    }
     const details = isPicker(event.target);
     if (!details) {
       for (const picker of triggerObservers.keys()) {
@@ -1125,11 +1710,15 @@
       return;
     }
     const summary = event.target.closest?.(".chat-controls__inline-select-trigger");
-    if (summary?.parentElement === details && details.open) {
-      event.preventDefault();
-      event.stopImmediatePropagation?.();
-      closePicker(details);
-      return;
+    if (summary?.parentElement === details) {
+      if (details.open) {
+        event.preventDefault();
+        event.stopImmediatePropagation?.();
+        if (details.dataset.pinkiePickerView === "effort") openPickerView(details, "model");
+        else closePicker(details);
+        return;
+      }
+      if (details.dataset) details.dataset.pinkiePickerView = "model";
     }
     const button = event.target.closest?.(".pinkie-model-current");
     if (button) {
@@ -1173,10 +1762,19 @@
         || (fallbackOption && selectedRoute && value !== selectedRoute))) {
         setEnhancement("", currentSessionKey(details));
         pendingPatches.delete(details);
+        const patch = modelSelectionPatch(value, modelOption.dataset?.pinkieFamily,
+          fallbackStates.get(details)?.models || [], carriedThinkingLevel(fallbackStates.get(details)));
         if (fallbackOption) {
           const fallback = fallbackStates.get(details);
           if (fallback) {
-            fallback.selectedModel = value;
+            if (fallback.session) {
+              if (!fallback.previousSession) fallback.previousSession = {...fallback.session};
+              const route = patch.model || value, slash = route.indexOf("/");
+              fallback.session = {...fallback.session, modelProvider: route.slice(0, slash), model: route.slice(slash + 1),
+                ...(Object.hasOwn(patch, "thinkingLevel") ? {thinkingLevel: patch.thinkingLevel} : {}),
+                ...(Object.hasOwn(patch, "reasoningLevel") ? {reasoningLevel: patch.reasoningLevel} : {})};
+            }
+            fallback.selectedModel = patch.model || value;
             fallback.switchingModel = true;
             const family = presentationModels(fallback.models).find((entry) =>
               `${entry.family?.provider}/${entry.family?.canonical}` === modelOption.dataset?.pinkieFamily)?.family;
@@ -1184,8 +1782,7 @@
             fallback.modelName = family?.label || selected?.name || selected?.id || value;
           }
         }
-        scheduleAutoSave(details, modelSelectionPatch(value, modelOption.dataset?.pinkieFamily,
-          fallbackStates.get(details)?.models || []));
+        scheduleAutoSave(details, patch);
       }
     }
     const immediateOption = event.target.closest?.(".chat-controls__use-default-model, .chat-controls__reasoning-default, [data-chat-thinking-option], [data-chat-speed-option]");
@@ -1235,20 +1832,26 @@
       sync(details);
     }
   }
-  document.addEventListener("visibilitychange", () => {
-    for (const details of triggerObservers.keys()) syncBrandMotion(details);
-  });
+  document.addEventListener("visibilitychange", () => syncPickerMotion());
+  window.addEventListener?.("pinkie:app-foreground", () => syncPickerMotion(true));
+  window.addEventListener?.("pinkie:app-background", () => syncPickerMotion(false));
+  window.addEventListener?.("focus", () => syncPickerMotion(true));
+  window.addEventListener?.("blur", () => syncPickerMotion(null));
+  window.addEventListener?.("pageshow", () => syncPickerMotion(null));
   window.addEventListener?.("pinkie:session-selected", syncAllPickers);
   window.addEventListener?.("popstate", syncAllPickers);
   window.addEventListener?.("storage", (event) => {
-    if (event.key?.startsWith("laolao:reasoning-enhance:v1:")) syncAllPickers();
+    if (event.key?.startsWith("laolao:reasoning-enhance:v1:") || event.key?.startsWith("pinkie:effort-choice:v1:")) syncAllPickers();
   });
 
   scanPickers();
   if (document.body) {
     new MutationObserver((changes) => {
       for (const [details, watcher] of triggerObservers) {
-        if (!details.isConnected) { watcher.disconnect(); triggerObservers.delete(details); releasePopupLayout(details); }
+        if (!details.isConnected) {
+          watcher.disconnect(); triggerObservers.delete(details); releasePopupLayout(details);
+          if (effortTriggers.get(details)?.matches?.(".pinkie-effort-trigger") && effortTriggers.get(details).dataset?.pinkieNativeEffort !== "1") effortTriggers.get(details).remove(); effortTriggers.delete(details);
+        } else if (effortTriggers.has(details) && !effortTriggers.get(details).isConnected) syncTrigger(details);
       }
       for (const change of changes) {
         for (const node of change.addedNodes || []) if (node.nodeType === 1) scanPickers(node);
@@ -1294,12 +1897,12 @@
         const nativeValues = String(range.dataset.pinkieNativeValues || "").split(",");
         const index = Math.max(0, Math.min(values.length - 1, Math.round(Number(range.value))));
         const tier = values[index];
-        const virtualTier = (tier === "max" || tier === "ultra") && !nativeValues.includes(tier);
-        const backendTier = virtualTier ? nativeValues.at(-1) : tier;
-        if (virtualTier) setEnhancement(tier, currentSessionKey(details));
-        else setEnhancement("", currentSessionKey(details));
         const fallback = fallbackStates.get(details);
-        const targetModel = familyTargetModel(fallback, tier);
+        const selected = selectionFor(fallback, tier, nativeValues);
+        const backendTier = selected.backend, targetModel = familyTargetModel(fallback, tier);
+        if (tier === "max" || tier === "ultra") setEnhancement(tier, currentSessionKey(details));
+        else setEnhancement("", currentSessionKey(details));
+        saveTierChoice({tier,model:selected.model,backend:backendTier}, currentSessionKey(details));
         if (fallback?.session) {
           if (!fallback.previousSession) fallback.previousSession = {...fallback.session};
           fallback.session.thinkingLevel = backendTier;
@@ -1314,21 +1917,28 @@
       if (nativeInputEvents.has(range)) return;
       const state = rangeStates.get(range);
       if (state && range.dataset?.pinkieExtended === "1") {
-        const index = Math.round(Number(range.value || 0));
-        if (index > state.nativeMax) {
-          event.stopImmediatePropagation?.();
-          setEnhancement(index === state.nativeMax + 1 ? "max" : "ultra", currentSessionKey(details));
-          if (state.nativeValue !== state.nativeMax) {
-            range.value = String(state.nativeMax);
-            nativeInputEvents.add(range);
-            try { range.dispatchEvent(new Event("input", {bubbles: true})); }
-            finally { nativeInputEvents.delete(range); }
-            state.nativeValue = state.nativeMax;
+        const index = Math.max(0, Math.min(MATERIALS.length - 1, Math.round(Number(range.value || 0))));
+        const tier = MATERIALS[index], nativeValues = state.nativeEncoded.split(",");
+        const backend = nativeTierFor(tier, nativeValues);
+        const nativeIndex = Math.max(0, nativeValues.indexOf(backend));
+        event.stopImmediatePropagation?.();
+        setEnhancement(tier === "max" || tier === "ultra" ? tier : "", currentSessionKey(details));
+        saveTierChoice({tier,backend}, currentSessionKey(details));
+        const nativeChanged = state.nativeValue !== nativeIndex;
+        state.nativeValue = nativeIndex;
+        // Host handlers must see their own index and enum, never a UI index.
+        if (nativeChanged) nativeInputEvents.add(range);
+        const encoded = range.dataset.chatThinkingValues;
+        try {
+          if (nativeChanged) {
+            range.dataset.chatThinkingValues = state.nativeEncoded;
+            range.value = String(nativeIndex);
+            range.dispatchEvent(new Event("input", {bubbles: true}));
           }
+        } finally {
+          range.dataset.chatThinkingValues = encoded;
           range.value = String(index);
-        } else {
-          state.nativeValue = index;
-          setEnhancement("", currentSessionKey(details));
+          nativeInputEvents.delete(range);
         }
       }
       syncReasoning(range);
@@ -1352,7 +1962,7 @@
       return;
     }
     const state = rangeStates.get(range);
-    if (state && Number(range.value) > state.nativeMax) event.stopImmediatePropagation?.();
+    if (state && range.dataset?.pinkieExtended === "1") event.stopImmediatePropagation?.();
     const values = String(state?.nativeEncoded || range.dataset?.chatThinkingValues || "").split(",");
     const index = state ? state.nativeValue : Math.round(Number(range.value || 0));
     const thinkingLevel = values[index]?.trim();

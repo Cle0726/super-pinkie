@@ -1753,7 +1753,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,12);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_library','plan_update','workbench_read','code_check','workbench_show']);
+  assert.equal(tools.length,13);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_material','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1815,7 +1815,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_library','plan_update','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -2580,4 +2580,19 @@ test('every visible model output increases the persistent display estimate',t=>{
   ledger.record({provider:'relay',model:'c',assistantTexts:['再继续'],usage:{input:50,output:10}});
   const migrated=JSON.parse(fs.readFileSync(file,'utf8'));
   assert.equal(migrated.requests,3);assert.ok(migrated.cost>0.03&&migrated.cost<0.04);
+});
+
+test('a command still running in the background is an honest in-progress state, not an empty promise',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:background-build',runId:'run-background-build'};
+  guard.begin({prompt:'帮我把项目打包，生成 dist/app.zip。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true},
+    result:{content:[{type:'text',text:'Command still running (session tidal-harbor, pid 28573). Use process (list/poll/log/write/send-keys/submit/paste/kill/clear/remove) for follow-up.'}],details:{status:'running'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已在后台运行，大约两分钟，跑完我接着核对并告诉你。'},ctx),undefined);
+  assert.equal(guard.finalize({lastAssistantMessage:'稍等，等我做完再告诉你。'},ctx),undefined,'the waiting phrase is fine while the command really runs');
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已经完成，dist/app.zip 已生成。'},ctx)?.action,'revise','a finished claim still needs evidence');
+  guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
+    result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
 });

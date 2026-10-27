@@ -15,6 +15,26 @@
   let usageFetchedAt = 0;
   let usageRequest = null;
   let sessionInfo = null;
+  let glyphLoad;
+  const glyphBase = document.currentScript?.src;
+  function mountCompactionGlyph(icon, phase) {
+    if (window.__pinkieCompactionGlyph) { window.__pinkieCompactionGlyph.mount(icon,phase); return; }
+    glyphLoad ||= new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('./laolao-compaction-glyph.js?v=compactionglyph2',glyphBase||location.href).href;script.onload=resolve;script.onerror=reject;document.head.append(script);});
+    glyphLoad.then(()=>{if(icon.isConnected)window.__pinkieCompactionGlyph?.mount(icon,icon.closest('.laolao-compaction-notice')?.dataset.phase||phase);}).catch(()=>{});
+  }
+  const noticeMotionObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      entry.target.dataset.onscreen = entry.isIntersecting ? "1" : "0";
+      entry.target.dataset.motion = !document.hidden && entry.isIntersecting ? "running" : "paused";
+      window.__pinkieCompactionGlyph?.setVisible(entry.target.querySelector(".laolao-compaction-notice__icon"),entry.target.dataset.motion==="running");
+    }
+  }, {threshold: 0}) : null;
+  document.addEventListener("visibilitychange", () => {
+    document.querySelectorAll(".laolao-compaction-notice").forEach((node) => {
+      node.dataset.motion = !document.hidden && node.dataset.onscreen !== "0" ? "running" : "paused";
+      window.__pinkieCompactionGlyph?.setVisible(node.querySelector(".laolao-compaction-notice__icon"),node.dataset.motion==="running");
+    });
+  });
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(location.search).get("session") || "";
@@ -250,7 +270,7 @@
     const key = currentSessionKey();
     const state = readCompactionState(key);
     document.querySelectorAll(".laolao-compaction-notice").forEach((node) => {
-      if (!state || node.closest("[data-pinkie-compaction]")?.dataset.pinkieCompaction !== key) node.remove();
+      if (!state || node.closest("[data-pinkie-compaction]")?.dataset.pinkieCompaction !== key) { window.__pinkieCompactionGlyph?.park(node.querySelector(".laolao-compaction-notice__icon")); noticeMotionObserver?.unobserve(node); node.remove(); }
     });
     if (!state) return;
     // This empty, per-session slot is rendered by the native chat template.
@@ -269,26 +289,31 @@
       const icon = document.createElement("span");
       icon.className = "laolao-compaction-notice__icon";
       icon.setAttribute("aria-hidden", "true");
+      icon.textContent = "C.le.";
       const copy = document.createElement("strong");
       copy.className = "laolao-compaction-notice__copy";
       const note = document.createElement("span");
       note.className = "laolao-compaction-notice__note";
       const elapsed = document.createElement("span");
       elapsed.className = "laolao-compaction-notice__elapsed";
+      elapsed.setAttribute("aria-hidden", "true");
       notice.append(icon, copy, note, elapsed);
+      notice.dataset.motion = document.hidden ? "paused" : "running";
+      noticeMotionObserver?.observe(notice);
     }
     if (notice.parentElement !== host) host.prepend(notice);
     const active = state.phase === "active" || state.phase === "retrying";
     const phaseChanged = notice.dataset.phase !== state.phase;
     notice.dataset.phase = state.phase;
+    mountCompactionGlyph(notice.querySelector(".laolao-compaction-notice__icon"),state.phase);
     const copy = notice.querySelector(".laolao-compaction-notice__copy");
     const note = notice.querySelector(".laolao-compaction-notice__note");
     const elapsed = notice.querySelector(".laolao-compaction-notice__elapsed");
     let message = "";
     let description = "";
     if (state.phase === "active") {
-      message = "正在整理对话内容～";
-      description = "可能需要几分钟，最近的内容会保留。";
+      message = "正在整理上下文";
+      description = "最近内容会保留，历史记录仍可回看。";
     } else if (state.phase === "retrying") {
       message = "整理好了，接着处理～";
       description = "碧琪正在恢复当前任务，工作进度会继续显示。";
@@ -298,15 +323,16 @@
       const after = formatTokens(state.afterTokens);
       message = "对话整理好啦";
       description = before && after
-        ? `对话整理完成：整理前 ${before} → ${after} 令牌`
+        ? `整理前 ${before} → 整理后 ${after} 令牌`
         : "最近的内容已保留，可以继续当前任务。";
     } else if (state.phase === "skipped") message = "当前内容暂时不需要整理";
     else { message = "这次整理没有完成"; description = "当前对话仍保留，可以稍后再试。"; }
     if (copy.textContent !== message) copy.textContent = message;
     if (note.textContent !== description) note.textContent = description;
+    if (note.title !== description) note.title = description;
     const seconds = Math.max(0, Math.floor((Date.now() - Number(state.startedAt)) / 1000));
     const timeText = active
-      ? `已用时 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`
+      ? `已用时 ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
       : "";
     if (elapsed.textContent !== timeText) elapsed.textContent = timeText;
     if (phaseChanged) host.closest("openclaw-chat-pane")?.requestUpdate?.();
@@ -495,19 +521,27 @@
 .agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
 .pinkie-chat-compaction:empty{display:none}
-.laolao-compaction-notice{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:11px;row-gap:4px;box-sizing:border-box;width:min(560px,calc(100% - 66px));margin:12px 16px 12px 50px;padding:14px 17px;border:1px solid rgba(205,91,141,.18);border-radius:17px;background:linear-gradient(135deg,rgba(255,250,253,.86),rgba(247,234,243,.68));color:#70425a;box-shadow:0 5px 18px rgba(106,48,79,.05)}
-.laolao-compaction-notice__icon{grid-column:1;grid-row:1 / span 3;display:grid;place-items:center;align-self:start;width:28px;height:28px;border-radius:9px;background:rgba(205,91,141,.10);color:#a34b72}
-.laolao-compaction-notice__icon::before{content:"";width:13px;height:15px;border:1.3px solid currentColor;border-radius:3px;box-shadow:3px -3px 0 -1px rgba(205,91,141,.25);opacity:.75}
-.laolao-compaction-notice[data-phase="active"] .laolao-compaction-notice__icon::before{width:12px;height:12px;border-radius:50%;border-color:rgba(189,115,162,.28);border-top-color:#a34b72;box-shadow:none;animation:laolao-context-spin 1.1s linear infinite}
-.laolao-compaction-notice[data-phase="complete"] .laolao-compaction-notice__icon::before{content:"✓";width:auto;height:auto;border:0;box-shadow:none;color:#698e76;font-size:18px;line-height:1}
-.laolao-compaction-notice__copy{grid-column:2;font-size:13px;font-weight:600;line-height:1.5;letter-spacing:.01em}
-.laolao-compaction-notice__note{grid-column:2;font-size:12px;line-height:1.6;color:#937889}
-.laolao-compaction-notice__note:empty,.laolao-compaction-notice__elapsed:empty{display:none}
-.laolao-compaction-notice__elapsed{grid-column:2;margin-top:2px;font-size:10.5px;color:#a38a98;font-variant-numeric:tabular-nums}
-html[data-pinkie-night] .laolao-compaction-notice{border-color:rgba(220,160,197,.17);background:linear-gradient(135deg,rgba(46,37,50,.82),rgba(36,32,42,.70));color:#e5c5d7;box-shadow:0 5px 18px rgba(0,0,0,.08)}
-html[data-pinkie-night] .laolao-compaction-notice__note,html[data-pinkie-night] .laolao-compaction-notice__elapsed{color:#ae91a3}
-@media(max-width:640px){.laolao-compaction-notice{width:calc(100% - 32px);margin:10px 16px;padding:12px 14px}}
-@media(prefers-reduced-motion:reduce){.laolao-compaction-notice__icon::before{animation:none!important}}
+/* Context compaction: a borderless divider in the timeline. The knot canvas
+   spans the row; status and timer sit centred beneath it. */
+.laolao-compaction-notice{--memory-ink:#2c2945;--memory-muted:#7a7590;--memory-glint:#2f7bff;display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);grid-template-areas:"art art art art" ". copy time ." "note note note note";column-gap:8px;align-items:center;box-sizing:border-box;width:min(640px,calc(100% - 32px));max-width:100%;margin:12px auto 14px;padding:0;border:0;background:none;box-shadow:none;color:var(--memory-ink);overflow:hidden}
+.laolao-compaction-notice__icon{grid-area:art;display:block;position:relative;width:100%;height:34px;color:var(--memory-ink)}
+.pinkie-compaction-knot,.pinkie-compaction-knot>canvas{display:block;width:100%;height:34px}
+.laolao-compaction-notice__icon::before{content:none}
+.laolao-compaction-notice__copy{grid-area:copy;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;line-height:20px;letter-spacing:.02em}
+.laolao-compaction-notice:is([data-phase="active"],[data-phase="retrying"]) .laolao-compaction-notice__copy{background-image:linear-gradient(105deg,var(--memory-ink) 0 40%,var(--memory-glint) 50%,var(--memory-ink) 60% 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:pinkie-memory-sheen 2.8s linear infinite}
+.laolao-compaction-notice__elapsed{grid-area:time;font-size:11px;line-height:20px;color:var(--memory-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.laolao-compaction-notice__elapsed:not(:empty)::before{content:"·";margin-right:8px;opacity:.6}
+.laolao-compaction-notice__elapsed:empty{display:none}
+.laolao-compaction-notice:has(.laolao-compaction-notice__elapsed:empty) .laolao-compaction-notice__copy{grid-column:2 / 4;text-align:center}
+.laolao-compaction-notice__note{grid-area:note;min-width:0;font-size:11px;line-height:17px;color:var(--memory-muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.laolao-compaction-notice__note:empty{display:none}
+.laolao-compaction-notice[data-phase="failed"]{--memory-ink:#8a5d2c;--memory-muted:#9a7a5a}
+html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice{--memory-ink:#e9eeff;--memory-muted:#9aa2c0;--memory-glint:#8ccaff}
+html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[data-phase="failed"]{--memory-ink:#e8c08f;--memory-muted:#b89d7e}
+.laolao-compaction-notice[data-motion="paused"] *{animation-play-state:paused!important}
+@keyframes pinkie-memory-sheen{from{background-position:130% 0}to{background-position:-130% 0}}
+@media(max-width:640px){.laolao-compaction-notice{width:calc(100% - 24px);margin:10px 12px 12px}}
+@media(prefers-reduced-motion:reduce){.laolao-compaction-notice *{animation:none!important}.laolao-compaction-notice .laolao-compaction-notice__copy{-webkit-text-fill-color:currentColor;background:none}}
 .chat-divider{margin:6px 8px!important}.chat-divider__rule{gap:8px!important;min-height:15px}.chat-divider__label{color:#a34b72!important;font-size:10.5px!important;letter-spacing:.025em;line-height:1.35;white-space:nowrap}.chat-divider__line{opacity:.45}.chat-divider__details{display:none!important}
 `;
     document.head.append(style);

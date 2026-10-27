@@ -74,7 +74,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queu
   animation: r2-slide-in .32s cubic-bezier(.3, 1.3, .5, 1);
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item::before {
-  content: "等会儿发";
+  content: attr(data-pinkie-queue-label);
   flex: none;
   padding: 2px 8px; border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, #fff);

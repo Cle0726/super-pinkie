@@ -54,7 +54,7 @@ test('pact defaults are created on demand with an empty exam date and no channel
   const value = pact.get();
   assert.equal(value.version, 1);
   assert.deepEqual(value.exam, {name: 'PRETCO-B', date: null});
-  assert.deepEqual(value.daily, {minutes: 30, questions: 20, reviews: 'due'});
+  assert.deepEqual(value.daily, {minutes: 30, questions: 20, lessons: 2, reviews: 'due'});
   assert.equal(value.intensity, 'firm');
   assert.equal(value.timezone, SHANGHAI);
   assert.deepEqual(value.reminders, {morning: '08:30', evening: '21:00', lastCall: '22:30'});
@@ -134,6 +134,8 @@ test('a later model grade updates the original day without double counting', t =
   assert.deepEqual(days('2026-10-19').questions, {answered: 1, correct: 1});
   assert.equal(pact.today().progress.questions, 0);
   store.resolve(SESSION, {activityId: shown.current.id, correct: false});
+  assert.deepEqual(days('2026-10-19').questions, {answered: 1, correct: 1}, 'a delayed model replay cannot rewrite the settled score');
+  store.correctAttempt(SESSION, submitted.current.submission.attemptId, {correct: false, reason: '用户核对后更正'});
   assert.deepEqual(days('2026-10-19').questions, {answered: 1, correct: 0});
 });
 

@@ -363,7 +363,7 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "companion.mjs", "reasoning.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs", "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs", "rich-runtime.mjs", "package.json", "openclaw.plugin.json"):
+        for name in ("index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs", "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs", "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs", "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs", "learning-desk.mjs", "learning-zsb.mjs", "learning-zsb-gen.mjs", "learning-zsb-data.json", "learning-zsb-items.json", "learning-library.mjs", "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs", "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs", "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs", "rich-runtime.mjs", "package.json", "openclaw.plugin.json"):
             changed |= _copy_if_changed(source / name, extension / name)
 
     for mode, relative in MODE_WORKSPACES.items():

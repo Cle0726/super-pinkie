@@ -24,7 +24,22 @@ test('interactive cards are session-scoped and never expose the private answer',
   assert.equal(shown.current.phase, 'asking');
   assert.equal('correctAnswer' in shown.current, false);
   assert.equal(store.status(second).current, null);
-  assert.equal(store.status(second).enabled, false);
+  assert.equal(store.status(second).enabled, true);
+});
+
+test('interaction starts on so 碧琪 can place cards herself, and only the student turns it off', t => {
+  const store = fixture(t);
+  const sessionKey = 'agent:learning:auto';
+  const shown = store.present(sessionKey, {kind: 'single_choice', question: 'auto?', options: ['A', 'B'], correct_answer: 'A'});
+  assert.equal(shown.current.phase, 'asking');
+  const prompt = learningPrompt(store, sessionKey);
+  assert.match(prompt, /不用等先生点按钮或开口要/);
+  assert.match(prompt, /ee4 RC\/RL 暂态/);
+  assert.match(prompt, /net4 子网划分/);
+  store.setEnabled(sessionKey, false);
+  assert.match(learningPrompt(store, sessionKey), /暂停的是主动出题/);
+  assert.match(learningPrompt(store, sessionKey), /不用等先生点按钮/);
+  assert.equal(store.status(sessionKey).enabled, false);
 });
 
 test('submissions are idempotent and reject stale activity ids', t => {
@@ -102,12 +117,12 @@ test('stopping interaction clears the card and fences a delayed present call', t
 test('a legacy disabled card is cleaned before it can revive on the next launch', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:legacy-disabled';
-  const legacy = store.read(sessionKey);
-  legacy.enabled = false;
-  legacy.current = {id: 'old-card', kind: 'short_answer', question: '旧题', phase: 'asking', createdAt: Date.now()};
-  store.write(sessionKey, legacy);
+  // v1 files carry enabled:false as the old default, not as the student's choice.
+  fs.mkdirSync(path.dirname(store.activityFile(sessionKey)), {recursive: true});
+  fs.writeFileSync(store.activityFile(sessionKey), JSON.stringify({v: 1, sessionKey, enabled: false, revision: 3, history: [],
+    current: {id: 'old-card', kind: 'short_answer', question: '旧题', phase: 'asking', createdAt: Date.now()}}));
   const status = store.status(sessionKey);
-  assert.equal(status.enabled, false);
+  assert.equal(status.enabled, true);
   assert.equal(status.current, null);
   const repaired = store.read(sessionKey);
   assert.equal(repaired.current, null);
@@ -121,14 +136,19 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   const store = fixture(t);
   const methods = new Map();
   registerLearningGateway({registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); }}, store);
-  assert.deepEqual([...methods.keys()].sort(), [
-    'pinkie.learning.current', 'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
+  // v2 (2026-10-26) adds materials.* and desk.lesson.* RPCs, some read-scoped; learning-lesson/materials tests cover them exactly.
+  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.')));
+  assert.deepEqual([...legacyMethods.keys()].sort(), [
+    'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
+    'pinkie.learning.current', 'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
+    'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
     'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare', 'pinkie.learning.notes.restore',
-    'pinkie.learning.notes.review', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
+    'pinkie.learning.notes.review', 'pinkie.learning.notes.review.queue', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
+    'pinkie.learning.practice.list', 'pinkie.learning.practice.open', 'pinkie.learning.practice.run',
     'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit',
   ]);
-  for (const item of methods.values()) assert.equal(item.opts.scope, 'operator.admin');
+  for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /Li An 学习笔记/);
   assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
@@ -352,7 +372,7 @@ test('merge keeps source notes recoverable and compare makes a linked card', t =
   assert.equal(store.readNotes().notes.find(note => note.id === first.id).original, 'be the same as = 和……一样');
 });
 
-test('batch activity result writes review results back to its linked notes', t => {
+test('a legacy multi-note card keeps its explanation without applying one grade to every linked note', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:batch-review';
   const first = store.saveNote(sessionKey, {content: 'take off = 起飞'}).note;
@@ -360,12 +380,17 @@ test('batch activity result writes review results back to its linked notes', t =
   store.setEnabled(sessionKey, true);
   const shown = store.present(sessionKey, {kind: 'short_answer', question: '解释这两个词组', note_ids: [first.id, second.id]});
   store.submit(sessionKey, {activityId: shown.current.id, answer: '...', submissionId: 'batch'});
-  store.resolve(sessionKey, {activity_id: shown.current.id, correct: false, feedback: '再记一次'});
+  const resolved = store.resolve(sessionKey, {activity_id: shown.current.id, correct: false, feedback: '再记一次'});
+  assert.equal(resolved.current.result.feedback, '再记一次');
+  assert.equal(resolved.current.result.correct, false);
+  assert.equal(resolved.current.result.reviewStatus, 'needs_individual_assessment');
+  assert.deepEqual(resolved.current.result.reviewedNotes, []);
+  assert.equal(store.listAttempts(sessionKey).total, 1);
   const notes = store.listNotes({sessionKey}).notes;
   for (const id of [first.id, second.id]) {
     const note = notes.find(item => item.id === id);
-    assert.equal(note.reviewCount, 1);
-    assert.equal(note.lapses, 1);
-    assert.ok(note.nextReviewAt > Date.now());
+    assert.equal(note.reviewCount, 0);
+    assert.equal(note.lapses, 0);
+    assert.equal(note.nextReviewAt, 0);
   }
 });

@@ -1,0 +1,607 @@
+{
+  "blocked" : {
+    "id" : "",
+    "mayHaveExecuted" : false,
+    "nextAction" : "snapshot-before-retry",
+    "ok" : false,
+    "reason" : "目标被其他内容遮住，尚未操作。"
+  },
+  "cancel" : {
+    "id" : "drag-cancel",
+    "mayHaveExecuted" : true,
+    "nextAction" : "snapshot-before-retry",
+    "ok" : false,
+    "reason" : "浏览器操作已取消；请重新观察页面确认已完成的部分。"
+  },
+  "canvas" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "dragged" : true,
+      "from" : {
+        "x" : 541,
+        "y" : 181
+      },
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 0,
+        "elementCount" : 4,
+        "elements" : [
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 73
+            },
+            "value" : "73"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:3",
+        "text" : "悬停菜单\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "to" : {
+        "x" : 576,
+        "y" : 216
+      }
+    }
+  },
+  "checks" : [
+    "悬停指令完成",
+    "原生悬停真正触发CSS :hover",
+    "悬停事件由WebKit生成且isTrusted为true",
+    "悬停展开后原生点击只提交一次",
+    "原生拖拽改变滑块值",
+    "滑块input事件为真实原生默认行为",
+    "专用滑杆工具准确设为73并回读",
+    "原生拖拽可以选中文字",
+    "Canvas收到连续原生拖拽事件",
+    "网页缩放后指针坐标仍准确",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "重复原生点击成功",
+    "连续40次操作无重复提交且指针覆盖层不拦截点击",
+    "被遮挡控件不会误点击",
+    "中途取消返回部分可能生效，不自动重放",
+    "取消会释放按住的鼠标键",
+    "用户接管中断拖拽并释放按键",
+    "接管期间拒绝新的自动鼠标动作"
+  ],
+  "clicked" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "clickCount" : 1,
+      "clicked" : true,
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 1,
+        "elementCount" : 5,
+        "elements" : [
+          {
+            "name" : "菜单选项",
+            "ref" : "pmvojpyanto1ype2",
+            "role" : "button"
+          },
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 20
+            },
+            "value" : "20"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:1",
+        "text" : "悬停菜单\n菜单选项\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "x" : 49.875,
+      "y" : 73
+    }
+  },
+  "drag" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "dragged" : true,
+      "from" : {
+        "x" : 182,
+        "y" : 170
+      },
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 1,
+        "elementCount" : 4,
+        "elements" : [
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 97
+            },
+            "value" : "97"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:2",
+        "text" : "悬停菜单\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "to" : {
+        "x" : 320,
+        "y" : 175
+      }
+    }
+  },
+  "events" : "{\"x\":110,\"y\":60,\"trusted\":true,\"target\":\"menu\"}",
+  "geometry" : {
+    "bounds" : "{{0, 0}, {900, 650}}",
+    "flipped" : true,
+    "frame" : "{{0, 0}, {900, 650}}",
+    "number" : 83217,
+    "subviews" : [
+      "WKFlippedView",
+      "BrowserAgentPointer"
+    ],
+    "visible" : true,
+    "window" : "{{209, 88}, {900, 682}}"
+  },
+  "hover" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "hovered" : true,
+      "input" : "native",
+      "moved" : true,
+      "observation" : {
+        "durationMs" : 4,
+        "elementCount" : 5,
+        "elements" : [
+          {
+            "name" : "菜单选项",
+            "ref" : "pmvojpyanto1ype2",
+            "role" : "button"
+          },
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 20
+            },
+            "value" : "20"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:1",
+        "text" : "悬停菜单\n菜单选项\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "x" : 110,
+      "y" : 60
+    }
+  },
+  "keyboardDebug" : "{\"active\":\"\",\"keys\":\"{\\\"key\\\":\\\"ArrowDown\\\",\\\"trusted\\\":true,\\\"active\\\":\\\"range\\\"}\",\"value\":\"73\"}",
+  "repeatedClicks" : "41",
+  "responder" : "Optional(<WKWebView: 0x1054c3dc0>)",
+  "selection" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "dragged" : true,
+      "from" : {
+        "x" : 30,
+        "y" : 254
+      },
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 0,
+        "elementCount" : 4,
+        "elements" : [
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 73
+            },
+            "value" : "73"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:3",
+        "text" : "悬停菜单\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "to" : {
+        "x" : 230,
+        "y" : 254
+      }
+    }
+  },
+  "setSlider" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "adjustments" : 1,
+      "changed" : true,
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 1,
+        "elementCount" : 4,
+        "elements" : [
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 73
+            },
+            "value" : "73"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:3",
+        "text" : "悬停菜单\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "requestedValue" : 73,
+      "sliderValue" : 73,
+      "targetValue" : 73
+    }
+  },
+  "status" : "passed",
+  "takeover" : {
+    "id" : "drag-takeover",
+    "mayHaveExecuted" : true,
+    "nextAction" : "snapshot-before-retry",
+    "ok" : false,
+    "reason" : "用户已接管浏览器；操作已停止，请先观察当前页面。"
+  },
+  "zoom" : {
+    "id" : "",
+    "ok" : true,
+    "result" : {
+      "clickCount" : 1,
+      "clicked" : true,
+      "input" : "native",
+      "observation" : {
+        "durationMs" : 0,
+        "elementCount" : 4,
+        "elements" : [
+          {
+            "name" : "",
+            "ref" : "pmvojpyanto1ype3",
+            "role" : "slider",
+            "slider" : {
+              "max" : 100,
+              "min" : 0,
+              "orientation" : "horizontal",
+              "reverse" : false,
+              "step" : 1,
+              "value" : 73
+            },
+            "value" : "73"
+          },
+          {
+            "name" : "画布终点",
+            "ref" : "pmvojpyanto1ype4",
+            "role" : "button"
+          },
+          {
+            "name" : "点击一次",
+            "ref" : "pmvojpyanto1ype5",
+            "role" : "button"
+          },
+          {
+            "name" : "遮挡按钮",
+            "ref" : "pmvojpyanto1ype6",
+            "role" : "button"
+          }
+        ],
+        "frames" : [
+
+        ],
+        "readyState" : "complete",
+        "scannedNodes" : 15,
+        "scope" : "viewport",
+        "snapshotId" : "pmvojpyanto1yp:3",
+        "text" : "悬停菜单\nBrowser pointer selects this passage accurately.\n点击一次\n遮挡按钮",
+        "title" : "",
+        "truncated" : false,
+        "unchanged" : false
+      },
+      "page" : {
+        "canGoBack" : false,
+        "canGoForward" : false,
+        "capabilities" : {
+          "nativePointer" : true,
+          "setSlider" : "native-range"
+        },
+        "loading" : false,
+        "open" : true,
+        "title" : "",
+        "url" : "http:\/\/127.0.0.1\/native-pointer-fixture"
+      },
+      "x" : 110,
+      "y" : 361
+    }
+  }
+}

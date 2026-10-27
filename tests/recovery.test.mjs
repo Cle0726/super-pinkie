@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, mountRecovery, __test} from '../services/cle-studio/src/recovery/recovery.js';
+import {isInternalTurnText, isStuckItem, appearsInTranscript, projectPane, recoverPane, recoverPaneDetailed, shouldAttempt, mountRecovery, pruneConfirmedQueue, __test} from '../services/cle-studio/src/recovery/recovery.js';
 import {queueText, queueErrorText, localizeQueueNode} from '../services/cle-studio/src/recovery/queue-copy.js';
 
 const WATCHDOG = '[pinkie-watchdog] 继续完成当前这一轮先生交代的工作，完成后正常交付。这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。';
@@ -227,7 +227,7 @@ function harness({queue = [], messages = [], activePanels = []} = {}) {
   pane.state = state;
   const calls = [];
   pane.retryQueuedChatMessage = async (id) => { calls.push(['retry', id]); };
-  pane.removeQueuedMessage = (id) => { calls.push(['remove', id]); };
+  pane.removeQueuedMessage = (id) => { calls.push(['remove', id]); state.chatQueue=state.chatQueue.filter((item)=>item.id!==id); };
   const host = {
     request: async (method, params) => {
       calls.push(['request', method, params]);
@@ -450,7 +450,7 @@ test('the steered badge reads as a state, the steer button as an action', () => 
   const badge = el('span', 'chat-queue__badge chat-queue__badge--steered', queue);
   const badgeText = {nodeType: 3, nodeValue: '引导', parentElement: badge};
   localizeQueueNode(badgeText);
-  assert.equal(badgeText.nodeValue, '已追加');
+  assert.equal(badgeText.nodeValue, '正在确认追加');
 
   const button = el('button', 'chat-queue__action chat-queue__steer', el('span', 'chat-queue__actions', queue));
   button.setAttribute('aria-label', '使用队列中的消息进行引导');
@@ -546,7 +546,7 @@ function lifecycleHarness({queue = [], panels = []} = {}) {
   const retries = [];
   const removals = [];
   pane.retryQueuedChatMessage = async (id) => { retries.push(id); };
-  pane.removeQueuedMessage = (id) => { removals.push(id); };
+  pane.removeQueuedMessage = (id) => { removals.push(id); pane.state.chatQueue=pane.state.chatQueue.filter((item)=>item.id!==id); };
 
   const body = el('div', 'body');
   const head = el('head', '');
@@ -690,6 +690,7 @@ test('abort during an in-flight recovery request does not arm a cooldown or repa
     });
     mountRecovery(h.host, controller.signal);
     h.advance(1_300);              // fires the initial projection pass
+    await new Promise((resolve) => setImmediate(resolve)); // delivery pruning precedes the roster request
     assert.ok(release, 'the recovery request should be in flight');
 
     controller.abort();
@@ -776,4 +777,190 @@ test('mounting with an already-aborted signal allocates nothing', async () => {
     // The fold rule itself must survive: it is static presentation, not a handle.
     assert.ok(h.document.getElementById('cle-recovery-style'), 'fold rule retained');
   } finally { h.restore(); }
+});
+
+
+test('an active run prunes a durably confirmed steer without waiting for idle or retrying', async () => {
+  const at = Date.now();
+  const h = harness({queue: [
+    {id:'accepted',kind:'steered',sendState:'unconfirmed',pendingRunId:'live',sendRunId:'steer-1',text:'追加任务',createdAt:at},
+    {id:'waiting',sendState:'waiting-model',pendingRunId:'live',text:'稍后做',createdAt:at},
+  ], messages:[{role:'user',content:'追加任务',idempotencyKey:'steer-1:user',timestamp:at+100}]});
+  h.state.chatRunId='live';
+  h.state.chatStream={runId:'live'};
+  const result=await recoverPaneDetailed(h.pane,h.host);
+  assert.deepEqual(result.removed,['accepted']);
+  assert.deepEqual(result.retried,[]);
+  assert.equal(result.attempted,false,'pruning never arms a send cooldown');
+  assert.deepEqual(h.calls,[['remove','accepted']]);
+  assert.equal(h.state.chatRunId,'live');
+  assert.equal(h.state.chatStream.runId,'live');
+  assert.equal(h.state.chatQueue[0].pendingRunId,'live');
+});
+
+test('delivery requires a user receipt and never falls back to text when sendRunId is known', () => {
+  const at=Date.now();
+  const item={id:'q',sendRunId:'expected',text:'相同文字',createdAt:at};
+  assert.equal(appearsInTranscript(item,[{role:'assistant',runId:'expected',content:'相同文字'}]),false);
+  assert.equal(appearsInTranscript(item,[{role:'user',runId:'other',content:'相同文字',timestamp:at+10}]),false);
+  assert.equal(appearsInTranscript(item,[{role:'user',idempotencyKey:'expected:user',content:'不同文字'}]),true);
+  assert.equal(appearsInTranscript(item,[{role:'user',__openclaw:{idempotencyKey:'expected:user'}}]),true);
+});
+
+test('fallback confirmation accepts ISO, second and millisecond dates only after queue creation', () => {
+  const at=1_790_000_000_000;
+  for(const createdAt of [at,at/1000,new Date(at).toISOString()]){
+    for(const timestamp of [at+1000,(at+1000)/1000,new Date(at+1000).toISOString()]){
+      assert.equal(appearsInTranscript({text:'同文',createdAt},[{role:'user',content:'同文',timestamp}]),true);
+    }
+    assert.equal(appearsInTranscript({text:'同文',createdAt},[{role:'user',content:'同文',timestamp:at-1}]),false);
+  }
+  assert.equal(appearsInTranscript({text:'同文',createdAt:at},[{role:'user',content:'同文'}]),false);
+});
+
+test('attachment confirmation requires enough persisted attachments and a creation timestamp', () => {
+  const at=Date.now();
+  const item={id:'image',createdAt:at,attachments:[{id:'image'}]};
+  assert.equal(appearsInTranscript(item,[{role:'user',content:'',timestamp:at+1,MediaPaths:['/image.png']}]),true);
+  assert.equal(appearsInTranscript(item,[{role:'user',content:'',timestamp:at+1}]),false);
+  assert.equal(appearsInTranscript({...item,text:'图'},[{role:'user',content:'图',timestamp:at+1}]),false);
+});
+
+test('two identical cards cannot consume one receipt over separate polls or a replacement pane', async () => {
+  const at=Date.now();
+  const h=harness({queue:[
+    {id:'first',kind:'steered',sendState:'unconfirmed',text:'重复一句',createdAt:at},
+    {id:'second',kind:'steered',sendState:'unconfirmed',text:'重复一句',createdAt:at+1},
+  ],messages:[{role:'user',content:'重复一句',timestamp:at+100,__openclaw:{id:'one-proof'}}]});
+  h.state.chatRunId='live';
+  assert.deepEqual(await pruneConfirmedQueue(h.pane),['first']);
+  assert.deepEqual(await pruneConfirmedQueue(h.pane),[]);
+  const replacement={...h.pane,state:h.state};
+  assert.deepEqual(await pruneConfirmedQueue(replacement),[]);
+  assert.equal(h.state.chatQueue[0].id,'second');
+  assert.deepEqual(h.calls,[['remove','first']]);
+  h.state.chatMessages.push({role:'user',content:'重复一句',timestamp:at+200,__openclaw:{id:'second-proof'}});
+  assert.deepEqual(await pruneConfirmedQueue(replacement),['second']);
+});
+
+test('an exact retry receipt is reserved before a same-text fallback card', async () => {
+  const at=Date.now();
+  const h=harness({queue:[
+    {id:'fallback',kind:'steered',text:'same',createdAt:at},
+    {id:'exact',sendRunId:'exact-run',text:'same',createdAt:at+1},
+  ],messages:[{role:'user',content:'same',timestamp:at+100,idempotencyKey:'exact-run:user'}]});
+  assert.deepEqual(await pruneConfirmedQueue(h.pane),['exact']);
+  assert.deepEqual(h.state.chatQueue.map(item=>item.id),['fallback']);
+});
+
+test('a no-op native remover never turns delivery confirmation into a retry', async () => {
+  const at=Date.now();
+  const h=harness({queue:[{id:'stuck',sendState:'waiting-reconnect',text:'delivered',createdAt:at}],
+    messages:[{role:'user',content:'delivered',timestamp:at+1}],
+    activePanels:[{key:'agent:project:main',status:'done',hasActiveRun:false}]});
+  h.pane.removeQueuedMessage=()=>{};
+  const result=await recoverPaneDetailed(h.pane,h.host);
+  assert.deepEqual(result.removed,[]);
+  assert.deepEqual(result.retried,[]);
+  assert.equal(h.calls.some(call=>call[0]==='retry'),false);
+});
+
+test('a receipt arriving during the idle check is removed before retry is considered', async () => {
+  const at=Date.now();
+  const h=harness({queue:[{id:'race',sendState:'waiting-reconnect',text:'arrived',createdAt:at}]});
+  h.host.request=async()=>{
+    h.state.chatMessages.push({role:'user',content:'arrived',timestamp:at+100});
+    return {sessions:[{key:'agent:project:main',status:'done',hasActiveRun:false}]};
+  };
+  const result=await recoverPaneDetailed(h.pane,h.host);
+  assert.deepEqual(result.removed,['race']);
+  assert.deepEqual(result.retried,[]);
+  assert.deepEqual(h.calls,[['remove','race']]);
+});
+
+test('a retired controller cannot remove or repaint the replacement controller after an awaited native action', async () => {
+  const at=Date.now();
+  const h=harness({queue:[{id:'old',kind:'steered',text:'old',createdAt:at}],
+    messages:[{role:'user',content:'old',timestamp:at+100}]});
+  let finish;
+  h.pane.removeQueuedMessage=()=>new Promise(resolve=>{finish=resolve;});
+  const pending=pruneConfirmedQueue(h.pane);
+  const replacement={sessionKey:h.state.sessionKey,chatQueue:[{id:'new',text:'new'}],chatMessages:[]};
+  h.pane.state=replacement;
+  finish();
+  assert.deepEqual(await pending,[]);
+  assert.equal(replacement.chatQueue[0].id,'new');
+});
+
+test('mutation sweeps never scan the whole pane again and newly mounted panes project once', async () => {
+  const h=lifecycleHarness();
+  const controller=new AbortController();
+  try {
+    let scans=0;
+    const original=h.pane.querySelectorAll;
+    h.pane.querySelectorAll=(selector)=>{if(selector==='.chat-group')scans++;return original(selector);};
+    mountRecovery(h.host,controller.signal);
+    assert.equal(scans,1);
+    const group=el('div','chat-group user',h.pane);
+    const b=bubble(group,'streamed token');
+    const text=b.querySelector('.chat-text').children[0];
+    for(let i=0;i<3;i++){
+      h.observed[0].cb([{type:'characterData',target:text}]);
+      for(const [id,fn] of [...h.frames]){h.frames.delete(id);fn();}
+      for(const {fn} of h.intervals.values())fn();
+    }
+    assert.equal(scans,1,'dirty rows and polling do not re-project history');
+    const added=paneOf();
+    added.isConnected=true;
+    added.dataset.mcpAppOwnerKey=JSON.stringify(['x','agent:learning:new']);
+    added.state={sessionKey:'agent:learning:new',chatQueue:[],chatMessages:[]};
+    let addedScans=0;
+    const query=added.querySelectorAll;
+    added.querySelectorAll=(selector)=>{if(selector==='.chat-group')addedScans++;return query(selector);};
+    const docQuery=h.document.querySelectorAll;
+    h.document.querySelectorAll=(selector)=>selector.includes('chat-pane-cache__pane')?[h.pane,added]:docQuery(selector);
+    h.observed[0].cb([{type:'childList',target:h.document.body,addedNodes:[added]}]);
+    assert.equal(addedScans,1);
+    h.observed[0].cb([{type:'characterData',target:text}]);
+    assert.equal(addedScans,1,'the new pane projects only once');
+  } finally {controller.abort();h.restore();}
+});
+
+
+test('a same-key session reset during native removal stops pruning the new incarnation', async () => {
+  const at=Date.now();
+  const h=harness({queue:[
+    {id:'first',sendRunId:'one',kind:'steered',text:'one',createdAt:at},
+    {id:'second',sendRunId:'two',kind:'steered',text:'two',createdAt:at},
+  ],messages:[
+    {role:'user',content:'one',idempotencyKey:'one:user'},
+    {role:'user',content:'two',idempotencyKey:'two:user'},
+  ]});
+  h.state.currentSessionId='before-reset';
+  let finish;
+  h.pane.removeQueuedMessage=(id)=>{
+    h.calls.push(['remove',id]);
+    return new Promise(resolve=>{finish=resolve;});
+  };
+  const pruning=pruneConfirmedQueue(h.pane);
+  h.state.currentSessionId='after-reset';
+  h.state.chatQueue=[{id:'second',kind:'queued',text:'new incarnation'}];
+  h.state.chatMessages=[];
+  finish();
+  assert.deepEqual(await pruning,[]);
+  assert.deepEqual(h.calls,[['remove','first']]);
+  assert.equal(h.state.chatQueue[0].text,'new incarnation');
+});
+
+test('delivery fallback keeps internal whitespace meaningful and leaves unproved busy cards unchanged', async () => {
+  const at=Date.now();
+  assert.equal(appearsInTranscript({text:'a  b',createdAt:at},[{role:'user',content:'a b',timestamp:at+1}]),false);
+  assert.equal(appearsInTranscript({text:'a\nb',createdAt:at},[{role:'user',content:'a b',timestamp:at+1}]),false);
+  const h=harness({queue:[{id:'unconfirmed',kind:'steered',sendState:'unconfirmed',pendingRunId:'active',text:'a  b',createdAt:at}],
+    messages:[{role:'user',content:'a b',timestamp:at+1}]});
+  h.state.chatRunId='active';
+  const before={...h.state.chatQueue[0]};
+  assert.deepEqual(await recoverPaneDetailed(h.pane,h.host),{retried:[],removed:[],attempted:false});
+  assert.deepEqual(h.state.chatQueue[0],before);
+  assert.deepEqual(h.calls,[]);
 });

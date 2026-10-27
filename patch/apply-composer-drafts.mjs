@@ -4,10 +4,91 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-const marker = '/* pinkie-composer-drafts:v1 */';
+const marker = '/* pinkie-composer-drafts:v4 */';
+const previousMarker = '/* pinkie-composer-drafts:v1 */';
 function refreshCache(url) {
   const [file,query='']=url.split('?'),params=new URLSearchParams(query);
-  params.set('pinkie-drafts','1');return file+'?'+params;
+  params.set('pinkie-drafts','4');return file+'?'+params;
+}
+
+export function pinkieComposerReadOnly(state) {
+  const doc = globalThis.document;
+  // Native internal splits are several panes inside one WebView. Only the
+  // primary pane owns the composer; independent mode documents remain writable.
+  const panes = Array.from(doc?.querySelectorAll?.('openclaw-chat-pane') || []);
+  const own = panes.find(pane => pane.state === state);
+  if (own && globalThis.__pinkieReadingViews) return globalThis.__pinkieReadingViews.isReading(own);
+  return Boolean(own && panes.length > 1 && own !== panes[0]);
+}
+
+// 2026.7 imports its composer store from sessionStorage despite the native
+// persistence API's name. Mirror text only, per gateway/session, to durable
+// storage. Queued sends retain their original lifecycle and are never replayed
+// merely because this text backup survived an App restart.
+export function pinkieDurableComposerStore(native, session, state) {
+  const prefix = 'pinkie.composerDraft.v2:';
+  const keyFor = key => prefix + key + ':' + encodeURIComponent(session);
+  const readOnly = () => pinkieComposerReadOnly(state);
+  const local = () => { try { return globalThis.localStorage; } catch { return null; } };
+  const parse = value => { try { return JSON.parse(value || 'null'); } catch { return null; } };
+  return {
+    getItem(key) {
+      let raw; try { raw = native?.getItem(key); } catch {}
+      const saved = parse(local()?.getItem(keyFor(key)));
+      if (!saved || typeof saved.draft !== 'string' || !saved.draft) return raw ?? null;
+      const data = parse(raw), store = data?.version === 1 && data.sessions && !Array.isArray(data.sessions)
+        ? data : {version:1,sessions:{}};
+      const entry = store.sessions[session];
+      if (!entry || Number(saved.updatedAt) >= Number(entry.updatedAt || 0)) {
+        store.sessions[session] = {...entry,draft:saved.draft,updatedAt:saved.updatedAt};
+      }
+      return JSON.stringify(store);
+    },
+    setItem(key, value) {
+      if (readOnly()) return;
+      try { native?.setItem(key,value); } catch {}
+      const entry = parse(value)?.sessions?.[session], storage = local();
+      if (!storage) return;
+      if (typeof entry?.draft === 'string' && entry.draft) {
+        const old = parse(storage.getItem(keyFor(key)));
+        if (old?.draft !== entry.draft) storage.setItem(keyFor(key),JSON.stringify({draft:entry.draft,updatedAt:entry.updatedAt || Date.now()}));
+      } else storage.removeItem(keyFor(key));
+    },
+    removeItem(key) {
+      if (readOnly()) return;
+      try { native?.removeItem(key); } catch {}
+      local()?.removeItem(keyFor(key));
+    },
+  };
+}
+
+function pinkieCaptureComposerInput(gatewayKey, sessionKey) {
+  if (globalThis.__pinkieDurableComposerInput || !globalThis.document?.querySelectorAll) return;
+  globalThis.__pinkieDurableComposerInput = true;
+  document.addEventListener('input', event => {
+    const textarea = event.target?.closest?.('.agent-chat__composer-combobox textarea');
+    const owner = textarea?.closest?.('openclaw-chat-pane');
+    const state = owner?.state || (document.documentElement?.hasAttribute?.('data-laolao-startup-home') ? document.querySelector('openclaw-chat-pane')?.state : null);
+    if (!state?.sessionKey || typeof textarea.value !== 'string' || pinkieComposerReadOnly(state)) return;
+    try {
+      const key = 'pinkie.composerDraft.v2:' + gatewayKey(state.settings?.gatewayUrl) + ':' + encodeURIComponent(sessionKey(state,state.sessionKey));
+      if (textarea.value) localStorage.setItem(key,JSON.stringify({draft:textarea.value,updatedAt:Date.now()}));
+      else localStorage.removeItem(key);
+    } catch { /* Native store remains available when persistent storage is full. */ }
+  },true);
+}
+
+function withDurableLegacyDrafts(source) {
+  if (!source.includes('openclaw.control.chatComposer.v1:')) return source;
+  const load = /function (\w+)\((\w+),(\w+)\)\{let (\w+)=(\w+)\(\);if\(!\4\)return null;try\{let (\w+)=(\w+)\(\2.settings\?\.gatewayUrl\),(\w+)=(\w+)\(\2,\3\),/u.exec(source);
+  if (!load) throw new Error('原生草稿读取结构已变化，未添加持久备份');
+  const accessor = load[5], gatewayKey = load[7], sessionKey = load[9];
+  const pattern = new RegExp('function (\\w+)\\((\\w+),(\\w+)([^)]*)\\)\\{let (\\w+)='+accessor+'\\(\\);','g');
+  const matches = [...source.matchAll(pattern)];
+  if (matches.length !== 4) throw new Error('草稿存储边界不明确，未覆盖');
+  const patched = source.replace(pattern,(_all,name,state,session,tail,storage) =>
+    `function ${name}(${state},${session}${tail}){let ${storage}=pinkieDurableComposerStore(${accessor}(),${sessionKey}(${state},${session}??${state}.sessionKey),${state});`);
+  return pinkieComposerReadOnly.toString()+'\n'+pinkieDurableComposerStore.toString()+'\n'+pinkieCaptureComposerInput.toString()+`\npinkieCaptureComposerInput(${gatewayKey},${sessionKey});\n`+patched;
 }
 
 function replaceOne(source, pattern, replacement) {
@@ -69,6 +150,23 @@ function injectFlush(source, start, stop) {
 /** Returns the patched source, or undefined when this bundle is not a store. */
 export function transform(source) {
   if (source.includes(marker)) return source;
+  if (source.includes('/* pinkie-composer-drafts:v3 */')) {
+    const next = source.replace('/* pinkie-composer-drafts:v3 */',marker);
+    if (!next.includes('openclaw.control.chatComposer.v1:')) return next;
+    return replaceOne(next,/function pinkieComposerReadOnly\(state\) \{[\s\S]*?\n\}/g,
+      () => pinkieComposerReadOnly.toString());
+  }
+  if (source.includes('/* pinkie-composer-drafts:v2 */')) {
+    let next = source.replace('/* pinkie-composer-drafts:v2 */',marker);
+    if (!next.includes('openclaw.control.chatComposer.v1:')) return next;
+    next = replaceOne(next,/function pinkieDurableComposerStore\(native, session\) \{[\s\S]*?\n\}/g,() => pinkieDurableComposerStore.toString());
+    next = replaceOne(next,/function pinkieCaptureComposerInput\(gatewayKey, sessionKey\) \{[\s\S]*?\n\}/g,() => pinkieCaptureComposerInput.toString());
+    const calls=/pinkieDurableComposerStore\((\w+)\(\),(\w+)\((\w+),(\w+)\?\?\3\.sessionKey\)\)/g;
+    if ([...next.matchAll(calls)].length!==4) throw new Error('v2 草稿调用边界不明确，未覆盖');
+    next=next.replace(calls,(_all,accessor,sessionKey,state,session)=>`pinkieDurableComposerStore(${accessor}(),${sessionKey}(${state},${session}??${state}.sessionKey),${state})`);
+    return pinkieComposerReadOnly.toString()+'\n'+next;
+  }
+  if (source.includes(previousMarker)) return marker+'\n'+withDurableLegacyDrafts(source.replace(previousMarker,''));
   // 2026.10 enforces its own bounds; older stores evict queue-only entries by
   // count, and unfinished drafts must survive that.
   const bounded = replaceOptional(source,
@@ -89,7 +187,7 @@ export function transform(source) {
   }
   // A bundle whose lifecycle methods moved on is left byte-for-byte untouched
   // rather than written half-patched.
-  return next ? marker + '\n' + next : source;
+  return next ? marker + '\n' + withDurableLegacyDrafts(next) : source;
 }
 
 export function apply(root, {backupRoot} = {}) {

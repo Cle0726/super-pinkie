@@ -1,0 +1,19 @@
+--- a/tests/learning-pact.test.mjs
++++ b/tests/learning-pact.test.mjs
+@@ -57 +57 @@
+-  assert.deepEqual(value.daily, {minutes: 30, questions: 20, reviews: 'due'});
++  assert.deepEqual(value.daily, {minutes: 30, questions: 20, lessons: 2, reviews: 'due'});
+--- a/tests/learning-interaction.test.mjs
++++ b/tests/learning-interaction.test.mjs
+@@
+-  assert.deepEqual([...methods.keys()].sort(), [
++  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.')));
++  assert.deepEqual([...legacyMethods.keys()].sort(), [
+@@
+-  for (const item of methods.values()) assert.equal(item.opts.scope, 'operator.admin');
++  for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
+--- a/tests/mode-architecture.test.mjs
++++ b/tests/mode-architecture.test.mjs
+@@
+-  assert.equal(tools.length,12);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_library','plan_update','workbench_read','code_check','workbench_show']);
++  assert.equal(tools.length,13);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_material','learning_library','plan_update','workbench_read','code_check','workbench_show']);

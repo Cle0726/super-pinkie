@@ -1,0 +1,1326 @@
+{
+  "createdAt": "2026-10-26T22:51:51.360Z",
+  "ms": 138,
+  "files": 163,
+  "characters": 784948,
+  "meanCharsPerMinute": 242.1010031606769,
+  "minCharsPerMinute": 146.4338856235176,
+  "maxCharsPerMinute": 346.56215357176995,
+  "withTimeStamps": 0,
+  "audit": {
+    "unchanged": true,
+    "beforeHash": "0c9dcc5d6c16c77c3825c1bc8b7d1694cfb746190f38097ce6da19e718eaeae0",
+    "afterHash": "0c9dcc5d6c16c77c3825c1bc8b7d1694cfb746190f38097ce6da19e718eaeae0",
+    "beforeEntries": 1774,
+    "afterEntries": 1774,
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "items": [
+    {
+      "path": "01_英语/02_讲义/视频转写稿/001 500必考词第1节课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 1,
+      "chars": 8808,
+      "charsPerMinute": 288.50519948953183,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/002 500必考词第2节课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 2,
+      "chars": 8242,
+      "charsPerMinute": 303.58215934797704,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/003 500必考词第3节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 3,
+      "chars": 6375,
+      "charsPerMinute": 271.26155400293527,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/004 500必考词第4节课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 4,
+      "chars": 5600,
+      "charsPerMinute": 275.1572151285191,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/005 500必考词第5节课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 5,
+      "chars": 6343,
+      "charsPerMinute": 294.1597614637486,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/006 500必考词第6节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 6,
+      "chars": 5581,
+      "charsPerMinute": 232.03141974553748,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/007 500必考词第7节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 7,
+      "chars": 4632,
+      "charsPerMinute": 234.94107966917863,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/008 500必考词第8节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 8,
+      "chars": 2413,
+      "charsPerMinute": 160.64690366591384,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/009 500必考词第9节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 9,
+      "chars": 5173,
+      "charsPerMinute": 185.14493541687068,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/010 500必考词第10节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 10,
+      "chars": 4330,
+      "charsPerMinute": 193.6490072536684,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/011 500必考词第11节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 11,
+      "chars": 4156,
+      "charsPerMinute": 220.59568350510958,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/012 500必考词第12节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 12,
+      "chars": 3700,
+      "charsPerMinute": 173.21075183458683,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/013 500必考词第13节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 13,
+      "chars": 3433,
+      "charsPerMinute": 146.4338856235176,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/014 500必考词第14节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 14,
+      "chars": 3788,
+      "charsPerMinute": 174.61564866168612,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/015 500必考词第15节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 15,
+      "chars": 3337,
+      "charsPerMinute": 178.8248586842181,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/016 500必考词第16节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 16,
+      "chars": 2838,
+      "charsPerMinute": 163.03211703982618,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/017 500必考词第17节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 17,
+      "chars": 2041,
+      "charsPerMinute": 181.8388592288235,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/018 500必考词第18节.txt",
+      "pack": "上岸班2023_主体",
+      "number": 18,
+      "chars": 2733,
+      "charsPerMinute": 166.55705774013958,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/019 500必考词第19课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 19,
+      "chars": 2608,
+      "charsPerMinute": 180.25925407068752,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/020 500必考词第20课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 20,
+      "chars": 2852,
+      "charsPerMinute": 184.04953505228343,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/021 500必考词第21课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 21,
+      "chars": 1986,
+      "charsPerMinute": 175.04230997090414,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/022 第一组与第二组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 22,
+      "chars": 4544,
+      "charsPerMinute": 286.7377713447441,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/023 第三组与第四组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 23,
+      "chars": 4630,
+      "charsPerMinute": 285.7644457067319,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/024 第五组与第六组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 24,
+      "chars": 2589,
+      "charsPerMinute": 257.84072883390996,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/025 第七组与第八组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 25,
+      "chars": 4152,
+      "charsPerMinute": 253.81365329845377,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/026 第九组与第十组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 26,
+      "chars": 4111,
+      "charsPerMinute": 238.84788680281116,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/027 第十一组与第十二组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 27,
+      "chars": 1934,
+      "charsPerMinute": 238.06334704001588,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/028 第十三组与第十四组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 28,
+      "chars": 1842,
+      "charsPerMinute": 239.8241461455884,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/029 第十五组与第十六组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 29,
+      "chars": 2226,
+      "charsPerMinute": 249.42915394697346,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/030 第十七组与第十八组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 30,
+      "chars": 1640,
+      "charsPerMinute": 252.30488913568047,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/031 第十九组与第二十组.txt",
+      "pack": "上岸班2023_主体",
+      "number": 31,
+      "chars": 2146,
+      "charsPerMinute": 279.55386537931196,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/032 22.txt",
+      "pack": "上岸班2023_主体",
+      "number": 32,
+      "chars": 2277,
+      "charsPerMinute": 252.27168137812617,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/033 24.txt",
+      "pack": "上岸班2023_主体",
+      "number": 33,
+      "chars": 2076,
+      "charsPerMinute": 259.00978028291416,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/034 26.txt",
+      "pack": "上岸班2023_主体",
+      "number": 34,
+      "chars": 1229,
+      "charsPerMinute": 269.4476214140337,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/035 28.txt",
+      "pack": "上岸班2023_主体",
+      "number": 35,
+      "chars": 2128,
+      "charsPerMinute": 284.71592976528973,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/036 30.txt",
+      "pack": "上岸班2023_主体",
+      "number": 36,
+      "chars": 1561,
+      "charsPerMinute": 257.4254651652182,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/037 32.txt",
+      "pack": "上岸班2023_主体",
+      "number": 37,
+      "chars": 2208,
+      "charsPerMinute": 275.0663029072609,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/038 34.txt",
+      "pack": "上岸班2023_主体",
+      "number": 38,
+      "chars": 1384,
+      "charsPerMinute": 272.7867566891434,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/039 36.txt",
+      "pack": "上岸班2023_主体",
+      "number": 39,
+      "chars": 2012,
+      "charsPerMinute": 286.792616994461,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/040 38.txt",
+      "pack": "上岸班2023_主体",
+      "number": 40,
+      "chars": 2848,
+      "charsPerMinute": 279.0427285696789,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/041 40.txt",
+      "pack": "上岸班2023_主体",
+      "number": 41,
+      "chars": 2293,
+      "charsPerMinute": 278.5911311572439,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/042 42.txt",
+      "pack": "上岸班2023_主体",
+      "number": 42,
+      "chars": 1474,
+      "charsPerMinute": 267.1524846481492,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/043 44.txt",
+      "pack": "上岸班2023_主体",
+      "number": 43,
+      "chars": 1267,
+      "charsPerMinute": 279.41522561351513,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/044 46.txt",
+      "pack": "上岸班2023_主体",
+      "number": 44,
+      "chars": 756,
+      "charsPerMinute": 250.22315702122043,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/045 48.txt",
+      "pack": "上岸班2023_主体",
+      "number": 45,
+      "chars": 2216,
+      "charsPerMinute": 240.8313171031223,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/046 50.txt",
+      "pack": "上岸班2023_主体",
+      "number": 46,
+      "chars": 2043,
+      "charsPerMinute": 247.63419596167455,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/047 52.txt",
+      "pack": "上岸班2023_主体",
+      "number": 47,
+      "chars": 1558,
+      "charsPerMinute": 277.07141478073623,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/048 54.txt",
+      "pack": "上岸班2023_主体",
+      "number": 48,
+      "chars": 1850,
+      "charsPerMinute": 246.9455054585391,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/049 阅读导学课.txt",
+      "pack": "上岸班2023_主体",
+      "number": 49,
+      "chars": 5776,
+      "charsPerMinute": 265.91609781459096,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/050 主旨题导学.txt",
+      "pack": "上岸班2023_主体",
+      "number": 50,
+      "chars": 5166,
+      "charsPerMinute": 249.3552129205194,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/051 态度题导学.txt",
+      "pack": "上岸班2023_主体",
+      "number": 51,
+      "chars": 5224,
+      "charsPerMinute": 248.3877744222112,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/052 例子题导学.txt",
+      "pack": "上岸班2023_主体",
+      "number": 52,
+      "chars": 4977,
+      "charsPerMinute": 219.20418341824822,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/053 猜词题导学.txt",
+      "pack": "上岸班2023_主体",
+      "number": 53,
+      "chars": 7022,
+      "charsPerMinute": 346.56215357176995,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/054 推理题导学.txt",
+      "pack": "上岸班2023_主体",
+      "number": 54,
+      "chars": 5120,
+      "charsPerMinute": 222.44605744113173,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/055 细节题之反复论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 55,
+      "chars": 4987,
+      "charsPerMinute": 229.4355468955458,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/056 细节题之转折论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 56,
+      "chars": 2438,
+      "charsPerMinute": 240.57390394805657,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/057 细节题之数字.txt",
+      "pack": "上岸班2023_主体",
+      "number": 57,
+      "chars": 2064,
+      "charsPerMinute": 204.82911228233758,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/058 细节题之否定论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 58,
+      "chars": 2757,
+      "charsPerMinute": 197.15082119222495,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/059 细节题之因果论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 59,
+      "chars": 1925,
+      "charsPerMinute": 187.48599942212104,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/060 细节题之符号论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 60,
+      "chars": 2374,
+      "charsPerMinute": 221.03480379353883,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/061 细节题之比较级和最高级.txt",
+      "pack": "上岸班2023_主体",
+      "number": 61,
+      "chars": 2363,
+      "charsPerMinute": 225.40219208035552,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/062 细节题之定位与替换.txt",
+      "pack": "上岸班2023_主体",
+      "number": 62,
+      "chars": 2087,
+      "charsPerMinute": 203.0809017290252,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/063 细节题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 63,
+      "chars": 16668,
+      "charsPerMinute": 261.7050783609819,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/064 定位与替换.txt",
+      "pack": "上岸班2023_主体",
+      "number": 64,
+      "chars": 14942,
+      "charsPerMinute": 255.40712134447602,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/065 态度、主旨和猜词.txt",
+      "pack": "上岸班2023_主体",
+      "number": 65,
+      "chars": 23632,
+      "charsPerMinute": 262.31225355925005,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/066 论点和论据.txt",
+      "pack": "上岸班2023_主体",
+      "number": 66,
+      "chars": 14689,
+      "charsPerMinute": 241.24567150748678,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/067 推理题 · 拔高.txt",
+      "pack": "上岸班2023_主体",
+      "number": 67,
+      "chars": 12931,
+      "charsPerMinute": 250.60379709029613,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/068 交际英语1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 68,
+      "chars": 5372,
+      "charsPerMinute": 271.8317778791836,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/069 交际英语2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 69,
+      "chars": 3493,
+      "charsPerMinute": 295.0692400991951,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/070 冠词.txt",
+      "pack": "上岸班2023_主体",
+      "number": 70,
+      "chars": 9203,
+      "charsPerMinute": 236.80970785001887,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/071 时态1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 71,
+      "chars": 7727,
+      "charsPerMinute": 252.37595643081477,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/072 时态2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 72,
+      "chars": 5644,
+      "charsPerMinute": 241.265317754346,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/073 时态3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 73,
+      "chars": 3589,
+      "charsPerMinute": 255.9317918361288,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/074 时态4.txt",
+      "pack": "上岸班2023_主体",
+      "number": 74,
+      "chars": 5114,
+      "charsPerMinute": 252.22490142816332,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/075 时态5.txt",
+      "pack": "上岸班2023_主体",
+      "number": 75,
+      "chars": 5005,
+      "charsPerMinute": 248.7280867283944,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/076 时态6.txt",
+      "pack": "上岸班2023_主体",
+      "number": 76,
+      "chars": 5816,
+      "charsPerMinute": 242.91587393922487,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/077 语态1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 77,
+      "chars": 5239,
+      "charsPerMinute": 247.4347138737277,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/078 语态2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 78,
+      "chars": 3003,
+      "charsPerMinute": 235.37863928502176,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/079 主谓一致1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 79,
+      "chars": 6842,
+      "charsPerMinute": 277.1452159209638,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/080 主谓一致2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 80,
+      "chars": 6752,
+      "charsPerMinute": 253.2931685095564,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/081 比较与倍数.txt",
+      "pack": "上岸班2023_主体",
+      "number": 81,
+      "chars": 6140,
+      "charsPerMinute": 244.61419923250452,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/082 比较与倍数.txt",
+      "pack": "上岸班2023_主体",
+      "number": 82,
+      "chars": 5641,
+      "charsPerMinute": 245.723827501089,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/083 倒装句.txt",
+      "pack": "上岸班2023_主体",
+      "number": 83,
+      "chars": 9091,
+      "charsPerMinute": 249.43117416450158,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/084 定语从句1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 84,
+      "chars": 6282,
+      "charsPerMinute": 266.2115076122489,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/085 定语从句2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 85,
+      "chars": 4825,
+      "charsPerMinute": 240.85264792490133,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/086 定语从句3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 86,
+      "chars": 6913,
+      "charsPerMinute": 264.1286147028227,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/087 定语从句4.txt",
+      "pack": "上岸班2023_主体",
+      "number": 87,
+      "chars": 8537,
+      "charsPerMinute": 246.62322659154898,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/088 状语从句1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 88,
+      "chars": 5791,
+      "charsPerMinute": 254.3173618292368,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/089 状语从句2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 89,
+      "chars": 5144,
+      "charsPerMinute": 254.6123933423908,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/090 状语从句3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 90,
+      "chars": 6965,
+      "charsPerMinute": 244.84995615193705,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/091 其他从句 · 宾从.txt",
+      "pack": "上岸班2023_主体",
+      "number": 91,
+      "chars": 6282,
+      "charsPerMinute": 263.02861130495467,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/092 其他从句 · 主从.txt",
+      "pack": "上岸班2023_主体",
+      "number": 92,
+      "chars": 7626,
+      "charsPerMinute": 272.70343287652906,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/093 其他从句 · 同从.txt",
+      "pack": "上岸班2023_主体",
+      "number": 93,
+      "chars": 5491,
+      "charsPerMinute": 271.27658055562256,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/094 其他从句 · 表从.txt",
+      "pack": "上岸班2023_主体",
+      "number": 94,
+      "chars": 4290,
+      "charsPerMinute": 266.88325144574435,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/095 虚拟语气1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 95,
+      "chars": 7325,
+      "charsPerMinute": 271.7624563090142,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/096 虚拟语气2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 96,
+      "chars": 5429,
+      "charsPerMinute": 267.20908081161474,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/097 虚拟语气3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 97,
+      "chars": 3874,
+      "charsPerMinute": 253.8293536159833,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/098 非谓语1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 98,
+      "chars": 5888,
+      "charsPerMinute": 263.71527274709536,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/099 非谓语2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 99,
+      "chars": 5594,
+      "charsPerMinute": 266.6301932068918,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/100 非谓语3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 100,
+      "chars": 5422,
+      "charsPerMinute": 270.75083273171265,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/101 强调句.txt",
+      "pack": "上岸班2023_主体",
+      "number": 101,
+      "chars": 6475,
+      "charsPerMinute": 256.4920774083424,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/102 道歉信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 102,
+      "chars": 3996,
+      "charsPerMinute": 169.32489735451418,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/103 感谢信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 103,
+      "chars": 4088,
+      "charsPerMinute": 192.52611743979978,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/104 建议信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 104,
+      "chars": 4451,
+      "charsPerMinute": 203.13755978772292,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/105 申请信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 105,
+      "chars": 7734,
+      "charsPerMinute": 190.81974779506413,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/106 推荐信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 106,
+      "chars": 7947,
+      "charsPerMinute": 193.56317644323687,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/107 邀请信.txt",
+      "pack": "上岸班2023_主体",
+      "number": 107,
+      "chars": 7834,
+      "charsPerMinute": 227.50748610783864,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/108 议论文上.txt",
+      "pack": "上岸班2023_主体",
+      "number": 108,
+      "chars": 4791,
+      "charsPerMinute": 197.77723718177026,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/109 议论文下.txt",
+      "pack": "上岸班2023_主体",
+      "number": 109,
+      "chars": 2296,
+      "charsPerMinute": 214.21806039158866,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/110 议论文 · 河北22真题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 110,
+      "chars": 2012,
+      "charsPerMinute": 243.237399847323,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/111 议论文 · 陕西22真题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 111,
+      "chars": 2969,
+      "charsPerMinute": 260.7875996904665,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/112 读写任务.txt",
+      "pack": "上岸班2023_主体",
+      "number": 112,
+      "chars": 2702,
+      "charsPerMinute": 187.32377495938948,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/113 读写任务 · 河南2022真题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 113,
+      "chars": 2428,
+      "charsPerMinute": 217.4419482612288,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/114 读写任务 · 山东2022真题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 114,
+      "chars": 2910,
+      "charsPerMinute": 259.6834690234737,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/115 议论文 · 天津2022真题.txt",
+      "pack": "上岸班2023_主体",
+      "number": 115,
+      "chars": 1656,
+      "charsPerMinute": 202.38936410160088,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/116 议论文2022江苏.txt",
+      "pack": "上岸班2023_主体",
+      "number": 116,
+      "chars": 2474,
+      "charsPerMinute": 201.97072348371796,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/117 书信2022安徽.txt",
+      "pack": "上岸班2023_主体",
+      "number": 117,
+      "chars": 2255,
+      "charsPerMinute": 178.98036497295047,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/118 书信2022湖北.txt",
+      "pack": "上岸班2023_主体",
+      "number": 118,
+      "chars": 3134,
+      "charsPerMinute": 162.19541027701655,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/119 议论文2022贵州.txt",
+      "pack": "上岸班2023_主体",
+      "number": 119,
+      "chars": 3232,
+      "charsPerMinute": 224.35555913438458,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/120 汉译英1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 120,
+      "chars": 7733,
+      "charsPerMinute": 256.93979828148076,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/121 汉译英2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 121,
+      "chars": 5251,
+      "charsPerMinute": 249.31957955824225,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/122 英译汉.txt",
+      "pack": "上岸班2023_主体",
+      "number": 122,
+      "chars": 8787,
+      "charsPerMinute": 253.4371185814208,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/123 改错训练1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 123,
+      "chars": 3807,
+      "charsPerMinute": 301.21034060716835,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/124 改错训练2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 124,
+      "chars": 2560,
+      "charsPerMinute": 211.82234453344532,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/125 完型填空 · 方法论.txt",
+      "pack": "上岸班2023_主体",
+      "number": 125,
+      "chars": 9295,
+      "charsPerMinute": 257.1094327585354,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/126 完型练习题1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 126,
+      "chars": 5575,
+      "charsPerMinute": 268.0930675474317,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/127 完形填空练习三.txt",
+      "pack": "上岸班2023_主体",
+      "number": 127,
+      "chars": 2543,
+      "charsPerMinute": 317.3817748364515,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/128 完形填空练习二.txt",
+      "pack": "上岸班2023_主体",
+      "number": 128,
+      "chars": 8500,
+      "charsPerMinute": 268.7237525424909,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/129 QING海.txt",
+      "pack": "上岸班2023_主体",
+      "number": 129,
+      "chars": 3978,
+      "charsPerMinute": 205.60646959794227,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/130 大兴机场.txt",
+      "pack": "上岸班2023_主体",
+      "number": 130,
+      "chars": 3336,
+      "charsPerMinute": 236.41987372530593,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/131 大运河.txt",
+      "pack": "上岸班2023_主体",
+      "number": 131,
+      "chars": 9729,
+      "charsPerMinute": 262.2695347405174,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/132 港珠澳大桥.txt",
+      "pack": "上岸班2023_主体",
+      "number": 132,
+      "chars": 9615,
+      "charsPerMinute": 228.013268441877,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/133 海南.txt",
+      "pack": "上岸班2023_主体",
+      "number": 133,
+      "chars": 4617,
+      "charsPerMinute": 224.37101961998377,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/134 坎井.txt",
+      "pack": "上岸班2023_主体",
+      "number": 134,
+      "chars": 8189,
+      "charsPerMinute": 241.55810054384904,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/135 龙井.txt",
+      "pack": "上岸班2023_主体",
+      "number": 135,
+      "chars": 6348,
+      "charsPerMinute": 229.35349777876755,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/136 普洱.txt",
+      "pack": "上岸班2023_主体",
+      "number": 136,
+      "chars": 3917,
+      "charsPerMinute": 215.92462502968965,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/137 青藏铁路.txt",
+      "pack": "上岸班2023_主体",
+      "number": 137,
+      "chars": 2329,
+      "charsPerMinute": 175.62889188326892,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/138 三国演义.txt",
+      "pack": "上岸班2023_主体",
+      "number": 138,
+      "chars": 2940,
+      "charsPerMinute": 213.28861978437305,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/139 团圆饭.txt",
+      "pack": "上岸班2023_主体",
+      "number": 139,
+      "chars": 6061,
+      "charsPerMinute": 259.18527276865933,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/140 西游记.txt",
+      "pack": "上岸班2023_主体",
+      "number": 140,
+      "chars": 2042,
+      "charsPerMinute": 183.93975158227934,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/141 饮食差异.txt",
+      "pack": "上岸班2023_主体",
+      "number": 141,
+      "chars": 3125,
+      "charsPerMinute": 217.202871979397,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/142 鱼儿.txt",
+      "pack": "上岸班2023_主体",
+      "number": 142,
+      "chars": 2669,
+      "charsPerMinute": 232.32399433625028,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/143 云南.txt",
+      "pack": "上岸班2023_主体",
+      "number": 143,
+      "chars": 3297,
+      "charsPerMinute": 208.0591126166519,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/144 都江堰.txt",
+      "pack": "上岸班2023_主体",
+      "number": 144,
+      "chars": 9092,
+      "charsPerMinute": 238.42884193944937,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/145 水浒传.txt",
+      "pack": "上岸班2023_主体",
+      "number": 145,
+      "chars": 2042,
+      "charsPerMinute": 198.97040222212718,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/146 七选五（不考）.txt",
+      "pack": "上岸班2023_主体",
+      "number": 146,
+      "chars": 2235,
+      "charsPerMinute": 277.3740490362073,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/147 十五选十（不考）.txt",
+      "pack": "上岸班2023_主体",
+      "number": 147,
+      "chars": 4561,
+      "charsPerMinute": 299.43730111337203,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/148 选词填空（不考）.txt",
+      "pack": "上岸班2023_主体",
+      "number": 148,
+      "chars": 4319,
+      "charsPerMinute": 277.76272464494457,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/149 选词填空（不考）.txt",
+      "pack": "上岸班2023_主体",
+      "number": 149,
+      "chars": 6274,
+      "charsPerMinute": 237.45028143459663,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/150 阅读练习1.txt",
+      "pack": "上岸班2023_主体",
+      "number": 150,
+      "chars": 3559,
+      "charsPerMinute": 263.02483681429925,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/151 阅读练习2.txt",
+      "pack": "上岸班2023_主体",
+      "number": 151,
+      "chars": 6351,
+      "charsPerMinute": 231.67614707234208,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/152 阅读练习3.txt",
+      "pack": "上岸班2023_主体",
+      "number": 152,
+      "chars": 2709,
+      "charsPerMinute": 267.29852129747593,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/153 阅读练习4.txt",
+      "pack": "上岸班2023_主体",
+      "number": 153,
+      "chars": 6737,
+      "charsPerMinute": 282.00490316403915,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/154 阅读练习5.txt",
+      "pack": "上岸班2023_主体",
+      "number": 154,
+      "chars": 5027,
+      "charsPerMinute": 238.34729916381013,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/155 阅读练习6.txt",
+      "pack": "上岸班2023_主体",
+      "number": 155,
+      "chars": 5690,
+      "charsPerMinute": 300.3528169056091,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/156 阅读练习7.txt",
+      "pack": "上岸班2023_主体",
+      "number": 156,
+      "chars": 4596,
+      "charsPerMinute": 293.1909393031675,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/157 阅读练习8.txt",
+      "pack": "上岸班2023_主体",
+      "number": 157,
+      "chars": 7670,
+      "charsPerMinute": 278.194887244774,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/158 阅读练习9.txt",
+      "pack": "上岸班2023_主体",
+      "number": 158,
+      "chars": 3739,
+      "charsPerMinute": 239.94232297371676,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/159 阅读练习10.txt",
+      "pack": "上岸班2023_主体",
+      "number": 159,
+      "chars": 5066,
+      "charsPerMinute": 252.5410407252679,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/160 阅读练习11.txt",
+      "pack": "上岸班2023_主体",
+      "number": 160,
+      "chars": 3257,
+      "charsPerMinute": 232.26905963242103,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/161 阅读练习13.txt",
+      "pack": "上岸班2023_主体",
+      "number": 161,
+      "chars": 2742,
+      "charsPerMinute": 256.3509950095121,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/162 阅读练习12.txt",
+      "pack": "上岸班2023_主体",
+      "number": 162,
+      "chars": 7057,
+      "charsPerMinute": 300.1373025022635,
+      "timeStamps": false
+    },
+    {
+      "path": "01_英语/02_讲义/视频转写稿/163 阅读练习14.txt",
+      "pack": "上岸班2023_主体",
+      "number": 163,
+      "chars": 6144,
+      "charsPerMinute": 284.9553075265483,
+      "timeStamps": false
+    }
+  ]
+}

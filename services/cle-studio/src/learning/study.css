@@ -18,7 +18,13 @@
   conic-gradient(from 0deg, var(--cle-fleur) 0 15%, transparent 15% 20%, var(--cle-fleur) 20% 35%, transparent 35% 40%, var(--cle-fleur) 40% 55%, transparent 55% 60%, var(--cle-fleur) 60% 75%, transparent 75% 80%, var(--cle-fleur) 80% 95%, transparent 95%);
   border-radius: 50%; box-shadow: 0 0 0 1px var(--cle-gold-soft); }
 .cle-study__timer { font: 500 14px/1.4 var(--cle-mono); color: var(--cle-gaze); font-variant-numeric: tabular-nums; }
-.cle-study__actions { display: flex; gap: 8px; }
+.cle-study__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cle-study__duration { appearance: auto; max-width: 90px; border: 1px solid var(--cle-line-strong); border-radius: 999px; padding: 6px 8px; background: var(--cle-surface); color: var(--cle-ink-2); font: 12px/1.4 var(--cle-sans); }
+.cle-study__next-step { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; flex: 1 1 100%; min-width: 0; font: 12px/1.5 var(--cle-sans); }
+.cle-study__next-label { color: var(--cle-ink); font-weight: 550; }
+.cle-study__next-description, .cle-study__mastery { color: var(--cle-ink-2); }
+.cle-study__mastery { grid-column: 1 / -1; color: var(--cle-ink-3); font-size: 11px; }
+.cle-study__duration:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 3px; }
 .cle-study__button { border: 1px solid var(--cle-line-strong) !important; border-radius: 999px !important; padding: 7px 14px !important; background: transparent !important; box-shadow: none !important; color: var(--cle-ink); font: 12px/1.4 var(--cle-sans); cursor: pointer; transition: background var(--cle-t-quick), border-color var(--cle-t-quick); }
 .cle-study__button:hover { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); }
 .cle-study__button:focus-visible, .cle-study-sheet input:focus-visible, .cle-study-sheet select:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 3px; }
@@ -68,6 +74,7 @@ html[data-cle] .chat-pane-cache__pane .cle-study__eyebrow em { display: none; }
   html[data-cle] .cle-study__summary { flex-direction: column; align-items: flex-start; gap: 6px; }
   html[data-cle] .cle-study__progress { gap: 10px 14px; }
   html[data-cle] .cle-study__streak span { margin-left: 2px; }
+  html[data-cle] .cle-study__next-step { grid-template-columns: 1fr; }
 }
 /* the pact sheet is a single dialog for the page; keep it inside the visible area on short panes */
 @media (max-height: 640px) { .cle-study-sheet { top: 12px; bottom: 12px; } }

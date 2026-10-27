@@ -80,6 +80,7 @@ test('a quiz in a new chat records review results only for old notes selected by
   store.setEnabled(active, true);
   store.prepareNotebookQuiz(active, [selected.id]);
   const card = store.present(active, {kind: 'short_answer', question: '解释这个词', note_ids: [selected.id, unselected.id]});
+  store.submit(active, {activityId: card.current.id, answer: '解释', confidence: 80});
   store.resolve(active, {activity_id: card.current.id, correct: true});
   assert.equal(store.findOwnedNote(LEARNING_NOTEBOOK_SESSION, selected.id).reviewCount, 1);
   assert.equal(store.findOwnedNote(LEARNING_NOTEBOOK_SESSION, unselected.id).reviewCount, 0);

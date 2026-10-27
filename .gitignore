@@ -7,3 +7,5 @@ dist/
 build/
 *.spec
 .build/
+design/study-desk/
+tools/study-desk/

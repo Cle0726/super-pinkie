@@ -46,6 +46,7 @@ export function mountKeys() {}
 export function mountReasoning() {}
 export function mountTranscript() {}
 export function mountPrune() {}
+export function mountViewport() {}
 `;
 async function loadMain(revision) {
   const result = await build({entryPoints: [main], bundle: true, write: false, format: 'esm',

@@ -8,6 +8,7 @@ export const LEGACY_MODULES = [
   {id: 'images', css: ['image-viewer.css'], js: ['laolao-image-viewer.js']},
   {id: 'browser', css: ['browser.css', 'laolao-material-preview.css'], js: ['laolao-link-viewer.js', 'laolao-material-preview.js']},
   {id: 'selection', js: ['laolao-selection-actions.js']},
+  {id: 'learning-inline', css: ['laolao-learning-inline.css','laolao-learning-practice.css'], js: ['laolao-learning-practice.js','laolao-learning-inline.js']},
   {id: 'learning', css: ['laolao-learning-stage.css', 'laolao-learning-library.css'], js: ['laolao-learning-stage.js', 'laolao-learning-library.js']},
   {id: 'workbench', css: ['laolao-workbench.css', 'laolao-workbench-notebook.css'], js: ['laolao-workbench.js']},
   {id: 'memory', css: ['laolao-memory.css'], js: ['laolao-memory.js']},

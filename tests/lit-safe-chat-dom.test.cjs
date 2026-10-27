@@ -93,7 +93,7 @@ test('phrases localizes Lit-owned chat labels only through their text node value
   // has to stay a node-value-only localization.
   assert.equal(run(textNode('Queued (12)', title)), '待发送（12）');
   const badge = element('chat-queue__badge', queue, 'span');
-  assert.equal(run(textNode('Steered', badge)), '已追加 · 碧琪下一步就会看到');
+  assert.equal(run(textNode('Steered', badge)), '正在确认追加');
   const steer = element('chat-queue__steer', queue, 'button');
   assert.equal(run(textNode('Steer', element('', steer))), '立即追加');
   const retry = element('chat-queue__retry', queue, 'button');
@@ -129,7 +129,8 @@ test('native chat timeline patches render through Lit templates without rewritin
   assert.doesNotMatch(patch, /replaceChildren\(|\.remove\(\)/);
   assert.doesNotMatch(resume, /(?:textContent|innerHTML|innerText)\s*=(?!=)/);
   assert.match(patch, /pinkieBuildTimeline/);
-  assert.match(patch, /return s\\`<details class="chat-timeline-overflow">/);
+  assert.match(patch, /return s\\`<details class="chat-timeline-overflow" \.open=/);
+  assert.match(patch, /pinkieTimelineView\(e\.key\)\.open\?s/);
 });
 
 function loadResumeGuard() {
