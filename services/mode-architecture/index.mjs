@@ -350,6 +350,13 @@ function failureReasonFromEvent(event = {}) {
   return [...new Set(reasons)].join(' ');
 }
 
+function startedBackgroundTask(message) {
+  if (!/^(?:toolResult|tool_result)$/i.test(String(message?.role || ''))) return false;
+  const details = message?.details;
+  if (details?.async === true && /^(?:started|running|queued)$/i.test(String(details.status || ''))) return true;
+  return /Background task started for \w+ generation\b/.test(resultText(message?.content ?? message?.result));
+}
+
 function hasIncompleteToolTurn(event = {}, reason = '') {
   // A turn that ends on ask_user is deliberately waiting for the user's
   // choice; resuming it would answer the question on the user's behalf.
@@ -360,6 +367,13 @@ function hasIncompleteToolTurn(event = {}, reason = '') {
   ));
   const lastAssistant = [...messages].reverse().find(message => message?.role === 'assistant');
   const lastMessage = messages.at(-1);
+  // image_generate / video tools hand back "Background task started" and the
+  // host yields the turn until the completion event arrives. That wait is the
+  // intended terminal state, not a missing final reply.
+  const assistantIndex = messages.lastIndexOf(lastAssistant);
+  const trailingResults = messages.slice(assistantIndex + 1)
+    .filter(message => /^(?:toolResult|tool_result)$/i.test(String(message?.role || '')));
+  if (trailingResults.length && trailingResults.every(startedBackgroundTask)) return false;
   // A transport can report success=true after returning a failed toolResult,
   // without another assistant event or a useful top-level error. Treat that
   // as an incomplete tool lane so the model immediately retries only the
@@ -1940,6 +1954,9 @@ export class CompletionIntegrityGuard {
     // Asking the user is a legitimate pause, not a delivery claim.
     const lastTool = state.tools.at(-1);
     if (lastTool && lastTool.name === ASK_USER_TOOL && !lastTool.failed) return;
+    // A started background job (image_generate, video) yields the turn until
+    // its completion event; the interim reply is not a delivery claim.
+    if (lastTool && !lastTool.failed && /Background task started for \w+ generation\b/.test(String(lastTool.output || ''))) return;
     const actionRun = isLikelyActionRequest(state.prompt);
     // Reading or summarizing an attached document needs no tool/effect proof.
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
