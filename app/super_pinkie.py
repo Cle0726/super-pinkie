@@ -766,6 +766,8 @@ def pull_and_update(log):
             log(f"==> 当前已是最新版本 ({info.get('currentVersion', 'current')})")
             return False
         log(f"==> 发现新版本 {info['version']}，正在下载并校验...")
+        for line in str(info.get("notes") or "").splitlines():
+            log(f"    · {line}")
         ready = updater.prepare()
         if not ready.get("ready"):
             log("  ⚠️ 新版本下载未完成，请稍后重试")

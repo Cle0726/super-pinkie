@@ -47,7 +47,7 @@ jobs:
           git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: desktop/windows/release-notes.md
           fail_on_unmatched_files: true
           files: dist/super-pinkie-full-*.zip
 
@@ -71,7 +71,7 @@ jobs:
         run: ./desktop/macos/build.sh
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: desktop/windows/release-notes.md
           fail_on_unmatched_files: true
           files: dist/super-pinkie-macos-*.zip
 
@@ -115,7 +115,7 @@ jobs:
           "$portableHash  $portable" | Set-Content -LiteralPath "dist\$portable.sha256" -Encoding ascii -NoNewline
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: desktop/windows/release-notes.md
           fail_on_unmatched_files: true
           files: |
             dist/super-pinkie-windows-*.exe

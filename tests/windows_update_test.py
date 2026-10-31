@@ -10,6 +10,7 @@ from unittest import mock
 from app.windows_desktop import (
     UPDATE_API_URL,
     WindowsUpdater,
+    release_notes_text,
     release_update,
     update_health_token_from_argv,
     version_tuple,
@@ -74,6 +75,26 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertEqual("2.6.0", selected["version"])
         release["assets"][1]["browser_download_url"] = "https://example.com/not-trusted"
         self.assertIsNone(release_update(release, "2.5.1"))
+
+    def test_update_dialog_receives_user_facing_notes_without_the_commit_trailer(self):
+        body = (
+            "## 这次更新了什么\n\n"
+            "- 图标换成清晰的新图。\n"
+            "- 名字统一写成碧琪。\n\n"
+            "**Full Changelog**: https://github.com/Cle0726/super-pinkie/compare/v2.5.20...v2.5.22\n"
+        )
+        release = {
+            "tag_name": "v2.5.22",
+            "body": body,
+            "assets": [
+                {"name": "super-pinkie-windows-2.5.22.exe", "browser_download_url": "https://github.com/Cle0726/super-pinkie/releases/download/v2.5.22/app.exe"},
+                {"name": "super-pinkie-windows-2.5.22.exe.sha256", "browser_download_url": "https://github.com/Cle0726/super-pinkie/releases/download/v2.5.22/app.exe.sha256"},
+            ],
+        }
+        selected = release_update(release, "2.5.20")
+        self.assertEqual("图标换成清晰的新图。\n名字统一写成碧琪。", selected["notes"])
+        self.assertNotIn("Full Changelog", selected["notes"])
+        self.assertEqual("", release_notes_text(None))
 
     def test_download_is_verified_and_staged_outside_user_content(self):
         payload = b"pinkie-update" * 90000
