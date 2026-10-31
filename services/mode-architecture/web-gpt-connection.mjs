@@ -31,7 +31,7 @@ function stateRoot() {
 
 function assertSession(sessionKey) {
   const key = String(sessionKey || '');
-  if (!VALID_SESSION.test(key)) throw new Error('缺少有效的 Li An 会话标识');
+  if (!VALID_SESSION.test(key)) throw new Error('缺少有效的碧琪会话标识');
   return key;
 }
 
@@ -167,7 +167,7 @@ export class WebGptConnectionManager {
   workspace(sessionKey, requestedWorkspace = '', {allowUnbound = false} = {}) {
     const workspace = boundWorkspaceFor(sessionKey, requestedWorkspace, this.bindingFile);
     if (!workspace && !allowUnbound) {
-      throw new Error('当前会话未绑定用户项目；网页 GPT 不会读取 Li An 记忆或内部工作区');
+      throw new Error('当前会话未绑定用户项目；网页 GPT 不会读取碧琪记忆或内部工作区');
     }
     return workspace;
   }

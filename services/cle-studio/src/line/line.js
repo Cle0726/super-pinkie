@@ -1,4 +1,4 @@
-// Li An in line. What you see is the artist's drawing itself (the ink, every change of weight intact);
+// 碧琪 in line. What you see is the artist's drawing itself (the ink, every change of weight intact);
 // the strokes traced from it by tools/lineart.py are only an invisible pen path — a mask that uncovers the
 // drawing in the order a hand would draw it. The eyes light up, sapphire, once the drawing is finished.
 const NS = 'http://www.w3.org/2000/svg';

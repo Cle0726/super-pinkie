@@ -1041,8 +1041,8 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processRows: collapseTimelineRows(steps, maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
-      : live ? 'Li An 正在干活'
-        : processInterrupted ? '这一轮停下来了' : 'Li An 的工作过程',
+      : live ? '碧琪正在干活'
+        : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',

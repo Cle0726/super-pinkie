@@ -402,7 +402,7 @@ class PartyTests(unittest.TestCase):
             self.assertNotIn('老板', prompt)
 
     def test_party_identity_is_name_only_and_preserves_task_writing_requirements(self):
-        expected = {'pinkie':'Li An', 'codex':'紫悦', 'openclaw':'云宝',
+        expected = {'pinkie':'碧琪', 'codex':'紫悦', 'openclaw':'云宝',
                     'claude':'珍奇', 'gemini':'柔柔', 'grok':'苹果嘉儿'}
         self.assertEqual(expected, party.CHARACTERS)
         self.assertEqual(party.IDENTITIES, setup.IDENTITIES)

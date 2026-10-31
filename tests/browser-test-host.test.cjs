@@ -150,13 +150,13 @@ test('native window chrome and voice entry no longer use the old pink identity',
   assert.match(border.slice(0, 400), /CleBrowserPalette\.line\(nightAppearance\)/, 'border follows the token line');
   assert.doesNotMatch(launcher, /NSColor\.systemPink/);
 
-  // Visible voice-entry copy is Li An now. macOS permission strings keep the
+  // Visible voice-entry copy is 碧琪 now. macOS permission strings keep the
   // bundle's real name on purpose: renaming them would send the user looking for
   // a switch that does not exist in System Settings.
   assert.doesNotMatch(launcher, /"碧琪听着呢"/);
-  assert.match(launcher, /"Li An 听着呢"/);
+  assert.match(launcher, /"碧琪听着呢"/);
   assert.doesNotMatch(launcher, /碧琪还没有麦克风权限/);
-  assert.match(launcher, /Li An 还没有麦克风权限/);
+  assert.match(launcher, /碧琪还没有麦克风权限/);
   // Those permission strings must still name the app bundle the OS shows.
   assert.match(launcher, /允许超級碧琪使用麦克风/);
 });

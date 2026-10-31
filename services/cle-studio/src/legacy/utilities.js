@@ -84,7 +84,7 @@ export function mountUtilities(host, signal) {
   space.append(node('h3', `${S}__group-title`, '空间'));
   const spaceRow = node('div', `${S}__actions`);
   for (const [label, port, handler, note] of [
-    ['派对空间', 18889, 'laolaoParty', '和 Li An 的几个分身一起聊'],
+    ['派对空间', 18889, 'laolaoParty', '和碧琪的几个分身一起聊'],
     ['灵感圆桌', 18891, 'laolaoRoundtable', '让几个模型互相接话'],
   ]) {
     const link = node('a', `${S}__action`, label);

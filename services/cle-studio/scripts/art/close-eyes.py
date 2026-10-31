@@ -1,4 +1,4 @@
-"""Close Li An's eyes on a cut-out painting (for the blink and sleep frames).
+"""Close 碧琪's eyes on a cut-out painting (for the blink and sleep frames).
 
 usage: close-eyes.py IN.png OUT.png [--half]
 The glowing eyes are found by colour, painted over with the fur around them (inpaint), and a lid

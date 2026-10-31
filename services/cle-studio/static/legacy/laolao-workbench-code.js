@@ -57,7 +57,7 @@
       this.id = result.id; this.label = result.label; byId.set(this.id, this);
       const rootUri = fileUri(this.root);
       const init = await this.request('initialize', {
-        processId: null, clientInfo: {name: 'Li An 工作台', version: '1'}, locale: 'zh-cn', rootUri, rootPath: this.root,
+        processId: null, clientInfo: {name: '碧琪工作台', version: '1'}, locale: 'zh-cn', rootUri, rootPath: this.root,
         workspaceFolders: [{uri: rootUri, name: this.root.split('/').pop()}],
         capabilities: {
           workspace: {configuration: true, workspaceFolders: true, applyEdit: true, workspaceEdit: {documentChanges: true}, didChangeConfiguration: {dynamicRegistration: true}},
@@ -608,7 +608,7 @@
     let sel = editor.getSelection();
     if (sel.isEmpty()) sel = new monaco.Selection(sel.startLineNumber, 1, sel.startLineNumber, model.getLineMaxColumn(sel.startLineNumber));
     const node = el('div', 'pk-wb-iedit');
-    const input = el('input', 'pk-wb-iedit__input'); input.placeholder = '告诉 Li An 要怎么改选中的代码…（Enter 修改，Esc 取消）'; input.spellcheck = false;
+    const input = el('input', 'pk-wb-iedit__input'); input.placeholder = '告诉碧琪要怎么改选中的代码…（Enter 修改，Esc 取消）'; input.spellcheck = false;
     const go = el('button', 'pk-wb-iedit__go'); go.type = 'button'; go.append(icon('sparkle'), el('span', '', '修改'));
     node.append(icon('edit'), input, go);
     const widget = {
@@ -638,7 +638,7 @@
         const end = {lineNumber: sel.startLineNumber + lines.length - 1, column: lines.length > 1 ? lines.at(-1).length + 1 : sel.startColumn + lines[0].length};
         const changed = editor.createDecorationsCollection([{range: new monaco.Range(sel.startLineNumber, 1, end.lineNumber, 1), options: {isWholeLine: true, className: 'pk-wb-iedit-done'}}]);
         setTimeout(() => changed.clear(), 2400);
-        wb.toast('Li An 改好了', {label: '撤销', run: () => { editor.focus(); editor.trigger('pinkie', 'undo'); }});
+        wb.toast('碧琪改好了', {label: '撤销', run: () => { editor.focus(); editor.trigger('pinkie', 'undo'); }});
       } catch (error) {
         node.classList.remove('is-busy'); input.disabled = false; go.disabled = false; input.focus();
         wb.toast('行内修改失败：' + error.message);
@@ -761,7 +761,7 @@
       if (!rawPath) { await pickScript(context); return; }
       const path = projectRunPath(rawPath, tab, context);
       if (wb.basename(path) === 'package.json') { await pickScript(context); return; }
-      if (!runCommand(path)) throw new Error('不知道怎么运行「' + wb.basename(path) + '」，可以在终端里自己跑，或者让 Li An 来。');
+      if (!runCommand(path)) throw new Error('不知道怎么运行「' + wb.basename(path) + '」，可以在终端里自己跑，或者让碧琪来。');
       await sendRun(async () => runCommand(path, await runManifest(path, context)), context);
     } catch (error) { wb.toast('未运行：' + (error?.message || String(error))); }
     finally { setRunBusy(false); }
@@ -811,7 +811,7 @@
     if (!editor || editor.__pkCode) return;
     editor.__pkCode = true;
     editor.updateOptions({inlineSuggest: {enabled: true, showToolbar: 'onHover'}, quickSuggestions: {other: true, comments: false, strings: true}, suggestOnTriggerCharacters: true, parameterHints: {enabled: true}, 'semanticHighlighting.enabled': true});
-    editor.addAction({id: 'pinkie.inlineEdit', label: '让 Li An 修改选中的代码（行内）', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI], contextMenuGroupId: '0_pinkie', contextMenuOrder: 3, run: inlineEdit});
+    editor.addAction({id: 'pinkie.inlineEdit', label: '让碧琪修改选中的代码（行内）', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI], contextMenuGroupId: '0_pinkie', contextMenuOrder: 3, run: inlineEdit});
     editor.addAction({id: 'pinkie.run', label: '运行当前文件', keybindings: [monaco.KeyCode.F5, monaco.KeyMod.WinCtrl | monaco.KeyMod.Alt | monaco.KeyCode.KeyN], contextMenuGroupId: '1_run', contextMenuOrder: 1, run: runActive});
     editor.addAction({id: 'pinkie.aiTrigger', label: '让 AI 补全这里', keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.Backslash], run: () => editor.trigger('pinkie', 'editor.action.inlineSuggest.trigger', {})});
   }

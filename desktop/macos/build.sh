@@ -339,7 +339,7 @@ if [[ "$CLE_BRAND" == 1 ]]; then
       -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleIconFile CLeAppIcon" \
       -c "Add :CLEBrand string cle" "$CONTENTS/Info.plist"
   for key in $($PB -c Print "$CONTENTS/Info.plist" | sed -n 's/^ *\(NS[A-Za-z]*UsageDescription\) = .*/\1/p'); do
-    value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/Li An/g')"
+    value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g')"
     $PB -c "Set :$key $value" "$CONTENTS/Info.plist"
   done
 fi

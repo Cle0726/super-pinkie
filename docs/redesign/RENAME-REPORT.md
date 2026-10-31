@@ -1,4 +1,4 @@
-# Rename report — Li An and the five modes
+# Rename report — 碧琪 and the five modes
 
 Branch `oc/rename`, worktree `~/release-superpinkie/wt/rename`.
 Scope: the new version paths only (`services/cle-studio/**` excluding vendor folders,
@@ -6,17 +6,17 @@ Scope: the new version paths only (`services/cle-studio/**` excluding vendor fol
 `services/roundtable/**`, `services/tts/**`, `services/messaging-connect/**`,
 `services/wechat-connect/**`, `patch/**`) plus the tests that assert the old text.
 
-## 1. Character: 碧琪 → Li An (male), product name → C.le.
+## 1. Character: 碧琪 → 碧琪 (male), product name → C.le.
 
-`Li An` keeps its Latin spelling with a space. Inside Chinese sentences it is
-written with spaces around it (`给 Li An 发消息`), never in front of Chinese
-punctuation (`还没连上 Li An，稍等`). Where the text referred to the character with
+`碧琪` keeps its Latin spelling with a space. Inside Chinese sentences it is
+written with spaces around it (`给碧琪发消息`), never in front of Chinese
+punctuation (`还没连上碧琪，稍等`). Where the text referred to the character with
 `她`, it now says `他`.
 
 | File | Visible occurrences changed |
 |---|---|
 | `services/cle-studio/openclaw.plugin.json` | 1 (manifest description) |
-| `services/cle-studio/package.json` | 2 (`超級碧琪` → C.le., name → Li An) |
+| `services/cle-studio/package.json` | 2 (`超級碧琪` → C.le., name → 碧琪) |
 | `services/cle-studio/static/legacy/laolao-ask-user.js` | 5 |
 | `services/cle-studio/static/legacy/laolao-ask-user.css` | 1 |
 | `services/cle-studio/static/legacy/laolao-capabilities.js` | 15 (incl. `她` → `他`) |
@@ -109,12 +109,12 @@ The French halves are never shown in these paths — the only French labels live
 ## Unsure / worth a second look
 
 1. The agent persona templates in `services/mode-architecture/setup.py` still call the user
-   "先生" and the character now says "自称只用 Li An". That reads fine, but if the male
+   "先生" and the character now says "自称只用碧琪". That reads fine, but if the male
    character should address the user differently this is the file to change.
-2. `services/cle-studio/static/legacy/laolao-web-gpt-collab.js` says "Li An 聊天、项目、权限…",
+2. `services/cle-studio/static/legacy/laolao-web-gpt-collab.js` says "碧琪聊天、项目、权限…",
    i.e. the mode names were already spelled out as common nouns there. I did not rewrite them
    to 雅叙 because they read as concepts, not mode labels — say the word if they should change.
-3. `laolao-companion.css` still ends the menu headings `Li An 粉` (colour), a leftover of the
+3. `laolao-companion.css` still ends the menu headings `碧琪粉` (colour), a leftover of the
    pink theme name. It is a design token description, so I left it.
 4. Party/roundtable still *are* a pony ensemble in the old UI; only the assistant was renamed.
    If the party cast should also be de-ponyfied, that is a separate content task.

@@ -14,11 +14,11 @@ Only when the user is idle. Back up first: `~/.openclaw` (config, agents, worksp
 - [ ] Patches: `patch/apply-all.mjs` (regenerates .br/.gz + asset-manifest).
 
 ## Character & modes
-- [ ] `agents.entries.*.identity`: name `Li An`, emoji 🐈‍⬛, avatar `avatars/li-an.png` (copy into each workspace),
+- [ ] `agents.entries.*.identity`: name `碧琪`, emoji 🐈‍⬛, avatar `avatars/li-an.png` (copy into each workspace),
       theme text per mode; keep the user's 【执行准则】 suffix in main's theme verbatim.
 - [ ] Workspaces (not unrestricted): SOUL.md, IDENTITY.md, AGENTS.md, AESTHETICS.md, persona/* from `personas/`.
       The user's 「桌面自动化执行指令」 section must stay byte-identical (verified on staging).
-- [ ] `services/mode-architecture` → live extension (renamed strings, learning pact, ask prefix 【回答 Li An 的提问】).
+- [ ] `services/mode-architecture` → live extension (renamed strings, learning pact, ask prefix 【回答碧琪的提问】).
 
 ## Brand
 - [ ] App icon: replace `Contents/Resources/PinkieAppIcon.icns` with `ui/assets/CLeAppIcon.icns` (same file name, so

@@ -77,7 +77,7 @@ test('selection and question-card saves prepare recall questions without rewriti
   hooks.hideControlMessages();
   assert.deepEqual(chatGroups.map(node => node.hiddenControl), [true, true, false]);
   assert.equal(chatGroups[0].textContent, '[[CLEKK_NOTE_LIGHT_V1]] old request');
-  hooks.state.selectionText = 'put off = 推迟'; hooks.state.selectionLabel = 'Li An 回答';
+  hooks.state.selectionText = 'put off = 推迟'; hooks.state.selectionLabel = '碧琪回答';
   await hooks.saveSelection();
   hooks.state.remote = {current: {topic: '知识点', result: {keyPoint: 'take off = 起飞'}}};
   await hooks.saveCurrentKeyPoint(element());

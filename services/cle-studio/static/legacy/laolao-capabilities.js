@@ -1,6 +1,6 @@
 /* laolao-capabilities:v2 —— 设置页里的「定时任务」和「连接器」，以及输入框旁的「深度研究」开关
  *
- * 用的是 OpenClaw 自带的调度器（cron.*）和 MCP 登记（pinkie.connectors.*），这里只是 Li An 风格的外壳：
+ * 用的是 OpenClaw 自带的调度器（cron.*）和 MCP 登记（pinkie.connectors.*），这里只是碧琪风格的外壳：
  * 和设置页其它卡片同一套写法（图标标题、圆角选项、粉色按钮），不出现「MCP」「会话 ID」这类工程词。
  * 推送对象从已有的微信 / 飞书 / QQ 聊天里取（pinkie.cron.targets），不用先生手抄 ID。 */
 (() => {
@@ -9,7 +9,7 @@
   const S = 'pinkie-user-settings__';
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const request = (name, params = {}, timeout = 20000) => typeof window.__laolaoSidebar?.gwRequest === 'function'
-    ? window.__laolaoSidebar.gwRequest(name, params, timeout) : Promise.reject(new Error('还没连上 Li An，稍等一下再试。'));
+    ? window.__laolaoSidebar.gwRequest(name, params, timeout) : Promise.reject(new Error('还没连上碧琪，稍等一下再试。'));
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles';
   const ZONE_NAME = {'America/Los_Angeles': '洛杉矶时间', 'America/New_York': '纽约时间', 'Asia/Shanghai': '北京时间', 'Asia/Hong_Kong': '香港时间', 'Asia/Taipei': '台北时间', 'Asia/Tokyo': '东京时间', 'Europe/London': '伦敦时间', UTC: 'UTC'};
   const zoneName = (tz) => ZONE_NAME[tz] || tz;
@@ -112,7 +112,7 @@
   ];
 
   function cronPanel(parent) {
-    const box = card(parent, '', '定时任务', '让 Li An 按时去做一件事，做完把结果推给你。也可以直接在聊天里说「每天早上 8 点把天气发我飞书」。');
+    const box = card(parent, '', '定时任务', '让碧琪按时去做一件事，做完把结果推给你。也可以直接在聊天里说「每天早上 8 点把天气发我飞书」。');
     box.id = 'pinkie-schedules';
     const list = node('div', 'pk-cap__list'), sheet = node('div', 'pk-cap__sheet'), bar = node('div', 'pk-cap__bar');
     const out = status(box);
@@ -120,7 +120,7 @@
     let editing = null, targets = [], jobsCache = [];
 
     // 表单
-    const what = input(line(sheet, '要 Li An 做什么'), 'textarea', '', '例如：查一下今天的天气，告诉我要不要带伞。');
+    const what = input(line(sheet, '要碧琪做什么'), 'textarea', '', '例如：查一下今天的天气，告诉我要不要带伞。');
     const whenBody = line(sheet, '什么时候');
     const kind = choices(whenBody, [['daily', '每天'], ['weekly', '每周'], ['every', '每隔一段时间'], ['once', '只一次'], ['cron', '自定义']], 'daily', () => fields());
     const detail = node('div', 'pk-cap__when'); whenBody.append(detail);
@@ -135,7 +135,7 @@
     const tzText = node('span'), tz = input(tzRow, 'text', zone); tz.hidden = true;
     const tzEdit = textButton('换时区', () => { tz.hidden = false; tzEdit.hidden = true; tz.focus(); });
     tzRow.prepend(tzText); tzRow.append(tzEdit);
-    const who = choices(line(sheet, '交给谁做', '用哪个模式的 Li An'), MODES, 'main');
+    const who = choices(line(sheet, '交给谁做', '用哪个模式的碧琪'), MODES, 'main');
     const pushBody = line(sheet, '做完推送到');
     let push = choices(pushBody, [['none', '不推送']], 'none', () => fields());
     const manual = node('div', 'pk-cap__inline pk-cap__manual'); pushBody.append(manual);
@@ -230,7 +230,7 @@
     }
     const save = button('开始定时', attempt(sheetStatus, async () => {
       const text = what.value.trim();
-      if (!text) throw new Error('先写下要 Li An 做什么。');
+      if (!text) throw new Error('先写下要碧琪做什么。');
       const label = name.value.trim() || text.replace(/\s+/g, ' ').slice(0, 18);
       const job = editing && jobsCache.find((j) => j.id === editing);
       const patch = {agentId: who.get(), schedule: schedule(), delivery: delivery(),
@@ -243,7 +243,7 @@
         await request('cron.add', {...patch, name: label, enabled: true, sessionTarget: 'isolated', wakeMode: 'now', deleteAfterRun: kind.get() === 'once'});
       }
       const edited = !!job;
-      close(); await load(); say(out, edited ? '改好了。' : '定好了，到点 Li An 会去做。', 'ok');
+      close(); await load(); say(out, edited ? '改好了。' : '定好了，到点碧琪会去做。', 'ok');
     }, '正在保存…'), 'primary');
     actions.append(save, textButton('取消', close));
 
@@ -266,7 +266,7 @@
       main.append(node('small', 'pk-job__meta', meta.join(' · ')));
       const ops = node('div', 'pk-job__ops');
       ops.append(
-        textButton('现在做一次', attempt(out, async () => { await request('cron.run', {id: job.id, mode: 'force'}); say(out, '「' + title + '」已经开始了，做完会出现在记录里。', 'ok'); }, '正在叫 Li An…')),
+        textButton('现在做一次', attempt(out, async () => { await request('cron.run', {id: job.id, mode: 'force'}); say(out, '「' + title + '」已经开始了，做完会出现在记录里。', 'ok'); }, '正在叫碧琪…')),
         ...(job.payload?.kind === 'agentTurn' ? [textButton('修改', () => open(job))] : []),
         textButton('记录', attempt(out, async () => { await history(job, r); say(out, ''); }, '正在读取记录…')),
         textButton('删除', () => confirmInline(r, '删掉「' + title + '」？', '删除', attempt(out, async () => { await request('cron.remove', {id: job.id}); await load(); say(out, '删掉了。', 'ok'); }))),
@@ -338,7 +338,7 @@
   }
 
   function connectorPanel(parent) {
-    const box = card(parent, '', '连接器', '把你自己的账号和资料接给 Li An，他就能直接去查、去读。密钥只存在这台电脑上。');
+    const box = card(parent, '', '连接器', '把你自己的账号和资料接给碧琪，他就能直接去查、去读。密钥只存在这台电脑上。');
     box.id = 'pinkie-connectors';
     const list = node('div', 'pk-cap__list'), grid = node('div', 'pk-cap__grid'), sheet = node('div', 'pk-cap__sheet');
     const out = status(box);
@@ -383,9 +383,9 @@
         token = input(body, 'password', '', 'ghp_… 或 github_pat_…'); token.autocomplete = 'new-password'; token.classList.add('pk-cap__mono');
         if (item?.source) { const a = node('a', 'pk-cap__source', '怎么生成令牌 ↗'); a.href = item.source; a.target = '_blank'; a.rel = 'noopener noreferrer'; body.append(a); }
       } else if (recipe.kind === 'oauth') {
-        sheet.append(node('p', 'pk-cap__note', '点「接入」后会打开 Notion 的登录页，你选好要给 Li An 看的页面，再把页面给的授权码贴回来就行。'));
+        sheet.append(node('p', 'pk-cap__note', '点「接入」后会打开 Notion 的登录页，你选好要给碧琪看的页面，再把页面给的授权码贴回来就行。'));
       } else if (recipe.kind === 'folder') {
-        const body = line(sheet, '哪个文件夹', 'Li An 只能读，不会改');
+        const body = line(sheet, '哪个文件夹', '碧琪只能读，不会改');
         const rowEl = node('div', 'pk-cap__inline'); body.append(rowEl);
         folder = input(rowEl, 'text', '', '/Users/…/Documents/资料');
         rowEl.append(button('选择…', () => pickFolder(folder), 'small'));
@@ -420,7 +420,7 @@
         await load();
         sheet.hidden = true; current = null;
         grid.querySelectorAll('.pk-cap__recipe').forEach((b) => b.classList.remove('is-selected'));
-        say(out, '接好了「' + recipe.title + '」，新开的对话里 Li An 就能用。', 'ok');
+        say(out, '接好了「' + recipe.title + '」，新开的对话里碧琪就能用。', 'ok');
         const server = servers.find((x) => x.name === name);
         if (server?.auth === 'oauth') list.querySelector(`[data-name="${CSS.escape(name)}"] [data-login]`)?.click();
       }, '正在接入…'), 'primary');
@@ -472,7 +472,7 @@
         login.dataset.login = '';
         ops.append(login);
       }
-      ops.append(textButton('移除', () => confirmInline(r, '移除「' + server.name + '」？Li An 以后就用不了它了。', '移除', attempt(out, async () => { await request('pinkie.connectors.remove', {name: server.name}); await load(); say(out, '移除了。', 'ok'); }))));
+      ops.append(textButton('移除', () => confirmInline(r, '移除「' + server.name + '」？碧琪以后就用不了它了。', '移除', attempt(out, async () => { await request('pinkie.connectors.remove', {name: server.name}); await load(); say(out, '移除了。', 'ok'); }))));
       main.append(ops);
       const sw = toggle(!!server.enabled, (server.enabled ? '暂停' : '启用') + '「' + server.name + '」', attempt(out, async (on) => { await request('pinkie.connectors.toggle', {name: server.name, enabled: on}); await load(); say(out, on ? '已启用，新开的对话里生效。' : '已暂停。', 'ok'); }));
       r.append(tile(recipe), main, sw);

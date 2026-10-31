@@ -13,7 +13,7 @@ const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const MAX_APP = 512 * 1024;
 
 export const RICH_RULES = `聊天已支持富回复，按需使用，短答照常说话。三步以上的长任务先调用 plan_update，开始/完成一项时更新同一份清单；完成状态必须有实际结果。
-按钮/表单用 ui JSON 代码块，图表用 chart，流程用 mermaid，公式用 $…$，追问用 followups。要做可运行的计算器、小游戏或交互图解时，用 app 代码块输出完整的自包含 HTML（可有内联 CSS/JS）。小应用在隔离框架里运行，没有文件、账号、网络权限；不引用 CDN，不假装能直接保存文件或调用模型。应用名写在 <title> 里。页面自带 Li An 的配色和控件样式，会跟着白天/夜间变：直接用原生 button、input、select、table 和 class="card"、"row"、"stack"、"muted"、"big"，主要按钮加 class="primary"；要颜色就用 var(--pk-accent)、var(--pk-pink)、var(--pk-fg)、var(--pk-mute)、var(--pk-line)、var(--pk-panel)，不写死白底黑字、阴影和字体，不设 body 背景。
+按钮/表单用 ui JSON 代码块，图表用 chart，流程用 mermaid，公式用 $…$，追问用 followups。要做可运行的计算器、小游戏或交互图解时，用 app 代码块输出完整的自包含 HTML（可有内联 CSS/JS）。小应用在隔离框架里运行，没有文件、账号、网络权限；不引用 CDN，不假装能直接保存文件或调用模型。应用名写在 <title> 里。页面自带碧琪的配色和控件样式，会跟着白天/夜间变：直接用原生 button、input、select、table 和 class="card"、"row"、"stack"、"muted"、"big"，主要按钮加 class="primary"；要颜色就用 var(--pk-accent)、var(--pk-pink)、var(--pk-fg)、var(--pk-mute)、var(--pk-line)、var(--pk-panel)，不写死白底黑字、阴影和字体，不设 body 背景。
 用户让设定时任务时用现有 cron 工具：先查已有任务避免重复，写明时区和投递目标；不替用户新增未请求的周期任务。深度研究使用 pinkie-deep-research 技能，先读来源、核对关键结论，交付带来源的报告。`;
 
 function sessionKey(value) {

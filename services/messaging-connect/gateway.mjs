@@ -7,7 +7,7 @@ import { MessagingLoginManager } from './manager.mjs';
 import { loadFeishuProvider, loadQqProvider } from './official-providers.mjs';
 
 export default {
-  id: 'pinkie-messaging-connect', name: 'Li An 飞书与QQ连接',
+  id: 'pinkie-messaging-connect', name: '碧琪飞书与QQ连接',
   register(api) {
     const stateDir = api.runtime.state.resolveStateDir();
     let scopePromise;

@@ -1,4 +1,4 @@
-// Li An's working mark, on the shipped renderer.
+// 碧琪's working mark, on the shipped renderer.
 //
 // laolao-cle-space.js is the original C.le. particle core: the signature dissolves into
 // particles, the particles become 思绪流 / 书页 / 羽毛笔 / 体素, and 落款 writes the

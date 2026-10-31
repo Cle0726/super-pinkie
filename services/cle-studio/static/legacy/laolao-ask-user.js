@@ -1,5 +1,5 @@
-/* laolao-ask-user：Li An 的主动提问卡。
-   Li An 调用 ask_user 工具后，在输入框正上方弹出一张选项卡：2–4 个选项可直接点，
+/* laolao-ask-user：碧琪的主动提问卡。
+   碧琪调用 ask_user 工具后，在输入框正上方弹出一张选项卡：2–4 个选项可直接点，
    也可以选“其他”自己写。点选后，答案经原生输入框作为一条普通消息发回去，
    原生的发送、排队、追加逻辑全部照旧。
 
@@ -11,7 +11,7 @@
   if (window.__laolaoAskUser) return;
 
   const MARKER = "[[PINKIE_ASK_V1]]";
-  const ANSWER_PREFIX = "【回答 Li An 的提问】";
+  const ANSWER_PREFIX = "【回答碧琪的提问】";
   const STICKER = "/cle/static/art/avatar.webp?v=20261019";
   const STORE = "laolao:ask-user:closed:v1";
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -120,11 +120,11 @@
     const multi = record.multiSelect === true;
     card = el("section", "laolao-ask" + (fromHistory ? " is-restored" : ""));
     card.setAttribute("role", "dialog");
-    card.setAttribute("aria-label", "Li An 的提问");
+    card.setAttribute("aria-label", "碧琪的提问");
 
     const head = el("header", "laolao-ask__head");
     const face = el("img", "laolao-ask__face"); face.src = STICKER; face.alt = "";
-    const who = el("span", "laolao-ask__who", "Li An 想问你");
+    const who = el("span", "laolao-ask__who", "碧琪想问你");
     head.append(face, who);
     if (record.header) head.append(el("span", "laolao-ask__chip", record.header));
     const later = el("button", "laolao-ask__later", "稍后再说"); later.type = "button";

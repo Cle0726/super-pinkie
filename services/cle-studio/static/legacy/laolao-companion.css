@@ -1,11 +1,11 @@
-/* 趴在输入框上的 Li An + 菜单 + 点缀。
+/* 趴在输入框上的碧琪 + 菜单 + 点缀。
    关键约定：
    - 猫锚在输入框 shell 的上沿偏右，底边固定（bottom: calc(100% - 9px)）；
    - 猫不压正文：--pinkie-safe 由脚本按实际高度写入，聊天内容末尾留出这段空间；
    - 五状态各自有可辨认的动作（CSS 只做 fallback 的轻动作；rig 在位时动作在画布里）。 */
 
 .pinkie-buddy {
-  --buddy-w: 78px;               /* Li An 取自用户的参考油画（坐姿），所有状态都坐着，共用 366×438 画框，底边对齐 */
+  --buddy-w: 78px;               /* 碧琪取自用户的参考油画（坐姿），所有状态都坐着，共用 366×438 画框，底边对齐 */
   --buddy-ratio: 366 / 438;
   position: absolute;
   z-index: 40;
@@ -17,7 +17,7 @@
   pointer-events: none;
   transition: right .25s ease, opacity .2s ease, transform .25s ease, visibility .2s;
 }
-/* 输入框的弹层（模型、设置、附件、容量）往上展开时，Li An先低头躲开，别挡住菜单 */
+/* 输入框的弹层（模型、设置、附件、容量）往上展开时，碧琪先低头躲开，别挡住菜单 */
 .agent-chat__composer-shell:has(details[open], .chat-settings-popover--open, .chat-controls__model[open]) > .pinkie-buddy {
   opacity: 0; visibility: hidden; transform: translateY(10px);
 }

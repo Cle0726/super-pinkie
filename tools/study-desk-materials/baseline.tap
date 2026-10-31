@@ -1968,7 +1968,7 @@ test at tests/browser-entry-panes.test.cjs:189:1
 ✖ without a native bridge the entry advertises an in-page preview (2.305292ms)
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /页内预览/. Input:
   
-  '打开浏览器（与 Li An 共用）'
+  '打开浏览器（与碧琪共用）'
   
       at TestContext.<anonymous> (/Users/Admin/release-superpinkie/repo/tests/browser-entry-panes.test.cjs:193:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -1979,7 +1979,7 @@ test at tests/browser-entry-panes.test.cjs:189:1
       at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
     generatedMessage: true,
     code: 'ERR_ASSERTION',
-    actual: '打开浏览器（与 Li An 共用）',
+    actual: '打开浏览器（与碧琪共用）',
     expected: /页内预览/,
     operator: 'match',
     diff: 'simple'

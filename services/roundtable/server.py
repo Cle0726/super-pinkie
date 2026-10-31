@@ -39,7 +39,7 @@ TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
 MODEL_LOCK = threading.Lock()
 MEMBERS = {
-    'pinkie': {'name': 'Li An', 'role': '主持与破题', 'scene': 'Li An 把新的问题放到了圆桌中央。'},
+    'pinkie': {'name': '碧琪', 'role': '主持与破题', 'scene': '碧琪把新的问题放到了圆桌中央。'},
     'twilight': {'name': '紫悦', 'role': '分析与结构', 'scene': '紫悦翻开笔记，开始梳理线索。'},
     'applejack': {'name': '苹果嘉儿', 'role': '事实与可行性', 'scene': '苹果嘉儿轻轻敲了敲桌面，核对实际条件。'},
     'rainbow': {'name': '云宝', 'role': '反方与压力测试', 'scene': '云宝绕着方案飞了一圈，专挑薄弱处看。'},

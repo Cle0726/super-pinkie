@@ -155,7 +155,7 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
     'pinkie.learning.vocab.settings.get', 'pinkie.learning.vocab.settings.set', 'pinkie.learning.vocab.today', 'pinkie.learning.vocab.update',
   ]);
   for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /Li An 学习笔记/);
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /碧琪学习笔记/);
   assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /题目消息只放题干、选项和必要的生词注释/);
@@ -243,7 +243,7 @@ test('light organization splits fields, suggests tags, and preserves both origin
   assert.deepEqual(organized.tags, ['词组', '固定搭配']);
   const englishOnly = store.saveNote(sessionKey, {content: 'back up'}).note;
   const supplemented = store.organizeLightNote(sessionKey, englishOnly.id, {supplementalMeaning: '备份；支持'}).note;
-  assert.equal(supplemented.supplementalMeaning, 'Li An 补充：备份；支持');
+  assert.equal(supplemented.supplementalMeaning, '碧琪补充：备份；支持');
   assert.equal(supplemented.original, 'back up');
 });
 

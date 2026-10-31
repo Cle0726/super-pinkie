@@ -3,7 +3,7 @@
 分支 `oc/sidebar`，网关 profile `cle-shell`（端口 19989），模块 id `sidebar`。
 原文件：`ui/injections/laolao-sidebar.js`、`laolao-session-list.js`、`laolao-sidebar.css`、
 `laolao-sidebar-surface.css`、`laolao-sidebar-autohide.js`；移植件在 `services/cle-studio/static/legacy/`（同名）。
-角色：Li An（他）；模式：雅叙 chat / 营造 project / 堇思 thinking / 习作 learning / 挥洒 unrestricted；
+角色：碧琪（他）；模式：雅叙 chat / 营造 project / 堇思 thinking / 习作 learning / 挥洒 unrestricted；
 只使用 `--cle-gaze`（蓝宝石）与 `--cle-gold`（金）两个强调色。
 
 一句话结论：**原生 `.sidebar-brand` 保留，其下挂载了原版侧栏的全部入口**（概览/更多、新会话、

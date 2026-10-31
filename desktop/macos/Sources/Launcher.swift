@@ -709,7 +709,7 @@ private final class NativeDictationController {
             case .notDetermined:
                 AVCaptureDevice.requestAccess(for: .audio) { allowed in
                     DispatchQueue.main.async {
-                        completion(allowed, allowed ? nil : "Li An 还没有麦克风权限。")
+                        completion(allowed, allowed ? nil : "碧琪还没有麦克风权限。")
                     }
                 }
             default:
@@ -737,7 +737,7 @@ private final class NativeDictationController {
 
     private func beginRecording() {
         guard let recognizer, recognizer.isAvailable else {
-            send(state: "error", message: "语音识别暂时不可用，Li An 晚点再试试。")
+            send(state: "error", message: "语音识别暂时不可用，碧琪晚点再试试。")
             return
         }
 
@@ -745,7 +745,7 @@ private final class NativeDictationController {
         task = nil
         request = SFSpeechAudioBufferRecognitionRequest()
         guard let request else {
-            send(state: "error", message: "Li An 没能准备好听写小本本。")
+            send(state: "error", message: "碧琪没能准备好听写小本本。")
             return
         }
         request.shouldReportPartialResults = true
@@ -780,7 +780,7 @@ private final class NativeDictationController {
             }
         } catch {
             inputNode.removeTap(onBus: 0)
-            send(state: "error", message: "麦克风启动失败，Li An 没能听清。")
+            send(state: "error", message: "麦克风启动失败，碧琪没能听清。")
         }
     }
 
@@ -2151,7 +2151,7 @@ enum BrowserWorkspaceGeometry {
         let inset = min(12, min(bounds.width, bounds.height) / 8)
         let available = bounds.insetBy(dx: inset, dy: inset)
         // a small window by default: it floats in the upper right and leaves the conversation, the
-        // composer and Li An visible; it can be dragged larger, docked or made full from its toolbar
+        // composer and 碧琪 visible; it can be dragged larger, docked or made full from its toolbar
         let w0 = min(540, available.width * 0.42), h0 = min(420, available.height * 0.56)
         let initial = NSRect(x: available.maxX - w0, y: available.maxY - h0, width: w0, height: h0)
         let raw = proposed ?? initial
@@ -2695,7 +2695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             // 超級碧琪's installer writes into ~/.openclaw; C.le. must never run it. Its own first
-            // run copies that data once into its own profile, as Li An.
+            // run copies that data once into its own profile, as 碧琪.
             if RuntimeConfig.isCleBrand { CleFirstRun.runIfNeeded() } else { BundledSetup.apply() }
             DispatchQueue.main.async {
                 self?.startBundledServices()
@@ -3534,7 +3534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browserPresentationMenu?.isHidden = false
         for button in browserPresentationButtons.values { button.isHidden = true }
         browserStatusStack?.isHidden = (browserLoadingIndicator?.isHidden != false) && (browserActivityIndicator?.isHidden != false)
-        browserPresentationMenu?.toolTip = browserAgentActive ? "Li An 正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
+        browserPresentationMenu?.toolTip = browserAgentActive ? "碧琪正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
         updateBrowserToolbarVisibility()
     }
 
@@ -4121,7 +4121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           p{margin:0;color:var(--ink2);font-size:13px}
           .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
         </style>
-        <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+        <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>碧琪的浏览器</h1><p>在上方输入网址或搜索内容</p>
         <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -5044,7 +5044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             case "roundtable":
                 panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
             default:
-                panel.message = "选择一个文件夹，Li An 会把它放进左侧项目栏。"
+                panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
             }
             panel.prompt = "选择"
             panel.canChooseFiles = false
@@ -5302,7 +5302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           let active = false;
           let baseDraft = { value: "" };
 
-          const textForState = () => active ? "收好啦" : "Li An 听着呢";
+          const textForState = () => active ? "收好啦" : "碧琪听着呢";
           const updateButton = (message) => {
             const button = document.getElementById(buttonId);
             if (!button) return;

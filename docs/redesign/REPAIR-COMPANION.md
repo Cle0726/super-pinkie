@@ -1,4 +1,4 @@
-# REPAIR-COMPANION · Li An 陪伴（动作 / 状态 / 遮挡 / 双 pane）
+# REPAIR-COMPANION · 碧琪陪伴（动作 / 状态 / 遮挡 / 双 pane）
 
 任务书：`briefs/pinkie-ui-repair-20261018/COMMON.md` + `companion.md`
 Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repair/companion`
@@ -120,7 +120,7 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 | 解释 / 总结 / 澄清（真实 RPC，含「用这个」回填） | 已保留，请求按 pane 隔离，模式变了就丢弃旧结果 |
 | 专注 25 分钟（含 learning 账本 RPC） | 已保留，进度线/小时间按 pane 独立 |
 | 进度播报（工具名翻译） | 已保留（只读本 pane 的 `.pinkie-process`） |
-| 选中文字「问 Li An」 | 已保留（接到当前聚焦 pane 的实例） |
+| 选中文字「问碧琪」 | 已保留（接到当前聚焦 pane 的实例） |
 | 发送点缀 + 输入框回弹 | 已保留 |
 | 五模式氛围（花瓣/金箔/微光/斜光/∞） | 已保留，只挂在活动 pane |
 | 25 张（5×5）姿态 | **未恢复图像**：等 Claude 的 `companion-v2` PNG；代码路径与回退已就绪 |
@@ -137,7 +137,7 @@ Worktree：`/Users/Admin/release-superpinkie/wt/repair-companion`，分支 `repa
 
 ## 7. Commit
 
-见 `git log --oneline -1` 于 `repair/companion`（提交信息：`fix(companion): per-pane Li An with a silhouette-driven cat rig, real safe space, five-state cues`）。
+见 `git log --oneline -1` 于 `repair/companion`（提交信息：`fix(companion): per-pane 碧琪 with a silhouette-driven cat rig, real safe space, five-state cues`）。
 
 改动文件：
 - `services/cle-studio/static/legacy/laolao-companion.js`（重写）

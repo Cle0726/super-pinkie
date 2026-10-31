@@ -8,7 +8,7 @@
 
 | 仓库文件 | 已装到 |
 |---|---|
-| `services/mode-architecture/app-browser.mjs` | App 内同名文件；`~/.openclaw/extensions/pinkie-mode-architecture/app-browser.mjs`（"Li An" → "碧琪"） |
+| `services/mode-architecture/app-browser.mjs` | App 内同名文件；`~/.openclaw/extensions/pinkie-mode-architecture/app-browser.mjs`（"碧琪" → "碧琪"） |
 | `ui/injections/laolao-context-compact.js` | App 内 `ui/injections/` 与 `runtime/openclaw/dist/control-ui/` |
 | `ui/injections/laolao-compaction-glyph.js` | 同上（`?v=compactionglyph2`） |
 | `installer/macos/apply-theme.sh`、`installer/windows/apply-theme.ps1` | 只把 `contextcompact9` 改成 `contextcompact10`；control-ui `index.html` 同样 |

@@ -61,7 +61,7 @@ function page() {
           <div class="cle-composer"><div class="agent-chat__input">
             <div class="agent-chat__composer-input-row">
               <div class="agent-chat__composer-combobox">
-                <textarea rows="1" placeholder="和 Li An 说点什么"></textarea>
+                <textarea rows="1" placeholder="和碧琪说点什么"></textarea>
               </div>
             </div>
             <div class="agent-chat__composer-footer">

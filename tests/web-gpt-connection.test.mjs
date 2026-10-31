@@ -75,7 +75,7 @@ test('an unbound chat never falls back to Pinkie memory or an internal agent wor
   );
   await assert.rejects(
     () => manager.start('agent:learning:unbound-session'),
-    /不会读取 Li An 记忆或内部工作区/,
+    /不会读取碧琪记忆或内部工作区/,
   );
 });
 

@@ -1325,7 +1325,7 @@
     const download = el("button", "laolao-learning-button", "导出整理稿"); download.type = "button";
     download.addEventListener("click", () => {
       const url = URL.createObjectURL(new Blob([notebook.markdown], {type: "text/markdown;charset=utf-8"}));
-      const link = el("a"); link.href = url; link.download = "Li An 学习笔记-整理稿.md";
+      const link = el("a"); link.href = url; link.download = "碧琪学习笔记-整理稿.md";
       document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     });
     actions.append(copy, download); return actions;
@@ -1396,7 +1396,7 @@
       for (const item of plan.discarded) discarded.append(el("p", "", `${item.type}：${item.reason}`));
       panel.append(discarded);
     }
-    if (!plan.operations?.length && !plan.notebook) panel.append(el("p", "laolao-learning-notes__empty", "Li An 没有找到可以执行的整理建议。原笔记保持不变。"));
+    if (!plan.operations?.length && !plan.notebook) panel.append(el("p", "laolao-learning-notes__empty", "碧琪没有找到可以执行的整理建议。原笔记保持不变。"));
     const actions = el("div", "laolao-learning-organize-preview__actions");
     const applyLabel = plan.notebook ? "保存整理稿" : "应用所选";
     const apply = el("button", "laolao-learning-button laolao-learning-button--primary", applyLabel); apply.type = "button"; apply.disabled = !checked.length && !plan.notebook;
@@ -1646,7 +1646,7 @@
     ];
     const csv = "\ufeff" + cells.map(row => row.map(value => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
-    const link = el("a"); link.href = url; link.download = "Li An 学习笔记-Anki.csv"; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    const link = el("a"); link.href = url; link.download = "碧琪学习笔记-Anki.csv"; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
   const revealMarkdown = () => {
@@ -1699,7 +1699,7 @@
       drawer.setAttribute("aria-hidden", "true");
       drawer.inert = true;
       const header = el("header", "laolao-learning-notes__header");
-      header.append(el("div", "laolao-learning-notes__title", "Li An 学习笔记"));
+      header.append(el("div", "laolao-learning-notes__title", "碧琪学习笔记"));
       const close = el("button", "", "×"); close.type = "button"; close.setAttribute("aria-label", "关闭笔记本"); close.addEventListener("click", closeNotebook); header.append(close);
       const contentWrap = el("div", "laolao-learning-notes__content");
       const reviewBar = el("div", "laolao-learning-notes__review-bar");
@@ -2036,7 +2036,7 @@
       if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
       const instance = controllerFor(assistant || document.body);
       if (!instance) return showToast("没有找到对应的学习会话", true);
-      const label = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "Li An 回答";
+      const label = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答";
       void instance.saveSelection(text, label);
     },
   });

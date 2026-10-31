@@ -1,6 +1,6 @@
 // 双模式 — two rooms side by side (the original app's split workspace, on the native split view): study on one
 // side while the project runs on the other. Each pane keeps its own room, session, model and status; the room
-// selector follows whichever pane has focus, and Li An (the pet) moves to where you are working.
+// selector follows whichever pane has focus, and 碧琪 (the pet) moves to where you are working.
 import {ROOMS, roomArt} from './rooms.js';
 import {lineArt, loadLine} from '../line/line.js';
 

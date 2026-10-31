@@ -3,9 +3,9 @@
 The little companion lies on top of the chat composer. The old app's one (style-*.png, a pink pony) is
 loved for its STYLE: clean vector cartoon, smooth outlines, flat cel shading with one soft highlight,
 big expressive eyes, compact "loaf" pose lying on its belly, small props, cute and polished like an
-official animated-series sticker. Make the SAME KIND of sticker, but of Li An:
+official animated-series sticker. Make the SAME KIND of sticker, but of 碧琪:
 
-## Li An (the character)
+## 碧琪 (the character)
 - a slender, short-haired, jet-black male cat (see ref-cat.png for who he is — but draw him in the
   cartoon sticker style of style-*.png, NOT as an oil painting)
 - big ice-blue eyes with a white catch-light; pointed upright ears with a dusky inner ear;

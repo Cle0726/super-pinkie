@@ -1,4 +1,4 @@
-"""Cut Li An out of the user's reference paintings (black cat, palette knife, white impasto ground).
+"""Cut 碧琪 out of the user's reference paintings (black cat, palette knife, white impasto ground).
 
 usage: cutout-ref.py IN.png OUT.png
 - the cat is the largest connected body of dark paint; the flower, loose ground strokes and the
