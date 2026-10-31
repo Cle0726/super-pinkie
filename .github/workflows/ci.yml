@@ -83,14 +83,13 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
           }
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
-          .\build-win.ps1
+          .\build-win.ps1 -CleBrand
       - uses: actions/upload-artifact@v4
         with:
-          name: super-pinkie-windows
+          name: cle-studio-windows
           if-no-files-found: error
           path: |
-            dist/超級碧琪/
-            dist/超級碧琪.exe
+            dist/C.le/
 
   windows-checks:
     # This app ships on Windows, but no job here used to run the suites there:

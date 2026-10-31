@@ -402,10 +402,10 @@ test('macOS manual update leaves the gateway page before replacing the App', () 
 
 test('release workflow publishes both desktop formats from self-contained builders', () => {
   const release = read('.github/workflows/release.yml');
-  assert.match(release, /\.\/desktop\/macos\/build\.sh/);
-  assert.match(release, /dist\/super-pinkie-macos-\*\.zip/);
-  assert.match(release, /\.\\build-win\.ps1/);
-  assert.match(release, /dist\/super-pinkie-windows-\*\.exe/);
+  assert.match(release, /CLE_BRAND=1 \.\/desktop\/macos\/build\.sh/);
+  assert.match(release, /dist\/cle-studio-macos-\*\.zip/);
+  assert.match(release, /\.\\build-win\.ps1 -CleBrand/);
+  assert.match(release, /dist\/cle-studio-windows-\*\.exe/);
 });
 
 test('macOS packaging atomically replaces an existing archive', () => {
