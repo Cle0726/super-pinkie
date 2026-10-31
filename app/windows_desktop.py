@@ -62,7 +62,7 @@ def trusted_update_url(value):
     return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
 
 
-def release_update(release, current_version, portable=False, asset_prefix=None):
+def release_update(release, current_version, portable=False):
     """Validate latest-release metadata and select the matching package."""
     if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
         return None
@@ -70,7 +70,7 @@ def release_update(release, current_version, portable=False, asset_prefix=None):
     if version_tuple(version) <= version_tuple(current_version):
         return None
     suffix = "-portable.zip" if portable else ".exe"
-    expected_name = f"{asset_prefix or UPDATE_ASSET_PREFIX}{version}{suffix}"
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}{suffix}"
     checksum_name = expected_name + ".sha256"
     assets = {
         str(asset.get("name", "")): str(asset.get("browser_download_url", ""))
@@ -160,55 +160,6 @@ def http_identity(url):
         return {}
 
 
-def activate_gateway(url):
-    """Point the shell at C.le.'s gateway. The module defaults stay on 18789 for 超級碧琪."""
-    global GATEWAY_URL, GATEWAY_CHAT_URL
-    GATEWAY_URL = url if url.endswith("/") else url + "/"
-    GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
-
-
-def cle_loading_page(resource_root):
-    source = Path(resource_root) / "ui/launcher-loading.html"
-    text = source.read_text(encoding="utf-8")
-    text = text.replace("http://127.0.0.1:18789/", "http://127.0.0.1:18809/")
-    text = text.replace("超級碧琪", "C.le.")
-    target = state_root() / "launcher-loading.html"
-    target.write_text(text, encoding="utf-8")
-    return target.resolve().as_uri()
-
-
-def ensure_cle_profile(runtime, resource_root):
-    """Copy Mac's one-time C.le. profile setup. It reads ~/.openclaw and never writes it."""
-    state = Path.home() / ".openclaw-cle-studio"
-    if (state / "openclaw.json").is_file():
-        return
-    script = Path(resource_root) / "installer" / "cle" / "cle-firstrun.py"
-    if not script.is_file():
-        append_log("launcher", "C.le. first-run script missing")
-        return
-    argv = [
-        str(script),
-        "--dst", str(state),
-        "--bundle", str(resource_root),
-        "--node", str(runtime.node),
-        "--openclaw", str(runtime.openclaw),
-        "--profile", "cle-studio",
-        "--port", "18809",
-    ]
-    previous = sys.argv
-    try:
-        sys.argv = argv
-        import runpy
-        runpy.run_path(str(script), run_name="__main__")
-    except SystemExit as error:
-        if error.code not in (0, None):
-            append_log("launcher", f"C.le. first run exited {error.code}")
-    except Exception as error:
-        append_log("launcher", f"C.le. first run failed: {error}")
-    finally:
-        sys.argv = previous
-
-
 def gateway_ui_url():
     """Return CLE Kk's chat route, including a legacy token when configured."""
     config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
@@ -249,9 +200,8 @@ def cleanup_orphan_webview(storage):
 class WindowsUpdater:
     """Release updater for a frozen EXE or PyInstaller onedir directory."""
 
-    def __init__(self, resource_root, opener=None, executable=None, asset_prefix=None):
+    def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
-        self.asset_prefix = asset_prefix or UPDATE_ASSET_PREFIX
         self.opener = opener or urllib.request.urlopen
         self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
         self.portable = self._is_onedir(self.executable)
@@ -311,9 +261,7 @@ class WindowsUpdater:
             self.last_checked = time.monotonic()
             try:
                 release = json.loads(self._read(UPDATE_API_URL, 1024 * 1024).decode("utf-8"))
-                selected = release_update(
-                    release, self.current_version, portable=self.portable, asset_prefix=self.asset_prefix,
-                )
+                selected = release_update(release, self.current_version, portable=self.portable)
                 self.latest = selected or {
                     "available": False,
                     "supported": True,
@@ -680,14 +628,6 @@ class BundledRuntime:
         self.runtime = self.root / "runtime"
         self.node = self.runtime / "bin/node.exe"
         self.openclaw = self.runtime / "node_modules/openclaw/openclaw.mjs"
-        self.cle = self._is_cle()
-
-    def _is_cle(self):
-        try:
-            payload = json.loads((self.runtime / "brand.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return False
-        return payload.get("brand") == "cle"
 
     def valid(self):
         return self.node.is_file() and self.openclaw.is_file()
@@ -705,17 +645,6 @@ class BundledRuntime:
         environment["CLE_KK_LOCAL_UNRESTRICTED"] = "1"
         environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
         environment["PINKIE_GATEWAY_URL"] = GATEWAY_URL
-        if self.cle:
-            # The installed Mac app is C.le. on OpenClaw 2026.10, port 18809,
-            # with its own profile. Never share 超級碧琪's 18789 gateway.
-            environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.10"
-            environment["OPENCLAW_PROFILE"] = "cle-studio"
-            environment["OPENCLAW_GATEWAY_PORT"] = "18809"
-            environment["PINKIE_GATEWAY_URL"] = "http://127.0.0.1:18809/"
-            environment["OPENCLAW_CONFIG_PATH"] = str(Path.home() / ".openclaw-cle-studio" / "openclaw.json")
-            if not os.environ.get("PINKIE_STATE_ROOT"):
-                base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData/Local")
-                environment["PINKIE_STATE_ROOT"] = str(Path(base) / "C.le.")
         environment["PINKIE_STATE_ROOT"] = str(state_root())
         # A packaged CLE Kk runtime is updated only by its signed release
         # updater. Never let the embedded upstream runtime advertise or apply
@@ -749,17 +678,10 @@ class GatewaySupervisor:
             log_dir = state_root() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             output = (log_dir / "gateway.log").open("ab")
-            if self.runtime.cle:
-                command = [
-                    str(self.runtime.node), str(self.runtime.openclaw),
-                    "--profile", "cle-studio",
-                    "gateway", "run", "--port", "18809", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
-                ]
-            else:
-                command = [
-                    str(self.runtime.node), str(self.runtime.openclaw),
-                    "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
-                ]
+            command = [
+                str(self.runtime.node), str(self.runtime.openclaw),
+                "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
+            ]
             try:
                 gateway_environment = self.runtime.environment()
                 gateway_environment["OPENCLAW_SERVICE_KIND"] = "gateway"
@@ -1529,24 +1451,19 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
         raise RuntimeError("Windows bundled runtime is incomplete")
-    if runtime.cle:
-        activate_gateway("http://127.0.0.1:18809/")
     os.environ.update(runtime.environment())
     webview_storage = state_root() / "webview"
     cleanup_orphan_webview(webview_storage)
-    updater = WindowsUpdater(
-        resource_root,
-        asset_prefix="cle-studio-windows-" if runtime.cle else None,
-    )
+    updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
-    loading = cle_loading_page(resource_root) if runtime.cle else (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
     window = webview.create_window(
-        "C.le." if runtime.cle else "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
+        "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
-        shadow=True, background_color="#F4EFE4" if runtime.cle else "#efcbd3",
+        shadow=True, background_color="#efcbd3",
     )
     bridge.attach(window)
     gateway = GatewaySupervisor(runtime)
@@ -1566,12 +1483,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
 
     def bootstrap():
         try:
-            if runtime.cle:
-                # C.le. keeps its own profile. The Pinkie setup writes ~/.openclaw
-                # and must not run first, or an empty file would look like a source profile.
-                ensure_cle_profile(runtime, resource_root)
-            else:
-                prepare(lambda message: append_log("setup", message))
+            prepare(lambda message: append_log("setup", message))
             services.start()
             gateway.start()
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()

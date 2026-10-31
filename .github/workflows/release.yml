@@ -64,17 +64,16 @@ jobs:
           python-version: "3.12"
       - name: Install bundled runtime inputs
         run: |
-          version="$(python3 -c 'import json; print(json.load(open("desktop/windows/cle-runtime-manifest.json"))["openclaw"])')"
+          version="$(python3 -c 'import json; print(json.load(open("desktop/windows/runtime-manifest.json"))["openclaw"])')"
           npm install -g "openclaw@$version"
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
-          npm ci --prefix services/cle-studio --no-audit --no-fund
       - name: Build self-contained macOS app
-        run: CLE_BRAND=1 ./desktop/macos/build.sh
+        run: ./desktop/macos/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: dist/cle-studio-macos-*.zip
+          files: dist/super-pinkie-macos-*.zip
 
   windows:
     needs: verify
@@ -98,21 +97,21 @@ jobs:
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
       - name: Build Windows exe
         shell: pwsh
-        run: .\build-win.ps1 -CleBrand -LegacyOneFile
+        run: .\build-win.ps1 -LegacyOneFile
       - name: Pack Windows onedir and compatibility exe
         shell: pwsh
         run: |
           $version = (Get-Content VERSION).Trim()
-          $file = "cle-studio-windows-$version.exe"
-          Copy-Item -LiteralPath 'dist\C.le.exe' -Destination "dist\$file" -Force
+          $file = "super-pinkie-windows-$version.exe"
+          Copy-Item -LiteralPath 'dist\超級碧琪.exe' -Destination "dist\$file" -Force
           $hash = (Get-FileHash -LiteralPath "dist\$file" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $file" | Set-Content -LiteralPath "dist\$file.sha256" -Encoding ascii -NoNewline
 
           # The portable onedir package is the recommended download: it keeps
           # the bundled runtime beside the launcher and starts without _MEI
           # extraction.  Include the directory name in the archive root.
-          $portable = "cle-studio-windows-$version-portable.zip"
-          Compress-Archive -Path 'dist\C.le' -DestinationPath "dist\$portable" -Force
+          $portable = "super-pinkie-windows-$version-portable.zip"
+          Compress-Archive -Path 'dist\超級碧琪' -DestinationPath "dist\$portable" -Force
           $portableHash = (Get-FileHash -LiteralPath "dist\$portable" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$portableHash  $portable" | Set-Content -LiteralPath "dist\$portable.sha256" -Encoding ascii -NoNewline
       - uses: softprops/action-gh-release@v2
@@ -120,7 +119,7 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            dist/cle-studio-windows-*.exe
-            dist/cle-studio-windows-*.exe.sha256
-            dist/cle-studio-windows-*-portable.zip
-            dist/cle-studio-windows-*-portable.zip.sha256
+            dist/super-pinkie-windows-*.exe
+            dist/super-pinkie-windows-*.exe.sha256
+            dist/super-pinkie-windows-*-portable.zip
+            dist/super-pinkie-windows-*-portable.zip.sha256
