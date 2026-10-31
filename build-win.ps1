@@ -163,6 +163,7 @@ $pyInstallerCommonArgs = @(
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",
+    "--add-data", "desktop\windows\release-notes.md;.",
     "--add-data", "config.example.json;.",
     "app\super_pinkie.py"
 )
