@@ -1,0 +1,342 @@
+/* C.le. startup layer — first paint, before any plugin module runs.
+ *
+ * The Control UI ships the previous product's branding in index.html itself: its window title, a
+ * lobster favicon, a near-black html/body and a red accent. The plugin can only fix that after its
+ * bundle downloads, so the first frames show the old product. This sheet travels *inside*
+ * index.html (apply-startup.mjs inlines it before </head>), so it is parsed before the first paint
+ * and needs no extra request and no inline script (the gateway CSP allows inline style, not
+ * inline script).
+ *
+ * Three tiers, deliberately different in lifetime:
+ *   1. Brand cleanup  — permanent, idempotent with the plugin's own rules. Old mascot, the
+ *      upstream wordmark and the promo cards must never appear, at any tick.
+ *   2. Startup tokens — scoped to html:not([data-cle]); the plugin sets data-cle first thing in
+ *      activate(), so these become the floor for first paint and step aside the moment the real
+ *      C.le. palette lands.
+ *   3. Retired-state fallback — scoped to html[data-cle]:not([data-cle-active]), i.e. the document
+ *      skin is retained but no plugin instance is live. data-cle survives a disconnect (the other
+ *      session's contract), so it can no longer mean "the plugin is online": the *active* marker
+ *      does. This tier keeps the product brand readable in exactly that state — see section 6.
+ *
+ * The sidebar wordmark is the one rule keyed on a state marker rather than on data-cle: the
+ * guards set data-cle-fallback while the slot still shows the upstream name, so the brand outlives
+ * the plugin without ever flattening a name the user chose.
+ *
+ * Nothing here hides openclaw-app as a whole: a failed bundle still reaches the native
+ * mount-fallback, and that panel inherits the same tokens so the real error stays readable.
+ */
+
+/* ---------- 1a. brand and promotion: permanent ---------- */
+/* These must never be visible at any tick, plugin loaded or not. The plugin repeats the
+   invite rules; the welcome mascot rule is what actually removes the old layer, because the
+   room welcome replaces the identity block but leaves the native mascot node in place. */
+.sidebar-shell__invite,
+.community-invite-card,
+aside.invite { display: none !important; }
+.agent-chat__welcome-clawd { display: none !important; }
+
+/* Login gate: the plugin cannot reach this DOM (it renders before a session exists), and the
+   native mark is the upstream lobster. Replace it with the supplied portrait and the name. */
+.login-gate__logo,
+.login-gate__logo--neutral { display: none !important; }
+/* font-size:0 hides the glyphs but leaves the string in the accessibility tree, so a screen
+   reader still announced the upstream name. Removing the element from layout removes it from
+   that tree as well, and the header below supplies both the portrait and the wordmark. */
+.login-gate__brand-name { display: none !important; }
+.login-gate__brand::before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+}
+.login-gate__brand::after {
+  content: "C.le.";
+  display: inline-block;
+  vertical-align: middle;
+  font: 600 15px/1 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .02em;
+  color: var(--text-strong, #15161A);
+}
+
+/* ---------- 1b. the workspace mark when native renders it as an image ---------- */
+/* The native header draws either a span mark (theme mascot "none", which the plugin paints)
+   or an img pointing at the upstream icon — the lobster. The plugin's shell.css only covers the
+   span case, so the image is replaced here instead of hidden: hiding it leaves an empty circle. */
+img.sidebar-workspace-header__mark {
+  content: url('/cle/static/art/avatar.webp');
+  object-fit: cover;
+}
+/* The other branch: theme branding.mascot === "none" renders
+     span.sidebar-workspace-header__mark.sidebar-workspace-header__mark--neutral
+   holding an inline <svg> glyph. A background on the span would sit *under* that glyph, so the
+   glyph is hidden and the portrait is painted on the span itself. Hiding the span instead would
+   leave the header without any mark. */
+span.sidebar-workspace-header__mark--neutral {
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+  border-radius: 50%;
+  overflow: hidden;
+}
+span.sidebar-workspace-header__mark--neutral > svg {
+  opacity: 0 !important;
+}
+
+/* ---------- 1c. the workspace header's *text* mark ---------- */
+/* The header's name falls back to the upstream product name when the gateway publishes no
+   display name (the paint happens before any gateway answer). Until the plugin takes over, the
+   slot shows the C.le. wordmark instead of that string; afterwards the real agent name returns
+   unchanged, because this rule is scoped. Scoping matters: the plugin's own brand pass rewrites
+   only the literal word, and a permanent rule would flatten a user-chosen name. */
+/* Lifetime note: this used to be scoped to html:not([data-cle]), which meant the moment the
+   plugin retired — or a disconnect ended activation — the upstream wordmark came back. The brand
+   must not depend on the plugin being alive.
+ *
+ * But an unconditional rule would also flatten a name the user chose. The two states are
+ * distinguishable in CSS: the upstream fallback is *literally* the product name, while a chosen
+ * name is anything else. So the rule is keyed on the fallback string appearing in the subtree,
+ * using a descendant text match. Selectors cannot inspect text, so the marker is an attribute the
+ * guards set: they see the string they are about to replace and record which state it is in. */
+.sidebar-agent-card__name-text[data-cle-fallback] {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+}
+.sidebar-agent-card__name-text[data-cle-fallback]::after {
+  content: "C.le.";
+  font: 500 13px/1.2 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .06em;
+  color: var(--text-strong, #15161A);
+}
+/* The name is not bare text. control-ui-boot-shared wraps it with the hover-marquee helper:
+     span.sidebar-agent-card__name-text.hover-marquee
+       > span.hover-marquee__text      ← the actual string
+   Zeroing the outer font-size is inherited, but the inner node still contributes its own font
+   metrics to the line box, so it is zeroed explicitly. The ::after above supplies the wordmark.
+   The chevron is a sibling of the marquee wrapper in the header branch and a child in the
+   roster branch; it keeps a real glyph size either way. */
+.sidebar-agent-card__name-text[data-cle-fallback] .hover-marquee__text {
+  font-size: 0 !important;
+}
+.sidebar-agent-card__name-text[data-cle-fallback] .sidebar-agent-card__chevron {
+  font-size: 12px;
+}
+
+/* ---------- 2. first-paint tokens ---------- */
+/* Values mirror themes/cle.json so the handover to the real palette is invisible.
+   Specificity (0,1,1) beats the upstream `:root` block wherever it sits; the plugin's
+   own inline palette on <html> still outranks this once data-cle is set. */
+html:not([data-cle]) {
+  color-scheme: light;
+  --bg: #F4EFE4;
+  --bg-accent: #EFE9DC;
+  --bg-elevated: #FBF8F1;
+  --bg-hover: #EBE4D5;
+  --bg-muted: #EDE6D8;
+  --card: #FBF8F1;
+  --card-foreground: #15161A;
+  --popover: #FFFDF8;
+  --popover-foreground: #15161A;
+  --panel: #F4EFE4;
+  --panel-strong: #FBF8F1;
+  --text: #15161A;
+  --text-strong: #15161A;
+  --chat-text: #15161A;
+  --muted: #6A665E;
+  --muted-strong: #6A665E;
+  --muted-foreground: #6A665E;
+  --border: #DED6C6;
+  --border-strong: #CFC5B2;
+  --input: #D7CEBD;
+  --ring: #2A63E8;
+  --accent: #2A63E8;
+  --accent-hover: #245BD8;
+  --accent-foreground: #FFFFFF;
+  --accent-subtle: rgba(42, 99, 232, .08);
+  --primary: #15161A;
+  --primary-hover: #2A2C33;
+  --primary-foreground: #FBF8F1;
+  --skeleton-base: #EDE6D8;
+  --skeleton-highlight: rgba(20, 18, 15, .07);
+  background: var(--bg);
+}
+
+html:not([data-cle])[data-theme-mode="dark"] {
+  color-scheme: dark;
+  --bg: #0A0D16;
+  --bg-accent: #0E1220;
+  --bg-elevated: #111522;
+  --bg-hover: #171C2B;
+  --bg-muted: #141927;
+  --card: #111522;
+  --card-foreground: #EFE8DA;
+  --popover: #161B2A;
+  --popover-foreground: #EFE8DA;
+  --panel: #0A0D16;
+  --panel-strong: #111522;
+  --text: #EFE8DA;
+  --text-strong: #EFE8DA;
+  --chat-text: #EFE8DA;
+  --muted: #A39D90;
+  --muted-strong: #A39D90;
+  --muted-foreground: #A39D90;
+  --border: #232A3B;
+  --border-strong: #2E3752;
+  --input: #283044;
+  --ring: #5AA8FF;
+  --accent: #5AA8FF;
+  --accent-hover: #74B6FF;
+  --accent-foreground: #04121F;
+  --accent-subtle: rgba(56, 174, 255, .10);
+  --primary: #EFE8DA;
+  --primary-hover: #F6F1E6;
+  --primary-foreground: #0A0D16;
+  --skeleton-base: #141927;
+  --skeleton-highlight: rgba(239, 232, 218, .06);
+  background: var(--bg);
+}
+
+html:not([data-cle]) body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 3. the wait, in our own hand ---------- */
+/* Between navigation and the first render, the app mount is empty: that is the only window
+   where the native loading skeleton cannot speak. It stays plain ink — C.le. opens straight into
+   its opening, so nothing (no mark, no name) is shown before it. */
+html:not([data-cle]) openclaw-app:empty {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+}
+html:not([data-cle]) openclaw-app:empty::before { content: none; }
+/* A real error is never covered. */
+body.openclaw-mount-fallback-active openclaw-app:empty::before { display: none; }
+
+/* ---------- 3b. the upstream app is never painted before C.le. is live ----------
+   Once the app renders, its own chrome (首页 / 智能体 / 仪表盘 nav, skeletons, the stock composer)
+   would be on screen until the plugin activates — on every refresh, and again on the theme reload.
+   Until data-cle-active is set the rendered app is not painted; the ink ground carries the wait,
+   continuous with the native black start and the opening. The login gate is painted regardless (the plugin cannot activate before a session exists), the mount fallback
+   lives outside the app, and if the plugin never comes the app is revealed after 12 s — the same
+   budget as the native fallback. No :has(): this sheet is evaluated on every DOM change. */
+html:not([data-cle]), html:not([data-cle]) body { background: #0B0C0F; }
+html:not([data-cle-active]) body:not(.openclaw-mount-fallback-active) > openclaw-app:not(:empty) {
+  visibility: hidden;
+  animation: cle-boot-reveal 0s linear 12s forwards;
+}
+html:not([data-cle-active]) openclaw-app .login-gate { visibility: visible; }
+@keyframes cle-boot-reveal { to { visibility: visible; } }
+
+
+/* ---------- 4. the welcome identity ---------- */
+/* The stock welcome names the agent with the previous product's wordmark, above a lobster avatar.
+   Hiding the block is not enough — a hidden block is blank while the plugin loads, and revealing
+   it later puts the old wordmark back. Neither is acceptable: blank stands in for an error, and
+   the old brand must not return at any point.
+ *
+ * So the block stays in place and is *rebranded in CSS*: the portrait museum-supplied by the
+ * project replaces the lobster avatar, and the copy line becomes the C.le. wordmark. The layout
+ * box, the hint line and everything around it stay exactly where the native renderer put them,
+ * so nothing shifts when the plugin takes over and swaps in the room's own opening.
+ *
+ * The model-setup notice is untouched: it is the only instruction a half-configured install has,
+ * and it is not a brand element. A real failure is unaffected — the native fallback panel is a
+ * separate element and is never covered by this block. */
+html:not([data-cle]) .agent-chat__welcome-avatar {
+  background: #0A0D16 url('/cle/static/art/avatar.webp') center / cover no-repeat;
+  overflow: hidden;
+}
+/* The native avatar is an <img>, an inline <svg> or a text initial, depending on the build. */
+html:not([data-cle]) .agent-chat__welcome-avatar > * {
+  opacity: 0 !important;
+}
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2 {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+}
+html:not([data-cle]) .agent-chat__welcome-identity-copy > h2::after {
+  content: "C.le.";
+  font: 400 30px/1.15 ui-serif, "New York", "Songti SC", "STSong", serif;
+  letter-spacing: .04em;
+  color: var(--text-strong, #15161A);
+}
+
+
+/* ---------- 5. the failure panel ---------- */
+/* C.le. chrome on the native error card: paper, ink and gold instead of the claw accent, with
+   the same actions and the same text the native bundle writes. Nothing is hidden or renamed —
+   only the surface belongs to us, so a real failure still reads as a real failure. */
+body.openclaw-mount-fallback-active .mount-fallback__panel {
+  border-radius: 16px;
+  box-shadow: 0 18px 48px -18px rgba(30, 24, 14, .28), 0 2px 6px rgba(30, 24, 14, .06);
+}
+html:not([data-theme-mode="dark"]) body.openclaw-mount-fallback-active .mount-fallback__panel {
+  border-color: rgba(20, 18, 15, .10);
+}
+body.openclaw-mount-fallback-active .mount-fallback__eyebrow {
+  font: 500 10.5px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: .14em;
+}
+body.openclaw-mount-fallback-active .mount-fallback__panel h1 {
+  font-family: ui-serif, "New York", "Songti SC", "STSong", serif;
+  font-weight: 400;
+  letter-spacing: .01em;
+}
+body.openclaw-mount-fallback-active .mount-fallback__button {
+  border-radius: 10px;
+  font-family: -apple-system, "PingFang SC", system-ui, sans-serif;
+}
+body.openclaw-mount-fallback-active .mount-fallback__button--primary {
+  background: var(--text-strong, #15161A);
+  color: var(--bg, #F4EFE4);
+}
+@media (hover: hover) {
+  body.openclaw-mount-fallback-active .mount-fallback__button--primary:hover {
+    background: color-mix(in srgb, var(--text-strong, #15161A) 88%, var(--bg, #F4EFE4));
+  }
+}
+
+/* ---------- 6. the sidebar while the plugin is retired or still arriving ---------- */
+/* rooms.css (owned elsewhere, art in progress there) hides the native header text under
+   [data-cle] and collapses the mark to a transparent 22px tile; the visible wordmark in that
+   state is its own `.cle-brandmark`, which exists only while a plugin instance is mounted. After
+   a disconnect — or before activation — the brandmark is gone and the corner is an empty gold
+   ring with no accessible name at all.
+ *
+ * `data-cle-active` is the contract for a live instance, so "retired or not yet active" is
+ * `html[data-cle]:not([data-cle-active])`. This block fills only that gap.
+ *
+ * It cannot lean on :has() (not dependable in the target WebKit for a layout-critical rule), so
+ * the plugin's own presence is expressed by a sibling selector instead: `.cle-brandmark` is a
+ * child of `.sidebar-brand`, and when it is absent the `::before` below is the only wordmark. When
+ * it is present both exist, so the fallback is suppressed by the plugin setting `data-cle-active`
+ * — the state, not a selector trick, decides. Nothing here hides anything or invents artwork:
+ * the mark is text, and it is real text in the accessibility tree.
+ */
+html[data-cle]:not([data-cle-active]) .sidebar-brand::before {
+  content: "C.le.";
+  order: 0;
+  font: italic 400 22px/1 var(--cle-serif, ui-serif, "New York", "Songti SC", serif);
+  letter-spacing: -.015em;
+  color: var(--cle-ink, #15161A);
+  padding: 6px 4px 2px 8px;
+  user-select: none;
+}
+/* Give the collapsed mark an accessible name too: the header button otherwise reads only the
+   menu purpose, with an empty tile beside it. Visually hidden, still in the AX tree. */
+html[data-cle]:not([data-cle-active]) .sidebar-workspace-header__main::after {
+  content: "C.le.";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

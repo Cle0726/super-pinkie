@@ -1,0 +1,60 @@
+✔ legacy exams migrate without losing dates; single-exam patches preserve the other exam (41.702167ms)
+✔ all 390 bank items have reproducible chapter mappings, >=80% have verified item indices (6.713542ms)
+✔ mastery needs independent success and a later-day retest; unresolved errors stay weak (11.681209ms)
+✔ today uses Shanghai exam boundaries, real ledgers, due retests and conservative topic matching (16.895542ms)
+✔ desk is registered from the existing learning gateway without index edits (8.015792ms)
+✔ sets hide answers, grade on the server, and repeated submissions never double-count (15.539916ms)
+✔ confidence and hints affect independence; blank answers use normalized accepted alternatives (6.253583ms)
+✔ a next-day retest changes lit to mastered and records exactly one new ledger answer (8.553042ms)
+✔ metrics calculate calendar-day series, deltas, independent rates and exam pace from real evidence (21.813167ms)
+✔ digest is deterministic, numbered and excludes private notes, questions, answers and arbitrary error text (3.846667ms)
+✔ insight uses the built-in channel, returns real usage, caches once daily and marks changed data stale (15.935167ms)
+✔ insight strips HTML, drops invented evidence and mismatched digits, and never invents a fallback diagnosis (1.821166ms)
+✔ insight handles timeout/unavailable and normalizes Anthropic and Responses usage (11.850958ms)
+✔ adopted plans persist to the next morning reminder, use the configured time, and ignore forged ids (7.738916ms)
+✔ subject warnings count real attempts and attributed focus, and Sunday evening has weekly material (26.67375ms)
+✔ board renders real metrics, evidence, range switches, themes and plan adoption in Chrome (2528.796292ms)
+✔ board has loading/failure/retry states and ignores late replies after unmount in WebKit without motion libraries (11767.591792ms)
+✔ multiple choice requires exactly the full set, independent of ordering (21.259959ms)
+✔ cross-midnight retest clears old failed evidence using Shanghai calendar days (9.23325ms)
+✔ automatic analysis runs once per day across ranges, with explicit force for a new range (13.974542ms)
+✔ analysis distinguishes attempt counts from correct counts and validates Chinese numbers and percentages (0.476ms)
+✔ missing learning model never silently falls back to a different model; missing usage stays null (3.799667ms)
+✔ today can choose an uncovered syllabus item to learn without pretending it is lit (6.241541ms)
+✔ pace history replays item states once and matches recomputing mastery for every day (47.316792ms)
+✔ a retest set without a chapter only uses due items and says when nothing is due (4.13175ms)
+✔ v2 today priority is continuing lesson, due retest, fresh lesson practice, weak point learning/practice, then new learning (50.527458ms)
+✖ v2 subject rotation uses the oldest learning activity; adopted learn plans take priority over rotation (11.978ms)
+✔ v2 check evidence never lights, weakens, or retests a point; completed lessons add learned evidence (3.221542ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 27
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14799.232917
+
+✖ failing tests:
+
+test at tests/learning-desk.test.mjs:445:1
+✖ v2 subject rotation uses the oldest learning activity; adopted learn plans take priority over rotation (11.978ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'ee1' !== 'c1'
+  
+      at TestContext.<anonymous> (file:///Users/Admin/release-superpinkie/repo/tests/learning-desk.test.mjs:447:92)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'ee1',
+    expected: 'c1',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

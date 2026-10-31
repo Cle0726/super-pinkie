@@ -1,6 +1,6 @@
 {
   "id": "pinkie-mode-architecture",
-  "name": "CLE Kk · 超級碧琪执行控制层",
+  "name": "CLE Kk · C.le. 执行控制层",
   "version": "1.13.1",
   "activation": {
     "onStartup": true
@@ -18,7 +18,9 @@
       "code_check",
       "workbench_show",
       "workbench_read",
-      "learning_library"
+      "learning_library",
+      "learning_material",
+      "learning_desk"
     ]
   },
   "configSchema": {

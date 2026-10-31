@@ -1,0 +1,454 @@
+/* laolao-rich:v1 —— Li An 回复里的组件、图表、流程图、公式（laolao-rich.js）
+ * 和工作过程同一套语言：浅底面板、C.le. 蓝做选中色、空心/实心的状态区分。
+ * :not(#p1):not(#p2):not(#p3) 只为压过主题里 ID 级别的 !important 规则。 */
+html:not(#p1):not(#p2):not(#p3) {
+  --pk-fg: #2a2233; --pk-mute: rgba(42, 34, 51, .58); --pk-faint: rgba(42, 34, 51, .1);
+  --pk-panel: rgba(255, 255, 255, .62); --pk-chip: rgba(42, 34, 51, .045); --pk-hover: rgba(47, 123, 255, .07);
+  --pk-accent: #2f7bff; --pk-accent-ink: #1f5fd6; --pk-on: rgba(47, 123, 255, .12); --pk-on-line: rgba(47, 123, 255, .42);
+  --pk-good: #16956f; --pk-shadow: 0 1px 2px rgba(42, 34, 51, .04), 0 8px 24px -16px rgba(42, 34, 51, .18);
+}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) {
+  --pk-fg: #ece3e8; --pk-mute: rgba(236, 223, 230, .56); --pk-faint: rgba(236, 223, 230, .1);
+  --pk-panel: rgba(255, 255, 255, .035); --pk-chip: rgba(255, 255, 255, .05); --pk-hover: rgba(142, 192, 255, .08);
+  --pk-accent: #8ec0ff; --pk-accent-ink: #a9d0ff; --pk-on: rgba(142, 192, 255, .14); --pk-on-line: rgba(142, 192, 255, .45);
+  --pk-good: #6fdcb5; --pk-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px -18px rgba(0, 0, 0, .6);
+}
+
+/* 原代码块：藏起来，点「源码」再露出 */
+html:not(#p1):not(#p2):not(#p3) .chat-text [data-pk-hidden] { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .chat-text [data-pk-hidden]:not(pre):not(.code-block-wrapper):not(details) { display: block !important; }
+
+/* ── 外壳 ──
+ * 「源码」按钮钉在右上角：平时透明，指针/键盘移到卡片上或按钮聚焦时显现，不压住内容。
+ * 这里不用 all: unset —— 它会把原生 button 的 display 一起清掉（细节写在 pk-clean 里）。 */
+html:not(#p1):not(#p2):not(#p3) .pk-rich {
+  position: relative; margin: 10px 0 12px; padding: 14px 16px 16px; border-radius: 14px;
+  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
+  color: var(--pk-fg); font-size: 14px; line-height: 1.6; max-width: 100%; overflow: hidden;
+  animation: pk-in .36s var(--cle-ease, cubic-bezier(.22, 1, .36, 1)) backwards;
+}
+@keyframes pk-in { from { opacity: 0; transform: translateY(4px); } }
+html:not(#p1):not(#p2):not(#p3) .pk-rich__tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich__src {
+  all: unset; cursor: pointer; padding: 2px 8px; border-radius: 6px; font: 11.5px/18px var(--cle-mono);
+  color: var(--pk-mute); opacity: 0; transition: opacity .2s, background .2s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-rich:hover .pk-rich__src,
+html:not(#p1):not(#p2):not(#p3) .pk-rich__src:focus-visible,
+html:not(#p1):not(#p2):not(#p3) .pk-rich__src[aria-pressed="true"] { opacity: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich__src:hover { background: var(--pk-chip); color: var(--pk-fg); }
+html:not(#p1):not(#p2):not(#p3) .pk-rich__src:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 1px; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich__error { color: var(--pk-mute); font-size: 13px; }
+/* 图表 / 流程图自带一张卡片：外壳不再画底，源码按钮压在卡片右上角 */
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chart-card, .pk-mermaid-card) { padding: 0; background: none; box-shadow: none; overflow: visible; }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chart-card, .pk-mermaid-card) .pk-chart__title { padding-right: 56px; }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chart-card, .pk-mermaid-card) > .pk-rich__tools { top: 0; right: 0; z-index: 2; }
+
+/* ── pk-clean：把裸元素还原成 C.le. 的样子 ──
+ * 旧的注入（以及各模块复制出来的那一份）用 `all: unset` 清掉按钮 / 输入框的全部默认样式；
+ * 但 all: unset 也会把 display 清成 inline，而且它会抹掉同一个元素上的其它属性（颜色、
+ * 字号、动画……），留下一个只有背景、没有字的空胶囊。这里把需要的属性重新声明一遍。 */
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-btn, .pk-follow__item, .pk-card .pk-btn, .pk-plan__head, .pk-app__tool) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  box-sizing: border-box; margin: 0; border: 0; text-decoration: none; white-space: normal; text-align: center;
+  font-family: var(--cle-sans); color: var(--pk-fg);
+  transition: background .18s, box-shadow .18s, color .18s, transform .18s;
+}
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-btn, .pk-follow__item) { cursor: pointer; }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-btn):disabled,
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item:disabled { cursor: default; }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-follow__item) {
+  padding: 6px 14px; border-radius: 999px; font-size: 13.5px; line-height: 20px; font-weight: 400;
+  background: var(--pk-chip); box-shadow: inset 0 0 0 1px var(--pk-faint);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item { padding: 6px 13px; border-radius: 12px; font-size: 13px; line-height: 19px; background: var(--pk-panel); }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-follow__item):hover:not(:disabled) { background: var(--pk-hover); box-shadow: inset 0 0 0 1px var(--pk-on-line); }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-follow__item):active:not(:disabled) { transform: scale(.97); }
+html:not(#p1):not(#p2):not(#p3) .pk-chip.is-on,
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-follow__item).is-chosen { background: var(--pk-on); color: var(--pk-accent-ink); box-shadow: inset 0 0 0 1px var(--pk-on-line); font-weight: 500; }
+html:not(#p1):not(#p2):not(#p3) .pk-btn {
+  padding: 7px 16px; border-radius: var(--cle-radius-ctl, 10px); font-size: 13.5px; font-weight: 500; line-height: 20px;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-btn--primary { background: var(--pk-accent); color: var(--cle-surface, #fff); box-shadow: 0 6px 16px -8px var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-btn--primary:hover:not(:disabled) { filter: brightness(1.06); }
+html:not(#p1):not(#p2):not(#p3) .pk-btn--ghost { background: none; color: var(--pk-accent-ink); box-shadow: inset 0 0 0 1px var(--pk-on-line); padding: 4px 12px; font-size: 13px; }
+html:not(#p1):not(#p2):not(#p3) .pk-btn--ghost:hover:not(:disabled) { background: var(--pk-hover); }
+html:not(#p1):not(#p2):not(#p3) .pk-card .pk-btn { align-self: flex-start; margin-top: 4px; }
+html:not(#p1):not(#p2):not(#p3) :is(.pk-chip, .pk-btn, .pk-follow__item):focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 2px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui.is-sent :is(.pk-chip, .pk-card):not(.is-chosen):not(.is-on) { opacity: .45; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui :is(.pk-chip, .pk-btn):disabled { cursor: default; }
+
+/* ── ```ui ── */
+html:not(#p1):not(#p2):not(#p3) .pk-ui { display: grid; gap: 12px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__title { font-size: 15.5px; font-weight: 600; letter-spacing: .01em; padding-right: 48px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__text { color: var(--pk-mute); margin-top: -6px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__buttons,
+html:not(#p1):not(#p2):not(#p3) .pk-field__options { display: flex; flex-wrap: wrap; gap: 8px; }
+
+html:not(#p1):not(#p2):not(#p3) .pk-ui__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+html:not(#p1):not(#p2):not(#p3) .pk-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px;
+  background: var(--pk-chip); box-shadow: inset 0 0 0 1px var(--pk-faint); transition: box-shadow .2s, background .2s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-card:hover { box-shadow: inset 0 0 0 1px var(--pk-on-line); }
+html:not(#p1):not(#p2):not(#p3) .pk-card.is-chosen { background: var(--pk-on); box-shadow: inset 0 0 0 1.5px var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-card__tag { align-self: flex-start; font-size: 11.5px; line-height: 18px; padding: 0 7px; border-radius: 6px; background: var(--pk-on); color: var(--pk-accent-ink); }
+html:not(#p1):not(#p2):not(#p3) .pk-card__title { font-weight: 600; }
+html:not(#p1):not(#p2):not(#p3) .pk-card__text { color: var(--pk-mute); font-size: 13px; flex: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-card .pk-btn { align-self: flex-start; margin-top: 4px; }
+
+html:not(#p1):not(#p2):not(#p3) .pk-ui__fields { display: grid; gap: 14px; }
+html:not(#p1):not(#p2):not(#p3) .pk-field { display: grid; gap: 6px; position: relative; }
+html:not(#p1):not(#p2):not(#p3) .pk-field__label { font-size: 13px; color: var(--pk-mute); }
+html:not(#p1):not(#p2):not(#p3) .pk-field__unit { position: absolute; right: 12px; bottom: 8px; font-size: 12.5px; color: var(--pk-mute); pointer-events: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-input {
+  box-sizing: border-box; width: 100%; max-width: 420px; padding: 7px 12px; border: 0; border-radius: 10px; font: inherit; font-size: 14px;
+  background: var(--pk-chip); color: var(--pk-fg); box-shadow: inset 0 0 0 1px var(--pk-faint); outline: none; resize: vertical;
+  color-scheme: light; transition: box-shadow .18s;
+}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) .pk-input { color-scheme: dark; }
+html:not(#p1):not(#p2):not(#p3) .pk-input:focus { box-shadow: inset 0 0 0 1.5px var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-input::placeholder { color: var(--pk-mute); }
+
+html:not(#p1):not(#p2):not(#p3) .pk-slider { display: flex; align-items: center; gap: 12px; max-width: 460px; }
+html:not(#p1):not(#p2):not(#p3) .pk-slider input {
+  -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; margin: 0;
+  background: linear-gradient(90deg, var(--pk-accent) var(--p, 50%), var(--pk-faint) var(--p, 50%));
+}
+html:not(#p1):not(#p2):not(#p3) .pk-slider input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 6px rgba(0, 0, 0, .2), 0 0 0 4px var(--pk-on);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-slider__val { min-width: 4.5em; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--pk-accent-ink); }
+
+html:not(#p1):not(#p2):not(#p3) .pk-check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 14px; }
+html:not(#p1):not(#p2):not(#p3) .pk-check__box {
+  -webkit-appearance: none; appearance: none; flex: none; width: 17px; height: 17px; margin: 2px 0 0; border-radius: 5px; cursor: pointer;
+  box-shadow: inset 0 0 0 1.5px var(--pk-mute); background: none; transition: background .18s, box-shadow .18s; position: relative;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-check__box:checked { background: var(--pk-accent); box-shadow: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-check__box:checked::after {
+  content: ""; position: absolute; left: 5.5px; top: 2px; width: 4px; height: 8.5px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-check__box:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 2px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__checklist { display: grid; gap: 8px; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__checklist .pk-check__box:checked + span { color: var(--pk-mute); text-decoration: line-through; text-decoration-color: var(--pk-faint); }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__count { font-size: 12px; color: var(--pk-mute); font-variant-numeric: tabular-nums; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui.is-complete .pk-ui__count { color: var(--pk-good); }
+
+html:not(#p1):not(#p2):not(#p3) .pk-ui__submit { display: flex; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui.is-sent .pk-ui__submit { display: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__sent { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--pk-mute); }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__sent b { color: var(--pk-good); font-weight: 500; flex: none; }
+
+/* ── 图表 ── */
+html:not(#p1):not(#p2):not(#p3) .pk-chart { display: grid; gap: 8px; margin: 10px 0 12px; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__title { font-weight: 600; padding-right: 48px; }
+
+/* ── 流程图 / 思维导图 ── */
+html:not(#p1):not(#p2):not(#p3) .pk-mermaid-card {
+  margin: 10px 0 12px; padding: 14px 16px; border-radius: 14px;
+  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow); overflow: hidden;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-mermaid { overflow-x: auto; text-align: center; }
+html:not(#p1):not(#p2):not(#p3) .pk-mermaid svg { max-width: 100%; height: auto; }
+html:not(#p1):not(#p2):not(#p3) .pk-mermaid.is-wide { text-align: left; padding-bottom: 6px; scrollbar-width: thin; }
+html:not(#p1):not(#p2):not(#p3) .pk-mermaid.is-wide svg { height: auto; }
+
+/* ── 公式 ── */
+html:not(#p1):not(#p2):not(#p3) .chat-text .pk-math:not([data-pk-done]) { font-family: var(--cle-mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; color: var(--pk-mute); }
+html:not(#p1):not(#p2):not(#p3) .chat-text .pk-math--block { display: block; margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+html:not(#p1):not(#p2):not(#p3) .chat-text .pk-math .katex { font-size: 1.08em; }
+html:not(#p1):not(#p2):not(#p3) .chat-text .pk-math.is-error { color: var(--cle-gaze, #1C7FE0); text-decoration: underline dotted; }
+
+/* ── 表格：点表头排序 ── */
+html:not(#p1):not(#p2):not(#p3) .chat-text table[data-pk-sort] th { cursor: pointer; user-select: none; white-space: nowrap; }
+html:not(#p1):not(#p2):not(#p3) .chat-text table[data-pk-sort] th::after { content: "↕"; margin-left: 5px; font-size: .8em; opacity: .25; }
+html:not(#p1):not(#p2):not(#p3) .chat-text table[data-pk-sort] th[aria-sort="ascending"]::after { content: "↑"; opacity: .8; color: var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .chat-text table[data-pk-sort] th[aria-sort="descending"]::after { content: "↓"; opacity: .8; color: var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .chat-text table[data-pk-sort] th:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: -2px; }
+
+/* ── 接着问 ── */
+/* 新界面的 .chat-group 是两列网格（头像槽 + 正文），挂在外面的行要自己占满正文那一列 */
+html:not(#p1):not(#p2):not(#p3) .pk-follow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; animation: pk-in .4s .1s cubic-bezier(.22, 1, .36, 1) backwards; }
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item {
+  all: unset; box-sizing: border-box; cursor: pointer; max-width: 100%; padding: 6px 13px; border-radius: 12px; font-size: 13px; line-height: 19px;
+  color: var(--pk-fg); background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint); transition: box-shadow .18s, background .18s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item::before { content: "↳ "; color: var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item:hover { background: var(--pk-hover); box-shadow: inset 0 0 0 1px var(--pk-on-line); }
+html:not(#p1):not(#p2):not(#p3) .pk-follow__item:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(#p1):not(#p2):not(#p3) :is(.pk-rich, .pk-follow) { animation: none !important; }
+}
+
+/* Native submission errors. */
+html:not(#p1):not(#p2):not(#p3) .pk-ui__error { color: var(--pk-fg); font-size: 13px; margin-top: 8px; width: 100%; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui__error::before { content: "！"; margin-right: 6px; color: var(--pk-accent); font-weight: 600; }
+html:not(#p1):not(#p2):not(#p3) .pk-ui[aria-busy="true"] :is(button,input,textarea) { pointer-events: none; opacity: .65; }
+
+/* ── ```app：一条标题栏 + 隔离框架 ── */
+html:not(#p1):not(#p2):not(#p3) { --pk-solid: var(--cle-surface, #FBFAF7); --pk-scrim: rgba(12, 12, 14, .32); }
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) { --pk-solid: var(--cle-surface, #131418); --pk-scrim: rgba(4, 4, 6, .6); }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app { padding: 0; display: flex; flex-direction: column; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__bar {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px 0 14px;
+  box-shadow: inset 0 -1px 0 var(--pk-faint);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-app__name { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__name b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__glyph { display: inline-grid; flex: none; width: 16px; height: 16px; color: var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-app__glyph svg { width: 16px; height: 16px; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__kind {
+  flex: none; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px;
+  color: var(--pk-mute); box-shadow: inset 0 0 0 1px var(--pk-faint);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-app__tools { display: flex; gap: 2px; flex: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__tool {
+  all: unset; box-sizing: border-box; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
+  color: var(--pk-mute); cursor: pointer; transition: background .18s, color .18s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-app__tool svg { width: 15px; height: 15px; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__tool:hover,
+html:not(#p1):not(#p2):not(#p3) .pk-app__tool[aria-pressed="true"] { background: var(--pk-chip); color: var(--pk-fg); }
+html:not(#p1):not(#p2):not(#p3) .pk-app__tool:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 1px; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__stage { position: relative; min-height: 96px; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__frame {
+  display: block; width: 100%; height: 160px; border: 0; background: transparent;
+  opacity: 0; transition: height .28s cubic-bezier(.22, 1, .36, 1), opacity .3s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-ready .pk-app__frame { opacity: 1; }
+/* 等待：一道 C.le. 蓝的光扫过细线 */
+html:not(#p1):not(#p2):not(#p3) .pk-app__loading {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px;
+  color: var(--pk-mute); font-size: 12.5px;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-app__loading i {
+  display: block; width: 120px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--pk-faint) 0 30%, var(--pk-accent) 50%, var(--pk-faint) 70% 100%) 0 0 / 300% 100%;
+  animation: pk-app-sweep 1.4s cubic-bezier(.45, .05, .35, 1) infinite;
+}
+@keyframes pk-app-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-error .pk-app__loading { display: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-error .pk-rich__error { padding: 12px 14px; }
+/* 全屏：浮在聊天上面，背后一层薄雾；ESC 或点雾退出 */
+html.pk-app-full:not(#p1):not(#p2):not(#p3) .chat-thread { will-change: auto !important; }
+html:not(#p1):not(#p2):not(#p3) .pk-app__scrim {
+  position: fixed; inset: 0; z-index: 2147482990; background: var(--pk-scrim);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: pk-fade .24s ease backwards;
+}
+@keyframes pk-fade { from { opacity: 0; } }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-full {
+  position: fixed; inset: max(24px, 5vh) max(24px, 6vw); z-index: 2147482991; margin: 0;
+  background: var(--pk-solid); box-shadow: inset 0 0 0 1px var(--pk-faint), 0 30px 80px -20px rgba(0, 0, 0, .45);
+  animation: pk-pop .3s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+@keyframes pk-pop { from { opacity: 0; transform: scale(.98); } }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-full .pk-app__stage { flex: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--app.is-full .pk-app__frame { height: 100% !important; }
+@media (prefers-reduced-motion: reduce) {
+  html:not(#p1):not(#p2):not(#p3) .pk-app__loading i { animation: none; background: var(--pk-faint); }
+  html:not(#p1):not(#p2):not(#p3) :is(.pk-app__frame, .pk-rich--app.is-full, .pk-app__scrim) { transition: none; animation: none; }
+}
+
+/* ── 工作计划（laolao-plan.js）：C.le. 的清单，和状态行同一个蓝 ── */
+html:not(#p1):not(#p2):not(#p3) .pk-plan {
+  display: block; max-width: 640px; margin: 4px 0 10px; padding: 4px 0 8px; border-radius: 14px;
+  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
+  color: var(--pk-fg); font-size: 13.5px; line-height: 1.55;
+  animation: pk-in .36s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan__head {
+  all: unset; display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box;
+  padding: 7px 14px 6px; cursor: pointer; border-radius: 14px;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan__head:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: -2px; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__label {
+  flex: none; padding: 0 7px; border-radius: 6px; font-size: 11.5px; line-height: 19px; font-weight: 600; letter-spacing: .04em;
+  color: var(--pk-accent-ink); background: var(--pk-on);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan__title { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__count { flex: none; color: var(--pk-mute); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__chev {
+  flex: none; width: 6px; height: 6px; margin: 0 2px 3px 2px;
+  border-right: 1.5px solid var(--pk-mute); border-bottom: 1.5px solid var(--pk-mute);
+  transform: rotate(45deg); transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan.is-folded .pk-plan__chev { transform: rotate(-45deg); margin-bottom: 0; }
+/* 进度：每一项一小段 */
+html:not(#p1):not(#p2):not(#p3) .pk-plan__bar { display: flex; gap: 3px; padding: 2px 14px 6px; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__bar i {
+  flex: 1; height: 3px; border-radius: 3px; background: var(--pk-faint); transition: background .4s;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan__bar i[data-status="completed"] { background: var(--pk-accent); }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__bar i[data-status="in_progress"] {
+  background: linear-gradient(90deg, var(--pk-on) 0 30%, var(--pk-accent) 50%, var(--pk-on) 70% 100%) 0 0 / 300% 100%;
+  animation: pk-app-sweep 1.8s cubic-bezier(.45, .05, .35, 1) infinite;
+}
+/* 收起 / 展开：高度过渡 */
+html:not(#p1):not(#p2):not(#p3) .pk-plan__body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .36s cubic-bezier(.22, 1, .36, 1); }
+html:not(#p1):not(#p2):not(#p3) .pk-plan.is-folded .pk-plan__body { grid-template-rows: 0fr; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__body > * { min-height: 0; overflow: hidden; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan.is-folded { padding-bottom: 4px; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan[data-state="done"] .pk-plan__bar { display: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan[data-state="done"] .pk-plan__label { color: var(--pk-good); background: color-mix(in srgb, var(--pk-good) 12%, transparent); }
+html:not(#p1):not(#p2):not(#p3) .pk-plan[data-state="done"] .pk-plan__title { font-weight: 500; color: var(--pk-mute); }
+
+html:not(#p1):not(#p2):not(#p3) .pk-plan__list { list-style: none; margin: 0; padding: 0 14px; display: grid; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item { display: flex; align-items: flex-start; gap: 9px; padding: 3px 0; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item.is-new { animation: pk-in .36s cubic-bezier(.22, 1, .36, 1) backwards; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__mark { flex: none; width: 16px; height: 16px; margin-top: 2.5px; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__mark svg { display: block; width: 16px; height: 16px; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="pending"] .pk-plan__mark svg { stroke: var(--pk-mute); opacity: .7; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="completed"] .pk-plan__mark svg circle { fill: var(--pk-accent); stroke: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="completed"] .pk-plan__mark svg path {
+  stroke: var(--pk-solid); stroke-width: 1.8; stroke-dasharray: 10; stroke-dashoffset: 0; animation: pk-plan-tick .42s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+@keyframes pk-plan-tick { from { stroke-dashoffset: 10; } }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="completed"] .pk-plan__mark svg { animation: pk-plan-pop .42s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+@keyframes pk-plan-pop { from { transform: scale(.6); } }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="completed"] .pk-plan__text { color: var(--pk-mute); }
+/* 进行中：一圈在转，文字上扫一道光（和状态行一样的节拍） */
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="in_progress"] .pk-plan__mark svg circle { stroke: var(--pk-on-line); }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="in_progress"] .pk-plan__mark svg .pk-plan__arc {
+  stroke: var(--pk-accent); stroke-dasharray: 11 40; transform-origin: 8px 8px; animation: pk-plan-spin 1.1s linear infinite;
+}
+@keyframes pk-plan-spin { to { transform: rotate(360deg); } }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="in_progress"] .pk-plan__text {
+  font-weight: 600;
+  background: linear-gradient(100deg, var(--pk-fg) 0 36%, var(--pk-accent) 47% 53%, var(--pk-fg) 64% 100%) 0 0 / 280% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: cle-sweep 2.2s cubic-bezier(.45, .05, .35, 1) infinite;
+}
+html:not(#p1):not(#p2):not(#p3) .pk-plan__note:not(:empty) { margin: 4px 14px 0; color: var(--pk-mute); font-size: 12.5px; }
+html:not(#p1):not(#p2):not(#p3) .pk-plan__note[hidden] { display: none; }
+@keyframes cle-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not(#p1):not(#p2):not(#p3) .pk-plan *, html:not(#p1):not(#p2):not(#p3) .pk-plan { animation: none !important; transition: none !important; }
+  html:not(#p1):not(#p2):not(#p3) .pk-plan__item[data-status="in_progress"] .pk-plan__text { color: var(--pk-accent-ink); background: none; }
+}
+
+/* ── 设置页的胶囊按钮 ──
+ * 这一份 laolao-rich.css 只负责聊天里的富内容；设置页的定时任务 / 连接器
+ * （laolao-capabilities.js）和输入框旁的「深度研究」开关不在本次移植范围，
+ * 原来那两段粉色样式已删掉——需要时由各自的模块带自己的样式。 */
+
+/* ── 代码块 / 「源码」按钮的可点范围 ── */
+
+/* 输入框 / 复选框 / 滑块去掉原生外观，只留 C.le. 的描边 */
+html .pk-check__box { -webkit-appearance: none; appearance: none; }
+html .pk-slider input { -webkit-appearance: none; appearance: none; }
+html .pk-slider input::-webkit-slider-runnable-track { background: transparent; }
+
+/* ── 图表 ── */
+html .pk-chart {
+  display: grid; grid-template-rows: auto 260px; gap: 8px; margin: 10px 0 12px; padding: 14px 16px 16px;
+  border-radius: var(--cle-radius-card, 14px);
+  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
+}
+html .pk-chart__title { font-weight: 600; padding-right: 48px; }
+html .pk-chart__stage { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+
+/* ── 流程图 / 思维导图 ── */
+html .pk-mermaid-card {
+  margin: 10px 0 12px; padding: 14px 16px; border-radius: var(--cle-radius-card, 14px);
+  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
+}
+html .pk-mermaid { overflow-x: auto; text-align: center; }
+html .pk-mermaid svg { max-width: 100%; height: auto; }
+html .pk-mermaid.is-wide { text-align: left; padding-bottom: 6px; scrollbar-width: thin; }
+html .pk-mermaid.is-wide svg { height: auto; }
+
+/* ── 公式 ── */
+html .chat-text .pk-math:not([data-pk-done]) { font-family: var(--cle-mono); font-size: .92em; color: var(--pk-mute); }
+html .chat-text .pk-math--block { display: block; margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+html .chat-text .pk-math .katex { font-size: 1.08em; }
+html .chat-text .pk-math.is-error { color: var(--cle-gaze); text-decoration: underline dotted; }
+
+/* ── 表格：点表头排序 ── */
+html .chat-text table[data-pk-sort] th { cursor: pointer; user-select: none; white-space: nowrap; }
+html .chat-text table[data-pk-sort] th::after { content: "↕"; margin-left: 5px; font-size: .8em; opacity: .25; }
+html .chat-text table[data-pk-sort] th[aria-sort="ascending"]::after { content: "↑"; opacity: .8; color: var(--pk-accent); }
+html .chat-text table[data-pk-sort] th[aria-sort="descending"]::after { content: "↓"; opacity: .8; color: var(--pk-accent); }
+html .chat-text table[data-pk-sort] th:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: -2px; }
+
+/* ── 接着问 ── */
+html .pk-follow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; animation: pk-in .4s .1s var(--cle-ease, ease) backwards; }
+html .pk-follow__item {
+  all: unset; box-sizing: border-box; cursor: pointer; max-width: 100%; padding: 6px 13px; border-radius: 12px; font-size: 13px; line-height: 19px;
+  color: var(--pk-fg); background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint); transition: box-shadow .18s, background .18s;
+}
+html .pk-follow__item::before { content: "↳ "; color: var(--pk-accent); }
+html .pk-follow__item:hover { background: var(--pk-hover); box-shadow: inset 0 0 0 1px var(--pk-on-line); }
+html .pk-follow__item:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html :is(.pk-rich, .pk-follow) { animation: none !important; }
+}
+
+/* 发送失败：只用一个墨色提示，不用红 */
+html .pk-ui__error { color: var(--pk-fg); font-size: 13px; margin-top: 8px; width: 100%; }
+html .pk-ui__error::before { content: "！"; margin-right: 6px; color: var(--pk-accent); font-weight: 600; }
+html .pk-ui[aria-busy="true"] :is(button,input,textarea) { pointer-events: none; opacity: .65; }
+
+/* ── ```app：一条标题栏 + 隔离框架 ── */
+html .pk-rich--app { padding: 0; display: flex; flex-direction: column; }
+html .pk-app__bar {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px 0 14px;
+  box-shadow: inset 0 -1px 0 var(--pk-faint);
+}
+html .pk-app__name { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+html .pk-app__name b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html .pk-app__glyph { display: inline-grid; flex: none; width: 16px; height: 16px; color: var(--pk-accent); }
+html .pk-app__glyph svg { width: 16px; height: 16px; }
+html .pk-app__kind {
+  flex: none; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px;
+  color: var(--pk-mute); box-shadow: inset 0 0 0 1px var(--pk-faint);
+}
+html .pk-app__tools { display: flex; gap: 2px; flex: none; }
+html .pk-app__tool {
+  all: unset; box-sizing: border-box; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
+  color: var(--pk-mute); cursor: pointer; transition: background .18s, color .18s;
+}
+html .pk-app__tool svg { width: 15px; height: 15px; }
+html .pk-app__tool:hover, html .pk-app__tool[aria-pressed="true"] { background: var(--pk-chip); color: var(--pk-fg); }
+html .pk-app__tool:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 1px; }
+html .pk-app__stage { position: relative; min-height: 96px; }
+html .pk-app__frame {
+  display: block; width: 100%; height: 160px; border: 0; background: transparent;
+  opacity: 0; transition: height .28s var(--cle-ease-soft, ease), opacity .3s;
+}
+html .pk-rich--app.is-ready .pk-app__frame { opacity: 1; }
+/* 等待：一道冰蓝的细线扫过 */
+html .pk-app__loading {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px;
+  color: var(--pk-mute); font-size: 12.5px;
+}
+html .pk-app__loading i {
+  display: block; width: 120px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--pk-faint) 0 30%, var(--pk-accent) 50%, var(--pk-faint) 70% 100%) 0 0 / 300% 100%;
+  animation: pk-app-sweep 1.4s var(--cle-ease-soft, ease) infinite;
+}
+@keyframes pk-app-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+html .pk-rich--app.is-error .pk-app__loading { display: none; }
+html .pk-rich--app.is-error .pk-rich__error { padding: 12px 14px; }
+/* 全屏：浮在聊天上面，背后一层薄雾；ESC 或点雾退出 */
+html.pk-app-full .chat-thread { will-change: auto !important; }
+html .pk-app__scrim {
+  position: fixed; inset: 0; z-index: 2147482990; background: var(--pk-scrim);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: pk-fade .24s ease backwards;
+}
+@keyframes pk-fade { from { opacity: 0; } }
+html .pk-rich--app.is-full {
+  position: fixed; inset: max(24px, 5vh) max(24px, 6vw); z-index: 2147482991; margin: 0;
+  background: var(--pk-solid); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--cle-shadow-pop, 0 30px 80px -20px rgba(0, 0, 0, .45));
+  animation: pk-pop .3s var(--cle-ease, ease) backwards;
+}
+@keyframes pk-pop { from { opacity: 0; transform: scale(.98); } }
+html .pk-rich--app.is-full .pk-app__stage { flex: 1; }
+html .pk-rich--app.is-full .pk-app__frame { height: 100% !important; }
+@media (prefers-reduced-motion: reduce) {
+  html .pk-app__loading i { animation: none; background: var(--pk-faint); }
+  html :is(.pk-app__frame, .pk-rich--app.is-full, .pk-app__scrim) { transition: none; animation: none; }
+}

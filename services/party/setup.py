@@ -85,9 +85,12 @@ def install(home=None):
             # Never alter custom personas or another agent sharing this id.
             if (existing.get('workspace') == str(workspace) and
                     not workspace.is_symlink()):
+                # Old installs embed the former display name; those exact
+                # templates are ours and get rewritten with the current name.
                 known_souls = {legacy_party_soul(label, address)
                                for label in (name, old_name) for address in ('老板', '铲屎官')}
-                known_souls.add(party_soul(name, '老板'))
+                known_souls |= {party_soul(label, address)
+                                for label in (name, old_name) for address in ('老板', '铲屎官')}
                 migrated |= migrate_file(home, agent_id, workspace / 'SOUL.md', known_souls, party_soul(name))
                 known_identities = {identity_file(label) + '- **Vibe:** 清楚、可靠的群聊搭档\n'
                                     for label in (name, old_name)}

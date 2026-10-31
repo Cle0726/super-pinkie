@@ -1,0 +1,229 @@
+/* 记忆匣：纸面面板 + 墨色文字 + 冰蓝焦点。
+   结构（头部/工具条/编辑器/列表/页脚）与行为不变，只把表面、边框、状态色换成 token。
+   注意：--cle-paper 在夜间是最深的底、--cle-surface 是抬起来的表面，
+   所以这里"面板"用 surface、"行/卡片"用 paper，两套主题都自然成立。 */
+
+.laolao-memory-entry {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--cle-ink-2);
+  background: transparent;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.laolao-memory-entry:hover {
+  border-color: var(--cle-line-strong);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+}
+
+.laolao-memory-entry:focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 2px;
+}
+
+/* 入口的小书写板图标：用 currentColor 描线，跟随主题 */
+.laolao-memory-entry::before {
+  width: 13px;
+  height: 15px;
+  border: 1.4px solid currentColor;
+  border-radius: 4px 4px 5px 5px;
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, currentColor 12%, transparent);
+  content: "";
+}
+
+.laolao-memory-entry::after {
+  position: absolute;
+  top: 7px;
+  width: 6px;
+  height: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 3px 0 color-mix(in srgb, currentColor 70%, transparent);
+  content: "";
+}
+
+.laolao-memory-layer {
+  position: fixed;
+  z-index: 2147483600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: var(--pk-scrim, rgba(12, 12, 14, .32));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: laolao-memory-layer-in 180ms ease-out both;
+}
+
+.laolao-memory-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(680px, calc(100vw - 56px));
+  height: min(690px, calc(100vh - 56px));
+  overflow: hidden;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 20px;
+  color: var(--cle-ink);
+  background: var(--cle-surface);
+  box-shadow: var(--cle-shadow-pop);
+}
+
+.laolao-memory-head,
+.laolao-memory-toolbar,
+.laolao-memory-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cle-line);
+}
+
+.laolao-memory-head { padding-top: 15px; }
+.laolao-memory-title { min-width: 0; flex: 1; }
+.laolao-memory-title strong { display: block; color: var(--cle-ink); font-size: 16px; font-weight: 600; }
+.laolao-memory-title span { display: block; margin-top: 3px; color: var(--cle-ink-2); font-size: 11px; }
+
+.laolao-memory-close,
+.laolao-memory-button {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 10px;
+  color: var(--cle-ink);
+  background: var(--cle-paper);
+  font: 500 12.5px/1 var(--cle-sans);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.laolao-memory-close { width: 32px; padding: 0; border-radius: 50%; font-size: 16px; }
+.laolao-memory-button:hover,
+.laolao-memory-close:hover { background: var(--cle-gaze-soft); border-color: var(--cle-gaze); }
+.laolao-memory-close:focus-visible,
+.laolao-memory-button:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+.laolao-memory-button:disabled { opacity: .55; cursor: default; background: var(--cle-paper); border-color: var(--cle-line); }
+
+/* 主操作：墨底纸字（夜间自动反转成浅底深字，因为 --cle-ink 会翻转） */
+.laolao-memory-button--primary {
+  color: var(--cle-paper);
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+}
+.laolao-memory-button--primary:hover {
+  background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+  border-color: var(--cle-ink);
+}
+
+/* 危险操作保留红色语义 */
+.laolao-memory-button--danger {
+  color: var(--cle-danger, #B23A33);
+  border-color: color-mix(in srgb, var(--cle-danger, #B23A33) 38%, transparent);
+  background: transparent;
+}
+.laolao-memory-button--danger:hover {
+  background: color-mix(in srgb, var(--cle-danger, #B23A33) 8%, transparent);
+  border-color: var(--cle-danger, #B23A33);
+}
+
+.laolao-memory-search,
+.laolao-memory-editor textarea,
+.laolao-memory-editor input,
+.laolao-memory-editor select {
+  box-sizing: border-box;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 10px;
+  color: var(--cle-ink);
+  background: var(--cle-paper);
+  font: inherit;
+  outline: none;
+}
+
+.laolao-memory-search { min-width: 0; height: 34px; flex: 1; padding: 0 12px; }
+.laolao-memory-search:focus,
+.laolao-memory-editor textarea:focus,
+.laolao-memory-editor input:focus,
+.laolao-memory-editor select:focus {
+  border-color: var(--cle-gaze);
+  box-shadow: 0 0 0 3px var(--cle-gaze-soft);
+}
+.laolao-memory-search::placeholder { color: var(--cle-ink-2); opacity: .85; }
+
+.laolao-memory-list {
+  min-height: 0;
+  padding: 14px 18px 24px;
+  overflow: auto;
+}
+
+.laolao-memory-empty { padding: 64px 20px; color: var(--cle-ink-2); text-align: center; }
+
+.laolao-memory-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--cle-line);
+  border-radius: 14px;
+  background: var(--cle-paper);
+}
+
+.laolao-memory-card__meta { display: flex; align-items: center; gap: 7px; color: var(--cle-ink-2); font-size: 10px; }
+.laolao-memory-card__kind {
+  padding: 2px 6px; border-radius: 99px;
+  color: var(--cle-ink-2);
+  background: color-mix(in srgb, var(--cle-ink) 7%, transparent);
+}
+.laolao-memory-card__text { grid-column: 1; margin: 0; color: var(--cle-ink); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.laolao-memory-card__actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: start; gap: 4px; }
+.laolao-memory-card__actions button {
+  min-width: 30px; height: 28px; padding: 0 7px;
+  border: 0; border-radius: 8px;
+  color: var(--cle-ink-2); background: transparent;
+  font: inherit; cursor: pointer;
+}
+.laolao-memory-card__actions button:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+.laolao-memory-card__actions button:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+
+.laolao-memory-editor {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cle-line);
+  background: var(--cle-paper);
+}
+
+.laolao-memory-editor[hidden] { display: none; }
+.laolao-memory-editor textarea { grid-column: 1 / -1; min-height: 100px; padding: 10px 12px; resize: vertical; font: inherit; }
+.laolao-memory-editor input,
+.laolao-memory-editor select { height: 34px; padding: 0 10px; }
+.laolao-memory-editor__checks { display: flex; align-items: center; gap: 6px; color: var(--cle-ink-2); font-size: 12px; }
+.laolao-memory-editor__actions { grid-column: 1 / -1; display: flex; justify-content: end; gap: 8px; }
+
+.laolao-memory-foot { justify-content: space-between; border-top: 1px solid var(--cle-line); border-bottom: 0; color: var(--cle-ink-2); font-size: 11px; }
+.laolao-memory-confirm { display: flex; align-items: center; gap: 8px; }
+.laolao-memory-confirm[hidden] { display: none; }
+.laolao-memory-status[data-error="1"] { color: var(--cle-danger, #B23A33); }
+
+@keyframes laolao-memory-layer-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 720px) {
+  .laolao-memory-layer { padding: 10px; }
+  .laolao-memory-panel { width: calc(100vw - 20px); height: calc(100vh - 20px); border-radius: 16px; }
+  .laolao-memory-editor { grid-template-columns: 1fr; }
+  .laolao-memory-editor textarea,
+  .laolao-memory-editor__actions { grid-column: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-memory-layer { animation: none; }
+  .laolao-memory-entry { transition: none; }
+}

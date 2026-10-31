@@ -17,7 +17,8 @@ function loadResumeHarness(historyPages){
       assert.equal(params.sessionKey,sessionKey);
       assert.equal(params.agentId,'unrestricted');
       assert.equal(params.limit,128);
-      return historyPages.get(params.offset);
+      const page=historyPages.get(params.offset);
+      return typeof page==='function'?page(params):page;
     },
   };
   const state={
@@ -61,6 +62,8 @@ function loadResumeHarness(historyPages){
 function loadTwoPaneHarness(request,options={}){
   const vm=require('node:vm');
   const listeners=new Map();
+  const timers=new Map();
+  let timerId=0;
   let nowAt=options.now ?? Date.now();
   const TestDate=options.clock ? class extends Date {static now(){return nowAt;}} : Date;
   const leftKey='agent:project:dashboard:left';
@@ -96,7 +99,9 @@ function loadTwoPaneHarness(request,options={}){
     },dispatchEvent(){},
   };
   const location={pathname:'/chat',search:`?session=${encodeURIComponent(leftKey)}`};
-  const window={location,setTimeout(){return 1;},clearTimeout(){},setInterval(){return 1;},
+  const window={location,
+    setTimeout(fn,ms){const id=++timerId;timers.set(id,{fn,ms,cancelled:false});return id;},
+    clearTimeout(id){if(timers.has(id))timers.get(id).cancelled=true;},setInterval(){return 1;},
     localStorage:options.localStorage,
     addEventListener(){},dispatchEvent(){}};
   class MutationObserver{observe(){} disconnect(){}}
@@ -108,6 +113,10 @@ function loadTwoPaneHarness(request,options={}){
     {filename:'laolao-resume.js'});
   return {window,document,location,page,left,right,leftKey,rightKey,panes,gateway,
     dispatch(name,event){for(const handler of listeners.get(name)||[])handler(event);},
+    runTimers(ms,{includeCancelled=false}={}){
+      const pending=Array.from(timers).filter(([,timer])=>timer.ms===ms);
+      for(const [id,timer] of pending){timers.delete(id);if(includeCancelled||!timer.cancelled)timer.fn();}
+    },
     setTime(value){nowAt=value;}};
 }
 
@@ -156,6 +165,7 @@ test('an active refresh restores the missing real user head without replacing th
     assert.equal(params.limit,128);
     return {messages:[opening,call,result],totalMessages:3,hasMore:false,sessionId:'long-running'};
   });
+  delete h.left.state.chatHistoryPagination;
   h.left.state.chatMessages=[call,result];
   h.left.state.chatStream={runId:'run-active'};
   const originalStream=h.left.state.chatStream;
@@ -509,10 +519,12 @@ test('an exact native retry receipt wins over an older same-text steered card',a
   ]);
   assert.equal(await h.window.__laolaoQueueRecovery.recover('mixed-same-text'),true);
   assert.deepEqual(calls.remove,['newer-native-retry']);
-  assert.deepEqual(calls.retry.map(item=>item.id),['older-steer']);
+  assert.deepEqual(calls.retry,[]);
+  assert.equal(h.left.state.chatQueue[0].id,'older-steer');
+  assert.equal(h.left.state.chatQueue[0].pendingRunId,'lost-run');
 });
 
-test('force-idle recovery demotes an abandoned steer and lets the native retry API deliver it',async()=>{
+test('force-idle recovery preserves an accepted steer until durable delivery is known',async()=>{
   const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
     ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
     : {messages:[],hasMore:false});
@@ -524,13 +536,11 @@ test('force-idle recovery demotes an abandoned steer and lets the native retry A
   }]);
   h.window.__laolaoStaleBusy.forceIdle();
   assert.equal(h.left.state.chatRunId,null);
-  assert.equal(await h.window.__laolaoQueueRecovery.recover('force-idle'),true);
-  assert.equal(calls.retry.length,1);
-  assert.equal(calls.retry[0].kind,'queued');
-  assert.equal(calls.retry[0].pendingRunId,undefined);
-  assert.equal(calls.retry[0].sendState,'waiting-reconnect');
-  assert.equal(calls.retry[0].sendError,undefined);
-  assert.equal(h.left.state.chatQueue.length,0);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('force-idle'),false);
+  assert.deepEqual(calls.retry,[]);
+  assert.equal(h.left.state.chatQueue[0].kind,'steered');
+  assert.equal(h.left.state.chatQueue[0].pendingRunId,'pinkie-watchdog-old');
+  assert.equal(h.left.state.chatQueue[0].sendState,'waiting-model');
 });
 
 test('an ordinary busy queue item resumes immediately after a lost final instead of waiting for stale-state timeout',async()=>{
@@ -597,7 +607,7 @@ test('a verified queued idle is not blocked by one stale native Stop button',asy
   assert.deepEqual(calls.retry.map(item=>item.id),['stale-stop-queue']);
 });
 
-test('a restored expired send state is revived once without turning a permanent failure into an idle retry loop',async()=>{
+test('a restored failed state stays available for explicit retry without an automatic resend',async()=>{
   const now=1_700_000_000_000;
   const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
     ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
@@ -610,18 +620,17 @@ test('a restored expired send state is revived once without turning a permanent 
     this.chatQueue=this.chatQueue.map(entry=>entry.id===item.id
       ? {...entry,sendState:'failed',sendError:'permanent error'}:entry);
   }});
-  assert.equal(await h.window.__laolaoQueueRecovery.recover('restored-queue'),true);
-  assert.equal(calls.retry.length,1);
-  assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('restored-queue'),false);
+  assert.equal(calls.retry.length,0);
   // The same restored item may remain visible after a non-retryable native
   // failure, but the 1s idle poll must preserve its text rather than hammer it.
   assert.equal(await h.window.__laolaoQueueRecovery.recover('idle-poll'),false);
-  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry.length,0);
   assert.equal(h.left.state.chatQueue[0].text,'do not lose this');
   assert.equal(h.left.state.chatQueue[0].sendState,'failed');
 });
 
-test('a selected-session reload hydrates one stale native composer queue and delegates its send back to retry',async()=>{
+test('a selected-session reload hydrates an uncertain steer without automatically sending it again',async()=>{
   const storage=memoryStorage();
   const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
     ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
@@ -638,16 +647,15 @@ test('a selected-session reload hydrates one stale native composer queue and del
       sessionKey:h.leftKey,agentId:'project'}],updatedAt:2_000,
   }}}));
   const calls=attachNativeQueueApi(h.left,[]);
-  assert.equal(await h.window.__laolaoQueueRecovery.recover('composer-hydration'),true);
-  assert.equal(calls.retry.length,1);
-  assert.equal(calls.retry[0].id,'reload-stale');
-  assert.equal(calls.retry[0].kind,'queued');
-  assert.equal(calls.retry[0].pendingRunId,undefined);
-  assert.equal(h.left.state.chatQueue.length,0);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('composer-hydration'),false);
+  assert.equal(calls.retry.length,0);
+  assert.equal(h.left.state.chatQueue[0].id,'reload-stale');
+  assert.equal(h.left.state.chatQueue[0].kind,'steered');
+  assert.equal(h.left.state.chatQueue[0].pendingRunId,'expired-run');
   // Page-local hydration is one-shot. A native remove/retry cannot be undone
   // by an unchanged old storage record during the same page lifetime.
   assert.equal(await h.window.__laolaoQueueRecovery.recover('idle-poll'),false);
-  assert.equal(calls.retry.length,1);
+  assert.equal(calls.retry.length,0);
 });
 
 test('queue recovery does not retry while the backend says a watchdog replacement run is active',async()=>{
@@ -891,6 +899,47 @@ test('terminal sync retries repaint until the final is actually in the DOM',asyn
   assert.equal(h.left.state.updateCount,2);
 });
 
+test('an offscreen virtual tail already in state never triggers repeated repaint while reading older history',async()=>{
+  const final={role:'assistant',content:'persisted final outside viewport',stopReason:'stop',
+    __openclaw:{id:'virtual-offscreen-final'}};
+  const calls=[];
+  const h=loadTwoPaneHarness(async(method)=>{
+    calls.push(method);
+    return method==='sessions.list' ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+      : {messages:[{...final}],hasMore:false};
+  },{clock:true,now:1_000});
+  h.panes.pop();
+  const original=[{role:'user',content:'earlier question',__openclaw:{id:'earlier-user'}},final];
+  h.left.state.chatMessages=original;
+  h.left.state.chatUserNearBottom=false;
+  h.left.state.chatFollowLocked=true;
+  h.left.renderRoot={textContent:'A much older reply is visible here.'};
+  h.left.state.requestUpdate=function(){this.updateCount=(this.updateCount||0)+1;};
+  assert.equal(await h.window.__laolaoTerminalSync.reconcile(),false);
+  h.setTime(8_000);
+  assert.equal(await h.window.__laolaoTerminalSync.reconcile(),false);
+  assert.equal(h.left.state.chatMessages,original);
+  assert.equal(h.left.state.updateCount,undefined);
+  assert.equal(h.left.state.scrollCount,undefined);
+  assert.deepEqual(calls,['sessions.list','chat.history','sessions.list','chat.history'],
+    'only the bounded probe runs; no second idle check or recovery repaint is needed');
+});
+
+test('an offscreen same-ID final still updates changed content without pulling the reader to the bottom',async()=>{
+  const before={role:'assistant',content:'old final body',stopReason:'stop',__openclaw:{id:'changed-final'}};
+  const after={...before,content:'corrected final body'};
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]} : {messages:[after],hasMore:false},
+  {clock:true,now:1_000});
+  h.panes.pop();
+  h.left.state.chatMessages=[before];
+  h.left.state.chatFollowLocked=true;
+  h.left.state.chatUserNearBottom=false;
+  assert.equal(await h.window.__laolaoTerminalSync.reconcile(),true);
+  assert.equal(h.left.state.chatMessages.at(-1).content,after.content);
+  assert.equal(h.left.state.scrollCount,undefined);
+});
+
 test('terminal sync clears stale transient tool streams only after backend completion',async()=>{
   const final={role:'assistant',content:'Final answer after real tools',stopReason:'stop',
     __openclaw:{id:'tool-stream-final'}};
@@ -1058,11 +1107,11 @@ test('history projection rebuilds are surfaced and retried with bounded backoff'
   assert.match(sidebar,/errorCode|errorText/);
 });
 
-test('history recovery keeps a bounded current-turn window instead of repaginating the transcript',()=>{
+test('history recovery bounds initial prefetch while preserving the paging contract',()=>{
   const resume=read('ui/injections/laolao-resume.js');
   assert.match(resume,/LIVE_MESSAGE_WINDOW = 512/);
   assert.match(resume,/HISTORY_PAGE_SIZE = 128/);
-  assert.match(resume,/keepLiveMessages/);
+  assert.match(resume,/normalizeHistoryMessages/);
   assert.match(resume,/findLastIndex/);
   assert.match(resume,/fetchRecentHistory/);
   assert.match(resume,/offset/);
@@ -1166,15 +1215,17 @@ test('live-window recovery always prefers the authoritative newest server tail',
   assert.equal(trimmed.at(-1).content,'latest-10');
 });
 
-test('history recovery is session-scoped and prunes native remounts back to the live window',()=>{
+test('history recovery is session-scoped and never trims already loaded pages',()=>{
   const resume=read('ui/injections/laolao-resume.js');
   assert.match(resume,/paneSessionKey\(pane\) !== sessionKey/);
   assert.match(resume,/gatewayClient\(\) !== client/);
   assert.match(resume,/visible-window-regressed/);
   assert.match(resume,/history-not-yet-synced/);
   assert.match(resume,/!historyStatusBySession\.has\(key\)/);
-  assert.match(resume,/state\.chatMessages\.length > LIVE_MESSAGE_WINDOW/);
-  assert.match(resume,/writeOwnMessages\(state, keepLiveMessages\(state\.chatMessages\)\)/);
+  assert.doesNotMatch(resume,/state\.chatMessages\.length > LIVE_MESSAGE_WINDOW/);
+  assert.doesNotMatch(resume,/keepLiveMessages/);
+  assert.match(resume,/__laolaoLoadEarlierHistory/);
+  assert.match(resume,/paginationForHistory/);
   assert.match(resume,/HISTORY_MAX_CHARS = 240000/);
   assert.doesNotMatch(resume,/pagination did not advance/);
 });
@@ -1183,12 +1234,12 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
   for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume45/);
+    assert.match(installer,/laolao-resume\.js\?v=resume54/);
     assert.match(installer,/apply-chat-timeline\.mjs/);
-    assert.match(installer,/clekk-history33/);
+    assert.match(installer,/clekk-history59/);
   }
   const patch=read('patch/apply-chat-timeline.mjs');
-  assert.match(patch,/LIVE_MESSAGE_WINDOW = 512/);
+  assert.match(patch,/HISTORY_RENDER_LIMIT = Infinity/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
   assert.match(patch,/pinkie-chat-timeline:v5/);
 });
@@ -1202,11 +1253,30 @@ test('desktop installers update an existing root-relative resume URL',()=>{
   assert.ok(windows.includes("('$1?v=' + $entry.Value)"));
 });
 
+test('native entry cache revision covers both URL forms and retains independent flags',()=>{
+  const mac=read('installer/macos/apply-theme.sh');
+  const command=[...mac.matchAll(/perl -0pi -e '([^']+)' "\$index_file"/g)]
+    .find(match=>match[1].includes('assets/index-')&&match[1].includes('clekk-history59'))?.[1];
+  assert.ok(command,'test the actual installer rewrite');
+  const {spawnSync}=require('node:child_process');
+  for(const prefix of ['./','/']){
+    for(const suffix of ['', '?v=clekk-history46&pinkie-drafts=1']){
+      const original=`<script type="module" src="${prefix}assets/index-abc.js${suffix}"></script>`;
+      const run=spawnSync('perl',['-0pe',command],{input:original,encoding:'utf8'});
+      assert.equal(run.status,0,run.stderr);
+      const extra=suffix?'&pinkie-drafts=1':'';
+      assert.equal(run.stdout,`<script type="module" src="${prefix}assets/index-abc.js?v=clekk-history59${extra}"></script>`);
+      const again=spawnSync('perl',['-0pe',command],{input:run.stdout,encoding:'utf8'});
+      assert.equal(again.stdout,run.stdout,'reapplying must not accumulate query parameters');
+    }
+  }
+});
+
 test('patched hashed UI chunks replace stale service-worker cache exactly once',()=>{
   const resume=read('ui/injections/laolao-resume.js');
   const mac=read('installer/macos/apply-theme.sh');
   const windows=read('installer/windows/apply-theme.ps1');
-  assert.match(resume,/UI_CACHE_REVISION = "history-render-31"/);
+  assert.match(resume,/UI_CACHE_REVISION = "history-render-34"/);
   assert.match(resume,/startsWith\("openclaw-control-"\)/);
   assert.match(resume,/UI_CACHE_REFRESH_ATTEMPTED/);
   assert.match(resume,/window\.localStorage\.setItem\(UI_CACHE_REFRESHED, "1"\)/);
@@ -1215,8 +1285,8 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   assert.match(cacheRefresh,/let the current view stay put/);
   assert.doesNotMatch(cacheRefresh,/window\.location\.reload\(\)/);
   for(const installer of [mac,windows]){
-    assert.match(installer,/clekk-history-render-33/);
-    assert.match(installer,/clekk-history33/);
+    assert.match(installer,/clekk-history-render-59/);
+    assert.match(installer,/clekk-history59/);
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }
@@ -1254,4 +1324,637 @@ test('a native newer-tail reload keeps the messages already on screen instead of
   state.chatMessages=range(1,6);
   writeOwnMessages(state,range(4,6));
   assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.seq),[4,5,6]);
+});
+
+
+test('history follows the server cursor even when projection changes the row count',async()=>{
+  const message=(id,role='assistant')=>({role,content:id,__openclaw:{id}});
+  const pages=new Map([
+    [0,{sessionId:'cursor',hasMore:true,nextOffset:128,messages:[message('tail')]}],
+    [128,{sessionId:'cursor',hasMore:false,messages:[message('opening','user')]}],
+  ]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('cursor',{manual:true}),true);
+  assert.deepEqual(requestedOffsets,[0,128]);
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.__openclaw.id),['opening','tail']);
+});
+
+test('an empty projected page can still advance using the server cursor',async()=>{
+  const pages=new Map([
+    [0,{sessionId:'empty-projection',hasMore:true,nextOffset:128,messages:[]}],
+    [128,{sessionId:'empty-projection',hasMore:false,messages:[{role:'user',content:'visible'}]}],
+  ]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('empty-projection',{manual:true}),true);
+  assert.deepEqual(requestedOffsets,[0,128]);
+  assert.equal(state.chatMessages[0].content,'visible');
+});
+
+test('a non-advancing history cursor leaves the existing chat intact',async()=>{
+  const pages=new Map([[0,{sessionId:'stalled',hasMore:true,nextOffset:0,
+    messages:[{role:'assistant',content:'partial'}]}]]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  const old={role:'assistant',content:'keep existing'};
+  state.chatMessages=[old];
+  assert.equal(await window.__laolaoRecoverCurrentChat('stalled',{manual:true}),false);
+  assert.deepEqual(requestedOffsets,[0]);
+  assert.equal(state.chatMessages[0],old);
+});
+
+test('a reset between history pages discards the old incarnation and retries from zero',async()=>{
+  let zeroReads=0;
+  const pages=new Map([
+    [0,()=>++zeroReads===1
+      ? {sessionId:'before',hasMore:true,nextOffset:128,messages:[{role:'assistant',content:'OLD'}]}
+      : {sessionId:'after',hasMore:false,messages:[{role:'user',content:'NEW'}]}],
+    [128,{sessionId:'after',hasMore:false,messages:[{role:'user',content:'RESET'}]}],
+  ]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('reset',{manual:true}),true);
+  assert.deepEqual(requestedOffsets,[0,128,0]);
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.content),['NEW']);
+  assert.equal(state.currentSessionId,'after');
+});
+
+test('a windowReset response on an older page restarts even when sessionId is unchanged',async()=>{
+  let zeroReads=0;
+  const pages=new Map([
+    [0,()=>++zeroReads===1
+      ? {sessionId:'same',hasMore:true,nextOffset:128,messages:[{role:'assistant',content:'OLD'}]}
+      : {sessionId:'same',windowReset:true,hasMore:false,messages:[{role:'user',content:'NEW'}]}],
+    [128,{sessionId:'same',windowReset:true,hasMore:false,messages:[{role:'user',content:'RESET'}]}],
+  ]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('compaction',{manual:true}),true);
+  assert.deepEqual(requestedOffsets,[0,128,0]);
+  assert.deepEqual(Array.from(state.chatMessages,m=>m.content),['NEW']);
+});
+
+test('repeated incarnation changes stop after one snapshot retry',async()=>{
+  let request=0;
+  const pages=new Map([
+    [0,()=>({sessionId:`start-${++request}`,hasMore:true,nextOffset:128,
+      messages:[{role:'assistant',content:'partial'}]})],
+    [128,()=>({sessionId:`changed-${++request}`,hasMore:false,messages:[]})],
+  ]);
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  const old={role:'user',content:'original'};
+  state.chatMessages=[old];
+  assert.equal(await window.__laolaoRecoverCurrentChat('reset-storm',{manual:true}),false);
+  assert.deepEqual(requestedOffsets,[0,128,0,128]);
+  assert.equal(state.chatMessages[0],old);
+});
+
+test('a 520-message turn preserves every fetched row without an unreachable middle gap',async()=>{
+  const messages=Array.from({length:520},(_,i)=>({role:i===0?'user':'toolResult',
+    content:`step-${i+1}`,__openclaw:{id:`step-${i+1}`,seq:i+1}}));
+  const pages=new Map();
+  for(let offset=0;offset<messages.length;offset+=128){
+    const end=messages.length-offset;
+    pages.set(offset,{sessionId:'long-turn',hasMore:end>128,nextOffset:offset+128,
+      messages:messages.slice(Math.max(0,end-128),end)});
+  }
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('long-turn',{manual:true}),true);
+  assert.deepEqual(requestedOffsets,[0,128,256,384,512]);
+  assert.equal(state.chatMessages.length,520);
+  assert.equal(state.chatMessages[0].__openclaw.seq,1);
+  assert.deepEqual(Array.from(state.chatMessages.slice(1),m=>m.__openclaw.seq),
+    Array.from({length:519},(_,i)=>i+2));
+});
+
+test('history without any user head still stops after twelve scan pages',async()=>{
+  const pages=new Map(Array.from({length:12},(_,i)=>[i*128,{
+    sessionId:'head-outside-bound',hasMore:true,nextOffset:(i+1)*128,
+    messages:Array.from({length:128},(_,j)=>({role:'toolResult',content:`${i}-${j}`,
+      __openclaw:{id:`${i}-${j}`}})),
+  }]));
+  const {window,state,requestedOffsets}=loadResumeHarness(pages);
+  assert.equal(await window.__laolaoRecoverCurrentChat('bounded-scan',{manual:true}),true);
+  assert.equal(requestedOffsets.length,12);
+  assert.equal(state.chatMessages.length,1536);
+  assert.equal(state.chatHistoryPagination.hasMore,true);
+  assert.equal(state.chatHistoryPagination.nextOffset,1536);
+});
+
+test('the same durable message ID still refreshes changed body and completion state',async()=>{
+  const before={role:'assistant',content:'partial',stopReason:'toolUse',__openclaw:{id:'stable'}};
+  const after={...before,content:'finished text',stopReason:'stop'};
+  const {window,state}=loadResumeHarness(new Map([[0,{hasMore:false,messages:[after]}]]));
+  state.chatMessages=[before];
+  assert.equal(await window.__laolaoRecoverCurrentChat('same-id-update',{manual:true}),true);
+  assert.equal(state.chatMessages[0].content,'finished text');
+  assert.equal(state.chatMessages[0].stopReason,'stop');
+  assert.equal(state.updateCount,1);
+  const same=window.__laolaoHistoryTestHooks.sameMessageSequence;
+  assert.equal(same([after],[{...after,__pinkieReceivedFinal:{sessionKey:state.sessionKey}}]),true);
+  assert.equal(same([after],[{...after,stopReason:'aborted'}]),false);
+});
+
+test('manual user input cancels the final delayed scroll even after the final was already followed',async()=>{
+  for(const kind of ['wheel','touchmove','keyboard','scrollbar']){
+    const final={role:'assistant',content:'FINAL',stopReason:'stop',__openclaw:{id:kind}};
+    const h=loadTwoPaneHarness(async()=>({messages:[final],hasMore:false}));
+    h.panes.pop();
+    const button=sendButton();
+    const event={target:button,composedPath:()=>[button,h.left]};
+    h.dispatch('pointerdown',event);
+    assert.equal(await h.window.__laolaoRecoverCurrentChat(kind,{manual:true}),true);
+    assert.equal(h.left.state.scrollCount,1);
+    if(kind==='keyboard')h.dispatch('keydown',{key:'PageUp',target:{closest(){return null;}},composedPath:()=>[h.left]});
+    else if(kind==='scrollbar')h.dispatch('pointerdown',{
+      target:{scrollHeight:2000,clientHeight:500,clientWidth:500,offsetWidth:515,
+        closest(){return null;},getBoundingClientRect(){return {right:515};}},
+      clientX:510,composedPath:()=>[h.left],
+    });
+    else h.dispatch(kind,event);
+    // Execute cancelled callbacks too: identity checks must protect even an
+    // already queued timer that cannot be removed from the browser task queue.
+    h.runTimers(120,{includeCancelled:true});
+    assert.equal(h.left.state.scrollCount,1,kind);
+    assert.equal(h.left.state.chatFollowLocked,true,kind);
+  }
+});
+
+test('a newer send invalidates every deferred scroll from the previous send',()=>{
+  const h=loadTwoPaneHarness(async()=>({messages:[],hasMore:false}));
+  h.panes.pop();
+  const button=sendButton(),event={target:button,composedPath:()=>[button,h.left]};
+  h.dispatch('pointerdown',event);
+  h.dispatch('pointerdown',event);
+  h.runTimers(120,{includeCancelled:true});
+  assert.equal(h.left.state.scrollCount,1);
+  assert.equal(h.left.state.chatFollowLocked,false);
+});
+
+test('history writes preserve the owning viewport and never trim a long live turn',async()=>{
+  const user={role:'user',content:'opening',__openclaw:{id:'opening'}};
+  const {window,state,pane}=loadResumeHarness(new Map([[0,{messages:[user],hasMore:false}]]));
+  let calls=0;
+  window.__pinkieChatViewport={preserve(target,write){assert.equal(target,pane);calls++;return write();}};
+  assert.equal(await window.__laolaoRecoverCurrentChat('anchor',{manual:true}),true);
+  assert.equal(calls,1);
+  window.__laolaoMessageWindowTestHooks.guardMessageWindow(state);
+  state.chatRunId='still-running';
+  state.chatMessages=[user,...Array.from({length:700},(_,i)=>({role:'toolResult',content:`live-${i}`,__openclaw:{id:`live-${i}`}}))];
+  assert.equal(state.chatMessages.length,701);
+  assert.equal(state.chatMessages[0],user);
+  assert.equal(calls,2);
+});
+
+
+test('active-run delivery pruning removes only confirmed cards without retrying or clearing the run',async()=>{
+  const h=loadTwoPaneHarness(async(method)=>{
+    assert.equal(method,'chat.history','pruning never asks to idle the active run');
+    return {sessionId:'active-instance',hasMore:false,messages:[
+      {role:'user',content:'accepted steer',idempotencyKey:'accepted-run:user'},
+      {role:'assistant',content:'still working',stopReason:'toolUse'},
+    ]};
+  });
+  h.left.state.currentSessionId='active-instance';
+  h.left.state.chatRunId='original-active-run';
+  h.left.state.chatStream={runId:'original-active-run'};
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'accepted',kind:'steered',text:'accepted steer',sendRunId:'accepted-run',pendingRunId:'original-active-run',sendState:'waiting-model'},
+    {id:'waiting',kind:'queued',text:'next instruction',pendingRunId:'original-active-run',sendState:'waiting-model'},
+  ]);
+  const ids=await h.window.__laolaoQueueRecovery.pruneDelivered(h.left);
+  assert.deepEqual(Array.from(ids),['accepted']);
+  assert.deepEqual(calls.remove,['accepted']);
+  assert.deepEqual(calls.retry,[]);
+  assert.equal(h.left.state.chatRunId,'original-active-run');
+  assert.equal(h.left.state.chatStream.runId,'original-active-run');
+  assert.equal(h.left.state.chatQueue[0].id,'waiting');
+  assert.equal(h.left.state.chatQueue[0].pendingRunId,'original-active-run');
+  assert.equal(h.left.state.chatQueue[0].sendState,'waiting-model');
+});
+
+test('provided delivery evidence pairs identical queued text one-to-one while the run is active',async()=>{
+  const h=loadTwoPaneHarness(async()=>{throw new Error('provided evidence needs no RPC');});
+  h.left.state.chatRunId='busy';
+  const at=Date.now()-1000;
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'one',text:'same',createdAt:at,kind:'steered',pendingRunId:'busy'},
+    {id:'two',text:'same',createdAt:at+1,kind:'steered',pendingRunId:'busy'},
+  ]);
+  const evidence=[{role:'user',content:'same',timestamp:at+500}];
+  assert.deepEqual(Array.from(await h.window.__laolaoQueueRecovery.pruneDelivered(h.left,evidence)),['one']);
+  assert.deepEqual(calls.remove,['one']);
+  assert.deepEqual(calls.retry,[]);
+  assert.equal(h.left.state.chatQueue[0].id,'two');
+  assert.deepEqual(Array.from(await h.window.__laolaoQueueRecovery.pruneDelivered(h.left,evidence)),[]);
+  assert.deepEqual(calls.remove,['one'],'a repeated poll cannot reuse the same delivered user row');
+  assert.equal(h.left.state.chatQueue[0].id,'two');
+});
+
+test('delivery pruning refuses stale evidence after the pane switches sessions',async()=>{
+  let resolveHistory;
+  const h=loadTwoPaneHarness(async()=>new Promise(resolve=>{resolveHistory=resolve;}));
+  const calls=attachNativeQueueApi(h.left,[{id:'pending',text:'accepted',sendRunId:'accepted'}]);
+  h.left.state.chatRunId='busy';
+  const pruning=h.window.__laolaoQueueRecovery.pruneDelivered(h.left);
+  h.left.state.sessionKey=h.rightKey;
+  resolveHistory({messages:[{role:'user',content:'accepted',idempotencyKey:'accepted:user'}],hasMore:false});
+  assert.deepEqual(Array.from(await pruning),[]);
+  assert.deepEqual(calls.remove,[]);
+  assert.deepEqual(calls.retry,[]);
+});
+
+
+test('history from an earlier local session incarnation cannot overwrite a same-key reset',async()=>{
+  let release;
+  const h=loadTwoPaneHarness(async()=>new Promise(resolve=>{release=resolve;}));
+  h.panes.pop();
+  h.left.state.currentSessionId='before-reset';
+  const pending=h.window.__laolaoRecoverCurrentChat('local-reset',{manual:true});
+  h.left.state.currentSessionId='after-reset';
+  const newer={role:'user',content:'new incarnation',__openclaw:{id:'new-instance'}};
+  h.left.state.chatMessages=[newer];
+  release({sessionId:'before-reset',messages:[{role:'assistant',content:'old instance'}],hasMore:false});
+  assert.equal(await pending,false);
+  assert.equal(h.left.state.chatMessages[0],newer);
+});
+
+function browsingHistory(total=2049){
+  const message=seq=>({role:seq%2?'user':'assistant',content:`message-${seq}`,
+    __openclaw:{id:`message-${seq}`,seq}});
+  const pages=new Map();
+  let count=total;
+  const pageAt=offset=>{
+    const end=Math.max(0,count-offset),start=Math.max(0,end-128);
+    return {sessionId:'browse-session',totalMessages:count,hasMore:start>0,
+      nextOffset:Math.min(count,offset+128),
+      messages:Array.from({length:end-start},(_,index)=>message(start+index+1))};
+  };
+  for(let offset=0;offset<10000;offset+=128)pages.set(offset,()=>pageAt(offset));
+  const h=loadResumeHarness(pages);
+  h.client.request=async(method,params)=>{
+    if(method==='sessions.list')return {sessions:[]};
+    assert.equal(method,'chat.history');
+    h.requestedOffsets.push(params.offset);
+    return pageAt(params.offset);
+  };
+  return {...h,pageAt,message,setTotal(value){count=value;}};
+}
+
+test('older history remains reachable past the initial 512-row prefetch until the first message',async()=>{
+  const h=browsingHistory();
+  assert.equal(await h.window.__laolaoRecoverCurrentChat('browse',{manual:true}),true);
+  assert.equal(h.state.chatMessages.length,512);
+  assert.equal(h.state.chatHistoryPagination.hasMore,true);
+  assert.equal(h.state.chatHistoryPagination.nextOffset,512);
+  while(h.state.chatHistoryPagination.hasMore){
+    assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),true);
+  }
+  assert.deepEqual(Array.from(h.state.chatMessages,m=>m.__openclaw.seq),
+    Array.from({length:2049},(_,index)=>index+1));
+  assert.deepEqual(h.requestedOffsets,Array.from({length:17},(_,index)=>index*128));
+  assert.equal(h.state.chatFollowLocked,true);
+  assert.equal(h.state.scrolled,undefined);
+  assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),false);
+});
+
+test('legacy startup creates real server pagination even when its native 80-row load has no paging field',async()=>{
+  const all=Array.from({length:658},(_,index)=>({role:index%2?'assistant':'user',content:`legacy-${index+1}`,
+    __openclaw:{id:`legacy-${index+1}`,seq:index+1}}));
+  const offsets=[];
+  const h=loadTwoPaneHarness(async(method,params)=>{
+    if(method==='sessions.list')return {sessions:[{key:h.leftKey,hasActiveRun:false}]};
+    assert.equal(method,'chat.history');
+    offsets.push(params.offset);
+    const end=Math.max(0,all.length-params.offset),start=Math.max(0,end-128);
+    return {sessionId:'legacy-startup',totalMessages:all.length,hasMore:start>0,
+      nextOffset:Math.min(all.length,params.offset+128),messages:all.slice(start,end)};
+  });
+  h.panes.pop();
+  delete h.left.state.chatHistoryPagination;
+  h.left.state.chatMessages=all.slice(-80);
+  assert.equal('chatHistoryPagination' in h.left.state,false);
+  // Exercise the normal startup timer rather than a console/manual recovery.
+  h.runTimers(400);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(offsets,[0,128,256,384]);
+  assert.equal(h.left.state.chatMessages.length,512);
+  assert.equal(h.left.state.chatHistoryPagination.hasMore,true);
+  assert.equal(h.left.state.chatHistoryPagination.nextOffset,512);
+  assert.equal(h.left.state.chatHistoryPagination.totalMessages,658);
+  while(h.left.state.chatHistoryPagination.hasMore){
+    assert.equal(await h.window.__laolaoLoadEarlierHistory(h.left),true);
+  }
+  assert.deepEqual(offsets,[0,128,256,384,512,640]);
+  assert.deepEqual(Array.from(h.left.state.chatMessages,message=>message.__openclaw.seq),
+    Array.from({length:658},(_,index)=>index+1));
+});
+
+test('older paging uses the raw server cursor even when projection returns fewer visible rows',async()=>{
+  const messages=Array.from({length:572},(_,i)=>({role:i%2?'assistant':'user',content:`projected-${i}`,
+    __openclaw:{id:`projected-${i}`,seq:i}}));
+  const pages=new Map(Array.from({length:13},(_,index)=>[index*257,{
+    sessionId:'projection',totalMessages:3341,hasMore:index<12,nextOffset:(index+1)*257,
+    messages:messages.slice(Math.max(0,messages.length-(index+1)*44),messages.length-index*44),
+  }]));
+  const h=loadResumeHarness(pages);
+  assert.equal(await h.window.__laolaoRecoverCurrentChat('projected',{manual:true}),true);
+  assert.equal(h.state.chatMessages.length,528);
+  assert.equal(h.state.chatHistoryPagination.nextOffset,3084);
+  assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),true);
+  assert.equal(h.requestedOffsets.at(-1),3084);
+  assert.equal(h.state.chatMessages.length,572);
+  assert.equal(h.state.chatHistoryPagination.hasMore,false);
+});
+
+test('loading an older page is deduplicated and cannot write into another session',async()=>{
+  const h=browsingHistory(1200);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  let release,calls=0;
+  h.client.request=async()=>{calls++;return new Promise(resolve=>{release=resolve;});};
+  const pending=h.window.__laolaoLoadEarlierHistory(h.pane);
+  assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),false);
+  assert.equal(calls,1);
+  h.state.sessionKey='agent:unrestricted:dashboard:other';
+  const other={role:'user',content:'other session'};
+  h.state.chatMessages=[other];
+  release(h.pageAt(512));
+  assert.equal(await pending,false);
+  assert.equal(h.state.chatMessages.length,1);
+  assert.equal(h.state.chatMessages[0],other);
+});
+
+test('same-key reset invalidates an older page even before the session ID changes',async()=>{
+  const h=browsingHistory(1200);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  let release;
+  h.client.request=async()=>new Promise(resolve=>{release=resolve;});
+  const pending=h.window.__laolaoLoadEarlierHistory(h.pane);
+  h.state.chatMessages=[];
+  const reset={role:'user',content:'after local reset',__openclaw:{id:'local-reset'}};
+  h.state.chatMessages=[reset];
+  release(h.pageAt(512));
+  assert.equal(await pending,false);
+  assert.equal(h.state.currentSessionId,'browse-session');
+  assert.equal(h.state.chatMessages[0],reset);
+});
+
+test('an older-page reset never joins two server session incarnations',async()=>{
+  const h=browsingHistory(1200);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  const previous=h.state.chatMessages;
+  h.client.request=async()=>({...h.pageAt(512),sessionId:'replacement',windowReset:true});
+  assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),false);
+  assert.equal(h.state.chatMessages,previous);
+  assert.equal(h.state.currentSessionId,'browse-session');
+  assert.equal(h.state.chatHistoryPagination.nextOffset,512);
+});
+
+test('streaming and idle recovery retain every previously loaded page and its real cursor',async()=>{
+  const h=browsingHistory(1000);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  await h.window.__laolaoLoadEarlierHistory(h.pane);
+  const first=h.state.chatMessages[0];
+  const stream={...h.message(1001),content:'streaming live tail'};
+  h.state.chatRunId='active';
+  h.state.chatMessages=[...h.state.chatMessages,stream];
+  await h.window.__laolaoLoadEarlierHistory(h.pane);
+  assert.equal(h.state.chatMessages.at(-1),stream);
+  assert.ok(h.state.chatMessages.includes(first));
+  assert.equal(h.state.chatMessages[0].__openclaw.seq,233);
+  h.state.chatRunId=null;
+  h.setTotal(1001);
+  await h.window.__laolaoRecoverCurrentChat('after-stream',{manual:true});
+  assert.equal(h.state.chatMessages[0].__openclaw.seq,233);
+  assert.equal(h.state.chatMessages.at(-1).content,'message-1001');
+  assert.equal(h.state.chatHistoryPagination.nextOffset,769);
+  while(h.state.chatHistoryPagination.hasMore)await h.window.__laolaoLoadEarlierHistory(h.pane);
+  assert.deepEqual(Array.from(h.state.chatMessages,m=>m.__openclaw.seq),
+    Array.from({length:1001},(_,index)=>index+1));
+  assert.equal(h.state.scrolled,undefined);
+});
+
+test('a long offline gap preserves the reading page and fills middle history in chronological order',async()=>{
+  const h=browsingHistory(1000);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  await h.window.__laolaoLoadEarlierHistory(h.pane);
+  const reading=h.state.chatMessages[0];
+  h.setTotal(3000);
+  await h.window.__laolaoRecoverCurrentChat('offline-gap',{manual:true});
+  assert.equal(h.state.chatMessages[0],reading);
+  assert.equal(h.state.chatMessages.at(-1).__openclaw.seq,3000);
+  assert.equal(h.state.chatHistoryPagination.nextOffset,512,'fill the gap before the old loaded cursor');
+  for(let pages=0;h.state.chatHistoryPagination.hasMore;pages++){
+    assert.ok(pages<30,'bounded one-page calls eventually reach the beginning');
+    assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),true);
+    const seqs=Array.from(h.state.chatMessages,m=>m.__openclaw.seq);
+    assert.deepEqual(seqs,[...seqs].sort((a,b)=>a-b));
+    assert.ok(h.state.chatMessages.some(message=>message.__openclaw.id===reading.__openclaw.id));
+  }
+  assert.deepEqual(Array.from(h.state.chatMessages,m=>m.__openclaw.seq),
+    Array.from({length:3000},(_,index)=>index+1));
+  assert.equal(h.state.scrolled,undefined);
+});
+
+test('native newest-tail assignments keep a same-incarnation reading page across an offline gap',async()=>{
+  const h=browsingHistory(1000);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  await h.window.__laolaoLoadEarlierHistory(h.pane);
+  const reading=h.state.chatMessages[0];
+  h.setTotal(3000);
+  h.state.chatMessages=h.pageAt(0).messages;
+  assert.equal(h.state.chatMessages[0],reading);
+  assert.equal(h.state.chatMessages.at(-1).__openclaw.seq,3000);
+});
+
+test('ordinary older browsing delegates to the native paging owner',async()=>{
+  const h=browsingHistory(1200);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  let nativeCalls=0;
+  const requestCount=h.requestedOffsets.length;
+  h.pane.loadOlderMessages=async()=>{
+    nativeCalls++;
+    h.state.chatMessages=[...h.pageAt(512).messages,...h.state.chatMessages];
+    h.state.chatHistoryPagination={...h.pageAt(512),messages:undefined};
+  };
+  assert.equal(await h.window.__laolaoLoadEarlierHistory(h.pane),true);
+  assert.equal(nativeCalls,1);
+  assert.equal(h.requestedOffsets.length,requestCount,'no second recovery reader runs beside native');
+  assert.equal(h.state.chatMessages.length,640);
+});
+
+test('opaque legacy IDs keep offline-gap pages ordered without sequence or timestamp metadata',async()=>{
+  const h=browsingHistory(1000);
+  h.client.request=async(method,params)=>{
+    if(method==='sessions.list')return {sessions:[]};
+    h.requestedOffsets.push(params.offset);
+    const page=h.pageAt(params.offset);
+    return {...page,messages:page.messages.map(message=>({...message,__openclaw:{id:message.__openclaw.id}}))};
+  };
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  await h.window.__laolaoLoadEarlierHistory(h.pane);
+  h.setTotal(3000);
+  await h.window.__laolaoRecoverCurrentChat('gap',{manual:true});
+  while(h.state.chatHistoryPagination.hasMore)await h.window.__laolaoLoadEarlierHistory(h.pane);
+  assert.deepEqual(Array.from(h.state.chatMessages,message=>message.__openclaw.id),
+    Array.from({length:3000},(_,index)=>`message-${index+1}`));
+});
+
+test('native append and prepend keep all previous objects without inspecting their bodies again',()=>{
+  const h=loadResumeHarness(new Map());
+  let inspectBody=false;
+  const previous=Array.from({length:600},(_,index)=>({
+    get role(){if(inspectBody)throw new Error('intact native pages need no message-body scan');return 'assistant';},
+    content:`native-${index}`,__openclaw:{id:`native-${index}`,seq:index},
+  }));
+  h.window.__laolaoMessageWindowTestHooks.guardMessageWindow(h.state);
+  h.window.__laolaoMessageWindowTestHooks.writeOwnMessages(h.state,previous);
+  inspectBody=true;
+  const appended=[...previous,{role:'user',content:'new send',__openclaw:{id:'new-send',seq:601}}];
+  h.state.chatMessages=appended;
+  assert.equal(h.state.chatMessages,appended);
+  const prepended=[{role:'assistant',content:'older',__openclaw:{id:'older',seq:-1}},...appended];
+  h.state.chatMessages=prepended;
+  assert.equal(h.state.chatMessages,prepended);
+  h.state.chatMessages=prepended;
+  assert.equal(h.state.chatMessages,prepended);
+});
+
+test('a fresh native tail still retains older pages and updates same-ID content',()=>{
+  const h=loadResumeHarness(new Map());
+  const previous=Array.from({length:600},(_,seq)=>({role:seq%2?'assistant':'user',content:`old-${seq}`,
+    __openclaw:{id:`native-${seq}`,seq}}));
+  h.window.__laolaoMessageWindowTestHooks.guardMessageWindow(h.state);
+  h.window.__laolaoMessageWindowTestHooks.writeOwnMessages(h.state,previous);
+  const fresh=previous.slice(-10).map(message=>({...message,content:`updated-${message.__openclaw.seq}`}));
+  h.state.chatMessages=fresh;
+  assert.equal(h.state.chatMessages.length,600);
+  assert.equal(h.state.chatMessages[0],previous[0]);
+  assert.equal(h.state.chatMessages.at(-1).content,'updated-599');
+});
+
+test('native older-page loading suppresses concurrent idle-tail recovery',async()=>{
+  const h=browsingHistory(1200);
+  h.pane.loadingOlder=true;
+  assert.equal(await h.window.__laolaoRecoverCurrentChat('idle-tail',{manual:true}),false);
+  assert.equal(h.requestedOffsets.length,0);
+  h.pane.loadingOlder=false;
+  assert.equal(await h.window.__laolaoRecoverCurrentChat('idle-tail',{manual:true}),true);
+});
+
+test('legacy local-page scrolls do not fetch the server while an ordinary fallback top scroll still does',async()=>{
+  let requests=0;
+  const older={role:'user',content:'older record',__openclaw:{id:'older-record'}};
+  const h=loadTwoPaneHarness(async(method)=>{
+    assert.equal(method,'chat.history');
+    requests++;
+    return {sessionId:'legacy-page',hasMore:false,nextOffset:256,totalMessages:256,messages:[older]};
+  });
+  h.panes.pop();
+  h.left.state.currentSessionId='legacy-page';
+  h.left.state.chatMessages=[{role:'assistant',content:'current',__openclaw:{id:'current'}}];
+  h.left.state.chatHistoryPagination={hasMore:true,nextOffset:128,totalMessages:256};
+  const thread={scrollTop:0,matches(){return true;}};
+  const event={target:thread,composedPath:()=>[thread,h.left]};
+  h.left.__pinkieLegacyHistoryPaged=true;
+  h.dispatch('scroll',event);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(requests,0,'local previous/next pages intentionally scroll to zero without network work');
+  h.left.__pinkieLegacyHistoryPaged=false;
+  h.dispatch('scroll',event);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(requests,1,'non-paged legacy clients retain their automatic top-edge loader');
+  assert.equal(h.left.state.chatMessages[0],older);
+});
+
+test('pagination-only recovery requests a render so an earlier-history entry becomes visible',async()=>{
+  const h=browsingHistory(1200);
+  await h.window.__laolaoRecoverCurrentChat('start',{manual:true});
+  h.state.chatHistoryPagination={hasMore:false};
+  const before=h.state.updateCount;
+  await h.window.__laolaoRecoverCurrentChat('paging-only',{manual:true});
+  assert.equal(h.state.chatHistoryPagination.hasMore,true);
+  assert.equal(h.state.updateCount,before+1);
+});
+
+test('gateway phase compatibility accepts only an actually connected native snapshot',()=>{
+  const h=loadResumeHarness(new Map());
+  delete h.gateway.snapshot.connected;
+  for(const phase of ['connecting','disconnected','idle']){
+    h.gateway.snapshot.phase=phase;
+    assert.equal(h.window.__laolaoGatewayTestHooks.gatewayConnected(),false,phase);
+  }
+  h.gateway.snapshot.phase='connected';
+  assert.equal(h.window.__laolaoGatewayTestHooks.gatewayConnected(),true);
+  h.gateway.snapshot.client=null;
+  assert.equal(h.window.__laolaoGatewayTestHooks.gatewayConnected(),false);
+});
+
+
+test('idle polling never automatically retries unknown delivery or accepted/in-flight steers',async()=>{
+  const now=1_700_000_000_000;
+  for(const item of [
+    {id:'unconfirmed',sendState:'unconfirmed'},
+    {id:'held',sendState:'held'},
+    {id:'unknown',sendState:'delivery-unknown'},
+    {id:'sending',sendState:'sending'},
+    {id:'submitting',sendState:'submitting'},
+    {id:'outbox',sendRunId:'native-run',sendState:'waiting-model'},
+    {id:'steer-mode',queueMode:'steer',sendState:'waiting-reconnect'},
+    {id:'steered',kind:'steered',sendState:'waiting-reconnect'},
+    {id:'pending',pendingRunId:'ended',sendState:'waiting-model'},
+  ]){
+    const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+      ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+      : {messages:[],hasMore:false},{clock:true,now});
+    h.panes.pop();
+    const queued={...item,text:'keep this card',createdAt:now-60_000};
+    const calls=attachNativeQueueApi(h.left,[queued]);
+    assert.equal(await h.window.__laolaoQueueRecovery.recover('uncertain-idle'),false,item.id);
+    assert.equal(await h.window.__laolaoQueueRecovery.recover('repeat-idle'),false,item.id);
+    assert.deepEqual(calls.retry,[],item.id);
+    assert.deepEqual(calls.remove,[],item.id);
+    assert.deepEqual(h.left.state.chatQueue[0],queued,item.id);
+  }
+});
+
+test('an untouched reserved queue item can resume after the original run ends',async()=>{
+  const now=1_700_000_000_000;
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{clock:true,now});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{id:'reserved',text:'not sent yet',createdAt:now-1,
+    sessionKey:h.leftKey,sendAttempts:0,sendRunId:'reserved-run',sendSubmittedAtMs:123}]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('completed-before-steer'),true);
+  assert.equal(calls.retry.length,1);assert.equal(calls.retry[0].id,'reserved');
+  assert.equal(calls.retry[0].sendRunId,'reserved-run');assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+});
+
+
+test('idle recovery cannot reuse delivery evidence already consumed by active pruning',async()=>{
+  const now=Date.now();
+  const evidence=[{role:'user',content:'same instruction',timestamp:now+100,__openclaw:{id:'one-proof'}}];
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:evidence,hasMore:false});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'first',text:'same instruction',createdAt:now,kind:'steered',sendState:'unconfirmed'},
+    {id:'second',text:'same instruction',createdAt:now+1,kind:'steered',sendState:'unconfirmed'},
+  ]);
+  h.left.state.chatRunId='active';
+  assert.deepEqual(Array.from(await h.window.__laolaoQueueRecovery.pruneDelivered(h.left,evidence)),['first']);
+  h.left.state.chatRunId=null;
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('idle-after-prune'),false);
+  assert.deepEqual(calls.remove,['first']);
+  assert.deepEqual(calls.retry,[]);
+  assert.equal(h.left.state.chatQueue[0].id,'second');
+});
+
+test('a replayed Send click without pointerdown starts follow on the prepared pane and leaves older-page browsing',()=>{
+ const h=loadTwoPaneHarness(async()=>({messages:[],hasMore:false}));const follow=[];
+ h.window.__pinkieChatViewport={follow(pane){follow.push(pane);}};
+ const view={browsing:true,endKey:'older',source:h.right.state.chatMessages};
+ h.window.__pinkieLegacyHistoryViews=new Map([[h.rightKey+':main',view]]);h.right.__pinkieHistoryBrowsing=true;
+ h.right.state.chatFollowLocked=true;h.right.state.chatUserNearBottom=false;h.left.state.chatUserNearBottom=false;
+ const button=sendButton();h.dispatch('click',{target:button,composedPath:()=>[button,h.right]});
+ assert.deepEqual(follow,[h.right]);assert.equal(view.browsing,false);assert.equal(view.endKey,null);assert.equal(h.right.__pinkieHistoryBrowsing,false);
+ assert.equal(h.right.state.chatUserNearBottom,true);assert.equal(h.right.state.chatFollowLocked,false);assert.equal(h.left.state.chatUserNearBottom,false);
 });

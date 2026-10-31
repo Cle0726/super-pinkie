@@ -12,6 +12,7 @@
     return request('pinkie.learning.library.'+suffix,{...params,sessionKey:session()},timeout);
   };
   const button=(label,action,cls='')=>{const b=el('button',cls,label);b.type='button';b.addEventListener('click',action);return b;};
+  const xMark=b=>{const mark=window.__pinkieStudyDesk?.icon?.('x',{size:'sm'});if(mark){b.textContent='';b.append(mark);}return b;};
   const notice=(text,error=false)=>{
     const status=state.drawer?.querySelector('.pinkie-library__status');
     if(status){status.textContent=text;status.dataset.error=error?'1':'0';}
@@ -28,7 +29,7 @@
     if(!learning())return;
     if(!state.drawer){
       const drawer=el('aside','pinkie-library');drawer.setAttribute('aria-label','学习资料库');
-      const head=el('header','pinkie-library__header'), heading=el('div');heading.append(el('div','pinkie-library__eyebrow','LEARNING LIBRARY'),el('h2','','我的资料'));head.append(heading,button('×',closeShelf,'pinkie-library__close'));head.lastChild.setAttribute('aria-label','关闭资料库');
+      const head=el('header','pinkie-library__header'), heading=el('div');heading.append(el('div','pinkie-library__eyebrow','LEARNING LIBRARY'),el('h2','','我的资料'));head.append(heading,xMark(button('×',closeShelf,'pinkie-library__close')));head.lastChild.setAttribute('aria-label','关闭资料库');
       const intro=el('p','pinkie-library__intro','把值得读的资料放在这里，和碧琪一起读、一起记。');
       const actions=el('div','pinkie-library__actions');actions.append(button('＋ 打开电子书',chooseFile,'pinkie-library__primary'),button('剪藏网页',()=>{clip.hidden=!clip.hidden;if(!clip.hidden)clip.querySelector('input').focus();}));
       const search=el('input','pinkie-library__search');search.type='search';search.placeholder='搜索书名，或正文里的中英文关键词…';search.setAttribute('aria-label','搜索学习资料');
@@ -74,10 +75,10 @@
     const meter=el('div','pinkie-library__progress'),fill=el('span'),position=book.progress?.location||1,percent=book.lastOpenedAt?Math.round(position/book.locations*100):0;fill.style.width=percent+'%';meter.append(fill);
     const recent=book.lastOpenedAt?new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric'}).format(book.lastOpenedAt)+' 打开':'还没开始读';
     body.append(openButton,meter,el('span','pinkie-library__meta',`${percent}% · ${book.type==='pdf'?'第 '+position+' 页':book.type==='epub'?'章节位置 '+position:'正文'} · ${recent}`));
-    const remove=button('×',()=>{
+    const remove=xMark(button('×',()=>{
       if(card.querySelector('.pinkie-library__confirm'))return;
       const confirm=el('div','pinkie-library__confirm');confirm.append(el('p','',`删除《${book.title}》？资料和阅读进度会移出书架，学习笔记仍保留。`),button('确认删除',task(async()=>{await rpc('remove',{id:book.id,confirm:'REMOVE_LEARNING_MATERIAL'});if(state.book?.id===book.id)closeReader();await loadShelf();}),'pinkie-library__primary'),button('保留',()=>confirm.remove()));card.append(confirm);
-    },'pinkie-library__remove');remove.setAttribute('aria-label','删除 '+book.title);card.append(icon(),body,remove);return card;
+    },'pinkie-library__remove'));remove.setAttribute('aria-label','删除 '+book.title);card.append(icon(),body,remove);return card;
   }
   function chooseFile(){
     if(!learning())return;
@@ -101,11 +102,11 @@
     return bytes;
   }
   function mountReader(){
-    const split=document.querySelector('.chat-split-container');if(!split)throw new Error('聊天区还没有准备好');
+    const split=state.deskHost?.isConnected?state.deskHost:document.querySelector('.chat-split-container');if(!split)throw new Error('聊天区还没有准备好');
     if(state.reader?.isConnected&&state.reader.parentElement===split)return;
     state.reader?.remove();state.split?.classList.remove('pinkie-library-layout');state.split=split;
     const reader=el('section','pinkie-reader');reader.setAttribute('aria-label','原文阅读器');
-    const head=el('header','pinkie-reader__header'),heading=el('div','pinkie-reader__heading');heading.append(el('h2','pinkie-reader__title'),el('div','pinkie-reader__subtitle'));head.append(heading,button('×',closeReader));head.lastChild.setAttribute('aria-label','关闭阅读器');
+    const head=el('header','pinkie-reader__header'),heading=el('div','pinkie-reader__heading');heading.append(el('h2','pinkie-reader__title'),el('div','pinkie-reader__subtitle'));head.append(heading,xMark(button('×',closeReader)));head.lastChild.setAttribute('aria-label','关闭阅读器');
     const toolbar=el('div','pinkie-reader__toolbar'),select=el('select');select.setAttribute('aria-label','页码或章节');select.addEventListener('change',task(()=>go(Number(select.value))));
     toolbar.append(button('‹',task(()=>go(state.location-1))),select,button('›',task(()=>go(state.location+1))),button('−',task(()=>zoom(-.1))),el('span','pinkie-reader__zoom','100%'),button('＋',task(()=>zoom(.1))),button('查找',()=>{find.hidden=!find.hidden;if(!find.hidden)find.querySelector('input').focus();}));
     toolbar.children[0].setAttribute('aria-label','上一页或章');toolbar.children[2].setAttribute('aria-label','下一页或章');toolbar.children[3].setAttribute('aria-label','缩小原文');toolbar.children[5].setAttribute('aria-label','放大原文');
@@ -122,10 +123,13 @@
   }
   async function open(id,anchor={}){
     if(!learning())return;
+    const context=window.__pinkieStudyDesk?.readerContext?.();if(context===false)return;
+    state.heavyRelease?.();state.heavyRelease=context?.release;state.deskHost=context?.host||null;
     const ticket=++state.openTicket;clearTimeout(state.progressTimer);await flushProgress();
+    try {
     const data=await rpc('book',{id});if(ticket!==state.openTicket)return;
     await releaseBook();state.book=data.book;state.locations=data.locations;state.location=Number(anchor.location||data.book.progress?.location||1);state.zoom=data.book.progress?.zoom||1;state.session=session();
-    mountReader();closeShelf();const content=state.reader.querySelector('.pinkie-reader__content');content.textContent='正在打开原文…';
+    mountReader();closeShelf();window.dispatchEvent(new CustomEvent('pinkie:library-opened'));const content=state.reader.querySelector('.pinkie-reader__content');content.textContent='正在打开原文…';
     if(data.book.type==='pdf'){
       await import('/laolao-vendor-pdf-compat.js?v=library1');
       const [pdf,bytes]=await Promise.all([import('/laolao-vendor-pdf.mjs?v=6.4.299'),sourceFile(data.book)]);if(ticket!==state.openTicket)return;
@@ -140,6 +144,7 @@
     if(ticket!==state.openTicket)return;
     await go(state.location,anchor.quote||'',anchor.location?0:data.book.progress?.scroll||0);
     return data;
+    } catch(error) { if(ticket===state.openTicket)closeReader();throw error; }
   }
   async function releaseBook(){
     state.renderTask?.cancel();state.renderTask=null;state.epub?.destroy();state.epub=null;
@@ -201,7 +206,7 @@
     const body=state.reader.querySelector('.pinkie-reader__body'),max=Math.max(0,body.scrollHeight-body.clientHeight),id=state.book.id;
     try{const result=await rpc('progress',{id,location:state.location,zoom:state.zoom,scroll:max?body.scrollTop/max:0});if(state.book?.id===id)state.book=result.book;}catch(error){notice('进度暂未保存：'+error.message,true);}
   }
-  function closeReader(){void flushProgress();++state.openTicket;++state.renderTicket;state.reader?.remove();state.reader=null;state.split?.classList.remove('pinkie-library-layout');state.split=null;void releaseBook();state.book=null;}
+  function closeReader(){void flushProgress();++state.openTicket;++state.renderTicket;state.reader?.remove();state.reader=null;state.split?.classList.remove('pinkie-library-layout');state.split=null;void releaseBook();state.book=null;state.heavyRelease?.();state.heavyRelease=null;state.deskHost=null;window.dispatchEvent(new CustomEvent('pinkie:library-closed'));}
   async function send(message){const request=window.__laolaoSidebar?.gwRequest;if(!request)throw new Error('聊天正在连接');return request('chat.send',{sessionKey:session(),message,idempotencyKey:crypto.randomUUID()},30000);}
   function selectionSource(selected){if(!state.book||!selected.anchor?.closest('[data-pinkie-reading]'))return null;return {id:state.book.id,title:state.book.title,location:state.location,label:state.locations.find(x=>x.location===state.location)?.label||'',quote:selected.text};}
   async function saveSelection(selected){const source=selectionSource(selected);if(!source)return;const result=await rpc('excerpt',source);notice('已记下书名、位置和原文');window.dispatchEvent(new CustomEvent('pinkie:library-note-saved',{detail:result.note}));return result;}

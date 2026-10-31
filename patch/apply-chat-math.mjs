@@ -110,5 +110,5 @@ function main() {
   if (!patched) console.log('chat-math: nothing to patch');
 }
 
-// Same check as the other patches: a raw path vs a percent-encoded file URL never matches for "超級碧琪".
+// Same check as the other patches: a raw path vs a percent-encoded file URL never matches for "超级碧琪".
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

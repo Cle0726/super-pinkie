@@ -1,0 +1,271 @@
+/* 定时任务 / 连接器卡片（laolao-capabilities.js）
+   结构与语义保持原样：任务行 = 时间 + 说明 + 开关，连接 = 图块 + 状态点。
+   只换表面与状态色，并去掉"用 emoji 当图标"的做法（图标由 CSS 线性图形提供，
+   卡片 header 的 emoji 在 JS 里已改为空，不再依赖字体里的彩色字符）。
+   阴影一律整条使用 --cle-shadow*；焦点环一律用实色 --cle-gaze。 */
+
+/* 卡片头：线性图标（定时=钟面，连接=插头），与原生 footer 的 16px/1.5 描边一致 */
+#cle-utilities .pk-cap .pinkie-user-settings__icon {
+  position: relative; flex: none;
+  width: 18px; height: 18px;
+  font-size: 0; line-height: 0;
+  color: var(--cle-ink-2);
+  background: none;
+  box-shadow: none;
+}
+#cle-utilities .pk-cap .pinkie-user-settings__icon svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* 没有 SVG 子节点时，用 CSS 画：钟面（定时任务）与插头（连接器），
+   都用 currentColor 描线，跟随文字色自动适配深浅主题。 */
+#cle-utilities .pk-cap .pinkie-user-settings__icon:empty::before,
+#cle-utilities .pk-cap .pinkie-user-settings__icon:not(:has(svg))::before {
+  content: ""; display: block; width: 15px; height: 15px;
+  border: 1.5px solid currentColor; border-radius: 50%;
+}
+/* 定时任务：钟面 + 两根指针 */
+#cle-utilities #pinkie-schedules .pinkie-user-settings__icon:not(:has(svg)) {
+  position: relative;
+}
+#cle-utilities #pinkie-schedules .pinkie-user-settings__icon:not(:has(svg))::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 1.5px; height: 5px; background: currentColor;
+  transform-origin: 50% 100%; transform: translate(-50%, -100%) rotate(0deg);
+  box-shadow: 3px 3px 0 -0.2px currentColor;
+}
+/* 连接器：方形插头 */
+#cle-utilities #pinkie-connectors .pinkie-user-settings__icon:not(:has(svg))::before {
+  width: 12px; height: 12px; border-radius: 4px;
+}
+
+#cle-utilities .pk-cap .pinkie-user-settings__card-header { gap: 9px; }
+#cle-utilities .pk-cap .pinkie-user-settings__card-hint { margin: 4px 0 12px 27px; }
+
+#cle-utilities .pk-capabilities { display: grid; gap: 10px; }
+#cle-utilities .pk-cap [hidden] { display: none !important; }
+#cle-utilities .pk-cap__list { display: grid; gap: 8px; }
+#cle-utilities .pk-cap__bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+#cle-utilities .pk-cap__mono { font-family: var(--cle-mono); font-size: 12px; }
+
+/* 文本按钮：默认二级墨色，悬停加深并落到冰蓝焦点 */
+#cle-utilities .pk-cap__link {
+  all: unset; cursor: pointer; padding: 3px 8px; border-radius: 7px; font-size: 12px; line-height: 18px;
+  color: var(--cle-ink-2); transition: background .16s, color .16s;
+}
+#cle-utilities .pk-cap__link:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+#cle-utilities .pk-cap__link:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+#cle-utilities .pk-cap__link:disabled { opacity: .5; cursor: default; }
+#cle-utilities .pk-cap__link:disabled:hover { background: transparent; color: var(--cle-ink-2); }
+
+/* 状态：ok / error / warn 是真实语义，各自给可在纸面上读清的实色 */
+#cle-utilities .pk-cap__status:empty { min-height: 0; margin: 0; }
+#cle-utilities .pk-cap__status { font-size: 12px; line-height: 1.5; }
+#cle-utilities .pk-cap__status[data-state="ok"] { color: var(--cle-ok, #3F6B4F); }
+#cle-utilities .pk-cap__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
+#cle-utilities .pk-cap__status[data-state="busy"] { color: var(--cle-ink-2); }
+#cle-utilities .pk-cap__warn {
+  margin: 0; padding: 8px 11px; border-radius: 10px; font-size: 12px; line-height: 1.5;
+  border: 1px solid color-mix(in srgb, var(--cle-warn, #7F5F1B) 34%, transparent);
+  background: color-mix(in srgb, var(--cle-warn, #7F5F1B) 8%, var(--cle-surface));
+  color: var(--cle-warn, #7F5F1B);
+}
+
+/* 一条任务 / 一个连接：左边醒目的「时间」或图块，中间说明，右边开关 */
+#cle-utilities :is(.pk-job, .pk-conn) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  transition: border-color .16s, opacity .2s;
+}
+#cle-utilities :is(.pk-job, .pk-conn):hover { border-color: var(--cle-ink-2); }
+#cle-utilities .pk-job[data-enabled="false"] :is(.pk-job__when, .pk-job__main > strong, .pk-job__text) { opacity: .55; }
+#cle-utilities .pk-job__when { display: grid; justify-items: start; gap: 1px; min-width: 72px; padding-top: 1px; }
+#cle-utilities .pk-job__when b { color: var(--cle-ink); font-size: 20px; line-height: 1.15; font-weight: 720; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+#cle-utilities .pk-job__when b.pk-cap__mono { font-size: 14px; }
+#cle-utilities .pk-job__when span { color: var(--cle-ink-2); font-size: 11px; }
+#cle-utilities :is(.pk-job__main, .pk-conn__main) { display: grid; gap: 3px; min-width: 0; }
+#cle-utilities :is(.pk-job__main > strong, .pk-conn__head strong) { font-size: 13.5px; font-weight: 700; color: var(--cle-ink); }
+#cle-utilities .pk-job__text {
+  margin: 0; color: var(--cle-ink-2); font-size: 12px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+#cle-utilities :is(.pk-job__meta, .pk-conn__meta) { color: var(--cle-ink-2); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+#cle-utilities .pk-job__ops { display: flex; flex-wrap: wrap; gap: 2px; margin: 3px 0 0 -8px; }
+#cle-utilities .pk-job__history {
+  grid-column: 2 / -1; list-style: none; margin: 2px 0 0; padding: 8px 0 0;
+  border-top: 1px dashed var(--cle-line-strong); display: grid; gap: 6px;
+}
+#cle-utilities .pk-job__history li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+#cle-utilities .pk-job__history li b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cle-ink); }
+#cle-utilities .pk-job__history li span { color: var(--cle-ok, #3F6B4F); }
+#cle-utilities .pk-job__history li[data-ok="false"] span { color: var(--cle-danger, #B23A33); }
+#cle-utilities .pk-job__history li p { grid-column: 1 / -1; margin: 0; color: var(--cle-ink-2); line-height: 1.5; }
+
+/* 删除确认：红色语义保留，但不做粉色底块 */
+#cle-utilities .pk-cap__confirm {
+  grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; margin-top: 2px;
+  border-radius: 10px; font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--cle-danger, #B23A33) 30%, transparent);
+  background: color-mix(in srgb, var(--cle-danger, #B23A33) 6%, var(--cle-surface));
+  color: var(--cle-danger, #B23A33);
+}
+
+/* 开关：关=中性轨，开=冰蓝，滑块始终是纸色（夜间自动翻转） */
+#cle-utilities .pk-cap__switch {
+  all: unset; box-sizing: border-box; position: relative; width: 38px; height: 22px; margin-top: 2px; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--cle-ink) 22%, transparent);
+  transition: background .22s;
+}
+#cle-utilities .pk-cap__switch i {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--cle-paper);
+  box-shadow: inset 0 0 0 1px var(--cle-line-strong);
+  transition: transform .26s cubic-bezier(.34, 1.4, .64, 1);
+}
+#cle-utilities .pk-cap__switch[aria-checked="true"] { background: var(--cle-gaze); }
+#cle-utilities .pk-cap__switch[aria-checked="true"] i { transform: translateX(16px); }
+#cle-utilities .pk-cap__switch:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+#cle-utilities .pk-cap__switch:disabled { opacity: .6; cursor: progress; }
+
+/* 空状态：三张例子卡 */
+#cle-utilities .pk-cap__empty-box { padding: 4px 0 2px; }
+#cle-utilities .pk-cap__empty { margin: 0 0 8px; color: var(--cle-ink-2); font-size: 12px; }
+#cle-utilities .pk-cap__ideas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#cle-utilities .pk-cap__idea {
+  all: unset; box-sizing: border-box; display: grid; gap: 2px; padding: 11px 13px; border-radius: 13px; cursor: pointer;
+  border: 1px dashed var(--cle-line-strong); background: var(--cle-paper);
+  transition: border-color .16s, background .16s;
+}
+#cle-utilities .pk-cap__idea:hover { border-style: solid; border-color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+#cle-utilities .pk-cap__idea:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+#cle-utilities .pk-cap__idea b { font-size: 13px; font-weight: 700; color: var(--cle-ink); }
+#cle-utilities .pk-cap__idea span { color: var(--cle-ink-2); font-size: 11px; }
+
+/* 新建 / 修改表单：纸面里的浅一档表面 */
+#cle-utilities .pk-cap__sheet {
+  margin: 12px 0 0; padding: 6px 16px 14px; border-radius: 16px;
+  background: var(--cle-paper); border: 1px solid var(--cle-line-strong);
+  animation: pk-cap-in .3s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+@keyframes pk-cap-in { from { opacity: 0; transform: translateY(-4px); } }
+#cle-utilities .pk-cap__sheet-head { display: flex; align-items: center; gap: 10px; padding: 10px 0 4px; font-size: 14px; color: var(--cle-ink); }
+#cle-utilities .pk-cap__line {
+  display: grid; grid-template-columns: minmax(110px, .26fr) minmax(0, 1fr); gap: 14px; align-items: start;
+  padding: 11px 0; border-bottom: 1px solid var(--cle-line);
+}
+#cle-utilities .pk-cap__line-label { display: grid; gap: 1px; padding-top: 7px; font-size: 13px; font-weight: 650; color: var(--cle-ink); }
+#cle-utilities .pk-cap__line-label small { color: var(--cle-ink-2); font-size: 11px; font-weight: 400; }
+#cle-utilities .pk-cap__line-body { display: grid; gap: 8px; min-width: 0; justify-items: start; }
+#cle-utilities .pk-cap__choices { justify-content: flex-start; }
+#cle-utilities .pk-cap__choices .pinkie-user-settings__choice { display: inline-flex; align-items: baseline; gap: 6px; }
+#cle-utilities .pk-cap__choice-sub { color: var(--cle-ink-2); font-size: 10.5px; font-weight: 500; }
+#cle-utilities .pk-cap__when { display: grid; gap: 8px; justify-items: start; width: 100%; }
+#cle-utilities .pk-cap__inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+#cle-utilities .pk-cap__inline > .pk-cap__input { flex: 1; min-width: 160px; }
+#cle-utilities .pk-cap__inline > .pk-cap__input[type="number"] { flex: 0 0 90px; min-width: 0; }
+#cle-utilities .pk-cap__tz { display: flex; align-items: center; gap: 6px; color: var(--cle-ink-2); font-size: 12px; }
+#cle-utilities .pk-cap__tz .pk-cap__input { width: 220px; }
+
+#cle-utilities .pk-cap__input {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 8px 12px;
+  border: 1px solid var(--cle-line-strong); border-radius: 11px;
+  background: var(--cle-surface); color: var(--cle-ink);
+  font: inherit; font-size: 13px; line-height: 1.5;
+  transition: border-color .16s, box-shadow .16s;
+}
+#cle-utilities .pk-cap__input[type="time"], #cle-utilities .pk-cap__input[type="datetime-local"] { width: auto; font-variant-numeric: tabular-nums; }
+#cle-utilities textarea.pk-cap__input { resize: vertical; min-height: 64px; }
+#cle-utilities .pk-cap__input::placeholder { color: var(--cle-ink-2); opacity: .8; }
+/* 焦点环：实色描边 + 8% 光晕。原来的写法把整组阴影塞进光晕槽，浏览器会把整条声明丢掉 */
+#cle-utilities .pk-cap__input:focus {
+  outline: none;
+  border-color: var(--cle-gaze);
+  box-shadow: 0 0 0 3px var(--cle-gaze-soft);
+}
+#cle-utilities .pk-cap__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; }
+#cle-utilities .pk-cap__sheet .pk-cap__status { margin-top: 8px; }
+#cle-utilities .pk-cap__note { margin: 6px 0 2px; color: var(--cle-ink-2); font-size: 12px; line-height: 1.6; }
+#cle-utilities .pk-cap__source { color: var(--cle-gaze); font-size: 12px; text-decoration: none; }
+#cle-utilities .pk-cap__source:hover { text-decoration: underline; }
+#cle-utilities .pk-cap__source:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+#cle-utilities .pk-cap__more { width: 100%; padding-top: 10px; font-size: 12px; color: var(--cle-ink-2); }
+#cle-utilities .pk-cap__more summary { cursor: pointer; margin-bottom: 8px; }
+#cle-utilities .pk-cap__more summary:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+
+/* 连接器图块：GitHub / Notion 的品牌色保留，其余收进纸墨 */
+#cle-utilities .pk-tile {
+  display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 11px;
+  font: 700 13px/1 var(--cle-sans); letter-spacing: -.02em; color: var(--cle-paper);
+  background: var(--cle-ink); box-shadow: none;
+}
+#cle-utilities .pk-tile svg { width: 19px; height: 19px; }
+#cle-utilities .pk-tile--github { color: #fff; background: linear-gradient(140deg, #3a3340, #1f1a24); }
+#cle-utilities .pk-tile--notion { color: #191919; background: #fff; box-shadow: inset 0 0 0 1.5px #2b2b2b; font-family: Georgia, "Times New Roman", serif; font-size: 17px; }
+#cle-utilities :is(.pk-tile--files, .pk-tile--custom) { color: var(--cle-ink); background: var(--cle-paper); box-shadow: inset 0 0 0 1px var(--cle-line-strong); }
+#cle-utilities .pk-conn__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#cle-utilities .pk-conn__state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--cle-ink-2); }
+#cle-utilities .pk-conn__state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cle-ink-2); }
+#cle-utilities .pk-conn__state[data-state="on"] { color: var(--cle-ok, #3F6B4F); }
+#cle-utilities .pk-conn__state[data-state="on"]::before {
+  background: var(--cle-ok, #3F6B4F);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cle-ok, #3F6B4F) 16%, transparent);
+}
+#cle-utilities .pk-conn__state[data-state="bad"] { color: var(--cle-danger, #B23A33); }
+#cle-utilities .pk-conn__state[data-state="bad"]::before { background: var(--cle-danger, #B23A33); box-shadow: none; }
+#cle-utilities .pk-conn__state[data-state="off"] { color: var(--cle-ink-2); }
+#cle-utilities .pk-conn__oauth { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 4px; }
+#cle-utilities .pk-conn__oauth .pk-cap__input { flex: 1; min-width: 180px; width: auto; }
+#cle-utilities .pk-conn__oauth a { text-decoration: none; display: inline-flex; align-items: center; }
+#cle-utilities .pk-cap__sub { margin: 14px 0 8px; color: var(--cle-ink-2); font-size: 11.5px; font-weight: 650; letter-spacing: .04em; }
+#cle-utilities .pk-cap__list:empty + .pk-cap__sub { margin-top: 0; }
+#cle-utilities .pk-cap__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+#cle-utilities .pk-cap__recipe {
+  all: unset; box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; cursor: pointer;
+  border: 1px solid var(--cle-line-strong); background: var(--cle-surface);
+  transition: border-color .16s, background .16s;
+}
+#cle-utilities .pk-cap__recipe:hover { border-color: var(--cle-ink-2); background: var(--cle-paper); }
+#cle-utilities .pk-cap__recipe.is-selected { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); box-shadow: none; }
+#cle-utilities .pk-cap__recipe:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+#cle-utilities .pk-cap__recipe-copy { display: grid; gap: 1px; min-width: 0; }
+#cle-utilities .pk-cap__recipe-copy b { font-size: 13px; font-weight: 700; color: var(--cle-ink); }
+#cle-utilities .pk-cap__recipe-copy small { color: var(--cle-ink-2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cle-utilities .pk-cap__recipe-tag {
+  position: absolute; top: -7px; right: 10px; padding: 0 7px; border-radius: 999px; font-size: 10px; line-height: 16px; font-weight: 650;
+  color: var(--cle-ok, #3F6B4F);
+  background: color-mix(in srgb, var(--cle-ok, #3F6B4F) 12%, var(--cle-surface));
+  box-shadow: 0 0 0 2px var(--cle-surface);
+}
+
+/* 夜间：token 已翻转，只需把"品牌白"和语义底色的混合重算 */
+:root[data-theme-mode="dark"] #cle-utilities .pk-tile--notion { background: #f4f1ee; color: #191919; }
+:root[data-theme-mode="dark"] #cle-utilities .pk-tile--github { color: #fff; background: linear-gradient(140deg, #3a3340, #1f1a24); }
+
+@media (max-width: 780px) {
+  #cle-utilities .pk-cap__line { grid-template-columns: 1fr; gap: 6px; }
+  #cle-utilities .pk-cap__line-label { padding-top: 0; }
+  #cle-utilities :is(.pk-cap__ideas, .pk-cap__grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #cle-utilities :is(.pk-job, .pk-conn) { grid-template-columns: auto minmax(0, 1fr); }
+  #cle-utilities :is(.pk-job, .pk-conn) > .pk-cap__switch { grid-column: 2; grid-row: 1; justify-self: end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #cle-utilities :is(.pk-cap__sheet, .pk-cap__switch i, .pk-cap__idea, .pk-cap__recipe) { animation: none !important; transition: none !important; }
+}
+
+/* ── 输入框旁的「深度研究」开关：一个小图标，打开后变成带字的冰蓝胶囊 ── */
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-research-btn { order: -55; }
+html .agent-chat__input .laolao-research-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; min-width: 28px; padding: 0 7px; margin: 0 1px;
+  border: 0; border-radius: 9px; background: transparent; color: var(--cle-ink-2);
+  font: inherit; font-size: 12.5px; cursor: pointer; transition: background .15s ease, color .15s ease, padding .2s ease;
+}
+html .agent-chat__input .laolao-research-btn svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html .agent-chat__input .laolao-research-btn .laolao-research-btn__spark { fill: currentColor; stroke: none; opacity: 0; transform-origin: 10.5px 10.5px; transition: opacity .2s, transform .3s; transform: scale(.4); }
+html .agent-chat__input .laolao-research-btn > span { display: none; white-space: nowrap; }
+html .agent-chat__input .laolao-research-btn:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+html .agent-chat__input .laolao-research-btn:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+html .agent-chat__input .laolao-research-btn.is-on { padding: 0 10px 0 8px; background: var(--cle-gaze-soft); color: var(--cle-gaze); font-weight: 600; }
+html .agent-chat__input .laolao-research-btn.is-on > span { display: inline; }
+html .agent-chat__input .laolao-research-btn.is-on .laolao-research-btn__spark { opacity: 1; transform: scale(1); }
+html[data-pinkie-night] .agent-chat__input .laolao-research-btn:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+html[data-pinkie-night] .agent-chat__input .laolao-research-btn.is-on { background: var(--cle-gaze-soft); color: var(--cle-gaze); }
+@media (prefers-reduced-motion: reduce) { html .agent-chat__input .laolao-research-btn, html .agent-chat__input .laolao-research-btn * { transition: none !important; } }

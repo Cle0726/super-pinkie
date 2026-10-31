@@ -1,0 +1,79 @@
+/* Li An 的提问卡：纸面卡片，浮在输入框正上方。
+   原版是珍珠玻璃 + 粉色描边；这里只换算表面与文字，交互结构（选项、快捷键、其他输入、
+   确认/稍后）全部保留。阴影一律整条使用 --cle-shadow*，焦点环用实色 --cle-gaze。 */
+.laolao-ask {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  padding: 10px 14px 10px;
+  border-radius: 20px;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  box-shadow: var(--cle-shadow-pop);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--cle-ink);
+  font: 14px/1.6 var(--cle-sans);
+  transform-origin: 50% 100%;
+  animation: laolao-ask-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.laolao-ask.is-restored { animation-duration: 0.28s; }
+@keyframes laolao-ask-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } }
+.laolao-ask.is-leaving { animation: laolao-ask-out 0.32s ease forwards; }
+.laolao-ask.is-answered { animation: laolao-ask-sent 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes laolao-ask-out { to { opacity: 0; transform: translateY(10px) scale(0.98); } }
+@keyframes laolao-ask-sent { to { opacity: 0; transform: translateY(18px) scale(0.92); } }
+
+.laolao-ask__head { display: flex; align-items: center; gap: 8px; margin: -2px 0 2px; }
+.laolao-ask__face { width: 46px; height: 46px; margin: -6px -2px -6px -6px; object-fit: contain; animation: laolao-ask-face 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both, laolao-ask-hop 1.6s ease-in-out 0.6s infinite; }
+@keyframes laolao-ask-face { from { transform: scale(0.5) rotate(-8deg); opacity: 0; } }
+@keyframes laolao-ask-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } }
+.laolao-ask__who { font-size: 13px; font-weight: 600; color: var(--cle-ink); }
+.laolao-ask__chip { font-size: 11.5px; padding: 0 8px; border-radius: 999px; background: var(--cle-gaze-soft); color: var(--cle-gaze); }
+.laolao-ask__later { all: unset; margin-left: auto; cursor: pointer; font-size: 12px; color: var(--cle-ink-2); padding: 2px 8px; border-radius: 8px; }
+.laolao-ask__later:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+.laolao-ask__later:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+
+.laolao-ask__question { margin: 4px 0 10px; font-size: 15.5px; font-weight: 600; line-height: 1.55; color: var(--cle-ink); }
+.laolao-ask__options { display: grid; gap: 6px; }
+.laolao-ask__option {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 12px; border-radius: 14px; background: var(--cle-paper);
+  box-shadow: inset 0 0 0 1px var(--cle-line-strong);
+  transition: box-shadow 0.18s, background 0.18s, transform 0.18s;
+  animation: laolao-ask-option 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms + 120ms);
+}
+@keyframes laolao-ask-option { from { opacity: 0; transform: translateY(6px); } }
+.laolao-ask__option:hover { background: var(--cle-surface); box-shadow: inset 0 0 0 1.5px var(--cle-line-strong); transform: translateY(-1px); }
+/* 键盘焦点必须用实色：--cle-gaze-soft 只有 8% 不透明度，做 outline 等于看不见 */
+.laolao-ask__option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; background: var(--cle-surface); }
+.laolao-ask__option.is-picked { background: var(--cle-gaze-soft); box-shadow: inset 0 0 0 1.5px var(--cle-gaze); }
+.laolao-ask__key { flex: none; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--cle-mono); color: var(--cle-ink-2); background: var(--cle-surface); box-shadow: inset 0 0 0 1px var(--cle-line-strong); }
+.laolao-ask__option.is-picked .laolao-ask__key { background: var(--cle-ink); color: var(--cle-paper); box-shadow: none; }
+.laolao-ask__text { display: flex; flex-direction: column; min-width: 0; }
+.laolao-ask__text strong { font-size: 14px; font-weight: 600; color: var(--cle-ink); }
+.laolao-ask__text small { font-size: 12.5px; color: var(--cle-ink-2); line-height: 1.5; }
+
+.laolao-ask__other { display: flex; gap: 6px; margin-top: 8px; }
+.laolao-ask__other-input { flex: 1; min-width: 0; box-sizing: border-box; height: 34px; padding: 0 12px; border-radius: 12px; border: 0; outline: none; background: var(--cle-paper); box-shadow: inset 0 0 0 1px var(--cle-line-strong); font: inherit; font-size: 13.5px; color: var(--cle-ink); }
+.laolao-ask__other-input:focus { box-shadow: inset 0 0 0 1.5px var(--cle-gaze), 0 0 0 3px var(--cle-gaze-soft); background: var(--cle-surface); }
+.laolao-ask__other-input::placeholder { color: var(--cle-ink-3); }
+.laolao-ask__other-send, .laolao-ask__confirm { all: unset; cursor: pointer; padding: 0 14px; height: 34px; line-height: 34px; border-radius: 12px; background: var(--cle-ink); color: var(--cle-paper); font-size: 13px; font-weight: 600; }
+.laolao-ask__confirm { height: 30px; line-height: 30px; }
+.laolao-ask__other-send:hover, .laolao-ask__confirm:hover { background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze)); }
+.laolao-ask__other-send:focus-visible, .laolao-ask__confirm:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+.laolao-ask__other-send:disabled, .laolao-ask__confirm:disabled {
+  cursor: default;
+  /* 禁用态也要能读：中性底 + 二级墨文字，靠 cursor 与对比度区分，不靠"糊成一片" */
+  background: var(--cle-paper);
+  color: var(--cle-ink-2);
+  border: 1px solid var(--cle-line-strong);
+  opacity: 1;
+}
+.laolao-ask__foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; min-height: 22px; }
+.laolao-ask__hint { font-size: 11.5px; color: var(--cle-ink-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-ask, .laolao-ask *, .laolao-ask__face { animation: none !important; transition: none !important; }
+}

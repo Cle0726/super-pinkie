@@ -688,73 +688,109 @@ img.chat-avatar.assistant {
 html[data-laolao-workspace-dock="1"] .laolao-mode-dock-trigger,
 .sidebar--collapsed .laolao-mode-dock-trigger { display: none !important; }
 
-/* Split exit. The docked half used to be closable only from the primary pane's
-   dock picker, which lives in the sidebar — and the sidebar collapses to a
-   hidden overlay in a narrow split, so the exit could vanish entirely. This
-   button belongs to the docked half, sits in the chat column just inside the
-   reserved workspace rail, and never depends on the sidebar being open. */
+/* The companion's exit lives in its existing toolbar or learning rail.
+   Keep the hit area compact and leave the document itself entirely clear. */
 .laolao-dock-exit { display: none !important; }
 
 html[data-laolao-workspace-dock="1"] .laolao-dock-exit {
-  position: fixed;
-  /* First-paint fallback only: the script measures the real top bar and sets an
-     inline top, because the bar is 44px wide-layout and ~58px narrow-layout. */
-  top: 52px;
-  right: calc(var(--laolao-window-rail-reserve, 44px) + 10px);
-  z-index: 200;
+  position: relative;
   display: inline-flex !important;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
   height: 28px;
-  padding: 0 11px;
-  border: 1px solid rgba(205, 85, 137, .32);
-  border-radius: 999px;
-  color: #a83e70;
-  background: linear-gradient(150deg, rgba(255,255,255,.93), rgba(252,226,241,.80));
-  box-shadow: 0 6px 18px rgba(135,52,90,.14), inset 0 1px rgba(255,255,255,.9);
-  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
-  letter-spacing: .2px;
+  min-height: 28px;
+  padding: 0;
+  margin-inline-start: 6px;
+  border: 1px solid rgba(83, 65, 94, .15);
+  border-radius: 8px;
+  color: #675b70;
+  background: rgba(255, 251, 254, .6);
+  box-shadow: none;
+  font: 500 11px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
   cursor: pointer;
   -webkit-app-region: no-drag;
   -webkit-tap-highlight-color: transparent;
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
 }
-
 html[data-laolao-workspace-dock="1"] .laolao-dock-exit svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.6;
   stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
-
-html[data-laolao-workspace-dock="1"] .laolao-dock-exit__label { white-space: nowrap; }
-
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit__label {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  padding: 5px 8px;
+  border: 1px solid rgba(83, 65, 94, .14);
+  border-radius: 7px;
+  color: #574b61;
+  background: #fffafd;
+  box-shadow: 0 3px 12px rgba(40, 24, 48, .1);
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
 html[data-laolao-workspace-dock="1"] .laolao-dock-exit:hover {
-  background: rgba(255,255,255,.97);
-  transform: translateY(-1px);
-  box-shadow: 0 9px 22px rgba(135,52,90,.19), inset 0 1px rgba(255,255,255,.95);
+  color: #493c56;
+  background: rgba(106, 86, 124, .09);
+  border-color: rgba(106, 86, 124, .26);
 }
-
-html[data-laolao-workspace-dock="1"] .laolao-dock-exit:active { transform: translateY(0) scale(.97); }
-html[data-laolao-workspace-dock="1"] .laolao-dock-exit:focus-visible { outline: 2px solid rgba(207,66,130,.48); outline-offset: 3px; }
-
-/* Dark mode in this skin is not a near-black surface: the shell keeps its
-   light chrome and expresses dark mode as saturated pink with light ink (see
-   .laolao-usage__chip in dark mode). A translucent pink would leave light text
-   on a light page, so use the same solid accent treatment as the dark-mode cost
-   chip: white ink on saturated pink reads on either backdrop. */
-html[data-theme-mode="dark"][data-laolao-workspace-dock="1"] .laolao-dock-exit {
-  border-color: rgba(255, 217, 232, .34);
-  color: #ffffff;
-  background: linear-gradient(150deg, #e94f91, #d13a7d);
-  box-shadow: 0 6px 18px rgba(160, 32, 89, .28), inset 0 1px rgba(255,255,255,.30);
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit:focus-visible {
+  outline: 2px solid rgba(149, 113, 177, .65);
+  outline-offset: 2px;
 }
-
-html[data-theme-mode="dark"][data-laolao-workspace-dock="1"] .laolao-dock-exit:hover {
-  background: linear-gradient(150deg, #ef63a1, #d94787);
-  color: #ffffff;
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit:is(:hover, :focus-visible) .laolao-dock-exit__label {
+  visibility: visible;
+  opacity: 1;
+}
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit[data-pinkie-placement="rail"] {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  margin: 10px 0 0;
+  border-color: transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-2, #675b70);
+}
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit[data-pinkie-placement="rail"]:hover {
+  background: var(--ink-tint, rgba(106, 86, 124, .09));
+}
+html[data-laolao-workspace-dock="1"] .laolao-dock-exit[data-pinkie-placement="rail"] .laolao-dock-exit__label {
+  top: 50%;
+  left: calc(100% + 12px);
+  right: auto;
+  transform: translateY(-50%);
+}
+html[data-theme-mode="dark"][data-laolao-workspace-dock="1"] .laolao-dock-exit,
+html[data-pinkie-night][data-laolao-workspace-dock="1"] .laolao-dock-exit {
+  color: #d5cbdc;
+  background: rgba(45, 37, 54, .65);
+  border-color: rgba(214, 200, 227, .18);
+}
+html:is([data-theme-mode="dark"], [data-pinkie-night])[data-laolao-workspace-dock="1"] .laolao-dock-exit:hover {
+  color: #f1e9f6;
+  background: rgba(187, 163, 209, .13);
+  border-color: rgba(214, 200, 227, .3);
+}
+html:is([data-theme-mode="dark"], [data-pinkie-night])[data-laolao-workspace-dock="1"] .laolao-dock-exit__label {
+  color: #ece3f2;
+  background: #2b2434;
+  border-color: rgba(214, 200, 227, .2);
+}
+html:is([data-theme-mode="dark"], [data-pinkie-night])[data-laolao-workspace-dock="1"] .laolao-dock-exit[data-pinkie-placement="rail"] {
+  color: var(--ink-2, #d5cbdc);
+  border-color: transparent;
+  background: transparent;
 }
 
 /* The right hand half is a focused second workspace, not a miniature copy of
@@ -4752,58 +4788,6 @@ html[data-pinkie-night] .chat-controls__model { --pinkie-brand-mono: #f5f5f5; }
   }
 }
 
-/* Only the tier word borrows the slider material; the model name stays plain. */
-.chat-controls__model[data-pinkie-outside-material] > .chat-controls__inline-select-trigger .chat-controls__inline-select-label {
-  display: inline-block;
-  max-width: 100%;
-  color: #5a5068;
-}
-.chat-controls__model[data-pinkie-outside-material] .pinkie-external-model-name { color: #5a5068; }
-.chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier {
-  display: inline-block;
-  position: relative;
-  font-weight: 760;
-  letter-spacing: .018em;
-  background: var(--pinkie-outside-ink, #625b69);
-  background-size: var(--pinkie-outside-size, 100% 100%);
-  background-position: 0% 50%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(255,255,255,.75)) drop-shadow(0 0 2px color-mix(in srgb, var(--pinkie-outside-glow-ink, transparent) 38%, transparent));
-  animation: var(--pinkie-outside-motion, none);
-}
-.chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::after {
-  content: "";
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  bottom: -3px;
-  height: var(--pinkie-outside-trail-height, 0px);
-  border-radius: 99px;
-  background: var(--pinkie-outside-trail, transparent);
-  background-size: 230% 100%;
-  opacity: var(--pinkie-outside-trail-opacity, 0);
-  box-shadow: 0 0 var(--pinkie-outside-trail-glow, 0px) var(--pinkie-outside-glow-ink, transparent);
-  pointer-events: none;
-  animation: var(--pinkie-outside-trail-motion, none);
-}
-.chat-controls__model[data-pinkie-outside-material="off"] { --pinkie-outside-ink: #605a65; }
-.chat-controls__model[data-pinkie-outside-material="minimal"] { --pinkie-outside-ink: linear-gradient(100deg,#625a70 8%,#d5c8d8 37%,#736781 61%,#625a70 90%); --pinkie-outside-size: 260% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 7s linear infinite; }
-.chat-controls__model[data-pinkie-outside-material="low"] { --pinkie-outside-ink: linear-gradient(100deg,#5c4e73 6%,#a88ac3 33%,#eee1ee 49%,#735a93 70%,#5c4e73 94%); --pinkie-outside-size: 270% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 5.5s linear infinite; --pinkie-outside-glow-ink:#ac8aca; --pinkie-outside-blur:3px; --pinkie-outside-glow-opacity:.34; --pinkie-outside-aura:pinkie-outside-breathe 4s ease-in-out infinite; }
-.chat-controls__model[data-pinkie-outside-material="medium"] { --pinkie-outside-ink: linear-gradient(100deg,#805065 5%,#cf8f97 32%,#ffe6cb 48%,#ba758a 69%,#805065 94%); --pinkie-outside-size: 275% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 4.7s linear infinite; --pinkie-outside-glow-ink:#df9da5; --pinkie-outside-blur:4px; --pinkie-outside-glow-opacity:.42; --pinkie-outside-aura:pinkie-outside-breathe 3.7s ease-in-out infinite; --pinkie-outside-trail-height:1px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#e4a7ac,transparent); --pinkie-outside-trail-opacity:.65; }
-.chat-controls__model[data-pinkie-outside-material="high"] { --pinkie-outside-ink: linear-gradient(100deg,#79395f 4%,#e967a3 27%,#fff0dc 42%,#e779b5 58%,#8b3c75 82%,#79395f 96%); --pinkie-outside-size: 300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.9s linear infinite; --pinkie-outside-glow-ink:#e576b2; --pinkie-outside-blur:5px; --pinkie-outside-glow-opacity:.54; --pinkie-outside-aura:pinkie-outside-breathe 2.9s ease-in-out infinite; --pinkie-outside-trail-height:1.5px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#f48bbd,#fff1dc,#f48bbd,transparent); --pinkie-outside-trail-opacity:.75; --pinkie-outside-trail-glow:3px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.9s linear infinite; }
-.chat-controls__model[data-pinkie-outside-material="xhigh"] { --pinkie-outside-ink:linear-gradient(100deg,#62416e 2%,#b65f9c 24%,#f2c4e4 38%,#fff2e7 48%,#a775cf 66%,#62416e 95%); --pinkie-outside-size:300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.3s linear infinite; --pinkie-outside-glow-ink:#ba71c2; --pinkie-outside-blur:6px; --pinkie-outside-glow-opacity:.68; --pinkie-outside-aura:pinkie-outside-breathe 2.5s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#b980d7,#f4d4ee,#b980d7,transparent); --pinkie-outside-trail-opacity:.86; --pinkie-outside-trail-glow:4px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.3s linear infinite; }
-.chat-controls__model[data-pinkie-outside-material="adaptive"] { --pinkie-outside-ink:linear-gradient(100deg,#385b71 2%,#78abae 24%,#d8efe0 43%,#9c83c0 63%,#385b71 95%); --pinkie-outside-size:300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.4s linear infinite; --pinkie-outside-glow-ink:#80bdbe; --pinkie-outside-blur:5px; --pinkie-outside-glow-opacity:.58; --pinkie-outside-aura:pinkie-outside-breathe 3s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#79bdbc,#dbf2e7,#aa91c3,transparent); --pinkie-outside-trail-opacity:.82; --pinkie-outside-trail-glow:4px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.4s linear infinite; }
-.chat-controls__model[data-pinkie-outside-material="max"] { --pinkie-outside-ink:linear-gradient(100deg,#793a61 2%,#d86f98 21%,#ffe2a9 37%,#fff8e9 48%,#dc8a7c 66%,#793a61 95%); --pinkie-outside-size:320% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 2.8s linear infinite; --pinkie-outside-glow-ink:#e8a17b; --pinkie-outside-blur:7px; --pinkie-outside-glow-opacity:.77; --pinkie-outside-aura:pinkie-outside-breathe 2.2s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#e88b9e,#fff1bf,#e88b9e,transparent); --pinkie-outside-trail-opacity:.94; --pinkie-outside-trail-glow:5px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 2.8s linear infinite; }
-.chat-controls__model[data-pinkie-outside-material="ultra"] { --pinkie-outside-ink:linear-gradient(100deg,#6b4380 2%,#d66cae 19%,#bdebe8 36%,#fff2f0 48%,#c07ce7 64%,#6b4380 95%); --pinkie-outside-size:330% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 2.25s linear infinite; --pinkie-outside-glow-ink:#bd82de; --pinkie-outside-blur:8px; --pinkie-outside-glow-opacity:.9; --pinkie-outside-aura:pinkie-outside-breathe 1.8s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#d77fb8,#a7e4ec,#f5ddf4,#d77fb8,transparent); --pinkie-outside-trail-opacity:1; --pinkie-outside-trail-glow:6px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 2.25s linear infinite; }
-@keyframes pinkie-outside-shimmer { to { background-position: 100% 50%; } }
-@keyframes pinkie-outside-breathe { 50% { opacity: .28; transform: scale(1.07); } }
-@media (prefers-reduced-motion: reduce) {
-  .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier,
-  .chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::after { animation: none !important; background-position: 50% 50%; }
-}
-
 /* The native picker anchors to its composer control and can calculate a
    negative left edge in narrow split panes. Keep the open surface fully in
    view without changing its desktop placement. */
@@ -5082,7 +5066,11 @@ html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.c
   z-index: 1;
   justify-self: end;
   width: 34px !important;
+  /* 窄于 768px 时上游给发送键 min-width:44px，不锁住就会被撑成扁胶囊（模式双开的半屏就在这个宽度） */
+  min-width: 34px !important;
+  max-width: 34px !important;
   height: 34px !important;
+  min-height: 34px !important;
   margin: 0 9px 0 0 !important;
   border-radius: 999px !important;
   background: var(--accent) !important;
@@ -5221,7 +5209,7 @@ html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.c
 
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.chat-send-btn--stop.chat-send-btn--stop:not(#__p1):not(#__p2) {
   grid-row: 1; grid-column: 12; justify-self: end; position: relative; z-index: 1;
-  width: 34px !important; min-width: 34px !important; height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
+  width: 34px !important; min-width: 34px !important; max-width: 34px !important; height: 34px !important; min-height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn svg { width: 16px !important; height: 16px !important; }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #fff !important; color: #fff !important; }

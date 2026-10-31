@@ -1,0 +1,146 @@
+/* ChatGPT 式消息内实验（concept_lab / logic_lab / timing_lab / sequence_lab）。颜色沿用 --il-*，白天夜间各一套。 */
+.pinkie-learning-inline { --pil-b: #2b8a9e; --pil-warn: #c9702a; --pil-good: #3f9a6b; --pil-bg: color-mix(in srgb, var(--il-accent) 4%, var(--il-surface)); }
+html[data-pinkie-night] .pinkie-learning-inline { --pil-b: #7cd0de; --pil-warn: #f0a868; --pil-good: #86d3a6; --pil-bg: color-mix(in srgb, var(--il-accent) 6%, var(--il-surface)); }
+.pil-x { display: grid; gap: 10px; min-width: 0; }
+.pil-formula {
+  min-width: 0; padding: 9px 12px; border-radius: 11px; background: var(--il-soft); color: var(--il-ink);
+  font: 500 13.5px/1.6 var(--cle-mono, ui-monospace, "SF Mono", Menlo, monospace); font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere; border-inline-start: 3px solid var(--il-accent);
+}
+.pil-figure { min-width: 0; border: 1px solid var(--il-line); border-radius: 12px; background: var(--pil-bg); overflow: hidden; }
+.pil-svg { display: block; max-width: 100%; font: 11px/1 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif); user-select: none; -webkit-user-select: none; }
+.pil-readouts { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pil-readout { display: grid; gap: 1px; min-width: 0; padding: 6px 10px; border: 1px solid var(--il-line); border-radius: 10px; background: var(--il-surface); }
+.pil-readout > span { color: var(--il-muted); font-size: 11.5px; line-height: 1.3; }
+.pil-readout > b { font: 600 14px/1.35 var(--cle-mono, ui-monospace, "SF Mono", Menlo, monospace); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pil-readout-strong { border-color: color-mix(in srgb, var(--il-accent) 55%, transparent); background: color-mix(in srgb, var(--il-accent) 9%, var(--il-surface)); }
+.pil-hint { margin: 0 !important; padding: 2px 2px; color: var(--il-muted); font-size: 13px; }
+.pil-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 16px; min-width: 0; }
+.pil-control { display: grid; gap: 4px; min-width: 0; }
+.pil-control-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--il-muted); }
+.pil-control-value { color: var(--il-ink); font: 600 12.5px/1.4 var(--cle-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.pil-range { width: 100%; min-width: 0; margin: 0; accent-color: var(--il-accent); height: 22px; cursor: grab; }
+.pil-range:active { cursor: grabbing; }
+.pil-range:focus-visible, .pil-seg:focus-visible, .pil-switch:focus-visible, .pil-text:focus-visible { outline: 2px solid var(--il-accent); outline-offset: 2px; }
+.pil-text { box-sizing: border-box; width: 100%; min-width: 0; min-height: 32px; padding: 4px 9px; border: 1px solid var(--il-line); border-radius: 8px; background: var(--il-surface); color: var(--il-ink); font: 13px/1.4 var(--cle-mono, ui-monospace, monospace); }
+.pil-segmented { display: flex; flex-wrap: wrap; gap: 0; min-width: 0; padding: 2px; border: 1px solid var(--il-line); border-radius: 9px; background: var(--il-soft); width: fit-content; max-width: 100%; }
+.pil-seg { appearance: none; border: 0; border-radius: 7px; background: transparent; color: var(--il-muted); padding: 4px 10px; font: inherit; font-size: 12.5px; line-height: 1.4; cursor: pointer; }
+.pil-seg[aria-checked="true"] { background: var(--il-surface); color: var(--il-ink); box-shadow: 0 1px 3px rgba(60, 40, 80, .14); font-weight: 600; }
+.pil-ask { justify-self: start; font-size: 12.5px; color: var(--il-muted); }
+.pil-ask::before { content: "↗ "; }
+
+/* SVG 图元 */
+.pil-plot-bg { fill: none; }
+.pil-grid { stroke: var(--il-line); stroke-width: 1; fill: none; }
+.pil-axis { stroke: color-mix(in srgb, var(--il-ink) 45%, transparent); stroke-width: 1.2; }
+.pil-tick { fill: var(--il-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.pil-axis-label { fill: var(--il-muted); font-size: 11px; font-style: italic; }
+.pil-label { fill: var(--il-ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pil-strong { font-weight: 650; }
+.pil-a { fill: var(--il-accent); }
+.pil-b { fill: var(--pil-b); }
+.pil-curve { fill: none; stroke: var(--il-accent); stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+.pil-curve-b { fill: none; stroke: var(--pil-b); stroke-width: 2.4; stroke-linejoin: round; }
+.pil-curve-faint { fill: none; stroke: color-mix(in srgb, var(--il-muted) 55%, transparent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.pil-tangent { fill: none; stroke: var(--il-accent); stroke-width: 1.8; opacity: .85; }
+.pil-secant { fill: none; stroke: var(--pil-b); stroke-width: 1.6; stroke-dasharray: 6 4; }
+.pil-guide { stroke: var(--pil-b); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+.pil-dot { fill: var(--il-accent); stroke: var(--il-surface); stroke-width: 2; }
+.pil-dot-b { fill: var(--pil-b); stroke: var(--il-surface); stroke-width: 2; }
+.pil-dot-warn { fill: var(--pil-warn); stroke: var(--il-surface); stroke-width: 2; }
+.pil-hollow { fill: var(--pil-bg); stroke: var(--il-accent); stroke-width: 2; }
+.pil-wire { stroke: color-mix(in srgb, var(--il-ink) 70%, transparent); stroke-width: 1.8; fill: none; stroke-linecap: round; }
+.pil-part { fill: var(--il-surface); stroke: color-mix(in srgb, var(--il-ink) 75%, transparent); stroke-width: 1.8; }
+.pil-plate { stroke: var(--il-ink); stroke-width: 2.4; }
+.pil-thick { stroke-width: 4; }
+.pil-node { fill: var(--il-ink); }
+.pil-current { fill: none; stroke: var(--il-accent); stroke-width: 3; stroke-dasharray: 2 12; stroke-linecap: round; animation: pil-flow 1s linear infinite; opacity: .9; }
+@keyframes pil-flow { to { stroke-dashoffset: -14; } }
+@media (prefers-reduced-motion: reduce) { .pil-current { animation: none; } }
+.pil-seg-a { fill: color-mix(in srgb, var(--il-accent) 75%, var(--il-surface)); }
+.pil-seg-b { fill: color-mix(in srgb, var(--pil-b) 75%, var(--il-surface)); }
+.pil-bar-label { fill: #fff; font-size: 11.5px; font-weight: 600; }
+.pil-phasor { stroke: var(--il-accent); stroke-width: 2.6; }
+.pil-phasor-b { stroke: var(--pil-b); stroke-width: 2.6; }
+.pil-strong-line { stroke-width: 2.6; }
+.pil-up { fill: color-mix(in srgb, var(--pil-good) 70%, transparent); }
+.pil-down { fill: color-mix(in srgb, var(--pil-warn) 70%, transparent); }
+.pil-area { fill: color-mix(in srgb, var(--il-accent) 22%, transparent); stroke: color-mix(in srgb, var(--il-accent) 55%, transparent); stroke-width: .8; }
+.pil-area-neg { fill: color-mix(in srgb, var(--pil-b) 22%, transparent); stroke: color-mix(in srgb, var(--pil-b) 55%, transparent); stroke-width: .8; }
+.pil-field { stroke: color-mix(in srgb, var(--il-muted) 70%, transparent); stroke-width: 1.3; stroke-linecap: round; }
+.pil-bit-net { fill: color-mix(in srgb, var(--il-accent) 20%, var(--il-surface)); stroke: color-mix(in srgb, var(--il-accent) 45%, transparent); }
+.pil-bit-host { fill: color-mix(in srgb, var(--pil-b) 16%, var(--il-surface)); stroke: color-mix(in srgb, var(--pil-b) 40%, transparent); }
+.pil-bit { fill: var(--il-ink); font: 600 11px/1 var(--cle-mono, ui-monospace, monospace); }
+.pil-split { stroke: var(--pil-warn); stroke-width: 2.2; }
+
+/* 逻辑 */
+.pil-switches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pil-switch { appearance: none; display: inline-grid; justify-items: center; min-width: 46px; padding: 4px 8px; border: 1px solid var(--il-line); border-radius: 10px; background: var(--il-surface); color: var(--il-ink); font: inherit; cursor: pointer; }
+.pil-switch > span { font-size: 11.5px; color: var(--il-muted); }
+.pil-switch > b { font: 700 17px/1.2 var(--cle-mono, ui-monospace, monospace); }
+.pil-switch[aria-pressed="true"] { border-color: var(--il-accent); background: color-mix(in srgb, var(--il-accent) 16%, var(--il-surface)); }
+.pil-arrow { color: var(--il-muted); }
+.pil-lamp { display: inline-grid; justify-items: center; min-width: 46px; padding: 4px 8px; border-radius: 10px; border: 1px dashed var(--il-line); }
+.pil-lamp > span { font-size: 11.5px; color: var(--il-muted); }
+.pil-lamp > b { font: 700 17px/1.2 var(--cle-mono, ui-monospace, monospace); }
+.pil-lamp[data-on="true"] { border-style: solid; border-color: var(--pil-good); background: color-mix(in srgb, var(--pil-good) 18%, var(--il-surface)); box-shadow: 0 0 12px color-mix(in srgb, var(--pil-good) 40%, transparent); }
+.pil-bar { text-decoration: overline; text-decoration-thickness: 1.5px; }
+.pil-sop { display: inline-flex; gap: 1px; }
+.pil-table-wrap { max-width: 100%; overflow: auto; padding: 8px; }
+.pil-table, .pil-kmap { border-collapse: collapse; font: 13px/1.5 var(--cle-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; margin: 0 auto; }
+.pil-table :is(th, td) { padding: 3px 12px; text-align: center; border-bottom: 1px solid var(--il-line); }
+.pil-table th { color: var(--il-muted); font-weight: 600; }
+.pil-muted { color: var(--il-muted); font-size: 11px; }
+.pil-one { color: var(--il-accent); font-weight: 700; }
+.pil-row-current td { background: color-mix(in srgb, var(--il-accent) 14%, transparent); }
+.pil-kmap th { padding: 4px 10px; color: var(--il-muted); font-weight: 600; }
+.pil-kmap td { position: relative; width: 52px; height: 42px; text-align: center; border: 1px solid var(--il-line); font-size: 15px; }
+.pil-kmap td small { position: absolute; right: 3px; bottom: 1px; font-size: 9px; color: var(--il-muted); font-weight: 400; }
+.pil-kmap td[data-group] { box-shadow: inset 0 0 0 calc(var(--rings, 1) * 2px) var(--ring); }
+[data-group="0"] { --ring: color-mix(in srgb, var(--il-accent) 70%, transparent); }
+[data-group="1"] { --ring: color-mix(in srgb, var(--pil-b) 75%, transparent); }
+[data-group="2"] { --ring: color-mix(in srgb, var(--pil-good) 75%, transparent); }
+[data-group="3"] { --ring: color-mix(in srgb, var(--pil-warn) 75%, transparent); }
+.pil-cell-current { background: color-mix(in srgb, var(--il-accent) 14%, transparent); }
+.pil-kmap-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+.pil-kmap-key { padding: 1px 8px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--ring); font: 600 12.5px/1.6 var(--cle-mono, ui-monospace, monospace); }
+.pil-wire-on { stroke: var(--il-accent); stroke-width: 2.4; fill: none; }
+.pil-wire-off { stroke: color-mix(in srgb, var(--il-muted) 55%, transparent); stroke-width: 1.6; fill: none; }
+.pil-gate { fill: var(--il-surface); stroke: var(--il-ink); stroke-width: 1.6; }
+.pil-gate-text { fill: var(--il-ink); font-size: 11px; font-weight: 600; }
+
+/* 时序 */
+.pil-wave-clk { fill: none; stroke: color-mix(in srgb, var(--il-ink) 70%, transparent); stroke-width: 1.6; }
+.pil-wave-in { fill: none; stroke: var(--pil-b); stroke-width: 2.2; }
+.pil-wave-q { fill: none; stroke: var(--il-accent); stroke-width: 2.6; }
+.pil-edge { stroke: var(--il-line); stroke-dasharray: 3 4; }
+.pil-edge-current { stroke: var(--pil-warn); stroke-width: 1.6; stroke-dasharray: 3 3; }
+.pil-hit { fill: transparent; cursor: pointer; }
+.pil-hit:hover, .pil-hit:focus-visible { fill: color-mix(in srgb, var(--pil-b) 12%, transparent); outline: none; }
+.pil-bit-label { fill: var(--il-muted); font-size: 10px; }
+
+/* 协议时序图 */
+.pil-actor { fill: var(--il-surface); stroke: var(--il-line); stroke-width: 1.2; }
+.pil-lifeline { stroke: var(--il-line); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.pil-msg-line { stroke: var(--il-accent); stroke-width: 2; }
+.pil-msg-head { fill: var(--il-accent); }
+.pil-msg-text { fill: var(--il-ink); font: 600 11.5px/1 var(--cle-mono, ui-monospace, monospace); }
+.pil-msg { transition: opacity .3s ease; }
+.pil-msg-future { opacity: .22; }
+.pil-msg-future .pil-msg-text { font-weight: 400; }
+.pil-msg-current .pil-msg-line { stroke: var(--pil-warn); stroke-width: 2.6; }
+.pil-msg-current .pil-msg-head { fill: var(--pil-warn); }
+.pil-state { fill: var(--pil-b); font: 600 10px/1 var(--cle-mono, ui-monospace, monospace); }
+.pil-detail { display: grid; gap: 4px; min-width: 0; padding: 9px 12px; border-radius: 11px; background: var(--il-soft); }
+.pil-detail p { margin: 0 !important; }
+.pil-keypoint { color: var(--il-accent); font-weight: 600; }
+.pil-inline-button { justify-self: start; width: auto; }
+.pil-formula sub, .pil-formula sup, .pil-readout sub, .pil-readout sup, .pil-hint sub, .pil-hint sup, .pil-control sub { font-size: 72%; line-height: 0; }
+.pil-table-compact :is(th, td) { padding: 1px 12px; }
+.pil-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+@media (max-width: 480px) {
+  .pil-formula { font-size: 12.5px; padding: 8px 10px; }
+  .pil-controls { grid-template-columns: 1fr; }
+  .pil-readout > b { font-size: 13px; }
+}

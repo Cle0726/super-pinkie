@@ -667,6 +667,10 @@ html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(23
   transition: opacity .16s ease, transform .16s ease;
 }
 .laolao-learning-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.laolao-learning-toast.has-action.is-visible { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.laolao-learning-toast button { flex: none; padding: 0; border: 0; color: inherit; background: none; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+/* 选中的是英文词或短语时，「记生词」是主按钮。 */
+.laolao-learning-selection-save.laolao-learning-selection-vocab { border-color: transparent; color: #fff; background: #DB1F74; }
 .laolao-learning-toast[data-error="1"] { background: rgba(151, 45, 85, .94); }
 
 @keyframes laolao-learning-arrive {
@@ -1026,3 +1030,36 @@ html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(23
 .laolao-learning-manuscript__stale { padding: 8px 10px; color: var(--notes-muted); border: 1px solid var(--notes-line); border-radius: 7px; font-size: 11px; }
 .laolao-learning-manuscript__actions { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
 .laolao-learning-organize-preview .laolao-learning-manuscript { padding: 0 3px; }
+
+/* Learning evidence stays next to the answer; one active item keeps long question groups compact. */
+.laolao-learning-stage.has-no-art .laolao-learning-stage__body { width: 100%; }
+.laolao-learning-stage__body { max-height: min(48vh, 480px); overflow-y: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.laolao-learning-stage__items { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; color: var(--learning-ink); font-size: 11px; }
+.laolao-learning-stage__items > span { margin-right: 5px; }
+.laolao-learning-stage__item { width: 29px; height: 29px; border: 1px solid rgba(126,84,111,.24); border-radius: 8px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.laolao-learning-stage__item[aria-current="true"] { outline: 2px solid var(--learning-pink); outline-offset: 1px; }
+.laolao-learning-stage__item[data-state="correct"] { background: rgba(55,153,102,.13); }
+.laolao-learning-stage__item[data-state="practice"] { background: rgba(227,128,65,.14); }
+.laolao-learning-stage__item[data-state="pending"] { border-style: dashed; }
+.laolao-learning-stage__confidence-row { display: flex; flex-wrap: wrap; gap: 6px; border: 0; margin: 0 auto 0 0; padding: 0; }
+.laolao-learning-stage__confidence-row legend { margin: 0 0 5px; padding: 0; font-size: 11px; }
+.laolao-learning-stage__confidence { width: auto; border: 1px solid rgba(126,84,111,.2); border-radius: 999px; padding: 5px 9px; color: inherit; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.laolao-learning-stage__confidence[aria-pressed="true"] { color: var(--learning-pink-deep); border-color: var(--learning-pink); background: rgba(232,79,154,.09); }
+.laolao-learning-stage__submitted { margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(126,84,111,.18); border-radius: 10px; font-size: 12px; }
+.laolao-learning-stage__submitted strong { font-size: 11px; opacity: .75; }
+.laolao-learning-stage__submitted p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.laolao-learning-stage__submitted small { display: block; margin-top: 6px; opacity: .75; }
+.laolao-learning-result__criteria { margin: 8px 0; padding-left: 20px; font-size: 12px; line-height: 1.7; }
+.laolao-learning-result__error { font-size: 12px; }
+.laolao-learning-stage__sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.laolao-learning-stage__correction { margin: 8px 0; font-size: 11px; opacity: .85; }
+.laolao-learning-stage__correction summary { cursor: pointer; margin-bottom: 6px; }
+.laolao-learning-stage__correction .laolao-learning-stage__answer { display: block; margin-bottom: 6px; }
+.laolao-learning-stage button:focus-visible { outline: 2px solid var(--learning-pink); outline-offset: 3px; }
+.laolao-learning-review__own { margin: 0; white-space: pre-wrap; text-align: left; font-size: 12px; }
+.laolao-learning-review__self-rating { color: var(--notes-muted, #938597); font-size: 11px; }
+.laolao-learning-radar__wrong-item { margin: 10px 0; padding: 12px; }
+.laolao-learning-radar__wrong-item > .laolao-learning-button { margin-top: 8px; }
+html[data-pinkie-night] .laolao-learning-stage__confidence[aria-pressed="true"] { color: #ffb9d9; }
+@media (max-width: 600px) { .laolao-learning-stage__body { max-height: 44vh; } }
+html[data-pinkie-night]:not(#_n) .laolao-learning-selection-save.laolao-learning-selection-vocab { color: #17131B !important; background: #F0679F !important; border-color: transparent !important; }

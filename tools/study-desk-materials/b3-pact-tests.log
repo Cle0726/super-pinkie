@@ -1,0 +1,55 @@
+✖ pact defaults are created on demand with an empty exam date and no channel (2.50575ms)
+✔ pact.set merges patches and rejects invalid values (35.7875ms)
+✔ ledger counts answered questions, reviews and new notes on the pact day (17.363417ms)
+✔ a later model grade updates the original day without double counting (14.772875ms)
+✔ a day is complete only when minutes, questions and due reviews are all satisfied (11.517875ms)
+✔ history reports complete, partial, missed and future days (1.155459ms)
+✔ future days appear when the pact timezone is behind the event date (11.054083ms)
+✔ streak stops at a missed day and keeps the best run (15.300791ms)
+✔ day boundaries follow the pact timezone, not UTC (9.529875ms)
+✔ focus sessions are single-flight, credited in whole minutes and capped (14.744417ms)
+✔ stopping before a full minute does not create study credit or an active day (4.9875ms)
+✔ unreviewed days cannot extend a streak when time and question goals are met (10.314375ms)
+✔ corrupt pact and day files are backed up and replaced, never silently overwritten (1.822625ms)
+✔ focus state corruption recovers instead of wedging the timer (0.861166ms)
+✔ today exposes exam countdown, due reviews and weak topics (21.671125ms)
+✔ composeNudgeContext carries the real numbers for all kinds and intensities (0.530292ms)
+✔ lastcall on a completed day is exactly NO_REPLY and the nudge hook agrees (13.917083ms)
+✔ nudge markers are recognised only in the learning agent prompt (0.154416ms)
+✔ gateway methods register with read and write scopes and round-trip through the ledger (1.359292ms)
+✔ pact hooks never break the legacy learning store (4.19325ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 19
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 293.172625
+
+✖ failing tests:
+
+test at tests/learning-pact.test.mjs:52:1
+✖ pact defaults are created on demand with an empty exam date and no channel (2.50575ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   lessons: 2,
+      minutes: 30,
+      questions: 20,
+      reviews: 'due'
+    }
+  
+      at TestContext.<anonymous> (file:///Users/Admin/release-superpinkie/repo/tests/learning-pact.test.mjs:57:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { minutes: 30, questions: 20, lessons: 2, reviews: 'due' },
+    expected: { minutes: 30, questions: 20, reviews: 'due' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

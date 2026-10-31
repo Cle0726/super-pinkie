@@ -1,0 +1,30 @@
+/* ---------- the window as glass (the native shell sets data-pinkie-native-glass) ----------
+   As the original app did it: the window itself is clear, and the page lays one sheet over the
+   desktop that thins from left to right — near-solid paper where the words are read, thinning
+   toward the painting's side so the desktop shows through. Night is the same sheet in ink.
+   Only the native window gets this; a browser tab keeps its solid ground. */
+html[data-cle][data-pinkie-native-glass="1"],
+html[data-cle][data-pinkie-native-glass="1"] body,
+html[data-cle][data-pinkie-native-glass="1"] .shell { background: transparent !important; }
+
+html[data-cle][data-pinkie-native-glass="1"] .shell { isolation: isolate; }
+html[data-cle][data-pinkie-native-glass="1"] .shell::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--cle-paper) 97%, transparent) 0%,
+    color-mix(in srgb, var(--cle-paper) 92%, transparent) 22%,
+    color-mix(in srgb, var(--cle-paper) 80%, transparent) 46%,
+    color-mix(in srgb, var(--cle-paper) 56%, transparent) 74%,
+    color-mix(in srgb, var(--cle-paper) 32%, transparent) 100%);
+  transition: background .6s ease;
+}
+
+/* the ground's knife texture thins with the sheet, so it never reads as a solid card */
+html[data-cle][data-pinkie-native-glass="1"] .cle-backdrop__canvas {
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .7) 50%, rgba(0, 0, 0, .25) 100%);
+  mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .7) 50%, rgba(0, 0, 0, .25) 100%);
+}
+/* the composer still stands on ground, a little lighter than solid */
+html[data-cle][data-pinkie-native-glass="1"] .cle-backdrop::after {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--cle-paper) 90%, transparent) 0%, color-mix(in srgb, var(--cle-paper) 70%, transparent) 30%, transparent 100%);
+}

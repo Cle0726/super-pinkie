@@ -1,0 +1,192 @@
+.laolao-link-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10001; /* 比 image-viewer 高一档，避免叠加时被遮 */
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--cle-ink, #15161a) 55%, transparent);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.laolao-link-viewer.is-open {
+  opacity: 1;
+}
+
+.laolao-link-viewer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--cle-surface, #ffffff);
+  border-bottom: 1px solid var(--cle-line, rgba(21,22,26,.12));
+  flex-shrink: 0;
+}
+
+/* 环境标识：native 时有原生工作区，无桥时这里只是页内 iframe。
+   不能只用普通预览冒充 App 的悬浮浏览器。 */
+.laolao-link-viewer__mode {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--cle-line, rgba(21,22,26,.12));
+  border-radius: 999px;
+  color: var(--cle-ink-3, #8a8a80);
+  background: transparent;
+  font: 500 10.5px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  white-space: nowrap;
+}
+
+.laolao-link-viewer__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cle-ink-2, rgba(21,22,26,.62));
+  font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  direction: ltr; /* URL 从左往右显示，避免阿拉伯/希伯来断字 */
+}
+
+.laolao-link-viewer__external,
+.laolao-link-viewer__close {
+  flex-shrink: 0;
+  border: 1px solid var(--cle-line-strong, rgba(21,22,26,.22));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cle-gaze, #2a63e8);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.laolao-link-viewer__external {
+  padding: 6px 14px;
+  font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+.laolao-link-viewer__external:hover {
+  background: var(--cle-gaze, #2a63e8);
+  color: var(--cle-paper, #fbfaf5);
+}
+
+.laolao-link-viewer__close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font: 500 22px/24px -apple-system, BlinkMacSystemFont, sans-serif;
+  display: grid;
+  place-items: center;
+}
+
+.laolao-link-viewer__close:hover {
+  background: var(--cle-gaze, #2a63e8);
+  color: var(--cle-paper, #fbfaf5);
+}
+
+.laolao-link-viewer__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  background: var(--cle-paper, #fbfaf5);
+}
+
+.laolao-link-viewer__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--cle-ink-2, rgba(21,22,26,.62));
+  font: 500 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  pointer-events: none;
+}
+
+.laolao-link-viewer__loading::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  border: 2px solid var(--cle-gaze-soft, rgba(42,99,232,.28));
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: pinkieLinkSpinner 0.8s linear infinite;
+}
+
+@keyframes pinkieLinkSpinner {
+  to { transform: rotate(360deg); }
+}
+
+.laolao-link-viewer__iframe {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--cle-paper, #fbfaf5);
+  display: none; /* load 事件触发后才显示 */
+}
+
+.laolao-link-viewer__fallback {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 28px;
+  text-align: center;
+  color: var(--cle-ink-2, rgba(21,22,26,.62));
+  flex: 1 1 auto;
+}
+
+.laolao-link-viewer__fallback-icon {
+  font-size: 44px;
+  opacity: 0.85;
+}
+
+.laolao-link-viewer__fallback-title {
+  color: var(--cle-ink, #15161a);
+  font: 600 17px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+.laolao-link-viewer__fallback-hint {
+  max-width: 460px;
+  font: 400 13px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  color: var(--cle-ink-3, #8a8a80);
+}
+
+.laolao-link-viewer__fallback-url {
+  width: min(560px, 90%);
+  padding: 9px 12px;
+  border: 1px solid var(--cle-line, rgba(21,22,26,.12));
+  border-radius: 10px;
+  background: var(--cle-surface, #ffffff);
+  color: var(--cle-ink, #15161a);
+  font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  direction: ltr;
+  text-align: left;
+}
+
+.laolao-link-viewer__fallback-copy {
+  padding: 8px 22px;
+  border: 1px solid var(--cle-gaze, #2a63e8);
+  border-radius: 999px;
+  background: var(--cle-gaze, #2a63e8);
+  color: var(--cle-paper, #fbfaf5);
+  cursor: pointer;
+  font: 500 13px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  transition: background 120ms ease;
+}
+
+.laolao-link-viewer__fallback-copy:hover {
+  background: var(--cle-ink, #15161a);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .laolao-link-viewer {
+    transition: none !important;
+  }
+  .laolao-link-viewer__loading::before {
+    animation: none !important;
+  }
+}
+
+

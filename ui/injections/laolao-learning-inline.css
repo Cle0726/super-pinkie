@@ -1,0 +1,143 @@
+.pinkie-learning-inline-slot { min-width: 0; max-width: 100%; }
+.pinkie-learning-inline-slot:empty { display: none; }
+.pinkie-learning-inline {
+  --il-surface: #fffafd;
+  --il-ink: #40354c;
+  --il-muted: #756b80;
+  --il-line: rgba(137, 111, 163, .22);
+  --il-soft: rgba(143, 117, 176, .08);
+  --il-accent: #9562ae;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin: 12px 0;
+  border: 1px solid var(--il-line);
+  border-radius: 16px;
+  background: var(--il-surface);
+  color: var(--il-ink);
+  font: 400 14px/1.6 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif);
+  overflow-wrap: anywhere;
+  isolation: isolate;
+}
+html[data-pinkie-night] .pinkie-learning-inline {
+  --il-surface: #211b2b;
+  --il-ink: #eee6f4;
+  --il-muted: #b6a9c2;
+  --il-line: rgba(191, 163, 219, .22);
+  --il-soft: rgba(191, 163, 219, .08);
+  --il-accent: #d3a1ea;
+}
+.pinkie-il-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 10px 14px; }
+.pinkie-il-title { min-width: 0; font-weight: 600; }
+.pinkie-il-body { min-width: 0; padding: 0 14px 14px; }
+.pinkie-il-body[hidden] { display: none; }
+.pinkie-il-body p { margin: 8px 0; white-space: pre-wrap; }
+.pinkie-il-body h3 { margin: 2px 0 12px; font: inherit; font-weight: 600; }
+.pinkie-il-question { white-space: pre-wrap; }
+.pinkie-il-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--il-muted); font-size: 12px; padding: 0 14px; }
+.pinkie-il-status:not(:empty) { padding-block: 0 10px; }
+.pinkie-il-status[data-error="1"], .pinkie-il-error { color: #b24573; }
+html[data-pinkie-night] :is(.pinkie-il-status[data-error="1"], .pinkie-il-error) { color: #f3a8c3; }
+.pinkie-il-button {
+  appearance: none; -webkit-appearance: none; box-sizing: border-box;
+  border: 1px solid var(--il-line); border-radius: 9px;
+  background: var(--il-soft); color: var(--il-ink);
+  padding: 6px 10px; font: inherit; line-height: 1.4;
+  min-width: 0; white-space: normal; cursor: pointer;
+}
+.pinkie-il-button:hover { background: color-mix(in srgb, var(--il-accent) 15%, var(--il-surface)); }
+.pinkie-il-button:focus-visible { outline: 2px solid var(--il-accent); outline-offset: 2px; }
+.pinkie-il-button:disabled { opacity: .55; cursor: wait; }
+.pinkie-il-primary { background: var(--il-ink); color: var(--il-surface); border-color: transparent; }
+.pinkie-il-primary:hover { background: color-mix(in srgb, var(--il-ink) 85%, var(--il-accent)); }
+.pinkie-il-quiet { border-color: transparent; background: transparent; }
+.pinkie-il-button[aria-current="true"], .pinkie-il-button[aria-pressed="true"] { border-color: var(--il-accent); background: color-mix(in srgb, var(--il-accent) 16%, var(--il-surface)); }
+.pinkie-il-items, .pinkie-il-actions, .pinkie-il-confidence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pinkie-il-items { margin-bottom: 12px; }
+.pinkie-il-actions { justify-content: space-between; margin-top: 12px; }
+.pinkie-il-confidence { gap: 2px; font-size: 12px; }
+.pinkie-il-answers { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 7px; }
+.pinkie-il-choice { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 8px 10px; border: 1px solid var(--il-line); border-radius: 10px; cursor: pointer; }
+.pinkie-il-choice:has(input:checked) { border-color: var(--il-accent); background: var(--il-soft); }
+.pinkie-il-choice input { flex: 0 0 auto; margin: 5px 0 0; accent-color: var(--il-accent); }
+.pinkie-il-choice span { min-width: 0; }
+.pinkie-il-answer { box-sizing: border-box; resize: vertical; width: 100%; max-width: 100%; min-height: 64px; padding: 9px 10px; border: 1px solid var(--il-line); border-radius: 10px; color: var(--il-ink); background: var(--il-soft); font: inherit; }
+.pinkie-il-answer:focus-visible { outline: 2px solid var(--il-accent); outline-offset: 1px; }
+.pinkie-il-hint, .pinkie-il-explanation { margin-top: 10px; }
+.pinkie-il-hint summary, .pinkie-il-explanation summary { cursor: pointer; }
+.pinkie-il-source, .pinkie-il-placeholder { color: var(--il-muted); font-size: 12px; }
+.pinkie-il-source { margin: 4px 0 10px; }
+.pinkie-il-submitted { color: var(--il-ink); }
+.pinkie-il-verdict { margin: 10px 0; font-weight: 600; }
+.pinkie-il-keypoint { padding-inline-start: 10px; border-inline-start: 2px solid var(--il-accent); }
+.pinkie-il-formula { font-variant-numeric: tabular-nums; font-weight: 500; margin-bottom: 4px; }
+.pinkie-il-plot { width: 100%; min-width: 0; height: 232px; }
+.pinkie-il-plot svg { display: block; width: 100%; height: 232px; overflow: visible; }
+.pinkie-il-plot text { fill: var(--il-ink); font-family: inherit; font-size: 11px; }
+.pinkie-il-gridline { stroke: var(--il-line); stroke-width: 1; }
+.pinkie-il-axis { stroke: var(--il-muted); stroke-width: 1; }
+.pinkie-il-curve { fill: none; stroke: var(--il-accent); stroke-width: 2.5; stroke-linejoin: round; }
+.pinkie-il-parameters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px 16px; }
+.pinkie-il-parameter { display: grid; gap: 3px; min-width: 0; }
+.pinkie-il-parameter > span { display: flex; justify-content: space-between; gap: 8px; }
+.pinkie-il-parameter output { font-variant-numeric: tabular-nums; }
+.pinkie-il-parameter input { width: 100%; min-width: 0; margin: 0; accent-color: var(--il-accent); }
+.pinkie-il-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.pinkie-il-flow-detail { margin-top: 12px; }
+.pinkie-il-flow-data { font-size: 13px; }
+.pinkie-il-flow-arrow { color: var(--il-muted); }
+.pinkie-il-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 480px) {
+  .pinkie-il-header { padding-inline: 10px; }
+  .pinkie-il-body { padding-inline: 10px; }
+  .pinkie-il-actions { align-items: stretch; }
+  .pinkie-il-confidence { width: 100%; }
+  .pinkie-il-confidence .pinkie-il-button { flex: 1; }
+}
+@media (pointer: coarse) {
+  .pinkie-il-button { min-height: 44px; }
+  .pinkie-il-choice { min-height: 44px; box-sizing: border-box; align-items: center; }
+  .pinkie-il-choice input { margin-top: 0; }
+  .pinkie-il-answer { font-size: 16px; }
+  .pinkie-il-parameter input { min-height: 36px; }
+}
+.pinkie-il-problem { padding: 9px 11px; border-radius: 10px; background: var(--il-soft); white-space: pre-wrap; }
+.pinkie-il-comparison { margin: 12px 0; }
+.pinkie-il-comparison-row { padding: 8px 0; border-bottom: 1px solid var(--il-line); }
+.pinkie-il-comparison-row blockquote { margin: 4px 0; padding-inline-start: 10px; border-inline-start: 2px solid var(--il-accent); white-space: pre-wrap; }
+.pinkie-il-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.pinkie-il-source .pinkie-il-button { padding: 3px 0; text-align: start; font-size: 12px; }
+.pinkie-il-role-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.pinkie-il-sentence { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.pinkie-il-segment { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: start; }
+.pinkie-il-segment > span { white-space: pre-wrap; }
+.pinkie-il-segment small { color: var(--il-accent); font-size: 11px; }
+.pinkie-il-segment[data-correct="false"] { border-color: #ba6b8a; }
+.pinkie-il-sentence-detail { padding: 9px 11px; margin-bottom: 12px; background: var(--il-soft); border-radius: 10px; }
+.pinkie-il-lab-phase { color: var(--il-muted); padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; font-size: 12px; }
+.pinkie-il-lab-phase[aria-current="true"] { color: var(--il-ink); background: var(--il-soft); border-color: var(--il-accent); }
+.pinkie-il-lab-area { display: grid; gap: 10px; margin-block: 10px; }
+.pinkie-il-pair-pool { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px; min-height: 42px; border: 1px dashed var(--il-line); border-radius: 10px; }
+.pinkie-il-pair { font: 12px/1.5 var(--cle-mono, ui-monospace, monospace); padding: 5px 8px; cursor: grab; }
+.pinkie-il-pair:active { cursor: grabbing; }
+.pinkie-il-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 8px; }
+.pinkie-il-bucket { display: flex; align-content: start; align-items: flex-start; flex-wrap: wrap; gap: 6px; min-height: 100px; padding: 9px; border: 1px solid var(--il-line); border-radius: 10px; background: var(--il-soft); }
+.pinkie-il-bucket > strong { width: 100%; }
+.pinkie-il-bucket > .pinkie-il-button[data-pinkie-bucket-button] { width: 100%; margin-bottom: 3px; }
+.pinkie-il-reduce-output { margin: 12px 0; padding: 10px; border-radius: 10px; background: var(--il-soft); }
+.pinkie-il-reduce-row { white-space: pre-wrap; font-variant-numeric: tabular-nums; }
+/* The chat shell disables native dragging by default. Word pairs explicitly
+   opt back in; their drag events stay inside the learning card. */
+.pinkie-learning-inline .pinkie-il-pair[draggable="true"] { -webkit-user-drag: element !important; -webkit-user-select: none; user-select: none; }
+
+/* 题卡：字母标签、代码题等宽、作答后标出自己的选择 */
+.pinkie-il-letter { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 7px; background: var(--il-soft); border: 1px solid var(--il-line); font-size: 12px; font-weight: 700; color: var(--il-accent); }
+.pinkie-il-choice:has(input:checked) { border-color: var(--il-accent); background: color-mix(in srgb, var(--il-accent) 9%, var(--il-surface)); }
+.pinkie-il-choice:has(input:checked) .pinkie-il-letter { background: var(--il-accent); color: var(--il-surface); border-color: transparent; }
+.pinkie-il-code { font-family: var(--cle-mono, ui-monospace, "SF Mono", Menlo, monospace); white-space: pre-wrap; font-size: 13.5px; }
+.pinkie-il-body h3.pinkie-il-code { padding: 8px 11px; border-radius: 10px; background: var(--il-soft); font-weight: 500; }
+.pinkie-il-answered .pinkie-il-choice { cursor: default; align-items: center; opacity: .62; }
+.pinkie-il-answered .pinkie-il-choice[data-chosen="true"] { opacity: 1; border-color: var(--il-accent); }
+.pinkie-il-answered .pinkie-il-choice[data-correct="true"] { border-color: #3f9a6b; background: color-mix(in srgb, #3f9a6b 10%, var(--il-surface)); }
+.pinkie-il-answered .pinkie-il-choice[data-correct="false"] { border-color: #c15a7c; background: color-mix(in srgb, #c15a7c 9%, var(--il-surface)); }
+.pinkie-il-mine { margin-inline-start: auto; color: var(--il-muted); font-size: 12px; white-space: nowrap; }

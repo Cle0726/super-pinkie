@@ -1,0 +1,134 @@
+/* ---------- the reasoning slider: a rail of living material (reasoning.js) ----------
+   As the original app did it — a thick rail, the part you have dragged filled with a material that
+   moves on its own, a different material for every level, the thumb made of the same stuff, a dot
+   for every stop. In C.le.'s own matter: ink smoke → graphite → indigo silk → Prussian oil →
+   ice glass → gold leaf → gold leaf on ice-blue fire. --cle-fill is how far the thumb is (0–1). */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider {
+  position: relative; isolation: isolate; height: 44px; margin: 4px 0 2px; overflow: visible;
+  --cle-rail: 18px;
+  /* defaults = medium */
+  --m-trough: linear-gradient(180deg, color-mix(in srgb, var(--cle-ink) 6%, transparent), color-mix(in srgb, var(--cle-ink) 11%, transparent));
+  --m-fill: linear-gradient(96deg, #14254f, #2a4f9a 48%, #1c3570);
+  --m-sheen: linear-gradient(104deg, transparent 32%, rgba(255, 255, 255, .34) 48%, transparent 64%);
+  --m-texture: none;
+  --m-anim: cle-m-drift 6s ease-in-out infinite alternate;
+  --m-thumb: radial-gradient(circle at 34% 28%, #fff 0 14%, #7da4e8 38%, #1c3570 100%);
+  --m-glow: rgba(42, 99, 232, .28);
+}
+/* the trough */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider::after {
+  content: ""; position: absolute; z-index: 0; left: 0; right: 0; top: 50%; height: var(--cle-rail); translate: 0 -50%;
+  border-radius: 999px; background: var(--m-trough);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--cle-ink) 14%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--cle-ink) 9%, transparent);
+  pointer-events: none;
+}
+/* the material, filled up to the thumb, moving on its own */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider::before {
+  content: ""; position: absolute; z-index: 1; left: 1px; top: 50%; height: calc(var(--cle-rail) - 2px); translate: 0 -50%;
+  width: calc((100% - 2px) * var(--cle-fill, 0) + (var(--cle-rail) - 2px) * (1 - var(--cle-fill, 0)));
+  border-radius: 999px;
+  background-image: var(--m-sheen), var(--m-texture), var(--m-fill);
+  background-size: 220% 100%, 120px 100%, 240% 100%;
+  background-repeat: no-repeat, repeat-x, no-repeat;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .28), 0 2px 10px var(--m-glow);
+  animation: var(--m-anim);
+  transition: width .32s cubic-bezier(.2, .7, 0, 1), box-shadow .3s ease;
+  pointer-events: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range {
+  position: relative; z-index: 4; height: 44px; margin: 0; background: transparent !important;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-runnable-track {
+  height: var(--cle-rail, 18px); background: transparent !important; box-shadow: none !important; border: 0 !important;
+}
+/* the thumb: a bead of the same material */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-thumb {
+  width: 24px; height: 24px; margin-top: -3px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--cle-surface) 92%, transparent);
+  background: var(--m-thumb);
+  box-shadow: 0 2px 8px rgba(10, 12, 18, .28), 0 0 0 1px color-mix(in srgb, var(--cle-ink) 16%, transparent), 0 0 16px var(--m-glow);
+  transition: transform .16s cubic-bezier(.2, .7, 0, 1), box-shadow .3s ease;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:active::-webkit-slider-thumb { transform: scale(1.14); }
+
+/* a dot at every stop, inside the rail */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-dots {
+  display: flex !important; position: absolute; z-index: 3; inset: 0 7px; align-items: center; justify-content: space-between; pointer-events: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--cle-ink) 30%, transparent);
+  transition: background .25s ease, transform .25s ease;
+}
+html[data-cle] .chat-controls__reasoning-dot[data-cle-past] { background: rgba(255, 255, 255, .72); }
+/* the names under the rail; the old tick marks are gone */
+html[data-cle] .cle-gaze-stop__tick { display: none !important; }
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__name { color: var(--cle-ink); font-weight: 600; }
+html[data-cle] .cle-gaze-stop__name { transition: color .25s ease; }
+
+/* ---------- the seven materials ---------- */
+/* OFF — ink smoke: a grey haze drifting slowly */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="off"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(96deg, #2b2c31 0%, #55565c 46%, #7a7a80 72%, #3a3b40 100%);
+  --m-sheen: radial-gradient(ellipse at 30% 50%, rgba(255, 255, 255, .22), transparent 40%);
+  --m-anim: cle-m-drift 12s ease-in-out infinite alternate;
+  --m-thumb: radial-gradient(circle at 34% 28%, #f2f2f2 0 14%, #8c8c92 42%, #2f3035 100%); --m-glow: rgba(40, 40, 46, .18);
+}
+/* MINIMAL — graphite: a pencil sheen passing once in a while */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="minimal"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(90deg, #3b3f4a 0%, #6e7480 40%, #a3a8b2 62%, #545966 100%);
+  --m-sheen: linear-gradient(106deg, transparent 30%, rgba(255, 255, 255, .55) 46%, rgba(220, 228, 240, .25) 52%, transparent 64%);
+  --m-texture: repeating-linear-gradient(115deg, rgba(255, 255, 255, .06) 0 2px, transparent 2px 7px);
+  --m-anim: cle-m-sheen 7.5s cubic-bezier(.45, 0, .55, 1) infinite;
+  --m-thumb: radial-gradient(circle at 32% 26%, #fff 0 16%, #b9bec8 40%, #4a4f5a 100%); --m-glow: rgba(70, 76, 90, .2);
+}
+/* LOW — indigo silk: broad folds travelling left */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="low"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(106deg, #1d2350 0%, #3a3f86 40%, #6670b8 66%, #2b3168 100%);
+  --m-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'%3E%3Cpath d='M-16 15 C8 -3 30 -1 50 13 S92 22 136 0' fill='none' stroke='%23fff' stroke-opacity='.3' stroke-width='5'/%3E%3Cpath d='M-12 2 C10 18 34 18 58 4 S98 -2 132 12' fill='none' stroke='%23c9ccf5' stroke-opacity='.24' stroke-width='2'/%3E%3C/svg%3E");
+  --m-sheen: linear-gradient(transparent, transparent);
+  --m-anim: cle-m-silk 6.5s ease-in-out infinite;
+  --m-thumb: radial-gradient(circle at 33% 25%, #fff 0 15%, #a9aee8 40%, #2b3168 100%); --m-glow: rgba(58, 63, 134, .26);
+}
+/* MEDIUM — Prussian oil: palette-knife strokes sliding through deep blue */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="medium"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(98deg, #0f1e45 0%, #1f3d86 30%, #3561b8 56%, #1a3070 100%);
+  --m-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'%3E%3Cpath d='M4 13 L22 5 L30 7 L12 15Z' fill='%23fff' fill-opacity='.16'/%3E%3Cpath d='M40 4 L70 2 L72 6 L44 9Z' fill='%2393b4ff' fill-opacity='.22'/%3E%3Cpath d='M78 14 L104 8 L110 11 L84 17Z' fill='%23fff' fill-opacity='.12'/%3E%3C/svg%3E");
+  --m-sheen: linear-gradient(112deg, transparent 0 22%, rgba(255, 255, 255, .26) 23% 29%, transparent 30%);
+  --m-anim: cle-m-knife 5.4s linear infinite;
+  --m-thumb: conic-gradient(from 30deg at 40% 36%, #e9f0ff, #3561b8, #0f1e45, #6d92de, #e9f0ff); --m-glow: rgba(42, 99, 232, .3);
+}
+/* HIGH — ice glass: cool facets and a bright beam */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="high"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(104deg, #0d3a6e 0%, #2a7bd0 34%, #7cc4ff 58%, #2a63e8 80%, #0d3a6e 100%);
+  --m-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'%3E%3Cpath d='M0 18 L26 0 L50 18 L78 0 L104 18 L126 2' fill='none' stroke='%23fff' stroke-opacity='.28' stroke-width='1.2'/%3E%3C/svg%3E");
+  --m-sheen: linear-gradient(104deg, transparent 34%, rgba(255, 255, 255, .62) 47%, rgba(190, 230, 255, .3) 52%, transparent 62%);
+  --m-anim: cle-m-sheen 3.8s cubic-bezier(.45, 0, .55, 1) infinite;
+  --m-thumb: radial-gradient(circle at 30% 24%, #fff 0 18%, #9fd4ff 40%, #1c5fb8 100%); --m-glow: rgba(90, 168, 255, .45);
+}
+/* XHIGH — gold leaf: flakes catching the light as they cross the blue */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="xhigh"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(100deg, #0f1e45 0%, #24418c 40%, #2a63e8 70%, #12204a 100%);
+  --m-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'%3E%3Cpath d='M8 5 L15 3 L17 8 L10 10Z' fill='%23e8c47a' fill-opacity='.9'/%3E%3Cpath d='M38 11 L44 9 L47 14 L40 15Z' fill='%23f6dc9c' fill-opacity='.8'/%3E%3Cpath d='M66 3 L74 2 L73 7 L67 7Z' fill='%23d9a94e' fill-opacity='.85'/%3E%3Cpath d='M92 10 L99 8 L101 13 L94 14Z' fill='%23f3d28a' fill-opacity='.8'/%3E%3Ccircle cx='55' cy='6' r='1' fill='%23fff'/%3E%3Ccircle cx='110' cy='4' r='.8' fill='%23fff'/%3E%3C/svg%3E");
+  --m-sheen: linear-gradient(104deg, transparent 36%, rgba(255, 236, 190, .5) 48%, transparent 60%);
+  --m-anim: cle-m-leaf 4.4s linear infinite;
+  --m-thumb: conic-gradient(from 40deg, #fff4d6, #d9a94e, #8a6420, #f3d28a, #fff4d6); --m-glow: rgba(217, 169, 78, .42);
+}
+/* ULTRA — gold leaf on ice-blue fire: the whole rail burns, the bead is gold */
+html[data-cle] .chat-controls__reasoning-panel[data-cle-level="ultra"] .chat-controls__reasoning-slider {
+  --m-fill: linear-gradient(96deg, #12306e 0%, #2a63e8 28%, #7cc4ff 46%, #2a63e8 64%, #0f1e45 100%);
+  --m-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'%3E%3Cpath d='M6 6 L14 4 L16 9 L8 11Z' fill='%23f6dc9c'/%3E%3Cpath d='M30 12 L37 10 L39 15 L32 16Z' fill='%23e8c47a'/%3E%3Cpath d='M52 3 L60 2 L59 7 L53 7Z' fill='%23fff1c8'/%3E%3Cpath d='M76 11 L83 9 L86 14 L78 15Z' fill='%23d9a94e'/%3E%3Cpath d='M98 4 L106 3 L107 8 L100 9Z' fill='%23f3d28a'/%3E%3Ccircle cx='44' cy='5' r='1.1' fill='%23fff'/%3E%3Ccircle cx='90' cy='14' r='1' fill='%23fff'/%3E%3C/svg%3E");
+  --m-sheen: linear-gradient(104deg, transparent 30%, rgba(255, 255, 255, .7) 46%, rgba(255, 220, 150, .45) 52%, transparent 64%);
+  --m-anim: cle-m-leaf 2.6s linear infinite, cle-m-burn 1.6s ease-in-out infinite alternate;
+  --m-thumb: conic-gradient(from 20deg, #fff8e6, #e8c47a, #a77a28, #f6dc9c, #fff8e6); --m-glow: rgba(124, 196, 255, .6);
+}
+
+@keyframes cle-m-drift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 100% 0, -120px 0, 100% 0; } }
+@keyframes cle-m-sheen { 0%, 30% { background-position: 140% 0, 0 0, 0 0; } 100% { background-position: -60% 0, -60px 0, 60% 0; } }
+@keyframes cle-m-silk { 0% { background-position: 0 0, 0 0, 0 0; } 50% { background-position: 0 0, -60px 0, 60% 0; } 100% { background-position: 0 0, -120px 0, 0 0; } }
+@keyframes cle-m-knife { from { background-position: 120% 0, 0 0, 0 0; } to { background-position: -40% 0, -120px 0, 100% 0; } }
+@keyframes cle-m-leaf { from { background-position: 140% 0, 0 0, 0 0; } to { background-position: -60% 0, -120px 0, 100% 0; } }
+@keyframes cle-m-burn { from { box-shadow: inset 0 1px rgba(255, 255, 255, .3), 0 0 8px rgba(124, 196, 255, .45); } to { box-shadow: inset 0 1px rgba(255, 255, 255, .4), 0 0 18px rgba(124, 196, 255, .8), 0 0 4px rgba(246, 220, 156, .7); } }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle] .chat-controls__reasoning-slider::before { animation: none !important; }
+}

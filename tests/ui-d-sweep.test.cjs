@@ -79,5 +79,10 @@ test('D sweep localizes navigation, picker, and duplicate-message chrome', () =>
 
 test('D sweep keeps the combined picker inside narrow windows', () => {
   const css = read('ui/injections/laolao-theme.css');
-  assert.match(css, /@media \(max-width: 680px\)[\s\S]*\.content--chat:has\(\.chat-controls__model\[open\]\)[\s\S]*\.chat-main:has\(\.chat-controls__model\[open\]\)[\s\S]*overflow: visible !important;[\s\S]*\.chat-controls__model\[open\] > \.chat-controls__inline-select-menu--combined[\s\S]*left: max\(-3px, calc\(\(100vw - 304px\) \/ 2 - 15px\)\) !important;[\s\S]*right: auto !important;[\s\S]*width: min\(304px, calc\(100vw - 24px\)\) !important;/);
+  // The narrow-window picker no longer escapes the composer with a fixed
+  // :has() offset. It is bounded to the viewport and raised above its host,
+  // which is what actually keeps it inside a 320px window.
+  assert.match(css, /width: min\(304px, calc\(100vw - 24px\)\)/);
+  assert.match(css, /max-height: min\(430px, calc\(100vh - 106px\)\)/);
+  assert.match(css, /\.agent-chat__composer-shell:has\(\.chat-controls__model\[open\]\) \{ z-index: 50; \}/);
 });

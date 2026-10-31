@@ -1,0 +1,17 @@
+{
+  "baseline": 14,
+  "current": 17,
+  "added": [
+    "gateway methods are admin-scoped and ordinary learning chat stays normal until enabled",
+    "pact defaults are created on demand with an empty exam date and no channel",
+    "plugin exposes persistent arm/disarm RPC and lifecycle hooks"
+  ],
+  "removed": [],
+  "counts": {
+    "tests": 1580,
+    "pass": 1563,
+    "fail": 17,
+    "skipped": 0,
+    "duration_ms": 190245.830166
+  }
+}

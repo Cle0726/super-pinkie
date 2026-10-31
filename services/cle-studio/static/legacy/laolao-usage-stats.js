@@ -1,0 +1,363 @@
+/* C.le. · 五个模式与派对共用的累计用量胶囊
+   派对 /api/usage 与四模式 laolao-stats.json 共用本机 SQLite 累计计数。
+   配额来自接口本地缓存；累计估算费用不是账户余额。旧版数据保留兼容读取。
+   特效：任一数值上涨时对应胶囊脉冲一次。 */
+(() => {
+  "use strict";
+
+  // 页面资源被更新器重复注入时只允许一个统计控制器运行，避免额度条成倍出现。
+  if (window.__cleKkUsageStatsInitialized) {
+    document.querySelectorAll(".laolao-usage").forEach((node, index) => {
+      if (index > 0) node.remove();
+    });
+    return;
+  }
+  window.__cleKkUsageStatsInitialized = true;
+
+  /* 仅兼容旧版统计的展示系数，不是模型真实单价；新版优先显示统计源估算。 */
+  const PRICING = {
+    default: { input: 0.2, output: 1.5, cacheRead: 0.02, cacheWrite: 0 },
+  };
+  const REFRESH_MS = 15000;
+  const clock = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+
+  const $sidebar = () => window.__laolaoSidebar;
+
+  const fmtTok = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(Math.round(n));
+  };
+  const fmtCost = (usd) => "$" + (usd >= 0.01 ? usd.toFixed(2) : usd.toFixed(4));
+
+  const pricingEnabled = Object.values(PRICING).some(
+    (p) => p.input > 0 || p.output > 0 || p.cacheRead > 0 || p.cacheWrite > 0
+  );
+
+  /* ---------- 数据 ---------- */
+  let view = null; // {input, output, cacheRead, quota, quotaNote, requests, successRate, source}
+  let refreshing = false;
+  let linkOnline = false;
+  let linkLatency = null;
+
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const pick = (s, keys) => {
+    for (const k of keys) if (Number.isFinite(s[k])) return s[k];
+    return null;
+  };
+
+  async function fetchJson(path) {
+    try {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  async function refresh() {
+    if (refreshing) return;
+    refreshing = true;
+    const startedAt = clock();
+    try {
+      const partyPage = Boolean(document.getElementById('party-usage'));
+      const [fileStats, liveRuntime] = await Promise.all([
+        partyPage ? fetchJson('/api/usage') : Promise.resolve(null),
+        !partyPage && $sidebar()?.gwRequest
+          ? $sidebar().gwRequest('pinkie.usage.get', {}, 5000).catch(()=>null)
+          : null,
+      ]);
+      // A packaged macOS App cannot rewrite JSON inside its signed bundle.
+      // Keep its build-time aggregate as a floor and merge newer live RPC
+      // counters without double counting them.
+      const stats = !partyPage && fileStats && liveRuntime
+        ? {
+            ...fileStats,
+            ...Object.fromEntries(['input','output','cacheRead','cacheWrite','requests','cost'].map(key => [
+              key,
+              Number.isFinite(fileStats[key]) || Number.isFinite(liveRuntime[key])
+                ? Math.max(Number(fileStats[key]) || 0, Number(liveRuntime[key]) || 0)
+                : null,
+            ])),
+            quota: fileStats.quota || liveRuntime.quota || null,
+            quotaNote: fileStats.quotaNote || liveRuntime.quotaNote || '',
+            updatedAt: Math.max(Number(fileStats.updatedAt) || 0, Number(liveRuntime.updatedAt) || 0),
+            sourceUpdatedAt: Math.max(Number(fileStats.sourceUpdatedAt) || 0, Number(liveRuntime.updatedAt) || 0),
+            runtimeIncluded: true,
+          }
+        : (fileStats || liveRuntime);
+      if (stats && (stats.scope === 'lifetime' || Number.isFinite(stats.input))) {
+        const runtime = stats.runtimeIncluded ? null : liveRuntime;
+        const merged = (key) => {
+          const base = Number.isFinite(stats[key]) ? stats[key] : null;
+          const extra = Number.isFinite(runtime?.[key]) ? runtime[key] : null;
+          return base == null ? extra : base + (extra || 0);
+        };
+        view = {
+          input: merged('input'),
+          output: merged('output'),
+          cacheRead: merged('cacheRead'),
+          cacheWrite: merged('cacheWrite'),
+          cost: merged('cost'),
+          persistent: stats.scope === 'lifetime',
+          costNote: stats.costNote || '按内置展示系数估算，不是实际账单或余额',
+          stale: !!stats.stale,
+          sourceUpdatedAt: stats.sourceUpdatedAt,
+          quota: stats.quota || null,
+          quotaNote: stats.quotaNote || "",
+          requests: stats.requests || null,
+          successRate: stats.successRate ?? null,
+          source: runtime ? '本机全模型累计 · 展示估算' : (stats.source || (stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计")),
+        };
+      } else {
+        const [quotaFile, payload] = await Promise.all([
+          Promise.resolve(null),
+          $sidebar() ? $sidebar().gwRequest("sessions.list", { limit: 1000 }) : null,
+        ]);
+        const arr = (payload && (payload.sessions || payload.items)) || [];
+        let input = 0, output = 0, cacheRead = 0, hasCache = false;
+        for (const s of arr) {
+          input += num(s.inputTokens ?? s.input);
+          output += num(s.outputTokens ?? s.output);
+          const cr = pick(s, ["cacheRead", "cacheReadTokens", "cache_read_input_tokens"]);
+          if (cr != null) hasCache = true;
+          cacheRead += num(cr);
+        }
+        view = {
+          input, output,
+          cacheRead: hasCache ? cacheRead : null,
+          quota: quotaFile && quotaFile.value && !/示例/.test(quotaFile.note || '') ? String(quotaFile.value) : null,
+          quotaNote: (quotaFile && quotaFile.note) || "",
+          requests: null, successRate: null,
+          source: "累计 · 网关会话",
+        };
+      }
+      linkOnline = Boolean(view);
+      linkLatency = linkOnline ? Math.max(0, Math.round(clock() - startedAt)) : null;
+      render();
+    } catch {
+      linkOnline = false;
+      linkLatency = null;
+      updateRuntimeChip();
+    } finally { refreshing = false; }
+  }
+
+  function costOf(v) {
+    if (v.persistent) return v.cost;
+    if (Number.isFinite(v.cost)) return v.cost;
+    if (!pricingEnabled) return null;
+    const p = PRICING.default;
+    return (v.input / 1e6) * p.input + (v.output / 1e6) * p.output
+         + (num(v.cacheRead) / 1e6) * p.cacheRead;
+  }
+
+  /* ---------- UI ---------- */
+  let wrap = null;
+  let chips = null; // [{el, labelEl, valueEl, key}]
+  let liveActive = false; // 模型正在思考/输出（发送按钮变成停止键时为真）
+  let liveStartedAt = 0;
+  const prevRaw = {};
+  const FIT_HIDE_ORDER = ["cacheRead", "output", "input", "runtime"];
+  let fitFrame = 0;
+  let fitObserver = null;
+  let fitHeader = null;
+
+  function fitChips() {
+    fitFrame = 0;
+    if (!wrap?.isConnected || !chips) return;
+    const header = wrap.closest(".chat-pane__header");
+    if (!header) return;
+
+    for (const chip of chips) chip.el.removeAttribute("data-fit-hidden");
+    const clipped = () =>
+      wrap.scrollWidth > wrap.clientWidth + 1 ||
+      header.scrollWidth > header.clientWidth + 1;
+    for (const key of FIT_HIDE_ORDER) {
+      if (!clipped()) break;
+      chips.find((chip) => chip.key === key)?.el.setAttribute("data-fit-hidden", "");
+    }
+  }
+
+  function queueFit() {
+    if (fitFrame) cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(fitChips);
+  }
+
+  function observeHeader(header) {
+    if (fitHeader === header) return;
+    fitObserver?.disconnect?.();
+    fitHeader = header;
+    if (typeof ResizeObserver === "function") {
+      fitObserver = new ResizeObserver(queueFit);
+      fitObserver.observe(header);
+    }
+  }
+
+  function syncLive() {
+    const live = Boolean(document.querySelector(".chat-send-btn--stop, #jobs .job"));
+    if (live === liveActive) return;
+    liveActive = live;
+    liveStartedAt = live ? Date.now() : 0;
+    if (wrap) wrap.classList.toggle("laolao-usage--live", live);
+    updateRuntimeChip();
+  }
+
+  const runtimeSnapshot = () => liveActive
+    ? {text: `生成 ${Math.max(1, Math.floor((Date.now() - liveStartedAt) / 1000))}s`, state: "live"}
+    : linkOnline && linkLatency != null
+      ? {text: `在线 ${linkLatency}ms`, state: "online"}
+      : {text: "待连接", state: "offline"};
+
+  function updateRuntimeChip() {
+    const chip = chips?.find((item) => item.key === "runtime");
+    if (!chip) return;
+    const runtime = runtimeSnapshot();
+    if (chip.valueEl.textContent !== runtime.text) chip.valueEl.textContent = runtime.text;
+    chip.el.dataset.state = runtime.state;
+  }
+
+  const CHIP_DEFS = [
+    { key: "input", label: "输入" },
+    { key: "output", label: "输出" },
+    { key: "cacheRead", label: "缓存读", naWhenNull: true },
+    { key: "runtime", label: "链路", cls: "laolao-usage__chip--runtime" },
+    { key: "cost", label: "累计估算", cls: "laolao-usage__chip--cost", naWhenNull: true },
+  ];
+
+  function ensureChips() {
+    const header = document.querySelector('#cle-utilities .cle-utilities__usage');
+    if (!header) return null;
+    observeHeader(header);
+    if (wrap && wrap.isConnected && header.contains(wrap) && chips) return chips;
+    wrap = document.createElement("div");
+    wrap.className = "laolao-usage";
+    wrap.classList.toggle("laolao-usage--live", liveActive);
+    header.appendChild(wrap);
+    chips = CHIP_DEFS.map((def) => {
+      const el = document.createElement("span");
+      el.className = "laolao-usage__chip" + (def.cls ? " " + def.cls : "");
+      el.dataset.usageKey = def.key;
+      el.setAttribute("draggable", "false");
+      const labelEl = document.createElement("span");
+      labelEl.className = "laolao-usage__label";
+      labelEl.textContent = def.label;
+      const valueEl = document.createElement("span");
+      valueEl.className = "laolao-usage__value";
+      el.appendChild(labelEl);
+      el.appendChild(document.createTextNode(" "));
+      el.appendChild(valueEl);
+      wrap.appendChild(el);
+      return { el, valueEl, key: def.key, def };
+    });
+    return chips;
+  }
+
+  function pulse(el) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (el.closest?.(".laolao-usage--live")) return;
+    el.__pinkieUsagePulse?.cancel?.();
+    if (typeof el.animate !== "function") return;
+    // 只做缩放。原来的关键帧会把底色临时刷成 --accent 并把字改成白色，
+    // 在纸面胶囊上等于每次数据变化都掉一次对比度；数值变化不需要抢视觉焦点。
+    el.__pinkieUsagePulse = el.animate([
+      { transform: "scale(1)" },
+      { transform: "scale(1.06)", offset: 0.35 },
+      { transform: "scale(1)" },
+    ], { duration: 600, easing: "ease-out" });
+  }
+
+  function render() {
+    const list = ensureChips();
+    if (!list || !view) return;
+
+    const cost = costOf(view);
+    const runtime = runtimeSnapshot();
+    const values = {
+      input: { text: fmtTok(view.input), raw: view.input },
+      output: { text: fmtTok(view.output), raw: view.output },
+      cacheRead: { text: view.cacheRead != null ? fmtTok(view.cacheRead) : "—", raw: view.cacheRead },
+      runtime: { text: runtime.text, raw: null, state: runtime.state },
+      cost: { text: cost != null ? fmtCost(cost) : "—", raw: cost },
+    };
+
+    for (const c of list) {
+      const v = values[c.key];
+      if (!v) continue;
+      const prev = prevRaw[c.key];
+      const increased =
+        typeof v.raw === "number" && typeof prev === "number" && v.raw > prev;
+      const changed = c.valueEl.textContent !== v.text;
+      if (changed) c.valueEl.textContent = v.text;
+      if (increased) {
+        pulse(c.el.closest ? c.el : c.el);
+      }
+      if (c.key === "runtime") c.el.dataset.state = v.state;
+      if (c.def.naWhenNull) {
+        c.el.classList.toggle("laolao-usage__chip--na", v.raw == null);
+      }
+      prevRaw[c.key] = v.raw;
+    }
+
+    queueFit();
+
+    wrap.title = [
+      `${view.source}：输入 ${fmtTok(view.input)} · 输出 ${fmtTok(view.output)}` +
+        (view.cacheRead != null ? ` · 缓存读 ${fmtTok(view.cacheRead)}` : ""),
+      view.requests != null
+        ? `请求 ${view.requests} 次` + (view.successRate != null ? ` · 成功率 ${view.successRate}%` : "")
+        : null,
+      view.quota ? `上游额度 ${view.quota}${view.quotaNote ? "（" + view.quotaNote + "）" : ""}` : "上游额度未知",
+      cost != null ? `累计估算 ${fmtCost(cost)}（${view.costNote || '按内置展示系数计算，不是实际账单'}）` : "费用未知，不虚构金额",
+      view.persistent ? '累计记录保存在本机，重启不清零；重复刷新不重复累加。' : null,
+      view.stale ? '统计源暂不可用，显示最后保存的累计值。' : null,
+      view.sourceUpdatedAt ? '统计源更新时间：'+new Date(view.sourceUpdatedAt).toLocaleString() : null,
+    ].filter(Boolean).join("\n");
+  }
+
+  /* ---------- 启动 ---------- */
+  window.__laolaoUsage = {
+    refresh,
+    render,
+    get view() { return view; },
+    get chips() { return chips; },
+  };
+
+  function boot() {
+    if (!document.getElementById('party-usage') && !$sidebar()) return setTimeout(boot, 500);
+
+    setInterval(refresh, REFRESH_MS);
+    setInterval(() => { syncLive(); updateRuntimeChip(); }, 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refresh();
+    });
+    let eventRefresh;
+    window.addEventListener('laolao:sessions-changed',()=>{
+      clearTimeout(eventRefresh);eventRefresh=setTimeout(refresh,500);
+    });
+    window.addEventListener("resize", queueFit, { passive: true });
+
+    // header 可能被 Lit 重渲染掉：observer 调 render 重建并回填数值。
+    // render 只在内容变化时写 DOM，写完后 mutation 再触发 render 也是空操作，不会死循环。
+    // class 变化也要盯：发送键 ⇄ 停止键的切换是流式状态信号（syncLive）。
+    // v9：rAF 节流。流式期间 mutation 批次极密，回调必须与帧率对齐，
+    // 不能每批次都跑（雪崩教训：回调频率 × 成本 才是主线程杀手）。
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; render(); syncLive(); });
+    }).observe(document.documentElement, {
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: ["class"],
+    });
+
+    refresh();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();

@@ -1,0 +1,50 @@
+/* 思考强度 — the four ways Li An can look at a problem. Paintings in arched frames, serif numerals,
+   gold hairlines; the only colour is the sapphire of the chosen one. */
+html[data-cle] .laolao-deep-think-menu {
+  color: var(--cle-ink) !important; background: var(--cle-surface) !important; border: 1px solid var(--cle-line-strong) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; border-radius: 18px !important; padding: 14px !important;
+  box-shadow: var(--cle-shadow-pop) !important; width: min(372px, calc(100vw - 20px)) !important; gap: 10px !important;
+}
+html[data-cle] .laolao-deep-think-menu::before { display: none !important; }
+html[data-cle] .laolao-deep-think-menu__head { color: var(--cle-ink) !important; font: 500 14px/1 var(--cle-serif) !important; letter-spacing: .18em !important; padding: 2px 2px 4px !important; }
+html[data-cle] .laolao-deep-think-menu__head::after { content: ""; flex: 1; height: 1px; margin-left: 10px; background: linear-gradient(90deg, var(--cle-gold-soft), transparent); }
+html[data-cle] .laolao-deep-think-menu__mark { color: var(--cle-gold) !important; }
+html[data-cle] .laolao-deep-think-menu__choices { gap: 8px !important; }
+html[data-cle] .laolao-deep-think-menu__item {
+  --tier-accent: var(--cle-gaze) !important; grid-template-columns: 46px 1fr !important; gap: 11px !important; min-height: 76px !important;
+  padding: 9px 10px 9px 9px !important; border-radius: 12px !important; background: transparent !important; border: 1px solid var(--cle-line) !important;
+  box-shadow: none !important; color: var(--cle-ink) !important; font-size: 12px !important;
+}
+html[data-cle] .laolao-deep-think-menu__item:hover { background: color-mix(in srgb, var(--cle-ink) 4%, transparent) !important; border-color: var(--cle-line-strong) !important; box-shadow: none !important; }
+html[data-cle] .laolao-deep-think-menu__item.is-selected { border-color: color-mix(in srgb, var(--cle-gaze) 60%, transparent) !important; background: var(--cle-gaze-soft) !important; box-shadow: 0 0 0 3px var(--cle-gaze-soft) !important; }
+html[data-cle] .laolao-deep-think-menu__icon { width: 46px !important; height: 58px !important; background: none !important; box-shadow: none !important; }
+html[data-cle] .laolao-deep-think-menu__poster, html[data-cle] .laolao-deep-think-menu__art {
+  width: 46px !important; height: 58px !important; border-radius: 999px 999px 4px 4px !important; object-fit: cover; object-position: 50% 30%;
+  filter: none !important; box-shadow: 0 0 0 1px var(--cle-gold-soft), 0 3px 10px -4px rgba(10, 13, 22, .45);
+}
+html[data-cle] .laolao-deep-think-menu__item.is-selected .laolao-deep-think-menu__poster { box-shadow: 0 0 0 1.5px var(--cle-gaze), 0 0 12px var(--cle-gaze-glow); }
+html[data-cle] .laolao-deep-think-menu__orbit { display: none !important; }
+html[data-cle] .laolao-deep-think-menu__numeral {
+  position: absolute; right: -5px; bottom: -4px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; place-items: center;
+  border-radius: 999px; background: var(--cle-surface) !important; color: var(--cle-gold) !important; box-shadow: 0 0 0 1px var(--cle-gold-soft) !important;
+  font: 500 10px/1 var(--cle-serif) !important; letter-spacing: 0;
+}
+html[data-cle] .laolao-deep-think-menu__copy { gap: 4px !important; }
+html[data-cle] .laolao-deep-think-menu__label { display: grid !important; row-gap: 3px; font: 500 15px/1.1 var(--cle-serif) !important; letter-spacing: .12em; white-space: nowrap; }
+html[data-cle] .laolao-deep-think-menu__fr { font: italic 400 11.5px/1 var(--cle-serif); letter-spacing: .01em; color: var(--cle-ink-2); overflow: hidden; text-overflow: ellipsis; }
+/* 摘要/页脚是正文级信息，必须过 4.5:1（ink-3 实测只有 2.81） */
+html[data-cle] .laolao-deep-think-menu__summary { color: var(--cle-ink-2) !important; font: 400 10.5px/1.35 var(--cle-sans) !important; white-space: normal !important; }
+html[data-cle] .laolao-deep-think-menu__recommended {
+  top: 7px !important; right: 7px !important; padding: 2px 6px !important; background: transparent !important; color: var(--cle-gold) !important;
+  border: 1px solid var(--cle-gold-soft) !important; font: 500 9.5px/1 var(--cle-sans) !important; letter-spacing: .08em;
+}
+html[data-cle] .laolao-deep-think-menu__hint { color: var(--cle-ink-2) !important; font: italic 400 12px/1.4 var(--cle-serif) !important; }
+html[data-cle] .laolao-deep-think-menu__footer { border-top: 1px solid var(--cle-line) !important; color: var(--cle-ink-2) !important; font-size: 10.5px !important; padding-top: 8px !important; }
+html[data-cle] .laolao-deep-think-btn__poster, html[data-cle] .laolao-deep-think-btn__art { border-radius: 999px 999px 3px 3px !important; height: 24px !important; width: 19px !important; filter: none !important; box-shadow: 0 0 0 1px var(--cle-gold-soft); }
+html[data-cle] #laolao-deep-think-toast { background: var(--cle-ink) !important; color: var(--cle-paper) !important; border: 0 !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: var(--cle-shadow-pop) !important; }
+html[data-cle] #laolao-deep-think-status { background: var(--cle-surface) !important; color: var(--cle-ink) !important; border: 1px solid var(--cle-line-strong) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: var(--cle-shadow-pop) !important; }
+/* 线描: the tier as a drawing on the card, the painting set aside */
+html[data-cle] .laolao-deep-think-menu__icon.is-line .laolao-deep-think-menu__poster,
+html[data-cle] .laolao-deep-think-menu__icon.is-line .laolao-deep-think-menu__art { display: none !important; }
+html[data-cle] .laolao-deep-think-menu__icon.is-line .cle-line { width: 52px; height: 58px; color: var(--cle-ink); }
+html[data-cle] .laolao-deep-think-menu__item.is-selected .laolao-deep-think-menu__icon.is-line .cle-line { color: var(--cle-gaze); }

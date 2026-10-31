@@ -142,7 +142,7 @@ test('tool progress rules and learn-while-doing apply independently in all five 
     assert.match(result.appendSystemContext,/首要目标始终是正确、高效、专业地完成当前任务/);
     assert.match(result.appendSystemContext,/教学不得暂停关键工作/);
     if(mode==='learning'){
-      assert.match(result.appendSystemContext,/学习模式方法模块/);
+      assert.match(result.appendSystemContext,/习作模式方法模块/);
       assert.match(result.appendSystemContext,/默认讲解要短、白话、口语化/);
       assert.match(result.appendSystemContext,/能三句话讲清就不写三段/);
       assert.match(result.appendSystemContext,/最小实验/);
@@ -243,7 +243,7 @@ test('a read-only check saying 不修改文件 is not mistaken for a mutation',(
 test('a completed read-only report may include an expected failed probe',()=>{
   const guard=new CompletionIntegrityGuard();
   const ctx={agentId:'learning',sessionKey:'agent:learning:expected-failure',runId:'run-expected-failure'};
-  guard.begin({prompt:'第五轮联合回归，标记 UI_LIVE_E_1057。只做只读检查，不修改文件：读取 /Users/Admin/.openclaw/workspace-unrestricted/super-pinkie/services/mode-architecture/package.json 的 scripts、dependencies，以及 reasoning.mjs 前 60 行；实际运行 node --check services/mode-architecture/reasoning.mjs、node --test tests/resume-ui.test.cjs、git diff --check；尝试读取不存在的 __missing_ui_probe_E__.txt，把 ENOENT 记录为预期失败并继续；最后检查 http://127.0.0.1:18789/readyz 的 HTTP 状态。工具全部结束后给完整中文总结，首行必须写 UI_LIVE_E_1057，准确说明成功项、预期失败项和测试通过数。'},ctx);
+  guard.begin({prompt:'第五轮联合回归，标记 UI_LIVE_E_1057。只做只读检查，不修改文件：读取 /Users/demo/.openclaw/workspace-unrestricted/super-pinkie/services/mode-architecture/package.json 的 scripts、dependencies，以及 reasoning.mjs 前 60 行；实际运行 node --check services/mode-architecture/reasoning.mjs、node --test tests/resume-ui.test.cjs、git diff --check；尝试读取不存在的 __missing_ui_probe_E__.txt，把 ENOENT 记录为预期失败并继续；最后检查 http://127.0.0.1:18789/readyz 的 HTTP 状态。工具全部结束后给完整中文总结，首行必须写 UI_LIVE_E_1057，准确说明成功项、预期失败项和测试通过数。'},ctx);
   guard.beforeTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'}},ctx);
   guard.afterTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'},
     result:{content:[{type:'text',text:'syntax ok'}],details:{status:'completed',exitCode:0}}},ctx);
@@ -487,7 +487,7 @@ test('runtime never blocks tools up front while completion evidence stays indepe
   assert.equal(forged,undefined);
   const pageProof=runtime.beforeTool({toolName:'write',params:{path:'/tmp/public_page_evidence.txt',content:'fake'}},ctx);
   assert.equal(pageProof,undefined);
-  const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/Admin/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
+  const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/demo/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
   assert.equal(controlRead,undefined);
 });
 
@@ -1739,6 +1739,9 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
     on:(name,fn)=>hooks.set(name,fn),
     registerGatewayMethod:(name,fn,opts)=>methods.set(name,{fn,opts}),
     registerTool:(factory,opts)=>tools.push({factory,opts}),
+    // The rich runtime resolves the plugin state dir through the host runtime.
+    runtime:{state:{resolveStateDir:()=>isolatedStateRoot},config:{current:()=>({})}},
+    registerHttpRoute:()=>({}),
     // Some compatible OpenClaw builds resolve a successful enqueue with no
     // payload; the control RPC must still stay usable in that case.
     session:{workflow:{
@@ -1750,7 +1753,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,6);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','learning_activity','web_gpt_activity','ask_user']);
+  assert.equal(tools.length,14);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1810,7 +1813,9 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
 
 test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
-  assert.deepEqual([...manifest.contracts.tools].sort(),['ask_user','clekk_memory','computer','delivery_guard','learning_activity','web_gpt_activity']);
+  // The manifest is the agent-facing contract: every tool the session actually
+  // exposes must be declared here first, or the host refuses to register it.
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -1856,6 +1861,7 @@ test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{
   const methods=new Map();
   plugin.register({
     on:()=>{},registerGatewayMethod:(name,fn)=>methods.set(name,fn),registerTool:()=>{},
+    runtime:{state:{resolveStateDir:()=>isolatedStateRoot},config:{current:()=>({})}},registerHttpRoute:()=>({}),
     session:{workflow:{enqueueNextTurnInjection:async()=>({enqueued:false})}},
   });
   let response;
@@ -1893,9 +1899,16 @@ test('upstream watchdog retries transient failures invisibly and ignores explici
   watchdog.modelEnded({runId:'r1',outcome:'error',failureKind:'connection_reset'});
   await watchdog.agentEnded({runId:'r1',success:false,error:'upstream network failed'},{agentId:'project',sessionKey:'agent:project:one'});
   assert.equal(injected.length,1);assert.match(injected[0].text,/已经完成.+禁止重复/);
-  assert.equal(scheduled.length,1);assert.equal(scheduled[0].message,'\u2063');assert.equal(scheduled[0].deliveryMode,'none');
+  // The scheduled continuation carries the guard text itself, not a bare
+  // placeholder, so the resumed turn knows what it must not repeat.
+  assert.equal(scheduled.length,1);assert.match(scheduled[0].message,/自动续接保护/);assert.equal(scheduled[0].deliveryMode,'none');
   assert.equal(removed[0].tag,scheduled[0].tag);
+  // A user stop leaves a grace window on the session; the next failure of that
+  // session must not schedule another invisible turn.
+  const stops = globalThis.__pinkieUserStops || (globalThis.__pinkieUserStops = new Map());
+  stops.set('agent:project:one', Date.now() + 60_000);
   await watchdog.agentEnded({runId:'r2',success:false,error:'user aborted'},{agentId:'project',sessionKey:'agent:project:one'});
+  stops.delete('agent:project:one');
   assert.equal(scheduled.length,1);
   assert.equal(isTransientFailure('connection_closed'),true);assert.equal(isTransientFailure('invalid api key'),false);
   assert.equal(isTransientFailure("You've reached your Codex subscription usage limit. Next reset in 2 hours"),true);
@@ -2197,7 +2210,8 @@ test('online watchdog uses the authenticated local CLI and removes its cron fall
   assert.ok(calls[0].options.timeout>=32_000);
   const params=JSON.parse(calls[0].args[calls[0].args.indexOf('--params')+1]);
   assert.equal(params.sessionKey,'agent:project:one');assert.equal(params.agentId,'project');
-  assert.equal(params.message,'\u2063');assert.equal(params.deliver,false);
+  // The resume turn is sent with the guard text, and never delivered to chat.
+  assert.match(params.message,/没有完整结束/);assert.equal(params.deliver,false);
   assert.match(params.idempotencyKey,/failed-run-1$/);assert.equal(calls[0].options.timeout,32_000);
   assert.deepEqual(removed,[{sessionKey:'agent:project:one',tag:'pinkie-watchdog-test'}]);
 });
@@ -2566,4 +2580,19 @@ test('every visible model output increases the persistent display estimate',t=>{
   ledger.record({provider:'relay',model:'c',assistantTexts:['再继续'],usage:{input:50,output:10}});
   const migrated=JSON.parse(fs.readFileSync(file,'utf8'));
   assert.equal(migrated.requests,3);assert.ok(migrated.cost>0.03&&migrated.cost<0.04);
+});
+
+test('a command still running in the background is an honest in-progress state, not an empty promise',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:background-build',runId:'run-background-build'};
+  guard.begin({prompt:'帮我把项目打包，生成 dist/app.zip。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true},
+    result:{content:[{type:'text',text:'Command still running (session tidal-harbor, pid 28573). Use process (list/poll/log/write/send-keys/submit/paste/kill/clear/remove) for follow-up.'}],details:{status:'running'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已在后台运行，大约两分钟，跑完我接着核对并告诉你。'},ctx),undefined);
+  assert.equal(guard.finalize({lastAssistantMessage:'稍等，等我做完再告诉你。'},ctx),undefined,'the waiting phrase is fine while the command really runs');
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已经完成，dist/app.zip 已生成。'},ctx)?.action,'revise','a finished claim still needs evidence');
+  guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
+    result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
 });

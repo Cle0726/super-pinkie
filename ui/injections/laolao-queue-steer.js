@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (window.__laolaoQueueSteer) return;
 
   // 忙碌时，原生 control-ui 会先把文字留成 chatQueue 项。这里不改写
   // handleSendChat，也不自己发 chat.send：只等原生项出现，再委托 pane
@@ -48,42 +49,36 @@
     pane?.requestUpdate?.();
   };
   const normalizedText = (value) => String(value || "").trim();
-  const itemFor = (pane, id) => queueFor(pane).find((item) => item?.id === id) || null;
-
-  const setComposerTextIfEmpty = (pane, text) => {
-    const value = String(text || "");
-    if (!value.trim()) return false;
-    const state = pane?.state;
-    const input = pane?.querySelector?.(".agent-chat__composer-combobox textarea")
-      || document.querySelector?.(".agent-chat__composer-combobox textarea");
-    if (normalizedText(state?.chatMessage) || normalizedText(input?.value)) return false;
-    // Use the textarea's normal input event so the native controlled composer
-    // owns the new draft. No Lit-managed chat DOM is rewritten here.
-    const setter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement?.prototype || {}, "value"
-    )?.set;
-    if (input) {
-      if (setter) setter.call(input, value);
-      else input.value = value;
-      input.dispatchEvent(new Event("input", {bubbles: true}));
-    } else if (state) {
-      state.chatMessage = value;
-      requestPaint(pane);
-    }
-    return true;
+  const sameSession = (pane, item) => !item?.sessionKey || !pane?.state?.sessionKey
+    || item.sessionKey === pane.state.sessionKey;
+  const itemFor = (pane, id) => queueFor(pane).find((item) => item?.id === id && sameSession(pane, item)) || null;
+  const nativeInFlight = (item) => {
+    // The native busy queue allocates its future send ID and timestamp before
+    // sending anything. Treat that exact untouched state as queued; an ID by
+    // itself is not a receipt or an in-flight submission.
+    const reservedOnly = /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
+      && item?.sendAttempts === 0 && !item?.sendState && !item?.pendingRunId
+      && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer" && item?.kind !== "steered";
+    if (reservedOnly) return false;
+    return Boolean(item?.sendRunId || item?.pendingRunId
+      || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
+      || ["sending", "submitting", "waiting-model", "unconfirmed", "held", "delivery-unknown"].includes(item?.sendState));
   };
 
+  // A queued card is already the recoverable source of the user's text. Copying
+  // it into the composer as well makes Enter submit a second copy.
   const restoreOrKeep = (pane, item, reason) => {
-    const restored = setComposerTextIfEmpty(pane, item?.text);
-    if (restored) notify(reason || "暂时没能送出，原文已放回输入框。");
-    else notify(reason || "暂时没能送出，原文已保留在待发送卡片里。");
-    return restored;
+    notify(reason || "暂时没能确认送达，原文已保留在消息卡片里。");
+    return false;
   };
 
   const makeQueuedAgain = (pane, id) => {
     const state = pane?.state;
     const item = itemFor(pane, id);
     if (!state || !item) return null;
+    // An accepted steer cannot be taken back locally. Re-queueing it would send
+    // the same instruction again after the current run ends.
+    if (item.kind === "steered" || nativeInFlight(item)) return null;
     state.chatQueue = queueFor(pane).map((entry) => entry?.id === id ? {
       ...entry,
       kind: "queued",
@@ -103,9 +98,8 @@
 
   // `steerQueuedChatMessage()` has one awkward native race: terminal handling
   // can remove its pending card before the steer RPC returns `timeout`. Keep a
-  // copy of the original card until delivery is visible, then put it back as a
-  // normal native queue item for the history-deduped retry path. This is state
-  // repair only; the actual send still goes through retryQueuedChatMessage.
+  // copy as unconfirmed until delivery is visible. An ambiguous timeout is
+  // never permission to send a second copy automatically.
   const restoreMissingQueuedItem = (pane, original) => {
     const state = pane?.state;
     if (!state || !original || itemFor(pane, original.id)) return itemFor(pane, original.id);
@@ -114,8 +108,8 @@
       ...original,
       kind: "queued",
       pendingRunId: undefined,
-      sendState: undefined,
-      sendError: undefined,
+      sendState: "unconfirmed",
+      sendError: "送达未确认，请核对聊天记录后再重试。",
     }];
     requestPaint(pane);
     return itemFor(pane, original.id);
@@ -127,11 +121,33 @@
     try { return await recovery.recover(pane, reason); } catch { return null; }
   };
 
+  const receiptChecks = new WeakMap();
+  const pruneDelivered = async (pane, force = false) => {
+    const prune = window.__laolaoQueueRecovery?.pruneDelivered;
+    if (typeof prune !== "function") return [];
+    const queue = queueFor(pane);
+    if (!queue.some((item) => item?.kind === "steered" || item?.queueMode === "steer"
+        || nativeInFlight(item))) return [];
+    const previous = receiptChecks.get(pane);
+    if (previous?.promise) return previous.promise;
+    if (!force && previous && Date.now() - previous.at < 1000) return [];
+    const check = {at: Date.now(), promise: null};
+    const state = pane.state, sessionKey = state?.sessionKey, sessionId = state?.currentSessionId;
+    receiptChecks.set(pane, check);
+    check.promise = Promise.resolve(prune(pane)).then((ids) => {
+      if (pane.state !== state || state?.sessionKey !== sessionKey || state?.currentSessionId !== sessionId) return [];
+      if (ids?.length) notify("已追加到当前任务。");
+      return Array.isArray(ids) ? ids : [];
+    }).catch(() => []).finally(() => { check.promise = null; });
+    return check.promise;
+  };
+
   const settleFallback = async (pane, id, reason) => {
-    await queueRecovery(pane, reason);
-    // Native retry can be asynchronous. A later failed/offline item is the
-    // only point where we put text back into an empty composer; otherwise its
-    // original queue card stays the single source of truth and cannot duplicate.
+    // Unknown delivery is not proof that sending failed. Only confirmed unsent
+    // cards may enter the ordinary retry path.
+    if (itemFor(pane, id)?.sendState !== "unconfirmed") await queueRecovery(pane, reason);
+    // Native retry can be asynchronous. Keep its original card as the one
+    // recoverable source, including after a failure or disconnect.
     window.setTimeout(() => {
       const item = itemFor(pane, id);
       if (!item) return;
@@ -141,9 +157,19 @@
     }, 500);
   };
 
-  const steerQueued = async (pane, id, {automatic = false} = {}) => {
+  const steeringByPane = new WeakMap();
+  const performSteer = async (pane, id, {automatic = false} = {}) => {
     const original = itemFor(pane, id);
     if (!original) return {state: "gone"};
+    const state = pane?.state, sessionKey = state?.sessionKey;
+    const sessionId = state?.currentSessionId;
+    const currentScope = () => pane?.state === state && state.sessionKey === sessionKey
+      && state.currentSessionId === sessionId;
+    if (original.kind === "steered" || nativeInFlight(original)) {
+      await pruneDelivered(pane, true);
+      if (!currentScope()) return {state: "superseded"};
+      return {state: itemFor(pane, id) ? "unconfirmed" : "delivered"};
+    }
     const runId = pane?.state?.chatRunId;
     const steer = nativeQueueMethod(pane, "steerQueuedChatMessage");
     if (!runId || !steer) {
@@ -151,38 +177,69 @@
       await settleFallback(pane, id, "no-tracked-run");
       return {state: "queued"};
     }
+    let receipt;
     try {
-      await steer(id);
+      receipt = await steer(id);
     } catch {
       // Older bundles surface transport failures by throwing, newer ones leave
       // the original queued item in place. Both converge through this branch.
     }
+    if (!currentScope()) return {state: "superseded"};
     const current = itemFor(pane, id);
     if (!current) {
-      if (locallyDelivered(pane, original)) return {state: "delivered"};
+      if (locallyDelivered(pane, original)
+          || ["ok", "accepted", "in_flight", "started"].includes(receipt?.status)) return {state: "delivered"};
       const restored = restoreMissingQueuedItem(pane, original);
       if (!restored) {
         restoreOrKeep(pane, original);
         return {state: "retained"};
       }
-      if (automatic) notify("这轮结束后发送。");
+      if (automatic) notify("追加的送达状态还未确认，原文已保留，请勿重复发送。");
       await settleFallback(pane, id, "steer-race-missing-card");
-      return {state: "queued"};
+      return {state: "unconfirmed"};
     }
-    if (current.kind === "steered" && current.pendingRunId) {
+    const accepted = ["ok", "accepted", "in_flight", "started"].includes(receipt?.status);
+    if (accepted || current.kind === "steered") {
+      if (current.kind !== "steered") {
+        state.chatQueue = queueFor(pane).map((item) => item.id === id ? {...item,
+          kind: "steered", pendingRunId: receipt?.runId || runId, sendState: "unconfirmed"} : item);
+      }
+      await pruneDelivered(pane, true);
+      if (!currentScope()) return {state: "superseded"};
       requestPaint(pane);
-      return {state: "steered"};
+      return {state: itemFor(pane, id) ? "steered" : "delivered"};
     }
-    makeQueuedAgain(pane, id);
-    if (automatic) notify("这轮结束后发送。");
-    await settleFallback(pane, id, "steer-fallback");
-    return {state: "queued"};
+    // 2026.10 keeps the submission in its outbox and returns void. Its
+    // sending/submitting fields and idempotency key must stay intact.
+    if (nativeInFlight(current)) {
+      await pruneDelivered(pane, true);
+      if (!currentScope()) return {state: "superseded"};
+      return {state: itemFor(pane, id) ? "unconfirmed" : "delivered"};
+    }
+    // A thrown timeout or a void result is ambiguous, even when the card
+    // remained in the queue. Keep the original exactly once and ask for proof.
+    state.chatQueue = queueFor(pane).map((item) => item.id === id ? {...item,
+      sendState: item.sendState === "failed" ? "failed" : "unconfirmed",
+      sendError: item.sendError || "送达未确认，请核对聊天记录后再重试。"} : item);
+    requestPaint(pane);
+    await pruneDelivered(pane, true);
+    if (!currentScope()) return {state: "superseded"};
+    return {state: itemFor(pane, id) ? "unconfirmed" : "delivered"};
+  };
+  const steerQueued = (pane, id, options = {}) => {
+    let pending = steeringByPane.get(pane);
+    if (!pending) steeringByPane.set(pane, pending = new Map());
+    if (pending.has(id)) return pending.get(id);
+    const promise = performSteer(pane, id, options).finally(() => pending.delete(id));
+    pending.set(id, promise);
+    return promise;
   };
 
   const pendingByPane = new WeakMap();
   const scheduleDefaultSteer = (pane, text) => {
     if (!pane || !paneBusy(pane) || !normalizedText(text)) return;
     const state = pane.state;
+    const sessionKey = state?.sessionKey;
     const pending = pendingByPane.get(pane) || [];
     const startedAt = Date.now();
     const ticket = {
@@ -199,8 +256,12 @@
 
     const observe = () => {
       ticket.attempts += 1;
+      if (pane?.state !== state || state?.sessionKey !== sessionKey) {
+        pendingByPane.set(pane, (pendingByPane.get(pane) || []).filter((entry) => entry !== ticket));
+        return;
+      }
       const item = queueFor(pane).find((entry) => entry && !ticket.ids.has(entry.id)
-        && normalizedText(entry.text) === ticket.text);
+        && sameSession(pane, entry) && normalizedText(entry.text) === ticket.text);
       if (item) {
         const list = pendingByPane.get(pane) || [];
         pendingByPane.set(pane, list.filter((entry) => entry !== ticket));
@@ -242,62 +303,45 @@
     if (input?.value) scheduleDefaultSteer(pane, input.value);
   }, true);
 
-  const deferSteered = (pane, id) => {
-    const item = makeQueuedAgain(pane, id);
-    if (!item) return;
-    notify("已改为这轮结束后发送。");
-    void queueRecovery(pane, "user-defer-steered");
-  };
-
-  const ensureDeferControl = (row, pane, item) => {
-    const actions = row.querySelector?.(".chat-queue__actions");
-    if (!actions) return;
-    let control = actions.querySelector?.(".chat-queue__pinkie-defer");
-    if (!control) {
-      control = document.createElement("button");
-      control.type = "button";
-      control.className = "btn chat-queue__pinkie-defer";
-      control.setAttribute("aria-label", "改为结束后发送");
-      control.setAttribute("title", "改为结束后发送");
-      control.append(document.createTextNode("改为结束后发"));
-      control.addEventListener("click", () => {
-        const id = control.dataset.pinkieQueueId;
-        if (id) deferSteered(pane, id);
-      });
-      actions.append(control);
-    }
-    control.dataset.pinkieQueueId = item.id;
-  };
-
   const syncQueueControls = () => {
     for (const pane of document.querySelectorAll?.("openclaw-chat-pane") || []) {
-      const visible = queueFor(pane).filter((item) => item?.sendState !== "sending");
+      void pruneDelivered(pane);
+      const visible = queueFor(pane).filter((item) => sameSession(pane, item)
+        && !["sending", "submitting"].includes(item?.sendState));
       const rows = pane.querySelectorAll?.(".chat-queue__item") || [];
       rows.forEach((row, index) => {
-        const item = visible[index];
+        const id = row.getAttribute?.("data-chat-queue-item");
+        const item = id ? visible.find((entry) => entry.id === id)
+          : rows.length === visible.length ? visible[index] : null;
         if (!item) return;
         row.dataset.pinkieQueueId = item.id;
-        if (item.kind === "steered") ensureDeferControl(row, pane, item);
-        else row.querySelector?.(".chat-queue__pinkie-defer")?.remove();
+        row.dataset.pinkieQueueLabel = item.kind === "steered" ? "确认追加中"
+          : item.sendState === "unconfirmed" ? "送达待确认"
+          : item.sendState === "failed" ? "发送失败" : "结束后发送";
+        row.querySelector?.(".chat-queue__pinkie-defer")?.remove();
       });
     }
   };
 
   const start = () => {
     syncQueueControls();
-    const root = document.querySelector("openclaw-app") || document.querySelector("#openclaw-mount-fallback");
+    const root = document.querySelector("openclaw-app") || document.querySelector("openclaw-app-shell")
+      || document.querySelector("#openclaw-mount-fallback") || document.body;
     if (!root || root.dataset.pinkieQueueSteerWatch === "1") return;
     root.dataset.pinkieQueueSteerWatch = "1";
     new MutationObserver(() => syncQueueControls()).observe(root, {
       childList: true, subtree: true,
     });
+    // A durable receipt may arrive while the run remains active and the queue
+    // DOM does not change. Prune only; this path never retries or sends.
+    window.setInterval?.(syncQueueControls, 1000);
   };
 
   window.__laolaoQueueSteer = {
     steerQueued, makeQueuedAgain, restoreMissingQueuedItem, syncQueueControls,
     // Kept as a small diagnostic/test seam for bundle API drift. It never
     // sends directly; both functions resolve and call native queue actions.
-    scheduleDefaultSteer, nativeQueueMethod,
+    scheduleDefaultSteer, nativeQueueMethod, pruneDelivered,
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, {once: true});
   else start();

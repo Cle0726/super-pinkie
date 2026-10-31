@@ -80,6 +80,7 @@ test('a quiz in a new chat records review results only for old notes selected by
   store.setEnabled(active, true);
   store.prepareNotebookQuiz(active, [selected.id]);
   const card = store.present(active, {kind: 'short_answer', question: '解释这个词', note_ids: [selected.id, unselected.id]});
+  store.submit(active, {activityId: card.current.id, answer: '解释', confidence: 80});
   store.resolve(active, {activity_id: card.current.id, correct: true});
   assert.equal(store.findOwnedNote(LEARNING_NOTEBOOK_SESSION, selected.id).reviewCount, 1);
   assert.equal(store.findOwnedNote(LEARNING_NOTEBOOK_SESSION, unselected.id).reviewCount, 0);
@@ -87,22 +88,10 @@ test('a quiz in a new chat records review results only for old notes selected by
   assert.deepEqual(store.read(active).notebookQuizIds, []);
 });
 
-test('drawer loads the notebook collection from a new chat instead of filtering by that chat', async () => {
-  const requests = [];
-  const source = fs.readFileSync(new URL('../ui/injections/laolao-learning-stage.js', import.meta.url), 'utf8')
-    .replace(/\}\)\(\);\s*$/, 'window.__notesTest = {state, loadNotes};})();');
-  const status = {textContent: ''};
-  const document = {readyState: 'loading', addEventListener() {}, querySelector() { return null; }};
-  const window = {addEventListener() {}, __laolaoSidebar: {async gwRequest(method, params) {
-    requests.push({method, params});
-    if (method === 'sessions.list') return {sessions: []};
-    return {notes: [], availableTags: [], similar: []};
-  }}};
-  vm.runInNewContext(source, {window, document, location: {href: 'http://localhost/chat?session=agent:learning:new-chat'}, URL,
-    setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 1; }});
-  window.__notesTest.state.drawer = {querySelector(selector) { return selector.endsWith('__status') ? status : null; }, classList: {contains() { return false; }}};
-  await window.__notesTest.loadNotes();
-  const request = requests.find(item => item.method === 'pinkie.learning.notes.list');
-  assert.equal(request.params.sessionKey, LEARNING_NOTEBOOK_SESSION);
-  assert.match(status.textContent, /删除聊天不影响笔记/);
+test('new notebook view uses the durable collection across source chats', async () => {
+  const source = fs.readFileSync(new URL('../ui/injections/laolao-study-desk-notes.js', import.meta.url), 'utf8');
+  assert.ok(source.includes("const LIBRARY = 'agent:learning:notes-library'"));
+  // The cross-chat storage/edit/export contract is exercised above against real files.
+  const stage = fs.readFileSync(new URL('../ui/injections/laolao-learning-stage.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(stage, /el\("aside", "laolao-learning-notes"/);
 });

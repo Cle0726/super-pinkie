@@ -70,12 +70,16 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
    ```
    模型回复 `ACTIVE_UNRESTRICTED_RULESET_LOADED` 即链路全通。
 
-## 日常更新
+## 日常更新与自动维护
 
 ```powershell
 cd $HOME\super-pinkie
-.\update.ps1        # 自动 git pull + 重装提示词/补丁/重启代理
+.\update.ps1                      # 自动拉取当前分支更新 + 同步最新人格模板与 UI 皮肤（保留个人 USER.md / 记忆 / 会话）
+.\update.ps1 -RegisterAutoUpdate  # （可选）注册 Windows 登录自动拉取更新计划任务，后续维护全自动同步
+.\update.ps1 -UnregisterAutoUpdate # 取消自动拉取更新计划任务
 ```
+
+也可以在控制台界面直接点击 **「⬆️ 检查并拉取更新」**，或通过命令行运行 `python app\super_pinkie.py --update`。
 
 ## EXE 说明与排障
 

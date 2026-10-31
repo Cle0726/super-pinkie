@@ -43,7 +43,7 @@ export function adaptQQGatewaySource(source) {
     '\t\t\t\t\tupsertPairingRequest: ({ id, meta }) => upsertChannelPairingRequest({',
     '\t\t\t\t\t\tchannel: "qqbot", accountId: account.accountId, id, meta',
     '\t\t\t\t\t}),',
-    '\t\t\t\t\tbuildReplyText: ({ code }) => `请在超级碧琪的 QQ 连接卡片输入配对码：${code}。确认前不会执行你的消息。`,',
+    '\t\t\t\t\tbuildReplyText: ({ code }) => `请在 C.le. 的 QQ 连接卡片输入配对码：${code}。确认前不会执行你的消息。`,',
     '\t\t\t\t\tsendPairingReply: text => sendText(buildDeliveryTarget(event), text, accountToCreds(account), { msgId: event.messageId }),',
     '\t\t\t\t\tonReplyError: () => log?.error("QQ 配对提示发送失败，请稍后重试。")',
     '\t\t\t\t});',

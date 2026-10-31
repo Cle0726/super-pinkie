@@ -1,0 +1,322 @@
+/* 趴在输入框上的 Li An + 菜单 + 点缀。
+   关键约定：
+   - 猫锚在输入框 shell 的上沿偏右，底边固定（bottom: calc(100% - 9px)）；
+   - 猫不压正文：--pinkie-safe 由脚本按实际高度写入，聊天内容末尾留出这段空间；
+   - 五状态各自有可辨认的动作（CSS 只做 fallback 的轻动作；rig 在位时动作在画布里）。 */
+
+.pinkie-buddy {
+  --buddy-w: 78px;               /* Li An 取自用户的参考油画（坐姿），所有状态都坐着，共用 366×438 画框，底边对齐 */
+  --buddy-ratio: 366 / 438;
+  position: absolute;
+  z-index: 40;
+  right: 72px;
+  /* 底边钉在输入框上沿；有追加卡（chat-queue）时整只抬高，仍蹲在卡片上沿 */
+  bottom: calc(100% - 9px + var(--buddy-lift, 0px));
+  width: var(--buddy-w);
+  aspect-ratio: var(--buddy-ratio);
+  pointer-events: none;
+  transition: right .25s ease, opacity .2s ease, transform .25s ease, visibility .2s;
+}
+/* 输入框的弹层（模型、设置、附件、容量）往上展开时，Li An先低头躲开，别挡住菜单 */
+.agent-chat__composer-shell:has(details[open], .chat-settings-popover--open, .chat-controls__model[open]) > .pinkie-buddy {
+  opacity: 0; visibility: hidden; transform: translateY(10px);
+}
+
+.pinkie-buddy__figure {
+  position: absolute; inset: 0;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  pointer-events: auto;
+  transform-origin: 50% 100%;
+  /* fallback（没有 rig 时）只做极轻的呼吸，位移不超过 0.8% —— 不冒充身体动作 */
+  animation: buddy-breathe 4.6s ease-in-out infinite;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.pinkie-buddy__img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; object-position: 50% 100%;
+  opacity: 0; transition: opacity .28s ease;
+  filter: drop-shadow(0 4px 6px rgba(10, 13, 22, .28));
+  pointer-events: none;
+}
+.pinkie-buddy__img.is-front { opacity: 1; }
+
+/* rig 在位：静态图隐掉，动作全在画布里；画布向上留了跃起空间 */
+.pinkie-buddy__rig {
+  position: absolute; pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(10, 13, 22, .28));
+  transition: filter .3s ease;
+}
+.pinkie-buddy.is-rig .pinkie-buddy__img { opacity: 0 !important; }
+.pinkie-buddy.is-rig .pinkie-buddy__figure { animation: none !important; }
+.pinkie-buddy.is-rig .pinkie-buddy__figure:hover .pinkie-buddy__rig { filter: drop-shadow(0 5px 9px rgba(10, 13, 22, .32)) brightness(1.03); }
+
+.pinkie-buddy__figure:hover { animation-play-state: paused; }
+.pinkie-buddy__figure:hover .pinkie-buddy__img { filter: drop-shadow(0 4px 10px var(--cle-gaze-glow, rgba(120,170,220,.35))) brightness(1.04); }
+.pinkie-buddy__figure:active { transform: translateY(1px); }
+
+/* fallback 的五个状态动作：呼吸 / 抬头 / 干活时轻晃 / 完成小跃 / 睡着慢呼吸 */
+.pinkie-buddy.is-perk .pinkie-buddy__figure { animation: buddy-perk .55s cubic-bezier(.3, 1.5, .5, 1) both, buddy-breathe 4.6s ease-in-out .55s infinite; }
+.pinkie-buddy.is-boop .pinkie-buddy__figure { animation: buddy-boop .45s cubic-bezier(.3, 1.6, .5, 1) both, buddy-breathe 4.6s ease-in-out .45s infinite; }
+.pinkie-buddy[data-state="sleepy"] .pinkie-buddy__figure { animation-duration: 7.4s; animation-timing-function: ease-in-out; }
+.pinkie-buddy[data-state="working"] .pinkie-buddy__figure { animation: buddy-ponder 3.4s ease-in-out infinite; }
+.pinkie-buddy[data-state="typing"] .pinkie-buddy__figure { animation: buddy-perk 4.8s ease-in-out infinite; }
+.pinkie-buddy[data-state="happy"] .pinkie-buddy__figure { animation: buddy-hop 1.1s cubic-bezier(.3, 1.4, .4, 1) 2; }
+
+/* 模式小标记：书页 / 工具 / 月亮 / 笔 / 纸，纸白底墨线，不用粉色 */
+.pinkie-buddy__mark {
+  position: absolute; left: -2px; bottom: 4px;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 8px;
+  background: var(--cle-surface, #fbf8f1);
+  border: 1px solid color-mix(in srgb, var(--cle-gold-soft, #d9c9a8) 70%, transparent);
+  color: var(--cle-ink-2, #3b3730);
+  box-shadow: 0 1px 3px rgba(10, 13, 22, .10);
+  opacity: .92; pointer-events: none;
+}
+.pinkie-buddy__mark svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.pinkie-buddy[data-room="thinking"] .pinkie-buddy__mark { background: color-mix(in srgb, var(--cle-ink, #1b1a17) 88%, #fff); color: #e8eefc; border-color: transparent; }
+.pinkie-buddy[data-room="learning"] .pinkie-buddy__mark { color: var(--cle-gold, #a8842c); }
+.pinkie-buddy[data-room="unrestricted"] .pinkie-buddy__mark { color: var(--cle-gaze, #3f6f9c); }
+/* 五状态在没有专属表情图时也要看得出差别：小标记上的一个细点/金圈/淡掉 */
+.pinkie-buddy__mark::after {
+  content: ""; position: absolute; right: -3px; top: -3px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cle-gaze, #3f6f9c); opacity: 0; transform: scale(.6);
+  transition: opacity .25s, transform .25s, background-color .25s;
+}
+.pinkie-buddy[data-state="typing"] .pinkie-buddy__mark::after { opacity: .55; transform: none; }
+.pinkie-buddy[data-state="working"] .pinkie-buddy__mark::after { opacity: 1; transform: none; background: var(--cle-gold, #a8842c); animation: buddy-state-beat 1.6s ease-in-out infinite; }
+.pinkie-buddy[data-state="happy"] .pinkie-buddy__mark::after { opacity: 1; transform: scale(1.25); background: var(--cle-gold, #a8842c); }
+.pinkie-buddy[data-state="sleepy"] .pinkie-buddy__mark { opacity: .5; }
+@keyframes buddy-state-beat { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+/* 进度翻译 / 专注倒计时：在他左边贴着输入框的一枚小标签 */
+.pinkie-buddy__caption {
+  position: absolute; right: calc(100% - 6px); bottom: 12px;
+  max-width: 200px; padding: 3px 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-radius: 999px;
+  background: var(--cle-surface, #fbf8f1);
+  border: 1px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 16%, transparent);
+  color: var(--cle-ink-2, #3b3730);
+  font: 500 11.5px/1.5 var(--cle-sans, -apple-system, "PingFang SC", sans-serif);
+  opacity: 0; transform: translateX(6px); transition: opacity .25s, transform .3s;
+  pointer-events: none;
+}
+.pinkie-buddy__caption.is-shown { opacity: 1; transform: none; }
+
+/* 说话气泡：从他头顶往上冒，尾巴指向他 */
+.pinkie-buddy__bubble {
+  position: absolute; right: 18px; bottom: calc(100% + 4px);
+  width: max-content; max-width: min(340px, 52vw);
+  padding: 12px 15px 13px;
+  border-radius: 16px 16px 6px 16px;
+  background: var(--cle-surface, #fbf8f1);
+  border: 1px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 20%, transparent);
+  box-shadow: var(--cle-shadow-pop, 0 18px 40px rgba(10,13,22,.18));
+  color: var(--cle-ink, #1b1a17); font: 400 13.5px/1.7 var(--cle-sans, -apple-system, "PingFang SC", sans-serif);
+  opacity: 0; visibility: hidden; transform: translate(var(--buddy-shift, 0), calc(6px + var(--buddy-shift-y, 0px))) scale(.97);
+  transform-origin: calc(100% - 20px) 100%;
+  transition: opacity .2s ease, transform .28s cubic-bezier(.3, 1.4, .5, 1);
+  pointer-events: none;
+}
+.pinkie-buddy__bubble.is-shown { opacity: 1; visibility: visible; transform: translate(var(--buddy-shift, 0), var(--buddy-shift-y, 0px)); pointer-events: auto; }
+.pinkie-buddy__bubble.has-close { padding-right: 32px; }
+.pinkie-buddy__bubble strong { color: var(--cle-ink, #1b1a17); font-weight: 600; }
+.pinkie-buddy__bubble .muted { margin-top: 4px; color: var(--cle-ink-3, #7a7467); font-size: 11.5px; }
+.pinkie-buddy__quote { margin: 6px 0 2px; padding: 7px 10px; border-radius: 10px; background: var(--cle-paper, #fffdf8); border-left: 1px solid var(--cle-gold-soft, #d9c9a8); color: var(--cle-ink, #1b1a17); }
+.pinkie-buddy__close {
+  position: absolute; right: 7px; top: 7px; width: 20px; height: 20px; padding: 3px;
+  border: 0; border-radius: 6px; background: transparent; cursor: pointer; color: var(--cle-ink-3, #7a7467);
+}
+.pinkie-buddy__close svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.pinkie-buddy__close:hover { background: color-mix(in srgb, var(--cle-ink, #1b1a17) 6%, transparent); color: var(--cle-ink, #1b1a17); }
+.pinkie-buddy__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.pinkie-buddy__chip {
+  border: 1px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 24%, transparent);
+  background: transparent; color: inherit; border-radius: 999px;
+  padding: 3px 11px; font: 500 12px/1.5 var(--cle-sans, -apple-system, "PingFang SC", sans-serif); cursor: pointer;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.pinkie-buddy__chip:hover { background: var(--cle-gaze-soft, rgba(63,111,156,.08)); border-color: color-mix(in srgb, var(--cle-gaze, #3f6f9c) 46%, transparent); transform: translateY(-1px); }
+.pinkie-buddy__chip.is-primary { background: var(--cle-ink, #1b1a17); border-color: transparent; color: var(--cle-paper, #fffdf8); }
+.pinkie-buddy__dots { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 2px; }
+.pinkie-buddy__dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--cle-gaze, #3f6f9c); opacity: .3; animation: buddy-dot 1.1s ease-in-out infinite; }
+.pinkie-buddy__dots i:nth-child(2) { animation-delay: .15s; }
+.pinkie-buddy__dots i:nth-child(3) { animation-delay: .3s; }
+
+/* 功能菜单：线条图标，悬停时各有一个小动作 */
+.pinkie-buddy__menu {
+  position: absolute; right: 8px; bottom: calc(100% + 2px);
+  width: 224px; max-width: min(224px, calc(100vw - 32px)); padding: 6px; overflow: auto;
+  border-radius: 16px;
+  background: var(--cle-surface, #fbf8f1);
+  border: 1px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 16%, transparent);
+  box-shadow: var(--cle-shadow-pop, 0 18px 40px rgba(10,13,22,.18));
+  opacity: 0; visibility: hidden; transform: translate(var(--buddy-shift, 0), calc(8px + var(--buddy-shift-y, 0px))) scale(.98);
+  transform-origin: calc(100% - 30px) 100%;
+  transition: opacity .16s, transform .24s cubic-bezier(.3, 1.4, .5, 1);
+  pointer-events: none;
+}
+.pinkie-buddy__menu.is-shown { opacity: 1; visibility: visible; transform: translate(var(--buddy-shift, 0), var(--buddy-shift-y, 0px)); pointer-events: auto; }
+.pinkie-buddy__item {
+  display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 9px;
+  width: 100%; padding: 7px 9px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--cle-ink, #1b1a17); cursor: pointer; text-align: left;
+  font: 500 13px/1.3 var(--cle-sans, -apple-system, "PingFang SC", sans-serif);
+  transition: background .15s;
+}
+.pinkie-buddy__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item { animation: buddy-item-in .3s cubic-bezier(.3, 1.3, .5, 1) both; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item:nth-child(2) { animation-delay: .03s; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item:nth-child(3) { animation-delay: .06s; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item:nth-child(4) { animation-delay: .09s; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item:nth-child(6) { animation-delay: .12s; }
+.pinkie-buddy__menu.is-shown .pinkie-buddy__item:nth-child(7) { animation-delay: .15s; }
+.pinkie-buddy__item:hover { background: color-mix(in srgb, var(--cle-ink, #1b1a17) 5%, transparent); }
+.pinkie-buddy__item:focus-visible { outline: 2px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 55%, #fff); outline-offset: -2px; background: color-mix(in srgb, var(--cle-gaze, #3f6f9c) 8%, #fff); }
+.pinkie-buddy__figure:focus-visible { outline: 2px solid var(--cle-gaze, #3f6f9c); outline-offset: 3px; border-radius: 22px; }
+.pinkie-buddy__hint { color: var(--cle-ink-3, #7a7467); font-size: 11px; font-weight: 400; }
+.pinkie-buddy__sep { height: 1px; margin: 5px 8px; background: var(--cle-line, rgba(27,26,23,.10)); }
+.pinkie-buddy__ico { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; color: color-mix(in srgb, var(--cle-gaze, #3f6f9c) 80%, #2a3b4a); background: color-mix(in srgb, var(--cle-gaze, #3f6f9c) 8%, #fff); }
+.pinkie-buddy__ico svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.pinkie-buddy__ico svg .ray, .pinkie-buddy__ico svg .spark { opacity: 0; transition: opacity .2s; }
+.pinkie-buddy__item:hover .pinkie-buddy__ico svg .ray,
+.pinkie-buddy__item:hover .pinkie-buddy__ico svg .spark { opacity: 1; animation: ico-twinkle .9s ease-in-out infinite; }
+.pinkie-buddy__item:hover .pinkie-buddy__ico svg .draw { stroke-dasharray: 60; animation: ico-draw .7s ease-out both; }
+.ico--summary:hover .pinkie-buddy__ico .l1 { animation: ico-line .6s ease-out both; }
+.ico--summary:hover .pinkie-buddy__ico .l2 { animation: ico-line .6s .08s ease-out both; }
+.ico--summary:hover .pinkie-buddy__ico .l3 { animation: ico-line .6s .16s ease-out both; }
+.ico--focus:hover .pinkie-buddy__ico .hand { transform-origin: 12px 13.5px; animation: ico-tick 1.2s steps(6) infinite; }
+.ico--narrate:hover .pinkie-buddy__ico .draw { animation: ico-wave .9s ease-in-out infinite; transform-origin: center; }
+
+/* 模型与参数 */
+.pinkie-buddy-settings {
+  --buddy-settings-bg: var(--cle-surface, #fbf8f1); --buddy-settings-field: var(--cle-paper, #fffdf8); --buddy-settings-ink: var(--cle-ink, #1b1a17);
+  --buddy-settings-muted: var(--cle-ink-3, #7a7467); --buddy-settings-line: var(--cle-line-strong, rgba(27,26,23,.18));
+  width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+  padding: 22px; margin: auto; border: 1px solid var(--buddy-settings-line); border-radius: 20px;
+  background: var(--buddy-settings-bg); color: var(--buddy-settings-ink);
+  box-shadow: var(--cle-shadow-pop, 0 18px 40px rgba(10,13,22,.18)); overflow: auto;
+  font: 14px/1.5 var(--cle-sans, -apple-system, "PingFang SC", sans-serif);
+}
+.pinkie-buddy-settings::backdrop { background: rgba(6, 8, 14, .35); }
+.pinkie-buddy-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pinkie-buddy-settings__heading h2 { margin: 0; font-size: 17px; font-weight: 650; color: inherit; }
+.pinkie-buddy-settings__close { width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 8px; color: var(--buddy-settings-muted); background: transparent; cursor: pointer; }
+.pinkie-buddy-settings__close svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.pinkie-buddy-settings__close:hover { background: color-mix(in srgb, var(--cle-ink, #1b1a17) 6%, transparent); color: var(--cle-ink, #1b1a17); }
+.pinkie-buddy-settings__note { margin: 8px 0 18px; font-size: 12px; color: var(--buddy-settings-muted); }
+.pinkie-buddy-settings__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.pinkie-buddy-settings__field { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 12px; }
+.pinkie-buddy-settings__field:first-child { grid-column: 1 / -1; }
+.pinkie-buddy-settings__field :is(input, select) { width: 100%; min-width: 0; height: 36px; padding: 6px 9px; border: 1px solid var(--buddy-settings-line); border-radius: 9px; background: var(--buddy-settings-field); color: var(--buddy-settings-ink); font: inherit; font-size: 13px; box-sizing: border-box; }
+.pinkie-buddy-settings__field :is(input, select):focus { outline: 2px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 45%, transparent); outline-offset: 1px; }
+.pinkie-buddy-settings__field :disabled { opacity: .55; }
+.pinkie-buddy-settings__field small { color: var(--buddy-settings-muted); font-size: 11px; }
+.pinkie-buddy-settings__sync { display: flex; gap: 7px; align-items: center; margin-top: 17px; font-size: 12px; color: var(--buddy-settings-muted); }
+.pinkie-buddy-settings__sync input { width: 14px; height: 14px; accent-color: var(--cle-gaze, #3f6f9c); }
+.pinkie-buddy-settings__status { min-height: 36px; margin: 12px 0; font-size: 12px; color: var(--buddy-settings-muted); }
+.pinkie-buddy-settings__status.is-error { color: #B23A33; }
+.pinkie-buddy-settings__actions { display: flex; justify-content: space-between; gap: 10px; }
+.pinkie-buddy-settings__button { padding: 8px 14px; border: 1px solid var(--buddy-settings-line); border-radius: 10px; background: var(--buddy-settings-field); color: inherit; font: 500 13px/1.4 var(--cle-sans, -apple-system, "PingFang SC", sans-serif); cursor: pointer; }
+.pinkie-buddy-settings__button.is-primary { background: var(--cle-ink, #1b1a17); color: var(--cle-paper, #fffdf8); border-color: transparent; }
+.pinkie-buddy-settings__button:disabled { opacity: .5; cursor: wait; }
+html[data-pinkie-night] .pinkie-buddy-settings__status.is-error { color: #E0645B; }
+/* 夜间：气泡/菜单的阴影收起一点，小标记的纸底不要发白发亮 */
+html[data-pinkie-night] .pinkie-buddy__mark { box-shadow: 0 1px 2px rgba(0, 0, 0, .5); opacity: .85; }
+html[data-pinkie-night] .pinkie-buddy__bubble,
+html[data-pinkie-night] .pinkie-buddy__menu { box-shadow: var(--cle-shadow-pop, 0 22px 60px -20px rgba(0,0,0,.8)); }
+
+.pinkie-buddy-ask {
+  position: fixed; z-index: 2147483000;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 11px 3px 4px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--cle-gaze, #3f6f9c) 26%, transparent);
+  background: var(--cle-surface, #fbf8f1); color: var(--cle-ink, #1b1a17); cursor: pointer;
+  font: 500 12px/1.4 var(--cle-sans, -apple-system, "PingFang SC", sans-serif);
+  box-shadow: var(--cle-shadow, 0 8px 24px rgba(10,13,22,.12));
+  animation: buddy-boop .3s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.pinkie-buddy-ask .pinkie-buddy__ico { width: 20px; height: 20px; border-radius: 50%; }
+
+/* One coordinate system for both selection actions. The top layer also
+   avoids transformed chat containers becoming the fixed-position origin. */
+.pinkie-selection-actions {
+  position: fixed; inset: auto; margin: 0; padding: 0; border: 0;
+  width: max-content; max-width: calc(100vw - 16px); overflow: visible;
+  display: flex; align-items: center; gap: 8px; background: transparent;
+  z-index: 2147483000;
+}
+.pinkie-selection-actions[hidden] { display: none !important; }
+.pinkie-selection-actions > :is(.pinkie-buddy-ask, .laolao-learning-selection-save) {
+  position: static !important; inset: auto !important; margin: 0 !important;
+  flex: none; animation: none; transform: none;
+}
+
+/* 发送 / 完成点缀的画布 & 氛围画布 */
+.pinkie-burst { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
+.pinkie-ambient { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }
+/* 氛围层要落在正文下面但仍在 pane 里：给宿主建立独立的层叠上下文 */
+html[data-cle] .chat-main:has(> .pinkie-ambient) { isolation: isolate; }
+.pinkie-ambient.is-on { opacity: 1; }
+.pinkie-focus-track { position: absolute; top: 1px; left: 22px; right: 22px; height: 2px; border-radius: 99px; opacity: 0; pointer-events: none; overflow: hidden; }
+.pinkie-focus-track::after { content: ""; display: block; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, var(--cle-gaze, #3f6f9c)); transform: scaleX(var(--pinkie-focus-progress, 0)); transform-origin: left; }
+.agent-chat__composer-shell[data-pinkie-focus] > .pinkie-focus-track { opacity: .8; }
+
+/* 安全空间：正文最后一段与输入框之间，至少留出猫的高度（脚本按实际尺寸写 --pinkie-safe
+   并给 pane 标记 data-pinkie-safe）。只作用于真正挂了猫的那一侧，不动输入框本身。 */
+html[data-cle] .chat-pane-cache__pane[data-pinkie-safe] .chat-thread-inner {
+  padding-bottom: var(--pinkie-safe, 0px) !important;
+  scroll-padding-bottom: var(--pinkie-safe, 0px);
+}
+/* 气泡/菜单出界不靠 overflow 裁剪（那会把向上的菜单一起切掉），
+   由脚本 reflow() 用 --buddy-shift 把它们推回本 pane 内。 */
+
+@media (max-width: 850px) {
+  .pinkie-buddy { --buddy-w: 70px; right: 36px; }
+  .pinkie-buddy__caption { max-width: 140px; font-size: 11px; }
+  .pinkie-buddy__bubble { max-width: min(320px, calc(100vw - 80px)); right: 0; }
+  .pinkie-buddy__menu { right: 0; }
+}
+/* 双模式两栏 / 窄窗：每侧各自收缩，但不消失、不搬到另一侧。
+   数值与 src/composer/composer.css 里的同名规则保持一致，谁先加载都不会跳一下
+   （那边带 !important，属于另一个任务的接线；这里只做同值的兜底）。 */
+@container cle-pane (max-width: 720px) {
+  .pinkie-buddy { --buddy-w: 72px; right: 54px; }
+}
+@container cle-pane (max-width: 520px) {
+  .pinkie-buddy { --buddy-w: 64px; right: 46px; }
+  .pinkie-buddy__mark { width: 18px; height: 18px; border-radius: 6px; }
+  .pinkie-buddy__mark svg { width: 12px; height: 12px; }
+}
+
+@keyframes buddy-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.004, 1.012); } }
+@keyframes buddy-perk { 0% { transform: translateY(0); } 35% { transform: translateY(-4px) scale(1.008, .994); } 100% { transform: translateY(0); } }
+@keyframes buddy-boop { 0% { transform: scale(1); } 40% { transform: scale(1.04, .96); } 100% { transform: scale(1); } }
+@keyframes buddy-ponder { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-1deg) translateY(-1px); } }
+@keyframes buddy-hop { 0%, 100% { transform: translateY(0); } 18% { transform: translateY(-6px) scale(.99, 1.01); } 34% { transform: translateY(0) scale(1.01, .99); } }
+@keyframes buddy-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+@keyframes buddy-item-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ico-draw { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+@keyframes ico-twinkle { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes ico-line { from { stroke-dasharray: 20; stroke-dashoffset: 20; } to { stroke-dasharray: 20; stroke-dashoffset: 0; } }
+@keyframes ico-tick { to { transform: rotate(360deg); } }
+@keyframes ico-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.7); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pinkie-buddy__figure, .pinkie-buddy__menu .pinkie-buddy__item, .pinkie-buddy__dots i,
+  .pinkie-buddy__mark::after { animation: none !important; }
+  .pinkie-buddy__img, .pinkie-buddy__rig { transition: none !important; }
+  .pinkie-ambient, .pinkie-burst { display: none; }
+  .pinkie-buddy__bubble, .pinkie-buddy__menu { transition: none !important; }
+}
+
+/* C.le. v5 · 线描：他是画在纸上的墨色剪影，不是贴上去的图 —— 没有投影、没有角标 */
+html:not([data-cle-art="paint"]) .pinkie-buddy__img,
+html:not([data-cle-art="paint"]) .pinkie-buddy__rig,
+html:not([data-cle-art="paint"]) .pinkie-buddy.is-rig .pinkie-buddy__figure:hover .pinkie-buddy__rig,
+html:not([data-cle-art="paint"]) .pinkie-buddy__figure:hover .pinkie-buddy__img { filter: none; }
+/* 模式角标在两种画风里都不要：房间已经写在侧栏和欢迎页上 */
+.pinkie-buddy__mark { display: none !important; }

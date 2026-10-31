@@ -6,6 +6,60 @@ import ImageIO
 import QuickLookThumbnailing
 import Darwin
 
+// pinkie-material-markdown:v1
+enum MaterialPreviewModePolicy {
+    private static let included: Set<String> = ["chat", "project", "thinking", "learning"]
+
+    static func allowsEnhancedMarkdown(primary: String?, companion: String?, companionVisible: Bool) -> Bool {
+        guard let primary, included.contains(primary) else { return false }
+        return !companionVisible || companion.map(included.contains) == true
+    }
+}
+
+enum MaterialMarkdownDocument {
+    static let bundledRenderer: String? = {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie/ui/injections/laolao-markdown-preview.js") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }()
+
+    private static let bundledMathScript: String? = {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie/ui/injections/laolao-katex/katex.min.js") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }()
+    private static let bundledMathStyle: String? = {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie/ui/injections/laolao-katex/katex.min.css"),
+              let css = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return css.replacingOccurrences(of: "url(fonts/", with: "url(clekk-material://katex/fonts/")
+    }()
+
+    static func content(text: String, renderer: String, nonce: String, relativeToken: String? = nil) -> String {
+        let script = renderer.replacingOccurrences(of: "</script", with: "<\\/script", options: .caseInsensitive)
+        let token = relativeToken?.range(of: "^[0-9a-f-]{36}$", options: [.regularExpression, .caseInsensitive]) != nil ? relativeToken! : ""
+        let enhanced = !token.isEmpty
+        let math = (enhanced ? bundledMathScript ?? "" : "").replacingOccurrences(of: "</script", with: "<\\/script", options: .caseInsensitive)
+        return """
+        <style>
+        \(enhanced ? bundledMathStyle ?? "" : "")
+        .markdown-body{max-width:960px;margin:0 auto;padding:28px;font:16px/1.75 -apple-system,BlinkMacSystemFont,sans-serif;overflow-wrap:anywhere}
+        .markdown-body h1,.markdown-body h2,.markdown-body h3{line-height:1.4;margin:1.6em 0 .65em;font-weight:700}.markdown-body h1{font-size:1.8em;margin-top:0}.markdown-body h2{font-size:1.4em}.markdown-body h3{font-size:1.15em}
+        .markdown-body p,.markdown-body ul,.markdown-body ol{margin:.8em 0}.markdown-body li{margin:.35em 0}.markdown-body strong{font-weight:700}
+        .markdown-body blockquote{margin:1em 0;padding:.1em 1em;border-left:3px solid var(--accent,#b283b8);opacity:.88}
+        .markdown-body pre{padding:16px;margin:1em 0;background:rgba(128,128,128,.1);border-radius:10px;white-space:pre;overflow:auto;overflow-wrap:normal;line-height:1.6}
+        .markdown-body code{font:13.5px/1.6 ui-monospace,monospace}.markdown-body :not(pre)>code{padding:.15em .35em;border-radius:4px;background:rgba(128,128,128,.12)}
+        .markdown-body .markdown-table{overflow-x:auto;margin:1em 0}.markdown-body table{width:100%;border-collapse:collapse;font-size:.94em}.markdown-body th,.markdown-body td{padding:9px 12px;text-align:left;border:1px solid rgba(128,128,128,.25)}.markdown-body th{background:rgba(128,128,128,.1)}
+        .markdown-body a{color:var(--accent,#9770ae)}.markdown-body img{max-width:100%;height:auto}.markdown-body hr{border:0;border-top:1px solid rgba(128,128,128,.25);margin:1.5em 0}.markdown-body.markdown-plain{white-space:pre-wrap}
+        .markdown-body .pinkie-preview-math--display{display:block;overflow-x:auto}
+        @media(max-width:600px){.markdown-body{padding:18px;font-size:15px}}
+        </style><article class="markdown-body" id="pinkie-markdown-document"><pre id="pinkie-markdown-source">\(escape(text))</pre></article><script nonce="\(escape(nonce))">\(math);window.__pinkieMarkdownEnhanced=\(enhanced ? "true" : "false");window.__pinkieMarkdownAssetToken="\(token)";\(script)</script>
+        """
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}
+
 private struct MaterialThumbnailFingerprint: Equatable {
     let url: URL
     let size: Int64
@@ -325,7 +379,8 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     private let lock = NSLock()
     private let jobsLock = NSLock()
     private var resources: [String: Resource] = [:]
-    private var workspacePages: [String: (name: String, data: Data)] = [:]
+    private var workspacePages: [String: (name: String, data: Data, nonce: String)] = [:]
+    private var enhancedMarkdownTokens: Set<String> = []
     private struct ThumbnailResource {
         let fingerprint: MaterialThumbnailFingerprint
         let cacheURL: URL
@@ -346,6 +401,7 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     private func pruneLocked(now: Date) {
         resources = resources.filter { $0.value.expiresAt > now }
         workspacePages = workspacePages.filter { resources[$0.key] != nil }
+        enhancedMarkdownTokens.formIntersection(resources.keys)
         if resources.count <= maximumResources { return }
         let surplus = resources.sorted { $0.value.expiresAt < $1.value.expiresAt }
             .prefix(resources.count - maximumResources).map(\.key)
@@ -535,7 +591,7 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
     /// The sidebar page uses the same validated token and Range transport as
     /// the chat preview. Neither the address field nor the tool result shows it.
-    func registerWorkspacePreview(path: String) -> [String: Any] {
+    func registerWorkspacePreview(path: String, enhancedMarkdown: Bool = false) -> [String: Any] {
         let result = register(path: path)
         guard result["ok"] as? Bool == true, let source = result["url"] as? String,
               let sourceURL = URL(string: source) else { return result }
@@ -547,6 +603,7 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
             try access.enforcePreviewSize(file)
             let name = file.url.lastPathComponent
             let escapedSource = Self.workspaceEscape(source)
+            let nonce = UUID().uuidString
             let content: String
             switch file.kind {
             case .video: content = "<video controls playsinline preload=\"metadata\" src=\"\(escapedSource)\"></video>"
@@ -557,15 +614,18 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
             case .text:
                 let data = try Data(contentsOf: file.url)
                 let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) ?? "这个文本的编码暂时无法显示。"
-                content = "<pre>\(Self.workspaceEscape(text))</pre>"
+                if ["md", "markdown"].contains(file.url.pathExtension.lowercased()), let renderer = MaterialMarkdownDocument.bundledRenderer {
+                    if enhancedMarkdown { lock.lock(); enhancedMarkdownTokens.insert(token); lock.unlock() }
+                    content = MaterialMarkdownDocument.content(text: text, renderer: renderer, nonce: nonce, relativeToken: enhancedMarkdown ? token : nil)
+                } else { content = "<pre>\(Self.workspaceEscape(text))</pre>" }
             case .external: return ["ok": false, "message": "暂时无法预览这种文件。"]
             }
             let html = """
             <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>\(Self.workspaceEscape(name))</title>
-            <style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#fffafd;color:#70425b;font:14px -apple-system,BlinkMacSystemFont,sans-serif}main{min-height:100%;display:grid;place-items:center;padding:20px}img{max-width:100%;max-height:calc(100vh - 40px);object-fit:contain}video,iframe{width:100%;height:100%;border:0;display:block}video{object-fit:contain;background:#17121b}audio{width:min(100%,580px)}pre{margin:0;padding:22px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font:13px ui-monospace,monospace}@media(prefers-color-scheme:dark){html,body{background:#1a131e;color:#efe5ea}}</style></head><body>\(content)</body></html>
+            <style>\(CleBrowserPalette.cssVariables)*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--paper);color:var(--ink);font:14px -apple-system,BlinkMacSystemFont,sans-serif}main{min-height:100%;display:grid;place-items:center;padding:20px}img{max-width:100%;max-height:calc(100vh - 40px);object-fit:contain}video,iframe{width:100%;height:100%;border:0;display:block}video{object-fit:contain;background:var(--ink)}audio{width:min(100%,580px)}pre{margin:0;padding:22px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font:13px ui-monospace,monospace}</style></head><body>\(content)</body></html>
             """
             let pageName = name + ".html"
-            lock.lock(); workspacePages[token] = (pageName, Data(html.utf8)); lock.unlock()
+            lock.lock(); workspacePages[token] = (pageName, Data(html.utf8), nonce); lock.unlock()
             let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
             let escapedName = pageName.addingPercentEncoding(withAllowedCharacters: allowed) ?? "preview.html"
             return ["ok": true, "url": "clekk-material://workspace/\(token)/\(escapedName)", "name": name, "kind": file.kind.rawValue]
@@ -578,7 +638,7 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
             .replacingOccurrences(of: "'", with: "&#39;")
     }
 
-    private func workspacePage(for url: URL) -> Data? {
+    private func workspacePage(for url: URL) -> (data: Data, nonce: String, enhancedMarkdown: Bool)? {
         let parts = url.pathComponents.filter { $0 != "/" }
         guard url.host == "workspace", parts.count == 2 else { return nil }
         lock.lock(); defer { lock.unlock() }
@@ -586,22 +646,53 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
         guard let resource = resources[parts[0]], let page = workspacePages[parts[0]], page.name == parts[1],
               let current = try? access.previewFile(path: resource.file.url.path),
               current.url == resource.file.url, current.size == resource.file.size else { return nil }
-        return page.data
+        return (page.data, page.nonce, enhancedMarkdownTokens.contains(parts[0]))
     }
 
     private func file(for task: WKURLSchemeTask) -> MaterialPreviewFile? {
         guard let requestURL = task.request.url else { return nil }
-        let components = requestURL.pathComponents.filter { $0 != "/" }
+        let components: [String]
+        if requestURL.host == "relative" {
+            // WebKit may decode an escaped slash in pathComponents before it
+            // hands the request to us. Split the encoded path first so a nested
+            // relative filename remains one capability-bound argument.
+            guard let encodedPath = URLComponents(url: requestURL, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return nil }
+            let pieces = encodedPath.split(separator: "/", omittingEmptySubsequences: true)
+            guard pieces.count == 2, let token = String(pieces[0]).removingPercentEncoding,
+                  let name = String(pieces[1]).removingPercentEncoding else { return nil }
+            components = [token, name]
+        } else {
+            components = requestURL.pathComponents.filter { $0 != "/" }
+        }
         guard components.count == 2, !components[0].isEmpty else { return nil }
         let token = components[0]
         let now = Date()
         lock.lock()
         defer { lock.unlock() }
         pruneLocked(now: now)
-        guard let resource = resources[token], components[1] == resource.file.url.lastPathComponent,
-              let current = try? access.previewFile(path: resource.file.url.path),
+        guard let resource = resources[token], let current = try? access.previewFile(path: resource.file.url.path),
               current.url == resource.file.url, current.size == resource.file.size else { return nil }
+        if requestURL.host == "relative" {
+            let name = components[1]
+            guard enhancedMarkdownTokens.contains(token), current.kind == .text, ["md", "markdown"].contains(current.url.pathExtension.lowercased()),
+                  !name.isEmpty, !name.hasPrefix("/"), !name.hasPrefix("\\"), !name.hasPrefix("~"), !name.contains("\0") else { return nil }
+            let path = current.url.deletingLastPathComponent().appendingPathComponent(name).standardizedFileURL.path
+            guard let image = try? access.previewFile(path: path), image.kind == .image,
+                  (try? access.enforcePreviewSize(image)) != nil else { return nil }
+            return image
+        }
+        guard components[1] == resource.file.url.lastPathComponent else { return nil }
         return current
+    }
+
+    private func mathFont(for url: URL) -> Data? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count == 2, parts[0] == "fonts", parts[1].hasSuffix(".woff2"),
+              parts[1].rangeOfCharacter(from: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_.-")).inverted) == nil,
+              let root = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie/ui/injections/laolao-katex/fonts", isDirectory: true) else { return nil }
+        let file = root.appendingPathComponent(parts[1])
+        guard let data = try? Data(contentsOf: file), data.count <= 2 * 1024 * 1024 else { return nil }
+        return data
     }
 
     private func finish(_ identifier: ObjectIdentifier) {
@@ -609,6 +700,26 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        if let url = urlSchemeTask.request.url, url.host == "katex" {
+            let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
+            let job = ReadJob()
+            jobsLock.lock(); jobs[identifier] = job; jobsLock.unlock()
+            readQueue.async { [weak self] in
+                guard let self else { return }
+                defer { self.finish(identifier) }
+                guard !job.isStopped else { return }
+                guard let data = self.mathFont(for: url), let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                    "Content-Type": "font/woff2", "Content-Length": String(data.count), "X-Content-Type-Options": "nosniff",
+                ]) else {
+                    if !job.isStopped { urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [NSLocalizedDescriptionKey: "公式字体不可用。"])) }
+                    return
+                }
+                guard !job.isStopped else { return }
+                urlSchemeTask.didReceive(response); urlSchemeTask.didReceive(data)
+                if !job.isStopped { urlSchemeTask.didFinish() }
+            }
+            return
+        }
         if let url = urlSchemeTask.request.url, url.host == "thumbnail" {
             let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
             let job = ReadJob()
@@ -632,13 +743,13 @@ final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         if let url = urlSchemeTask.request.url, url.host == "workspace" {
             guard let page = workspacePage(for: url), let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": "text/html; charset=utf-8", "Content-Length": String(page.count), "X-Content-Type-Options": "nosniff",
-                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src clekk-material:; media-src clekk-material:; frame-src clekk-material:; object-src 'none'; base-uri 'none'; form-action 'none'",
+                "Content-Type": "text/html; charset=utf-8", "Content-Length": String(page.data.count), "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; script-src 'nonce-\(page.nonce)'; style-src 'unsafe-inline'; img-src clekk-material: data:;\(page.enhancedMarkdown ? " font-src clekk-material:;" : "") media-src clekk-material:; frame-src clekk-material:; object-src 'none'; base-uri 'none'; form-action 'none'",
             ]) else {
                 urlSchemeTask.didFailWithError(NSError(domain: "CLEKkMaterialPreview", code: 404, userInfo: [NSLocalizedDescriptionKey: "预览地址已过期或文件已移动，请再点一次。"])); return
             }
             urlSchemeTask.didReceive(response)
-            urlSchemeTask.didReceive(page)
+            urlSchemeTask.didReceive(page.data)
             urlSchemeTask.didFinish()
             return
         }

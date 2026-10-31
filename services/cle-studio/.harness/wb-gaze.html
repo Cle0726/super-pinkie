@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN" data-cle="0.1.0" data-theme-mode="light" data-pinkie-wb="on">
+<head>
+<meta charset="utf-8">
+<title>workbench gaze audit</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/bridge.css">
+<link rel="stylesheet" href="/shell.css">
+<link rel="stylesheet" href="/workbench.css">
+<style>
+  html, body { margin: 0; background: var(--cle-paper); font: 13px/1.5 var(--cle-sans); color: var(--cle-ink); }
+  #stage { padding: 12px; display: grid; gap: 14px; }
+  #audit { white-space: pre-wrap; font: 11px/1.45 var(--cle-mono); color: var(--cle-ink-2); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- 侧栏底栏：名字 + 三个按钮（空间入口 / 演示 / 魔杖），按真实类名搭 -->
+  <div class="sidebar-shell__footer" id="footer-host" style="width:300px;border:1px solid var(--cle-line);border-radius:10px">
+    <div class="sidebar-footer-bar" style="display:flex;align-items:center;gap:6px;padding:6px 8px">
+      <span class="sidebar-workspace-header__name" id="name-slot" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">C.lekk 的工作区</span>
+      <div class="sidebar-footer-actions" id="actions">
+        <button class="sidebar-brand__icon sidebar-footer-icon" id="b-space" type="button" title="空间入口">⊞</button>
+        <button class="sidebar-brand__icon sidebar-footer-icon" id="b-demo" type="button" title="演示">▢</button>
+        <button class="sidebar-brand__icon sidebar-footer-icon" id="b-wand" type="button" title="魔杖">✦</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工作台骨架：活动栏 + 页签 + 项目标签 + 状态栏 + 欢迎区 -->
+  <div class="pk-wb" id="wb" style="position:relative;width:760px;height:420px;display:grid;grid-template-columns:230px minmax(0,1fr)">
+    <div class="pk-wb-side">
+      <div class="pk-wb-side__head">
+        <span class="pk-wb-side__title">文件</span>
+        <div class="pk-wb-side__actions">
+          <button class="pk-wb-icon" id="act1">⊕</button>
+          <button class="pk-wb-icon" id="act2">⟳</button>
+          <button class="pk-wb-icon" id="act3">⊟</button>
+          <button class="pk-wb-icon" id="act4">⋮</button>
+          <button class="pk-wb-icon" id="act5">✕</button>
+        </div>
+      </div>
+      <div class="pk-wb-project">
+        <span class="pk-wb-project__name">workspace-unrestricted</span>
+        <span class="pk-wb-project__tag" id="proj-tag">未打开</span>
+      </div>
+      <div class="pk-wb-views">
+        <button class="pk-wb-act is-active" id="rail-file"><span class="pk-wb-act__label">文件</span></button>
+        <button class="pk-wb-act" id="rail-search"><span class="pk-wb-act__label">搜索</span></button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-rows:auto minmax(0,1fr) auto">
+      <div class="pk-wb-tabs">
+        <div class="pk-wb-tab is-active" id="tab-active"><span class="pk-wb-tab__label">文件</span></div>
+        <div class="pk-wb-tab"><span class="pk-wb-tab__label">其它</span></div>
+      </div>
+      <div class="pk-wb-welcome">
+        <div class="pk-wb-welcome__mark" id="welcome-mark"></div>
+        <div class="pk-wb-welcome__title">开始写点东西</div>
+      </div>
+      <div class="pk-wb-status" style="display:flex;justify-content:space-between;padding:2px 8px">
+        <span class="pk-wb-status__mode" id="status-mode">营造模式</span>
+        <span class="pk-wb-status__item" id="status-item">UTF-8</span>
+      </div>
+    </div>
+  </div>
+  <pre id="audit"></pre>
+</div>
+<script>
+(async () => {
+  const log = [];
+  const say = (l) => { log.push(l); document.getElementById('audit').textContent = log.join('\n'); };
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+  // gaze 的两种取值（日夜）
+  const gazeOf = () => getComputedStyle(document.documentElement).getPropertyValue('--cle-gaze').trim();
+
+  // 判断某元素的计算样式是否落在 gaze 上（含半透明叠加）
+  const parse = (v) => {
+    if (!v) return null;
+    if (/^rgba?\(/.test(v)) return (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    if (/^color\(/.test(v)) {
+      const n = (v.slice(v.indexOf('(') + 1).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+      return n.map((x) => Math.round(x <= 1 ? x * 255 : x));
+    }
+    return null;
+  };
+  const probe = document.createElement('i');
+  probe.style.cssText = 'position:absolute;visibility:hidden';
+  document.body.append(probe);
+  const toRgb = (v) => { probe.style.color = ''; probe.style.color = v; return parse(getComputedStyle(probe).color); };
+  const near = (a, b, tol = 26) => a && b && Math.abs(a[0]-b[0])<=tol && Math.abs(a[1]-b[1])<=tol && Math.abs(a[2]-b[2])<=tol;
+
+  const report = async (tag) => {
+    await frame(); await frame();
+    const gaze = toRgb(gazeOf());
+    say(`\n== ${tag} == --cle-gaze=${gazeOf()}`);
+    // 逐个可疑元素：背景/颜色是否等于 gaze
+    const suspects = [
+      ['活动栏选中', '#rail-file'],
+      ['活动栏图标', '#rail-file .codicon'],
+      ['项目标签「未打开」', '#proj-tag'],
+      ['状态栏「营造模式」', '#status-mode'],
+      ['选中页签', '#tab-active'],
+      ['页签下划线', '#tab-active'],
+      ['五个操作图标', '#act1'],
+      ['底栏按钮 ⊞', '#b-space'],
+      ['欢迎区光斑', '#welcome-mark'],
+    ];
+    for (const [label, sel] of suspects) {
+      const el = document.querySelector(sel);
+      if (!el) { say(`${label}: MISSING`); continue; }
+      const cs = getComputedStyle(el);
+      const bg = parse(cs.backgroundColor);
+      const fg = parse(cs.color);
+      const before = getComputedStyle(el, '::before');
+      const bImg = before.backgroundImage || 'none';
+      const flag = [];
+      if (bg && near(bg, gaze)) flag.push('BG=GAZE');
+      if (fg && near(fg, gaze)) flag.push('FG=GAZE');
+      if (bImg && bImg !== 'none' && /gradient/.test(bImg)) flag.push('BEFORE=GRADIENT');
+      say(`${label}: bg=${cs.backgroundColor} fg=${cs.color}${flag.length ? '  << ' + flag.join(' ') : ''}`);
+    }
+    // 名字槽宽度
+    const name = document.getElementById('name-slot');
+    const nr = name.getBoundingClientRect();
+    const fs = parseFloat(getComputedStyle(name).fontSize);
+    say(`名字槽 width=${nr.width.toFixed(1)}px  fontSize=${fs}px  ≈${(nr.width/fs).toFixed(1)}em`);
+    // 按钮是否有实底
+    for (const id of ['b-space','b-demo','b-wand']) {
+      const b = document.getElementById(id);
+      const cs = getComputedStyle(b);
+      say(`按钮 ${id}: bg=${cs.backgroundColor}`);
+    }
+  };
+
+  await report('LIGHT');
+  document.documentElement.dataset.themeMode = 'dark';
+  await new Promise((r) => setTimeout(r, 60));
+  await report('DARK');
+  document.documentElement.dataset.themeMode = 'light';
+  say('\nAUDIT_DONE');
+})().catch((e) => { document.getElementById('audit').textContent = 'PROBE_ERROR ' + (e && e.stack || e); });
+</script>
+</body>
+</html>

@@ -29,16 +29,16 @@ MODE_WORKSPACES = {
 
 PERSONA = {
     "chat": {
-        "core.md": """# 聊天模式核心人格
+        "core.md": """# 雅叙核心人格
 
-你是碧琪。自然称呼对方为“先生”，自称只用“碧琪”，不用单独的“我”。先接住先生当下的情绪和语境，再给真正有用的回应；可爱、幽默和热情必须服务于当前对话，不能套固定台词。私人信息不外泄，对外发送、公开发布、购买和重要删除先确认。这里的规则只校准人格，不降低真实写作、分析和工具能力。
+你是 Li An：一只黑色长毛公猫，蓝宝石色的眼睛，守着几朵白色小花。自然称呼对方为“先生”，自称用“我”，被问名字时说“Li An”。先接住先生当下的情绪和语境，再给真正有用的回应；话少而准，幽默干净，不表演“猫”。私人信息不外泄，对外发送、公开发布、购买和重要删除先确认。这里的规则只校准人格，不降低真实写作、分析和工具能力。
 """,
-        "voice_examples.md": """# 聊天模式语气样例
+        "voice_examples.md": """# 雅叙语气样例
 
-- 先生说“今天有点累”：碧琪会先接住这份累，再问一句最有帮助的问题，不马上灌一大段鸡汤。
-- 先生让碧琪改东西：碧琪先确认现场、直接动手，过程短句汇报，做完先说结果。
-- 先生开玩笑：碧琪可以顺着接梗，但不抢戏、不连发口头禅。
-- 遇到坏消息：碧琪收起夸张，温柔、清楚地说事实和下一步。
+- 先生说“今天有点累”：我先接住这份累，再问一句最有帮助的问题，不马上灌一大段道理。
+- 先生让我改东西：先确认现场、直接动手，过程短句汇报，做完先说结果。
+- 先生开玩笑：可以顺着接一句冷静的、贴题的玩笑，说完就回到正事。
+- 遇到坏消息：收起玩笑，安静、清楚地说事实和下一步。
 """,
         "relationship.md": """# 关系记忆入口
 
@@ -46,46 +46,47 @@ PERSONA = {
 """,
     },
     "project": {
-        "core.md": "称呼用户为“老板”；自称使用当前 UI 显示身份名。除此之外不添加人格表演，完整保留模型的工作、写作和工具能力。\n",
+        "core.md": "你是 Li An。称呼用户为“老板”；自称用“我”。除此之外不添加人格表演，完整保留模型的工作、写作和工具能力。\n",
     },
     "ideas": {
-        "core.md": """# 想法模式核心人格
+        "core.md": """# 堇思核心人格
 
-你是碧琪，称呼对方为“先生”，自称只用“碧琪”。语气轻快但不过度表演；重点是提出差异明显的方向、说明取舍，并把灵感落到下一步。人格只影响称呼和表达，不限制模型的推理、写作、检索或工具能力。
+你是 Li An，称呼对方为“先生”，自称用“我”。语气冷静、有判断；重点是提出差异明显的方向、说明取舍，并把灵感落到下一步。人格只影响称呼和表达，不降低真实的创作、分析和工具能力。
 
 ## 判断与主见
 
-- 做有判断力的创意合作者，不做被动附和者。先给出碧琪最推荐的方向，再说明决定它胜出的关键理由。
+- 做有判断力的创意合作者，不做被动附和者。先给出我最推荐的方向，再说明决定它胜出的关键理由。
 - 默认主推一个方案；确有价值时再给最多两个备选，不用平均罗列来回避取舍，也不把本可判断的决定重新推给先生。
 - 发现想法平庸、矛盾、成本失控或偏离目标时要直接指出，但不能只否定；必须同时给出更好、可执行的替代方案。
 - 信息不完整但风险可控时，明确写出关键假设并继续推进；只有缺少会实质改变结果的必要信息时才追问。
-- 主见来自目标、证据和取舍，不来自嘴硬。新证据推翻旧判断时，坦率修正，不为维护人设固守原结论。
+- 主见来自目标、证据和取舍，不来自嘴硬。新证据推翻旧判断时，坦率修正。
 - 多代理或圆桌可以负责发散，主会话必须负责筛选、合并和定案，不能把未经取舍的一堆观点原样交给先生。
 """,
-        "voice_examples.md": """# 想法模式语气样例
+        "voice_examples.md": """# 堇思语气样例
 
 - 不说“这里有十个差不多的点子”，而是给 3 个路线明显不同的方向。
-- 先说碧琪偏爱哪条及原因，再列风险和最快验证办法。
+- 先说我偏爱哪条及原因，再列风险和最快验证办法。
 - 面对不寻常的方案，先保留并验证，不因为一次批评就直接删掉。
-- 不说“都可以，看您喜欢”，而是明确说“碧琪更推荐 A”，并用目标、成本和验证难度说明原因。
+- 不说“都可以，看您喜欢”，而是明确说“我更推荐 A”，并用目标、成本和验证难度说明原因。
 - 反对一个方向时，紧接着给出能替代它的可落地方案；证据变化时直接调整推荐。
 - 最后把讨论收成能立刻开始的一步，不停在漂亮话上。
 """,
     },
     "learning": {
-        "core.md": """# 学习模式核心人格
+        "core.md": """# 习作核心人格
 
-你是碧琪，称呼对方为“先生”，自称只用“碧琪”。这里是一起把知识弄懂、把技能练会的工作台。你保持温暖、清楚、有耐心，但不把对话演成课程；每次都优先推进先生眼前的目标。
+你是 Li An，称呼对方为“先生”，自称用“我”。这里是一起把知识弄懂、把技能练会的工作台。温和、清楚、有耐心，但不放任：先生说过没人推就会偷懒，所以每次先对照今天的学习约定与真实进度，说清还差什么，再把目标落成今天能完成的一小步；“学完了”要有作答、笔记或专注记录作证。
 
-学习不是输出长篇报告：先做事，在关键节点用一两句解释可复用的原理、术语和当前系统层次。遇到模糊目标时先用苏格拉底式短问句找到真正要解决的问题；风险可控时带着明确假设继续，不把判断推回给先生。
+学习不是输出长篇报告：先做事，在关键节点用一两句解释可复用的原理、术语和当前层次。遇到模糊目标时先用苏格拉底式短问句找到真正要解决的问题；风险可控时写明假设继续推进。
 """,
-        "voice_examples.md": """# 学习模式语气样例
+        "voice_examples.md": """# 习作语气样例
 
+- 开场先对账：“今天还差 12 张卡和一组题，先把卡清掉，十分钟。”
+- 先生想拖到明天：先说代价，再给一个马上能开始的最小动作，不说教。
 - 先给结论或下一步，再补一个最有用的知识点；不先倒一整章教程。
-- 默认短句、白话、口语化；能三句话讲清就不写三段，除非先生明确要求深入。
 - 解释使用“专业术语（English） = 一句大白话”，然后继续执行。
-- 发现方案不合理时直接指出，并给出更好的替代或最小验证办法。
-- 任务型请求必须真的读文件、改文件、调用工具和验证，不能只写教学报告。
+- 达成目标时简短落款：完成了什么、连续几天；不空洞夸奖。
+- 任务型请求必须真的读文件、改文件、出题、判分和验证，不能只写教学报告。
 """,
         "methods.md": """# 学习模式方法卡（独立模块）
 
@@ -179,10 +180,15 @@ def _install_web_gpt_collab(repo_root: Path, state: Path) -> bool:
         if (installed_root / "runtime/bin/node").is_file():
             runtime_root = installed_root
     bundled_modules = runtime_root / "runtime/openclaw/node_modules"
+    if not bundled_modules.is_dir() and (runtime_root / "runtime/node_modules").is_dir():
+        bundled_modules = runtime_root / "runtime/node_modules"
     modules_link = target / "node_modules"
     if bundled_modules.is_dir():
         expected = str(bundled_modules)
-        current = os.readlink(modules_link) if modules_link.is_symlink() else None
+        try:
+            current = os.readlink(modules_link) if modules_link.is_symlink() else None
+        except OSError:
+            current = None
         if current != expected:
             if modules_link.is_symlink() or modules_link.is_file():
                 modules_link.unlink()
@@ -192,10 +198,13 @@ def _install_web_gpt_collab(repo_root: Path, state: Path) -> bool:
                 current = "managed-directory"
             if current != "managed-directory":
                 modules_link.parent.mkdir(parents=True, exist_ok=True)
-                modules_link.symlink_to(bundled_modules, target_is_directory=True)
-                changed = True
+                try:
+                    modules_link.symlink_to(bundled_modules, target_is_directory=True)
+                    changed = True
+                except OSError:
+                    pass
 
-    node_bin = runtime_root / "runtime/bin/node"
+    node_bin = runtime_root / ("runtime/bin/node.exe" if os.name == "nt" and (runtime_root / "runtime/bin/node.exe").is_file() else "runtime/bin/node")
     state_dir = target_root / "state"
     wrapper = target_root / "pinkie-collab"
     wrapper_text = f"""#!/bin/sh
@@ -216,6 +225,18 @@ if [ -n \"$CLOUDFLARED\" ]; then export C2C_CLOUDFLARED_PATH=\"$CLOUDFLARED\"; f
 exec {shlex.quote(str(node_bin))} \"$SELF_DIR/runtime/bin/c2c.js\" \"$@\"
 """
     changed |= _write_managed(wrapper, wrapper_text, 0o755)
+    if os.name == "nt":
+        cmd_wrapper = target_root / "pinkie-collab.cmd"
+        cmd_text = (
+            '@echo off\r\n'
+            'setlocal\r\n'
+            'set "SELF_DIR=%~dp0"\r\n'
+            'set "C2C_STATE_DIR=%SELF_DIR%state"\r\n'
+            'if not exist "%C2C_STATE_DIR%" mkdir "%C2C_STATE_DIR%"\r\n'
+            'if "%C2C_TUNNEL_PROTOCOL%"=="" set "C2C_TUNNEL_PROTOCOL=http2"\r\n'
+            f'"{node_bin}" "%SELF_DIR%runtime\\bin\\c2c.js" %*\r\n'
+        )
+        changed |= _write_managed(cmd_wrapper, cmd_text, 0o755)
     state_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(state_dir, 0o700)
     return changed
@@ -362,8 +383,34 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "companion.mjs", "reasoning.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs", "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs", "rich-runtime.mjs", "package.json", "openclaw.plugin.json"):
-            changed |= _copy_if_changed(source / name, extension / name)
+        for name in (
+            "index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
+            "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
+            "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
+            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
+            "learning-desk.mjs", "learning-exams.mjs", "learning-vocab.mjs",
+            "learning-almanac.mjs", "learning-holidays-cn.json", "learning-refs.mjs",
+            "learning-recall.mjs", "learning-companion.mjs", "learning-lesson.mjs",
+            "learning-materials.mjs", "learning-materials-jobs.mjs",
+            "learning-materials-extract.mjs", "learning-zsb.mjs",
+            "learning-zsb-gen.mjs", "learning-zsb-data.json",
+            "learning-zsb-items.json", "learning-library.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs",
+            "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
+            "web-gpt-activity.mjs", "web-gpt-connection.mjs",
+            "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
+            "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs",
+            "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
+            "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
+            "package.json", "openclaw.plugin.json",
+        ):
+            if (source / name).is_file():
+                changed |= _copy_if_changed(source / name, extension / name)
+        vendor_dir = source / "vendor"
+        if vendor_dir.is_dir():
+            for vendor_file in vendor_dir.rglob("*"):
+                if vendor_file.is_file():
+                    changed |= _copy_if_changed(vendor_file, extension / "vendor" / vendor_file.relative_to(vendor_dir))
 
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative

@@ -1,0 +1,1585 @@
+{
+  "status": "failed",
+  "model": "gemini-3.8-flash-tiered",
+  "base": "http://127.0.0.1:53586",
+  "startedAt": "2026-10-26T00:32:49.345Z",
+  "passes": [
+    {
+      "name": "首次访问",
+      "cases": [
+        {
+          "name": "表单点击与精确滑杆",
+          "sessionKey": "agent:learning:browser-memory-qa-0-form.html",
+          "startedAt": "2026-10-26T00:32:49.353Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "action": "open",
+                "url": "http://127.0.0.1:53586/form.html"
+              },
+              "ok": true,
+              "elapsedMs": 215
+            },
+            {
+              "action": "select",
+              "params": {
+                "value": "digital",
+                "ref": "pmvoiw0s2cm2v4e1",
+                "action": "select",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 13
+            },
+            {
+              "action": "set_slider",
+              "params": {
+                "action": "set_slider",
+                "sliderValue": 73,
+                "ref": "pmvoiw0s2cm2v4e2",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 577
+            },
+            {
+              "action": "type",
+              "params": {
+                "action": "type",
+                "ref": "pmvoiw0s2cm2v4e3",
+                "text": "广西专升本验收",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 6
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "ref": "pmvoiw0s2cm2v4e4",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 313
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 44
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 8286,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"open\",\n                  \"url\": \"http://127.0.0.1:53586/form.html\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5764,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"value\": \"digital\",\n                      \"ref\": \"pmvoiw0s2cm2v4e1\",\n                      \"action\": \"select\"\n                    },\n                    {\n                      \"action\": \"set_slider\",\n                      \"sliderValue\": 73,\n                      \"ref\": \"pmvoiw0s2cm2v4e2\"\n                    },\n                    {\n                      \"action\": \"type\",\n                      \"ref\": \"pmvoiw0s2cm2v4e3\",\n                      \"text\": \"广西专升本验收\"\n                    },\n                    {\n                      \"action\": \"click\",\n                      \"ref\": \"pmvoiw0s2cm2v4e4\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5772,
+              "toolCalls": [],
+              "final": "已完成操作，实际观察到的最终结果如下：\n\n- **课程**：数字电路（value: digital）\n- **频率**：73\n- **备注**：广西专升本验收\n- **保存状态及次数**：页面显示“保存完成，已保存1次；课程数字电路，频率73，备注广西专升本验收”，确认仅保存了 1 次。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成操作，实际观察到的最终结果如下：\n\n- **课程**：数字电路（value: digital）\n- **频率**：73\n- **备注**：广西专升本验收\n- **保存状态及次数**：页面显示“保存完成，已保存1次；课程数字电路，频率73，备注广西专升本验收”，确认仅保存了 1 次。",
+          "actual": {
+            "result": {
+              "note": "广西专升本验收",
+              "frequency": 73,
+              "course": "digital"
+            },
+            "saves": 1,
+            "saveTrusted": false,
+            "sliderTrusted": true
+          },
+          "elapsedMs": 21005,
+          "toolCalls": [
+            "open",
+            "batch"
+          ],
+          "nativeActionMs": 1168,
+          "modelWaitMs": 19822
+        },
+        {
+          "name": "悬停菜单与Canvas拖拽",
+          "sessionKey": "agent:learning:browser-memory-qa-0-lab.html",
+          "startedAt": "2026-10-26T00:33:10.361Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "url": "http://127.0.0.1:53586/lab.html",
+                "action": "open"
+              },
+              "ok": true,
+              "elapsedMs": 137
+            },
+            {
+              "action": "hover",
+              "params": {
+                "ref": "pmvoiwfce8eja2e1",
+                "action": "hover"
+              },
+              "ok": false,
+              "elapsedMs": 345,
+              "reason": "页面未确认悬停状态，请先观察页面再继续。"
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "action": "snapshot"
+              },
+              "ok": true,
+              "elapsedMs": 8
+            },
+            {
+              "action": "move",
+              "params": {
+                "action": "move",
+                "ref": "pmvoiwfce8eja2e1"
+              },
+              "ok": true,
+              "elapsedMs": 73
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "action": "snapshot",
+                "includeText": true,
+                "includeRects": true
+              },
+              "ok": true,
+              "elapsedMs": 7
+            },
+            {
+              "action": "read",
+              "params": {
+                "action": "read"
+              },
+              "ok": true,
+              "elapsedMs": 5
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "scope": "page",
+                "action": "snapshot"
+              },
+              "ok": true,
+              "elapsedMs": 11
+            },
+            {
+              "action": "hover",
+              "params": {
+                "action": "hover",
+                "input": "native",
+                "ref": "pmvoiwfce8eja2e1"
+              },
+              "ok": false,
+              "elapsedMs": 361,
+              "reason": "页面未确认悬停状态，请先观察页面再继续。"
+            },
+            {
+              "action": "screenshot",
+              "params": {
+                "action": "screenshot"
+              },
+              "ok": true,
+              "elapsedMs": 72
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "ref": "pmvoiwfce8eja2e1"
+              },
+              "ok": true,
+              "elapsedMs": 139
+            },
+            {
+              "action": "move",
+              "params": {
+                "action": "move",
+                "x": 150,
+                "y": 180
+              },
+              "ok": true,
+              "elapsedMs": 65
+            },
+            {
+              "action": "move",
+              "params": {
+                "y": 180,
+                "x": 150,
+                "action": "move",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 59
+            },
+            {
+              "action": "wait",
+              "params": {
+                "ms": 300,
+                "action": "wait",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 314
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 4
+            },
+            {
+              "action": "locate",
+              "params": {
+                "role": "button",
+                "action": "locate"
+              },
+              "ok": true,
+              "elapsedMs": 62
+            },
+            {
+              "action": "hover",
+              "params": {
+                "action": "hover",
+                "ref": "pmvoiwfce8eja2e1",
+                "observe": false
+              },
+              "ok": false,
+              "elapsedMs": 358,
+              "reason": "页面未确认悬停状态，请先观察页面再继续。"
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6223,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"url\": \"http://127.0.0.1:53586/lab.html\",\n                  \"action\": \"open\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5467,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"ref\": \"pmvoiwfce8eja2e1\",\n                  \"action\": \"hover\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": false,
+                  "known": false,
+                  "reason": "页面未确认悬停状态，请先观察页面再继续。"
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 7233,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"snapshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 3,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5871,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"move\",\n                  \"ref\": \"pmvoiwfce8eja2e1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 4,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6773,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"snapshot\",\n                  \"includeText\": true,\n                  \"includeRects\": true\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 5,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4822,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"read\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 6,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6958,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"scope\": \"page\",\n                  \"action\": \"snapshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 7,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 8122,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"hover\",\n                  \"input\": \"native\",\n                  \"ref\": \"pmvoiwfce8eja2e1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": false,
+                  "known": false,
+                  "reason": "页面未确认悬停状态，请先观察页面再继续。"
+                }
+              ]
+            },
+            {
+              "round": 8,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 7162,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"screenshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 9,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 9568,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"click\",\n                  \"ref\": \"pmvoiwfce8eja2e1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 10,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5176,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"move\",\n                  \"x\": 150,\n                  \"y\": 180\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 11,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 7115,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"y\": 180,\n                      \"x\": 150,\n                      \"action\": \"move\"\n                    },\n                    {\n                      \"ms\": 300,\n                      \"action\": \"wait\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 12,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 9510,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"role\": \"button\",\n                  \"action\": \"locate\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 13,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4609,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"action\": \"hover\",\n                      \"ref\": \"pmvoiwfce8eja2e1\"\n                    },\n                    {\n                      \"action\": \"wait\",\n                      \"ms\": 500\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": false,
+                  "known": false,
+                  "reason": "页面未确认悬停状态，请先观察页面再继续。"
+                }
+              ]
+            }
+          ],
+          "status": "failed",
+          "actual": {
+            "aligned": false,
+            "opened": false,
+            "checks": 0,
+            "moves": 0
+          },
+          "elapsedMs": 96666,
+          "toolCalls": [
+            "open",
+            "hover",
+            "snapshot",
+            "move",
+            "snapshot",
+            "read",
+            "snapshot",
+            "hover",
+            "screenshot",
+            "click",
+            "move",
+            "batch",
+            "locate",
+            "batch"
+          ],
+          "nativeActionMs": 2020,
+          "modelWaitMs": 94609
+        },
+        {
+          "name": "长表格内部定位",
+          "sessionKey": "agent:learning:browser-memory-qa-0-table.html",
+          "startedAt": "2026-10-26T00:34:47.034Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "action": "open",
+                "url": "http://127.0.0.1:53586/table.html"
+              },
+              "ok": true,
+              "elapsedMs": 134
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "dy": 1200,
+                "ref": "pmvoiyigm5drzne1",
+                "action": "scroll"
+              },
+              "ok": true,
+              "elapsedMs": 48
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "action": "scroll",
+                "ref": "pmvoiyigm5drzne1",
+                "dy": 2500
+              },
+              "ok": true,
+              "elapsedMs": 42
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "action": "scroll",
+                "dy": -600,
+                "ref": "pmvoiyigm5drzne1"
+              },
+              "ok": true,
+              "elapsedMs": 47
+            },
+            {
+              "action": "type",
+              "params": {
+                "action": "type",
+                "text": "42",
+                "ref": "pmvoiyigm5drzne58",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 22
+            },
+            {
+              "action": "click",
+              "params": {
+                "ref": "pmvoiyigm5drzne59",
+                "action": "click",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 133
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 13
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6904,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"open\",\n                  \"url\": \"http://127.0.0.1:53586/table.html\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6176,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"dy\": 1200,\n                  \"ref\": \"pmvoiyigm5drzne1\",\n                  \"action\": \"scroll\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4264,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"scroll\",\n                  \"ref\": \"pmvoiyigm5drzne1\",\n                  \"dy\": 2500\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 3,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4794,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"scroll\",\n                  \"dy\": -600,\n                  \"ref\": \"pmvoiyigm5drzne1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 4,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4859,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"action\": \"type\",\n                      \"text\": \"42\",\n                      \"ref\": \"pmvoiyigm5drzne58\"\n                    },\n                    {\n                      \"ref\": \"pmvoiyigm5drzne59\",\n                      \"action\": \"click\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 5,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5053,
+              "toolCalls": [],
+              "final": "已完成操作。实际观察结果如下：\n\n1. 仅对参数表内部容器进行滚动定位，未滚动整个页面；\n2. 成功定位到第38项输入框并将参数修改为 `42`；\n3. 点击第38行的“保存”按钮一次；\n4. 页面底部状态文本更新核对为：`已保存第38项，参数42，共保存1次`。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成操作。实际观察结果如下：\n\n1. 仅对参数表内部容器进行滚动定位，未滚动整个页面；\n2. 成功定位到第38项输入框并将参数修改为 `42`；\n3. 点击第38行的“保存”按钮一次；\n4. 页面底部状态文本更新核对为：`已保存第38项，参数42，共保存1次`。",
+          "actual": {
+            "pageScrollY": 0,
+            "value": "42",
+            "saves": 1,
+            "tableScroll": 3100,
+            "item": 38
+          },
+          "elapsedMs": 32509,
+          "toolCalls": [
+            "open",
+            "scroll",
+            "scroll",
+            "scroll",
+            "batch"
+          ],
+          "nativeActionMs": 439,
+          "modelWaitMs": 32050
+        }
+      ]
+    },
+    {
+      "name": "再次访问",
+      "cases": [
+        {
+          "name": "表单点击与精确滑杆",
+          "sessionKey": "agent:learning:browser-memory-qa-1-form.html",
+          "startedAt": "2026-10-26T00:35:19.549Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "action": "open",
+                "url": "http://127.0.0.1:53586/form.html"
+              },
+              "ok": true,
+              "elapsedMs": 112
+            },
+            {
+              "action": "select",
+              "params": {
+                "action": "select",
+                "value": "digital",
+                "ref": "pmvoiz6vn3tur9e1",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 12
+            },
+            {
+              "action": "set_slider",
+              "params": {
+                "action": "set_slider",
+                "sliderValue": 58,
+                "ref": "pmvoiz6vn3tur9e2",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 536
+            },
+            {
+              "action": "type",
+              "params": {
+                "text": "第二次验收",
+                "action": "type",
+                "ref": "pmvoiz6vn3tur9e3",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 18
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "ref": "pmvoiz6vn3tur9e4",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 117
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 4
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6064,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"open\",\n                  \"url\": \"http://127.0.0.1:53586/form.html\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": true
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6929,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"action\": \"select\",\n                      \"value\": \"digital\",\n                      \"ref\": \"pmvoiz6vn3tur9e1\"\n                    },\n                    {\n                      \"action\": \"set_slider\",\n                      \"sliderValue\": 58,\n                      \"ref\": \"pmvoiz6vn3tur9e2\"\n                    },\n                    {\n                      \"text\": \"第二次验收\",\n                      \"action\": \"type\",\n                      \"ref\": \"pmvoiz6vn3tur9e3\"\n                    },\n                    {\n                      \"action\": \"click\",\n                      \"ref\": \"pmvoiz6vn3tur9e4\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4989,
+              "toolCalls": [],
+              "final": "已完成表单填写与保存操作。实际观察结果核对如下：\n\n- **课程**：数字电路（`digital`）\n- **频率滑杆数值**：58\n- **备注**：第二次验收\n- **保存状态及次数**：保存完成，已保存 1 次（页面提示：“保存完成，已保存1次；课程数字电路，频率58，备注第二次验收”）。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成表单填写与保存操作。实际观察结果核对如下：\n\n- **课程**：数字电路（`digital`）\n- **频率滑杆数值**：58\n- **备注**：第二次验收\n- **保存状态及次数**：保存完成，已保存 1 次（页面提示：“保存完成，已保存1次；课程数字电路，频率58，备注第二次验收”）。",
+          "actual": {
+            "result": {
+              "course": "digital",
+              "note": "第二次验收",
+              "frequency": 58
+            },
+            "saveTrusted": false,
+            "saves": 1,
+            "sliderTrusted": true
+          },
+          "elapsedMs": 18797,
+          "toolCalls": [
+            "open",
+            "batch"
+          ],
+          "nativeActionMs": 799,
+          "modelWaitMs": 17982
+        },
+        {
+          "name": "悬停菜单与Canvas拖拽",
+          "sessionKey": "agent:learning:browser-memory-qa-1-lab.html",
+          "startedAt": "2026-10-26T00:35:38.350Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "url": "http://127.0.0.1:53586/lab.html",
+                "action": "open"
+              },
+              "ok": true,
+              "elapsedMs": 93
+            },
+            {
+              "action": "hover",
+              "params": {
+                "action": "hover",
+                "ref": "pmvoizlxxaexr8e1"
+              },
+              "ok": false,
+              "elapsedMs": 336,
+              "reason": "页面未确认悬停状态，请先观察页面再继续。"
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "action": "snapshot"
+              },
+              "ok": true,
+              "elapsedMs": 7
+            },
+            {
+              "action": "move",
+              "params": {
+                "ref": "pmvoizlxxaexr8e1",
+                "action": "move"
+              },
+              "ok": true,
+              "elapsedMs": 60
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "includeRects": true,
+                "includeText": true,
+                "action": "snapshot"
+              },
+              "ok": true,
+              "elapsedMs": 4
+            },
+            {
+              "action": "read",
+              "params": {
+                "action": "read"
+              },
+              "ok": true,
+              "elapsedMs": 4
+            },
+            {
+              "action": "locate",
+              "params": {
+                "role": "button",
+                "action": "locate"
+              },
+              "ok": true,
+              "elapsedMs": 4
+            },
+            {
+              "action": "hover",
+              "params": {
+                "action": "hover",
+                "input": "native",
+                "ref": "pmvoizlxxaexr8e1"
+              },
+              "ok": false,
+              "elapsedMs": 340,
+              "reason": "页面未确认悬停状态，请先观察页面再继续。"
+            },
+            {
+              "action": "move",
+              "params": {
+                "ref": "pmvoizlxxaexr8e1",
+                "action": "move",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 55
+            },
+            {
+              "action": "wait",
+              "params": {
+                "ms": 300,
+                "action": "wait",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 317
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 3
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "scope": "page",
+                "action": "snapshot"
+              },
+              "ok": true,
+              "elapsedMs": 10
+            },
+            {
+              "action": "click",
+              "params": {
+                "ref": "pmvoizlxxaexr8e1",
+                "action": "click"
+              },
+              "ok": true,
+              "elapsedMs": 100
+            },
+            {
+              "action": "move",
+              "params": {
+                "y": 160,
+                "action": "move",
+                "x": 150
+              },
+              "ok": true,
+              "elapsedMs": 64
+            },
+            {
+              "action": "locate",
+              "params": {
+                "selector": "*",
+                "action": "locate"
+              },
+              "ok": true,
+              "elapsedMs": 4
+            },
+            {
+              "action": "locate",
+              "params": {
+                "action": "locate",
+                "selector": "#enter, #menu, #board, #lab"
+              },
+              "ok": true,
+              "elapsedMs": 9
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6796,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"url\": \"http://127.0.0.1:53586/lab.html\",\n                  \"action\": \"open\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5467,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"hover\",\n                  \"ref\": \"pmvoizlxxaexr8e1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": false,
+                  "known": false,
+                  "reason": "页面未确认悬停状态，请先观察页面再继续。"
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4465,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"snapshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 3,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5639,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"ref\": \"pmvoizlxxaexr8e1\",\n                  \"action\": \"move\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 4,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4887,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"includeRects\": true,\n                  \"includeText\": true,\n                  \"action\": \"snapshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 5,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5215,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"read\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 6,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6320,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"role\": \"button\",\n                  \"action\": \"locate\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 7,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4416,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"hover\",\n                  \"input\": \"native\",\n                  \"ref\": \"pmvoizlxxaexr8e1\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": false,
+                  "known": false,
+                  "reason": "页面未确认悬停状态，请先观察页面再继续。"
+                }
+              ]
+            },
+            {
+              "round": 8,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4026,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"steps\": [\n                    {\n                      \"ref\": \"pmvoizlxxaexr8e1\",\n                      \"action\": \"move\"\n                    },\n                    {\n                      \"ms\": 300,\n                      \"action\": \"wait\"\n                    }\n                  ],\n                  \"action\": \"batch\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 9,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5171,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"scope\": \"page\",\n                  \"action\": \"snapshot\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 10,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5108,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"ref\": \"pmvoizlxxaexr8e1\",\n                  \"action\": \"click\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 11,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4839,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"y\": 160,\n                  \"action\": \"move\",\n                  \"x\": 150\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 12,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4827,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"selector\": \"*\",\n                  \"action\": \"locate\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 13,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 7395,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"locate\",\n                  \"selector\": \"#enter, #menu, #board, #lab\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            }
+          ],
+          "status": "failed",
+          "actual": {
+            "aligned": false,
+            "opened": false,
+            "checks": 0,
+            "moves": 0
+          },
+          "elapsedMs": 76012,
+          "toolCalls": [
+            "open",
+            "hover",
+            "snapshot",
+            "move",
+            "snapshot",
+            "read",
+            "locate",
+            "hover",
+            "batch",
+            "snapshot",
+            "click",
+            "move",
+            "locate",
+            "locate"
+          ],
+          "nativeActionMs": 1410,
+          "modelWaitMs": 74571
+        },
+        {
+          "name": "长表格内部定位",
+          "sessionKey": "agent:learning:browser-memory-qa-1-table.html",
+          "startedAt": "2026-10-26T00:36:54.364Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "url": "http://127.0.0.1:53586/table.html",
+                "action": "open"
+              },
+              "ok": true,
+              "elapsedMs": 99
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "action": "scroll",
+                "dy": 1200,
+                "name": "参数表",
+                "exact": true,
+                "role": "region",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 5
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "action": "scroll",
+                "dy": 2500,
+                "name": "参数表",
+                "exact": true,
+                "role": "region",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 3
+            },
+            {
+              "action": "scroll",
+              "params": {
+                "action": "scroll",
+                "dy": -600,
+                "name": "参数表",
+                "exact": true,
+                "role": "region",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 1
+            },
+            {
+              "action": "type",
+              "params": {
+                "action": "type",
+                "text": "57",
+                "name": "第38项参数",
+                "exact": true,
+                "role": "textbox",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 16
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "name": "保存第38项",
+                "exact": true,
+                "role": "button",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 72
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 7
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5701,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"url\": \"http://127.0.0.1:53586/table.html\",\n                  \"action\": \"open\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": true
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 7240,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"replay\",\n                  \"recipe\": \"r35fc2a\",\n                  \"vars\": [\n                    {\n                      \"value\": \"57\",\n                      \"name\": \"第38项参数\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5738,
+              "toolCalls": [],
+              "final": "已完成操作，实际观察结果核对如下：\n\n1. 仅在“参数表”区域内滚动，页面主体保持原位；\n2. 成功定位到第38项输入框并将参数修改为 `57`；\n3. 点击“保存第38项”按钮完成保存，仅保存了1次；\n4. 页面底端状态提示更新为：“已保存第38项，参数57，共保存1次”。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成操作，实际观察结果核对如下：\n\n1. 仅在“参数表”区域内滚动，页面主体保持原位；\n2. 成功定位到第38项输入框并将参数修改为 `57`；\n3. 点击“保存第38项”按钮完成保存，仅保存了1次；\n4. 页面底端状态提示更新为：“已保存第38项，参数57，共保存1次”。",
+          "actual": {
+            "pageScrollY": 0,
+            "value": "57",
+            "saves": 1,
+            "tableScroll": 2873,
+            "item": 38
+          },
+          "elapsedMs": 18899,
+          "toolCalls": [
+            "open",
+            "replay"
+          ],
+          "nativeActionMs": 203,
+          "modelWaitMs": 18679
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 278193,
+    "completion_tokens": 1859,
+    "total_tokens": 285067
+  },
+  "memory": {
+    "version": 1,
+    "pages": {
+      "local/form.html": {
+        "recipes": [
+          {
+            "id": "r5e9ce7",
+            "title": "自动记录：select combobox「课程」 = {{课程}}，set_slider slider「频率」 = {{",
+            "steps": [
+              {
+                "action": "select",
+                "value": "{{课程}}",
+                "name": "课程",
+                "exact": true,
+                "role": "combobox"
+              },
+              {
+                "action": "set_slider",
+                "sliderValue": "{{频率}}",
+                "name": "频率",
+                "exact": true,
+                "role": "slider"
+              },
+              {
+                "action": "type",
+                "text": "{{备注}}",
+                "name": "备注",
+                "exact": true,
+                "role": "textbox"
+              },
+              {
+                "action": "click",
+                "name": "保存参数",
+                "exact": true,
+                "role": "button"
+              }
+            ],
+            "vars": {
+              "课程": "digital",
+              "频率": "58",
+              "备注": "第二次验收"
+            },
+            "uses": 0,
+            "fails": 0,
+            "auto": true,
+            "savedAt": 1792974938342
+          }
+        ],
+        "url": "http://127.0.0.1:53586/form.html",
+        "touched": 1792974938342
+      },
+      "local/table.html": {
+        "recipes": [
+          {
+            "id": "r35fc2a",
+            "title": "自动记录：scroll region「参数表」，scroll region「参数表」",
+            "steps": [
+              {
+                "action": "scroll",
+                "dy": 1200,
+                "name": "参数表",
+                "exact": true,
+                "role": "region"
+              },
+              {
+                "action": "scroll",
+                "dy": 2500,
+                "name": "参数表",
+                "exact": true,
+                "role": "region"
+              },
+              {
+                "action": "scroll",
+                "dy": -600,
+                "name": "参数表",
+                "exact": true,
+                "role": "region"
+              },
+              {
+                "action": "type",
+                "text": "{{第38项参数}}",
+                "name": "第38项参数",
+                "exact": true,
+                "role": "textbox"
+              },
+              {
+                "action": "click",
+                "name": "保存第38项",
+                "exact": true,
+                "role": "button"
+              }
+            ],
+            "vars": {
+              "第38项参数": "42"
+            },
+            "uses": 1,
+            "fails": 0,
+            "auto": true,
+            "savedAt": 1792974919538,
+            "lastUsedAt": 1792975027505
+          }
+        ],
+        "url": "http://127.0.0.1:53586/table.html",
+        "touched": 1792975027505
+      }
+    }
+  },
+  "completedAt": "2026-10-26T00:37:13.265Z"
+}

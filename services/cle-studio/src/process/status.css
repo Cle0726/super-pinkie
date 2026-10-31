@@ -1,0 +1,202 @@
+/* The live status line. Transform/opacity only. */
+html[data-cle] .chat-working-indicator:has(> .cle-status) > :not(.cle-status) { display: none !important; }
+.cle-status { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--cle-ink-2); }
+.cle-status__glyph { display: inline-block; width: 84px; height: 44px; flex: 0 0 84px; margin-left: -8px; }
+.cle-status__particles { display: block; position: relative; width: 84px; height: 44px; font: italic 16px/44px var(--cle-serif); color: var(--cle-ink); }
+.cle-status__verb {
+  font: italic 400 15px/1 var(--cle-serif); letter-spacing: .08em; color: var(--cle-ink);
+  background: linear-gradient(100deg, var(--cle-ink) 0%, var(--cle-ink) 38%, var(--cle-gold) 46%, color-mix(in srgb, var(--cle-gaze) 70%, var(--cle-paper)) 52%, var(--cle-ink) 60%, var(--cle-ink) 100%);
+  background-size: 260% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: cle-sheen 2.8s linear infinite;
+}
+.cle-status__verb.is-new { animation: cle-sheen 2.8s linear infinite, cle-verb-in var(--cle-t-base) var(--cle-ease) 1; }
+@keyframes cle-sheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+@keyframes cle-verb-in { from { opacity: 0; translate: 0 3px; } }
+.cle-status__chip {
+  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 11px/1 var(--cle-mono); color: var(--cle-ink-2);
+  padding: 4px 7px; border-radius: 6px; background: color-mix(in srgb, var(--cle-ink) 6%, transparent);
+}
+.cle-status__time { font: 400 11px/1 var(--cle-mono); color: var(--cle-ink-3); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .cle-status__verb { animation: none !important; } }
+
+/* ---------- reading column ----------
+   One measure for what you read and what you type. The transcript and the composer both read
+   --chat-thread-max-width, so the left edge of a reply lands on the left edge of the textarea;
+   nothing is stretched across a 1366px conversation, and narrow panes keep their own width. */
+html[data-cle] {
+  --cle-read-column: 54rem;   /* 864px — inside the 760–880 comfort band */
+  --cle-read-gutter: 18px;
+}
+html[data-cle] .chat {
+  --chat-thread-max-width: var(--cle-read-column);
+  --chat-thread-gutter: var(--cle-read-gutter);
+  --chat-composer-side-inset: 0px;
+}
+/* The “jump to bottom” coin floats over the transcript's last line. The scroll container is
+   .chat-thread, which declares its own bottom padding — inheriting a value from .chat would be
+   ignored, so the reserve is set on the scrolling element itself. */
+html[data-cle] .chat-thread,
+html[data-cle] .chat-thread-viewport {
+  --chat-thread-padding-bottom: calc(8px + var(--chat-transcript-fade-height, 24px) + 36px);
+}
+html[data-cle] .chat-thread-inner { max-width: var(--chat-thread-max-width); }
+html[data-cle] .agent-chat__composer-shell,
+html[data-cle] .chat-footer > openclaw-plugin-view > .chat-footer__context {
+  max-width: var(--chat-thread-max-width);
+  width: 100%;
+}
+
+/* ---------- the transcript: words on the canvas, no bubbles (as in the original app) ----------
+   The native group is a two-column grid (avatar gutter + content) whenever it carries a footer.
+   Hiding the avatar alone leaves the content in column 2 and the empty column 1 behind it — that
+   is where the 332px + 370px layout came from. Collapse the grid itself: one column, content in
+   column 1, no avatar gutter, and let the messages take the whole reading column. */
+html[data-cle] .chat-group {
+  --chat-avatar-column: 0px;
+  --chat-avatar-gap: 0px;
+  --chat-avatar-gutter: 0px;
+  --chat-group-avatar-column: 1;
+  --chat-group-content-column: 1;
+  --chat-message-column-max: 100%;
+  margin-inline: 0;
+  min-width: 0;
+}
+html[data-cle] .chat-group.chat-group--with-footer {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0;
+  justify-content: stretch;
+}
+html[data-cle] .chat-group.chat-group--with-footer > :is(.chat-avatar, .chat-avatar-slot) { display: none !important; }
+html[data-cle] .chat-group > .chat-group-messages,
+html[data-cle] .chat-group.chat-group--with-footer > .chat-group-messages {
+  grid-column: 1 / -1; grid-row: 1;
+  width: 100%; max-width: 100%; min-width: 0;
+  margin: 0;
+}
+html[data-cle] .chat-group > .chat-group-footer,
+html[data-cle] .chat-group.chat-group--with-footer > .chat-group-footer {
+  grid-column: 1 / -1; grid-row: 2;
+  width: 100%; max-width: 100%; margin: 0;
+}
+html[data-cle] .chat-avatar-slot, html[data-cle] .chat-group > .chat-avatar { display: none !important; }
+
+html[data-cle] .chat-group .chat-bubble:not(.chat-bubble--tool-shell):not(.chat-reading-indicator) {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important;
+}
+html[data-cle] .chat-group.assistant .chat-bubble { width: 100% !important; max-width: 100% !important; }
+html[data-cle] .chat-group .chat-text { min-width: 0; max-width: 100%; }
+
+/* ---------- typography: one hierarchy for every room ---------- */
+html[data-cle] .chat-group.assistant .chat-text {
+  font: 400 16px/1.75 var(--cle-sans) !important; color: var(--cle-ink); letter-spacing: .002em; text-wrap: pretty;
+}
+/* The room is per pane. In 双模式 one side can be 习作 while the other is 营造; keying type on
+   html[data-cle-room] changed both sides when focus moved. composer/panes.js stamps each pane
+   with the room of its own session. */
+html[data-cle] .chat-pane-cache__pane[data-cle-pane-room="learning"] .chat-group.assistant .chat-text {
+  font-size: 16.5px !important; line-height: 1.8 !important;
+}
+html[data-cle] .chat-group .chat-text p { margin: 0 0 .8em !important; }
+html[data-cle] .chat-group .chat-text > :first-child { margin-top: 0 !important; }
+html[data-cle] .chat-group .chat-text > :last-child { margin-bottom: 0 !important; }
+html[data-cle] .chat-group .chat-text :is(strong, b) { font-weight: 600; color: var(--cle-ink); }
+html[data-cle] .chat-group .chat-text :is(em, i) { font-style: italic; }
+html[data-cle] .chat-group .chat-text :is(h1, h2, h3, h4) {
+  font-family: var(--cle-serif); font-weight: 600; line-height: 1.4;
+  margin: 1.35em 0 .55em !important; letter-spacing: .02em; color: var(--cle-ink);
+}
+html[data-cle] .chat-group .chat-text h1 { font-size: 1.3em; }
+html[data-cle] .chat-group .chat-text h2 { font-size: 1.16em; }
+html[data-cle] .chat-group .chat-text h3 { font-size: 1.04em; }
+html[data-cle] .chat-group .chat-text :is(ul, ol) { margin: .2em 0 .9em !important; padding-left: 1.4em !important; }
+html[data-cle] .chat-group .chat-text li { margin: .28em 0 !important; }
+html[data-cle] .chat-group .chat-text li::marker { color: var(--cle-gold); }
+html[data-cle] .chat-group .chat-text hr { border: 0; height: 1px; margin: 1.4em 0; background: linear-gradient(90deg, transparent, var(--cle-gold-soft) 15% 85%, transparent); }
+html[data-cle] .chat-group .chat-text blockquote { margin: 1em 0; padding: 0 0 0 16px; border-left: 1px solid var(--cle-gold-soft); color: var(--cle-ink-2); font-family: var(--cle-serif); font-style: italic; }
+html[data-cle] .chat-group .chat-text a { color: var(--cle-gaze); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--cle-gaze) 35%, transparent); }
+html[data-cle] .chat-group .chat-text :not(pre) > code { font: 400 .86em/1.5 var(--cle-mono); padding: .12em .38em; border-radius: 5px; background: color-mix(in srgb, var(--cle-ink) 6%, transparent); color: var(--cle-ink); }
+
+/* long content never pushes the column wider: code, tables, media and embeds scroll inside it */
+html[data-cle] .chat-group .chat-text pre,
+html[data-cle] .chat-group .chat-bubble pre {
+  max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+  background: var(--cle-surface) !important; border: 1px solid var(--cle-line);
+  border-radius: var(--cle-radius-card); padding: 14px 16px !important;
+  font: 400 13px/1.65 var(--cle-mono);
+}
+html[data-cle] .chat-group .chat-text table,
+html[data-cle] .chat-group .chat-text .markdown-table {
+  display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+  border-collapse: collapse; font-size: 14.5px; margin: .6em 0 1em;
+}
+html[data-cle] .chat-group .chat-text :is(th, td) { border: 0; border-bottom: 1px solid var(--cle-line); padding: 9px 14px 9px 0; text-align: left; vertical-align: top; }
+html[data-cle] .chat-group .chat-text th { font: 500 12px/1.35 var(--cle-sans); letter-spacing: .06em; color: var(--cle-ink-2); border-bottom-color: var(--cle-line-strong); }
+html[data-cle] .chat-group .chat-text :is(img, video, svg, canvas, iframe) { max-width: 100%; height: auto; }
+html[data-cle] .chat-group .chat-text :is(openclaw-embed, openclaw-chart, .chat-tool-card, .pinkie-process, .laolao-learning-stage) { max-width: 100%; min-width: 0; }
+
+/* the user's own words: right-aligned block, but the paragraph itself reads left to right */
+html[data-cle] .chat-group.user { justify-content: flex-end; }
+html[data-cle] .chat-group.user > .chat-group-messages { max-width: min(100%, 46rem) !important; margin-left: auto; align-items: flex-end; }
+html[data-cle] .chat-group.user .chat-group-messages > .chat-bubble.chat-bubble:not(.chat-bubble--tool-shell) { padding: 2px 14px 2px 0 !important; border-right: 1px solid var(--cle-gold-soft) !important; }
+html[data-cle] .chat-group.user .chat-text {
+  font: 400 15.5px/1.7 var(--cle-sans) !important; color: var(--cle-ink-2) !important;
+  text-align: start; text-wrap: pretty;
+}
+html[data-cle] .chat-group.user .chat-text p { margin: 0 0 .5em !important; }
+html[data-cle] .chat-group.user .chat-text p:last-child { margin: 0 !important; }
+
+/* meta lines (model chip, timestamps, tool summaries) stay legible on paper and at night */
+html[data-cle] .chat-group-footer, html[data-cle] .chat-group-timestamp { color: var(--cle-ink-2); }
+html[data-cle] .chat-group .chat-text small, html[data-cle] .chat-bubble small { color: var(--cle-ink-2); font-size: 13px; }
+
+/* message actions only when you reach for them */
+html[data-cle] .chat-group-footer { opacity: 0; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .chat-group:hover .chat-group-footer,
+html[data-cle] .chat-group:focus-within .chat-group-footer,
+html[data-cle] .chat-group-footer:has(.msg-meta[open]) { opacity: 1; }
+html[data-cle] .chat-sender-name { display: none; }
+
+/* the activity group: narration and tool rows as part of the text, Claude-Code style */
+html[data-cle] .chat-activity-group__summary { font: 400 12.5px/1.35 var(--cle-sans) !important; color: var(--cle-ink-2) !important; letter-spacing: .02em; }
+html[data-cle] .chat-pane-cache__pane--active .chat-activity-group { border-color: var(--cle-line) !important; }
+
+/* message position rail: there when you reach for it, never under the text */
+html[data-cle] .chat-position-rail { opacity: .18; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .chat-position-rail:hover,
+html[data-cle] .chat-position-rail:focus-within { opacity: 1; }
+html[data-cle] .chat-position-rail :is(button, [role="button"]):focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+
+/* ---------- width-adaptive: a pane wears its own width, in 双模式 and in a narrow window ---------- */
+@container cle-pane (max-width: 720px) {
+  /* A container query's subject must live inside the container. `html[data-cle]` is the
+     container's ancestor, so `html[data-cle] { --cle-read-gutter: 16px }` written here never
+     matched; the gutter belongs to the pane's chat surface (.chat is inside the pane). */
+  html[data-cle] .chat { --cle-read-gutter: 16px; }
+  /* The column may use the whole pane, but it must still breathe: the edge margin lives on the
+     thread and the composer, so a 508px split pane is not border-to-border text. Without this the
+     reply and the input both ran from x=258 to x=766 with no margin at all. */
+  html[data-cle] .chat-thread-inner {
+    max-width: none; width: 100%; margin-inline: 0;
+    padding-inline: var(--cle-read-gutter);
+    box-sizing: border-box;
+  }
+  html[data-cle] .chat-group, html[data-cle] .chat-group.user { max-width: none; margin-inline: 0; padding-inline: 0; }
+  html[data-cle] .chat-group.user > .chat-group-messages { max-width: 88% !important; }
+  html[data-cle] .chat-group.assistant .chat-text { font-size: 15.5px !important; }
+  html[data-cle] .chat-pane-cache__pane[data-cle-pane-room="learning"] .chat-group.assistant .chat-text { font-size: 16px !important; }
+  /* same axis: the composer keeps the identical side inset */
+  html[data-cle] .agent-chat__composer-shell,
+  html[data-cle] .chat-footer > openclaw-plugin-view > .chat-footer__context {
+    width: calc(100% - 2 * var(--cle-read-gutter));
+    max-width: none;
+    margin-inline: auto;
+  }
+}
+
+/* reduced motion: the rail and the footer still resolve instantly */
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle] .chat-group-footer, html[data-cle] .chat-position-rail { transition: none !important; }
+}
+.cle-status[data-kind="done"] .cle-status__time { display: none; }   /* the app already states the time (and tokens) under the reply */

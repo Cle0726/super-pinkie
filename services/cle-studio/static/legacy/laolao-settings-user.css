@@ -1,0 +1,481 @@
+/* 来啦～老弟 · 常用设置。独立于原生页面的 Lit 节点。 */
+body[data-pinkie-user-settings="1"] .qs-container,
+body[data-pinkie-user-settings="1"] .config-view-toggle-row {
+  display: none !important;
+}
+
+body[data-pinkie-user-settings="1"] .content-header .page-sub {
+  display: none !important;
+}
+
+#cle-utilities {
+  --pinkie-settings-ink: var(--cle-ink);
+  --pinkie-settings-muted: var(--cle-ink-2);
+  --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong);
+  --pinkie-settings-card: var(--cle-surface);
+  --pinkie-settings-soft: var(--cle-paper);
+  --pinkie-settings-control: var(--cle-surface);
+  position: fixed;
+  z-index: 8;
+  right: auto;
+  bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+}
+
+#cle-utilities[hidden] { display: none !important; }
+
+#cle-utilities,
+#cle-utilities * { box-sizing: border-box; }
+
+#cle-utilities .pinkie-user-settings__scroll {
+  width: min(100%, 1120px);
+  height: 100%;
+  margin: 0 auto;
+  padding: 2px 28px 26px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#cle-utilities .pinkie-user-settings__intro { margin: 2px 0 18px; }
+#cle-utilities .pinkie-user-settings__title {
+  margin: 0;
+  color: var(--cle-ink);
+  font-size: clamp(20px, 2.1vw, 27px);
+  font-weight: 760;
+  letter-spacing: -.035em;
+}
+#cle-utilities .pinkie-user-settings__intro-copy,
+#cle-utilities .pinkie-user-settings__card-hint,
+#cle-utilities .pinkie-user-settings__hint,
+#cle-utilities .pinkie-user-settings__soft-note {
+  color: var(--pinkie-settings-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+#cle-utilities .pinkie-user-settings__intro-copy { margin: 4px 0 0; }
+
+#cle-utilities .pinkie-user-settings__card {
+  margin: 0 0 13px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 18px;
+  background: var(--pinkie-settings-card);
+  box-shadow: none;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+#cle-utilities .pinkie-user-settings__card-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 25px;
+}
+#cle-utilities .pinkie-user-settings__icon { font-size: 17px; line-height: 1; }
+#cle-utilities .pinkie-user-settings__card-title {
+  margin: 0;
+  color: var(--pinkie-settings-ink);
+  font-size: 15px;
+  font-weight: 740;
+}
+#cle-utilities .pinkie-user-settings__card-hint { margin: 4px 0 9px 27px; }
+#cle-utilities .pinkie-user-settings__row {
+  display: grid;
+  grid-template-columns: minmax(140px, .34fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 8px 0;
+  border-top: 1px solid var(--cle-line);
+}
+#cle-utilities .pinkie-user-settings__row-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+#cle-utilities .pinkie-user-settings__row-title { font-size: 13px; font-weight: 650; }
+#cle-utilities .pinkie-user-settings__row-control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+#cle-utilities .pinkie-user-settings__segments,
+#cle-utilities .pinkie-user-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+#cle-utilities .pinkie-user-settings__segments--wrap { justify-content: flex-start; }
+
+#cle-utilities .pinkie-user-settings__choice,
+#cle-utilities .pinkie-user-settings__brand,
+#cle-utilities .pinkie-user-settings__model-button,
+#cle-utilities .pinkie-user-settings__button,
+#cle-utilities .pinkie-user-settings__text-button,
+#cle-utilities .pinkie-user-settings__advanced-link {
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 999px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+#cle-utilities .pinkie-user-settings__choice,
+#cle-utilities .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; }
+#cle-utilities .pinkie-user-settings__choice:hover,
+#cle-utilities .pinkie-user-settings__brand:hover,
+#cle-utilities .pinkie-user-settings__model-button:hover,
+#cle-utilities .pinkie-user-settings__button:hover,
+#cle-utilities .pinkie-user-settings__text-button:hover,
+#cle-utilities .pinkie-user-settings__advanced-link:hover {
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  box-shadow: none;
+}
+#cle-utilities .pinkie-user-settings__choice.is-selected,
+#cle-utilities .pinkie-user-settings__brand.is-selected {
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 26%, transparent);
+}
+#cle-utilities button:focus-visible,
+#cle-utilities summary:focus-visible {
+  outline: 3px solid var(--cle-gaze);
+  outline-offset: 2px;
+}
+
+#cle-utilities .pinkie-user-settings__soft-note { margin: 8px 0 0; }
+#cle-utilities .pinkie-user-settings__status {
+  min-height: 17px;
+  margin: 7px 0 0;
+  color: var(--cle-ok, #3F6B4F);
+  font-size: 11px;
+  line-height: 1.45;
+}
+#cle-utilities .pinkie-user-settings__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
+#cle-utilities .pinkie-user-settings__status[data-state="busy"] { color: var(--cle-ink-2); }
+
+#cle-utilities .pinkie-user-settings__wechat {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 18px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 16px;
+  background: var(--pinkie-settings-soft);
+  text-align: center;
+}
+#cle-utilities .pinkie-user-settings__wechat[hidden],
+#cle-utilities .pinkie-user-settings__wechat [hidden],
+#cle-utilities .pinkie-user-settings__wechat-account[hidden] { display: none !important; }
+#cle-utilities .pinkie-user-settings__wechat-qr {
+  display: block;
+  width: min(280px, 100%);
+  height: auto;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+#cle-utilities .pinkie-user-settings__wechat-link { color: var(--pinkie-settings-accent); font-size: 12px; }
+#cle-utilities .pinkie-user-settings__wechat-verify { display: grid; justify-items: center; gap: 10px; }
+#cle-utilities .pinkie-user-settings__wechat-code {
+  width: 160px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  text-align: center;
+  letter-spacing: .25em;
+}
+#cle-utilities .pinkie-user-settings__wechat-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+#cle-utilities .pinkie-user-settings__messaging-connection { margin-top: 10px; }
+#cle-utilities .pinkie-user-settings__messaging-connection [hidden] { display: none !important; }
+#cle-utilities .pinkie-user-settings__messaging-panel {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 18px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 16px;
+  background: var(--pinkie-settings-soft);
+  text-align: center;
+}
+#cle-utilities .pinkie-user-settings__messaging-qr {
+  display: block;
+  width: min(280px, 100%);
+  height: auto;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+#cle-utilities .pinkie-user-settings__messaging-link {
+  color: var(--pinkie-settings-accent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#cle-utilities .pinkie-user-settings__messaging-project {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+#cle-utilities .pinkie-user-settings__messaging-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  text-align: left;
+}
+#cle-utilities .pinkie-user-settings__messaging-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 13px;
+}
+#cle-utilities .pinkie-user-settings__messaging-input:focus-visible {
+  outline: 3px solid var(--cle-gaze);
+  outline-offset: 2px;
+}
+#cle-utilities .pinkie-user-settings__messaging-input:disabled { opacity: .65; }
+#cle-utilities .pinkie-user-settings__messaging-bound { overflow-wrap: anywhere; }
+#cle-utilities .pinkie-user-settings__messaging-manual { margin: 10px 0; }
+#cle-utilities .pinkie-user-settings__messaging-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+#cle-utilities .pinkie-user-settings__messaging-form > button { grid-column: 1 / -1; justify-self: start; }
+#cle-utilities .pinkie-user-settings__messaging-verify {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 100%);
+}
+#cle-utilities .pinkie-user-settings__messaging-verify > button { justify-self: center; }
+#cle-utilities .pinkie-user-settings__messaging-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+}
+@media (max-width: 640px) {
+  #cle-utilities .pinkie-user-settings__messaging-project,
+  #cle-utilities .pinkie-user-settings__messaging-form { grid-template-columns: minmax(0, 1fr); }
+  #cle-utilities .pinkie-user-settings__messaging-project > button { justify-self: start; }
+}
+
+#cle-utilities .pinkie-user-settings__model-button {
+  min-width: min(100%, 280px);
+  min-height: 37px;
+  padding: 7px 14px;
+  text-align: left;
+}
+#cle-utilities .pinkie-user-settings__model-menu {
+  margin: 4px 0 10px;
+  padding: 10px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 14px;
+  background: var(--pinkie-settings-soft);
+}
+#cle-utilities .pinkie-user-settings__model-menu[hidden] { display: none !important; }
+#cle-utilities .pinkie-user-settings__brand-row {
+  display: flex;
+  gap: 6px;
+  overflow: auto;
+  padding: 1px 1px 8px;
+}
+#cle-utilities .pinkie-user-settings__brand { flex: 0 0 auto; min-height: 31px; padding: 5px 11px; }
+#cle-utilities .pinkie-user-settings__brand[data-brand="gemini"],
+#cle-utilities .pinkie-user-settings__brand[data-brand="claude"],
+#cle-utilities .pinkie-user-settings__brand[data-brand="codex"] { border-color: var(--cle-line-strong); }
+#cle-utilities .pinkie-user-settings__model-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+#cle-utilities .pinkie-user-settings__model-choice {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--cle-line);
+  border-radius: 10px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+#cle-utilities .pinkie-user-settings__model-choice[hidden] { display: none !important; }
+#cle-utilities .pinkie-user-settings__model-choice:hover { border-color: var(--pinkie-settings-accent); }
+
+#cle-utilities .pinkie-user-settings__preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+#cle-utilities .pinkie-user-settings__preset {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 87px;
+  padding: 12px 13px;
+  border: 1px solid var(--pinkie-settings-border);
+  border-radius: 14px;
+  background: var(--pinkie-settings-control);
+  color: var(--pinkie-settings-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+#cle-utilities .pinkie-user-settings__preset:hover { border-color: var(--cle-gaze); }
+#cle-utilities .pinkie-user-settings__preset.is-selected {
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 30%, transparent);
+}
+#cle-utilities .pinkie-user-settings__preset-title { font-size: 13px; font-weight: 730; }
+#cle-utilities .pinkie-user-settings__preset-detail { color: var(--pinkie-settings-muted); font-size: 11px; line-height: 1.45; }
+#cle-utilities .pinkie-user-settings__custom {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--pinkie-settings-soft);
+  color: var(--cle-ink-2);
+  font-size: 12px;
+}
+#cle-utilities .pinkie-user-settings__custom[hidden] { display: none !important; }
+
+#cle-utilities .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; }
+#cle-utilities .pinkie-user-settings__button--primary {
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
+}
+#cle-utilities .pinkie-user-settings__button--small { min-height: 31px; padding: 5px 11px; }
+#cle-utilities .pinkie-user-settings__text-button,
+#cle-utilities .pinkie-user-settings__advanced-link {
+  min-height: 33px;
+  padding: 6px 13px;
+  color: var(--cle-ink);
+}
+#cle-utilities .pinkie-user-settings__channels { margin: 8px 0 0; border-top: 1px solid var(--cle-line); }
+#cle-utilities .pinkie-user-settings__channels-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  color: var(--pinkie-settings-ink);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+#cle-utilities .pinkie-user-settings__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--pinkie-settings-soft);
+  color: var(--cle-ink);
+  font-size: 10px;
+}
+#cle-utilities .pinkie-user-settings__channel-list { display: grid; gap: 6px; }
+#cle-utilities .pinkie-user-settings__channel {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--pinkie-settings-soft);
+  font-size: 12px;
+}
+#cle-utilities .pinkie-user-settings__channel-state { color: var(--cle-ok, #3F6B4F); }
+#cle-utilities .pinkie-user-settings__empty { margin: 2px 0 8px; color: var(--pinkie-settings-muted); font-size: 12px; }
+#cle-utilities .pinkie-user-settings__warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--cle-warn, #7F5F1B) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cle-warn, #7F5F1B) 8%, var(--cle-surface));
+  color: var(--cle-warn, #7F5F1B);
+}
+#cle-utilities .pinkie-user-settings__warning[hidden] { display: none !important; }
+#cle-utilities .pinkie-user-settings__warning-icon { font-size: 17px; }
+#cle-utilities .pinkie-user-settings__warning-text { margin: 0; font-size: 11px; line-height: 1.5; }
+
+#cle-utilities .pinkie-user-settings__value { color: var(--pinkie-settings-muted); font-size: 12px; }
+#cle-utilities .pinkie-user-settings__usage-label { margin: 12px 0 7px; font-size: 12px; font-weight: 700; }
+#cle-utilities .pinkie-user-settings__usage-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 7px;
+}
+#cle-utilities .pinkie-user-settings__usage-chip {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--cle-line);
+  border-radius: 11px;
+  background: var(--pinkie-settings-soft);
+}
+#cle-utilities .pinkie-user-settings__usage-name { color: var(--pinkie-settings-muted); font-size: 10px; }
+#cle-utilities .pinkie-user-settings__usage-value { overflow: hidden; color: var(--pinkie-settings-ink); font-size: 13px; text-overflow: ellipsis; }
+#cle-utilities .pinkie-user-settings__footer { display: flex; justify-content: center; padding: 7px 0 16px; }
+
+
+
+@media (max-width: 780px) {
+  #cle-utilities .pinkie-user-settings__scroll { padding: 2px 14px 20px; }
+  #cle-utilities .pinkie-user-settings__card { padding: 14px 13px 12px; }
+  #cle-utilities .pinkie-user-settings__row { grid-template-columns: 1fr; gap: 8px; }
+  #cle-utilities .pinkie-user-settings__row-control { justify-content: flex-start; }
+  #cle-utilities .pinkie-user-settings__preset-grid { grid-template-columns: 1fr; }
+  #cle-utilities .pinkie-user-settings__preset { min-height: 68px; }
+  #cle-utilities .pinkie-user-settings__usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #cle-utilities .pinkie-user-settings__warning { grid-template-columns: auto minmax(0, 1fr); }
+  #cle-utilities .pinkie-user-settings__warning .pinkie-user-settings__button { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #cle-utilities *, #cle-utilities *::before, #cle-utilities *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

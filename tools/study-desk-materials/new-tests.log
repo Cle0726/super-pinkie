@@ -1,0 +1,29 @@
+✔ model image channel serializes openai-completions, preserves usage, and supports Markdown (5.417458ms)
+✔ model image channel serializes anthropic-messages, preserves usage, and supports Markdown (0.905875ms)
+✔ model image channel serializes openai-responses, preserves usage, and supports Markdown (0.8305ms)
+✔ material source guard blocks USB and registered indexes while preserving the original bank guard (0.507875ms)
+✔ active lesson check and bridge metadata survive submission; check does not update mastery or review schedules (8.56775ms)
+✔ full lesson cycle records checks and stuck, credits one lesson, saves sources, and carries teaching history forward (61.42225ms)
+✔ state transitions reject foreign ownership, auto-pause, abandon without credit, and permit fallback lessons (4.367667ms)
+✔ P1 stays bounded without cutting fixed instructions; all dynamic teaching history is JSON data (1.939625ms)
+✔ new RPC names and scopes are exact; hooks order library -> P8 -> active-only P1 (1.392792ms)
+✔ lesson transcript trimming preserves beginning, ending and server stuck moments without raw tool messages (0.335ms)
+✔ survey counts form-feed pages using the 40 non-whitespace character threshold (1.361375ms)
+✔ survey audit includes hidden files, detects mtime changes, and never follows symlinks (5.570209ms)
+✔ survey rejects root and symlink outputs before opening a writable file (2.35125ms)
+✔ survey imports transcript numbering and same-name subtitles without guessing an ambiguous title (1.522ms)
+✔ synthetic survey reads PDF PPTX GBK archives and encrypted flags while leaving all source metadata unchanged (440.501917ms)
+✔ material role and subject rules keep all answer/practice paths out of teaching results (0.377417ms)
+✔ incremental extraction preserves original mtimes, reads GBK archive members, retains gone text, and pauses on detach (784.3445ms)
+✔ search/read expose only teach data; P5 validates ranges and chapters, and cached P6 fallback runs once (901.326333ms)
+✔ vision cache, daily budget and unreadable fallback preserve OCR; original preview and reveal enforce root bounds (1200.428416ms)
+✔ OCR TSV keeps words in line order, flags math risk, and uses array process args at nice 15 (588.018917ms)
+✔ transcription gates, subtitles, interruption cleanup and local-only import work without real ffmpeg or whisper (30.03575ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4044.609875
