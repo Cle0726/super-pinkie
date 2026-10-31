@@ -16,7 +16,7 @@ Status: working document for the 2026-10 redesign (branch `redesign/cle`). Targe
 
 > **Blue means the cat is looking.** Focus, the active choice, live progress, the caret, the cat's eyes. Nothing decorative is blue.
 
-Name chain, kept as brand lore: 梁才酷 → LCK → "K k" → **C.le.**  The assistant is still called 碧琪 (碧 = jade blue, her eyes). She is an original black cat, not a pony.
+Name chain, kept as brand lore: LCK → "K k" → **C.le.**  The assistant is still called 碧琪 (碧 = jade blue, her eyes). She is an original black cat, not a pony.
 
 ## 2. Tokens
 
