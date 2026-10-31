@@ -9,10 +9,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-export const marker = '/* pinkie-chat-timeline:v25 */';
+export const marker = '/* pinkie-chat-timeline:v26 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 // These are compatibility exports, not retention caps. Fetching is paginated;
 // the renderer must keep every page the user has already opened reachable.
@@ -260,11 +260,32 @@ function pinkieEarlierHistory(options) {
   const failures = globalThis.__pinkieEarlierHistoryFailures instanceof WeakSet
     ? globalThis.__pinkieEarlierHistoryFailures : (globalThis.__pinkieEarlierHistoryFailures = new WeakSet());
   const loading = pending.has(pane) || pane.loadingOlder || state.chatLoading;
+  // The server returns 128 rows while the old renderer displays up to 100.
+  // At a loaded boundary, fetch before showing a tiny leftover page so a
+  // reader does not have to click twice for each chunk. Keep other modes on
+  // their existing path and never discard locally available history if the
+  // fetch fails.
+  const needsBoundaryPage = () => {
+    if (!canFetch || !view.hasPrevious || !/^agent:(?:main|project|thinking|learning):/u.test(String(options.sessionKey || ''))) return false;
+    let count = 0;
+    let chars = 0;
+    for (let index = view.startIndex - 1; index >= 0; index -= 1) {
+      const message = view.source[index];
+      if (view.shouldSkip?.(message) || (String(message?.role || '').toLowerCase() === 'user' && isInternalUserMessage(message))) continue;
+      const weight = pinkieHistoryMessageWeight(message);
+      if (count && chars + weight > 240000) return false;
+      count += 1;
+      chars += weight;
+      if (count >= 100) return false;
+    }
+    return true;
+  };
   const stop = (event) => { event.preventDefault(); event.stopPropagation(); };
   const previous = (event) => {
     stop(event);
     if (pending.has(pane) || pane.state !== state || loading) return;
-    if (view.hasPrevious) { pinkieNavigateHistory(pane, options, 'previous'); return; }
+    const prefetchBoundary = needsBoundaryPage();
+    if (view.hasPrevious && !prefetchBoundary) { pinkieNavigateHistory(pane, options, 'previous'); return; }
     if (!canFetch) return;
     const firstKey = pinkieHistoryMessageKey(view.source?.[view.startIndex]);
     pending.add(pane);
@@ -272,7 +293,10 @@ function pinkieEarlierHistory(options) {
     pane.requestUpdate?.();
     Promise.resolve().then(() => globalThis.__laolaoLoadEarlierHistory(pane)).then((changed) => {
       if (pane.state !== state) return;
-      if (changed === false && state.chatHistoryPagination?.hasMore === true) failures.add(pane);
+      if (changed === false) {
+        if (state.chatHistoryPagination?.hasMore === true) failures.add(pane);
+        if (prefetchBoundary && view.hasPrevious) pinkieNavigateHistory(pane, options, 'previous');
+      }
       else if (changed) {
         const source = state.chatMessages;
         const at = source.findIndex((message) => pinkieHistoryMessageKey(message) === firstKey);
@@ -281,7 +305,10 @@ function pinkieEarlierHistory(options) {
           pinkieNavigateHistory(pane, options, 'previous');
         }
       }
-    }).catch(() => { failures.add(pane); }).finally(() => {
+    }).catch(() => {
+      failures.add(pane);
+      if (prefetchBoundary && pane.state === state && view.hasPrevious) pinkieNavigateHistory(pane, options, 'previous');
+    }).finally(() => {
       pending.delete(pane);
       pane.requestUpdate?.();
     });
@@ -854,7 +881,7 @@ export function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
     let calls = [];
     try { calls = getToolCalls(entry.message || {}, entry.key) || []; } catch {}
     for (const call of calls) {
-      if (String(call.name || '').split('.').at(-1) !== 'learning_activity' || call.isError
+      if (!['learning_activity', 'learning_desk'].includes(String(call.name || '').split('.').at(-1)) || call.isError
         || typeof call.outputText !== 'string' || call.outputText.length > 500000) continue;
       let data;
       try {
@@ -866,7 +893,7 @@ export function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
         }
       } catch { continue; }
       const value = data?.inline;
-      if (value?.v !== 1 || !['quiz', 'function_plot', 'process_flow', 'sentence_parse', 'mapreduce_lab', 'c_program', 'memory_lab', 'device_lab', 'illustrated_guide', 'circuit_lab', 'network_lab', 'math_check', 'english_reading', 'english_writing', 'mock_exam', 'review_queue', 'concept_lab', 'logic_lab', 'timing_lab', 'sequence_lab'].includes(value.kind)
+      if (value?.v !== 1 || !['quiz', 'function_plot', 'process_flow', 'sentence_parse', 'mapreduce_lab', 'c_program', 'memory_lab', 'device_lab', 'illustrated_guide', 'circuit_lab', 'network_lab', 'math_check', 'english_reading', 'english_writing', 'mock_exam', 'review_queue', 'concept_lab', 'logic_lab', 'timing_lab', 'sequence_lab', 'desk_card', 'desk_receipt', 'desk_plan'].includes(value.kind)
         || typeof value.id !== 'string' || !value.id || value.id.length > 160
         || typeof value.sessionKey !== 'string' || !/^agent:learning:[^\r\n]{1,480}$/.test(value.sessionKey)) continue;
       const key = `${value.sessionKey}:${value.kind}:${value.id}`;
@@ -1010,7 +1037,6 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processThinking: historyThinking,
     processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
     processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
-    learningCards: pinkieLearningInlineReferences(steps, getToolCalls),
     processState: !live && processInterrupted ? 'oops' : '',
     processRows: collapseTimelineRows(steps, maxRows, ownerKey),
     processSteps: toolCount,
@@ -1022,7 +1048,13 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',
         processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
   };
-  return [...(head ? [head] : []), card, ...tail];
+  // Tool-created activities are part of this reply, not its folded work log.
+  // Give them a stable row after the answer so a long reply cannot leave the
+  // card above the viewport while telling the student to answer below.
+  const learningCards = pinkieLearningInlineReferences(steps, getToolCalls);
+  const learningRow = learningCards.length ? [{kind: 'group', role: 'assistant',
+    key: `${processKey}:learning`, messages: [], isLearningCard: true, learningCards}] : [];
+  return [...(head ? [head] : []), card, ...tail, ...learningRow];
 }
 
 /** Pure timeline projection, also exercised directly by unit tests. */
@@ -1176,7 +1208,7 @@ function withScrollIntent(source) {
 
 /** Closed cards retain only their summary; Lit mounts rows on a user click. */
 export function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
 }
 export function overflowBranchSource(groupName) {
   return `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow" .open=\${pinkieTimelineView(e.key).open}><summary @click=\${n=>pinkieTimelineToggle(n,e.key)}>前面还有 \${e.overflowCount} 步</summary>\${pinkieTimelineView(e.key).open?s\`<div class="chat-timeline-overflow__body">\${pinkieTimelineRows(e,e.overflowItems).map(n=>n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):c)}\${pinkieTimelineView(e.key).count<e.overflowItems.length?s\`<button type="button" @click=\${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>\`:c}</div>\`:c}</details>\`;`;
@@ -1358,9 +1390,13 @@ export function transformLearningInlineKinds(original) {
   const match = section.match(pattern);
   if (!match) throw new Error('学习组件类型检查与预期不符');
   const kinds = JSON.parse('[' + match[1].replaceAll("'", '"') + ']');
-  if (['memory_lab', 'device_lab', 'illustrated_guide'].every(kind => kinds.includes(kind))) return original;
-  const next = [...new Set([...kinds, 'memory_lab', 'device_lab', 'illustrated_guide'])];
-  const patched = section.replace(pattern, `![${next.map(v => JSON.stringify(v)).join(',')}].includes(value.kind)`);
+  // 碧琪手账 v2：learning_desk 工具的三种卡片也走这个解析器。
+  const wanted = ['memory_lab', 'device_lab', 'illustrated_guide', 'desk_card', 'desk_receipt', 'desk_plan'];
+  const tool = "String(call.name || '').split('.').at(-1) !== 'learning_activity'";
+  if (wanted.every(kind => kinds.includes(kind)) && !section.includes(tool)) return original;
+  const next = [...new Set([...kinds, ...wanted])];
+  const patched = section.replace(pattern, `![${next.map(v => JSON.stringify(v)).join(',')}].includes(value.kind)`)
+    .replace(tool, "!['learning_activity', 'learning_desk'].includes(String(call.name || '').split('.').at(-1))");
   return original.slice(0, start) + patched + original.slice(end + tail.length);
 }
 

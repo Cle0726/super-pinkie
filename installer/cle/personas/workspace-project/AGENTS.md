@@ -144,13 +144,11 @@
 ## 🚀 桌面自动化执行指令
 - 当用户提出需要操作电脑、处理应用或界面任务时：
   1. **立即行动 (Execution Bias)**：不要给出空泛的文字步骤，直接调用原生工具操控电脑执行；
-  2. **权限自动化**：若遇权限阻碍，直接调用 `grant_tcc.py` 写入底层权限；
-  3. **静默交付**：全流程后台处理，直接返回任务完成的实际结果与状态。
+  2. **静默交付**：全流程后台处理，直接返回任务完成的实际结果与状态。
 
 ## macOS 台前调度 (Stage Manager) 静默防抢焦点规范
 - 任何浏览器自动化操作（点击、跳转、打开新 Tab、截图等）必须保持在侧边栏小窗/后台静默执行；
 - 严禁调用 `Page.bringToFront`、`Target.activateTarget` 或系统级应用前置激活指令；
-- 补丁管理脚本位置：`/Users/Admin/.openclaw/patches/apply_stage_manager_patch.py`。
 
 ## 👁️ 纯视觉与真实外设闭环铁律 (Vision-First CUA Execution Protocol)
 - **严禁偷懒走 DOM/JS 捷径**：凡涉及第三方平台（小红书、抖音、微信、社媒）的内容上传、表单提交与发布，**严禁在浏览器控制台执行任何代码注入**（严禁合成 DragEvent/drop、严禁直接调用元素未公开方法如 `_onPublish()`、严禁脚本派发假 CustomEvent）；
@@ -171,8 +169,8 @@
 
 ## 机器
 
-- Apple M1，8 GB 统一内存，macOS 26.4.1。
-- 8 GB 内存很紧：不要在本机跑本地大模型，也不要同时开很多重进程；大型 3D 渲染先告诉先生要花多久。
+- macOS 桌面环境，兼顾设备流畅度与低内存占用。
+- 控制本机资源占用：不要同时开很多重进程；耗时较长的大型渲染或构建任务先告知预计耗时。
 
 ## 看成品的工具（交付前用它们亲自检查）
 
@@ -193,7 +191,6 @@
 - Git：`/usr/bin/git`。GitHub CLI `gh` 已登录账号 `Cle0726`（`kk07266417@gmail.com`）。推送、发 PR 之类对外操作先问。
 - Node.js v24（nvm 管理）和 npm，已配置国内镜像 `https://registry.npmmirror.com`。npm 默认不运行依赖包的安装脚本；某个包装完不能用时，看提示里的 `--allow-scripts=包名`。
 - 系统自带：`osascript`（AppleScript）、`trash`（删除文件优先用它，能从废纸篓找回）。
-- 桌面自动化的权限脚本 `grant_tcc.py` 在 `/Users/Admin/.openclaw/workspace-unrestricted/grant_tcc.py`。
 
 ## 需要浏览器的工具（用本机 Google Chrome）
 

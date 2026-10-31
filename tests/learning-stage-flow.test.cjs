@@ -14,7 +14,7 @@ function harness(handler = () => ({}), options = {}) {
   const calls = [], opened = [];
   const window = {addEventListener() {}, __pinkieLibrary: {open: async (...args) => opened.push(args)}, __laolaoSidebar: {gwRequest: async (method, params) => { calls.push({method, params}); return handler(method, params); }}};
   const location = {href: 'http://localhost/chat?session=agent:learning:one'};
-  const exposed = source.replace(/\}\)\(\);\s*$/, 'window.testStage = {state, renderStage, submitAnswer, poll, activeItem, nextQuestion, startReview, renderReview, continueLearning, openMistakesRadar, appendQuestionSources, appendGradeCorrection};})();');
+  const exposed = source.replace(/\}\)\(\);\s*$/, 'window.testStage = {state, renderStage, submitAnswer, poll, activeItem, nextQuestion, startReview, openNotebook, continueLearning, appendQuestionSources, appendGradeCorrection};})();');
   vm.runInNewContext(exposed, {document, window, location, URL, crypto: {randomUUID: () => 'submission-1'}, setInterval() {}, setTimeout() {}, clearTimeout() {}, console, ...options});
   return {document, calls, opened, location, window, ...window.testStage};
 }
@@ -172,38 +172,18 @@ test('variant requests preserve the attempt relation and actual note association
   assert.match(message, /retry_of: attempt-1/); assert.match(message, /note-1/);
 });
 
-test('review uses a bounded queue and requires recalling before exposing the note meaning', async () => {
-  const h = harness(method => method === 'pinkie.learning.notes.review.queue' ? {notes: [{id: 'note-1', term: 'active recall', meaning: '主动回忆'}], dueCount: 35, remainingCount: 34, dailyRemaining: 20} : {});
-  const drawer = h.document.createElement('aside');
-  const list = h.document.createElement('div'); list.className = 'laolao-learning-notes__list'; drawer.append(list); h.document.body.append(drawer); h.state.drawer = drawer;
-  await h.startReview();
-  assert.equal(h.calls[0].params.limit, 10);
-  assert.ok(h.document.querySelector('.laolao-learning-review__recall'));
-  assert.ok(!h.document.querySelector('.laolao-learning-review__back'), 'the answer must stay hidden before recall');
-  const recall = h.document.querySelector('.laolao-learning-review__recall'); recall.value = '先自己想'; recall.dispatch('input');
-  const flip = h.document.querySelector('.laolao-learning-review .laolao-learning-button'); flip.click();
-  assert.match(text(h.document.querySelector('.laolao-learning-review__back')), /主动回忆/);
-  assert.match(text(h.document.querySelector('.laolao-learning-review__own')), /先自己想/);
-  assert.equal(h.state.reviewRemaining, 34);
+test('review continuation opens the full-page recall view without constructing a drawer', async () => {
+  const h = harness(), opened = [];
+  h.window.__pinkieStudyDesk = {go: (...args) => opened.push(args)};
+  const root = h.document.createElement('div'); root.id = 'pinkie-study-desk'; h.document.body.append(root);
+  h.document.getElementById = id => h.document.querySelector('#' + id);
+  await h.startReview(); assert.equal(opened[0][0], 'notes'); assert.equal(opened[0][1].view, 'review');
+  assert.equal(h.document.querySelector('.laolao-learning-notes'), null);
 });
 
 test('a stale next step for another session cannot trigger an attempt request in the current pane', async () => {
   const h = harness(); await h.continueLearning({sessionKey: 'agent:learning:other', attemptId: 'other-attempt'});
   assert.equal(h.calls.length, 0);
-});
-
-test('mistake records display the selected option text, with a fallback for older answer records', async () => {
-  const h = harness(method => method === 'pinkie.learning.attempts.list' ? {attempts: [
-    {id: 'attempt-1', question: '选择合适的用法', answer: '2', answerText: '过去完成时', result: {correct: false}},
-    {id: 'attempt-2', question: '旧版简答记录', answer: '因为发生在另一件事之前', result: {correct: false}},
-  ]} : {});
-  const drawer = h.document.createElement('aside'); drawer.className = 'is-open';
-  const list = h.document.createElement('div'); list.className = 'laolao-learning-notes__list'; drawer.append(list); h.document.body.append(drawer); h.state.drawer = drawer;
-  await h.openMistakesRadar();
-  const records = list.querySelectorAll('.laolao-learning-radar__wrong-item');
-  assert.match(text(records[0]), /你的答案：过去完成时/);
-  assert.doesNotMatch(text(records[0]), /你的答案：2/);
-  assert.match(text(records[1]), /你的答案：因为发生在另一件事之前/);
 });
 
 test('manual grading corrections require a reason and retain the actual attempt scope', async () => {
@@ -221,7 +201,7 @@ test('native port keeps pane ownership and the same per-item contract', () => {
   const port = fs.readFileSync(require('node:path').join(__dirname, '../services/cle-studio/static/legacy/laolao-learning-stage.js'), 'utf8');
   assert.match(port, /const instances = new Set/);
   assert.match(port, /const pageSessionKey = \(\) => sessionKeyFor\(state\.pane\)/);
-  for (const marker of ['  const activityItems =', '  const renderStage =', '  const openMistakesRadar =']) {
+  for (const marker of ['  const activityItems =', '  const renderStage =']) {
     const block = value => value.slice(value.indexOf(marker), value.indexOf('\n  const ', value.indexOf(marker) + marker.length));
     assert.equal(block(source), block(port), `shared implementation drift at ${marker}`);
   }

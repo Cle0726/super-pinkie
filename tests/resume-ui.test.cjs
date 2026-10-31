@@ -1914,6 +1914,19 @@ test('idle polling never automatically retries unknown delivery or accepted/in-f
   }
 });
 
+test('an untouched reserved queue item can resume after the original run ends',async()=>{
+  const now=1_700_000_000_000;
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{clock:true,now});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[{id:'reserved',text:'not sent yet',createdAt:now-1,
+    sessionKey:h.leftKey,sendAttempts:0,sendRunId:'reserved-run',sendSubmittedAtMs:123}]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('completed-before-steer'),true);
+  assert.equal(calls.retry.length,1);assert.equal(calls.retry[0].id,'reserved');
+  assert.equal(calls.retry[0].sendRunId,'reserved-run');assert.equal(calls.retry[0].sendState,'waiting-reconnect');
+});
+
 
 test('idle recovery cannot reuse delivery evidence already consumed by active pruning',async()=>{
   const now=Date.now();

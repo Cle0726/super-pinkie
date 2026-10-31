@@ -8,6 +8,9 @@ OUTPUT_ROOT="${PINKIE_BUILD_DIR:-$REPO_ROOT/dist}"
 # CLE_BRAND=1 builds C.le. — its own app beside 超級碧琪: own name, bundle id, icon, OpenClaw
 # 2026.10 runtime, the C.le. plugins and its own first run (installer/cle). Never the old installer.
 CLE_BRAND="${CLE_BRAND:-0}"
+# This selector is shared by the build and isolation regression checks.
+source "$SCRIPT_DIR/native-sources.sh"
+NATIVE_SOURCE_DIR="$(native_sources_for_brand "$SCRIPT_DIR" "$CLE_BRAND")"
 if [[ "$CLE_BRAND" == 1 ]]; then
   APP_NAME="C.le."
   BUNDLE_ID="com.cle0726.cle-studio"
@@ -180,9 +183,9 @@ rm -rf "$APP_PATH"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 xcrun swiftc -parse-as-library -O \
-  "$SCRIPT_DIR/Sources/MaterialPreview.swift" \
-  "$SCRIPT_DIR/Sources/BrowserControl.swift" \
-  "$SCRIPT_DIR/Sources/Launcher.swift" \
+  "$NATIVE_SOURCE_DIR/MaterialPreview.swift" \
+  "$NATIVE_SOURCE_DIR/BrowserControl.swift" \
+  "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \
   -framework Foundation \
@@ -196,6 +199,15 @@ else
   cp "$REPO_ROOT/ui/assets/PinkieAppIcon.icns" "$CONTENTS/Resources/PinkieAppIcon.icns"
 fi
 mkdir -p "$CONTENTS/Resources/SuperPinkie"
+# Keep the sources matching the executable in the package. Existing repair
+# tools read the canonical Sources path; the Pinkie installer uses its
+# explicitly branded path so it can never select the C.le. sources.
+mkdir -p "$CONTENTS/Resources/SuperPinkie/desktop/macos"
+ditto "$NATIVE_SOURCE_DIR" "$CONTENTS/Resources/SuperPinkie/desktop/macos/Sources"
+if [[ "$CLE_BRAND" != 1 ]]; then
+  mkdir -p "$CONTENTS/Resources/SuperPinkie/desktop/macos/pinkie"
+  ditto "$NATIVE_SOURCE_DIR" "$CONTENTS/Resources/SuperPinkie/desktop/macos/pinkie/Sources"
+fi
 for bundle_part in VERSION ui personas installer patch; do
   ditto "$REPO_ROOT/$bundle_part" "$CONTENTS/Resources/SuperPinkie/$bundle_part"
 done

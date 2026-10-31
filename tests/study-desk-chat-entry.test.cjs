@@ -7,9 +7,9 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
     const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(harness.url);await page.locator('#pinkie-study-desk').waitFor({state:'attached'});
     assert.equal(await page.locator('html').getAttribute('data-pinkie-study-desk'),'chat');
-    assert.equal(harness.calls.length,0,'No practice/dashboard request is made just to create chat');
+    assert.ok(harness.calls.every(c=>/\.(?:desk\.today|ref\.receipts|state)$/.test(c.method)), 'Only the read-only tonight strip may load when opening a chat');
     await page.getByRole('textbox',{name:'聊天输入'}).fill('还没发出的内容');
-    await page.getByRole('button',{name:'舞台',exact:true}).click();
+    await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers:['Alt']});
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'stage');
     await page.getByRole('button',{name:'开始练习',exact:true}).click();
     await page.locator('.q-text').waitFor();
@@ -27,7 +27,7 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
     }
     await select('agent:learning:study-desk-qa');
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'chat','Returning to an existing chat never auto-opens its desk');
-    await page.getByRole('button',{name:'舞台',exact:true}).click();
+    await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers:['Alt']});
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'stage','Manual desk entry remains available');
     assert.equal(await page.locator('.q-text').innerText(),question,'The original exercise survives the chat switch');
     assert.match(await page.locator('.confirm-answer').innerText(),/下一题|看看这一组/);
@@ -41,7 +41,7 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
     assert.equal(await page.locator('#pinkie-study-desk').count(),0);
     await page.evaluate(()=>document.documentElement.dataset.laolaoMode='learning');await select('agent:learning:dashboard:last-new');
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'chat');
-    await page.getByRole('button',{name:'今日',exact:true}).click();
+    await page.getByRole('button',{name:'今日',exact:true}).click({modifiers:['Alt']});
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'today','Manual desk entry continues to work');
     assert.deepEqual(errors,[]);
   }finally{await browser.close();await harness.close();service.close();}

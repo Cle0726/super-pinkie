@@ -1,0 +1,137 @@
+{
+  "origin": "Existing approved image_gen batches; gen.sh, batch1.sh and batch2.sh record prompts and reference images. No new generation in this completion.",
+  "entries": [
+    {
+      "name": "after-exam",
+      "source": "design/study-desk-v2/stickers/raw/after-exam.png",
+      "sourceSha256": "a03750650625e409cf3ec775cf01a8575cb19698b06e2fb6b41e5f2278211472",
+      "webpSha256": "b22a4c67403ccf445713314141f9fd795f085cf9ac7c61b6507b23b75a5e2289"
+    },
+    {
+      "name": "asleep",
+      "source": "design/study-desk-v2/stickers/raw/asleep.png",
+      "sourceSha256": "0c71234912bd51d0a835c16745c0136f1abdf2e6e608d070cb11942c93fd89c5",
+      "webpSha256": "44ad12fbd16594197ab369839e5b16c2415329ea730a00c874119c10e0fc87aa"
+    },
+    {
+      "name": "board-magnifier",
+      "source": "design/study-desk-v2/stickers/raw/board-magnifier.png",
+      "sourceSha256": "e946a5694b6cf8e6f0b5183731ef5e2601394118b98cb55d1bfdeb664aec1ee8",
+      "webpSha256": "4f09c32651623c7d766a7b5cc916995dd3d85846e3d217162b40f09cf8b1f48b"
+    },
+    {
+      "name": "correct",
+      "source": "design/study-desk-v2/stickers/raw/correct.png",
+      "sourceSha256": "627c3b09bed3a87bd8b19c4fc7c2eb0a5ef624a90e5a926a15b2d693142358d1",
+      "webpSha256": "05091d376349641730fc41dea00c0977d37fda85b2d8d9835a2a28ec0f339278"
+    },
+    {
+      "name": "done-stamp",
+      "source": "design/study-desk-v2/stickers/raw/done-stamp.png",
+      "sourceSha256": "228d00b138b51a68538b7d0b08283c315d51050be0f60d3f10eea7f7679dee1c",
+      "webpSha256": "22ee6100e09199298fed9c2b59f82af388bd7bc19d43d4e2f00241983207b6d1"
+    },
+    {
+      "name": "exam-day",
+      "source": "design/study-desk-v2/stickers/raw/exam-day.png",
+      "sourceSha256": "468aea157ceb105ba8454beba7a6895fafd2f39ff9f15f020ca6f6207b85d6ee",
+      "webpSha256": "ae6debfc010ac63e2d4a6ddeb62e222c388e562a2bd80e38d0e737503f39af5d"
+    },
+    {
+      "name": "fest-lantern",
+      "source": "design/study-desk-v2/stickers/raw/fest-lantern.png",
+      "sourceSha256": "57632faf483ffead1691002604056fa96306409328463773bed80e58be437ea6",
+      "webpSha256": "662906b7f928ea9fbce69a544a1d2d95822b0a90830df5737458683d37df4d55"
+    },
+    {
+      "name": "fest-newyear",
+      "source": "design/study-desk-v2/stickers/raw/fest-newyear.png",
+      "sourceSha256": "53278eae2e4869f6684d6c42ee7145ea3119b5f492b191b1ee3fe895a033a2c2",
+      "webpSha256": "0e84e8365fd00470aa329b22833bd2411a033a58679f24e08e92d31ae196f036"
+    },
+    {
+      "name": "fest-sanyuesan",
+      "source": "design/study-desk-v2/stickers/raw/fest-sanyuesan.png",
+      "sourceSha256": "28b9e2c74064d6f0ffc2d30b9c3836cbf492a17dbb482b8940ff34bde3a3c3d5",
+      "webpSha256": "35225a05f0fd0eada6b08bd2c1a570675efa55ddd12cdef1089e0e712070b70d"
+    },
+    {
+      "name": "fest-spring",
+      "source": "design/study-desk-v2/stickers/raw/fest-spring.png",
+      "sourceSha256": "820fcc73bc0091c20b5968ed80767d88960e61a39064129363d9af702bd61e53",
+      "webpSha256": "93b7dee7bdb8ca8708d2cef57f951de9e1e0f01d84fd08b5ca4b8f10646cd735"
+    },
+    {
+      "name": "late-yawn",
+      "source": "design/study-desk-v2/stickers/raw/late-yawn.png",
+      "sourceSha256": "b14738f4c345ed17972fd91a682de2bc8c4724ef95c086c17bc54739ded9709b",
+      "webpSha256": "3d2189b63880f4e8c1d3fa618d154376665de227fa577d4489be72671894ca2b"
+    },
+    {
+      "name": "lesson-chalk",
+      "source": "design/study-desk-v2/stickers/raw/lesson-chalk.png",
+      "sourceSha256": "158c7eb1eb6fd18e0075740a4de3f7e83254a416459cd7ee5623a4631b54b2c1",
+      "webpSha256": "f0c9cd98695f15ef4e1d4024cca76bbb438f1535346b4f6557f9a2f3480fe077"
+    },
+    {
+      "name": "library-books",
+      "source": "design/study-desk-v2/stickers/raw/library-books.png",
+      "sourceSha256": "a1629b775ec7e7f3a2e696136d44c154a895623a81cf0bf8a3ed3ccbca080aca",
+      "webpSha256": "24e729f8ead1c0847212ea0014a1d7464e293f5afee7ad0cc9394fb039330463"
+    },
+    {
+      "name": "notes-highlighter",
+      "source": "design/study-desk-v2/stickers/raw/notes-highlighter.png",
+      "sourceSha256": "3e90309fefb8a9f8c26e53cb6e7895ebb5d3d3708a916976296d0ed170a20d0d",
+      "webpSha256": "b3614ef7c514e8f2680e0e7e635e333da09553258290af3167da3f023a986100"
+    },
+    {
+      "name": "split-peek",
+      "source": "design/study-desk-v2/stickers/raw/split-peek.png",
+      "sourceSha256": "1ee17480731f66a092791ac3a877283428e2a95459425a672e7ec70594e2d36d",
+      "webpSha256": "06105f2bd376fc19bac0a6bd1b13ed9fb191df23a2d2c7bd58806a28cac4b739"
+    },
+    {
+      "name": "stage-thinking",
+      "source": "design/study-desk-v2/stickers/raw/stage-thinking.png",
+      "sourceSha256": "3e054c8b29e3087b1831c6b5fe40938b21ec611fa6b2a26147151d127c32dabe",
+      "webpSha256": "e169487da2c24e669bcd42dea18d75592174c259b93ca0c8b2b4edae47469ac3"
+    },
+    {
+      "name": "streak3",
+      "source": "design/study-desk-v2/stickers/raw/streak3.png",
+      "sourceSha256": "c5348c62e2b12fbd20fcabcbd63db8fab3491afbbbc0af1b8cb86730cf0ca09c",
+      "webpSha256": "54261136ad2490ca8f37283e059977ea26a880bc8efba2d6f3e1315a4ec92482"
+    },
+    {
+      "name": "thinking-pencil",
+      "source": "design/study-desk-v2/stickers/raw/thinking-pencil.png",
+      "sourceSha256": "80e2304a297206c376a6c118fd2f76ca678173df985805a3de3a1f994afd2070",
+      "webpSha256": "2aea8a4ba03630f6722ecf43e980a99ed65ae165a0474313e42c9b1bd9730c1a"
+    },
+    {
+      "name": "today-morning",
+      "source": "design/study-desk-v2/stickers/raw/today-morning.png",
+      "sourceSha256": "569e11eb84bebecf276332a87cf062d8ab91cacbc892bf726d88fe448f734e56",
+      "webpSha256": "acb743e3ba791b8e251494db46f5b4e62ed9a7abea0d1bcef83dd7d19e7ce731"
+    },
+    {
+      "name": "today-night",
+      "source": "design/study-desk-v2/stickers/raw/today-night.png",
+      "sourceSha256": "c10ada073559ae92a7143099fe6281266454dafa76a85d0b2667103ff4d950d4",
+      "webpSha256": "9eab44f2582b7c031ad3addfb75d8f69b7e44434642ab0ec93b5086ce273c60a"
+    },
+    {
+      "name": "vocab-card",
+      "source": "design/study-desk-v2/stickers/raw/vocab-card.png",
+      "sourceSha256": "6c05086ed1ea6bb0a88bb38935daeba66ab22e24355de289b9b8cc7f80d774ab",
+      "webpSha256": "649a9c8a305ec6255278f92cf7bbae6a5d629785825859c535f34eb118b12d0b"
+    },
+    {
+      "name": "wrong-eraser",
+      "source": "design/study-desk-v2/stickers/raw/wrong-eraser.png",
+      "sourceSha256": "c0fd28fe9120b7784323caa159aa0f67a8999a9062d11abf8dcdcff6731752bc",
+      "webpSha256": "3d5d9230575df606c84fd2bf9c475b42277c54773d9fe7e8a76925ecbdb0dc21"
+    }
+  ]
+}

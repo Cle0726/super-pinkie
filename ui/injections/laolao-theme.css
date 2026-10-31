@@ -5066,7 +5066,11 @@ html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.c
   z-index: 1;
   justify-self: end;
   width: 34px !important;
+  /* 窄于 768px 时上游给发送键 min-width:44px，不锁住就会被撑成扁胶囊（模式双开的半屏就在这个宽度） */
+  min-width: 34px !important;
+  max-width: 34px !important;
   height: 34px !important;
+  min-height: 34px !important;
   margin: 0 9px 0 0 !important;
   border-radius: 999px !important;
   background: var(--accent) !important;
@@ -5205,7 +5209,7 @@ html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.c
 
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.chat-send-btn--stop.chat-send-btn--stop:not(#__p1):not(#__p2) {
   grid-row: 1; grid-column: 12; justify-self: end; position: relative; z-index: 1;
-  width: 34px !important; min-width: 34px !important; height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
+  width: 34px !important; min-width: 34px !important; max-width: 34px !important; height: 34px !important; min-height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn svg { width: 16px !important; height: 16px !important; }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #fff !important; color: #fff !important; }

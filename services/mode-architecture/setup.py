@@ -180,10 +180,15 @@ def _install_web_gpt_collab(repo_root: Path, state: Path) -> bool:
         if (installed_root / "runtime/bin/node").is_file():
             runtime_root = installed_root
     bundled_modules = runtime_root / "runtime/openclaw/node_modules"
+    if not bundled_modules.is_dir() and (runtime_root / "runtime/node_modules").is_dir():
+        bundled_modules = runtime_root / "runtime/node_modules"
     modules_link = target / "node_modules"
     if bundled_modules.is_dir():
         expected = str(bundled_modules)
-        current = os.readlink(modules_link) if modules_link.is_symlink() else None
+        try:
+            current = os.readlink(modules_link) if modules_link.is_symlink() else None
+        except OSError:
+            current = None
         if current != expected:
             if modules_link.is_symlink() or modules_link.is_file():
                 modules_link.unlink()
@@ -193,10 +198,13 @@ def _install_web_gpt_collab(repo_root: Path, state: Path) -> bool:
                 current = "managed-directory"
             if current != "managed-directory":
                 modules_link.parent.mkdir(parents=True, exist_ok=True)
-                modules_link.symlink_to(bundled_modules, target_is_directory=True)
-                changed = True
+                try:
+                    modules_link.symlink_to(bundled_modules, target_is_directory=True)
+                    changed = True
+                except OSError:
+                    pass
 
-    node_bin = runtime_root / "runtime/bin/node"
+    node_bin = runtime_root / ("runtime/bin/node.exe" if os.name == "nt" and (runtime_root / "runtime/bin/node.exe").is_file() else "runtime/bin/node")
     state_dir = target_root / "state"
     wrapper = target_root / "pinkie-collab"
     wrapper_text = f"""#!/bin/sh
@@ -217,6 +225,18 @@ if [ -n \"$CLOUDFLARED\" ]; then export C2C_CLOUDFLARED_PATH=\"$CLOUDFLARED\"; f
 exec {shlex.quote(str(node_bin))} \"$SELF_DIR/runtime/bin/c2c.js\" \"$@\"
 """
     changed |= _write_managed(wrapper, wrapper_text, 0o755)
+    if os.name == "nt":
+        cmd_wrapper = target_root / "pinkie-collab.cmd"
+        cmd_text = (
+            '@echo off\r\n'
+            'setlocal\r\n'
+            'set "SELF_DIR=%~dp0"\r\n'
+            'set "C2C_STATE_DIR=%SELF_DIR%state"\r\n'
+            'if not exist "%C2C_STATE_DIR%" mkdir "%C2C_STATE_DIR%"\r\n'
+            'if "%C2C_TUNNEL_PROTOCOL%"=="" set "C2C_TUNNEL_PROTOCOL=http2"\r\n'
+            f'"{node_bin}" "%SELF_DIR%runtime\\bin\\c2c.js" %*\r\n'
+        )
+        changed |= _write_managed(cmd_wrapper, cmd_text, 0o755)
     state_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(state_dir, 0o700)
     return changed
@@ -363,8 +383,34 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs", "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs", "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs", "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs", "learning-desk.mjs", "learning-zsb.mjs", "learning-zsb-gen.mjs", "learning-zsb-data.json", "learning-zsb-items.json", "learning-library.mjs", "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs", "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs", "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs", "rich-runtime.mjs", "package.json", "openclaw.plugin.json"):
-            changed |= _copy_if_changed(source / name, extension / name)
+        for name in (
+            "index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
+            "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
+            "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
+            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
+            "learning-desk.mjs", "learning-exams.mjs", "learning-vocab.mjs",
+            "learning-almanac.mjs", "learning-holidays-cn.json", "learning-refs.mjs",
+            "learning-recall.mjs", "learning-companion.mjs", "learning-lesson.mjs",
+            "learning-materials.mjs", "learning-materials-jobs.mjs",
+            "learning-materials-extract.mjs", "learning-zsb.mjs",
+            "learning-zsb-gen.mjs", "learning-zsb-data.json",
+            "learning-zsb-items.json", "learning-library.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs",
+            "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
+            "web-gpt-activity.mjs", "web-gpt-connection.mjs",
+            "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
+            "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs",
+            "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
+            "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
+            "package.json", "openclaw.plugin.json",
+        ):
+            if (source / name).is_file():
+                changed |= _copy_if_changed(source / name, extension / name)
+        vendor_dir = source / "vendor"
+        if vendor_dir.is_dir():
+            for vendor_file in vendor_dir.rglob("*"):
+                if vendor_file.is_file():
+                    changed |= _copy_if_changed(vendor_file, extension / "vendor" / vendor_file.relative_to(vendor_dir))
 
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative

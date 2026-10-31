@@ -243,7 +243,7 @@ test('a read-only check saying 不修改文件 is not mistaken for a mutation',(
 test('a completed read-only report may include an expected failed probe',()=>{
   const guard=new CompletionIntegrityGuard();
   const ctx={agentId:'learning',sessionKey:'agent:learning:expected-failure',runId:'run-expected-failure'};
-  guard.begin({prompt:'第五轮联合回归，标记 UI_LIVE_E_1057。只做只读检查，不修改文件：读取 /Users/Admin/.openclaw/workspace-unrestricted/super-pinkie/services/mode-architecture/package.json 的 scripts、dependencies，以及 reasoning.mjs 前 60 行；实际运行 node --check services/mode-architecture/reasoning.mjs、node --test tests/resume-ui.test.cjs、git diff --check；尝试读取不存在的 __missing_ui_probe_E__.txt，把 ENOENT 记录为预期失败并继续；最后检查 http://127.0.0.1:18789/readyz 的 HTTP 状态。工具全部结束后给完整中文总结，首行必须写 UI_LIVE_E_1057，准确说明成功项、预期失败项和测试通过数。'},ctx);
+  guard.begin({prompt:'第五轮联合回归，标记 UI_LIVE_E_1057。只做只读检查，不修改文件：读取 /Users/demo/.openclaw/workspace-unrestricted/super-pinkie/services/mode-architecture/package.json 的 scripts、dependencies，以及 reasoning.mjs 前 60 行；实际运行 node --check services/mode-architecture/reasoning.mjs、node --test tests/resume-ui.test.cjs、git diff --check；尝试读取不存在的 __missing_ui_probe_E__.txt，把 ENOENT 记录为预期失败并继续；最后检查 http://127.0.0.1:18789/readyz 的 HTTP 状态。工具全部结束后给完整中文总结，首行必须写 UI_LIVE_E_1057，准确说明成功项、预期失败项和测试通过数。'},ctx);
   guard.beforeTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'}},ctx);
   guard.afterTool({toolName:'exec',toolCallId:'syntax-check',params:{command:'node --check reasoning.mjs'},
     result:{content:[{type:'text',text:'syntax ok'}],details:{status:'completed',exitCode:0}}},ctx);
@@ -487,7 +487,7 @@ test('runtime never blocks tools up front while completion evidence stays indepe
   assert.equal(forged,undefined);
   const pageProof=runtime.beforeTool({toolName:'write',params:{path:'/tmp/public_page_evidence.txt',content:'fake'}},ctx);
   assert.equal(pageProof,undefined);
-  const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/Admin/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
+  const controlRead=runtime.beforeTool({toolName:'read',params:{path:'/Users/demo/.openclaw/pinkie-deep-think/runs/state.json'}},ctx);
   assert.equal(controlRead,undefined);
 });
 
@@ -1753,7 +1753,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,13);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_material','learning_library','plan_update','workbench_read','code_check','workbench_show']);
+  assert.equal(tools.length,14);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1815,7 +1815,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{

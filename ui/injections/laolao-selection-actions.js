@@ -12,7 +12,7 @@
   function candidate() {
     const selection = window.getSelection();
     const text = String(selection || '').trim();
-    if (!text || text.length > 20000 || !selection.rangeCount || selection.isCollapsed) return null;
+    if (!text || text.length > 1_000_000 || !selection.rangeCount || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
     const element = node => node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
     const anchor = element(selection.anchorNode), focus = element(selection.focusNode);
@@ -129,4 +129,5 @@
     last = null; point = null; dragging = false; dismissed = false; hide(); schedule();
   });
   window.__pinkieSelectionActions = {register(id, action) { actions.set(id, action); schedule(); }};
+  window.dispatchEvent(new Event('pinkie:selection-ready'));
 })();

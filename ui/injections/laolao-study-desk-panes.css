@@ -1,0 +1,223 @@
+/* The book owns the layout; each page is a sizing and focus boundary. */
+#pinkie-study-desk.pk-ink .desk-content{position:absolute;inset:44px 18px 18px 88px;display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:12px;min-width:0;min-height:0}
+#pinkie-study-desk.pk-ink[data-pages="2"] .desk-content{grid-template-columns:repeat(2,minmax(0,1fr))}
+#pinkie-study-desk.pk-ink[data-pages="3"] .desk-content{grid-template-columns:repeat(3,minmax(0,1fr))}
+#pinkie-study-desk.pk-ink .desk-page{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;container:pkpage/inline-size;border-left:2px solid var(--hair-2)}
+#pinkie-study-desk.pk-ink .desk-page[data-focused]{border-left-color:var(--pink)}
+#pinkie-study-desk.pk-ink .desk-page[data-drop]{outline:2px dashed var(--pink);outline-offset:3px}
+#pinkie-study-desk.pk-ink .desk-page-tools{height:28px;flex:0 0 28px;display:flex;align-items:center;gap:6px;padding:0 8px;color:var(--ink-2);font:12px var(--sans)}
+#pinkie-study-desk.pk-ink .desk-page-title{margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pinkie-study-desk.pk-ink .desk-page-action{border:0;background:none;color:var(--ink-2);width:26px;height:26px;display:grid;place-items:center;cursor:pointer}
+#pinkie-study-desk.pk-ink[data-pages="1"] .desk-page-action{visibility:hidden}
+#pinkie-study-desk.pk-ink .desk-page-body{position:relative;flex:1;min-height:0;min-width:0}
+#pinkie-study-desk.pk-ink .desk-page .view{inset:0!important;max-width:100%;box-sizing:border-box;border-radius:4px 14px 14px 4px}
+#pinkie-study-desk.pk-ink .desk-page:not([data-focused]) :is(.rv,.view.in,.biqi,.pk-anim,.say .ln,.side .fig img){animation:none!important;opacity:1;transform:none}
+#pinkie-study-desk.pk-ink .desk-page:not([data-focused]) *{animation-play-state:paused!important}
+#pinkie-study-desk.pk-ink .desk-page .pinkie-library{position:absolute!important;inset:0!important;width:100%!important;max-width:none!important;height:100%!important;border-radius:0!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#pinkie-study-desk.pk-ink .desk-page .pinkie-library .pinkie-library__grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+#pinkie-study-desk.pk-ink .desk-page .n-directory-toggle{display:none}
+#pinkie-study-desk.pk-ink .desk-page .view :is(img,svg){max-width:100%}
+@container pkpage (max-width:760px){
+  #pinkie-study-desk.pk-ink .desk-page :is(.home,.stage,.pinkie-desk-vocab,.view.pk-month){padding:24px 18px 24px 28px}
+  #pinkie-study-desk.pk-ink .desk-page .view::before{left:16px}
+  #pinkie-study-desk.pk-ink .desk-page .home{display:flex;flex-direction:column;overflow:auto;gap:26px}
+  #pinkie-study-desk.pk-ink .desk-page .greet{font-size:32px;margin-top:12px}
+  #pinkie-study-desk.pk-ink .desk-page .task{margin-top:24px;padding:20px;gap:12px}
+  #pinkie-study-desk.pk-ink .desk-page .task h3{font-size:24px}
+  #pinkie-study-desk.pk-ink .desk-page .h-right{min-height:360px}
+  #pinkie-study-desk.pk-ink .desk-page .countdown{justify-content:flex-start;gap:24px}
+  #pinkie-study-desk.pk-ink .desk-page .ask{margin-top:24px}
+  #pinkie-study-desk.pk-ink .desk-page .pk-pageno,#pinkie-study-desk.pk-ink .desk-page .pk-mstamp{display:none}
+  #pinkie-study-desk.pk-ink .desk-page .stage{grid-template-columns:minmax(0,1fr);overflow:auto;gap:20px}
+  #pinkie-study-desk.pk-ink .desk-page .st-top{flex-wrap:wrap;height:auto;gap:8px}
+  #pinkie-study-desk.pk-ink .desk-page .st-top .modes{margin-left:0;flex-wrap:wrap}
+  #pinkie-study-desk.pk-ink .desk-page .fig{display:none}
+  #pinkie-study-desk.pk-ink .desk-page .side{min-height:0}
+  #pinkie-study-desk.pk-ink .desk-page .q-text{font-size:23px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-vocab .v-tools{flex-wrap:wrap}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-vocab .v-top{flex-wrap:wrap;gap:10px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-vocab .v-list{grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-vocab .v-cover{grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes{display:flex}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-toc{display:none;position:absolute;inset:0 auto 0 0;width:min(236px,85%);background:var(--paper);z-index:20;box-shadow:8px 0 24px rgba(30,16,26,.12)}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes.n-directory-open .n-toc{display:block}
+  #pinkie-study-desk.pk-ink .desk-page .n-directory-toggle{display:inline-flex}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-main{width:100%;min-width:0}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-head{padding:22px 18px 14px;gap:12px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-tools{gap:10px;flex-wrap:wrap}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-search{width:100%;max-width:220px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-scroll{padding:0 18px 24px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-cards{columns:1;grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-irow{grid-template-columns:24px minmax(0,1fr);gap:8px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-irow .n-classify{grid-column:2}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-notes .n-paper{padding-left:28px;padding-right:16px}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-board{padding:24px 20px;overflow:auto}
+  #pinkie-study-desk.pk-ink .desk-page .pinkie-desk-board :is(.b-top,.b-metrics){flex-wrap:wrap;grid-template-columns:repeat(2,minmax(0,1fr))}
+  #pinkie-study-desk.pk-ink .desk-page .lesson-stage{grid-template-columns:minmax(0,1fr);padding:0}
+  #pinkie-study-desk.pk-ink .desk-page .lesson-side{display:none}
+}
+@container pkpage (max-width:480px){
+  #pinkie-study-desk.pk-ink .desk-page .quiet .q-row{gap:6px;font-size:14px}
+  #pinkie-study-desk.pk-ink .desk-page .ask kbd{display:none}
+  #pinkie-study-desk.pk-ink .desk-page .pk-cal-day{min-height:62px;padding:4px}
+  #pinkie-study-desk.pk-ink .desk-page :is(.pk-cal-tag,.pk-cal-lunar){font-size:10px}
+  #pinkie-study-desk.pk-ink .desk-page .n-move{flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){#pinkie-study-desk.pk-ink .desk-page *{animation:none!important;transition:none!important}}
+
+@container pkpage (max-width:760px){
+ #pinkie-study-desk.pk-ink .desk-page .task .pk-hl{white-space:normal;overflow-wrap:anywhere;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+ #pinkie-study-desk.pk-ink .desk-page .task>div{min-width:0}
+}
+
+/* Approved spread reference: one open book, a single spine, controls inside the page. */
+#pinkie-study-desk.pk-ink .desk-content{inset:18px 18px 18px 84px;gap:0;z-index:1;grid-auto-rows:minmax(0,1fr)}
+#pinkie-study-desk.pk-ink .desk-page{border-left:0}
+#pinkie-study-desk.pk-ink .desk-page-body{height:100%;flex:1}
+#pinkie-study-desk.pk-ink .desk-page-tools{position:absolute;right:28px;top:26px;height:26px;z-index:7;padding:0}
+#pinkie-study-desk.pk-ink .desk-page-title{display:none}
+#pinkie-study-desk.pk-ink .desk-page .view{border-radius:0!important;box-shadow:none}
+#pinkie-study-desk.pk-ink .desk-page:first-child .view{border-radius:6px 0 0 6px!important}
+#pinkie-study-desk.pk-ink .desk-page:last-child .view{border-radius:0 16px 16px 0!important}
+#pinkie-study-desk.pk-ink[data-pages="1"] .desk-page .view{border-radius:6px 22px 22px 6px!important}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page::after{content:"";position:absolute;left:0;top:0;bottom:0;width:22px;background:linear-gradient(90deg,rgba(46,34,54,.11),transparent);pointer-events:none;z-index:5}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page:first-child::after{left:auto;right:0;width:26px;background:linear-gradient(270deg,rgba(46,34,54,.13),transparent)}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .view::before{left:54px!important;top:0!important;bottom:0!important;width:1.5px!important;opacity:.55}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view::before{background:var(--pink)!important;width:2.5px!important;opacity:1}
+#pinkie-study-desk.pk-ink .s-number{display:none}
+#pinkie-study-desk.pk-ink .s-mode-toggle{display:none}
+#pinkie-study-desk.pk-ink .v-spread-title,#pinkie-study-desk.pk-ink .v-spread-list{display:none}
+#pinkie-study-desk.pk-ink .v-foot{display:flex;gap:12px;align-items:center;margin-top:auto;position:sticky;bottom:0;background:var(--paper);padding:14px 0 0;z-index:3}
+#pinkie-study-desk.pk-ink .v-foot .v-review{margin-left:auto}
+#pinkie-study-desk.pk-ink .v-book-layouts{display:flex;gap:4px;align-items:center;color:var(--ink-3)}
+#pinkie-study-desk.pk-ink .v-book-layouts button{border:0;background:none;padding:0;color:inherit;width:22px;height:18px;cursor:pointer}
+#pinkie-study-desk.pk-ink .v-book-layouts button:hover{color:var(--pink-ink)}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page :is(.stage,.pinkie-desk-vocab){padding:26px 28px 22px 74px!important;display:flex;flex-direction:column;gap:0;overflow:hidden}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top{position:relative;display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:0;padding:0 0 0;flex:0 0 auto;margin:0 0 20px;border:0;min-height:78px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top .crumb{font:12px var(--sans);letter-spacing:.08em;color:var(--ink-3);padding-right:54px;max-width:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-number{display:block;font:600 22px/1.3 var(--serif);margin:2px 0 0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top :is(.back,.clock,.streak){display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top .segs{margin:12px 0 0;justify-content:flex-start}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top .modes{display:none;position:absolute;top:50px;right:0;background:var(--paper);z-index:10;padding:12px;box-shadow:var(--lift);flex-wrap:wrap}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-top.s-modes-open .modes{display:flex}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .s-mode-toggle{display:block;position:absolute;right:0;top:48px;font-size:11px;color:var(--ink-3);border:0;background:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .qcol{position:static;overflow:auto;flex:1;min-height:0;padding:0 0 180px;width:100%}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-meta{display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-text{font:16px/1.75 var(--sans);margin:0 0 12px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-code{font:13px/1.75 var(--mono);background:var(--paper);border-left:2px solid var(--hair-2);padding:6px 12px;margin:0 0 16px;border-radius:0;overflow:auto}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .opts{gap:6px;margin:0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .opt{height:44px;min-height:44px;padding:0 10px;gap:10px;font:14px var(--mono);border:0;border-radius:6px;background:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .opt.sel{background:var(--pink-tint)}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .opt .k{font:500 15px var(--pk-hand);width:22px;height:22px;border:1.4px solid var(--hair-2);border-radius:50% 46% 52% 48%}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .opt.sel .k{color:var(--pink-ink);border-color:var(--pink)}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot{position:absolute;left:74px;right:28px;bottom:22px;margin:0;gap:12px;z-index:4;display:flex;flex-wrap:nowrap;background:none;padding:0;border:0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot :is(.conf-label,kbd){display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot .conf{gap:10px;display:flex;min-width:0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot .conf button{font-size:12px;padding:3px 0;white-space:nowrap}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .confirm-answer{height:40px;min-height:40px;padding:0 18px;font:14px var(--sans);margin-left:auto;white-space:nowrap}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .confirm-answer .pk-star{width:14px;height:14px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side{position:absolute;left:74px;right:28px;bottom:86px;height:106px;display:grid;grid-template-columns:minmax(0,1fr) 74px;align-items:end;gap:10px;overflow:visible;margin:0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .fig{display:block;grid-column:2;grid-row:1;min-height:0;height:86px;width:74px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .fig img{position:static;width:74px;height:86px;object-fit:contain}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .say{grid-column:1;grid-row:1;max-height:106px;overflow:auto;padding:0;background:none;border:0;box-shadow:none;font:17px/1.55 var(--pk-hand)}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .say .who{display:block;font:11px var(--sans);color:var(--ink-3);margin-bottom:4px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .say p{margin:0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side .more{position:absolute;bottom:-28px;left:0;display:flex;gap:10px;opacity:0;pointer-events:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side:hover .more,#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .side:focus-within .more{opacity:1;pointer-events:auto}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab>.v-top{display:block;flex:0 0 auto;margin:0;padding:0 60px 18px 0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab .v-heading>.v-title{display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .v-spread-title{display:block;font:600 22px/1.3 var(--serif);margin:2px 0 0}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab>:is(.v-list,.v-add,.v-tools,.v-cover,.v-exams,.v-aside,.pk-stamp){display:none!important}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab .v-top>:is(.v-filters,.v-model){display:none!important}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .v-spread-list{display:block;flex:1;min-height:0;overflow:auto;border-top:1.5px solid var(--ink);padding-bottom:14px}
+#pinkie-study-desk.pk-ink .v-book-word{position:relative;display:grid;grid-template-columns:118px minmax(0,1fr) 74px;align-items:center;gap:10px;min-height:62px;border-bottom:1px solid var(--hair)}
+#pinkie-study-desk.pk-ink .v-book-term b{font:600 18px var(--serif);display:block;overflow-wrap:anywhere}
+#pinkie-study-desk.pk-ink .v-book-sound{display:block;font:15px var(--pk-hand);color:var(--pink-ink)}
+#pinkie-study-desk.pk-ink .v-book-meaning{font:13px/1.45 var(--sans);color:var(--ink-2)}
+#pinkie-study-desk.pk-ink .v-book-memory{display:flex;gap:2px}
+#pinkie-study-desk.pk-ink .v-book-memory .pk-star{width:13px;height:13px}
+#pinkie-study-desk.pk-ink .v-book-word.is-new{background:linear-gradient(90deg,var(--pink-tint),transparent 70%)}
+#pinkie-study-desk.pk-ink .v-book-new{position:absolute;left:-66px;top:18px;font-size:11px}
+#pinkie-study-desk.pk-ink .v-book-detail{position:absolute;right:0;bottom:1px;background:none;border:0;color:var(--pink-ink);font-size:10px;opacity:0;cursor:pointer}
+#pinkie-study-desk.pk-ink .v-book-word:hover .v-book-detail,#pinkie-study-desk.pk-ink .v-book-word:focus-within .v-book-detail{opacity:1}
+#pinkie-study-desk.pk-ink .v-book-origin{color:var(--pink-ink);font-size:11px;border:0;border-bottom:1px dotted currentColor;background:none;margin-left:6px;cursor:pointer}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .v-foot{position:static;flex:0 0 40px;min-height:40px;padding:0;background:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab[data-reviewing]>.v-spread-list,#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .pinkie-desk-vocab[data-reviewing]>.v-foot{display:none}
+#pinkie-study-desk.pk-ink .v-management{max-width:760px;width:min(90vw,760px);max-height:85vh;overflow:auto}
+#pinkie-study-desk.pk-ink .v-management>:is(.v-add,.v-tools,.v-cover,.v-exams){display:flex;flex-wrap:wrap;margin:16px 0}
+@container pkpage (max-width:480px){
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page :is(.stage,.pinkie-desk-vocab){padding-left:48px!important;padding-right:20px!important}
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .view::before{left:30px!important}
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page :is(.q-foot,.side){left:48px;right:20px}
+ #pinkie-study-desk.pk-ink .v-book-word{grid-template-columns:90px minmax(0,1fr);gap:8px;padding:8px 0}
+ #pinkie-study-desk.pk-ink .v-book-memory{grid-column:2;justify-self:end}
+ #pinkie-study-desk.pk-ink .v-book-term{grid-row:1 / span 2}
+ #pinkie-study-desk.pk-ink .v-book-term b{font-size:17px}
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot{gap:6px;flex-wrap:wrap}
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot .conf{gap:7px}
+ #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .confirm-answer{padding:0 12px}
+}
+
+
+html[data-pinkie-study-desk="desk"] #pinkie-study-desk.pk-ink{overflow:visible}
+html[data-pinkie-study-desk="desk"] #pinkie-study-desk.pk-ink .plate{position:fixed!important;inset:0!important;width:100vw;height:100vh;pointer-events:none}
+#pinkie-study-desk.pk-ink .v-book-kicker{display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .v-book-kicker{display:block;font:12px var(--sans);color:var(--ink-3);letter-spacing:.08em}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .v-heading>.v-count{display:none}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .v-spread-title{color:var(--ink)!important;font:600 22px/1.3 var(--serif)!important}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .q-foot .confirm-answer{background:var(--pink)!important;color:white!important}
+#pinkie-study-desk.pk-ink .desk-page .segs i{mask:none!important;-webkit-mask:none!important;background:none!important;width:15px;height:15px;display:block}
+#pinkie-study-desk.pk-ink .desk-page .segs i .pk-star{width:15px;height:15px}
+#pinkie-study-desk.pk-ink .desk-page .segs i.cur .pk-star{color:var(--pink);transform:scale(1.18)}
+
+#pinkie-study-desk.pk-ink .pk-clippings{padding:40px 40px 40px 100px;overflow:auto;display:flex;flex-direction:column;gap:18px}
+#pinkie-study-desk.pk-ink .b-receipt{display:flex;gap:12px;justify-content:space-between;border-bottom:1px solid var(--hair);padding:12px 0;font-size:14px}
+#pinkie-study-desk.pk-ink .pk-clippings .pk-clip{max-width:760px}
+
+/* Motion budget: paint-heavy properties change immediately; only compositor properties interpolate. */
+#pinkie-study-desk.pk-ink *,#pinkie-study-desk.pk-ink *::before,#pinkie-study-desk.pk-ink *::after{transition-property:transform,opacity!important}
+html[data-laolao-mode="learning"][data-pinkie-study-desk="desk"] .shell,html[data-laolao-mode="learning"][data-pinkie-study-desk="desk"] .shell *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#pinkie-study-desk.pk-ink .view[data-view="library"].pinkie-library-layout{display:flex;padding:0;overflow:hidden}
+#pinkie-study-desk.pk-ink .view[data-view="library"]>.pinkie-reader{position:relative;inset:auto;width:100%;height:100%;min-width:0;max-width:none;flex:1;border:0;border-radius:0;background:transparent}
+#pinkie-study-desk.pk-ink .view[data-view="library"]>.pinkie-library[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){#pinkie-study-desk.pk-ink *,#pinkie-study-desk.pk-ink *::before,#pinkie-study-desk.pk-ink *::after{animation:none!important;transition-duration:0s!important;transition-delay:0s!important}}
+#pinkie-study-desk.pk-ink .pk-entry{padding:50px 8% 36px 10%;overflow:auto}
+#pinkie-study-desk.pk-ink .pk-entry-body{white-space:pre-wrap;font:18px/2 var(--serif);margin:30px 0}
+#pinkie-study-desk.pk-ink .pk-entry-actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .view{--pk-margin-x:54px}
+#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view{--pk-page-margin:var(--pink)}
+@container pkpage (max-width:480px){#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .view{--pk-margin-x:30px}}
+
+/* 先生 10-29：桌上的页是能拖动的卡片，不是固定的单页 / 对开。位置和大小由 JS 写在 left/top/width/height（内容区的百分比）上。
+   顶上的胶带是把手；右边、下边和右下角拖动改大小。拖的时候只动 transform，不加模糊。 */
+#pinkie-study-desk.pk-ink:not([data-view="chat"]) .desk-content{display:block}
+/* 回到普通聊天时整张桌面都收起来（上面的定位规则比 laolao-study-desk.css 里那条隐藏规则晚加载，会把它盖掉）。 */
+#pinkie-study-desk.pk-ink[data-view="chat"] .desk-content{display:none}
+#pinkie-study-desk.pk-ink .desk-page{position:absolute;box-sizing:border-box;min-width:0;min-height:0}
+#pinkie-study-desk.pk-ink .desk-page-grip{position:absolute;left:0;right:0;top:0;height:22px;z-index:8;cursor:grab;touch-action:none}
+#pinkie-study-desk.pk-ink .desk-page-grip::before{content:"";position:absolute;left:50%;top:-6px;width:84px;height:18px;margin-left:-42px;transform:rotate(-2deg);
+  background:repeating-linear-gradient(90deg,rgba(239,175,123,.42) 0 6px,rgba(245,194,154,.48) 6px 12px);opacity:0;transition:opacity .15s}
+#pinkie-study-desk.pk-ink .desk-page:hover>.desk-page-grip::before,#pinkie-study-desk.pk-ink .desk-page[data-dragging]>.desk-page-grip::before{opacity:1}
+#pinkie-study-desk.pk-ink[data-pages="1"][data-tiled="true"] .desk-page-grip::before{opacity:0!important}
+#pinkie-study-desk.pk-ink .desk-page[data-dragging] .desk-page-grip{cursor:grabbing}
+#pinkie-study-desk.pk-ink .desk-page[data-dragging]{user-select:none;will-change:transform}
+#pinkie-study-desk.pk-ink .desk-page[data-dragging] .desk-page-body{pointer-events:none}
+#pinkie-study-desk.pk-ink .desk-page-resize{position:absolute;z-index:8;touch-action:none}
+#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="e"]{top:22px;bottom:18px;right:0;width:6px;cursor:ew-resize}
+#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="s"]{left:0;right:18px;bottom:0;height:6px;cursor:ns-resize}
+#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="se"]{right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;
+  background:linear-gradient(135deg,transparent 0 55%,var(--hair-2) 55% 60%,transparent 60% 70%,var(--hair-2) 70% 75%,transparent 75%);opacity:0;transition:opacity .15s}
+#pinkie-study-desk.pk-ink .desk-page:hover>.desk-page-resize[data-edge="se"]{opacity:.9}
+/* 拖散以后每张卡都是一张独立的纸：四角都圆、自己带投影，书脊阴影去掉。平铺时保持原来那本摊开的本子。 */
+#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page .view{border-radius:6px 16px 16px 6px!important;box-shadow:var(--book-shadow)!important}
+#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page:first-child::after{display:none}
+#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page[data-focused] .view{box-shadow:0 0 0 1px var(--hair-2),var(--book-shadow)!important}
+/* 合上 / 换位按钮只要不止一张就显示（原来只在对开时显示）。 */
+#pinkie-study-desk.pk-ink[data-pages="1"] .desk-page-action{visibility:hidden}
+/* 聊天卡片：就是学习台独立对话本身，纸面和便签栏时一样。 */
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .view{border-radius:14px!important}
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"]::after{display:none}
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-tools{top:0;right:8px;height:22px;z-index:9}
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-grip{right:44px}
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .pk-chat-page{padding-top:16px!important}
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-action[aria-label="换到另一页"]{display:none}

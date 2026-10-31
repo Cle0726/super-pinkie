@@ -1,13 +1,14 @@
-/* 碧琪学习台 v2：课程与讲义。所有状态以会话为边界，离开学习模式时撤销监听和浮层。 */
+/* 碧琪学习台：每页独立的课程状态和资源清理。 */
 (() => {
   'use strict';
   if (window.__pinkieStudyDeskLesson) return;
-  const desk = window.__pinkieStudyDesk; if (!desk) return;
+  const globalDesk = window.__pinkieStudyDesk; if (!globalDesk) return;
+  function create(desk) {
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const btn = (text, action, cls = 'lesson-secondary', mark) => { const n = el('button', cls); n.type = 'button'; if (mark && mark !== 'arrow') n.append(desk.icon(mark, {size: 'xs'})); n.append(el('span', '', text)); if (mark === 'arrow') n.append(desk.icon(mark, {size: 'xs'})); n.addEventListener('click', () => { Promise.resolve().then(() => action(n)).catch(error => report(n, error)); }); return n; };
   const data = () => desk.local().lessonUi ||= {mock: new Set(), prepared: null, current: null, revision: 0};
-  const root = () => document.getElementById('pinkie-study-desk');
-  const valid = (key, node) => desk.sessionKey() === key && Boolean(root()) && (!node || node.isConnected);
+  const root = () => desk.pane()?.host || document.getElementById('pinkie-study-desk');
+  const valid = (key, node) => desk.sessionKey() === key && Boolean(root()?.isConnected) && (!node || node.isConnected);
   const report = (node, error) => { const host = node?.closest('dialog,.lesson-paper,.lesson-bar') || root(); if (!host) return; let line = host.querySelector('.lesson-error'); if (!line) { line = el('p', 'lesson-error'); line.setAttribute('role', 'status'); host.append(line); } line.textContent = error.message || String(error); };
   const usage = u => Number(u?.total ?? u?.totalTokens ?? ((u?.input || 0) + (u?.output || 0))).toLocaleString();
   const model = m => typeof m === 'string' ? m : m?.name || m?.id || '简版课纲';
@@ -56,9 +57,12 @@
     const control = btn('讲义状态', openMaterials, 'materials-status', 'file-text'); host.append(control);
     // 今日页先拼好再挂进页面：等一拍再更新，否则 isConnected 还是 false，状态标和轮询都永远不启动（2026-10-26 真机发现）。
     await new Promise(resolve => setTimeout(resolve, 0));
+    let hasJobs = false;
     const update = m => {
       if (!valid(key, control)) return;
       const busy = m.busy || m.jobs?.find(j => j.state === 'running'), mounted = m.mounted ?? m.roots?.some(r => r.mounted);
+      hasJobs = Boolean(busy);
+      if (!hasJobs) { clearInterval(statusPolling); statusPolling=0; }
       const label = busy ? `${{scan: '正在索引', ocr: '识别扫描页', map: '正在对齐', vision: '正在读页', transcribe: '正在转写'}[busy.kind] || '正在处理'} ${Number(busy.done || 0).toLocaleString()} / ${Number(busy.total || 0).toLocaleString()}` : mounted ? `讲义 · 已索引 ${m.indexedFiles ?? m.files?.indexed ?? 0} 份 · ${stamp(m.updatedAt || m.roots?.[0]?.lastScanAt)} 更新` : 'U盘未插 · 用本机索引';
       control.replaceChildren(desk.icon(mounted ? 'usb' : 'hard-drive', {size: 'xs'}), el('span', '', label)); control.title = label;
       if (local.mock.has('materials')) control.append(el('small', 'status-demo', '讲义示意数据'));
@@ -66,7 +70,7 @@
     if (initial) update(initial);
     else { control.setAttribute('aria-busy', 'true'); try { update(await rpc('materials.status', {}, local, key)); } catch (error) { if (valid(key, control)) { control.replaceChildren(el('span', '', '讲义状态未读到 · 点此重试')); control.title = error.message; } } finally { control.removeAttribute('aria-busy'); } }
     clearInterval(statusPolling);
-    if (valid(key, control)) statusPolling = setInterval(async () => { if (!valid(key, control) || root()?.dataset.view !== 'today' || document.hidden) return; try { update(await rpc('materials.status', {}, local, key)); } catch (error) { if (valid(key, control)) control.title = error.message; } }, 15000);
+    if (hasJobs && valid(key, control)) statusPolling = setInterval(async () => { if (!valid(key, control) || root()?.dataset.view !== 'today' || document.hidden || !desk.isFocused()) return; try { update(await rpc('materials.status', {}, local, key)); } catch (error) { if (valid(key, control)) control.title = error.message; } }, 15000);
   }
   async function openMaterials() {
     const node = dialog('讲义', 'materials-panel'), body = el('div'); node.append(body); const key = desk.sessionKey(), local = data(); let revision = 0;
@@ -102,9 +106,9 @@
     }
     await load();
   }
-  function empty(host) { const node = el('div', 'lesson-empty'); const image = el('img'); image.src = desk.base + 'laolao-pinkie-buddy-learning-working.png'; image.alt = '碧琪'; node.append(image, el('h2', '', '先选一个想学的考点。'), el('p', '', '回到今日，点地图上的考点，就可以备课。'), btn('选择考点', () => desk.go('today'), 'lesson-primary'), btn('回今日', () => desk.go('today'), 'link')); host.append(node); }
+  function empty(host) { const node = el('div', 'lesson-empty'); const image = el('img', 'pk-sticker'); image.src = desk.sticker?.('thinking-pencil') || desk.base + 'laolao-pinkie-buddy-learning-working.png'; image.alt = '碧琪'; node.append(image, el('h2', '', '先选一个想学的考点。'), el('p', '', '回到今日，点地图上的考点，就可以备课。'), btn('选择考点', () => desk.go('today'), 'lesson-primary'), btn('回今日', () => desk.go('today'), 'link')); host.append(node); }
   async function openFocus(focus) {
-    if (focus.kind === 'lesson') { const local = data(), key = desk.sessionKey(); local.current = await rpc('lesson.current', {}, local, key); if (valid(key)) { if (local.current) desk.go('chat'); else await open(focus.payload || {}); } }
+    if (focus.kind === 'lesson') { const local = data(), key = desk.sessionKey(); local.current = await rpc('lesson.current', {}, local, key); if (valid(key)) { if (local.current) window.__pinkieDeskChat?.open?.(); else await open(focus.payload || {}); } }
     else await open(focus.payload || {});
   }
   async function open(selection) {
@@ -112,11 +116,13 @@
     await desk.switchStageMode('learn');
   }
   function renderSide(host, state, text) {
-    const side = el('aside', 'lesson-side'), image = el('img'); image.src = desk.base + (state === 'question' ? 'laolao-learning-question.png' : `laolao-pinkie-buddy-learning-${state}.png`); image.alt = '碧琪'; side.append(image, el('p', 'lesson-speech', text)); host.append(side); return side;
+    // 上课用碧琪在小黑板前的贴纸；整理笔记时咬着铅笔想，下课举星星。
+    const side = el('aside', 'lesson-side'), image = el('img', 'pk-sticker'), art = {working: 'thinking-pencil', happy: 'correct'}[state] || 'lesson-chalk';
+    image.src = desk.sticker?.(art) || desk.base + (state === 'question' ? 'laolao-learning-question.png' : `laolao-pinkie-buddy-learning-${state}.png`); image.alt = '碧琪'; side.append(image, el('p', 'lesson-speech', text)); host.append(side); return side;
   }
   function showConflict(current, proceed) {
     const node = dialog('还有一节没上完', 'lesson-conflict'); node.append(el('p', '', `「${pointTitle(current)}」上到第 ${current.segment || 1} / ${current.outline?.segments?.length || 1} 段。`));
-    const actions = el('div', 'lesson-actions'); const resume = btn('继续那一节', () => { node.close(); data().current = current; desk.go('chat'); }, 'lesson-primary');
+    const actions = el('div', 'lesson-actions'); const resume = btn('继续那一节', () => { node.close(); data().current = current; window.__pinkieDeskChat?.open?.(); }, 'lesson-primary');
     actions.append(resume, btn('放弃它，开始这一节', async b => { b.disabled = true; await rpc('lesson.abandon', {lessonId: current.lessonId}); node.close(); await proceed(); })); node.append(actions); resume.focus();
   }
   function mount(host) {
@@ -162,7 +168,7 @@
         const begun = local.begun ||= {result: await rpc('lesson.begin', {lessonId: lesson.lessonId}, local, key), sent: false};
         if (!valid(key, host)) return;
         local.current = {...lesson, status: 'active', startedAt: Date.now(), segment: 1};
-        if (local.mock.has('lesson') || begun.sent) desk.go('chat');
+        if (local.mock.has('lesson') || begun.sent) window.__pinkieDeskChat?.open?.();
         else { await desk.askBiqi(begun.result.message); begun.sent = true; }
       } finally { b.disabled = false; }
     }, 'lesson-pink'));
@@ -170,8 +176,10 @@
     desk.motion.splitIn(paper.querySelector('h1'));
   }
   async function openPage(source, sources = [source]) {
+    const release = desk.claimHeavy?.('pdf', desk.pane()); if (release === false) return;
     const node = dialog('原页', 'lesson-viewer'), body = el('div', 'page-body'), footer = el('footer', 'lesson-actions'), key = desk.sessionKey(), local = data();
     let page = {...source}, revision = 0, zoom = 1;
+    node.addEventListener('close', () => release?.(), {once: true});
     const citation = el('p', 'lesson-meta'); node.insertBefore(citation, node.children[1] || null); node.append(body, footer);
     const tools = el('div', 'page-tools');
     const scale = delta => { zoom = Math.max(1, Math.min(2, zoom + delta)); const image = body.querySelector('img'); if (image) image.style.width = zoom * 100 + '%'; };
@@ -205,9 +213,11 @@
     releasePadding();
   }
   function releasePadding() { if (padding) { padding.node.removeAttribute('data-pinkie-lesson-space'); if (padding.value) padding.node.style.setProperty('--pinkie-lesson-base-padding', padding.value); else padding.node.style.removeProperty('--pinkie-lesson-base-padding'); padding = null; } }
-  function messageColumn() { return document.querySelector('openclaw-chat-pane[active] .chat-thread, openclaw-chat-pane .chat-thread, .agent-chat__messages, .chat-thread, .chat-messages'); }
+  function messageColumn() { return window.__pinkieDeskChat?.messageColumn?.() || document.querySelector('openclaw-chat-pane[active] .chat-thread, openclaw-chat-pane .chat-thread, .agent-chat__messages, .chat-thread, .chat-messages'); }
   function positionBar() {
     if (!bar) return;
+    const shared = window.__pinkieDeskChat?.lessonHost?.();
+    if (shared) { releasePadding(); if (bar.parentElement !== shared) shared.append(bar); bar.style.cssText = ''; bar.classList.add('lesson-bar--shared'); const width = shared.getBoundingClientRect().width; bar.classList.toggle('lesson-bar--narrow', width < 720); bar.classList.toggle('lesson-bar--compact', width < 560); const strip = shared.closest('.pk-tonight'); strip?.classList.add('pk-tonight--lesson'); return; }
     const column = messageColumn(), viewport = column?.getBoundingClientRect(), rect = (column?.querySelector('.chat-thread-inner') || column)?.getBoundingClientRect();
     const side = document.querySelector('aside.sidebar:not(.sidebar--collapsed)')?.getBoundingClientRect();
     const left = rect && rect.width > 300 ? rect.left : Math.max(side?.right || 0, 110), width = rect && rect.width > 300 ? rect.width : innerWidth - left - 24;
@@ -217,11 +227,11 @@
     if (column && padding?.node !== column) { releasePadding(); padding = {node: column, value: column.style.getPropertyValue('--pinkie-lesson-base-padding')}; column.style.setProperty('--pinkie-lesson-base-padding', getComputedStyle(column).paddingTop); column.setAttribute('data-pinkie-lesson-space', ''); resizeObserver?.observe(column); }
   }
   async function refreshCurrent() {
-    if (!root() || root().dataset.view !== 'chat' || document.hidden) return;
+    if (!root()?.isConnected || !window.__pinkieDeskChat?.active?.() || document.hidden || desk.pane() !== globalDesk.pane()) return;
     const key = desk.sessionKey(), local = data(), token = ++currentRevision;
-    try { const current = await rpc('lesson.current', {}, local, key); if (!valid(key) || root()?.dataset.view !== 'chat' || token !== currentRevision) return; if (current) { const prepared = local.prepared?.lessonId === current.lessonId ? local.prepared : null; current.sources ||= prepared?.sources || [...new Set((current.outline?.segments || []).flatMap(s => s.sources || []))].map((ref, i) => ({ref, title: '讲义出处 ' + (i + 1), citation: '讲义出处 ' + (i + 1)})); } local.current = current; paintBar(current, local); }
+    try { const current = await rpc('lesson.current', {}, local, key); if (!valid(key) || !window.__pinkieDeskChat?.active?.() || token !== currentRevision) return; if (current) { const prepared = local.prepared?.lessonId === current.lessonId ? local.prepared : null; current.sources ||= prepared?.sources || [...new Set((current.outline?.segments || []).flatMap(s => s.sources || []))].map((ref, i) => ({ref, title: '讲义出处 ' + (i + 1), citation: '讲义出处 ' + (i + 1)})); } local.current = current; paintBar(current, local); }
     catch (error) {
-      if (!valid(key) || root()?.dataset.view !== 'chat' || token !== currentRevision) return;
+      if (!valid(key) || !window.__pinkieDeskChat?.active?.() || token !== currentRevision) return;
       if (!bar) { bar = el('section', 'lesson-bar'); bar.setAttribute('aria-label', '课程条'); bar.append(el('span', 'lesson-meta', '课程状态暂时没读到'), btn('重试', refreshCurrent)); root().append(bar); positionBar(); }
       report(bar, error);
     }
@@ -245,7 +255,8 @@
         if (!lesson.sources?.length) pop.append(el('p', 'lesson-meta', '这节课暂无讲义出处。')); pop.append(btn('收起', () => pop.remove(), 'link')); bar.append(pop);
       }, 'lesson-ghost lesson-bar-source', 'file-text'); sourceButton.title = '讲义出处';
       const stuck = btn('没懂，换个讲法', b => event('stuck', b), 'lesson-secondary lesson-bar-stuck', 'rotate-ccw');
-      const pause = btn('暂停', b => event('pause', b), 'lesson-ghost lesson-bar-pause', 'pause'); pause.title = '暂停上课';
+      stuck.setAttribute('aria-label','没懂，换个讲法');
+      const pause = btn('暂停', b => event('pause', b), 'lesson-ghost lesson-bar-pause', 'pause'); pause.title = '暂停上课'; pause.setAttribute('aria-label','暂停');
       const ready = segment >= segments.length && Number(lesson.checks?.answered ?? lesson.checks?.asked ?? 0) >= segments.length;
       actions.append(sourceButton, stuck, pause, btn('讲完了，去练', b => ready ? finish(lesson, b) : confirmFinish(lesson, b), ready ? 'lesson-pink' : 'lesson-secondary', 'arrow'));
     }
@@ -309,15 +320,26 @@
     demo(paper, local); renderSide(host, result.failed ? 'working' : 'happy', summary.next || (result.failed ? '课程还在，稍后可以再试一次。' : '先生，这节课学过了，接着试一小组。'));
   }
   function sync() {
-    clearBar(); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!root() || root().dataset.view !== 'chat' || document.hidden) return;
+    clearBar(); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!root()?.isConnected || !window.__pinkieDeskChat?.active?.() || document.hidden || desk.pane() !== globalDesk.pane()) return;
     // 新聊天不抢发学习台请求；已有课程立即恢复，其他会话从首个 4 秒轮询或新消息恢复。
-    if (data().current || data().prepared || desk.local().today?.focus?.kind === 'lesson') void refreshCurrent(); polling = setInterval(refreshCurrent, 4000);
+    if (data().current || data().prepared || desk.local().today?.focus?.kind === 'lesson') void refreshCurrent(); 
     const column = messageColumn(); if (column) { let queued = false; messageObserver = new MutationObserver(records => { if (queued || !records.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !bar?.contains(n)))) return; queued = true; setTimeout(() => { queued = false; void refreshCurrent(); }, 250); }); messageObserver.observe(column, {childList: true, characterData: true, subtree: true}); }
     resizeObserver = new ResizeObserver(positionBar); if (column) resizeObserver.observe(column); const sidebar = document.querySelector('aside.sidebar'); if (sidebar) resizeObserver.observe(sidebar);
   }
-  window.__pinkieStudyDeskLesson = {open, openFocus, mountStatus, openMaterials, openPage, transcript};
-  desk.registerStageMode('learn', {title: '讲', mount, unmount() { root()?.querySelector('.lesson-stage')?._lessonCleanup?.(); }});
-  window.addEventListener('pinkie:study-desk-view', sync); window.addEventListener('pinkie:study-desk-mounted', sync); window.addEventListener('pinkie:study-desk-unmount', () => { data().revision++; clearInterval(statusPolling); statusPolling = 0; clearBar(); });
-  window.addEventListener('resize', positionBar); document.addEventListener('visibilitychange', sync); window.addEventListener('pagehide', () => { clearInterval(statusPolling); clearBar(); });
-  sync();
+    const pause = (options={}) => { clearInterval(statusPolling); statusPolling = 0; if(!options.chat||!options.samePane)clearBar(); };
+    return {open, openFocus, mountStatus, openMaterials, openPage, transcript, mount, sync, pause,
+      unmount() { root()?.querySelector('.lesson-stage')?._lessonCleanup?.(); pause(); },
+      resume() { sync(); }, dispose() { data().revision++; pause(); for (const d of root()?.querySelectorAll('.lesson-dialog') || []) { d.close(); d.remove(); } }};
+  }
+  const instances = new WeakMap();
+  const forPane = (pane = globalDesk.pane()) => { if (!instances.has(pane)) instances.set(pane, create(globalDesk.forPane(pane))); return instances.get(pane); };
+  const fromHost = host => { const id = host?.closest?.('[data-pane]')?.dataset.pane; return forPane(id ? globalDesk.contexts().find(ctx => ctx.pane.id === id)?.pane : globalDesk.pane()); };
+  window.__pinkieStudyDeskLesson = {forPane, open: (...args) => forPane().open(...args), openFocus: (...args) => forPane().openFocus(...args),
+    mountStatus: (host, ...args) => fromHost(host).mountStatus(host, ...args), openMaterials: (...args) => forPane().openMaterials(...args), openPage: (...args) => forPane().openPage(...args), transcript: (...args) => forPane().transcript(...args)};
+  globalDesk.registerStageMode('learn', {title: '讲', create: ctx => forPane(ctx.pane)});
+  const each = run => { if (!document.getElementById('pinkie-study-desk')) return; for (const ctx of globalDesk.contexts()) { const instance = instances.get(ctx.pane); if (instance) run(instance, ctx); } };
+  for (const name of ['pinkie:study-desk-view', 'pinkie:study-desk-focus', 'pinkie:study-desk-mounted', 'pinkie:learning-state', 'pinkie:desk-chat-ready', 'pinkie:desk-conversation-ready']) window.addEventListener(name, event => each((instance,ctx) => { if(name==='pinkie:study-desk-focus'&&event.detail?.chat&&ctx.pane===globalDesk.pane())return;instance.sync(); }));
+  window.addEventListener('pinkie:study-desk-unmount', () => each(instance => instance.dispose()));
+  document.addEventListener('visibilitychange', () => each(instance => document.hidden ? instance.pause() : instance.sync()));
+  window.addEventListener('pagehide', () => each(instance => instance.dispose()));
 })();

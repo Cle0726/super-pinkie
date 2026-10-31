@@ -160,14 +160,18 @@ test('today separates activity completion from mastery and caps automatic daily 
   const pact = new LearningPact(store); store.pact = pact;
   pact.set({daily: {minutes: 5, questions: 1}});
   for (let index = 0; index < 25; index++) store.saveNote(KEY, {content: `n${index} = 知识点`});
-  assert.equal(store.reviewQueue(LEARNING_NOTEBOOK_SESSION, {limit: 100}).notes.length, 20);
+  // 笔记本 v2：笔记回顾每天最多 10 条，其余算积压，不丢。
+  const queue = store.reviewQueue(LEARNING_NOTEBOOK_SESSION, {limit: 100});
+  assert.equal(queue.notes.length, 10); assert.equal(queue.todayCount, 10); assert.equal(queue.backlog, 15);
   const before = pact.today({sessionKey: KEY});
   assert.equal(before.activityComplete, false);
   assert.equal(before.reviewPlan.target, 20);
   assert.equal(before.reviewPlan.backlog, 5);
   assert.equal(before.nextStep.kind, 'review');
   pact.mutateDay(pact.todayDate(), day => { day.minutes = 5; day.questions.answered = 1; });
-  pact.recordReview({count: 20});
+  // 笔记的每日额度按「今天复习过的不同笔记」计，账本里别的复习（例如生词）不占这 10 条。
+  for (const due of store.reviewQueue(LEARNING_NOTEBOOK_SESSION).notes) store.reviewNote(LEARNING_NOTEBOOK_SESSION, due.id, 'remembered');
+  pact.recordReview({count: 10});
   const after = pact.today({sessionKey: KEY});
   assert.equal(after.activityComplete, true);
   assert.equal(after.mastery.assessed, 0);

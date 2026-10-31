@@ -21,6 +21,16 @@ enum MaterialPreviewNativeTests {
     }
 
     static func main() throws {
+        for mode in ["chat", "project", "thinking", "learning"] {
+            try expect(MaterialPreviewModePolicy.allowsEnhancedMarkdown(primary: mode, companion: nil, companionVisible: false), "受测模式应允许增强预览")
+        }
+        try expect(MaterialPreviewModePolicy.allowsEnhancedMarkdown(primary: "learning", companion: "project", companionVisible: true), "两个受测模式应允许增强预览")
+        try expect(!MaterialPreviewModePolicy.allowsEnhancedMarkdown(primary: nil, companion: nil, companionVisible: false), "未知主模式应保留原预览")
+        try expect(!MaterialPreviewModePolicy.allowsEnhancedMarkdown(primary: "other", companion: nil, companionVisible: false), "未列入的模式应保留原预览")
+        try expect(!MaterialPreviewModePolicy.allowsEnhancedMarkdown(primary: "learning", companion: "other", companionVisible: true), "双开含未列入模式时应保留原预览")
+        let legacyMarkdown = MaterialMarkdownDocument.content(text: "$x$", renderer: "", nonce: "test")
+        try expect(legacyMarkdown.contains("window.__pinkieMarkdownEnhanced=false"), "默认预览应保留原行为")
+
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("material-preview-test-\(UUID().uuidString)", isDirectory: true)
         let home = root.appendingPathComponent("home", isDirectory: true)
         let outside = root.appendingPathComponent("outside", isDirectory: true)

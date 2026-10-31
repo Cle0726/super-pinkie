@@ -1,0 +1,145 @@
+/* 碧琪手账 v2 · 共享组件层（briefs/study-desk-v2/LANGUAGE.md）。
+   作用域是 .pk-ink：已换皮的学习台页和学习模式聊天里的卡片加这个 class；还没换皮的 v1 页面不受影响。
+   M1 预算：零 backdrop-filter；动画只动 transform / opacity；不跑循环。 */
+
+.pk-ink{
+  --pk-paper:#FAF6F1; --pk-paper-2:#F2EBE4; --pk-rule:#E6DCD6; --pk-rule-2:#D9CCC5; --pk-margin:#F1B7CF;
+  --pk-ink:#2E2236; --pk-ink-2:#6F6377; --pk-ink-3:#87788D;
+  --pk-pink:#E5488F; --pk-pink-solid:#DB1F74; --pk-pink-ink:#B42F6E; --pk-pink-tint:#F9E1EC; --pk-hl:rgba(244,114,170,.34);
+  --pk-gold-1:#C9A24A; --pk-gold-2:#F1D58A;
+  --pk-tape:rgba(246,196,215,.72); --pk-tape-2:rgba(205,226,214,.72); --pk-tape-stripe:rgba(255,255,255,.25);
+  --pk-serif:"Songti SC","Noto Serif SC",serif; --pk-sans:"PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+  --pk-hand:"HanziPen SC","LXGW WenKai","Kaiti SC",cursive; --pk-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --pk-out:cubic-bezier(.2,.7,.2,1); --pk-spring:cubic-bezier(.34,1.56,.64,1);
+  --pk-sheet:0 1px 0 rgba(46,34,54,.05),0 30px 60px -36px rgba(90,40,70,.42);
+  --pk-lift:0 1px 0 rgba(46,34,54,.05),0 18px 30px -22px rgba(90,40,70,.45);
+  color:var(--pk-ink); font-family:var(--pk-sans);
+}
+:is(#pinkie-study-desk[data-theme="night"],html[data-pinkie-night]) .pk-ink,.pk-ink[data-theme="night"]{
+  --pk-paper:#1C1620; --pk-paper-2:#231C28; --pk-rule:#2C2433; --pk-rule-2:#3A3142; --pk-margin:#6B3352;
+  --pk-ink:#F2E9EF; --pk-ink-2:#B6A9BB; --pk-ink-3:#8E8294;
+  --pk-pink:#F0679F; --pk-pink-solid:#F0679F; --pk-pink-ink:#F59AC2; --pk-pink-tint:#3B1E2D; --pk-hl:rgba(240,103,159,.30);
+  --pk-tape:rgba(240,103,159,.30); --pk-tape-2:rgba(150,190,170,.26); --pk-tape-stripe:rgba(255,255,255,.06);
+  --pk-sheet:0 1px 0 rgba(0,0,0,.3),0 30px 60px -30px rgba(0,0,0,.8);
+  --pk-lift:0 1px 0 rgba(0,0,0,.3),0 18px 30px -20px rgba(0,0,0,.7);
+}
+/* 胶带随季节 / 节日换（learning-almanac 的 protagonist.tape），全用渐变，零图片。 */
+.pk-ink[data-tape="spring"]{--pk-tape:rgba(246,196,215,.72);--pk-tape-2:rgba(205,226,214,.72)}
+.pk-ink[data-tape="summer"]{--pk-tape:rgba(170,222,206,.7);--pk-tape-2:rgba(248,214,160,.7)}
+.pk-ink[data-tape="autumn"]{--pk-tape:rgba(232,150,96,.62);--pk-tape-2:rgba(214,178,120,.62)}
+.pk-ink[data-tape="winter"]{--pk-tape:rgba(190,206,226,.75);--pk-tape-2:rgba(236,226,232,.8)}
+.pk-ink[data-tape="red"]{--pk-tape:rgba(214,58,64,.7);--pk-tape-2:rgba(240,196,92,.72)}
+.pk-ink[data-tape="moon"]{--pk-tape:rgba(240,232,210,.85);--pk-tape-2:rgba(196,186,222,.7)}
+.pk-ink[data-tape="plain"]{--pk-tape:rgba(200,190,196,.55);--pk-tape-2:rgba(200,190,196,.55);--pk-tape-stripe:transparent}
+.pk-ink[data-tape="wuse"]{--pk-tape-paint:linear-gradient(90deg,#3C2A46 0 20%,#D9434F 20% 40%,#F2C230 40% 60%,#9C5BC4 60% 80%,#F6F1EA 80%)}
+
+/* ---------- 纸 ---------- */
+.pk-paper{background-color:var(--pk-paper)}
+.pk-ruled{background-image:repeating-linear-gradient(to bottom,transparent 0 33px,var(--pk-rule) 33px 34px);background-position:0 12px}
+.pk-dots{background-image:radial-gradient(circle,var(--pk-rule-2) 1.1px,transparent 1.4px);background-size:24px 24px;background-position:6px 6px}
+.pk-grid{background-image:linear-gradient(var(--pk-rule) 1px,transparent 1px),linear-gradient(90deg,var(--pk-rule) 1px,transparent 1px);background-size:24px 24px}
+:is(#pinkie-study-desk[data-theme="night"],html[data-pinkie-night]) .pk-ink .pk-grid,.pk-ink[data-theme="night"] .pk-grid{background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px)}
+.pk-margin{position:relative;padding-left:84px}
+.pk-margin::before{content:"";position:absolute;left:66px;top:0;bottom:0;width:1.5px;background:var(--pk-margin)}
+.pk-margin.pk-focus::before{width:2.5px;background:var(--pk-pink)}
+
+/* ---------- 荧光笔：每页最多一处 ---------- */
+.pk-hl{position:relative;z-index:0;white-space:nowrap}
+.pk-hl::before{content:"";position:absolute;z-index:-1;left:-.12em;right:-.14em;top:.42em;bottom:.02em;background:var(--pk-hl);border-radius:.18em .5em .3em .6em/.5em .3em .6em .2em;transform:skewX(-8deg);transform-origin:left}
+.pk-hl.pk-anim::before{animation:pk-stroke .28s var(--pk-out) both}
+@keyframes pk-stroke{from{transform:skewX(-8deg) scaleX(0)}}
+
+/* ---------- 星星：唯一的进度单位 ---------- */
+.pk-star{display:inline-block;width:16px;height:16px;flex:none;vertical-align:-2px;--sf:transparent;--ss:var(--pk-rule-2)}
+.pk-star[data-s="half"]{--sf:url(#pk-half);--ss:var(--pk-pink)}
+.pk-star[data-s="full"]{--sf:var(--pk-pink);--ss:var(--pk-pink)}
+.pk-star[data-s="gold"]{--sf:url(#pk-gold);--ss:var(--pk-gold-1)}
+.pk-star[data-s="cur"]{--ss:var(--pk-pink);transform:scale(1.15)}
+.pk-star.pk-anim{animation:pk-light .24s var(--pk-out) both}
+@keyframes pk-light{0%{transform:scale(.6)}70%{transform:scale(1.1)}}
+.pk-stars{display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center}
+
+/* ---------- 碧琪批注：只给碧琪用手写体 ---------- */
+.pk-note{font-family:var(--pk-hand);color:var(--pk-pink-ink);font-size:19px;line-height:1.55;position:relative}
+.pk-note>small{display:block;font:12px var(--pk-sans);color:var(--pk-ink-3);letter-spacing:.06em;margin-bottom:4px}
+
+/* ---------- 印章：状态只用印章 ---------- */
+.pk-stamp{--pk-grunge:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.2 2.05'/%3E%3C/filter%3E%3Crect width='120' height='60' filter='url(%23n)'/%3E%3C/svg%3E");
+  display:inline-flex;align-items:center;gap:4px;font:700 13px var(--pk-serif);color:var(--pk-pink);border:1.8px solid currentColor;border-radius:6px;padding:3px 8px 2px;transform:rotate(-6deg);letter-spacing:.12em;opacity:.88;white-space:nowrap;
+  -webkit-mask-image:var(--pk-grunge);mask-image:var(--pk-grunge);-webkit-mask-size:120px 60px;mask-size:120px 60px}
+.pk-stamp[data-tone="ink"]{color:var(--pk-ink-3)}
+.pk-stamp[data-size="sm"]{font-size:10px;padding:1px 4px 0;border-width:1.4px;border-radius:4px}
+.pk-stamp[data-size="lg"]{font-size:20px;padding:6px 14px 5px;border-width:2.4px;border-radius:9px}
+.pk-stamp.pk-anim{animation:pk-stamp .18s var(--pk-out) both}
+@keyframes pk-stamp{from{transform:rotate(-6deg) scale(1.25);opacity:0}}
+
+/* ---------- 胶带卡：每页最多一张 ---------- */
+.pk-taped{position:relative;background:var(--pk-paper);border-radius:4px;box-shadow:var(--pk-lift);transform:rotate(-.6deg)}
+:is(#pinkie-study-desk[data-theme="night"],html[data-pinkie-night]) .pk-ink .pk-taped,.pk-ink[data-theme="night"] .pk-taped{background:var(--pk-paper-2)}
+.pk-taped::before,.pk-taped::after{content:"";position:absolute;width:92px;height:26px;background-color:var(--pk-tape);background-image:var(--pk-tape-paint,repeating-linear-gradient(90deg,var(--pk-tape-stripe) 0 6px,transparent 6px 12px));top:-11px;left:-20px;transform:rotate(-24deg);pointer-events:none;
+  -webkit-mask:linear-gradient(90deg,transparent 0 3px,#000 3px calc(100% - 3px),transparent 0)}
+.pk-taped::after{left:auto;right:-22px;top:auto;bottom:-10px;background-color:var(--pk-tape-2)}
+/* 夜里台灯下，胶带颜色压暗一点，不然季节色在深纸上发脏。 */
+#pinkie-study-desk[data-theme="night"] .pk-ink .pk-taped::before,#pinkie-study-desk[data-theme="night"] .pk-ink .pk-taped::after,html[data-pinkie-night] .pk-ink .pk-taped::before,html[data-pinkie-night] .pk-ink .pk-taped::after,
+.pk-ink[data-theme="night"] .pk-taped::before,.pk-ink[data-theme="night"] .pk-taped::after,.pk-ink[data-theme="night"] .pk-ref::before{opacity:.55}
+.pk-taped[data-tape="one"]::after{content:none}
+.pk-taped.pk-anim{animation:pk-stick .32s var(--pk-spring) both}
+@keyframes pk-stick{from{transform:rotate(-3deg) translateY(-10px);opacity:0}}
+
+/* ---------- 碧琪贴纸：最终素材烘焙了白边，只加一层投影；占位立绘用 data-raw 补白边 ---------- */
+.pk-sticker{display:block;filter:drop-shadow(0 8px 10px rgba(90,40,70,.25));pointer-events:none;user-select:none}
+.pk-sticker[data-raw]{filter:drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 8px 10px rgba(90,40,70,.25))}
+.pk-sticker.pk-anim{animation:pk-stick .32s var(--pk-spring) both}
+
+/* ---------- 按钮：只有三种 ---------- */
+.pk-btn{border:0;cursor:pointer;font:600 15px var(--pk-sans);border-radius:99px;height:46px;padding:0 22px;display:inline-flex;align-items:center;gap:8px;transition:transform .2s var(--pk-out)}
+.pk-btn:hover{transform:translateY(-1px)}
+.pk-btn:disabled{cursor:default;opacity:.55;transform:none}
+.pk-btn:focus-visible{outline:2px solid var(--pk-pink);outline-offset:3px}
+.pk-btn[data-kind="ink"]{background:var(--pk-ink);color:var(--pk-paper)}
+.pk-btn[data-kind="go"]{background:var(--pk-pink-solid);color:#fff;box-shadow:0 10px 20px -12px rgba(229,72,143,.9)}
+.pk-btn[data-kind="go"] .pk-star{--sf:#fff;--ss:#fff}
+.pk-btn[data-size="sm"]{height:36px;font-size:14px;padding:0 16px}
+.pk-link{border:0;background:none;font:500 14px var(--pk-sans);color:var(--pk-ink-2);cursor:pointer;padding:2px 0;position:relative}
+.pk-link::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:1.5px;background:var(--pk-ink-3);border-radius:2px;transform:scaleX(.35);transform-origin:left;transition:transform .28s var(--pk-out)}
+.pk-link:hover,.pk-link:focus-visible{color:var(--pk-ink);outline:none}
+.pk-link:hover::after,.pk-link:focus-visible::after{transform:scaleX(1);background:var(--pk-pink)}
+.pk-link[data-tone="pink"]{color:var(--pk-pink-ink)}
+
+/* ---------- 页眉与分段选择（取代原生 select） ---------- */
+.pk-kicker{font-size:13px;color:var(--pk-ink-3);letter-spacing:.08em}
+.pk-kicker .pk-alm{font-family:var(--pk-hand);color:var(--pk-ink-2);font-size:15px;margin-left:10px;letter-spacing:0}
+.pk-title{font:600 30px/1.2 var(--pk-serif);margin:0}
+.pk-seg{display:flex;gap:18px}
+.pk-seg button{border:0;background:none;font:500 14px var(--pk-sans);color:var(--pk-ink-3);padding:0 0 4px;cursor:pointer;position:relative;isolation:isolate}
+.pk-seg button[aria-pressed="true"]{color:var(--pk-ink)}
+.pk-seg button[aria-pressed="true"]::after{content:"";position:absolute;left:-3px;right:-3px;bottom:-2px;height:7px;background:var(--pk-hl);border-radius:3px;transform:skewX(-10deg);z-index:-1}
+
+/* ---------- 条目卡：学习台和聊天共用（PLAN §2） ---------- */
+.pk-ref{position:relative;display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:7px 10px;border:1px solid var(--pk-rule-2);border-radius:5px;background:var(--pk-paper);font-size:12px;color:var(--pk-ink-2);text-align:left}
+.pk-ref::before{content:"";position:absolute;right:-12px;top:-7px;width:40px;height:13px;background:var(--pk-tape-2);transform:rotate(28deg);pointer-events:none}
+.pk-ref b{font:600 13px var(--pk-serif);color:var(--pk-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-ref .pk-star{width:11px;height:11px}
+.pk-kind{font-size:10px;color:var(--pk-pink-ink);border:1px solid currentColor;border-radius:3px;padding:0 3px;line-height:15px;white-space:nowrap}
+.pk-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;background:var(--pk-paper);border-radius:4px;border-top:3px solid var(--pk-pink);box-shadow:var(--pk-lift);transform:rotate(.4deg)}
+:is(#pinkie-study-desk[data-theme="night"],html[data-pinkie-night]) .pk-ink .pk-card,.pk-ink[data-theme="night"] .pk-card{background:var(--pk-paper-2)}
+.pk-card small{display:block;font-size:11px;color:var(--pk-ink-3)}
+.pk-card b{font:600 14px var(--pk-serif)}
+.pk-receipt{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--pk-ink-2);padding:6px 10px;border:1.4px dashed var(--pk-rule-2);border-radius:6px}
+.pk-receipt .pk-link{margin-left:auto;font-size:12px}
+.pk-receipt[data-undone]{opacity:.55;text-decoration:line-through}
+
+/* 学习台 v1 有一条 id 级的 #pinkie-study-desk :where(button,input,textarea){font:inherit;color:inherit}，
+   会盖过上面按类写的按钮字体和颜色。在学习台里用同样的 id 级再说一遍（只说字体和颜色）。 */
+#pinkie-study-desk .pk-btn{font:600 15px var(--pk-sans)}
+#pinkie-study-desk .pk-btn[data-size="sm"]{font-size:14px}
+#pinkie-study-desk .pk-btn[data-kind="ink"]{color:var(--pk-paper)}
+#pinkie-study-desk .pk-btn[data-kind="go"]{color:#fff}
+#pinkie-study-desk .pk-link{font:500 14px var(--pk-sans);color:var(--pk-ink-2)}
+#pinkie-study-desk .pk-link:is(:hover,:focus-visible){color:var(--pk-ink)}
+#pinkie-study-desk .pk-link[data-tone="pink"]{color:var(--pk-pink-ink)}
+#pinkie-study-desk .pk-seg button{font:500 14px var(--pk-sans);color:var(--pk-ink-3)}
+#pinkie-study-desk .pk-seg button[aria-pressed="true"]{color:var(--pk-ink)}
+#pinkie-study-desk button.pk-ref{font:12px var(--pk-sans);color:var(--pk-ink-2)}
+
+@media (prefers-reduced-motion:reduce){.pk-ink .pk-anim,.pk-ink .pk-anim::before{animation:none!important}.pk-btn,.pk-link::after{transition:none!important}}

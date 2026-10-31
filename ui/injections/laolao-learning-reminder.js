@@ -7,7 +7,7 @@
   const key = () => new URL(location.href).searchParams.get('session') || window.__pinkieStudyDesk?.sessionKey?.() || '';
   const active = () => {
     const owner = /^agent:([^:]+):/.exec(key())?.[1];
-    return root.dataset.laolaoMode === 'learning' && owner === 'learning';
+    return !window.__pinkieDeskChat && root.dataset.laolaoMode === 'learning' && owner === 'learning';
   };
   const visible = node => node && !node.closest('[hidden], [inert]') && node.getBoundingClientRect().height > 0 && getComputedStyle(node).visibility !== 'hidden';
   const header = () => ['header.topbar .dashboard-header', '.chat-pane__header .dashboard-header', '.topnav-shell__content', '.chat-pane__header', '.topnav-shell'].map(s => document.querySelector(s)).find(visible);
@@ -144,7 +144,7 @@
     observer.observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-pinkie-study-desk']});
     observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-laolao-mode-label']});
   };
-  for (const name of ['pinkie:session-selected', 'laolao:modechange', 'popstate', 'pinkie:study-desk-view', 'pinkie:study-desk-mounted']) window.addEventListener(name, queue);
+  for (const name of ['pinkie:session-selected', 'laolao:modechange', 'popstate', 'pinkie:study-desk-view', 'pinkie:study-desk-mounted', 'pinkie:desk-chat-ready']) window.addEventListener(name, queue);
   window.addEventListener('pinkie:learning-state', () => { if (active() && !document.hidden) { state.readAt = 0; queue(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopTimer(); closePanel(); } else { state.readAt = 0; queue(); } });
   window.addEventListener('resize', queue);

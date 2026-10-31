@@ -819,6 +819,7 @@
     const nested = slot.closest('.chat-work-group, .chat-session-activity, .chat-activity-group__body');
     const supplied = nested ? [] : Array.isArray(slot.pinkieLearningCards) ? slot.pinkieLearningCards : rawRefs(slot.pinkieLearningSource);
     const refs = [...new Map(supplied.filter(ref => validRef(ref) && ref.sessionKey === sessionKey).map(ref => [`${ref.kind}:${ref.id}`, ref])).values()];
+    try { window.__pinkieDeskChat?.bind?.(slot, supplied, sessionKey); } catch (error) { console.warn('[desk-chat] bind', error); }
     const shown = refs.slice(0, root.limit), keys = new Set(shown.map(ref => `${ref.sessionKey}:${ref.kind}:${ref.id}`));
     for (const [key, view] of root.items) if (!keys.has(key)) { view.dispose(); view.element.remove(); root.items.delete(key); }
     for (const ref of shown) {

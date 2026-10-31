@@ -15,11 +15,11 @@ test('learning shell mounts once, restores native chat, and cleans up across ten
       window.qaMounts = 0; window.qaUnmounts = 0;
       __pinkieStudyDesk.registerView('board', {title: '看板', mount(host) { qaMounts++; host.textContent = '真实挂载'; }, unmount() { qaUnmounts++; }});
     });
-    await page.getByRole('button', {name: '看板', exact: true}).click();
+    await page.getByRole('button', {name: '看板', exact: true}).click({modifiers: ['Alt']});
     await page.getByText('真实挂载').waitFor();
     await page.getByRole('button', {name: '对话', exact: true}).click();
     assert.equal(await page.locator('.shell').evaluate(n => n.inert), false);
-    await page.getByRole('button', {name: '今日', exact: true}).click();
+    await page.getByRole('button', {name: '今日', exact: true}).click({modifiers: ['Alt']});
     for (let i = 0; i < 10; i++) {
       await page.evaluate(() => { history.replaceState({}, '', '/chat?session=agent:project:qa'); document.documentElement.dataset.laolaoMode = 'project'; dispatchEvent(new Event('pinkie:session-selected')); });
       assert.equal(await page.locator('#pinkie-study-desk').count(), 0);
@@ -40,12 +40,12 @@ test('pinned GSAP stays isolated, exact prototype tokens follow night mode', asy
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('paper')), '#FAF6F1');
     // Day secondary ink reaches 3:1 on paper (approved token change 2026-10-26).
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('ink-3')), '#87788D');
-    // The pink hover fill is absolutely positioned; the arrow must stay above it.
-    await page.locator('.task .go .desk-icon').waitFor();
-    assert.equal(await page.locator('.task .go .desk-icon').evaluate(n => getComputedStyle(n).position), 'relative');
+    // 手账 v2：今日卡片的主按钮是一颗写着字的粉色「开始 / 去学 / 继续」，不再是墨色圆钮里的箭头。
+    await page.locator('.task .go').waitFor();
+    assert.match(await page.locator('.task .go').textContent(), /开始|去学|继续/);
     await page.getByRole('button', {name: '切换日间和夜间'}).click();
-    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('paper')), '#17131B');
-    assert.equal(await page.locator('.rail').evaluate(n => n.getBoundingClientRect().width), 72);
+    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('paper')), '#1C1620');
+    assert.equal(await page.locator('.rail').evaluate(n => n.getBoundingClientRect().width), 76);
   });
 });
 test('missing libraries and reduced motion render without exceptions or animation', async () => {
@@ -88,9 +88,9 @@ test('today, exam settings and a complete set use B real RPC; Enter never submit
       // Feedback lands in place: the stem is not rebuilt or replayed, and nothing is washed out.
       assert.equal(await page.locator('.q-text[data-qa-same="1"]').count(), 1);
       assert.deepEqual(await page.locator('.opt.answered').first().evaluate(n => [getComputedStyle(n).opacity, getComputedStyle(n).filter]), ['1', 'none']);
-      assert.notEqual(await page.getByRole('button', {name: '很确定', exact: true}).evaluate(n => getComputedStyle(n).boxShadow), 'none');
+      assert.equal(await page.getByRole('button', {name: '很确定', exact: true}).getAttribute('aria-pressed'), 'true');
       await page.getByRole('button', {name: '对话', exact: true}).click();
-      await page.getByRole('button', {name: '舞台', exact: true}).click();
+      await page.getByRole('button', {name: '舞台', exact: true}).click({modifiers: ['Alt']});
       assert.equal(await page.locator('.q-text').innerText(), question);
       assert.equal(harness.calls.filter(c => c.method.endsWith('desk.set')).length, 1);
       await page.locator('.confirm-answer').focus(); await page.keyboard.press('Enter');
@@ -128,9 +128,11 @@ test('real control-ui Chromium hosts flashcards, an experiment, a mock paper, bo
   try {
     await run({handler: service.handler, realUI: true, engine: 'chromium'}, async (page, harness) => {
       const activate = async locator => { const r = await locator.boundingBox(); assert.ok(r); await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2); };
+      // 索引贴：⌥ 点击 = 在当前卡里换页（普通点击会另摊一张卡）。
+      const activateRail = async locator => { await page.keyboard.down('Alt'); try { await activate(locator); } finally { await page.keyboard.up('Alt'); } };
       await page.locator('openclaw-app').waitFor({state: 'attached'});
       await page.locator('.shell').waitFor({state: 'attached'});
-      await activate(page.getByRole('button', {name: '舞台', exact: true}));
+      await activateRail(page.getByRole('button', {name: '舞台', exact: true}));
       await activate(page.getByRole('button', {name: '闪卡', exact: true}));
       await page.locator('.flashcard').waitFor();
       await page.locator('.flashcard').focus();
@@ -139,29 +141,30 @@ test('real control-ui Chromium hosts flashcards, an experiment, a mock paper, bo
       await page.locator('.flashcard.flipped').waitFor();
       await page.keyboard.press('3');
       await page.getByText('这一轮复习完成。', {exact: true}).waitFor();
-      assert.equal(harness.calls.filter(c => c.method.endsWith('notes.review')).length, 1);
+      assert.equal(harness.calls.filter(c => c.method.endsWith('notes.recall.review')).length, 1);
       await activate(page.getByRole('button', {name: '实验', exact: true}));
       await page.locator('.desk-inline-slot .pinkie-learning-inline').waitFor();
       await activate(page.getByRole('button', {name: '模拟考', exact: true}));
       await page.waitForFunction(() => document.querySelector('.desk-inline-slot')?.textContent.includes('专业基础综合课模拟卷'));
-      await activate(page.getByRole('button', {name: '书架', exact: true}));
+      await activateRail(page.getByRole('button', {name: '书架', exact: true}));
       await page.locator('.pinkie-library:not([hidden])').waitFor();
       await activate(page.getByRole('button', {name: '关闭资料库', exact: true}));
-      await activate(page.getByRole('button', {name: '笔记本', exact: true}));
-      await page.locator('.laolao-learning-notes.is-open').waitFor();
-      await activate(page.getByRole('button', {name: '关闭笔记本', exact: true}));
+      await activateRail(page.getByRole('button', {name: '笔记本', exact: true}));
+      // 笔记本 v2：学习台里的整页视图，不再是抽屉；回舞台走左侧导航。
+      await page.locator('.pinkie-desk-notes .n-toc').waitFor();
+      assert.equal(await page.locator('.laolao-learning-notes.is-open').count(), 0);
+      await activateRail(page.locator('.rail [data-go="stage"]'));
       await activate(page.getByRole('button', {name: '刷题', exact: true}));
       await page.locator('.q-text').waitFor();
       const stem = await page.locator('.q-text').innerText();
       await activate(page.getByRole('button', {name: '换个说法讲', exact: true}));
-      await page.waitForFunction(() => document.querySelector('#pinkie-study-desk')?.dataset.view === 'chat');
+      await page.waitForFunction(() => __pinkieStudyConversation.active());
       const chat = harness.calls.find(c => c.method === 'chat.send'); assert.match(chat.params.message, /我还没提交答案/); assert.ok(chat.params.message.includes(stem));
       await page.getByText('隔离验收回复：已收到这道题的追问，点左侧舞台可回原题。', {exact: true}).waitFor();
-      // In chat the rail must not cover the native sidebar: one native-styled entry replaces it.
-      assert.equal(await page.locator('#pinkie-study-desk .rail').isVisible(), false);
-      assert.equal(await page.locator('aside.sidebar .nav-section__items > a.pinkie-desk-entry').count(), 1);
-      assert.equal(await page.locator('.shell').first().evaluate(n => getComputedStyle(n).marginLeft), '0px');
-      await activate(page.getByRole('button', {name: '回到学习台', exact: true}));
+      assert.equal(await page.locator('#pinkie-study-desk .rail').isVisible(), true);
+      assert.equal(await page.locator('#pinkie-desk-chat .pk-chat-thread').isVisible(), true);
+      assert.match(chat.params.sessionKey,/^agent:learning:desk-chat:/);
+      await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers: ['Alt']});
       assert.equal(await page.locator('.q-text').innerText(), stem);
     });
   } finally { service.close(); }
@@ -171,13 +174,13 @@ test('WebKit reuses real flashcard scheduling and inline experiment cards withou
   service.store.saveNote('agent:learning:study-desk-qa', {title: '数组下标', content: 'C 数组下标从 0 开始。'});
   try {
     await run({handler: service.handler, legacyUI: true}, async (page, harness) => {
-      await page.getByRole('button', {name: '舞台', exact: true}).click();
+      await page.getByRole('button', {name: '舞台', exact: true}).click({modifiers: ['Alt']});
       await page.getByRole('button', {name: '闪卡', exact: true}).click();
       await page.locator('.flashcard').waitFor();
       await page.locator('.other-stage').evaluate(n => { n.tabIndex = -1; n.focus(); });
       await page.keyboard.press('Space'); await page.locator('.flashcard.flipped').waitFor(); await page.keyboard.press('3');
       await page.getByText('这一轮复习完成。', {exact: true}).waitFor();
-      assert.equal(harness.calls.find(c => c.method.endsWith('notes.review')).params.rating, 'remembered');
+      assert.equal(harness.calls.find(c => c.method.endsWith('notes.recall.review')).params.rating, 'remembered');
       await page.getByRole('button', {name: '实验', exact: true}).click();
       await page.locator('.desk-inline-slot .pinkie-learning-inline').waitFor();
       await page.waitForFunction(() => __pinkieLearningInline.stats().loaded > 0);
@@ -244,14 +247,14 @@ test('today ask bar has a send button, shows sending, keeps the text and explain
     if (method === 'chat.send') { sends++; if (sends === 1) throw Error('网关连接断开'); await new Promise(r => setTimeout(r, 400)); return {runId: 'r'}; }
     return {};
   }}, async (page, h) => {
-    const send = page.getByRole('button', {name: '发送', exact: true}), input = page.getByRole('textbox', {name: '问碧琪'});
+    const send = page.locator('.ask-send'), input = page.getByRole('textbox', {name: '问碧琪'});
     await send.waitFor(); assert.equal(await send.isDisabled(), true);
     await page.locator('.ask').click({position: {x: 30, y: 28}}); await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '问碧琪');
     await page.keyboard.type('讲讲换路定律'); assert.equal(await send.isDisabled(), false);
     await send.click(); await page.getByRole('alert').filter({hasText: '没发出去：网关连接断开'}).waitFor();
     assert.equal(await input.inputValue(), '讲讲换路定律');
     await send.click(); await page.locator('.ask.sending').waitFor(); assert.equal(await page.locator('.ask.sending .ask-send').isDisabled(), true);
-    await page.waitForFunction(() => document.querySelector('#pinkie-study-desk')?.dataset.view === 'chat');
+    await page.waitForFunction(() => __pinkieStudyConversation.active());
     assert.equal(h.calls.filter(c => c.method === 'chat.send').length, 2); assert.equal(h.calls.filter(c => c.method === 'chat.send').at(-1).params.message, '讲讲换路定律');
   });
 });
@@ -294,7 +297,7 @@ test('board model chip reports the real model, generation time, duration and usa
     await run({handler: (method, p) => method.endsWith('desk.insight')
       ? {status: 'ok', generatedAt: Date.parse('2026-10-26T18:38:00+08:00'), model: {name: 'Gemini 3.8 Flash Tiered'}, usage: {total: 6607}, ms: 17238, findings: [], plan: null, insightStale: false}
       : service.handler(method, p)}, async page => {
-      await page.getByRole('button', {name: '看板', exact: true}).click();
+      await page.getByRole('button', {name: '看板', exact: true}).click({modifiers: ['Alt']});
       await page.waitForFunction(() => document.querySelector('.b-model-chip')?.textContent.includes('tokens'));
       assert.equal(await page.locator('.b-model-chip').innerText(), 'Gemini 3.8 Flash Tiered · 18:38 · 用时 17.2 秒 · 6,607 tokens');
     });
@@ -328,19 +331,19 @@ test('desk buttons keep their own colours in day and night: the control reset ne
       : service.handler(method, p).then(result => { if (method.endsWith('desk.today')) result.focus = {kind: 'set', title: 'C 语言 · 循环结构', payload: {chapter: 'c5', size: 6}}; return result; })}, async page => {
       for (const theme of ['day', 'night']) {
         if (theme === 'night') await page.getByRole('button', {name: '切换日间和夜间'}).click();
-        await page.getByRole('button', {name: '今日', exact: true}).click();
+        await page.getByRole('button', {name: '今日', exact: true}).click({modifiers: ['Alt']});
         const [on, off] = await page.evaluate(() => ['.rail-nav button.on', '.rail-nav button:not(.on)'].map(s => getComputedStyle(document.querySelector(s)).color));
         assert.notEqual(on, off, `${theme}: the current rail page looks like the others`);
         // UI-UPGRADE 4.5: the solid brand star uses --on-pink (white by day, dark at night) and must reach 3:1.
         assert.ok(await contrast(page.locator('.logo')) >= 3, `${theme}: logo star`);
-        await page.getByRole('button', {name: '看板', exact: true}).click();
+        await page.getByRole('button', {name: '看板', exact: true}).click({modifiers: ['Alt']});
         await page.waitForFunction(() => document.querySelector('.b-adopt')?.disabled === false);
         assert.ok(await contrast(page.locator('.b-adopt')) >= 4.5, `${theme}: 采纳为明天的计划`);
-        await page.getByRole('button', {name: '舞台', exact: true}).click();
+        await page.getByRole('button', {name: '舞台', exact: true}).click({modifiers: ['Alt']});
         await page.locator('.stage-empty .confirm').waitFor();
         assert.ok(await contrast(page.locator('.stage-empty .confirm')) >= 4.5, `${theme}: 开始练习`);
       }
-      await page.getByRole('button', {name: '今日', exact: true}).click();
+      await page.getByRole('button', {name: '今日', exact: true}).click({modifiers: ['Alt']});
       await page.getByRole('button', {name: /^开始：/}).click(); await page.locator('.q-text').waitFor();
       for (const theme of ['night', 'day']) {
         if (theme === 'day') await page.getByRole('button', {name: '切换日间和夜间'}).click();
@@ -434,7 +437,7 @@ test('v2 A3: course bar, stuck, pause/resume, guarded finish, clean history and 
   await v2Run({}, async (page, f) => {
     await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
     assert.ok(await page.locator('.lesson-bar').evaluate(n => n.getBoundingClientRect().height <= 48));
-    assert.ok(await page.locator('.chat-thread').evaluate(n => parseFloat(getComputedStyle(n).paddingTop) >= 56));
+    assert.equal(await page.locator('.pk-tonight .lesson-bar').count(), 1);
     await page.getByRole('button', {name: '没懂，换个讲法', exact: true}).click();
     await page.waitForFunction(() => qaCalls.some(c => c.method === 'chat.send' && c.params.message === '这段没懂，换个讲法'));
     await page.getByRole('button', {name: '暂停', exact: true}).click(); await page.getByText('已暂停', {exact: true}).waitFor();
@@ -446,16 +449,16 @@ test('v2 A3: course bar, stuck, pause/resume, guarded finish, clean history and 
     await page.locator('.lesson-summary-title').waitFor(); await page.locator('.lesson-formula .katex').first().waitFor();
     const finish = f.controls.calls.find(c => c.method.endsWith('lesson.finish'));
     assert.equal(finish.params.transcript.length, 1); assert.equal(finish.params.transcript[0].text, '课上讲解'); assert.ok(!JSON.stringify(finish.params.transcript).includes('secret'));
-    assert.equal(await page.locator('.lesson-bar').count(), 0); assert.equal(await page.locator('.chat-thread').evaluate(n => n.style.paddingTop), '');
+    assert.equal(await page.locator('.lesson-bar').count(), 0); assert.equal(await page.locator('.shell .chat-thread').evaluate(n => n.style.paddingTop), '');
     await page.getByRole('button', {name: '去练 4 道', exact: true}).click(); await page.locator('.q-text').waitFor();
-    assert.deepEqual(f.controls.calls.find(c => c.method.endsWith('desk.set')).params, {sessionKey: 'agent:learning:study-desk-qa', size: 4, mode: 'practice', chapter: 'ee4', item: 2});
+    const setParams=f.controls.calls.find(c=>c.method.endsWith('desk.set')).params;assert.match(setParams.sessionKey,/^agent:learning:desk-chat:/);assert.deepEqual({...setParams,sessionKey:undefined},{sessionKey:undefined,size:4,mode:'practice',chapter:'ee4',item:2});
   });
 });
 test('v2 A3: summary generation failure still bridges to chat; mock courses never send real chat messages', async () => {
   await v2Run({summaryFailed: true, chatNext: true, ready: true}, async (page, f) => {
     await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar .lesson-pink').waitFor();
     await page.getByRole('button', {name: '讲完了，去练', exact: true}).click(); await page.getByText('这次没生成笔记，对话记录已经保存。', {exact: true}).waitFor();
-    await page.getByRole('button', {name: '让碧琪出题', exact: true}).click(); await page.waitForFunction(() => document.documentElement.dataset.pinkieStudyDesk === 'chat');
+    await page.getByRole('button', {name: '让碧琪出题', exact: true}).click(); await page.waitForFunction(() => __pinkieStudyConversation.active());
     assert.match(f.controls.calls.filter(c => c.method === 'chat.send').at(-1).params.message, /换路定律/);
   });
   await v2Run({unknown: true}, async (page, f) => {
@@ -463,12 +466,12 @@ test('v2 A3: summary generation failure still bridges to chat; mock courses neve
     await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar[data-demo=true]').waitFor();
     assert.equal(f.controls.calls.filter(c => c.method === 'chat.send').length, 0);
     await page.evaluate(() => { history.replaceState({}, '', '/chat?session=agent:project:qa'); document.documentElement.dataset.laolaoMode = 'project'; dispatchEvent(new Event('pinkie:session-selected')); });
-    assert.equal(await page.locator('.lesson-bar').count(), 0); assert.equal(await page.locator('.chat-thread').evaluate(n => n.style.paddingTop), '');
+    assert.equal(await page.locator('.lesson-bar').count(), 0); assert.equal(await page.locator('.shell .chat-thread').evaluate(n => n.style.paddingTop), '');
   });
 });
 test('v2 A4: board learning progress, adopted learn entries and reduced motion remain session scoped', async () => {
   await v2Run({}, async (page, f) => {
-    await page.getByRole('button', {name: '看板', exact: true}).click(); await page.locator('.b-learning-row').first().waitFor();
+    await page.getByRole('button', {name: '看板', exact: true}).click({modifiers: ['Alt']}); await page.locator('.b-learning-row').first().waitFor();
     assert.equal(await page.locator('.b-learning [role=progressbar]').count(), 3);
     assert.match(await page.locator('.b-learning').innerText(), /已学[\s\S]*36 \/ 144[\s\S]*已练[\s\S]*20 \/ 144[\s\S]*已掌握[\s\S]*8 \/ 144/);
     await page.getByText('学 · 换路定律', {exact: true}).waitFor();
@@ -476,25 +479,18 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
     await page.emulateMedia({reducedMotion: 'reduce'}); await page.evaluate(() => __pinkieStudyDeskLesson.open({k: 'ee4', i: 2})); await page.locator('.lesson-outline').waitFor();
     assert.equal(await page.evaluate(() => document.querySelector('#pinkie-study-desk').getAnimations({subtree: true}).length), 0);
     await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
-    await page.evaluate(() => __pinkieStudyDesk.go('today')); const before = f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
+    await page.evaluate(() => __pinkieStudyDesk.go('today')); await page.locator('#pinkie-desk-chat .pk-chat-stop').waitFor({state:'hidden'}); await page.waitForTimeout(500); const before = f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
     await page.waitForTimeout(4200); assert.equal(f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length, before);
   });
 });
-test('v2 A3: native conversation column stays aligned with both sidebar states and notebook entry locates the lesson', async () => {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs'); const f = createV2Fixture({ready: true});
-  try { await run({handler: f.handler, engine: 'chromium', realUI: true}, async page => {
-    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor(); await page.locator('.chat-thread-inner').waitFor();
-    const check = async () => {
-      const measured = await page.evaluate(() => { const bar = document.querySelector('.lesson-bar').getBoundingClientRect(), column = document.querySelector('.chat-thread-inner').getBoundingClientRect(), thread = document.querySelector('.chat-thread'); return {offset: Math.abs(bar.left - column.left), width: Math.abs(bar.width - column.width), height: bar.height, padding: parseFloat(getComputedStyle(thread).paddingTop), marked: thread.hasAttribute('data-pinkie-lesson-space')}; });
-      assert.ok(measured.offset < 2, JSON.stringify(measured)); assert.ok(measured.width < 2, JSON.stringify(measured)); assert.ok(measured.height <= 48); assert.ok(measured.padding >= 56); assert.equal(measured.marked, true);
-    };
-    await page.waitForTimeout(500); await check();
-    await page.getByRole('button', {name: '收起侧边栏', exact: true}).click(); await page.waitForTimeout(700); await check();
-    await page.setViewportSize({width: 1024, height: 700}); await page.waitForTimeout(400); await check();
-    await page.getByRole('button', {name: '讲完了，去练', exact: true}).click(); await page.locator('.lesson-summary-title').waitFor();
-    await page.getByRole('button', {name: '看笔记', exact: true}).click(); await page.locator('.laolao-learning-note[data-note-id="fixture-note"]').waitFor();
-    assert.equal(await page.locator('.laolao-learning-note[data-note-id="fixture-note"]').evaluate(n => n === document.activeElement), true);
-  }); } finally { f.release(); }
+test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', async () => {
+  const {createV2Fixture}=await import('../tools/study-desk/v2-fixtures.mjs');const f=createV2Fixture({ready:true});
+  try{await run({handler:f.handler,engine:'chromium',realUI:true},async page=>{
+    await page.locator('.task').click();await page.getByRole('button',{name:'开始上课',exact:true}).click();await page.locator('#pinkie-desk-chat .lesson-bar').waitFor();
+    for(const width of [1440,1024]){await page.setViewportSize({width,height:800});await page.waitForFunction(()=>{const n=document.querySelector('#pinkie-desk-chat .lesson-bar'),paper=document.getElementById('pinkie-desk-chat');if(!n||!paper)return false;const a=n.getBoundingClientRect(),b=paper.getBoundingClientRect();return a.left>=b.left&&a.right<=b.right+1&&a.height<=48;},{},{polling:100});}
+    await page.getByRole('button',{name:'讲完了，去练',exact:true}).click();await page.locator('.lesson-summary-title').waitFor();await page.getByRole('button',{name:'看笔记',exact:true}).click();await page.locator('.n-card[data-note-id="fixture-note"]').waitFor();
+    assert.equal(await page.locator('.n-card[data-note-id="fixture-note"]').evaluate(n=>n===document.activeElement),true);
+  });}finally{f.release();}
 });
 test('v2 A2: retrying an opening message never begins the same lesson twice', async () => {
   const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs'); const f = createV2Fixture(); let failed = false;
@@ -522,7 +518,7 @@ test('v2 real lesson RPC: empty material roots and no model still complete a les
 });
 test('v2 A1: a learned point without bank questions opens chat practice instead of an empty set', async () => {
   await v2Run({focus: 'set', practiceInChat: true}, async (page, f) => {
-    await page.locator('.task').click(); await page.waitForFunction(() => document.documentElement.dataset.pinkieStudyDesk === 'chat');
+    await page.locator('.task').click(); await page.waitForFunction(() => __pinkieStudyConversation.active());
     assert.equal(f.controls.calls.filter(c => c.method.endsWith('desk.set')).length, 0);
     assert.match(f.controls.calls.find(c => c.method === 'chat.send').params.message, /换路定律.*一道理解练习题/);
   });

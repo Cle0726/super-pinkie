@@ -102,7 +102,7 @@
     return bytes;
   }
   function mountReader(){
-    const split=document.querySelector('.chat-split-container');if(!split)throw new Error('聊天区还没有准备好');
+    const split=state.deskHost?.isConnected?state.deskHost:document.querySelector('.chat-split-container');if(!split)throw new Error('聊天区还没有准备好');
     if(state.reader?.isConnected&&state.reader.parentElement===split)return;
     state.reader?.remove();state.split?.classList.remove('pinkie-library-layout');state.split=split;
     const reader=el('section','pinkie-reader');reader.setAttribute('aria-label','原文阅读器');
@@ -123,7 +123,10 @@
   }
   async function open(id,anchor={}){
     if(!learning())return;
+    const context=window.__pinkieStudyDesk?.readerContext?.();if(context===false)return;
+    state.heavyRelease?.();state.heavyRelease=context?.release;state.deskHost=context?.host||null;
     const ticket=++state.openTicket;clearTimeout(state.progressTimer);await flushProgress();
+    try {
     const data=await rpc('book',{id});if(ticket!==state.openTicket)return;
     await releaseBook();state.book=data.book;state.locations=data.locations;state.location=Number(anchor.location||data.book.progress?.location||1);state.zoom=data.book.progress?.zoom||1;state.session=session();
     mountReader();closeShelf();window.dispatchEvent(new CustomEvent('pinkie:library-opened'));const content=state.reader.querySelector('.pinkie-reader__content');content.textContent='正在打开原文…';
@@ -141,6 +144,7 @@
     if(ticket!==state.openTicket)return;
     await go(state.location,anchor.quote||'',anchor.location?0:data.book.progress?.scroll||0);
     return data;
+    } catch(error) { if(ticket===state.openTicket)closeReader();throw error; }
   }
   async function releaseBook(){
     state.renderTask?.cancel();state.renderTask=null;state.epub?.destroy();state.epub=null;
@@ -202,7 +206,7 @@
     const body=state.reader.querySelector('.pinkie-reader__body'),max=Math.max(0,body.scrollHeight-body.clientHeight),id=state.book.id;
     try{const result=await rpc('progress',{id,location:state.location,zoom:state.zoom,scroll:max?body.scrollTop/max:0});if(state.book?.id===id)state.book=result.book;}catch(error){notice('进度暂未保存：'+error.message,true);}
   }
-  function closeReader(){void flushProgress();++state.openTicket;++state.renderTicket;state.reader?.remove();state.reader=null;state.split?.classList.remove('pinkie-library-layout');state.split=null;void releaseBook();state.book=null;}
+  function closeReader(){void flushProgress();++state.openTicket;++state.renderTicket;state.reader?.remove();state.reader=null;state.split?.classList.remove('pinkie-library-layout');state.split=null;void releaseBook();state.book=null;state.heavyRelease?.();state.heavyRelease=null;state.deskHost=null;window.dispatchEvent(new CustomEvent('pinkie:library-closed'));}
   async function send(message){const request=window.__laolaoSidebar?.gwRequest;if(!request)throw new Error('聊天正在连接');return request('chat.send',{sessionKey:session(),message,idempotencyKey:crypto.randomUUID()},30000);}
   function selectionSource(selected){if(!state.book||!selected.anchor?.closest('[data-pinkie-reading]'))return null;return {id:state.book.id,title:state.book.title,location:state.location,label:state.locations.find(x=>x.location===state.location)?.label||'',quote:selected.text};}
   async function saveSelection(selected){const source=selectionSource(selected);if(!source)return;const result=await rpc('excerpt',source);notice('已记下书名、位置和原文');window.dispatchEvent(new CustomEvent('pinkie:library-note-saved',{detail:result.note}));return result;}

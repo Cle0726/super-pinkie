@@ -443,17 +443,27 @@ def install_personas(log, preserve_existing=False):
     }
     src_root = resource_path("personas")
     backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
+    template_files = (
+        "SOUL.md",
+        "IDENTITY.md",
+        "AGENTS.md",
+        "AESTHETICS.md",
+        "METHODS.md",
+        "HEARTBEAT.md",
+        "DREAMS.md",
+        "memory-system.md",
+    )
     for mode, target in mapping.items():
         src_mode = src_root / mode
         if src_mode.exists():
             target.mkdir(parents=True, exist_ok=True)
-            for fname in ["SOUL.md", "IDENTITY.md"]:
+            for fname in template_files:
                 src_file = src_mode / fname
                 if src_file.exists():
                     dst_file = target / fname
                     if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
                         continue
-                    if preserve_existing and dst_file.exists():
+                    if (preserve_existing or mode == "neutral" or fname == "DREAMS.md") and dst_file.exists():
                         continue
                     if dst_file.exists():
                         bak_dir = backup_root / mode
@@ -713,6 +723,64 @@ def make_button(parent, text, command, big=False, color=None):
     )
 
 
+def pull_and_update(log):
+    """拉取最新 Git 更新或检查打包版 Release 更新并重新部署（保留 USER.md / 记忆 / 会话）"""
+    repo_root = resource_path()
+    if (repo_root / ".git").exists() and shutil.which("git"):
+        log("==> 检测到 Git 仓库，正在从远端拉取最新更新...")
+        try:
+            branch_res = subprocess.run(
+                ["git", "-C", str(repo_root), "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            branch = (branch_res.stdout or "").strip() or "main"
+            subprocess.run(["git", "-C", str(repo_root), "fetch", "origin"], capture_output=True, text=True, timeout=30)
+            pull_res = subprocess.run(
+                ["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch],
+                capture_output=True, text=True, timeout=45,
+            )
+            if pull_res.returncode != 0:
+                log("  本地有未提交改动，自动暂存后拉取...")
+                subprocess.run(["git", "-C", str(repo_root), "stash", "push", "-m", "pinkie-auto-update"], capture_output=True, timeout=15)
+                subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch], capture_output=True, text=True, timeout=45, check=True)
+                subprocess.run(["git", "-C", str(repo_root), "stash", "pop"], capture_output=True, timeout=15)
+            log(f"  ✅ Git 仓库已同步到最新 ({branch})")
+        except Exception as exc:
+            log(f"  ⚠️ Git 拉取失败: {exc}")
+            return False
+        ensure_prompts(log)
+        apply_patch(False, log)
+        install_personas(log, preserve_existing=False)
+        for service in ("party", "context", "project-scope", "mode-architecture"):
+            install_runtime_service(service, log)
+        install_theme(log)
+        restart_openclaw_gateway(log)
+        log("🎉 自动拉取更新并重部署完成！（个人记忆与配置均完整保留）")
+        return True
+
+    try:
+        from windows_desktop import WindowsUpdater
+        updater = WindowsUpdater(repo_root)
+        info = updater.check(force=True)
+        if not info.get("available"):
+            log(f"==> 当前已是最新版本 ({info.get('currentVersion', 'current')})")
+            return False
+        log(f"==> 发现新版本 {info['version']}，正在下载并校验...")
+        ready = updater.prepare()
+        if not ready.get("ready"):
+            log("  ⚠️ 新版本下载未完成，请稍后重试")
+            return False
+        launched = updater.launch_replacer()
+        if launched.get("started"):
+            log("  ✅ 新版本准备就绪，正在自动重启替换...")
+            return True
+        log("  ⚠️ 替换启动失败：" + str(launched.get("message", "")))
+        return False
+    except Exception as exc:
+        log(f"  ⚠️ 检查更新失败：{exc}")
+        return False
+
+
 def prepare_bundled_desktop(log):
     state = windows_state_root()
     state.mkdir(parents=True, exist_ok=True)
@@ -858,6 +926,7 @@ def run_control_center():
     btn_row1 = tk.Frame(tab_quick, bg=BG)
     btn_row1.pack(fill="x", padx=10, pady=4)
     make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
+    make_button(btn_row1, "⬆️ 检查并拉取更新", lambda: threading.Thread(target=lambda: [pull_and_update(log), refresh_status()], daemon=True).start(), color="#C2185B").pack(side="left", padx=4)
     make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
     make_button(btn_row1, "🌐 打开 Web 界面", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
 
@@ -966,6 +1035,9 @@ def main():
     ports = relay_ports_from_argv()
     if ports:
         run_relay(*ports)
+        return
+    if "--update" in sys.argv:
+        pull_and_update(print)
         return
     if os.name == "nt" and getattr(sys, "frozen", False) and bundled_runtime_root() and "--control-center" not in sys.argv:
         from windows_desktop import run_desktop, update_health_token_from_argv

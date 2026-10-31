@@ -2,6 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
+import {almanac} from './learning-almanac.mjs';
+// 今天是什么日子（briefs/study-desk-v2/PLAN.md §4）：日历事实一律按北京时间，加上从作答和上课记录算出的「隔了几天回来」。
+// 出错只丢这一块，不影响今日页其他数据。
+function deskAlmanac(desk, now, pact) {
+  try {
+    const day = instant => new Date((Number(instant) || 0) + 8 * 3_600_000).toISOString().slice(0, 10);
+    const diff = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86_400_000);
+    const today = day(now);
+    const last = Math.max(0, ...desk.attempts().map(a => Number(a.createdAt) || 0), ...(desk.store.lessons?.all() || []).map(l => Number(l.finishedAt) || 0));
+    const lastDay = last ? day(last) : '';
+    return almanac(now, {exams: pact.exams || [], rhythm: {gapDays: lastDay ? diff(lastDay, today) : 0, studiedToday: lastDay === today,
+      studyDay: Math.max(1, diff(day(pact.createdAt || now), today) + 1), ...(desk.store.companion?.rhythmHint?.(now) || {})}, personal: desk.store.companion?.personal?.() || {}});
+  } catch (error) { console.warn('[study-desk] almanac', error); return null; }
+}
 import {toQuizItems} from './learning-zsb.mjs';
 
 const DATA = JSON.parse(fs.readFileSync(new URL('./learning-zsb-data.json', import.meta.url), 'utf8'));
@@ -569,7 +583,6 @@ export class LearningDesk {
     const busy = materialStatus?.jobs?.find(job => job.state === 'running');
     const cache = this.cachedInsight?.('7d');
     const fresh = Boolean(cache && ['ok', 'cached'].includes(cache.status) && cache.digestHash === hash(this.digest({sessionKey, range: '7d'})));
-    const dueReviews = this.pact.dueReviews(now);
     const created = shanghaiDay(pact.createdAt || now);
     return {date, weekday: new Date(date + 'T00:00:00Z').getUTCDay(), studyDay: Math.max(1, dayDiff(created, date) + 1),
       exams: pact.exams.map(exam => ({...exam, daysLeft: exam.date ? dayDiff(date, exam.date) : null, note: exam.date ? '' : '日期待确认'})),
@@ -577,13 +590,26 @@ export class LearningDesk {
       progress: {minutes: ledger.minutes, questions: ledger.questions.answered, reviews: ledger.reviews.done, lessons: ledger.lessons || 0},
       focus, materials: {mounted: mountedRoots.length > 0, label: mountedRoots.map(root => root.label).join(' / ') || 'U盘未插 · 用本机索引', indexedFiles: materialStatus?.files?.indexed || 0,
         updatedAt: Math.max(0, ...(materialStatus?.roots || []).map(root => root.lastScanAt || 0)), busy: busy ? {kind: busy.kind, done: busy.done, total: busy.total} : null},
-      quiet: [{kind: 'review', label: '闪卡复习', meta: `还剩 ${dueReviews} 张`, count: dueReviews},
-        {kind: 'retest', label: '错题复测', meta: `${due.length} 个考点到期`, count: due.length}], mastery,
+      quiet: this.quiet(now, due.length), mastery,
       biqiLine: {text: fresh && cache?.biqiLine ? cache.biqiLine : focus.kind === 'learn' ? '先生，我们先把这个考点弄懂。' : '先生，我陪你把每一步弄懂。', source: fresh && cache?.biqiLine ? 'insight' : 'rule'},
-      insightStale: !fresh, subjectWarnings: this.subjectWarnings(now)};
+      insightStale: !fresh, subjectWarnings: this.subjectWarnings(now), almanac: deskAlmanac(this, now, pact)};
+  }
+
+  // 今日页的安静列表说实话：背单词和笔记回顾各算各的，笔记每天最多 10 条，积压不催。
+  quiet(now, retestCount) {
+    let vocab = {count: 0, newToday: 0};
+    try { vocab = this.store.vocab?.today(now) || vocab; } catch {}
+    let notes = {todayCount: 0};
+    try { notes = this.store.recall ? this.store.recall.snapshot('agent:learning:notes-library', {now}) : this.store.reviewQueue('agent:learning:notes-library', {now}); } catch {}
+    return [
+      {kind: 'vocab', label: '背单词', meta: `今天 ${vocab.count} 个 · 新词 ${vocab.newToday}`, count: vocab.count},
+      {kind: 'notes', label: '笔记回顾', meta: (notes.pending || notes.missing) && !notes.todayCount ? '正在准备回忆卡' : `今天 ${notes.todayCount} 条`, count: notes.todayCount},
+      {kind: 'retest', label: '错题复测', meta: `${retestCount} 个考点到期`, count: retestCount},
+    ];
   }
 }
 
+export {justified as deskJustified};
 export function registerLearningDeskGateway(api, store, options = {}) {
   const desk = new LearningDesk(store, options);
   for (const [method, scope] of [['today', 'operator.read'], ['set', 'operator.admin'], ['answer', 'operator.admin'], ['metrics', 'operator.read'], ['digest', 'operator.read'], ['insight', 'operator.admin'], ['adoptPlan', 'operator.admin']]) {

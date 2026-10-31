@@ -4,7 +4,7 @@
   if (window.__pinkieStudyDeskBoardLoaded) return;
   window.__pinkieStudyDeskBoardLoaded = true;
   const NS = 'http://www.w3.org/2000/svg';
-  let teardown = () => {}, registered = false;
+  let registered = false;
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; };
   const svg = (tag, attrs = {}, text) => { const node = document.createElementNS(NS, tag); Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, String(v))); if (text != null) node.textContent = text; return node; };
   const num = value => value != null && Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -17,7 +17,7 @@
     const template = document.createElement('template'); template.innerHTML = String(value || '');
     const append = (parent, source) => [...source.childNodes].forEach(node => {
       if (node.nodeType === 3) parent.append(document.createTextNode(node.textContent));
-      else if (node.nodeName === 'EM') { const mark = el('em'); append(mark, node); parent.append(mark); }
+      else if (node.nodeName === 'EM') { const mark = el('em', 'pk-hl'); append(mark, node); parent.append(mark); }
       else if (!['SCRIPT', 'STYLE'].includes(node.nodeName)) append(parent, node);
     });
     root.replaceChildren(); append(root, template.content);
@@ -37,8 +37,7 @@
     return graph;
   }
   function mount(root, ctx) {
-    teardown();
-    let alive = true, revision = 0, range = '7d', insight = null, digest = null;
+    let alive = true, revision = 0, range = ctx.pane?.state.boardRange || '7d', insight = null, digest = null;
     const animations = new Set();
     const motion = ctx.motion || {};
     const key = typeof ctx.sessionKey === 'function' ? ctx.sessionKey() : ctx.sessionKey;
@@ -46,20 +45,27 @@
     const animate = tween => { if (tween) animations.add(tween); return tween; };
     const stopMotion = () => { for (const tween of animations) tween.kill?.(); animations.clear(); };
     root.classList.add('pinkie-desk-board'); root.replaceChildren();
-    const top = el('div', 'b-top'), title = el('h2', 'b-title', '学习看板'), ranges = el('div', 'b-ranges'); ranges.setAttribute('aria-label', '统计范围');
+    const top = el('div', 'b-top'), title = el('h2', 'b-title', '学习看板'), ranges = el('div', 'b-ranges pk-seg'); ranges.setAttribute('aria-label', '统计范围');
+    // 页眉小字：统计的是哪几天（北京日期）；页码是今年第几周。
+    const kicker = el('div', 'pk-kicker b-kicker'), heading = el('div', 'b-heading'); heading.append(kicker, title);
+    const bj = new Date(Date.now() + 8 * 3_600_000), md = d => `${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日`;
+    const span = days => { const from = new Date(bj - (days - 1) * 86_400_000); return `${md(from)} – ${from.getUTCMonth() === bj.getUTCMonth() ? bj.getUTCDate() + ' 日' : md(bj)}`; };
+    const week = (() => { const d = new Date(Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7)); return Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86_400_000 + 1) / 7); })();
+    const kickerFor = value => ({'7d': '最近 7 天 · ' + span(7), '30d': '最近 30 天 · ' + span(30), all: '从开始到今天'})[value] || '';
     const model = el('div', 'b-model'), chip = el('span', 'b-model-chip', '正在连接内置模型'), refresh = el('button', 'b-refresh', '重新分析'); refresh.type = 'button'; refresh.prepend(window.__pinkieStudyDesk.icon('refresh-cw', {size: 'xs'}));
-    model.append(chip, refresh); top.append(title, ranges, model);
+    model.append(chip, refresh); top.append(heading, ranges, model);
     const headline = el('div', 'b-headline'); headline.setAttribute('role', 'status'); headline.setAttribute('aria-live', 'polite');
     const metrics = el('div', 'b-metrics'), learning = el('section', 'b-learning'), pace = el('section', 'b-pace'), diag = el('section', 'b-diag');
     pace.append(el('h3', '', '备考节奏 · 专升本'), el('p', 'b-sub', '已点亮的考点和需要的进度，由程序计算'));
     const chart = el('div', 'b-chart'), paceNote = el('p', 'b-pace-note'); pace.append(chart, paceNote);
     diag.append(el('h3', '', '碧琪的诊断'), el('p', 'b-sub', '内置模型读了账本和作答记录，每条都附依据'));
+    const lens = el('img', 'pk-sticker b-sticker'); lens.src = window.__pinkieStudyDesk.sticker?.('board-magnifier') || ''; lens.alt = ''; lens.setAttribute('aria-hidden', 'true'); diag.append(lens);
     const findings = el('div', 'b-findings'), adoptRow = el('div', 'b-adopt-row'), adopt = el('button', 'b-adopt', '采纳为明天的计划'), adoptMsg = el('small', '', '会写进学习约定');
     adopt.type = 'button'; adopt.disabled = true; adoptRow.append(adopt, adoptMsg); diag.append(findings, adoptRow);
-    root.append(top, headline, metrics, learning, pace, diag);
+    root.append(top, headline, metrics, learning, pace, diag, el('div', 'pk-pageno', `第 ${week} 周`));
     const buttons = [['7d', '最近 7 天'], ['30d', '30 天'], ['all', '全部']].map(([value, label]) => {
       const button = el('button', '', label); button.type = 'button'; button.dataset.range = value;
-      button.addEventListener('click', () => { if (range === value) return; range = value; load(); }); ranges.append(button); return button;
+      button.addEventListener('click', () => { if (range === value) return; range = value; if (ctx.pane) ctx.pane.state.boardRange = range; load(); }); ranges.append(button); return button;
     });
     const countUp = (node, value) => {
       node.dataset.count = String(value); node.textContent = String(value);
@@ -82,8 +88,10 @@
       if (data.learning) {
         const progress = data.learning; learning.append(el('h3', '', '学习进度'));
         for (const [field, label] of [['learned', '已学'], ['practiced', '已练'], ['mastered', '已掌握']]) {
-          const row = el('div', 'b-learning-row'), track = el('div', 'b-learning-track'), fill = el('i'); row.dataset.state = field;
-          const total = Math.max(0, num(progress.total)), value = Math.max(0, num(progress[field])); fill.style.width = Math.min(100, total ? value / total * 100 : 0) + '%'; track.append(fill);
+          // 进度只用星星：一排 12 颗，按比例点亮（有一个就至少亮一颗）；已学半颗、已练粉、已掌握金箔。
+          const row = el('div', 'b-learning-row'), track = el('div', 'b-learning-track'); row.dataset.state = field;
+          const total = Math.max(0, num(progress.total)), value = Math.max(0, num(progress[field])), lit = value ? Math.max(1, Math.round(Math.min(1, total ? value / total : 0) * 12)) : 0;
+          const kit = window.__pinkieDeskKit; if (kit) track.append(kit.stars(Array.from({length: 12}, (_, i) => i < lit ? {learned: 'half', practiced: 'full', mastered: 'gold'}[field] : '')));
           track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', label); track.setAttribute('aria-valuenow', Math.min(value, total)); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', total);
           row.append(el('span', '', label), track, el('b', '', `${value} / ${total}`)); learning.append(row);
         }
@@ -108,8 +116,9 @@
     function renderPace(data) {
       chart.replaceChildren();
       if (!data) {
-        const empty = el('div', 'b-chart-empty'); empty.append(el('p', '', '设好考试日期，这里会排出每科的节奏。'));
-        const setup = el('button', 'b-text-button b-secondary', '去设置'); setup.type = 'button'; setup.onclick = () => ctx.go('today'); empty.append(setup); chart.append(empty);
+        const empty = el('div', 'b-chart-empty'), nap = el('img', 'pk-sticker'), say = el('div'); nap.src = window.__pinkieStudyDesk.sticker?.('asleep') || ''; nap.alt = ''; nap.setAttribute('aria-hidden', 'true');
+        say.append(el('p', 'pk-note', '先告诉我两场考试的日期，我才能帮你排节奏哦。'));
+        const setup = el('button', 'b-text-button pk-link', '去今日页设置日期'); setup.type = 'button'; setup.onclick = () => ctx.go('today'); say.append(setup); empty.append(nap, say); chart.append(empty);
         paceNote.textContent = '两场考试的准确日期待确认。'; return;
       }
       const graph = svg('svg', {viewBox: '0 0 640 236', role: 'img', 'aria-label': `已点亮 ${data.lit} / ${data.total} 个考点；${data.projectedDate ? '预计 ' + data.projectedDate : '证据不足，暂不推算'}`});
@@ -167,7 +176,7 @@
     }
     async function load(force = false) {
       const token = ++revision; stopMotion(); refresh.disabled = true; root.setAttribute('aria-busy', 'true');
-      buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === range)));
+      buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === range))); kicker.textContent = kickerFor(range);
       skeleton(headline, 1); skeleton(findings); adopt.disabled = true;
       const requestedRange = range;
       const report = request('insight', {range: requestedRange, force}).catch(error => ({status: 'failed', error: error.message}));
@@ -190,16 +199,31 @@
         adopt.textContent = '已采纳'; adoptMsg.textContent = `明早 ${result.reminderAt}，碧琪会按这个计划提醒先生。`; motion.confettiAt?.(adopt, 'small');
       } catch (error) { if (alive && token === revision) { adopt.disabled = false; adopt.textContent = '重试采纳'; adoptMsg.textContent = error.message; } }
     };
+    const changes = el('section', 'b-receipts'); changes.append(el('h3', '', '最近改动')); root.append(changes);
+    const refreshChanges = async () => {
+      try {
+        const {receipts = []} = await ctx.request('pinkie.learning.ref.receipts', {recent:true}); if (!alive || !root.isConnected) return;
+        changes.replaceChildren(el('h3', '', '最近改动'));
+        if (!receipts.length) changes.append(el('p', 'b-sub', '收进手账、采纳计划和更正判分，都会在这里留下回执。'));
+        for (const receipt of receipts.slice(0, 8)) {
+          const row = el('div', 'b-receipt'); row.append(el('span', '', (receipt.by === 'biqi' ? '碧琪 · ' : '') + (receipt.title || receipt.text || receipt.action)));
+          if (receipt.undone) row.append(el('small', '', '已撤销'));
+          else if (receipt.undoable) { const undo = el('button', 'b-refresh', '撤销'); undo.type = 'button'; undo.onclick = async () => { undo.disabled=true; try { await ctx.request('pinkie.learning.ref.undo', {receiptId:receipt.receiptId}); await refreshChanges(); } catch (error) { undo.disabled=false; undo.textContent=error.message; } }; row.append(undo); }
+          changes.append(row);
+        }
+      } catch (error) { if (alive) changes.append(el('p', 'b-sub', '改动记录暂时没读到：' + error.message)); }
+    }; void refreshChanges();
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     const reduce = () => { if (motion.reduced) { stopMotion(); root.querySelectorAll('[data-count]').forEach(node => { node.textContent = node.dataset.count; }); root.querySelectorAll('.b-chart path').forEach(path => { path.style.strokeDasharray = 'none'; path.style.strokeDashoffset = '0'; }); } };
     media?.addEventListener?.('change', reduce);
-    teardown = () => { alive = false; revision++; stopMotion(); media?.removeEventListener?.('change', reduce); };
+    const teardown = () => { alive = false; revision++; stopMotion(); media?.removeEventListener?.('change', reduce); };
     load();
+    return {unmount: teardown, pause: stopMotion};
   }
   function register() {
     const desk = window.__pinkieStudyDesk;
     if (registered || !desk?.registerView) return registered;
-    desk.registerView('board', {title: '看板', icon: 'chart', mount, unmount() { const end = teardown; teardown = () => {}; end(); }}); registered = true; return true;
+    desk.registerView('board', {title: '看板', icon: 'chart', mount}); registered = true; return true;
   }
   if (!register()) {
     const timer = window.setInterval(() => { if (register()) window.clearInterval(timer); }, 200);

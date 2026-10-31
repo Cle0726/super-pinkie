@@ -45,7 +45,7 @@ test('installer cache-busts the native glass assets',()=>{
   const installer=read('installer/macos/apply-theme.sh');
   assert.match(installer,/laolao-theme\.css\?v=theme90/);
   assert.match(installer,/laolao-sidebar\.css\?v=sidebar18/);
-  assert.match(installer,/laolao-sidebar\.js\?v=sidebar37/);
+  assert.match(installer,/laolao-sidebar\.js\?v=sidebar38/);
   assert.match(installer,/laolao-session-list\.js\?v=sessions11/);
   assert.match(installer,/trap reseal_app_on_exit EXIT/);
   assert.match(installer,/codesign --force --deep --sign -/);

@@ -18,7 +18,9 @@
       "code_check",
       "workbench_show",
       "workbench_read",
-      "learning_library", "learning_material"
+      "learning_library",
+      "learning_material",
+      "learning_desk"
     ]
   },
   "configSchema": {

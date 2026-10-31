@@ -667,6 +667,10 @@ html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(23
   transition: opacity .16s ease, transform .16s ease;
 }
 .laolao-learning-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.laolao-learning-toast.has-action.is-visible { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.laolao-learning-toast button { flex: none; padding: 0; border: 0; color: inherit; background: none; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+/* 选中的是英文词或短语时，「记生词」是主按钮。 */
+.laolao-learning-selection-save.laolao-learning-selection-vocab { border-color: transparent; color: #fff; background: #DB1F74; }
 .laolao-learning-toast[data-error="1"] { background: rgba(151, 45, 85, .94); }
 
 @keyframes laolao-learning-arrive {
@@ -1058,3 +1062,4 @@ html[data-pinkie-night] .laolao-learning-packs__tag.is-new { background: rgba(23
 .laolao-learning-radar__wrong-item > .laolao-learning-button { margin-top: 8px; }
 html[data-pinkie-night] .laolao-learning-stage__confidence[aria-pressed="true"] { color: #ffb9d9; }
 @media (max-width: 600px) { .laolao-learning-stage__body { max-height: 44vh; } }
+html[data-pinkie-night]:not(#_n) .laolao-learning-selection-save.laolao-learning-selection-vocab { color: #17131B !important; background: #F0679F !important; border-color: transparent !important; }

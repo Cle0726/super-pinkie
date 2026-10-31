@@ -271,6 +271,15 @@ test('a native submission already in progress is not steered a second time', asy
   assert.deepEqual(recoveryCalls, []);
 });
 
+test('a busy native queue item with only a reserved run id is steered once', async () => {
+  const {api} = loadQueueSteer();
+  const pane = queuePane([{id:'reserved',text:'新要求',sessionKey:'agent:learning:test',sendAttempts:0,sendRunId:'reserved-id',sendSubmittedAtMs:123}]);
+  pane.state.sessionKey='agent:learning:test';let calls=0;
+  pane.state.steerQueuedChatMessage=async function(id){calls++;this.chatQueue=this.chatQueue.map(x=>x.id===id?{...x,kind:'steered',pendingRunId:this.chatRunId}:x)};
+  assert.equal((await api.steerQueued(pane,'reserved')).state,'steered');
+  assert.equal(calls,1);assert.equal(pane.state.chatQueue[0].sendRunId,'reserved-id');
+});
+
 test('queue presentation follows the native stable item ID instead of a filtered array index', () => {
   const pane = queuePane([
     {id:'submitting', text:'处理中', sendState:'submitting'},

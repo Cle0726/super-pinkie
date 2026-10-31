@@ -3064,7 +3064,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         browserControl.closeWorkspace = { [weak self] in self?.detachBrowserWorkspace() }
         browserControl.registerFilePreview = { [weak self] path in
-            self?.materialPreview.registerWorkspacePreview(path: path) ?? ["ok": false, "message": "文件预览暂时不可用。"]
+            guard let self else { return ["ok": false, "message": "文件预览暂时不可用。"] }
+            let enhanced = MaterialPreviewModePolicy.allowsEnhancedMarkdown(
+                primary: self.modeID(for: self.webView?.url),
+                companion: self.companionModeID,
+                companionVisible: self.companionPanel?.superview != nil
+            )
+            return self.materialPreview.registerWorkspacePreview(path: path, enhancedMarkdown: enhanced)
         }
         browserControl.activityChanged = { [weak self] active in
             guard let self else { return }

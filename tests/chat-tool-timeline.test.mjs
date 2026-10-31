@@ -468,7 +468,7 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v25 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v26 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
 function asLegacyV1Bundle(v4Bundle) {
@@ -488,7 +488,7 @@ function asLegacyV1Bundle(v4Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v25/);
+  assert.match(result.text, /pinkie-chat-timeline:v26/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,e\)/);
   assert.match(result.text, /function Zb\(e\)\{return Infinity\}/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -534,6 +534,39 @@ test('legacy earlier-history control targets its own pane, prevents duplicate lo
   assert.equal(vm.runInContext('pinkieEarlierHistory(options)', context).values.find(value => typeof value === 'string' && /^(?:上一页|正在加载|重试加载)/.test(value)), '重试加载更早消息');
   state.chatHistoryPagination = {hasMore: false};
   assert.equal(vm.runInContext('pinkieEarlierHistory(options)', context), null);
+});
+
+test('short local boundary pages fetch older rows before paging, without hiding history on failure', async () => {
+  async function exercise(sessionKey, succeeds) {
+    const messages = Array.from({length: 112}, (_, index) => message(index % 2 ? 'assistant' : 'user', `turn ${index}`, `m-${index}`));
+    const older = Array.from({length: 128}, (_, index) => message(index % 2 ? 'assistant' : 'user', `older ${index}`, `old-${index}`));
+    const state = {sessionKey, currentSessionId:'instance', chatMessages:messages, chatHistoryPagination:{hasMore:true,nextOffset:112}};
+    const pane = {paneId:'target',state,requestUpdate(){}};
+    let requests=0;
+    const context=vm.createContext({c:null,document:{querySelectorAll:()=>[pane]},s:(strings,...values)=>({strings,values}),pane,
+      options:{paneId:pane.paneId,sessionKey,messages},
+      __laolaoLoadEarlierHistory:async()=>{requests++;if(!succeeds)return false;state.chatMessages=[...older,...state.chatMessages];return true;}});
+    vm.runInContext(transformWithStatus(bundleFixture).text,context);
+    const project=()=>vm.runInContext('pinkieSelectMessageWindow(pane.state.chatMessages,()=>false,options)',context);
+    assert.equal(project().length,100);
+    const control=vm.runInContext('pinkieEarlierHistory(options)',context);
+    control.values.find(x=>typeof x==='function')({preventDefault(){},stopPropagation(){}});
+    await new Promise(resolve=>setImmediate(resolve));
+    const page=project();
+    return {requests,ids:Array.from(page,x=>x.__openclaw.id),state};
+  }
+  const loaded=await exercise('agent:learning:audit',true);
+  assert.equal(loaded.requests,1);
+  assert.equal(loaded.ids.length,100);
+  assert.equal(loaded.ids[0],'old-40');
+  assert.equal(loaded.ids.at(-1),'m-11');
+  assert.equal(loaded.state.chatMessages.length,240);
+  const failed=await exercise('agent:learning:audit',false);
+  assert.equal(failed.requests,1);
+  assert.deepEqual(failed.ids,Array.from({length:12},(_,i)=>`m-${i}`));
+  const excluded=await exercise('agent:other:audit',true);
+  assert.equal(excluded.requests,0);
+  assert.deepEqual(excluded.ids,Array.from({length:12},(_,i)=>`m-${i}`));
 });
 
 test('legacy local pages keep 10000 retained messages reachable with 100-row projections and stable reading pages', () => {
@@ -688,7 +721,7 @@ test('an installed v1 chat bundle upgrades to the current runtime through apply 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v25/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v26/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1\b|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -813,6 +846,28 @@ test('a turn with steps becomes user · process card · final reply', () => {
   assert.equal(card.processRows.every((row) => row.isTimelineStep), true);
 });
 
+test('a learning activity is placed once after its own answer and keeps its session and turn', () => {
+  const makeTurn = (id, session) => {
+    const ref = {v:1, sessionKey:session, id:`quiz-${id}`, kind:'quiz', revision:1, title:'练习'};
+    return [group('user', `user-${id}`, [message('user', '讲解并出题', `user-${id}`)]),
+      group('tool', `tool-${id}`, [
+        message('assistant', [{type:'tool_call',callId:`call-${id}`,name:'learning_activity',arguments:{action:'present'}}], `call-${id}`),
+        message('tool', [{type:'tool_result',callId:`call-${id}`,name:'learning_activity',text:JSON.stringify({inline:ref})}], `result-${id}`),
+      ]),
+      group('assistant', `final-${id}`, [message('assistant', '请在下面作答。', `final-${id}`)])];
+  };
+  const timeline = pinkieBuildTimeline([...makeTurn('one','agent:learning:first'), ...makeTurn('two','agent:learning:second')], parseToolRows);
+  const cards = timeline.filter(item => item.isLearningCard);
+  assert.equal(cards.length, 2);
+  assert.deepEqual(cards.map(item => item.learningCards[0].sessionKey), ['agent:learning:first','agent:learning:second']);
+  for (const [index, name] of ['one','two'].entries()) {
+    const at = timeline.findIndex(item => own(item.key) === `final-${name}`);
+    assert.equal(timeline[at+1], cards[index], 'the interactive card follows its own answer');
+    assert.equal(cards[index].learningCards.length, 1);
+  }
+  assert.equal(timeline.filter(item => item.isProcessCard).some(item => item.learningCards?.length), false);
+});
+
 test('plain answers keep the native layout unless the page recorded their thinking', () => {
   const entries = [
     group('user', 'chat-user', [message('user', '你好', 'chat-user')]),
@@ -921,13 +976,13 @@ test('2026.10 metadata upgrade adds one owned slot to a work group without repla
   assert.equal(transformCurrentWithStatus(result.text).changed, false);
 });
 
-test('the released v21 process card upgrades to an interactive slot outside the process fold', () => {
+test('the released v21 process card upgrades to an interactive row outside the process fold', () => {
   const v21 = asOlderBundle(transformWithStatus(bundleFixture).text, 'v21')
     .replace('<div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=${e.key} .pinkieLearningCards=${e.learningCards||[]} .pinkieLearningSession=${t?.sessionKey||``}></div>', '');
   const result = transformWithStatus(v21);
   assert.equal(result.changed, true, result.reason);
   assert.equal(result.reason, 'upgraded-v21');
-  assert.match(result.text, /<\/details><div class="pinkie-process__status"[^]*?<div class="pinkie-learning-inline-slot"/);
+  assert.match(result.text, /if\(e&&e\.isLearningCard\)return s`<div class="chat-group assistant chat-group--learning"/);
   assert.equal(result.text.split('data-pinkie-learning-slot=').length, 2);
   assert.equal(transformWithStatus(result.text).changed, false);
 });

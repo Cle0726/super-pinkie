@@ -220,7 +220,12 @@
                   if (prepared?.prepared && prepared.mode === 'delivery-review') job.review = {requestId, tier};
                 }
               }
+              // A synchronous socket send error happens after workbench sync.
+              // Report its real stage for the modes covered by this repair.
+              const previousStage = stage;
+              if (/^agent:(main|project|thinking|learning):/.test(String(key || ''))) stage = 'send';
               send(data);
+              stage = previousStage;
               if (job?.review) watchReview(key, job.review.requestId, job.review.tier);
               else {
                 // 思考强度档位（加强 / 全开 / 长跑）在整个任务结束后也做交付验收。
@@ -230,7 +235,7 @@
               }
             }
             catch(error) {
-              const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
+              const message = stage === 'send' ? '消息连接发送失败：'+error.message : stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
               toast('没有发送：'+message);
               ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message}})}));
             } finally {
@@ -872,11 +877,12 @@
     void drainAutoTitleHistory();
   }
 
-  async function createProjectSession(name) {
+  async function createProjectSession(name, options = {}) {
     if(name&&!state.projectFolders[name]){toast('请先为「'+name+'」选择项目文件夹');return;}
     const agentId = currentModeAgent();
     const workbench = window.__pinkieWorkbench?.state;
-    const inheritedFolder = !name && workbench?.visible && workbench.info?.bound && workbench.key === pageSessionKey() && workbench.info.agentId === agentId
+    // plain：首页发第一句话用的干净新会话——不进项目组，也不继承工作台的文件夹。
+    const inheritedFolder = !name && !options.plain && workbench?.visible && workbench.info?.bound && workbench.key === pageSessionKey() && workbench.info.agentId === agentId
       ? {path:workbench.root,name:workbench.info.name || '当前项目'} : null;
     const ownerMode=stateMode,ownerState=state;
     const operation=ownerMode+'|'+(name||'');
@@ -1687,6 +1693,7 @@
   window.__laolaoSidebar = {
     gwRequest,
     navigateSession,
+    createSession: () => createProjectSession(null, {plain: true}),
     askDeleteAllSessions,
     get mode() { return stateMode; },
     get state() { return state; },

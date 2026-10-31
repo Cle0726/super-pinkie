@@ -137,16 +137,22 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   const methods = new Map();
   registerLearningGateway({registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); }}, store);
   // v2 (2026-10-26) adds materials.* and desk.lesson.* RPCs, some read-scoped; learning-lesson/materials tests cover them exactly.
-  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.')));
+  // 手账 v2 (2026-10-29) adds ref.*; learning-refs.test.mjs pins those names and scopes exactly.
+  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.') && !name.startsWith('pinkie.learning.ref.')));
   assert.deepEqual([...legacyMethods.keys()].sort(), [
     'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
     'pinkie.learning.current', 'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
     'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
-    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare', 'pinkie.learning.notes.restore',
-    'pinkie.learning.notes.review', 'pinkie.learning.notes.review.queue', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
+    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare',
+    'pinkie.learning.notes.recall.prepare', 'pinkie.learning.notes.recall.queue', 'pinkie.learning.notes.recall.review', 'pinkie.learning.notes.restore', 'pinkie.learning.notes.review', 'pinkie.learning.notes.review.queue', 'pinkie.learning.notes.save', 'pinkie.learning.notes.section.build', 'pinkie.learning.notes.section.get',
+    'pinkie.learning.notes.toc', 'pinkie.learning.notes.triage.apply', 'pinkie.learning.notes.triage.suggest', 'pinkie.learning.notes.triage.undo', 'pinkie.learning.notes.update',
     'pinkie.learning.practice.list', 'pinkie.learning.practice.open', 'pinkie.learning.practice.run',
     'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit',
+    'pinkie.learning.vocab.add', 'pinkie.learning.vocab.delete', 'pinkie.learning.vocab.fromNotes.apply', 'pinkie.learning.vocab.fromNotes.preview',
+    'pinkie.learning.vocab.fromNotes.undo', 'pinkie.learning.vocab.importList', 'pinkie.learning.vocab.list', 'pinkie.learning.vocab.organize',
+    'pinkie.learning.vocab.restore', 'pinkie.learning.vocab.retag', 'pinkie.learning.vocab.review', 'pinkie.learning.vocab.review.queue',
+    'pinkie.learning.vocab.settings.get', 'pinkie.learning.vocab.settings.set', 'pinkie.learning.vocab.today', 'pinkie.learning.vocab.update',
   ]);
   for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /Li An 学习笔记/);
@@ -159,18 +165,11 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   assert.equal(learningPrompt(store, 'agent:project:prompt'), '');
 });
 
-test('frontend keeps one native card, restores by revision, and avoids subtree observers', () => {
+test('frontend keeps one native card and restores by revision without an idle polling interval', () => {
   const source = fs.readFileSync(new URL('../ui/injections/laolao-learning-stage.js', import.meta.url), 'utf8');
   assert.match(source, /pinkie\.learning\.current/);
-  assert.match(source, /pinkie\.learning\.notes\.update/);
-  assert.match(source, /pinkie\.learning\.notes\.review/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.apply/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.light/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.preview/);
   assert.doesNotMatch(source, /learning_notes/);
   assert.match(source, /CLEKK_LEARNING_BATCH_V1/);
-  assert.match(source, /notes__search/);
-  assert.match(source, /notes__tag-filters/);
   assert.match(source, /state\.sessionKey !== sessionKey \|\| state\.revision/);
   assert.match(source, /stage\.replaceChildren\(\)/);
   assert.match(source, /chat\.send/);
@@ -182,7 +181,8 @@ test('frontend keeps one native card, restores by revision, and avoids subtree o
   assert.match(source, /__pinkieSelectionActions\?\.register\('note'/);
   const selection = fs.readFileSync(new URL('../ui/injections/laolao-selection-actions.js', import.meta.url), 'utf8');
   assert.match(selection, /\.chat-group\.assistant/);
-  assert.doesNotMatch(source, /new MutationObserver/);
+  assert.doesNotMatch(source, /setInterval\(/);
+  assert.match(source, /document\.hidden/);
 });
 
 test('note saves strip title decorations, preserve the body, and keep an immutable original', t => {

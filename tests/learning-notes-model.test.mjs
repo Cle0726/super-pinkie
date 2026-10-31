@@ -23,7 +23,7 @@ function fixture(t, options = {}) {
   return {root, store, config, api, organizer};
 }
 
-test('save RPC only stores a note even when an organizer model is available', async t => {
+test('save RPC preserves source text and automatically queues derived recall questions', async t => {
   let modelCalls = 0;
   const {store, api, organizer} = fixture(t, {fetchImpl: async () => { modelCalls++; return response(lightResult); }});
   const methods = new Map();
@@ -31,14 +31,15 @@ test('save RPC only stores a note even when an organizer model is available', as
   let result;
   await methods.get('pinkie.learning.notes.save')({params: {sessionKey, content: 'just record this'}, respond(ok, value) { result = {ok, value}; }});
   assert.equal(result.ok, true);
-  assert.equal(modelCalls, 0);
+  await store.recall.running;
+  assert.equal(modelCalls, 1);
   assert.equal(result.value.note.content, 'just record this');
   assert.equal(result.value.note.original, 'just record this');
   assert.deepEqual(result.value.note.tags, []);
   assert.equal(result.value.note.lightOrganizedAt, undefined);
 });
 
-test('selection and question-card save actions do not organize until the user explicitly asks', async t => {
+test('selection and question-card saves prepare recall questions without rewriting the source', async t => {
   let modelCalls = 0;
   const {store, api, organizer} = fixture(t, {fetchImpl: async () => { modelCalls++; return response(lightResult); }});
   const methods = new Map(); const requests = [];
@@ -67,7 +68,7 @@ test('selection and question-card save actions do not organize until the user ex
     }}));
   }}};
   const source = fs.readFileSync(new URL('../ui/injections/laolao-learning-stage.js', import.meta.url), 'utf8')
-    .replace(/\}\)\(\);\s*$/, 'window.__notesTest = {state, saveSelection, saveCurrentKeyPoint, organizeSingleNote, hideControlMessages};})();');
+    .replace(/\}\)\(\);\s*$/, 'window.__notesTest = {state, saveSelection, saveCurrentKeyPoint, hideControlMessages};})();');
   vm.runInNewContext(source, {
     window, document, location: {href: `http://localhost/chat?session=${sessionKey}`}, URL,
     crypto: {randomUUID}, setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 1; },
@@ -81,15 +82,12 @@ test('selection and question-card save actions do not organize until the user ex
   hooks.state.remote = {current: {topic: '知识点', result: {keyPoint: 'take off = 起飞'}}};
   await hooks.saveCurrentKeyPoint(element());
   assert.deepEqual(requests, ['pinkie.learning.notes.save', 'pinkie.learning.notes.save']);
-  assert.equal(modelCalls, 0);
+  await store.recall.running;
+  const recallCalls = modelCalls; assert.ok(recallCalls >= 1);
   const notes = store.listNotes({sessionKey}).notes;
   assert.equal(notes.length, 2);
   assert.equal(notes.every(note => !note.lightOrganizedAt), true);
   assert.deepEqual(store.findOwnedNote(sessionKey, notes[1].id).tags, []);
-  await hooks.organizeSingleNote(notes[1]);
-  assert.equal(modelCalls, 1);
-  assert.equal(requests.at(-1), 'pinkie.learning.notes.organize.light');
-  assert.ok(store.findOwnedNote(sessionKey, notes[1].id).lightOrganizedAt);
   assert.equal(requests.includes('chat.send'), false);
 });
 
