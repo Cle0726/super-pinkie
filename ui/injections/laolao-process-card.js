@@ -13,7 +13,7 @@
   const STORE = "laolao:process-thinking:v1";
   const MAX_CARDS = 80;
   const MAX_TEXT = 8000;
-  const STICKER = (state) => `/laolao-pinkie-status-${state}.png`;
+  const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
   const PHRASE = {
     thinking: "碧琪在动小脑瓜…", working: "碧琪在抛气球干活…", writing: "碧琪在比划着回你…",
     asking: "碧琪在等你点头…", done: "完成啦！", oops: "这一轮停下来了，做到一半的记录都留着",

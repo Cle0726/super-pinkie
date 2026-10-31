@@ -52,18 +52,9 @@
   const sameSession = (pane, item) => !item?.sessionKey || !pane?.state?.sessionKey
     || item.sessionKey === pane.state.sessionKey;
   const itemFor = (pane, id) => queueFor(pane).find((item) => item?.id === id && sameSession(pane, item)) || null;
-  const nativeInFlight = (item) => {
-    // The native busy queue allocates its future send ID and timestamp before
-    // sending anything. Treat that exact untouched state as queued; an ID by
-    // itself is not a receipt or an in-flight submission.
-    const reservedOnly = /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
-      && item?.sendAttempts === 0 && !item?.sendState && !item?.pendingRunId
-      && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer" && item?.kind !== "steered";
-    if (reservedOnly) return false;
-    return Boolean(item?.sendRunId || item?.pendingRunId
-      || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
-      || ["sending", "submitting", "waiting-model", "unconfirmed", "held", "delivery-unknown"].includes(item?.sendState));
-  };
+  const nativeInFlight = (item) => Boolean(item?.sendRunId || item?.pendingRunId
+    || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
+    || ["sending", "submitting", "waiting-model", "unconfirmed", "held", "delivery-unknown"].includes(item?.sendState));
 
   // A queued card is already the recoverable source of the user's text. Copying
   // it into the composer as well makes Enter submit a second copy.

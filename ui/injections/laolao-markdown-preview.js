@@ -48,39 +48,9 @@ function __pkCjkStrong(md) {
   });
 }
 
-const md=new library.n({html:false,breaks:true,linkify:true});__pkCjkStrong(md);md.use(library.t(),{enabled:false});const enhanced=window.__pinkieMarkdownEnhanced===true;
-// Keep local images behind the native preview capability. The native handler
-// resolves each relative path against the Markdown file and checks it again.
-function previewImageSource(value){
-  const src=String(value||'');
-  if(/^(?:clekk-material:|data:image\/(?:png|jpe?g|gif|webp);base64,)/i.test(src))return src;
-  if(!enhanced)return '';
-  const token=String(window.__pinkieMarkdownAssetToken||'');
-  if(!/^[0-9a-f-]{36}$/i.test(token))return '';
-  let decoded;try{decoded=decodeURIComponent(src);}catch{return '';}
-  if(!decoded||/^(?:[a-z][a-z0-9+.-]*:|[\/\\]|#|~)/i.test(decoded)||decoded.includes('\0'))return '';
-  return 'clekk-material://relative/'+token+'/'+encodeURIComponent(decoded);
-}
-md.renderer.rules.image=(tokens,index)=>{const token=tokens[index],src=previewImageSource(token.attrGet('src')||''),alt=md.utils.escapeHtml(token.content||'图片');return src?'<img src="'+md.utils.escapeHtml(src)+'" alt="'+alt+'">':alt;};
-// Parse math inside Markdown rather than scanning rendered code blocks. This
-// keeps literal dollars in code and supports both inline and display math.
-md.inline.ruler.before('escape','pinkie_preview_math',(state,silent)=>{
-  const src=state.src,start=state.pos;if(!enhanced||src[start]!=='$')return false;
-  const display=src[start+1]==='$',delimiter=display?'$$':'$',begin=start+delimiter.length;
-  if(begin>=state.posMax||(!display&&/\s/.test(src[begin])))return false;
-  let end=begin;
-  while((end=src.indexOf(delimiter,end))>=0&&end<state.posMax){
-    let slashes=0;for(let i=end-1;i>=begin&&src[i]==='\\';i--)slashes++;
-    if(!(slashes%2))break;end+=delimiter.length;
-  }
-  if(end<0||end>=state.posMax)return false;
-  const tex=src.slice(begin,end);
-  if(!tex.trim()||tex.length>16000||(!display&&(/[\r\n]/.test(tex)||/\s$/.test(tex)||/\d/.test(src[end+1]||''))))return false;
-  if(!silent){const token=state.push('pinkie_preview_math','',0);token.content=tex;token.meta={display};}
-  state.pos=end+delimiter.length;return true;
-});
-md.renderer.rules.pinkie_preview_math=(tokens,index)=>{const token=tokens[index],display=!!token.meta?.display;return '<span class="pinkie-preview-math'+(display?' pinkie-preview-math--display':'')+'" data-tex="'+md.utils.escapeHtml(token.content)+'" data-display="'+(display?'1':'0')+'"></span>';};
-function render(text){const options={ALLOWED_TAGS:['a','p','br','strong','em','s','h1','h2','h3','h4','h5','h6','blockquote','ul','ol','li','hr','table','thead','tbody','tr','th','td','pre','code','img','input'],ALLOWED_ATTR:['href','title','src','alt','start','type','checked','disabled','class']};if(enhanced){options.ALLOWED_TAGS.push('span');options.ALLOWED_ATTR.push('data-tex','data-display');options.ALLOWED_URI_REGEXP=/^(?:(?:https?|mailto|tel):|clekk-material:\/\/(?:relative|preview)\/|data:image\/(?:png|jpe?g|gif|webp);base64,|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;}return library.v.sanitize(md.render(String(text)),options);}
+const md=new library.n({html:false,breaks:true,linkify:true});__pkCjkStrong(md);md.use(library.t(),{enabled:false});
+md.renderer.rules.image=(tokens,index)=>{const token=tokens[index],src=token.attrGet('src')||'',alt=md.utils.escapeHtml(token.content||'图片');return /^(?:clekk-material:|data:image\/(?:png|jpe?g|gif|webp);base64,)/i.test(src)?'<img src="'+md.utils.escapeHtml(src)+'" alt="'+alt+'">':alt;};
+function render(text){return library.v.sanitize(md.render(String(text)),{ALLOWED_TAGS:['a','p','br','strong','em','s','h1','h2','h3','h4','h5','h6','blockquote','ul','ol','li','hr','table','thead','tbody','tr','th','td','pre','code','img','input'],ALLOWED_ATTR:['href','title','src','alt','start','type','checked','disabled','class']});}
 window.__pinkieMarkdownPreview={render};const source=document.getElementById('pinkie-markdown-source'),target=document.getElementById('pinkie-markdown-document');
-if(source&&target){try{target.innerHTML=render(source.textContent);for(const table of target.querySelectorAll('table')){const wrap=document.createElement('div');wrap.className='markdown-table';table.before(wrap);wrap.append(table);}for(const link of target.querySelectorAll('a')){link.rel='noopener noreferrer';}for(const node of target.querySelectorAll('.pinkie-preview-math')){const tex=node.dataset.tex||'',display=node.dataset.display==='1';try{if(!window.katex)throw Error('math renderer unavailable');window.katex.render(tex,node,{displayMode:display,throwOnError:false,strict:'ignore',trust:false,output:'htmlAndMathml'});}catch{node.textContent=(display?'$$':'$')+tex+(display?'$$':'$');}}target.dataset.rendered='markdown';}catch(error){console.warn('Markdown preview unavailable',error);target.textContent=source.textContent;target.classList.add('markdown-plain');}}
+if(source&&target){try{target.innerHTML=render(source.textContent);for(const table of target.querySelectorAll('table')){const wrap=document.createElement('div');wrap.className='markdown-table';table.before(wrap);wrap.append(table);}for(const link of target.querySelectorAll('a')){link.rel='noopener noreferrer';}target.dataset.rendered='markdown';}catch(error){console.warn('Markdown preview unavailable',error);target.textContent=source.textContent;target.classList.add('markdown-plain');}}
 })();

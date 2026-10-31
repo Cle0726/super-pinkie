@@ -37,7 +37,7 @@ test('the card matches the original bubbles and respects reduced motion', () => 
   assert.match(css, /prefers-reduced-motion: reduce/);
   for (const source of [read('ui/injections/laolao-head.fragment.html'), read('installer/macos/apply-theme.sh'), read('installer/windows/apply-theme.ps1')]) {
     assert.match(source, /laolao-process-card\.css\?v=processcard6/);
-    assert.match(source, /laolao-process-card\.js\?v=processcard12/);
+    assert.match(source, /laolao-process-card\.js\?v=processcard11/);
   }
 });
 
