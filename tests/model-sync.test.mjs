@@ -28,7 +28,7 @@ test('verified clekk GPT-6 gets slider capabilities while an unverified provider
   const [verified] = newModelEntries([], ['gpt-6-sol'], {verifiedGpt6: true});
   assert.equal(verified.reasoning, true);
   assert.deepEqual(verified.input, ['text', 'image']);
-  assert.deepEqual(verified.compat.supportedReasoningEfforts, ['low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(verified.compat.supportedReasoningEfforts, ['low', 'medium', 'high', 'xhigh', 'max']);
 });
 
 test('sync adds upstream models once, preserves configured entries, and does not expose the key', async () => {
@@ -126,7 +126,7 @@ test('sync upgrades only its old clekk GPT-6 placeholders, preserving custom and
   assert.equal(config.models.providers.clekk.models[0].reasoning, true);
   assert.deepEqual(config.models.providers.clekk.models[0].input, ['text', 'image']);
   assert.deepEqual(config.models.providers.clekk.models[0].compat.supportedReasoningEfforts,
-    ['low', 'medium', 'high', 'xhigh']);
+    ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.equal(config.models.providers.clekk.models[1].name, 'My Luna');
   assert.equal(config.models.providers.clekk.models[1].reasoning, false);
 });
@@ -290,4 +290,29 @@ test('existing automatic WorkBuddy placeholders gain reasoning while custom capa
   assert.equal(config.models.providers.mm.models[1].reasoning,false);
   assert.equal(config.models.providers.other.models[0].reasoning,false);
   assert.equal((await sync.sync({force:true})).upgraded,0);
+});
+
+
+test('all default clekk GPT native profiles recover exact levels including 6.1 Sol and Mini', async()=>{
+ const entries=['gpt-6.1-sol','gpt-5.4-mini','gpt-5.4','gpt-5.5'].map(id=>({id,name:id.replace('gpt-','GPT-').replace(/-mini$/,' Mini').replace(/-sol$/,' Sol'),reasoning:id==='gpt-5.4'||id==='gpt-5.5',input:['text'],contextWindow:1100000,contextTokens:1100000}));
+ const config={models:{providers:{clekk:{baseUrl:'http://127.0.0.1:49684/v1',apiKey:'fixture',models:entries}}}};
+ const api={runtime:{config:{current:()=>config,mutateConfigFile:async({mutate})=>mutate(config)}}};
+ const sync=createModelSynchronizer(api,{fetchImpl:async()=>new Response(JSON.stringify({data:entries.map(({id})=>({id}))}))});
+ assert.equal((await sync.sync()).upgraded,4);
+ for(const model of config.models.providers.clekk.models){
+  assert.equal(model.reasoning,true);
+  assert.deepEqual(model.compat.supportedReasoningEfforts,model.id==='gpt-6.1-sol'?['low','medium','high','xhigh','max']:['none','low','medium','high','xhigh']);
+ }
+ assert.equal((await sync.sync({force:true})).upgraded,0);
+});
+
+test('explicit upstream effort metadata is honored without replacing a custom capability declaration',async()=>{
+ const custom={id:'custom',name:'Custom model',reasoning:true,compat:{supportedReasoningEfforts:['high']}};
+ const config={models:{providers:{fixture:{baseUrl:'https://example.invalid/v1',apiKey:'fixture',models:[custom,{id:'new-known',name:'New Known',reasoning:false}]}}}};
+ const api={runtime:{config:{current:()=>config,mutateConfigFile:async({mutate})=>mutate(config)}}};
+ const payload={data:[{id:'custom',reasoning_efforts:['low','max']},{id:'new-known',capabilities:{reasoning:{efforts:['medium','high','max']}}},{id:'discovered',supported_reasoning_efforts:['LOW','HIGH']}]};
+ await createModelSynchronizer(api,{fetchImpl:async()=>new Response(JSON.stringify(payload))}).sync();
+ const models=config.models.providers.fixture.models;assert.deepEqual(custom.compat.supportedReasoningEfforts,['high']);
+ assert.deepEqual(models.find(m=>m.id==='new-known').compat.supportedReasoningEfforts,['medium','high','max']);
+ assert.deepEqual(models.find(m=>m.id==='discovered').compat.supportedReasoningEfforts,['low','high']);
 });

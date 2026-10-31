@@ -1,0 +1,120 @@
+/* v2 新结构；视觉方案未定稿时只用已有纸墨令牌。A0 定稿后统一切换令牌。 */
+:is(#pinkie-study-desk,.pk-tonight) .desk-date-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+:is(#pinkie-study-desk,.pk-tonight) .date{min-width:0;white-space:nowrap}
+:is(#pinkie-study-desk,.pk-tonight) .materials-status{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 9px;border:1px solid var(--hair);border-radius:99px;background:transparent;color:var(--ink-2);font-size:12px;cursor:pointer;max-width:100%;text-align:left}
+:is(#pinkie-study-desk,.pk-tonight) .materials-status:hover{border-color:var(--ink-3)}
+:is(#pinkie-study-desk,.pk-tonight) .status-demo{font:12px var(--sans);color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .dot.learned{background:none;box-shadow:inset 0 0 0 1.2px var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .dot.learned::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .map-legend{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px;font-size:12px;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .map-legend>span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+:is(#pinkie-study-desk,.pk-tonight) .map-legend .map-key{width:10px;height:10px;border-radius:50%;position:relative;box-shadow:inset 0 0 0 1.2px var(--ring);display:inline-block;cursor:default;animation:none}
+:is(#pinkie-study-desk,.pk-tonight) .mrow{grid-template-columns:max-content minmax(0,1fr);color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .mrow>span{white-space:nowrap;min-width:64px}
+:is(#pinkie-study-desk,.pk-tonight) .map-cap,:is(#pinkie-study-desk,.pk-tonight) .cd-sub{font-size:12px;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-secondary,.lesson-ghost,.lesson-icon,.lesson-primary,.lesson-pink){display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 16px;border-radius:99px;font-size:14px;line-height:1.4;white-space:nowrap;cursor:pointer;color:var(--ink);transition:background .2s,border-color .2s,transform .12s}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-secondary{border:1px solid var(--hair-2);background:transparent}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-secondary:hover{border-color:var(--ink-3)}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-ghost,.lesson-icon){border:0;background:transparent;color:var(--ink-2);padding:0 8px}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-ghost,.lesson-icon):hover{background:var(--ink-tint);color:var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-icon{width:36px;height:36px;flex-shrink:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-icon>span:not(.desk-icon){position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-primary,.lesson-pink){height:48px;background:var(--ink);color:var(--paper);border:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-pink{background:var(--pink-solid,var(--ink));color:var(--on-pink,var(--paper))}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-secondary,.lesson-ghost,.lesson-icon,.lesson-primary,.lesson-pink):active{transform:scale(.97)}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-secondary,.lesson-ghost,.lesson-icon,.lesson-primary,.lesson-pink):disabled{opacity:.5!important;filter:none!important;cursor:default!important}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-secondary,.lesson-ghost,.lesson-icon,.lesson-primary,.lesson-pink):focus-visible{outline:2px solid var(--pink);outline-offset:2px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-dialog{margin:auto;width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 48px);padding:28px;border-radius:24px;border:1px solid var(--glass-edge);color:var(--ink);background:var(--glass-strong);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:var(--glass-shadow);pointer-events:auto;overflow:auto}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-dialog::backdrop{background:rgba(24,16,30,.25)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-dialog h2{font:600 22px var(--serif);margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-conflict{width:min(440px,calc(100vw - 48px))}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-meta{font-size:12px;line-height:1.7;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-error{font-size:14px;color:var(--ink-2);line-height:1.7}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-demo{display:block;font-size:12px;color:var(--ink-2);text-align:right;margin-top:12px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-banner{padding:10px 12px;border-radius:8px;background:var(--ink-tint);font-size:12px;color:var(--ink-2);line-height:1.7}
+:is(#pinkie-study-desk,.pk-tonight) .material-root{display:grid;grid-template-columns:20px 1fr auto;gap:6px;padding:14px 0;border-bottom:1px solid var(--hair);font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .material-root small{font-size:12px;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .material-root code{grid-column:2/-1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px var(--mono);color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .material-job{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;margin-top:18px;font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .material-job small{font:12px var(--mono);color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .material-job p{grid-column:2/-1;margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .material-job progress{appearance:none;-webkit-appearance:none;height:4px;width:100%;border:0;border-radius:9px;overflow:hidden;background:var(--hair);accent-color:var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .material-job progress::-webkit-progress-bar{background:var(--hair)}
+:is(#pinkie-study-desk,.pk-tonight) .material-job progress::-webkit-progress-value{background:var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .material-job[data-state="paused"] progress::-webkit-progress-value{background:var(--ink-3)}
+:is(#pinkie-study-desk,.pk-tonight) .materials-panel details{margin-top:24px;font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-skeleton{display:flex;flex-direction:column;gap:22px;padding:22px 0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-skeleton i{display:block;height:32px;border-radius:8px;background:var(--ink-tint)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-skeleton i:first-child{height:44px;width:66%}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-skeleton i:last-child{width:75%}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-stage{grid-template-rows:auto minmax(0,1fr)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-paper{margin-top:24px;padding:28px;background:var(--card);border:1px solid var(--hair);border-radius:24px;min-width:0;overflow:auto;position:relative}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-paper h1{font:600 40px/1.35 var(--serif);margin:12px 0 20px;overflow-wrap:anywhere}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-outline{list-style:none;padding:0;margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-outline li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:14px 0;border-top:1px solid var(--hair)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-outline li>b{height:28px;border:1px solid var(--hair-2);border-radius:50%;display:grid;place-items:center;font:14px var(--serif)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-outline h3{display:flex;align-items:center;gap:8px;font:600 18px/1.5 var(--serif);margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-outline p{margin:4px 0 0;font-size:14px;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-sources{margin-top:24px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-sources h2{font:600 18px var(--serif);margin:0 0 8px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-source{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--hair);font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-source>span:not(.desk-icon){flex:1;min-width:100px;overflow-wrap:anywhere}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-chip{border:1px solid var(--hair-2);border-radius:8px;padding:2px 6px;font-size:12px;color:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-side{padding-top:40px;min-width:0;overflow:auto}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-side img{display:block;width:100%;max-height:260px;object-fit:contain;object-position:center bottom}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-speech{white-space:pre-line;padding:22px 0;border-top:1px solid var(--hair);font-size:15px;line-height:1.85}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-empty{text-align:center;margin:auto;display:flex;align-items:center;flex-direction:column;gap:16px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-empty img{width:160px;height:160px;object-fit:contain}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-empty h2{font:600 30px var(--serif);margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-empty p{font-size:15px;color:var(--ink-2);margin:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-viewer{width:min(920px,calc(100vw - 96px));height:calc(100vh - 96px);max-height:none;display:flex;flex-direction:column}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-viewer:not([open]){display:none}
+:is(#pinkie-study-desk,.pk-tonight) .page-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:12px}
+:is(#pinkie-study-desk,.pk-tonight) .page-body{flex:1;min-height:0;overflow:auto;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:18px}
+:is(#pinkie-study-desk,.pk-tonight) .page-image{display:block;max-width:none;width:100%;height:auto;box-shadow:var(--lift)}
+:is(#pinkie-study-desk,.pk-tonight) .page-text{font:16px/1.9 var(--serif);white-space:pre-wrap;max-width:680px;margin:0 auto;overflow-wrap:anywhere}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-viewer>footer{justify-content:center;margin-top:16px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar{position:fixed;z-index:95;display:flex;align-items:center;gap:12px;height:44px;max-height:48px;padding:0 14px;border:1px solid var(--glass-edge);border-radius:16px;background:var(--glass-strong);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:var(--glass-shadow);pointer-events:auto;color:var(--ink);font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-title{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-title strong{font:600 15px var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-state{width:6px;height:6px;border-radius:50%;background:var(--ink);flex-shrink:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar[data-status="paused"] .lesson-state{background:none;border:1px solid var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-actions button{height:30px;min-height:30px;padding:0 10px;font-size:12px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-segments{display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12px;white-space:nowrap}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-segments i{width:8px;height:8px;border:1px solid var(--ring);border-radius:50%}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-segments i.done{background:var(--ink);border-color:var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-segments i.current{border:1.5px solid var(--pink)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-segment-count{display:none}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar--compact .lesson-segments i{display:none}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar--compact .lesson-segment-count{display:inline}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar--narrow :is(.lesson-bar-source,.lesson-bar-pause)>span:not(.desk-icon){display:none}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar--narrow .lesson-bar-stuck>span:not(.desk-icon){font-size:0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar--narrow .lesson-bar-stuck>span:not(.desk-icon)::after{content:"没懂";font-size:12px}
+:is(#pinkie-study-desk,.pk-tonight) :is(.lesson-source-popover,.lesson-finish-confirm){position:absolute;top:calc(100% + 8px);right:0;width:min(320px,calc(100vw - 48px));padding:20px;border:1px solid var(--glass-edge);border-radius:16px;background:var(--glass-strong);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:var(--glass-shadow);pointer-events:auto}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-source-popover button{white-space:normal;text-align:left;justify-content:flex-start;height:auto;min-height:36px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-finish-confirm .link{margin-left:12px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-summary-title{display:flex;align-items:center;gap:12px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-summary-title .dot{flex-shrink:0;width:14px;height:14px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-keypoints{padding-left:24px;font-size:15px;line-height:1.85}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-keypoints li{margin:12px 0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-formula{padding:14px 20px;margin:14px 0;border:1px solid var(--hair);border-radius:12px;overflow:auto;text-align:center}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-stuck{display:flex;align-items:center;gap:8px;font-size:14px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-stuck.unresolved{color:var(--pink-ink)}
+@media(max-width:1100px){:is(#pinkie-study-desk,.pk-tonight) .lesson-paper{padding:20px}:is(#pinkie-study-desk,.pk-tonight) .lesson-paper h1{font-size:30px}:is(#pinkie-study-desk,.pk-tonight) .desk-date-row{align-items:flex-start;gap:6px}:is(#pinkie-study-desk,.pk-tonight) .mrow>span{min-width:0}:is(#pinkie-study-desk,.pk-tonight) .lesson-side img{max-height:200px}:is(#pinkie-study-desk,.pk-tonight) .lesson-actions{gap:8px}:is(#pinkie-study-desk,.pk-tonight) .lesson-actions>small{flex-basis:100%}}
+@media(max-width:760px){:is(#pinkie-study-desk,.pk-tonight) .lesson-stage{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto}:is(#pinkie-study-desk,.pk-tonight) .lesson-side{display:flex;align-items:center;gap:16px;padding-top:16px}:is(#pinkie-study-desk,.pk-tonight) .lesson-side img{width:120px}:is(#pinkie-study-desk,.pk-tonight) .lesson-viewer{width:calc(100vw - 24px);height:calc(100vh - 24px)}:is(#pinkie-study-desk,.pk-tonight) .lesson-bar{gap:6px;padding:0 8px}:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-title{max-width:100px}:is(#pinkie-study-desk,.pk-tonight) .lesson-bar-actions button{padding:0 6px}:is(#pinkie-study-desk,.pk-tonight) .lesson-segments{display:none}}
+
+:is(#pinkie-study-desk,.pk-tonight) .map-key.learned{box-shadow:inset 0 0 0 1.2px var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .map-key.learned::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .map-key.l{background:var(--pink);box-shadow:none}
+:is(#pinkie-study-desk,.pk-tonight) .map-key.m{background:var(--ink);box-shadow:none}
+:is(#pinkie-study-desk,.pk-tonight) .map-key.weak{box-shadow:inset 0 0 0 1.5px var(--ink)}
+
+html[data-pinkie-study-desk="chat"] [data-pinkie-lesson-space]{padding-top:calc(var(--pinkie-lesson-base-padding,24px) + 56px)!important}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-checks{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:16px 0}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-checks>span{margin-right:6px}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-checks i{display:inline-block;width:10px;height:10px;border-radius:50%;border:1px solid var(--ink-2)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-checks i.correct{background:var(--ink);border-color:var(--ink)}
+:is(#pinkie-study-desk,.pk-tonight) .lesson-bar>.lesson-error{position:absolute;top:calc(100% + 6px);right:0;max-width:420px;margin:0;padding:10px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card);box-shadow:var(--lift)}

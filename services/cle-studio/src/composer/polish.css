@@ -1,0 +1,63 @@
+/* ---------- experience pass (2026-10-19): what a full walk-through as a user turned up ---------- */
+
+/* the workbench's chat column is one pane wide: a 双模式 split carried in from the rooms keeps
+   only the pane you are working in (the native narrow-window rule, applied to the column) */
+/* only when a split really is there (an active cell exists): a single pane carries no --active
+   mark, and hiding every unmarked cell left the workbench's chat column empty */
+html[data-pinkie-wb="on"] .chat-split-view:has(.chat-split-view__cell--active) .chat-split-view__column:not(:has(.chat-split-view__cell--active)),
+html[data-pinkie-wb="on"] .chat-split-view:has(.chat-split-view__cell--active) .chat-split-view__cell:not(.chat-split-view__cell--active) { display: none !important; }
+html[data-pinkie-wb="on"] :is(.chat-split-view__column:has(.chat-split-view__cell--active), .chat-split-view__cell--active) {
+  flex: 1 1 auto !important; width: auto !important; max-width: none !important; min-width: 0 !important;
+}
+
+/* one microphone: inside the app the system dictation button is the real one; the web voice
+   key steps aside, and the native button wears the same pen-drawn mic as every other key */
+html[data-cle] .cle-composer:has(.chat-send-btn--laolao-dictation) .chat-send-btn--voice { display: none !important; }
+html[data-cle] .chat-send-btn--laolao-dictation.cle-keyed { background: transparent !important; color: var(--cle-ink-2) !important; box-shadow: none !important; }
+html[data-cle] .chat-send-btn--laolao-dictation.cle-keyed.is-recording { color: var(--cle-gaze) !important; }
+
+/* at night the companion keeps a faint cool rim of light, so a dark pose never sinks into the dark */
+html[data-pinkie-night] .pinkie-buddy__img,
+html[data-pinkie-night] .pinkie-buddy__rig {
+  filter: drop-shadow(0 0 1.2px rgba(150, 195, 255, .5)) drop-shadow(0 0 7px rgba(90, 150, 230, .18)) drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
+}
+
+/* the companion's menu: ink line icons on paper, his gaze only on hover — no stock blue chips */
+html[data-cle] .pinkie-buddy__ico { color: var(--cle-ink-2); background: transparent; border: 1px solid var(--cle-line); }
+html[data-cle] .pinkie-buddy__item:hover .pinkie-buddy__ico,
+html[data-cle] .pinkie-buddy__item:focus-visible .pinkie-buddy__ico { color: var(--cle-gaze); border-color: color-mix(in srgb, var(--cle-gaze) 40%, transparent); }
+
+/* a narrow pane in conversation: the painting steps further back so the words never sit on his face */
+.cle-backdrop.is-narrow:not(.is-empty) .cle-backdrop__paint.is-front { opacity: .17; }
+html[data-pinkie-night] .cle-backdrop.is-narrow:not(.is-empty) .cle-backdrop__paint.is-front { opacity: .24; }
+.cle-backdrop.is-narrow:not(.is-empty) .cle-backdrop__veil {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cle-paper) 40%, transparent), color-mix(in srgb, var(--cle-paper) 62%, transparent) 50%, color-mix(in srgb, var(--cle-paper) 40%, transparent));
+}
+
+/* the workbench speaks the same typeface as the rest of the app */
+html[data-cle] .pk-wb { font-family: var(--cle-sans); }
+
+/* the shared browser panel (web; inside the app the native floating window is used instead):
+   its shadow styles read the theme variables, so it is dressed by handing it the C.le. ones */
+html[data-cle] openclaw-browser-panel, html[data-cle] .chat-browser-panel {
+  --bg: var(--cle-paper); --text: var(--cle-ink); --muted: var(--cle-ink-2);
+  --border: var(--cle-line); --accent: var(--cle-gaze);
+}
+html[data-cle] .chat-browser-panel .tabstrip-tab[active] {
+  background: var(--cle-surface); box-shadow: inset 0 0 0 1px var(--cle-line); color: var(--cle-ink);
+}
+
+/* narrow panes put the model controls on their own row. Packed with justify-self:end the row
+   shrank to its min-content and the model's name collapsed to one letter ("G"); let the row span
+   the pane and push its contents right instead */
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .cle-composer .agent-chat__composer-controls { justify-self: stretch !important; display: flex; justify-content: flex-end; min-width: 0; }
+}
+/* the model button fills its control (the old `> details > summary` rule no longer matches the
+   2026.10 markup, so the button shrank to 50px and squeezed the name to one letter) */
+html[data-cle] .chat-composer-model-control details:has(> .chat-controls__model-trigger) { flex: 1 1 auto; min-width: 0; }
+html[data-cle] .chat-composer-model-control summary.chat-controls__model-trigger { width: 100%; min-width: 0; box-sizing: border-box; }
+html[data-cle] .chat-composer-model-control details:has(> .chat-controls__effort-trigger) { flex: 0 0 auto; }
+html[data-pinkie-wb="on"] .chat-composer-model-control { max-width: 190px !important; }
+html[data-pinkie-wb="on"] .chat-composer-model-control { max-width: 220px !important; }
+html[data-pinkie-wb="on"] .chat-composer-model-control .chat-controls__inline-select-label { max-width: 168px !important; }

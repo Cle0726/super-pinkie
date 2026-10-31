@@ -53,7 +53,8 @@ if [[ ! -f "$MARKER" ]]; then
     local target_dir="$2"
     local label="$3"
     mkdir -p "$target_dir"
-    for filename in SOUL.md IDENTITY.md; do
+    for filename in SOUL.md IDENTITY.md AGENTS.md AESTHETICS.md METHODS.md HEARTBEAT.md DREAMS.md memory-system.md; do
+      [[ -f "$source_dir/$filename" ]] || continue
       if [[ -e "$target_dir/$filename" || -L "$target_dir/$filename" ]]; then
         continue
       fi

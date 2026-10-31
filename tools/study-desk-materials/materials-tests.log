@@ -1,0 +1,19 @@
+✔ survey counts form-feed pages using the 40 non-whitespace character threshold (0.954625ms)
+✔ survey audit includes hidden files, detects mtime changes, and never follows symlinks (4.01125ms)
+✔ survey rejects root and symlink outputs before opening a writable file (1.472542ms)
+✔ survey imports transcript numbering and same-name subtitles without guessing an ambiguous title (0.809833ms)
+✔ synthetic survey reads PDF PPTX GBK archives and encrypted flags while leaving all source metadata unchanged (456.741375ms)
+✔ material role and subject rules keep all answer/practice paths out of teaching results (0.370125ms)
+✔ incremental extraction preserves original mtimes, reads GBK archive members, retains gone text, and pauses on detach (816.265625ms)
+✔ search/read expose only teach data; P5 validates ranges and chapters, and cached P6 fallback runs once (921.807875ms)
+✔ vision cache, daily budget and unreadable fallback preserve OCR; original preview and reveal enforce root bounds (1268.163334ms)
+✔ OCR TSV keeps words in line order, flags math risk, and uses array process args at nice 15 (629.406083ms)
+✔ transcription gates, subtitles, interruption cleanup and local-only import work without real ffmpeg or whisper (30.720708ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4214.891875

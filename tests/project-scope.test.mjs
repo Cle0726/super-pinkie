@@ -47,7 +47,9 @@ test('runtime-expanded paths under the hidden agent workspace are remapped to th
   const internal=path.join(workspace,'nested/result.txt');
   assert.equal(guard.before({toolName:'write',params:{path:internal,content:'x'}},ctx).params.path,path.join(a,'nested/result.txt'));
   assert.equal(guard.before({toolName:'read',params:{path:path.join(b,'b.txt')}},ctx).params.path,path.join(b,'b.txt'));
-  assert.equal(guard.before({toolName:'exec',params:{command:'pwd',workdir:workspace}},ctx),undefined);
+  // exec now receives the bound project as its default cwd; an explicit path
+  // inside the project is resolved against it rather than dropped.
+  assert.equal(guard.before({toolName:'exec',params:{command:'pwd',workdir:workspace}},ctx).params.workdir,a);
 });
 
 test('all configured tools pass through and command tools are never rewritten',t=>{
@@ -55,7 +57,10 @@ test('all configured tools pass through and command tools are never rewritten',t
   for(const toolName of ['browser','gateway','memory_search','image_generate','process','sessions_send']){
     assert.equal(guard.before({toolName,params:{sample:true}},ctx),undefined);
   }
-  assert.equal(guard.before({toolName:'exec',params:{command:'pwd'}},ctx),undefined);
+  // exec is given the project as its default directory, but the native
+  // command payload itself is never rewritten.
+  const exec=guard.before({toolName:'exec',params:{command:'pwd'}},ctx);
+  assert.equal(exec.params.command,'pwd');assert.ok(exec.params.workdir);
   assert.equal(guard.before({toolName:'apply_patch',params:{input:'anything'}},ctx),undefined);
 });
 
@@ -133,8 +138,12 @@ test('real commands start in the project and can access a sibling folder',t=>{
   const script='const fs=require("fs");process.stdout.write(fs.readFileSync("a.txt","utf8")+"|"+fs.readFileSync(process.argv[1],"utf8"))';
   const argv=['-e',script,target];
   const command=[process.execPath,...argv].join(' ');
-  assert.equal(guard.before({toolName:'exec',params:{command}},ctx),undefined);
-  const result=spawnSync(process.execPath,argv,{cwd:a,encoding:'utf8'});
+  // The guard supplies the project as the default working directory; run the
+  // command exactly the way the runtime would, using the guarded parameters.
+  const guarded=guard.before({toolName:'exec',params:{command}},ctx);
+  assert.equal(guarded.params.command,command,'the command text itself is never rewritten');
+  assert.equal(guarded.params.workdir,a,'the default cwd is the bound project');
+  const result=spawnSync(process.execPath,argv,{cwd:guarded.params.workdir,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
   assert.equal(result.stdout,'project A|project B','the command must start in the project and still reach a sibling folder');
 });

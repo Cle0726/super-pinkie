@@ -1,0 +1,131 @@
+/* 碧琪手账 v2 · 聊天这一侧（laolao-desk-chat.js）。用 laolao-desk-kit.css 的 .pk-ink 变量；零模糊，只动 transform / opacity。 */
+
+/* ---------- 今晚条：一条斜贴的胶带纸条 ---------- */
+.pk-tonight{position:relative;display:flex;align-items:center;gap:10px;width:calc(100% - 32px);max-width:760px;margin:10px auto 4px;padding:8px 14px 7px 16px;
+  border:0;border-radius:3px;background-color:color-mix(in srgb,var(--pk-tape) 50%,var(--pk-paper));background-image:var(--pk-tape-paint,none);
+  color:var(--pk-ink);font:13px var(--pk-sans);text-align:left;cursor:pointer;transform:rotate(-.4deg);flex:none;
+  -webkit-mask:linear-gradient(90deg,transparent 0 4px,#000 4px calc(100% - 4px),transparent 0)}
+/* 三月三的五色带压在文字下面太花：只留顶上一道。 */
+.pk-tonight[data-tape="wuse"]{background-color:var(--pk-paper-2);background-size:100% 4px;background-repeat:no-repeat}
+.pk-tonight b{font:700 13px var(--pk-serif);letter-spacing:.12em;white-space:nowrap}
+.pk-tonight span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--pk-ink-2)}
+.pk-tonight i{margin-left:auto;font-style:normal;font-size:12px;color:var(--pk-ink-3);white-space:nowrap;opacity:0;transition:opacity .2s}
+.pk-tonight:hover i,.pk-tonight:focus-visible i{opacity:1}
+.pk-tonight:focus-visible{outline:2px solid var(--pk-pink);outline-offset:2px}
+html[data-pinkie-night] .pk-tonight{color:var(--pk-ink)}
+
+/* ---------- 「收」：碧琪消息悬停时出现在页边 ---------- */
+.pk-collect-btn{position:fixed;left:0;top:0;z-index:60;width:28px;height:28px;border-radius:50%;border:1.4px solid var(--pk-pink);background:var(--pk-paper);
+  color:var(--pk-pink);font:700 12px var(--pk-serif);cursor:pointer;box-shadow:var(--pk-lift);padding:0;will-change:transform}
+.pk-collect-btn[hidden]{display:none}
+.pk-collect-btn:hover,.pk-collect-btn:focus-visible{background:var(--pk-pink);color:#fff;outline:none}
+.pk-collect-menu{position:fixed;left:0;top:0;z-index:61;display:grid;gap:2px;min-width:150px;padding:8px;border-radius:6px;background:var(--pk-paper);
+  box-shadow:var(--pk-sheet),0 0 0 1px var(--pk-rule-2);animation:pk-chat-pop .16s var(--pk-out) both}
+.pk-collect-menu small{font-size:11px;color:var(--pk-ink-3);padding:2px 8px 6px}
+.pk-collect-menu button{display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:none;border-radius:4px;padding:7px 8px;
+  font:14px var(--pk-sans);color:var(--pk-ink);text-align:left;cursor:pointer}
+.pk-collect-menu button:hover:not(:disabled),.pk-collect-menu button:focus-visible{background:var(--pk-pink-tint);outline:none}
+.pk-collect-menu button:disabled{color:var(--pk-ink-3);cursor:default}
+.pk-collect-menu em{font-style:normal;font-size:11px}
+/* 菜单的位置写在 transform 上，所以出现只动透明度。 */
+@keyframes pk-chat-pop{from{opacity:0}}
+
+/* 收过的消息：页边一枚小章（翻回来也看得到，靠 receipts 补章）。 */
+.chat-group.assistant .chat-bubble[data-pk-collected]{position:relative}
+.pk-collected{position:absolute;right:-6px;top:-10px;pointer-events:none;background:none!important}
+.pk-collected .pk-stamp{background:var(--pk-paper)}
+
+/* 回到出处：荧光笔从左往右扫一下。 */
+.chat-bubble[data-pk-sweep]{position:relative}
+.chat-bubble[data-pk-sweep]::after{content:"";position:absolute;inset:-4px -8px;border-radius:8px;background:rgba(244,114,170,.26);pointer-events:none;
+  transform-origin:left;animation:pk-sweep 1.6s var(--pk-out,ease) both}
+@keyframes pk-sweep{0%{transform:scaleX(0);opacity:1}25%{transform:scaleX(1);opacity:1}100%{transform:scaleX(1);opacity:0}}
+
+/* ---------- 带条目问：用户气泡顶部的小条目卡 ---------- */
+.pk-ref-row{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;background:none!important}
+.pk-ref-row .pk-ref{cursor:pointer;text-align:left}
+.pk-ref-row .pk-ref:hover b{color:var(--pk-pink-ink)}
+
+/* ---------- 碧琪的手账卡片 ---------- */
+.pk-desk-cards{display:grid;gap:8px;margin:8px 0 2px;max-width:520px}
+.pk-desk-cards .pk-card .pk-star{width:12px;height:12px;vertical-align:-1px}
+.pk-desk-gone{font-size:12px;color:var(--pk-ink-3)}
+.pk-desk-plan{padding:12px 14px;background:var(--pk-paper);border-radius:4px;box-shadow:var(--pk-lift);
+  background-image:radial-gradient(circle,var(--pk-rule-2) 1px,transparent 1.3px);background-size:20px 20px;background-position:4px 4px}
+html[data-pinkie-night] .pk-desk-plan{background-color:var(--pk-paper-2)}
+.pk-plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pk-plan-head small{font-size:12px;color:var(--pk-ink-3);letter-spacing:.04em}
+.pk-plan-list{margin:8px 0 10px;padding-left:20px;font:14px/1.7 var(--pk-serif);color:var(--pk-ink)}
+.pk-desk-plan .pk-note{font-size:16px;margin:-2px 0 10px}
+
+/* ---------- 底部小提示 ---------- */
+.chat-main{position:relative}
+.pk-chat-toast{position:absolute;left:50%;bottom:118px;z-index:40;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:6px 8px;border-radius:8px;
+  background:var(--pk-paper);box-shadow:var(--pk-sheet),0 0 0 1px var(--pk-rule-2);font-size:13px;color:var(--pk-ink-2);animation:pk-toast .2s var(--pk-out) both}
+.pk-chat-toast>span{display:block;padding:4px 6px}
+.pk-chat-toast .pk-receipt{border:0;padding:4px 6px;min-width:0}
+.pk-chat-toast .pk-receipt>span:not(.pk-stamp){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-receipt .pk-link{white-space:nowrap;flex:none}
+@keyframes pk-toast{from{opacity:0;transform:translate(-50%,6px)}}
+
+@media (prefers-reduced-motion:reduce){.pk-collect-menu,.pk-chat-toast,.chat-bubble[data-pk-sweep]::after{animation:none!important}.pk-tonight i{transition:none}}
+
+/* One quiet strip: the active lesson and its actions replace the ordinary task line. */
+.pk-tonight{display:block!important;padding:0!important;cursor:default!important;z-index:5}
+.pk-tonight-main{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:inherit;padding:10px 14px;text-align:left;cursor:pointer;font:inherit}
+.pk-tonight-main>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-tonight-main>i{font-size:12px;font-style:normal;white-space:nowrap}
+.pk-tonight-lesson:empty{display:none}
+.pk-tonight--lesson .pk-tonight-main{display:none}
+.pk-tonight--lesson{transform:none}
+.pk-tonight{--ink:var(--pk-ink);--ink-2:var(--pk-ink-2);--ink-3:var(--pk-ink-3);--pink:var(--pk-pink);--pink-solid:var(--pk-pink-solid);--on-pink:#fff;--paper:var(--pk-paper);--card:var(--pk-paper);--hair:var(--pk-rule);--hair-2:var(--pk-rule-2);--ring:var(--pk-rule-2);--serif:var(--pk-serif);--sans:var(--pk-sans);--ink-tint:var(--pk-pink-tint)}
+.pk-tonight .lesson-bar.lesson-bar--shared{position:relative!important;inset:auto!important;display:flex;flex-wrap:nowrap;gap:8px;width:auto!important;height:44px;max-height:48px;margin:0;padding:6px 14px;border:0;border-radius:0;background:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.pk-tonight .lesson-bar--shared .lesson-bar-actions{display:flex;gap:6px;flex-wrap:nowrap;margin-left:auto}
+.pk-tonight .lesson-bar-title{max-width:150px}
+.pk-tonight :is(.lesson-source-popover,.lesson-finish-confirm){z-index:100;background:var(--pk-paper)!important;border:1px solid var(--pk-rule)!important;border-radius:6px!important;box-shadow:var(--pk-sheet)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.pk-tonight:has(.lesson-finish-confirm,.lesson-source-popover){-webkit-mask:none;transform:none}
+.pk-tonight .lesson-bar--shared .lesson-segments{display:flex;gap:5px}
+html[data-pinkie-desk-split] .pk-tonight-main>i{display:none}
+/* 学习台专属纸面；不改普通聊天页面。 */
+#pinkie-desk-chat{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;width:100%;height:100%;box-sizing:border-box;overflow:hidden;background:var(--pk-paper-2);color:var(--pk-ink);border-radius:14px;font:14px/1.7 var(--pk-sans);box-shadow:none;backdrop-filter:none}
+#pinkie-desk-chat[hidden]{display:none!important}
+#pinkie-desk-chat.is-side{position:fixed;top:18px;bottom:18px;right:18px;width:var(--pk-split-w,384px);height:auto;z-index:95}
+#pinkie-desk-chat .pk-chat-head{display:flex;align-items:center;justify-content:space-between;padding:8px 16px 0;min-height:18px;flex:none;color:var(--pk-ink-3);font-size:11px}
+#pinkie-desk-chat .pk-chat-head button{border:0;background:none;color:inherit;cursor:pointer;font:inherit;padding:0}
+#pinkie-desk-chat .chat-thread{position:relative;display:block;flex:1;min-height:0;overflow:auto;padding:18px 16px 20px 34px;overscroll-behavior:contain;background:none;scrollbar-width:thin}
+#pinkie-desk-chat .chat-group{display:block;margin:0 0 18px;padding:0;position:relative;min-width:0;max-width:100%;border:0;background:none}
+#pinkie-desk-chat .chat-group.user{margin-left:18%;padding:12px;background:var(--pk-paper);border-radius:12px 12px 3px 12px;box-shadow:var(--pk-lift)}
+#pinkie-desk-chat .chat-bubble{display:block;margin:0;padding:0;max-width:100%;border:0;border-radius:0;background:none!important;box-shadow:none;color:var(--pk-ink);font:14px/1.75 var(--pk-sans);overflow:visible;overflow-wrap:anywhere}
+#pinkie-desk-chat .chat-bubble p{margin:0 0 10px}#pinkie-desk-chat .chat-bubble p:last-child{margin-bottom:0}
+#pinkie-desk-chat .chat-bubble strong{font-weight:650}#pinkie-desk-chat .chat-bubble code{font:12px var(--pk-mono);background:var(--pk-pink-tint);padding:1px 3px;border-radius:3px}
+#pinkie-desk-chat .chat-bubble pre{max-width:100%;overflow:auto;white-space:pre;font:12px/1.7 var(--pk-mono);padding:8px;background:var(--pk-paper);border-left:2px solid var(--pk-rule-2)}
+#pinkie-desk-chat .chat-bubble pre code{background:none;padding:0}
+#pinkie-desk-chat .pk-chat-list{padding-left:14px;position:relative}#pinkie-desk-chat .pk-chat-list::before{content:'·';position:absolute;left:0}
+#pinkie-desk-chat :is(.pk-chat-working,.pk-chat-empty,.pk-chat-status){color:var(--pk-ink-3);font:13px/1.7 var(--pk-sans)}
+#pinkie-desk-chat .pk-chat-status{margin:0 16px}#pinkie-desk-chat .pk-chat-status:empty{display:none}
+#pinkie-desk-chat .pk-chat-compose{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;margin:0 14px 14px;padding:12px 0 10px;border:0;border-bottom:1.5px solid var(--pk-ink-3);background:none;box-shadow:none;border-radius:0;flex:none}
+#pinkie-desk-chat .pk-chat-pencil{color:var(--pk-pink);padding:4px 0}
+#pinkie-desk-chat textarea{display:block;min-width:60px;flex:1;resize:vertical;max-height:130px;min-height:28px;box-sizing:border-box;border:0!important;background:none!important;box-shadow:none!important;color:var(--pk-ink);font:14px/1.7 var(--pk-sans);padding:2px 0;border-radius:0;outline:none}
+#pinkie-desk-chat textarea::placeholder{color:var(--pk-ink-3)}
+#pinkie-desk-chat .pk-chat-compose button{border:0;background:none;box-shadow:none;color:var(--pk-pink-ink);font:12px var(--pk-sans);padding:5px 0;cursor:pointer;min-height:28px}
+#pinkie-desk-chat .pk-chat-compose button:disabled{opacity:.35;cursor:default}
+#pinkie-desk-chat .pk-chat-fold{color:var(--pk-ink-3)!important;font-size:10px!important}
+#pinkie-desk-chat .pk-tonight{background:var(--pk-paper);border-radius:3px;box-shadow:var(--pk-lift);width:calc(100% - 28px);max-width:none;margin:14px auto 4px;transform:none;-webkit-mask:none;overflow:visible;flex:none}
+#pinkie-desk-chat .pk-tonight::before{content:'';position:absolute;width:82px;height:20px;left:40%;top:-10px;transform:rotate(-4deg);background:repeating-linear-gradient(90deg,rgba(239,175,123,.50) 0 6px,rgba(245,194,154,.55) 6px 12px);pointer-events:none}
+#pinkie-desk-chat .pk-tonight-main{padding:15px 14px 12px;display:block}
+#pinkie-desk-chat .pk-tonight-main b{display:block;color:var(--pk-ink-3);font:11px var(--pk-sans);margin-bottom:5px}
+#pinkie-desk-chat .pk-tonight-main>span{display:block;color:var(--pk-ink);font:13px/1.7 var(--pk-sans);white-space:normal}
+#pinkie-desk-chat .pk-tonight-main>i{display:none}
+#pinkie-desk-chat .pk-chat-toast{position:absolute;left:12px;right:12px;bottom:70px;max-width:none;z-index:20}
+#pinkie-study-desk.pk-ink .pk-chat-page{padding:0!important;background:var(--paper-2)!important;overflow:hidden}
+#pinkie-study-desk.pk-ink .pk-chat-page #pinkie-desk-chat{border-radius:0}
+@media(prefers-reduced-motion:reduce){#pinkie-desk-chat *,#pinkie-desk-chat *::before{animation:none!important;transition:none!important}}
+#pinkie-desk-chat:not(.is-side) .pk-chat-fold{display:none}
+.pk-collect-btn{z-index:120}.pk-collect-menu{z-index:121}
+#pinkie-desk-chat .pk-tonight-main>.pk-tonight-progress{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#pinkie-desk-chat .pk-tonight-progress>span{white-space:nowrap}
+#pinkie-desk-chat .pk-tonight-stars{display:flex;gap:3px}
+#pinkie-desk-chat .pk-tonight-stars .pk-star{width:12px;height:12px}
+#pinkie-desk-chat .pk-tonight-number{color:var(--pk-ink-2);font-size:12px}
+#pinkie-desk-chat .pk-tonight-progress small{margin-left:auto;font:11px var(--pk-sans);color:var(--pk-ink-3)}
+#pinkie-desk-chat .chat-bubble{outline:none!important;border:0!important}

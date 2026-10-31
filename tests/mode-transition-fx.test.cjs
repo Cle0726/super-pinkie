@@ -74,7 +74,7 @@ test('fragments and both installers carry the same splash and FX revisions', () 
   }
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.css') > fragment.indexOf('laolao-motion-system.css'));
   assert.ok(fragment.indexOf('laolao-mode-transition-fx.js') < fragment.indexOf('laolao-mode-switcher.js'));
-  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode42/);
+  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode45/);
   assert.match(windows, /\$fxPattern[\s\S]*\$switcherMatch[\s\S]*\$html\.Substring\(0, \$switcherMatch\.Index\)/);
   assert.match(windows, /\$switcherTag[\s\S]*\$1/);
 });

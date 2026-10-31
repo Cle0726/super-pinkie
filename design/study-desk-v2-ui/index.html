@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习台 v2 UI 草图</title>
+<!-- 设计草图，只给用户看大概效果；不是产品文件。用法：index.html?theme=night 看夜间。 -->
+<style>
+:root{
+  --paper:#FAF6F1; --paper-2:#F2EBE4; --card:#FFFDFB;
+  --ink:#2E2236; --ink-2:#6F6377; --ink-3:#87788D; --hair:#E9E0DB; --hair-2:#DDD1CC;
+  --ink-tint:rgba(46,34,54,.06); --ring:rgba(46,34,54,.2);
+  --pink:#E5488F; --pink-tint:#F9E1EC; --pink-ink:#B42F6E; --pink-solid:#DB1F74; --on-pink:#FFFFFF; --on-ink:#FAF6F1;
+  --glass:rgba(255,251,248,.7); --glass-strong:rgba(255,251,249,.82); --glass-edge:rgba(255,255,255,.62); --glass-hi:rgba(255,255,255,.85);
+  --glass-shadow:0 24px 60px -34px rgba(110,48,80,.42);
+  --serif:"Songti SC","Noto Serif SC",serif; --sans:"PingFang SC","Hiragino Sans GB",system-ui,sans-serif; --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --plate:url(../../ui/assets/study-desk/backplate-day.webp);
+}
+:root[data-theme=night]{
+  --paper:#17131B; --paper-2:#100D13; --card:#1F1A24;
+  --ink:#F2E9EF; --ink-2:#B6A9BB; --ink-3:#7D7183; --hair:#2E2735; --hair-2:#3A3242;
+  --ink-tint:rgba(242,233,239,.06); --ring:rgba(242,233,239,.2);
+  --pink:#F0679F; --pink-tint:#3B1E2D; --pink-ink:#F59AC2; --pink-solid:#F0679F; --on-pink:#17131B; --on-ink:#17131B;
+  --glass:rgba(30,24,36,.6); --glass-strong:rgba(32,26,38,.8); --glass-edge:rgba(255,255,255,.09); --glass-hi:rgba(255,255,255,.12);
+  --glass-shadow:0 24px 60px -30px rgba(0,0,0,.75);
+  --plate:url(../../ui/assets/study-desk/backplate-night.webp);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper-2);color:var(--ink);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased}
+.board{width:1280px;margin:0 auto;padding:36px 40px 44px}
+.board>h2{font:600 26px var(--serif);margin:0 0 4px}
+.board>p.lead{margin:0 0 22px;color:var(--ink-2);font-size:14px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.tag{display:inline-block;font-size:12px;color:var(--ink-2);letter-spacing:.06em;margin-bottom:10px}
+.tag b{color:var(--ink);font-weight:600;margin-right:6px}
+.panel{position:relative;border-radius:22px;overflow:hidden;background:var(--plate) center/cover;box-shadow:0 0 0 1px var(--hair)}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-hi),var(--glass-shadow)}
+.paperpane{background:color-mix(in srgb,var(--paper) 94%,transparent);border-radius:22px}
+.ico{display:inline-flex;align-items:center;justify-content:center;flex:none}
+.ico svg{width:100%;height:100%}
+/* rail */
+.rails{display:flex;gap:26px;align-items:flex-start}
+.railbox{display:flex;flex-direction:column;align-items:center}
+.rail{width:72px;height:540px;border-radius:24px;display:flex;flex-direction:column;align-items:center;padding:22px 0 18px;margin:16px}
+.rail .logo{width:36px;height:36px;border-radius:11px;background:var(--pink);display:grid;place-items:center}
+.rail nav{margin:auto 0;display:flex;flex-direction:column;gap:12px}
+.rail button{width:44px;height:44px;border:0;background:none;border-radius:14px;display:grid;place-items:center;position:relative;color:var(--ink-3);padding:0}
+.rail.v1 button{color:var(--ink)}
+.rail button.on{color:var(--ink)}
+.rail.v2 button.on{background:var(--ink-tint)}
+.rail button.on::before{content:"";position:absolute;left:-10px;top:50%;width:4px;height:4px;border-radius:50%;background:var(--pink);transform:translateY(-50%)}
+.rail .foot{display:flex;flex-direction:column;align-items:center;gap:10px}
+.rail .foot img{width:34px;height:34px;border-radius:50%;object-fit:cover}
+.legend{font-size:12px;color:var(--ink-2);line-height:2.05;margin-top:16px}
+.legend div{display:flex;align-items:center;gap:10px}
+.legend .ico{width:20px;height:20px}
+/* buttons */
+.btnrow{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.btn{height:48px;padding:0 26px;border-radius:99px;border:0;font:600 15px var(--sans);display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.btn.md{height:36px;padding:0 18px;font-weight:500;font-size:14px}
+.btn.sm{height:30px;padding:0 12px;font-weight:500;font-size:13px;gap:6px}
+.btn.primary{background:var(--ink);color:var(--on-ink)}
+.btn.pink-old{background:#E5488F;color:#fff}
+.btn.pink{background:var(--pink-solid);color:var(--on-pink)}
+.btn.second{background:none;color:var(--ink);box-shadow:inset 0 0 0 1px var(--hair-2)}
+.btn.ghost{background:none;color:var(--ink-2);font-weight:500}
+.btn.ghost:hover{background:var(--ink-tint)}
+.ratio{font-size:12px;color:var(--ink-2);margin-top:8px}
+.ratio.bad{color:var(--pink-ink)}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:20px;padding:22px 24px}
+/* text */
+.meta{font-size:12px}
+/* stage */
+.screen{position:relative;height:430px;border-radius:22px;overflow:hidden;background:var(--plate) center/cover;box-shadow:0 0 0 1px var(--hair)}
+.screen .sheet{position:absolute;inset:10px;border-radius:18px;padding:20px 26px;display:flex;flex-direction:column}
+.s-top{display:flex;align-items:center;gap:12px;font:600 15px var(--serif)}
+.s-top .back{width:30px;height:30px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--hair-2);display:grid;place-items:center;color:var(--ink-2)}
+.s-top .modes{margin-left:auto;display:flex;gap:14px;font:12px var(--sans);color:var(--ink-2)}
+.s-top .modes .on{color:var(--ink);box-shadow:inset 0 -1.5px 0 var(--pink)}
+.qmeta{font-size:11px;color:var(--ink-2);margin-top:18px}
+.qtext{font:600 21px/1.45 var(--serif);margin:8px 0 0;max-width:430px}
+.opts{list-style:none;padding:0;margin:0}
+.opt{display:grid;grid-template-columns:30px 1fr 18px;align-items:center;gap:6px;padding:9px 4px;border-top:1px solid var(--hair);font-size:14px}
+.opts li:last-child .opt{border-bottom:1px solid var(--hair)}
+.opt .k{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--hair-2);display:grid;place-items:center;font:11px var(--serif);color:var(--ink-2)}
+.opt.sel{background:var(--pink-tint)}
+.opt.sel .k{background:var(--pink);color:#fff;box-shadow:none}
+.qfoot{display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-3)}
+.qfoot.old span{color:var(--ink-3)}
+.seg{display:inline-flex;align-items:center;box-shadow:inset 0 0 0 1px var(--hair-2);border-radius:99px;padding:2px}
+.seg span{height:24px;padding:0 10px;border-radius:99px;display:inline-flex;align-items:center;font-size:12px;color:var(--ink-2)}
+.seg span.on{background:var(--ink-tint);color:var(--ink)}
+.qfoot .label{font-size:11px;color:var(--ink-2)}
+.side{position:absolute;right:40px;top:70px;width:220px;font-size:12px;color:var(--ink)}
+.side img{width:170px;display:block;margin:0 auto 6px}
+.tools{position:absolute;right:40px;bottom:20px;display:flex;gap:6px}
+.tools.old{gap:14px;font-size:12px;color:var(--ink-3);bottom:26px}
+.note{font-size:12px;color:var(--ink-2);margin-top:10px;line-height:1.8}
+.note b{color:var(--ink)}
+/* map */
+.mapstates{display:flex;gap:36px;align-items:center;flex-wrap:wrap}
+.st{display:flex;align-items:center;gap:10px;font-size:14px}
+.dot{width:14px;height:14px;border-radius:50%;position:relative;flex:none}
+.dot.none{box-shadow:inset 0 0 0 1.4px var(--ring)}
+.dot.learned{box-shadow:inset 0 0 0 1.4px var(--ink-2)}
+.dot.learned::after{content:"";position:absolute;inset:4.5px;border-radius:50%;background:var(--ink-2)}
+.dot.lit{background:var(--pink)}
+.dot.mastered{background:var(--ink)}
+.dot.weak{box-shadow:inset 0 0 0 2px var(--ink)}
+.dots{display:flex;flex-wrap:wrap;gap:7px;max-width:560px}
+.dots .dot{width:10px;height:10px}
+.dots .dot.learned::after{inset:3px}
+.dots .dot.none{box-shadow:inset 0 0 0 1.2px var(--ring)}
+.dots .dot.weak{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.maprow{display:grid;grid-template-columns:72px 1fr;gap:14px;font-size:12px;color:var(--ink-2);margin-top:12px}
+/* big screens */
+.big{position:relative;height:740px;border-radius:24px;overflow:hidden;background:var(--plate) center/cover;box-shadow:0 0 0 1px var(--hair)}
+.big .sheet{position:absolute;inset:14px 14px 14px 14px;border-radius:22px;padding:28px 44px;display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:56px;grid-template-rows:auto minmax(0,1fr)}
+.big .s-top{grid-column:1/-1;font-size:19px}
+.big .s-top .back{width:38px;height:38px}
+.big .s-top .modes{font-size:14px;gap:20px}
+.lcol{display:flex;flex-direction:column;min-width:0;padding-top:22px}
+.lcol .meta{color:var(--ink-2)}
+.lcol h1{font:600 38px/1.3 var(--serif);margin:6px 0 18px}
+.outline{list-style:none;margin:0;padding:0}
+.outline li{display:grid;grid-template-columns:40px 1fr;gap:4px;padding:11px 0;border-top:1px solid var(--hair)}
+.outline li:last-child{border-bottom:1px solid var(--hair)}
+.outline .n{width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--hair-2);display:grid;place-items:center;font:13px var(--serif);color:var(--ink-2);margin-top:2px}
+.outline b{font:600 17px var(--serif);display:flex;align-items:center;gap:8px}
+.outline small{display:block;font-size:13px;color:var(--ink-2)}
+.keyp{margin-top:14px;padding:8px 14px;border-left:2px solid var(--pink);background:var(--card);border-radius:0 8px 8px 0;font-size:14px;color:var(--ink-2)}
+.keyp b{color:var(--ink);font-weight:600;margin-right:6px}
+.srcs{margin-top:14px;font-size:13px}
+.srcs .h{font-size:12px;color:var(--ink-2);margin-bottom:4px}
+.src{display:flex;align-items:center;gap:8px;padding:5px 0}
+.chip{font-size:11px;padding:1px 7px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--hair-2);color:var(--ink-2)}
+.src .btn{margin-left:auto}
+.lfoot{margin-top:auto;display:flex;align-items:center;gap:12px;padding-top:14px}
+.lfoot .meta{margin-right:auto;color:var(--ink-2)}
+.rcol{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:6px}
+.rcol img{width:250px}
+.bubble{align-self:stretch;background:var(--glass-strong);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border:1px solid var(--glass-edge);border-radius:18px 18px 18px 4px;padding:12px 16px;font-size:14px;line-height:1.75;margin-bottom:10px;box-shadow:var(--glass-shadow)}
+.bubble .who{font-size:11px;color:var(--ink-2);letter-spacing:.06em}
+#s-stage .pair{grid-template-columns:1fr;gap:18px}
+#s-stage .screen{height:440px}
+#s-prep .big{height:860px}
+/* lesson bar */
+.chat{position:relative;height:400px;border-radius:24px;overflow:hidden;background:var(--plate) center/cover;box-shadow:0 0 0 1px var(--hair)}
+.chat .side-native{position:absolute;left:0;top:0;bottom:0;width:210px;background:var(--glass);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border-right:1px solid var(--glass-edge);padding:18px 14px;font-size:13px;color:var(--ink-2)}
+.chat .side-native div{padding:6px 8px;border-radius:8px;display:flex;align-items:center;gap:8px}
+.chat .side-native .ico{width:16px;height:16px}
+.chat .col{position:absolute;left:250px;right:40px;top:14px;bottom:14px}
+.lbar{height:44px;border-radius:16px;display:flex;align-items:center;gap:12px;padding:0 10px 0 14px;background:var(--glass-strong)}
+.lbar .live{width:6px;height:6px;border-radius:50%;background:var(--ink)}
+.lbar .live.paused{background:none;box-shadow:inset 0 0 0 1.2px var(--ink-2)}
+.lbar .t{font:600 15px var(--serif);white-space:nowrap}
+.lbar .segs{display:flex;gap:6px;margin:0 auto}
+.lbar .segs i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--ring)}
+.lbar .segs i.done{background:var(--ink);box-shadow:none}
+.lbar .segs i.cur{box-shadow:inset 0 0 0 1.5px var(--pink)}
+.lbar .acts{display:flex;gap:6px;align-items:center}
+.msg{margin-top:16px;max-width:620px;font-size:14px;line-height:1.85}
+.msg:not(.me){background:var(--glass-strong);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:8px 14px;width:fit-content}
+.msg.me{margin-left:auto;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:8px 14px;width:fit-content}
+.msg .k{display:inline-block;padding:2px 10px;border-radius:8px;background:var(--card);border:1px solid var(--hair);font-family:var(--serif)}
+.composer{position:absolute;left:0;right:0;bottom:0;height:52px;border-radius:99px;background:var(--glass-strong);border:1px solid var(--glass-edge);display:flex;align-items:center;padding:0 20px;color:var(--ink-2);font-size:14px}
+/* summary */
+.points{list-style:none;padding:0;margin:0}
+.points li{display:grid;grid-template-columns:34px 1fr;padding:6px 0;font-size:15px;line-height:1.8}
+.points .n{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--hair-2);display:grid;place-items:center;font:12px var(--serif);color:var(--ink-2);margin-top:4px}
+.formula{margin:12px 0;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 20px;text-align:center;font:italic 20px "Times New Roman",var(--serif)}
+.stuck{display:flex;align-items:center;gap:8px;font-size:14px;padding:3px 0}
+.stuck .ico{width:16px;height:16px}
+.checks{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);margin-top:10px}
+.checks i{width:10px;height:10px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--ring)}
+.checks i.ok{background:var(--ink);box-shadow:none}
+.statuschip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--hair);font-size:12px;color:var(--ink-2)}
+.statuschip .ico{width:14px;height:14px}
+</style>
+</head>
+<body>
+
+<section class="board" id="s-rail">
+  <h2>① 侧栏图标</h2>
+  <p class="lead">左：现在（手画图标；当前页和其他页同色；夜间「今日」和日夜切换是同一个太阳）。右：改后（Lucide 一套，和 App 原生侧栏同风格；当前页加浅底）。</p>
+  <div class="rails">
+    <div class="railbox"><span class="tag"><b>现在</b></span><div class="panel"><div class="rail glass v1" id="rail-old"></div></div></div>
+    <div class="railbox"><span class="tag"><b>改后</b></span><div class="panel"><div class="rail glass v2" id="rail-new"></div></div></div>
+    <div class="legend" id="rail-legend"></div>
+  </div>
+</section>
+
+<section class="board" id="s-buttons">
+  <h2>② 按钮：粉色深浅和四级按钮</h2>
+  <p class="lead">只有「开始上课」「讲完了，去练」两个按钮是粉色实心。白字放在现在的碧琪粉上偏浅；改后深一点。点、圈、悬停还用原来的粉。</p>
+  <div class="pair">
+    <div class="card">
+      <span class="tag"><b>现在的粉</b>#E5488F + 白字</span>
+      <div class="btnrow"><button class="btn pink-old">开始上课</button><button class="btn sm pink-old">讲完了，去练</button></div>
+      <div class="ratio bad" id="r-old"></div>
+    </div>
+    <div class="card">
+      <span class="tag"><b>改后</b>日间 #DB1F74 + 白字 · 夜间 #F0679F + 深字</span>
+      <div class="btnrow"><button class="btn pink">开始上课</button><button class="btn sm pink">讲完了，去练 <span class="ico" data-i="arrow-right" data-s="14"></span></button></div>
+      <div class="ratio" id="r-new"></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:22px">
+    <span class="tag"><b>四级按钮</b>每屏最多一个主按钮</span>
+    <div class="btnrow">
+      <button class="btn primary">去练 4 道 <span class="ico" data-i="arrow-right" data-s="16"></span></button>
+      <button class="btn md second"><span class="ico" data-i="rotate-ccw" data-s="14"></span>没懂，换个讲法</button>
+      <button class="btn md ghost"><span class="ico" data-i="pause" data-s="14"></span>暂停</button>
+      <button class="btn md ghost" style="width:36px;padding:0;justify-content:center" aria-label="关闭"><span class="ico" data-i="x" data-s="16"></span></button>
+      <span style="color:var(--ink-2);font-size:14px;border-bottom:1.5px solid var(--pink);padding-bottom:2px">回今日</span>
+    </div>
+    <div class="note">主按钮（墨色）· 次按钮（描边）· 幽灵 / 图标按钮 · 文字链接</div>
+  </div>
+</section>
+
+<section class="board" id="s-text">
+  <h2>③ 小字加深一档</h2>
+  <p class="lead">12–13px 的说明文字从 <code>--ink-3</code> 改成 <code>--ink-2</code>。</p>
+  <div class="pair">
+    <div class="card"><span class="tag"><b>现在</b>--ink-3</span>
+      <div class="meta" style="color:var(--ink-3)">10 月 26 日 · 星期一 · 备考第 1 天</div>
+      <div class="meta" style="color:var(--ink-3)">Gemini 3.8 Flash Tiered · 18:38 · 用时 17.2 秒 · 6,607 tokens</div>
+      <div class="meta" style="color:var(--ink-3)">悬停看考点，点一下，碧琪围绕它出 3 道题。</div>
+      <div class="ratio" id="t-old"></div></div>
+    <div class="card"><span class="tag"><b>改后</b>--ink-2</span>
+      <div class="meta" style="color:var(--ink-2)">10 月 26 日 · 星期一 · 备考第 1 天</div>
+      <div class="meta" style="color:var(--ink-2)">Gemini 3.8 Flash Tiered · 18:38 · 用时 17.2 秒 · 6,607 tokens</div>
+      <div class="meta" style="color:var(--ink-2)">悬停看考点，点一下，碧琪围绕它出 3 道题。</div>
+      <div class="ratio" id="t-new"></div></div>
+  </div>
+</section>
+
+<section class="board" id="s-stage">
+  <h2>④ 刷题舞台</h2>
+  <p class="lead">选项跟着题干走，不再沉底；把握度做成分段按钮；右下工具变成有图标的按钮。</p>
+  <div class="pair">
+    <div><span class="tag"><b>现在</b></span>
+      <div class="screen"><div class="sheet paperpane" id="stage-old"></div></div></div>
+    <div><span class="tag"><b>改后</b></span>
+      <div class="screen"><div class="sheet paperpane" id="stage-new"></div></div></div>
+  </div>
+</section>
+
+<section class="board" id="s-map">
+  <h2>⑤ 考点地图：加「学过」</h2>
+  <p class="lead">「学过」= 细圈 + 中心点；「待复测」= 粗圈、中间空。10px 下也分得清。</p>
+  <div class="card">
+    <div class="mapstates">
+      <div class="st"><i class="dot none"></i>没学</div>
+      <div class="st"><i class="dot learned"></i>学过</div>
+      <div class="st"><i class="dot lit"></i>点亮</div>
+      <div class="st"><i class="dot mastered"></i>掌握</div>
+      <div class="st"><i class="dot weak"></i>待复测</div>
+    </div>
+    <div id="mapdemo" style="margin-top:18px"></div>
+  </div>
+</section>
+
+<section class="board" id="s-prep">
+  <h2>⑥ 课前页（舞台「讲」）</h2>
+  <p class="lead">先学后练的入口：讲什么、课纲、讲义出处、视频，然后「开始上课」进对话。</p>
+  <div class="big"><div class="sheet paperpane">
+    <div class="s-top"><span class="back"><span class="ico" data-i="arrow-left" data-s="20"></span></span>换路定律 · 课前
+      <span class="modes"><span class="on">讲</span><span>刷题</span><span>闪卡</span><span>实验</span><span>模拟考</span></span></div>
+    <div class="lcol">
+      <div class="meta" style="display:flex;align-items:center;gap:12px">电工电子 · 第 3 章 动态电路 · 考纲：掌握</div>
+      <h1>换路定律</h1>
+      <ol class="outline">
+        <li><span class="n">1</span><div><b>为什么电容电压不能突变</b><small>从「电荷要时间才能搬运」理解，不背结论</small></div></li>
+        <li><span class="n">2</span><div><b>换路定律两句话 <span class="ico" data-i="flask-conical" data-s="14" style="color:var(--ink-2)"></span></b><small>u<sub>C</sub>(0₊)=u<sub>C</sub>(0₋)，i<sub>L</sub>(0₊)=i<sub>L</sub>(0₋)，在 RC 实验里看一遍</small></div></li>
+        <li><span class="n">3</span><div><b>求初始值的三步</b><small>先画 0₋ 电路，再把电容换成电压源</small></div></li>
+        <li><span class="n">4</span><div><b>真题衔接</b><small>一道 2025 机构卷的初始值题</small></div></li>
+      </ol>
+      <div class="keyp"><b>易错</b>电阻上的电压和电流可以突变，只有 u<sub>C</sub>、i<sub>L</sub> 不能。</div>
+      <div class="srcs">
+        <div class="h">讲义出处</div>
+        <div class="src"><span class="ico" data-i="file-text" data-s="14" style="color:var(--ink-2)"></span>3. 瞬态电路.pdf · 第 12 页 <span class="chip">原文</span><button class="btn sm ghost"><span class="ico" data-i="eye" data-s="14"></span>看原页</button></div>
+        <div class="src"><span class="ico" data-i="file-text" data-s="14" style="color:var(--ink-2)"></span>重点难点详解 · 第 141 页 <span class="chip">模型读过</span><button class="btn sm ghost"><span class="ico" data-i="eye" data-s="14"></span>看原页</button></div>
+        <div class="src"><span class="ico" data-i="circle-play" data-s="16" style="color:var(--ink-2)"></span>第 37 讲 换路定律 · 42 分钟 · 有转写稿<button class="btn sm ghost"><span class="ico" data-i="circle-play" data-s="14"></span>打开视频</button></div>
+      </div>
+      <div class="lfoot"><span class="meta">预计 18 分钟 · 备课 Gemini 3.8 · 2,310 tokens</span><button class="btn md second">换一个考点</button><button class="btn pink">开始上课</button></div>
+    </div>
+    <div class="rcol">
+      <div class="bubble"><div class="who">碧琪</div>先生，今天只讲一件事：电容的电压为什么「跟不上」开关。上次我们卡在 0₋ 和 0₊ 的区别，这次我先画给你看。</div>
+      <img src="../../ui/assets/laolao-learning-question.png" alt="">
+    </div>
+  </div></div>
+</section>
+
+<section class="board" id="s-bar">
+  <h2>⑦ 上课时对话页顶部的课程条</h2>
+  <p class="lead">玻璃细条，高 44px，和消息列对齐。上面：上课中；下面：暂停；最右「讲完了，去练」在最后一段答完后才变粉。</p>
+  <div class="chat">
+    <div class="side-native"><div><span class="ico" data-i="star" data-s="16" style="color:#E5488F"></span>学习台</div><div><span class="ico" data-i="message-square" data-s="16"></span>新会话</div><div style="background:var(--ink-tint);color:var(--ink)">换路定律 · 上课</div></div>
+    <div class="col">
+      <div class="lbar glass"><i class="live"></i><span class="t">换路定律</span>
+        <span class="segs"><i class="done"></i><i class="cur"></i><i></i><i></i></span>
+        <span class="acts"><button class="btn sm ghost"><span class="ico" data-i="file-text" data-s="14"></span>出处 3</button><button class="btn sm second"><span class="ico" data-i="rotate-ccw" data-s="14"></span>没懂，换个讲法</button><button class="btn sm ghost"><span class="ico" data-i="pause" data-s="14"></span>暂停</button><button class="btn sm second">讲完了，去练 <span class="ico" data-i="arrow-right" data-s="14"></span></button></span></div>
+      <div class="lbar glass" style="margin-top:10px;color:var(--ink-2)"><i class="live paused"></i><span class="t" style="color:var(--ink-2)">换路定律</span>
+        <span class="segs" style="margin:0 0 0 auto"></span><span style="margin:0 auto;font-size:13px">已暂停</span>
+        <span class="acts"><button class="btn sm primary"><span class="ico" data-i="play" data-s="14"></span>继续</button><button class="btn sm ghost">下课</button></span></div>
+      <div class="msg">第 2 段：<span class="k">换路定律</span> 就两句话。开关动作的那一瞬间，电容两端的电压保持原来的值……</div>
+      <div class="msg me">那电感为什么是电流不变？</div>
+      <div class="composer">先生，继续问我吧</div>
+    </div>
+  </div>
+</section>
+
+<section class="board" id="s-sum">
+  <h2>⑧ 课后小结</h2>
+  <p class="lead">下课后回到舞台：要点、公式、卡过的地方、理解检查，然后「去练 4 道」。不放派对。</p>
+  <div class="big" style="height:680px"><div class="sheet paperpane">
+    <div class="s-top"><span class="back"><span class="ico" data-i="arrow-left" data-s="20"></span></span>换路定律 · 课后
+      <span class="modes"><span class="on">讲</span><span>刷题</span><span>闪卡</span><span>实验</span><span>模拟考</span></span></div>
+    <div class="lcol">
+      <div class="meta">课后笔记 · 10 月 26 日 · 18 分钟</div>
+      <h1 style="display:flex;align-items:center;gap:14px"><i class="dot learned"></i>换路定律 · 课后笔记</h1>
+      <ol class="points">
+        <li><span class="n">1</span><span>电容电压、电感电流不能突变，其余量都可以。</span></li>
+        <li><span class="n">2</span><span>求初始值：先在 0₋ 电路求 u<sub>C</sub>、i<sub>L</sub>，再在 0₊ 电路里把它们当电源。</span></li>
+      </ol>
+      <div class="formula">u<sub>C</sub>(0₊) = u<sub>C</sub>(0₋)　　i<sub>L</sub>(0₊) = i<sub>L</sub>(0₋)</div>
+      <div class="stuck"><span class="ico" data-i="circle-check"></span>0₋ 和 0₊ 分不清 · 已解决</div>
+      <div class="stuck" style="color:var(--pink-ink)"><span class="ico" data-i="circle-dot"></span>电感当电流源时的方向 · 下次先讲这里</div>
+      <div class="checks">理解检查 3 / 4 <i class="ok"></i><i class="ok"></i><i></i><i class="ok"></i></div>
+      <div class="lfoot"><span class="meta"></span><span style="color:var(--ink-2);font-size:14px">回今日</span><button class="btn md second"><span class="ico" data-i="notebook-text" data-s="14"></span>看笔记</button><button class="btn primary">去练 4 道 <span class="ico" data-i="arrow-right" data-s="16"></span></button></div>
+    </div>
+    <div class="rcol">
+      <div class="bubble"><div class="who">碧琪</div>讲通啦！趁热做 4 道，明天我再考你一次电感那块～</div>
+      <img src="../../ui/assets/laolao-pinkie-buddy-learning-happy.png" alt="" style="width:230px">
+    </div>
+  </div></div>
+  <div style="margin-top:14px;display:flex;gap:10px;align-items:center"><span class="statuschip"><span class="ico" data-i="usb"></span>讲义 · 已索引 412 份 · 10-26 更新</span><span class="statuschip"><span class="ico" data-i="hard-drive"></span>U盘未插 · 用本机索引</span><span class="note" style="margin:0">← 今日页角落的讲义状态标</span></div>
+</section>
+
+<script src="icons.js"></script>
+<script>
+const theme = new URLSearchParams(location.search).get('theme') === 'night' ? 'night' : 'day';
+document.documentElement.dataset.theme = theme;
+const SW = {14: 2, 16: 1.75, 20: 1.6, 24: 1.5};
+const lucide = (name, size = 20) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${SW[size] || 1.6}" stroke-linecap="round" stroke-linejoin="round">${LUCIDE[name]}</svg>`;
+const OLD = {
+  star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z',
+  today: 'M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+  stage: 'M20 12a8 8 0 1 1-8-8m4 8a4 4 0 1 1-4-4m0 4 9-9m-4 0h4v4',
+  board: 'M4 3v17h17M7 15l4-5 4 3 6-8',
+  library: 'M4 4h4v16H4zm5 0h4v16H9zm6 1 4-1 4 15-4 1Z',
+  notes: 'M7 3h13v18H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 0v18m3-13h6m-6 4h6',
+  chat: 'M21 11a9 8 0 0 1-9 8H7l-4 3 1-7a8 8 0 0 1-1-4 9 8 0 0 1 18 0Zm-14 0h10',
+  moon: 'M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11', arrow: 'M5 12h14m-6-6 6 6-6 6', back: 'M19 12H5m6-6-6 6 6 6',
+};
+const old = (name, size = 22) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"><path d="${OLD[name]}"/></svg>`;
+document.querySelectorAll('[data-i]').forEach(n => { n.innerHTML = lucide(n.dataset.i, +(n.dataset.s || 16)); n.style.width = n.style.height = (n.dataset.s || 16) + 'px'; });
+const avatar = '<img src="../../ui/assets/laolao-mode-learning-hd.png" alt="">';
+// rails
+const night = theme === 'night';
+const oldItems = ['today', 'stage', 'board', 'library', 'notes', 'chat'];
+const newItems = [['house', '今日'], ['pencil-line', '舞台'], ['chart-line', '看板'], ['library', '书架'], ['notebook-text', '笔记本'], ['message-square', '对话']];
+document.getElementById('rail-old').innerHTML = `<div class="logo" style="color:var(--ink)">${old('star', 20)}</div><nav>${oldItems.map((n, i) => `<button class="${i === 1 ? 'on' : ''}">${old(n)}</button>`).join('')}</nav><div class="foot"><button>${night ? old('today') : old('moon')}</button>${avatar}</div>`;
+const brand = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">${LUCIDE.star}</svg>`;
+document.getElementById('rail-new').innerHTML = `<div class="logo" style="color:var(--on-pink)">${brand}</div><nav>${newItems.map(([n], i) => `<button class="${i === 1 ? 'on' : ''}">${lucide(n, 20)}</button>`).join('')}</nav><div class="foot"><button>${lucide(night ? 'sun' : 'moon', 20)}</button>${avatar}</div>`;
+document.getElementById('rail-legend').innerHTML = '<div style="color:var(--ink);font-weight:600;margin-bottom:4px">改后对照</div>' + [['star', 'logo：实心星（切换模式）', true], ...newItems.map(([n, l]) => [n, l]), [night ? 'sun' : 'moon', night ? '切到日间' : '切到夜间']].map(([n, l, fill]) => `<div><span class="ico">${fill ? brand : lucide(n, 20)}</span>${l}</div>`).join('') + '<div style="margin-top:8px">当前页：深色 + 浅底 + 粉点<br>其他页：浅一档</div>';
+// contrast readouts
+const hex = h => h.match(/\w\w/g).map(x => parseInt(x, 16) / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+const L = h => { const [r, g, b] = hex(h.replace('#', '')); return .2126 * r + .7152 * g + .0722 * b; };
+const cr = (a, b) => { const x = L(a), y = L(b); return ((Math.max(x, y) + .05) / (Math.min(x, y) + .05)).toFixed(2); };
+document.getElementById('r-old').textContent = `对比度 ${cr('#FFFFFF', night ? '#F0679F' : '#E5488F')}:1（正文要求 4.5）`;
+document.getElementById('r-new').textContent = night ? `对比度 ${cr('#17131B', '#F0679F')}:1` : `对比度 ${cr('#FFFFFF', '#DB1F74')}:1`;
+document.getElementById('t-old').textContent = `对比度 ${night ? cr('#7D7183', '#1F1A24') : cr('#87788D', '#FFFDFB')}:1`;
+document.getElementById('t-new').textContent = `对比度 ${night ? cr('#B6A9BB', '#1F1A24') : cr('#6F6377', '#FFFDFB')}:1`;
+// stage
+const q = '参考点改变时，电路中各点的电位和任意两点间的电压分别';
+const opts = ['都改变', '电位改变，电压不变', '电位不变，电压改变', '都不变'];
+const optList = sel => `<ul class="opts">${opts.map((o, i) => `<li><div class="opt ${i === sel ? 'sel' : ''}"><span class="k">${i + 1}</span>${o}<span></span></div></li>`).join('')}</ul>`;
+const stageTop = (icon) => `<div class="s-top"><span class="back">${icon}</span>电路基本概念 · 练习<span class="modes"><span class="on">刷题</span><span>闪卡</span><span>实验</span><span>模拟考</span></span></div>`;
+const side = `<div class="side"><img src="../../ui/assets/laolao-learning-question.png" alt=""><div style="color:var(--ink-2);font-size:11px">碧琪</div>先生，先自己判断，选完我再讲。</div>`;
+document.getElementById('stage-old').innerHTML = stageTop(old('back', 16)) + `<div class="qmeta" style="color:var(--ink-3)">第 1 题 · 单选 · 电路基本概念</div><div class="qtext">${q}</div><div style="margin-top:auto;max-width:430px">${optList(1).replace(/font-size:14px/g, '')}</div>`
+  + `<div class="qfoot old" style="max-width:430px"><span>没把握</span><span>有点把握</span><span style="color:var(--ink-2);box-shadow:inset 0 -1.5px 0 var(--pink)">很确定</span><button class="btn sm" style="margin-left:auto;background:var(--ink);color:var(--ink-3)">确认 Enter</button></div>`
+  + side.replace('top:66px', 'top:66px') + `<div class="tools old"><span>换个说法讲</span><span>画执行过程</span><span>提示 H</span></div>`;
+document.getElementById('stage-old').querySelectorAll('.opt').forEach(n => n.style.fontSize = '12.5px');
+document.getElementById('stage-new').innerHTML = stageTop(lucide('arrow-left', 16)) + `<div class="qmeta">第 1 题 · 单选 · 电路基本概念</div><div class="qtext">${q}</div><div style="margin-top:22px;max-width:430px">${optList(1)}</div>`
+  + `<div class="qfoot" style="max-width:430px"><span class="label">把握</span><span class="seg"><span>没把握</span><span>有点</span><span class="on">很确定</span></span><button class="btn sm primary" style="margin-left:auto">确认 <kbd style="font:11px var(--sans);opacity:.6">Enter</kbd></button></div>`
+  + side + `<div class="tools"><button class="btn sm ghost">${lucide('rotate-ccw', 14)}换个说法</button><button class="btn sm ghost">${lucide('route', 14)}画过程</button><button class="btn sm ghost">${lucide('lightbulb', 14)}提示</button></div>`;
+// map demo
+const rows = [['电工电子', 'mmlllllearned learned learned weak none none none none none none none none none none none none'], ['C 语言', 'm l l weak learned none none none none none none none none none none none none none'], ['计网', 'learned learned none none none none none none none none none none none none none']];
+const cls = {m: 'mastered', l: 'lit'};
+document.getElementById('mapdemo').innerHTML = rows.map(([name, seq]) => {
+  const items = seq.replace(/^(m+)(l+)/, (_, m, l) => [...m].map(() => 'm').concat([...l].map(() => 'l')).join(' ') + ' ').trim().split(/\s+/);
+  return `<div class="maprow"><span>${name}</span><div class="dots">${items.map(s => `<i class="dot ${cls[s] || s}"></i>`).join('')}</div></div>`;
+}).join('') + '<div class="note">地图下面加一行图例：没学 · 学过 · 点亮 · 掌握 · 待复测</div>';
+</script>
+</body>
+</html>

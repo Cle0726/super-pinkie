@@ -1,0 +1,477 @@
+/* Shared model catalog surface. Native rows keep their click handlers, auth
+   warnings and disabled states. The legacy night sheet uses two ID exclusions
+   with !important; this scope also has to outrank that installed theme. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model, .chat-controls__model-picker) [data-pinkie-picker-surface] {
+  --model-surface: #11141f;
+  --model-ink: #efe8da;
+  --model-muted: #aaa596;
+  --model-faint: #77766e;
+  --model-line: rgba(255,255,255,.16);
+  --model-focus: #5aa8ff;
+  --model-gold: #c9a24a;
+  box-sizing: border-box;
+  display: flex !important;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: min(360px, calc(100dvh - 100px)) !important;
+  min-height: 0;
+  padding: 10px 11px 11px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--model-line) !important;
+  border-radius: 16px !important;
+  color: var(--model-ink) !important;
+  background: var(--model-surface) !important;
+  background-image: none !important;
+  box-shadow: 0 18px 48px rgba(0,0,0,.28) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  font-family: var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif);
+  isolation: isolate;
+}
+/* Daytime catalog is an independent light surface. Effort artwork and its
+   animation variables deliberately stay outside this palette. */
+html:not([data-pinkie-night]):not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model, .chat-controls__model-picker) [data-pinkie-picker-surface] {
+  --model-surface: #fff9fd;
+  --model-ink: #44364f;
+  --model-muted: #65566f;
+  --model-faint: #786982;
+  --model-line: rgba(116, 82, 140, .22);
+  --model-focus: #9664aa;
+  --model-gold: #96602c;
+  color-scheme: light;
+  box-shadow: 0 16px 42px rgba(91, 55, 105, .16), inset 0 1px rgba(255,255,255,.95) !important;
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) [data-pinkie-picker-surface] { color-scheme: dark; }
+html:not([data-pinkie-night]):not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) [data-pinkie-picker-surface] [data-chat-model-option][aria-selected="true"] {
+  background: #f0e4f3 !important;
+}
+html:not([data-pinkie-night]):not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) [data-pinkie-picker-surface] .pinkie-model-filter { opacity: .85; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-popup-bounded] [data-pinkie-picker-surface] {
+  width: var(--pinkie-popup-width) !important;
+  max-height: var(--pinkie-popup-max-height) !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) :is(.chat-controls__model, .chat-controls__model-picker) [data-pinkie-picker-surface]::before,
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) :is(.chat-controls__model, .chat-controls__model-picker) [data-pinkie-picker-surface]::after,
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] > :is(.pinkie-model-current, .pinkie-model-frame),
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-brand-tabs { display: none !important; content: none !important; }
+
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-search-wrap {
+  display: flex !important;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 7px !important;
+  padding: 2px 7px 7px !important;
+  border: 0 !important;
+  border-bottom: 1.5px solid var(--model-focus) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-search-wrap > svg {
+  flex: 0 0 18px; width: 18px; height: 18px; color: var(--model-faint);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-search {
+  flex: 1; min-width: 0; height: 29px !important; padding: 0 !important;
+  color: var(--model-ink) !important; background: transparent !important;
+  border: 0 !important; border-radius: 0 !important; outline: 0 !important;
+  box-shadow: none !important; font: 400 14px/1.4 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-search::placeholder { color: var(--model-faint) !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-search-wrap:focus-within { border-bottom-width: 2px !important; }
+
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filters {
+  flex: 0 0 auto; display: flex; align-items: stretch; gap: 4px;
+  min-width: 0; overflow-x: auto; overscroll-behavior-x: contain;
+  margin: 0 0 7px; padding: 0 3px; border-bottom: 1px solid var(--model-line);
+  scrollbar-width: thin;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter {
+  position: relative; display: flex; flex: 0 0 auto; align-items: center; justify-content: center;
+  min-width: 29px; min-height: 33px; padding: 5px; margin: 0;
+  border: 0; border-radius: 0; background: transparent; color: var(--model-muted);
+  opacity: .62; cursor: pointer; font: 600 12px/1.25 var(--cle-sans, system-ui, sans-serif);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter[data-pinkie-brand] { font-size: 0; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter::after {
+  content: ""; position: absolute; inset: auto 2px -1px; height: 2px;
+  background: transparent;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter[aria-pressed="true"] { color: var(--model-ink); opacity: 1; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter[aria-pressed="true"]::after {
+  background: linear-gradient(90deg, var(--model-gold) 65%, transparent);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter:hover { opacity: 1; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter:focus-visible {
+  outline: 2px solid var(--model-focus); outline-offset: -3px; border-radius: 5px;
+}
+/* Reuse the original brand artwork already supplied by each host. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-filter[data-pinkie-brand]::before {
+  content: ""; position: static; display: block; width: 18px; height: 18px; flex: 0 0 18px;
+  background: var(--model-brand-ink, currentColor) var(--model-brand-image, none) center / contain no-repeat !important;
+  -webkit-mask: var(--model-brand-mask, none) center / contain no-repeat !important;
+  mask: var(--model-brand-mask, none) center / contain no-repeat !important;
+}
+
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] :is(.chat-controls__model-options, .chat-controls__model-browser) {
+  display: flex !important; flex-direction: column; flex: 1 1 auto;
+  min-height: 0 !important; max-height: none !important; gap: 1px;
+  margin: 0 !important; padding: 0 2px !important;
+  overflow: auto !important; overscroll-behavior: contain;
+  background: transparent !important; border: 0 !important; scrollbar-gutter: auto;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] :is(.pinkie-fallback-catalog, .chat-controls__provider-model-list,
+  .chat-controls__provider-model-group[data-chat-model-provider-group], openclaw-tooltip:has(> [data-chat-model-option])) {
+  display: contents !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-provider-group] > .chat-controls__provider-heading { display: none !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option] {
+  position: relative !important; display: flex !important; align-items: center; flex: 0 0 auto;
+  order: var(--pinkie-model-order, 0) !important;
+  gap: 10px !important; min-width: 0 !important; min-height: 34px !important; width: 100% !important;
+  margin: 0 !important; padding: 5px 57px 5px 6px !important;
+  border: 0 !important; border-radius: 7px !important; color: var(--model-muted) !important;
+  background: transparent !important; box-shadow: none !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 450 14px/1.4 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif) !important;
+  text-align: left; cursor: pointer;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option]::before {
+  content: "" !important; display: block !important;
+  background: var(--model-brand-ink, currentColor) var(--model-brand-image, none) center / contain no-repeat !important;
+  -webkit-mask: var(--model-brand-mask, none) center / contain no-repeat !important;
+  mask: var(--model-brand-mask, none) center / contain no-repeat !important;
+  position: static !important; inset: auto !important; margin: 0 !important;
+  transform: none !important; flex: 0 0 19px !important; width: 19px !important; height: 19px !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option]::after {
+  content: attr(data-pinkie-context); position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  color: var(--model-faint); font: 400 12px/1.4 var(--cle-mono, ui-monospace, monospace);
+  min-width: 28px; text-align: right; padding-left: 15px;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option][aria-selected="true"] { color: var(--model-ink) !important; font-weight: 600 !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option][aria-selected="true"]::after {
+  background: radial-gradient(circle at 4px 50%, var(--model-gold) 0 3px, transparent 3.5px);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--model-ink) 5%, transparent) !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface][data-pinkie-keyboard] [data-chat-model-highlighted] {
+  background: color-mix(in srgb, var(--model-ink) 7%, transparent) !important;
+  outline: 1px solid var(--model-focus) !important; outline-offset: -1px;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option]:focus-visible { outline: 2px solid var(--model-focus) !important; outline-offset: -2px; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option]:disabled { opacity: .55 !important; cursor: not-allowed; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] :is(.chat-controls__model-option-copy, .chat-controls__model-option-title) {
+  display: block; min-width: 0; max-width: 100%; color: inherit !important; font: inherit !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-option-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] :is(.chat-controls__model-option-meta, .chat-controls__model-option-action,
+  .chat-controls__model-state-label--default) { display: none !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .chat-controls__model-option-auth-warning { display: inline-flex; color: var(--model-gold); font-size: 11px; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-pinkie-filter-hidden],
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option][hidden] { display: none !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-empty { padding: 22px 10px; color: var(--model-muted); font: 400 14px/1.5 system-ui, sans-serif; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-empty[hidden] { display: none !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-manage {
+  display: block; flex: 0 0 auto; padding: 4px 8px 0; border: 0; background: transparent;
+  color: var(--model-faint); font: 400 11px/1.4 system-ui, sans-serif; text-align: right; cursor: pointer;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] .pinkie-model-manage:focus-visible { outline: 2px solid var(--model-focus); }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface][data-pinkie-routes-open] .chat-controls__provider-model-group[data-chat-model-provider-group] {
+  display: grid !important; flex: 0 0 auto;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface][data-pinkie-routes-open] [data-chat-model-provider-group] > .chat-controls__provider-heading { display: flex !important; }
+/* Each legacy entry opens one view of the original Lit-owned controls. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] :is(.chat-controls__reasoning-panel, .chat-controls__speed-panel, .chat-controls__picker-actions) { flex: 0 0 auto; }
+@media (max-width: 480px) {
+  html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model, .chat-controls__model-picker) [data-pinkie-picker-surface] {
+    width: min(360px, calc(100vw - 24px)) !important; padding: 10px !important; border-radius: 16px !important;
+  }
+  html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) [data-pinkie-picker-surface] [data-chat-model-option] { font-size: 14px !important; gap: 9px !important; min-height: 34px !important; }
+}
+@container cle-pane (max-width: 500px) {
+  html[data-cle]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model-menu, .chat-controls__inline-select-menu--combined)[data-pinkie-picker-surface] { width: min(360px, calc(100cqw - 18px)) !important; }
+}
+
+/* Model and effort controls share native state, with separate user-facing entries. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="model"] [data-pinkie-picker-surface] :is(.chat-controls__reasoning-panel, .chat-controls__speed-panel, .chat-controls__picker-actions),
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] :is(.chat-controls__model-search-wrap, .pinkie-model-filters, .chat-controls__model-browser, .chat-controls__model-options, .pinkie-model-manage, .pinkie-model-empty, .chat-controls__picker-actions) {
+  display: none !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] {
+  width: var(--pinkie-popup-width, 296px) !important;
+  max-width: min(296px, calc(100vw - 24px)) !important;
+  max-height: var(--pinkie-popup-max-height, 200px) !important;
+  padding: 6px 8px !important;
+  gap: 6px;
+}
+html:not([data-pinkie-night]):not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] {
+  --model-surface: #fff8fc;
+  --model-ink: #51445f;
+  --model-line: rgba(141, 116, 165, .24);
+  box-shadow: 0 12px 32px rgba(113, 84, 136, .14), inset 0 1px rgba(255, 255, 255, .9) !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] :is(.chat-controls__reasoning-panel, .chat-controls__speed-panel) {
+  display: block !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] .chat-controls__reasoning-panel {
+  display: grid !important;
+  /* 标签列固定宽度：按内容伸缩时，拖动中标签一变，滑块就会在指针下左右移动最多 55px。 */
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+/* A single native effort (for example High) is rendered as a button upstream.
+   Once the nine-tier slider is present, it owns this choice. Keep the native
+   button in Lit's DOM, but remove the duplicate from layout and keyboard focus.
+   Speed options and a native control without a replacement remain available. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model [data-pinkie-picker-surface] .chat-controls__reasoning-panel:has(.chat-controls__reasoning-range) > .chat-controls__reasoning-option[data-chat-thinking-option] {
+  display: none !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] .pinkie-reasoning-current {
+  position: static !important;
+  display: block !important;
+  inset: auto !important;
+  color: var(--model-ink) !important;
+  text-shadow: none !important;
+  grid-area: 1 / 1;
+  max-width: 56px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin: 0 !important;
+  font: 550 12px/1.4 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif) !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] .chat-controls__reasoning-slider {
+  grid-area: 1 / 2;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  margin: 0 !important;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] .chat-controls__reasoning-range { height: 34px !important; }
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .pinkie-effort-trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 112px;
+  min-height: 28px;
+  margin: 0 0 0 3px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  white-space: nowrap;
+  font: 550 12px/1.25 var(--cle-sans, -apple-system, "PingFang SC", system-ui, sans-serif);
+  cursor: pointer;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .pinkie-effort-trigger:is(:hover, [aria-expanded="true"]) {
+  border-color: color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .pinkie-effort-trigger:focus-visible {
+  outline: 2px solid #5aa8ff;
+  outline-offset: 2px;
+}
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .pinkie-effort-trigger:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 480px) {
+  html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .pinkie-effort-trigger { max-width: 92px; padding-inline: 5px; font-size: 11px; }
+}
+
+/* Keep the original tier material on both the legacy label and the separate effort entry. */
+.chat-controls__model[data-pinkie-outside-material] > .chat-controls__inline-select-trigger .chat-controls__inline-select-label {
+  display: inline-block;
+  max-width: 100%;
+  color: #5a5068;
+}
+.chat-controls__model[data-pinkie-outside-material] .pinkie-external-model-name { color: #5a5068; }
+:is(.chat-controls__model[data-pinkie-outside-material], .pinkie-effort-trigger[data-pinkie-material]) .pinkie-external-tier {
+  display: inline-block;
+  position: relative;
+  font-weight: 760;
+  letter-spacing: .018em;
+  background: var(--pinkie-outside-ink, #625b69);
+  background-size: var(--pinkie-outside-size, 100% 100%);
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.75)) drop-shadow(0 0 2px color-mix(in srgb, var(--pinkie-outside-glow-ink, transparent) 38%, transparent));
+  animation: var(--pinkie-outside-motion, none);
+  animation-direction: alternate;
+  animation-timing-function: ease-in-out;
+}
+/* The standalone tier uses the text material without a decorative underline. */
+.chat-controls__model[data-pinkie-outside-material] .pinkie-external-tier::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: -3px;
+  height: var(--pinkie-outside-trail-height, 0px);
+  border-radius: 99px;
+  background: var(--pinkie-outside-trail, transparent);
+  background-size: 230% 100%;
+  opacity: var(--pinkie-outside-trail-opacity, 0);
+  box-shadow: 0 0 var(--pinkie-outside-trail-glow, 0px) var(--pinkie-outside-glow-ink, transparent);
+  pointer-events: none;
+  animation: var(--pinkie-outside-trail-motion, none);
+}
+:is(.chat-controls__model[data-pinkie-outside-material="off"], .pinkie-effort-trigger[data-pinkie-material="off"]) { --pinkie-outside-ink: #605a65; }
+:is(.chat-controls__model[data-pinkie-outside-material="minimal"], .pinkie-effort-trigger[data-pinkie-material="minimal"]) { --pinkie-outside-ink: linear-gradient(100deg,#625a70 8%,#d5c8d8 37%,#736781 61%,#625a70 90%); --pinkie-outside-size: 260% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 7s linear infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="low"], .pinkie-effort-trigger[data-pinkie-material="low"]) { --pinkie-outside-ink: linear-gradient(100deg,#5c4e73 6%,#a88ac3 33%,#eee1ee 49%,#735a93 70%,#5c4e73 94%); --pinkie-outside-size: 270% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 5.5s linear infinite; --pinkie-outside-glow-ink:#ac8aca; --pinkie-outside-blur:3px; --pinkie-outside-glow-opacity:.34; --pinkie-outside-aura:pinkie-outside-breathe 4s ease-in-out infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="medium"], .pinkie-effort-trigger[data-pinkie-material="medium"]) { --pinkie-outside-ink: linear-gradient(100deg,#805065 5%,#cf8f97 32%,#ffe6cb 48%,#ba758a 69%,#805065 94%); --pinkie-outside-size: 275% 100%; --pinkie-outside-motion: pinkie-outside-shimmer 4.7s linear infinite; --pinkie-outside-glow-ink:#df9da5; --pinkie-outside-blur:4px; --pinkie-outside-glow-opacity:.42; --pinkie-outside-aura:pinkie-outside-breathe 3.7s ease-in-out infinite; --pinkie-outside-trail-height:1px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#e4a7ac,transparent); --pinkie-outside-trail-opacity:.65; }
+:is(.chat-controls__model[data-pinkie-outside-material="high"], .pinkie-effort-trigger[data-pinkie-material="high"]) { --pinkie-outside-ink: linear-gradient(100deg,#79395f 4%,#e967a3 27%,#fff0dc 42%,#e779b5 58%,#8b3c75 82%,#79395f 96%); --pinkie-outside-size: 300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.9s linear infinite; --pinkie-outside-glow-ink:#e576b2; --pinkie-outside-blur:5px; --pinkie-outside-glow-opacity:.54; --pinkie-outside-aura:pinkie-outside-breathe 2.9s ease-in-out infinite; --pinkie-outside-trail-height:1.5px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#f48bbd,#fff1dc,#f48bbd,transparent); --pinkie-outside-trail-opacity:.75; --pinkie-outside-trail-glow:3px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.9s linear infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="xhigh"], .pinkie-effort-trigger[data-pinkie-material="xhigh"]) { --pinkie-outside-ink:linear-gradient(100deg,#62416e 2%,#b65f9c 24%,#f2c4e4 38%,#fff2e7 48%,#a775cf 66%,#62416e 95%); --pinkie-outside-size:300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.3s linear infinite; --pinkie-outside-glow-ink:#ba71c2; --pinkie-outside-blur:6px; --pinkie-outside-glow-opacity:.68; --pinkie-outside-aura:pinkie-outside-breathe 2.5s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#b980d7,#f4d4ee,#b980d7,transparent); --pinkie-outside-trail-opacity:.86; --pinkie-outside-trail-glow:4px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.3s linear infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="adaptive"], .pinkie-effort-trigger[data-pinkie-material="adaptive"]) { --pinkie-outside-ink:linear-gradient(100deg,#385b71 2%,#78abae 24%,#d8efe0 43%,#9c83c0 63%,#385b71 95%); --pinkie-outside-size:300% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 3.4s linear infinite; --pinkie-outside-glow-ink:#80bdbe; --pinkie-outside-blur:5px; --pinkie-outside-glow-opacity:.58; --pinkie-outside-aura:pinkie-outside-breathe 3s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#79bdbc,#dbf2e7,#aa91c3,transparent); --pinkie-outside-trail-opacity:.82; --pinkie-outside-trail-glow:4px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 3.4s linear infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="max"], .pinkie-effort-trigger[data-pinkie-material="max"]) { --pinkie-outside-ink:linear-gradient(100deg,#793a61 2%,#d86f98 21%,#ffe2a9 37%,#fff8e9 48%,#dc8a7c 66%,#793a61 95%); --pinkie-outside-size:320% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 2.8s linear infinite; --pinkie-outside-glow-ink:#e8a17b; --pinkie-outside-blur:7px; --pinkie-outside-glow-opacity:.77; --pinkie-outside-aura:pinkie-outside-breathe 2.2s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#e88b9e,#fff1bf,#e88b9e,transparent); --pinkie-outside-trail-opacity:.94; --pinkie-outside-trail-glow:5px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 2.8s linear infinite; }
+:is(.chat-controls__model[data-pinkie-outside-material="ultra"], .pinkie-effort-trigger[data-pinkie-material="ultra"]) { --pinkie-outside-ink:linear-gradient(100deg,#6b4380 2%,#d66cae 19%,#bdebe8 36%,#fff2f0 48%,#c07ce7 64%,#6b4380 95%); --pinkie-outside-size:330% 100%; --pinkie-outside-motion:pinkie-outside-shimmer 2.25s linear infinite; --pinkie-outside-glow-ink:#bd82de; --pinkie-outside-blur:8px; --pinkie-outside-glow-opacity:.9; --pinkie-outside-aura:pinkie-outside-breathe 1.8s ease-in-out infinite; --pinkie-outside-trail-height:2px; --pinkie-outside-trail:linear-gradient(90deg,transparent,#d77fb8,#a7e4ec,#f5ddf4,#d77fb8,transparent); --pinkie-outside-trail-opacity:1; --pinkie-outside-trail-glow:6px; --pinkie-outside-trail-motion:pinkie-outside-shimmer 2.25s linear infinite; }
+@keyframes pinkie-outside-shimmer { to { background-position: 100% 50%; } }
+@keyframes pinkie-outside-breathe { 50% { opacity: .28; transform: scale(1.07); } }
+@media (prefers-reduced-motion: reduce) {
+  :is(.chat-controls__model[data-pinkie-outside-material], .pinkie-effort-trigger[data-pinkie-material]) .pinkie-external-tier,
+  :is(.chat-controls__model[data-pinkie-outside-material], .pinkie-effort-trigger[data-pinkie-material]) .pinkie-external-tier::after { animation: none !important; background-position: 50% 50%; }
+}
+
+.chat-controls__model[data-pinkie-brand-motion-paused] + .pinkie-effort-trigger .pinkie-external-tier,
+.chat-controls__model[data-pinkie-brand-motion-paused] + .pinkie-effort-trigger .pinkie-external-tier::after { animation-play-state: paused !important; }
+
+/* Night materials have their own star field and travelling light, independent
+   of the daytime party artwork. Only small paint layers animate; control
+   bounds, the native range and its hit target never move. */
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material] {
+  --pinkie-night-a: #8f87ff;
+  --pinkie-night-b: #67d9f4;
+  --pinkie-night-c: #db8aff;
+  --pinkie-night-glow: #9e8afa;
+  --pinkie-night-speed: 5s;
+  --pinkie-night-text-speed: 4s;
+  --pinkie-night-period: 128px;
+}
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="off"] { --pinkie-night-a: #8392aa; --pinkie-night-b: #bbc8dd; --pinkie-night-c: #8392aa; --pinkie-night-glow: #7889a4; --pinkie-night-rail-motion: none; --pinkie-night-type-motion: none; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="minimal"] { --pinkie-night-a: #536baf; --pinkie-night-b: #a3d4f1; --pinkie-night-c: #8399d3; --pinkie-night-glow: #6e9bd3; --pinkie-night-speed: 9s; --pinkie-night-text-speed: 7s; --pinkie-night-period: 180px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="low"] { --pinkie-night-a: #8065c8; --pinkie-night-b: #c8adf3; --pinkie-night-c: #7dbae3; --pinkie-night-glow: #aa8ddd; --pinkie-night-speed: 7.4s; --pinkie-night-text-speed: 6s; --pinkie-night-period: 164px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="medium"] { --pinkie-night-a: #8560ca; --pinkie-night-b: #e69bd5; --pinkie-night-c: #7ccce4; --pinkie-night-glow: #c190de; --pinkie-night-speed: 6s; --pinkie-night-text-speed: 5s; --pinkie-night-period: 148px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="high"] { --pinkie-night-a: #a45bc7; --pinkie-night-b: #f49bd8; --pinkie-night-c: #77dcf0; --pinkie-night-glow: #da86db; --pinkie-night-speed: 4.8s; --pinkie-night-text-speed: 3.8s; --pinkie-night-period: 132px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="xhigh"] { --pinkie-night-a: #7d65e8; --pinkie-night-b: #c7adff; --pinkie-night-c: #76dff5; --pinkie-night-glow: #ac9cfa; --pinkie-night-speed: 4s; --pinkie-night-text-speed: 3.2s; --pinkie-night-period: 120px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="adaptive"] { --pinkie-night-a: #4888b5; --pinkie-night-b: #8ce9df; --pinkie-night-c: #d18dee; --pinkie-night-glow: #81d5db; --pinkie-night-speed: 4.3s; --pinkie-night-text-speed: 3.6s; --pinkie-night-period: 124px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="max"] { --pinkie-night-a: #a66a9e; --pinkie-night-b: #ffe1a2; --pinkie-night-c: #8cdded; --pinkie-night-glow: #f2c68b; --pinkie-night-speed: 3.3s; --pinkie-night-text-speed: 2.8s; --pinkie-night-period: 108px; }
+html[data-pinkie-night] :is(.chat-controls__model, .pinkie-effort-trigger)[data-pinkie-material="ultra"] { --pinkie-night-a: #9c78fa; --pinkie-night-b: #87f2ef; --pinkie-night-c: #f4a2e5; --pinkie-night-glow: #bfabff; --pinkie-night-speed: 2.6s; --pinkie-night-text-speed: 2.4s; --pinkie-night-period: 96px; }
+
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model, .pinkie-effort-trigger) :is(.pinkie-external-tier, .pinkie-reasoning-current) {
+  background-image: repeating-linear-gradient(90deg, var(--pinkie-night-a) 0%, var(--pinkie-night-b) 16%, #f4f5ff 24%, var(--pinkie-night-c) 36%, var(--pinkie-night-a) 50%);
+  /* A fixed 64px repeat avoids subpixel seams from percentage text widths. */
+  background-size: 128px 100%;
+  background-repeat: repeat-x;
+  background-position: 0 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--pinkie-night-glow) 38%, transparent));
+  animation: var(--pinkie-night-type-motion, pinkie-night-letterflow var(--pinkie-night-text-speed) linear infinite);
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model[data-pinkie-picker-view="effort"] [data-pinkie-picker-surface] {
+  background: radial-gradient(ellipse at 96% 0%, color-mix(in srgb, var(--pinkie-night-a) 12%, transparent), transparent 64%), linear-gradient(155deg, #14182b, #0d1120) !important;
+  border-color: color-mix(in srgb, var(--pinkie-night-a) 26%, #2c3042) !important;
+  box-shadow: 0 16px 40px rgba(0,0,0,.36), inset 0 1px rgba(211,217,255,.035) !important;
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .chat-controls__reasoning-slider::after {
+  background: radial-gradient(circle at 20% 35%, rgba(186,204,250,.25) 0 .6px, transparent 1.2px), radial-gradient(circle at 72% 70%, rgba(177,206,237,.2) 0 .7px, transparent 1.3px), linear-gradient(180deg, #0c1227, #19213a) !important;
+  border: 1px solid color-mix(in srgb, var(--pinkie-night-a) 32%, #26324e) !important;
+  box-shadow: inset 0 1px 5px rgba(0,0,0,.55), 0 0 9px color-mix(in srgb, var(--pinkie-night-glow) 14%, transparent) !important;
+  animation: none;
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .chat-controls__reasoning-slider::before {
+  left: 13px;
+  right: auto;
+  width: max(0px, calc(var(--reasoning-fill, 0%) - var(--reasoning-end-offset, 0px))) !important;
+  max-width: calc(100% - 26px);
+  height: 20px;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, var(--pinkie-night-b) 58%, transparent);
+  border-radius: 999px;
+  opacity: .9 !important;
+  /* Every layer travels exactly one complete tile per cycle. Matching tile
+     edges keep both the moving light and the star field continuous. */
+  background-image: radial-gradient(circle at 18px 6px, #effaff 0 .65px, transparent 1.4px), radial-gradient(circle at 64px 14px, var(--pinkie-night-b) 0 .8px, transparent 1.8px), linear-gradient(108deg, transparent 22%, rgba(231,244,255,.72) 43%, transparent 62%), linear-gradient(90deg, #26224f 8%, var(--pinkie-night-a) 25%, var(--pinkie-night-b) 47%, var(--pinkie-night-c) 67%, #26224f 92%);
+  background-size: var(--pinkie-night-period) 20px, var(--pinkie-night-period) 20px, calc(var(--pinkie-night-period) * 2) 100%, calc(var(--pinkie-night-period) * 3) 100%;
+  background-repeat: repeat-x;
+  background-position: 0 0;
+  box-shadow: inset 0 1px rgba(226,243,255,.22), 0 0 9px color-mix(in srgb, var(--pinkie-night-glow) 30%, transparent);
+  filter: none;
+  animation: var(--pinkie-night-rail-motion, pinkie-night-current var(--pinkie-night-speed) linear infinite);
+  will-change: auto;
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .chat-controls__reasoning-dots { display: none !important; }
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .pinkie-reasoning-stop {
+  background: #3d4c6a;
+  border-color: #19233b;
+  box-shadow: 0 0 0 1px rgba(147,168,209,.15);
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-covered="1"] {
+  background: var(--pinkie-night-b);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--pinkie-night-glow) 60%, transparent);
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-thumb {
+  background: radial-gradient(circle at 46% 42%, #fff 0 18%, #dcfaff 30%, var(--pinkie-night-b) 57%, var(--pinkie-night-a) 100%) !important;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--pinkie-night-glow) 70%, transparent));
+}
+@keyframes pinkie-night-current {
+  to { background-position: var(--pinkie-night-period) 0, calc(0px - var(--pinkie-night-period)) 0, calc(var(--pinkie-night-period) * 2) 0, calc(var(--pinkie-night-period) * -3) 0; }
+}
+@keyframes pinkie-night-letterflow { to { background-position: -64px 50%; } }
+.chat-controls__model[data-pinkie-brand-motion-paused] :is(.pinkie-reasoning-current, .chat-controls__reasoning-slider)::before,
+.chat-controls__model[data-pinkie-brand-motion-paused] :is(.pinkie-reasoning-current, .chat-controls__reasoning-slider)::after,
+.chat-controls__model[data-pinkie-brand-motion-paused] .pinkie-reasoning-current { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) :is(.chat-controls__model, .pinkie-effort-trigger) :is(.pinkie-external-tier, .pinkie-reasoning-current),
+  html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .chat-controls__reasoning-slider::before { animation: none !important; background-position: 50% 50%; }
+}
+
+/* Commit a fresh animation timeline when WebKit reopens a hidden picker.
+   This marker lasts one frame and never changes geometry or CSS pause rules. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model [data-pinkie-picker-surface][data-pinkie-motion-reset] *,
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model [data-pinkie-picker-surface][data-pinkie-motion-reset] *::before,
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model [data-pinkie-picker-surface][data-pinkie-motion-reset] *::after { animation-name: none !important; }
+
+/* The folded list owns only its own children. Keep the native list in place
+   and hide it only after an authoritative replacement is available. */
+html:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override) details.chat-controls__model[data-pinkie-folded-catalog="1"] .chat-controls__model-browser > :not(.pinkie-fallback-catalog) { display: none !important; }
+
+/* Route marks on the nine stops (see routeKind in laolao-model-picker.js):
+   a solid dot is native, a ringed dot is made up by process, a dashed hollow
+   dot can only shorten the answer on this model. */
+.chat-controls__model .pinkie-reasoning-stop[data-pinkie-route="fill"] {
+  border-color: rgba(205, 78, 140, .85);
+  box-shadow: 0 0 0 2px rgba(214, 96, 154, .22), 0 1px 3px rgba(113, 67, 117, .14);
+}
+.chat-controls__model .pinkie-reasoning-stop[data-pinkie-route="down"] {
+  border-style: dashed;
+  background: transparent;
+  opacity: .8;
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-route="fill"] {
+  border-color: var(--pinkie-night-b, #8fb7ff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pinkie-night-glow, #8fb7ff) 35%, transparent);
+}
+html[data-pinkie-night]:not(#_pinkie-model-surface):not(#_pinkie-model-surface-override):not(#_pinkie-model-night) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-route="down"] {
+  border-style: dashed;
+  background: transparent;
+}
+.chat-controls__model .pinkie-reasoning-current[data-pinkie-route="down"],
+.chat-controls__model .pinkie-reasoning-current[data-pinkie-route="fill"] { white-space: nowrap; }

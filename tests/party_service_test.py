@@ -402,7 +402,7 @@ class PartyTests(unittest.TestCase):
             self.assertNotIn('老板', prompt)
 
     def test_party_identity_is_name_only_and_preserves_task_writing_requirements(self):
-        expected = {'pinkie':'碧琪', 'codex':'紫悦', 'openclaw':'云宝',
+        expected = {'pinkie':'Li An', 'codex':'紫悦', 'openclaw':'云宝',
                     'claude':'珍奇', 'gemini':'柔柔', 'grok':'苹果嘉儿'}
         self.assertEqual(expected, party.CHARACTERS)
         self.assertEqual(party.IDENTITIES, setup.IDENTITIES)
@@ -577,6 +577,8 @@ class PartyTests(unittest.TestCase):
         untouched = {'id':'main', 'name':'原模式人格', 'workspace':'/keep-this'}
         agents = [untouched]
         originals = {}
+        # Old installs on disk carry the former display name; the migration is
+        # keyed on it, so the fixtures keep 碧琪 on purpose.
         for agent_id, name in [('pinkie-party','碧琪'), ('party-openclaw','OpenClaw')]:
             workspace = config.parent / ('workspace-' + agent_id)
             workspace.mkdir()
@@ -592,7 +594,7 @@ class PartyTests(unittest.TestCase):
         self.assertEqual(untouched, updated['agents']['list'][0])
         self.assertEqual(123, updated['untouched'])
         self.assertEqual('云宝', updated['agents']['list'][2]['name'])
-        for agent_id, name in [('pinkie-party','碧琪'), ('party-openclaw','云宝')]:
+        for agent_id, name in [('pinkie-party',party.CHARACTERS['pinkie']), ('party-openclaw','云宝')]:
             workspace = config.parent / ('workspace-' + agent_id)
             self.assertEqual(setup.party_soul(name), (workspace/'SOUL.md').read_text())
             self.assertEqual(setup.identity_file(name), (workspace/'IDENTITY.md').read_text())

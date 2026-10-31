@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
+import {agentWorkspace, runtimeConfig} from './openclaw-paths.mjs';
 
 const MODE_ROOTS = Object.freeze({
   chat: '.openclaw/workspace',
@@ -10,6 +11,8 @@ const MODE_ROOTS = Object.freeze({
   learning: '.openclaw/workspace-learning',
   none: '.openclaw/workspace-unrestricted',
 });
+// 运行时由 agentWorkspace(config, agentId) 算工作区；这张表只是兜底（没有配置、没有 agent 时）。
+const MODE_AGENT = Object.freeze({chat: 'main', project: 'project', ideas: 'thinking', learning: 'learning', none: 'unrestricted'});
 
 const MODE_AGENTS = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
 const MEMORY_KINDS = new Set(['identity', 'preference', 'feedback', 'decision', 'fact', 'reference']);
@@ -85,12 +88,20 @@ export class LongTermMemoryStore {
     this.home = options.home || os.homedir();
     this.stateRoot = options.stateRoot || process.env.PINKIE_STATE_ROOT || path.join(this.home, 'Library/Application Support/SuperPinkie');
     this.now = options.now || (() => Date.now());
+    // 插件 API 的配置（new LongTermMemoryStore({api})）；没有时 workspaceForMode 会读配置文件兜底。
+    this.api = options.api || null;
+    this.config = options.config || null;
     this.parentForChild = options.parentForChild || (sessionKey => sessionKey);
   }
 
   workspaceForMode(mode) {
+    if (!MODE_ROOTS[mode]) throw new Error('未知记忆模式');
+    // OpenClaw 2026.10：状态目录随 --profile 变化，agents 配置也可能是 agents.entries。
+    const config = this.config ? this.config() : runtimeConfig(this.api);
+    const agentId = MODE_AGENT[mode];
+    const configured = config && Object.keys(config).length ? agentWorkspace(config, agentId, {home: this.home}) : '';
+    if (configured && path.isAbsolute(configured)) return configured;
     const relative = MODE_ROOTS[mode];
-    if (!relative) throw new Error('未知记忆模式');
     return path.join(this.home, relative);
   }
 

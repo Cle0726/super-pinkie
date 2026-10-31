@@ -1,0 +1,80 @@
+/* Uses only free space in the existing header; never adds another row. */
+.pinkie-learning-reminder-host { min-width: 0; }
+/* Stretch an existing desktop header into its allocated column, so a short
+   label at a narrow width cannot determine the next desktop width. */
+.topnav-shell__content:has(.pinkie-learning-reminder-host) { flex: 1 1 0%; justify-self: stretch; min-width: 0; }
+.dashboard-header.pinkie-learning-reminder-host { width: 100%; justify-content: flex-start; gap: 0; }
+.dashboard-header.pinkie-learning-reminder-host > .dashboard-header__breadcrumb { flex: none; }
+/* Upstream hides its title group below the mobile breakpoint. Reuse that
+   row's free middle space instead of inserting a fourth grid item. */
+.topnav-shell.pinkie-learning-reminder-host { display: flex !important; align-items: center; gap: 8px; }
+.topnav-shell.pinkie-learning-reminder-host > #pinkie-learning-reminder { flex: 1 1 auto; margin-inline-start: 0; justify-content: center; }
+html #pinkie-learning-reminder {
+  --reminder-ink: #6d5974;
+  --reminder-strong: #51405b;
+  --reminder-hair: rgba(103, 79, 117, .2);
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 12px;
+  min-width: 24px;
+  height: 26px;
+  min-height: 26px;
+  margin: 0 0 0 12px;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--reminder-ink);
+  box-shadow: none;
+  font: 400 11px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+html #pinkie-learning-reminder:hover { background: rgba(120, 87, 139, .08); }
+html #pinkie-learning-reminder:focus-visible { outline: 2px solid #ad78a0; outline-offset: 2px; }
+#pinkie-learning-reminder .pinkie-learning-reminder__exam { display: inline-flex; align-items: baseline; gap: 5px; flex: none; }
+#pinkie-learning-reminder b { color: var(--reminder-strong); font-size: 12px; font-weight: 600; }
+#pinkie-learning-reminder .pinkie-learning-reminder__progress { padding-inline-start: 12px; border-inline-start: 1px solid var(--reminder-hair); }
+#pinkie-learning-reminder .pinkie-learning-reminder__short-name { display: none; }
+#pinkie-learning-reminder[data-density="short"] .pinkie-learning-reminder__full-name,
+#pinkie-learning-reminder[data-density="exams"] .pinkie-learning-reminder__full-name,
+#pinkie-learning-reminder[data-density="nearest"] .pinkie-learning-reminder__full-name,
+#pinkie-learning-reminder[data-density="number"] .pinkie-learning-reminder__exam-name,
+#pinkie-learning-reminder:is([data-density="exams"], [data-density="nearest"], [data-density="number"]) .pinkie-learning-reminder__progress,
+#pinkie-learning-reminder:is([data-density="nearest"], [data-density="number"]) .pinkie-learning-reminder__exam[data-nearest="false"] { display: none; }
+#pinkie-learning-reminder:is([data-density="short"], [data-density="exams"], [data-density="nearest"]) .pinkie-learning-reminder__short-name { display: inline; }
+html #pinkie-learning-reminder:is([data-density="exams"], [data-density="nearest"], [data-density="number"]) { gap: 9px; }
+html #pinkie-learning-reminder[data-stale="true"] { opacity: .65; }
+.pinkie-learning-reminder-panel {
+  position: fixed;
+  z-index: 100210;
+  box-sizing: border-box;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: 14px 16px;
+  border: 1px solid #ddcddd;
+  border-radius: 14px;
+  background: #fffafd;
+  color: #67516d;
+  box-shadow: 0 9px 30px rgba(61, 38, 72, .15);
+  font: 400 12px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+.pinkie-learning-reminder-panel__title { display: block; margin-bottom: 10px; color: #51405b; font-size: 12px; font-weight: 600; }
+.pinkie-learning-reminder-panel__exam { display: flex; justify-content: space-between; gap: 16px; margin: 7px 0; }
+.pinkie-learning-reminder-panel__exam small { display: block; font-size: 10px; opacity: .7; }
+.pinkie-learning-reminder-panel__exam b { color: #99557e; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.pinkie-learning-reminder-panel p { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid rgba(103, 79, 117, .16); font-size: 11px; }
+.pinkie-learning-reminder-panel__error { display: block; margin-top: 10px; color: #936467; }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) #pinkie-learning-reminder { --reminder-ink: #bfb0cb; --reminder-strong: #e1d4e9; --reminder-hair: rgba(207, 187, 224, .2); }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) #pinkie-learning-reminder:hover { background: rgba(205, 173, 228, .09); }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-learning-reminder-panel { background: #29222f; color: #c9bace; border-color: #514156; box-shadow: 0 9px 30px rgba(0,0,0,.25); }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-learning-reminder-panel__title { color: #eadfea; }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-learning-reminder-panel__exam b { color: #e8a6ca; }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-learning-reminder-panel p { border-color: #514156; }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-learning-reminder-panel__error { color: #d9abb3; }

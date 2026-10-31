@@ -1,0 +1,60 @@
+{
+ "log": [
+  {
+   "a": "open",
+   "p": {
+    "url": "http://127.0.0.1:53586/lab.html"
+   },
+   "ok": true,
+   "ms": 102
+  },
+  {
+   "a": "hover",
+   "p": {
+    "name": "高级实验"
+   },
+   "ok": true,
+   "ms": 124
+  },
+  {
+   "a": "hover",
+   "p": {
+    "name": "高级实验"
+   },
+   "ok": true,
+   "ms": 123
+  },
+  {
+   "a": "hover",
+   "p": {
+    "name": "高级实验"
+   },
+   "ok": true,
+   "ms": 127
+  },
+  {
+   "a": "hover",
+   "p": {
+    "name": "高级实验",
+    "input": "native"
+   },
+   "ok": true,
+   "ms": 133
+  },
+  {
+   "a": "snapshot",
+   "p": {
+    "compact": true
+   },
+   "ok": true,
+   "ms": 2
+  }
+ ],
+ "qa": {
+  "opened": false,
+  "aligned": false,
+  "checks": 0,
+  "moves": 0
+ },
+ "menuVisible": true
+}

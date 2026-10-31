@@ -840,14 +840,26 @@
 
   const DOCK_EXIT_ID = "laolao-dock-exit";
 
-  // A fixed offset cannot be used here: the shell's top bar is 44px tall when
-  // the pane is wide and grows to ~58px once the narrow layout wraps its usage
-  // chips. Measure the real bar instead of guessing, so the exit never lands
-  // on top of the controls it sits next to.
+  // Keep this control in existing chrome. A fixed body overlay covers text,
+  // countdowns and selection targets in the companion workspace.
   const positionDockExit = (button) => {
-    const bar = document.querySelector("header.topbar") || document.querySelector(".topnav-shell");
-    const bottom = bar ? bar.getBoundingClientRect().bottom : 0;
-    button.style.top = `${Math.round(Math.max(8, bottom) + 8)}px`;
+    const visible = (node) => node && !node.closest("[hidden]")
+      && node.getBoundingClientRect().height > 0 && window.getComputedStyle(node).visibility !== "hidden";
+    const rail = document.documentElement.getAttribute("data-pinkie-study-desk") === "desk"
+      ? document.querySelector("#pinkie-study-desk .rail") : null;
+    const toolbar = [".topnav-shell__actions", ".dashboard-header__actions", ".pk-workspace-header", "header.topbar"]
+      .map(selector => document.querySelector(selector)).find(node => visible(node) || (node &&
+        window.getComputedStyle(node).display !== "none" && !node.closest("[hidden]") &&
+        visible(node.closest("header.topbar, .pk-workspace-header"))));
+    const host = visible(rail) ? rail : toolbar;
+    if (!host) { button.remove(); return; }
+    const placement = host === rail ? "rail" : "toolbar";
+    if (button.dataset.pinkiePlacement !== placement) button.dataset.pinkiePlacement = placement;
+    if (button.parentElement !== host) {
+      if (placement === "rail") host.insertBefore(button, host.querySelector(".rail-nav"));
+      else host.append(button);
+    }
+    if (button.style.top) button.style.removeProperty("top");
   };
 
   // The dock picker in the primary pane is the only exit a split used to have,
@@ -869,24 +881,17 @@
     button.type = "button";
     button.id = DOCK_EXIT_ID;
     button.className = "laolao-dock-exit";
-    button.setAttribute("aria-label", "退出分屏，关闭右侧窗口");
-    button.title = "退出分屏";
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5l9 9"></path><path d="M16.5 7.5l-9 9"></path></svg><span class="laolao-dock-exit__label">退出分屏</span>';
+    button.setAttribute("aria-label", "退出分屏，收起右侧模式");
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect><path d="M13.5 4.5v15"></path><path d="m17.5 9-3 3 3 3"></path></svg><span class="laolao-dock-exit__label" role="tooltip">退出分屏</span>';
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       closeWorkspaceDock();
     });
-    document.body.append(button);
     positionDockExit(button);
   };
 
-  // render() only re-runs on DOM mutations and history changes, so a pure
-  // window resize has to re-seat the button on its own.
-  window.addEventListener("resize", () => {
-    const button = document.getElementById(DOCK_EXIT_ID);
-    if (button) positionDockExit(button);
-  });
+  window.addEventListener("resize", syncDockExitButton);
 
   const openDockMenu = () => {
     if (!dockTrigger || !hasWorkspaceDock() || isDockedWorkspace()) return;
@@ -1013,7 +1018,7 @@
   });
   window.addEventListener("popstate", render);
   let renderQueued = false;
-  const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
+  const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, .topnav-shell__actions, #pinkie-study-desk, #pinkie-study-desk .rail, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
   new MutationObserver(records => {
     // Streaming text and our status clocks do not change the mode controls.
     // Only new/retired mount points and assistant avatars need reconciliation.
@@ -1031,7 +1036,7 @@
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["src", "data-pk-wb-compact", "data-laolao-workspace-split", "data-laolao-workspace-dock"],
+    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock"],
   });
   const schedulePreload = () => window.setTimeout(() => {
     if (typeof window.requestIdleCallback === "function") {

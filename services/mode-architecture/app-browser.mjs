@@ -8,10 +8,15 @@ import {spawn} from 'node:child_process';
 
 export const APP_BROWSER_ACTIONS = Object.freeze([
   'open', 'status', 'snapshot', 'screenshot', 'click', 'type', 'press', 'scroll',
-  'wait', 'back', 'forward', 'reload', 'eval', 'show_file', 'close',
-  'serve', 'stop_serve', 'serve_logs',
+  'wait', 'back', 'forward', 'reload', 'eval', 'show_file', 'close', 'locate', 'read', 'select', 'batch',
+  'serve', 'stop_serve', 'serve_logs', 'move', 'hover', 'drag', 'set_slider',
+  'fill', 'replay', 'remember', 'recipes', 'forget',
 ]);
-const NATIVE_ACTIONS = new Set(APP_BROWSER_ACTIONS.slice(0, 15));
+const NODE_ACTIONS = new Set(['serve','stop_serve','serve_logs','batch','fill','replay','remember','recipes','forget']);
+const NATIVE_ACTIONS = new Set(APP_BROWSER_ACTIONS.filter(action => !NODE_ACTIONS.has(action)));
+const BATCH_ACTIONS = new Set(['click','type','select','press','scroll','wait','move','hover','drag','set_slider']);
+const WRITE_ACTIONS = new Set(['serve','stop_serve','open','back','forward','reload','eval','show_file','close','click','type','select','press','scroll','move','hover','drag','set_slider']);
+const browserBatches = new WeakMap();
 const NAVIGATION_ACTIONS = new Set(['open', 'back', 'forward', 'reload', 'show_file']);
 const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 Windows 暂不支持），请改用 browser 工具。';
 const MAX_MESSAGE_BYTES = 4 * 1024 * 1024;
@@ -89,8 +94,18 @@ export function requestAppBrowser(action, params = {}, {environment = process.en
       socket.destroy();
       if (error) reject(error); else resolve(reply);
     };
-    const onAbort = () => finish(new Error('浏览器操作已取消。'));
-    const timer = setTimeout(() => finish(new Error(`App 浏览器操作超时（${Math.ceil(timeoutMs / 1000)} 秒），请检查页面后重试。`)), timeoutMs);
+    const cancelNative = () => {
+      // Cancellation uses the same authenticated private endpoint. This only
+      // prevents pending work; a click already dispatched cannot be undone.
+      const cancel = net.createConnection(endpoint.socketPath);
+      const deadline = setTimeout(() => cancel.destroy(), 500); deadline.unref?.();
+      cancel.unref();
+      cancel.on('connect', () => cancel.end(JSON.stringify({id:randomUUID(),action:'cancel',requestId:id,...(endpoint.token?{token:endpoint.token}:{})})+'\n'));
+      cancel.on('error', () => {});
+      cancel.on('close', () => clearTimeout(deadline));
+    };
+    const onAbort = () => { cancelNative(); finish(new Error('浏览器操作已取消；请先观察页面确认已完成的部分。')); };
+    const timer = setTimeout(() => { cancelNative(); finish(new Error(`App 浏览器操作超时（${Math.ceil(timeoutMs / 1000)} 秒），请先观察页面确认结果。`)); }, timeoutMs);
     signal?.addEventListener('abort', onAbort, {once: true});
     socket.setEncoding('utf8');
     socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`));
@@ -131,9 +146,12 @@ function within(parent, file) {
 function safeHomePath(home, file) {
   if (!within(home, file)) throw new Error('为保护系统文件，只能打开用户主目录里的文件。');
   const parts = path.relative(home, file).split(path.sep).map(part => part.toLowerCase());
-  const workspace = parts[0] === '.openclaw' && (parts[1] === 'workspace' || parts[1]?.startsWith('workspace-'));
-  if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (parts[0] === '.openclaw' && !workspace)) {
-    throw new Error('这个位置包含密钥或碧琪配置，不能从浏览器里打开。');
+  // ~/.openclaw/workspace* 和 --profile 的 ~/.openclaw-<名字>/workspace* 都算模式工作区。
+  const isWorkspace = (dir) => typeof dir === 'string' && (dir === 'workspace' || dir.startsWith('workspace-'));
+  const stateFolder = /^\.openclaw(?:-.+)?$/.test(parts[0] || '');
+  const workspace = stateFolder && isWorkspace(parts[1] || '');
+  if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (stateFolder && !workspace)) {
+    throw new Error('这个位置包含密钥或 Li An 配置，不能从浏览器里打开。');
   }
 }
 function validateDirectory(raw, home, {requireHome = true} = {}) {
@@ -237,9 +255,10 @@ function processAlive(record) {
 }
 
 export class AppBrowserServers {
-  constructor({environment = process.env, homeDirectory = os.homedir(), serveTimeoutMs = 60_000, stopGraceMs = 1_000} = {}) {
+  constructor({environment = process.env, homeDirectory = os.homedir(), serveTimeoutMs = 60_000, stopGraceMs = 1_000, memoryFile} = {}) {
     this.environment = environment;
     this.home = fs.realpathSync(homeDirectory);
+    this.memory = new BrowserSiteMemory(memoryFile ?? path.join(this.home, '.openclaw', 'pinkie-browser', 'site-memory.json'));
     this.serveTimeoutMs = Math.min(60_000, Math.max(1, serveTimeoutMs));
     this.stopGraceMs = Math.min(2_000, Math.max(1, stopGraceMs));
     this.servers = new Set();
@@ -266,7 +285,7 @@ export class AppBrowserServers {
 
   records(ctx, params = {}) {
     const owner = sessionOwner(ctx);
-    if (!owner) throw new Error('缺少当前碧琪会话，不能管理本地服务。');
+    if (!owner) throw new Error('缺少当前 Li An 会话，不能管理本地服务。');
     if (params.pid !== undefined && (!Number.isInteger(params.pid) || params.pid < 1)) throw new Error('服务进程号无效。');
     if (params.port !== undefined && (!Number.isInteger(params.port) || params.port < 1 || params.port > 65535)) throw new Error('服务端口无效。');
     return [...this.servers].filter(record => record.owner === owner
@@ -292,7 +311,7 @@ export class AppBrowserServers {
   async startServe(ctx, params, {signal} = {}) {
     aborted(signal);
     if (this.disposed) throw new Error('网关正在退出，不能启动新的本地服务。');
-    if (!sessionOwner(ctx)) throw new Error('缺少当前碧琪会话，不能启动本地服务。');
+    if (!sessionOwner(ctx)) throw new Error('缺少当前 Li An 会话，不能启动本地服务。');
     // Fail before starting a process when there is no visible App browser.
     appBrowserEndpoint(this.environment);
     const staticMode = typeof params.dir === 'string' && params.dir.trim();
@@ -320,7 +339,7 @@ export class AppBrowserServers {
         addLog(record, '本地网页服务已启动。\n');
       } else {
         const cwd = validateDirectory(params.cwd, this.home, {requireHome: false});
-        if (await portOpen(params.port)) throw new Error('这个端口已经被其他服务占用，碧琪没有启动或接管它。');
+        if (await portOpen(params.port)) throw new Error('这个端口已经被其他服务占用，Li An 没有启动或接管它。');
         aborted(signal);
         if (this.disposed) throw new Error('网关正在退出，不能启动新的本地服务。');
         record.port = params.port;
@@ -390,7 +409,7 @@ export class AppBrowserServers {
   async stop(ctx, params = {}) {
     if (params.pid === undefined && params.port === undefined) throw new Error('停止服务需要 pid 或 port。');
     const records = this.records(ctx, params);
-    if (!records.length) throw new Error('当前会话没有启动这个服务，碧琪不会停止其他会话或用户的进程。');
+    if (!records.length) throw new Error('当前会话没有启动这个服务，Li An 不会停止其他会话或用户的进程。');
     await Promise.all(records.map(record => this.stopRecord(record)));
     return {ok: true, message: '本会话的本地服务已停止。', services: records.map(({url, pid, port}) => ({url, pid, port}))};
   }
@@ -433,27 +452,315 @@ export class AppBrowserServers {
   }
 }
 
+// Site memory: steps that worked on a page are kept as portable targets
+// (role + accessible name or selector, never document refs), so the next
+// visit replays them in one call instead of exploring the page again.
+const MEMORY_STEP_FIELDS = ['action','selector','name','role','exact','text','value','submit','key','dx','dy','x','y','sliderValue','input','button','clickCount','durationMs','waitFor','ms','toSelector','toName','toRole','toExact','toX','toY','targetTimeoutMs'];
+const RECORDED_ACTIONS = new Set(['click','type','select','press','scroll','hover','drag','set_slider']);
+const MAX_RECIPE_STEPS = 24, MAX_RECIPES_PER_PAGE = 6, MAX_MEMORY_PAGES = 300;
+const REPLAY_ACTIONS = new Set([...BATCH_ACTIONS]);
+
+export function browserPageKey(raw) {
+  let url;
+  try { url = new URL(String(raw || '')); } catch { return ''; }
+  if (url.protocol === 'file:') return `file:${url.pathname}`;
+  if (!['http:', 'https:'].includes(url.protocol)) return '';
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  // Ids in paths (/item/123, /doc/9f2c…) vary per visit; the page shape does not.
+  const parts = url.pathname.split('/').filter(Boolean)
+    .map(part => /^\d+$|^[0-9a-f]{12,}$|^[0-9a-f-]{32,36}$/i.test(part) ? ':id' : decodeURIComponent(part).slice(0, 80));
+  return `${local ? 'local' : url.host.toLowerCase()}/${parts.join('/')}`;
+}
+
+function stepLabel(step) {
+  const target = step.name ? `${step.role ? `${step.role}` : ''}「${step.name}」` : step.selector ? `\`${step.selector}\``
+    : Number.isFinite(step.x) ? `(${step.x},${step.y})` : '';
+  const to = step.toName ? ` →「${step.toName}」` : step.toSelector ? ` → \`${step.toSelector}\`` : Number.isFinite(step.toX) ? ` → (${step.toX},${step.toY})` : '';
+  const value = step.text !== undefined ? ` = ${step.text}` : step.value !== undefined ? ` = ${step.value}` : step.sliderValue !== undefined ? ` = ${step.sliderValue}`
+    : step.key ? ` ${step.key}` : step.action === 'scroll' && !target ? ` dy=${step.dy ?? 0}` : '';
+  return `${step.action} ${target}${to}${value}`.replace(/\s+/g, ' ').trim();
+}
+
+function fieldValue(list, key) {
+  if (Array.isArray(list)) return list.find(item => item && item.name === key)?.value;
+  return list && typeof list === 'object' ? list[key] : undefined;
+}
+
+export class BrowserSiteMemory {
+  constructor(file) { this.file = file || ''; this.data = null; this.trails = new Map(); }
+
+  load() {
+    if (this.data) return this.data;
+    try {
+      const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (data?.version === 1 && data.pages && typeof data.pages === 'object') this.data = data;
+    } catch {}
+    return this.data ||= {version: 1, pages: {}};
+  }
+
+  persist() {
+    if (!this.file) return;
+    try {
+      fs.mkdirSync(path.dirname(this.file), {recursive: true, mode: 0o700});
+      const temporary = `${this.file}.${process.pid}.tmp`;
+      fs.writeFileSync(temporary, JSON.stringify(this.data), {mode: 0o600});
+      fs.renameSync(temporary, this.file);
+    } catch {}
+  }
+
+  trail(owner) {
+    const id = owner || 'default';
+    let trail = this.trails.get(id);
+    if (!trail) {
+      trail = {key: '', url: '', refs: new Map(), elements: [], steps: [], saved: false, announced: ''};
+      this.trails.set(id, trail);
+      if (this.trails.size > 64) this.trails.delete(this.trails.keys().next().value);
+    }
+    return trail;
+  }
+
+  // A trail starts at an opened page and follows the clicks that navigate
+  // away from it, so a multi-page flow replays from where it began.
+  start(owner, url) {
+    this.flush(owner);
+    const trail = this.trail(owner);
+    Object.assign(trail, {key: browserPageKey(url), url: String(url || ''), steps: [], saved: false, announced: ''});
+    return trail;
+  }
+
+  observe(owner, result) {
+    const trail = this.trail(owner);
+    const url = result?.page?.url || (typeof result?.url === 'string' ? result.url : '');
+    if (url && !trail.key) Object.assign(trail, {key: browserPageKey(url), url});
+    for (const list of [result?.observation?.elements, result?.elements, result?.matches]) {
+      if (!Array.isArray(list) || !list.length) continue;
+      if (list !== result?.matches) trail.elements = list.slice(0, 300);
+      for (const element of list) {
+        if (element?.ref && element.name) trail.refs.set(element.ref, {role: element.role, name: element.name, protected: element.protected === true});
+      }
+    }
+    while (trail.refs.size > 3000) trail.refs.delete(trail.refs.keys().next().value);
+    return trail;
+  }
+
+  portable(trail, step) {
+    const out = {};
+    for (const field of MEMORY_STEP_FIELDS) if (step[field] !== undefined) out[field] = step[field];
+    for (const [refField, nameField, roleField, exactField] of [['ref', 'name', 'role', 'exact'], ['toRef', 'toName', 'toRole', 'toExact']]) {
+      if (!step[refField]) continue;
+      const known = trail.refs.get(step[refField]);
+      if (!known?.name) return null;
+      out[nameField] = known.name; out[exactField] = true;
+      if (known.role) out[roleField] = known.role;
+      if (refField === 'ref' && known.protected) out.secret = true;
+    }
+    return out;
+  }
+
+  record(owner, step) {
+    if (!RECORDED_ACTIONS.has(step?.action)) return;
+    const trail = this.trail(owner);
+    if (!trail.key || trail.steps.length >= MAX_RECIPE_STEPS) { trail.overflow = !!trail.key; return; }
+    trail.steps.push(this.portable(trail, step));
+    trail.saved = false;
+  }
+
+  recipes(key) { return key ? this.load().pages[key]?.recipes || [] : []; }
+
+  brief(recipe) {
+    return {id: recipe.id, title: recipe.title, steps: recipe.steps.map(stepLabel),
+      ...(Object.keys(recipe.vars || {}).length ? {vars: recipe.vars} : {}), uses: recipe.uses || 0, ...(recipe.auto ? {auto: true} : {})};
+  }
+
+  known(owner, url) {
+    const trail = this.trail(owner), key = url ? browserPageKey(url) : trail.key;
+    const recipes = this.recipes(key);
+    return recipes.length ? recipes.slice(0, 4).map(recipe => this.brief(recipe)) : undefined;
+  }
+
+  // Typed text, chosen options and slider values become named variables
+  // whose defaults are what worked last time.
+  template(steps) {
+    const vars = {}, used = new Set();
+    const variable = (step, field, fallback) => {
+      let label = String(step.name || step.selector || fallback).slice(0, 24), n = 2;
+      while (used.has(label)) label = `${String(step.name || step.selector || fallback).slice(0, 24)}${n++}`;
+      used.add(label);
+      vars[label] = step.secret ? '' : String(step[field]);
+      return `{{${label}}}`;
+    };
+    const templated = steps.map((step, index) => {
+      const copy = {...step};
+      if (copy.action === 'type' && copy.text !== undefined) copy.text = variable(copy, 'text', `文本${index + 1}`);
+      if (copy.action === 'select' && copy.value !== undefined) copy.value = variable(copy, 'value', `选项${index + 1}`);
+      else if (copy.action === 'select' && copy.text !== undefined) copy.text = variable(copy, 'text', `选项${index + 1}`);
+      if (copy.action === 'set_slider' && copy.sliderValue !== undefined) copy.sliderValue = variable(copy, 'sliderValue', `数值${index + 1}`);
+      delete copy.secret;
+      return copy;
+    });
+    return {steps: templated, vars};
+  }
+
+  save(owner, title, {auto = false} = {}) {
+    const trail = this.trail(owner);
+    if (!trail.key || !trail.steps.length) return {ok: false, reason: '这一页还没有可记住的成功操作。'};
+    if (trail.overflow) return {ok: false, reason: `操作超过 ${MAX_RECIPE_STEPS} 步，没有记住；请把任务拆小后再记。`};
+    if (trail.steps.some(step => !step)) return {ok: false, reason: '有步骤用的 ref 没在观察里出现过名称，没能记住；下次可用 name 或 selector 定位。'};
+    const {steps, vars} = this.template(trail.steps.filter(step => step.action !== 'move'));
+    const data = this.load(), signature = JSON.stringify(steps);
+    const page = data.pages[trail.key] ||= {recipes: []};
+    let recipe = page.recipes.find(item => JSON.stringify(item.steps) === signature);
+    const name = String(title || '').trim().slice(0, 60) || `自动记录：${steps.slice(0, 2).map(stepLabel).join('，')}`.slice(0, 60);
+    if (recipe) {
+      if (!auto || recipe.auto) recipe.title = name;
+      if (!auto) recipe.auto = false;
+      recipe.vars = vars; recipe.savedAt = Date.now();
+    } else {
+      recipe = {id: `r${randomUUID().replace(/-/g, '').slice(0, 6)}`, title: name, steps, vars, uses: 0, fails: 0, auto, savedAt: Date.now()};
+      page.recipes.unshift(recipe);
+      while (page.recipes.length > MAX_RECIPES_PER_PAGE) {
+        const drop = page.recipes.findLastIndex(item => item.auto);
+        page.recipes.splice(drop >= 0 ? drop : page.recipes.length - 1, 1);
+      }
+    }
+    page.url = trail.url; page.touched = Date.now();
+    const keys = Object.keys(data.pages);
+    if (keys.length > MAX_MEMORY_PAGES) {
+      keys.sort((a, b) => (data.pages[a].touched || 0) - (data.pages[b].touched || 0));
+      for (const key of keys.slice(0, keys.length - MAX_MEMORY_PAGES)) delete data.pages[key];
+    }
+    trail.saved = true;
+    this.persist();
+    return {ok: true, recipe: this.brief(recipe)};
+  }
+
+  // Unsaved trails of two or more steps are kept automatically at turn end;
+  // replay failures demote them again.
+  flush(owner) {
+    const trail = this.trails.get(owner || 'default');
+    if (!trail || trail.saved || trail.steps.length < 2) return;
+    this.save(owner, '', {auto: true});
+  }
+
+  find(id) {
+    for (const [key, page] of Object.entries(this.load().pages)) {
+      const recipe = page.recipes.find(item => item.id === id);
+      if (recipe) return {key, page, recipe};
+    }
+    return null;
+  }
+
+  instantiate(recipe, given) {
+    const missing = [], unknown = [];
+    const names = Object.keys(recipe.vars || {});
+    for (const item of Array.isArray(given) ? given : Object.entries(given || {}).map(([name, value]) => ({name, value}))) {
+      if (item && !names.includes(item.name)) unknown.push(item.name);
+    }
+    if (unknown.length) throw new Error(`这个记录没有变量 ${unknown.join('、')}；可用变量：${names.join('、') || '无'}。`);
+    const fill = value => String(value).replace(/\{\{([^}]+)\}\}/g, (_, name) => {
+      const supplied = fieldValue(given, name), fallback = recipe.vars?.[name];
+      const result = supplied !== undefined ? supplied : fallback;
+      if (result === undefined || result === '') missing.push(name);
+      return String(result ?? '');
+    });
+    const steps = recipe.steps.map(step => {
+      const copy = {...step};
+      for (const field of ['text', 'value', 'sliderValue']) if (typeof copy[field] === 'string') copy[field] = fill(copy[field]);
+      if (typeof copy.sliderValue === 'string') copy.sliderValue = Number(copy.sliderValue);
+      return copy;
+    });
+    if (missing.length) throw new Error(`回放需要先提供：${[...new Set(missing)].join('、')}。`);
+    return steps;
+  }
+
+  result(id, ok) {
+    const found = this.find(id);
+    if (!found) return;
+    const {page, recipe} = found;
+    if (ok) { recipe.uses = (recipe.uses || 0) + 1; recipe.fails = 0; recipe.lastUsedAt = Date.now(); }
+    else {
+      recipe.fails = (recipe.fails || 0) + 1;
+      if (recipe.fails >= (recipe.auto ? 1 : 3)) page.recipes.splice(page.recipes.indexOf(recipe), 1);
+    }
+    page.touched = Date.now();
+    this.persist();
+  }
+
+  forget(id) {
+    const found = this.find(id);
+    if (!found) return false;
+    found.page.recipes.splice(found.page.recipes.indexOf(found.recipe), 1);
+    this.persist();
+    return true;
+  }
+
+  // fill: label → value pairs become typed steps chosen from the last
+  // observation, so a whole form is one call.
+  fillSteps(owner, fields) {
+    const entries = Array.isArray(fields) ? fields.map(item => [item?.name, item?.value]) : Object.entries(fields || {});
+    if (!entries.length || entries.length > 20) throw new Error('fill 需要 1 至 20 个 fields（name 为字段名，value 为要填的值）。');
+    const elements = this.trail(owner).elements;
+    return entries.map(([label, raw]) => {
+      const name = String(label ?? '').trim();
+      if (!name) throw new Error('fill 的每个字段都需要 name。');
+      const value = String(raw ?? '');
+      const clean = text => String(text || '').toLocaleLowerCase();
+      const exact = elements.filter(el => clean(el.name) === clean(name));
+      const loose = exact.length ? exact : elements.filter(el => clean(el.name).includes(clean(name)) && !['button', 'link'].includes(el.role));
+      const el = loose.length === 1 ? loose[0] : null;
+      if (!el) return {action: 'type', name, text: value};
+      if (el.options) return {action: 'select', ref: el.ref, value};
+      if (el.slider || el.role === 'slider') return {action: 'set_slider', ref: el.ref, sliderValue: Number(value)};
+      if (['checkbox', 'radio', 'switch'].includes(el.role) || typeof el.checked === 'boolean') {
+        const want = !/^(false|0|no|off|否|不|取消)$/i.test(value);
+        return el.checked === want ? null : {action: 'click', ref: el.ref};
+      }
+      return {action: 'type', ref: el.ref, text: value};
+    }).filter(Boolean);
+  }
+}
+
 function validateNativeAction(action, params) {
   const target = () => {
-    if (!(typeof params.ref === 'string' && params.ref.trim()) && !(typeof params.selector === 'string' && params.selector.trim())) {
+    if (!(typeof params.ref === 'string' && params.ref.trim()) && !(typeof params.selector === 'string' && params.selector.trim()) && !(typeof params.name === 'string' && params.name.trim())) {
       throw new Error('这个操作需要快照里的 ref 或网页 selector。');
     }
   };
   if (action === 'open' && !(typeof params.url === 'string' && params.url.trim())) throw new Error('打开网页需要 url。');
   if (action === 'show_file' && !(typeof params.path === 'string' && params.path.trim())) throw new Error('预览文件需要 path。');
   if (action === 'type') { target(); if (typeof params.text !== 'string') throw new Error('输入操作需要 text。'); }
-  if (action === 'click' && !(Number.isFinite(params.x) && Number.isFinite(params.y))) target();
+  if (action === 'select') { target(); if (params.value === undefined && typeof params.text !== 'string') throw new Error('选择下拉选项需要 value 或 text。'); }
+  if (action === 'locate' && !params.selector && !params.name && !params.text && !params.role) throw new Error('定位控件需要 name、role、text 或 selector。');
+  if (['click','move','hover','drag'].includes(action)) {
+    if (params.x !== undefined || params.y !== undefined) {
+      if (!Number.isFinite(params.x) || !Number.isFinite(params.y) || params.x < 0 || params.y < 0) throw new Error('鼠标坐标需同时提供有限的非负 x、y，单位为网页可见区域 CSS 像素。');
+      if (params.ref || params.selector || params.name) throw new Error('鼠标目标请在 ref/selector/name 与 x/y 中选择一种。');
+    } else target();
+    if (params.input !== undefined && !['auto','native'].includes(params.input)) throw new Error('input 只支持 auto 或 native。');
+    if (params.button !== undefined && !['left','right'].includes(params.button)) throw new Error('button 只支持 left 或 right。');
+    if (params.clickCount !== undefined && (!Number.isInteger(params.clickCount)||params.clickCount<1||params.clickCount>3)) throw new Error('clickCount 范围为 1 到 3。');
+  }
+  if (action === 'drag') {
+    const byRef=typeof params.toRef==='string'&&params.toRef.trim(),bySelector=typeof params.toSelector==='string'&&params.toSelector.trim(),byName=typeof params.toName==='string'&&params.toName.trim(),byPoint=params.toX!==undefined||params.toY!==undefined;
+    if ([!!byRef,!!bySelector,!!byName,byPoint].filter(Boolean).length!==1 || (byPoint&&(!Number.isFinite(params.toX)||!Number.isFinite(params.toY)||params.toX<0||params.toY<0))) throw new Error('拖拽终点请提供 toRef、toSelector、toName 或一组非负 toX/toY。');
+    if (params.button==='right') throw new Error('拖拽使用左键。');
+    if (params.durationMs!==undefined&&(!Number.isInteger(params.durationMs)||params.durationMs<100||params.durationMs>1500)) throw new Error('拖拽时间范围为 100 到 1500 毫秒。');
+  }
+  if(action==='set_slider'){target();if(!Number.isFinite(params.sliderValue))throw new Error('set_slider需要有限的sliderValue目标数值。');}
   if (action === 'press' && !['Enter', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(params.key)) {
     throw new Error('按键只支持回车、退出、制表和方向键，请填写 Enter、Escape、Tab 或 ArrowUp/Down/Left/Right。');
   }
-  if (action === 'scroll' && !Number.isFinite(params.dy) && !(typeof params.ref === 'string' && params.ref.trim())) throw new Error('滚动需要 dy 或 ref。');
+  if (action === 'scroll' && !Number.isFinite(params.dy) && !Number.isFinite(params.dx) && !params.ref && !params.selector) throw new Error('滚动需要 dx/dy、ref 或 selector。');
   if (action === 'eval' && !(typeof params.js === 'string' && params.js.trim())) throw new Error('本地网页执行需要 js。');
   if (action === 'wait') {
-    const criteria = [params.text !== undefined, params.selector !== undefined, params.ms !== undefined].filter(Boolean).length;
+    const criteria = [params.text !== undefined, params.selector !== undefined, params.ref !== undefined, params.name !== undefined, params.ms !== undefined].filter(Boolean).length;
     if (criteria !== 1 || (params.text !== undefined && !(typeof params.text === 'string' && params.text.trim()))
       || (params.selector !== undefined && !(typeof params.selector === 'string' && params.selector.trim()))
+      || (params.ref !== undefined && !(typeof params.ref === 'string' && params.ref.trim()))
+      || (params.name !== undefined && !(typeof params.name === 'string' && params.name.trim()))
+      || (params.waitFor !== undefined && !['visible','hidden','attached','detached','enabled'].includes(params.waitFor))
       || (params.ms !== undefined && (!Number.isInteger(params.ms) || params.ms < 0 || params.ms > 15_000))) {
-      throw new Error('等待请只填写 text、selector 或 ms 之一，最多 15 秒。');
+      throw new Error('等待请只填写 text、selector、ref、name 或 ms 之一，最多 15 秒。');
     }
   }
 }
@@ -464,7 +771,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
   return {
     name: 'app_browser',
     label: 'App 浏览器',
-    description: '控制先生或老板看得到的 App 侧栏浏览器。要展示网页、打开或播放网页视频、验证自己做的网页或本地开发服务时用本工具；只需后台抓取资料用 web_fetch 或 browser，操控其他应用用 computer。先 snapshot 取得 ref 再点击或输入。serve 用 dir 启动仅绑定 127.0.0.1 的静态服务，或用 command、cwd、port 启动项目服务（命令应绑定 127.0.0.1），最多等待 60 秒后自动在侧栏打开；stop_serve/serve_logs 只能管理本会话启动的服务。eval 只允许本地页面；用户正在操作或网页 ChatGPT 协作进行时写操作会明确拒绝，请稍后重试。',
+    description: '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -472,11 +779,33 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
         url: {type: 'string'}, focus: {type: 'boolean'}, maxChars: {type: 'integer', minimum: 1, maximum: 100_000},
         fullPage: {type: 'boolean'}, ref: {type: 'string'}, selector: {type: 'string'},
         x: {type: 'number'}, y: {type: 'number'}, text: {type: 'string'}, submit: {type: 'boolean'},
+        toRef: {type:'string'},toSelector: {type:'string'},toX: {type:'number'},toY: {type:'number'},
+        toName:{type:'string'},toRole:{type:'string'},toExact:{type:'boolean'},
+        durationMs: {type:'integer',minimum:100,maximum:1500},input: {type:'string',enum:['auto','native']},
+        sliderValue:{type:'number'},
+        button: {type:'string',enum:['left','right']},clickCount: {type:'integer',minimum:1,maximum:3},dx:{type:'number'},
         key: {type: 'string', enum: ['Enter', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']},
         dy: {type: 'number'}, ms: {type: 'integer', minimum: 0, maximum: 15_000}, js: {type: 'string'},
         path: {type: 'string'}, dir: {type: 'string'}, command: {type: 'string'}, cwd: {type: 'string'},
         port: {type: 'integer', minimum: 1, maximum: 65535}, pid: {type: 'integer', minimum: 1},
         timeout_ms: {type: 'integer', minimum: 1, maximum: 30_000},
+        compact: {type: 'boolean'}, includeText: {type: 'boolean'}, includeRects: {type: 'boolean'},
+        maxElements: {type: 'integer', minimum: 1, maximum: 300}, since: {type: 'string'},
+        scope: {type: 'string', enum: ['viewport','page']}, observe: {type: 'boolean'},
+        name: {type: 'string'}, role: {type: 'string'}, exact: {type: 'boolean'},
+        limit: {type: 'integer', minimum: 1, maximum: 40}, value: {type: 'string'},
+        remember: {type: 'string'}, title: {type: 'string'}, recipe: {type: 'string'}, submitName: {type: 'string'},
+        vars: {type: 'array', maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {name: {type: 'string'}, value: {type: 'string'}}, required: ['name', 'value']}},
+        fields: {type: 'array', minItems: 1, maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {name: {type: 'string'}, value: {type: 'string'}}, required: ['name', 'value']}},
+        waitUntil: {type: 'string', enum: ['domcontentloaded','load']},
+        waitFor: {type:'string',enum:['visible','hidden','attached','detached','enabled']},
+        targetTimeoutMs: {type: 'integer', minimum: 0, maximum: 5000},
+        steps: {type: 'array', minItems: 1, maxItems: 12, items: {type: 'object', additionalProperties: false,
+          properties: {action:{type:'string',enum:[...BATCH_ACTIONS]},ref:{type:'string'},selector:{type:'string'},name:{type:'string'},role:{type:'string'},exact:{type:'boolean'},
+            x:{type:'number'},y:{type:'number'},toRef:{type:'string'},toSelector:{type:'string'},toX:{type:'number'},toY:{type:'number'},durationMs:{type:'integer',minimum:100,maximum:1500},input:{type:'string',enum:['auto','native']},button:{type:'string',enum:['left','right']},clickCount:{type:'integer',minimum:1,maximum:3},dx:{type:'number'},
+            sliderValue:{type:'number'},
+            toName:{type:'string'},toRole:{type:'string'},toExact:{type:'boolean'},
+            text:{type:'string'},value:{type:'string'},submit:{type:'boolean'},key:{type:'string',enum:['Enter','Escape','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']},dy:{type:'number'},waitFor:{type:'string',enum:['visible','hidden','attached','detached','enabled']},ms:{type:'integer',minimum:0,maximum:15000},targetTimeoutMs:{type:'integer',minimum:0,maximum:5000}},required:['action']}},
       }, required: ['action'],
     },
     prepareBeforeToolCallParams(params, meta = {}) {
@@ -488,21 +817,107 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
       return params;
     },
     async execute(_toolCallId, params = {}, signal) {
+      const memory = servers.memory ||= new BrowserSiteMemory('');
+      const owner = sessionOwner(activeContext);
+      const remember = typeof params.remember === 'string' && params.remember.trim() ? params.remember.trim() : '';
+      const saved = reply => {
+        if (!remember || !reply.ok) return reply;
+        const kept = memory.save(owner, remember);
+        return {...reply, remembered: kept.ok ? kept.recipe : {ok: false, reason: kept.reason}};
+      };
+      // Validate everything before the first side effect. Never retry a
+      // completed prefix, even when a later control rerenders or navigates.
+      const runSteps = async (steps, {url, limit = 12, recipe} = {}) => {
+        if (!Array.isArray(steps) || !steps.length || steps.length > limit) throw new Error(`批量操作需要1至${limit}个步骤。`);
+        for (const step of steps) {
+          if (!step || !BATCH_ACTIONS.has(step.action)) throw new Error('batch只支持同页click/type/select/press/scroll/wait/move/hover/drag/set_slider。');
+          validateNativeAction(step.action, step);
+        }
+        if (url !== undefined && !(typeof url === 'string' && url.trim())) throw new Error('打开网页需要 url。');
+        if (browserBatches.has(servers)) throw new Error('另一组浏览器操作正在执行，请等待它完成。');
+        const lease = {}, completed = [], deadline = AbortSignal.timeout(Math.min(30000, Math.max(1, params.timeout_ms || (url ? 25000 : 15000))));
+        const batchSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+        browserBatches.set(servers, lease);
+        try {
+          if (url) {
+            const opened = await servers.request('open', {url, ...(params.focus !== undefined ? {focus: params.focus} : {})}, {signal: batchSignal});
+            if (!opened.ok) return {ok: false, reason: String(opened.reason || '侧栏暂时无法打开这个网页。'), completed, failedIndex: -1, replay: false, mayHaveExecuted: false};
+            memory.start(owner, opened.result?.page?.url || url);
+            memory.observe(owner, opened.result);
+          }
+          for (const [index, step] of steps.entries()) {
+            aborted(batchSignal);
+            const reply = await servers.request(step.action, {...step, observe: false}, {signal: batchSignal});
+            if (!reply.ok) {
+              if (recipe) memory.result(recipe, false);
+              return {ok: false, reason: String(reply.reason || '步骤未完成'), completed, failedIndex: index, failedStep: stepLabel(step), replay: false, mayHaveExecuted: WRITE_ACTIONS.has(step.action), nextAction: 'snapshot-before-retry'};
+            }
+            memory.record(owner, step);
+            memory.observe(owner, reply.result);
+            completed.push({index, action: step.action, result: reply.result || {}});
+          }
+          if (recipe) memory.result(recipe, true);
+          let observation;
+          if (params.observe !== false) {
+            const reply = await servers.request('snapshot', {compact: true, maxElements: 80, maxChars: 2400}, {signal: batchSignal});
+            if (reply.ok) { observation = reply.result; memory.observe(owner, observation); }
+          }
+          return {ok: true, completed, ...(observation ? {observation} : {}), message: '批量操作已完成。'};
+        } catch (error) {
+          if (recipe) memory.result(recipe, false);
+          return {ok: false, reason: batchSignal.aborted ? '这组操作已停止；已完成的步骤不会自动重发。' : error.message, completed, failedIndex: completed.length, replay: false, mayHaveExecuted: WRITE_ACTIONS.has(steps[completed.length]?.action), nextAction: 'snapshot-before-retry'};
+        } finally { if (browserBatches.get(servers) === lease) browserBatches.delete(servers); }
+      };
       try {
         const action = String(params.action || '');
+        if (action === 'batch') return toolResult(saved(await runSteps(params.steps, {url: params.url})));
+        if (action === 'fill') {
+          const steps = memory.fillSteps(owner, params.fields);
+          if (typeof params.submitName === 'string' && params.submitName.trim()) steps.push({action: 'click', name: params.submitName.trim(), exact: true});
+          if (!steps.length) return toolResult({ok: true, completed: [], message: '这些字段已经是目标值，没有操作。'});
+          return toolResult(saved(await runSteps(steps, {url: params.url, limit: 21})));
+        }
+        if (action === 'replay') {
+          const found = typeof params.recipe === 'string' && memory.find(params.recipe.trim());
+          if (!found) throw new Error('没有这个操作记录；先 open 页面查看 known 里的记录 id。');
+          const steps = memory.instantiate(found.recipe, params.vars);
+          for (const step of steps) if (!REPLAY_ACTIONS.has(step.action)) throw new Error('这个记录里有不能回放的步骤，请改用 batch。');
+          const url = params.url || (memory.trail(owner).key !== found.key ? found.page.url : undefined);
+          const result = await runSteps(steps, {url, limit: MAX_RECIPE_STEPS, recipe: found.recipe.id});
+          if (result.ok) memory.trail(owner).saved = true;
+          return toolResult({...result, recipe: found.recipe.id, ...(result.ok ? {} : {hint: '记录可能已过期：先看页面，再用 batch 完成；成功后带 remember 重新记住。'})});
+        }
+        if (action === 'remember') {
+          const kept = memory.save(owner, params.title || params.remember || '');
+          return toolResult(kept.ok ? {ok: true, message: '已记住这一页的操作，下次 open 时会出现在 known 里，可直接 replay。', recipe: kept.recipe} : kept);
+        }
+        if (action === 'recipes') {
+          const known = memory.known(owner, params.url);
+          return toolResult({ok: true, known: known || [], message: known ? '这一页已记住的操作。' : '这一页还没有记住的操作。'});
+        }
+        if (action === 'forget') return toolResult(memory.forget(String(params.recipe || '')) ? {ok: true, message: '已删除这条操作记录。'} : failure('没有这个操作记录。'));
+        if (browserBatches.has(servers) && WRITE_ACTIONS.has(action)) throw new Error('另一组浏览器操作正在执行，请等待它完成。');
         if (action === 'serve') {
           const result = await servers.serve(activeContext, params, {signal});
+          if (result.ok && result.url) { memory.start(owner, result.url); const known = memory.known(owner); if (known) result.known = known; }
           return toolResult(result);
         }
         if (action === 'stop_serve') return toolResult(await servers.stop(activeContext, params));
         if (action === 'serve_logs') return toolResult(servers.logs(activeContext, params));
         if (!NATIVE_ACTIONS.has(action)) throw new Error('不支持这个 App 浏览器操作。');
         validateNativeAction(action, params);
-        const reply = await servers.request(action, params, {signal});
-        if (!reply.ok) return toolResult(failure(String(reply.reason || 'App 浏览器没有完成这个操作。')));
+        const {remember: _remember, ...native} = params;
+        const reply = await servers.request(action, native, {signal});
+        if (!reply.ok) return toolResult({...failure(String(reply.reason || 'App 浏览器没有完成这个操作。')),mayHaveExecuted:reply.mayHaveExecuted===true,nextAction:reply.nextAction||'snapshot-before-retry'});
         const result = reply.result && typeof reply.result === 'object' ? reply.result : {};
-        const message = action === 'screenshot' ? '浏览器截图已保存，用 image 工具查看。' : 'App 浏览器操作已完成。';
-        return toolResult({...result, ok: true, message});
+        if (['open', 'show_file'].includes(action)) memory.start(owner, result.page?.url || result.url || params.url || '');
+        else memory.record(owner, params);
+        const trail = memory.observe(owner, result);
+        // Saved steps for this page ride along with the first observation of it.
+        let known;
+        if (trail.key && trail.announced !== trail.key) { known = memory.known(owner); trail.announced = trail.key; }
+        const message = action === 'screenshot' ? '浏览器截图已保存，用 image 工具查看。' : known ? '已打开。这一页有记住的操作（known），能用就直接 replay。' : 'App 浏览器操作已完成。';
+        return toolResult(saved({...result, ...(known ? {known} : {}), ok: true, message}));
       } catch (error) {
         return toolResult(failure(error instanceof Error ? error.message : 'App 浏览器调用失败，请检查后重试。'));
       }
@@ -514,7 +929,9 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
 // in index.mjs. agent_end is a turn boundary, so never stop a preview there.
 export function registerAppBrowserLifecycle(api, options = {}) {
   const servers = new AppBrowserServers(options);
-  api.on?.('session_end', (event, ctx) => servers.cleanupSession(event, ctx));
+  api.on?.('session_end', (event, ctx) => { servers.memory.flush(sessionOwner(ctx) || sessionOwner(event)); return servers.cleanupSession(event, ctx); });
+  // Turn end is when an unsaved, successful trail is kept for next time.
+  api.on?.('agent_end', (event, ctx) => { try { servers.memory.flush(sessionOwner(ctx) || sessionOwner(event)); } catch {} });
   api.on?.('gateway_stop', () => servers.dispose());
   api.registerService?.({id: 'pinkie-app-browser', start() { servers.disposed = false; liveManagers.add(servers); }, stop: () => servers.dispose()});
   return ctx => createAppBrowserTool(ctx, {servers});

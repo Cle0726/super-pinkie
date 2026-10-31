@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN" data-cle="0.1.0" data-theme-mode="light">
+<head>
+<meta charset="utf-8">
+<title>surface audit</title>
+<link rel="stylesheet" href="/tokens.css">
+<!-- 顺序与真实加载一致：bridge 之后才是各移植模块自己的样式 -->
+<link rel="stylesheet" href="/bridge.css">
+<link rel="stylesheet" href="/tiers.css">
+<link rel="stylesheet" href="/ask-user.css">
+<link rel="stylesheet" href="/settings-user.css">
+<link rel="stylesheet" href="/capabilities.css">
+<link rel="stylesheet" href="/usage.css">
+<link rel="stylesheet" href="/memory.css">
+<link rel="stylesheet" href="/rich.css">
+<link rel="stylesheet" href="/workbench.css">
+<link rel="stylesheet" href="/notebook.css">
+<style>
+  html, body { margin: 0; background: var(--cle-paper); font: 13px/1.5 var(--cle-sans); color: var(--cle-ink); }
+  #stage { padding: 16px; display: grid; gap: 12px; }
+  #audit { white-space: pre-wrap; font: 11px/1.45 var(--cle-mono); color: var(--cle-ink-2); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- 提问卡：与 laolao-ask-user.js 生成的 DOM 同构 -->
+  <section class="laolao-ask" id="ask">
+    <div class="laolao-ask__head">
+      <span class="laolao-ask__who">Li An 想问你</span>
+      <span class="laolao-ask__chip">多选题</span>
+      <button class="laolao-ask__later" type="button">稍后再说</button>
+    </div>
+    <div class="laolao-ask__question">这次要先把哪一段放到前面？</div>
+    <div class="laolao-ask__options">
+      <button class="laolao-ask__option" type="button"><span class="laolao-ask__key">1</span><span class="laolao-ask__text"><strong>先讲结论</strong><small>把判断放在最前面</small></span></button>
+      <button class="laolao-ask__option is-picked" type="button"><span class="laolao-ask__key">2</span><span class="laolao-ask__text"><strong>先补背景</strong><small>从你为什么要做说起</small></span></button>
+      <button class="laolao-ask__option" type="button" disabled><span class="laolao-ask__key">3</span><span class="laolao-ask__text"><strong>不可选</strong><small>禁用态</small></span></button>
+    </div>
+    <div class="laolao-ask__other">
+      <input class="laolao-ask__other-input" placeholder="或者自己写一句…">
+      <button class="laolao-ask__other-send" type="button" disabled>发送</button>
+    </div>
+    <div class="laolao-ask__foot"><span class="laolao-ask__hint">可以多选 · Esc 稍后再说</span><button class="laolao-ask__confirm" type="button" disabled>发送选择</button></div>
+  </section>
+
+  <!-- 用量胶囊 -->
+  <div class="laolao-usage" id="usage">
+    <span class="laolao-usage__chip"><span class="laolao-usage__label">输入</span> <span class="laolao-usage__value">12.4K</span></span>
+    <span class="laolao-usage__chip laolao-usage__chip--cost"><span class="laolao-usage__label">累计估算</span> <span class="laolao-usage__value">$0.42</span></span>
+    <span class="laolao-usage__chip laolao-usage__chip--runtime" data-state="live"><span class="laolao-usage__label">链路</span> <span class="laolao-usage__value">生成 3s</span></span>
+  </div>
+
+  <!-- 功能面板里的卡片（capabilities + settings 零件） -->
+  <section id="cle-utilities" style="position:static;inset:auto;width:min(620px,100%);height:auto">
+    <div class="pinkie-user-settings__scroll">
+      <section class="pinkie-user-settings__card pk-cap">
+        <header class="pinkie-user-settings__card-header">
+          <span class="pinkie-user-settings__icon">⏰</span>
+          <h3 class="pinkie-user-settings__card-title">定时任务</h3>
+        </header>
+        <p class="pinkie-user-settings__card-hint">让 Li An 按时去做一件事。</p>
+        <div class="pk-cap__list">
+          <article class="pk-job" data-enabled="true">
+            <div class="pk-job__when"><b>08:00</b><span>每天</span></div>
+            <div class="pk-job__main">
+              <strong>早上的天气</strong>
+              <p class="pk-job__text">查一下今天的天气。</p>
+              <small class="pk-job__meta">不推送 · 雅叙模式 · 下次 明天 08:00</small>
+              <div class="pk-job__ops">
+                <button class="pk-cap__link" type="button">现在做一次</button>
+                <button class="pk-cap__link" type="button">修改</button>
+                <button class="pk-cap__link" type="button" disabled>删除</button>
+              </div>
+            </div>
+            <button class="pk-cap__switch" role="switch" aria-checked="true" aria-label="暂停"><i></i></button>
+          </article>
+        </div>
+        <div class="pk-cap__bar">
+          <button class="pinkie-user-settings__button pinkie-user-settings__button--primary" type="button">＋ 新的定时任务</button>
+          <button class="pinkie-user-settings__button" type="button">取消</button>
+        </div>
+        <p class="pk-cap__status" data-state="ok">改好了。</p>
+        <p class="pk-cap__status" data-state="error">没有完成，再试一次。</p>
+        <p class="pk-cap__warn">调度暂时关着，任务不会自动执行。</p>
+        <div class="pk-cap__ideas">
+          <button class="pk-cap__idea" type="button"><b>早上的天气</b><span>每天早上 8 点</span></button>
+        </div>
+      </section>
+      <section class="pk-cap" id="pinkie-connectors">
+        <header class="pinkie-user-settings__card-header">
+          <span class="pinkie-user-settings__icon">🔌</span>
+          <h3 class="pinkie-user-settings__card-title">连接器</h3>
+        </header>
+        <div class="pk-cap__grid">
+          <button class="pk-cap__recipe is-selected" data-id="github" type="button"><span class="pk-tile pk-tile--github">GH</span><span class="pk-cap__recipe-copy"><b>GitHub</b><small>查仓库、议题和代码</small></span></button>
+          <button class="pk-cap__recipe" data-id="files" type="button"><span class="pk-tile pk-tile--files">F</span><span class="pk-cap__recipe-copy"><b>本地资料夹</b><small>只读打开一个文件夹</small></span></button>
+        </div>
+        <div class="pk-cap__sheet">
+          <div class="pk-cap__line">
+            <div class="pk-cap__line-label"><span>访问令牌</span><small>在 GitHub 设置里生成</small></div>
+            <div class="pk-cap__line-body"><input class="pk-cap__input" placeholder="ghp_…"></div>
+          </div>
+          <div class="pk-cap__actions">
+            <button class="pinkie-user-settings__button pinkie-user-settings__button--primary" type="button">接入</button>
+            <button class="pk-cap__link" type="button">取消</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- 记忆匣 -->
+  <section class="laolao-memory-panel" id="memory">
+    <header class="laolao-memory-head">
+      <div class="laolao-memory-title"><strong>雅叙 · 记忆匣</strong><span>物理独立保存</span></div>
+      <button class="laolao-memory-close" type="button">×</button>
+    </header>
+    <div class="laolao-memory-toolbar">
+      <input class="laolao-memory-search" placeholder="搜索当前模式记忆">
+      <button class="laolao-memory-button laolao-memory-button--primary" type="button">＋ 新增</button>
+    </div>
+    <div class="laolao-memory-list">
+      <article class="laolao-memory-card"><span class="laolao-memory-card__kind">偏好</span><p class="laolao-memory-card__text">先生喜欢先看结论。</p></article>
+    </div>
+    <footer class="laolao-memory-foot">
+      <span class="laolao-memory-status">共 1 条</span>
+      <button class="laolao-memory-button laolao-memory-button--danger" type="button">清空当前范围</button>
+    </footer>
+  </section>
+
+  <pre id="audit"></pre>
+</div>
+<script type="module">
+  const log = [];
+  const say = (l) => { log.push(l); document.getElementById('audit').textContent = log.join('\n'); };
+
+  /* ── 主题切换后的确定稳定条件 ────────────────────────────────────────────
+     不能用固定 sleep：实测这些组件带 background/border-color 过渡，空闲时要 ~240ms
+     才走完，负载高时更久；320ms 只是"墙上时间"，不是"过渡已完成"。
+     这里用两层判定，任一不满足都算失败而不是静默通过：
+       1) 该元素没有正在运行的 transition/animation；
+       2) 连续若干帧读到的计算值完全一致（排除过渡已结束但首帧被 paint 推迟）。
+     始终有界：超过 BUDGET_MS 抛错，并把当时的未完成动画名带进失败输出。 */
+  const SETTLE_FRAMES = 3;
+  const SETTLE_BUDGET_MS = 4000;
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  // 只能等"有限时长"的过渡/动画。页面里有 1s infinite 的脉冲点（laolao-runtime-dot），
+  // 如果连无限循环也等，就永远等不到稳定——那正是之前只能靠 sleep 硬凑的根因。
+  const isFiniteAnim = (a) => {
+    const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : null;
+    if (!t) return true;
+    return Number.isFinite(t.endTime) || Number.isFinite(t.activeDuration);
+  };
+  const pendingFinite = (anims) => anims.filter((a) =>
+    (a.playState === 'running' || a.playState === 'pending') && isFiniteAnim(a));
+
+  // 参与稳定性判定的样式量：只管会因主题切换而过渡的那些属性。
+  // 不把 opacity/transform 放进来：它们被无限脉冲动画持续改写，放进来会让"稳定"永远不可达。
+  const THEME_PROPS = ['color', 'backgroundColor', 'borderTopColor', 'borderRightColor',
+    'borderBottomColor', 'borderLeftColor', 'boxShadow', 'outlineColor', 'fill', 'stroke'];
+  const snapshot = (el) => {
+    const cs = getComputedStyle(el);
+    return THEME_PROPS.map((p) => cs[p]).join('|');
+  };
+
+  async function settleTree(root, label) {
+    const started = performance.now();
+    const stuck = new Set();
+    let prev = null, stable = 0;
+    while (performance.now() - started < SETTLE_BUDGET_MS) {
+      await frame();
+      const all = root && root.getAnimations ? root.getAnimations({subtree: true}) : [];
+      const running = pendingFinite(all);
+      if (running.length) {
+        stable = 0; prev = null;
+        for (const a of running) stuck.add(a.transitionProperty || a.animationName || a.constructor.name);
+        continue;
+      }
+      const now = Array.from(root.querySelectorAll('*')).slice(0, 500).map(snapshot).join('\n');
+      if (now === prev) { if (++stable >= SETTLE_FRAMES) return {ok: true, waited: Math.round(performance.now() - started)}; }
+      else { prev = now; stable = 1; }
+    }
+    return {ok: false, reason: `${label} 在 ${SETTLE_BUDGET_MS}ms 内未稳定`, running: [...stuck].join(',')};
+  }
+
+  /* 让浏览器自己解析 var()：把声明写到一个探针元素上，读回 computed style。
+     返回 null 表示"浏览器在解析后丢弃了这条声明"（正是无效声明的特征）。 */
+  function probe(el, prop, value) {
+    el.style.setProperty(prop, value);
+    const inline = el.style.getPropertyValue(prop);
+    const resolved = getComputedStyle(el).getPropertyValue(prop).trim();
+    el.style.removeProperty(prop);
+    // 关键：内联属性会保留原文（含 var()），要看的是"浏览器解析变量之后"的 computed 值。
+    // 颜色槽塞进整组阴影时，computed 会是 none —— 这才是整条声明失效的特征。
+    if (!inline) return {ok: false, resolved: '', reason: 'declaration dropped'};
+    if (!resolved || resolved === 'none' || resolved === 'normal') {
+      return {ok: false, resolved, reason: 'resolved to ' + (resolved || 'empty')};
+    }
+    if (resolved.includes('var(')) return {ok: false, resolved, reason: 'unresolved var'};
+    return {ok: true, resolved};
+  }
+
+  const px = (v) => Math.round(parseFloat(v || '0') * 100) / 100;
+  // color-mix() 会计算成 color(srgb 0.94 0.91 0.86) 这种格式，用正则取数字会读错。
+  // 统一交给浏览器自己转成 rgb()：建一个探针元素，把颜色赋上去再读回 computed。
+  const norm = document.createElement('i');
+  norm.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden';
+  // 注意 color(srgb …) 的分量是 0–1 的小数，不能当 0–255 用（那会让对比度算出假值）。
+  const rgb = (v) => {
+    if (!v) return [0, 0, 0];
+    if (/^rgba?\(/.test(v)) return (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    if (/^color\(/.test(v)) {
+      const nums = (v.slice(v.indexOf('(') + 1).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+      return nums.map((n) => Math.round(n <= 1 ? n * 255 : n));
+    }
+    norm.style.color = '';
+    norm.style.color = v;
+    const out = getComputedStyle(norm).color;
+    return (out.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  };
+  const lum = ([r, g, b]) => {
+    const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const alpha = (v) => {
+    if (!v) return 1;
+    if (/^rgba?\(/.test(v)) { const m = v.match(/[\d.]+/g) || []; return m.length > 3 ? Number(m[3]) : 1; }
+    if (/^color\(/.test(v)) {
+      const m = v.slice(v.indexOf('(') + 1).match(/[\d.]+/g) || [];
+      return m.length > 3 ? Number(m[3]) : 1;
+    }
+    return 1;
+  };
+  const over = (fg, bg) => {
+    const a = alpha(fg); const f = rgb(fg), b = rgb(bg);
+    return `rgb(${f.map((c, i) => Math.round(c * a + b[i] * (1 - a))).join(', ')})`;
+  };
+  const asRgbRaw = (v) => {
+    if (/^color\(/.test(v)) { const [r, g, b] = rgb(v); return `rgb(${r}, ${g}, ${b})`; }
+    if (/^rgba?\(/.test(v)) return v;
+    norm.style.color = '';
+    norm.style.color = v;
+    return getComputedStyle(norm).color;
+  };
+  const asRgb = (v) => {
+    if (!v) return 'rgb(0, 0, 0)';
+    if (/^rgba?\(/.test(v)) return v;
+    norm.style.color = '';
+    norm.style.color = v;
+    return getComputedStyle(norm).color;
+  };
+  const contrast = (fg, bg) => {
+    const solid = over(fg, bg);
+    const [l1, l2] = [lum(rgb(solid)), lum(rgb(bg))].sort((x, y) => y - x);
+    return Math.round(((l1 + 0.05) / (l2 + 0.05)) * 100) / 100;
+  };
+  const visible = (el) => {
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0;
+  };
+  // background-color 可能是 color(srgb …)：先统一成 rgb()，再判断是否够不透明，
+  // 否则会把"半个像素的描边色"当成页面底色，算出一个假的对比度。
+  const solidBg = (el, base) => {
+    for (let n = el; n; n = n.parentElement) {
+      const raw = getComputedStyle(n).backgroundColor;
+      if (!raw || raw === 'rgba(0, 0, 0, 0)') continue;
+      const a = alpha(raw);
+      if (a <= 0.5) continue;
+      return a >= 1 ? asRgb(raw) : over(asRgb(raw).replace(/^rgb\(/, 'rgba(').replace(/\)$/, `, ${a})`), base);
+    }
+    return base;
+  };
+  const bgOf = (el) => solidBg(el, 'rgb(255, 255, 255)');
+
+
+  document.body.append(norm);
+  const checker = document.createElement('div');
+  checker.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden';
+  document.body.append(checker);
+
+  /* ── token 类型核对 ── */
+  const tokenChecks = [
+    ['--cle-shadow', 'box-shadow', 'shadow'],
+    ['--cle-shadow-pop', 'box-shadow', 'shadow'],
+    ['--cle-gaze', 'outline-color', 'colour'],
+    ['--cle-gaze-soft', 'background-color', 'colour'],
+    ['--cle-line-strong', 'border-top-color', 'colour'],
+  ];
+  for (const [token, prop, kind] of tokenChecks) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    const multi = (value.match(/rgba?\(/g) || []).length > 1 || /\d+px\s+\d+px/.test(value);
+    say(`TOKEN ${token} kind=${kind} multiValue=${multi ? 'yes' : 'no'} value=${value.slice(0, 52)}`);
+  }
+
+  // 多值叠加也必须有效：描边色 + 整组阴影
+  {
+    const r = probe(checker, 'box-shadow', 'inset 0 0 0 1px var(--pk-faint), var(--cle-shadow-pop)');
+    say(`SHADOW combined valid=${r.ok ? 'yes' : 'no'} resolved=${(r.resolved || r.reason).slice(0, 58)}`);
+  }
+
+  /* 阴影 token 作为整条值使用：必须有效，且解析后是合法阴影 */
+  for (const token of ['--cle-shadow', '--cle-shadow-pop']) {
+    const r = probe(checker, 'box-shadow', `var(${token})`);
+    say(`SHADOW ${token} valid=${r.ok ? 'yes' : 'no'} resolved=${(r.resolved || r.reason).slice(0, 60)}`);
+    // 反例：同一个 token 塞进颜色槽必须被判为无效——这就是 "无效 CSS" 的判定标准
+    const bad = probe(checker, 'box-shadow', `inset 0 0 0 1px var(${token})`);
+    say(`SHADOW ${token}-as-colour valid=${bad.ok ? 'yes' : 'no'} reason=${bad.reason || 'accepted!'}`);
+  }
+
+  /* ── 提问卡 ── */
+  const ask = document.getElementById('ask');
+  const askBg = bgOf(ask);
+  const rows = [
+    ['ASK surface', ask, 'color', askBg],
+    ['ASK question', ask.querySelector('.laolao-ask__question'), 'color', bgOf(ask.querySelector('.laolao-ask__question'))],
+    ['ASK who', ask.querySelector('.laolao-ask__who'), 'color', askBg],
+    ['ASK chip', ask.querySelector('.laolao-ask__chip'), 'color', bgOf(ask.querySelector('.laolao-ask__chip'))],
+    ['ASK option strong', ask.querySelector('.laolao-ask__option strong'), 'color', bgOf(ask.querySelector('.laolao-ask__option'))],
+    ['ASK option small', ask.querySelector('.laolao-ask__option small'), 'color', bgOf(ask.querySelector('.laolao-ask__option'))],
+    ['ASK picked key', ask.querySelector('.laolao-ask__option.is-picked .laolao-ask__key'), 'color', bgOf(ask.querySelector('.laolao-ask__option.is-picked .laolao-ask__key'))],
+    ['ASK hint', ask.querySelector('.laolao-ask__hint'), 'color', askBg],
+    ['ASK later', ask.querySelector('.laolao-ask__later'), 'color', askBg],
+  ];
+  for (const [name, el, prop, bg] of rows) {
+    if (!el) { say(`${name} MISSING`); continue; }
+    const cs = getComputedStyle(el);
+    say(`${name} ${prop}=${cs[prop]} bg=${bg} contrast=${contrast(cs[prop], bg)}`);
+  }
+  const send = ask.querySelector('.laolao-ask__other-send');
+  say(`ASK send disabled=${send.disabled} bg=${getComputedStyle(send).backgroundColor} colour=${getComputedStyle(send).color} contrast=${contrast(getComputedStyle(send).color, getComputedStyle(send).backgroundColor)}`);
+  const opt = ask.querySelector('.laolao-ask__option:not(.is-picked)');
+  const focusRing = probe(opt, 'outline', '2px solid var(--cle-gaze)');
+  say(`ASK focus-ring valid=${focusRing.ok ? 'yes' : 'no'} resolved=${(focusRing.resolved || focusRing.reason).slice(0, 40)}`);
+  // 假的焦点环：oc/restyle 的写法（outline 用 8% 软色）解析后几乎透明
+  const weak = getComputedStyle(document.documentElement).getPropertyValue('--cle-gaze-soft').trim();
+  say(`ASK soft-ring-as-outline alpha=${alpha(weak)} (0.08 = 只在背景上成立，不能当描边)`);
+
+  /* ── 用量胶囊 ── */
+  for (const chip of document.querySelectorAll('#usage .laolao-usage__chip')) {
+    const cs = getComputedStyle(chip);
+    say(`USAGE chip bg=${cs.backgroundColor} colour=${cs.color} contrast=${contrast(cs.color, bgOf(chip))}`);
+  }
+
+  /* ── 功能面板卡片 ── */
+  const util = document.getElementById('cle-utilities');
+  const utilBg = bgOf(util.querySelector('.pk-cap'));
+  for (const [name, sel, prop] of [
+    ['CARD title', '.pk-cap .pinkie-user-settings__card-title', 'color'],
+    ['CARD hint', '.pk-cap .pinkie-user-settings__card-hint', 'color'],
+    ['CARD job strong', '.pk-job__main > strong', 'color'],
+    ['CARD job meta', '.pk-job__meta', 'color'],
+    ['CARD job when', '.pk-job__when b', 'color'],
+    ['CARD link', '.pk-cap__link', 'color'],
+    ['CARD ok', '.pk-cap__status[data-state="ok"]', 'color'],
+    ['CARD error', '.pk-cap__status[data-state="error"]', 'color'],
+    ['CARD warn', '.pk-cap__warn', 'color'],
+    ['CARD idea b', '.pk-cap__idea b', 'color'],
+    ['CARD idea span', '.pk-cap__idea span', 'color'],
+    ['CARD recipe b', '.pk-cap__recipe-copy b', 'color'],
+    ['CARD recipe small', '.pk-cap__recipe-copy small', 'color'],
+    ['CARD input', '.pk-cap__input', 'color'],
+    ['CARD line label', '.pk-cap__line-label span', 'color'],
+  ]) {
+    const el = util.querySelector(sel);
+    if (!el) { say(`${name} MISSING`); continue; }
+    const cs = getComputedStyle(el);
+    say(`${name} ${prop}=${cs[prop]} contrast=${contrast(cs[prop], bgOf(el))}`);
+  }
+  const primary = util.querySelector('.pinkie-user-settings__button--primary');
+  say(`CARD primary bg=${getComputedStyle(primary).backgroundColor} colour=${getComputedStyle(primary).color} contrast=${contrast(getComputedStyle(primary).color, bgOf(primary))}`);
+  const warn = util.querySelector('.pk-cap__warn');
+  say(`CARD warn bg=${getComputedStyle(warn).backgroundColor} contrast=${contrast(getComputedStyle(warn).color, bgOf(warn))}`);
+  const sw = util.querySelector('.pk-cap__switch');
+  const swRing = probe(sw, 'outline', '2px solid var(--cle-gaze)');
+  say(`CARD switch bg=${getComputedStyle(sw).backgroundColor} focusRing=${swRing.ok ? 'valid' : 'invalid'}`);
+  // 输入焦点：oc/restyle 把 3px 环写成 var(--cle-shadow)，这里验证正确写法
+  const input = util.querySelector('.pk-cap__input');
+  const inputRing = probe(input, 'box-shadow', '0 0 0 3px var(--cle-gaze-soft)');
+  say(`CARD input focus-ring valid=${inputRing.ok ? 'yes' : 'no'} resolved=${(inputRing.resolved || inputRing.reason).slice(0, 46)}`);
+
+  /* ── 记忆匣 ── */
+  const memory = document.getElementById('memory');
+  const memBg = bgOf(memory);
+  for (const [name, sel] of [
+    ['MEM title', '.laolao-memory-title strong'],
+    ['MEM subtitle', '.laolao-memory-title span'],
+    ['MEM search', '.laolao-memory-search'],
+    ['MEM card text', '.laolao-memory-card__text'],
+    ['MEM status', '.laolao-memory-status'],
+  ]) {
+    const el = memory.querySelector(sel);
+    if (!el) { say(`${name} MISSING`); continue; }
+    const cs = getComputedStyle(el);
+    say(`${name} colour=${cs.color} contrast=${contrast(cs.color, bgOf(el))}`);
+  }
+  const memPrimary = memory.querySelector('.laolao-memory-button--primary');
+  say(`MEM primary bg=${getComputedStyle(memPrimary).backgroundColor} colour=${getComputedStyle(memPrimary).color} contrast=${contrast(getComputedStyle(memPrimary).color, getComputedStyle(memPrimary).backgroundColor)}`);
+  const memDanger = memory.querySelector('.laolao-memory-button--danger');
+  say(`MEM danger colour=${getComputedStyle(memDanger).color} contrast=${contrast(getComputedStyle(memDanger).color, memBg)}`);
+
+  /* ── 夜间：每个元素在切主题前先克隆一份，避免量到旧的样式对象 ── */
+  document.documentElement.dataset.themeMode = 'dark';
+  void document.body.offsetHeight;
+  // 等真实过渡结束（不是等墙钟）：整棵 stage 子树的 transition/animation 归零后再等计算值稳 3 帧。
+  const nightSettle = await settleTree(document.getElementById('stage'), 'NIGHT 主题');
+  const night = [];
+  if (!nightSettle.ok) night.push(`NIGHT SETTLE FAILED ${nightSettle.reason} running=[${nightSettle.running}]`);
+  const darkBgOf = (el) => {
+    for (let n = el; n; n = n.parentElement) {
+      const bg = getComputedStyle(n).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && alpha(bg) > 0.5) return over(bg, 'rgb(0, 0, 0)');
+    }
+    return 'rgb(0, 0, 0)';
+  };
+  for (const [name, sel, host] of [
+    ['ASK surface', '.laolao-ask', null],
+    ['ASK question', '.laolao-ask__question', null],
+    ['ASK hint', '.laolao-ask__hint', null],
+    ['ASK option strong', '.laolao-ask__option strong', null],
+    ['CARD title', '#cle-utilities .pk-cap .pinkie-user-settings__card-title', null],
+    ['CARD hint', '#cle-utilities .pk-cap .pinkie-user-settings__card-hint', null],
+    ['CARD job meta', '#cle-utilities .pk-job__meta', null],
+    ['CARD ok', '#cle-utilities .pk-cap__status[data-state="ok"]', null],
+    ['CARD warn', '#cle-utilities .pk-cap__warn', null],
+    ['CARD recipe small', '#cle-utilities .pk-cap__recipe-copy small', null],
+    ['MEM title', '.laolao-memory-title strong', null],
+    ['MEM subtitle', '.laolao-memory-title span', null],
+    ['MEM card text', '.laolao-memory-card__text', null],
+    ['MEM status', '.laolao-memory-status', null],
+  ]) {
+    const el = document.querySelector(sel);
+    if (!el) { night.push(`NIGHT ${name} MISSING`); continue; }
+    const cs = getComputedStyle(el);
+    const bg = darkBgOf(el);
+    night.push(`NIGHT ${name} colour=${cs.color} bg=${bg} contrast=${contrast(cs.color, bg)}`);
+  }
+  for (const [name, sel] of [
+    ['USAGE chip', '#usage .laolao-usage__chip'],
+    ['USAGE cost', '#usage .laolao-usage__chip--cost'],
+    ['CARD primary', '#cle-utilities .pinkie-user-settings__button--primary'],
+    ['MEM primary', '.laolao-memory-button--primary'],
+    ['ASK send disabled', '.laolao-ask__other-send'],
+  ]) {
+    const el = document.querySelector(sel);
+    if (!el) { night.push(`NIGHT ${name} MISSING`); continue; }
+    const cs = getComputedStyle(el);
+    const bg = cs.backgroundColor === 'rgba(0, 0, 0, 0)' ? darkBgOf(el.parentElement) : over(cs.backgroundColor, 'rgb(0, 0, 0)');
+    night.push(`NIGHT ${name} colour=${cs.color} bg=${bg} contrast=${contrast(cs.color, bg)}`);
+  }
+  // 焦点环必须仍然是实色
+  const ring = probe(document.querySelector('.laolao-ask__option'), 'outline', '2px solid var(--cle-gaze)');
+  night.push(`NIGHT focus-ring valid=${ring.ok ? 'yes' : 'no'} resolved=${(ring.resolved || ring.reason).slice(0, 40)}`);
+  {
+    const el = document.querySelector('.laolao-ask__option');
+    const all=[...document.styleSheets].flatMap(sh=>{try{return [...sh.cssRules]}catch{return[]}});
+    const hits=all.filter(r=>r.selectorText&&/laolao-ask__option/.test(r.selectorText)&&(()=>{try{return el.matches(r.selectorText.split(',')[0].trim())}catch{return false}})());
+    // 全表扫描：任何声明了 background 且匹配该元素的规则
+    const bgRules=all.filter(r=>r.selectorText && r.style && (r.style.background||r.style.backgroundColor));
+    const matched=bgRules.filter(r=>{try{return [...r.selectorText.split(',')].some(sel=>el.matches(sel.trim()))}catch{return false}});
+  }
+  night.forEach(say);
+  document.documentElement.dataset.themeMode = 'light';
+
+  /* ── 运行时注入样式的模块（样式写在 JS 里，必须真的加载模块才测得到） ── */
+  const MODULES = [
+    ['DS pop', '/desensitize.js', '<div id="laolao-desensitize-pop"><div class="ds-head"><span class="ds-head__title">脱敏</span></div><select class="ds-select"><option>模型</option></select><textarea class="ds-input" placeholder="原文"></textarea><div class="ds-bar"><span class="ds-status">就绪</span><button class="ds-run">处理</button></div><button class="ds-apply">应用</button></div>'],
+    ['THINK menu', '/deep-think.js', '<div class="laolao-deep-think-menu"><div class="laolao-deep-think-menu__head">思考深度</div><div class="laolao-deep-think-menu__choices"><button class="laolao-deep-think-menu__item" data-tier="base"><span class="laolao-deep-think-menu__copy"><span class="laolao-deep-think-menu__label">标准</span><span class="laolao-deep-think-menu__summary">日常问答</span></span></button><button class="laolao-deep-think-menu__item is-selected" data-tier="boost"><span class="laolao-deep-think-menu__copy"><span class="laolao-deep-think-menu__label">加强</span><span class="laolao-deep-think-menu__summary">多步推理</span></span></button></div><div class="laolao-deep-think-menu__hint">当前：加强</div><div class="laolao-deep-think-menu__footer">⌘. 切换</div></div>'],
+  ];
+  const moduleProbes = [];
+  const runModules = async (tag) => {
+  // deep-think / desensitize / web-gpt 都把 CSS 内联在自己的 <style> 里。
+  // 这里直接把它们的 style 文本取出来注入，再按真实 class 结构量取。
+  const injectModuleCss = async (file) => {
+    const txt = await (await fetch(file)).text();
+    const m = txt.match(/textContent = `([\s\S]*?)`;/) || txt.match(/textContent=`([\s\S]*?)`;/);
+    if (!m) return false;
+    const st = document.createElement('style');
+    st.textContent = m[1];
+    document.head.append(st);
+    return true;
+  };
+  for (const [label0, file, html] of MODULES) {
+    const label = tag + ' ' + label0;
+    const ok = await injectModuleCss(file);
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:relative;padding:8px';
+    holder.innerHTML = html;
+    document.getElementById('stage').append(holder);
+    const root = holder.firstElementChild;
+    const cs = getComputedStyle(root);
+    const bg = solidBg(root.parentElement, 'rgb(255, 255, 255)');
+    moduleProbes.push(`MODULE ${label} injected=${ok ? 'yes' : 'no'} colour=${cs.color} bg=${bg} contrast=${contrast(cs.color, bg)}`);
+    // 面板里每一块文字都要能读
+    for (const el of root.querySelectorAll('span, strong, small, button, select, textarea, div')) {
+      const t = (el.textContent || '').trim();
+      if (!t || el.children.length) continue;
+      const s2 = getComputedStyle(el);
+      const b2 = solidBg(el, bg);
+      const v = contrast(s2.color, b2);
+      if (v < 4.5) moduleProbes.push(`MODULE ${label} LOW "${t.slice(0, 12)}" colour=${s2.color} bg=${b2} contrast=${v}`);
+    }
+    // 焦点环必须实色
+    const r = probe(root.querySelector('button, select, textarea'), 'outline', '2px solid var(--cle-gaze)');
+    moduleProbes.push(`MODULE ${label} ring=${r.ok ? 'yes' : 'no'}`);
+    holder.remove();
+  }
+  };
+  await runModules('LIGHT');
+  document.documentElement.dataset.themeMode = 'dark';
+  void document.body.offsetHeight;
+  const moduleNightSettle = await settleTree(document.getElementById('stage'), 'NIGHT 模块');
+  await runModules('NIGHT');
+  if (!moduleNightSettle.ok) say(`MODULE NIGHT SETTLE FAILED ${moduleNightSettle.reason} running=[${moduleNightSettle.running}]`);
+  document.documentElement.dataset.themeMode = 'light';
+  void document.body.offsetHeight;
+  await settleTree(document.getElementById('stage'), 'LIGHT 复原');
+
+  moduleProbes.forEach(say);
+
+  say('AUDIT_DONE');
+</script>
+</body>
+</html>

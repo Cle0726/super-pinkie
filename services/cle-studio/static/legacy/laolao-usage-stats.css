@@ -1,0 +1,152 @@
+/* C.le. · 五个模式与派对共用的累计用量胶囊。
+   原版是粉色实底 + 白字（白字压 #e94f91 只有 3.5:1），这里改成纸面胶囊 + 描边：
+   数字用墨色、标签用二级墨色，语义状态（在线/生成/离线、成功、失败）保留真实颜色。
+   数值上涨的脉冲只做位移动画，不再把底色临时刷成粉色。 */
+
+.laolao-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 12px;
+  white-space: nowrap;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none;
+  cursor: default;
+  opacity: 0.88;
+  transition: opacity 0.15s ease;
+}
+
+.laolao-usage,
+.laolao-usage * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+.laolao-usage:hover { opacity: 1; }
+
+.laolao-usage__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  background: var(--cle-paper);
+  color: var(--cle-ink-2);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.laolao-usage__label { color: var(--cle-ink-2); }
+.laolao-usage__value { color: var(--cle-ink); font-weight: 600; }
+
+.laolao-usage__chip:hover {
+  border-color: var(--cle-ink-2);
+  background: var(--cle-surface);
+}
+
+.laolao-usage__chip--na { color: var(--cle-ink-2); }
+.laolao-usage__chip--na .laolao-usage__value { color: var(--cle-ink-2); }
+
+/* 累计估算：这是"钱"，用墨底纸字和其他计数区分开，不用白字压粉 */
+.laolao-usage__chip--cost {
+  background: var(--cle-ink);
+  border-color: var(--cle-ink);
+  color: var(--cle-paper);
+}
+.laolao-usage__chip--cost .laolao-usage__label { color: var(--cle-paper); opacity: .82; }
+.laolao-usage__chip--cost .laolao-usage__value { color: var(--cle-paper); }
+.laolao-usage__chip--cost:hover {
+  background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+  border-color: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+}
+
+/* 链路状态：绿=在线，冰蓝脉冲=正在生成，灰=未连接。都是真实状态，不是装饰 */
+.laolao-usage__chip--runtime { gap: 6px; }
+.laolao-usage__chip--runtime::before {
+  width: 5px; height: 5px; border-radius: 50%; flex: none;
+  background: var(--cle-ok, #3F6B4F);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cle-ok, #3F6B4F) 16%, transparent);
+  content: "";
+  align-self: center;
+}
+.laolao-usage__chip--runtime[data-state="online"] { color: var(--cle-ok, #3F6B4F); }
+.laolao-usage__chip--runtime[data-state="online"] .laolao-usage__value { color: var(--cle-ok, #3F6B4F); }
+.laolao-usage__chip--runtime[data-state="live"] {
+  border-color: color-mix(in srgb, var(--cle-gaze) 42%, var(--cle-line-strong));
+  background: var(--cle-gaze-soft);
+  color: var(--cle-gaze);
+}
+.laolao-usage__chip--runtime[data-state="live"] .laolao-usage__value { color: var(--cle-gaze); }
+.laolao-usage__chip--runtime[data-state="live"]::before {
+  background: var(--cle-gaze);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cle-gaze) 18%, transparent);
+  animation: laolao-runtime-dot 1s ease-in-out infinite;
+}
+.laolao-usage__chip--runtime[data-state="offline"] { color: var(--cle-ink-2); }
+.laolao-usage__chip--runtime[data-state="offline"]::before {
+  background: var(--cle-ink-2);
+  box-shadow: none;
+}
+@keyframes laolao-runtime-dot { 50% { opacity: .42; transform: scale(.72); } }
+
+/* 暗色模式：--cle-paper 在夜间是"最深的底"，--cle-surface 才是抬起来的表面，
+   所以夜间胶囊必须用 surface，否则会变成"深墨底 + 浅字"里最难读的那一档。 */
+html[data-theme-mode="dark"] .laolao-usage__chip {
+  background: var(--cle-surface);
+  border-color: var(--cle-line-strong);
+}
+/* 成本胶囊在夜间反转：浅底深字（--cle-ink 夜间是浅色） */
+html[data-theme-mode="dark"] .laolao-usage__chip--cost {
+  background: var(--cle-ink);
+  border-color: var(--cle-ink);
+  color: var(--cle-paper);
+}
+html[data-theme-mode="dark"] .laolao-usage__chip--cost .laolao-usage__label { color: var(--cle-paper); }
+html[data-theme-mode="dark"] .laolao-usage__chip--cost .laolao-usage__value { color: var(--cle-paper); }
+html[data-theme-mode="dark"] .laolao-usage__chip--runtime[data-state="live"] {
+  background: var(--cle-gaze-soft);
+  border-color: color-mix(in srgb, var(--cle-gaze) 42%, var(--cle-line-strong));
+}
+html[data-theme-mode="dark"] .laolao-usage__chip--runtime[data-state="online"] { color: var(--cle-ok, #8FC29E); }
+html[data-theme-mode="dark"] .laolao-usage__chip--runtime[data-state="online"] .laolao-usage__value { color: var(--cle-ok, #8FC29E); }
+
+/* 数值上涨：只做一次轻微放大，不再把底色刷成粉色（那会短暂压掉对比度） */
+@keyframes laolao-usage-pulse {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+.laolao-usage__chip--pulse { animation: laolao-usage-pulse 0.6s ease-out; }
+
+/* 生成中：整组胶囊轻微起伏（依次错峰），用位移而不是发光 */
+@keyframes laolao-usage-live {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+
+.laolao-usage--live { opacity: 1; }
+
+.laolao-usage--live .laolao-usage__chip {
+  animation: laolao-usage-live 1.4s ease-in-out infinite;
+}
+
+.laolao-usage--live .laolao-usage__chip:nth-child(2) { animation-delay: 0.12s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(3) { animation-delay: 0.24s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(4) { animation-delay: 0.36s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(5) { animation-delay: 0.48s; }
+.laolao-usage--live .laolao-usage__chip:nth-child(6) { animation-delay: 0.6s; }
+
+/* 派对页顶部：同一个胶囊组，只是更小、靠右 */
+#party-usage { display:flex;justify-content:flex-end;flex:none;padding:8px 20px 0;min-height:28px;background:transparent; }
+#party-usage .laolao-usage { padding-left:0;flex-wrap:wrap;justify-content:flex-end;gap:5px;max-width:100%;-webkit-user-select:none; }
+#party-usage .laolao-usage__chip { padding:2px 8px;font-size:10px; }
+@media(prefers-reduced-motion:reduce){
+  .laolao-usage,.laolao-usage__chip{transition:none}
+  .laolao-usage--live .laolao-usage__chip,.laolao-usage__chip--pulse,.laolao-usage__chip--runtime[data-state="live"]::before{animation:none}
+}

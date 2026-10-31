@@ -7,3 +7,11 @@ dist/
 build/
 *.spec
 .build/
+design/study-desk/
+design/study-desk-v2/
+design/notebook-v2/
+tools/study-desk/
+tools/product-audit/
+docs/PRODUCT-TESTING/
+/AGENTS.md
+patch/markdown-preview-installed.diff

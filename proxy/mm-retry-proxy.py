@@ -742,6 +742,9 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         return prefix, looks_refused(text)
 
     def refusal_target(self, fallback_model, body):
+        # PINKIE_EXPLICIT_MODEL_FALLBACK: preserve the selected model by default.
+        if os.environ.get("UR_ALLOW_MODEL_FALLBACK", "0") != "1":
+            return None
         """决定拒绝后重试的目标模型. 优先用表内替身, 否则通用兜底.
 
         若当前模型已经是目标(避免自我重试死循环)则返回 None.

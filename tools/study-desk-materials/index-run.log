@@ -1,0 +1,154 @@
+{
+  "createdAt": "2026-10-26T22:38:57.178Z",
+  "store": "/Users/Admin/Library/Application Support/SuperPinkie/learning-materials",
+  "ms": 709,
+  "freeMemoryBytes": 83148800,
+  "eventLoopMaxMs": 0,
+  "status": {
+    "roots": [
+      {
+        "id": "zsb",
+        "label": "广西专升本",
+        "exam": "zsb",
+        "path": "/Volumes/Cle/学习/专升本/广西专升本",
+        "mounted": true,
+        "lastScanAt": null
+      },
+      {
+        "id": "pretco-b-usb",
+        "label": "英语 B 级（U盘）",
+        "exam": "pretco-b",
+        "path": "/Volumes/Cle/学习/英语B级",
+        "mounted": true,
+        "lastScanAt": null
+      },
+      {
+        "id": "pretco-b-mac",
+        "label": "英语 B 级（本机）",
+        "exam": "pretco-b",
+        "path": "/Users/Admin/Downloads/03_学习资料_英语考试",
+        "mounted": true,
+        "lastScanAt": null
+      }
+    ],
+    "files": {
+      "total": 0,
+      "indexed": 0,
+      "pending": 0,
+      "failed": 0,
+      "unsupported": 0
+    },
+    "pages": {
+      "total": 0,
+      "text": 0,
+      "ocr": 0,
+      "ocrPending": 0,
+      "vision": 0
+    },
+    "videos": {
+      "total": 0,
+      "transcribed": 0,
+      "pending": 0
+    },
+    "jobs": [
+      {
+        "kind": "scan",
+        "done": 0,
+        "total": 3,
+        "state": "waiting",
+        "reason": "可用内存低于 1 GB，等待",
+        "remainingSeconds": null
+      },
+      {
+        "kind": "ocr",
+        "done": 0,
+        "total": 0,
+        "state": "idle",
+        "reason": "",
+        "remainingSeconds": null
+      },
+      {
+        "kind": "map",
+        "done": 0,
+        "total": 0,
+        "state": "idle",
+        "reason": "",
+        "remainingSeconds": null
+      },
+      {
+        "kind": "vision",
+        "done": 0,
+        "total": 0,
+        "state": "idle",
+        "reason": "",
+        "remainingSeconds": null
+      },
+      {
+        "kind": "transcribe",
+        "done": 0,
+        "total": 0,
+        "state": "idle",
+        "currentVideo": null,
+        "progressSec": 0,
+        "durationSec": 0,
+        "queueDurationSec": 0,
+        "reason": "",
+        "remainingSeconds": null
+      }
+    ],
+    "tools": {
+      "pdftotext": true,
+      "pdftoppm": true,
+      "tesseract": true,
+      "ffmpeg": true,
+      "ffprobe": true,
+      "whisper-cli": true,
+      "textutil": true,
+      "bsdtar": true,
+      "python3": true,
+      "whisper": true
+    },
+    "storeBytes": 110592,
+    "visionBudget": {
+      "used": 0,
+      "limit": 200,
+      "reason": ""
+    }
+  },
+  "audits": [
+    {
+      "root": "/Volumes/Cle/学习/专升本/广西专升本",
+      "unchanged": true,
+      "beforeHash": "0c9dcc5d6c16c77c3825c1bc8b7d1694cfb746190f38097ce6da19e718eaeae0",
+      "afterHash": "0c9dcc5d6c16c77c3825c1bc8b7d1694cfb746190f38097ce6da19e718eaeae0",
+      "beforeEntries": 1774,
+      "afterEntries": 1774,
+      "added": [],
+      "removed": [],
+      "changed": []
+    },
+    {
+      "root": "/Volumes/Cle/学习/英语B级",
+      "unchanged": true,
+      "beforeHash": "bfe735b603b8056e1d41709b877b4e31dac061cb8eff825cf2e1d21e86463f73",
+      "afterHash": "bfe735b603b8056e1d41709b877b4e31dac061cb8eff825cf2e1d21e86463f73",
+      "beforeEntries": 192,
+      "afterEntries": 192,
+      "added": [],
+      "removed": [],
+      "changed": []
+    },
+    {
+      "root": "/Users/Admin/Downloads/03_学习资料_英语考试",
+      "unchanged": true,
+      "beforeHash": "dcc1d4c57f35198084c64772a95751488e1d3c442064864f431a3f1de215c792",
+      "afterHash": "dcc1d4c57f35198084c64772a95751488e1d3c442064864f431a3f1de215c792",
+      "beforeEntries": 76,
+      "afterEntries": 76,
+      "added": [],
+      "removed": [],
+      "changed": []
+    }
+  ],
+  "modelCalls": 0
+}

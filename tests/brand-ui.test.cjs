@@ -34,8 +34,8 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(phrases,/isProtectedContent\(node\).*return/s);
   assert.match(mac,/s\{OpenClaw\}\{CLE Kk\}g/);
   assert.match(windows,/Replace\('OpenClaw', 'CLE Kk'\)/);
-  assert.match(mac,/phrases29/);assert.match(windows,/phrases29/);
-  assert.match(mac,/theme87/);assert.match(windows,/theme87/);
+  assert.match(mac,/phrases30/);assert.match(windows,/phrases30/);
+  assert.match(mac,/theme91/);assert.match(windows,/theme91/);
 });
 
 test('every mode has its own readable text palette without replacing the selected artwork',()=>{
@@ -58,7 +58,7 @@ test('every mode has its own readable text palette without replacing the selecte
   assert.match(theme,/\[data-mode="learning"\] \{ --mode-button-ink: #615b9a; \}/);
 });
 
-test('model picker keeps native session actions in a compact Pinkie glass surface',()=>{
+test('model picker preserves native session actions and reasoning controls',()=>{
   const css=read('ui/injections/laolao-theme.css');
   const picker=css.slice(css.indexOf('/* 碧琪模型匣：'));
   assert.match(picker,/\.chat-controls__model > \.chat-controls__inline-select-menu--combined/);
@@ -73,14 +73,14 @@ test('model picker keeps native session actions in a compact Pinkie glass surfac
   assert.match(picker,/\.chat-controls__picker-actions/);
   assert.match(picker,/not\(:has\(\.chat-controls__reasoning-options--speed button:not\(:disabled\)\)\)/);
   assert.match(picker,/@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-theme\.css\?v=theme87/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-theme\.css\?v=theme91/);
   assert.match(picker,/not\(\[data-pinkie-models-open="1"\]\) \.chat-controls__model-browser \{ display: none !important; \}/);
   assert.match(picker,/\[data-pinkie-level="4"\] \.chat-controls__reasoning-slider::before/);
   const behavior=read('ui/injections/laolao-model-picker.js');
   assert.match(behavior,/details\.dataset\.pinkieModelsOpen = "0"/);
   assert.match(behavior,/Number\(range\.value\) >= Number\(range\.max\)/);
-  assert.match(behavior,/watcher\.observe\(details, \{childList: true, subtree: true, characterData: true\}\)/);
-  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker30/);
+  assert.match(behavior,/watcher\.observe\(details, \{childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: \["hidden", "aria-selected", "disabled"\]\}\)/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker49/);
 });
 
 test('the mode header keeps its controls readable and uses one clear split-window icon',()=>{

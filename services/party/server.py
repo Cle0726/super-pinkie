@@ -28,7 +28,7 @@ USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
-LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'CLE Kk',
+LABELS = {'pinkie': 'Li An', 'codex': 'Codex', 'openclaw': 'CLE Kk',
           'claude': 'Claude', 'gemini': 'Gemini', 'grok': 'Grok'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MAX_MESSAGE = 12000
@@ -646,7 +646,7 @@ class Manager:
                   '涉及 Skill 时，必须在本次执行重新完整读取所需 SKILL.md 和必需引用，不得沿用上次记忆或假装读取。'
                   '如权限不允许读取，明确说明。禁止发布、支付、发外部消息、修改授权或绕过安全措施。'
                   '不要声称完成未做过的工作，不输出隐藏思维链。\n')
-        common += '群内公开称呼与 @ 使用小马名字：'+ '、'.join(key+'='+name for key,name in CHARACTERS.items())+'。平台名仅用于技术说明，JSON 的 agent 字段仍使用原内部标识。\n'
+        common += '群内公开称呼与 @ 使用这些名字：'+ '、'.join(key+'='+name for key,name in CHARACTERS.items())+'。平台名仅用于技术说明，JSON 的 agent 字段仍使用原内部标识。\n'
         if task['agent'] == 'pinkie':
             common += ('你负责本群的任务调度，没有直接操作文件的工具。'
                        '收到普通聊天就按用户要求回答；需要其他成员并行工作时提出至多3项清楚的派工建议。'
@@ -781,7 +781,7 @@ class Manager:
             self.store.stream_message(task, 'reply', output, status='done')
             return
         if not isinstance(parsed, dict) or not isinstance(parsed.get('message'), str):
-            raise ValueError('碧琪的回复格式不完整，请重试')
+            raise ValueError('Li An 的回复格式不完整，请重试')
         reply_id = self.store.stream_message(task, 'reply', parsed['message'], status='done')
         if task['prompt'].startswith('[派对服务：只汇总]'):
             return

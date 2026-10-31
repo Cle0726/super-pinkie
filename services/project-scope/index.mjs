@@ -101,7 +101,10 @@ export class ProjectScope {
       // Native app-server exec uses `cmd`: its approval payload must pass
       // through byte-for-byte, including when invoked inside code mode.
       if(name==='exec'&&typeof p.command==='string'&&!Object.hasOwn(p,'cmd')) {
-        p.workdir=this.resolve(b,typeof p.workdir==='string'&&p.workdir?p.workdir:'.');
+        // Same runtime-expanded prefix rule as read/write/edit: a cwd the
+        // runtime pre-expanded under the hidden agent workspace maps back to
+        // the bound project, while any other absolute path stays as asked.
+        p.workdir=this.resolve(b,typeof p.workdir==='string'&&p.workdir?p.workdir:'.',ctx?.workspaceDir||ctx?.workspace||'');
         return {params:p};
       }
       // The app-server relay normalizes exec_command to `exec` while
@@ -141,7 +144,7 @@ export class ProjectScope {
   }
 }
 export default {
-  id:'pinkie-project-scope',name:'碧琪项目工作锚点',
+  id:'pinkie-project-scope',name:'Li An 项目工作锚点',
   register(api) {
     const guard=new ProjectScope();
     api.registerGatewayMethod('pinkie.project.validate',({params,respond})=>{

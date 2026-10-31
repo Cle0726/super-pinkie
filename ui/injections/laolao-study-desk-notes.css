@@ -1,0 +1,156 @@
+/* 笔记本只使用学习台令牌；视图内的两栏各自滚动。 */
+#pinkie-study-desk .pinkie-desk-notes{display:flex;overflow:hidden;--rule:color-mix(in srgb,var(--ink-2) 18%,transparent)}
+#pinkie-study-desk[data-theme=night] .pinkie-desk-notes{--rule:color-mix(in srgb,var(--ink-2) 12%,transparent)}
+#pinkie-study-desk .pinkie-desk-notes *{box-sizing:border-box}
+#pinkie-study-desk .pinkie-desk-notes [hidden]{display:none!important}
+#pinkie-study-desk .pinkie-desk-notes button{font-family:var(--sans);cursor:pointer}
+#pinkie-study-desk .pinkie-desk-notes button:disabled{opacity:.55;cursor:default}
+#pinkie-study-desk .pinkie-desk-notes :is(button,input,textarea,select,a):focus-visible{outline:2px solid var(--pink);outline-offset:3px}
+#pinkie-study-desk .pinkie-desk-notes .n-toc{width:252px;flex:none;border-right:1px solid var(--hair);padding:26px 14px 18px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+#pinkie-study-desk .pinkie-desk-notes .n-toc h1{font:600 21px var(--serif);margin:0 10px 16px}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-entry{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:10px;font-size:14px;background:none;color:var(--ink-2);text-align:left}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-entry:hover{background:var(--ink-tint)}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-entry[aria-current=page]{background:var(--card);color:var(--ink);box-shadow:var(--lift)}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-sub{padding-left:36px;font-size:13px}
+#pinkie-study-desk .pinkie-desk-notes .n-number{margin-left:auto;font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-inbox-entry .n-number{font-weight:600;color:var(--pink-ink)}
+#pinkie-study-desk .pinkie-desk-notes .n-group{font-size:12px;color:var(--ink-2);margin:16px 10px 6px}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-expand{border:0;background:none;color:var(--ink-2);font-size:12px;padding:8px;text-align:left}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-foot{margin-top:auto;padding-top:16px}
+#pinkie-study-desk .pinkie-desk-notes .n-toc-foot p{font-size:12px;color:var(--ink-2);line-height:1.65;margin:12px 10px 0}
+#pinkie-study-desk .pinkie-desk-notes .n-main{flex:1;min-width:0;display:flex;flex-direction:column}
+#pinkie-study-desk .pinkie-desk-notes .n-head{padding:26px 28px 16px;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;flex:none}
+#pinkie-study-desk .pinkie-desk-notes .n-crumb{font-size:12px;line-height:18px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-crumb:empty{display:none}
+#pinkie-study-desk .pinkie-desk-notes .n-head h2{font:600 28px/1.15 var(--serif);margin:0}
+#pinkie-study-desk .pinkie-desk-notes .n-subtitle{margin:6px 0 0;font-size:13px;color:var(--ink-2);line-height:1.6}
+#pinkie-study-desk .pinkie-desk-notes .n-tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#pinkie-study-desk .pinkie-desk-notes .n-btn{min-height:36px;border-radius:99px;border:1px solid var(--hair-2);background:var(--card);color:var(--ink-2);padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:13px;white-space:nowrap}
+#pinkie-study-desk .pinkie-desk-notes .n-ink{background:var(--ink);color:var(--paper);border:0}
+#pinkie-study-desk .pinkie-desk-notes .n-primary{background:var(--pink-solid);color:var(--on-pink);border:0}
+#pinkie-study-desk .pinkie-desk-notes .n-icon{width:30px;height:30px;padding:0;border:0;background:none;border-radius:8px;color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;flex:none}
+#pinkie-study-desk .pinkie-desk-notes .n-icon:hover{background:var(--ink-tint)}
+#pinkie-study-desk .pinkie-desk-notes .n-segment{display:flex;padding:3px;border-radius:99px;background:var(--ink-tint)}
+#pinkie-study-desk .pinkie-desk-notes .n-segment button{border:0;background:none;border-radius:99px;height:30px;padding:0 12px;font-size:13px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-segment button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:var(--lift)}
+#pinkie-study-desk .pinkie-desk-notes .n-search{display:flex;align-items:center;gap:8px;width:220px;height:36px;padding:0 12px;border:1px solid var(--hair-2);border-radius:99px;background:var(--card);color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-search input{min-width:0;width:100%;border:0;background:none;color:var(--ink);font:14px var(--sans);outline:none}
+#pinkie-study-desk .pinkie-desk-notes .n-scroll{flex:1;min-height:0;overflow:auto;padding:0 28px 32px}
+#pinkie-study-desk .pinkie-desk-notes .n-cards{columns:3 300px;column-gap:16px}
+#pinkie-study-desk .pinkie-desk-notes .n-card{break-inside:avoid;margin:0 0 16px;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:16px 18px 12px;box-shadow:var(--lift);display:flex;flex-direction:column;gap:8px}
+#pinkie-study-desk .pinkie-desk-notes .n-card h3{margin:0 0 6px;font:600 17px/1.4 var(--serif)}
+#pinkie-study-desk .pinkie-desk-notes .n-card p{margin:0;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+#pinkie-study-desk .pinkie-desk-notes .n-card-top{display:flex;gap:6px;align-items:center}
+#pinkie-study-desk .pinkie-desk-notes .n-chip{display:inline-flex;align-items:center;gap:4px;font-size:14px;line-height:22px;padding:1px 8px;border-radius:8px;background:var(--ink-tint);color:var(--ink-2);white-space:nowrap}
+/* 六种笔记类型：日夜各一套，标签字对底色都在 4.5:1 以上。 */
+#pinkie-study-desk .pinkie-desk-notes{--t-rule-bg:#E6EEF8;--t-rule:#3D5E8C;--t-pattern-bg:#EAF3EA;--t-pattern:#3F6B45;--t-method-bg:#F5EEDF;--t-method:#7A5A22;--t-concept-bg:#EFE9F5;--t-concept:#634C80;--margin-line:color-mix(in srgb,var(--pink) 28%,transparent)}
+#pinkie-study-desk[data-theme=night] .pinkie-desk-notes{--t-rule-bg:#1E2A3B;--t-rule:#9DB8E0;--t-pattern-bg:#1F2D22;--t-pattern:#9CCBA3;--t-method-bg:#2E2718;--t-method:#D8BC86;--t-concept-bg:#2A2333;--t-concept:#C3ADE0;--margin-line:color-mix(in srgb,var(--pink) 22%,transparent)}
+#pinkie-study-desk .pinkie-desk-notes .n-type-规则{background:var(--t-rule-bg);color:var(--t-rule)}
+#pinkie-study-desk .pinkie-desk-notes .n-type-易错{background:var(--pink-tint);color:var(--pink-ink)}
+#pinkie-study-desk .pinkie-desk-notes .n-type-句型{background:var(--t-pattern-bg);color:var(--t-pattern)}
+#pinkie-study-desk .pinkie-desk-notes .n-type-方法{background:var(--t-method-bg);color:var(--t-method)}
+#pinkie-study-desk .pinkie-desk-notes .n-type-概念{background:var(--t-concept-bg);color:var(--t-concept)}
+#pinkie-study-desk .pinkie-desk-notes .n-example{font-size:13px!important;color:var(--ink-2);padding-left:10px;border-left:2px solid var(--hair-2);margin-top:8px!important}
+#pinkie-study-desk .pinkie-desk-notes .n-card footer{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);border-top:1px solid var(--hair);padding-top:8px;margin-top:2px}
+#pinkie-study-desk .pinkie-desk-notes .n-card footer>span{flex:1}
+#pinkie-study-desk .pinkie-desk-notes .n-text-button{display:inline-flex;align-items:center;gap:5px;border:0;background:none;color:var(--ink-2);font-size:12px;padding:4px;white-space:nowrap}
+#pinkie-study-desk .pinkie-desk-notes .n-menu{position:absolute;z-index:40;min-width:168px;max-height:calc(100% - 16px);overflow:auto;padding:5px;border:1px solid var(--hair-2);border-radius:12px;background:var(--card);box-shadow:var(--lift)}
+#pinkie-study-desk .pinkie-desk-notes .n-menu button{display:block;width:100%;border:0;border-radius:7px;text-align:left;padding:9px 12px;background:none;font-size:14px;color:var(--ink)}
+#pinkie-study-desk .pinkie-desk-notes .n-menu button:hover{background:var(--ink-tint)}
+#pinkie-study-desk .pinkie-desk-notes .n-edit{display:flex;flex-direction:column;gap:12px}
+#pinkie-study-desk .pinkie-desk-notes .n-edit label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes :is(.n-edit input,.n-edit textarea,.n-dialog select){width:100%;border:1px solid var(--hair-2);border-radius:10px;background:var(--paper);color:var(--ink);padding:9px 12px;font:14px/1.6 var(--sans);resize:vertical}
+#pinkie-study-desk .pinkie-desk-notes .n-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog{color:var(--ink);background:var(--card);border:1px solid var(--hair);border-radius:20px;padding:24px;width:min(680px,90%);max-height:88%;box-shadow:var(--lift)}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog::backdrop{background:var(--ink-tint);backdrop-filter:blur(8px)}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog h2{font:600 22px var(--serif);margin:0}
+#pinkie-study-desk .pinkie-desk-notes .n-original{white-space:pre-wrap;line-height:1.7}
+#pinkie-study-desk .pinkie-desk-notes .n-toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:45;max-width:90%;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--paper);border-radius:18px;padding:12px 18px;font-size:14px;box-shadow:var(--lift)}
+#pinkie-study-desk .pinkie-desk-notes .n-toast button{background:none;border:0;color:inherit;text-decoration:underline;white-space:nowrap;font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-empty{text-align:center;padding:60px 20px;color:var(--ink-2);font-size:14px}
+
+#pinkie-study-desk .pinkie-desk-notes .n-ghost{border-color:transparent;background:none}
+#pinkie-study-desk .pinkie-desk-notes .n-empty strong{display:block;font:600 20px var(--serif);color:var(--ink);margin-bottom:8px}
+#pinkie-study-desk .pinkie-desk-notes .n-empty p{margin:0}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog-sub{margin:-8px 0 16px;font-size:14px;color:var(--ink-2)}
+/* 收集箱 */
+#pinkie-study-desk .pinkie-desk-notes .n-move{display:flex;gap:16px;align-items:center;padding:16px 18px;border-radius:16px;background:var(--card);border:1px solid var(--hair);box-shadow:var(--lift);margin-bottom:18px}
+#pinkie-study-desk .pinkie-desk-notes .n-move-icon{width:44px;height:44px;border-radius:12px;background:var(--pink-tint);color:var(--pink-ink);display:grid;place-items:center;flex:none}
+#pinkie-study-desk .pinkie-desk-notes .n-move-text{min-width:0;flex:1}
+#pinkie-study-desk .pinkie-desk-notes .n-move-text strong{font:600 16px var(--serif)}
+#pinkie-study-desk .pinkie-desk-notes .n-move-text p{margin:3px 0 0;font-size:13px;line-height:1.6;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-move-buttons{display:flex;gap:8px;flex:none}
+#pinkie-study-desk .pinkie-desk-notes .n-ibar{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-size:13px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-ibar>span{flex:1;min-width:0}
+#pinkie-study-desk .pinkie-desk-notes .n-inbox{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:16px;background:var(--card);overflow:hidden}
+#pinkie-study-desk .pinkie-desk-notes .n-irow{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(260px,auto);gap:14px;align-items:start;padding:14px 18px;border-top:1px solid var(--hair);overflow:hidden;transition:height .22s ease,opacity .22s ease,padding .22s ease}
+#pinkie-study-desk .pinkie-desk-notes .n-irow:first-child{border-top:0}
+#pinkie-study-desk .pinkie-desk-notes .n-irow.is-leaving{opacity:0;padding-top:0;padding-bottom:0}
+#pinkie-study-desk .pinkie-desk-notes .n-irow>input{margin-top:5px;accent-color:var(--pink-solid);width:16px;height:16px}
+#pinkie-study-desk .pinkie-desk-notes .n-raw{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+#pinkie-study-desk .pinkie-desk-notes .n-irow.is-word .n-raw b{font:600 16px var(--serif)}
+#pinkie-study-desk .pinkie-desk-notes .n-from{font-size:12px;color:var(--ink-2);margin-top:3px}
+#pinkie-study-desk .pinkie-desk-notes .n-sugg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+#pinkie-study-desk .pinkie-desk-notes .n-arrow,#pinkie-study-desk .pinkie-desk-notes .n-wait{font-size:12px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-wait{animation:n-breathe 1.6s ease-in-out infinite}
+@keyframes n-breathe{50%{opacity:.55}}
+#pinkie-study-desk .pinkie-desk-notes .n-classify{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:center}
+#pinkie-study-desk .pinkie-desk-notes .n-classify :is(select,input){height:32px;border:1px solid var(--hair-2);border-radius:8px;background:var(--paper);color:var(--ink);padding:0 8px;font:13px var(--sans);max-width:130px}
+#pinkie-study-desk .pinkie-desk-notes .n-dialog .n-classify{justify-content:flex-start}
+#pinkie-study-desk .pinkie-desk-notes .n-move-list{display:flex;flex-direction:column;max-height:52vh;overflow:auto;border:1px solid var(--hair);border-radius:14px;margin-bottom:16px}
+#pinkie-study-desk .pinkie-desk-notes .n-move-row{display:grid;grid-template-columns:20px minmax(0,1fr);gap:4px 12px;padding:12px 14px;border-top:1px solid var(--hair);cursor:pointer}
+#pinkie-study-desk .pinkie-desk-notes .n-move-row:first-child{border-top:0}
+#pinkie-study-desk .pinkie-desk-notes .n-move-row input{accent-color:var(--pink-solid);margin-top:3px}
+#pinkie-study-desk .pinkie-desk-notes .n-move-raw{margin:0;font-size:13px;line-height:1.55;color:var(--ink-2);overflow-wrap:anywhere}
+#pinkie-study-desk .pinkie-desk-notes .n-move-words{grid-column:2;display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pinkie-desk-notes .n-move-word{display:inline-flex;gap:6px;align-items:baseline;padding:3px 10px;border-radius:8px;background:var(--ink-tint);font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-move-word b{font-family:var(--serif)}
+#pinkie-study-desk .pinkie-desk-notes .n-move-word em{font-style:normal;color:var(--pink-ink)}
+/* 整理稿：一页真的笔记纸。横线间距 34px，正文行高对齐 34px。 */
+#pinkie-study-desk .pinkie-desk-notes .n-stale{max-width:820px;margin:0 auto 14px;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:var(--pink-tint);color:var(--pink-ink);font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-stale>span{flex:1}
+#pinkie-study-desk .pinkie-desk-notes .n-stale .n-btn{min-height:30px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper{position:relative;max-width:820px;margin:0 auto;border-radius:6px 18px 18px 6px;box-shadow:var(--lift),0 0 0 1px var(--hair);padding:34px 56px 34px 92px;
+  background:repeating-linear-gradient(to bottom,transparent 0 33px,var(--rule) 33px 34px) 0 0/100% 34px,var(--card)}
+#pinkie-study-desk .pinkie-desk-notes .n-paper::before{content:"";position:absolute;left:64px;top:0;bottom:0;width:1.5px;background:var(--margin-line)}
+#pinkie-study-desk .pinkie-desk-notes .n-holes{position:absolute;left:22px;top:60px;bottom:60px;display:flex;flex-direction:column;justify-content:space-between}
+#pinkie-study-desk .pinkie-desk-notes .n-holes i{width:12px;height:12px;border-radius:50%;background:var(--paper-2,var(--paper));box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
+#pinkie-study-desk .pinkie-desk-notes .n-paper h3{font:600 22px/34px var(--serif);margin:0}
+#pinkie-study-desk .pinkie-desk-notes .n-paper-meta{font-size:12px;line-height:34px;height:34px;color:var(--ink-2);display:flex;gap:10px;align-items:center;margin:0}
+#pinkie-study-desk .pinkie-desk-notes .n-paper-meta .n-chip{font-size:12px;line-height:20px;padding:0 7px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper h4{font:600 17px/34px var(--serif);margin:34px 0 0;display:flex;align-items:center;gap:10px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper h4 .n-chip{font:400 12px/20px var(--sans);padding:0 7px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper ol{margin:0;padding-left:22px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper li{font-size:15px;line-height:34px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper li p{margin:0;line-height:34px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper .n-eg{color:var(--ink-2);font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-paper .n-warn{color:var(--pink-ink);font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-src{border:0;background:none;padding:0;margin-left:8px;font-size:12px;line-height:16px;color:var(--ink-2);border-bottom:1px dotted var(--ink-2);vertical-align:baseline}
+#pinkie-study-desk .pinkie-desk-notes .n-paper-empty{margin:0;font-size:15px;line-height:34px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-quizme{margin-top:34px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#pinkie-study-desk .pinkie-desk-notes .n-sources{max-width:320px}
+#pinkie-study-desk .pinkie-desk-notes .n-sources button{white-space:normal;line-height:1.45}
+/* 今天回顾 */
+#pinkie-study-desk .pinkie-desk-notes .n-review{max-width:640px;margin:10px auto 0;display:flex;flex-direction:column;gap:16px}
+#pinkie-study-desk .pinkie-desk-notes .n-rbar{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--ink-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-dots{display:flex;gap:4px}
+#pinkie-study-desk .pinkie-desk-notes .n-dots i{width:22px;height:4px;border-radius:2px;background:var(--hair-2)}
+#pinkie-study-desk .pinkie-desk-notes .n-dots i.d{background:var(--pink)}
+#pinkie-study-desk .pinkie-desk-notes .n-dots i.c{background:color-mix(in srgb,var(--pink) 45%,transparent)}
+#pinkie-study-desk .pinkie-desk-notes .n-rcard{background:var(--card);border:1px solid var(--hair);border-radius:20px;box-shadow:var(--lift);padding:30px 34px;display:flex;flex-direction:column;gap:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-q{font:600 24px/1.4 var(--serif)}
+#pinkie-study-desk .pinkie-desk-notes .n-rcard textarea{border:1px solid var(--hair-2);border-radius:14px;background:var(--paper);color:var(--ink);padding:12px 14px;font:15px/1.6 var(--sans);resize:none}
+#pinkie-study-desk .pinkie-desk-notes .n-kbd-hint{font-size:12px;color:var(--ink-2);align-self:center}
+#pinkie-study-desk .pinkie-desk-notes .n-ans{border-top:1px dashed var(--hair-2);padding-top:14px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.7}
+#pinkie-study-desk .pinkie-desk-notes .n-ans p{margin:0;white-space:pre-wrap}
+#pinkie-study-desk .pinkie-desk-notes .n-ans .n-eg{color:var(--ink-2);font-size:14px}
+#pinkie-study-desk .pinkie-desk-notes .n-rate{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+#pinkie-study-desk .pinkie-desk-notes .n-rate button{height:46px;border-radius:99px;border:1px solid var(--hair-2);background:var(--card);color:var(--ink);font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}
+#pinkie-study-desk .pinkie-desk-notes .n-rate kbd{font:12px var(--mono,monospace);color:inherit;opacity:.7}
+#pinkie-study-desk .pinkie-desk-notes .n-rate .n-rate-ok{border:0;background:var(--pink-solid);color:var(--on-pink)}
+#pinkie-study-desk .pinkie-desk-notes .n-alt{display:flex;justify-content:center}
+#pinkie-study-desk .pinkie-desk-notes .n-honest{margin:0;font-size:12px;color:var(--ink-2);text-align:center}
+@media(max-width:1100px){#pinkie-study-desk .pinkie-desk-notes .n-irow{grid-template-columns:22px minmax(0,1fr)}#pinkie-study-desk .pinkie-desk-notes .n-sugg{grid-column:2;justify-content:flex-start}#pinkie-study-desk .pinkie-desk-notes .n-move{flex-wrap:wrap}#pinkie-study-desk .pinkie-desk-notes .n-paper{padding:34px 28px 34px 72px}#pinkie-study-desk .pinkie-desk-notes .n-paper::before{left:50px}#pinkie-study-desk .pinkie-desk-notes .n-holes{left:16px}}
+@media(max-width:1100px){#pinkie-study-desk .pinkie-desk-notes .n-toc{width:210px;padding:24px 10px}#pinkie-study-desk .pinkie-desk-notes .n-head{padding:20px 22px 14px}#pinkie-study-desk .pinkie-desk-notes .n-scroll{padding:0 22px 24px}#pinkie-study-desk .pinkie-desk-notes .n-search{width:160px}}
+@media(prefers-reduced-motion:reduce){#pinkie-study-desk .pinkie-desk-notes *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

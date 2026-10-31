@@ -49,6 +49,8 @@ test('settings use the native config RPC and do not destructively edit Lit-owned
   assert.match(source, /laolaoModelPickerCatalog/);
   assert.doesNotMatch(source, /(?:\.textContent|\.innerHTML|\.innerText)\s*=(?!=)/);
   assert.doesNotMatch(source, /replaceChildren\(|\.remove\(\)/);
+  // ui/injections/** is the old live app and keeps the old character name;
+  // this page must keep matching the labels it actually ships.
   for (const label of ['碧琪', '模型与思考', '碧琪能做什么', '外观与声音', '连接', '关于与更新']) {
     assert.ok(source.includes(`"${label}"`), `missing settings group: ${label}`);
   }
@@ -60,8 +62,10 @@ test('settings page is loaded by the head fragment and both installers with one 
   const head = read('ui/injections/laolao-head.fragment.html');
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
+  // CSS and JS advance independently; each must use its own current key.
+  const versions = {'laolao-settings-user.css': 3, 'laolao-settings-user.js': 4};
   for (const file of ['laolao-settings-user.css', 'laolao-settings-user.js']) {
-    const versioned = new RegExp(`${file.replace(/[.-]/g, '\\$&')}\\?v=settingsuser1`);
+    const versioned = new RegExp(`${file.replace(/[.-]/g, '\\$&')}\\?v=settingsuser${versions[file]}`);
     assert.match(head, versioned);
     assert.match(mac, versioned);
     assert.match(windows, versioned);

@@ -155,9 +155,35 @@ export function transform(original) {
   const boundaryTo =
     '\tconst roots = [...(localRoots ?? getDefaultLocalRootsCore()), ..._pinkieResolveExtraMediaRoots()];\n' +
     '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
-  if (text.split(inboundFrom).length === 2) text = text.replace(inboundFrom, inboundTo);
-  else if (text.split(boundaryFrom).length === 2) text = text.replace(boundaryFrom, boundaryTo);
-  else throw new Error("OpenClaw 图片白名单代码结构已变化，未覆盖: inbound/boundary roots");
+  // 2026.10: the managed-reference lookup is wrapped in try/catch and the
+  // defaults come from getDefaultMediaLocalRoots(). Keep the inbound branch as
+  // is (it already narrows to the physical file) and widen only the boundary
+  // roots, which is what the Control UI's agent-scoped roots are compared to.
+  const currentInboundFrom =
+    '\tlet inboundReference;\n' +
+    '\ttry {\n' +
+    '\t\tinboundReference = await resolveInboundMediaReference(mediaPath);\n';
+  const currentInboundTo =
+    '\tif (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return {\n' +
+    '\t\trejectHardlinks: false,\n' +
+    '\t\troots: [path.dirname(path.resolve(mediaPath))]\n' +
+    '\t};\n' +
+    currentInboundFrom;
+  const currentBoundaryFrom =
+    '\tconst roots = localRoots ?? getDefaultMediaLocalRoots();\n' +
+    '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
+  const currentBoundaryTo =
+    '\tconst roots = [...(localRoots ?? getDefaultMediaLocalRoots()), ..._pinkieResolveExtraMediaRoots()];\n' +
+    '\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n';
+  // Every known caller shape is widened, not just the first one found: the
+  // managed-reference lookup and the default-root boundary are separate paths.
+  const shapes = [];
+  if (text.split(inboundFrom).length === 2) shapes.push([inboundFrom, inboundTo]);
+  if (text.split(currentInboundFrom).length === 2) shapes.push([currentInboundFrom, currentInboundTo]);
+  if (text.split(boundaryFrom).length === 2) shapes.push([boundaryFrom, boundaryTo]);
+  if (text.split(currentBoundaryFrom).length === 2) shapes.push([currentBoundaryFrom, currentBoundaryTo]);
+  for (const [from, to] of shapes) text = text.replace(from, to);
+  if (!shapes.length) throw new Error("OpenClaw 图片白名单代码结构已变化，未覆盖: inbound/boundary roots");
 
   return header + text;
 }
@@ -168,9 +194,14 @@ export function transform(original) {
  */
 export function apply(root, { backupRoot } = {}) {
   const dist = path.join(root, "dist");
-  const candidates = fs.readdirSync(dist).filter(
-    (n) => n.startsWith("local-media-access-") && n.endsWith(".js")
-  );
+  // 2026.10 emits .mjs bundles (one is only a re-export shim), 2026.7 used
+  // .js; pick the single chunk that actually implements the boundary.
+  const candidates = fs.readdirSync(dist)
+    .filter((n) => n.startsWith("local-media-access-") && /\.m?js$/.test(n))
+    .filter((n) => {
+      const source = fs.readFileSync(path.join(dist, n), "utf8");
+      return source.includes(marker) || /function resolveLocalMediaBoundary\(/u.test(source);
+    });
   if (candidates.length !== 1) {
     throw new Error("无法唯一确认 local-media-access 模块: " + candidates.join(", "));
   }

@@ -47,7 +47,12 @@ test('night switch runs before anything paints and the night stylesheet loads la
   assert.match(sh, /<script src="\/laolao-night\.js\?v=night2"><\/script>/);
   const fragment = read('ui/injections/laolao-head.fragment.html');
   const scripts = fragment.match(/laolao-[\w-]+\.js/g);
-  assert.equal(scripts[0], 'laolao-night.js');
+  // The property that matters is ordering against stylesheets, not being the
+  // literal first script: the night switch must run before any CSS loads.
+  assert.ok(scripts.includes('laolao-night.js'));
+  const nightAt = fragment.indexOf('laolao-night.js');
+  const firstStyle = fragment.indexOf('<link rel="stylesheet"');
+  assert.ok(firstStyle > -1 && nightAt < firstStyle, 'night switch runs before the first stylesheet');
   const ps1 = read('installer/windows/apply-theme.ps1');
   assert.match(ps1, /<head\[\^>\]\*>/);
 });

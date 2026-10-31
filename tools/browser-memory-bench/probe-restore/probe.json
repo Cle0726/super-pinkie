@@ -1,0 +1,21 @@
+{
+ "before": {
+  "front": "Finder",
+  "hasFocus": {
+   "value": false
+  }
+ },
+ "during": {
+  "hover": true,
+  "front": "Finder",
+  "hasFocus": {
+   "value": true
+  }
+ },
+ "after": {
+  "front": "Finder",
+  "hasFocus": {
+   "value": false
+  }
+ }
+}

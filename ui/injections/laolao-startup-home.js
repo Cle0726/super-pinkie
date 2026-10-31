@@ -94,7 +94,7 @@
     else window.dispatchEvent(new CustomEvent('laolao:toast', {detail: {message}}));
   };
   let busy = false, ready = false, operation = 0, observer, revealObserver, scheduled = false;
-  let sendingNative = false, creatingNative = false;
+  let sendingNative = false, creatingNative = false, handedOff = false;
   let expectedModeSession = '', pendingDraft = null, nativeRequest = null;
   const previous = new Map();
   const remember = () => {
@@ -148,6 +148,10 @@
       || panes.find(pane => pane.active === true) || panes[0] || null;
   };
   const currentInput = (pane = activePane()) => pane?.querySelector('.agent-chat__composer-combobox textarea');
+  // 输入框空着时，原生的那颗按钮是语音（--voice），填字后重绘才变成发送；只认真正的发送按钮。
+  const NOT_SEND = ['chat-send-btn--stop', 'chat-send-btn--voice', 'chat-send-btn--laolao-dictation', 'chat-send-btn--queue'];
+  const isSendButton = node => Boolean(node?.classList?.contains('chat-send-btn') && !NOT_SEND.some(name => node.classList.contains(name)));
+  const sendButton = pane => Array.from(pane?.querySelectorAll('.chat-send-btn') || []).find(isSendButton) || null;
   const paneReady = (pane, key) => {
     const state = pane?.state;
     const page = pane?.closest?.('openclaw-chat-page')
@@ -167,7 +171,7 @@
   };
   const leave = () => {
     if (!active) return;
-    active = false; busy = false; operation++; nativeRequest = null;
+    active = false; busy = false; handedOff = false; operation++; nativeRequest = null;
     releaseDraft();
     root.removeAttribute('data-laolao-startup-home');
     root.removeAttribute('data-laolao-startup-ready');
@@ -187,7 +191,7 @@
   };
   const chatGlyph = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v6a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V15h0.5A2.5 2.5 0 0 1 5 12.5Z"/></svg>';
   const mount = () => {
-    if (!active) return;
+    if (!active || handedOff) return;
     if (root.getAttribute('data-laolao-workspace-dock') === '1') { leave(); return; }
     const main = document.querySelector('.chat-main');
     if (!main) return;
@@ -270,19 +274,32 @@
     const replay = () => {
       if (!isCurrent() || !paneReady(request.pane, request.key)
           || currentInput(request.pane)?.value !== request.text || button.disabled || !button.isConnected) return false;
+      const target = sendButton(request.pane) || button;
+      if (target.disabled) return false;
       const previousBypass = sendingNative;
       sendingNative = true;
-      try { button.click(); } finally { sendingNative = previousBypass; }
+      try { target.click(); } finally { sendingNative = previousBypass; }
       return true;
     };
     request.preparations.push(Promise.resolve().then(() => isCurrent()
       ? prepare(replay, isCurrent, {text: request.text, input: request.input}) : {status: 'cancelled'}));
     return true;
   };
+  // 只撤掉首页的画面，不结束这一单：active / busy / operation 保持不变，
+  // 正在准备的发送仍认得自己的会话；完成或出错时由 leave() 收尾。
+  const handOff = () => {
+    if (!active || handedOff) return;
+    handedOff = true;
+    root.removeAttribute('data-laolao-startup-home');
+    root.removeAttribute('data-laolao-startup-ready');
+    root.removeAttribute('data-laolao-startup-reveal');
+    root.removeAttribute('data-laolao-startup-busy');
+    document.querySelectorAll('.laolao-startup-home, .laolao-startup-home__recent').forEach(node => node.remove());
+  };
   const sendFromHome = async (input, pane, dispatch) => {
     if (!active || busy || !input?.value?.trim()) return false;
-    const create = document.querySelector('.sidebar-new-session');
-    if (!create || create.disabled) { notify('新会话暂时没有准备好，文字还在输入框里。'); return false; }
+    const create = document.querySelector('.sidebar-new-session'), createPlain = window.__laolaoSidebar?.createSession;
+    if (typeof createPlain !== 'function' && (!create || create.disabled)) { notify('新会话暂时没有准备好，文字还在输入框里。'); return false; }
     const originalKey = sessionKey(), selected = mode(), text = input.value;
     const attachments = Array.isArray(pane?.state?.chatAttachments) ? [...pane.state.chatAttachments] : null;
     busy = true; const token = ++operation;
@@ -291,8 +308,12 @@
     try {
       // Use the existing sidebar workflow, including project binding, names,
       // routing and deduplication. It is the only owner of sessions.create.
-      creatingNative = true;
-      try { create.click(); } finally { creatingNative = false; }
+      // 首页的第一句话开一个干净的新会话：不进当前项目组，也不继承工作台文件夹。
+      if (typeof createPlain === 'function') void createPlain();
+      else {
+        creatingNative = true;
+        try { create.click(); } finally { creatingNative = false; }
+      }
       const next = await waitFor(() => {
         if (mode() !== selected) return null;
         const key = sessionKey();
@@ -307,8 +328,8 @@
       await Promise.resolve(next.pane.updateComplete);
       if (!active || token !== operation || mode() !== selected || sessionKey() !== next.key
           || !paneReady(next.pane, next.key)) throw new Error('会话已切换，原文已保留。');
-      const send = next.pane.querySelector('.chat-send-btn:not(.chat-send-btn--stop)');
-      if (!send || send.disabled) throw new Error('发送暂时没有准备好，原文已保留。');
+      const send = await waitFor(() => { const button = sendButton(next.pane); return button && !button.disabled ? button : null; },
+        token, 3000, '发送暂时没有准备好，原文已保留。');
       const request = {token, mode: selected, key: next.key, pane: next.pane, input: next.input, button: send, text, preparations: []};
       nativeRequest = request;
       // No direct chat.send RPC: the native composer keeps its own attachment,
@@ -318,6 +339,9 @@
         sendingNative = true;
         try { send.click(); } finally { sendingNative = false; }
       }
+      // 消息已经交给新会话：首页立刻让位给聊天。思考档 / 网页 GPT 的准备
+      // 可能要好几分钟，期间一直停在首页会像没发出去。首页只在后台继续跟踪这一单。
+      handOff();
       let delivery = 'native';
       for (let index = 0; index < request.preparations.length; index++) {
         const result = await request.preparations[index];
@@ -340,6 +364,7 @@
       return true;
     } catch (error) {
       if (token === operation) {
+        if (handedOff) { if (!error.notified) notify(error.message || '暂时没能送出，原文已保留。'); leave(); return false; }
         releaseDraft(); busy = false;
         nativeRequest = null;
         root.removeAttribute('data-laolao-startup-busy'); mount();
@@ -386,7 +411,7 @@
   window.addEventListener('click', event => {
     if (!active || sendingNative) return;
     const send = pathMatch(event, '.chat-send-btn:not(.chat-send-btn--stop)');
-    if (send && !send.disabled) {
+    if (send && isSendButton(send) && !send.disabled) {
       event.preventDefault(); event.stopImmediatePropagation();
       const pane = send.closest?.('openclaw-chat-pane') || activePane();
       if (!busy) void sendFromHome(currentInput(pane), pane);

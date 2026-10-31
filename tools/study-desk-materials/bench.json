@@ -1,0 +1,19 @@
+{
+  "syntheticOnly": true,
+  "ms": 335,
+  "eventLoopMaxMs": 24.444927,
+  "pages": {
+    "total": 141,
+    "text": 141,
+    "ocr": 0,
+    "ocrPending": 0,
+    "vision": 0
+  },
+  "files": {
+    "total": 1,
+    "indexed": 1,
+    "pending": 0,
+    "failed": 0,
+    "unsupported": 0
+  }
+}

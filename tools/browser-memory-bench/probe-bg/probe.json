@@ -1,0 +1,30 @@
+{
+ "active": {
+  "frontmost": "Finder",
+  "hover": true,
+  "click": true,
+  "drag": true,
+  "qa": {
+   "down": false,
+   "opened": true,
+   "trusted": true,
+   "checks": 0,
+   "aligned": true,
+   "moves": 20
+  }
+ },
+ "background": {
+  "frontmost": "Finder",
+  "hover": true,
+  "click": true,
+  "drag": true,
+  "qa": {
+   "opened": true,
+   "aligned": true,
+   "down": false,
+   "checks": 0,
+   "moves": 20,
+   "trusted": true
+  }
+ }
+}

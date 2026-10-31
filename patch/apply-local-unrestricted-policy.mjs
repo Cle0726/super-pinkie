@@ -20,6 +20,22 @@ import {execFileSync} from 'node:child_process';
 const marker = '/* cle-kk-local-unrestricted-policy:v1 */';
 const oldLine = 'const ownerOnlyCoreToolDenylist = options?.senderIsOwner === false ? [...GATEWAY_OWNER_ONLY_CORE_TOOLS] : [];';
 const newLine = `${marker}\n\tconst ownerOnlyCoreToolDenylist = options?.senderIsOwner === false && process.env.CLE_KK_LOCAL_UNRESTRICTED !== "1" ? [...GATEWAY_OWNER_ONLY_CORE_TOOLS] : [];`;
+// 2026.10 reads `input.senderIsOwner` and keeps portal/sessions/automations
+// exceptions inline; only the owner-only gate is switched off here.
+const CURRENT_LINE = String.raw`const ownerOnlyCoreToolDenylist = (\w+)\.senderIsOwner === false \? GATEWAY_OWNER_ONLY_CORE_TOOLS\.filter\(`;
+const currentGate = (state) => `const ownerOnlyCoreToolDenylist = ${state}.senderIsOwner === false && process.env.CLE_KK_LOCAL_UNRESTRICTED !== "1" ? GATEWAY_OWNER_ONLY_CORE_TOOLS.filter(`;
+
+/**
+ * Returns the patched source, or null when this bundle is not a tool-policy
+ * module the patch understands.
+ */
+export function transform(source) {
+  if (source.includes(marker)) return source;
+  if (source.includes(oldLine)) return source.replace(oldLine, newLine);
+  const matches = [...source.matchAll(new RegExp(CURRENT_LINE, "g"))];
+  if (matches.length !== 1) return null;
+  return `${marker}\n` + source.replace(new RegExp(CURRENT_LINE, "g"), (_match, state) => currentGate(state));
+}
 
 function backupPath(root) {
   return process.env.PINKIE_PATCH_BACKUP_ROOT
@@ -34,6 +50,8 @@ function resolveRoot() {
   }
   // The self-contained launchers execute this script with their bundled
   // Node. Resolve the sibling OpenClaw package even when no global CLI exists.
+  // The .app folder name is part of the shipped bundle path and does not follow
+  // the product's display name; keep it exactly in sync with the launchers.
   candidates.push(path.resolve(path.dirname(process.execPath), '..', 'openclaw'));
   if (process.platform === 'darwin') {
     candidates.push('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw');
@@ -60,18 +78,19 @@ function resolveRoot() {
 export function apply(root = resolveRoot()) {
   if (!root) throw new Error('无法找到 OpenClaw 包目录，请明确设置 OPENCLAW_ROOT');
   const dist = path.join(root, 'dist');
+  // 2026.10 emits .mjs bundles; 2026.7 used .js.
   const candidates = fs.readdirSync(dist)
-    .filter(name => /^agent-tools-.*\.js$/.test(name))
+    .filter(name => /^agent-tools-[^/]*\.(?:m?js)$/.test(name))
     .map(name => path.join(dist, name));
   const alreadyPatched = candidates.find(file => fs.readFileSync(file, 'utf8').includes(marker));
   if (alreadyPatched) return {changed: false, file: alreadyPatched};
-  const files = candidates.filter(file => fs.readFileSync(file, 'utf8').includes(oldLine));
+  const files = candidates.filter(file => fs.readFileSync(file, 'utf8').includes('ownerOnlyCoreToolDenylist'));
   if (files.length !== 1) throw new Error(`无法唯一确认 agent-tools 模块：${files.map(file => path.basename(file)).join(', ')}`);
   const file = files[0];
   const original = fs.readFileSync(file, 'utf8');
   if (original.includes(marker)) return {changed: false, file};
-  if (!original.includes(oldLine)) throw new Error('agent-tools owner-only policy anchor not found; refusing to patch');
-  const next = original.replace(oldLine, newLine);
+  const next = transform(original);
+  if (!next) throw new Error('agent-tools owner-only policy anchor not found; refusing to patch');
   const backup = backupPath(root);
   fs.mkdirSync(backup, {recursive: true, mode: 0o700});
   fs.copyFileSync(file, path.join(backup, path.basename(file)));

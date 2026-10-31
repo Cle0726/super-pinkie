@@ -24,7 +24,22 @@ test('interactive cards are session-scoped and never expose the private answer',
   assert.equal(shown.current.phase, 'asking');
   assert.equal('correctAnswer' in shown.current, false);
   assert.equal(store.status(second).current, null);
-  assert.equal(store.status(second).enabled, false);
+  assert.equal(store.status(second).enabled, true);
+});
+
+test('interaction starts on so 碧琪 can place cards herself, and only the student turns it off', t => {
+  const store = fixture(t);
+  const sessionKey = 'agent:learning:auto';
+  const shown = store.present(sessionKey, {kind: 'single_choice', question: 'auto?', options: ['A', 'B'], correct_answer: 'A'});
+  assert.equal(shown.current.phase, 'asking');
+  const prompt = learningPrompt(store, sessionKey);
+  assert.match(prompt, /不用等先生点按钮或开口要/);
+  assert.match(prompt, /ee4 RC\/RL 暂态/);
+  assert.match(prompt, /net4 子网划分/);
+  store.setEnabled(sessionKey, false);
+  assert.match(learningPrompt(store, sessionKey), /暂停的是主动出题/);
+  assert.match(learningPrompt(store, sessionKey), /不用等先生点按钮/);
+  assert.equal(store.status(sessionKey).enabled, false);
 });
 
 test('submissions are idempotent and reject stale activity ids', t => {
@@ -38,6 +53,20 @@ test('submissions are idempotent and reject stale activity ids', t => {
   assert.equal(replayed.revision, submitted.revision);
   assert.equal(replayed.current.submission.answer, '2');
   assert.throws(() => store.submit(sessionKey, {activityId: 'old-card', answer: '2'}), /题卡已经更新/);
+});
+
+test('choice grading maps model letters to the option ids returned by the UI', t => {
+  const store = fixture(t);
+  const key = 'agent:learning:choice-labels';
+  store.setEnabled(key, true);
+  for (const options of [['A. quick', 'B. quickly', 'C. quicker'], ['quick', 'quickly', 'quicker']]) {
+    const shown = store.present(key, {kind: 'single_choice', question: 'He ran ___', options, correct_answer: 'B'});
+    assert.equal(store.submit(key, {activityId: shown.current.id, answer: '2'}).current.submission.correctness, true);
+  }
+  const multi = store.present(key, {kind: 'multiple_choice', question: 'Pick two', options: ['A. first', 'B. second', 'C. third'], correct_answer: ['C', 'A']});
+  assert.equal(store.submit(key, {activityId: multi.current.id, answer: ['1', '3']}).current.submission.correctness, true);
+  const custom = store.present(key, {kind: 'single_choice', question: 'Use explicit ids', options: [{id: 'B', label: 'First'}, {id: 'A', label: 'Second'}], correct_answer: 'B'});
+  assert.equal(store.submit(key, {activityId: custom.current.id, answer: 'B'}).current.submission.correctness, true);
 });
 
 test('resolved key points and selected text persist outside chat history', t => {
@@ -88,12 +117,12 @@ test('stopping interaction clears the card and fences a delayed present call', t
 test('a legacy disabled card is cleaned before it can revive on the next launch', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:legacy-disabled';
-  const legacy = store.read(sessionKey);
-  legacy.enabled = false;
-  legacy.current = {id: 'old-card', kind: 'short_answer', question: '旧题', phase: 'asking', createdAt: Date.now()};
-  store.write(sessionKey, legacy);
+  // v1 files carry enabled:false as the old default, not as the student's choice.
+  fs.mkdirSync(path.dirname(store.activityFile(sessionKey)), {recursive: true});
+  fs.writeFileSync(store.activityFile(sessionKey), JSON.stringify({v: 1, sessionKey, enabled: false, revision: 3, history: [],
+    current: {id: 'old-card', kind: 'short_answer', question: '旧题', phase: 'asking', createdAt: Date.now()}}));
   const status = store.status(sessionKey);
-  assert.equal(status.enabled, false);
+  assert.equal(status.enabled, true);
   assert.equal(status.current, null);
   const repaired = store.read(sessionKey);
   assert.equal(repaired.current, null);
@@ -107,15 +136,26 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   const store = fixture(t);
   const methods = new Map();
   registerLearningGateway({registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); }}, store);
-  assert.deepEqual([...methods.keys()].sort(), [
-    'pinkie.learning.current', 'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
+  // v2 (2026-10-26) adds materials.* and desk.lesson.* RPCs, some read-scoped; learning-lesson/materials tests cover them exactly.
+  // 手账 v2 (2026-10-29) adds ref.*; learning-refs.test.mjs pins those names and scopes exactly.
+  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.') && !name.startsWith('pinkie.learning.ref.')));
+  assert.deepEqual([...legacyMethods.keys()].sort(), [
+    'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
+    'pinkie.learning.current', 'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
+    'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
-    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare', 'pinkie.learning.notes.restore',
-    'pinkie.learning.notes.review', 'pinkie.learning.notes.save', 'pinkie.learning.notes.update',
+    'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare',
+    'pinkie.learning.notes.recall.prepare', 'pinkie.learning.notes.recall.queue', 'pinkie.learning.notes.recall.review', 'pinkie.learning.notes.restore', 'pinkie.learning.notes.review', 'pinkie.learning.notes.review.queue', 'pinkie.learning.notes.save', 'pinkie.learning.notes.section.build', 'pinkie.learning.notes.section.get',
+    'pinkie.learning.notes.toc', 'pinkie.learning.notes.triage.apply', 'pinkie.learning.notes.triage.suggest', 'pinkie.learning.notes.triage.undo', 'pinkie.learning.notes.update',
+    'pinkie.learning.practice.list', 'pinkie.learning.practice.open', 'pinkie.learning.practice.run',
     'pinkie.learning.set', 'pinkie.learning.status', 'pinkie.learning.submit',
+    'pinkie.learning.vocab.add', 'pinkie.learning.vocab.delete', 'pinkie.learning.vocab.fromNotes.apply', 'pinkie.learning.vocab.fromNotes.preview',
+    'pinkie.learning.vocab.fromNotes.undo', 'pinkie.learning.vocab.importList', 'pinkie.learning.vocab.list', 'pinkie.learning.vocab.organize',
+    'pinkie.learning.vocab.restore', 'pinkie.learning.vocab.retag', 'pinkie.learning.vocab.review', 'pinkie.learning.vocab.review.queue',
+    'pinkie.learning.vocab.settings.get', 'pinkie.learning.vocab.settings.set', 'pinkie.learning.vocab.today', 'pinkie.learning.vocab.update',
   ]);
-  for (const item of methods.values()) assert.equal(item.opts.scope, 'operator.admin');
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /碧琪学习笔记/);
+  for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /Li An 学习笔记/);
   assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /题目消息只放题干、选项和必要的生词注释/);
@@ -125,18 +165,11 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   assert.equal(learningPrompt(store, 'agent:project:prompt'), '');
 });
 
-test('frontend keeps one native card, restores by revision, and avoids subtree observers', () => {
+test('frontend keeps one native card and restores by revision without an idle polling interval', () => {
   const source = fs.readFileSync(new URL('../ui/injections/laolao-learning-stage.js', import.meta.url), 'utf8');
   assert.match(source, /pinkie\.learning\.current/);
-  assert.match(source, /pinkie\.learning\.notes\.update/);
-  assert.match(source, /pinkie\.learning\.notes\.review/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.apply/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.light/);
-  assert.match(source, /pinkie\.learning\.notes\.organize\.preview/);
   assert.doesNotMatch(source, /learning_notes/);
   assert.match(source, /CLEKK_LEARNING_BATCH_V1/);
-  assert.match(source, /notes__search/);
-  assert.match(source, /notes__tag-filters/);
   assert.match(source, /state\.sessionKey !== sessionKey \|\| state\.revision/);
   assert.match(source, /stage\.replaceChildren\(\)/);
   assert.match(source, /chat\.send/);
@@ -145,8 +178,11 @@ test('frontend keeps one native card, restores by revision, and avoids subtree o
   assert.match(source, /chat\.abort/);
   assert.match(source, /preserveSideRuns: false/);
   assert.match(source, /Promise\.allSettled/);
-  assert.match(source, /\.chat-group\.assistant/);
-  assert.doesNotMatch(source, /new MutationObserver/);
+  assert.match(source, /__pinkieSelectionActions\?\.register\('note'/);
+  const selection = fs.readFileSync(new URL('../ui/injections/laolao-selection-actions.js', import.meta.url), 'utf8');
+  assert.match(selection, /\.chat-group\.assistant/);
+  assert.doesNotMatch(source, /setInterval\(/);
+  assert.match(source, /document\.hidden/);
 });
 
 test('note saves strip title decorations, preserve the body, and keep an immutable original', t => {
@@ -207,7 +243,7 @@ test('light organization splits fields, suggests tags, and preserves both origin
   assert.deepEqual(organized.tags, ['词组', '固定搭配']);
   const englishOnly = store.saveNote(sessionKey, {content: 'back up'}).note;
   const supplemented = store.organizeLightNote(sessionKey, englishOnly.id, {supplementalMeaning: '备份；支持'}).note;
-  assert.equal(supplemented.supplementalMeaning, '碧琪补充：备份；支持');
+  assert.equal(supplemented.supplementalMeaning, 'Li An 补充：备份；支持');
   assert.equal(supplemented.original, 'back up');
 });
 
@@ -336,7 +372,7 @@ test('merge keeps source notes recoverable and compare makes a linked card', t =
   assert.equal(store.readNotes().notes.find(note => note.id === first.id).original, 'be the same as = 和……一样');
 });
 
-test('batch activity result writes review results back to its linked notes', t => {
+test('a legacy multi-note card keeps its explanation without applying one grade to every linked note', t => {
   const store = fixture(t);
   const sessionKey = 'agent:learning:batch-review';
   const first = store.saveNote(sessionKey, {content: 'take off = 起飞'}).note;
@@ -344,12 +380,17 @@ test('batch activity result writes review results back to its linked notes', t =
   store.setEnabled(sessionKey, true);
   const shown = store.present(sessionKey, {kind: 'short_answer', question: '解释这两个词组', note_ids: [first.id, second.id]});
   store.submit(sessionKey, {activityId: shown.current.id, answer: '...', submissionId: 'batch'});
-  store.resolve(sessionKey, {activity_id: shown.current.id, correct: false, feedback: '再记一次'});
+  const resolved = store.resolve(sessionKey, {activity_id: shown.current.id, correct: false, feedback: '再记一次'});
+  assert.equal(resolved.current.result.feedback, '再记一次');
+  assert.equal(resolved.current.result.correct, false);
+  assert.equal(resolved.current.result.reviewStatus, 'needs_individual_assessment');
+  assert.deepEqual(resolved.current.result.reviewedNotes, []);
+  assert.equal(store.listAttempts(sessionKey).total, 1);
   const notes = store.listNotes({sessionKey}).notes;
   for (const id of [first.id, second.id]) {
     const note = notes.find(item => item.id === id);
-    assert.equal(note.reviewCount, 1);
-    assert.equal(note.lapses, 1);
-    assert.ok(note.nextReviewAt > Date.now());
+    assert.equal(note.reviewCount, 0);
+    assert.equal(note.lapses, 0);
+    assert.equal(note.nextReviewAt, 0);
   }
 });

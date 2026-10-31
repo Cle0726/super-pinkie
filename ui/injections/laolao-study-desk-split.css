@@ -1,0 +1,43 @@
+/* 便签栏：学习台让出右边一栏，原生聊天外壳收进去（S0 2026-10-28 验证：外壳 contain 后，聊天里按窗口定位的部件改成相对右栏；
+   原生侧栏那一列要去掉，网格改成单列）。不加任何模糊层。 */
+html[data-pinkie-desk-split]{--pk-split-w:clamp(340px,30vw,440px)}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] #pinkie-study-desk{right:var(--pk-split-w)!important;width:auto!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{visibility:visible!important;contain:layout paint;position:fixed!important;top:0!important;bottom:0!important;right:0!important;left:auto!important;
+  width:var(--pk-split-w)!important;max-width:none!important;height:100vh!important;margin:0!important;grid-template-columns:minmax(0,1fr)!important;
+  box-shadow:-1px 0 0 rgba(46,34,54,.08),-28px 0 40px -34px rgba(90,40,70,.45)}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell>:is(.shell-nav,.sidebar-resizer,.shell-skip-link,.shell-nav-backdrop){display:none!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell>main.content{grid-column:1/-1!important;padding-left:0!important}
+#pinkie-study-desk [data-desk-split].on{color:var(--pink-ink,#B42F6E)}
+/* 便签栏开着时学习台变窄：各页按学习台自己的宽度收紧（laolao-study-desk-ink.css 的 @container pkview），这里不再按窗口宽度覆盖。 */
+/* 窄栏里不放工作台的侧边小栏（学习台页上本来就不开工作台，⌥⌘B 也被学习台拦下）。 */
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell :is(.chat-workspace-rail,.pk-wb-reopen,.pk-wb-quick){display:none!important}
+/* 便签栏是一条横线便签纸（PLAN §1.1）：不透出聊天的立绘壁纸。原来那层 ::before 是整张图 cover + blur(22px)，
+   去掉它、把纸直接画在卡片上（画在 z-index:-1 的伪元素上时，Chromium 合成后会透出底下的壁纸）；也给 M1 省掉一层滤镜。::after 的细颗粒保留，当纸纹。 */
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .card.chat::before{display:none!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .card.chat{
+  background:linear-gradient(90deg,transparent 22px,#F1B7CF 22px 23.5px,transparent 23.5px),repeating-linear-gradient(to bottom,transparent 0 31px,#EADFD9 31px 32px) 0 14px,#FAF6F1!important}
+html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell .card.chat{
+  background:linear-gradient(90deg,transparent 22px,#6B3352 22px 23.5px,transparent 23.5px),repeating-linear-gradient(to bottom,transparent 0 31px,#2A2231 31px 32px) 0 14px,#1C1620!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{background:#F2EBE4!important}
+html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell{background:#141017!important}
+/* 先生 10-29：便签栏不要「框里套框」。原生外壳四周 25px 的留白、阴影和卡片圆角都去掉，聊天纸一直铺到窗口边，和学习台之间只留一条细线。 */
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{padding:0!important;box-shadow:-1px 0 0 rgba(46,34,54,.10)!important;background:#FAF6F1!important}
+html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell{box-shadow:-1px 0 0 rgba(0,0,0,.5)!important;background:#1C1620!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .card.chat{border:0!important;border-radius:0!important;box-shadow:none!important;margin:0!important}
+
+/* Reference spread: a plain paper note beside the bound book, without nested card frames. */
+html[data-pinkie-desk-split]{--pk-split-w:clamp(300px,26.6667vw,420px)}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] openclaw-app{z-index:91!important;pointer-events:none}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] openclaw-app .shell{pointer-events:auto}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] #pinkie-study-desk{right:calc(var(--pk-split-w) + 32px)!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] #pinkie-study-desk .desk-content{right:0}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{top:18px!important;bottom:18px!important;right:18px!important;height:auto!important;border-radius:14px!important;overflow:hidden;background:#F2EBE4!important;box-shadow:none!important;z-index:91!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .card.chat{background:#F2EBE4!important}
+html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell,html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell .card.chat{background:#211A26!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell :is(.chat-thread,.agent-chat__messages){padding-left:34px!important;padding-right:16px!important}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .chat-group.assistant .chat-bubble{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;font-size:13.5px;line-height:1.7}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .chat-group.user .chat-bubble{background:#FAF6F1!important;border:0!important;box-shadow:0 1px 0 rgba(46,34,54,.06)!important;border-radius:12px 12px 3px 12px!important;padding:10px 12px!important}
+html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell .chat-group.user .chat-bubble{background:#2B2231!important}
+/* 学习台有自己的独立对话；普通学习聊天始终留在原来的页面。 */
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] openclaw-app{z-index:1!important;pointer-events:auto}
+html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{visibility:hidden!important;pointer-events:none!important}

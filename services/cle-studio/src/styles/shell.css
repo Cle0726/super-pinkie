@@ -1,0 +1,129 @@
+/* C.le. shell — first pass over the native Control UI (2026.10.4 light DOM). */
+
+/* promotion, the upstream mascot and the reply attribution are removed by core/prune.js */
+
+/* ---------- page ---------- */
+html[data-cle] body { background: var(--cle-paper); color: var(--cle-ink); -webkit-font-smoothing: antialiased; }
+html[data-cle] ::selection { background: var(--cle-gaze-soft); }
+html[data-cle] img.chat-avatar.assistant {
+  content: url('/cle/static/art/avatar.webp?v=20261019r');
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* ---------- sidebar ---------- */
+html[data-cle] aside.sidebar {
+  background: transparent;
+  border-right: 1px solid var(--cle-line);
+}
+html[data-cle] .sidebar-shell { background: transparent; }
+html[data-cle] .sidebar-resizer { opacity: 0; }
+html[data-cle] .nav-section__items a,
+html[data-cle] .nav-section__items button {
+  border-radius: var(--cle-radius-ctl);
+  color: var(--cle-ink-2);
+  transition: color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .nav-section__items a:hover,
+html[data-cle] .nav-section__items button:hover { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+html[data-cle] .nav-section__items [aria-current="page"],
+html[data-cle] .nav-section__items .active,
+html[data-cle] .nav-section__items [data-active="true"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: inset 2px 0 0 var(--cle-gaze);
+  color: var(--cle-ink) !important;
+  font-weight: 600;
+}
+html[data-cle] .sidebar-online, html[data-cle] .sidebar-sessions { --cle-head: 1; }
+html[data-cle] .sidebar-online > :first-child,
+html[data-cle] .sidebar-sessions > :first-child {
+  font: 500 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--cle-ink-3);
+}
+html[data-cle] .sidebar-footer-bar { border-top: 1px solid var(--cle-line); background: transparent; }
+
+/* ── 侧栏底部：名字必须完整可读，按钮不许挤掉它 ────────────────────────────
+   现象：右侧几个图标（空间入口 / 演示 / 魔杖）抢宽，名字被压到约 30px，
+   只剩「C.l」并带渐隐。这里给名字一个保底宽度，窄的时候先收按钮、再收名字。
+   按钮本身不要灰色实底方块（原生的 footer-icon 有时带 background），统一透明。 */
+html[data-cle] .sidebar-footer-actions {
+  flex: 0 0 auto;
+  gap: 2px;
+  min-width: 0;
+}
+/* 任何落在这排里的图标按钮：无实底，只有 hover 时的极淡中性底 */
+html[data-cle] :is(.sidebar-footer-actions, .sidebar-footer-bar) .sidebar-footer-icon {
+  background: transparent !important;
+  border-radius: 8px;
+  /* 必须显式给字色：原生的按钮只画 SVG，字符图标（⊞ 之类）会拿到继承的纯黑，
+     夜间在深底上只有 1.15:1，等于看不见。 */
+  color: var(--cle-ink-2);
+}
+html[data-cle] :is(.sidebar-footer-actions, .sidebar-footer-bar) .sidebar-footer-icon:hover {
+  background: color-mix(in srgb, var(--cle-ink) 6%, transparent) !important;
+  color: var(--cle-ink);
+}
+/* 名字槽：保底 8 个汉字宽（约 8em 于 11.5px ≈ 92px），不够时才省略 */
+html[data-cle] :is(.sidebar-workspace-header__name, .sidebar-agent-card__name-text, .sidebar-footer-bar .hover-marquee__text) {
+  min-width: 8em;
+  flex: 1 1 auto;
+}
+/* 窄侧栏：按钮先收成一条，不跟名字抢 */
+@media (max-width: 1180px) {
+  html[data-cle] .sidebar-footer-actions { gap: 0; }
+}
+/* 极窄仍要保证名字不被挤没：允许按钮横向滚动而不是压缩名字 */
+html[data-cle] .sidebar-footer-actions { overflow-x: auto; scrollbar-width: none; }
+html[data-cle] .sidebar-footer-actions::-webkit-scrollbar { display: none; }
+
+/* ---------- pane header ---------- */
+html[data-cle] .chat-pane__header { background: transparent; border-bottom: 0; }
+html[data-cle] .chat-pane__session-title-text { font: 500 15px/1.2 var(--cle-serif); letter-spacing: .01em; color: var(--cle-ink); }
+
+/* ---------- welcome ---------- */
+html[data-cle] .agent-chat__welcome h2 {
+  font: 400 34px/1.15 var(--cle-serif);
+  letter-spacing: .02em;
+  color: var(--cle-ink);
+}
+html[data-cle] .agent-chat__hint { color: var(--cle-ink-3); font-size: 12.5px; }
+html[data-cle] .agent-chat__suggestion {
+  background: transparent;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 999px;
+  color: var(--cle-ink-2);
+  font-size: 13px;
+  box-shadow: none;
+  transition: border-color var(--cle-t-quick) var(--cle-ease-soft), color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .agent-chat__suggestion:hover { border-color: var(--cle-ink); color: var(--cle-ink); background: color-mix(in srgb, var(--cle-surface) 70%, transparent); }
+
+/* composer lives in composer/composer.css */
+html[data-cle] .chat-footer { background: transparent; }
+
+/* ---------- canvas: no stock wallpaper; the paper is ours ---------- */
+html[data-cle] .shell { background-image: var(--cle-canvas, none) !important; background-size: 720px 720px; background-repeat: repeat; }
+
+/* ---------- workspace menu: his face instead of the stock mascot ---------- */
+html[data-cle] .sidebar-workspace-header__mark > svg { display: none !important; }
+html[data-cle] .sidebar-workspace-header__mark {
+  background: #0A0D16 url('/cle/static/art/avatar.webp?v=20261019r') center / cover no-repeat !important;
+  border-radius: 50% !important; box-shadow: 0 0 0 1px var(--cle-gold-soft);
+}
+
+/* the resize handle: invisible until the pointer finds it */
+html[data-cle] .sidebar-resizer { opacity: 0; transition: opacity var(--cle-t-quick) var(--cle-ease-soft); }
+html[data-cle] .sidebar-resizer:hover, html[data-cle] .sidebar-resizer:active { opacity: 1; }
+
+/* ---------- the opening ---------- */
+#cle-splash { position: fixed; inset: 0; z-index: 2147483646; background: transparent; pointer-events: none; transition: opacity .35s ease; }
+#cle-splash canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#cle-splash .cle-splash__sig { position: absolute; pointer-events: none; color: #F1EADB; filter: drop-shadow(0 2px 10px rgba(6, 8, 14, .55)); }
+#cle-splash.is-gone { opacity: 0; }
+
+/* ---------- developer chrome the user never needs ---------- */
+html[data-cle] .chat-pane__sharing-trigger, html[data-cle] [class*="chat-pane__sharing"],
+html[data-cle] .sidebar-footer-bar__home, html[data-cle] .sidebar-issues-button { display: none !important; }

@@ -1,0 +1,411 @@
+/* Prototype tokens and geometry, scoped to the learning desk. */
+
+#pinkie-study-desk{
+  --paper:#FAF6F1; --paper-2:#F2EBE4; --card:#FFFDFB;
+  --ink:#2E2236; --ink-2:#6F6377; --ink-3:#87788D; --hair:#E9E0DB; --hair-2:#DDD1CC;
+  --ink-tint:rgba(46,34,54,.06);
+  --pink:#E5488F; --pink-tint:#F9E1EC; --pink-ink:#B42F6E;
+  --lift:0 1px 0 rgba(46,34,54,.04),0 22px 44px -28px rgba(90,40,70,.38);
+  --serif:"Songti SC","Noto Serif SC","Source Han Serif SC",ui-serif,serif;
+  --sans:"PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --out:cubic-bezier(.2,.7,.2,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --glass:rgba(255,251,248,.7); --ring:rgba(46,34,54,.2); --glass-strong:rgba(255,251,249,.8); --glass-edge:rgba(255,255,255,.62); --glass-hi:rgba(255,255,255,.85);
+  --glass-shadow:0 24px 60px -34px rgba(110,48,80,.42);
+}
+#pinkie-study-desk[data-theme="night"]{
+  --paper:#17131B; --paper-2:#100D13; --card:#1F1A24;
+  --ink:#F2E9EF; --ink-2:#B6A9BB; --ink-3:#7D7183; --hair:#2E2735; --hair-2:#3A3242;
+  --ink-tint:rgba(242,233,239,.06);
+  --pink:#F0679F; --pink-tint:#3B1E2D; --pink-ink:#F59AC2;
+  --lift:0 1px 0 rgba(0,0,0,.2),0 22px 44px -26px rgba(0,0,0,.7);
+  --glass:rgba(30,24,36,.6); --ring:rgba(242,233,239,.2); --glass-strong:rgba(32,26,38,.78); --glass-edge:rgba(255,255,255,.09); --glass-hi:rgba(255,255,255,.12);
+  --glass-shadow:0 24px 60px -30px rgba(0,0,0,.75);
+}
+
+#pinkie-study-desk .pw{position:relative;width:100%;border-radius:22px;overflow:hidden;box-shadow:0 40px 80px -40px rgba(80,40,60,.45),0 0 0 1px var(--hair);outline:none}
+#pinkie-study-desk .pw:focus-visible{box-shadow:0 40px 80px -40px rgba(80,40,60,.45),0 0 0 2px var(--pink)}
+#pinkie-study-desk{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0;background:#EADBD3;color:var(--ink);font-family:var(--sans);overflow:hidden;transition:background .4s var(--out),color .4s var(--out)}
+/* 背景板没入库前用纸色渐变占位，不透出 App 带角色的学习壁纸。 */
+#pinkie-study-desk .plate{position:absolute;inset:0;background:radial-gradient(70% 90% at 88% 22%,var(--pink-tint),transparent 70%),radial-gradient(60% 70% at 8% 92%,var(--paper-2),transparent 70%),var(--paper);transition:background .5s}
+#pinkie-study-desk[data-theme="night"]{background:#120E15}
+#pinkie-study-desk .glass{background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:inset 0 1px 0 var(--glass-hi),var(--glass-shadow);position:relative;transition:background .4s,border-color .4s}
+#pinkie-study-desk .glass::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background-image:var(--grain);opacity:.07;mix-blend-mode:overlay}
+#pinkie-study-desk .rail{position:absolute;left:14px;top:14px;bottom:14px;width:72px;border-radius:24px;display:flex;flex-direction:column;align-items:center;padding:24px 0 20px;z-index:5}
+#pinkie-study-desk .logo{width:36px;height:36px;border-radius:11px;background:var(--pink);color:#fff;display:grid;place-items:center;font-size:18px}
+#pinkie-study-desk .rail-nav{margin:auto 0;display:flex;flex-direction:column;gap:14px}
+#pinkie-study-desk .rail-nav button,#pinkie-study-desk .rail-foot button{width:44px;height:44px;border:0;background:none;border-radius:14px;color:var(--ink-3);font-size:21px;cursor:pointer;position:relative;transition:color .2s,background .2s}
+#pinkie-study-desk .rail-nav button:hover,#pinkie-study-desk .rail-foot button:hover{color:var(--ink);background:var(--ink-tint)}
+#pinkie-study-desk .rail-nav button.on{color:var(--ink)}
+#pinkie-study-desk .rail-nav button.on::before{content:"";position:absolute;left:-10px;top:50%;width:4px;height:4px;border-radius:50%;background:var(--pink);transform:translateY(-50%)}
+#pinkie-study-desk .rail-nav button span{position:absolute;left:54px;top:50%;transform:translate(-4px,-50%);font-size:12px;white-space:nowrap;background:var(--ink);color:var(--paper);padding:2px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:.18s var(--out)}
+#pinkie-study-desk .rail-nav button:hover span{opacity:1;transform:translate(0,-50%)}
+#pinkie-study-desk .rail-foot{display:flex;flex-direction:column;align-items:center;gap:12px}
+#pinkie-study-desk .rail-foot img{width:36px;height:36px;border-radius:50%;object-fit:cover}
+#pinkie-study-desk .view{position:absolute;inset:14px 14px 14px 100px;border-radius:26px}
+#pinkie-study-desk .view[hidden]{display:none}
+#pinkie-study-desk .rv{opacity:0;transform:translateY(10px)}
+#pinkie-study-desk .view.in .rv{animation:psd-rise .62s var(--out) forwards;animation-delay:calc(var(--i,0) * 70ms)}
+#pinkie-study-desk .morph{position:absolute;z-index:4;pointer-events:none;-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%)}
+#pinkie-study-desk .home{padding:50px 66px 40px;display:grid;grid-template-columns:600px minmax(0,1fr);column-gap:110px}
+#pinkie-study-desk .h-left{display:flex;flex-direction:column;min-width:0}
+#pinkie-study-desk .date{font-size:13px;color:var(--ink-3);letter-spacing:.06em}
+#pinkie-study-desk .greet{font-family:var(--serif);font-size:54px;line-height:1.22;font-weight:600;margin:22px 0 0;letter-spacing:.01em}
+#pinkie-study-desk .greet span{display:block;color:var(--ink-3);font-weight:400}
+#pinkie-study-desk .task{margin-top:46px;background:var(--card);border:1px solid var(--hair);border-radius:28px;padding:30px 32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:24px;cursor:pointer;transition:transform .28s var(--out),box-shadow .28s var(--out),border-color .28s}
+#pinkie-study-desk .task:hover{transform:translateY(-3px);box-shadow:var(--lift);border-color:transparent}
+#pinkie-study-desk .task small{font-size:12px;color:var(--ink-3);letter-spacing:.06em}
+#pinkie-study-desk .task h3{font-family:var(--serif);font-size:30px;font-weight:600;margin:6px 0 6px}
+#pinkie-study-desk .task p{margin:0;color:var(--ink-2);font-size:14px}
+#pinkie-study-desk .go{width:68px;height:68px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font-size:24px;position:relative;overflow:hidden;border:0;cursor:pointer}
+#pinkie-study-desk .go::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--pink);transform:scale(0);transition:transform .42s var(--out)}
+#pinkie-study-desk .task:hover .go::before{transform:scale(1)}
+#pinkie-study-desk .go .desk-icon{position:relative;transition:transform .3s var(--out)}
+#pinkie-study-desk .task:hover .go .desk-icon{transform:translateX(3px)}
+#pinkie-study-desk .quiet{margin-top:26px}
+#pinkie-study-desk .q-row{display:grid;grid-template-columns:minmax(0,1fr) auto 20px;gap:16px;align-items:center;padding:15px 4px;border-top:1px solid var(--hair);font-size:15px;cursor:pointer;color:var(--ink)}
+#pinkie-study-desk .q-row:last-child{border-bottom:1px solid var(--hair)}
+#pinkie-study-desk .q-row em{font-style:normal;color:var(--ink-3);font-size:13px}
+#pinkie-study-desk .q-row i{color:var(--ink-3);transition:transform .25s var(--out),color .2s}
+#pinkie-study-desk .q-row:hover i{transform:translateX(4px);color:var(--ink)}
+#pinkie-study-desk .stroke{position:relative;display:inline-block}
+#pinkie-study-desk .stroke::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:1.5px;background:var(--pink);transform:scaleX(0);transform-origin:left;transition:transform .32s var(--out)}
+#pinkie-study-desk .q-row:hover .stroke::after,#pinkie-study-desk .stroke.on::after{transform:scaleX(1)}
+#pinkie-study-desk .ask{margin-top:auto;height:56px;border:1px solid var(--glass-edge);border-radius:99px;display:flex;align-items:center;gap:12px;padding:0 10px 0 22px;color:var(--ink-3);font-size:14px;background:var(--glass-strong);box-shadow:inset 0 1px 0 var(--glass-hi);transition:border-color .2s}
+#pinkie-study-desk .ask:hover{border-color:var(--ink-3)}
+#pinkie-study-desk .ask i{color:var(--pink);font-size:18px}
+#pinkie-study-desk .ask kbd{margin-left:auto;font-family:var(--sans);font-size:12px;border:1px solid var(--hair-2);border-radius:8px;padding:2px 8px;color:var(--ink-3)}
+#pinkie-study-desk .h-right{position:relative;min-width:0;display:flex;flex-direction:column}
+#pinkie-study-desk .countdown{display:flex;justify-content:flex-end;gap:48px;align-items:flex-end}
+#pinkie-study-desk .cd{text-align:right}
+#pinkie-study-desk .cd small{display:flex;align-items:center;justify-content:flex-end;gap:6px;font-size:12px;color:var(--ink-3);letter-spacing:.04em}
+#pinkie-study-desk .cd small i{width:6px;height:6px;border-radius:50%;background:var(--pink)}
+#pinkie-study-desk .cd b{font-family:var(--serif);font-weight:500;font-size:68px;line-height:1;letter-spacing:-.01em;display:inline-block;margin-top:6px}
+#pinkie-study-desk .cd b span{font-size:15px;color:var(--ink-3);margin-left:4px;font-family:var(--sans);font-weight:400}
+#pinkie-study-desk .cd.far b{color:var(--ink-3)}
+#pinkie-study-desk .cd em{display:block;font-style:normal;font-size:11px;color:var(--ink-3);margin-top:4px}
+#pinkie-study-desk .cd-sub{margin-top:14px;text-align:right;font-size:12px;color:var(--ink-3)}
+#pinkie-study-desk .map{margin-top:48px}
+#pinkie-study-desk .map-h{display:flex;align-items:baseline;gap:10px;font-size:12px;color:var(--ink-3)}
+#pinkie-study-desk .map-h b{font-family:var(--serif);font-size:30px;color:var(--ink);font-weight:500}
+#pinkie-study-desk .map-rows{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+#pinkie-study-desk .mrow{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:start;font-size:12px;color:var(--ink-3)}
+#pinkie-study-desk .dots{display:flex;flex-wrap:wrap;gap:7px}
+#pinkie-study-desk .dot{width:10px;height:10px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--ring);cursor:pointer;position:relative;transition:transform .2s var(--out),opacity .2s}
+#pinkie-study-desk .dot.gap{margin-left:9px}
+#pinkie-study-desk .dot:hover{transform:scale(1.5)}
+#pinkie-study-desk .dot.l{background:var(--pink);box-shadow:none}
+#pinkie-study-desk .dot.m{background:var(--ink);box-shadow:none}
+#pinkie-study-desk .dot.dim{opacity:.22}
+#pinkie-study-desk .map.in .dot{animation:psd-dotin .5s var(--out) both;animation-delay:calc(var(--d) * 8ms + 260ms)}
+#pinkie-study-desk .dot.lit{animation:psd-starlight .7s var(--spring) both!important}
+#pinkie-study-desk .dot.lit::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1.5px solid var(--pink);animation:psd-halo .8s var(--out) forwards}
+#pinkie-study-desk .map-cap{margin-top:16px;font-size:13px;color:var(--ink-2);min-height:22px}
+#pinkie-study-desk .map-cap b{font-family:var(--serif);color:var(--ink);font-weight:600;margin-right:8px}
+#pinkie-study-desk .biqi{position:absolute;right:-30px;bottom:-40px;width:262px;transform-origin:50% 100%}
+#pinkie-study-desk .view.in .biqi{animation:psd-rise .62s var(--out) forwards,psd-breathe 4.6s 1s ease-in-out infinite;animation-delay:280ms,1s}
+#pinkie-study-desk .bubble{position:absolute;right:236px;bottom:150px;max-width:250px;background:var(--glass-strong);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border:1px solid var(--glass-edge);border-radius:18px 18px 4px 18px;padding:12px 16px;font-size:13.5px;line-height:1.65;color:var(--ink);box-shadow:var(--lift)}
+#pinkie-study-desk .bubble.swap{animation:psd-bub .4s var(--out)}
+#pinkie-study-desk .stage{padding:28px 66px 34px;display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto minmax(0,1fr);column-gap:96px}
+#pinkie-study-desk .s-top{grid-column:1/-1;display:flex;align-items:center;gap:18px;height:44px}
+#pinkie-study-desk .back{width:42px;height:42px;border-radius:50%;border:1px solid var(--hair-2);background:none;display:grid;place-items:center;font-size:18px;color:var(--ink-2);cursor:pointer;transition:.2s}
+#pinkie-study-desk .back:hover{color:var(--ink);border-color:var(--ink-3)}
+#pinkie-study-desk .crumb{font-family:var(--serif);font-size:21px;font-weight:600}
+#pinkie-study-desk .crumb small{font-family:var(--sans);font-size:12px;color:var(--ink-3);font-weight:400;margin-left:10px}
+#pinkie-study-desk .segs{margin-left:auto;display:flex;gap:6px;align-items:center}
+#pinkie-study-desk .segs i{width:34px;height:4px;border-radius:9px;background:var(--hair-2);position:relative;overflow:hidden;transition:background .3s}
+#pinkie-study-desk .segs i::after{content:"";position:absolute;inset:0;border-radius:9px;background:var(--pink);transform:scaleX(0);transform-origin:left;transition:transform .5s var(--out)}
+#pinkie-study-desk .segs i.ok::after{transform:scaleX(1)}
+#pinkie-study-desk .segs i.no::after{transform:scaleX(1);background:var(--ink-3)}
+#pinkie-study-desk .segs i.cur{background:var(--ink-3)}
+#pinkie-study-desk .streak{font-size:12px;color:var(--pink-ink);margin-left:6px;min-width:44px;opacity:0;transition:opacity .3s}
+#pinkie-study-desk .streak.on{opacity:1}
+#pinkie-study-desk .clock{font-family:var(--mono);font-size:13px;color:var(--ink-3);margin-left:8px}
+#pinkie-study-desk .modes{display:flex;gap:22px;margin-left:30px;font-size:13px;color:var(--ink-3)}
+#pinkie-study-desk .modes span{cursor:pointer;padding-bottom:3px}
+#pinkie-study-desk .modes span.on{color:var(--ink);box-shadow:inset 0 -1.5px 0 var(--pink)}
+#pinkie-study-desk .qcol{display:flex;flex-direction:column;min-width:0;padding-top:44px;position:relative}
+#pinkie-study-desk .q-meta{font-size:12px;color:var(--ink-3);letter-spacing:.06em}
+#pinkie-study-desk .q-text{font-family:var(--serif);font-size:34px;line-height:1.45;font-weight:600;margin:14px 0 0}
+#pinkie-study-desk .q-code{margin:22px 0 0;padding:4px 0 4px 34px;border-radius:4px;font:16px/28px var(--mono);white-space:pre;color:var(--ink);background:repeating-linear-gradient(to bottom,transparent 0 27px,var(--hair) 27px 28px);position:relative}
+#pinkie-study-desk .q-code::before{content:"";position:absolute;left:14px;top:0;bottom:0;width:1px;background:var(--pink);opacity:.45}
+#pinkie-study-desk .opts{list-style:none;margin:auto 0 0;padding:28px 0 0}
+#pinkie-study-desk .opt{position:relative;width:100%;display:grid;grid-template-columns:48px minmax(0,1fr) 28px;align-items:center;gap:6px;border:0;border-top:1px solid var(--hair);background:none;padding:17px 6px;text-align:left;font-size:18px;cursor:pointer;overflow:hidden}
+#pinkie-study-desk .opts li:last-child .opt{border-bottom:1px solid var(--hair)}
+#pinkie-study-desk .opt .bl{position:absolute;inset:0;background:var(--pink-tint);clip-path:circle(0 at var(--ink-x,22px) var(--ink-y,50%));transition:clip-path .6s var(--out);z-index:0}
+#pinkie-study-desk .opt.rev .bl{background:var(--ink-tint)}
+#pinkie-study-desk .opt.ok .bl,#pinkie-study-desk .opt.rev .bl{clip-path:circle(140% at var(--ink-x,22px) var(--ink-y,50%))}
+#pinkie-study-desk .opt>*:not(.bl){position:relative;z-index:1}
+#pinkie-study-desk .opt .k{width:28px;height:28px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--hair-2);display:grid;place-items:center;font-size:13px;color:var(--ink-3);font-family:var(--serif);transition:background .25s,color .25s,box-shadow .25s,transform .35s var(--spring)}
+#pinkie-study-desk .opt:hover .k{box-shadow:inset 0 0 0 1.2px var(--ink-3);color:var(--ink)}
+#pinkie-study-desk .opt .t{position:relative;justify-self:start}
+#pinkie-study-desk .opt .t::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:1.5px;background:var(--pink);transform:scaleX(0);transform-origin:left;transition:transform .3s var(--out)}
+#pinkie-study-desk .opt:hover .t::after{transform:scaleX(1)}
+#pinkie-study-desk .opt.sel .k{background:var(--pink);color:#fff;box-shadow:none;transform:scale(1.08)}
+#pinkie-study-desk .opt.ok .k{background:var(--pink);color:#fff;box-shadow:none}
+#pinkie-study-desk .opt.rev .k{background:var(--ink);color:var(--paper);box-shadow:none}
+#pinkie-study-desk .opt.no .t{color:var(--ink-3)}
+#pinkie-study-desk .opt.no .t::before{content:"";position:absolute;left:-2px;right:-2px;top:52%;height:1.5px;background:var(--ink-3);transform-origin:left;animation:psd-strike .45s var(--out) forwards}
+#pinkie-study-desk .opt.answered{cursor:default}
+#pinkie-study-desk .opt.answered .t::after{display:none}
+#pinkie-study-desk .opt .mk svg{width:22px;height:22px;stroke:var(--pink);stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30}
+#pinkie-study-desk .opt.ok .mk svg{animation:psd-draw .45s .25s var(--out) forwards}
+#pinkie-study-desk .q-foot{display:flex;align-items:center;gap:18px;margin-top:22px;font-size:13px;color:var(--ink-3)}
+#pinkie-study-desk .conf{display:flex;gap:16px}
+#pinkie-study-desk .conf button{border:0;background:none;padding:0 0 3px;font-size:13px;color:var(--ink-3);cursor:pointer;transition:color .2s,box-shadow .25s}
+#pinkie-study-desk .conf button:hover{color:var(--ink)}
+#pinkie-study-desk .conf button[aria-pressed="true"]{color:var(--ink);box-shadow:inset 0 -1.5px 0 var(--pink)}
+#pinkie-study-desk .err{color:var(--pink-ink)}
+#pinkie-study-desk .confirm{margin-left:auto;height:44px;padding:0 22px;border-radius:99px;border:0;background:var(--ink);color:var(--paper);font-size:14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:transform .2s var(--out)}
+#pinkie-study-desk .confirm:active{transform:scale(.97)}
+#pinkie-study-desk .confirm kbd{font-family:var(--sans);font-size:11px;opacity:.6}
+#pinkie-study-desk .side{display:flex;flex-direction:column;min-height:0;padding-top:30px}
+#pinkie-study-desk .side .fig{height:210px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--hair)}
+#pinkie-study-desk .side .fig img{height:200px;transform-origin:50% 100%;animation:psd-breathe 4.6s ease-in-out infinite;transition:opacity .18s}
+#pinkie-study-desk .side .fig img.psd-hop{animation:psd-hop .62s var(--out),psd-breathe 4.6s .62s ease-in-out infinite}
+#pinkie-study-desk .say{padding-top:22px;font-size:15px;line-height:1.85;color:var(--ink)}
+#pinkie-study-desk .say .who{font-size:12px;color:var(--ink-3);letter-spacing:.06em;margin-bottom:6px}
+#pinkie-study-desk .say p{margin:0 0 10px}
+#pinkie-study-desk .say .ln{display:block;opacity:0;transform:translateY(6px);animation:psd-rise .5s var(--out) forwards}
+#pinkie-study-desk .kp{position:relative;display:inline}
+#pinkie-study-desk .kp svg{position:absolute;left:0;bottom:-6px;width:100%;height:8px;overflow:visible}
+#pinkie-study-desk .kp path{fill:none;stroke:var(--pink);stroke-width:2;stroke-linecap:round;stroke-dasharray:400;stroke-dashoffset:400;animation:psd-draw .9s .35s var(--out) forwards}
+#pinkie-study-desk .keyp{display:block;margin-top:4px;padding-left:14px;border-left:2px solid var(--pink);border-radius:0;color:var(--ink-2);font-size:14px}
+#pinkie-study-desk .side .more{margin-top:auto;display:flex;gap:18px;font-size:13px;color:var(--ink-3)}
+#pinkie-study-desk .side .more span{cursor:pointer;transition:color .2s}
+#pinkie-study-desk .side .more span:hover{color:var(--ink)}
+#pinkie-study-desk .summary{position:absolute;inset:44px 0 0 0;background:transparent;display:none;flex-direction:column;justify-content:center}
+#pinkie-study-desk .summary.on{display:flex}
+#pinkie-study-desk .summary h3{font-family:var(--serif);font-size:46px;font-weight:600;margin:0}
+#pinkie-study-desk .summary p{color:var(--ink-2);margin:12px 0 0;font-size:15px}
+#pinkie-study-desk .sum-dots{display:flex;gap:12px;margin:34px 0}
+#pinkie-study-desk .sum-dots i{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1.2px var(--ring)}
+#pinkie-study-desk .sum-dots i.l{background:var(--pink);box-shadow:none;animation:psd-starlight .7s var(--spring) both}
+#pinkie-study-desk .sum-act{display:flex;gap:22px;align-items:center}
+#pinkie-study-desk .sum-act .confirm{margin-left:0}
+#pinkie-study-desk .link{border:0;background:none;color:var(--ink-2);cursor:pointer;font-size:14px;padding:0 0 3px}
+#pinkie-study-desk .link:hover{color:var(--ink);box-shadow:inset 0 -1.5px 0 var(--pink)}
+#pinkie-study-desk canvas.party{position:absolute;inset:0;pointer-events:none;z-index:6;width:100%;height:100%}
+@keyframes psd-rise{to{opacity:1;transform:none}}
+@keyframes psd-dotin{from{opacity:0;transform:scale(.3)}}
+@keyframes psd-starlight{0%{transform:scale(.4)}60%{transform:scale(1.35)}100%{transform:scale(1)}}
+@keyframes psd-halo{from{opacity:.9;transform:scale(.6)}to{opacity:0;transform:scale(1.9)}}
+@keyframes psd-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.013,1.018)}}
+@keyframes psd-bub{from{opacity:0;transform:translateY(6px) scale(.98)}}
+@keyframes psd-strike{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes psd-draw{to{stroke-dashoffset:0}}
+@keyframes psd-hop{30%{transform:translateY(-12px)}60%{transform:translateY(0)}80%{transform:translateY(-3px)}}
+
+/* Runtime shell: the original App stays intact beneath the desk. */
+#pinkie-study-desk{position:fixed;inset:0;width:auto;height:auto;z-index:90;background:#EADBD3;color:var(--ink);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;isolation:isolate;overflow:hidden}
+#pinkie-study-desk *,#pinkie-study-desk *::before,#pinkie-study-desk *::after{box-sizing:border-box}
+/* 只重置学习台自己的控件；挂进来的互动卡片和抽屉保留自己的按钮配色（否则「开始模拟」「新笔记」会墨字墨底）。
+   用 :where() 把优先级压到 (1,0,0)：仍然盖过 App 的 button 样式，但不再盖掉 .confirm、.b-adopt 这些按钮自己的颜色和字号。 */
+#pinkie-study-desk :where(button,input,textarea):where(:not(.desk-inline-slot *,.laolao-learning-notes *,.pinkie-library *)){font:inherit;color:inherit}
+#pinkie-study-desk button{touch-action:manipulation}
+#pinkie-study-desk button:focus-visible,#pinkie-study-desk input:focus-visible{outline:2px solid var(--pink);outline-offset:4px}
+#pinkie-study-desk [hidden]{display:none!important}
+#pinkie-study-desk .desk-content{position:absolute;inset:0}
+#pinkie-study-desk .morph{-webkit-backdrop-filter:none;backdrop-filter:none;will-change:transform;contain:layout paint}
+#pinkie-study-desk .view{overflow:auto}
+#pinkie-study-desk .logo{border:0;cursor:pointer;padding:8px}
+#pinkie-study-desk .desk-icon{position:static;display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;opacity:1;transform:none;padding:0;background:none;color:inherit;pointer-events:none}
+#pinkie-study-desk .desk-icon svg{width:100%;height:100%}
+#pinkie-study-desk .rail-nav button{display:grid;place-items:center;padding:0}
+#pinkie-study-desk .rail-nav button .desk-icon{position:static;transform:none;opacity:1;padding:0;background:none;color:inherit;border-radius:0}
+#pinkie-study-desk .rail-nav button:focus-visible .nav-tip{opacity:1;transform:translate(0,-50%)}
+#pinkie-study-desk .desk-status{position:absolute;bottom:18px;left:120px;font:12px var(--sans);color:var(--ink-2);pointer-events:none;z-index:9}
+#pinkie-study-desk[data-view="chat"]{pointer-events:none;background:none;transition:none}
+#pinkie-study-desk[data-view="chat"] .plate,#pinkie-study-desk[data-view="chat"] .desk-content,#pinkie-study-desk[data-view="chat"] .party,#pinkie-study-desk[data-view="chat"] .desk-status{display:none}
+#pinkie-study-desk[data-view="chat"] .rail{pointer-events:auto}
+/* 对话界面（data-pinkie-study-desk="chat"）里工作台照常可用：只在学习台自己的页面藏起来。
+   之前一律藏起，但工作台按 --pk-wb-w 给对话留的左边距还在，打开工作台后左边空一大块。 */
+html[data-pinkie-study-desk]:not([data-pinkie-study-desk="chat"]) :is(.pk-wb,.pk-wb-quick,.pk-wb-menu,.laolao-workbench,.chat-workspace-rail,.chat-workspace-sidebar,openclaw-terminal-panel){display:none!important}
+html[data-pinkie-study-desk] :is(.laolao-learning-stage,.laolao-learning-notebook-button,.laolao-companion){display:none!important}
+html[data-pinkie-study-desk]:not([data-pinkie-study-desk="chat"]) .chat-workbench{grid-template-columns:minmax(0,1fr)!important}
+html[data-pinkie-study-desk] body main.content{padding-left:0!important}
+html[data-pinkie-study-desk="desk"] .shell{visibility:hidden!important}
+/* 对话视图有原生侧栏入口时，整条细导航让出来，原生页面不再右移。 */
+html[data-pinkie-desk-entry] #pinkie-study-desk[data-view="chat"] .rail{display:none}
+html[data-pinkie-study-desk="chat"]:not([data-pinkie-desk-entry]) .shell.shell--chat{margin-left:100px;width:calc(100% - 100px)}
+.pinkie-desk-entry--crumb{display:inline-flex;align-items:center;gap:5px;margin-left:6px;padding:3px 10px 3px 8px;border-radius:99px;border:1px solid color-mix(in srgb,currentColor 24%,transparent);font-size:12.5px;line-height:1.4;color:inherit;text-decoration:none;cursor:pointer;white-space:nowrap}
+.pinkie-desk-entry--crumb:hover{border-color:color-mix(in srgb,currentColor 48%,transparent)}
+.pinkie-desk-entry__icon{display:inline-flex;width:14px;height:14px;color:#E5488F}
+.pinkie-desk-entry__icon svg{width:14px;height:14px}
+.pinkie-desk-entry .nav-item__icon svg{width:16px;height:16px}
+html[data-pinkie-study-desk] :is(.laolao-learning-notes,.pinkie-library){z-index:110!important;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+@media(max-width:1350px){
+  #pinkie-study-desk .home{padding:40px 44px 34px;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);column-gap:54px}
+  #pinkie-study-desk .stage{padding:28px 44px;grid-template-columns:minmax(0,1fr) 300px;column-gap:44px}
+  #pinkie-study-desk .modes{gap:14px;margin-left:8px}
+  #pinkie-study-desk .segs i{width:22px}
+  #pinkie-study-desk .greet{font-size:48px}
+}
+@media(max-width:1100px){
+  #pinkie-study-desk .home{padding:30px 32px;column-gap:32px}
+  #pinkie-study-desk .greet{font-size:40px}
+  #pinkie-study-desk .task{padding:22px;margin-top:28px;gap:12px}
+  #pinkie-study-desk .task h3{font-size:25px}
+  #pinkie-study-desk .countdown{gap:22px}
+  #pinkie-study-desk .cd b{font-size:52px}
+  #pinkie-study-desk .stage{padding:22px 32px;grid-template-columns:minmax(0,1fr) 250px;column-gap:28px}
+  #pinkie-study-desk .s-top{height:auto;flex-wrap:wrap;gap:10px}
+  #pinkie-study-desk .modes{margin-left:auto}
+  #pinkie-study-desk .q-text{font-size:28px}
+  #pinkie-study-desk .qcol{padding-top:28px}
+  #pinkie-study-desk .q-foot{gap:10px;flex-wrap:wrap}
+  #pinkie-study-desk .conf{gap:10px}
+}
+#pinkie-study-desk[data-reduced="true"],#pinkie-study-desk[data-reduced="true"] *,#pinkie-study-desk[data-reduced="true"] *::before,#pinkie-study-desk[data-reduced="true"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+#pinkie-study-desk[data-reduced="true"] .rv,#pinkie-study-desk[data-reduced="true"] .say .ln{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  #pinkie-study-desk,#pinkie-study-desk *,#pinkie-study-desk *::before,#pinkie-study-desk *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  #pinkie-study-desk .rv,#pinkie-study-desk .say .ln{opacity:1;transform:none}
+}
+#pinkie-study-desk .task{text-align:left;width:100%;color:var(--ink)}
+#pinkie-study-desk .ask{-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+#pinkie-study-desk .ask input{min-width:0;flex:1;width:100%;background:none;border:0;outline:none;color:var(--ink);font-size:14px}
+#pinkie-study-desk .ask input::placeholder{color:var(--ink-2)}
+#pinkie-study-desk .dot{border:0;padding:0;background:none;flex-shrink:0}
+#pinkie-study-desk .dot.l{background:var(--pink)}
+#pinkie-study-desk .dot.m{background:var(--ink)}
+#pinkie-study-desk .dot.weak{box-shadow:inset 0 0 0 1.5px var(--ink)}
+#pinkie-study-desk .cd b strong{font:inherit}
+#pinkie-study-desk .exam-set{background:none;border:0;border-bottom:1px solid var(--hair-2);padding:10px 0;cursor:pointer;color:var(--ink-2);font-size:13px}
+#pinkie-study-desk .demo-label{position:absolute;right:24px;bottom:16px;font-size:11px;color:var(--ink-2)}
+#pinkie-study-desk .desk-loading{grid-column:1/-1;color:var(--ink-2)}
+#pinkie-study-desk .desk-exam{margin:auto;width:min(380px,90vw);border:1px solid var(--glass-edge);border-radius:24px;background:var(--glass-strong);color:var(--ink);padding:28px;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:var(--glass-shadow)}
+#pinkie-study-desk .desk-exam::backdrop{background:rgba(24,16,30,.25)}
+#pinkie-study-desk .desk-exam h3{font:600 25px var(--serif);margin:0 0 22px}
+#pinkie-study-desk .desk-exam label{display:flex;flex-direction:column;gap:12px}
+#pinkie-study-desk .desk-exam input{padding:12px;border:1px solid var(--hair-2);border-radius:8px;background:var(--card);color:var(--ink)}
+#pinkie-study-desk .desk-exam .confirm{display:inline-flex;margin:16px 20px 0 0}
+#pinkie-study-desk .stage-empty{grid-column:1/-1;margin:auto}
+#pinkie-study-desk .stage-empty .confirm{margin:28px 0}
+#pinkie-study-desk .modes button,#pinkie-study-desk .more button{background:none;border:0;padding:0 0 3px;cursor:pointer;font-size:13px;color:var(--ink-2);white-space:nowrap}
+#pinkie-study-desk .modes button.on{color:var(--ink);box-shadow:inset 0 -1.5px 0 var(--pink)}
+#pinkie-study-desk .more{flex-wrap:wrap}
+#pinkie-study-desk .summary{position:relative;inset:auto;margin:auto 0}
+#pinkie-study-desk .blank-answer{margin:30px 0;padding:14px;border:1px solid var(--hair-2);background:var(--card);color:var(--ink);border-radius:10px}
+#pinkie-study-desk .q-code{overflow:auto;max-height:220px;flex-shrink:0;white-space:pre-wrap}
+#pinkie-study-desk .side{overflow:auto}
+#pinkie-study-desk .side .fig img{max-width:100%;object-fit:contain;object-position:center bottom}
+#pinkie-study-desk .say .keyp{white-space:pre-wrap}
+#pinkie-study-desk .opts{flex-shrink:0}
+#pinkie-study-desk .q-row{width:100%;border-left:0;border-right:0;border-bottom:0;background:none;text-align:left}
+#pinkie-study-desk .view[data-view="stage"]{overflow:auto}
+#pinkie-study-desk .other-stage{grid-column:1/-1;min-height:0;overflow:auto;padding:38px 0}
+#pinkie-study-desk .flashcard{display:block;width:min(760px,100%);min-height:280px;margin:28px auto 20px;padding:44px;border:1px solid var(--hair);border-radius:24px;background:var(--card);color:var(--ink);text-align:left;cursor:pointer;transition:transform .36s var(--out),box-shadow .28s var(--out)}
+#pinkie-study-desk .flashcard.flipped{animation:psd-flip .36s var(--out)}
+#pinkie-study-desk .flashcard h2{font:600 36px/1.4 var(--serif);margin:0}
+#pinkie-study-desk .flashcard p{white-space:pre-wrap}
+#pinkie-study-desk .flash-grades{display:flex;gap:18px;justify-content:center}
+#pinkie-study-desk .flash-grades .confirm{margin:0}
+#pinkie-study-desk .inline-tabs{display:flex;gap:24px;flex-wrap:wrap;margin:0 0 25px}
+#pinkie-study-desk :is(.laolao-learning-notes,.pinkie-library){background:var(--glass-strong)!important;border:1px solid var(--glass-edge);box-shadow:var(--glass-shadow);color:var(--ink);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+/* 笔记本始终是浅色纸面（正文颜色写死、没有夜间样式），这里只把墨绿强调色换成学习台的日间墨色，保持只有一种强调色。 */
+#pinkie-study-desk .laolao-learning-notes{--notes-accent:#2E2236;--notes-tint:rgba(46,34,54,.06)}
+#pinkie-study-desk .laolao-learning-notes .laolao-learning-button--primary:hover{background:#6F6377}
+/* 笔记本还没有夜间样式，夜间先用不透明的日间纸面保证可读（纸面层本来就是给长时间阅读的）。 */
+#pinkie-study-desk[data-theme="night"] .laolao-learning-notes{background:#FAF6F1!important;color:#2E2236;border-color:rgba(255,255,255,.12)}
+@keyframes psd-flip{from{opacity:.3;transform:perspective(1000px) rotateX(-12deg)}to{opacity:1;transform:none}}
+@media(max-width:1100px){
+  #pinkie-study-desk .biqi{width:220px;right:-20px;bottom:-30px}
+  #pinkie-study-desk .bubble{right:200px;bottom:96px;max-width:195px;font-size:12.5px}
+  #pinkie-study-desk .map{margin-top:28px}
+  #pinkie-study-desk .dot{width:9px;height:9px}
+  #pinkie-study-desk .dots{gap:6px}
+  #pinkie-study-desk .mrow{grid-template-columns:55px minmax(0,1fr);gap:8px}
+}
+#pinkie-study-desk[data-backplate="true"] .plate{inset:0;transform:none;filter:none;background-image:var(--desk-backplate);background-position:center;background-size:cover}
+#pinkie-study-desk .subject-warning{font-size:12px;color:var(--ink-2);text-align:right;margin:12px 0 0}
+#pinkie-study-desk[data-theme="day"] :is(.conf button,.say .who,.cd.far b){color:var(--ink-2)}
+#pinkie-study-desk[data-theme="day"] .opt:not(.sel):not(.ok):not(.rev) .k{color:var(--ink-2)}
+/* App 主题把所有禁用按钮压成 .44 透明加灰度（!important）。作答后的选项和把握度要保持原样，答对的粉色要看得见。 */
+#pinkie-study-desk :is(.opt,.conf button,.task,.q-row,.dot,.flash-grades .confirm):disabled{opacity:1!important;filter:none!important;cursor:default!important}
+#pinkie-study-desk .conf button[aria-pressed="true"]:disabled{box-shadow:inset 0 -1.5px 0 var(--pink)!important}
+#pinkie-study-desk .confirm:disabled{opacity:.62!important;filter:none!important}
+#pinkie-study-desk[data-theme="day"] .opt.no .t{color:var(--ink-2)}
+#pinkie-study-desk .q-code{background-color:var(--card)}
+#pinkie-study-desk .q-code::after{content:"";position:absolute;inset:0;background-image:var(--paper-texture,none);opacity:.06;pointer-events:none}
+#pinkie-study-desk .blank-answer:disabled{opacity:1;-webkit-text-fill-color:var(--ink)}
+/* 综合题小题标记放在输入框上方。 */
+#pinkie-study-desk .q-part{margin:26px 0 0;font:15px/1.6 var(--sans);color:var(--ink-2)}
+#pinkie-study-desk .q-part + .blank-answer{margin-top:10px}
+#pinkie-study-desk .say .keyp{background:var(--card);padding:10px 14px;border-radius:0 8px 8px 0}
+
+/* ===== v2 A0 · UI 升级（briefs/study-desk-learn/UI-UPGRADE.md，2026-10-26 定稿）===== */
+/* 3.1 令牌：带字的粉按钮用 --pink-solid（日 4.71:1 / 夜 6.24:1）；点、圈、悬停仍是 --pink。 */
+#pinkie-study-desk{--on-ink:var(--paper);--pink-solid:#DB1F74;--on-pink:#FFFFFF;--fs-meta:12px;--fs-ui:14px;--fs-body:15px;--ctl-lg:48px;--ctl-md:36px;--ctl-sm:30px;--r-ctl:99px;--r-chip:8px}
+#pinkie-study-desk[data-theme="night"]{--pink-solid:#F0679F;--on-pink:#17131B}
+#pinkie-study-desk :is(.confirm,.b-adopt:not(:disabled)){color:var(--on-ink)}
+/* 3.2 小于 14px 的字用 --ink-2；控件文字 14px。 */
+#pinkie-study-desk :is(.date,.task small,.q-row em,.cd small,.cd em,.cd-sub,.map-h,.mrow,.map-cap,.q-meta,.clock,.say .who,.ask kbd,.confirm kbd,.subject-warning,.demo-label,.b-adopt-row small,.b-model-chip){color:var(--ink-2)}
+#pinkie-study-desk :is(.modes button,.conf button,.side .more button,.link){font-size:14px}
+/* 5.1 侧栏：没选中 --ink-2，选中 --ink 加浅底；logo 和日夜切换也有提示。 */
+#pinkie-study-desk :is(.rail-nav,.rail-foot) button{color:var(--ink-2)}
+#pinkie-study-desk .rail-nav button.on{color:var(--ink);background:var(--ink-tint)}
+#pinkie-study-desk .logo{position:relative;color:var(--on-pink)}
+#pinkie-study-desk :is(.logo,.rail-foot button) .nav-tip{position:absolute;left:54px;top:50%;transform:translate(-4px,-50%);font-size:12px;line-height:1.6;white-space:nowrap;background:var(--ink);color:var(--paper);padding:2px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:.18s var(--out);z-index:2}
+#pinkie-study-desk .logo .nav-tip{left:50px}
+#pinkie-study-desk :is(.logo,.rail-foot button):is(:hover,:focus-visible) .nav-tip{opacity:1;transform:translate(0,-50%)}
+#pinkie-study-desk .q-row .desk-icon{color:var(--ink-2);transition:transform .25s var(--out),color .2s}
+#pinkie-study-desk .q-row:hover .desk-icon{transform:translateX(4px);color:var(--ink)}
+/* 5.1 倒计时：没日期时保持同样版式，数字位放 —，下面一个小药丸。 */
+#pinkie-study-desk .cd b.cd-none{font-size:30px;line-height:1.25;margin-top:14px}
+#pinkie-study-desk .cd b.cd-none strong{color:var(--ink-3);font-weight:400}
+#pinkie-study-desk .exam-set{display:inline-flex;align-items:center;gap:6px;height:var(--ctl-sm);margin-top:10px;padding:0 12px;border:1px solid var(--hair-2);border-radius:var(--r-ctl);color:var(--ink);font-size:14px;transition:border-color .2s}
+#pinkie-study-desk .exam-set:hover{border-color:var(--ink-3)}
+/* 5.1 地图学科名不折行；1100px 以下用短名。 */
+#pinkie-study-desk .mrow-name{white-space:nowrap;overflow:hidden;text-overflow:clip}
+#pinkie-study-desk .mrow-name .short{display:none}
+@media(max-width:1100px){#pinkie-study-desk .mrow-name .full{display:none}#pinkie-study-desk .mrow-name .short{display:inline}}
+/* 5.1 气泡压到地图时收成一个小圆点，悬停或聚焦再展开。 */
+#pinkie-study-desk .bubble.tucked{width:30px;height:30px;padding:0;overflow:hidden;color:transparent;border-radius:50%;cursor:default}
+@media(max-width:1100px){#pinkie-study-desk .bubble.tucked{right:236px;bottom:24px}#pinkie-study-desk .map-legend{max-width:calc(100% - 150px)}}
+#pinkie-study-desk .bubble.tucked::after{content:"…";position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-2);font-size:14px}
+#pinkie-study-desk .bubble.tucked:is(:hover,:focus-within){width:auto;height:auto;padding:12px 16px;color:var(--ink);border-radius:18px 18px 4px 18px;z-index:3}
+#pinkie-study-desk .bubble.tucked:is(:hover,:focus-within)::after{content:none}
+/* 5.2 舞台：选项跟着题干走，把握度和主按钮那一行贴底。 */
+#pinkie-study-desk .opts{margin:48px 0 0}
+#pinkie-study-desk .q-foot{margin-top:auto;padding-top:28px}
+#pinkie-study-desk .conf-label{font-size:12px;color:var(--ink-2);margin-right:-8px}
+#pinkie-study-desk .conf{gap:0;padding:2px;border-radius:var(--r-ctl);box-shadow:inset 0 0 0 1px var(--hair-2)}
+#pinkie-study-desk .conf button{height:28px;padding:0 12px;border-radius:var(--r-ctl);color:var(--ink-2)}
+#pinkie-study-desk .conf button[aria-pressed="true"]{background:var(--ink-tint);color:var(--ink)}
+#pinkie-study-desk .side .more{gap:4px}
+#pinkie-study-desk .side .more button{display:inline-flex;align-items:center;gap:6px;height:var(--ctl-sm);padding:0 10px;border-radius:var(--r-ctl);color:var(--ink-2);transition:background .2s,color .2s}
+#pinkie-study-desk .side .more button:hover{background:var(--ink-tint);color:var(--ink)}
+/* 5.2 统一空状态：碧琪 + 一句话 + 一句说明 + 一个主按钮 + 一个链接。 */
+#pinkie-study-desk .desk-empty{margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:24px}
+#pinkie-study-desk .desk-empty img{width:160px;height:auto;margin-bottom:10px}
+#pinkie-study-desk .desk-empty-title{font:600 30px/1.3 var(--serif);margin:0;color:var(--ink)}
+#pinkie-study-desk .desk-empty p{margin:0;font-size:15px;color:var(--ink-2)}
+#pinkie-study-desk .desk-empty-actions{display:flex;gap:22px;align-items:center;margin-top:22px}
+#pinkie-study-desk .stage-empty{display:flex;width:100%}
+#pinkie-study-desk .stage-empty .confirm{margin:0}
+#pinkie-study-desk .other-stage:has(>.desk-empty){display:flex}
+/* 5.3 学习台里的实验和模拟考卡片：把它们的变量映射到学习台令牌，不改别人的文件。 */
+#pinkie-study-desk .desk-inline-slot{--il-accent:var(--ink);--il-ink:var(--ink);--il-muted:var(--ink-2);--il-line:var(--hair);--il-soft:var(--ink-tint);--il-surface:var(--card);--pil-b:var(--ink-3);--pil-good:var(--ink);--pil-warn:var(--pink-ink);accent-color:var(--ink)}
+/* 5.4 看板 */
+#pinkie-study-desk .b-refresh{display:inline-flex;align-items:center;gap:6px;font-size:14px}
+#pinkie-study-desk .b-no .desk-icon{color:var(--ink-2);vertical-align:-3px}
+#pinkie-study-desk .b-chart-empty p{font-size:18px;color:var(--ink)}
+#pinkie-study-desk .b-text-button.b-secondary{display:inline-flex;align-items:center;height:var(--ctl-md);padding:0 18px;border:1px solid var(--hair-2);border-radius:var(--r-ctl);text-decoration:none}
+#pinkie-study-desk .b-text-button .desk-icon{vertical-align:-2px;margin-left:2px}
+/* 5.5 笔记本、书架的关闭键：36px 圆形幽灵按钮。 */
+#pinkie-study-desk :is(.laolao-learning-notes,.pinkie-library) button:has(>.desk-icon:only-child){display:inline-grid;place-items:center;width:36px;height:36px;padding:0;border-radius:50%;background:none;border:0;color:var(--ink-2)}
+#pinkie-study-desk :is(.laolao-learning-notes,.pinkie-library) button:has(>.desk-icon:only-child):hover{background:rgba(46,34,54,.06);color:#2E2236}
+
+/* 今日页输入框：发送键、发送中、失败提示 */
+#pinkie-study-desk .ask{cursor:text}
+#pinkie-study-desk .ask kbd{margin-left:0}
+#pinkie-study-desk .ask-send{flex:none;width:36px;height:36px;border-radius:50%;border:0;display:grid;place-items:center;background:var(--ink);color:var(--on-ink);cursor:pointer;transition:opacity .15s,transform .15s}
+#pinkie-study-desk .ask-send:disabled{background:var(--hair-2);color:var(--ink-2);cursor:default}
+#pinkie-study-desk .ask-send:not(:disabled):hover{transform:translateY(-1px)}
+#pinkie-study-desk .ask-send:focus-visible{outline:2px solid var(--pink-solid);outline-offset:2px}
+#pinkie-study-desk .ask.sending .ask-send svg{animation:desk-ask-spin .9s linear infinite}
+@keyframes desk-ask-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk .ask.sending .ask-send svg{animation:none}}
+#pinkie-study-desk .ask-error{margin:8px 0 0 22px;font:13px/1.5 var(--sans);color:var(--ink)}
+#pinkie-study-desk .ask-error[hidden]{display:none}

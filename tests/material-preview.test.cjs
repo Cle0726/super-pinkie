@@ -127,7 +127,7 @@ test('simulated assistant replay offers actions only for a path accepted by the 
       closest(selector) {
         if (selector.includes('a[href]') && this.tagName === 'A' && this.getAttribute('href')) return this;
         if (selector.includes('pre, code') && ['PRE', 'CODE'].includes(this.tagName)) return this;
-        if (selector.includes('.chat-bubble') && this.tagName === 'CODE') return this.bubble;
+        if (selector.includes('.chat-bubble') && ['CODE', 'A'].includes(this.tagName)) return this.bubble;
         return null;
       }
       getBoundingClientRect() { return { left: 80, bottom: 110, width: 180, height: 30 }; }
@@ -165,7 +165,7 @@ test('simulated assistant replay offers actions only for a path accepted by the 
       setTimeout: window.setTimeout, clearTimeout: window.clearTimeout,
     });
     const bubble = new FakeElement('div');
-    const code = new FakeElement('code', '/Users/Admin/work/answer.txt');
+    const code = new FakeElement('code', '/Users/demo/work/answer.txt');
     code.bubble = bubble;
     return { document, documentListeners, posted, window, code, FakeElement };
   };
@@ -187,28 +187,31 @@ test('simulated assistant replay offers actions only for a path accepted by the 
   const stopped = clickCode(valid);
   assert.deepEqual(stopped, { prevented: true, stopped: true });
   assert.equal(valid.posted[0].action, 'check');
-  assert.equal(valid.posted[0].path, '/Users/Admin/work/answer.txt');
+  assert.equal(valid.posted[0].path, '/Users/demo/work/answer.txt');
   valid.window.__laolaoMaterialPreviewResult({ requestId: valid.posted[0].requestId, ok: true, name: 'answer.txt' });
   await tick();
   const menu = valid.document.body.children.find((item) => item.className === 'laolao-material-menu');
   assert.ok(menu, 'existing assistant output path gets an action menu');
   menu.children[0].listeners.click[0]();
+  await tick();
   assert.equal(valid.posted[1].action, 'open');
-  assert.equal(valid.posted[1].path, '/Users/Admin/work/answer.txt');
+  assert.equal(valid.posted[1].path, '/Users/demo/work/answer.txt');
 
   const markdownLink = makeHarness();
   const linkedPath = new markdownLink.FakeElement('a', '生成的视频');
-  linkedPath.setAttribute('href', '/Users/Admin/项目视频剪辑管理/133-cut.mp4');
+  linkedPath.bubble = new markdownLink.FakeElement('div');
+  linkedPath.setAttribute('href', '/Users/demo/project-media/133-cut.mp4');
   clickTarget(markdownLink, linkedPath);
   assert.equal(markdownLink.posted[0].action, 'check');
-  assert.equal(markdownLink.posted[0].path, '/Users/Admin/项目视频剪辑管理/133-cut.mp4');
+  assert.equal(markdownLink.posted[0].path, '/Users/demo/project-media/133-cut.mp4');
 
   const windowsFileLink = makeHarness();
   const windowsFilePath = new windowsFileLink.FakeElement('a', '生成的表格');
-  windowsFilePath.setAttribute('href', 'file:///C:/Users/Admin/Downloads/report%20final.csv');
+  windowsFilePath.bubble = new windowsFileLink.FakeElement('div');
+  windowsFilePath.setAttribute('href', 'file:///C:/Users/demo/Downloads/report%20final.csv');
   windowsFilePath.href = windowsFilePath.getAttribute('href');
   clickTarget(windowsFileLink, windowsFilePath);
-  assert.equal(windowsFileLink.posted[0].path, 'C:/Users/Admin/Downloads/report final.csv');
+  assert.equal(windowsFileLink.posted[0].path, 'C:/Users/demo/Downloads/report final.csv');
 
   const missing = makeHarness();
   clickCode(missing);
@@ -227,5 +230,10 @@ test('installers ship and inject the material viewer on both platforms', () => {
     assert.match(source, /laolao-material-preview\.js/);
   }
   assert.match(mac, /laolaoMaterialPreview/);
-  assert.match(windows, /'laolao-material-preview\.js' = 'material3'/);
+  const fragmentVersion = fragment.match(/laolao-material-preview\.js\?v=(material\d+)/)?.[1];
+  const windowsVersion = windows.match(/'laolao-material-preview\.js' = '(material\d+)'/)?.[1];
+  const macVersion = mac.match(/laolao-material-preview\.js\?v=(material\d+)/)?.[1];
+  assert.ok(fragmentVersion, 'viewer cache version is present');
+  assert.equal(windowsVersion, fragmentVersion, 'Windows uses the same viewer cache version');
+  assert.equal(macVersion, fragmentVersion, 'macOS uses the same viewer cache version');
 });

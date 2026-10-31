@@ -5,7 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
 OUTPUT_ROOT="${PINKIE_BUILD_DIR:-$REPO_ROOT/dist}"
-APP_NAME="超級碧琪"
+# CLE_BRAND=1 builds C.le. — its own app beside 超級碧琪: own name, bundle id, icon, OpenClaw
+# 2026.10 runtime, the C.le. plugins and its own first run (installer/cle). Never the old installer.
+CLE_BRAND="${CLE_BRAND:-0}"
+# This selector is shared by the build and isolation regression checks.
+source "$SCRIPT_DIR/native-sources.sh"
+NATIVE_SOURCE_DIR="$(native_sources_for_brand "$SCRIPT_DIR" "$CLE_BRAND")"
+if [[ "$CLE_BRAND" == 1 ]]; then
+  APP_NAME="C.le."
+  BUNDLE_ID="com.cle0726.cle-studio"
+  CLE_STAGE="${CLE_STAGE_ROOT:-$HOME/Library/Application Support/SuperPinkie/dev/cle-stage}"
+  : "${PINKIE_OPENCLAW_BIN:=$CLE_STAGE/npm/lib/node_modules/openclaw/openclaw.mjs}"
+else
+  APP_NAME="超級碧琪"
+  BUNDLE_ID="com.cle0726.super-pinkie"
+fi
 APP_PATH="$OUTPUT_ROOT/$APP_NAME.app"
 CONTENTS="$APP_PATH/Contents"
 RUNTIME_ROOT="$CONTENTS/Resources/SuperPinkie/runtime"
@@ -99,7 +113,9 @@ if [[ ! -f "$CUA_SDK_PACKAGE" ]]; then
   CUA_SDK_PACKAGE="$OPENCLAW_ROOT/node_modules/@trycua/cua-driver/package.json"
 fi
 CUA_SDK_VERSION="$("$NODE_BIN" -e 'process.stdout.write(require(process.argv[1]).version || "")' "$CUA_SDK_PACKAGE")"
-if [[ "$CUA_SDK_VERSION" != "$CUA_DRIVER_VERSION" ]]; then
+if [[ "$CUA_SDK_VERSION" != "$CUA_DRIVER_VERSION" && "$CLE_BRAND" == 1 ]]; then
+  echo "warning: C.le. runtime ships cua-driver SDK $CUA_SDK_VERSION; the bundled driver is $CUA_DRIVER_VERSION" >&2
+elif [[ "$CUA_SDK_VERSION" != "$CUA_DRIVER_VERSION" ]]; then
   echo "error: cua-driver 原生程序 $CUA_DRIVER_VERSION 与 SDK $CUA_SDK_VERSION 不兼容" >&2
   exit 1
 fi
@@ -167,8 +183,9 @@ rm -rf "$APP_PATH"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 xcrun swiftc -parse-as-library -O \
-  "$SCRIPT_DIR/Sources/MaterialPreview.swift" \
-  "$SCRIPT_DIR/Sources/Launcher.swift" \
+  "$NATIVE_SOURCE_DIR/MaterialPreview.swift" \
+  "$NATIVE_SOURCE_DIR/BrowserControl.swift" \
+  "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \
   -framework Foundation \
@@ -176,8 +193,21 @@ xcrun swiftc -parse-as-library -O \
   -framework WebKit \
   -o "$CONTENTS/MacOS/Launcher"
 
-cp "$REPO_ROOT/ui/assets/PinkieAppIcon.icns" "$CONTENTS/Resources/PinkieAppIcon.icns"
+if [[ "$CLE_BRAND" == 1 ]]; then
+  cp "$REPO_ROOT/ui/assets/CLeAppIcon.icns" "$CONTENTS/Resources/CLeAppIcon.icns"
+else
+  cp "$REPO_ROOT/ui/assets/PinkieAppIcon.icns" "$CONTENTS/Resources/PinkieAppIcon.icns"
+fi
 mkdir -p "$CONTENTS/Resources/SuperPinkie"
+# Keep the sources matching the executable in the package. Existing repair
+# tools read the canonical Sources path; the Pinkie installer uses its
+# explicitly branded path so it can never select the C.le. sources.
+mkdir -p "$CONTENTS/Resources/SuperPinkie/desktop/macos"
+ditto "$NATIVE_SOURCE_DIR" "$CONTENTS/Resources/SuperPinkie/desktop/macos/Sources"
+if [[ "$CLE_BRAND" != 1 ]]; then
+  mkdir -p "$CONTENTS/Resources/SuperPinkie/desktop/macos/pinkie"
+  ditto "$NATIVE_SOURCE_DIR" "$CONTENTS/Resources/SuperPinkie/desktop/macos/pinkie/Sources"
+fi
 for bundle_part in VERSION ui personas installer patch; do
   ditto "$REPO_ROOT/$bundle_part" "$CONTENTS/Resources/SuperPinkie/$bundle_part"
 done
@@ -244,9 +274,54 @@ sed \
   -e "s/@PYTHON_VERSION@/$PYTHON_VERSION/g" \
   "$SCRIPT_DIR/runtime-manifest.json.in" > "$RUNTIME_ROOT/runtime-manifest.json"
 
+if [[ "$CLE_BRAND" == 1 ]]; then
+  # C.le.: the plugins it loads (cle-studio freshly built from the repo; the two mode plugins as
+  # staged) and the startup layer patched into the bundled Control UI.
+  EXT="$CONTENTS/Resources/SuperPinkie/extensions"
+  mkdir -p "$EXT"
+  (cd "$REPO_ROOT/services/cle-studio" && "$NODE_BIN" build.mjs >/dev/null)
+  rsync -a --delete --exclude node_modules --exclude src --exclude build.mjs --exclude .gitignore \
+    "$REPO_ROOT/services/cle-studio/" "$EXT/cle-studio/"
+  for ext in pinkie-mode-architecture pinkie-project-scope; do
+    rsync -a --delete --exclude node_modules "$CLE_STAGE/extensions/$ext/" "$EXT/$ext/"
+  done
+  # the staged runtime already carries the startup layer (apply-startup.mjs refuses app bundles)
+  grep -q 'cle-boot-reveal' "$RUNTIME_ROOT/openclaw/dist/control-ui/index.html" \
+    || { echo "error: the staged Control UI has no C.le. startup layer; run apply-startup.mjs on the stage first" >&2; exit 1; }
+
+  # C.le. speaks only as itself. The bundle parts above are shared with 超級碧琪, so the rename
+  # happens on this app's copies only — never on the repo sources 超級碧琪 ships.
+  RES="$CONTENTS/Resources/SuperPinkie"
+  cle_rebrand() { # file, sed-expr
+    [[ -f "$1" ]] || return 0
+    /usr/bin/sed -i '' "$2" "$1"
+  }
+  cle_rebrand "$RES/ui/launcher-loading.html" 's/超級碧琪/C\.le./g'
+  cle_rebrand "$RES/ui/party/party.js" 's/「超級碧琪」/「C\.le.」/g'
+  cle_rebrand "$RES/ui/injections/laolao-usage-stats.js" 's/^\/\* 超級碧琪 /\/* C.le. /'
+  cle_rebrand "$RES/ui/injections/laolao-ui-subtraction.css" 's/^\/\* 超級碧琪 /\/* C.le. /'
+  cle_rebrand "$RES/ui/injections/laolao-vendor-monaco/worker-boot.js" 's/^\/\* 超級碧琪：/\/* C.le.：/'
+  cle_rebrand "$EXT/cle-studio/static/legacy/laolao-vendor-monaco/worker-boot.js" 's/^\/\* 超級碧琪：/\/* C.le.：/'
+  # The mode plugin falls back to 超級碧琪's runtime when it cannot find its own host; for C.le.
+  # that would reach into the other app. Point the fallback at this bundle instead.
+  for ext_js in "$EXT/pinkie-mode-architecture/index.mjs" "$EXT/pinkie-mode-architecture/setup.py" \
+                "$EXT/pinkie-project-scope/index.mjs" "$EXT/pinkie-project-scope/setup.py" \
+                "$RES/services/mode-architecture/index.mjs" "$RES/services/mode-architecture/setup.py"; do
+    cle_rebrand "$ext_js" 's|/Applications/超級碧琪\.app|/Applications/C.le..app|g'
+  done
+  # Anything user-facing that still names the other app is a build error, not a nicety.
+  leftover=$(grep -rl '超級碧琪' "$RES/ui" "$EXT" 2>/dev/null \
+    | xargs grep -l '超級碧琪' 2>/dev/null | grep -vE 'THIRD_PARTY|\.map$' || true)
+  if [[ -n "$leftover" ]]; then
+    echo "error: C.le. bundle still names 超級碧琪:" >&2
+    echo "$leftover" >&2
+    exit 1
+  fi
+fi
+
 # Patch the copied OpenClaw package before signing. Build-only mode never
-# touches the user's config, personas or history.
-PATH="$RUNTIME_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+# touches the user's config, personas or history. (超級碧琪 only.)
+[[ "$CLE_BRAND" == 1 ]] || PATH="$RUNTIME_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
 OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" \
 PINKIE_OPENCLAW_BIN="$RUNTIME_ROOT/bin/openclaw" \
 PINKIE_PYTHON_BIN="$RUNTIME_ROOT/python/bin/python3" \
@@ -258,6 +333,16 @@ PINKIE_SKIP_APP_BUNDLES=1 \
 sed \
   -e "s/@VERSION@/$VERSION/g" \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
+if [[ "$CLE_BRAND" == 1 ]]; then
+  PB=/usr/libexec/PlistBuddy
+  $PB -c "Set :CFBundleDisplayName C.le." -c "Set :CFBundleName C.le." \
+      -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleIconFile CLeAppIcon" \
+      -c "Add :CLEBrand string cle" "$CONTENTS/Info.plist"
+  for key in $($PB -c Print "$CONTENTS/Info.plist" | sed -n 's/^ *\(NS[A-Za-z]*UsageDescription\) = .*/\1/p'); do
+    value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/Li An/g')"
+    $PB -c "Set :$key $value" "$CONTENTS/Info.plist"
+  done
+fi
 
 SIGN_IDENTITY="${PINKIE_CODESIGN_IDENTITY:--}"
 codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$APP_PATH"
@@ -267,12 +352,13 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
   # toggle still appears enabled. Give local builds a stable bundle-identifier
   # requirement; Developer ID builds keep their stronger certificate-derived DR.
   codesign --force --options runtime --sign - \
-    --requirements '=designated => identifier "com.cle0726.super-pinkie"' \
+    --requirements "=designated => identifier \"$BUNDLE_ID\"" \
     "$APP_PATH"
 fi
 codesign --verify --deep --strict "$APP_PATH"
-ARCHIVE_PATH="$OUTPUT_ROOT/super-pinkie-macos-$VERSION.zip"
-ARCHIVE_TEMP="$OUTPUT_ROOT/.super-pinkie-macos-$VERSION.zip.$$"
+ARCHIVE_BASE="super-pinkie-macos"; [[ "$CLE_BRAND" == 1 ]] && ARCHIVE_BASE="cle-studio-macos"
+ARCHIVE_PATH="$OUTPUT_ROOT/$ARCHIVE_BASE-$VERSION.zip"
+ARCHIVE_TEMP="$OUTPUT_ROOT/.$ARCHIVE_BASE-$VERSION.zip.$$"
 # ditto does not reliably replace an existing archive. Build a complete new
 # archive beside it, then atomically swap it into place so releases can never
 # silently retain yesterday's ZIP.

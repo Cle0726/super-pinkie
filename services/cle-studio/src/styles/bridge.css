@@ -1,0 +1,427 @@
+/* Bridge: the variables the 2026.7 modules were written against, redefined from C.le. tokens.
+   Four ids beat the old modules' three-id overrides, so a ported module re-skins without edits. */
+html[data-cle]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --pk-fg: var(--cle-ink);
+  --pk-mute: var(--cle-ink-2);
+  --pk-faint: var(--cle-line);
+  --pk-panel: color-mix(in srgb, var(--cle-surface) 82%, transparent);
+  --pk-chip: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+  --pk-hover: var(--cle-gaze-soft);
+  --pk-accent: var(--cle-gaze);
+  --pk-accent-ink: var(--cle-gaze);
+  --pk-on: var(--cle-gaze-soft);
+  --pk-on-line: color-mix(in srgb, var(--cle-gaze) 42%, transparent);
+  --pk-good: var(--cle-ok, #4F7D5C);
+  --pk-shadow: var(--cle-shadow);
+  --pk-solid: var(--cle-surface);
+  --pk-scrim: rgba(12, 12, 14, .32);
+  --pinkie-settings-ink: var(--cle-ink);
+  --pinkie-settings-muted: var(--cle-ink-2);
+  --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong);
+  --pinkie-settings-card: var(--cle-surface);
+  --pinkie-settings-soft: color-mix(in srgb, var(--cle-ink) 4%, var(--cle-surface));
+  --pinkie-settings-control: var(--cle-surface);
+}
+html[data-cle][data-theme-mode="dark"]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --pk-scrim: rgba(4, 4, 6, .6);
+  --pk-good: #7FB08B;
+}
+
+/* The notebook and editor remain functional modules, but use the same paper,
+   ink and gaze as the native shell. Keep these outside their vendor styles. */
+html[data-cle]:not(#c1):not(#c2):not(#c3):not(#c4) {
+  --learning-pink: var(--cle-gaze);
+  --learning-pink-deep: var(--cle-gaze);
+  --learning-violet: var(--cle-gaze);
+  --learning-ink: var(--cle-ink);
+  --learning-paper: var(--cle-surface);
+}
+/* 品牌规则：gaze 是唯一强调色，只给"此刻正在被看/正在发生"的一处用
+   （焦点、运行中、选中指示的一条细线）。它不是通用图标色，更不能当实心底。
+   所以这里不再把 --wb-accent / --wb-cle 指向 gaze：
+     - 图标、胶囊、悬停底走墨色层级（ink-2 / ink-3 / ink）；
+     - 只有 --wb-sig（选中页签底部细线、分隔线渐变）保留 gaze。 */
+html[data-cle] .pk-wb {
+  --wb-line: var(--cle-line-strong);
+  --wb-text: var(--cle-ink);
+  --wb-mute: var(--cle-ink-2);
+  --wb-faint: var(--cle-ink-3);
+  --wb-accent: var(--cle-ink-2);
+  --wb-cle: var(--cle-ink-3);
+  --wb-hover: color-mix(in srgb, var(--cle-ink) 6%, transparent);
+  --wb-glass: var(--cle-surface);
+  --wb-glass-2: var(--cle-surface);
+  --wb-editor: var(--cle-paper);
+  --wb-sig: var(--cle-gaze);
+  --wb-card: var(--cle-surface);
+  --wb-card-line: var(--cle-line);
+  --wb-card-shadow: var(--cle-shadow);
+  --wb-mono: var(--cle-mono);
+  --font-body: var(--cle-sans);
+}
+html[data-cle] :is(.laolao-learning-tools__tray, .laolao-learning-stage, .laolao-learning-notes, .pinkie-library, .pinkie-library-reader) {
+  color: var(--cle-ink);
+  background: var(--cle-surface);
+  border-color: var(--cle-line-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-cle] .laolao-learning-stage__art { display: none; }
+html[data-cle] .laolao-learning-stage {
+  flex: 0 0 auto;
+  width: min(768px, calc(100% - 36px));
+  min-height: 0;
+  max-height: min(45vh, 400px);
+  overflow-y: auto;
+  margin: 0 auto 12px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-card);
+  background: var(--cle-surface);
+  color: var(--cle-ink);
+  box-shadow: var(--cle-shadow);
+  animation: none;
+}
+html[data-cle] .laolao-learning-stage::before,
+html[data-cle] .laolao-learning-stage::after { display: none; }
+html[data-cle] .laolao-learning-stage__body { width: 100%; padding: 18px 20px; }
+html[data-cle] :is(.laolao-learning-stage__question, .laolao-learning-option__text, .laolao-learning-result) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-learning-stage__lead, .laolao-learning-result__explanation, .laolao-learning-result__feedback, .laolao-learning-stage__confidence-row) { color: var(--cle-ink-2); }
+html[data-cle] .laolao-learning-option { border-color: var(--cle-line-strong); background: var(--cle-paper); }
+html[data-cle] .laolao-learning-option:hover,
+html[data-cle] .laolao-learning-option:has(input:checked) { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); box-shadow: none; transform: none; }
+html[data-cle] .laolao-learning-option:has(input:focus-visible) { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+html[data-cle] .laolao-learning-option__badge { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle] .laolao-learning-button { color: var(--cle-ink); border-color: var(--cle-line-strong); background: var(--cle-surface); box-shadow: none; }
+html[data-cle] .laolao-learning-button--primary { color: var(--cle-paper); background: var(--cle-ink); border-color: var(--cle-ink); }
+
+/* Mature tools keep their own behavior and share the new paper/ink palette. */
+/* 语义色：成功 / 失败 / 警告。它们表达真实状态，所以不并入纸墨金的装饰色阶；
+   取值保证在 --cle-surface 上达到 4.5:1（深色主题单独一套）。 */
+html[data-cle] { --cle-ok: #3F6B4F; --cle-danger: #B23A33; --cle-warn: #7F5F1B; }
+html[data-cle][data-theme-mode="dark"] { --cle-ok: #8FC29E; --cle-danger: #E0645B; --cle-warn: #D7B36A; }
+
+/* ── 功能与连接 ──────────────────────────────────────────────────────────
+   utilities.js 只负责编排；这里只定义接缝：footer 入口、面板骨架、分组行，
+   以及被移植卡片（定时任务 / 连接器）落在新版纸白+墨黑+暖金里的表面。
+   色值一律走 tokens；语义色（成功/错误/警告）保留真实含义，不染成金。
+   z-index：面板 11000（高于侧栏与浮层，低于记忆匣 2147483600 和选择菜单 12000 之下的
+   原生对话框），与 presentation 工具条的 10004 分层不冲突。 */
+html[data-cle] .cle-utilities-entry { flex: 0 0 auto; margin: 0 2px; color: var(--cle-ink-2); }
+html[data-cle] .cle-utilities-entry[aria-expanded="true"] { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle] .cle-utilities-entry .cle-utilities__glyph svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.cle-utilities-layer { position: fixed; inset: 0; z-index: 11000; background: var(--pk-scrim); }
+.cle-utilities-layer[hidden], html[data-cle] #cle-utilities[hidden] { display: none !important; }
+
+html[data-cle] #cle-utilities {
+  --pinkie-settings-ink: var(--cle-ink); --pinkie-settings-muted: var(--cle-ink-2); --pinkie-settings-accent: var(--cle-gaze);
+  --pinkie-settings-border: var(--cle-line-strong); --pinkie-settings-card: var(--cle-surface);
+  --pinkie-settings-control: var(--cle-paper); --pinkie-settings-soft: var(--cle-gaze-soft);
+  position: absolute; inset: 16px 16px 16px auto; width: min(620px, calc(100% - 32px)); z-index: 1;
+  display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-card);
+  background: var(--cle-surface); color: var(--cle-ink); box-shadow: var(--cle-shadow-pop); overflow: hidden;
+}
+.cle-utilities__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 18px 13px; border-bottom: 1px solid var(--cle-line); flex: 0 0 auto; }
+.cle-utilities__titles { display: grid; gap: 3px; min-width: 0; }
+.cle-utilities__titles strong { font: 600 15px/1.25 var(--cle-serif); letter-spacing: .01em; }
+.cle-utilities__sub { color: var(--cle-ink-2); font: 400 11.5px/1.4 var(--cle-sans); }
+.cle-utilities__close { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; padding: 0; border: 1px solid transparent; border-radius: 8px; color: var(--cle-ink-2); background: transparent; cursor: pointer; }
+.cle-utilities__close:hover { color: var(--cle-ink); border-color: var(--cle-line-strong); background: var(--cle-paper); }
+.cle-utilities__close:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+.cle-utilities__close svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+
+/* 唯一的异步反馈行：真实失败/降级才出现，成功后自动收起 */
+.cle-utilities__status { flex: 0 0 auto; margin: 0; padding: 8px 18px; border-bottom: 1px solid var(--cle-line); color: var(--cle-ink-2); background: var(--cle-paper); font: 400 12px/1.5 var(--cle-sans); }
+.cle-utilities__status[data-state="warn"] { color: var(--cle-warn, #7F5F1B); }
+.cle-utilities__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
+
+html[data-cle] #cle-utilities .pinkie-user-settings__scroll { width: 100%; min-height: 0; height: auto; flex: 1; padding: 16px 18px 20px; overflow: auto; overscroll-behavior: contain; }
+
+/* 记忆：整行命中区，图标＋两行说明 */
+.cle-utilities__row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 11px 12px; border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-ctl); background: var(--cle-paper); color: var(--cle-ink); text-align: left; cursor: pointer; }
+.cle-utilities__row:hover { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+.cle-utilities__row:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+.cle-utilities__row-copy { display: grid; gap: 2px; min-width: 0; }
+.cle-utilities__row-copy b { font: 500 13px/1.3 var(--cle-sans); }
+.cle-utilities__row-copy small { color: var(--cle-ink-2); font: 400 11.5px/1.4 var(--cle-sans); }
+.cle-utilities__glyph { display: inline-grid; place-items: center; flex: 0 0 auto; width: 20px; height: 20px; color: var(--cle-ink-2); }
+.cle-utilities__row:hover .cle-utilities__glyph { color: var(--cle-gaze); }
+.cle-utilities__glyph svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 分组：标题用等宽小标，和侧栏一致 */
+.cle-utilities__group, .cle-utilities__usage { margin: 18px 0 0; }
+.cle-utilities__group-title { margin: 0 0 7px; font: 500 10.5px/1.2 var(--cle-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--cle-ink-2); }
+.cle-utilities__hint { margin: 6px 0 0; color: var(--cle-ink-2); font: 400 11.5px/1.55 var(--cle-sans); }
+.cle-utilities__actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.cle-utilities__action {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 6px 11px;
+  border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-ctl);
+  background: var(--cle-paper); color: var(--cle-ink); font: 500 12.5px/1.3 var(--cle-sans);
+  text-decoration: none; cursor: pointer;
+}
+.cle-utilities__action:hover { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+.cle-utilities__action:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+.cle-utilities__action:disabled { color: var(--cle-ink-2); opacity: .7; border-color: var(--cle-line); cursor: default; background: transparent; }
+.cle-utilities__action[data-native="0"] { color: var(--cle-ink-2); }
+.cle-utilities__action[data-native="0"]::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cle-ink-3); }
+
+.cle-utilities__usage .laolao-usage { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; margin: 8px 0 0; padding: 0; }
+html[data-cle] .cle-utilities__usage .laolao-usage__chip { color: var(--cle-ink-2); background: var(--cle-paper); border: 1px solid var(--cle-line); box-shadow: none; font-variant-numeric: tabular-nums; }
+html[data-cle] .cle-utilities__usage .laolao-usage__value { color: var(--cle-ink); }
+html[data-cle] .cle-utilities__usage .laolao-usage__chip--cost .laolao-usage__value { color: var(--cle-ink); }
+
+html[data-cle] #cle-utilities :is(.pinkie-user-settings__card, .pk-cap__sheet, .pk-cap__job, .pk-conn, .pk-cap__recipe) { background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] #cle-utilities .pk-capabilities { display: grid; gap: 10px; }
+html[data-cle] #cle-utilities .pk-cap { padding: 13px 14px; border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-card); background: var(--cle-surface); }
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__icon { font-size: 0; width: 18px; height: 18px; border-radius: 5px; background: var(--cle-gaze-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 30%, transparent); }
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__card-header { gap: 8px; }
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__card-title { font: 600 13.5px/1.3 var(--cle-sans); }
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__card-hint { margin: 4px 0 10px 26px; color: var(--cle-ink-2); font-size: 11.5px; line-height: 1.55; }
+html[data-cle] #cle-utilities :is(.pk-cap__status[data-state="ok"], .pk-conn__state[data-state="on"], .pk-job__history li span) { color: var(--cle-ok, #3F6B4F); }
+html[data-cle] #cle-utilities :is(.pk-cap__status[data-state="error"], .pk-conn__state[data-state="bad"], .pk-job__history li[data-ok="false"] span) { color: var(--cle-danger, #B23A33); }
+html[data-cle] #cle-utilities .pk-cap__warn { border: 1px solid color-mix(in srgb, var(--cle-warn, #7F5F1B) 32%, transparent); background: color-mix(in srgb, var(--cle-warn, #7F5F1B) 9%, var(--cle-surface)); color: var(--cle-warn, #7F5F1B); }
+html[data-cle] #cle-utilities .pk-cap__empty { color: var(--cle-ink-2); }
+html[data-cle] #cle-utilities .pk-cap__input { background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); }
+html[data-cle] #cle-utilities .pk-cap__input:focus { border-color: var(--cle-gaze); box-shadow: 0 0 0 3px var(--cle-gaze-soft); outline: none; }
+html[data-cle] #cle-utilities .pk-cap__switch i { background: var(--cle-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .22); }
+html[data-cle] #cle-utilities .pk-cap__switch:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+html[data-cle] #cle-utilities :is(.pk-job, .pk-conn):hover { border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] #cle-utilities .pk-job__when b { color: var(--cle-ink); }
+html[data-cle] #cle-utilities .pk-cap__recipe.is-selected { border-color: var(--cle-gaze); background: var(--cle-gaze-soft); box-shadow: none; }
+html[data-cle] #cle-utilities .pk-cap__confirm { border: 1px solid color-mix(in srgb, var(--cle-danger, #B23A33) 26%, transparent); background: color-mix(in srgb, var(--cle-danger, #B23A33) 7%, var(--cle-surface)); color: var(--cle-danger, #B23A33); }
+/* 连接器图块：GitHub / Notion 的深色与纸白是品牌识别，保留；
+   文件夹和"其他服务"原本是橙紫渐变，属于旧配色，收进纸墨金。 */
+html[data-cle] #cle-utilities .pk-tile { color: var(--cle-paper); background: var(--cle-ink); box-shadow: none; }
+html[data-cle] #cle-utilities .pk-tile--github { color: #fff; background: linear-gradient(140deg, #3a3340, #1f1a24); }
+html[data-cle] #cle-utilities .pk-tile--notion { color: #191919; background: #fff; box-shadow: inset 0 0 0 1.5px #2b2b2b; }
+html[data-cle] #cle-utilities :is(.pk-tile--files, .pk-tile--custom) {
+  color: var(--cle-ink);
+  background: var(--cle-paper);
+  box-shadow: inset 0 0 0 1px var(--cle-line-strong);
+}
+:root[data-theme-mode="dark"] #cle-utilities .pk-tile { color: var(--cle-ink); background: var(--cle-paper); }
+:root[data-theme-mode="dark"] #cle-utilities .pk-tile--github { color: #fff; background: linear-gradient(140deg, #3a3340, #1f1a24); }
+:root[data-theme-mode="dark"] #cle-utilities .pk-tile--notion { color: #191919; background: #f4f1ee; }
+
+/* ── 设置卡片的基础零件 ──────────────────────────────────────────────────
+   .pinkie-user-settings__* 是 laolao-settings-user.css（oc/restyle 领地）里的一套通用零件，
+   那里的悬停/选中态还是粉色字面量。能力卡片实际就用这套零件，所以在面板作用域内
+   把"悬停/选中/焦点"三种状态映射到冰蓝；颜色变量本身早已由上面的 --pinkie-settings-*
+   指向 C.le. token。原文件不动，避免和旧配色清扫互相覆盖。 */
+html[data-cle] #cle-utilities :is(
+  .pinkie-user-settings__choice:hover,
+  .pinkie-user-settings__brand:hover,
+  .pinkie-user-settings__model-button:hover,
+  .pinkie-user-settings__button:hover,
+  .pinkie-user-settings__text-button:hover,
+  .pinkie-user-settings__advanced-link:hover
+) {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong));
+  background: var(--cle-gaze-soft);
+  box-shadow: none;
+  transform: none;
+}
+html[data-cle] #cle-utilities :is(
+  .pinkie-user-settings__choice.is-selected,
+  .pinkie-user-settings__brand.is-selected
+) {
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cle-gaze) 26%, transparent);
+}
+html[data-cle] #cle-utilities :is(button, summary):focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 2px;
+}
+/* 空状态的三张"例子"卡：虚线框原本是粉色，悬停还会浮起来发光 */
+html[data-cle] #cle-utilities .pk-cap__idea {
+  border: 1px dashed var(--cle-line-strong);
+  background: var(--cle-paper);
+  box-shadow: none;
+  transform: none;
+}
+html[data-cle] #cle-utilities .pk-cap__idea:hover {
+  border-style: solid;
+  border-color: var(--cle-gaze);
+  background: var(--cle-gaze-soft);
+  box-shadow: none;
+  transform: none;
+}
+html[data-cle] #cle-utilities .pk-cap__idea:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+html[data-cle] #cle-utilities .pk-cap__idea b { color: var(--cle-ink); }
+html[data-cle] #cle-utilities .pk-cap__idea span { color: var(--cle-ink-2); }
+
+/* 主按钮：粉色渐变 → 墨色底，纸色字（对比 17:1）。次按钮保持纸面描边。 */
+html[data-cle] #cle-utilities :is(.pinkie-user-settings__button--primary, .pk-cap__actions .pinkie-user-settings__button--primary) {
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
+  box-shadow: none;
+}
+html[data-cle] #cle-utilities :is(.pinkie-user-settings__button--primary, .pk-cap__actions .pinkie-user-settings__button--primary):hover {
+  background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+  border-color: var(--cle-ink);
+  box-shadow: none;
+  transform: none;
+}
+html[data-cle] #cle-utilities .pinkie-user-settings__button--primary:disabled,
+html[data-cle] #cle-utilities .pinkie-user-settings__button--primary[disabled] {
+  background: var(--cle-ink-2);
+  border-color: var(--cle-ink-2);
+  color: var(--cle-paper);
+  opacity: .6;
+}
+/* 夜间：--cle-ink 是浅色、--cle-paper 是最深的底。
+   主按钮在夜间必须是"浅底深字"，否则会变成浅字压浅底（实测 1.07:1）。 */
+:root[data-theme-mode="dark"] #cle-utilities :is(.pinkie-user-settings__button--primary, .pk-cap__actions .pinkie-user-settings__button--primary) {
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
+}
+/* laolao-settings-user.css 里 #cle-utilities .pinkie-user-settings__button--primary
+   与上面同特异性、且加载更晚，旧粉渐变会赢。这里提一级特异性把它压住，
+   深色和浅色都要，否则浅色下同样会露出粉色按钮。 */
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__button--primary,
+html[data-cle] #cle-utilities .pk-cap__actions .pinkie-user-settings__button--primary,
+:root[data-theme-mode="dark"] #cle-utilities .pk-cap .pinkie-user-settings__button--primary {
+  border-color: var(--cle-ink);
+  background: var(--cle-ink);
+  color: var(--cle-paper);
+  box-shadow: none;
+}
+/* 用量胶囊的夜间表面：laolao-usage-stats.css 的 html[data-theme-mode="dark"] .laolao-usage__chip
+   与这里的覆盖同特异性且更晚加载，所以在面板作用域内提一级特异性兜住。 */
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip {
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  color: var(--cle-ink-2);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__value { color: var(--cle-ink); }
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost {
+  background: var(--cle-ink);
+  border-color: var(--cle-ink);
+  color: var(--cle-paper);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost .laolao-usage__label,
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--cost .laolao-usage__value { color: var(--cle-paper); }
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--runtime[data-state="live"] {
+  background: var(--cle-gaze-soft);
+  border-color: color-mix(in srgb, var(--cle-gaze) 42%, var(--cle-line-strong));
+  color: var(--cle-gaze);
+}
+html[data-cle] #cle-utilities .laolao-usage .laolao-usage__chip--runtime[data-state="live"] .laolao-usage__value { color: var(--cle-gaze); }
+
+html[data-cle] #cle-utilities .pk-cap .pinkie-user-settings__button--primary:hover,
+:root[data-theme-mode="dark"] #cle-utilities .pk-cap .pinkie-user-settings__button--primary:hover {
+  border-color: var(--cle-ink);
+  background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze));
+  box-shadow: none;
+}
+:root[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__button--primary:disabled,
+:root[data-theme-mode="dark"] #cle-utilities .pinkie-user-settings__button--primary[disabled] {
+  background: var(--cle-surface);
+  border-color: var(--cle-line-strong);
+  color: var(--cle-ink-2);
+}
+/* 危险操作（清空记忆、移除连接）：保留红色语义，不用金或灰吞掉 */
+html[data-cle] #cle-utilities :is(.laolao-memory-button--danger, .pk-cap__danger) { color: var(--cle-danger, #B23A33); }
+
+html[data-cle] #cle-utilities .pinkie-user-settings__status { color: var(--cle-ok, #3F6B4F); }
+html[data-cle] #cle-utilities .pinkie-user-settings__status[data-state="error"] { color: var(--cle-danger, #B23A33); }
+html[data-cle] #cle-utilities .pinkie-user-settings__status[data-state="busy"] { color: var(--cle-ink-2); }
+html[data-cle] #cle-utilities .pinkie-user-settings__wechat-qr { background: #fff; }
+/* muted 文字在 oc/restyle 的合并版里被写成 #886b7c（纸面 4.12:1、墨面 3.85:1）。
+   这里在面板作用域内把它拉回 --cle-ink-2，不依赖对方是否最终修正。 */
+html[data-cle] #cle-utilities {
+  --pinkie-settings-muted: var(--cle-ink-2);
+}
+
+html[data-cle] :is(.laolao-memory-panel, .laolao-memory-editor, .laolao-memory-card, .laolao-web-gpt-panel, .laolao-deep-think-menu, #laolao-context-compact-popover, .laolao-context-viewer__popover) { color: var(--cle-ink); background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: var(--cle-shadow-pop); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-cle] :is(.laolao-memory-head, .laolao-memory-foot, .laolao-web-gpt-panel__head) { background: var(--cle-paper); border-color: var(--cle-line); }
+html[data-cle] :is(.laolao-memory-title strong, .laolao-memory-text, .laolao-memory-card__text, .laolao-web-gpt-panel__title strong, .laolao-deep-think-menu__name, .laolao-deep-think-menu__head) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-memory-title span, .laolao-memory-status, .laolao-memory-meta, .laolao-deep-think-menu__desc, .laolao-web-gpt-panel__status) { color: var(--cle-ink-2); }
+/* 只给"次要"按钮上纸面：主/危险操作必须走下面的层级规则。
+   否则 :is() 会按最高权重命中主按钮，把主次一起压平（这就是之前主按钮丢层级的根因）。 */
+html[data-cle] :is(.laolao-memory-button, .laolao-memory-search, .laolao-memory-editor input, .laolao-memory-editor textarea, .laolao-memory-editor select):not(.laolao-memory-button--primary):not(.laolao-memory-button--danger) {
+  background: var(--cle-paper); color: var(--cle-ink); border-color: var(--cle-line-strong); box-shadow: none;
+}
+/* 记忆匣的主/危险操作要保留层级：全都变成同一张纸，用户就分不出哪个是"保存" */
+html[data-cle] .laolao-memory-button.laolao-memory-button--primary { background: var(--cle-ink); color: var(--cle-paper); border-color: var(--cle-ink); }
+/* 夜间 --cle-ink 是浅色：浅底 + 深字，保持"主按钮最醒目"的层级 */
+html[data-cle][data-theme-mode="dark"] .laolao-memory-button.laolao-memory-button--primary { background: var(--cle-ink); color: var(--cle-paper); border-color: var(--cle-ink); }
+html[data-cle] .laolao-memory-button.laolao-memory-button--primary:hover { background: color-mix(in srgb, var(--cle-ink) 88%, var(--cle-gaze)); border-color: var(--cle-ink); }
+html[data-cle] .laolao-memory-button.laolao-memory-button--danger { background: transparent; color: var(--cle-danger, #B23A33); border-color: color-mix(in srgb, var(--cle-danger, #B23A33) 38%, transparent); }
+html[data-cle] .laolao-memory-button.laolao-memory-button--danger:hover { background: color-mix(in srgb, var(--cle-danger, #B23A33) 8%, transparent); }
+html[data-cle] .laolao-memory-button:hover, html[data-cle] .laolao-memory-close:hover { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+/* 输入框的焦点环统一到冰蓝（原版是粉色 3px 光晕） */
+html[data-cle] :is(.laolao-memory-search, .laolao-memory-editor input, .laolao-memory-editor textarea, .laolao-memory-editor select):focus { border-color: var(--cle-gaze); box-shadow: 0 0 0 3px var(--cle-gaze-soft); outline: none; }
+/* 记忆层本身是遮罩：纸面面板之下应是一层中性压暗，而不是粉色玻璃 */
+html[data-cle] .laolao-memory-layer { background: var(--pk-scrim); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-cle] .laolao-memory-card { background: var(--cle-paper); }
+html[data-cle] :is(.laolao-memory-entry, .laolao-memory-close, .laolao-deep-think-btn, .laolao-context-compact-btn, .laolao-web-gpt-collab, .laolao-research-btn) { color: var(--cle-ink-2); }
+html[data-cle] :is(.laolao-deep-think-btn.is-selected, .laolao-web-gpt-collab.is-active, .laolao-research-btn.is-on) { color: var(--cle-gaze); background: var(--cle-gaze-soft); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu { --tier-accent: var(--cle-gaze); }
+html[data-cle] .laolao-deep-think-menu__item { background: var(--cle-paper); border-color: var(--cle-line); }
+html[data-cle] .laolao-deep-think-menu__item[aria-checked="true"] { border-color: var(--cle-gaze); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu__icon { background: var(--cle-gaze-soft); box-shadow: none; }
+html[data-cle] .laolao-deep-think-menu__art { display: none; }
+html[data-cle] :is(.laolao-link-viewer__header, .laolao-link-viewer__body, .laolao-link-viewer__iframe) { background: var(--cle-surface); }
+html[data-cle] :is(.laolao-link-viewer__url, .laolao-link-viewer__loading, .laolao-link-viewer__fallback, .laolao-link-viewer__fallback-title) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-link-viewer__external, .laolao-link-viewer__close, .laolao-link-viewer__fallback-copy) { background: var(--cle-paper); color: var(--cle-gaze); border-color: var(--cle-line-strong); }
+html[data-cle] .laolao-research-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; }
+html[data-cle] .laolao-research-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+html[data-cle] .laolao-research-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+html[data-cle] .agent-chat__composer-lead :is(.laolao-deep-think-btn, .laolao-context-compact-btn, .laolao-web-gpt-collab, .laolao-research-btn, .laolao-browser-workspace-entry) { flex: 0 0 28px; width: 28px; height: 28px; margin: 0; }
+html[data-cle] #cle-utilities .pk-cap__switch[aria-checked="true"] { background: var(--cle-gaze); }
+html[data-cle] .cle-native-mermaid--bridged { display: none !important; }
+html[data-cle] .pk-chart { display: flex; flex-direction: column; }
+html[data-cle] .pk-chart__stage { flex: 0 0 260px; height: 260px; min-height: 0; }
+html[data-cle] .pk-mermaid-card.is-full { position: fixed; inset: 24px; z-index: 10000; padding: 44px 24px 24px; margin: 0; overflow: auto; background: var(--cle-surface); }
+html[data-cle] .pk-mermaid-card.is-full .pk-mermaid { display: grid; place-items: center; min-height: 100%; }
+html[data-cle] .pk-rich__tools .pk-app__tool { width: 26px; height: 24px; color: var(--cle-ink-2); background: var(--cle-surface); }
+html[data-cle] .pk-rich__tools .pk-app__tool svg { width: 16px; height: 16px; }
+html[data-cle] :is(.laolao-ask, .pinkie-buddy__menu, .pinkie-buddy__bubble, .pinkie-buddy-settings, #laolao-desensitize-pop) { color: var(--cle-ink); background: var(--cle-surface); border-color: var(--cle-line-strong); box-shadow: var(--cle-shadow-pop); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-cle] :is(.laolao-ask__who, .laolao-ask__question, .laolao-ask__text strong, .pinkie-buddy__menu-title) { color: var(--cle-ink); }
+html[data-cle] :is(.laolao-ask__option, .laolao-ask__other-input, .pinkie-buddy__menu-item, .pinkie-buddy__chip) { color: var(--cle-ink); background: var(--cle-paper); border-color: var(--cle-line-strong); box-shadow: none; }
+html[data-cle] .laolao-ask__option.is-picked { background: var(--cle-gaze-soft); box-shadow: inset 0 0 0 1px var(--cle-gaze); }
+html[data-cle] .laolao-ask__face { width: 28px; height: 28px; margin: 0; border-radius: 50%; animation: none; }
+html[data-cle] .pinkie-buddy { --accent: var(--cle-gaze); }
+html[data-cle] .laolao-image-viewer { background: var(--pk-scrim); }
+html[data-cle] :is(.pinkie-library, .pinkie-reader) { --lib-ink: var(--cle-ink); --lib-muted: var(--cle-ink-2); --lib-line: var(--cle-line-strong); --lib-paper: var(--cle-surface); --lib-soft: var(--cle-paper); --lib-accent: var(--cle-gaze); --lib-highlight: var(--cle-gaze-soft); }
+html[data-cle] :is(.laolao-learning-tools__trigger, .laolao-learning-toggle) { flex: 0 0 auto; color: var(--cle-ink-2); background: var(--cle-surface); border: 1px solid var(--cle-line-strong); box-shadow: none; font: 500 11px var(--cle-sans); min-height: 28px; }
+html[data-cle] :is(.laolao-learning-tools__item, .laolao-learning-tools__due.is-due) { color: var(--cle-ink-2); background: transparent; }
+html[data-cle] .laolao-learning-tools__item:hover { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+html[data-cle] .laolao-learning-toggle.is-active { color: var(--cle-gaze); background: var(--cle-gaze-soft); }
+.pinkie-selection-actions { position: fixed; z-index: 12000; display: flex; gap: 6px; margin: 0; padding: 5px; border: 1px solid var(--cle-line-strong); border-radius: 9px; background: var(--cle-surface); box-shadow: var(--cle-shadow-pop); }
+.pinkie-selection-actions[hidden] { display: none; }
+.pinkie-selection-actions button { border: 0; background: var(--cle-paper); color: var(--cle-ink); border-radius: 6px; padding: 6px 9px; font: 500 12px var(--cle-sans); cursor: pointer; }
+/* ── 空间入口的兜底 ──────────────────────────────────────────────────────
+   #pinkie-party-entry / #pinkie-roundtable-entry 是原 App 注入到 .chat-workspace-rail 的
+   两个粉色渐变立牌。融合任务不搬这两个入口（它们仍由原版注入逻辑提供），
+   但如果它们出现在新版里，至少不能带着旧粉底和竖排字破坏纸面。 */
+html[data-cle] :is(#pinkie-party-entry, #pinkie-roundtable-entry) {
+  color: var(--cle-ink-2);
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--cle-radius-ctl);
+}
+html[data-cle] :is(#pinkie-party-entry, #pinkie-roundtable-entry):hover {
+  color: var(--cle-ink);
+  background: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+}
+html[data-cle] :is(#pinkie-party-entry, #pinkie-roundtable-entry):focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: -2px;
+}
+html[data-cle] :is(#pinkie-party-entry, #pinkie-roundtable-entry) img { box-shadow: none; filter: none; }
+
+@media (max-width: 760px) {
+  html[data-cle] .cle-composer .agent-chat__composer-lead { flex-wrap: wrap; max-width: 180px; }
+  html[data-cle] #cle-utilities { inset: 8px; width: auto; }
+  html[data-cle] #cle-utilities .pinkie-user-settings__scroll { padding: 14px; }
+  html[data-cle] #cle-utilities .cle-utilities__actions { gap: 6px; }
+  html[data-cle] #cle-utilities .cle-utilities__action { flex: 1 1 132px; justify-content: center; }
+}

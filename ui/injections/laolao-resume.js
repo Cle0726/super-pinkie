@@ -90,7 +90,8 @@
     return shell?.gatewayConnected === true || shell?.state?.gatewayConnected === true;
   };
   const gatewayConnected = () => Boolean(
-    gatewayClient() && (gatewaySnapshot()?.connected === true || nativeGatewayConnected())
+    gatewayClient() && (gatewaySnapshot()?.connected === true
+      || gatewaySnapshot()?.phase === "connected" || nativeGatewayConnected())
   );
   const recoveryTransportAvailable = () => gatewayConnected()
     || typeof window.__laolaoSidebar?.gwRequest === "function";
@@ -108,7 +109,7 @@
   // so a repaired renderer could remain invisible forever. Run one guarded
   // cache migration per UI revision. This removes only disposable control-ui
   // caches; transcripts, settings, prompts and media are not stored here.
-  const UI_CACHE_REVISION = "history-render-31";
+  const UI_CACHE_REVISION = "history-render-34";
   const UI_CACHE_REFRESHED = `laolao:ui-cache-refreshed:${UI_CACHE_REVISION}`;
   const UI_CACHE_REFRESH_ATTEMPTED = `laolao:ui-cache-refresh-attempted:${UI_CACHE_REVISION}`;
   let gatewayOfflineSince = 0;
@@ -258,9 +259,9 @@
     return /session history is rebuilding|transcript projection is rebuilding|projection is rebuilding|UNAVAILABLE/i.test(text);
   };
 
-  // The native timeline renders at most 80 rows. Keep a larger bounded message
-  // window so a long current turn (including tool calls and their results)
-  // survives reconnects and app restarts; old turns still never load wholesale.
+  // Initial recovery reads a bounded tail. This is a prefetch budget, never a
+  // transcript limit: the native virtualizer bounds DOM, and older pages stay
+  // reachable through the real server cursor as the reader scrolls upward.
   const LIVE_MESSAGE_WINDOW = 512;
   const HISTORY_PAGE_SIZE = 128;
   // Internal watchdog turns are persisted for crash/restart recovery, but are
@@ -268,6 +269,33 @@
   const HISTORY_MAX_SCAN_PAGES = 12;
   const HISTORY_MAX_CHARS = 240000;
   const historyStatusBySession = new Map();
+  const historyEpochByState = new WeakMap();
+  const historyEpoch = (state) => {
+    let epoch = historyEpochByState.get(state);
+    if (!epoch) {
+      epoch = {sessionKey: state.sessionKey, sessionId: state.currentSessionId, generation: 0};
+      historyEpochByState.set(state, epoch);
+    } else if (epoch.sessionKey !== state.sessionKey || epoch.sessionId !== state.currentSessionId) {
+      epoch.sessionKey = state.sessionKey;
+      epoch.sessionId = state.currentSessionId;
+      epoch.generation += 1;
+    }
+    return epoch.generation;
+  };
+  const earlierLoadsByPane = new WeakMap();
+  const historyGapsByState = new WeakMap();
+  const guardedPagingPanes = new WeakSet();
+  const guardNativePaging = (pane) => {
+    if (!pane || guardedPagingPanes.has(pane) || typeof pane.loadOlderMessages !== "function") return;
+    const nativeLoad = pane.loadOlderMessages;
+    // Ordinary history uses native staging/cache/anchoring unchanged. Only a
+    // disconnected pair of loaded spans needs the gap-aware page merger.
+    pane.loadOlderMessages = function (...args) {
+      return historyGapsByState.has(this.state)
+        ? loadEarlierHistory(this) : nativeLoad.apply(this, args);
+    };
+    guardedPagingPanes.add(pane);
+  };
 
   const messageText = (message) => {
     if (!message || typeof message !== "object") return "";
@@ -356,21 +384,31 @@
     return result;
   };
 
-  // 恢复发生时页面已确认 idle，说明正在发送的 optimistic 消息早应落盘。
-  // 流式期间由 isBusy() 直接跳过恢复。若单轮异常长到超过窗口，仍保留
-  // 最后一条真实用户消息作为时间线起点，并把其余容量留给最新步骤。
-  const keepLiveMessages = (messages) => {
-    const renderable = uniqueMessages(Array.isArray(messages) ? messages : [])
-      .filter(isRenderableHistoryMessage);
-    if (renderable.length <= LIVE_MESSAGE_WINDOW) return renderable;
-    const lastUserIndex = renderable.findLastIndex((message) =>
-      String(message?.role || "").toLowerCase() === "user");
-    const start = renderable.length - LIVE_MESSAGE_WINDOW;
-    if (lastUserIndex >= 0 && lastUserIndex < start) {
-      return [renderable[lastUserIndex], ...renderable.slice(-LIVE_MESSAGE_WINDOW + 1)];
+  const orderedHistoryMessages = (messages) => {
+    const unique = uniqueMessages(messages);
+    const ordered = (key) => {
+      for (let index = 1; index < unique.length; index += 1) {
+        if (key(unique[index - 1]) > key(unique[index])) return unique.sort((a, b) => key(a) - key(b));
+      }
+      return unique;
+    };
+    const seq = (message) => message?.__openclaw?.seq;
+    if (unique.every((message) => Number.isSafeInteger(seq(message)))) {
+      return ordered(seq);
     }
-    return renderable.slice(-LIVE_MESSAGE_WINDOW);
+    const time = (message) => {
+      const value = message?.timestamp ?? message?.ts;
+      if (typeof value === "number") return value;
+      return typeof value === "string" ? Date.parse(value) : NaN;
+    };
+    if (unique.every((message) => Number.isFinite(time(message)))) {
+      return ordered(time);
+    }
+    return unique;
   };
+
+  const normalizeHistoryMessages = (messages) => uniqueMessages(Array.isArray(messages) ? messages : [])
+    .filter(isRenderableHistoryMessage);
 
   // A successful chat.final is already authoritative for the selected run.
   // Its durable history can lag behind the event; retain that received reply
@@ -378,49 +416,130 @@
   // finals, reset, or compaction replace the matching local reply.
   const retainReceivedFinal = (previous, next, state) => {
     if (!Array.isArray(previous) || !Array.isArray(next) || !next.length) return next;
+    // Most assignments have no event-only final at all. Do not build turn
+    // indexes or inspect every text block on ordinary native page loads.
+    if (!previous.some((message) => message?.__pinkieReceivedFinal?.sessionKey === state?.sessionKey)) return next;
     const realUser = (message) => String(message?.role || '').toLowerCase() === 'user' && isRenderableHistoryMessage(message);
-    let result = next;
-    for (let at = 0; at < previous.length; at += 1) {
-      const reply = previous[at], received = reply?.__pinkieReceivedFinal;
-      if (received?.sessionKey !== state?.sessionKey) continue;
-      if (received.sessionId && state.currentSessionId && received.sessionId !== state.currentSessionId) continue;
-      const user = previous.slice(0, at).findLast(realUser);
-      const anchor = user ? result.findIndex((message) => messageIdentity(message) === messageIdentity(user)) : -1;
-      if (anchor < 0) continue;
-      const nextUser = result.findIndex((message, index) => index > anchor && realUser(message));
-      const end = nextUser < 0 ? result.length : nextUser;
-      const tail = result.slice(anchor + 1, end);
-      if (tail.some((message) => message?.__openclaw?.kind === 'compaction'
+    // Build each turn once. Repeated native streaming assignments can include
+    // years of loaded history; slicing/searching it once per received final
+    // would make that hot path quadratic.
+    const turns = new Map();
+    const nextIds = new Set();
+    let turn = null;
+    for (let index = 0; index < next.length; index += 1) {
+      const message = next[index];
+      nextIds.add(messageIdentity(message));
+      if (realUser(message)) {
+        if (turn) turn.end = index;
+        turn = {end: next.length, terminal: false};
+        turns.set(messageIdentity(message), turn);
+      } else if (turn && (message?.__openclaw?.kind === 'compaction'
           || String(message?.role || '').toLowerCase() === 'assistant'
             && !/^tool[_-]?(?:use|calls?)$/iu.test(String(message.stopReason || ''))
-            && isRenderableHistoryMessage(message))) continue;
-      // Preserve old replies inside their own turn, never after a later user.
-      result = [...result.slice(0, end), reply, ...result.slice(end)];
+            && isRenderableHistoryMessage(message))) turn.terminal = true;
+    }
+    const insertions = new Map();
+    let user = null;
+    for (const reply of previous) {
+      if (realUser(reply)) user = reply;
+      const received = reply?.__pinkieReceivedFinal;
+      if (received?.sessionKey !== state?.sessionKey) continue;
+      if (received.sessionId && state.currentSessionId && received.sessionId !== state.currentSessionId) continue;
+      if (nextIds.has(messageIdentity(reply))) continue;
+      const target = user && turns.get(messageIdentity(user));
+      if (!target || target.terminal) continue;
+      insertions.set(target.end, [...(insertions.get(target.end) || []), reply]);
+      target.terminal = true;
+    }
+    if (!insertions.size) return next;
+    const result = [];
+    for (let index = 0; index <= next.length; index += 1) {
+      if (insertions.has(index)) result.push(...insertions.get(index));
+      if (index < next.length) result.push(next[index]);
     }
     return result;
   };
-  const mergeRecentHistory = (history, state) => keepLiveMessages(retainReceivedFinal(state?.chatMessages, history, state));
+  const mergeRecentHistory = (history, state) => {
+    if (!Array.isArray(history)) return history;
+    const previous = Array.isArray(state?.chatMessages) ? state.chatMessages : [];
+    const ids = new Set(history.map(messageIdentity));
+    const overlap = previous.some((message) => ids.has(messageIdentity(message)));
+    if (previous.length && history.length && !overlap && state?.currentSessionId) {
+      // A long offline run may put more than a prefetch window between the
+      // reader's old page and the newest tail. Keep that reading page, but
+      // track the gap separately: its cursor must start from the fresh tail.
+      historyGapsByState.set(state, {olderIds: new Set(previous.map(messageIdentity)),
+        pagination: {...state.chatHistoryPagination}});
+      return orderedHistoryMessages([...previous, ...history]);
+    }
+    return retainReceivedFinal(previous, keepEarlierMessages(previous, history), state);
+  };
+
+  const mergeEarlierPage = (state, previous, page, pageInfo) => {
+    const gap = historyGapsByState.get(state);
+    if (!gap) return {messages: orderedHistoryMessages([...page, ...previous])};
+    const older = previous.filter((message) => gap.olderIds.has(messageIdentity(message)));
+    const newer = previous.filter((message) => !gap.olderIds.has(messageIdentity(message)));
+    if (page.some((message) => gap.olderIds.has(messageIdentity(message)))) {
+      // The two known spans now touch. The server page either starts inside
+      // the old span, or reaches past its beginning; preserve both cases.
+      const oldIndexes = new Map(older.map((message, index) => [messageIdentity(message), index]));
+      const shared = page.map(messageIdentity).filter((identity) => oldIndexes.has(identity));
+      const first = oldIndexes.get(shared[0]), last = oldIndexes.get(shared[shared.length - 1]);
+      const joined = [...older.slice(0, first), ...page, ...older.slice(last + 1)];
+      const canRebase = Number.isSafeInteger(gap.pagination.nextOffset)
+        && Number.isSafeInteger(gap.pagination.totalMessages) && Number.isSafeInteger(pageInfo.totalMessages)
+        && pageInfo.totalMessages >= gap.pagination.totalMessages;
+      // Once the spans touch, skip the old pages already in memory using only
+      // raw totals. Without totals, retain the gap merger until paging reaches
+      // the old span's first row; otherwise an opaque legacy page can reorder it.
+      const reachedHead = shared.includes(messageIdentity(older[0]));
+      if (canRebase || reachedHead) historyGapsByState.delete(state);
+      return {messages: orderedHistoryMessages([...joined, ...newer]),
+        ...(canRebase ? {coveredPagination: {...gap.pagination,
+          nextOffset: gap.pagination.nextOffset + pageInfo.totalMessages - gap.pagination.totalMessages}} : {})};
+    }
+    return {messages: orderedHistoryMessages([...older, ...page, ...newer])};
+  };
 
   // ── 历史窗口不回缩 ──
   // 原生页每轮结束后只重新拉最新 10 条，并用它整体替换 chatMessages；它本来靠
-  // 向前分页补回更早的消息，但本脚本关掉了分页（只维持有界窗口）。于是已经显示
+  // 向前分页补回更早的消息。恢复最新尾页时也必须保留用户已经载入的前缀，否则已经显示
   // 的旧消息会被挤掉，接着本脚本发现窗口回退又整窗补回：旧消息被拆掉重建、入场
   // 动画重播、滚动乱跳，看起来就像「发完消息之前的聊天又弹出来」。这里在原生赋值
   // 的那一刻把它的尾页接回已显示的窗口：同一会话里，新列表的第一条若能在当前
   // 列表里找到，就保留它前面的消息。本脚本自己写入的权威窗口不经过这里。
   let ownMessageWrite = 0;
-  const writeOwnMessages = (state, messages) => {
+  const preserveMessageViewport = (state, write) => {
+    const pane = chatPanes().find((item) => item?.state === state);
+    const preserve = window.__pinkieChatViewport?.preserve;
+    // The viewport coordinator captures the visible message and its offset,
+    // then restores it after Lit paints. Older builds safely keep their
+    // position rather than forcing a bottom scroll during history recovery.
+    return pane && typeof preserve === "function" ? preserve(pane, write) : write();
+  };
+  const writeOwnMessages = (state, messages) => preserveMessageViewport(state, () => {
     ownMessageWrite += 1;
     try { state.chatMessages = messages; } finally { ownMessageWrite -= 1; }
-  };
+  });
   const keepEarlierMessages = (previous, next) => {
     if (!Array.isArray(previous) || !Array.isArray(next) || !previous.length || !next.length) return next;
-    const first = messageIdentity(next[0]);
-    if (!first) return next;
-    const at = previous.findIndex((message) => messageIdentity(message) === first);
+    const previousIds = new Map(previous.map((message, index) => [messageIdentity(message), index]));
+    const firstShared = next.find((message) => previousIds.has(messageIdentity(message)));
+    const at = firstShared ? previousIds.get(messageIdentity(firstShared)) : -1;
     if (at <= 0) return next;
     const merged = [...previous.slice(0, at), ...next];
-    return merged.length > LIVE_MESSAGE_WINDOW ? keepLiveMessages(merged) : merged;
+    return uniqueMessages(merged);
+  };
+  const containsPreviousReferences = (previous, next) => {
+    if (previous === next) return true;
+    if (!Array.isArray(previous) || !Array.isArray(next) || !previous.length || next.length < previous.length) return false;
+    let start = -1;
+    if (next[0] === previous[0] && next[previous.length - 1] === previous[previous.length - 1]) start = 0;
+    else if (next[next.length - previous.length] === previous[0] && next[next.length - 1] === previous[previous.length - 1]) {
+      start = next.length - previous.length;
+    }
+    return start >= 0 && previous.every((message, index) => message === next[start + index]);
   };
   const guardedMessageStates = new WeakSet();
   const guardMessageWindow = (state) => {
@@ -435,16 +554,36 @@
     const read = descriptor.get ? () => descriptor.get.call(state) : () => value;
     const write = descriptor.set ? (next) => descriptor.set.call(state, next) : (next) => { value = next; };
     let listSession = state.sessionKey;
+    let listSessionId = state.currentSessionId;
     Object.defineProperty(state, "chatMessages", {
       configurable: true,
       enumerable: true,
       get: read,
       set(next) {
         // A different session (or a reset to an empty list) always replaces.
-        const sameSession = state.sessionKey === listSession;
+        const sameSession = state.sessionKey === listSession
+          && state.currentSessionId === listSessionId;
         listSession = state.sessionKey;
+        listSessionId = state.currentSessionId;
         const previous = read();
-        write(ownMessageWrite || !sameSession ? next : retainReceivedFinal(previous, keepEarlierMessages(previous, next), state));
+        historyEpoch(state);
+        // A same-key reset may clear the transcript before its new session ID
+        // arrives. Invalidate in-flight pages even in that intermediate state.
+        if (!ownMessageWrite && Array.isArray(previous) && previous.length
+            && Array.isArray(next) && next.length === 0) {
+          historyEpochByState.get(state).generation += 1;
+          historyGapsByState.delete(state);
+        }
+        const completePrevious = sameSession && !historyGapsByState.has(state)
+          && containsPreviousReferences(previous, next);
+        let messages = ownMessageWrite || !sameSession || completePrevious ? next
+          : mergeRecentHistory(next, state);
+        if (!sameSession) historyGapsByState.delete(state);
+        if (!ownMessageWrite && sameSession && historyGapsByState.has(state) && Array.isArray(messages)) {
+          messages = orderedHistoryMessages(messages);
+        }
+        if (ownMessageWrite || !sameSession) write(messages);
+        else preserveMessageViewport(state, () => write(messages));
       },
     });
     return true;
@@ -455,8 +594,13 @@
     return left.every((message, index) => {
       const a = messageIdentity(message);
       const b = messageIdentity(right[index]);
-      if (a || b) return a === b;
-      try { return JSON.stringify(message) === JSON.stringify(right[index]); } catch { return message === right[index]; }
+      if ((a || b) && a !== b) return false;
+      if (message === right[index]) return true;
+      // Durable IDs identify a row, not its revision: tool output, streaming
+      // text and completion state can all change without receiving a new ID.
+      const durable = (key, value) => key === "__pinkieReceivedFinal" ? undefined : value;
+      try { return JSON.stringify(message, durable) === JSON.stringify(right[index], durable); }
+      catch { return false; }
     });
   };
 
@@ -471,39 +615,181 @@
     };
   };
 
-  // chat.history 的 offset=0 是最新一页。不要再分页回填整个 transcript：
-  // 完整记录留在持久层，需要时由会话检查点/搜索读取；聊天页只同步 live window。
+  // offset=0 is the newest page. Read only the initial window here; preserve
+  // its real cursor so older pages can be fetched later, without loading the
+  // whole transcript up front or discarding records inside a fetched page.
   const fetchRecentHistory = async (pane, sessionKey, expectedClient) => {
     const client = expectedClient || gatewayClient();
     if (!recoveryTransportAvailable() || !sessionKey) return null;
     // 会话切换或 websocket 换代后，旧请求的结果绝不能写进新聊天。
     if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey) return null;
-    let offset = 0;
-    let pageCount = 0;
-    let hasMore = true;
-    let newestPage = null;
-    let renderable = [];
-    while (hasMore && pageCount < HISTORY_MAX_SCAN_PAGES
-        && renderable.length < LIVE_MESSAGE_WINDOW) {
-      const page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
-      if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey) return null;
-      if (!newestPage) newestPage = page;
-      const rawMessages = Array.isArray(page?.messages) ? page.messages : [];
-      const visiblePage = uniqueMessages(rawMessages).filter(isRenderableHistoryMessage);
-      renderable = uniqueMessages([...visiblePage, ...renderable]);
-      pageCount += 1;
-      hasMore = page?.hasMore === true && rawMessages.length > 0;
-      offset += rawMessages.length;
+    const expectedState = pane.state;
+    guardMessageWindow(expectedState);
+    const expectedGeneration = historyEpoch(expectedState);
+    const expectedSessionId = expectedState?.currentSessionId;
+    // A reset/compaction between pages invalidates every accumulated row.
+    // Retry the entire snapshot once, never join two session incarnations.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let offset = 0;
+      let pageCount = 0;
+      let hasMore = true;
+      let newestPage = null;
+      let snapshotSessionId = "";
+      let renderable = [];
+      let snapshotChanged = false;
+      while (hasMore && pageCount < HISTORY_MAX_SCAN_PAGES) {
+        const page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
+        if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey
+            || pane.state !== expectedState || expectedState?.currentSessionId !== expectedSessionId
+            || historyEpoch(expectedState) !== expectedGeneration) return null;
+        const pageSessionId = String(page?.sessionInfo?.sessionId || page?.sessionId || "");
+        if ((snapshotSessionId && pageSessionId && snapshotSessionId !== pageSessionId)
+            || (offset > 0 && page?.windowReset === true)) {
+          snapshotChanged = true;
+          break;
+        }
+        if (!newestPage) newestPage = page;
+        if (pageSessionId) snapshotSessionId = pageSessionId;
+        const rawMessages = Array.isArray(page?.messages) ? page.messages : [];
+        const visiblePage = uniqueMessages(rawMessages).filter(isRenderableHistoryMessage);
+        renderable = uniqueMessages([...visiblePage, ...renderable]);
+        pageCount += 1;
+        hasMore = page?.hasMore === true;
+        // Projected rows may be filtered or split: only the server cursor is
+        // authoritative. Do not derive it from the visible message count.
+        const nextOffset = page?.nextOffset === undefined
+          ? offset + rawMessages.length : page.nextOffset;
+        if (hasMore && (!Number.isSafeInteger(nextOffset) || nextOffset <= offset)) return null;
+        offset = nextOffset;
+        // A long single turn may fill 512 rows before its real user head is
+        // reached. Continue the bounded scan until both requirements hold.
+        if (!hasMore || (renderable.length >= LIVE_MESSAGE_WINDOW
+            && renderable.some((message) => String(message?.role || "").toLowerCase() === "user"))) break;
+      }
+      if (snapshotChanged) continue;
+      return {
+        messages: renderable,
+        sessionId: snapshotSessionId,
+        windowReset: newestPage?.windowReset === true,
+        totalMessages: Number.isFinite(newestPage?.totalMessages) ? newestPage.totalMessages : undefined,
+        pageCount,
+        hasMore,
+        nextOffset: Number.isSafeInteger(offset) ? offset : undefined,
+      };
     }
-
-    return {
-      messages: keepLiveMessages(renderable),
-      sessionId: String(newestPage?.sessionInfo?.sessionId || newestPage?.sessionId || ""),
-      totalMessages: Number.isFinite(newestPage?.totalMessages) ? newestPage.totalMessages : undefined,
-      pageCount,
-      hasMore,
-    };
+    return null;
   };
+
+  const paginationForHistory = (recent, previous, retainedPrefix) => {
+    let pagination = {hasMore: recent.hasMore === true, nextOffset: recent.nextOffset};
+    if (retainedPrefix && typeof previous?.hasMore === "boolean") {
+      // The cursor belongs to the oldest loaded page, not the newly fetched
+      // tail. Offset counts server rows, so only raw totalMessages may rebase
+      // it after new persisted rows arrive (never projected/visible lengths).
+      const shift = Number.isSafeInteger(recent.totalMessages) && Number.isSafeInteger(previous.totalMessages)
+        ? recent.totalMessages - previous.totalMessages : 0;
+      const rebased = previous.nextOffset + shift;
+      if (previous.hasMore === false || (Number.isSafeInteger(rebased) && rebased > 0 && shift >= 0)) {
+        pagination = {...previous, nextOffset: rebased, hasMore: previous.hasMore};
+      }
+    }
+    return {...pagination,
+      ...(Number.isFinite(recent.totalMessages) ? {totalMessages: recent.totalMessages} : {}),
+      ...(recent.sessionId ? {sessionId: recent.sessionId} : {})};
+  };
+
+  // Current native panes already own paging, caching, generation checks and
+  // scroll anchoring. Older panes can use the same public entry point through
+  // this compatibility loader; every invocation loads at most one visible
+  // page (plus a bounded run of filtered internal pages).
+  const loadEarlierHistory = async (pane = activePane()) => {
+    const state = pane?.state;
+    const sessionKey = paneSessionKey(pane);
+    if (!state || !sessionKey || earlierLoadsByPane.has(pane)) return false;
+    if (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey) return false;
+    guardMessageWindow(state);
+    const generation = historyEpoch(state);
+    const sessionId = state.currentSessionId;
+    const client = gatewayClient();
+    const valid = () => pane.state === state && paneSessionKey(pane) === sessionKey
+      && historyEpoch(state) === generation && state.currentSessionId === sessionId
+      && gatewayClient() === client
+      && !(pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey);
+    const paging = state.chatHistoryPagination;
+    if (paging?.hasMore !== true || !Number.isSafeInteger(paging.nextOffset) || paging.nextOffset <= 0) return false;
+    cancelFollowIntent(pane);
+    const loading = {};
+    earlierLoadsByPane.set(pane, loading);
+    try {
+      if (typeof pane.loadOlderMessages === "function" && !historyGapsByState.has(state)) {
+        const before = state.chatMessages;
+        const beforePagination = JSON.stringify(state.chatHistoryPagination);
+        await pane.loadOlderMessages();
+        if (!valid()) return false;
+        const status = historyStatusBySession.get(sessionKey) || {};
+        historyStatusBySession.set(sessionKey, {...status, loadedCount: state.chatMessages?.length || 0,
+          visibleCount: state.chatMessages?.length || 0, pagination: {...state.chatHistoryPagination}});
+        return before !== state.chatMessages || beforePagination !== JSON.stringify(state.chatHistoryPagination);
+      }
+      if (!recoveryTransportAvailable()) return false;
+      let offset = paging.nextOffset;
+      let loaded = [];
+      let page = null;
+      for (let scan = 0; scan < HISTORY_MAX_SCAN_PAGES; scan += 1) {
+        page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
+        if (!valid()) return false;
+        const pageSessionId = String(page?.sessionInfo?.sessionId || page?.sessionId || "");
+        if (page?.windowReset === true || (sessionId && pageSessionId && sessionId !== pageSessionId)) {
+          scheduleRecovery("older-history-reset", 0);
+          return false;
+        }
+        const raw = Array.isArray(page?.messages) ? page.messages : [];
+        loaded = uniqueMessages([...raw.filter(isRenderableHistoryMessage), ...loaded]);
+        const nextOffset = page?.nextOffset === undefined ? offset + raw.length : page.nextOffset;
+        if (page?.hasMore === true && (!Number.isSafeInteger(nextOffset) || nextOffset <= offset)) return false;
+        offset = nextOffset;
+        if (loaded.length || page?.hasMore !== true) break;
+      }
+      if (!valid() || !page) return false;
+      const previous = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+      const merged = mergeEarlierPage(state, previous, loaded, page);
+      const messages = merged.messages;
+      if (!sameMessageSequence(previous, messages)) writeOwnMessages(state, messages);
+      state.chatHistoryPagination = {
+        hasMore: page.hasMore === true, nextOffset: offset,
+        ...(merged.coveredPagination && merged.coveredPagination.nextOffset >= offset
+          ? merged.coveredPagination : {}),
+        ...(Number.isFinite(page.totalMessages) ? {totalMessages: page.totalMessages} : {}),
+        ...(sessionId ? {sessionId} : {}),
+      };
+      const status = historyStatusBySession.get(sessionKey) || {};
+      historyStatusBySession.set(sessionKey, {...status, loadedCount: messages.length,
+        visibleCount: messages.length, pagination: {...state.chatHistoryPagination}});
+      state.requestUpdate?.();
+      if (state !== pane) pane.requestUpdate?.();
+      return true;
+    } catch {
+      // Keep the existing cursor and transcript so an explicit retry works.
+      return false;
+    } finally {
+      if (earlierLoadsByPane.get(pane) === loading) earlierLoadsByPane.delete(pane);
+    }
+  };
+  window.__laolaoLoadEarlierHistory = loadEarlierHistory;
+  window.addEventListener("pinkie:load-earlier-history", (event) => {
+    const pane = event.detail?.pane || chatPanes().find((item) => paneSessionKey(item) === event.detail?.sessionKey)
+      || activePane();
+    void loadEarlierHistory(pane);
+  });
+  document.addEventListener("scroll", (event) => {
+    const thread = event.target;
+    if (thread?.scrollTop > 96 || !thread?.matches?.(".chat-thread, .chat-messages, .chat-thread-scroll")) return;
+    const pane = paneForEvent(event);
+    // Native scroll handlers own their preload threshold and request staging.
+    if (pane && !pane.__pinkieLegacyHistoryPaged && typeof pane.loadOlderMessages !== "function") {
+      void loadEarlierHistory(pane);
+    }
+  }, {capture: true, passive: true});
 
   // 正在生成中的判定: 发送按钮禁用 / 停止按钮可见 / 流式进行中
   const isBusy = (pane = activePane()) => {
@@ -586,41 +872,78 @@
     if (closest && panes.includes(closest)) return closest;
     return panes.length === 1 ? panes[0] : null;
   };
+  const scrollIntentBySession = new Map();
+  const cancelFollowIntent = (pane, lock = true) => {
+    const sessionKey = paneSessionKey(pane);
+    if (!sessionKey) return;
+    const follow = followOwnSendBySession.get(sessionKey);
+    for (const timer of follow?.timers || []) window.clearTimeout(timer);
+    followOwnSendBySession.delete(sessionKey);
+    scrollIntentBySession.set(sessionKey, (scrollIntentBySession.get(sessionKey) || 0) + 1);
+    if (lock && pane.state) {
+      pane.state.chatUserNearBottom = false;
+      pane.state.chatFollowLocked = true;
+    }
+  };
+  const scheduleFollowScroll = (follow, afterScroll) => {
+    const timer = window.setTimeout(() => {
+      follow.timers.delete(timer);
+      if (followOwnSendBySession.get(follow.sessionKey) !== follow) return;
+      const current = chatPanes().find((item) => paneSessionKey(item) === follow.sessionKey);
+      if (current?.state && !current.__pinkieHistoryBrowsing && !current.state.chatFollowLocked) afterScroll(current);
+    }, 120);
+    follow.timers.add(timer);
+  };
   const followOwnSend = (pane) => {
     const state = pane?.state;
     const sessionKey = paneSessionKey(pane);
     if (!state || !sessionKey) return;
-    followOwnSendBySession.set(sessionKey, {
-      sessionKey,
-      previousTail: messageIdentity(state.chatMessages?.at(-1)),
-    });
-    state.chatUserNearBottom = true;
-    window.setTimeout(() => {
-      if (followOwnSendBySession.has(sessionKey)) {
-        const current = chatPanes().find((item) => paneSessionKey(item) === sessionKey);
-        current?.state?.scrollToBottom?.({smooth: false});
+    window.__pinkieChatViewport?.follow?.(pane);
+    const views = window.__pinkieLegacyHistoryViews;
+    if (views instanceof Map && pane.__pinkieHistoryBrowsing) {
+      const paneId = pane.paneId || pane.id || "main";
+      let view = views.get(`${sessionKey}:${paneId}`);
+      if (!view) {
+        const candidates = [...views].filter(([key, value]) => key.startsWith(sessionKey + ":") && value.source === state.chatMessages);
+        if (candidates.length === 1) view = candidates[0][1];
       }
-    }, 120);
+      if (view) {
+        view.browsing = false; view.endKey = null; view.userAnchor = null;
+        pane.__pinkieHistoryBrowsing = false;
+        state.requestUpdate?.(); pane.requestUpdate?.();
+      }
+    }
+    cancelFollowIntent(pane, false);
+    const follow = {sessionKey, previousTail: messageIdentity(state.chatMessages?.at(-1)),
+      timers: new Set(), terminal: false};
+    followOwnSendBySession.set(sessionKey, follow);
+    state.chatUserNearBottom = true;
+    state.chatFollowLocked = false;
+    scheduleFollowScroll(follow, (current) => current.state.scrollToBottom?.({smooth: false}));
   };
   const followTerminalReply = (pane, messages) => {
+    if (pane?.__pinkieHistoryBrowsing) return false;
     const sessionKey = paneSessionKey(pane);
     const follow = followOwnSendBySession.get(sessionKey);
-    if (!follow) return false;
+    if (!follow || pane.state?.chatFollowLocked) return false;
+    if (follow.terminal) return true;
     const last = messages.at(-1);
     if (messageIdentity(last) === follow.previousTail
         || String(last?.role || "").toLowerCase() !== "assistant"
         || last?.stopReason === "toolUse"
         || !messageText(last).trim()) return false;
-    followOwnSendBySession.delete(sessionKey);
+    follow.terminal = true;
+    for (const timer of follow.timers) window.clearTimeout(timer);
+    follow.timers.clear();
     const state = pane.state;
     state.chatUserNearBottom = true;
-    // Lit may paint the persisted final one frame after chat.history resolves.
+    // The final's deferred paint shares the send's cancellable intent. A
+    // user scroll or a newer send invalidates both immediate/delayed work.
     state.scrollToBottom?.({smooth: false});
-    window.setTimeout(() => {
-      if (paneSessionKey(pane) === sessionKey && !isBusy(pane)) {
-        state.scrollToBottom?.({smooth: false});
-      }
-    }, 120);
+    scheduleFollowScroll(follow, (current) => {
+      if (!isBusy(current)) current.state.scrollToBottom?.({smooth: false});
+      if (followOwnSendBySession.get(sessionKey) === follow) followOwnSendBySession.delete(sessionKey);
+    });
     return true;
   };
   const realSendButton = (target) => {
@@ -630,7 +953,9 @@
       .some((name) => button.classList?.contains(name))) return null;
     return /send|发送/i.test(button.getAttribute?.("aria-label") || "") ? button : null;
   };
-  document.addEventListener("pointerdown", (event) => {
+  for (const type of ["pointerdown", "click"]) document.addEventListener(type, (event) => {
+    // Home and Max/Ultra replay the native Send click after preparation; those
+    // clicks have no pointerdown and belong to the newly ready chat pane.
     if (realSendButton(event.target)) followOwnSend(paneForEvent(event));
   }, true);
   document.addEventListener("keydown", (event) => {
@@ -640,13 +965,29 @@
   }, true);
   const cancelFollowOnUserScroll = (event) => {
     const pane = paneForEvent(event);
-    const sessionKey = paneSessionKey(pane);
-    if (!sessionKey || !followOwnSendBySession.has(sessionKey)) return;
-    followOwnSendBySession.delete(sessionKey);
-    if (pane.state) pane.state.chatUserNearBottom = false;
+    if (pane) cancelFollowIntent(pane);
   };
   document.addEventListener("wheel", cancelFollowOnUserScroll, {capture: true, passive: true});
   document.addEventListener("touchmove", cancelFollowOnUserScroll, {capture: true, passive: true});
+  document.addEventListener("pointerdown", (event) => {
+    if (realSendButton(event.target)) return;
+    const pane = paneForEvent(event);
+    if (!pane) return;
+    const target = event.target;
+    const customScrollbar = target?.closest?.('[role="scrollbar"], .simplebar-track, .os-scrollbar');
+    const rect = target?.getBoundingClientRect?.();
+    const gutter = Math.max(12, (target?.offsetWidth || 0) - (target?.clientWidth || 0));
+    const nativeScrollbar = target?.scrollHeight > target?.clientHeight && rect
+      && Number.isFinite(event.clientX) && event.clientX >= rect.right - gutter;
+    if (customScrollbar || nativeScrollbar || event.button === 1) cancelFollowIntent(pane);
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!["ArrowUp", "PageUp", "Home", "ArrowDown", "PageDown", "End", " "].includes(event.key)
+        || event.altKey || event.metaKey || event.ctrlKey) return;
+    if (event.target?.closest?.('textarea, input, select, [contenteditable="true"], [role="textbox"]')) return;
+    const pane = paneForEvent(event) || activePane();
+    if (pane) cancelFollowIntent(pane);
+  }, true);
 
   // The router can advance before the lazy chat page receives its new loader
   // data. Repair only the selected pane via native reactive properties; never
@@ -754,6 +1095,10 @@
     const sessionKey = paneSessionKey(pane);
     const state = pane?.state;
     if (!sessionKey || !state || !recoveryTransportAvailable()) return false;
+    guardMessageWindow(state);
+    guardNativePaging(pane);
+    const expectedGeneration = historyEpoch(state);
+    if (pane.loadingOlder === true || earlierLoadsByPane.has(pane)) return false;
     if (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey) return false;
     if (pane.sessionKey && pane.sessionKey !== sessionKey) return false;
     const now = Date.now();
@@ -779,39 +1124,47 @@
         const recent = options.recent || await fetchRecentHistory(pane, sessionKey, client);
         if (!recent || recoveryByPane.get(pane) !== recovery
             || pane.state !== state || paneSessionKey(pane) !== sessionKey
+            || historyEpoch(state) !== expectedGeneration || pane.loadingOlder === true || earlierLoadsByPane.has(pane)
             || (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey)
             || (!options.recent && gatewayClient() !== client)
             || (isBusy(pane) && !options.verifiedTerminal)) return false;
         const localMessages = Array.isArray(state.chatMessages) ? state.chatMessages : [];
-        const mergedMessages = mergeRecentHistory(recent.messages, state);
+        const incarnationChanged = recent.windowReset === true
+          || Boolean(recent.sessionId && state.currentSessionId && recent.sessionId !== state.currentSessionId);
+        const previousPagination = state.chatHistoryPagination;
+        if (incarnationChanged) historyGapsByState.delete(state);
+        const mergedMessages = incarnationChanged ? recent.messages
+          : mergeRecentHistory(recent.messages, state);
+        const retainedPrefix = !incarnationChanged && !historyGapsByState.has(state)
+          && messageIdentity(mergedMessages[0]) !== messageIdentity(recent.messages[0])
+          && messageIdentity(mergedMessages[0]) === messageIdentity(localMessages[0]);
+        if (recent.sessionId) state.currentSessionId = recent.sessionId;
         const messagesChanged = !sameMessageSequence(localMessages, mergedMessages);
         const repaint = options.forcePaint === true;
         if (messagesChanged || repaint) writeOwnMessages(state, mergedMessages);
-        // 新版原生页认识此字段；旧版会忽略它。明确关闭向前分页，避免它把
-        // 已持久化的旧记录重新挂回 live DOM。
-        if ("chatHistoryPagination" in state) {
-          state.chatHistoryPagination = {
-            hasMore: false,
-            ...(Number.isFinite(recent.totalMessages)
-              ? {totalMessages: recent.totalMessages}
-              : {}),
-          };
-        }
+        // Keep the cursor of the oldest loaded page. Rendering is virtualized;
+        // disabling pagination here would make durable history unreachable.
+        // Legacy controllers never declared this field. Create it as well:
+        // the compatibility history controls still need the real server
+        // cursor after their native initial 80-row load.
+        state.chatHistoryPagination = paginationForHistory(recent, previousPagination, retainedPrefix);
+        const paginationChanged = JSON.stringify(previousPagination) !== JSON.stringify(state.chatHistoryPagination);
         historyStatusBySession.set(sessionKey, {
           loadedCount: mergedMessages.length,
-          visibleCount: recent.messages.length,
+          visibleCount: mergedMessages.length,
           totalMessages: recent.totalMessages,
           pageCount: recent.pageCount,
           sessionId: recent.sessionId,
           lastMessageIdentity: messageIdentity(recent.messages[recent.messages.length - 1]),
           syncedAt: Date.now(),
           windowed: true,
+          pagination: {...state.chatHistoryPagination},
         });
         historyRebuildRetryAttempt = 0;
         // Avoid a full Lit render when history is byte-for-byte unchanged;
         // this is common during reconnect polling and was another source of
         // the composer visibly jumping up and down.
-        if (messagesChanged || repaint) {
+        if (messagesChanged || repaint || paginationChanged) {
           state.requestUpdate?.();
           // In some OpenClaw builds `state` is a plain controller and only
           // the custom element owns Lit's render queue. Request both; the
@@ -824,7 +1177,7 @@
         const followedReply = terminalIsVerified
           && followTerminalReply(pane, recent.messages);
         if (!followedReply && (messagesChanged || repaint) && terminalIsVerified
-            && state.chatUserNearBottom === true) {
+            && !pane.__pinkieHistoryBrowsing && state.chatUserNearBottom === true && !state.chatFollowLocked) {
           state.scrollToBottom?.({smooth: false});
         }
         window.dispatchEvent(new CustomEvent("pinkie:session-resynced", {
@@ -874,6 +1227,9 @@
     const client = gatewayClient();
     if (!state || !sessionKey || !client || !recoveryTransportAvailable()
         || paneSessionKey(pane) !== sessionKey) return false;
+    guardMessageWindow(state);
+    guardNativePaging(pane);
+    const generation = historyEpoch(state);
     const runId = timelineRunIds.get(sessionKey) || "";
     const prior = activeTimelineBoundarySyncBySession.get(sessionKey);
     if (prior?.runId === runId && prior.done) return false;
@@ -884,9 +1240,12 @@
       const recent = await fetchRecentHistory(pane, sessionKey, client);
       if (!recent || gatewayClient() !== client || pane.state !== state
           || paneSessionKey(pane) !== sessionKey
+          || (recent.sessionId && state.currentSessionId && recent.sessionId !== state.currentSessionId)
           || (pane === activePane() && routedSessionKey() && routedSessionKey() !== sessionKey)) return false;
       // The run may have ended or changed while history was loading.
       if (await backendHasActiveRun(sessionKey) !== true) return false;
+      if (pane.state !== state || paneSessionKey(pane) !== sessionKey
+          || historyEpoch(state) !== generation || gatewayClient() !== client) return false;
       const refreshedRunId = timelineRunIds.get(sessionKey) || "";
       if (runId && refreshedRunId && runId !== refreshedRunId) return false;
 
@@ -918,18 +1277,13 @@
         missingPrefix = history.slice(0, userIndex + overlapIndex);
       }
       if (!missingPrefix.some((message) => messageIdentity(message) === userIdentity)) return false;
-      const mergedMessages = keepLiveMessages([...missingPrefix, ...localMessages]);
+      const mergedMessages = uniqueMessages([...missingPrefix, ...localMessages]);
       if (sameMessageSequence(localMessages, mergedMessages)) {
         sync.done = true;
         return false;
       }
       writeOwnMessages(state, mergedMessages);
-      if ("chatHistoryPagination" in state) {
-        state.chatHistoryPagination = {
-          hasMore: false,
-          ...(Number.isFinite(recent.totalMessages) ? {totalMessages: recent.totalMessages} : {}),
-        };
-      }
+      state.chatHistoryPagination = paginationForHistory(recent, state.chatHistoryPagination, false);
       historyStatusBySession.set(sessionKey, {
         loadedCount: mergedMessages.length,
         visibleCount: mergedMessages.length,
@@ -983,7 +1337,8 @@
     isRenderableHistoryMessage,
     mergeRecentHistory,
     retainReceivedFinal,
-    keepLatestMessages: keepLiveMessages,
+    sameMessageSequence,
+    keepLatestMessages: normalizeHistoryMessages,
     publishTimelineRunState,
   };
   window.__laolaoGatewayTestHooks = {gatewayConnected, nativeGatewayConnected};
@@ -1193,18 +1548,12 @@
   // 但 WKWebView 在后台、看门狗换 runId 或档位续跑时，最容易丢的正是这个
   // terminal event。这里不重写发送协议：只把已经没有所属 run 的本地项整理
   // 成原生 retryQueuedChatMessage 能处理的状态，再由原生方法实际发送。
-  const QUEUE_STALE_STATE_AFTER_MS = 8_000;
   const QUEUE_RECOVERY_THROTTLE_MS = 900;
   const queueRecoveryByPane = new WeakMap();
   const queueRecoveryTimerByPane = new WeakMap();
   const queueRecoveryAtByPane = new WeakMap();
   const queueRecoveryStatusBySession = new Map();
   const hydratedNativeComposerQueues = new Set();
-  // A persisted `failed` item should get one recovery attempt after a reload,
-  // but a fresh permanent failure must not turn the idle poll into a retry
-  // loop. The set is intentionally page-local: a real reload gets one clean
-  // stale-state repair pass again.
-  const recoveredFailedQueueItems = new Set();
 
   const queueTimestampMs = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -1351,12 +1700,13 @@
   // Do not let one user history row consume several same-text queue cards.
   // Messages and cards are paired oldest-first, which mirrors their native
   // insertion order and preserves deliberately repeated user instructions.
-  const deliveredQueueItemIds = (items, messages) => {
+  const deliveredQueueItemIds = (items, messages, consumedEvidence, evidenceByItem) => {
     if (!Array.isArray(items) || !Array.isArray(messages)) return new Set();
     const orderedItems = items.map((item, index) => ({item, index})).sort((left, right) =>
       (queueItemCreatedAt(left.item) - queueItemCreatedAt(right.item)) || left.index - right.index);
     const orderedMessages = messages.map((message, index) => ({message, index})).filter(({message}) =>
-      String(message?.role || "").toLowerCase() === "user").sort((left, right) =>
+      String(message?.role || "").toLowerCase() === "user"
+        && !consumedEvidence?.has(messageIdentity(message))).sort((left, right) =>
       (historyMessageAt(left.message) - historyMessageAt(right.message)) || left.index - right.index);
     const usedMessages = new Set();
     const delivered = new Set();
@@ -1367,6 +1717,7 @@
       if (matchIndex < 0) return;
       usedMessages.add(matchIndex);
       delivered.add(item.id);
+      evidenceByItem?.set(item.id, messageIdentity(orderedMessages[matchIndex].message));
     };
     // A normal native retry has a durable sendRunId. Reserve those exact
     // idempotency matches before an earlier steered card with the same text
@@ -1380,35 +1731,41 @@
     return delivered;
   };
 
-  const queueItemActivityAt = (item) => Math.max(
-    queueTimestampMs(item?.sendRequestStartedAtMs),
-    queueTimestampMs(item?.sendSubmittedAtMs),
-    queueItemCreatedAt(item)
-  );
-  const queueItemStateIsStale = (item, now = Date.now()) => {
-    const at = queueItemActivityAt(item);
-    return !at || now - at >= QUEUE_STALE_STATE_AFTER_MS;
+  const consumedQueueEvidenceBySession = new Map();
+  const queueEvidenceLedger = (sessionKey, incarnation) => {
+    let ledger = consumedQueueEvidenceBySession.get(sessionKey);
+    if (!ledger || (ledger.sessionId && incarnation && ledger.sessionId !== incarnation)) {
+      ledger = {sessionId: incarnation, evidence: new Set()};
+      consumedQueueEvidenceBySession.set(sessionKey, ledger);
+    } else if (incarnation) ledger.sessionId = incarnation;
+    return ledger;
   };
-  const queueRecoveryKey = (sessionKey, item) => `${sessionKey}:${String(item?.id || "")}`;
-  const queueItemNeedsRecovery = (sessionKey, item, now) => {
-    if (!item || item.localCommandName) return false;
-    // A steer accepted/in-flight item is deliberately pending only while its
-    // tracked run exists. The caller has already confirmed the session idle.
-    if (item.pendingRunId || item.kind === "steered") return true;
-    // This state is only assigned to a message that was queued behind a live
-    // model turn; once sessions.list confirms no run it is immediately safe
-    // to hand back to native retry (no arbitrary 8s wait for a lost final).
-    if (item.sendState === "waiting-model") return true;
-    const blocked = ["sending", "waiting-model", "failed"].includes(item.sendState);
-    if (!blocked || !queueItemStateIsStale(item, now)) return false;
-    return item.sendState !== "failed"
-      || !recoveredFailedQueueItems.has(queueRecoveryKey(sessionKey, item));
+  const consumeQueueEvidence = (ledger, evidence) => {
+    if (evidence) ledger.evidence.add(evidence);
+    while (ledger.evidence.size > LIVE_MESSAGE_WINDOW * 2) {
+      ledger.evidence.delete(ledger.evidence.values().next().value);
+    }
   };
-  const normalizeQueuedItem = (sessionKey, item) => {
-    if (item.sendState === "failed") recoveredFailedQueueItems.add(queueRecoveryKey(sessionKey, item));
+  const queueReservedButUnsent = (item) => /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
+    && item?.sendAttempts === 0 && (!item?.sendState || (item?.sendState === "waiting-reconnect" && item?.__pinkieReservedUnsent === true))
+    && !item?.pendingRunId && item?.kind !== "steered"
+    && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer";
+  const queueDeliveryUnconfirmed = (item) => !queueReservedButUnsent(item) && Boolean(item?.pendingRunId || item?.kind === "steered"
+    || item?.sendRunId || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
+    || ["unconfirmed", "held", "delivery-unknown", "sending", "submitting", "failed"].includes(item?.sendState));
+  const queueItemNeedsRecovery = (item) => {
+    if (!item || item.localCommandName || queueDeliveryUnconfirmed(item)) return false;
+    // Only a card still queued behind the completed run is known unsent.
+    // Missing history is not proof that an accepted/in-flight steer failed;
+    // leave those cards for delivery confirmation or an explicit user retry.
+    return item.sendState === "waiting-model" || queueReservedButUnsent(item);
+  };
+  const normalizeQueuedItem = (item) => {
+    const reservedUnsent = queueReservedButUnsent(item);
     const {pendingRunId, sendError, sendRequestStartedAtMs, kind, ...rest} = item;
     return {
       ...rest,
+      ...(reservedUnsent ? {__pinkieReservedUnsent: true} : {}),
       // Native retry accepts waiting-reconnect, while its own send routine
       // immediately promotes it to sending when the socket is usable.
       sendState: "waiting-reconnect",
@@ -1461,7 +1818,9 @@
 
         let items = queueForSession(state, sessionKey);
         const remove = nativeQueueMethod(pane, "removeQueuedMessage");
-        const deliveredIds = deliveredQueueItemIds(items, recent.messages);
+        const ledger = queueEvidenceLedger(sessionKey, recent.sessionId || state.currentSessionId || "");
+        const evidenceByItem = new Map();
+        const deliveredIds = deliveredQueueItemIds(items, recent.messages, ledger.evidence, evidenceByItem);
         const delivered = items.filter((item) => deliveredIds.has(item?.id));
         // Never fall through and retry a confirmed-delivered item if an
         // upstream bundle changed the public remove method. Keeping its card
@@ -1470,26 +1829,28 @@
         if (delivered.length) {
           for (const item of delivered) {
             await Promise.resolve(remove(item.id));
-            recoveredFailedQueueItems.delete(queueRecoveryKey(sessionKey, item));
-            removed += 1;
+            if (!queueForSession(state, sessionKey).some((entry) => entry?.id === item.id)) {
+              consumeQueueEvidence(ledger, evidenceByItem.get(item.id));
+              removed += 1;
+            }
           }
           items = queueForSession(state, sessionKey);
           if (items.some((item) => deliveredIds.has(item?.id))) return false;
         }
 
-        const recoveryNow = Date.now();
         const next = items.map((item) => {
-          if (!queueItemNeedsRecovery(sessionKey, item, recoveryNow)) return item;
+          if (!queueItemNeedsRecovery(item)) return item;
           normalized += 1;
-          return normalizeQueuedItem(sessionKey, item);
+          return normalizeQueuedItem(item);
         });
         if (normalized) {
           replaceQueueForSession(pane, sessionKey, next);
           items = queueForSession(state, sessionKey);
         }
 
-        const candidate = items.find((item) => !item?.localCommandName && !item?.pendingRunId
-          && !["sending", "waiting-model", "failed"].includes(item?.sendState));
+        const candidate = items.find((item) => !item?.localCommandName
+          && !queueDeliveryUnconfirmed(item)
+          && item?.sendState === "waiting-reconnect");
         const retry = nativeQueueMethod(pane, "retryQueuedChatMessage");
         if (candidate && retry && !queueRecoveryBusy(pane)) {
           retriedId = candidate.id;
@@ -1511,6 +1872,69 @@
       }
     })();
     return recovery.promise;
+  };
+
+  // Delivery confirmation is independent of run idleness. An accepted steer
+  // can already be persisted while the same run is still producing output;
+  // remove its pending card now so no UI action can enqueue it a second time.
+  // This path deliberately has no retry, normalization or force-idle action.
+  const queuePruneByPane = new WeakMap();
+  const pruneDeliveredQueueItems = async (pane = activePane(), messages) => {
+    const state = pane?.state;
+    const sessionKey = paneSessionKey(pane);
+    const client = gatewayClient();
+    const sessionId = state?.currentSessionId;
+    if (!state || !sessionKey || !queueForSession(state, sessionKey).length) return [];
+    const stillCurrent = () => pane.state === state && paneSessionKey(pane) === sessionKey
+      && state.currentSessionId === sessionId
+      && gatewayClient() === client
+      && (!pane.sessionKey || pane.sessionKey === sessionKey)
+      && (pane !== activePane() || !routedSessionKey() || routedSessionKey() === sessionKey);
+    if (!stillCurrent()) return [];
+    const prior = queuePruneByPane.get(pane);
+    if (prior?.sessionKey === sessionKey) return prior.promise;
+    const prune = {sessionKey, promise: null};
+    queuePruneByPane.set(pane, prune);
+    prune.promise = (async () => {
+      const removed = [];
+      try {
+        const recent = Array.isArray(messages) ? {messages}
+          : await fetchRecentHistory(pane, sessionKey, client);
+        if (!recent || !stillCurrent()
+            || (recent.sessionId && state.currentSessionId && recent.sessionId !== state.currentSessionId)) return removed;
+        const remove = nativeQueueMethod(pane, "removeQueuedMessage");
+        if (!remove) return removed;
+        const items = queueForSession(state, sessionKey).filter((item) =>
+          !item?.sessionKey || item.sessionKey === sessionKey);
+        const ledger = queueEvidenceLedger(sessionKey, recent.sessionId || state.currentSessionId || "");
+        const evidenceByItem = new Map();
+        const deliveredIds = deliveredQueueItemIds(items, recent.messages, ledger.evidence, evidenceByItem);
+        for (const item of items) {
+          if (!deliveredIds.has(item?.id) || !stillCurrent()) continue;
+          // Re-check the item after an awaited removal; a native UI action may
+          // already have consumed it while this pruning pass was in flight.
+          if (!queueForSession(state, sessionKey).some((entry) => entry?.id === item.id)) continue;
+          await Promise.resolve(remove(item.id));
+          if (!stillCurrent()) break;
+          if (!queueForSession(state, sessionKey).some((entry) => entry?.id === item.id)) {
+            removed.push(item.id);
+            consumeQueueEvidence(ledger, evidenceByItem.get(item.id));
+          }
+        }
+        if (removed.length) publishQueueRecoveryStatus(sessionKey, {
+          reason: "delivered-prune", removed: removed.length, removedIds: removed,
+          normalized: 0, retriedId: null,
+        });
+      } catch (error) {
+        publishQueueRecoveryStatus(sessionKey, {reason: "delivered-prune",
+          removed: removed.length, normalized: 0, retriedId: null,
+          error: String(error?.message || error)});
+      } finally {
+        if (queuePruneByPane.get(pane) === prune) queuePruneByPane.delete(pane);
+      }
+      return removed;
+    })();
+    return prune.promise;
   };
 
   const scheduleQueueRecovery = (pane = activePane(), reason = "unknown", recent = null) => {
@@ -1584,6 +2008,7 @@
     },
     status: (sessionKey = currentSessionKey()) => queueRecoveryStatusBySession.get(sessionKey) || null,
     isDelivered: queueItemArrivedInHistory,
+    pruneDelivered: pruneDeliveredQueueItems,
   };
 
   // A watchdog retry can finish under a new run id after the native pane has
@@ -1600,6 +2025,7 @@
     const key = paneSessionKey(pane);
     if (!key || !pane?.state || !recoveryTransportAvailable()
         || !location.pathname.startsWith("/chat")) return false;
+    if (pane.loadingOlder === true || earlierLoadsByPane.has(pane)) return false;
     if (pane === activePane() && routedSessionKey() && routedSessionKey() !== key) return false;
     if (pane.sessionKey && pane.sessionKey !== key) return false;
     // A painted local assistant can be the *previous* turn. The native pane
@@ -1622,7 +2048,13 @@
           || final?.stopReason === "toolUse" || !messageText(final).trim()) return false;
       const current = pane.state?.chatMessages?.at(-1);
       const sameFinal = messageIdentity(current) === messageIdentity(final);
-      if (sameFinal && !isBusy(pane) && terminalPainted(pane, final)) {
+      const sameFinalContent = sameFinal && sameMessageSequence([current], [final]);
+      const readingEarlier = pane.__pinkieHistoryBrowsing === true
+        || pane.state?.chatFollowLocked === true || pane.state?.chatUserNearBottom === false;
+      if (sameFinalContent && !isBusy(pane) && (readingEarlier || terminalPainted(pane, final))) {
+        // Virtual rows intentionally unmount an offscreen tail. A reader of
+        // older messages does not need that already-synced final forced back
+        // into the DOM every five seconds.
         // The renderer can already have painted the persisted final while the
         // one native terminal callback that drains chatQueue was lost. The
         // transcript needs no repaint, but the idle queue still needs its
@@ -1861,15 +2293,8 @@
           observedPaneKeys.set(pane, key);
           scheduleRecovery("pane-session-changed", 250);
         }
-        // Native history can briefly remount a larger page. Keep each pane's
-        // bounded timeline window independent; one busy pane must not block another.
-        if (Array.isArray(state.chatMessages) && state.chatMessages.length > LIVE_MESSAGE_WINDOW
-            && !isBusy(pane)) {
-          writeOwnMessages(state, keepLiveMessages(state.chatMessages));
-          state.requestUpdate?.();
-          scheduleRecovery("native-history-remounted", 250);
-          continue;
-        }
+        // Loaded history remains available while the renderer limits mounted
+        // rows. Never trim a reader's earlier pages back to the prefetch budget.
         const expected = historyStatusBySession.get(key)?.visibleCount;
         if (Number.isFinite(expected) && Array.isArray(state.chatMessages)
             && state.chatMessages.length < expected && !isBusy(pane) && !waitingForGateway) {
@@ -1949,7 +2374,9 @@
             || !hasDetachedLitMarkers(this)) throw error;
         paneRebuildAt.set(this, Date.now());
         const state = this.state;
-        const followTail = state?.chatUserNearBottom !== false;
+        const sessionKey = paneSessionKey(this);
+        const scrollIntent = scrollIntentBySession.get(sessionKey) || 0;
+        const followTail = state?.chatUserNearBottom === true && !state?.chatFollowLocked;
         const composerFocused = root.contains?.(document.activeElement)
           && document.activeElement?.matches?.(".agent-chat__composer-combobox textarea");
         console.warn("[laolao] chat pane render hit detached Lit markers; rebuilding its DOM", error);
@@ -1959,7 +2386,11 @@
         if (this.renderOptions?.renderBefore) this.renderOptions.renderBefore = null;
         const result = update.call(this, changed);
         window.requestAnimationFrame(() => {
-          if (followTail) state?.scrollToBottom?.({smooth: false});
+          if (followTail && paneSessionKey(this) === sessionKey
+              && (scrollIntentBySession.get(sessionKey) || 0) === scrollIntent
+              && state?.chatUserNearBottom === true && !state?.chatFollowLocked) {
+            state?.scrollToBottom?.({smooth: false});
+          }
           if (composerFocused) document.querySelector(".agent-chat__composer-combobox textarea")?.focus?.();
         });
         window.dispatchEvent(new CustomEvent("pinkie:chat-pane-rebuilt", {

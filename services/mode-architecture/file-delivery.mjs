@@ -50,8 +50,11 @@ export function validateDeliveryFile(raw, {homeDirectory = os.homedir(), started
     const file = fs.realpathSync(requested);
     if (!inside(home, file) || /[\0\r\n]/.test(file)) return null;
     const parts = path.relative(home, file).split(path.sep).map(part => part.toLowerCase());
-    const workspace = parts[0] === '.openclaw' && (parts[1] === 'workspace' || parts[1]?.startsWith('workspace-'));
-    if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (parts[0] === '.openclaw' && !workspace)) return null;
+    // ~/.openclaw/workspace* 和 --profile 的 ~/.openclaw-<名字>/workspace* 都算模式工作区。
+    const isWorkspace = (dir) => dir === 'workspace' || dir.startsWith('workspace-');
+    const stateFolder = /^\.openclaw(?:-.+)?$/.test(parts[0] || '');
+    const workspace = stateFolder && isWorkspace(parts[1] || '');
+    if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (stateFolder && !workspace)) return null;
     if (!DELIVERY_TYPES.has(path.extname(file).slice(1).toLowerCase())) return null;
     const stat = fs.statSync(file);
     if (!stat.isFile() || !(stat.mtimeMs > startedAt)) return null;

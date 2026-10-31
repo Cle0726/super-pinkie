@@ -6,10 +6,79 @@ import Speech
 import WebKit
 
 private enum RuntimeConfig {
+    /// A separate acceptance host must never read, write or signal anything that
+    /// belongs to the installed app: no live config, no live state directory, no
+    /// live services, no ownership of the gateway on 18789.
+    ///
+    /// The test build is compiled with `-D CLE_BROWSER_TEST_HOST`, so isolation is
+    /// a property of the binary itself. Double-clicking the .app from Finder, from
+    /// CUA or through LaunchServices therefore behaves exactly like the `--run`
+    /// shell path; nobody has to remember an environment variable.
+    static let isTestHost: Bool = {
+        #if CLE_BROWSER_TEST_HOST
+        return true
+        #else
+        return ProcessInfo.processInfo.environment["PINKIE_TEST_HOST"] == "1"
+        #endif
+    }()
+
+    /// The C.le. app (its own bundle, released apart from 超級碧琪) declares `CLEBrand = cle` in
+    /// its Info.plist; the original app does not, so it keeps its own opening and art.
+    static let isCleBrand: Bool = {
+        (Bundle.main.object(forInfoDictionaryKey: "CLEBrand") as? String) == "cle"
+    }()
+
+    /// What the user reads in menus and dialogs.
+    static var productName: String { isCleBrand ? "C.le." : "超級碧琪" }
+    /// C.le. runs its own OpenClaw profile (state in ~/.openclaw-cle-studio), apart from 超級碧琪's
+    /// ~/.openclaw, on its own port: the two apps never share config, sessions or a gateway.
+    static let cleProfile = "cle-studio"
+    static var cleOpenClawState: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".openclaw-cle-studio", isDirectory: true)
+    }
+
+    /// Compiled into the test binary only. `strings` on the executable is the
+    /// checkable proof that a delivered .app is the isolated build. Kept as a
+    /// computed value used at launch so the optimiser cannot drop it.
+    static var testHostBuildMarker: String {
+        #if CLE_BROWSER_TEST_HOST
+        return "CLE_BROWSER_TEST_HOST_ALWAYS=1"
+        #else
+        return "CLE_BROWSER_TEST_HOST_ALWAYS=0"
+        #endif
+    }
+    /// Application Support root. The installed app uses the historical path; the
+    /// acceptance host is redirected so logs, snapshots and caches stay apart,
+    /// including when no environment is provided at all.
+    static let stateRoot: URL = {
+        if let custom = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !custom.isEmpty {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        if isCleBrand && !isTestHost {
+            return FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/C.le.", isDirectory: true)
+        }
+        let base = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
+        return isTestHost ? base.appendingPathComponent("browser-test", isDirectory: true) : base
+    }()
+
     private static let values: [String: String] = {
-        let configURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/super-pinkie/config.json")
-        guard let data = try? Data(contentsOf: configURL),
+        // The acceptance host never reads the installed app's config unless a
+        // path is given explicitly; by default it reads only its own state dir.
+        let path: String
+        if let explicit = ProcessInfo.processInfo.environment["PINKIE_CONFIG_PATH"] {
+            path = explicit
+        } else if isTestHost {
+            path = stateRoot.appendingPathComponent("config.json").path
+        } else if isCleBrand {
+            path = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/cle-studio/config.json").path
+        } else {
+            path = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/super-pinkie/config.json").path
+        }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
         }
@@ -22,9 +91,28 @@ private enum RuntimeConfig {
         ProcessInfo.processInfo.environment[environmentKey] ?? values[configKey] ?? fallback
     }
 
-    static let gatewayURL = URL(string: string(
-        "PINKIE_GATEWAY_URL", "gatewayURL", fallback: "http://127.0.0.1:18789/"
-    ))!
+    static let gatewayURL: URL = {
+        let fallback = isTestHost ? "http://127.0.0.1:19789/" : (isCleBrand ? "http://127.0.0.1:18809/" : "http://127.0.0.1:18789/")
+        // C.le. never adopts a gateway address that names 超級碧琪's port. Both apps can
+        // be launched from the same logged-in session, and a stale PINKIE_GATEWAY_URL
+        // inherited from that session must not point the second app at the first app's
+        // gateway — that would write C.le. traffic into 超級碧琪's state.
+        var raw = string("PINKIE_GATEWAY_URL", "gatewayURL", fallback: fallback)
+        if isCleBrand && !isTestHost, let adopted = URL(string: raw), adopted.port == 18789 {
+            NSLog("[C.le.] 拒绝使用 18789（超級碧琪的网关端口），改用 %@", fallback)
+            raw = fallback
+        }
+        var url = URL(string: raw)!
+        guard isTestHost else { return url }
+        // An explicit override is still checked: a mistyped port must not attach
+        // the acceptance host to the installed app's gateway.
+        let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
+        if !loopback || url.port == 18789 {
+            NSLog("[CLE Kk test host] 拒绝连接到非测试网关：%@", url.absoluteString)
+            url = URL(string: "http://127.0.0.1:19789/")!
+        }
+        return url
+    }()
     static let speechURL = URL(string: string(
         "PINKIE_SPEECH_URL", "speechURL", fallback: "http://127.0.0.1:18888/v1/audio/speech"
     ))!
@@ -80,7 +168,12 @@ private enum BundledRuntime {
         // that a briefly installed 2026.9 build may have left behind.  The
         // setup helper removes only those schema-incompatible keys and keeps
         // every user model, prompt, memory and workspace setting intact.
-        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = "2026.7"
+        environment["PINKIE_RUNTIME_CONFIG_SCHEMA"] = RuntimeConfig.isCleBrand ? "2026.10" : "2026.7"
+        if RuntimeConfig.isCleBrand && !RuntimeConfig.isTestHost {
+            environment["OPENCLAW_PROFILE"] = RuntimeConfig.cleProfile
+            environment["OPENCLAW_GATEWAY_PORT"] = String(RuntimeConfig.gatewayURL.port ?? 18809)
+            environment["PINKIE_STATE_ROOT"] = RuntimeConfig.stateRoot.path
+        }
         environment["PINKIE_GATEWAY_URL"] = RuntimeConfig.gatewayURL.absoluteString
         // This App is a pinned CLE Kk release. Upstream OpenClaw/Cua update
         // notices must never replace its patched runtime behind the user's
@@ -101,8 +194,7 @@ private enum BundledRuntime {
     }
 
     static func logHandle(named name: String) -> FileHandle? {
-        let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SuperPinkie/logs", isDirectory: true)
+        let directory = RuntimeConfig.stateRoot.appendingPathComponent("logs", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = directory.appendingPathComponent(name + ".log")
@@ -417,7 +509,12 @@ private final class BrowserPanelContainer: NSView {
 private final class BrowserEdgeTab: BrowserPanelDragHandle {
     var edge: BrowserDockEdge = .right { didSet { needsDisplay = true } }
     var onHover: ((Bool) -> Void)?
+    /// Press / click / Space / Return all mean the same thing here: toggle the
+    /// half-revealed state. Dragging still detaches the panel as before.
+    var onActivate: (() -> Void)?
     private var hoverArea: NSTrackingArea?
+    private var pressOrigin: NSPoint?
+    private var pressMoved = false
     override init(frame: NSRect) {
         super.init(frame: frame)
         setAccessibilityElement(true)
@@ -426,6 +523,57 @@ private final class BrowserEdgeTab: BrowserPanelDragHandle {
         setAccessibilityHelp("鼠标靠近露出半幅；向工作区拖动恢复悬浮")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // Without these the tab was announced as a button that did nothing: no
+    // keyboard focus, no press action, so VoiceOver and CUA activation were both
+    // no-ops. It is a real control now, not only a drag surface.
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.becomeFirstResponder()
+    }
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.resignFirstResponder()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onActivate?()
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Space (49) and Return (36) are the two keys AppKit conventions expect
+        // a focused button to answer to.
+        if event.keyCode == 49 || event.keyCode == 36 {
+            onActivate?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressOrigin = event.locationInWindow
+        pressMoved = false
+        super.mouseDown(with: event)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        // A couple of points of jitter must not turn a click into a drag.
+        if let origin = pressOrigin, hypot(event.locationInWindow.x - origin.x, event.locationInWindow.y - origin.y) > 3 {
+            pressMoved = true
+        }
+        super.mouseDragged(with: event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        let wasClick = pressOrigin != nil && !pressMoved
+        pressOrigin = nil
+        pressMoved = false
+        super.mouseUp(with: event)
+        // After super.mouseUp the drag lifecycle may have scheduled a retract;
+        // onActivate bumps the hover generation, which cancels it.
+        if wasClick { onActivate?() }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea { removeTrackingArea(hoverArea) }
@@ -435,10 +583,17 @@ private final class BrowserEdgeTab: BrowserPanelDragHandle {
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.systemPink.withAlphaComponent(0.82).setFill()
+        let night = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        CleBrowserPalette.gaze(night).withAlphaComponent(0.78).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 0), xRadius: 8, yRadius: 8).fill()
         let symbol = edge == .right ? "chevron.left" : edge == .top ? "chevron.down" : "chevron.up"
         NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX-6, y: bounds.midY-6, width: 12, height: 12))
+        if window?.firstResponder === self {
+            CleBrowserPalette.gaze(night).setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 1), xRadius: 7, yRadius: 7)
+            ring.lineWidth = 1.5
+            ring.stroke()
+        }
     }
 }
 struct BrowserResizeEdges: OptionSet {
@@ -554,11 +709,11 @@ private final class NativeDictationController {
             case .notDetermined:
                 AVCaptureDevice.requestAccess(for: .audio) { allowed in
                     DispatchQueue.main.async {
-                        completion(allowed, allowed ? nil : "碧琪还没有麦克风权限。")
+                        completion(allowed, allowed ? nil : "Li An 还没有麦克风权限。")
                     }
                 }
             default:
-                completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用麦克风。")
+                completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用麦克风。")
             }
         }
 
@@ -569,20 +724,20 @@ private final class NativeDictationController {
             SFSpeechRecognizer.requestAuthorization { status in
                 DispatchQueue.main.async {
                     guard status == .authorized else {
-                        completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
+                        completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用语音识别。")
                         return
                     }
                     continueWithMicrophone()
                 }
             }
         default:
-            completion(false, "请在“系统设置 → 隐私与安全性”里允许超級碧琪使用语音识别。")
+            completion(false, "请在“系统设置 → 隐私与安全性”里允许\(RuntimeConfig.productName)使用语音识别。")
         }
     }
 
     private func beginRecording() {
         guard let recognizer, recognizer.isAvailable else {
-            send(state: "error", message: "语音识别暂时不可用，碧琪晚点再试试。")
+            send(state: "error", message: "语音识别暂时不可用，Li An 晚点再试试。")
             return
         }
 
@@ -590,7 +745,7 @@ private final class NativeDictationController {
         task = nil
         request = SFSpeechAudioBufferRecognitionRequest()
         guard let request else {
-            send(state: "error", message: "碧琪没能准备好听写小本本。")
+            send(state: "error", message: "Li An 没能准备好听写小本本。")
             return
         }
         request.shouldReportPartialResults = true
@@ -625,7 +780,7 @@ private final class NativeDictationController {
             }
         } catch {
             inputNode.removeTap(onBus: 0)
-            send(state: "error", message: "麦克风启动失败，碧琪没能听清。")
+            send(state: "error", message: "麦克风启动失败，Li An 没能听清。")
         }
     }
 
@@ -741,6 +896,40 @@ private enum Gateway {
     private struct ExecutableIdentity: Equatable {
         let device: UInt64
         let inode: UInt64
+    }
+
+    /// Read-only lookup used by the acceptance host. Returns the listener that
+    /// actually owns `port`, with its executable identity, without signalling
+    /// anything. `listenerProcesses()` is hard-wired to the configured port; this
+    /// takes the port explicitly so the caller can be explicit about which
+    /// gateway it is adopting. Returns plain values so the private record type
+    /// stays inside this enum.
+    private static func describedListener(port: Int) -> (pid: pid_t, executable: String)? {        guard port > 0 else { return nil }
+        for pid in listenerPIDs(port: port) {
+            guard let executable = executablePath(for: pid) else { continue }
+            let path = canonicalPath(executable)
+            guard mappedExecutableIdentity(for: pid, matching: path) != nil else { continue }
+            return (pid, path)
+        }
+        return nil
+    }
+
+    static func adoptableListenerDescriptor(port: Int) -> (pid: pid_t, executable: String)? {
+        describedListener(port: port)
+    }
+
+    /// The same provenance rule the shipped app applies before trusting a
+    /// listener as its own runtime.
+    static func isOwnBundledNode(_ executablePath: String) -> Bool {
+        isCLEKkBundledNode(executablePath)
+    }
+
+    /// True when the process currently holds the project's own state database
+    /// open (for the test profile that is `<state root>/state/openclaw.sqlite`).
+    /// A listener that merely occupies the port fails this.
+    static func listenerOwnsState(_ pid: pid_t, stateRoot: String) -> Bool {
+        let marker = canonicalPath(stateRoot) + "/state/openclaw.sqlite"
+        return openStatePaths(pid: pid).contains { $0 == marker || $0.hasPrefix(marker + "-") }
     }
 
     static let url = RuntimeConfig.gatewayURL
@@ -909,6 +1098,34 @@ private enum Gateway {
             && executablePath.hasSuffix(bundledNodeSuffix)
     }
 
+    /// The acceptance gateway on 19789 is a development OpenClaw started from
+    /// `.../SuperPinkie/dev/cle-stage` with its own profile, so its executable is
+    /// a plain node binary and `isCLEKkBundledNode` cannot prove it.
+    ///
+    /// Adopting it therefore needs a different, checkable provenance test. The
+    /// profile decides where session state lives, so requiring the expected state
+    /// root is what stops us from binding to the live gateway (different root)
+    /// or to some unrelated node process that merely listens on a port.
+    static func isTestGatewayStateRoot(_ path: String, expectedStateRoot: String) -> Bool {
+        let canonicalExpected = canonicalPath(expectedStateRoot)
+        let canonicalActual = canonicalPath(path)
+        guard !canonicalExpected.isEmpty, !canonicalActual.isEmpty else { return false }
+        // Exact match only: no prefix or "contains" leniency, which a path such as
+        // `.../.openclaw-cle-elsewhere` could otherwise satisfy.
+        return canonicalActual == canonicalExpected
+    }
+
+    /// Read-only filesystem evidence tied to the live process: the state database
+    /// it currently has open. This is what proves the PID really is the gateway
+    /// for that profile, not just a process whose argv happens to mention it.
+    static func openStatePaths(pid: pid_t) -> [String] {
+        guard let text = lsofOutput(["-nP", "-a", "-p", String(pid), "-Fn"]) else { return [] }
+        return text.split(separator: "\n").compactMap { line in
+            guard line.first == "n" else { return nil }
+            return canonicalPath(String(line.dropFirst()))
+        }
+    }
+
     private static func stillSameProcess(_ listener: ListenerProcess) -> Bool {
         guard let current = executablePath(for: listener.pid),
               canonicalPath(current) == listener.executablePath,
@@ -982,7 +1199,26 @@ private enum Gateway {
         }
     }
 
+    /// Acceptance-host attachment: wait for the test gateway that is already
+    /// running. Never spawn, signal or replace a listener, so a live app's
+    /// gateway on another port and the test gateway on 19789 both stay intact.
+    static func attachToExisting(timeout: TimeInterval = 30, completion: @escaping (Bool) -> Void) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            isReady { ready in
+                if ready { completion(true); return }
+                guard Date() < deadline else { completion(false); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: poll)
+            }
+        }
+        poll()
+    }
+
     static func start() {
+        guard !RuntimeConfig.isTestHost else {
+            lastError = "验收宿主不创建网关；请先启动测试网关。"
+            return
+        }
         guard process?.isRunning != true else { return }
         let task = Process()
         if BundledRuntime.exists(BundledRuntime.nodeURL),
@@ -990,7 +1226,9 @@ private enum Gateway {
            let entry = BundledRuntime.openClawEntryURL,
            FileManager.default.fileExists(atPath: entry.path) {
             task.executableURL = node
-            task.arguments = [entry.path, "gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
+            task.arguments = [entry.path]
+                + (RuntimeConfig.isCleBrand ? ["--profile", RuntimeConfig.cleProfile] : [])
+                + ["gateway", "run", "--port", String(url.port ?? 18789), "--allow-unconfigured"]
         } else if let external = ["/opt/homebrew/bin/openclaw", "/usr/local/bin/openclaw"]
             .map(URL.init(fileURLWithPath:))
             .first(where: { BundledRuntime.exists($0) }) {
@@ -1069,6 +1307,7 @@ private enum Gateway {
         // process may only be draining/rebuilding its transcript; killing it
         // here creates another drain and can hide a completed reply for five
         // minutes. If our child really exited, start it again.
+        guard !RuntimeConfig.isTestHost else { return }
         guard process?.isRunning != true else { return }
         start()
     }
@@ -1080,9 +1319,9 @@ private enum Gateway {
 /// this private endpoint directly as the `computer` tool; no extra node pairing
 /// or second gateway transport is required.
 private final class DesktopControlService {
-    private static let displayName = "超級碧琪桌面控制"
+    private static var displayName: String { "\(RuntimeConfig.productName)桌面控制" }
     private static let driverBundleIdentifier = "com.trycua.driver"
-    private static let hostBundleIdentifier = "com.cle0726.super-pinkie"
+    private static var hostBundleIdentifier: String { Bundle.main.bundleIdentifier ?? "com.cle0726.super-pinkie" }
 
     private var driverProcess: Process?
     private var nodeProcess: Process?
@@ -1187,12 +1426,16 @@ private final class DesktopControlService {
     }
 
     func start() {
+        // The acceptance host never owns a desktop driver: starting one would
+        // re-use the live CUA identity and could interrupt the user's session.
+        guard !RuntimeConfig.isTestHost else { return }
         stopping = false
         guard driverProcess?.isRunning != true else { return }
         startDriver()
     }
 
     func stop() {
+        guard !RuntimeConfig.isTestHost else { return }
         stopping = true
         generation += 1
         pairingProbe?.cancel()
@@ -1668,6 +1911,32 @@ private final class TTSService {
     }
 }
 
+/// C.le.'s one-time copy of 超級碧琪's data into its own profile (installer/cle/cle-firstrun.py).
+/// Reads ~/.openclaw, never writes it; does nothing once ~/.openclaw-cle-studio is set up.
+private enum CleFirstRun {
+    static func runIfNeeded() {
+        let state = RuntimeConfig.cleOpenClawState
+        guard !FileManager.default.fileExists(atPath: state.appendingPathComponent("openclaw.json").path),
+              let root = BundledRuntime.resourceRoot,
+              let python = BundledRuntime.pythonExecutable(),
+              let node = BundledRuntime.nodeURL,
+              let entry = BundledRuntime.openClawEntryURL else { return }
+        let script = root.appendingPathComponent("installer/cle/cle-firstrun.py")
+        guard FileManager.default.fileExists(atPath: script.path) else { return }
+        let task = Process()
+        task.executableURL = python
+        task.arguments = [script.path, "--dst", state.path, "--bundle", root.path,
+                          "--node", node.path, "--openclaw", entry.path,
+                          "--profile", RuntimeConfig.cleProfile,
+                          "--port", String(RuntimeConfig.gatewayURL.port ?? 18809)]
+        task.environment = BundledRuntime.environment()
+        let log = BundledRuntime.logHandle(named: "first-run")
+        task.standardOutput = log ?? FileHandle.nullDevice
+        task.standardError = log ?? FileHandle.nullDevice
+        do { try task.run(); task.waitUntilExit() } catch { NSLog("[C.le.] first run failed: %@", error.localizedDescription) }
+    }
+}
+
 private enum BundledSetup {
     static func apply() {
         guard let resources = Bundle.main.resourceURL else { return }
@@ -1695,6 +1964,89 @@ private enum BundledSetup {
 @main
 struct LauncherMain {
     static func main() {
+        // Headless proof used by the acceptance build: prints the resolved
+        // isolation facts and exits before any window, service or gateway work.
+        // It runs with no environment, so it proves what a Finder/CUA launch
+        // would do rather than what a shell wrapper injects.
+        // Headless proof of the gateway-attach path. It performs the same
+        // read-only listener checks the running host does and reports them, so
+        // the wiring can be audited without opening a window or touching the
+        // gateway. It never signals, spawns or restarts anything.
+        if CommandLine.arguments.contains("--browser-test-attach-check") {
+            // Same decision the running host makes, minus the UI. Read-only.
+            let delegate = AppDelegate()
+            let decision = delegate.testGatewayAdoptionDecision(port: RuntimeConfig.gatewayURL.port ?? 19789)
+            print("isTestHost=\(RuntimeConfig.isTestHost)")
+            print("port=\(RuntimeConfig.gatewayURL.port ?? 19789)")
+            print("stateRoot=\(delegate.testProfileStateRoot())")
+            switch decision {
+            case .adopt(let pid, _):
+                print("decision=adopt")
+                print("gatewayPid=\(pid)")
+                exit(0)
+            case .refuse(let reason):
+                print("decision=refuse")
+                print("reason=\(reason)")
+                exit(3)
+            case nil:
+                print("decision=none")
+                exit(4)
+            }
+        }
+        if CommandLine.arguments.contains("--browser-test-endpoint-check") {
+            // Proves the credential descriptor round-trip without a window:
+            // start the real endpoint, publish the same descriptor the host
+            // publishes, report only shapes/permissions, then clean up.
+            let delegate = AppDelegate()
+            guard case let .adopt(pid, executable)? = delegate.testGatewayAdoptionDecision(port: RuntimeConfig.gatewayURL.port ?? 19789) else {
+                print("decision=refuse"); exit(3)
+            }
+            BrowserControlEndpoint.setAdoptedExecutable(executable)
+            BrowserControlEndpoint.adoptExistingGateway(pid)
+            var started = false
+            do {
+                try BrowserControlEndpoint.shared.start { _, done in done(["ok": false, "reason": "checker"] ) }
+                started = true
+            } catch {
+                print("endpoint=failed"); exit(5)
+            }
+            let encoded = BrowserControlEndpoint.environmentValue() ?? ""
+            let dir = RuntimeConfig.stateRoot
+            let file = dir.appendingPathComponent("browser-endpoint.json")
+            // Publish exactly what the running host publishes, so the check covers
+            // directory/file permissions rather than just string existence.
+            delegate.publishEndpointDescriptorForCheck()
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: file.path)) ?? [:]
+            let mode = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+            let dirMode = ((try? FileManager.default.attributesOfItem(atPath: dir.path))?[.posixPermissions] as? NSNumber)?.intValue ?? 0
+            print("endpoint=started")
+            print("hasDescriptor=\(!encoded.isEmpty)")
+            print("descriptorDir=\(dir.lastPathComponent)")
+            print("descriptorExists=\(FileManager.default.fileExists(atPath: file.path))")
+            print("descriptorMode=\(String(mode, radix: 8))")
+            print("dirMode=\(String(dirMode, radix: 8))")
+            if CommandLine.arguments.contains("--hold") {
+                // Keeps the endpoint alive so an authorised or unauthorised peer
+                // probe can run against it. Still no window and no gateway action.
+                print("holding=true")
+                fflush(stdout)
+                Thread.sleep(forTimeInterval: 600)
+            }
+            BrowserControlEndpoint.shared.stop()
+            try? FileManager.default.removeItem(at: file)
+            let ok = started
+            exit(ok ? 0 : 5)
+        }
+        if CommandLine.arguments.contains("--browser-test-self-check") {
+            let test = RuntimeConfig.isTestHost
+            print("isTestHost=\(test)")
+            print("marker=\(RuntimeConfig.testHostBuildMarker)")
+            print("gateway=\(RuntimeConfig.gatewayURL.absoluteString)")
+            print("state=\(RuntimeConfig.stateRoot.path)")
+            // A test binary that reported production defaults would defeat the
+            // whole point of compiling it in.
+            exit(test && RuntimeConfig.testHostBuildMarker == "CLE_BROWSER_TEST_HOST_ALWAYS=1" ? 0 : 1)
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.setActivationPolicy(.regular)
@@ -1706,7 +2058,7 @@ struct LauncherMain {
     private static func makeMenu(_ delegate: AppDelegate) -> NSMenu {
         let menu = NSMenu()
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "超級碧琪")
+        let appMenu = NSMenu(title: RuntimeConfig.productName)
         let updateItem = appMenu.addItem(
             withTitle: "检查并安装更新…",
             action: #selector(AppDelegate.checkForUpdates(_:)),
@@ -1742,7 +2094,7 @@ struct LauncherMain {
         )
         fullScreenItem.keyEquivalentModifierMask = [.command, .control]
         fullScreenItem.target = delegate
-        appMenu.addItem(withTitle: "退出 超級碧琪", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 \(RuntimeConfig.productName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
 
@@ -1798,7 +2150,10 @@ enum BrowserWorkspaceGeometry {
         guard bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return .zero }
         let inset = min(12, min(bounds.width, bounds.height) / 8)
         let available = bounds.insetBy(dx: inset, dy: inset)
-        let initial = NSRect(x: available.maxX - min(760, available.width * 0.65), y: available.maxY - min(650, available.height * 0.78), width: min(760, available.width * 0.65), height: min(650, available.height * 0.78))
+        // a small window by default: it floats in the upper right and leaves the conversation, the
+        // composer and Li An visible; it can be dragged larger, docked or made full from its toolbar
+        let w0 = min(540, available.width * 0.42), h0 = min(420, available.height * 0.56)
+        let initial = NSRect(x: available.maxX - w0, y: available.maxY - h0, width: w0, height: h0)
         let raw = proposed ?? initial
         let width = min(available.width, max(min(360, available.width), raw.width.isFinite ? raw.width : initial.width))
         let height = min(available.height, max(min(260, available.height), raw.height.isFinite ? raw.height : initial.height))
@@ -1848,6 +2203,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var browserFloatingFrame: NSRect?
     private var browserDockEdge: BrowserDockEdge?
     private var browserEdgeRevealed = false
+    /// True when the tab was opened by press/keyboard/AX rather than hover. A
+    /// keyboard user has their pointer elsewhere, so the panel moves out from
+    /// under the cursor and the hover-exit path would instantly retract it again.
+    /// Cleared as soon as the pointer legitimately enters the panel or the tab.
+    private var browserEdgePinned = false
     private var browserEdgeTab: BrowserEdgeTab?
     private var browserEdgeHoveringPanel = false
     private var browserEdgeHoveringTab = false
@@ -1927,6 +2287,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let browserEndpoint = BrowserControlEndpoint()
     private var browserUserEventMonitor: Any?
     private var chatGPTControlUntil = Date.distantPast
+    /// Descriptor written for a controlled gateway attach; removed on quit.
+    private var testEndpointDescriptorURL: URL?
     private let materialPreview = MaterialPreviewSchemeHandler()
     private let materialPreviewAccess = MaterialPreviewFileAccess()
     private let materialDownloadLock = NSLock()
@@ -2020,6 +2382,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.toggleFullScreen(sender)
     }
 
+    // The descriptor carries a live token; it must not outlive the endpoint.
+    private func removeTestEndpointDescriptor() {
+        guard let descriptor = testEndpointDescriptorURL else { return }
+        try? FileManager.default.removeItem(at: descriptor)
+        testEndpointDescriptorURL = nil
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         gatewayMonitor?.invalidate()
         gatewayMonitor = nil
@@ -2028,6 +2397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         roundtable.stop()
         desktopControl.stop()
         browserEndpoint.stop()
+        removeTestEndpointDescriptor()
         materialPreview.clearThumbnailCache()
         if let browserUserEventMonitor { NSEvent.removeMonitor(browserUserEventMonitor) }
         // CLE Kk owns this private loopback gateway. Leaving it alive preserves
@@ -2185,6 +2555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc func checkForUpdates(_ sender: Any?) {
+        guard !RuntimeConfig.isTestHost else { return }
         guard !updateLaunchInProgress else { return }
         let confirmation = NSAlert()
         confirmation.messageText = "主动拉取 CLE Kk 更新？"
@@ -2196,9 +2567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         guard let root = BundledRuntime.resourceRoot else { return }
         let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
-        let stateRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
-        let updateRoot = stateRoot.appendingPathComponent("updates", isDirectory: true)
+        let updateRoot = RuntimeConfig.stateRoot.appendingPathComponent("updates", isDirectory: true)
         let helper = updateRoot.appendingPathComponent("manual-update.sh")
         let task = Process()
         do {
@@ -2274,15 +2643,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // 透明窗口的原生底层必须保持透明；聊天可读性由网页里的淡玻璃气泡负责。
         // 若这里铺不透明底色，所有 CSS 透明面都会退化成整块粉色背景。
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
+        // C.le. starts in the dark: until the first page has drawn, the window is ink-black instead of
+        // a see-through frame over the desktop. didFinish puts the glass (clear) back.
+        if RuntimeConfig.isTestHost || RuntimeConfig.isCleBrand {
+            contentView.layer?.backgroundColor = NSColor(red: 0.02, green: 0.024, blue: 0.031, alpha: 1).cgColor
+        }
         contentView.layer?.cornerRadius = 22
         contentView.layer?.cornerCurve = .continuous
         contentView.layer?.borderWidth = 1
-        contentView.layer?.borderColor = NSColor(
-            srgbRed: 217.0 / 255.0,
-            green: 89.0 / 255.0,
-            blue: 143.0 / 255.0,
-            alpha: 0.24
-        ).cgColor
+        // The outer window hairline used the old pink (217,89,143). It is now the
+        // same token line as every other hairline in the new shell.
+        contentView.layer?.borderColor = CleBrowserPalette.line(nightAppearance).cgColor
         contentView.layer?.masksToBounds = true
         contentView.addSubview(webView)
         primaryFullSizeConstraints = [
@@ -2315,8 +2686,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         NSApp.activate(ignoringOtherApps: true)
 
         showStartupScreen()
+        if RuntimeConfig.isTestHost {
+            // The acceptance host attaches to an already-running test gateway and
+            // touches nothing else: no bundled installer, no live services, no
+            // desktop driver, no gateway child process.
+            startTestHostServices()
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            BundledSetup.apply()
+            // 超級碧琪's installer writes into ~/.openclaw; C.le. must never run it. Its own first
+            // run copies that data once into its own profile, as Li An.
+            if RuntimeConfig.isCleBrand { CleFirstRun.runIfNeeded() } else { BundledSetup.apply() }
             DispatchQueue.main.async {
                 self?.startBundledServices()
             }
@@ -2408,6 +2788,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func showStartupScreen() {
         startupVideoStartedAt = Date()
+        // C.le. opens in the dark: the web opening (Le regard) begins on pure black, so the
+        // native screen before it is the same black — never the old pony movie or a paper flash.
+        // The acceptance host does the same. Only the original 超級碧琪 build keeps its movie.
+        if RuntimeConfig.isTestHost || RuntimeConfig.isCleBrand {
+            webView?.loadHTMLString(startupPlaceholderHTML, baseURL: nil)
+            return
+        }
         if let root = BundledRuntime.resourceRoot {
             let page = root.appendingPathComponent("ui/launcher-loading.html")
             if FileManager.default.fileExists(atPath: page.path) {
@@ -2415,15 +2802,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 return
             }
         }
-        webView?.loadHTMLString("<html lang=\"zh-CN\"><body style=\"display:grid;place-items:center;height:100%;margin:0;background:#efcbd3;color:#76465f;font:14px -apple-system\">超級碧琪正在准备</body></html>", baseURL: nil)
+        webView?.loadHTMLString(startupPlaceholderHTML, baseURL: nil)
     }
+
+    /// Brand-neutral startup/fallback page. Colours come from the one palette
+    /// table; the mark is the shipped C.le. signature, not an emoji or a "正在准备"
+    /// pink card. Used by the test host and by the production fallback when the
+    /// bundled loading page is missing, so neither can fall back to old art.
+    private var startupPlaceholderHTML: String {
+        // C.le. opens straight into its opening: until the first page draws, the window is the same
+        // ink the opening starts from, with nothing on it (no mark, no progress bar, no name).
+        #"""
+        <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
+        <style>html,body{width:100%;height:100%;margin:0;background:#050608}</style></head><body></body></html>
+        """#
+    }
+
+    /// Readiness-only attachment used by the acceptance host. Everything that
+    /// could mutate live state (installer, TTS/party/roundtable servers, CUA
+    /// driver, gateway spawn/kill) stays off; only the browser workspace and the
+    /// web UI bridge are initialised.
+    private func startTestHostServices() {
+        // Touch the marker so the linker keeps it; `strings` on the built binary
+        // is how the controller proves a delivered .app is the isolated build.
+        NSLog("[CLE Kk test host] %@", RuntimeConfig.testHostBuildMarker)
+        configureBrowserControl()
+        Gateway.attachToExisting { [weak self] ready in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Bind the browser endpoint either way: if the gateway is already
+                // up we adopt it, otherwise we keep retrying so a restart that
+                // happens after we launch still gets a working endpoint.
+                self.adoptTestGatewayForBrowserControl()
+                if ready { self.activateGatewayDashboard() } else { self.showGatewayRecoveryFailure() }
+            }
+        }
+    }
+
+    /// The test host does not spawn a gateway, so the running 19789 process never
+    /// received `PINKIE_APP_BROWSER_ENDPOINT` and is not our child. Authorise it
+    /// anyway, but only after proving what it is: the recorded listener on the
+    /// test port, not on 18789, whose executable is a CLE Kk bundled Node.
+    ///
+    /// This changes no other rule: uid, token and the private socket directory
+    /// still apply, and `allowedPeer` still requires an exact PID match. The only
+    /// extra is that an adopted root may ask this endpoint once for the
+    /// credential it was never handed, and it has to prove the same binary is
+    /// still behind the socket to get it.
+    private func adoptTestGatewayForBrowserControl() {
+        guard RuntimeConfig.isTestHost else { return }
+        guard let decision = testGatewayAdoptionDecision(port: Gateway.url.port ?? 19789) else {
+            publishTestEndpointDescriptor()
+            return
+        }
+        guard case let .adopt(pid, executable) = decision else {
+            if case let .refuse(reason) = decision { NSLog("[CLE Kk test host] not adopting: %@", reason) }
+            publishTestEndpointDescriptor()
+            return
+        }
+        BrowserControlEndpoint.setAdoptedExecutable(executable)
+        BrowserControlEndpoint.adoptExistingGateway(pid)
+        NSLog("[CLE Kk test host] browser endpoint bound to gateway pid %d on port %d", pid, Gateway.url.port ?? 19789)
+        publishTestEndpointDescriptor()
+    }
+
+    enum TestGatewayDecision: Equatable {
+        case adopt(pid: pid_t, executable: String)
+        case refuse(String)
+    }
+
+    /// Pure, headless-testable form of the adoption rule. Everything here is a
+    /// read: lsof for the listener, lsof for its open state DB. Nothing is
+    /// signalled, spawned or modified.
+    func testGatewayAdoptionDecision(port: Int) -> TestGatewayDecision? {
+        guard RuntimeConfig.isTestHost else { return nil }
+        guard port == 19789 else { return .refuse("port \(port) is not the test gateway port") }
+        guard let listener = Gateway.adoptableListenerDescriptor(port: port) else {
+            return .refuse("no listener on port \(port)")
+        }
+        let expectedState = testProfileStateRoot()
+        guard Gateway.listenerOwnsState(listener.pid, stateRoot: expectedState) else {
+            return .refuse("listener \(listener.pid) does not own \(expectedState)/state/openclaw.sqlite")
+        }
+        return .adopt(pid: listener.pid, executable: listener.executable)
+    }
+
+    /// Where the 19789 profile keeps its state. This is the one fact that
+    /// separates it from the installed app's gateway.
+    func testProfileStateRoot() -> String {
+        if let explicit = ProcessInfo.processInfo.environment["CLE_TEST_GATEWAY_STATE_DIR"], !explicit.isEmpty {
+            return explicit
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".openclaw-cle", isDirectory: true).path
+    }
+
+    /// The running 19789 gateway was started before this endpoint existed, so it
+    /// has no `PINKIE_APP_BROWSER_ENDPOINT` in its environment. Writing the
+    /// descriptor lets the operator hand it over with a controlled restart/env
+    /// instead of us taking over the gateway.
+    ///
+    /// Security: owner-only file inside the isolated browser-test state root (not
+    /// the live one), 0600, removed on quit. It contains the same one-shot token
+    /// the endpoint already generates; nothing is logged or printed.
+    private func publishTestEndpointDescriptor() {        guard RuntimeConfig.isTestHost, let encoded = BrowserControlEndpoint.environmentValue() else { return }
+        let directory = RuntimeConfig.stateRoot
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            // createDirectory does not tighten an existing directory, and this one
+            // holds a live token. Enforce owner-only on every publish.
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            let file = directory.appendingPathComponent("browser-endpoint.json")
+            guard let data = encoded.data(using: .utf8) else { return }
+            try data.write(to: file, options: [.atomic, .completeFileProtection])
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            testEndpointDescriptorURL = file
+            NSLog("[CLE Kk test host] endpoint descriptor written for a controlled gateway attach")
+        } catch {
+            NSLog("[CLE Kk test host] could not write endpoint descriptor: %@", error.localizedDescription)
+        }
+    }
+
+    /// Same publish path, callable from the headless endpoint check.
+    func publishEndpointDescriptorForCheck() { publishTestEndpointDescriptor() }
 
     private func startBundledServices() {
         desktopControl.start()
         configureBrowserControl()
         tts.ready { _ in }
-        party.ready { _ in }
-        roundtable.ready { _ in }
+        if !RuntimeConfig.isCleBrand {
+            party.ready { _ in }
+            roundtable.ready { _ in }
+        }
 
         Gateway.isReady { [weak self] ready in
             DispatchQueue.main.async {
@@ -2474,8 +2984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func showGatewayRecoveryFailure() {
         let alert = NSAlert()
-        alert.messageText = "超級碧琪的网关还在恢复中"
-        alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 ~/Library/Application Support/SuperPinkie/logs/gateway.log。"
+        alert.messageText = "\(RuntimeConfig.productName) 的网关还在恢复中"
+        alert.informativeText = Gateway.lastError ?? "网关正在完成上一轮工作，请稍后再试。详细信息保存在 \(RuntimeConfig.stateRoot.path)/logs/gateway.log。"
         alert.alertStyle = .warning
         alert.runModal()
     }
@@ -2554,13 +3064,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         browserControl.closeWorkspace = { [weak self] in self?.detachBrowserWorkspace() }
         browserControl.registerFilePreview = { [weak self] path in
-            self?.materialPreview.registerWorkspacePreview(path: path) ?? ["ok": false, "message": "文件预览暂时不可用。"]
+            guard let self else { return ["ok": false, "message": "文件预览暂时不可用。"] }
+            let enhanced = MaterialPreviewModePolicy.allowsEnhancedMarkdown(
+                primary: self.modeID(for: self.webView?.url),
+                companion: self.companionModeID,
+                companionVisible: self.companionPanel?.superview != nil
+            )
+            return self.materialPreview.registerWorkspacePreview(path: path, enhancedMarkdown: enhanced)
         }
         browserControl.activityChanged = { [weak self] active in
             guard let self else { return }
             self.browserAgentActive = active
             self.browserActivityIndicator?.isHidden = !active
             self.browserStatusLabel?.isHidden = active || self.browserStatusLabel?.stringValue.isEmpty == true
+            // The status stack owns both the spinner and the activity chip;
+            // hiding only its children would leave an empty 140pt gap in the
+            // toolbar once an agent turn finished.
+            self.updateBrowserToolbarLayout(width: self.browserPanel?.bounds.width ?? 600)
         }
         browserControl.collaborationActive = { [weak self] done in
             guard let self else { done(false); return }
@@ -2637,12 +3157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browser.appearance = NSAppearance(named: nightAppearance ? .darkAqua : .aqua)
         browser.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) {
-            browser.underPageBackgroundColor = NSColor(
-                srgbRed: nightAppearance ? 0.10 : 1.0,
-                green: nightAppearance ? 0.075 : 0.985,
-                blue: nightAppearance ? 0.115 : 0.993,
-                alpha: 0.97
-            )
+            // This is the colour WebKit paints behind the page during load and
+            // rubber-band scrolling. It used to be a third, hand-mixed pair
+            // (0.10/0.075/0.115 and 1/.985/.993) that flashed next to the token
+            // chrome; keep it on the same palette as the panel.
+            browser.underPageBackgroundColor = CleBrowserPalette.paper(nightAppearance).withAlphaComponent(0.97)
         }
         return browser
     }
@@ -2780,11 +3299,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
-          main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid #d8679b38;border-radius:20px;background:#fff9;box-shadow:0 16px 45px #9f4c741c;text-align:center}
-          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;background:#f8dfea;color:#ad4a76;font-size:22px}
-          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:#997487;line-height:1.65}.detail{margin-top:12px;font-size:11px;color:#ad8799}
-          @media(prefers-color-scheme:dark){body{background:linear-gradient(145deg,#1a131e,#251b2b);color:#efe5ea}main{background:#2a2030;border-color:#ffffff18;box-shadow:0 16px 45px #0006}.mark{background:#ff7fb322;color:#ff9cc6}p,.detail{color:#b3a1ab}}
+          \#(CleBrowserPalette.cssVariables)
+          *{box-sizing:border-box}html,body{height:100%}
+          body{margin:0;display:grid;place-items:center;background:var(--paper);font:14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--ink)}
+          main{width:min(420px,calc(100vw - 42px));padding:28px;border:1px solid var(--line);border-radius:20px;background:var(--surface);text-align:center}
+          .mark{width:48px;height:48px;margin:0 auto 16px;display:grid;place-items:center;border-radius:16px;border:1px solid var(--line);color:var(--gaze);font-size:22px}
+          h1{margin:0 0 9px;font-size:17px}p{margin:0;color:var(--ink2);line-height:1.65}.detail{margin-top:12px;font-size:11px;color:var(--ink3);word-break:break-word}
         </style><main><div class="mark">!</div><h1>页面没有加载成功</h1><p>点上方的重新加载再试；如果登录页仍被网络验证拦住，可点右上角“在默认浏览器打开”。</p><p class="detail">\#(detail)</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -2801,12 +3321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.wantsLayer = true
-        panel.layer?.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.975,
-            blue: 0.988,
-            alpha: 0.97
-        ).cgColor
+        panel.layer?.backgroundColor = CleBrowserPalette.paper(nightAppearance).withAlphaComponent(0.97).cgColor
         panel.layer?.masksToBounds = true
         panel.appearance = NSAppearance(named: .aqua)
 
@@ -2832,12 +3347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let toolbar = header
         toolbar.appearance = NSAppearance(named: .aqua)
         toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.93,
-            blue: 0.97,
-            alpha: 0.96
-        ).cgColor
+        toolbar.layer?.backgroundColor = CleBrowserPalette.surface(nightAppearance).withAlphaComponent(0.96).cgColor
 
         let back = browserToolbarButton(symbol: "chevron.left", label: "后退", action: #selector(browserGoBack(_:)))
         let forward = browserToolbarButton(symbol: "chevron.right", label: "前进", action: #selector(browserGoForward(_:)))
@@ -2854,10 +3364,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         status.translatesAutoresizingMaskIntoConstraints = false
         status.isHidden = true
         status.lineBreakMode = .byTruncatingTail
-        status.textColor = NSColor(srgbRed: 0.58, green: 0.42, blue: 0.50, alpha: 1)
+        status.textColor = CleBrowserPalette.ink2(nightAppearance)
         status.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
         let activity = BrowserActivityIndicator()
-        let statusStack = NSStackView(views: [loading])
+        let statusStack = NSStackView(views: [loading, activity])
         statusStack.translatesAutoresizingMaskIntoConstraints = false
         statusStack.orientation = .horizontal
         statusStack.alignment = .centerY
@@ -2872,29 +3382,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         address.focusRingType = .none
         (address.cell as? NSSearchFieldCell)?.cancelButtonCell = nil
         address.appearance = NSAppearance(named: .aqua)
-        address.backgroundColor = NSColor(
-            srgbRed: 1.0,
-            green: 0.985,
-            blue: 0.993,
-            alpha: 0.92
-        )
-        address.textColor = NSColor(
-            srgbRed: 0.39,
-            green: 0.29,
-            blue: 0.35,
-            alpha: 1.0
-        )
+        address.backgroundColor = CleBrowserPalette.paper(nightAppearance)
+        address.textColor = CleBrowserPalette.ink(nightAppearance)
 
         let browser = makeBrowserWebView()
         let resize = BrowserResizeHandle(frame: .zero)
         resize.translatesAutoresizingMaskIntoConstraints = false
         resize.wantsLayer = true
-        resize.layer?.backgroundColor = NSColor(
-            srgbRed: 0.83,
-            green: 0.33,
-            blue: 0.57,
-            alpha: 0.18
-        ).cgColor
+        resize.layer?.backgroundColor = CleBrowserPalette.gaze(nightAppearance).withAlphaComponent(0.16).cgColor
         resize.onDrag = { [weak self] delta in
             guard let self,
                   let window = self.window,
@@ -3038,8 +3533,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browserExternalButton?.isHidden = true
         browserPresentationMenu?.isHidden = false
         for button in browserPresentationButtons.values { button.isHidden = true }
-        browserStatusStack?.isHidden = browserLoadingIndicator?.isHidden != false
-        browserPresentationMenu?.toolTip = browserAgentActive ? "碧琪正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
+        browserStatusStack?.isHidden = (browserLoadingIndicator?.isHidden != false) && (browserActivityIndicator?.isHidden != false)
+        browserPresentationMenu?.toolTip = browserAgentActive ? "Li An 正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
         updateBrowserToolbarVisibility()
     }
 
@@ -3053,41 +3548,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.appearance = followSystem ? nil : appearance
         for button in [browserBackButton, browserForwardButton, browserReloadButton, browserCloseButton, browserExternalButton] {
             button?.appearance = appearance
-            button?.contentTintColor = dark ? rgb(0.81, 0.74, 0.79, 1) : rgb(0.39, 0.55, 0.59, 1)
+            button?.contentTintColor = CleBrowserPalette.ink2(dark)
         }
         browserTitlebar?.appearance = appearance
         browserPresentationMenu?.appearance = appearance
         for button in browserPresentationButtons.values {
             button.appearance = appearance
-            button.contentTintColor = button.state == .on ? .systemPink : (dark ? rgb(0.81, 0.74, 0.79, 1) : rgb(0.39, 0.55, 0.59, 1))
+            button.contentTintColor = button.state == .on ? CleBrowserPalette.gaze(dark) : CleBrowserPalette.ink2(dark)
         }
         browserLoadingIndicator?.appearance = appearance
         // WebView 自身也要跟着换外观，否则深色下页面里的原生控件和
         // prefers-color-scheme 仍按浅色渲染。
         browserWebView?.appearance = appearance
         if #available(macOS 12.0, *) {
-            browserWebView?.underPageBackgroundColor = dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.985, 0.993, 0.97)
+            browserWebView?.underPageBackgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(0.97)
         }
         if let panel = browserPanel {
             panel.appearance = appearance
-            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.97) : rgb(1.0, 0.975, 0.988, 0.97)).cgColor
+            panel.layer?.backgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(0.97).cgColor
         }
         if let toolbar = browserToolbarView {
             toolbar.appearance = appearance
-            toolbar.layer?.backgroundColor = (dark ? rgb(0.14, 0.105, 0.16, 0.96) : rgb(1.0, 0.93, 0.97, 0.96)).cgColor
+            toolbar.layer?.backgroundColor = CleBrowserPalette.surface(dark).withAlphaComponent(0.96).cgColor
         }
         if let address = browserAddressField {
             address.appearance = appearance
-            address.backgroundColor = dark ? rgb(1, 1, 1, 0.07) : rgb(1.0, 0.985, 0.993, 0.92)
-            address.textColor = dark ? rgb(0.94, 0.90, 0.92, 1) : rgb(0.39, 0.29, 0.35, 1)
+            address.backgroundColor = dark ? CleBrowserPalette.surface(dark) : CleBrowserPalette.paper(false)
+            address.textColor = CleBrowserPalette.ink(dark)
         }
-        browserStatusLabel?.textColor = dark ? rgb(0.72, 0.62, 0.68, 1) : rgb(0.58, 0.42, 0.50, 1)
+        browserStatusLabel?.textColor = CleBrowserPalette.ink2(dark)
         browserActivityIndicator?.setNight(dark)
         applyBrowserForceDark()
-        browserResizeView?.layer?.backgroundColor = (dark ? rgb(1.0, 0.5, 0.7, 0.16) : rgb(0.83, 0.33, 0.57, 0.18)).cgColor
+        browserResizeView?.layer?.backgroundColor = CleBrowserPalette.gaze(dark).withAlphaComponent(dark ? 0.20 : 0.16).cgColor
         if let panel = companionPanel {
             panel.appearance = appearance
-            panel.layer?.backgroundColor = (dark ? rgb(0.10, 0.075, 0.115, 0.6) : rgb(1.0, 0.93, 0.97, 0.52)).cgColor
+            panel.layer?.backgroundColor = CleBrowserPalette.paper(dark).withAlphaComponent(dark ? 0.60 : 0.52).cgColor
         }
     }
 
@@ -3611,15 +4106,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     private func loadBrowserStartPage() {
-        // 起始页用 color-scheme + 媒体查询跟着全局深色走，不再写死浅色。
+        // 起始页的颜色来自同一份 palette（与 tokens.css / cle.json 同步），
+        // 不再在任何页面里另写一套色值。
         let html = #"""
         <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
         <style>
-          *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#fffafd,#f9edf5);font:14px -apple-system;color:#70425b}
-          main{text-align:center;padding:36px}.mark{width:58px;height:58px;margin:0 auto 18px;display:grid;place-items:center;border:1px solid #d8679b45;border-radius:20px;background:#fff9;box-shadow:0 14px 38px #9f4c7420;font-size:25px}
-          p{margin:0;color:#9a7187}
-          @media(prefers-color-scheme:dark){body{background:linear-gradient(145deg,#151016,#211825);color:#f2e7ec}main{background:#0000}.mark{background:#ffffff0f;border-color:#ff7fb340;box-shadow:0 14px 38px #0006}p{color:#b09aa3}}
-        </style><main><div class="mark">◎</div><p>在上方输入网址或搜索内容</p></main>
+          \#(CleBrowserPalette.cssVariables)
+          *{box-sizing:border-box}
+          html,body{height:100%}
+          body{margin:0;display:grid;place-items:center;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+          main{text-align:center;padding:36px;max-width:380px}
+          .mark{width:auto;margin:0 0 18px;color:var(--ink);line-height:1}
+          h1{margin:0 0 6px;font:600 15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;letter-spacing:.01em}
+          p{margin:0;color:var(--ink2);font-size:13px}
+          .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+        </style>
+        <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+        <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
         """#
         browserWebView?.loadHTMLString(html, baseURL: nil)
         browserAddressField?.stringValue = ""
@@ -3820,7 +4323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         updateBrowserPanelInput()
         panel.layer?.cornerRadius = browserPresentation == .floating ? 14 : 0
         panel.layer?.borderWidth = browserPresentation == .floating ? 1 : 0
-        panel.layer?.borderColor = NSColor.systemPink.withAlphaComponent(0.25).cgColor
+        panel.layer?.borderColor = CleBrowserPalette.line(nightAppearance).cgColor
         for (mode, button) in browserPresentationButtons { button.state = mode == browserPresentation ? .on : .off }
         for (mode, item) in browserPresentationMenuItems { item.state = mode == browserPresentation ? .on : .off }
         let toolbarWidth = browserPresentation == .side ? browserWidthConstraint?.constant ?? content.bounds.width : browserPresentation == .floating ? browserFloatingFrame?.width ?? content.bounds.width : content.bounds.width
@@ -3868,7 +4371,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         scheduleBrowserFit()
     }
     private func clearBrowserEdgeDock() {
-        browserDockEdge = nil; browserEdgeRevealed = false
+        browserDockEdge = nil; browserEdgeRevealed = false; browserEdgePinned = false
         updateBrowserPanelInput()
         browserEdgeHoveringPanel = false; browserEdgeHoveringTab = false
         browserEdgeHoverGeneration += 1
@@ -3903,6 +4406,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             tab.onDragBegan = { [weak self] in self?.beginBrowserFloatingDrag() }
             tab.onDrag = { [weak self] delta in self?.moveBrowserFloating(by: delta) }
             tab.onDragEnded = { [weak self] in self?.endBrowserFloatingDrag() }
+            // Press/Space/Return/AX press: the same toggle the hover path uses.
+            // Hover-out still retracts on its own; detaching by dragging inwards
+            // is untouched because that runs through the drag callbacks above.
+            tab.onActivate = { [weak self] in self?.toggleBrowserEdgeReveal() }
             browserEdgeTab = tab
         }
         tab.edge = edge
@@ -3917,17 +4424,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if tab.superview == nil { content.addSubview(tab) }
         for handle in browserFloatingResizeHandles { handle.isHidden = true; handle.enabled = false }
     }
-    private func updateBrowserEdgeHover() {
-        guard browserDockEdge != nil, !browserDragging else { return }
+    /// Explicit toggle used by keyboard and accessibility activation. It bumps the
+    /// hover generation so a previously scheduled retract cannot undo the reveal,
+    /// and it leaves `browserDockEdge` intact so the panel stays docked to the edge.
+    private func toggleBrowserEdgeReveal() {
+        guard browserPresentation == .floating, browserDockEdge != nil else { return }
+        browserEdgeHoverGeneration += 1
+        browserEdgeRevealed.toggle()
+        browserEdgePinned = browserEdgeRevealed
+        if let frame = browserFloatingFrame { setBrowserFloatingFrame(frame, animated: true) }
+        if browserEdgeRevealed { browserEdgeTab?.window?.makeFirstResponder(browserEdgeTab) }
+        // Tell assistive tech what just happened; the label alone described the
+        // resting state, not the result of pressing it.
+        NSAccessibility.post(element: browserEdgeTab as Any, notification: .valueChanged)
+    }
+
+    private func updateBrowserEdgeHover() {        guard browserDockEdge != nil, !browserDragging else { return }
         browserEdgeHoverGeneration += 1
         let generation = browserEdgeHoverGeneration
         if browserEdgeHoveringPanel || browserEdgeHoveringTab {
+            browserEdgePinned = false
             browserEdgeRevealed = true
             if let frame = browserFloatingFrame { setBrowserFloatingFrame(frame, animated: true) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now()+0.22) { [weak self] in
                 guard let self, generation == self.browserEdgeHoverGeneration,
-                      self.browserDockEdge != nil, !self.browserDragging else { return }
+                      self.browserDockEdge != nil, !self.browserDragging,
+                      // An explicit activation keeps the panel out until the user
+                      // dismisses it (another press, or moving the pointer in and
+                      // back out again).
+                      !self.browserEdgePinned else { return }
                 self.browserEdgeRevealed = false
                 if let frame = self.browserFloatingFrame { self.setBrowserFloatingFrame(frame, animated: true) }
             }
@@ -3960,7 +4486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if pushed.minY <= bounds.minY-52 && browserDragDelta.y < 0 { candidates.append((.bottom,bounds.minY-pushed.minY)) }
         let edge = candidates.max(by:{$0.1 < $1.1})?.0
         if let edge {
-            browserDockEdge = edge; browserEdgeRevealed = false
+            browserDockEdge = edge; browserEdgeRevealed = false; browserEdgePinned = false
             browserEdgeHoveringPanel = false; browserEdgeHoveringTab = false
             setBrowserFloatingFrame(frame, animated: true)
         }
@@ -4518,7 +5044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             case "roundtable":
                 panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
             default:
-                panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
+                panel.message = "选择一个文件夹，Li An 会把它放进左侧项目栏。"
             }
             panel.prompt = "选择"
             panel.canChooseFiles = false
@@ -4776,7 +5302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           let active = false;
           let baseDraft = { value: "" };
 
-          const textForState = () => active ? "收好啦" : "碧琪听着呢";
+          const textForState = () => active ? "收好啦" : "Li An 听着呢";
           const updateButton = (message) => {
             const button = document.getElementById(buttonId);
             if (!button) return;

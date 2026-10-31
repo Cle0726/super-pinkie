@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN" data-cle="0.1.0" data-theme-mode="light">
+<head>
+<meta charset="utf-8">
+<title>brand chrome audit</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/shell.css">
+</head>
+<body>
+<!-- 原生 Control UI 的品牌位置（取自 runtime index-*.js 的真实模板顺序） -->
+<div class="topnav-shell">
+  <div class="topnav-shell__content">
+    <div class="topbar-brand" aria-label="OpenClaw">
+      <img class="topbar-brand__logo" src="apple-touch-icon.png" alt="" aria-hidden="true">
+      <span class="topbar-brand__title">OpenClaw</span>
+    </div>
+  </div>
+</div>
+
+<aside class="sidebar">
+  <img class="sidebar-native-brand" src="favicon.svg" alt="OpenClaw">
+  <div class="sidebar-shell">
+    <div class="sidebar-shell__footer">
+      <div class="sidebar-footer-bar">
+        <span class="sidebar-footer-bar__spacer"></span>
+        <a class="sidebar-footer-icon" href="https://docs.openclaw.ai" target="_blank" rel="noreferrer" aria-label="Docs">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- 登录门：真实模板是 img.login-gate__logo + .login-gate__title 文本 -->
+<div class="login-gate">
+  <div class="login-gate__card">
+    <div class="login-gate__header">
+      <img class="login-gate__logo" src="favicon.svg" alt="OpenClaw">
+      <div class="login-gate__title">OpenClaw</div>
+      <div class="login-gate__sub">Sign in to the gateway</div>
+    </div>
+  </div>
+</div>
+
+<!-- 对照组：用户正文里的品牌字样必须原样保留 -->
+<div class="chat-group user"><div class="chat-text">我的笔记：OpenClaw 的 docs.openclaw.ai 文档，别改这行。</div></div>
+<pre><code>npm i -g openclaw@latest  # OpenClaw CLI</code></pre>
+
+<pre id="log"></pre>
+<script type="module">
+  const {startBrandGuard} = await import('/brand.js');
+  const log = [];
+  const say = (l) => { log.push(l); document.getElementById('log').textContent = log.join('\n'); };
+  const show = (label, el) => {
+    const cs = getComputedStyle(el);
+    say(`${label} text="${(el.textContent || '').trim()}" display=${cs.display} visibility=${cs.visibility} opacity=${cs.opacity}`);
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const controller = new AbortController();
+  startBrandGuard(controller.signal);
+  await wait(400);   // 让 requestIdleCallback / setTimeout 的 flush 真的跑完
+
+  say(`TITLE "${document.title}"`);
+  show('TOPBAR-TITLE', document.querySelector('.topbar-brand__title'));
+  say(`TOPBAR-BRAND aria="${document.querySelector('.topbar-brand')?.getAttribute('aria-label')}"`);
+  const nativeBrand = document.querySelector('.sidebar-native-brand');
+  say(`SIDEBAR-NATIVE-BRAND alt="${nativeBrand?.alt}" display=${getComputedStyle(nativeBrand).display}`);
+  show('LOGIN-TITLE', document.querySelector('.login-gate__title'));
+  say(`LOGIN-LOGO alt="${document.querySelector('.login-gate__logo')?.alt}"`);
+  const docs = document.querySelector('.sidebar-footer-icon[href*="openclaw"]');
+  say(`FOOTER-DOCS ${docs ? 'present' : 'gone'} href=${docs?.getAttribute('href')} hidden=${docs?.hidden}`);
+
+  // 正文保护：用户消息与代码块必须一字不改
+  say(`USER-TEXT "${document.querySelector('.chat-group.user .chat-text').textContent}"`);
+  say(`CODE "${document.querySelector('pre code').textContent}"`);
+
+  // 页面深层出现的新节点（例如设置页异步渲染）也要被扫到
+  const later = document.createElement('div');
+  later.className = 'config-page__title';
+  later.textContent = 'OpenClaw 配置';
+  document.body.append(later);
+  await wait(600);
+  say(`LATE-NODE "${later.textContent}"`);
+
+  // 其它 chrome 品牌：按 runtime skills-page 的真实模板结构复刻（硬编码标题 + 搜索框 placeholder）
+  const hub = document.createElement('section');
+  hub.className = 'skills-clawhub';
+  hub.innerHTML = '<div style="font-weight:600">ClawHub</div>'
+    + '<input placeholder="Search ClawHub skills…" autocomplete="off" name="clawhub-search">'
+    + '<div class="muted">No skills found on ClawHub.</div>';
+  document.body.append(hub);
+  const tooltip = document.createElement('button');
+  tooltip.className = 'sidebar-footer-icon';
+  tooltip.setAttribute('aria-label', 'OpenClaw 文档');
+  tooltip.title = 'OpenClaw docs';
+  document.body.append(tooltip);
+  await wait(600);
+  say(`CLAWHUB title="${hub.querySelector('div').textContent}" placeholder="${hub.querySelector('input').placeholder}" empty="${hub.querySelector('.muted').textContent}"`);
+  say(`TOOLTIP aria="${tooltip.getAttribute('aria-label')}" title="${tooltip.title}"`);
+  say('DONE_MARKER');
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+/* ---------- how hard he is looking (gazefx.js) ---------- */
+.cle-gazefx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483000; }
+
+/* the composer's rim as gold leaf with one ice-blue glint, travelling while he thinks;
+   brighter and quicker the higher the level (--cle-gaze-int 0…1) */
+@property --cle-rim { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+html[data-cle] .cle-composer .agent-chat__input::after {
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: stretch; z-index: 0; pointer-events: none;
+  border-radius: var(--cle-radius-composer); border: 1.5px solid transparent;
+  background: conic-gradient(from var(--cle-rim), transparent 0 52%, rgba(169, 132, 47, .0) 56%, rgba(214, 178, 96, .9) 68%,
+    rgba(255, 236, 190, 1) 72%, rgba(90, 168, 255, .95) 74.5%, rgba(255, 236, 190, 1) 77%, rgba(214, 178, 96, .85) 81%, transparent 92%) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity .7s ease;
+}
+html[data-cle] .cle-composer.cle-thinking .agent-chat__input::after {
+  opacity: calc(.3 + var(--cle-gaze-int, .5) * .7);
+  animation: cle-rim calc(8s - var(--cle-gaze-int, .5) * 5.5s) linear infinite;
+}
+html[data-cle] .cle-composer.cle-kindled .agent-chat__input::after { opacity: 1; animation: cle-rim 1.3s cubic-bezier(.2, .7, 0, 1) 1; }
+@keyframes cle-rim { to { --cle-rim: 360deg; } }
+/* at the deepest levels the composer itself carries a faint glow of attention while thinking */
+html[data-cle] .cle-composer.cle-thinking:is([data-cle-level="xhigh"], [data-cle-level="max"], [data-cle-level="ultra"]) .agent-chat__input::before {
+  box-shadow: 0 0 0 1px rgba(201, 162, 74, .25), 0 0 calc(18px + var(--cle-gaze-int, .5) * 22px) -6px rgba(90, 168, 255, .45), var(--cle-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle] .cle-composer .agent-chat__input::after { animation: none !important; }
+}

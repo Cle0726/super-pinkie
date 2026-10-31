@@ -58,10 +58,16 @@ test('workspace dock is a full-height companion split in the same native window,
   assert.doesNotMatch(dock, /NSButton\(title: "×"/);
   assert.match(dock, /companion\.topAnchor\.constraint\(equalTo: panel\.topAnchor\)/);
   assert.doesNotMatch(dock, /panel\.layer\?\.maskedCorners/);
-  assert.match(dock, /primaryFullSizeConstraints\.forEach \{ \$0\.isActive = false \}/);
-  assert.match(dock, /panel\.leadingAnchor\.constraint\(equalTo: primaryWebView\.trailingAnchor, constant: -1\)/);
-  assert.match(dock, /panel\.widthAnchor\.constraint\(equalTo: primaryWebView\.widthAnchor\)/);
-  assert.match(dock, /window\.minSize = splitMinimumSize/);
+  // The split tears down the full-size constraints through the layout engine
+  // (one deactivate call) inside the shared layout rebuild, then re-activates
+  // whichever arrangement applies. Reusing an existing dock only re-routes it.
+  assert.match(launcher, /NSLayoutConstraint\.deactivate\(chatLayoutConstraints \+ browserLayoutConstraints \+ primaryFullSizeConstraints\)/);
+  assert.match(launcher, /NSLayoutConstraint\.activate\(primaryFullSizeConstraints\)/);
+  // The split geometry lives in the shared layout rebuild, expressed against
+  // the primary WebView's anchors.
+  assert.match(launcher, /companion\.leadingAnchor\.constraint\(equalTo:primary\.trailingAnchor,constant:-1\)/);
+  assert.match(launcher, /companion\.widthAnchor\.constraint\(equalTo:primary\.widthAnchor\)/);
+  assert.match(launcher, /splitMinimumSize/);
   assert.doesNotMatch(dock, /\bNSWindow\s*\(/);
   assert.doesNotMatch(dock, /Gateway\.(?:start|stop|repair)\s*\(/);
   assert.doesNotMatch(dock, /DesktopControlService\s*\(/);
@@ -102,8 +108,10 @@ test('split keeps the menu as an overlay and leaves real workspace controls visi
   assert.match(theme, /\.shell-nav-backdrop \{[\s\S]*display: none !important[\s\S]*pointer-events: none !important/);
   assert.match(theme, /\.chat-workbench > \.chat-workspace-rail[\s\S]*display: flex !important/);
   assert.match(theme, /--laolao-window-rail-reserve: 44px !important/);
-  assert.match(launcher, /sessionStorage\.setItem\('laolao-primary-workspace-split', '1'\)/);
-  assert.match(launcher, /sessionStorage\.removeItem\('laolao-primary-workspace-split'\)/);
+  // Split state is persisted through one helper so set/clear cannot drift:
+  // keep(key, on) writes '1' or removes the key.
+  assert.match(launcher, /const keep=\(key,on\)=>on\?sessionStorage\.setItem\(key,'1'\):sessionStorage\.removeItem\(key\)/);
+  assert.match(launcher, /keep\('laolao-primary-workspace-split',/);
 });
 
 test('session navigation clears a stale mobile drawer in single and split windows', () => {
@@ -183,9 +191,11 @@ test('a split always keeps a reachable exit, even when the sidebar is hidden', (
   assert.match(mode, /button\.id = DOCK_EXIT_ID/);
 
   // It has to be built before render() bails out on a missing sidebar.
+  // It is built before render() bails out on a missing identity element. The
+  // identity may now come from the compact workspace header or the sidebar.
   assert.match(
     mode,
-    /syncDockExitButton\(\);\s*\n\s*const identity = document\.querySelector\("\.sidebar-brand__identity"\)/
+    /syncDockExitButton\(\);\s*\n\s*const identity = [\s\S]{0,200}?sidebar-brand__identity/
   );
 
   // The docked half is allowed to actually request the close. Refusing it here

@@ -73,7 +73,7 @@ export function routeReady(config, accountId = '*') {
 
 export function bindWechatAccount(draft, accountId) {
   if (!ACCOUNT_ID.test(accountId)) throw new Error('微信账户信息不完整，请重新扫码。');
-  if (!routeReady(draft, accountId)) throw new Error('微信还没有接到无限模式，请先完成连接设置。');
+  if (!routeReady(draft, accountId)) throw new Error('微信还没有接到挥洒模式，请先完成连接设置。');
   const exact = (draft.bindings || []).find(binding => binding.match?.channel === CHANNEL && binding.match?.accountId === accountId
     && binding.match?.peer?.kind === 'direct' && binding.match.peer.id === '*');
   if (!exact) draft.bindings.unshift({agentId: AGENT, match: {channel: CHANNEL, accountId, peer: {kind: 'direct', id: '*'}}, session: {dmScope: 'per-account-channel-peer'}});
@@ -117,7 +117,7 @@ export class WechatLoginManager {
   async start() {
     if (this.stopped) throw new Error('连接服务正在更新，请稍后重试。');
     if (this.job && ACTIVE.has(this.job.state)) return this.status();
-    if (!routeReady(this.config())) throw new Error('微信还没有接到无限模式，请先完成连接设置。');
+    if (!routeReady(this.config())) throw new Error('微信还没有接到挥洒模式，请先完成连接设置。');
     if (!this.cliEntry) throw new Error('微信连接服务暂时不可用。');
     const job = {id: randomUUID(), state: 'starting', message: '正在生成微信二维码…', startedAt: this.now(),
       expiresAt: this.now() + this.timeoutMs, qrUrl: '', qrDataUrl: '', qrGeneration: 0, child: null, timer: null};
@@ -178,7 +178,7 @@ export class WechatLoginManager {
     const account = changed.length === 1 ? changed[0] : job.alreadyConnected && initialAccounts.length === 1
       ? accounts.find(item => item.accountId === initialAccounts[0].accountId) : null;
     if (code !== 0 || !account) { this.fail(job, '微信连接未完成，请重新扫码。'); return; }
-    job.state = 'finishing'; job.message = '扫码已确认，正在接入无限模式…';
+    job.state = 'finishing'; job.message = '扫码已确认，正在接入挥洒模式…';
     try {
       await this.mutate(draft => {
         if (this.stopped || this.job !== job || job.state !== 'finishing') throw new Error('连接已停止。');
@@ -186,8 +186,8 @@ export class WechatLoginManager {
         if (!this.accountRouteReady(draft, account)) throw new Error('微信路由与现有设置冲突。');
       });
       if (this.job !== job || !ACTIVE.has(job.state)) return;
-      job.state = 'connected'; job.message = '微信已连接到无限模式。'; job.qrUrl = ''; job.qrDataUrl = '';
-    } catch { this.fail(job, '微信已扫码，但无限模式连接还没完成，请重试。'); }
+      job.state = 'connected'; job.message = '微信已连接到挥洒模式。'; job.qrUrl = ''; job.qrDataUrl = '';
+    } catch { this.fail(job, '微信已扫码，但挥洒模式连接还没完成，请重试。'); }
   }
   verify({id, code}) {
     const job = this.job;
@@ -223,7 +223,7 @@ export class WechatLoginManager {
 }
 
 export default {
-  id: 'pinkie-wechat-connect', name: '碧琪微信连接',
+  id: 'pinkie-wechat-connect', name: 'Li An 微信连接',
   register(api) {
     // CLI metadata/registration must not start workers. Only the running
     // gateway owns this manager, and each login has its own isolated stdin.

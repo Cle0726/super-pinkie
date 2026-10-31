@@ -1,0 +1,205 @@
+/* ---------- sidebar head: wordmark + tools on one row, the room below ---------- */
+html[data-cle] .sidebar-agent-card { display: none !important; }
+html[data-cle] .sidebar-brand { flex-wrap: wrap !important; height: auto !important; row-gap: 8px; padding-bottom: 6px; align-items: center; }
+/* the workbench's compact head (30px) would push the room selector over the search row */
+html[data-cle][data-pk-wb-compact] aside.sidebar .sidebar-brand, html[data-cle][data-pinkie-wb] aside.sidebar .sidebar-brand { height: auto !important; min-height: 0 !important; }
+html[data-cle] .sidebar-brand > .sidebar-workspace-header { order: 1; margin-left: auto; }
+html[data-cle] .sidebar-brand > .sidebar-brand__actions { order: 2; }
+html[data-cle] .sidebar-workspace-header__main { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 8px; }
+html[data-cle] .sidebar-workspace-header__main .sidebar-agent-card__text { display: none; }
+html[data-cle] .sidebar-workspace-header__mark { width: 22px !important; height: 22px !important; border-radius: 6px; background: transparent !important; color: var(--cle-ink-3) !important; }
+.cle-brandmark {
+  order: 0; font: italic 400 22px/1 var(--cle-serif); letter-spacing: -.015em; color: var(--cle-ink);
+  padding: 6px 4px 2px 8px; user-select: none;
+}
+.cle-room {
+  order: 3; flex: 1 0 100%;
+  appearance: none; border: 0; background: transparent; cursor: default;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 11px;
+  height: 52px; padding: 0 10px 0 7px; margin: 0; border-radius: 12px;
+  color: var(--cle-ink); text-align: left; min-width: 0;
+  box-shadow: inset 0 0 0 1px var(--cle-line);
+  transition: background-color var(--cle-t-quick) var(--cle-ease-soft), box-shadow var(--cle-t-quick) var(--cle-ease-soft);
+}
+.cle-room:hover, .cle-room[aria-expanded="true"] { background: color-mix(in srgb, var(--cle-ink) 4%, transparent); box-shadow: inset 0 0 0 1px var(--cle-line-strong); }
+.cle-room:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+/* the room's painting, whole, in a small arched window with a hairline of gold leaf */
+.cle-room__thumb, .cle-room-menu__thumb {
+  width: 32px; height: 46px; border-radius: 999px 999px 3px 3px; background: #0A0D16 center / 100% 100% no-repeat;
+  box-shadow: 0 0 0 1px var(--cle-paper), 0 0 0 2px rgba(201, 162, 74, .75), 0 4px 10px -2px rgba(10, 13, 22, .45);
+}
+.cle-room__names { display: grid; line-height: 1.1; min-width: 0; row-gap: 3px; }
+.cle-room__zh { font: 500 15px/1.1 var(--cle-serif); letter-spacing: .14em; white-space: nowrap; }
+.cle-room__fr { font: italic 400 12px/1 var(--cle-serif); letter-spacing: .02em; color: var(--cle-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cle-room__chev { width: 12px; height: 12px; color: var(--cle-ink-3); }
+
+/* ---------- room menu ---------- */
+.cle-room-menu {
+  position: fixed; z-index: 2147483000; padding: 6px;
+  background: var(--cle-surface); border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-card); box-shadow: var(--cle-shadow-pop);
+  animation: cle-pop var(--cle-t-base) var(--cle-ease);
+}
+.cle-room-menu[hidden] { display: none; }
+@keyframes cle-pop { from { opacity: 0; transform: translateY(-4px) scale(.985); } }
+.cle-room-menu__item {
+  appearance: none; border: 0; background: transparent; width: 100%;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 12px;
+  height: 54px; padding: 0 10px 0 8px; border-radius: 10px; color: var(--cle-ink-2); text-align: left; cursor: default;
+}
+.cle-room-menu__item:hover, .cle-room-menu__item:focus-visible { outline: none; background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+.cle-room-menu__item[aria-current="true"] { color: var(--cle-ink); }
+.cle-room-menu__item[aria-current="true"] .cle-room-menu__thumb { box-shadow: 0 0 0 1px var(--cle-paper), 0 0 0 2.5px var(--cle-gaze), 0 0 14px var(--cle-gaze-glow); }
+.cle-room-menu__thumb { width: 30px; height: 44px; }
+.cle-room-menu__names { display: grid; row-gap: 4px; min-width: 0; }
+.cle-room-menu__zh { font: 500 15px/1 var(--cle-serif); letter-spacing: .12em; white-space: nowrap; }
+.cle-room-menu__zh em { font: italic 400 13px/1 var(--cle-serif); letter-spacing: .01em; margin-left: 10px; color: var(--cle-ink-3); }
+.cle-room-menu__hint { font: 400 11.5px/1 var(--cle-sans); color: var(--cle-ink-3); letter-spacing: .04em; }
+.cle-room-menu__key { font: 10px/1 var(--cle-mono); color: var(--cle-ink-3); background: none; border: 0; }
+
+/* ---------- clin d'œil ---------- */
+.cle-blink { position: fixed; inset: 0; z-index: 2147483600; pointer-events: none; visibility: hidden; contain: strict;
+  --cle-blink-paper: color-mix(in srgb, var(--cle-paper) 90%, transparent); color: var(--cle-ink); }
+.cle-blink.is-on { visibility: visible; pointer-events: auto; }
+/* each lid is frosted paper: the room stays there, out of focus, behind it */
+.cle-blink__veil { position: absolute; left: 0; right: 0; height: 50.5vh; will-change: transform; overflow: hidden;
+  background: var(--cle-blink-paper); -webkit-backdrop-filter: blur(22px) saturate(.7); backdrop-filter: blur(22px) saturate(.7); }
+.cle-blink__veil--top { top: 0; transform: translateY(-100%); }
+.cle-blink__veil--bottom { bottom: 0; transform: translateY(100%); }
+/* 油画: the painting shows through the paper as a wash, full-bleed, never framed */
+.cle-blink__veil i { position: absolute; left: 0; right: 0; height: 100vh; opacity: 0; mix-blend-mode: luminosity;
+  background: var(--cle-blink-wash, none) center 30% / cover no-repeat; filter: blur(2px); }
+.cle-blink[data-style="oil"] .cle-blink__veil i { opacity: 1; mix-blend-mode: normal; filter: none;
+  /* the painting stands where the room's backdrop will stand, so the eye opens onto the same picture */
+  left: auto; right: 0; width: min(100vw, 68vh, 760px); background-position: center 28%; background-size: cover;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 16%, rgba(0,0,0,.8) 34%, #000 52%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 16%, rgba(0,0,0,.8) 34%, #000 52%); }
+html[data-pinkie-night] .cle-blink[data-style="oil"] .cle-blink__veil i { filter: brightness(.62) saturate(.92); }
+.cle-blink[data-style="oil"] .cle-blink__veil { background: color-mix(in srgb, var(--cle-paper) 96%, transparent); }
+.cle-blink[data-style="oil"] .cle-blink__face { left: clamp(24px, 12vw, 220px); translate: 0 -50%; justify-items: start; text-align: left; width: min(440px, 46vw); }
+.cle-blink[data-style="oil"] .cle-blink__zh { padding-left: 0; font-size: 40px; }
+.cle-blink[data-style="oil"] .cle-blink__line { font: 400 16px/1.6 var(--cle-serif); letter-spacing: .1em; color: var(--cle-ink-2); }
+@media (max-width: 760px) { .cle-blink[data-style="oil"] .cle-blink__veil i { width: 100vw; } .cle-blink[data-style="oil"] .cle-blink__face { left: 16px; top: auto; bottom: 14vh; translate: 0 0; } }
+.cle-blink__veil--top i { top: 0; } .cle-blink__veil--bottom i { bottom: 0; }
+/* the gaze: one hairline where the lids meet */
+.cle-blink__seam { position: absolute; left: 0; right: 0; top: 50%; height: 1px; margin-top: -.5px; opacity: 0;
+  background: linear-gradient(90deg, transparent 8%, var(--cle-gaze) 38%, var(--cle-gaze) 62%, transparent 92%);
+  box-shadow: 0 0 14px var(--cle-gaze-glow); }
+.cle-blink__face { position: absolute; left: 50%; top: 50%; translate: -50% -56%; display: grid; justify-items: center;
+  width: min(420px, 80vw); opacity: 0; text-align: center; }
+.cle-blink__drawing { width: clamp(132px, 17vh, 184px); aspect-ratio: 1; margin-bottom: 26px; }
+.cle-blink__drawing .cle-line { width: 100%; height: 100%; color: var(--cle-ink); }
+.cle-blink[data-style="oil"] .cle-blink__drawing { display: none; }
+.cle-blink__fr { font: italic 400 13px/1 var(--cle-serif); letter-spacing: .14em; color: var(--cle-gold, var(--cle-ink-3)); margin-bottom: 14px; }
+.cle-blink__zh { font: 400 30px/1 var(--cle-serif); letter-spacing: .38em; padding-left: .38em; color: var(--cle-ink); }
+.cle-blink__rule { width: 28px; height: 1px; margin: 18px 0 14px; background: var(--cle-ink-3); transform-origin: center; opacity: .6; }
+.cle-blink__line { font: 400 13px/1.6 var(--cle-sans); letter-spacing: .16em; color: var(--cle-ink-3); }
+
+/* ---------- the empty room ---------- */
+html[data-cle] .agent-chat__welcome-identity,
+html[data-cle] .agent-chat__welcome-secondary { display: none !important; }
+html[data-cle] .agent-chat__welcome { display: grid; place-items: center; }
+.cle-welcome { display: grid; justify-items: center; text-align: center; padding: 6vh 16px 2vh; animation: cle-rise var(--cle-t-scene) var(--cle-ease) both; }
+@keyframes cle-rise { from { opacity: 0; translate: 0 10px; } }
+.cle-welcome__arch {
+  position: relative; margin: 0 0 22px; width: min(260px, 36vh); aspect-ratio: 3 / 4;
+  border-radius: 999px 999px 6px 6px; overflow: hidden; background: #0B0D12;
+  box-shadow: 0 28px 60px -30px rgba(10, 12, 18, .55);
+}
+.cle-welcome__arch img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block;
+  transform-origin: 50% 40%; animation: cle-breathe 26s var(--cle-ease-soft) infinite alternate; }
+/* the painting is alive only in the slowest way: a breath of a zoom, never a mesh-warp */
+@keyframes cle-breathe { from { transform: scale(1.015); } to { transform: scale(1.06) translateY(-1%); } }
+@media (prefers-reduced-motion: reduce) { .cle-welcome__arch img { animation: none; } }
+.cle-welcome__arch.is-empty img { display: none; }
+.cle-welcome__rule { position: absolute; inset: 7px; border-radius: 999px 999px 3px 3px; border: 1px solid rgba(201, 162, 74, .55); pointer-events: none; }
+.cle-welcome__label { margin: 0 0 12px; display: flex; align-items: baseline; gap: 12px; }
+.cle-welcome__label span { font: 500 14px/1 var(--cle-serif); letter-spacing: .4em; padding-left: .4em; color: var(--cle-ink-2); }
+.cle-welcome__label em { font: italic 400 14px/1 var(--cle-serif); letter-spacing: .02em; color: var(--cle-gold); }
+.cle-welcome__label span::after { content: ""; display: inline-block; width: 18px; height: 1px; margin-left: 12px; vertical-align: middle; background: var(--cle-gold); opacity: .6; }
+html[data-cle] .agent-chat__welcome .cle-welcome__line { margin: 0 0 26px; font: 400 26px/1.35 var(--cle-serif); letter-spacing: .06em; color: var(--cle-ink); max-width: 22em; }
+.cle-welcome__asks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 620px; }
+.cle-welcome__ask {
+  appearance: none; background: transparent; border: 1px solid var(--cle-line-strong); border-radius: 999px;
+  padding: 8px 15px; font: 400 13px/1 var(--cle-sans); color: var(--cle-ink-2); cursor: default;
+  transition: border-color var(--cle-t-quick) var(--cle-ease-soft), color var(--cle-t-quick) var(--cle-ease-soft);
+}
+.cle-welcome__ask:hover { border-color: var(--cle-ink); color: var(--cle-ink); }
+@media (max-height: 760px) { .cle-welcome__arch { width: min(180px, 26vh); } .cle-welcome__line { font-size: 22px; } }
+/* line close-ups: ink on the paper, no frame needed */
+.cle-room__thumb.is-line, .cle-room-menu__thumb.is-line { background: transparent; box-shadow: none; border-radius: 0; display: grid; place-items: center; }
+.cle-room__thumb.is-line .cle-line { width: 42px; height: 42px; --cle-line-w: 1.15px; }
+.cle-room-menu__thumb.is-line .cle-line { width: 38px; height: 38px; --cle-line-w: 1.1px; }
+.cle-room-menu__item[aria-current="true"] .cle-room-menu__thumb.is-line { box-shadow: none; }
+.cle-room-menu__item[aria-current="true"] .cle-line { color: var(--cle-ink); }
+.cle-room-menu__item:not([aria-current="true"]) .cle-line { color: var(--cle-ink-2); }
+
+/* ---------- the two switches at the foot of the room menu ---------- */
+.cle-modes { display: flex; justify-content: space-between; gap: 10px; margin: 6px 4px 2px; padding-top: 8px; border-top: 1px solid var(--cle-line); }
+.cle-seg { display: inline-flex; padding: 2px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--cle-line-strong); }
+.cle-seg button { appearance: none; border: 0; background: transparent; color: var(--cle-ink-3); font: 500 12px/1 var(--cle-serif); letter-spacing: .12em;
+  padding: 6px 12px 6px 13px; border-radius: 999px; cursor: default; transition: background-color var(--cle-t-quick), color var(--cle-t-quick); }
+.cle-seg button[aria-checked="true"] { background: var(--cle-ink); color: var(--cle-paper); }
+.cle-seg button:not([aria-checked="true"]):hover { color: var(--cle-ink); }
+
+/* ---------- 双模式: two rooms side by side ---------- */
+.cle-room-menu__dual { appearance: none; border: 0; background: transparent; width: 100%; display: flex; align-items: center; gap: 10px;
+  height: 40px; padding: 0 10px; border-radius: 10px; color: var(--cle-ink-2); font: 500 13px/1 var(--cle-serif); letter-spacing: .14em; cursor: default; }
+.cle-room-menu__dual:hover { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+.cle-room-menu__dual em { font: italic 400 12px/1 var(--cle-serif); letter-spacing: .02em; color: var(--cle-ink-3); }
+.cle-room-menu__dual svg { width: 18px; height: 18px; }
+.cle-room-menu[data-picking="dual"] .cle-room-menu__item[aria-current="true"] { opacity: .35; pointer-events: none; }
+.cle-room-menu__pickhint { display: none; padding: 6px 10px 8px; font: italic 400 12px/1.3 var(--cle-serif); color: var(--cle-gold); }
+.cle-room-menu[data-picking="dual"] .cle-room-menu__pickhint { display: block; }
+.chat-split-view__cell { position: relative; }
+.cle-pane-badge { position: absolute; z-index: 5; top: 9px; right: 118px; display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px 4px 6px; border-radius: 999px; background: var(--cle-surface); box-shadow: 0 0 0 1px var(--cle-line), var(--cle-shadow); pointer-events: auto; border: 0; cursor: default; color: inherit;
+  opacity: .9; transition: opacity var(--cle-t-quick); }
+.chat-split-view__cell:not(.chat-split-view__cell--active) .cle-pane-badge { opacity: .55; }
+.cle-pane-badge__icon { width: 24px; height: 24px; display: grid; border-radius: 50%; background: center / cover; }
+.cle-pane-badge__icon .cle-line { width: 24px; height: 24px; }
+.cle-pane-badge b { font: 500 13px/1 var(--cle-serif); letter-spacing: .14em; color: var(--cle-ink); }
+.cle-pane-badge em { font: italic 400 11.5px/1 var(--cle-serif); color: var(--cle-ink-3); }
+html[data-cle-split] .chat-split-view__cell--active { box-shadow: inset 0 2px 0 var(--cle-gaze-soft); }
+
+.cle-pane-badge:hover { box-shadow: 0 0 0 1px var(--cle-line-strong), var(--cle-shadow); opacity: 1 !important; }
+.cle-pane-badge__chev { width: 6px; height: 6px; margin-left: 2px; border-right: 1.3px solid var(--cle-ink-3); border-bottom: 1.3px solid var(--cle-ink-3); transform: rotate(45deg) translateY(-2px); }
+.cle-history { position: fixed; z-index: 2147483000; width: 320px; max-height: min(60vh, 520px); display: flex; flex-direction: column;
+  background: var(--cle-surface); border: 1px solid var(--cle-line-strong); border-radius: var(--cle-radius-card); box-shadow: var(--cle-shadow-pop);
+  animation: cle-pop var(--cle-t-base) var(--cle-ease); overflow: hidden; }
+.cle-history__head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--cle-line); }
+.cle-history__head b { font: 500 14px/1 var(--cle-serif); letter-spacing: .14em; }
+.cle-history__head em { font: italic 400 12px/1 var(--cle-serif); color: var(--cle-gold); }
+.cle-history__head span { margin-left: auto; font: 11px/1 var(--cle-sans); color: var(--cle-ink-3); letter-spacing: .08em; }
+.cle-history__list { overflow-y: auto; padding: 6px; }
+.cle-history__row { appearance: none; border: 0; background: transparent; width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px;
+  font: 13px/1.3 var(--cle-sans); color: var(--cle-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.cle-history__row:hover { background: color-mix(in srgb, var(--cle-ink) 5%, transparent); color: var(--cle-ink); }
+.cle-history__row[aria-current="true"] { background: var(--cle-gaze-soft); color: var(--cle-ink); }
+.cle-history__empty { margin: 10px; font: 12px/1.4 var(--cle-sans); color: var(--cle-ink-3); }
+.cle-history__new { appearance: none; border: 0; border-top: 1px solid var(--cle-line); background: transparent; padding: 11px 14px; text-align: left;
+  font: 500 12.5px/1 var(--cle-sans); color: var(--cle-ink-2); cursor: default; }
+.cle-history__new:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 4%, transparent); }
+/* 线描 welcome: the arch is a window of paper, the drawing in ink, the gold rule kept */
+/* 线描: he is drawn on the page itself — no frame, no card, no shadow */
+.cle-welcome__arch.is-line { background: none; box-shadow: none; border-radius: 0; overflow: visible; display: grid; place-items: center;
+  width: min(300px, 34vh); aspect-ratio: 1; height: auto; margin-bottom: 10px; }
+.cle-welcome__arch.is-line .cle-welcome__rule { display: none; }
+.cle-welcome__arch.is-line .cle-line { width: 100%; height: 100%; color: var(--cle-ink); }
+@media (max-height: 760px) { .cle-welcome__arch.is-line { width: min(220px, 30vh); } }
+
+/* ---------- welcome over the painting (v6) ----------
+   wide pane: the words stand on the ground at the left, the painting stands at the right;
+   narrow pane: the painting fills, the words sit at its foot */
+html[data-cle] .agent-chat__welcome:has(> .cle-welcome) { align-self: stretch; width: 100%; max-width: none; justify-self: stretch; grid-template-columns: minmax(0, 1fr) !important; justify-items: stretch !important; }
+html[data-cle] .cle-welcome { justify-items: start; text-align: left; padding: 0 0 4vh; margin-right: auto;
+  width: min(54%, 560px); margin-left: clamp(16px, 7%, 96px); min-height: 52vh; align-content: end; box-sizing: border-box; }
+html[data-cle] .cle-welcome__arch { display: none; }
+html[data-cle] .cle-welcome__label { margin-bottom: 16px; }
+html[data-cle] .agent-chat__welcome .cle-welcome__line { font-size: clamp(26px, 2.6vw, 38px); line-height: 1.3; letter-spacing: .04em; margin-bottom: 28px; text-wrap: balance; }
+html[data-cle] .cle-welcome__asks { justify-content: flex-start; }
+html[data-cle] .cle-welcome__ask { background: color-mix(in srgb, var(--cle-paper) 72%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+@container cle-pane (max-width: 720px) {
+  html[data-cle] .cle-welcome { width: auto; margin: 0 16px; justify-items: center; text-align: center; min-height: 46vh; }
+  html[data-cle] .cle-welcome__asks { justify-content: center; }
+}

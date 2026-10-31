@@ -1,6 +1,6 @@
 # 飞书与 QQ 连接入口
 
-飞书固定连接学习模式（account `pinkie-learning`）；QQ 固定连接项目模式（account `pinkie-project`）。微信无限模式连接独立保留。
+飞书固定连接习作模式（account `pinkie-learning`）；QQ 固定连接营造模式（account `pinkie-project`）。微信挥洒模式连接独立保留。
 
 使用已校验 npm 完整性、与当前 2026.7.1-2 核心兼容的官方 `@openclaw/feishu@2026.7.1` 和 `@openclaw/qqbot@2026.7.1`。不调用会改全局配置的交互式安装器，不更新核心。QQ 的配对适配有原包 SHA 校验、全部文件写前检查、原文件备份与幂等检查。
 

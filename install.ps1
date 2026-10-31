@@ -19,9 +19,10 @@
 #   $env:UR_PROMPTS_DIR, $env:UR_PROXY_LISTEN, $env:UR_PROXY_UPSTREAM_PORT, $env:OPENCLAW_ROOT
 
 param(
-  [string]$Provider   = "",
-  [switch]$Remove     = $false,
-  [switch]$SkipTheme  = $false
+  [string]$Provider     = "",
+  [switch]$Remove       = $false,
+  [switch]$SkipTheme    = $false,
+  [switch]$SyncPersonas = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,20 +124,32 @@ $personaMap = @{
   "learning"  = "$UserHome\.openclaw\workspace-learning"
   "neutral"   = "$UserHome\.openclaw\workspace-unrestricted"
 }
+$personaBackupRoot = Join-Path $env:LOCALAPPDATA ("SuperPinkie\backups\personas-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+$personaTemplateFiles = @("SOUL.md","IDENTITY.md","AGENTS.md","AESTHETICS.md","METHODS.md","HEARTBEAT.md","DREAMS.md","memory-system.md")
 foreach ($mode in $personaMap.Keys) {
   $srcDir = Join-Path $RepoDir "personas\$mode"
   $dstDir = $personaMap[$mode]
   if (Test-Path $srcDir) {
     New-Item -ItemType Directory -Force -Path $dstDir | Out-Null
-    foreach ($f in @("SOUL.md","IDENTITY.md")) {
+    foreach ($f in $personaTemplateFiles) {
       $src = Join-Path $srcDir $f
       $dst = Join-Path $dstDir $f
       if (Test-Path $src) {
         if (Test-Path $dst) {
-          Write-Host "    [$mode] keeping existing $f"
-          continue
+          if (-not $SyncPersonas -or $mode -eq "neutral" -or $f -eq "DREAMS.md") {
+            Write-Host "    [$mode] keeping existing $f"
+            continue
+          }
+          $srcHash = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash
+          $dstHash = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash
+          if ($srcHash -eq $dstHash) {
+            continue
+          }
+          $modeBackupDir = Join-Path $personaBackupRoot $mode
+          New-Item -ItemType Directory -Force -Path $modeBackupDir | Out-Null
+          Copy-Item -LiteralPath $dst -Destination (Join-Path $modeBackupDir $f) -Force
         }
-        Copy-Item $src $dst
+        Copy-Item -LiteralPath $src -Destination $dst -Force
       }
     }
     Write-Host "    [$mode] -> $dstDir"

@@ -52,7 +52,7 @@ test('tier completion refreshes only the bounded live timeline window while relo
   assert.match(src,/now - previous < 30_000/);
 });
 
-test('tier menu uses compact self-drawn pink glass controls and avoids a root mutation observer',()=>{
+test('tier menu keeps its glass design and observes mode changes without a subtree mutation observer',()=>{
   const src=read('ui/injections/laolao-deep-think.js');
   assert.match(src,/viewBox='0 0 24 24'/);
   assert.match(src,/grid-template-columns:repeat\(2/);
@@ -73,7 +73,8 @@ test('tier menu uses compact self-drawn pink glass controls and avoids a root mu
   assert.doesNotMatch(src,/rgba\(30,27,46/);
   assert.doesNotMatch(src,/✦|🧠|⚡|🔥/);
   assert.match(src,/window\.setInterval\(scheduleRender, 700\)/);
-  assert.doesNotMatch(src,/new MutationObserver/);
+  assert.match(src,/attributeFilter: \["data-laolao-mode"\]/);
+  assert.doesNotMatch(src,/subtree:\s*true/);
 });
 
 test('all four generated tier videos and their reproducible sources are shipped',()=>{

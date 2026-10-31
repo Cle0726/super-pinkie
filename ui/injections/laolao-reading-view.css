@@ -1,0 +1,16 @@
+/* Only secondary panes created by the chat's split-view control are for reading.
+   Each independent mode document keeps its primary composer and tools. */
+:is(
+  openclaw-chat-pane[data-pinkie-reading-view],
+  html:not([data-pinkie-reading-ready]) .chat-split-view__column:not(:first-child) > openclaw-chat-pane,
+  html:not([data-pinkie-reading-ready]) .chat-split-view__column:first-child > openclaw-chat-pane:not(:first-of-type)
+) :is(.agent-chat__composer-shell,.chat-workspace-rail,.chat-sidebar,.laolao-buddy,#laolao-workbench,#laolao-buddy,.chat-notes-toggle,.chat-terminal-toggle) {
+  display:none !important;
+}
+openclaw-chat-pane[data-pinkie-reading-view] .chat-thread {
+  padding-bottom:18px !important;
+}
+/* Keep the session picker and the close control, without more split buttons. */
+openclaw-chat-pane[data-pinkie-reading-view] .chat-pane__actions > openclaw-tooltip:not(:last-child) {
+  display:none !important;
+}

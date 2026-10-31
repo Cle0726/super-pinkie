@@ -1,0 +1,19 @@
+/* C.le. 侧边栏 · 表面
+   原文件：ui/injections/laolao-sidebar-surface.css
+   原实现给整块侧栏刷雾面玻璃、描边与渐变。C.le. 侧栏不需要另一层表面：纸色由 shell.css 决定，
+   这里只补两件事——原生 duplicate 区域的兜底隐藏（脚本未就绪时也不闪出旧列表），以及折叠态的尺寸。 */
+html[data-cle][data-cle-sidebar]:not([data-cle-sidebar-off]) aside.sidebar .sidebar-shell__content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+html[data-cle][data-cle-sidebar]:not([data-cle-sidebar-off]) aside.sidebar .sidebar-brand { flex: 0 0 auto; }
+html[data-cle][data-cle-sidebar]:not([data-cle-sidebar-off]) aside.sidebar .sidebar-shell__invite { display: none !important; }
+/* The collapsed rail keeps the native icons; our block steps aside. */
+html[data-cle][data-cle-sidebar]:not([data-cle-sidebar-off]) aside.sidebar .sidebar--collapsed .cle-sb,
+html[data-cle][data-cle-sidebar]:not([data-cle-sidebar-off]) .shell--nav-collapsed .cle-sb { display: none !important; }
+/* Native session rows never show beside ours, even for one frame. */
+html[data-cle-sidebar]:not([data-cle-sidebar-off]) .sidebar-recent-session[data-session-key*=":subagent:"] { display: none !important; }
+/* The docked invite card has no home in the new rail. */
+html[data-cle] .sidebar-shell__invite { display: none !important; }

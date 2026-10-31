@@ -1,0 +1,55 @@
+/* ---------- the room as a painting (backdrop.js) ---------- */
+html[data-cle] .chat-split-view__cell > .chat-pane-cache { position: relative; z-index: 1; }
+.cle-backdrop { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; contain: strict; }
+
+/* the ground: palette-knife paper by day, the night ground after dark */
+.cle-backdrop__canvas { position: absolute; inset: 0; opacity: .5;
+  background: url("/cle/static/art/canvas-paper.webp") 0 0 / 640px 640px repeat; }
+html[data-pinkie-night] .cle-backdrop__canvas { background-image: url("/cle/static/art/canvas-night.webp"); opacity: .55; }
+
+/* the painting: a tall canvas standing at the right, its left edge dissolving into the ground */
+.cle-backdrop__paint {
+  position: absolute; top: 0; bottom: 0; right: 0; width: min(100%, 68vh, 760px);
+  background: center 28% / cover no-repeat; opacity: 0;
+  /* one soft edge only (WebKit does not intersect stacked masks reliably): the left side dissolves */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .35) 16%, rgba(0, 0, 0, .8) 34%, #000 52%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .35) 16%, rgba(0, 0, 0, .8) 34%, #000 52%);
+  transition: opacity 1.2s cubic-bezier(.2, .7, 0, 1), filter 1.2s ease;
+  transform-origin: 70% 35%; animation: cle-breathe-paint 46s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+@keyframes cle-breathe-paint { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.075) translate3d(-1.2%, -.8%, 0); } }
+html.cle-still .cle-backdrop__paint { animation: none; }
+
+/* an empty room is the whole picture; in conversation the painting withdraws into the margin */
+.cle-backdrop.is-empty .cle-backdrop__paint.is-front { opacity: 1; }
+.cle-backdrop:not(.is-empty) .cle-backdrop__paint.is-front { opacity: .34; }
+html[data-pinkie-night] .cle-backdrop__paint { filter: brightness(.58) saturate(.92) contrast(1.06); }
+html[data-pinkie-night] .cle-backdrop:not(.is-empty) .cle-backdrop__paint.is-front { opacity: .42; }
+
+/* the foot of the painting sinks into the paper, so the composer and its controls stand on ground */
+.cle-backdrop::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+  background: linear-gradient(0deg, var(--cle-paper) 0%, color-mix(in srgb, var(--cle-paper) 86%, transparent) 30%, transparent 100%); }
+
+/* in an empty room the painting is him; the little companion steps back until there is talk */
+html[data-cle] .chat-pane-cache__pane.cle-room-empty .pinkie-buddy { opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity .5s ease, transform .5s ease; }
+
+/* legibility: a soft wash where the words sit, never a box */
+.cle-backdrop__veil { position: absolute; inset: 0;
+  background: radial-gradient(70% 60% at 34% 55%, color-mix(in srgb, var(--cle-paper) 62%, transparent), transparent 72%); opacity: 0; transition: opacity .8s ease; }
+.cle-backdrop:not(.is-empty) .cle-backdrop__veil { opacity: 1;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--cle-paper) 55%, transparent) 18%, color-mix(in srgb, var(--cle-paper) 55%, transparent) 82%, transparent 100%); }
+
+/* narrow panes (双模式, small windows): the painting fills the pane and the welcome sits at its foot */
+.cle-backdrop.is-narrow .cle-backdrop__paint { width: 100%;
+  -webkit-mask-image: linear-gradient(0deg, transparent 0%, #000 42%); mask-image: linear-gradient(0deg, transparent 0%, #000 42%); }
+.cle-backdrop.is-narrow .cle-backdrop__veil { opacity: 1; background: linear-gradient(0deg, color-mix(in srgb, var(--cle-paper) 80%, transparent) 0%, transparent 55%); }
+
+/* the native fades were painted in solid paper across the whole pane — over a painting they read
+   as bars. The top one goes; the one behind the composer keeps the scrolled words off the input,
+   but only as wide as the reading column, and soft at its sides */
+html[data-cle] .chat-main__conversation::before { background: none !important; }
+html[data-cle] .chat-footer::before {
+  -webkit-mask-image: linear-gradient(90deg, transparent calc(50% - 520px), #000 calc(50% - 420px), #000 calc(50% + 420px), transparent calc(50% + 520px));
+  mask-image: linear-gradient(90deg, transparent calc(50% - 520px), #000 calc(50% - 420px), #000 calc(50% + 420px), transparent calc(50% + 520px));
+}

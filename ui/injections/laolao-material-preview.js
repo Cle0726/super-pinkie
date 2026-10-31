@@ -200,36 +200,40 @@
     const handler = window.webkit?.messageHandlers?.laolaoBrowserWorkspace;
     if (!handler) return Promise.resolve(false);
     if (sidebarPreviews.has(target.path)) return sidebarPreviews.get(target.path);
-    const request = new Promise((resolve) => {
+    const request = new Promise((resolve, reject) => {
       let settled = false;
-      const finish = (ok) => {
+      const finish = (ok, reason = '') => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeout);
         window.removeEventListener("laolao:browser-show-file", onResult);
         sidebarPreviews.delete(target.path);
-        resolve(ok);
+        if (ok) resolve(true);
+        else reject(new Error(reason || '浏览器里的文件没有打开，请再试一次。'));
       };
       const onResult = (event) => {
-        if (event.detail?.path === target.path) finish(event.detail.ok === true);
+        if (event.detail?.path === target.path) finish(event.detail.ok === true, event.detail.reason);
       };
-      const timeout = window.setTimeout(() => finish(false), 1500);
+      // This bridge owns the preview. A slow acknowledgement must never open
+      // a second iframe viewer while the native browser is still navigating.
+      const timeout = window.setTimeout(() => finish(false, '浏览器正在打开文件，请稍后再试。'), 8000);
       window.addEventListener("laolao:browser-show-file", onResult);
       try { handler.postMessage({ action: "show-file", path: target.path }); }
-      catch (_) { finish(false); }
+      catch (error) { finish(false, error?.message); }
     });
     sidebarPreviews.set(target.path, request);
-    request.finally(() => sidebarPreviews.delete(target.path));
+    void request.finally(() => sidebarPreviews.delete(target.path)).catch(() => {});
     return request;
   };
 
   const runFileAction = (target, action, rail) => {
     const selectedAction = action;
     if (selectedAction === "preview") {
+      if (window.webkit?.messageHandlers?.laolaoBrowserWorkspace) closePreview(rail);
       requestSidebarPreview(target).then((opened) => {
         if (opened) closePreview(rail);
         else openPreview(rail, target);
-      });
+      }).catch(error => showFileActionError(error?.message || '文件预览没有打开。'));
       return;
     }
     requestNativeAction(target, selectedAction).then((result) => {

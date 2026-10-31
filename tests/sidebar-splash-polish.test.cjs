@@ -19,8 +19,9 @@ test("sidebar collapse: no grid-column animation, flush slide-out, card look onl
 
 test("sidebar script: card stays while sliding back, native collapse waits until the panel is gone, content glides", () => {
   const js = inj("laolao-sidebar-autohide.js");
-  assert.match(js, /cardUntil = performance\.now\(\) \+ 460;/);
-  assert.match(js, /root\.setAttribute\('data-pinkie-sidebar-card', '1'\)/);
+  assert.match(js, /cardUntil = performance\.now\(\) \+ 220;/);
+  // The attribute is written through a helper that takes the computed value.
+  assert.match(js, /setAttr\(root, 'data-pinkie-sidebar-card', active && \(peek \|\| performance\.now\(\) < cardUntil\) \? '1' : null\)/);
   assert.match(js, /collapseTimer = setTimeout\(\(\) => \{\s*if \(!peek && auto && !collapsed\(\)\) nativeToggle\(\);/);
   assert.match(js, /if \(!auto && !collapsed\(\)\) \{\s*\/\/[^\n]*\n\s*event\.preventDefault\(\); event\.stopImmediatePropagation\(\);/);
   assert.match(js, /\['\.shell--chat \.chat-thread-inner', '\.shell--chat \.chat-thread'\]/);
@@ -79,6 +80,6 @@ test("demo tool settings: values never clip, clean type, filled tracks, colours 
 
 test("macOS installer bumps the sidebar surface and auto-hide cache keys on upgrade, not only on first install", () => {
   const mac = read("installer/macos/apply-theme.sh");
-  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-surface\.css\?v=sidebarsurface5' "\$index_file"; then/);
-  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-autohide\.js\?v=sidebarautohide5' "\$index_file"; then/);
+  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-surface\.css\?v=sidebarsurface7' "\$index_file"; then/);
+  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-autohide\.js\?v=sidebarautohide8' "\$index_file"; then/);
 });

@@ -1,0 +1,18 @@
+✔ model image channel serializes openai-completions, preserves usage, and supports Markdown (6.423292ms)
+✔ model image channel serializes anthropic-messages, preserves usage, and supports Markdown (1.124916ms)
+✔ model image channel serializes openai-responses, preserves usage, and supports Markdown (0.633625ms)
+✔ material source guard blocks USB and registered indexes while preserving the original bank guard (0.647291ms)
+✔ active lesson check and bridge metadata survive submission; check does not update mastery or review schedules (8.635625ms)
+✔ full lesson cycle records checks and stuck, credits one lesson, saves sources, and carries teaching history forward (57.651ms)
+✔ state transitions reject foreign ownership, auto-pause, abandon without credit, and permit fallback lessons (7.128667ms)
+✔ P1 stays bounded without cutting fixed instructions; all dynamic teaching history is JSON data (2.227334ms)
+✔ new RPC names and scopes are exact; hooks order library -> P8 -> active-only P1 (0.812417ms)
+✔ lesson transcript trimming preserves beginning, ending and server stuck moments without raw tool messages (0.49675ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 193.73475

@@ -1,0 +1,280 @@
+/* C.le. composer — one quiet pill for the words and the send button; the tools sit
+   underneath as plain text. Native DOM untouched: re-flowed with grid + display:contents.
+
+   One geometry for both sides of the conversation: the thread and the composer share
+   --cle-read-column (set in status.css), so the text you type starts on the same axis as
+   the text you read. Narrow panes keep their own width instead of shrinking the column. */
+.cle-composer { position: relative; }
+
+html[data-cle] .cle-composer .agent-chat__input {
+  /* Row 1 owns both tracks; row 2's controls span them and align to the end.
+
+     With a shared two-column template the model controls sized column 2 (313.8px at an 864px
+     composer): the text was squeezed to 544px and the send coin sat at the left edge of a 313px
+     column with a large empty tail. Now column 2 is only as wide as the send/voice coin, and the
+     controls of row 2 span the whole row instead of defining it. */
+  display: grid !important;
+  /* Row 1 spans both tracks, so the model controls in row 2 cannot size it; row 2 splits into the
+     tools (flexible) and the controls (auto). The send/voice cluster shares row 1's area and is
+     pinned to the end, with the input reserving exactly its width. Every area used below is
+     declared here — an undeclared area silently creates an implicit row (that was the 134px
+     composer with a phantom track). */
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: "words words" "tools utils";
+  align-items: center;
+  column-gap: 6px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  isolation: isolate;
+  min-width: 0;
+}
+/* the pill itself is drawn by a pseudo-element spanning only the first row */
+html[data-cle] .cle-composer .agent-chat__input::before {
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: stretch; z-index: -1;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-composer);
+  box-shadow: var(--cle-shadow);
+  transition: border-color var(--cle-t-base) var(--cle-ease-soft), box-shadow var(--cle-t-base) var(--cle-ease-soft);
+}
+html[data-cle] .cle-composer .agent-chat__input:focus-within::before {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong));
+  box-shadow: 0 0 0 4px var(--cle-gaze-glow), var(--cle-shadow);
+}
+html[data-cle] .cle-composer .agent-chat__composer-input-row {
+  grid-area: words; min-width: 0;
+  /* Steady state: 4px gap + the send/voice cluster (two 34px coins + 4px + 9px inset + 11px text clearance = 92px)
+     so the text never runs under the buttons while the row still spans the whole composer */
+  padding: 13px 92px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center;
+  transition: padding-right var(--cle-t-quick, 0.15s) ease;
+}
+/* Expanded state: native microphone picker parameter button expands from 0 to 28px on focus-visible,
+   hover, or when open. Yield the exact 28px (120px total) so text never runs under the trigger,
+   preserving 100% button center hit-target and zero text overlap without hardcoding an empty column. */
+html[data-cle] .cle-composer .agent-chat__input:is(
+  :has(.chat-talk-control:has(:focus-visible)),
+  :has(.chat-talk-control:hover),
+  :has(.chat-talk-input-picker[open]),
+  :has(.chat-talk-input-picker[aria-expanded="true"]),
+  :has(.chat-talk-input-picker__trigger:focus-visible),
+  :has(.chat-talk-input-picker__trigger:hover)
+) .agent-chat__composer-input-row {
+  padding-right: calc(92px + var(--chat-microphone-picker-width, 28px));
+}
+
+html[data-cle] .cle-composer .agent-chat__composer-combobox { min-width: 0; }
+html[data-cle] .cle-composer .agent-chat__composer-combobox textarea {
+  font: 400 15.5px/1.6 var(--cle-sans); color: var(--cle-ink); caret-color: var(--cle-gaze);
+  min-height: 24px; padding: 0; background: transparent;
+}
+html[data-cle] .cle-composer .agent-chat__composer-placeholder { font: 400 15.5px/1.6 var(--cle-sans); color: var(--cle-ink-3); padding: 0; }
+
+html[data-cle] .cle-composer .agent-chat__composer-footer,
+html[data-cle] .cle-composer .agent-chat__composer-trail { display: contents !important; }
+html[data-cle] .cle-composer .agent-chat__composer-actions {
+  grid-area: words; justify-self: end; align-self: center;
+  padding-right: 9px; display: flex; gap: 4px;
+}
+html[data-cle] .cle-composer .agent-chat__composer-lead {
+  grid-area: tools; padding: 8px 0 0 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  min-width: 0; max-width: 100%;
+}
+/* bridge.css caps the lead at 180px below a 760px window; a split pane is narrow while the
+   window is wide, and a narrow window still has a full-width composer. The lead owns its width. */
+html[data-cle] .cle-composer .agent-chat__composer-footer .agent-chat__composer-lead { max-width: 100%; }
+html[data-cle] .cle-composer .agent-chat__composer-footer .agent-chat__composer-lead > * { flex: 0 1 auto; min-width: 0; }
+/* Row 2 spans both tracks: the model/effort controls are wide, but they must not define the
+   width of row 1. */
+html[data-cle] .cle-composer .agent-chat__composer-controls {
+  grid-area: utils; padding: 8px 10px 0 0;
+  justify-self: end; align-self: center; min-width: 0;
+}
+/* The native permission control is a <wa-dropdown> whose host is display:contents, so its child
+   button resolves `width: 100%` against the whole lead — measured 532.2px on an 864px composer,
+   which alone pushed the other tools onto a third row. Size the real trigger, not the host. */
+html[data-cle] .cle-composer .agent-chat__composer-lead .chat-controls__permission-trigger {
+  width: var(--chat-composer-control-size, 36px) !important;
+  min-width: var(--chat-composer-control-size, 36px);
+  max-width: var(--chat-composer-control-size, 36px);
+  flex: 0 0 auto;
+  padding-inline: 0;
+}
+html[data-cle] .cle-composer .agent-chat__composer-lead > * {
+  flex: 0 0 auto; min-width: 0; max-width: 100%;
+}
+/* The native mobile toolbar turns the footer into a flex row and gives the lead `flex:none`, which
+   pinned it to max-content. Our grid owns this layout; keep the ordering but never the sizing. */
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-footer { display: contents !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-lead { flex: 1 1 auto !important; order: 0 !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-controls { flex: 0 1 auto !important; order: 0 !important; margin-inline-start: 0 !important; }
+html[data-cle] .cle-composer .agent-chat__input--mobile-toolbar .agent-chat__composer-actions { order: 0 !important; }
+
+/* tools: plain text, quiet until touched */
+html[data-cle] .cle-composer .agent-chat__input-btn,
+html[data-cle] .cle-composer .chat-controls__inline-select-trigger {
+  color: var(--cle-ink-3); background: transparent; border: 0; border-radius: 8px; min-height: 26px;
+  transition: color var(--cle-t-quick) var(--cle-ease-soft), background-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .cle-composer .agent-chat__input-btn:hover,
+html[data-cle] .cle-composer .chat-controls__inline-select-trigger:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
+html[data-cle] .cle-composer .chat-controls__inline-select-label {
+  font: 500 12px/1 var(--cle-sans); letter-spacing: .01em;
+  min-width: 0; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+html[data-cle] .cle-composer .chat-send-btn { width: 34px; height: 34px; }
+html[data-cle] .cle-composer .chat-send-btn--send { background: var(--cle-ink) !important; color: var(--cle-paper) !important; transition: transform var(--cle-t-press) var(--cle-ease-soft), opacity var(--cle-t-quick); }
+html[data-cle] .cle-composer .chat-send-btn--send:active { transform: scale(.93); }
+html[data-cle] .cle-composer .chat-send-btn--send:disabled { opacity: .22; }
+html[data-cle] .cle-composer .chat-send-btn--voice { color: var(--cle-ink-3); background: transparent !important; }
+html[data-cle] .cle-composer .chat-send-btn--voice:hover { color: var(--cle-ink); }
+
+/* ---------- 凝视: the thinking level as an eye ---------- */
+html[data-cle] .chat-controls__effort-gauge > svg { display: none !important; }
+html[data-cle] .chat-controls__effort-gauge { display: inline-grid; place-items: center; width: 18px; height: 18px; }
+.cle-eye { display: grid; width: 18px; height: 18px; color: var(--cle-ink-2); transition: color var(--cle-t-quick) var(--cle-ease-soft); }
+.cle-eye svg { width: 18px; height: 18px; overflow: visible; }
+.cle-eye[data-lit="true"] .cle-eye__iris { fill: var(--cle-gaze); fill-opacity: .9; }
+.cle-eye[data-lit="true"] { filter: drop-shadow(0 0 3px var(--cle-gaze-glow)); }
+.cle-eye__halo { opacity: .7; }
+html[data-cle] .chat-controls__effort-trigger:hover .cle-eye { color: var(--cle-ink); }
+html[data-cle] .chat-controls__effort-trigger[data-cle-word] .chat-controls__inline-select-label { font-size: 0 !important; letter-spacing: 0; }
+html[data-cle] .chat-controls__effort-trigger[data-cle-word] .chat-controls__inline-select-label::after {
+  content: attr(data-cle-word); font: 500 12px/1 var(--cle-serif); letter-spacing: .06em;
+}
+html[data-cle] .chat-controls__reasoning-panel[data-cle-hint]::after {
+  content: attr(data-cle-word) " · " attr(data-cle-hint); display: block; margin-top: 8px;
+  font: 400 12px/1.4 var(--cle-sans); color: var(--cle-ink-3);
+}
+html[data-cle] .cle-composer .chat-controls__permission-icon { color: var(--cle-ink-3) !important; }
+
+/* stop: the same ink coin as send, with an ivory square — never alarm red */
+html[data-cle] .cle-composer .chat-send-btn--stop { background: var(--cle-ink) !important; color: var(--cle-paper) !important; border: 0 !important; box-shadow: 0 0 0 4px var(--cle-gaze-soft) !important; }
+html[data-cle] .cle-composer .chat-send-btn--stop svg, html[data-cle] .cle-composer .chat-send-btn--stop rect { color: var(--cle-paper) !important; fill: currentColor; }
+
+/* ---------- one of each: duplicates hidden (the original browser and the compaction meter stay) ---------- */
+html[data-cle] .context-ring { display: none !important; }
+
+/* ---------- folded tools: a small menu, one per composer ----------
+   Only low-priority controls carry data-cle-priority="low" (composer.js classifies them by
+   meaning: browser, voice, notes). The menu proxies a click to the real control in the same
+   pane, so the panel opens where the composer is and sends to that pane's session. */
+/* Occupancy-driven fold: composer.js measures the real widths and flags the composer, so a wide
+   composer whose tool row still overflows folds too, and a narrow one with few tools does not. */
+html[data-cle] .cle-composer.is-crowded.has-low-tools .cle-tools-more { display: inline-grid; }
+html[data-cle] .cle-composer.is-crowded .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
+.cle-tools-more {
+  display: none; appearance: none; border: 0; background: transparent; color: var(--cle-ink-3);
+  width: 28px; min-width: 28px; height: 26px; border-radius: 8px; place-items: center; cursor: pointer; padding: 0;
+}
+.cle-tools-more:hover { color: var(--cle-ink); background: color-mix(in srgb, var(--cle-ink) 5%, transparent); }
+.cle-tools-more:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 2px; }
+.cle-tools-more[hidden] { display: none !important; }
+.cle-tools-menu {
+  position: fixed; z-index: 9200; display: grid; gap: 1px; padding: 5px;
+  border: 1px solid var(--cle-line-strong); border-radius: 12px;
+  background: var(--cle-surface); box-shadow: var(--cle-shadow-pop);
+  font: 400 13px/1.4 var(--cle-sans); color: var(--cle-ink);
+}
+.cle-tools-menu[hidden] { display: none; }
+.cle-tools-menu__item {
+  appearance: none; border: 0; background: transparent; color: var(--cle-ink);
+  text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+  font: 400 13px/1.4 var(--cle-sans);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cle-tools-menu__item:hover, .cle-tools-menu__item:focus-visible { background: var(--cle-gaze-soft); outline: none; }
+.cle-tools-menu__item[aria-pressed="true"] { color: var(--cle-gaze); }
+.cle-tools-menu__item:disabled { color: var(--cle-ink-3); cursor: default; }
+
+/* ---------- responsive: every pane adapts to its own width (two panes in 双模式, a narrow window) ---------- */
+html[data-cle] .chat-pane-cache__pane { container: cle-pane / inline-size; }
+@container cle-pane (max-width: 720px) {
+  /* The tools get their own row and the model controls a third one. Address them by the named
+     areas of the template: the old `2 / 1 / 3 / 4` and `3 / 1 / 4 / 4` referenced a four-column
+     grid that no longer exists, so the browser invented implicit tracks (381px 83px 0px) and the
+     tools floated in a phantom column. `tools`/`utils` are declared on both rows below. */
+  html[data-cle] .cle-composer .agent-chat__input {
+    grid-template-rows: auto auto auto;
+    grid-template-areas: "words actions" "tools tools" "utils utils";
+  }
+  html[data-cle] .cle-composer .agent-chat__composer-lead { grid-area: tools; padding: 8px 6px 0 10px; }
+  html[data-cle] .cle-composer .agent-chat__composer-controls { grid-area: utils; justify-self: end; padding: 4px 8px 0 0; }
+  html[data-cle] .cle-welcome__arch { width: min(200px, 30vh, 44cqw); }
+  html[data-cle] .agent-chat__welcome .cle-welcome__line { font-size: 21px !important; }
+  html[data-cle] .cle-welcome__ask { padding: 7px 12px; font-size: 12.5px; }
+  html[data-cle] .cle-pane-badge em { display: none; }
+}
+@container cle-pane (max-width: 620px) {
+  /* the rarely used tools fold behind ⋯ — chosen by role, never by position. Fold happens at any
+     width where the low-priority tools do not fit (composer.js measures real occupancy); this
+     narrow-pane rule is the floor for the first paint, before any width has been measured. */
+  html[data-cle] .cle-composer.has-low-tools .cle-tools-more { display: inline-grid; }
+  html[data-cle] .cle-composer.is-crowded .agent-chat__composer-lead > [data-cle-priority="low"] { display: none !important; }
+  /* the essentials stay, but two panes at ~508px share the row: compact them instead of wrapping
+     the whole lead into a second block of empty space */
+  html[data-cle] .cle-composer .agent-chat__composer-lead :is(.laolao-learning-toggle, .laolao-learning-tools__trigger) {
+    min-height: 26px; padding: 0 8px; font-size: 11px;
+  }
+  html[data-cle] .cle-composer .agent-chat__composer-lead .laolao-learning-tools { flex: 0 0 auto; }
+  html[data-cle] .cle-composer .chat-controls__effort-trigger .chat-controls__inline-select-label { display: none !important; }
+  html[data-cle] .chat-pane__workspace-chip { display: none !important; }
+  html[data-cle] .cle-pane-badge b { display: none; }
+}
+@container cle-pane (max-width: 520px) {
+  html[data-cle] .cle-composer .chat-controls__inline-select-label { max-width: 11ch; }
+}
+
+/* ---------- 离线/退役后原生外壳兜底 (html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell) ----------
+   当插件 composer replacement 退役后，原生重建自己 composer，.cle-composer 容器消失，
+   由外层稳定的 .agent-chat__composer-shell 承载原生输入结构。保留单药丸版式、864px 正文列、
+   墨字纸底与视觉边距，保留原生 disabled 状态与断线真实反馈，不假装在线，不冻结按钮。 */
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__input {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: "words words" "tools utils";
+  align-items: center;
+  column-gap: 6px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  isolation: isolate;
+  min-width: 0;
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__input::before {
+  content: ""; grid-area: 1 / 1 / 2 / -1; align-self: stretch; z-index: -1;
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-composer);
+  box-shadow: var(--cle-shadow);
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-input-row {
+  grid-area: words; min-width: 0;
+  padding: 13px 92px 13px 20px; min-height: 52px; box-sizing: border-box; align-self: center;
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-combobox { min-width: 0; }
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-combobox textarea {
+  font: 400 15.5px/1.6 var(--cle-sans); color: var(--cle-ink); caret-color: var(--cle-gaze);
+  min-height: 24px; padding: 0; background: transparent;
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-footer,
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-trail { display: contents !important; }
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-actions {
+  grid-area: words; justify-self: end; align-self: center;
+  padding-right: 9px; display: flex; gap: 4px;
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-lead {
+  grid-area: tools; padding: 8px 0 0 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  min-width: 0; max-width: 100%;
+}
+html[data-cle]:not([data-cle-active]) .agent-chat__composer-shell .agent-chat__composer-controls {
+  grid-area: utils; padding: 8px 10px 0 0;
+  justify-self: end; align-self: center; min-width: 0;
+}

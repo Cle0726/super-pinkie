@@ -1,0 +1,1 @@
+{"result":{"confirm":{"title":"删除当前模式全部会话","body":"列表里列出的普通会话和聊天记录会一次删除；其他模式、主会话以及项目文件夹里的真实文件不会被动。此操作不可撤销。","buttons":["取消","全部删除"]},"result":{"toast":"已删除 1 个会话和记录","targetGone":true,"survivors":["新会话 051","新会话 093","oc-test-evi-b","新会话 144","oc-test-ui-renamed","新会话 789","新会话 588","新会话 175","新会话 025","新会话","Automation: Memory Dreaming Promotion"],"modalGone":true}},"errors":[]}

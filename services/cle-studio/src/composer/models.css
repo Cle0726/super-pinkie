@@ -1,0 +1,696 @@
+@import "../../../../ui/injections/laolao-model-picker.css";
+
+/* Model controls — the model menu, its trigger and the reasoning stops.
+   Written for the 2026.10 picker (details.chat-controls__model-picker inside wa-popup),
+   and still correct for the 2026.7 combined menu that the same script also serves.
+   Paper/ink/gold, with ice blue reserved for focus, selection and a real run. */
+
+/* ---------- the popup itself ---------- */
+html[data-cle] .chat-controls__model-picker > wa-popup::part(popup) {
+  z-index: 90;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > wa-popup::part(popup) {
+  border-radius: var(--cle-radius-card);
+}
+
+/* 2026.10 renders two popups: the model menu and the separate effort menu. Both are
+   `.chat-controls__inline-select-menu`; the 2026.7 combined one is kept for parity. */
+html[data-cle] :is(.chat-controls__model-menu, .chat-controls__effort-menu,
+  .chat-controls__inline-select-menu--combined) {
+  box-sizing: border-box;
+  width: min(368px, calc(100vw - 24px));
+  max-height: min(440px, calc(100dvh - 116px));
+  padding: 0;
+  color: var(--cle-ink);
+  background: var(--cle-surface);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-card);
+  box-shadow: var(--cle-shadow-pop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  overflow: hidden;
+  isolation: isolate;
+  font-family: var(--cle-sans);
+}
+/* the old glass sweep and frames were the grey slab; they are not part of this surface */
+html[data-cle] :is(.chat-controls__model-menu, .chat-controls__effort-menu,
+  .chat-controls__inline-select-menu--combined)::before,
+html[data-cle] :is(.chat-controls__model-menu, .chat-controls__effort-menu,
+  .chat-controls__inline-select-menu--combined)::after {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+}
+html[data-cle] .chat-controls__model-menu > .pinkie-model-frame,
+html[data-cle] .chat-controls__model-menu > .pinkie-model-current,
+html[data-cle] .chat-controls__model-menu > .pinkie-model-brand-tabs,
+html[data-cle] .chat-controls__model-menu > .pinkie-fallback-catalog {
+  display: none !important;
+}
+
+/* narrow panes: the menu follows the pane, not the window */
+@container cle-pane (max-width: 430px) {
+  html[data-cle] :is(.chat-controls__model-menu, .chat-controls__effort-menu,
+    .chat-controls__inline-select-menu--combined) {
+    width: min(100cqw - 16px, 368px);
+  }
+}
+
+/* ---------- search ---------- */
+html[data-cle] .chat-controls__model-search-wrap {
+  gap: 8px;
+  margin: 9px 9px 6px;
+  padding: 0 10px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-ctl);
+  background: var(--cle-paper);
+  transition: border-color var(--cle-t-quick) var(--cle-ease-soft), box-shadow var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .chat-controls__model-search-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, var(--cle-line-strong));
+  box-shadow: 0 0 0 3px var(--cle-gaze-soft);
+}
+html[data-cle] .chat-controls__model-search-wrap svg { color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__model-search {
+  height: 34px;
+  font: 400 13px/1.4 var(--cle-sans);
+  color: var(--cle-ink);
+  caret-color: var(--cle-gaze);
+}
+html[data-cle] .chat-controls__model-search::placeholder { color: var(--cle-ink-3); }
+
+/* ---------- scroll area and provider sections ---------- */
+html[data-cle] .chat-controls__model-options {
+  padding: 0 6px 8px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+html[data-cle] .chat-controls__provider-model-group { display: grid; gap: 2px; }
+html[data-cle] .chat-controls__provider-heading {
+  min-height: 30px;
+  padding: 6px 8px 3px;
+  color: var(--cle-ink-2);
+  font: 500 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+html[data-cle] .chat-controls__provider-toggle {
+  min-height: 30px;
+  gap: 7px;
+  padding: 4px 2px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  border-radius: var(--cle-radius-chip);
+}
+html[data-cle] .chat-controls__provider-toggle:hover { color: var(--cle-ink); }
+html[data-cle] .chat-controls__provider-toggle:focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 1px;
+}
+html[data-cle] .chat-controls__provider-label {
+  letter-spacing: .08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-cle] .chat-controls__provider-heading > span:not(.chat-controls__provider-label):not(.chat-controls__provider-icon):not(.chat-controls__auth-meta):not([aria-hidden]) {
+  color: var(--cle-ink-2);
+  font-size: 10px;
+}
+html[data-cle] .chat-controls__auth-meta { color: var(--cle-ink-2); font-size: 10px; }
+html[data-cle] .chat-controls__auth-meta[data-auth-kind="missing"] { color: var(--cle-gold); }
+html[data-cle] .chat-controls__provider-settings { color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__provider-settings:hover { color: var(--cle-ink); }
+
+/* ---------- model rows ---------- */
+html[data-cle] :is(.chat-controls__model-option, .chat-controls__combined-model-option) {
+  min-height: 38px;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--cle-radius-chip);
+  color: var(--cle-ink);
+  background: transparent;
+  font: 500 13px/1.35 var(--cle-sans);
+  text-align: left;
+  transition: background-color var(--cle-t-quick) var(--cle-ease-soft), border-color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] :is(.chat-controls__model-option, .chat-controls__combined-model-option):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+  border-color: var(--cle-line);
+}
+html[data-cle] :is(.chat-controls__model-option, .chat-controls__combined-model-option):focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: -2px;
+}
+html[data-cle] .chat-controls__model-option[aria-selected="true"],
+html[data-cle] .chat-controls__combined-model-option[aria-selected="true"] {
+  background: var(--cle-gaze-soft);
+  border-color: color-mix(in srgb, var(--cle-gaze) 34%, transparent);
+  box-shadow: inset 2px 0 0 var(--cle-gaze);
+}
+html[data-cle] :is(.chat-controls__model-option, .chat-controls__combined-model-option):disabled {
+  /* readable but clearly unavailable: ink-2 at reduced weight, not a 2.8:1 whisper */
+  color: var(--cle-ink-2);
+  background: transparent;
+  opacity: .78;
+  cursor: not-allowed;
+}
+html[data-cle] .chat-controls__model-option-title {
+  gap: 6px;
+  color: var(--cle-ink);
+  font: 500 13px/1.35 var(--cle-sans);
+  font-weight: 550;
+  min-width: 0;
+}
+html[data-cle] .chat-controls__model-option[aria-selected="true"] .chat-controls__model-option-title { color: var(--cle-ink); }
+html[data-cle] .chat-controls__model-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-cle] .chat-controls__model-option-meta,
+html[data-cle] .chat-controls__model-option-provider {
+  color: var(--cle-ink-2);
+  font: 400 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .02em;
+}
+html[data-cle] .chat-controls__model-state-label--default {
+  margin-inline-start: 2px;
+  padding: 1px 4px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 3px;
+  color: var(--cle-ink-2);
+  font: 500 9px/1.2 var(--cle-mono);
+  letter-spacing: .08em;
+}
+html[data-cle] .chat-controls__model-option-auth-warning { color: var(--cle-gold); }
+html[data-cle] .chat-controls__inline-select-check { color: var(--cle-gaze); }
+html[data-cle] .chat-controls__model-option-action kbd {
+  color: var(--cle-ink-2);
+  font: 400 9.5px/1 var(--cle-mono);
+}
+html[data-cle] .chat-controls__model-search-empty {
+  color: var(--cle-ink-2);
+  font: 400 12px/1.5 var(--cle-sans);
+}
+html[data-cle] .chat-controls__model-catalog-state {
+  color: var(--cle-ink-2);
+  border-bottom-color: var(--cle-line);
+  font: 400 11.5px/1.35 var(--cle-sans);
+}
+html[data-cle] .chat-controls__model-catalog-action {
+  min-height: 28px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-chip);
+  color: var(--cle-ink);
+  background: var(--cle-paper);
+  font: 500 11.5px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__model-catalog-action:hover { background: color-mix(in srgb, var(--cle-ink) 6%, var(--cle-paper)); }
+
+/* ---------- trigger ---------- */
+html[data-cle] :is(.chat-controls__model-trigger, .chat-controls__inline-select-trigger):focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 2px;
+}
+html[data-cle] .chat-controls__model-picker > summary .chat-controls__inline-select-label,
+html[data-cle] .chat-controls__model > summary .chat-controls__inline-select-label {
+  color: var(--cle-ink);
+  font: 500 12.5px/1.2 var(--cle-sans);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-cle] .chat-controls__model-picker > summary .chat-controls__inline-select-chevron,
+html[data-cle] .chat-controls__model > summary .chat-controls__inline-select-chevron { color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__model-trigger[aria-disabled="true"] .chat-controls__inline-select-label,
+html[data-cle] .chat-controls__inline-select-trigger--disabled .chat-controls__inline-select-label { color: var(--cle-ink-3); }
+html[data-cle] :is(.chat-controls__locked-model-badge, .chat-controls__model-context-badge) {
+  color: var(--cle-ink-2);
+  border: 1px solid var(--cle-line-strong);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: 500 9.5px/1.2 var(--cle-mono);
+}
+html[data-cle] .chat-controls__model-capability-badge { color: var(--cle-gold); }
+
+/* ---------- brand marks (geometry and colour: the original Lobe SVG set) ----------
+   Two families, because the artwork is authored two ways:
+   · monochrome marks (openai / codex / grok / groq / kimi / zai / ollama) are masked and
+     take the ink of the surface they sit on, so they stay legible in both themes;
+   · coloured marks (gemini / claude / deepseek / qwen / mistral / …) keep their own brand
+     colour and only ever appear as an image, never tinted grey. */
+/* Two independent channels, so a coloured mark can never be flattened into a silhouette:
+   --pinkie-brand-mono is painted through a mask (monochrome artwork),
+   --pinkie-brand-img is painted as the image itself (coloured artwork).
+   Everything defaults to the neutral cross-model mark, never to an empty box. */
+html[data-cle] [data-pinkie-brand] {
+  --pinkie-brand-mono: url("/cle/static/legacy/brand/crossmodel.svg");
+  --pinkie-brand-img: none;
+  --pinkie-brand-ink: var(--cle-ink);
+}
+
+/* One shared drawing rule for the trigger, the rows and the brand tabs.
+   The geometry reset is not cosmetic: the native composer always carries
+   `.agent-chat__input--mobile-toolbar`, and that build paints EVERY
+   `:is(.chat-controls__model-trigger,.chat-controls__effort-trigger)::before` as
+   `position: absolute; inset: 0` — a full-size hit layer. An in-flow mark that only sets
+   display/flex therefore leaves that absolute positioning in place, drops out of the flex
+   line, and paints at the summary's top-left corner while the text starts on the next row.
+   So position is reset per host class: the trigger flows in the row, rows and tabs keep
+   their own offsets where they are absolute by design. */
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > summary[data-pinkie-brand]::before,
+html[data-cle] [data-chat-model-option][data-pinkie-brand]::before,
+html[data-cle] .pinkie-model-brand-tab[data-pinkie-brand]::before,
+html[data-cle] .pinkie-model-current[data-pinkie-brand]::before {
+  content: "";
+  display: block;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background-color: var(--pinkie-brand-ink);
+  background-image: var(--pinkie-brand-img);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  -webkit-mask: var(--pinkie-brand-mono) center / contain no-repeat;
+  mask: var(--pinkie-brand-mono) center / contain no-repeat;
+  pointer-events: none;
+}
+/* the trigger: back into the flex line so it occupies a slot and shares the text baseline */
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > summary[data-pinkie-brand]::before {
+  position: static;
+  inset: auto;
+  left: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  transform: none;
+  align-self: center;
+}
+/* the native mobile-toolbar rule also forces 44×44 on the trigger, which would centre a
+   16px mark inside a 44px box; the quiet C.le. row keeps its own comfortable size */
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model, .chat-controls__effort-picker) > summary[data-pinkie-brand] {
+  min-width: 0;
+  min-height: 27px;
+}
+
+/* monochrome set — masked, inked by the surrounding text colour */
+html[data-cle] [data-pinkie-brand="openai"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/openai.svg"); }
+html[data-cle] [data-pinkie-brand="codex"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/codex.svg"); }
+html[data-cle] [data-pinkie-brand="grok"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/grok.svg"); }
+html[data-cle] [data-pinkie-brand="groq"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/groq.svg"); }
+html[data-cle] [data-pinkie-brand="kimi"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/kimi.svg"); }
+html[data-cle] [data-pinkie-brand="zai"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/zai.svg"); }
+html[data-cle] [data-pinkie-brand="ollama"] { --pinkie-brand-mono: url("/cle/static/legacy/brand/ollama.svg"); }
+
+/* coloured set — the original artwork, never masked, never tinted */
+html[data-cle] :is([data-pinkie-brand="gemini"], [data-pinkie-brand="claude"], [data-pinkie-brand="deepseek"],
+  [data-pinkie-brand="minimax"], [data-pinkie-brand="hunyuan"], [data-pinkie-brand="alibaba"],
+  [data-pinkie-brand="mistral"], [data-pinkie-brand="doubao"], [data-pinkie-brand="perplexity"]) {
+  --pinkie-brand-mono: none;
+  --pinkie-brand-ink: transparent;
+}
+html[data-cle] [data-pinkie-brand="gemini"] { --pinkie-brand-img: url("/cle/static/legacy/brand/gemini.svg"); }
+html[data-cle] [data-pinkie-brand="claude"] { --pinkie-brand-img: url("/cle/static/legacy/brand/claude.svg"); }
+html[data-cle] [data-pinkie-brand="deepseek"] { --pinkie-brand-img: url("/cle/static/legacy/brand/deepseek.svg"); }
+html[data-cle] [data-pinkie-brand="minimax"] { --pinkie-brand-img: url("/cle/static/legacy/brand/minimax.svg"); }
+html[data-cle] [data-pinkie-brand="hunyuan"] { --pinkie-brand-img: url("/cle/static/legacy/brand/hunyuan.svg"); }
+html[data-cle] [data-pinkie-brand="alibaba"] { --pinkie-brand-img: url("/cle/static/legacy/brand/alibaba.svg"); }
+html[data-cle] [data-pinkie-brand="mistral"] { --pinkie-brand-img: url("/cle/static/legacy/brand/mistral.svg"); }
+html[data-cle] [data-pinkie-brand="doubao"] { --pinkie-brand-img: url("/cle/static/legacy/brand/doubao.svg"); }
+html[data-cle] [data-pinkie-brand="perplexity"] { --pinkie-brand-img: url("/cle/static/legacy/brand/perplexity.svg"); }
+html[data-cle] :is(.chat-controls__model-picker, .chat-controls__model) > summary[data-pinkie-brand] { gap: 6px; }
+
+/* the native provider glyph is kept only where no brand mark exists, so there are
+   never two marks side by side */
+html[data-cle] .chat-controls__model-picker > summary[data-pinkie-brand] > .chat-controls__trigger-provider-icon,
+html[data-cle] .chat-controls__model > summary[data-pinkie-brand] > .chat-controls__trigger-provider-icon { display: none; }
+html[data-cle] [data-chat-model-option][data-pinkie-brand] > .chat-controls__model-option-provider {
+  display: none;
+}
+html[data-cle] .chat-controls__provider-icon { color: var(--cle-ink-2); }
+
+/* motion: one gentle float while open, none under reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-cle] .chat-controls__model-picker > summary[data-pinkie-brand]::before {
+    animation: pinkie-brand-float 4.2s ease-in-out infinite;
+  }
+  html[data-cle] .chat-controls__model-picker[open] > summary[data-pinkie-brand]::before {
+    animation-play-state: paused;
+  }
+}
+@keyframes pinkie-brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle] [data-pinkie-brand]::before { animation: none !important; }
+}
+html[data-cle] .chat-controls__model-picker[data-pinkie-brand-motion-paused] [data-pinkie-brand]::before {
+  animation-play-state: paused !important;
+}
+
+/* ---------- 凝视: the eye reads the level, the label still names it ---------- */
+html[data-cle] :is(.chat-controls__effort-trigger, .chat-controls__model-trigger) .chat-controls__effort-gauge {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+html[data-cle] .chat-controls__effort-gauge > svg { display: none !important; }
+html[data-cle] .cle-eye {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--cle-ink-2);
+  transition: color var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .cle-eye--loose { margin-inline-end: 5px; }
+html[data-cle] .cle-eye svg { width: 20px; height: 20px; overflow: visible; }
+html[data-cle] .cle-eye[data-lit="true"] { color: var(--cle-ink); }
+html[data-cle] .cle-eye .cle-eye__iris { transition: fill var(--cle-t-base) var(--cle-ease-soft), fill-opacity var(--cle-t-base) var(--cle-ease-soft); }
+html[data-cle] .cle-eye[data-lit="true"] .cle-eye__iris { fill: var(--cle-gaze); fill-opacity: .92; }
+html[data-cle] .cle-eye[data-lit="true"] { filter: drop-shadow(0 0 2.5px var(--cle-gaze-glow)); }
+html[data-cle] .cle-eye__halo { opacity: .65; }
+html[data-cle] .chat-controls__effort-trigger:hover .cle-eye,
+html[data-cle] .chat-controls__effort-trigger[open] .cle-eye { color: var(--cle-ink); }
+html[data-cle] .chat-controls__effort-trigger[aria-disabled="true"] .cle-eye,
+html[data-cle] .chat-controls__effort-trigger[data-chat-thinking-disabled="true"] .cle-eye { color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__effort-trigger[data-chat-thinking-disabled="true"] .chat-controls__inline-select-label { color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__model-trigger[data-chat-model-locked="true"] { opacity: .72; }
+
+/* the standard tier name, then a short Chinese word — never the word alone */
+html[data-cle] .chat-controls__effort-trigger .chat-controls__inline-select-label[data-cle-tier]::after {
+  content: " " attr(data-cle-word);
+  color: var(--cle-ink-2);
+  font: 400 10.5px/1 var(--cle-sans);
+  letter-spacing: .02em;
+  margin-inline-start: 4px;
+}
+html[data-cle] .chat-controls__effort-trigger .chat-controls__inline-select-label {
+  color: var(--cle-ink-2);
+  font: 500 12px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__effort-trigger[data-cle-level="off"] .chat-controls__inline-select-label { color: var(--cle-ink-2); }
+
+/* ---------- the stops, in the model's real order ----------
+   A stop is a small vertical mark plus its standard name — not a coloured bar, which read
+   as one continuous fill and competed with the track. The mark is ink; only the current
+   stop takes the ice blue, and it takes it as colour, not as a glow. */
+html[data-cle] .cle-gaze-stops {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  margin: 10px 1px 0;
+  padding: 0;
+}
+html[data-cle] .cle-gaze-stop {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: var(--cle-ink-2);
+  font: 500 11px/1.15 var(--cle-sans);
+  letter-spacing: 0;
+  text-align: center;
+}
+html[data-cle] .cle-gaze-stop__tick {
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--cle-ink) 26%, transparent);
+  transition: background-color var(--cle-t-quick) var(--cle-ease-soft), height var(--cle-t-quick) var(--cle-ease-soft);
+}
+html[data-cle] .cle-gaze-stop__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-cle] .cle-gaze-stop[data-past] { color: var(--cle-ink-2); }
+html[data-cle] .cle-gaze-stop[data-past] .cle-gaze-stop__tick { background: color-mix(in srgb, var(--cle-ink) 52%, transparent); }
+html[data-cle] .cle-gaze-stop[data-current] { color: var(--cle-ink); }
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__tick {
+  width: 2px;
+  height: 9px;
+  background: var(--cle-gaze);
+  box-shadow: none;
+}
+html[data-cle] .cle-gaze-stop[data-current] .cle-gaze-stop__name { font-weight: 650; }
+/* Many stops on a narrow pane: step the size down by the count the model actually exposes,
+   so a nine-stop ladder stays readable instead of every label being squeezed at once. */
+html[data-cle] .cle-gaze-stops[data-cle-stops="6"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="7"] .cle-gaze-stop { font-size: 10px; }
+html[data-cle] .cle-gaze-stops[data-cle-stops="8"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="9"] .cle-gaze-stop,
+html[data-cle] .cle-gaze-stops[data-cle-stops="10"] .cle-gaze-stop { font-size: 9.5px; }
+html[data-cle] .cle-gaze-stops[data-cle-stops="8"] .cle-gaze-stop__name,
+html[data-cle] .cle-gaze-stops[data-cle-stops="9"] .cle-gaze-stop__name,
+html[data-cle] .cle-gaze-stops[data-cle-stops="10"] .cle-gaze-stop__name { letter-spacing: -.01em; }
+html[data-cle] .cle-gaze-stops[data-disabled] { opacity: .72; }
+html[data-cle] .cle-gaze-stops[data-disabled] .cle-gaze-stop[data-current] .cle-gaze-stop__tick { background: var(--cle-ink-3); }
+html[data-cle] .cle-gaze-stops__why {
+  flex: 1 0 100%;
+  order: 9;
+  margin-top: 3px;
+  color: var(--cle-ink-2);
+  font: 400 10.5px/1.35 var(--cle-sans);
+  text-align: left;
+}
+html[data-cle] .cle-gaze-stops.is-note {
+  justify-content: flex-start;
+  color: var(--cle-ink-2);
+  font: 400 11px/1.4 var(--cle-sans);
+  text-align: left;
+}
+/* The "更快 / 更智能" pair under the track. Verified against the 2026.10.4 bundle: this
+   element is NOT rendered by the current effort menu (no `reasoning-scale` in any shipped
+   js/css). The rule is kept only so the older combined menu, which the same picker script
+   also serves, does not fall back to an unstyled 11px --muted line. */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-scale {
+  margin: 4px 2px 0;
+  color: var(--cle-ink-2);
+  font: 400 10px/1.2 var(--cle-sans);
+}
+
+/* ---------- 思考强度滑杆：细轨、明确停点、安静层级 ----------
+   The 2026.10 build paints this one control in three separate places. All three have to be
+   answered, or a thinner track just disappears inside them:
+
+   1. `.chat-controls__reasoning-slider:has([data-effort-boost=max|ultra])` — the *container*
+      is filled with a 220%-wide blue gradient at full pill radius and given a 6s/4s
+      `chat-effort-flow` animation. This, not the track, is the thick bright blue capsule.
+   2. `.chat-controls__reasoning-range[data-effort-boost=max|ultra]` — the input carries
+      1px + 12px (max) or 1px + 18px + inset (ultra) blue glow.
+   3. `::-webkit-slider-runnable-track` / `::-webkit-slider-thumb` — a 26px pill and a
+      28×20 thumb.
+
+   The native input keeps its value, min/max/step, keyboard handling and disabled state; we
+   only take over the paint. `html[data-cle]` already outranks the native selectors, so no
+   !important is added here. */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider {
+  position: relative;
+  height: 22px;
+  margin: 10px 2px 0;
+  /* (1) undo the gradient capsule and its animation */
+  background: none;
+  background-image: none;
+  border-radius: 999px;
+  animation: none;
+  box-shadow: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider:has([data-effort-boost]) {
+  background: none;
+  background-image: none;
+  animation: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-dots { display: none; }
+
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range {
+  height: 22px;
+  /* (2) undo the input's own glow; the stop marks carry the emphasis instead */
+  box-shadow: none;
+  background: none;
+  filter: none;
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost],
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost="max"],
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range[data-effort-boost="ultra"] {
+  box-shadow: none;
+  background: none;
+}
+
+/* (3) the track: one hairline, filled part in ink, the rest a light rule */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border: 0;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--cle-ink) 72%, transparent) var(--reasoning-fill, 0%),
+      color-mix(in srgb, var(--cle-ink) 14%, transparent) var(--reasoning-fill, 0%));
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-track {
+  height: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cle-ink) 14%, transparent);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-progress {
+  height: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cle-ink) 72%, transparent);
+}
+
+/* the thumb: a small ink bead with a paper ring, sized to sit on the hairline */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border: 1.5px solid var(--cle-surface);
+  border-radius: 999px;
+  background: var(--cle-ink);
+  box-shadow: 0 1px 2px rgba(20, 18, 15, .22);
+  transition: transform var(--cle-t-press) var(--cle-ease-soft);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--cle-surface);
+  border-radius: 999px;
+  background: var(--cle-ink);
+  box-shadow: 0 1px 2px rgba(20, 18, 15, .22);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:hover::-webkit-slider-thumb,
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:active::-webkit-slider-thumb { transform: scale(1.1); }
+/* focus is a ring on the bead, never a glow around the whole control */
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:focus-visible { outline: none; }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--cle-surface), 0 0 0 4px color-mix(in srgb, var(--cle-gaze) 55%, transparent);
+}
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--inherit::-webkit-slider-thumb { background: var(--cle-ink-2); }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range--unanchored::-webkit-slider-thumb { opacity: .55; }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-slider:has(.chat-controls__reasoning-range:disabled) { opacity: .55; }
+html[data-cle] :is(.chat-controls__effort-menu, .chat-controls__model-menu) .chat-controls__reasoning-range:disabled { cursor: not-allowed; }
+
+/* ---------- the panel around the slider, and every option beside it ----------
+   These are the same controls in both menus: the effort menu has the reasoning panel plus a
+   Speed group; the model menu embeds a reasoning panel plus the same Speed group. They were
+   dropped by accident in the previous pass and are restored here unchanged, except where a
+   rule genuinely conflicted with the hairline track (none of them did). */
+html[data-cle] .chat-controls__reasoning-panel {
+  gap: 2px;
+  padding: 11px 12px 12px;
+  border-top: 1px solid var(--cle-line);
+  background: transparent;
+}
+html[data-cle] .chat-controls__effort-heading {
+  color: var(--cle-ink-2);
+  font: 500 10.5px/1.2 var(--cle-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+html[data-cle] .chat-controls__effort-value,
+html[data-cle] .chat-controls__reasoning-value {
+  color: var(--cle-ink);
+  font: 500 12px/1.2 var(--cle-sans);
+}
+/* "(Default is …)". Verified against the 2026.10.4 bundle: no `reasoning-default` exists in
+   any shipped js/css — the current menu exposes the default through its search/row state
+   instead. The rule is retained for the older combined menu that this picker still serves,
+   and is deliberately not claimed as a current native control. */
+html[data-cle] .chat-controls__reasoning-default {
+  color: var(--cle-ink-2);
+  font: 400 10.5px/1.2 var(--cle-sans);
+  border-radius: var(--cle-radius-chip);
+  padding: 2px 4px;
+}
+html[data-cle] .chat-controls__reasoning-default:hover:not(:disabled) {
+  color: var(--cle-ink);
+  background: color-mix(in srgb, var(--cle-ink) 5%, transparent);
+}
+html[data-cle] .chat-controls__reasoning-default:focus-visible {
+  outline: 2px solid var(--cle-gaze);
+  outline-offset: 1px;
+}
+html[data-cle] .chat-controls__reasoning-default:disabled { opacity: .55; }
+
+/* a model that exposes a single stop renders a button here instead of a slider */
+html[data-cle] .chat-controls__reasoning-option {
+  min-height: 30px;
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-chip);
+  background: var(--cle-paper);
+  color: var(--cle-ink-2);
+  font: 500 12px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__reasoning-option:hover:not(:disabled) { color: var(--cle-ink); border-color: var(--cle-ink-3); }
+html[data-cle] .chat-controls__reasoning-option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+html[data-cle] .chat-controls__reasoning-option:disabled { opacity: .55; }
+html[data-cle] .chat-controls__reasoning-option--selected,
+html[data-cle] .chat-controls__reasoning-option[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--cle-gaze) 55%, transparent);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+}
+
+/* Speed: standard / fast / ultrafast, native radio semantics kept */
+html[data-cle] .chat-controls__speed-panel { border-top: 1px solid var(--cle-line); padding: 10px 12px 12px; }
+html[data-cle] .chat-controls__speed-options {
+  border: 1px solid var(--cle-line-strong);
+  border-radius: var(--cle-radius-ctl);
+  background: var(--cle-paper);
+  gap: 2px;
+  padding: 3px;
+}
+html[data-cle] .chat-controls__speed-option {
+  min-height: 28px;
+  border-radius: 6px;
+  color: var(--cle-ink-2);
+  font: 500 11.5px/1 var(--cle-sans);
+}
+html[data-cle] .chat-controls__speed-option:hover:not(:disabled) { color: var(--cle-ink); }
+html[data-cle] .chat-controls__speed-option[aria-checked="true"] {
+  border-color: var(--cle-line-strong);
+  background: var(--cle-surface);
+  color: var(--cle-ink);
+}
+html[data-cle] .chat-controls__speed-option[aria-checked="true"][data-chat-speed-option="ultrafast"] {
+  border-color: color-mix(in srgb, var(--cle-gaze) 50%, transparent);
+  background: var(--cle-gaze-soft);
+  color: var(--cle-ink);
+}
+html[data-cle] .chat-controls__speed-option:focus-visible { outline: 2px solid var(--cle-gaze); outline-offset: 1px; }
+html[data-cle] .chat-controls__speed-option:disabled { opacity: .55; }
+
+/* very narrow: the tier word is dropped, the tier name is not */
+@container cle-pane (max-width: 520px) {
+  html[data-cle] .chat-controls__effort-trigger .chat-controls__inline-select-label[data-cle-tier]::after { content: ""; }
+  /* A 508px split pane is the normal case, not a cramped special case: the stop names keep
+     their size and are truncated only if they truly cannot fit. */
+  html[data-cle] .cle-gaze-stop { font-size: 10.5px; }
+  /* composer.css hides the whole effort label at this width; an eye alone would leave
+     Max and High indistinguishable, so the standard tier name stays and only shrinks.
+     Same specificity as that rule and this file loads after it, so the name wins. */
+  html[data-cle] .cle-composer .chat-controls__effort-trigger .chat-controls__inline-select-label {
+    display: inline !important;
+    max-width: 7ch;
+    font-size: 10.5px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-cle] :is(.cle-eye, .cle-gaze-stop__tick, .chat-controls__reasoning-range::-webkit-slider-thumb) { transition: none !important; }
+}

@@ -13,7 +13,7 @@
   const STORE = "laolao:process-thinking:v1";
   const MAX_CARDS = 80;
   const MAX_TEXT = 8000;
-  const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
+  const STICKER = (state) => `/laolao-pinkie-status-${state}.png`;
   const PHRASE = {
     thinking: "碧琪在动小脑瓜…", working: "碧琪在抛气球干活…", writing: "碧琪在比划着回你…",
     asking: "碧琪在等你点头…", done: "完成啦！", oops: "这一轮停下来了，做到一半的记录都留着",
@@ -53,6 +53,8 @@
   const keep = window.__pinkieProcessKeep instanceof Set ? window.__pinkieProcessKeep : new Set();
   window.__pinkieProcessKeep = keep;
   for (const key of Object.keys(store)) keep.add(key);
+  const processCards = new Map();
+  const dirtyCards = new Set();
   const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
   // v8: show each received thought before folding, including a block delivered
   // in the same batch as tool.start. Keep this transient state out of storage.
@@ -92,9 +94,13 @@
   // acting, so the wait since that boundary is the real thinking time.
   const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
   const liveCardKey = () => {
-    const cards = document.querySelectorAll(".chat-group--process details.pinkie-process[data-live='1']");
-    const card = cards[cards.length - 1];
-    return card?.closest("[data-pinkie-process]")?.dataset.pinkieProcess || "";
+    const known = processCards.get(run.key);
+    if (known?.isConnected && known.querySelector('details.pinkie-process[data-live="1"]')) return run.key;
+    let key = "";
+    for (const [id, card] of processCards) {
+      if (card.isConnected && card.querySelector('details.pinkie-process[data-live="1"]')) key = id;
+    }
+    return key;
   };
   const resolveKey = () => {
     const key = liveCardKey();
@@ -237,8 +243,10 @@
       body.id = "pinkie-thought-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
       head.setAttribute("aria-controls", body.id);
       head.addEventListener("click", () => {
-        if (openedThoughts.has(key)) openedThoughts.delete(key); else openedThoughts.add(key);
-        schedule();
+        preserveSlot(slot, () => {
+          if (openedThoughts.has(key)) openedThoughts.delete(key); else openedThoughts.add(key);
+          renderThinking(slot);
+        });
       });
       body.append(el("div", "pinkie-thinking__text"));
       box.append(head, body);
@@ -271,7 +279,10 @@
       : live ? (run.state || "thinking") : restoredState;
     if (!state) {
       const pill = slot.querySelector(".pinkie-status");
-      if (pill && !pill.classList.contains("is-gone")) { pill.classList.add("is-gone"); setTimeout(() => { if (pill.classList.contains("is-gone")) pill.remove(); }, 450); }
+      if (pill && !pill.classList.contains("is-gone")) {
+        pill.classList.add("is-gone");
+        setTimeout(() => { if (pill.classList.contains("is-gone")) preserveSlot(slot, () => pill.remove()); }, 450);
+      }
       return;
     }
     let pill = slot.querySelector(".pinkie-status:not(.is-gone)");
@@ -306,7 +317,7 @@
     const move = run.migrate;
     if (!move) return;
     if (Date.now() > move.until || sessionKey() !== move.session || run.startedAt) { run.migrate = null; return; }
-    const cards = [...document.querySelectorAll('.chat-group--process[data-pinkie-process]')];
+    const cards = [...processCards.values()].filter(card => card.isConnected);
     if (cards.some(card => card.dataset.pinkieProcess === move.from)) return;
     const card = cards.at(-1), key = card?.dataset.pinkieProcess || '';
     const record = store[move.from];
@@ -323,39 +334,73 @@
     save();
   }
 
+  function preserveSlot(slot, change) {
+    const pane = slot.closest?.('openclaw-chat-pane');
+    return window.__pinkieChatViewport?.preserve
+      ? window.__pinkieChatViewport.preserve(pane, change) : change();
+  }
+
   let frame = 0;
-  const foldStates = new WeakMap();
-  function syncProcessFold(details) {
-    const live = details.dataset.live === "1";
-    // Leave a user's manual toggle alone during updates. Completion gathers
-    // the public narration into the same card and folds the whole process.
-    if (foldStates.get(details) === true && !live) details.open = false;
-    foldStates.set(details, live);
+  function markCard(card) {
+    if (!card?.matches?.('.chat-group--process[data-pinkie-process]')) return;
+    const key = card.dataset.pinkieProcess;
+    processCards.set(key, card);
+    dirtyCards.add(card);
+  }
+  function indexCards(root) {
+    if (!root) return;
+    markCard(root);
+    root.querySelectorAll?.('.chat-group--process[data-pinkie-process]').forEach(markCard);
+  }
+  function markCurrent() {
+    const card = processCards.get(run.key || run.doneKey);
+    if (card) dirtyCards.add(card);
   }
   function schedule() {
+    markCurrent();
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
       typingFrame = false;
       if (run.startedAt) resolveKey();
       migrateThinking();
-      document.querySelectorAll("details.pinkie-process").forEach(syncProcessFold);
-      document.querySelectorAll("[data-pinkie-thinking]").forEach(renderThinking);
-      document.querySelectorAll("[data-pinkie-status]").forEach(renderStatus);
+      const changed = [...dirtyCards];
+      dirtyCards.clear();
+      for (const card of changed) {
+        if (!card.isConnected) continue;
+        card.querySelectorAll('[data-pinkie-thinking]').forEach(renderThinking);
+        card.querySelectorAll('[data-pinkie-status]').forEach(renderStatus);
+      }
+      // Only the card whose thought is typing is dirtied for the next frame.
       if (typingFrame) schedule();
     });
   }
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     schedule();
   });
-  // These slots are ours. Their timer/typewriter writes must not wake the
-  // document observer and redraw themselves on every animation frame.
+  // Index new/replaced cards once; text updates dirty only their owning card.
+  // Attribute changes are limited to the native run metadata, not our text.
   new MutationObserver(records => {
-    if (records.some(record => !record.target.closest?.("[data-pinkie-thinking], [data-pinkie-status]"))) schedule();
-  }).observe(document.documentElement, {childList: true, subtree: true});
+    let changed = false;
+    for (const record of records) {
+      if (record.target.closest?.('[data-pinkie-thinking], [data-pinkie-status]')) continue;
+      const owner = record.target.closest?.('.chat-group--process[data-pinkie-process]');
+      if (owner) { markCard(owner); changed = true; }
+      for (const node of record.addedNodes || []) { indexCards(node); changed = true; }
+      for (const node of record.removedNodes || []) {
+        const removed = [];
+        if (node.matches?.('.chat-group--process[data-pinkie-process]')) removed.push(node);
+        removed.push(...(node.querySelectorAll?.('.chat-group--process[data-pinkie-process]') || []));
+        for (const card of removed) if (processCards.get(card.dataset.pinkieProcess) === card && !card.isConnected) processCards.delete(card.dataset.pinkieProcess);
+      }
+    }
+    if (changed) schedule();
+  }).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-live', 'data-state']});
+  indexCards(document);
+  schedule();
   setInterval(() => { if (run.startedAt || run.doneAt > Date.now() - 3200) schedule(); }, 250);
 
   // ---------- a small confetti pop from the sticker (drawn above the text) ----------

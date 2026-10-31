@@ -1,0 +1,91 @@
+/* 碧琪手账 v2 · 学习台陪伴层（laolao-study-desk-handbook.js）：每天一句的署名、剪报、今晚收的、带条目问、本月月历。
+   用 laolao-desk-kit.css 的 .pk-ink 变量；零模糊，只动 transform / opacity。 */
+
+/* ---------- 今日页 ---------- */
+#pinkie-study-desk .pk-month-link{margin-left:12px;font-size:13px}
+#pinkie-study-desk .bubble .pk-daily-by{display:block;margin-top:6px;font:11px var(--pk-sans);color:var(--pk-ink-3);letter-spacing:.04em}
+#pinkie-study-desk .bubble[data-source]{font-family:var(--pk-hand);font-size:16px;line-height:1.5;color:var(--pk-pink-ink)}
+
+#pinkie-study-desk .pk-slot-tonight:not(:empty),#pinkie-study-desk .pk-slot-clips:not(:empty){margin-top:14px}
+/* 小标题写在左边页边（手账的写法），省一行。 */
+#pinkie-study-desk :is(.pk-tonight-list,.pk-clips){display:grid;grid-template-columns:52px minmax(0,1fr);column-gap:12px;align-items:start}
+#pinkie-study-desk .pk-tonight-list h4,#pinkie-study-desk .pk-clips-h{grid-column:1;grid-row:1/span 4;margin:3px 0 0;font:600 13px var(--pk-serif);color:var(--pk-ink-2);letter-spacing:.1em;line-height:1.4}
+#pinkie-study-desk .pk-clips>.pk-clip{grid-column:2}
+#pinkie-study-desk .pk-tonight-list ul{grid-column:2;list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#pinkie-study-desk .pk-tonight-list li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--pk-ink-2);min-width:0}
+#pinkie-study-desk .pk-tonight-list li>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pinkie-study-desk .pk-tonight-list .pk-stamp{flex:none;transform:rotate(-4deg)}
+#pinkie-study-desk .pk-tonight-list .pk-link{margin-left:auto;flex:none;font-size:12px}
+
+/* 剪报：一张剪下来的报纸条，左边一道粉色页边线。 */
+#pinkie-study-desk .pk-clips{row-gap:8px}
+#pinkie-study-desk .pk-clip{position:relative;padding:12px 16px 12px 18px;background:var(--pk-paper);border-radius:2px;box-shadow:var(--pk-lift);transform:rotate(.35deg);
+  clip-path:polygon(0 2px,4% 0,9% 2px,15% 0,22% 2px,30% 0,38% 2px,47% 0,55% 2px,63% 0,71% 2px,80% 0,88% 2px,95% 0,100% 2px,100% 100%,0 100%)}
+#pinkie-study-desk .pk-clip::before{content:"";position:absolute;left:8px;top:10px;bottom:10px;width:1.5px;background:var(--pk-margin)}
+#pinkie-study-desk[data-theme="night"] .pk-clip{background:var(--pk-paper-2)}
+#pinkie-study-desk .pk-clip-src{display:block;font-size:11px;color:var(--pk-ink-3);letter-spacing:.04em}
+#pinkie-study-desk .pk-clip-title{display:block;margin:2px 0 4px;font:600 15px/1.35 var(--pk-serif);color:var(--pk-ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+#pinkie-study-desk .pk-clip-title:hover{color:var(--pk-pink-ink)}
+#pinkie-study-desk .pk-clip-sum{margin:0;font-size:13px;line-height:1.6;color:var(--pk-ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#pinkie-study-desk .pk-clip-quote{display:block;margin-top:4px;font:italic 13px var(--pk-serif);color:var(--pk-ink-2)}
+#pinkie-study-desk .pk-clip .pk-note{font-size:16px;margin-top:4px}
+#pinkie-study-desk .pk-clip-row{display:flex;align-items:center;gap:16px;margin-top:6px}
+#pinkie-study-desk .pk-clip--small{padding:8px 14px 8px 18px;transform:rotate(-.25deg)}
+#pinkie-study-desk .pk-clip--small .pk-clip-title{-webkit-line-clamp:1;margin:0;font-size:14px}
+#pinkie-study-desk .pk-clip--small .pk-clip-src{display:none}
+
+/* 带着今天的考点问碧琪：按下后条目卡压上一道荧光笔。 */
+#pinkie-study-desk .pk-ask-refs{display:flex;align-items:center;gap:8px;margin:auto 0 8px;padding-top:18px;font-size:12px;color:var(--pk-ink-3)}
+#pinkie-study-desk .pk-ask-refs+.ask{margin-top:0}
+#pinkie-study-desk .pk-ask-ref{cursor:pointer;max-width:min(360px,70%)}
+#pinkie-study-desk .pk-ask-ref[aria-pressed="true"]{border-color:var(--pk-pink);box-shadow:0 0 0 2px var(--pk-hl)}
+#pinkie-study-desk .pk-ask-ref[aria-pressed="true"]::after{content:"✓";font-size:12px;color:var(--pk-pink)}
+#pinkie-study-desk .pk-ask-ref:focus-visible{outline:2px solid var(--pk-pink);outline-offset:2px}
+
+/* 放不下时一级一级收（handbook.js 的 fit）。 */
+#pinkie-study-desk .view[data-pk-fit] .pk-clip:not(.pk-clip--small) :is(.pk-clip-sum,.pk-clip-quote,.pk-note,.pk-clip-row){display:none}
+#pinkie-study-desk .view[data-pk-fit] .pk-clip:not(.pk-clip--small){padding-top:8px;padding-bottom:8px}
+#pinkie-study-desk .view[data-pk-fit] .pk-clip-title{-webkit-line-clamp:1}
+#pinkie-study-desk .view:is([data-pk-fit="2"],[data-pk-fit="3"],[data-pk-fit="4"],[data-pk-fit="5"]) :is(.pk-tonight-list li:nth-child(n+2),.pk-clip+.pk-clip){display:none}
+/* 剪报是先生要的「外面的世界」，比今晚收的清单更晚收起。 */
+#pinkie-study-desk .view:is([data-pk-fit="3"],[data-pk-fit="4"],[data-pk-fit="5"]) .pk-slot-tonight{display:none}
+#pinkie-study-desk .view:is([data-pk-fit="4"],[data-pk-fit="5"]) .pk-slot-clips{display:none}
+#pinkie-study-desk .view[data-pk-fit="5"] .pk-ask-refs{display:none}
+#pinkie-study-desk .view[data-pk-fit="5"] .pk-ask-refs+.ask{margin-top:auto}
+
+/* ---------- 本月：手账月历跨页（点阵纸） ---------- */
+#pinkie-study-desk .view.pk-month{padding:36px 48px 28px;display:flex;flex-direction:column;gap:16px;overflow:auto;
+  background-color:var(--pk-paper);background-image:radial-gradient(circle,var(--pk-rule-2) 1.1px,transparent 1.4px);background-size:24px 24px;background-position:6px 6px;
+  -webkit-backdrop-filter:none;backdrop-filter:none}
+#pinkie-study-desk[data-theme="night"] .view.pk-month{background-color:var(--pk-paper)}
+#pinkie-study-desk .pk-month-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+#pinkie-study-desk .pk-month-nav{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+#pinkie-study-desk .pk-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;flex:1;min-height:0}
+#pinkie-study-desk .pk-cal-wd{font:600 12px var(--pk-serif);color:var(--pk-ink-3);text-align:center;padding-bottom:2px;letter-spacing:.2em}
+#pinkie-study-desk .pk-cal-day{position:relative;min-height:78px;padding:6px 8px;border-radius:4px;background:color-mix(in srgb,var(--pk-paper) 86%,transparent);
+  box-shadow:inset 0 0 0 1px var(--pk-rule);display:flex;flex-direction:column;gap:2px;min-width:0}
+#pinkie-study-desk .pk-cal-day[data-future]{opacity:.72}
+#pinkie-study-desk .pk-cal-day[data-today]{box-shadow:inset 0 0 0 2px var(--pk-pink)}
+#pinkie-study-desk .pk-cal-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px}
+#pinkie-study-desk .pk-cal-n{font:600 17px var(--pk-serif);color:var(--pk-ink)}
+#pinkie-study-desk .pk-cal-day[data-weekend] .pk-cal-n,#pinkie-study-desk .pk-cal-day[data-off] .pk-cal-n{color:var(--pk-pink-ink)}
+/* 考试日用红笔圈出来。 */
+#pinkie-study-desk .pk-cal-n[data-exam]{position:relative}
+#pinkie-study-desk .pk-cal-n[data-exam]::after{content:"";position:absolute;left:-7px;right:-7px;top:-4px;bottom:-4px;border:1.8px solid var(--pk-pink);border-radius:50% 46% 52% 44%/48% 52% 46% 54%;transform:rotate(-8deg)}
+#pinkie-study-desk .pk-cal-lunar{font:12px var(--pk-hand);color:var(--pk-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pinkie-study-desk .pk-cal-tag{font:12px/1.3 var(--pk-hand);color:var(--pk-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pinkie-study-desk .pk-cal-mark{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:4px}
+#pinkie-study-desk .pk-cal-mark .pk-star{width:13px;height:13px}
+#pinkie-study-desk .pk-cal-mark small{font-size:10px;color:var(--pk-ink-3)}
+#pinkie-study-desk .pk-cal-milestone{font-size:10px;color:var(--pk-pink-ink);border:1px solid currentColor;border-radius:3px;padding:0 3px;align-self:flex-start;transform:rotate(-3deg)}
+#pinkie-study-desk .pk-cal-legend{display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--pk-ink-3)}
+#pinkie-study-desk .pk-cal-key-exam::before{content:"";display:inline-block;width:12px;height:10px;margin-right:6px;border:1.5px solid var(--pk-pink);border-radius:50%;vertical-align:-1px}
+
+/* 学习台变窄（便签栏开着）时按月历页自己的宽度收紧。容器只设在本页：设在 .desk-content 上会让别的视图里 fixed 定位的浮层改认它做参照。 */
+#pinkie-study-desk .view.pk-month{container-type:inline-size;container-name:pkmonth}
+@container pkmonth (max-width:900px){
+  #pinkie-study-desk .pk-cal{gap:4px}
+  #pinkie-study-desk .pk-cal-day{min-height:64px;padding:5px 6px}
+  #pinkie-study-desk .pk-cal-mark small{display:none}
+}
+@container pkmonth (max-width:680px){#pinkie-study-desk .pk-cal-lunar{display:none}}

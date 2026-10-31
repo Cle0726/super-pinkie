@@ -1,0 +1,50 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>perf</title>
+<link rel="stylesheet" href="/effects.css">
+<style>
+:root{--cle-ink:#15161A;--cle-ink-2:#5C5A57;--cle-ink-3:#9A958B;--cle-paper:#F4EFE4;--cle-gold:#A9842F;--cle-gaze:#2A63E8;--cle-serif:ui-serif,serif;--cle-mono:ui-monospace,monospace;--cle-ease:cubic-bezier(.2,.7,0,1);--cle-line:rgba(20,18,15,.1);--cle-surface:#FBF8F1}
+body{margin:0;background:var(--cle-paper)}
+.chat-pane-cache__pane{container:cle-pane / inline-size;width:720px;padding:16px}
+.chat-working-indicator{min-height:28px;display:inline-flex;align-items:center}
+</style></head><body>
+<div class="chat-pane-cache__pane chat-pane-cache__pane--visible chat-pane-cache__pane--active" data-mcp-app-owner-key='["o","agent:main:main"]'>
+<div class="chat-thread-inner"><div class="chat-group assistant" data-chat-row-key="a1">前文</div></div>
+<div class="chat-working-indicator"><span class="native">working…</span></div>
+</div>
+<pre id="log" style="font:12px monospace"></pre>
+<script type="module">
+document.documentElement.dataset.cle='0.1.0';
+const logs=[];const log=(...a)=>{logs.push(a.join(' '));document.getElementById('log').textContent=logs.join('\n')};
+const orig=HTMLCanvasElement.prototype.getContext;const live=new Set();let created=0;
+window.__glCount=()=>live.size;
+HTMLCanvasElement.prototype.getContext=function(t,...r){const c=orig.call(this,t,...r);if(String(t).startsWith('webgl')&&c){created++;live.add(c);const l=c.getExtension('WEBGL_lose_context');if(l){const o=l.loseContext.bind(l);l.loseContext=()=>{live.delete(c);o()}}}return c};
+const {mountStatus}=await import('/status.js');
+const listeners=new Map();
+const host={onEvent(n,f){(listeners.get(n)||listeners.set(n,[]).get(n)).push(f);return()=>{}},sessions:{selectedKey:'agent:main:main'}};
+const emit=(n,p)=>(listeners.get(n)||[]).forEach(f=>f(p));
+mountStatus(host,new AbortController().signal);
+
+// measure layout/script work over a simulated long run: 200 tool steps + a DOM mutation per step
+const pane=document.querySelector('.chat-pane-cache__pane');
+emit('agent',{sessionKey:'agent:main:main',stream:'lifecycle',data:{phase:'start',startedAt:Date.now()}});
+const t0=performance.now();
+for(let i=0;i<200;i++){
+  emit('agent',{sessionKey:'agent:main:main',stream:'tool',data:{phase:'start',name:i%3?'read':'exec',toolCallId:'t'+i,args:i%3?{path:'/f'+i+'.md'}:{command:'run '+i}}});
+  emit('agent',{sessionKey:'agent:main:main',stream:'tool',data:{phase:'result',name:'read',toolCallId:'t'+i}});
+  // the app also re-renders transcript fragments
+  const d=document.createElement('div');d.className='chat-group assistant';d.textContent='步 '+i;pane.querySelector('.chat-thread-inner').append(d);
+  await new Promise(r=>setTimeout(r,12));
+}
+const elapsed=performance.now()-t0;
+const glyphs=document.querySelectorAll('.cle-status__particles').length;
+const canvases=document.querySelectorAll('.cle-status__particles canvas').length;
+const lines=document.querySelectorAll('.cle-status').length;
+log('STEPS',200);
+log('MS',Math.round(elapsed));
+log('GL_LIVE',live.size);
+log('GL_CREATED',created);
+log('GLYPHS',glyphs);
+log('CANVASES',canvases);
+log('LINES',lines);
+log('VERB',document.querySelector('.cle-status__verb')?.textContent);
+log('DONE_MARKER');
+</script></body></html>

@@ -3,8 +3,13 @@ const MIN_REQUEST_GAP_MS = 30_000;
 const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$/;
 const MEDIA_ID = /(?:^|[-_/])(?:image|imagine|video|veo|audio|tts|speech|embedding|embed|rerank|transcribe)(?:[-_.]|$)/i;
 const EFFORT_SUFFIX = /-(?:extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/i;
-const VERIFIED_GPT6 = /^gpt-6-(?:astra|sol|luna)$/;
-const GPT6_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh']);
+const VERIFIED_GPT6 = /^(?:gpt-6-(?:astra|sol|luna)|gpt-6\.1-sol)$/;
+const GPT6_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+const CLEKK_NATIVE_EFFORTS=new Map([
+  ...['gpt-5.4','gpt-5.4-mini','gpt-5.5'].map(id=>[id,['none','low','medium','high','xhigh']]),
+  ...['gpt-6-astra','gpt-6.1-sol'].map(id=>[id,[...GPT6_EFFORTS]]),
+  ...['gpt-6-sol','gpt-6-luna','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'].map(id=>[id,['none',...GPT6_EFFORTS]]),
+]);
 // These WorkBuddy models advertise reasoning in the official model catalog.
 // High was verified through this local OpenAI-compatible route. Do not invent
 // additional effort levels from a model name alone.
@@ -41,6 +46,21 @@ function isAutoDiscoveredGpt6(entry) {
     && Array.isArray(entry.input) && entry.input.length === 1 && entry.input[0] === 'text';
 }
 
+// Explicit upstream capabilities are authoritative; missing fields stay unknown.
+export function upstreamReasoningCapabilities(payload) {
+  const ids = new Set(chatModelIds(payload)), result = new Map();
+  const allowed = new Set(['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']);
+  for (const entry of payload.data) {
+    if (!ids.has(entry.id)) continue;
+    const raw = entry.supported_reasoning_efforts ?? entry.reasoning_efforts
+      ?? entry.compat?.supportedReasoningEfforts ?? entry.capabilities?.reasoning?.efforts;
+    if (!Array.isArray(raw) || !raw.length || raw.length > 10
+      || raw.some(level => typeof level !== 'string' || !allowed.has(level.toLowerCase()))) continue;
+    result.set(entry.id, [...new Set(raw.map(level => level.toLowerCase()))]);
+  }
+  return result;
+}
+
 function isLegacyAutoDiscoveredGpt6(entry) {
   return entry && VERIFIED_GPT6.test(entry.id)
     && isAutoDiscoveredGpt6({...entry, name: modelName(entry.id)})
@@ -52,7 +72,7 @@ function isVerifiedTextOnlyGpt6(entry) {
     && entry.reasoning === true && entry.contextWindow === 128000
     && entry.contextTokens === 128000 && Array.isArray(entry.input)
     && entry.input.length === 1 && entry.input[0] === 'text'
-    && JSON.stringify(entry.compat?.supportedReasoningEfforts) === JSON.stringify(GPT6_EFFORTS);
+    && [JSON.stringify(GPT6_EFFORTS),JSON.stringify(GPT6_EFFORTS.slice(0,-1))].includes(JSON.stringify(entry.compat?.supportedReasoningEfforts));
 }
 
 export function chatModelIds(payload) {
@@ -148,6 +168,14 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const payload = await readLimitedJson(response);
       const ids = chatModelIds(payload);
       const contextWindows = upstreamContextWindows(payload);
+      const declaredEfforts = upstreamReasoningCapabilities(payload);
+      const reasoningPending = (provider.models || []).flatMap(entry => {
+        if (entry.compat || !ids.includes(entry.id)) return [];
+        const generated=[modelName(entry.id),modelName(entry.id).replace(/^GPT-/, 'GPT ')].includes(entry.name);
+        const efforts = declaredEfforts.get(entry.id)
+          || (name === 'clekk' && (generated || entry.reasoning===true) ? CLEKK_NATIVE_EFFORTS.get(entry.id) : null);
+        return efforts ? [{id: entry.id, before: JSON.stringify(entry), efforts}] : [];
+      });
       const contextUpdates = (provider.models || []).flatMap((entry) => {
         const window = contextWindows.get(entry.id);
         return window && (entry.contextWindow !== window || entry.contextTokens !== window)
@@ -166,11 +194,13 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const imagePending = verifiedGpt6 ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry)) : [];
       return {name, available: ids.length,
-        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}), legacy, imagePending, workBuddyPending, contextUpdates, contextUpdated: 0};
+        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => declaredEfforts.has(entry.id)
+          ? {...entry, reasoning: true, compat: {...entry.compat, supportsReasoningEffort: true, supportedReasoningEfforts: declaredEfforts.get(entry.id)}} : entry),
+        legacy, imagePending, workBuddyPending, reasoningPending, contextUpdates, contextUpdated: 0};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
     if (!successes.length) throw results[0].reason;
-    const changes = successes.filter((result) => result.additions.length || result.legacy.length || result.imagePending.length || result.workBuddyPending.length || result.contextUpdates.length);
+    const changes = successes.filter((result) => result.additions.length || result.legacy.length || result.imagePending.length || result.workBuddyPending.length || result.reasoningPending.length || result.contextUpdates.length);
     if (changes.length) {
       await api.runtime.config.mutateConfigFile({
         base: 'source', afterWrite: {mode: 'auto'},
@@ -199,6 +229,12 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
               entry.reasoning = true;
               entry.compat = workBuddyThinkingCompat();
             }
+            for (const change of result.reasoningPending) {
+              const entry = models.find(model => model.id === change.id);
+              if (!entry || JSON.stringify(entry) !== change.before) continue;
+              entry.reasoning = true;
+              entry.compat = {supportsReasoningEffort: true, supportedReasoningEfforts: change.efforts};
+            }
             result.contextUpdated = 0;
             for (const update of contextUpdates) {
               const entry = models.find((model) => model.id === update.id);
@@ -215,12 +251,12 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     lastChecked = now();
     lastResult = {
       added: successes.reduce((sum, result) => sum + result.additions.length, 0),
-      upgraded: successes.reduce((sum, result) => sum + result.legacy.length + result.imagePending.length + result.workBuddyPending.length, 0),
+      upgraded: successes.reduce((sum, result) => sum + new Set([...result.legacy,...result.imagePending,...result.workBuddyPending,...result.reasoningPending].map(row=>row.id)).size, 0),
       contextUpdated: successes.reduce((sum, result) => sum + result.contextUpdated, 0),
       available: successes.reduce((sum, result) => sum + result.available, 0),
       checkedAt: lastChecked,
-      providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending, workBuddyPending, contextUpdated}) =>
-        [name, {available, added: additions.length, upgraded: legacy.length + imagePending.length + workBuddyPending.length, contextUpdated}])),
+      providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending, workBuddyPending, reasoningPending, contextUpdated}) =>
+        [name, {available, added: additions.length, upgraded: new Set([...legacy,...imagePending,...workBuddyPending,...reasoningPending].map(row=>row.id)).size, contextUpdated}])),
       failed: results.filter((result) => result.status === 'rejected').length,
     };
     return lastResult;

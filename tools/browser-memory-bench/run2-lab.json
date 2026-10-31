@@ -1,0 +1,374 @@
+{
+  "status": "passed",
+  "model": "gemini-3.8-flash-tiered",
+  "base": "http://127.0.0.1:53586",
+  "startedAt": "2026-10-26T00:38:16.396Z",
+  "passes": [
+    {
+      "name": "首次访问",
+      "cases": [
+        {
+          "name": "悬停菜单与Canvas拖拽",
+          "sessionKey": "agent:learning:browser-memory-qa-0-lab.html",
+          "startedAt": "2026-10-26T00:38:16.402Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "action": "open",
+                "url": "http://127.0.0.1:53586/lab.html"
+              },
+              "ok": true,
+              "elapsedMs": 113
+            },
+            {
+              "action": "hover",
+              "params": {
+                "ref": "pmvoj2zagwiwnwe1",
+                "action": "hover"
+              },
+              "ok": true,
+              "elapsedMs": 124
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "ref": "pmvoj2zagwiwnwe2"
+              },
+              "ok": true,
+              "elapsedMs": 100
+            },
+            {
+              "action": "drag",
+              "params": {
+                "ref": "pmvoj2zagwiwnwe3",
+                "toRef": "pmvoj2zagwiwnwe4",
+                "action": "drag",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 510
+            },
+            {
+              "action": "click",
+              "params": {
+                "ref": "pmvoj2zagwiwnwe5",
+                "action": "click",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 55
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 3
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5999,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"open\",\n                  \"url\": \"http://127.0.0.1:53586/lab.html\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5882,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"ref\": \"pmvoj2zagwiwnwe1\",\n                  \"action\": \"hover\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4641,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"click\",\n                  \"ref\": \"pmvoj2zagwiwnwe2\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 3,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5146,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"batch\",\n                  \"steps\": [\n                    {\n                      \"ref\": \"pmvoj2zagwiwnwe3\",\n                      \"toRef\": \"pmvoj2zagwiwnwe4\",\n                      \"action\": \"drag\"\n                    },\n                    {\n                      \"ref\": \"pmvoj2zagwiwnwe5\",\n                      \"action\": \"click\"\n                    }\n                  ]\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 4,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5688,
+              "toolCalls": [],
+              "final": "已完成全部操作并确认页面状态：\n\n1. 成功悬停“高级实验”按钮并展开菜单；\n2. 点击“打开画布”加载出实验画布及目标区；\n3. 将实验画布中心的节点成功拖拽至右侧目标区；\n4. 点击“检查结果”按钮后，页面文本已明确更新并显示：**“检查通过：节点已对齐目标区”**。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成全部操作并确认页面状态：\n\n1. 成功悬停“高级实验”按钮并展开菜单；\n2. 点击“打开画布”加载出实验画布及目标区；\n3. 将实验画布中心的节点成功拖拽至右侧目标区；\n4. 点击“检查结果”按钮后，页面文本已明确更新并显示：**“检查通过：节点已对齐目标区”**。",
+          "actual": {
+            "opened": true,
+            "checks": 1,
+            "aligned": true,
+            "checkTrusted": false,
+            "moves": 20,
+            "down": false,
+            "trusted": true
+          },
+          "elapsedMs": 28276,
+          "toolCalls": [
+            "open",
+            "hover",
+            "click",
+            "batch"
+          ],
+          "nativeActionMs": 905,
+          "modelWaitMs": 27356
+        }
+      ]
+    },
+    {
+      "name": "再次访问",
+      "cases": [
+        {
+          "name": "悬停菜单与Canvas拖拽",
+          "sessionKey": "agent:learning:browser-memory-qa-1-lab.html",
+          "startedAt": "2026-10-26T00:38:44.680Z",
+          "actions": [
+            {
+              "action": "open",
+              "params": {
+                "action": "open",
+                "url": "http://127.0.0.1:53586/lab.html"
+              },
+              "ok": true,
+              "elapsedMs": 29
+            },
+            {
+              "action": "hover",
+              "params": {
+                "action": "hover",
+                "name": "高级实验",
+                "exact": true,
+                "role": "button",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 132
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "name": "打开画布",
+                "exact": true,
+                "role": "button",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 56
+            },
+            {
+              "action": "drag",
+              "params": {
+                "action": "drag",
+                "name": "实验画布，中心有一个节点",
+                "exact": true,
+                "role": "button",
+                "toName": "目标区",
+                "toExact": true,
+                "toRole": "button",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 476
+            },
+            {
+              "action": "click",
+              "params": {
+                "action": "click",
+                "name": "检查结果",
+                "exact": true,
+                "role": "button",
+                "observe": false
+              },
+              "ok": true,
+              "elapsedMs": 56
+            },
+            {
+              "action": "snapshot",
+              "params": {
+                "compact": true,
+                "maxElements": 80,
+                "maxChars": 2400
+              },
+              "ok": true,
+              "elapsedMs": 2
+            }
+          ],
+          "rounds": [
+            {
+              "round": 0,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 6521,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"action\": \"open\",\n                  \"url\": \"http://127.0.0.1:53586/lab.html\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": true
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 5446,
+              "toolCalls": [
+                {
+                  "name": "app_browser",
+                  "arguments": "{\n                  \"recipe\": \"r032b57\",\n                  \"action\": \"replay\"\n                }"
+                }
+              ],
+              "results": [
+                {
+                  "ok": true,
+                  "known": false
+                }
+              ]
+            },
+            {
+              "round": 2,
+              "model": "gemini-3.8-flash-tiered",
+              "latencyMs": 4843,
+              "toolCalls": [],
+              "final": "已完成验收，实际观察结果如下：\n\n1. 成功悬停“高级实验”展开菜单，并点击“打开画布”。\n2. 将画布中心节点拖拽至右侧“目标区”。\n3. 点击“检查结果”后，页面显示：**“检查通过：节点已对齐目标区”**。"
+            }
+          ],
+          "status": "passed",
+          "final": "已完成验收，实际观察结果如下：\n\n1. 成功悬停“高级实验”展开菜单，并点击“打开画布”。\n2. 将画布中心节点拖拽至右侧“目标区”。\n3. 点击“检查结果”后，页面显示：**“检查通过：节点已对齐目标区”**。",
+          "actual": {
+            "opened": true,
+            "checks": 1,
+            "checkTrusted": false,
+            "aligned": true,
+            "moves": 20,
+            "down": false,
+            "trusted": true
+          },
+          "elapsedMs": 17575,
+          "toolCalls": [
+            "open",
+            "replay"
+          ],
+          "nativeActionMs": 751,
+          "modelWaitMs": 16810
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 45186,
+    "completion_tokens": 404,
+    "total_tokens": 46253
+  },
+  "memory": {
+    "version": 1,
+    "pages": {
+      "local/lab.html": {
+        "recipes": [
+          {
+            "id": "r032b57",
+            "title": "自动记录：hover button「高级实验」，click button「打开画布」",
+            "steps": [
+              {
+                "action": "hover",
+                "name": "高级实验",
+                "exact": true,
+                "role": "button"
+              },
+              {
+                "action": "click",
+                "name": "打开画布",
+                "exact": true,
+                "role": "button"
+              },
+              {
+                "action": "drag",
+                "name": "实验画布，中心有一个节点",
+                "exact": true,
+                "role": "button",
+                "toName": "目标区",
+                "toExact": true,
+                "toRole": "button"
+              },
+              {
+                "action": "click",
+                "name": "检查结果",
+                "exact": true,
+                "role": "button"
+              }
+            ],
+            "vars": {},
+            "uses": 1,
+            "fails": 0,
+            "auto": true,
+            "savedAt": 1792975124676,
+            "lastUsedAt": 1792975137399
+          }
+        ],
+        "url": "http://127.0.0.1:53586/lab.html",
+        "touched": 1792975137399
+      }
+    }
+  },
+  "completedAt": "2026-10-26T00:39:02.257Z"
+}

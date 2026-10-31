@@ -1,0 +1,104 @@
+✔ legacy exams migrate without losing dates; single-exam patches preserve the other exam (55.901334ms)
+✔ all 390 bank items have reproducible chapter mappings, >=80% have verified item indices (11.571333ms)
+✔ mastery needs independent success and a later-day retest; unresolved errors stay weak (15.177834ms)
+✔ today uses Shanghai exam boundaries, real ledgers, due retests and conservative topic matching (24.134125ms)
+✔ desk is registered from the existing learning gateway without index edits (5.429125ms)
+✔ sets hide answers, grade on the server, and repeated submissions never double-count (21.41025ms)
+✔ confidence and hints affect independence; blank answers use normalized accepted alternatives (6.026042ms)
+✔ a next-day retest changes lit to mastered and records exactly one new ledger answer (9.39675ms)
+✔ metrics calculate calendar-day series, deltas, independent rates and exam pace from real evidence (23.214833ms)
+✔ digest is deterministic, numbered and excludes private notes, questions, answers and arbitrary error text (3.47425ms)
+✔ insight uses the built-in channel, returns real usage, caches once daily and marks changed data stale (26.600375ms)
+✔ insight strips HTML, drops invented evidence and mismatched digits, and never invents a fallback diagnosis (2.328625ms)
+✔ insight handles timeout/unavailable and normalizes Anthropic and Responses usage (11.838ms)
+✔ adopted plans persist to the next morning reminder, use the configured time, and ignore forged ids (7.449542ms)
+✔ subject warnings count real attempts and attributed focus, and Sunday evening has weekly material (29.456167ms)
+✔ board renders real metrics, evidence, range switches, themes and plan adoption in Chrome (2789.828042ms)
+✔ board has loading/failure/retry states and ignores late replies after unmount in WebKit without motion libraries (10898.490375ms)
+✔ multiple choice requires exactly the full set, independent of ordering (18.75825ms)
+✔ cross-midnight retest clears old failed evidence using Shanghai calendar days (4.878208ms)
+✔ automatic analysis runs once per day across ranges, with explicit force for a new range (6.442042ms)
+✔ analysis distinguishes attempt counts from correct counts and validates Chinese numbers and percentages (0.356833ms)
+✔ missing learning model never silently falls back to a different model; missing usage stays null (2.72575ms)
+✔ today advances past uncovered syllabus items without pretending those items are lit (5.018708ms)
+✔ pace history replays item states once and matches recomputing mastery for every day (33.411292ms)
+✔ a retest set without a chapter only uses due items and says when nothing is due (2.886292ms)
+✔ interactive cards are session-scoped and never expose the private answer (7.795041ms)
+✔ interaction starts on so 碧琪 can place cards herself, and only the student turns it off (3.814291ms)
+✔ submissions are idempotent and reject stale activity ids (3.996708ms)
+✔ choice grading maps model letters to the option ids returned by the UI (15.3835ms)
+✔ resolved key points and selected text persist outside chat history (11.065917ms)
+✔ tool binds the active learning session and updates the native card (3.72525ms)
+✔ stopping interaction clears the card and fences a delayed present call (5.03525ms)
+✔ a legacy disabled card is cleaned before it can revive on the next launch (5.196708ms)
+✔ gateway methods are admin-scoped and ordinary learning chat stays normal until enabled (3.420625ms)
+✔ frontend keeps one native card, restores by revision, and avoids subtree observers (1.919916ms)
+✔ note saves strip title decorations, preserve the body, and keep an immutable original (3.203042ms)
+✔ notes are scoped to their learning session, including search and tag filters (5.130459ms)
+✔ update RPC changes editable fields but never replaces the saved original (2.556791ms)
+✔ light organization splits fields, suggests tags, and preserves both original and content (3.782458ms)
+✔ legacy notes remain readable and missing review fields mean never reviewed and due today (1.6075ms)
+✔ review scheduling uses spaced intervals and resets after forgetting (0.173875ms)
+✔ similar-note detection catches identical terms and comparison families (0.342667ms)
+✔ organization operations validate type, reason, ownership, and references (3.541584ms)
+✔ organization preview applies only selected operations, backs up, and can be undone (7.675833ms)
+✔ merge keeps source notes recoverable and compare makes a linked card (6.141ms)
+✔ a legacy multi-note card keeps its explanation without applying one grade to every linked note (6.994875ms)
+✔ model image channel serializes openai-completions, preserves usage, and supports Markdown (31.27225ms)
+✔ model image channel serializes anthropic-messages, preserves usage, and supports Markdown (0.877625ms)
+✔ model image channel serializes openai-responses, preserves usage, and supports Markdown (0.659333ms)
+✖ material source guard blocks USB and registered indexes while preserving the original bank guard (1.616667ms)
+✔ active lesson check and bridge metadata survive submission; check does not update mastery or review schedules (17.721291ms)
+✔ pact defaults are created on demand with an empty exam date and no channel (55.445125ms)
+✔ pact.set merges patches and rejects invalid values (6.608875ms)
+✔ ledger counts answered questions, reviews and new notes on the pact day (31.900708ms)
+✔ a later model grade updates the original day without double counting (21.063708ms)
+✔ a day is complete only when minutes, questions and due reviews are all satisfied (14.421375ms)
+✔ history reports complete, partial, missed and future days (1.28525ms)
+✔ future days appear when the pact timezone is behind the event date (11.989291ms)
+✔ streak stops at a missed day and keeps the best run (16.223458ms)
+✔ day boundaries follow the pact timezone, not UTC (10.215708ms)
+✔ focus sessions are single-flight, credited in whole minutes and capped (16.539375ms)
+✔ stopping before a full minute does not create study credit or an active day (5.162292ms)
+✔ unreviewed days cannot extend a streak when time and question goals are met (11.357042ms)
+✔ corrupt pact and day files are backed up and replaced, never silently overwritten (2.128666ms)
+✔ focus state corruption recovers instead of wedging the timer (0.988334ms)
+✔ today exposes exam countdown, due reviews and weak topics (26.029583ms)
+✔ composeNudgeContext carries the real numbers for all kinds and intensities (0.565917ms)
+✔ lastcall on a completed day is exactly NO_REPLY and the nudge hook agrees (19.505959ms)
+✔ nudge markers are recognised only in the learning agent prompt (0.211542ms)
+✔ gateway methods register with read and write scopes and round-trip through the ledger (1.909042ms)
+✔ pact hooks never break the legacy learning store (4.950959ms)
+ℹ tests 71
+ℹ suites 0
+ℹ pass 70
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14120.932541
+
+✖ failing tests:
+
+test at tests/learning-lesson.test.mjs:24:1
+✖ material source guard blocks USB and registered indexes while preserving the original bank guard (1.616667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (file:///Users/Admin/release-superpinkie/repo/tests/learning-lesson.test.mjs:26:200)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

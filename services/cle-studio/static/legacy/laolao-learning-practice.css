@@ -1,0 +1,33 @@
+.pinkie-practice-dialog {
+  --il-surface:#fff9fd;--il-ink:#40354c;--il-muted:#756b80;--il-line:rgba(137,111,163,.24);--il-soft:rgba(143,117,176,.08);--il-accent:#9562ae;
+  box-sizing:border-box;width:min(760px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 48px);
+  margin:auto;padding:12px;border:1px solid var(--il-line);border-radius:18px;color:var(--il-ink);background:var(--il-surface);
+  box-shadow:0 20px 60px #4b305733;overflow:auto;overscroll-behavior:contain;font:14px/1.6 var(--cle-sans,system-ui,sans-serif);
+}
+.pinkie-practice-dialog::backdrop {background:rgba(49,31,57,.2);}
+html[data-pinkie-night] .pinkie-practice-dialog {--il-surface:#211b2b;--il-ink:#eee6f4;--il-muted:#b6a9c2;--il-line:rgba(191,163,219,.24);--il-soft:rgba(191,163,219,.08);--il-accent:#d3a1ea;color-scheme:dark;}
+.pinkie-practice-dialog > :is(.pinkie-il-source,.pinkie-il-items,select) {margin:8px;max-width:calc(100% - 16px);}
+.pinkie-practice-field {display:grid;gap:4px;min-width:0;margin-block:9px;}
+.pinkie-practice-field > span {font-size:12px;color:var(--il-muted);}
+.pinkie-practice-field :is(input,select) {min-height:36px;}
+.pinkie-practice-controls {display:flex;flex-wrap:wrap;gap:6px;margin-block:10px;}
+.pinkie-practice-code-editor {font:13px/1.6 var(--cle-mono,ui-monospace,monospace);white-space:pre;overflow:auto;tab-size:2;}
+.pinkie-practice-code,.pinkie-practice-output,.pinkie-practice-diagram {box-sizing:border-box;max-width:100%;padding:10px;overflow:auto;border-radius:10px;background:var(--il-soft);color:var(--il-ink);font:12px/1.7 var(--cle-mono,ui-monospace,monospace);white-space:pre;}
+.pinkie-practice-code > span {display:block;}
+.pinkie-practice-code > span[data-active="true"] {background:color-mix(in srgb,var(--il-accent) 22%,transparent);border-inline-start:2px solid var(--il-accent);}
+.pinkie-practice-table-wrap {max-width:100%;overflow:auto;margin-block:10px;}
+.pinkie-practice-table {border-collapse:collapse;font:12px/1.6 var(--cle-mono,ui-monospace,monospace);width:100%;}
+.pinkie-practice-table :is(th,td) {padding:5px 8px;border-bottom:1px solid var(--il-line);text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}
+.pinkie-practice-check {display:flex;gap:8px;align-items:center;margin-block:8px;}
+.pinkie-practice-check input {accent-color:var(--il-accent);}
+.pinkie-practice-passage {display:grid;gap:6px;margin-block:10px;}
+.pinkie-practice-passage button {text-align:start;line-height:1.8;}
+.pinkie-practice-passage button:disabled {opacity:1;cursor:default;}
+.pinkie-practice-review {display:grid;gap:4px;padding-block:12px;border-bottom:1px solid var(--il-line);}
+.pinkie-practice-review p {margin:3px 0;}
+.pinkie-practice-review button {justify-self:start;}
+.pinkie-practice-wave {display:block;width:100%;max-width:100%;height:150px;}
+@media(max-width:480px){.pinkie-practice-dialog{padding:6px;border-radius:12px;}.pinkie-practice-code,.pinkie-practice-output,.pinkie-practice-diagram{font-size:11px;}}
+
+/* Author display rules must not reveal results invalidated by new input. */
+.pinkie-il-body [data-practice-computed][hidden] { display: none !important; }

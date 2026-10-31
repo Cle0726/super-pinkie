@@ -214,6 +214,7 @@
       "<div class='laolao-deep-think-status__track' aria-hidden='true'><span></span></div>" +
       "<div class='laolao-deep-think-status__details' hidden></div>";
     panel.querySelector(".laolao-deep-think-status__summary").addEventListener("click", () => {
+      if (panel.dataset.sessionKey !== workSessionKey()) return;
       statusExpanded = !statusExpanded;
       panel.classList.toggle("is-expanded", statusExpanded);
       panel.querySelector(".laolao-deep-think-status__summary").setAttribute("aria-expanded", String(statusExpanded));
@@ -228,6 +229,7 @@
     const panel = statusElement();
     const actions = $(".agent-chat__composer-actions");
     if (!panel || panel.hidden || !actions?.isConnected) return;
+    if (panel.dataset.sessionKey !== workSessionKey()) { hideStatus(); return; }
     const rect = actions.getBoundingClientRect();
     const width = panel.offsetWidth;
     const height = panel.offsetHeight;
@@ -312,6 +314,7 @@
     }
     if (!status.active && !endedRecently) { hideStatus(); return; }
     const panel = ensureStatus();
+    panel.dataset.sessionKey = sessionKey;
     const required = Math.max(0, Number(status.required) || 0);
     const completed = Math.min(required || Infinity, Math.max(0, Number(status.completed) || 0));
     const underway = Math.max(0, (Number(status.pending) || 0) + (Number(status.reserved) || 0));
@@ -343,22 +346,24 @@
   };
 
   const refreshStatus = async () => {
-    const sessionKey = currentSessionKey();
+    const sessionKey = workSessionKey();
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (!sessionKey || sessionKey.includes(":subagent:") || typeof rpc !== "function" || statusRequest) return;
     const requestedSession = sessionKey;
-    statusRequest = rpc("pinkie.deepThink.status", {sessionKey}, 8_000);
+    const request = {sessionKey, promise: rpc("pinkie.deepThink.status", {sessionKey}, 8_000)};
+    statusRequest = request;
     try {
-      const status = await statusRequest;
-      if (requestedSession !== currentSessionKey()) return;
+      const status = await request.promise;
+      if (statusRequest !== request || requestedSession !== workSessionKey()) return;
       statusFailures = 0;
       latestStatusSessionKey = requestedSession;
       renderStatus(status);
     } catch {
+      if (statusRequest !== request || requestedSession !== workSessionKey()) return;
       statusFailures += 1;
       if (statusFailures >= 3) hideStatus();
     } finally {
-      statusRequest = null;
+      if (statusRequest === request) statusRequest = null;
     }
   };
 
@@ -644,6 +649,348 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     document.head.appendChild(style);
   };
 
+  /* ---------- 后台工作小面板 ----------
+     子代理、独立解答与批评、后台命令都在这里：收起是输入框右上方的一颗小胶囊，点开是一张小卡片，
+     点某一行就在卡片里看它的完整结果。不进左侧聊天列表，也不往聊天正文里插消息。
+     数据来自 pinkie.work.status（mode-architecture/index.mjs）。旧的档位胶囊和 Max/Ultra 进度条由它取代。 */
+  const WORK_ID = "pinkie-work-panel";
+  const WORK_PHASES = {
+    armed: "正在准备推演",
+    answering: "碧琪在回答", reviewing: "正在批评与核对", fixing: "按批评修改中", passed: "核对通过",
+    fixed: "已按批评修正", unresolved: "仍有问题，回复里已说明", unchecked: "这次没核对成", skipped: "这次没核对",
+  };
+  const WORK_LEVELS = {medium: "Medium", high: "High", xhigh: "XHigh", adaptive: "Adaptive", max: "Max", ultra: "Ultra", boost: "加强档", full: "全开档", marathon: "长跑档"};
+  const ACTIVE_REVIEW = new Set(["armed", "answering", "reviewing", "fixing"]);
+  let workExpanded = false;
+  let workDetail = "";
+  let workRequest = null;
+  let workLastActive = 0;
+  let workSession = "";
+  let workNextPoll = 0;
+  let workGeneration = 0;
+
+  const workSessionKey = () => {
+    const key = currentSessionKey();
+    const agent = /^agent:([^:]+):/.exec(key)?.[1];
+    const modeAgent = {chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted"}[currentMode()];
+    return agent && agent === modeAgent ? key : "";
+  };
+
+  function resetWorkSession(sessionKey = workSessionKey()) {
+    workGeneration++;
+    workSession = sessionKey;
+    workRequest = null;
+    workNextPoll = 0;
+    workExpanded = false;
+    workDetail = "";
+    workLastActive = 0;
+    workAnchorResize.disconnect(); workAnchorChanges.disconnect(); workAnchor = null;
+    window.__pinkieWorkLatest = null;
+    const panel = document.getElementById(WORK_ID);
+    if (panel) { panel.hidden = true; delete panel.dataset.sessionKey; }
+    document.documentElement.removeAttribute("data-pinkie-work");
+    // The legacy four-tier capsule shares this session boundary as well.
+    statusRequest = null;
+    latestStatusSessionKey = "";
+    latestStatus = {active: false};
+    selectedTier = sessionKey ? readTier() : "";
+    syncSelectionUi();
+    statusExpanded = false;
+    statusFailures = 0;
+    hideStatus();
+  }
+
+  function syncWorkSession() {
+    const key = workSessionKey();
+    if (key !== workSession) resetWorkSession(key);
+    return key;
+  }
+
+  const ownsWorkPanel = panel => panel?.dataset.sessionKey === workSessionKey() && workSession === workSessionKey();
+
+  const shortModel = (ref) => {
+    const id = String(ref || "").split("/").pop().replace(/-(?:tiered|thinking|preview)$/i, "");
+    return id.split("-").map((part) => (/^(?:gpt|glm)$/i.test(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1))).join(" ");
+  };
+  const clock = (ms) => {
+    const seconds = Math.max(0, Math.round(ms / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  };
+
+  // 状态图标用内联 SVG：进行中是转动的弧线，完成时画出一个勾，失败是感叹号。
+  const STATE_ICONS = {
+    running: "<svg viewBox='0 0 16 16' aria-hidden='true'><circle class='pinkie-work__track' cx='8' cy='8' r='6'/><path class='pinkie-work__arc' d='M8 2a6 6 0 0 1 6 6'/></svg>",
+    done: "<svg viewBox='0 0 16 16' aria-hidden='true'><circle class='pinkie-work__ring' cx='8' cy='8' r='6'/><path class='pinkie-work__tick' d='M5.2 8.4l1.9 1.9 3.8-4.1'/></svg>",
+    failed: "<svg viewBox='0 0 16 16' aria-hidden='true'><circle class='pinkie-work__ring' cx='8' cy='8' r='6'/><path d='M8 4.9v3.6'/><path d='M8 11.1v.01'/></svg>",
+  };
+  const setIcon = (node, state) => {
+    const key = STATE_ICONS[state] ? state : "done";
+    if (node.dataset.icon === key) return;
+    node.dataset.icon = key;
+    node.innerHTML = STATE_ICONS[key];
+  };
+
+  function workRows(status) {
+    const rows = [];
+    for (const job of status?.reasoning?.jobs || []) {
+      rows.push({key: `job:${job.id}`, kind: "job", id: job.id, state: job.state, title: job.label || "协作", model: job.model,
+        summary: job.summary, startedAt: job.startedAt, endedAt: job.endedAt, hasOutput: job.hasOutput});
+    }
+    for (const child of status?.tier?.children || []) {
+      rows.push({key: `child:${child.id}`, kind: "child", id: child.id, state: child.state, title: child.roleLabel || "协作", model: child.model,
+        summary: child.summary || (child.state === "running" ? "进行中…" : ""), startedAt: child.startedAt, endedAt: child.endedAt, hasOutput: child.hasOutput});
+    }
+    for (const bg of status?.background || []) {
+      rows.push({key: `bg:${bg.id}`, kind: "bg", id: bg.id, state: bg.state === "running" ? "running" : "done", title: "后台命令", model: "",
+        summary: bg.state === "running" ? bg.command : `${bg.command}${bg.woke ? " · 已叫醒碧琪" : ""}`, startedAt: bg.startedAt, endedAt: bg.endedAt, hasOutput: false});
+    }
+    return rows;
+  }
+
+  function workHeadline(status, rows) {
+    const review = status?.reasoning || {};
+    const level = WORK_LEVELS[review.level] || review.level || "";
+    if (review.phase && WORK_PHASES[review.phase]) {
+      const round = review.phase === "fixing" && review.round ? ` · 第 ${review.round} 轮` : "";
+      return `${level ? level + " · " : ""}${WORK_PHASES[review.phase]}${round}`;
+    }
+    if (status?.tier?.active) return PHASE_LABELS[status.tier.phase] || "协作处理中";
+    const running = rows.filter((row) => row.kind === "bg" && row.state === "running").length;
+    if (running) return `后台命令 · ${running} 个在跑`;
+    return "后台工作已完成";
+  }
+
+  const ensureWorkPanel = () => {
+    let panel = document.getElementById(WORK_ID);
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = WORK_ID;
+    panel.hidden = true;
+    panel.setAttribute("aria-live", "polite");
+    panel.innerHTML =
+      "<button class='pinkie-work__pill' type='button' aria-expanded='false'>" +
+      "<span class='pinkie-work__dot pinkie-work__icon' aria-hidden='true'></span><span class='pinkie-work__title'></span>" +
+      "<span class='pinkie-work__count'></span><span class='pinkie-work__time'></span><span class='pinkie-work__chevron' aria-hidden='true'>⌃</span></button>" +
+      "<div class='pinkie-work__card' hidden><div class='pinkie-work__head'><span>后台工作</span>" +
+      "<button class='pinkie-work__stop' type='button' hidden>停止核对</button></div>" +
+      "<div class='pinkie-work__rows' role='list'></div><div class='pinkie-work__detail' hidden></div></div>";
+    panel.querySelector(".pinkie-work__pill").addEventListener("click", () => {
+      if (!ownsWorkPanel(panel)) return;
+      workExpanded = !workExpanded;
+      if (!workExpanded) workDetail = "";
+      renderWork(window.__pinkieWorkLatest);
+    });
+    panel.querySelector(".pinkie-work__stop").addEventListener("click", () => {
+      if (!ownsWorkPanel(panel)) return;
+      const sessionKey = workSessionKey();
+      const requestId = window.__pinkieWorkLatest?.reasoning?.requestId || "";
+      document.dispatchEvent(new CustomEvent("pinkie:reasoning-cancel", {detail: {sessionKey, requestId}}));
+      void window.__laolaoSidebar?.gwRequest?.("pinkie.reasoning.cancel", {sessionKey, requestId}, 10_000).catch(() => {});
+    });
+    panel.querySelector(".pinkie-work__rows").addEventListener("click", (event) => {
+      if (!ownsWorkPanel(panel)) return;
+      const row = event.target.closest?.(".pinkie-work__row[data-has-output='1']");
+      if (!row) return;
+      workDetail = workDetail === row.dataset.key ? "" : row.dataset.key;
+      renderWork(window.__pinkieWorkLatest);
+      if (workDetail) void loadWorkDetail(row.dataset.kind, row.dataset.id, row.dataset.key);
+    });
+    document.body.appendChild(panel);
+    return panel;
+  };
+
+  async function loadWorkDetail(kind, id, key) {
+    const sessionKey = workSessionKey();
+    const generation = workGeneration;
+    const panel = ensureWorkPanel();
+    if (!sessionKey || !ownsWorkPanel(panel)) return;
+    const box = panel.querySelector(".pinkie-work__detail");
+    box.textContent = "读取中…";
+    try {
+      const result = await window.__laolaoSidebar?.gwRequest?.("pinkie.work.detail", {sessionKey, kind, id}, 10_000);
+      if (generation !== workGeneration || sessionKey !== workSessionKey() || workDetail !== key) return;
+      if (result?.sessionKey !== sessionKey) throw new Error("详情会话不匹配");
+      box.textContent = result?.found ? (result.output || "（没有内容）") : "这一项的结果已经清理掉了";
+    } catch {
+      if (generation === workGeneration && sessionKey === workSessionKey() && workDetail === key) box.textContent = "暂时读不到结果";
+    }
+    requestAnimationFrame(positionWork);
+  }
+
+  let workAnchor = null;
+  const workAnchorResize = new ResizeObserver(() => requestAnimationFrame(positionWork));
+  const workAnchorChanges = new MutationObserver(() => requestAnimationFrame(positionWork));
+  // Keep the result above the composer, and reserve a separate row when the
+  // native New messages control occupies the same area in a narrow pane.
+  const positionWork = () => {
+    const panel = document.getElementById(WORK_ID);
+    const actions = $(".agent-chat__composer-actions");
+    const shell = $(".agent-chat__input") || $(".agent-chat__composer-shell") || actions;
+    if (!panel || panel.hidden || !shell?.isConnected) return;
+    if (!ownsWorkPanel(panel)) { resetWorkSession(); return; }
+    if (workAnchor !== shell) {
+      workAnchor = shell;
+      workAnchorResize.disconnect(); workAnchorResize.observe(shell);
+      workAnchorChanges.disconnect(); workAnchorChanges.observe(shell, {childList: true});
+    }
+    const rect = shell.getBoundingClientRect();
+    const right = rect.right;
+    panel.style.maxWidth = `${Math.max(120, Math.min(340, rect.width - 16, window.innerWidth - 24))}px`;
+    const card = panel.querySelector(".pinkie-work__card");
+    const width = panel.offsetWidth;
+    const left = Math.max(12, Math.min(right - width, window.innerWidth - width - 12));
+    panel.style.left = `${left}px`;
+    const pill = panel.querySelector(".pinkie-work__pill").getBoundingClientRect();
+    const hit = card && !card.hidden ? panel.getBoundingClientRect() : pill;
+    let ceiling = rect.top - 8;
+    const pane = shell.closest(".chat-pane, .agent-chat") || shell.parentElement;
+    for (const button of pane.querySelectorAll(".chat-new-messages")) {
+      if (button.hidden || getComputedStyle(button).visibility === "hidden") continue;
+      const b = button.getBoundingClientRect();
+      if (b.width && b.height && hit.left < b.right + 8 && hit.right > b.left - 8) ceiling = Math.min(ceiling, b.top - 10);
+    }
+    if (card && !card.hidden) card.style.maxHeight = `${Math.max(40, ceiling - pill.height - 24)}px`;
+    panel.style.top = `${Math.max(12, ceiling - panel.offsetHeight)}px`;
+  };
+
+  function renderWork(status) {
+    const sessionKey = syncWorkSession();
+    if (!sessionKey || status?.sessionKey !== sessionKey) return;
+    const rows = workRows(status);
+    const review = status?.reasoning || {};
+    const running = rows.some((row) => row.state === "running");
+    const active = running || ACTIVE_REVIEW.has(review.phase) || Boolean(status?.tier?.active && !status.tier.complete);
+    const now = Date.now();
+    if (active) workLastActive = now;
+    // 做完后留 20 秒给人看一眼结果；点开着的卡片不自动收走。
+    const endedAt = Math.max(0, Number(review.updatedAt) || 0, Number(status?.tier?.endedAt) || 0, ...rows.map(row => Number(row.endedAt) || 0));
+    const recent = now - Math.max(workLastActive, endedAt) < 20_000;
+    const visible = (rows.length > 0 || active) && (active || recent || workExpanded);
+    const panel = visible ? ensureWorkPanel() : document.getElementById(WORK_ID);
+    if (!panel) return;
+    panel.hidden = !visible;
+    panel.dataset.sessionKey = sessionKey;
+    document.documentElement.toggleAttribute("data-pinkie-work", visible);
+    if (!visible) { workExpanded = false; workDetail = ""; return; }
+    if (workDetail && !rows.some((row) => row.key === workDetail)) workDetail = "";
+    panel.classList.toggle("is-active", active);
+    setIcon(panel.querySelector(".pinkie-work__dot"), active ? "running" : rows.some((row) => row.state === "failed") && !rows.some((row) => row.state === "done") ? "failed" : "done");
+    panel.classList.toggle("is-expanded", workExpanded);
+    const done = rows.filter((row) => row.state !== "running").length;
+    const started = rows.filter((row) => row.state === "running").map((row) => row.startedAt).filter(Boolean);
+    setText(panel.querySelector(".pinkie-work__title"), workHeadline(status, rows));
+    setText(panel.querySelector(".pinkie-work__count"), rows.length ? `${done}/${rows.length}` : "");
+    setText(panel.querySelector(".pinkie-work__time"), started.length ? clock(now - Math.min(...started)) : "");
+    panel.querySelector(".pinkie-work__pill").setAttribute("aria-expanded", String(workExpanded));
+    const card = panel.querySelector(".pinkie-work__card");
+    card.hidden = !workExpanded;
+    panel.querySelector(".pinkie-work__stop").hidden = !ACTIVE_REVIEW.has(review.phase);
+    if (workExpanded) {
+      const list = panel.querySelector(".pinkie-work__rows");
+      const existing = new Map(Array.from(list.children).map((node) => [node.dataset.key, node]));
+      const seen = new Set();
+      for (const row of rows) {
+        let node = existing.get(row.key);
+        if (!node) {
+          node = document.createElement("div");
+          node.className = "pinkie-work__row";
+          node.setAttribute("role", "listitem");
+          node.innerHTML = "<span class='pinkie-work__state pinkie-work__icon' aria-hidden='true'></span><span class='pinkie-work__main'><span class='pinkie-work__name'></span><span class='pinkie-work__sum'></span></span><span class='pinkie-work__clock'></span>";
+          node.dataset.key = row.key;
+          list.append(node);
+        }
+        seen.add(row.key);
+        node.dataset.kind = row.kind;
+        node.dataset.id = row.id;
+        node.dataset.state = row.state;
+        node.dataset.hasOutput = row.hasOutput ? "1" : "0";
+        node.classList.toggle("is-open", workDetail === row.key);
+        setIcon(node.querySelector(".pinkie-work__state"), row.state);
+        setText(node.querySelector(".pinkie-work__name"), row.model ? `${row.title} · ${shortModel(row.model)}` : row.title);
+        setText(node.querySelector(".pinkie-work__sum"), row.summary || (row.state === "running" ? "进行中…" : ""));
+        setText(node.querySelector(".pinkie-work__clock"), row.startedAt ? clock((row.endedAt || now) - row.startedAt) : "");
+      }
+      for (const [key, node] of existing) if (!seen.has(key)) node.remove();
+      const detail = panel.querySelector(".pinkie-work__detail");
+      detail.hidden = !workDetail;
+    }
+    requestAnimationFrame(positionWork);
+  }
+
+  async function refreshWork() {
+    const sessionKey = syncWorkSession();
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!sessionKey || sessionKey.includes(":subagent:") || typeof rpc !== "function" || workRequest) return;
+    if (Date.now() < workNextPoll) return;
+    const generation = workGeneration;
+    const request = {sessionKey, promise: rpc("pinkie.work.status", {sessionKey}, 8_000)};
+    workRequest = request;
+    try {
+      const status = await request.promise;
+      if (workRequest !== request || generation !== workGeneration || sessionKey !== workSessionKey()) return;
+      if (status?.sessionKey !== sessionKey) throw new Error("任务状态会话不匹配");
+      window.__pinkieWorkLatest = status;
+      renderWork(status);
+      const idle = !document.documentElement.hasAttribute("data-pinkie-work");
+      workNextPoll = Date.now() + (idle ? 2_500 : 900);
+    } catch {
+      if (workRequest === request && generation === workGeneration && sessionKey === workSessionKey()) workNextPoll = Date.now() + 5_000;
+    } finally {
+      if (workRequest === request) workRequest = null;
+    }
+  }
+
+  const ensureWorkStyle = () => {
+    if (document.getElementById("pinkie-work-style")) return;
+    const style = document.createElement("style");
+    style.id = "pinkie-work-style";
+    style.textContent = `
+#${WORK_ID}{position:fixed;z-index:2147482810;width:min(340px,calc(100vw - 24px));color:#5d3550;font-size:12px;contain:layout style}
+#${WORK_ID}[hidden]{display:none!important}
+html[data-pinkie-work] #laolao-deep-think-status,html[data-pinkie-work] #pinkie-reasoning-progress{display:none!important}
+.pinkie-work__pill{display:flex;align-items:center;gap:7px;margin-left:auto;max-width:100%;padding:6px 12px;border:1px solid rgba(255,255,255,.7);border-radius:999px;background:linear-gradient(145deg,rgba(255,252,253,.9),rgba(249,226,239,.84));color:inherit;box-shadow:0 8px 22px rgba(97,48,73,.13),inset 0 1px rgba(255,255,255,.78);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);cursor:pointer;font:inherit}
+.pinkie-work__icon{display:grid;flex:none;place-items:center;width:14px;height:14px;color:#62b493}
+.pinkie-work__icon svg{width:14px;height:14px;overflow:visible;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.pinkie-work__icon[data-icon="running"]{color:#d85b91}.pinkie-work__icon[data-icon="failed"]{color:#c9774b}
+.pinkie-work__track{opacity:.22}.pinkie-work__ring{opacity:.28}
+.pinkie-work__icon[data-icon="running"] svg{animation:pinkie-work-spin .9s linear infinite;transform-origin:50% 50%}
+.pinkie-work__tick{stroke-dasharray:10;stroke-dashoffset:10;animation:pinkie-work-draw .42s cubic-bezier(.2,.8,.3,1) .05s forwards}
+.pinkie-work__title{min-width:0;overflow:hidden;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+.pinkie-work__count,.pinkie-work__time{flex:none;color:rgba(93,53,80,.6);font-size:11px;font-variant-numeric:tabular-nums}
+.pinkie-work__chevron{flex:none;font-size:10px;transition:transform .2s ease}
+#${WORK_ID}.is-expanded .pinkie-work__chevron{transform:rotate(180deg)}
+.pinkie-work__card{margin-top:6px;padding:9px 10px 10px;overflow:auto;overscroll-behavior:contain;border:1px solid rgba(255,255,255,.72);border-radius:14px;background:linear-gradient(145deg,rgba(255,252,253,.94),rgba(249,229,240,.9));box-shadow:0 14px 34px rgba(97,48,73,.16),inset 0 1px rgba(255,255,255,.78);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+.pinkie-work__card[hidden]{display:none}
+.pinkie-work__head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:650}
+.pinkie-work__stop{padding:2px 9px;border:1px solid rgba(176,80,124,.28);border-radius:999px;background:transparent;color:#a3426c;font:inherit;font-size:11px;cursor:pointer}
+.pinkie-work__stop[hidden]{display:none}
+.pinkie-work__rows{display:flex;flex-direction:column;gap:2px;max-height:min(36vh,280px);overflow:auto;overscroll-behavior:contain}
+.pinkie-work__row{display:grid;grid-template-columns:12px minmax(0,1fr) auto;align-items:start;gap:7px;padding:5px 6px;border-radius:9px}
+.pinkie-work__row[data-has-output="1"]{cursor:pointer}
+.pinkie-work__row[data-has-output="1"]:hover,.pinkie-work__row.is-open{background:rgba(214,96,154,.09)}
+.pinkie-work__state{margin-top:2px}
+.pinkie-work__main{display:flex;min-width:0;flex-direction:column;gap:1px}
+.pinkie-work__name{overflow:hidden;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.pinkie-work__sum{overflow:hidden;color:rgba(93,53,80,.62);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.pinkie-work__clock{color:rgba(93,53,80,.55);font-size:11px;font-variant-numeric:tabular-nums}
+.pinkie-work__detail{max-height:min(42vh,360px);margin-top:7px;padding:8px 9px;overflow:auto;border-radius:10px;background:rgba(255,255,255,.62);white-space:pre-wrap;word-break:break-word;font-size:11.5px;line-height:1.55}
+.pinkie-work__detail[hidden]{display:none}
+html[data-theme-mode="dark"] #${WORK_ID},html[data-pinkie-night] #${WORK_ID}{color:#ecdff0}
+html[data-theme-mode="dark"] .pinkie-work__pill,html[data-pinkie-night] .pinkie-work__pill,html[data-theme-mode="dark"] .pinkie-work__card,html[data-pinkie-night] .pinkie-work__card{border-color:rgba(255,255,255,.12);background:linear-gradient(145deg,rgba(38,26,48,.9),rgba(28,20,40,.88));box-shadow:0 12px 30px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.06)}
+html[data-theme-mode="dark"] .pinkie-work__count,html[data-theme-mode="dark"] .pinkie-work__time,html[data-theme-mode="dark"] .pinkie-work__sum,html[data-theme-mode="dark"] .pinkie-work__clock,html[data-pinkie-night] .pinkie-work__count,html[data-pinkie-night] .pinkie-work__time,html[data-pinkie-night] .pinkie-work__sum,html[data-pinkie-night] .pinkie-work__clock{color:rgba(236,223,240,.6)}
+html[data-theme-mode="dark"] .pinkie-work__detail,html[data-pinkie-night] .pinkie-work__detail{background:rgba(255,255,255,.06)}
+html[data-theme-mode="dark"] .pinkie-work__stop,html[data-pinkie-night] .pinkie-work__stop{color:#f2a6c8;border-color:rgba(242,166,200,.3)}
+@keyframes pinkie-work-spin{to{transform:rotate(360deg)}}
+@keyframes pinkie-work-draw{to{stroke-dashoffset:0}}
+html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="running"],html[data-pinkie-night] .pinkie-work__icon[data-icon="running"]{color:#f08cba}
+html[data-theme-mode="dark"] .pinkie-work__icon,html[data-pinkie-night] .pinkie-work__icon{color:#7fd0ad}
+html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pinkie-night] .pinkie-work__icon[data-icon="failed"]{color:#e39a6f}
+@media (prefers-reduced-motion: reduce){.pinkie-work__icon svg,.pinkie-work__chevron{animation:none!important;transition:none!important}.pinkie-work__tick{stroke-dashoffset:0}}
+`;
+    document.head.appendChild(style);
+  };
+  ensureWorkStyle();
+
   // 重渲染自愈
   let scheduled = false;
   const scheduleRender = () => {
@@ -654,8 +1001,17 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   // 输入区由 Lit 重建；低频轮询足够且不会在流式输出时制造 MutationObserver 风暴。
   window.setInterval(scheduleRender, 700);
   window.setInterval(() => { if (!document.hidden) void refreshStatus(); }, 900);
+  window.setInterval(() => { syncWorkSession(); if (!document.hidden) void refreshWork(); }, 450);
   window.addEventListener("resize", positionStatus, {passive: true});
-  window.addEventListener("popstate", () => { hideStatus(); void refreshStatus(); });
+  window.addEventListener("resize", positionWork, {passive: true});
+  const workSessionChanged = () => { syncWorkSession(); workNextPoll = 0; void refreshStatus(); void refreshWork(); };
+  window.addEventListener("popstate", workSessionChanged);
+  window.addEventListener("pinkie:session-selected", workSessionChanged);
+  new MutationObserver(() => {
+    const previous = workSession;
+    syncWorkSession();
+    if (previous !== workSession) void refreshWork();
+  }).observe(document.documentElement, {attributes: true, attributeFilter: ["data-laolao-mode"]});
   document.addEventListener("pointerdown", (e) => {
     if (menu && !menu.contains(e.target) && !e.target.closest?.("." + BTN_CLASS)) {
       closeMenu();

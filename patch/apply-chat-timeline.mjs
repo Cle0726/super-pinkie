@@ -7,14 +7,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-export const marker = '/* pinkie-chat-timeline:v17 */';
+export const marker = '/* pinkie-chat-timeline:v26 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
-export const LIVE_MESSAGE_WINDOW = 512;
-export const HISTORY_RENDER_LIMIT = 512;
+// These are compatibility exports, not retention caps. Fetching is paginated;
+// the renderer must keep every page the user has already opened reachable.
+export const LIVE_MESSAGE_WINDOW = Infinity;
+export const HISTORY_RENDER_LIMIT = Infinity;
 
 function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
@@ -45,27 +48,323 @@ function isInternalUserMessage(message = {}) {
   return !visible && !hasVisibleUserPayload(message);
 }
 
-/** Keep a bounded tail while retaining the real user turn boundary if needed. */
-export function pinkieSelectMessageWindow(messages = [], shouldSkip = () => false, limit = 512) {
+/** The legacy renderer has no virtual list. Its retained data stays complete;
+ * only an explicit, navigable page is passed into Lit. Without pane options,
+ * installed callers retain all loaded history instead of a silent hard tail. */
+export function pinkieSelectMessageWindow(messages = [], shouldSkip = () => false, options) {
   const source = Array.isArray(messages) ? messages : [];
-  const bound = Math.max(1, Number.isFinite(limit) ? Math.floor(limit) : 512);
+  const visible = (message) => !shouldSkip(message)
+    && !(String(message?.role || '').toLowerCase() === 'user' && isInternalUserMessage(message));
+  if (!options || typeof options !== 'object') return source.filter(visible);
+  const view = pinkieLegacyHistoryView(options);
+  const pane = pinkieHistoryPane(options);
+  const sessionId = pane?.state?.currentSessionId || '';
+  if (view.sessionId !== sessionId) {
+    view.sessionId = sessionId;
+    view.browsing = false;
+    view.endKey = null;
+    view.userAnchor = null;
+    view.toolAnchors = new Map();
+  }
+  let end = source.length;
+  if (view.browsing && view.endKey) {
+    const cached = view.endIndex - 1;
+    const at = cached >= 0 && pinkieHistoryMessageKey(source[cached]) === view.endKey
+      ? cached : source.findIndex((message) => pinkieHistoryMessageKey(message) === view.endKey);
+    if (at >= 0) end = at + 1;
+    else { view.browsing = false; view.endKey = null; }
+  }
+  if (pane) {
+    pane.__pinkieHistoryBrowsing = view.browsing === true;
+    pane.__pinkieLegacyHistoryPaged = true;
+  }
   const selected = [];
-  const hasUser = () => selected.some((message) =>
-    String(message?.role || '').toLowerCase() === 'user');
-  for (let index = source.length - 1; index >= 0; index -= 1) {
-    if (selected.length >= bound && hasUser()) break;
-    const message = source[index];
-    if (shouldSkip(message)) continue;
-    if (selected.length < bound) {
-      selected.unshift(message);
-      continue;
+  let start = end;
+  let chars = 0;
+  while (start > 0 && selected.length < 100) {
+    const message = source[start - 1];
+    if (!visible(message)) { start -= 1; continue; }
+    const weight = pinkieHistoryMessageWeight(message);
+    if (selected.length && chars + weight > 240000) break;
+    start -= 1;
+    selected.unshift(message);
+    chars += weight;
+  }
+  // If the first row is a tool result, keep its nearby call card as page
+  // context as well. Parallel calls can share one assistant row.
+  const first = selected[0];
+  const result = textParts(first).find(isToolResultPart);
+  const resultId = String(first?.toolCallId || first?.tool_call_id
+    || (result ? partCallId(result, first) : ''));
+  let toolContextIndex = -1;
+  if (resultId) {
+    const cache = view.toolAnchors || (view.toolAnchors = new Map());
+    const cached = cache.get(resultId);
+    let at = cached && cached.index < start
+      && pinkieHistoryMessageKey(source[cached.index]) === cached.key ? cached.index : -1;
+    if (at < 0) for (let index = start - 1; index >= 0; index -= 1) {
+      const candidate = source[index];
+      if (textParts(candidate).some((part) => isToolCallPart(part) && partCallId(part, candidate) === resultId)) {
+        at = index;
+        break;
+      }
     }
-    if (String(message?.role || '').toLowerCase() === 'user') {
-      selected.unshift(message);
-      break;
+    if (at >= 0) {
+      if (cache.size >= 256) cache.delete(cache.keys().next().value);
+      cache.set(resultId, {index: at, key: pinkieHistoryMessageKey(source[at])});
+      toolContextIndex = at;
+      selected.unshift(source[at]);
     }
   }
+  const realUser = (message) => String(message?.role || '').toLowerCase() === 'user' && visible(message);
+  // A page may start halfway through a long tool run. Retain its user prompt
+  // as context, while every intervening step remains reachable by paging.
+  if (selected.length && !realUser(selected[0])) {
+    const cached = view.userAnchor;
+    const appended = source.length - (view.rawLength ?? source.length);
+    const appendOnly = appended >= 0 && appended <= end - start && view.rawLength > 0
+      && pinkieHistoryMessageKey(source[view.rawLength - 1]) === view.lastRawKey;
+    let at = cached && (cached.start === start || appendOnly) && cached.index < start
+      && pinkieHistoryMessageKey(source[cached.index]) === cached.key ? cached.index : -1;
+    if (at < 0) for (let index = start - 1; index >= 0; index -= 1) {
+      if (realUser(source[index])) { at = index; break; }
+    }
+    if (at >= 0) {
+      const key = pinkieHistoryMessageKey(source[at]);
+      view.userAnchor = {start, index: at, key};
+      if (toolContextIndex >= 0 && toolContextIndex < at) selected.splice(1, 0, source[at]);
+      else selected.unshift(source[at]);
+    }
+  }
+  view.startIndex = start;
+  view.endIndex = end;
+  view.source = source;
+  view.rawLength = source.length;
+  view.lastRawKey = pinkieHistoryMessageKey(source.at(-1));
+  view.shouldSkip = shouldSkip;
+  view.hasPrevious = start > 0;
+  view.hasNext = end < source.length;
   return selected;
+}
+
+function pinkieHistoryMessageKey(message) {
+  if (!message) return '';
+  if (message.__openclaw?.id) return `id:${message.__openclaw.id}`;
+  if (Number.isSafeInteger(message.__openclaw?.seq)) return `seq:${message.__openclaw.seq}`;
+  if (message.messageId) return `message:${message.messageId}`;
+  return `${message.role || ''}:${message.timestamp ?? message.ts ?? ''}:${userText(message)}`;
+}
+
+function pinkieHistoryMessageWeight(message) {
+  if (typeof message?.content === 'string') return message.content.length;
+  if (Array.isArray(message?.content)) return message.content.reduce((total, part) => total
+    + (typeof part?.text === 'string' ? part.text.length : 0)
+    + (typeof part?.thinking === 'string' ? part.thinking.length : 0)
+    + (typeof part?.reasoning === 'string' ? part.reasoning.length : 0), 0);
+  return typeof message?.text === 'string' ? message.text.length : 0;
+}
+
+function pinkieLegacyHistoryView(options = {}) {
+  const views = globalThis.__pinkieLegacyHistoryViews instanceof Map
+    ? globalThis.__pinkieLegacyHistoryViews : (globalThis.__pinkieLegacyHistoryViews = new Map());
+  const key = `${options.sessionKey || ''}:${options.paneId || 'main'}`;
+  if (!views.has(key)) {
+    if (views.size >= 128) views.delete(views.keys().next().value);
+    views.set(key, {browsing: false, endKey: null});
+  }
+  return views.get(key);
+}
+
+function pinkieHistoryRenderOptions(options) {
+  return pinkieLegacyHistoryView(options).browsing
+    ? {...options, toolMessages: [], streamSegments: [], stream: null,
+      streamStartedAt: null, runId: null, loading: false, sending: false}
+    : options;
+}
+
+function pinkieHistoryPane(options = {}) {
+  const panes = Array.from(globalThis.document?.querySelectorAll?.('openclaw-chat-pane') || []);
+  const sameSession = (pane) => !options.sessionKey || pane?.state?.sessionKey === options.sessionKey;
+  const exact = panes.find((pane) => sameSession(pane)
+    && options.paneId != null && String(pane?.paneId ?? pane?.id ?? '') === String(options.paneId));
+  if (exact) return exact;
+  const candidates = panes.filter(sameSession);
+  const sameMessages = candidates.filter((pane) => options.messages && pane?.state?.chatMessages === options.messages);
+  if (sameMessages.length === 1) return sameMessages[0];
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function pinkieHistoryRepaint(pane, latest = false) {
+  const state = pane.state;
+  pane.__pinkieHistoryBrowsing = !latest;
+  state.chatFollowLocked = !latest;
+  state.chatUserNearBottom = latest;
+  state.requestUpdate?.();
+  pane.requestUpdate?.();
+  Promise.resolve(pane.updateComplete).then(() => {
+    if (pane.state !== state) return;
+    if (latest) state.scrollToBottom?.({smooth: false});
+    else {
+      const thread = pane.querySelector?.('.chat-thread, .chat-messages, .chat-thread-scroll');
+      if (thread) thread.scrollTop = 0;
+    }
+  });
+}
+
+function pinkieNavigateHistory(pane, options, direction) {
+  const view = pinkieLegacyHistoryView(options);
+  const source = pane?.state?.chatMessages;
+  if (!Array.isArray(source) || !source.length) return;
+  view.revision = (view.revision || 0) + 1;
+  if (direction === 'latest') {
+    view.browsing = false;
+    view.endKey = null;
+    pinkieHistoryRepaint(pane, true);
+    return;
+  }
+  let end = view.endIndex;
+  if (direction === 'previous') end = view.startIndex;
+  else {
+    let count = 0;
+    let chars = 0;
+    while (end < source.length && count < 100) {
+      const message = source[end];
+      const visible = !view.shouldSkip?.(message)
+        && !(String(message?.role || '').toLowerCase() === 'user' && isInternalUserMessage(message));
+      const weight = visible ? pinkieHistoryMessageWeight(message) : 0;
+      if (visible && count && chars + weight > 240000) break;
+      end += 1;
+      if (visible) { count += 1; chars += weight; }
+    }
+  }
+  if (end < 1) return;
+  view.browsing = true;
+  view.endIndex = end;
+  view.endKey = pinkieHistoryMessageKey(source[end - 1]);
+  view.userAnchor = null;
+  pinkieHistoryRepaint(pane);
+}
+
+/** Legacy paging is explicit and Lit-owned; current native virtual scrolling
+ * is never replaced. The earliest loaded page can fetch one more server page. */
+function pinkieEarlierHistory(options) {
+  const pane = pinkieHistoryPane(options);
+  const state = pane?.state;
+  if (!pane || !state) return c;
+  const view = pinkieLegacyHistoryView(options);
+  const canFetch = state.chatHistoryPagination?.hasMore === true
+    && typeof globalThis.__laolaoLoadEarlierHistory === 'function';
+  if (!view.hasPrevious && !view.browsing && !canFetch) return c;
+  const pending = globalThis.__pinkieEarlierHistoryLoads instanceof WeakSet
+    ? globalThis.__pinkieEarlierHistoryLoads : (globalThis.__pinkieEarlierHistoryLoads = new WeakSet());
+  const failures = globalThis.__pinkieEarlierHistoryFailures instanceof WeakSet
+    ? globalThis.__pinkieEarlierHistoryFailures : (globalThis.__pinkieEarlierHistoryFailures = new WeakSet());
+  const loading = pending.has(pane) || pane.loadingOlder || state.chatLoading;
+  // The server returns 128 rows while the old renderer displays up to 100.
+  // At a loaded boundary, fetch before showing a tiny leftover page so a
+  // reader does not have to click twice for each chunk. Keep other modes on
+  // their existing path and never discard locally available history if the
+  // fetch fails.
+  const needsBoundaryPage = () => {
+    if (!canFetch || !view.hasPrevious || !/^agent:(?:main|project|thinking|learning):/u.test(String(options.sessionKey || ''))) return false;
+    let count = 0;
+    let chars = 0;
+    for (let index = view.startIndex - 1; index >= 0; index -= 1) {
+      const message = view.source[index];
+      if (view.shouldSkip?.(message) || (String(message?.role || '').toLowerCase() === 'user' && isInternalUserMessage(message))) continue;
+      const weight = pinkieHistoryMessageWeight(message);
+      if (count && chars + weight > 240000) return false;
+      count += 1;
+      chars += weight;
+      if (count >= 100) return false;
+    }
+    return true;
+  };
+  const stop = (event) => { event.preventDefault(); event.stopPropagation(); };
+  const previous = (event) => {
+    stop(event);
+    if (pending.has(pane) || pane.state !== state || loading) return;
+    const prefetchBoundary = needsBoundaryPage();
+    if (view.hasPrevious && !prefetchBoundary) { pinkieNavigateHistory(pane, options, 'previous'); return; }
+    if (!canFetch) return;
+    const firstKey = pinkieHistoryMessageKey(view.source?.[view.startIndex]);
+    pending.add(pane);
+    failures.delete(pane);
+    pane.requestUpdate?.();
+    Promise.resolve().then(() => globalThis.__laolaoLoadEarlierHistory(pane)).then((changed) => {
+      if (pane.state !== state) return;
+      if (changed === false) {
+        if (state.chatHistoryPagination?.hasMore === true) failures.add(pane);
+        if (prefetchBoundary && view.hasPrevious) pinkieNavigateHistory(pane, options, 'previous');
+      }
+      else if (changed) {
+        const source = state.chatMessages;
+        const at = source.findIndex((message) => pinkieHistoryMessageKey(message) === firstKey);
+        if (at > 0) {
+          view.startIndex = at;
+          pinkieNavigateHistory(pane, options, 'previous');
+        }
+      }
+    }).catch(() => {
+      failures.add(pane);
+      if (prefetchBoundary && pane.state === state && view.hasPrevious) pinkieNavigateHistory(pane, options, 'previous');
+    }).finally(() => {
+      pending.delete(pane);
+      pane.requestUpdate?.();
+    });
+  };
+  const next = (event) => { stop(event); if (pane.state === state) pinkieNavigateHistory(pane, options, 'next'); };
+  const latest = (event) => { stop(event); if (pane.state === state) pinkieNavigateHistory(pane, options, 'latest'); };
+  const earliest = !view.hasPrevious && !canFetch;
+  const buttonStyle = 'flex:0 0 auto;width:auto;min-width:0;height:24px;min-height:24px;padding:0 8px;font-size:12px;line-height:22px;white-space:nowrap;background:transparent;box-shadow:none';
+  return s`<nav class="pinkie-history-pagination" aria-label="聊天记录分页" style="position:static;flex:0 0 auto;display:flex;align-items:center;justify-content:center;align-self:center;gap:4px;width:fit-content;max-width:100%;height:28px;min-height:28px;box-sizing:border-box;padding:2px;margin:0 auto 8px;border:0;background:transparent;box-shadow:none"><button class="btn btn--sm" style=${buttonStyle} data-pinkie-load-earlier title=${earliest ? '已到最早消息' : '查看更早的聊天记录'} ?disabled=${loading || earliest} @click=${previous}>${loading ? '正在加载更早消息…' : earliest ? '已到最早消息' : view.hasPrevious ? '上一页' : failures.has(pane) ? '重试加载更早消息' : '加载更早消息'}</button>${view.browsing ? s`<button class="btn btn--sm" style=${buttonStyle} data-pinkie-history-next ?disabled=${!view.hasNext} @click=${next}>下一页</button><button class="btn btn--sm" style=${buttonStyle} data-pinkie-history-latest @click=${latest}>回到最近</button>` : c}</nav>`;
+}
+
+// UI state is separate from persisted messages. Lit alone owns body creation
+// and disposal; closing a card never removes native template markers by hand.
+export function pinkieTimelineView(key) {
+  const views = globalThis.__pinkieTimelineViews instanceof Map
+    ? globalThis.__pinkieTimelineViews : (globalThis.__pinkieTimelineViews = new Map());
+  if (!views.has(key)) {
+    if (views.size >= 512) views.delete(views.keys().next().value);
+    views.set(key, {open: false, count: 80});
+  }
+  return views.get(key);
+}
+export function pinkieProcessOpen(entry) {
+  const view = pinkieTimelineView(entry.key);
+  view.processDefault = entry.processLive === true || entry.processCurrent === true;
+  return view.processChoice ?? (view.processDefault || view.open);
+}
+export function pinkieTimelineRows(entry, rows) {
+  const view = pinkieTimelineView(entry.key);
+  return view.open ? rows.slice(-view.count) : [];
+}
+function pinkieTimelineUpdate(target, update) {
+  const pane = target?.closest?.('openclaw-chat-pane');
+  const render = () => {
+    update();
+    if (pane?.requestUpdate) pane.requestUpdate();
+    else pane?.state?.requestUpdate?.();
+    return pane?.updateComplete;
+  };
+  return globalThis.__pinkieChatViewport?.preserve
+    ? globalThis.__pinkieChatViewport.preserve(pane, render) : render();
+}
+export function pinkieTimelineToggle(event, key) {
+  event.preventDefault();
+  event.stopPropagation();
+  return pinkieTimelineUpdate(event.currentTarget, () => {
+    const view = pinkieTimelineView(key);
+    view.open = !(view.processChoice ?? (view.processDefault || view.open));
+    if ('processDefault' in view) view.processChoice = view.open;
+    if (!view.open) view.count = 80;
+  });
+}
+export function pinkieTimelineMore(event, key) {
+  event.preventDefault();
+  event.stopPropagation();
+  return pinkieTimelineUpdate(event.currentTarget, () => { pinkieTimelineView(key).count += 80; });
 }
 
 function partType(part = {}) {
@@ -574,6 +873,37 @@ function pinkieProcessTurnKey(head, ownerKey) {
   return `pinkie:process:${session}:${id}`;
 }
 
+/** Only trusted learning-tool results create slots. Prose and arbitrary HTML
+ * never become executable content, and the correct answer stays on the server. */
+export function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
+  const refs = new Map();
+  for (const row of rows || []) for (const entry of row.messages || []) {
+    let calls = [];
+    try { calls = getToolCalls(entry.message || {}, entry.key) || []; } catch {}
+    for (const call of calls) {
+      if (!['learning_activity', 'learning_desk'].includes(String(call.name || '').split('.').at(-1)) || call.isError
+        || typeof call.outputText !== 'string' || call.outputText.length > 500000) continue;
+      let data;
+      try {
+        data = JSON.parse(call.outputText);
+        if (!data?.inline && data?.details?.inline) data = data.details;
+        if (!data?.inline && Array.isArray(data?.content)) {
+          const part = data.content.find(part => part?.type === 'text' && typeof part.text === 'string');
+          if (part) data = JSON.parse(part.text);
+        }
+      } catch { continue; }
+      const value = data?.inline;
+      if (value?.v !== 1 || !['quiz', 'function_plot', 'process_flow', 'sentence_parse', 'mapreduce_lab', 'c_program', 'memory_lab', 'device_lab', 'illustrated_guide', 'circuit_lab', 'network_lab', 'math_check', 'english_reading', 'english_writing', 'mock_exam', 'review_queue', 'concept_lab', 'logic_lab', 'timing_lab', 'sequence_lab', 'desk_card', 'desk_receipt', 'desk_plan'].includes(value.kind)
+        || typeof value.id !== 'string' || !value.id || value.id.length > 160
+        || typeof value.sessionKey !== 'string' || !/^agent:learning:[^\r\n]{1,480}$/.test(value.sessionKey)) continue;
+      const key = `${value.sessionKey}:${value.kind}:${value.id}`;
+      refs.set(key, {v: 1, id: value.id, kind: value.kind, sessionKey: value.sessionKey,
+        title: String(value.title || '互动学习').slice(0, 160), revision: Number(value.revision) || 0});
+    }
+  }
+  return [...refs.values()];
+}
+
 function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
   if (!entries.length) return [];
   const hasUserHead = isRealUserGroup(entries[0]);
@@ -703,6 +1033,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     timestamp: timelineTimestamp(steps[0]),
     isProcessCard: true,
     processLive: live,
+    processCurrent: isLatestTurn,
     processThinking: historyThinking,
     processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
     processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
@@ -710,18 +1041,28 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processRows: collapseTimelineRows(steps, maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
-      : live ? '碧琪正在干活'
-        : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
+      : live ? 'Li An 正在干活'
+        : processInterrupted ? '这一轮停下来了' : 'Li An 的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',
         processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
   };
-  return [...(head ? [head] : []), card, ...tail];
+  // Tool-created activities are part of this reply, not its folded work log.
+  // Give them a stable row after the answer so a long reply cannot leave the
+  // card above the viewport while telling the student to answer below.
+  const learningCards = pinkieLearningInlineReferences(steps, getToolCalls);
+  const learningRow = learningCards.length ? [{kind: 'group', role: 'assistant',
+    key: `${processKey}:learning`, messages: [], isLearningCard: true, learningCards}] : [];
+  return [...(head ? [head] : []), card, ...tail, ...learningRow];
 }
 
 /** Pure timeline projection, also exercised directly by unit tests. */
-export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80) {
+export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80, options) {
+  const pageIsLive = !options || !pinkieLegacyHistoryView(options).browsing;
+  const pagePresentation = (timeline) => pageIsLive ? timeline : timeline.map((item) => item?.isProcessCard
+    ? {...item, processLive: false, processCurrent: false, processState: '', processTitle: '本页工作过程',
+      processMeta: '分页查看'} : item);
   const visibleEntries = (Array.isArray(entries) ? entries : []).flatMap((item) => {
     if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
     const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
@@ -756,7 +1097,7 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
     // When a fresh page's native ten-message tail has no user head, the
     // selected session's backend run state still tells us whether this orphan
     // chunk is live. Earlier chunks separated by compaction remain historical.
-    return projectOrphanEntries(safeEntries, getToolCalls, maxRows, pinkieRunIsActive());
+    return pagePresentation(projectOrphanEntries(safeEntries, getToolCalls, maxRows, pageIsLive && pinkieRunIsActive()));
   }
 
   const timeline = projectOrphanEntries(safeEntries.slice(0, turnStarts[0]), getToolCalls, maxRows);
@@ -767,10 +1108,10 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
       safeEntries.slice(start, end),
       getToolCalls,
       maxRows,
-      turnIndex === turnStarts.length - 1,
+      pageIsLive && turnIndex === turnStarts.length - 1,
     ));
   }
-  return timeline;
+  return pagePresentation(timeline);
 }
 
 function isCompactionEntry(item) {
@@ -827,7 +1168,7 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${pinkieHistoryMessageKey.toString()}\n${pinkieHistoryMessageWeight.toString()}\n${pinkieLegacyHistoryView.toString()}\n${pinkieHistoryRenderOptions.toString()}\n${pinkieHistoryPane.toString()}\n${pinkieHistoryRepaint.toString()}\n${pinkieNavigateHistory.toString()}\n${pinkieEarlierHistory.toString()}\n${pinkieTimelineView.toString()}\n${pinkieProcessOpen.toString()}\n${pinkieTimelineRows.toString()}\n${pinkieTimelineUpdate.toString()}\n${pinkieTimelineToggle.toString()}\n${pinkieTimelineMore.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${pinkieLearningInlineReferences.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
 }
 
 function withSessionMessageProgress(source) {
@@ -865,13 +1206,12 @@ function withScrollIntent(source) {
     'delayed follow respects a newer user scroll');
 }
 
-/**
- * Native <details> starts closed and owns manual toggles. The page script only
- * closes it once when the run completes. Narration and thinking always stay
- * inside the process; the C.le. styles keep its rows visible.
- */
-function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><div class="pinkie-process__live-text">\${e.processLiveRows.map(n=>${groupName}(n,t))}</div><details class="pinkie-process" data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary"><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div></details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;`;
+/** Closed cards retain only their summary; Lit mounts rows on a user click. */
+export function processBranchSource(groupName) {
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
+}
+export function overflowBranchSource(groupName) {
+  return `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow" .open=\${pinkieTimelineView(e.key).open}><summary @click=\${n=>pinkieTimelineToggle(n,e.key)}>前面还有 \${e.overflowCount} 步</summary>\${pinkieTimelineView(e.key).open?s\`<div class="chat-timeline-overflow__body">\${pinkieTimelineRows(e,e.overflowItems).map(n=>n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):c)}\${pinkieTimelineView(e.key).count<e.overflowItems.length?s\`<button type="button" @click=\${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>\`:c}</div>\`:c}</details>\`;`;
 }
 
 /** Add the process branch to a renderer patched by an older release. */
@@ -879,14 +1219,16 @@ function withProcessBranch(source) {
   if (source.includes('e.isProcessCard')) {
     const renderer = /function\s+([\w$]+)\(e,t\)\{if\(e&&e\.isProcessCard\)/u.exec(source);
     if (!renderer) throw new Error('process-card renderer is missing');
-    return replaceExactlyOnce(source,
+    source = replaceExactlyOnce(source,
       /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u,
       () => processBranchSource(renderer[1]), 'process-card renderer upgrade');
+    return replaceExactlyOnce(source, /if\(e&&e\.timelineOverflow\)return s`[\s\S]*?`;(?=let n=U\(e\.role\))/, () => overflowBranchSource(renderer[1]), 'overflow renderer upgrade');
   }
   const match = /function\s+([\w$]+)\(e,t\)\{if\(e&&e\.timelineOverflow\)/u.exec(source);
   if (!match) throw new Error('timeline overflow renderer is missing');
   const at = match.index + match[0].length - 'if(e&&e.timelineOverflow)'.length;
-  return source.slice(0, at) + processBranchSource(match[1]) + source.slice(at);
+  const output = source.slice(0, at) + processBranchSource(match[1]) + source.slice(at);
+  return replaceExactlyOnce(output, /if\(e&&e\.timelineOverflow\)return s`[\s\S]*?`;(?=let n=U\(e\.role\))/, () => overflowBranchSource(match[1]), 'overflow renderer upgrade');
 }
 
 function withNativePresentation(source) {
@@ -915,6 +1257,75 @@ function withChatCompactionSlot(source) {
   return sourceWithReplacement(source, main.index, end, patched);
 }
 
+function withEarlierHistoryControl(source) {
+  const main = /function\s+[\w$]+\(e\)\{e=\{\.\.\.e,showThinking:false,autoExpandToolCalls:false\};let t=[\w$]+\(e\.paneId\),n=e\.onRequestUpdate/u.exec(source);
+  if (!main) throw new Error('native chat thread renderer is missing');
+  const next = source.indexOf('function ', main.index + 9);
+  const end = next < 0 ? source.length : next;
+  const section = source.slice(main.index, end);
+  const call = '${pinkieEarlierHistory(e)}';
+  if (section.split(call).length > 2) throw new Error('legacy earlier-history control is duplicated');
+  const clean = section.replace(call, '');
+  const patched = replaceExactlyOnce(clean, '<div class="chat-thread-inner">',
+    `<div class="chat-thread-inner">${call}`, 'legacy earlier-history control inside the transcript');
+  return sourceWithReplacement(source, main.index, end, patched);
+}
+
+function withLegacyHistoryPagingContext(source) {
+  const main = /function\s+[\w$]+\(e\)\{e=\{\.\.\.e,showThinking:false,autoExpandToolCalls:false\};let t=[\w$]+\(e\.paneId\),n=e\.onRequestUpdate/u.exec(source);
+  if (!main) throw new Error('native chat thread renderer is missing');
+  const next = source.indexOf('function ', main.index + 9);
+  const end = next < 0 ? source.length : next;
+  let section = source.slice(main.index, end);
+  const oldProps = /([\w$]+)\(\{sessionKey:e\.sessionKey,messages:e\.messages,toolMessages:e\.toolMessages,streamSegments:e\.streamSegments,stream:[\w$.]+(?:\?\?null)?,streamStartedAt:e\.streamStartedAt,queue:e\.queue/u;
+  const newProps = /([\w$]+)\(\{paneId:e\.paneId,pinkieHistoryRevision:pinkieLegacyHistoryView\(e\)\.revision\|\|0,sessionKey:e\.sessionKey/u;
+  const match = oldProps.exec(section) || newProps.exec(section);
+  if (!match) throw new Error('native history projection props are missing');
+  const memoName = match[1];
+  section = section.replace(oldProps, (_all, name) => `${name}({paneId:e.paneId,pinkieHistoryRevision:pinkieLegacyHistoryView(e).revision||0,sessionKey:e.sessionKey,messages:e.messages,toolMessages:e.toolMessages,streamSegments:e.streamSegments,stream:e.stream??null,streamStartedAt:e.streamStartedAt,queue:e.queue`);
+  let output = sourceWithReplacement(source, main.index, end, section);
+  const at = output.indexOf(`function ${memoName}(e){`);
+  const memoEnd = output.indexOf('function ', at + 9);
+  if (at < 0 || memoEnd < 0) throw new Error('native history projection cache is missing');
+  const memo = output.slice(at, memoEnd);
+  if (memo.includes('t.input.pinkieHistoryRevision===e.pinkieHistoryRevision')) return output;
+  const patched = replaceExactlyOnce(memo,
+    /(if\(t\.input&&[\w$]+\(t\.input,e\))\)return t\.items/u,
+    '$1&&t.input.paneId===e.paneId&&t.input.pinkieHistoryRevision===e.pinkieHistoryRevision)return t.items',
+    'native history paging cache key');
+  return sourceWithReplacement(output, at, memoEnd, patched);
+}
+
+function withLoadedHistoryProjection(source) {
+  const history = functionSection(source, 'Showing last ${c} messages');
+  const renderLimitName = /let\s+[\w$]+\s*=\[\],[\w$]+\s*=([\w$]+)\(e\.historyRenderLimit\)/u.exec(history.text)?.[1];
+  if (!renderLimitName) throw new Error('history render-limit call is missing');
+  // This native helper limits the projection after messages and tool rows are
+  // combined. Changing only the tail selector would still hide loaded pages.
+  let output = replaceExactlyOnce(source,
+    new RegExp(`function ${escapeRegExp(renderLimitName)}\\(e\\)\\{return (?:5|512|Infinity)\\}`, 'u'),
+    `function ${renderLimitName}(e){return Infinity}`,
+    'loaded history render limit');
+  output = output.replace(/pinkieSelectMessageWindow\(e\.messages,([\w$]+),(?:512|Infinity)\)/gu,
+    'pinkieSelectMessageWindow(e.messages,$1,e)');
+  output = output.replace(/pinkieSelectMessageWindow\(e\.messages,([\w$]+)\)/gu,
+    'pinkieSelectMessageWindow(e.messages,$1,e)');
+  output = output.replace(/pinkieBuildTimeline\(__pinkieTimelineEntries,([\w$]+)(?:,80,e)?\)/gu,
+    'pinkieBuildTimeline(__pinkieTimelineEntries,$1,80,e)');
+  const current = functionSection(output, 'Showing last ${c} messages');
+  if (!current.text.includes('e=pinkieHistoryRenderOptions(e);')) {
+    const projected = current.text.replace(/^(function\s+[\w$]+\(e\)\{)/u, '$1e=pinkieHistoryRenderOptions(e);');
+    output = sourceWithReplacement(output, current.start, current.end, projected);
+  }
+  const projected = functionSection(output, 'Showing last ${c} messages');
+  if (!projected.text.includes('o=0,/* pinkie-paged-byte-budget */')) {
+    const text = replaceExactlyOnce(projected.text, /o=[\w$]+\(r,e\.showToolCalls,n\),/u,
+      'o=0,/* pinkie-paged-byte-budget */', 'native secondary history clipping');
+    output = sourceWithReplacement(output, projected.start, projected.end, text);
+  }
+  return output;
+}
+
 function upgradeBundle(original, previousMarker) {
   const version = /:(v\d+) \*\/$/u.exec(previousMarker)?.[1] || 'old';
   try {
@@ -929,7 +1340,7 @@ function upgradeBundle(original, previousMarker) {
     }
     const runtime = `${marker}${splitRuntimeSource()}\n`;
     return {
-      text: withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime)))))),
+      text: withLegacyHistoryPagingContext(withEarlierHistoryControl(withLoadedHistoryProjection(withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime))))))))),
       changed: true,
       reason: `upgraded-${version}`,
     };
@@ -938,12 +1349,63 @@ function upgradeBundle(original, previousMarker) {
   }
 }
 
+export function transform(original) {
+  return transformBundle(String(original || '')).text;
+}
+
+export function transformWithStatus(original) {
+  return transformBundle(String(original || ''));
+}
+
+/** Patch only live presentation in an installed legacy bundle. Learning slots,
+ * protocol handlers, and all other native rendering remain byte-for-byte intact. */
+export function transformLivePresentation(original) {
+  if (original.includes('/* pinkie-live-process:v1 */')) return original;
+  if (!original.includes('/* pinkie-chat-timeline:v24 */')) throw new Error('不是已验证的 v24 聊天渲染器，未覆盖');
+  let source = original;
+  source = replaceExactlyOnce(source, 'processLive: live,', 'processLive: live,\n    processCurrent: isLatestTurn,', 'latest process default');
+  source = replaceExactlyOnce(source, '{...item, processLive: false, processState:', '{...item, processLive: false, processCurrent: false, processState:', 'historical page stays collapsed');
+  const at = source.indexOf('function pinkieTimelineToggle('), end = source.indexOf('\nfunction ',at+9);
+  if (at<0 || end<0) throw new Error('无法识别过程展开状态，未覆盖');
+  source = source.slice(0,at)+pinkieTimelineToggle.toString()+source.slice(end);
+  const pattern = /if\(e&&e\.isProcessCard\)return s`[\s\S]*?`;(?=if\(e&&e\.timelineOverflow\))/u;
+  source = replaceExactlyOnce(source,pattern,branch=>{
+    if (branch.split('pinkieTimelineView(e.key).open').length!==3) throw new Error('过程模板已变化，未覆盖');
+    return branch.replaceAll('pinkieTimelineView(e.key).open','pinkieProcessOpen(e)');
+  },'live process mounts as events arrive');
+  source = source.replace('/* pinkie-chat-timeline:v24 */',marker+'\n/* pinkie-live-process:v1 */\n'+pinkieProcessOpen.toString()+'\n');
+  return source;
+}
+
 function sourceWithReplacement(source, start, end, replacement) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 
+export function transformLearningInlineKinds(original) {
+  const start = original.indexOf('function pinkieLearningInlineReferences(');
+  const tail = 'return [...refs.values()];\n}';
+  const end = original.indexOf(tail, start);
+  if (start < 0 || end < start || original.indexOf('function pinkieLearningInlineReferences(', start + 1) >= 0) throw new Error('不能唯一定位消息内学习组件引用解析器');
+  const section = original.slice(start, end + tail.length), pattern = /!\[([^\]]+)\]\.includes\(value\.kind\)/u;
+  const match = section.match(pattern);
+  if (!match) throw new Error('学习组件类型检查与预期不符');
+  const kinds = JSON.parse('[' + match[1].replaceAll("'", '"') + ']');
+  // 碧琪手账 v2：learning_desk 工具的三种卡片也走这个解析器。
+  const wanted = ['memory_lab', 'device_lab', 'illustrated_guide', 'desk_card', 'desk_receipt', 'desk_plan'];
+  const tool = "String(call.name || '').split('.').at(-1) !== 'learning_activity'";
+  if (wanted.every(kind => kinds.includes(kind)) && !section.includes(tool)) return original;
+  const next = [...new Set([...kinds, ...wanted])];
+  const patched = section.replace(pattern, `![${next.map(v => JSON.stringify(v)).join(',')}].includes(value.kind)`)
+    .replace(tool, "!['learning_activity', 'learning_desk'].includes(String(call.name || '').split('.').at(-1))");
+  return original.slice(0, start) + patched + original.slice(end + tail.length);
+}
+
 function transformBundle(original) {
-  if (original.includes(marker)) return {text: original, changed: false, reason: 'already-patched'};
+  if (original.includes(marker)) {
+    if (!original.includes('function pinkieLearningInlineReferences(')) return {text: original, changed: false, reason: 'already-patched'};
+    const text = transformLearningInlineKinds(original);
+    return {text, changed: text !== original, reason: text === original ? 'already-patched' : 'learning-components-updated'};
+  }
   const previousMarker = previousMarkers.find((value) => original.includes(value));
   if (previousMarker) return upgradeBundle(original, previousMarker);
   try {
@@ -972,7 +1434,7 @@ function transformBundle(original) {
       throw new Error('native message window and internal-message filters do not agree');
     }
     source = source.replace(tailPattern,
-      `r=pinkieSelectMessageWindow(e.messages,${liMatches[0][2]},${LIVE_MESSAGE_WINDOW}),`);
+      `r=pinkieSelectMessageWindow(e.messages,${liMatches[0][2]},e),`);
 
     const parserPattern = /function\s+[\w$]+\(e,t,n,r\)\{let a=e,o=typeof a\.role==`string`\?a\.role:`unknown`,l=U\(o\),u=([\w$]+)\(e\),d=U\(u\.role\)===`tool`,f=([\w$]+)\(e\),p=n\.showToolCalls\?\?!0\?([\w$]+)\(e,t\):\[\]/gu;
     const parserMatches = [...source.matchAll(parserPattern)];
@@ -1006,7 +1468,7 @@ function transformBundle(original) {
     const nextFunction = source.indexOf('function ', groupStart + 9);
     if (nextFunction < 0) throw new Error('message-group renderer boundary is missing');
     let groupSource = source.slice(groupStart, nextFunction);
-    const overflowBranch = `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow"><summary>前面还有 \${e.overflowCount} 步</summary><div class="chat-timeline-overflow__body">\${e.overflowItems.map(n=>n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):n.kind===\`stream\`?${groupName}({kind:\`group\`,role:\`assistant\`,key:n.key,messages:[{message:{role:\`assistant\`,content:[{type:\`text\`,text:n.text}],timestamp:n.startedAt},key:n.key}],timestamp:n.startedAt,isTimelineStep:!0},t):c)}</div></details>\`;`;
+    const overflowBranch = overflowBranchSource(groupName);
     groupSource = replaceExactlyOnce(groupSource,
       /function\s+[\w$]+\(e,t\)\{/gu,
       (match) => `${match}${processBranchSource(groupName)}${overflowBranch}`,
@@ -1042,18 +1504,130 @@ function transformBundle(original) {
       'streaming timeline footer');
     source = source.slice(0, streamStart) + streamSource + source.slice(streamEnd);
 
-    return {text: withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(source)))), changed: true, reason: 'patched'};
+    return {text: withLegacyHistoryPagingContext(withEarlierHistoryControl(withLoadedHistoryProjection(withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(source))))))), changed: true, reason: 'patched'};
   } catch (error) {
     return {text: original, changed: false, reason: String(error?.message || error)};
   }
 }
 
-export function transform(original) {
-  return transformBundle(String(original || '')).text;
+
+
+/* ---------------------------------------------------------------------------
+ * OpenClaw 2026.10 port (control-ui-boot-chat-*.js).
+ *
+ * Every helper is minified differently on each build, so this port only uses
+ * stable product facts:
+ *   - `data-chat-row-key=${e.key}` identifies the message group being rendered,
+ *   - `toolmsg:${t}` is the per-message tool card id,
+ *   - `chat-group ${v} chat-group--with-footer…` marks a user/assistant group,
+ *   - `chat-group tool chat-group--turn-block…` marks a tool preview block.
+ * The native virtual list and lazy tool bodies own all child nodes. The skin
+ * adds stable metadata and a tool-group class without moving Lit-owned nodes.
+ * ------------------------------------------------------------------------- */
+const currentMarker = '/* pinkie-chat-timeline-2026:v3 */';
+const previousMetadataMarker = '/* pinkie-chat-timeline-2026:v2 */';
+const previousCurrentMarker = '/* pinkie-chat-timeline-2026:v1 */';
+const GROUP_ROW_KEY = 'data-chat-row-key=${e.key}';
+const TOOL_BLOCK_HEAD = 'class="chat-group tool chat-group--turn-block';
+
+export function currentTimelineCss() {
+  // Native virtual-list layout and tool bodies must keep their own sizing.
+  return `${currentMarker}\n`;
 }
 
-export function transformWithStatus(original) {
-  return transformBundle(String(original || ''));
+const previousCurrentCss = `/* pinkie-chat-timeline-2026:v1 */ #chat-messages{display:flex;flex-direction:column;gap:.35rem}
+#chat-messages .chat-timeline-tool-row{display:flex;flex-direction:column;gap:.25rem;opacity:.92}
+#chat-messages .chat-timeline-tool-row>.chat-bubble,#chat-messages .chat-timeline-tool-row>.chat-tool-card{margin:0}
+#chat-messages .chat-group--timeline-tools .chat-tool-card> :first-child,#chat-messages .chat-timeline-tool-row .chat-tool-card> :first-child{margin-top:0}
+`;
+
+/** Native 2026.10 owns its virtual list and lazy tool bodies. Add metadata only. */
+export function currentTimelineRuntimeSource() {
+  return `function __pkTimelineGroupId(key) {
+  return "turn-" + String(key == null ? "" : key).replace(/[^\\w:-]/g, "_");
+}`;
+}
+
+/** Status variant used by apply(): DOM projection for 2026.10 renderers. */
+export function transformCurrentWithStatus(original) {
+  const originalText = String(original || '');
+  let text = originalText;
+  if (text.includes(currentMarker)) return {text, changed: false, reason: 'already-patched'};
+  if (text.includes(previousMetadataMarker)) {
+    const previous = `${previousMetadataMarker}\n${currentTimelineRuntimeSource()}\n`;
+    if (!text.includes(previous)) return {text: originalText, changed: false, reason: 'previous metadata runtime is incomplete'};
+    text = text.replace(previous, '');
+  }
+  if (text.includes(previousCurrentMarker)) {
+    // Remove the v1 observer/mover as one recognized span. Never touch native
+    // virtual-list or tool renderer code when upgrading an installed bundle.
+    const start = text.indexOf(previousCurrentMarker);
+    const tail = 'export default __pkTimelineInstall;';
+    const end = text.indexOf(tail, start);
+    if (end < 0) return {text, changed: false, reason: 'previous timeline runtime is incomplete'};
+    text = text.slice(0, start) + text.slice(end + tail.length);
+    text = text.replace('\${(globalThis.__pkTimelineRoot??=globalThis.document?.body,globalThis.document?.body?__pkTimelineInstall(globalThis.__pkTimelineRoot):"")}', '');
+  }
+
+  const groupKey = /chat-group--with-footer[\s\S]{0,400}?data-chat-row-key=\$\{e\.key\}/u;
+  const match = groupKey.exec(text);
+  if (!match) return {text: originalText, changed: false, reason: 'chat group row key not found'};
+  const keyAt = match.index + match[0].lastIndexOf(GROUP_ROW_KEY);
+  let output = text;
+  if (!text.includes('data-timeline-group-id=${__pkTimelineGroupId(e.key)}')) {
+    output = text.slice(0, keyAt + GROUP_ROW_KEY.length)
+      + `\n      data-timeline-group-id=\${__pkTimelineGroupId(e.key)}`
+      + text.slice(keyAt + GROUP_ROW_KEY.length);
+  }
+
+  if (!output.includes(TOOL_BLOCK_HEAD + ' chat-group--timeline-tools') && output.split(TOOL_BLOCK_HEAD).length === 2) {
+    output = output.replace(TOOL_BLOCK_HEAD, `${TOOL_BLOCK_HEAD} chat-group--timeline-tools`);
+  }
+  // The native virtualizer continues to own the row. Only an empty, stable
+  // child slot is added; the learning renderer owns that slot's children.
+  output = output.replace(/(<div\s+class="chat-group tool chat-group--turn-block[^"\n]*"[^>]{0,900}>\s*<div class="chat-group-messages">)/gu, (opening) => {
+    return `${opening}<div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e?.key||e?.[0]?.key} .pinkieLearningSource=\${e}></div>`;
+  });
+  // Single tool messages use the ordinary group renderer. Aggregate work and
+  // activity groups also have a continuation branch with no outer group div.
+  // Keep the owned slot outside their lazy/collapsed body in both branches.
+  const slot = '<div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=${e?.key||e?.[0]?.key} .pinkieLearningSource=${e}></div>';
+  output = output.replace(/(class="chat-group \$\{[^]{0,1000}?chat-group--with-footer[^]{0,1000}?data-chat-row-key=\$\{e\.key\}[^]{0,600}?<div class="chat-group-messages">)/u, `$1${slot}`);
+  output = output.replace(/return ([\w$]+)\.presentation===`continuation`\?([\w$]+):([\w$]+)`(\s*<div\s+class="chat-group tool chat-group--turn-block chat-group--work")/u,
+    (_, options, body, html, opening) => `return ${options}.presentation===\`continuation\`?${html}\`${slot}\${${body}}\`:${html}\`${opening}`);
+  output = output.replace(/return ([\w$]+)===`continuation`\?([\w$]+):([\w$]+)`(\s*<div\s+class="chat-group tool chat-group--turn-block chat-group--activity[^"\n]*")/u,
+    (_, presentation, body, html, opening) => `return ${presentation}===\`continuation\`?${html}\`${slot}\${${body}}\`:${html}\`${opening}`);
+  const head = /\/\/#region [^\n]*\n?/u.exec(output);
+  const at = head ? head.index : 0;
+  output = `${output.slice(0, at)}${currentMarker}\n${currentTimelineRuntimeSource()}\n${output.slice(at)}`;
+  return {text: output, changed: true, reason: 'patched-2026'};
+}
+
+/** 2026.10: keep native virtualization and mark groups without moving nodes. */
+function applyCurrent(root, file, name, {backupRoot} = {}) {
+  const original = fs.readFileSync(file, 'utf8');
+  const result = transformCurrentWithStatus(original);
+  if (!result.changed) return {changed: false, skipped: true, reason: result.reason, file: name};
+  if (fs.readFileSync(file, 'utf8') !== original) return {changed: false, skipped: true, reason: 'chat chunk changed while patching', file: name};
+  const backupBase = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'SuperPinkie', 'backups')
+    : path.join(os.homedir(), 'Library/Application Support/SuperPinkie/backups');
+  const backup = backupRoot || path.join(backupBase, `chat-timeline-${Date.now()}`);
+  fs.mkdirSync(backup, {recursive: true, mode: 0o700});
+  fs.copyFileSync(file, path.join(backup, name));
+  fs.writeFileSync(file, result.text);
+  refreshPrecompressed(file);
+  // The projection's CSS travels with the skin stylesheet: no markup or inline
+  // style is added to the transcript itself.
+  const css = path.join(root, 'dist', 'control-ui', 'laolao-theme.css');
+  if (fs.existsSync(css)) {
+    const sheet = fs.readFileSync(css, 'utf8').replace(previousCurrentCss, '');
+    if (!sheet.includes(currentMarker)) {
+      fs.writeFileSync(css, `${sheet}\n${currentTimelineCss()}`);
+      refreshPrecompressed(css);
+    }
+  }
+  return {changed: true, backup, file: name, mode: '2026-dom'};
 }
 
 export function apply(root, {backupRoot} = {}) {
@@ -1061,7 +1635,16 @@ export function apply(root, {backupRoot} = {}) {
   if (!fs.existsSync(assets) || !fs.statSync(assets).isDirectory()) {
     return {changed: false, skipped: true, reason: 'native chat assets not found'};
   }
-  const candidates = fs.readdirSync(assets).filter((name) => /^chat-page-[\w-]+\.js$/u.test(name));
+  const files = fs.readdirSync(assets);
+  const legacyChunks = files.filter((name) => /^chat-page-[\w-]+\.js$/u.test(name));
+  // 2026.10 renderer chunk: control-ui-boot-chat-*.js without the style shard.
+  // Native 2026.10 virtualizes messages; only metadata is patched.
+  const currentChunks = files.filter((name) => /^control-ui-boot-chat-(?!styles)[\w-]+\.js$/u.test(name)
+    && fs.readFileSync(path.join(assets, name), 'utf8').includes(GROUP_ROW_KEY));
+  if (!legacyChunks.length && currentChunks.length === 1) {
+    return applyCurrent(root, path.join(assets, currentChunks[0]), currentChunks[0], {backupRoot});
+  }
+  const candidates = legacyChunks;
   if (candidates.length !== 1) {
     return {changed: false, skipped: true, reason: `expected one chat-page chunk, found ${candidates.length}`};
   }

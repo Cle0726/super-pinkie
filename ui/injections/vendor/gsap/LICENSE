@@ -1,0 +1,10 @@
+GSAP 3.13.0 — upstream license notice
+
+Copyright 2008-2025, GreenSock. All rights reserved.
+Subject to the terms at https://gsap.com/standard-license
+
+License designation from the upstream package: Standard "no charge" license.
+Core, SplitText and DrawSVGPlugin retain their original license headers.
+The upstream npm archive does not include a standalone license text.
+The official terms URL redirected to the GSAP forums-offline page when checked
+on 2026-10-25; this notice is not a substitute or reinterpretation of those terms.

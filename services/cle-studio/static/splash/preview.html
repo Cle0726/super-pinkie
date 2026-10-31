@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Le regard · preview</title>
+<style>html,body{margin:0;height:100%;background:#F3F0EA;overflow:hidden}canvas{position:fixed;inset:0;width:100%;height:100%}
+svg[role=img]{position:fixed;color:#ECE8E1;pointer-events:none}
+#app{position:fixed;inset:0;display:grid;place-items:center;font:500 13px ui-monospace;letter-spacing:.14em;color:#9C968C}</style></head>
+<body><div id="app">APP UNDERNEATH</div><canvas id="c"></canvas>
+<script type="module">
+import {createRegard} from './regard.js';
+const q = new URLSearchParams(location.search);
+const r = await createRegard(document.getElementById('c'), {base: '../art/'});
+window.__regard = r;
+if (q.has('seq')) { const ex = Number(q.get('seq')); const bk = q.has('blink') ? Number(q.get('blink')) : null; window.__frame = (t) => r.renderAt(t, {exitAfter: t >= ex ? ex : null, blink: bk}); document.title = 'ready'; }
+else if (q.has('t')) { const ex = q.has('exit') ? Number(q.get('exit')) : null; r.renderAt(Number(q.get('t')), {exitAfter: ex}); document.title = 'ready'; }
+else { r.play(); if (q.has('auto')) setTimeout(() => r.exit(), Number(q.get('auto')) * 1000); }
+</script></body></html>

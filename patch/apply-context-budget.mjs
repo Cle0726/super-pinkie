@@ -8,6 +8,9 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 const marker='/* pinkie-context-budget:v1 */';
 const legacySessionsMarker='/* pinkie-context-budget:sessions:v1 */';
 const sessionsMarker='/* pinkie-context-budget:sessions:v2 */';
+// 2026.10 projects rows through `listProjectedSessions` instead of returning
+// `{...result, sessions}` inline, so the handler result is rewritten in place.
+const projectedSessionsMarker='/* pinkie-context-budget:sessions:v3 */';
 const header=marker+'\nimport {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";\n';
 const sessionsHeader=marker+'\nimport {compactionBudget as pinkieContextBudget, sessionContextWindow as pinkieSessionContextWindow} from "./pinkie-context-budget.mjs";\n';
 function replaceOnce(text,from,to){
@@ -20,9 +23,13 @@ function replacePatternOnce(text,pattern,to,label){
   return text.replace(pattern,to);
 }
 function hasOnce(text,value){return text.split(value).length===2;}
+// 2026.10: `listProjectedSessions` takes an `onResult(result, sharedRows)`
+// hook right after the rows are decorated.
+const PROJECTED_RESULT='\t\t\t\tparams.onResult?.(result, sharedRows);\n';
 export function transform(kind,original){
-  if(original.includes(kind==='sessions'?sessionsMarker:marker))return original;
+  if(original.includes(kind==='sessions'?(original.includes(projectedSessionsMarker)?projectedSessionsMarker:sessionsMarker):marker))return original;
   let text=original;
+  if(kind==='sessions' && original.includes(projectedSessionsMarker))return original;
   if(kind==='sessions' && original.includes(legacySessionsMarker)){
     text=replaceOnce(text,legacySessionsMarker,sessionsMarker);
     text=replaceOnce(text,header,sessionsHeader);
@@ -64,6 +71,17 @@ export function transform(kind,original){
       text=replaceOnce(text,current,'const threshold = pinkieContextBudget(contextWindowTokens).threshold;');
     }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：preflight threshold');
   }else if(kind==='sessions'){
+    if(hasOnce(text,PROJECTED_RESULT)){
+      // 2026.10: listProjectedSessions owns the result object.
+      text=replaceOnce(text,PROJECTED_RESULT,`\t\t\t\tfor (const pinkieSession of result.sessions) {
+\t\t\t\t\tconst pinkieWindow = pinkieSessionContextWindow(pinkieSession, prepared?.cfg, result.defaults?.contextTokens);
+\t\t\t\t\tpinkieSession.contextTokens = pinkieWindow;
+\t\t\t\t\tpinkieSession.pinkieCompactionBudget = pinkieBudgetCache.get(pinkieWindow) ?? pinkieBudgetCache.set(pinkieWindow, pinkieContextBudget(pinkieWindow)).get(pinkieWindow);
+\t\t\t\t}
+${PROJECTED_RESULT}`);
+      text=replaceOnce(text,'function listProjectedSessions(params) {','function listProjectedSessions(params) {\n\tconst pinkieBudgetCache = /* @__PURE__ */ new Map();');
+      return projectedSessionsMarker+'\n'+sessionsHeader+text;
+    }
     const response=/return\s*\{\s*\.\.\.result,\s*sessions\s*\};/g;
     // One policy read per distinct window per request, not one per session.
     const replacement=`const pinkieBudgets = new Map();
@@ -82,11 +100,11 @@ export function transform(kind,original){
 }
 export function apply(root,{backupRoot}={}){
   const dist=path.join(root,'dist');
-  const candidates=fs.readdirSync(dist).filter(n=>n.endsWith('.js'));
+  const candidates=fs.readdirSync(dist).filter(n=>n.endsWith('.js')||n.endsWith('.mjs'));
   const targets=[
     ['settings',['agent-settings-'],['configuredReserveTokens','targetReserveTokens']],
     ['preflight',['agent-runner.runtime-','agent-runner-memory-'],['minimumThresholdTokens','responsesServerCompactionThreshold']],
-    ['sessions',['sessions-'],['"sessions.list": async','gateway.sessions.list']],
+    ['sessions',['sessions-','session-utils-list-'],['"sessions.list": async','gateway.sessions.list','function listProjectedSessions(params)']],
   ].map(([kind,prefixes,needles])=>{
     const names=candidates.filter(name=>prefixes.some(prefix=>name.startsWith(prefix))).filter(name=>{
       const source=fs.readFileSync(path.join(dist,name),'utf8');

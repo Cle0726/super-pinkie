@@ -85,3 +85,18 @@ test('announcing the work and stopping is sent back once; waiting on the user is
     assert.doesNotMatch(waiting.guard.finalize({lastAssistantMessage: reply}, waiting.ctx, {verifyExternal: false})?.reason || '', /不要只预告/);
   }
 });
+
+test('a turn that presented or graded a learning card is delivered without file evidence', (t) => {
+  for (const prompt of ['专升本：给我出 3 道 C 语言循环和数组的题，要有程序阅读题',
+    '[[CLEKK_LEARNING_ANSWER_V1]] activity_id: q1 item_id: zsb-c6-80 answer: "4"\n请只对这一小题调用 learning_activity resolve，使用 item_results 并保留 item_id，给出简短讲解和具体错因。',
+    // The host appends mode context to the prompt; its “运行练习” is not the user's request.
+    '[[CLEKK_LEARNING_START_V1]] 调用 learning_activity present 出一道互动题。\n\n【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。']) {
+    const {guard, ctx} = setup(t, prompt);
+    guard.afterTool({toolName: 'learning_activity', toolCallId: 'card', params: {action: 'present'}, result: 'ok'}, ctx);
+    assert.equal(guard.finalize({lastAssistantMessage: '题卡已经出好，直接作答就行。'}, ctx, {verifyExternal: false}), undefined, prompt);
+  }
+  // Asking for a file still needs the file.
+  const {guard, ctx} = setup(t, '出 3 道题并保存成文件');
+  guard.afterTool({toolName: 'learning_activity', toolCallId: 'card', params: {action: 'present'}, result: 'ok'}, ctx);
+  assert.equal(guard.finalize({lastAssistantMessage: '已经全部完成。'}, ctx, {verifyExternal: false})?.action, 'revise');
+});

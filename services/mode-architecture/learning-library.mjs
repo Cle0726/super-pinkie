@@ -16,7 +16,7 @@ const compact = value => String(value ?? '').normalize('NFKC').replace(/\s+/gu, 
 const escape = value => String(value).replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const learningSession = key => {
-  if (!/^agent:learning:[^\r\n]{1,240}$/.test(String(key ?? ''))) throw new Error('资料库只在学习模式中使用');
+  if (!/^agent:learning:[^\r\n]{1,240}$/.test(String(key ?? ''))) throw new Error('资料库只在习作模式中使用');
   return key;
 };
 const idValue = id => {
@@ -218,7 +218,10 @@ export class LearningLibrary {
     const meta=this.get(id), location=Number(params.location ?? meta.progress?.location ?? 1);
     if (!Number.isInteger(location)||location<1||location>meta.locations) throw new Error('页码或章节超出范围');
     const previous=meta.progress||{};
-    return {book:this.metadata({...meta,lastOpenedAt:Date.now(),progress:{location,scroll:Math.max(0,Math.min(1,Number(params.scroll??previous.scroll)||0)),zoom:Math.max(0.6,Math.min(2,Number(params.zoom??previous.zoom)||1))}})};
+    const visitedLocations=[...new Set([...(Array.isArray(previous.visitedLocations)?previous.visitedLocations:[]),location])].filter(value=>Number.isInteger(value)&&value>=1&&value<=meta.locations).sort((a,b)=>a-b);
+    return {book:this.metadata({...meta,lastOpenedAt:Date.now(),progress:{...previous,location,scroll:Math.max(0,Math.min(1,Number(params.scroll??previous.scroll)||0)),zoom:Math.max(0.6,Math.min(2,Number(params.zoom??previous.zoom)||1)),
+      visitedLocations,visitedCount:visitedLocations.length,coverage:meta.locations?visitedLocations.length/meta.locations:0,
+      evidence:'visited_only'}})};
   }
   beginImport(params) {
     const name=trim(params.name,240), type=/\.pdf$/i.test(name)?'pdf':/\.epub$/i.test(name)?'epub':'';
@@ -422,6 +425,7 @@ export function createLearningLibraryTool(library,ctx) {
     }};
 }
 export function registerLearningLibrary(api,{learning,library=new LearningLibrary()}={}) {
+  if (learning) learning.library=library;
   const rpc=(suffix,scope,fn)=>api.registerGatewayMethod('pinkie.learning.library.'+suffix,async({params,respond})=>{
     try {const p=params||{};learningSession(p.sessionKey);respond(true,await fn(p));}
     catch(error){respond(false,undefined,{code:'INVALID_REQUEST',message:error.message});}
@@ -452,10 +456,14 @@ export function registerLearningLibrary(api,{learning,library=new LearningLibrar
     const text=source.pages.map(page=>'【'+source.book.title+' · '+page.label+'】\n'+page.text).join('\n\n');
     if(!text.trim())throw new Error('这一页没有可提取的文字');
     const result=learning.saveNote(p.sessionKey,{title:source.book.title+' · 章节阅读',content:text,sourceLabel:source.book.title+' · '+p.start+'–'+(p.end||p.start),tags:['章节阅读']});
+    const sources=source.pages.map(page=>({bookId:source.book.id,title:source.book.title,location:page.location,label:page.label,quote:page.text.slice(0,1000)}));
+    const noteState=learning.readNotesState();
+    const note={...result.note,sourceAnchor:sources[0],sourceAnchors:sources};
+    learning.writeNotes(noteState.notes.map(value=>value.id===note.id?note:value));
     // Reuse the existing notebook quiz permission and outcome tracking.
     learning.setEnabled(p.sessionKey,true);
     learning.prepareNotebookQuiz(p.sessionKey,[result.note.id]);
-    return {ids:[result.note.id],source,sourceText:text,prompt:'请根据以下资料做简短摘要、列要点，再用 learning_activity present 出 3 道理解题，一次展示一题。以原文为准，引用书名和页码。\n'+text};
+    return {ids:[note.id],source,sources,sourceText:text,prompt:'请根据以下资料做简短摘要、列要点，再用 learning_activity present 的 items 出 3 道理解题。每小题独立 note_ids 和 sources，只关联实际检验的知识点。以原文为准，引用书名和页码；不要把一个整组结果套到全部笔记。\n来源：'+JSON.stringify(sources)+'\n'+text};
   });
   api.registerTool?.(ctx=>createLearningLibraryTool(library,ctx),{name:'learning_library'});
   api.on('before_prompt_build',(_event,ctx)=>{
