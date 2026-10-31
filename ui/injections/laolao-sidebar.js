@@ -220,12 +220,7 @@
                   if (prepared?.prepared && prepared.mode === 'delivery-review') job.review = {requestId, tier};
                 }
               }
-              // A synchronous socket send error happens after workbench sync.
-              // Report its real stage for the modes covered by this repair.
-              const previousStage = stage;
-              if (/^agent:(main|project|thinking|learning):/.test(String(key || ''))) stage = 'send';
               send(data);
-              stage = previousStage;
               if (job?.review) watchReview(key, job.review.requestId, job.review.tier);
               else {
                 // 思考强度档位（加强 / 全开 / 长跑）在整个任务结束后也做交付验收。
@@ -235,7 +230,7 @@
               }
             }
             catch(error) {
-              const message = stage === 'send' ? '消息连接发送失败：'+error.message : stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
+              const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
               toast('没有发送：'+message);
               ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message}})}));
             } finally {

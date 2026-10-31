@@ -12,7 +12,7 @@
 
   const MARKER = "[[PINKIE_ASK_V1]]";
   const ANSWER_PREFIX = "【回答碧琪的提问】";
-  const STICKER = "/laolao-pinkie-status-asking.png";
+  const STICKER = "./laolao-pinkie-status-asking.png";
   const STORE = "laolao:ask-user:closed:v1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
