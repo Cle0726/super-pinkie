@@ -6,14 +6,19 @@ param(
     [switch]$LegacyOneFile,
     # Local developers may use a compatible Node 24.x patch release. CI keeps
     # the manifest's exact version for reproducible release artifacts.
-    [switch]$AllowLocalNodeVersion
+    [switch]$AllowLocalNodeVersion,
+    # Match the installed Mac app: C.le. on OpenClaw 2026.10.4, not the
+    # September 超級碧琪 runtime. The default build stays the older app.
+    [switch]$CleBrand
 )
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
-$manifest = Get-Content ".\desktop\windows\runtime-manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$manifestPath = ".\desktop\windows\runtime-manifest.json"
+if ($CleBrand) { $manifestPath = ".\desktop\windows\cle-runtime-manifest.json" }
+$manifest = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
@@ -43,13 +48,66 @@ if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
     throw "OpenClaw 内置运行时不完整"
 }
 
-$env:OPENCLAW_ROOT = $openclawRoot
-$env:PINKIE_SKIP_APP_BUNDLES = "1"
-& ".\installer\windows\apply-theme.ps1"
-python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
-if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
+$env:OPENCLAW_ROOT = (Resolve-Path $openclawRoot).Path
+if ($CleBrand) {
+    # Same patch order as patch/apply-all.mjs. C.le. does not wear the old
+    # 超級碧琪 theme; the last patch writes the Mac startup layer into index.html.
+    $clePatches = @(
+        'apply-chat-timeline.mjs',
+        'apply-chat-math.mjs',
+        'apply-chat-linebreaks.mjs',
+        'apply-composer-drafts.mjs',
+        'apply-context-budget.mjs',
+        'apply-compaction-boundary-recovery.mjs',
+        'apply-loopback-model-reliability.mjs',
+        'apply-work-thinking.mjs',
+        'apply-thinking-capabilities.mjs',
+        'apply-image-access.mjs',
+        'apply-control-ui-workspace-media.mjs',
+        'apply-control-ui-file-delivery.mjs',
+        'apply-material-preview-csp.mjs',
+        'apply-local-unrestricted-policy.mjs',
+        'apply-computer-v2.mjs',
+        'reapply-unrestricted-patch.mjs',
+        'apply-same-session-recovery.mjs',
+        'apply-startup.mjs'
+    )
+    foreach ($patch in $clePatches) {
+        & node (Join-Path $RepoRoot "patch\$patch")
+        if ($LASTEXITCODE -ne 0) { throw "C.le. patch failed: $patch" }
+    }
+    $controlUi = Join-Path $openclawRoot "dist\control-ui\index.html"
+    if (-not (Select-String -LiteralPath $controlUi -Pattern 'cle-boot-reveal' -Quiet)) {
+        throw "C.le. startup layer missing from the bundled Control UI"
+    }
+    Push-Location (Join-Path $RepoRoot "services\cle-studio")
+    npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "cle-studio dependencies failed" }
+    node .\build.mjs
+    if ($LASTEXITCODE -ne 0) { throw "cle-studio build failed" }
+    Pop-Location
+    $extStage = Join-Path $runtimeStage "extensions"
+    New-Item -ItemType Directory -Force -Path $extStage | Out-Null
+    $extMap = @{
+        'cle-studio' = 'services\cle-studio'
+        'pinkie-mode-architecture' = 'services\mode-architecture'
+        'pinkie-project-scope' = 'services\project-scope'
+    }
+    foreach ($name in $extMap.Keys) {
+        $destination = Join-Path $extStage $name
+        New-Item -ItemType Directory -Force -Path $destination | Out-Null
+        & robocopy (Join-Path $RepoRoot $extMap[$name]) $destination /E /NFL /NDL /NJH /NJS /nc /ns /np /XD node_modules src .git
+        if ($LASTEXITCODE -ge 8) { throw "failed to stage extension $name" }
+    }
+    @{ brand = "cle"; openclaw = $manifest.openclaw; port = 18809 } | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "brand.json") -Encoding UTF8
+} else {
+    $env:PINKIE_SKIP_APP_BUNDLES = "1"
+    & ".\installer\windows\apply-theme.ps1"
+    python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
+    if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
+    Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
+}
 Remove-Item Env:OPENCLAW_ROOT -ErrorAction SilentlyContinue
-Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
 
 $runtimeInfo = @{
     architecture = $env:PROCESSOR_ARCHITECTURE
@@ -60,9 +118,16 @@ $runtimeInfo = @{
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
+$appName = "超級碧琪"
+$pyInstallerExtra = @()
+if ($CleBrand) {
+    $appName = "C.le"
+    $pyInstallerExtra += @("--add-data", "$(Join-Path $runtimeStage 'extensions');extensions")
+    $pyInstallerExtra += @("--add-data", "$(Join-Path $runtimeStage 'brand.json');runtime")
+}
 $pyInstallerCommonArgs = @(
     "--noconfirm", "--clean", "--windowed",
-    "--name", "超級碧琪",
+    "--name", $appName,
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
     "--hidden-import", "webview.platforms.edgechromium",
@@ -99,19 +164,20 @@ $pyInstallerCommonArgs = @(
 # Build the fast-starting directory layout by default.  PyInstaller keeps all
 # resources next to the launcher, so Windows no longer has to unpack ~700 MB
 # into a temporary _MEI directory before showing the window.
-pyinstaller @pyInstallerCommonArgs --onedir
+pyinstaller @pyInstallerCommonArgs @pyInstallerExtra --onedir
 if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
-if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
+$onedirExe = Join-Path $RepoRoot "dist\$appName\$appName.exe"
+if (-not (Test-Path -LiteralPath $onedirExe)) {
     throw "Windows onedir 构建产物缺失"
 }
 
 if ($LegacyOneFile) {
-    pyinstaller @pyInstallerCommonArgs --onefile
+    pyinstaller @pyInstallerCommonArgs @pyInstallerExtra --onefile
     if ($LASTEXITCODE -ne 0) { throw "Windows 兼容 EXE 构建失败" }
-    if (-not (Test-Path -LiteralPath 'dist\超級碧琪.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot "dist\$appName.exe"))) {
         throw "Windows onefile 构建产物缺失"
     }
 }
 
-Write-Host "构建完成: dist\超級碧琪\超級碧琪.exe"
-if ($LegacyOneFile) { Write-Host "兼容构建完成: dist\超級碧琪.exe" }
+Write-Host "构建完成: dist\$appName\$appName.exe"
+if ($LegacyOneFile) { Write-Host "兼容构建完成: dist\$appName.exe" }
