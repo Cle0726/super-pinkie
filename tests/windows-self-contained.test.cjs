@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -103,6 +104,39 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /--collect-binaries/, 'native sqlite binaries must be collected');
   assert.doesNotMatch(build, /winget/);
   assert.doesNotMatch(build, /openclaw\.json/);
+  assert.match(build, /PINKIE_SKIP_RUNTIME_PATCHES/);
+  assert.match(build, /desktop\\windows\\mac-runtime/);
+  assert.match(build, /cle-studio/);
+  assert.match(build, /\$serviceStage;services/);
+  assert.match(build, /\$personaStage;personas/);
+});
+
+test('the Windows package overlays the installed Mac runtime, not a newer patch generation', () => {
+  const snapshot = path.join(root, 'desktop/windows/mac-runtime');
+  const sums = fs.readFileSync(path.join(snapshot, 'SHA256SUMS'), 'utf8').trim().split('\n');
+  assert.ok(sums.length >= 60, `the Mac snapshot is incomplete: ${sums.length} files`);
+  for (const line of sums) {
+    const splitAt = line.indexOf('  ');
+    assert.ok(splitAt > 0, line);
+    const expected = line.slice(0, splitAt);
+    const relative = line.slice(splitAt + 2);
+    const file = path.join(snapshot, relative);
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    assert.equal(actual, expected, relative);
+  }
+  const chat = fs.readFileSync(path.join(snapshot, 'openclaw/dist/control-ui/assets/chat-page-DrPkxqJK.js'), 'utf8');
+  assert.match(chat, /\/\* pinkie-chat-timeline:v25 \*\//);
+  assert.doesNotMatch(chat, /pinkie-chat-timeline:v26/);
+  const index = fs.readFileSync(path.join(snapshot, 'openclaw/dist/control-ui/index.html'), 'utf8');
+  assert.match(index, /pinkie-surface=6/);
+  assert.match(index, /pinkie-browser=3/);
+  assert.match(index, /pinkie-learning=8/);
+  assert.match(index, /laolao-theme\.css\?v=theme91/);
+  const mode = fs.readFileSync(path.join(snapshot, 'services/mode-architecture/index.mjs'), 'utf8');
+  assert.doesNotMatch(mode, /C\.le\. 执行控制层/);
+  const soul = fs.readFileSync(path.join(snapshot, 'personas/chat/SOUL.md'), 'utf8');
+  assert.match(soul, /碧琪/);
+  assert.doesNotMatch(soul, /Li An/);
 });
 
 test('Windows desktop launches the bundled gateway and keeps it supervised', () => {

@@ -4,6 +4,8 @@ __pycache__/
 dist/
 !services/chatgpt-collab/runtime/dist/
 !services/chatgpt-collab/runtime/dist/**
+!desktop/windows/mac-runtime/openclaw/dist/
+!desktop/windows/mac-runtime/openclaw/dist/**
 build/
 *.spec
 .build/

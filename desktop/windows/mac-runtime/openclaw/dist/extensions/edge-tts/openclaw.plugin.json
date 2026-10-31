@@ -1,0 +1,24 @@
+{
+  "id": "edge-tts",
+  "name": "Edge TTS",
+  "description": "免费微软神经语音 (edge-tts)，本地服务 127.0.0.1:18888",
+  "activation": {
+    "onStartup": false
+  },
+  "enabledByDefault": true,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "setup": {
+    "providers": [
+      {
+        "id": "edge-tts",
+        "envVars": [
+          "EDGE_TTS_KEY"
+        ]
+      }
+    ]
+  }
+}
