@@ -1,0 +1,12 @@
+{
+  "name": "@openclaw/edge-tts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenClaw Edge TTS plugin (free neural voices via local edge-tts server)",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

@@ -718,6 +718,13 @@ foreach ($packageRoot in $packageRoots) {
             $seenUi[$uiRoot] = $true
             Write-Host "==> applying skin to $uiRoot"
             Apply-UISkin $uiRoot
+            # 发行包在皮肤之后改用本机 Mac 应用里已经跑着的运行时快照。
+            # 当前补丁脚本比那份应用新一代，直接打会让 Windows 的聊天页和 Mac 不一致。
+            if ($env:PINKIE_SKIP_RUNTIME_PATCHES -eq "1") {
+                Write-Host "  runtime patches skipped; build-win.ps1 overlays the installed Mac runtime"
+                $didAny = $true
+                continue
+            }
             $node = Get-Command node -ErrorAction SilentlyContinue
             $runtimePatches = @(
                 'apply-chat-timeline.mjs',
@@ -741,7 +748,10 @@ foreach ($packageRoot in $packageRoots) {
                 try {
                     $env:OPENCLAW_ROOT = $packageRoot
                     foreach ($runtimePatch in $runtimePatches) {
-                        try { & $node.Source $runtimePatch | Out-Null } catch {}
+                        & $node.Source $runtimePatch
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Warning "runtime patch failed: $runtimePatch exit $LASTEXITCODE"
+                        }
                     }
                 } finally {
                     $env:OPENCLAW_ROOT = $previousRoot

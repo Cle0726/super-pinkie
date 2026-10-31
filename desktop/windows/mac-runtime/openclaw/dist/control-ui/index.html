@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script src="/laolao-night.js?v=night2"></script>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>来啦～老弟</title>
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/png" sizes="any" href="/laolao-avatar.png?v=20260828" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png?v=20260828" />
+    
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      (function () {
+        var THEMES = { claw: 1, knot: 1, dash: 1 };
+        var MODES = { system: 1, light: 1, dark: 1 };
+        var LEGACY = {
+          dark: "claw:dark",
+          light: "claw:light",
+          openknot: "knot:dark",
+          fieldmanual: "dash:dark",
+          clawdash: "dash:light",
+          system: "claw:system",
+        };
+        try {
+          var keys = Object.keys(localStorage);
+          var raw;
+          for (var i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf("openclaw.control.settings.v1") === 0) {
+              raw = localStorage.getItem(keys[i]);
+              if (raw) break;
+            }
+          }
+          if (!raw) return;
+          var s = JSON.parse(raw);
+          var t = s && s.theme;
+          var m = s && s.themeMode;
+          if (typeof t !== "string") t = "";
+          if (typeof m !== "string") m = "";
+          var legacy = LEGACY[t];
+          var theme = THEMES[t] ? t : legacy ? legacy.split(":")[0] : "claw";
+          var mode = MODES[m] ? m : legacy ? legacy.split(":")[1] : "system";
+          if (mode === "system") {
+            mode = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          }
+          var resolved =
+            theme === "knot"
+              ? mode === "light"
+                ? "openknot-light"
+                : "openknot"
+              : theme === "dash"
+                ? mode === "light"
+                  ? "dash-light"
+                  : "dash"
+                : mode === "light"
+                  ? "light"
+                  : "dark";
+          document.documentElement.setAttribute("data-theme", resolved);
+          document.documentElement.setAttribute(
+            "data-theme-mode",
+            resolved.includes("light") ? "light" : "dark",
+          );
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      body.openclaw-mount-fallback-active {
+        margin: 0;
+        min-width: 320px;
+        color: #eef4f8;
+        background: #101418;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      body.openclaw-mount-fallback-active openclaw-app {
+        display: none;
+      }
+
+      .mount-fallback {
+        box-sizing: border-box;
+        min-height: 100vh;
+        padding: 24px;
+        place-items: center;
+      }
+
+      .mount-fallback:not([hidden]) {
+        display: grid;
+      }
+
+      .mount-fallback__panel {
+        box-sizing: border-box;
+        width: min(100%, 640px);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 8px;
+        background: #151b21;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+        padding: 28px;
+      }
+
+      .mount-fallback__eyebrow {
+        margin: 0 0 10px;
+        color: #9fb0bd;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .mount-fallback__panel h1 {
+        margin: 0;
+        color: inherit;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        line-height: 1.15;
+      }
+
+      .mount-fallback__panel p {
+        margin: 16px 0 0;
+        color: #c8d3da;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .mount-fallback__panel ul {
+        margin: 18px 0 0;
+        padding-left: 1.2rem;
+        color: #c8d3da;
+        line-height: 1.6;
+      }
+
+      .mount-fallback__panel a {
+        color: #8bd3ff;
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      .mount-fallback__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .mount-fallback__button {
+        min-height: 42px;
+        border: 1px solid rgba(148, 163, 184, 0.36);
+        border-radius: 6px;
+        padding: 0 16px;
+        color: inherit;
+        background: transparent;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .mount-fallback__button--primary {
+        border-color: #66c2ff;
+        color: #061019;
+        background: #8bd3ff;
+      }
+
+      .mount-fallback__panel:focus {
+        outline: none;
+      }
+
+      .mount-fallback__button:focus-visible,
+      .mount-fallback__panel a:focus-visible {
+        outline: 3px solid #f9c74f;
+        outline-offset: 3px;
+      }
+
+      html[data-theme-mode="light"] body.openclaw-mount-fallback-active {
+        color: #151b21;
+        background: #f5f7fa;
+      }
+
+      html[data-theme-mode="light"] .mount-fallback__panel {
+        border-color: rgba(71, 85, 105, 0.22);
+        background: #ffffff;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
+      }
+
+      html[data-theme-mode="light"] .mount-fallback__eyebrow,
+      html[data-theme-mode="light"] .mount-fallback__panel p,
+      html[data-theme-mode="light"] .mount-fallback__panel ul {
+        color: #4b5963;
+      }
+
+      html[data-theme-mode="light"] .mount-fallback__panel a {
+        color: #0369a1;
+      }
+    </style>
+    <script src="/laolao-session-list.js?v=sessions11"></script>
+    <script src="/laolao-sidebar.js?v=sidebar37h1"></script>
+    <script src="/laolao-side-layout.js?v=side12"></script>
+    <script src="/laolao-usage-stats.js?v=stats16"></script>
+        
+    
+    <script type="module" crossorigin src="/assets/index-Bvtt7vVx.js?v=clekk-history59&pinkie-drafts=4&pinkie-surface=6&pinkie-browser=3&pinkie-learning=8"></script>
+    <link rel="modulepreload" crossorigin href="/assets/decorate-CUyPCN2p.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/lit-runtime-B2f-BITn.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-QTnfLwEv.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/gateway-runtime-FrENt4C6.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/record-coerce-DKxWgtJK.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/string-coerce-BuYUxt7q.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/gateway-scope-DHyh6J4D.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/preload-helper-DYl5dUZ5.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/i18n-Cb2Gon67.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/config-runtime-C9ddPyId.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/config-form-utils-38-hmHgl.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/nodes-Dkwg6-Q9.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/gateway-CWCQz7bR.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/string-normalization-BzUT2-1w.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/dist-zvxH6qH4.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/app-route-paths-Ckh-KQjG.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/browser-CpPLSxgf.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/number-coercion-FQ9q6Y4E.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/session-display-SOXKSy_a.js?pinkie-drafts=1">
+    <link rel="modulepreload" crossorigin href="/assets/session-key-O2mAF18C.js?pinkie-drafts=1">
+    <link rel="stylesheet" crossorigin href="/assets/index-LH4ofOKi.css">
+    <link rel="stylesheet" href="/laolao-theme.css?v=theme91">
+    <link rel="stylesheet" href="/laolao-sidebar.css?v=sidebar18">
+    <link rel="stylesheet" href="/laolao-side-layout.css?v=side21">
+    <link rel="stylesheet" href="/laolao-usage-stats.css?v=stats8">
+    <link rel="stylesheet" href="/laolao-splash.css?v=splash21">
+      <script defer src="/laolao-phrases.js?v=phrases30"></script>
+    <script defer src="/laolao-live-voice.js?v=voice4"></script>
+    <script defer src="/laolao-image-viewer.js"></script>
+        <script defer src="/laolao-mode-transition-fx.js?v=modetransitionfx6"></script>
+    <script defer src="/laolao-mode-switcher.js?v=mode45"></script><script defer src="/laolao-model-picker.js?v=modelpicker49"></script><script defer src="/laolao-party-entry.js?v=party4"></script>
+    <script src="/laolao-motion.js?v=motion6"></script>
+    <script defer src="/laolao-progress.js?v=progress5"></script>
+    <script defer src="/laolao-stream-fx.js?v=stream4"></script>
+    <script defer src="/laolao-link-viewer.js?v=link6"></script>
+    <script defer src="/laolao-roundtable-entry.js?v=roundtable3"></script>
+    <script defer src="/laolao-resume.js?v=resume54"></script>
+    <script defer src="/laolao-tool-stream.js?v=toolstream5"></script>
+    <link rel="stylesheet" href="/laolao-tool-stream.css?v=toolstream3">
+    <script defer src="/laolao-deep-think.js?v=deepthink27"></script>
+    <script defer src="/laolao-context-compact.js?v=contextcompact10"></script>
+    <link rel="stylesheet" href="/laolao-classic-shell.css?v=classic19">
+    <link rel="stylesheet" href="/laolao-memory.css?v=memory1">
+    <script defer src="/laolao-classic-shell.js?v=classic20"></script>
+    <script defer src="/laolao-memory.js?v=memory2"></script><link rel="stylesheet" href="/laolao-ui-subtraction.css?v=subtraction14"><link rel="stylesheet" href="/laolao-material-preview.css?v=material4">
+    <script defer src="/laolao-material-preview.js?v=material6"></script><link rel="stylesheet" href="/laolao-workspace-focus.css?v=workspacefocus2">
+    <script defer src="/laolao-workspace-focus.js?v=workspacefocus2"></script><script defer src="/laolao-page-warmup.js?v=warmup1"></script><link rel="stylesheet" href="/laolao-learning-stage.css?v=learning13">
+    <script defer src="/laolao-learning-stage.js?v=learning20"></script><script defer src="/laolao-web-gpt-collab.js?v=webgpt33"></script><link rel="stylesheet" href="/laolao-settings-user.css?v=settingsuser3">
+    <script defer src="/laolao-settings-user.js?v=settingsuser4"></script>
+    <link rel="stylesheet" href="/laolao-motion-system.css?v=motionsys1">
+    <link rel="stylesheet" href="/laolao-mode-transition-fx.css?v=modetransitionfx4"><link rel="stylesheet" href="/laolao-mode-menu-fx.css?v=modemenufx1"><script defer src="/laolao-queue-steer.js?v=queuesteer3"></script><link rel="stylesheet" href="/laolao-ask-user.css?v=askuser1">
+    <script defer src="/laolao-ask-user.js?v=askuser1"></script><link rel="stylesheet" href="/laolao-process-card.css?v=processcard6">
+    <script defer src="/laolao-process-card.js?v=processcard11"></script><script defer src="/laolao-laser-pointer.js?v=laser9"></script><script defer src="/laolao-desensitize.js?v=desensitize1"></script><link rel="stylesheet" href="/laolao-sidebar-surface.css?v=sidebarsurface7">
+    <script defer src="/laolao-sidebar-autohide.js?v=sidebarautohide8"></script>
+    <link rel="stylesheet" href="/laolao-companion.css?v=companion5">
+    <link rel="stylesheet" href="/laolao-redesign.css?v=redesign8">
+    <script defer src="/laolao-buddy-rig.js?v=buddyrig2"></script>
+    <script defer src="/laolao-companion.js?v=companion6"></script>
+    <script defer src="/laolao-immersion.js?v=immersion2"></script>
+    <link rel="stylesheet" href="/laolao-startup-home.css?v=startuphome6">
+    <script src="/laolao-startup-home.js?v=startuphome9"></script>
+    <link rel="stylesheet" href="/laolao-divider.css?v=divider1">
+    <link rel="stylesheet" href="/laolao-cle-stage.css?v=clestage21">
+    <link rel="stylesheet" href="/laolao-tool-rows.css?v=toolrows8">
+    <link rel="stylesheet" href="/laolao-rich.css?v=rich5">
+    <script defer src="/laolao-perf.js?v=perf4"></script>
+    <script defer src="/laolao-vendor-gsap.min.js?v=gsap3150"></script>
+    <script defer src="/laolao-cle-signature.js?v=clesig1"></script>
+    <script type="module" src="/laolao-cle-stage.js?v=clestage22"></script>
+    <script defer src="/laolao-rich.js?v=rich4"></script>
+    <script defer src="/laolao-plan.js?v=plan3"></script>
+    <script defer src="/laolao-capabilities.js?v=capabilities4"></script>
+    <script src="/laolao-selection-actions.js?v=deskfinal6"></script>
+<link rel="stylesheet" href="/laolao-learning-library.css?v=library1">
+<script defer src="/laolao-learning-library.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-workbench.css?v=workbench14">
+    <script defer src="/laolao-workbench.js?v=workbench16"></script>
+    
+    <link rel="stylesheet" href="/laolao-model-picker.css?v=modelpicker15">
+    <link rel="stylesheet" href="/laolao-learning-inline.css?v=learninginline5">
+    <link rel="stylesheet" href="./laolao-learning-practice.css?v=learningpractice4">
+<script defer src="./laolao-learning-practice.js?v=learningpractice4"></script>
+<link rel="stylesheet" href="/laolao-learning-explore.css?v=learningexplore1">
+<script defer src="/laolao-learning-explore.js?v=learningexplore1"></script>
+    <link rel="stylesheet" href="/laolao-learning-devices.css?v=learningdevices1">
+    <script defer src="/laolao-learning-devices.js?v=learningdevices1"></script>
+<script defer src="/laolao-learning-inline.js?v=deskfinal6"></script>
+    <script defer src="/laolao-splash-fx.js?v=splashfx2"></script>
+    <script defer src="/laolao-splash.js?v=splash28"></script>
+    <link rel="stylesheet" href="/laolao-night.css?v=night3">
+<link rel="stylesheet" href="/laolao-reading-view.css?v=readingview3">
+<script defer src="/laolao-reading-view.js?v=readingview2"></script>
+
+    <!-- Study desk: pinned vendors are captured before restoring the App globals. -->
+<script defer src="/vendor/lucide/icons.js?v=lucide04602"></script>
+    <script defer src="/vendor/study-desk-before.js?v=studydesk2"></script>
+    <script defer src="/vendor/gsap/gsap.min.js?v=gsap3130"></script>
+    <script defer src="/vendor/gsap/SplitText.min.js?v=gsap3130"></script>
+    <script defer src="/vendor/gsap/DrawSVGPlugin.min.js?v=gsap3130"></script>
+    <script defer src="/vendor/canvas-confetti/confetti.browser.min.js?v=confetti193"></script>
+    <script defer src="/vendor/study-desk-after.js?v=studydesk2"></script>
+    <link rel="stylesheet" href="/laolao-desk-kit.css?v=deskfinal6">
+    <script defer src="/laolao-desk-kit.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk.css?v=deskcards2">
+    <link rel="stylesheet" href="/laolao-study-desk-board.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk.js?v=deskcards3"></script>
+    <script defer src="/laolao-study-desk-board.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-vocab.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk-vocab.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-lesson.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk-lesson.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-learning-reminder.css?v=deskfinal6">
+    <script defer src="/laolao-learning-reminder.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-split.css?v=deskcards1">
+    <script defer src="/laolao-study-desk-split.js?v=deskcards1"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-notes.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk-notes.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-desk-chat.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk-conversation.js?v=deskfinal6"></script>
+    <script defer src="/laolao-desk-chat.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-handbook.css?v=deskfinal6">
+    <script defer src="/laolao-study-desk-handbook.js?v=deskfinal6"></script>
+    <link rel="stylesheet" href="/laolao-study-desk-ink.css?v=deskfinal6">
+    <link rel="stylesheet" href="/laolao-study-desk-panes.css?v=deskcards1">
+
+
+
+
+
+
+
+    
+        
+
+    
+    
+    
+    
+    
+    
+
+    
+            
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+</head>
+  <body>
+    <section id="laolao-splash" class="laolao-splash" aria-live="polite" aria-label="来啦～老弟正在启动">
+      <div class="laolao-splash__content">
+        <p class="laolao-splash__eyebrow">
+          <img class="laolao-splash__avatar" src="/laolao-avatar.png" alt="" />
+          碧琪的派对小屋
+        </p>
+        <h1 class="laolao-splash__title">来啦～老弟</h1>
+        <div class="laolao-splash__progress-shell" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8" aria-describedby="laolao-splash-message">
+          <div id="laolao-splash-fill" class="laolao-splash__progress-fill"></div>
+          <span id="laolao-splash-message" class="laolao-splash__message">先生稍等，碧琪在给气球打气…</span>
+          <span id="laolao-splash-percentage" class="laolao-splash__percentage">8%</span>
+        </div>
+      </div>
+    </section>
+        <script src="/laolao-handoff-bootstrap.js?v=handoff7"></script>
+        
+        
+    <openclaw-app></openclaw-app>
+    <section
+      id="openclaw-mount-fallback"
+      class="mount-fallback"
+      data-openclaw-mount-timeout-ms="12000"
+      role="alert"
+      aria-labelledby="openclaw-mount-fallback-title"
+      hidden
+    >
+      <div class="mount-fallback__panel" tabindex="-1">
+        <p class="mount-fallback__eyebrow">CLE Kk Control UI</p>
+        <h1 id="openclaw-mount-fallback-title">Control UI did not start</h1>
+        <p id="openclaw-mount-fallback-summary">
+          The browser loaded the static page, but the app bundle did not start. The gateway may be
+          restarting, or this page may reference assets from a different CLE Kk version.
+        </p>
+        <ul>
+          <li>CLE Kk will retry the current app bundle automatically.</li>
+          <li>If this persists, reload or try a clean browser profile.</li>
+          <li>
+            See
+            <a
+              href="https://docs.openclaw.ai/web/control-ui#blank-control-ui-page"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Control UI troubleshooting</a
+            >.
+          </li>
+        </ul>
+        <div class="mount-fallback__actions">
+          <button
+            type="button"
+            id="openclaw-mount-retry"
+            class="mount-fallback__button mount-fallback__button--primary"
+          >
+            Try again
+          </button>
+          <button type="button" id="openclaw-mount-wait" class="mount-fallback__button">
+            Keep waiting
+          </button>
+        </div>
+      </div>
+    </section>
+    <script>
+      (function () {
+        var tagName = "openclaw-app";
+        var app = document.querySelector(tagName);
+        var fallback = document.getElementById("openclaw-mount-fallback");
+        if (!app || !fallback) return;
+
+        var panel = fallback.querySelector(".mount-fallback__panel");
+        var summary = document.getElementById("openclaw-mount-fallback-summary");
+        var retry = document.getElementById("openclaw-mount-retry");
+        var wait = document.getElementById("openclaw-mount-wait");
+        var rawDelay = Number(fallback.getAttribute("data-openclaw-mount-timeout-ms"));
+        var delay = Number.isFinite(rawDelay) && rawDelay > 0 ? rawDelay : 12000;
+        var maxRecoveryAttempts = 6;
+        var timer;
+        var recoveryTimer;
+        var recoveryAttempt = 0;
+        var recoveryInFlight = false;
+        var recoveryNavigation = false;
+
+        try {
+          var initialUrl = new URL(window.location.href);
+          recoveryNavigation = initialUrl.searchParams.has("openclaw_mount_recovery");
+          if (recoveryNavigation) {
+            initialUrl.searchParams.delete("openclaw_mount_recovery");
+            window.history.replaceState(null, "", initialUrl.href);
+          }
+        } catch (e) {}
+
+        function appMounted() {
+          try {
+            return Boolean(
+              app.isConnected &&
+              window.customElements &&
+              typeof window.customElements.get === "function" &&
+              window.customElements.get(tagName),
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function hideFallback() {
+          fallback.hidden = true;
+          document.body.classList.remove("openclaw-mount-fallback-active");
+        }
+
+        function setSummary(text) {
+          if (summary) summary.textContent = text;
+        }
+
+        function scheduleRecovery() {
+          window.clearTimeout(recoveryTimer);
+          if (appMounted() || recoveryAttempt >= maxRecoveryAttempts) return;
+          var retryDelay = Math.min(delay, 1000 * Math.pow(2, recoveryAttempt));
+          recoveryTimer = window.setTimeout(retryCurrentDocument, retryDelay);
+        }
+
+        function finishRecoveryAttempt() {
+          recoveryInFlight = false;
+          if (appMounted()) return;
+          if (recoveryAttempt >= maxRecoveryAttempts) {
+            setSummary(
+              "The gateway is still unavailable. Try again, then check the troubleshooting guide if the problem persists.",
+            );
+            return;
+          }
+          setSummary(
+            "The gateway is not reachable yet. CLE Kk will keep retrying while it restarts.",
+          );
+          scheduleRecovery();
+        }
+
+        function retryCurrentDocument() {
+          if (
+            appMounted() ||
+            recoveryInFlight ||
+            recoveryAttempt >= maxRecoveryAttempts ||
+            typeof window.fetch !== "function"
+          )
+            return;
+          var documentUrl = new URL(window.location.href);
+          if (recoveryNavigation) {
+            setSummary(
+              "A fresh page still could not start the Control UI. Try again, then check the troubleshooting guide if the problem persists.",
+            );
+            return;
+          }
+          recoveryInFlight = true;
+          recoveryAttempt += 1;
+          documentUrl.searchParams.set("openclaw_mount_recovery", String(Date.now()));
+          window
+            .fetch(documentUrl.href, { cache: "no-store", credentials: "same-origin" })
+            .then(function (response) {
+              if (!response.ok) throw new Error("gateway unavailable");
+              window.location.replace(documentUrl.href);
+            })
+            .catch(function () {
+              finishRecoveryAttempt();
+            });
+        }
+
+        function showFallback() {
+          if (appMounted()) return;
+          retryCurrentDocument();
+          fallback.hidden = false;
+          document.body.classList.add("openclaw-mount-fallback-active");
+          if (panel && typeof panel.focus === "function") {
+            try {
+              panel.focus({ preventScroll: true });
+            } catch (e) {
+              panel.focus();
+            }
+          }
+        }
+
+        function armFallbackTimer() {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(showFallback, delay);
+        }
+
+        armFallbackTimer();
+
+        if (window.customElements && typeof window.customElements.whenDefined === "function") {
+          window.customElements.whenDefined(tagName).then(
+            function () {
+              window.clearTimeout(timer);
+              window.clearTimeout(recoveryTimer);
+              hideFallback();
+            },
+            function () {},
+          );
+        }
+
+        if (retry) {
+          retry.addEventListener("click", function () {
+            window.location.reload();
+          });
+        }
+        if (wait) {
+          wait.addEventListener("click", function () {
+            hideFallback();
+            recoveryAttempt = 0;
+            retryCurrentDocument();
+            armFallbackTimer();
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

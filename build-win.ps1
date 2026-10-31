@@ -45,11 +45,82 @@ if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
 
 $env:OPENCLAW_ROOT = $openclawRoot
 $env:PINKIE_SKIP_APP_BUNDLES = "1"
+$env:PINKIE_SKIP_RUNTIME_PATCHES = "1"
 & ".\installer\windows\apply-theme.ps1"
 python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
 if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
+
+# 皮肤资源来自仓库，页面和网关补丁来自本机正在运行的 超級碧琪.app。
+# 仓库里的补丁比那份应用新，直接打会让 Windows 的聊天页、材料预览和模式层跟 Mac 不一致。
+$overlayRoot = Join-Path $RepoRoot "desktop\windows\mac-runtime"
+$sums = Join-Path $overlayRoot "SHA256SUMS"
+if (-not (Test-Path -LiteralPath $sums)) { throw "缺少本机 Mac 运行时快照 desktop\windows\mac-runtime" }
+$serviceStage = Join-Path $runtimeStage "bundled-services"
+$personaStage = Join-Path $runtimeStage "bundled-personas"
+foreach ($stage in @($serviceStage, $personaStage)) {
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+}
+Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -Recurse -Force
+$cleStudio = Join-Path $serviceStage "cle-studio"
+if (Test-Path -LiteralPath $cleStudio) { Remove-Item -LiteralPath $cleStudio -Recurse -Force }
+Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
+
+function Install-MacSnapshot([string]$Relative, [string]$Destination, [string]$Expected) {
+    $source = Join-Path $overlayRoot ($Relative -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $source)) { throw "快照缺少 $Relative" }
+    $parent = Split-Path -Parent $Destination
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    Copy-Item -LiteralPath $source -Destination $Destination -Force
+    $actual = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $Expected) { throw "快照校验失败 $Relative" }
+}
+
+$aiCopied = $false
+Get-Content -LiteralPath $sums | ForEach-Object {
+    if (-not $_.Trim()) { return }
+    $parts = $_ -split '  ', 2
+    $expect = $parts[0].ToLower()
+    $rel = $parts[1].Trim()
+    if ($rel.StartsWith("openclaw/")) {
+        Install-MacSnapshot $rel (Join-Path $openclawRoot ($rel.Substring(9) -replace '/', '\')) $expect
+    } elseif ($rel.StartsWith("services/")) {
+        Install-MacSnapshot $rel (Join-Path $serviceStage ($rel.Substring(9) -replace '/', '\')) $expect
+    } elseif ($rel.StartsWith("personas/")) {
+        Install-MacSnapshot $rel (Join-Path $personaStage ($rel.Substring(9) -replace '/', '\')) $expect
+    } elseif ($rel.StartsWith("ai/")) {
+        $name = Split-Path -Leaf $rel
+        $dirs = @(
+            (Join-Path $openclawRoot "node_modules\@openclaw\ai\dist"),
+            (Join-Path $runtimeModules "@openclaw\ai\dist")
+        ) | Where-Object { Test-Path -LiteralPath $_ }
+        if (-not $dirs) { throw "找不到 @openclaw/ai，无法覆盖 $name" }
+        foreach ($dir in $dirs) {
+            Install-MacSnapshot $rel (Join-Path $dir $name) $expect
+        }
+        $script:aiCopied = $true
+    } else {
+        throw "无法识别的快照路径 $rel"
+    }
+}
+if (-not $aiCopied) { throw "Mac 快照没有覆盖 @openclaw/ai" }
+$chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
+if (-not $chat) { throw "缺少聊天页" }
+$chatText = Get-Content -LiteralPath $chat.FullName -Raw
+if ($chatText -notmatch 'pinkie-chat-timeline:v25') { throw "聊天页不是本机 Mac 的时间线 v25" }
+$indexText = Get-Content -LiteralPath (Join-Path $openclawRoot "dist\control-ui\index.html") -Raw
+foreach ($needle in @('pinkie-surface=6', 'pinkie-browser=3', 'pinkie-learning=8', 'laolao-theme.css?v=theme91')) {
+    if ($indexText -notlike "*$needle*") { throw "页面入口缺少 $needle" }
+}
+$modeIndex = Join-Path $serviceStage "mode-architecture\index.mjs"
+$modeText = Get-Content -LiteralPath $modeIndex -Raw
+if ($modeText -like '*C.le. 执行控制层*') { throw "Windows 包带上了 C.le. 控制层" }
+
 Remove-Item Env:OPENCLAW_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
+Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES -ErrorAction SilentlyContinue
 
 $runtimeInfo = @{
     architecture = $env:PROCESSOR_ARCHITECTURE
@@ -84,9 +155,9 @@ $pyInstallerCommonArgs = @(
     "--add-data", "prompts;prompts",
     "--add-data", "proxy;proxy",
     "--add-data", "patch;patch",
-    "--add-data", "personas;personas",
+    "--add-data", "$personaStage;personas",
     "--add-data", "skills;skills",
-    "--add-data", "services;services",
+    "--add-data", "$serviceStage;services",
     "--add-data", "ui;ui",
     "--add-data", "installer;installer",
     "--add-data", "scripts;scripts",
