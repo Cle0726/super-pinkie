@@ -79,10 +79,9 @@ fi
 # never mutate the developer's globally installed OpenClaw package.
 OPENCLAW_COMPAT_STAGE_ROOT=""
 CUA_VERIFY_DIR=""
-CLE_RUNTIME_STAGE=""
 cleanup_build_temps() {
   local target
-  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}" "${CLE_RUNTIME_STAGE:-}"; do
+  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}"; do
     [[ -n "$target" && -d "$target" ]] || continue
     case "$(basename "$target")" in
       super-pinkie-cua.*|super-pinkie-openclaw.*) rm -rf "$target" ;;
@@ -243,40 +242,6 @@ done
 
 # The shipped App owns its runtime. User configuration, model keys, history and
 # workspaces remain in ~/.openclaw and are deliberately not copied into it.
-# C.le. matches the installed Mac app: OpenClaw 2026.10 with the startup layer.
-# Never patch the developer's live package in place; copy first when the layer
-# is not already there (a local cle-stage is left untouched).
-if [[ "$CLE_BRAND" == 1 ]] && ! grep -q 'cle-boot-reveal' "$OPENCLAW_ROOT/dist/control-ui/index.html" 2>/dev/null; then
-  CLE_RUNTIME_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-openclaw.XXXXXX")"
-  ditto --norsrc --noextattr "$OPENCLAW_ROOT" "$CLE_RUNTIME_STAGE/openclaw"
-  OPENCLAW_ROOT="$CLE_RUNTIME_STAGE/openclaw"
-  cle_patch() {
-    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$NODE_BIN" "$REPO_ROOT/patch/$1" \
-      || { echo "error: C.le. patch failed: $1" >&2; exit 1; }
-  }
-  for cle_patch_name in \
-    apply-chat-timeline.mjs \
-    apply-chat-math.mjs \
-    apply-chat-linebreaks.mjs \
-    apply-composer-drafts.mjs \
-    apply-context-budget.mjs \
-    apply-compaction-boundary-recovery.mjs \
-    apply-loopback-model-reliability.mjs \
-    apply-work-thinking.mjs \
-    apply-thinking-capabilities.mjs \
-    apply-image-access.mjs \
-    apply-control-ui-workspace-media.mjs \
-    apply-control-ui-file-delivery.mjs \
-    apply-material-preview-csp.mjs \
-    apply-local-unrestricted-policy.mjs \
-    apply-computer-v2.mjs \
-    reapply-unrestricted-patch.mjs \
-    apply-same-session-recovery.mjs \
-    apply-startup.mjs
-  do
-    cle_patch "$cle_patch_name"
-  done
-fi
 mkdir -p "$RUNTIME_ROOT/bin" "$RUNTIME_ROOT/licenses"
 cp "$NODE_BIN" "$RUNTIME_ROOT/bin/node"
 cp "$CUA_DRIVER_ARCHIVE_SOURCE" "$RUNTIME_ROOT/cua-driver-helper.tar.gz"
@@ -318,15 +283,7 @@ if [[ "$CLE_BRAND" == 1 ]]; then
   rsync -a --delete --exclude node_modules --exclude src --exclude build.mjs --exclude .gitignore \
     "$REPO_ROOT/services/cle-studio/" "$EXT/cle-studio/"
   for ext in pinkie-mode-architecture pinkie-project-scope; do
-    ext_source="$CLE_STAGE/extensions/$ext"
-    if [[ ! -d "$ext_source" ]]; then
-      case "$ext" in
-        pinkie-mode-architecture) ext_source="$REPO_ROOT/services/mode-architecture" ;;
-        pinkie-project-scope) ext_source="$REPO_ROOT/services/project-scope" ;;
-      esac
-    fi
-    [[ -d "$ext_source" ]] || { echo "error: missing C.le. extension $ext" >&2; exit 1; }
-    rsync -a --delete --exclude node_modules "$ext_source/" "$EXT/$ext/"
+    rsync -a --delete --exclude node_modules "$CLE_STAGE/extensions/$ext/" "$EXT/$ext/"
   done
   # the staged runtime already carries the startup layer (apply-startup.mjs refuses app bundles)
   grep -q 'cle-boot-reveal' "$RUNTIME_ROOT/openclaw/dist/control-ui/index.html" \

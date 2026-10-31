@@ -386,23 +386,3 @@ test('the injected bridge waits for a document it can actually append to', () =>
   assert.ok(controls, 'the window controls must appear once the document can take them');
   assert.ok(document.body.children.includes(controls), 'the controls must land in the body');
 });
-
-test('Windows C.le. build follows the installed Mac app', () => {
-  const manifest = JSON.parse(read('desktop/windows/cle-runtime-manifest.json'));
-  const build = read('build-win.ps1');
-  const launcher = read('app/windows_desktop.py');
-  const mac = read('desktop/macos/build.sh');
-  assert.equal(manifest.openclaw, '2026.10.4');
-  assert.equal(manifest.brand, 'cle');
-  assert.equal(manifest.port, 18809);
-  assert.match(build, /cle-runtime-manifest\.json/);
-  assert.match(build, /CleBrand/);
-  assert.match(build, /apply-startup\.mjs/);
-  assert.match(build, /cle-boot-reveal/);
-  assert.match(launcher, /OPENCLAW_PROFILE"\] = "cle-studio"/);
-  assert.match(launcher, /--port", "18809"/);
-  assert.match(launcher, /PINKIE_RUNTIME_CONFIG_SCHEMA"\] = "2026\.10"/);
-  assert.match(launcher, /cle-studio-windows-/);
-  assert.match(mac, /services\/mode-architecture/);
-  assert.match(mac, /apply-startup\.mjs/);
-});
