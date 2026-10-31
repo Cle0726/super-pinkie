@@ -76,7 +76,6 @@ jobs:
           files: dist/super-pinkie-macos-*.zip
 
   windows:
-    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
