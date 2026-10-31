@@ -1,7 +1,7 @@
 # FUSION 修复报告：移植功能的整体衔接
 
 分支 `repair/fusion`，worktree `/Users/Admin/release-superpinkie/wt/repair-fusion`。
-模型：DeepSeek V4.1 Flash · WB。角色：Li An（他）／五模式雅叙·营造·堇思·习作·挥洒。
+模型：DeepSeek V4.1 Flash · WB。角色：碧琪（他）／五模式雅叙·营造·堇思·习作·挥洒。
 
 ## 一句话结论
 
@@ -438,7 +438,7 @@ T+320/500/800ms 数值完全一致       ← 终态稳定，且与 240ms 相同
   "这次读不到"，用来区分"读到空字符串"。
 - `gwRequest` 用 `settled` 闸门 + 单一 `finish()`：同步 throw / 异步 reject / 超时
   三条路径都会 `clearTimeout`，不会漏 timer。
-- 离线时 RPC **立即以明确错误失败**：`与 Li An 的连接已断开，操作未执行。等重新连上再试。`
+- 离线时 RPC **立即以明确错误失败**：`与碧琪的连接已断开，操作未执行。等重新连上再试。`
   —— 不是伪装 timeout，不排队，不重放。
 - `rebind(newHost, newSignal)` 必须接**新一轮 activation 的 signal**。这点我第一版写错成复用旧
   signal，被测试抓到：重连后一切看似正常，旧 activation 一 abort 就把新桥整体打掉。
@@ -541,7 +541,7 @@ A 装旧 host 后 classic 捕获 `gwRequest`，B 接管新 host：
 取消计时器、结算调用方、忽略旧结果、绝不重发。
 
 并且区分两种诚实语义：
-- **发送前就离线** → `与 Li An 的连接已断开，操作未执行。`
+- **发送前就离线** → `与碧琪的连接已断开，操作未执行。`
 - **已发出后断线** → `连接在请求发出后断开，这次操作的结果未确认。重连后请先确认再重试。`
   不能声称"未执行"，因为副作用可能已经发生。
 

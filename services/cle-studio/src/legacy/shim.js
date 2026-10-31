@@ -19,7 +19,7 @@
 // 统一放在 document 上的单例 slot，重复导入共享同一份。
 
 const SLOT = '__cleBridgeSlot_v1';
-const OFFLINE_MESSAGE = '与 Li An 的连接已断开，操作未执行。等重新连上再试。';
+const OFFLINE_MESSAGE = '与碧琪的连接已断开，操作未执行。等重新连上再试。';
 const UNCONFIRMED_MESSAGE = '连接在请求发出后断开，这次操作的结果未确认。重连后请先确认再重试。';
 
 const RELAYED = ['agent', 'chat', 'session.message', 'session.tool', 'sessions.changed', 'plugin.pinkie.lsp.message', 'plugin.pinkie.ext.progress', 'plugin.pinkie.ai.scan'];

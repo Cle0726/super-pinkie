@@ -1,5 +1,5 @@
-/* Li An 伙伴 + 模式氛围 + 输入框动效。
-   - 每一侧聊天 pane 都有自己的 Li An（双模式时两侧各一只，各自的菜单、状态、专注计时；
+/* 碧琪伙伴 + 模式氛围 + 输入框动效。
+   - 每一侧聊天 pane 都有自己的碧琪（双模式时两侧各一只，各自的菜单、状态、专注计时；
      不把同一个节点在两侧搬来搬去，所以非活动侧不会丢工具）。
    - 五状态 rest / typing / working / happy / sleepy 各有可辨认动作，动作由 laolao-cat-rig.js
      在局部（头、尾、呼吸、跃起）完成，底边钉在输入框上沿。rig 不可用时退回静态换图。
@@ -161,8 +161,8 @@
 
   /* ── 模型请求（每个 pane 各自发、各自收，结果不串侧） ───────────────── */
   const DEMO = {
-    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，Li An会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
-    summary: () => `一句话：Li An把这周学习排成每天不超过 50 分钟，周三只复习 15 分钟，周末空着。<div class="muted">样板演示回答</div>`,
+    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，碧琪会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
+    summary: () => `一句话：碧琪把这周学习排成每天不超过 50 分钟，周三只复习 15 分钟，周末空着。<div class="muted">样板演示回答</div>`,
   };
   const ask = async (job, kind, payload) => {
     if (preview) {
@@ -183,7 +183,7 @@
     return {html: "小帮手还没连接独立模型，先保留你正在写的内容。"};
   };
 
-  /* ── 一只 Li An ───────────────────────────────────────────────────────── */
+  /* ── 一只碧琪 ───────────────────────────────────────────────────────── */
   class Buddy {
     constructor(pane) {
       this.id = `b${++seq}`;
@@ -223,7 +223,7 @@
 
       const figure = el("button", "pinkie-buddy__figure");
       figure.type = "button";
-      figure.setAttribute("aria-label", "Li An，点我打开小菜单");
+      figure.setAttribute("aria-label", "碧琪，点我打开小菜单");
       figure.setAttribute("aria-haspopup", "menu");
       figure.setAttribute("aria-expanded", "false");
       figure.setAttribute("aria-controls", `pinkie-buddy-menu-${this.id}`);
@@ -439,12 +439,12 @@
       const titleId = `pinkie-buddy-settings-title-${this.id}`;
       dialog.setAttribute("aria-labelledby", titleId);
       const heading = el("div", "pinkie-buddy-settings__heading");
-      const title = el("h2", "", `${MODE_NAMES[originRoom]} · Li An 的模型与参数`); title.id = titleId;
+      const title = el("h2", "", `${MODE_NAMES[originRoom]} · 碧琪的模型与参数`); title.id = titleId;
       // 与气泡上的关闭一致：墨线图标，不用字符冒充控件
       const close = el("button", "pinkie-buddy-settings__close"); close.type = "button"; close.setAttribute("aria-label", "关闭模型设置");
       close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
       close.addEventListener("click", () => dialog.close()); heading.append(title, close);
-      const note = el("p", "pinkie-buddy-settings__note", "这组设置用于 Li An 在输入框旁的解释、总结和提问整理。");
+      const note = el("p", "pinkie-buddy-settings__note", "这组设置用于碧琪在输入框旁的解释、总结和提问整理。");
       const form = el("form", "pinkie-buddy-settings__form"), fields = el("fieldset", "pinkie-buddy-settings__fields");
       fields.disabled = true;
       const field = (label, input, hint = "") => { const row = el("label", "pinkie-buddy-settings__field"); row.append(el("span", "", label), input); if (hint) row.append(el("small", "", hint)); fields.append(row); return input; };
@@ -493,7 +493,7 @@
         const settings = values(), syncAll = allModes.checked; fields.disabled = allModes.disabled = true; test.disabled = save.disabled = true; showStatus("正在保存…");
         try {
           const result = await helperRpc("pinkie.companion.settings.set", {mode: originRoom, settings, allModes: syncAll});
-          if (live()) { render(result); showStatus(syncAll ? "已保存到所有模式。" : "已保存。下一次小Li An回复会使用这组设置。"); }
+          if (live()) { render(result); showStatus(syncAll ? "已保存到所有模式。" : "已保存。下一次小碧琪回复会使用这组设置。"); }
         } catch (error) { if (live()) showStatus(error.message || "保存失败，请再试一次。", true); }
         finally { if (live()) { fields.disabled = allModes.disabled = false; test.disabled = save.disabled = !catalog.length; } }
       });
@@ -626,7 +626,7 @@
       if (!raw || raw === this.lastNarrated || Date.now() - this.lastNarrateAt < 2500) return;
       this.lastNarrated = raw; this.lastNarrateAt = Date.now();
       const hit = PLAIN.find(([re]) => re.test(raw));
-      this.caption.textContent = `Li An ${hit ? hit[1] : "在忙一个小步骤"}`;
+      this.caption.textContent = `碧琪 ${hit ? hit[1] : "在忙一个小步骤"}`;
       this.caption.classList.add("is-shown");
     }
 
@@ -950,14 +950,14 @@
     if (inst.previewState === "happy") burstFrom(inst.figure, "done");
   });
 
-  /* 选中聊天文字时出现「问Li An」 */
+  /* 选中聊天文字时出现「问碧琪」 */
   window.__pinkieSelectionActions?.register("ask", {
     order: 2,
     when: ({text, library}) => library ? text.length <= 20000 : text.length <= 60,
     create: () => {
       const chip = el("button", "pinkie-buddy-ask");
       const ico = el("span", "pinkie-buddy__ico"); ico.innerHTML = ICON.explain;
-      chip.append(ico, el("span", "", "问 Li An"));
+      chip.append(ico, el("span", "", "问碧琪"));
       return chip;
     },
     run: (selected) => {

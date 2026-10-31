@@ -840,7 +840,7 @@ test('a turn with steps becomes user · process card · final reply', () => {
   const card = timeline[1];
   assert.equal(card.isProcessCard, true);
   assert.equal(card.processLive, false);
-  assert.equal(card.processTitle, 'Li An 的工作过程');
+  assert.equal(card.processTitle, '碧琪的工作过程');
   assert.equal(card.processMeta, '1 个步骤 · 用时 18 秒');
   assert.deepEqual(card.processRows.map((row) => row.role), ['assistant', 'tool']);
   assert.equal(card.processRows.every((row) => row.isTimelineStep), true);
@@ -903,7 +903,7 @@ test('narration streamed before a later tool call is already a card row while li
   assert.deepEqual(timeline.map((item) => own(item.key)), ['live-user', 'pinkie:process::live-user', 'reply', 'reading']);
   const card = timeline[1];
   assert.equal(card.processLive, true);
-  assert.equal(card.processTitle, 'Li An 正在干活');
+  assert.equal(card.processTitle, '碧琪正在干活');
   assert.equal(card.processMeta, '已做 1 步');
   assert.deepEqual(card.processRows.map((row) => [row.key, row.role]), [['say-1', 'assistant'], ['tool-1:0:timeline:tool:0', 'tool']]);
   assert.equal(card.processRows[0].messages[0].message.content[0].text, '我先查配置。');

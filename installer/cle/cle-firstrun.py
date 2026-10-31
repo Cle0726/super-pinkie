@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""C.le. first run — give the new app its own copy of the old app's data, as Li An.
+"""C.le. first run — give the new app its own copy of the old app's data, as 碧琪.
 
 Run by the C.le. launcher before it starts its gateway, once: when DST already has an
 openclaw.json nothing happens. Nothing in SRC (the 超級碧琪 state, ~/.openclaw) is ever written.
@@ -12,10 +12,10 @@ What it does, in order (into DST.partial, renamed to DST only when everything su
     sessions, session state, attachments, logbook, skills; caches, logs, backups, the browser
     profile, npm caches and the old app's own plugins are left behind;
  2. clones every agent workspace into DST/workspaces/<name> and points the config at it;
- 3. the character is Li An, not 碧琪: the identity files of the four rooms come from the C.le.
+ 3. the character is 碧琪, not 碧琪: the identity files of the four rooms come from the C.le.
     templates (the user's own 「🚀 桌面自动化执行指令」 section of AGENTS.md is carried over
     verbatim), and in the copied workspaces' markdown (memory, notes, skills) the old name
-    becomes Li An (the product name 碧琪 App becomes C.le.); the unrestricted room keeps its own
+    becomes 碧琪 (the product name 碧琪 App becomes C.le.); the unrestricted room keeps its own
     files, only the name in them is changed; chat transcripts are history and stay as they were;
  4. channels (WeChat, Telegram, …) are removed so the two apps never answer for the same account;
  5. `openclaw doctor --fix --non-interactive` migrates the config and state to this runtime;
@@ -59,7 +59,7 @@ def rename_in_markdown(root: Path, unrestricted: bool):
         if '碧琪' not in t:
             continue
         u = t.replace('碧琪 App', 'C.le.').replace('碧琪App', 'C.le.').replace('超級碧琪', 'C.le.').replace('超级碧琪', 'C.le.')
-        u = u.replace('碧琪', 'Li An')
+        u = u.replace('碧琪', '碧琪')
         if u != t:
             p.write_text(u, encoding='utf-8'); n += 1
     return n
@@ -155,7 +155,7 @@ def main():
             (part / 'workspaces' / name).mkdir(parents=True)
             mapping.setdefault(str(src / name), str(dst / 'workspaces' / name))
 
-    # Li An, not 碧琪
+    # 碧琪, not 碧琪
     renamed = 0
     for ws in (part / 'workspaces').iterdir():
         if not ws.is_dir():

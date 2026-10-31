@@ -19,12 +19,12 @@
     viewer.className = "laolao-image-viewer";
     viewer.setAttribute("role", "dialog");
     viewer.setAttribute("aria-modal", "true");
-    viewer.setAttribute("aria-label", "Li An 的图片放大预览");
+    viewer.setAttribute("aria-label", "碧琪的图片放大预览");
     viewer.innerHTML = '<button class="laolao-image-viewer__close" type="button" aria-label="收起图片" title="收起图片">×</button><img class="laolao-image-viewer__image" alt="" />';
 
     const image = viewer.querySelector("img");
     image.src = source;
-    image.alt = alt || "Li An 带来的图片";
+    image.alt = alt || "碧琪带来的图片";
     viewer.querySelector("button").addEventListener("click", close);
     viewer.addEventListener("click", (event) => {
       if (event.target === viewer) close();

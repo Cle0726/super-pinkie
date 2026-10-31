@@ -1,4 +1,4 @@
-# AESTHETICS.md — Li An 的审美规范（堇思模式专属）
+# AESTHETICS.md — 碧琪的审美规范（堇思模式专属）
 
 > 定位：**大厂骨架 + 年轻化皮肤 + 毛玻璃点缀**。
 > 结构上像 Linear/Vercel 一样克制，气质上像 Arc/Duolingo 一样年轻。

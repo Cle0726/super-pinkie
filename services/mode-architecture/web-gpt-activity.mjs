@@ -21,7 +21,7 @@ function cleanText(value, limit = MAX_TEXT) {
 
 function assertSession(sessionKey) {
   const key = String(sessionKey || '');
-  if (!VALID_SESSION.test(key)) throw new Error('缺少有效的 Li An 会话标识');
+  if (!VALID_SESSION.test(key)) throw new Error('缺少有效的碧琪会话标识');
   return key;
 }
 
@@ -132,7 +132,7 @@ export function createWebGptActivityTool(store, initialContext = {}) {
     },
     async execute(_toolCallId, params = {}) {
       try {
-        if (!activeSessionKey) throw new Error('缺少当前 Li An 会话');
+        if (!activeSessionKey) throw new Error('缺少当前碧琪会话');
         return toolResponse(store.append(activeSessionKey, {
           stage: params.action,
           text: params.content,

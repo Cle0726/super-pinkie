@@ -83,7 +83,7 @@
       highlights = sentenceHighlights(conclusion?.[1] || normalized);
     }
     highlights = highlights.slice(0, 190).replace(/[，；、\s]+$/u, "");
-    return `先生，这段有点长，Li An 只念重点：${highlights || "重点都在屏幕上啦，先生慢慢看！"}`;
+    return `先生，这段有点长，碧琪只念重点：${highlights || "重点都在屏幕上啦，先生慢慢看！"}`;
   };
 
   const cancelTracks = () => {

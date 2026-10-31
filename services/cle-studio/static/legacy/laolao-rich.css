@@ -1,4 +1,4 @@
-/* laolao-rich:v1 —— Li An 回复里的组件、图表、流程图、公式（laolao-rich.js）
+/* laolao-rich:v1 —— 碧琪回复里的组件、图表、流程图、公式（laolao-rich.js）
  * 和工作过程同一套语言：浅底面板、C.le. 蓝做选中色、空心/实心的状态区分。
  * :not(#p1):not(#p2):not(#p3) 只为压过主题里 ID 级别的 !important 规则。 */
 html:not(#p1):not(#p2):not(#p3) {

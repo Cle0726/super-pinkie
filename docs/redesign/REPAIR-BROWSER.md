@@ -53,14 +53,14 @@ Sources/Launcher.swift:1927:35: error: cannot find 'BrowserControlEndpoint' in s
 ### R5 · Agent 活动提示从未显示
 `BrowserActivityIndicator` 实例被创建、被赋给 `browserActivityIndicator`、`activityChanged` 也会改它的 `isHidden`，但它从未被加入任何视图层级（`statusStack = NSStackView(views: [loading])`）。
 
-影响：模型操作浏览器时工具栏没有任何"Li An 正在使用浏览器"反馈，用户只知道页面自己在动。
+影响：模型操作浏览器时工具栏没有任何"碧琪正在使用浏览器"反馈，用户只知道页面自己在动。
 
 修法：`statusStack = NSStackView(views: [loading, activity])`；`updateBrowserToolbarLayout` 改为两个子视图都隐藏时才隐藏整个 stack（`detachesHiddenViews` 已开启，不会留空白）；`activityChanged` 里补一次工具栏布局刷新。
 
 ### R6 · 原生 chrome 仍是旧粉色皮肤，与新版割裂
 浏览器面板底、工具栏底、地址栏、边缘收纳手柄、悬浮/停靠/铺满的选中态、模型点击反馈点、起始页、错误页、`clekk-material` 文件预览页，全部是旧粉色（`systemPink`、`#fffafd`/`#70425b`、`#fb8`…）。
 
-修法：新增 `CleBrowserPalette`（纸白/墨黑/金/冰蓝 + 夜间对应值），上述所有位置改用它；起始页与错误页改成 `color-scheme` + `prefers-color-scheme` 的同一套变量；文件预览页同样改纸白/墨黑。品牌文案 `碧琪正在使用浏览器` → `Li An 正在使用浏览器`，起始页标题改为 `Li An 的浏览器`。
+修法：新增 `CleBrowserPalette`（纸白/墨黑/金/冰蓝 + 夜间对应值），上述所有位置改用它；起始页与错误页改成 `color-scheme` + `prefers-color-scheme` 的同一套变量；文件预览页同样改纸白/墨黑。品牌文案 `碧琪正在使用浏览器` → `碧琪正在使用浏览器`，起始页标题改为 `碧琪的浏览器`。
 
 ### R7 · 没有可复用的隔离验收宿主
 任务要求为主控提供独立测试宿主，仓库里既没有脚本也没有隔离入口。
@@ -122,7 +122,7 @@ cd ~/release-superpinkie/wt/repair-browser
 | 网页强制深色 | 保留 | `browserForceDarkScript` 未改；菜单项与状态保留 |
 | 同一 WKWebView 保留页面与登录 | 保留 | `configuration.websiteDataStore = .default()`；`detachBrowserWorkspace` 不清 `browserWebView`/`lastBrowserURL`（测试断言其不含 `= nil`） |
 | 前进/后退/刷新/外部打开 | 保留 | 未改；`createWebViewWith` 把 `target=_blank` 接进工作区 |
-| 模型操作提示 | **已修** | 活动指示器进栈（R5），文案改 Li An |
+| 模型操作提示 | **已修** | 活动指示器进栈（R5），文案改碧琪 |
 | 点击反馈 / 真人操作让行 | 保留 | `BrowserClickFeedback` + `userDidInteract` 10s 窗口未改；反馈点配色并入新版 |
 | ChatGPT 网页协作 | 保留 | `chatgpt-control` / `reset-chatgpt-session` 分支与前端 `laolao-web-gpt-collab.js` 对接未改 |
 | 本地文件/服务预览 | **已修** | 双开问题（R4）；预览页配色并入新版 |
@@ -300,7 +300,7 @@ cd services/cle-studio && node build.mjs   → ui 1a0183a8b349
 改为 `CleBrowserPalette.line(nightAppearance)`，与新版所有发丝线同一 token；全文件 `systemPink` 与 `217/89/143` 已清零。
 
 ### 9.3 语音入口仍叫“碧琪听着呢”（返修）
-源头是 `nativeDictationBridge` 注入的 `textForState`，以及麦克风/语音识别的错误文案。可见入口与用户可读提示改为 `Li An 听着呢`、`Li An 还没有麦克风权限` 等。
+源头是 `nativeDictationBridge` 注入的 `textForState`，以及麦克风/语音识别的错误文案。可见入口与用户可读提示改为 `碧琪听着呢`、`碧琪还没有麦克风权限` 等。
 
 **刻意保留** `超级碧琪` 的位置：`NSMicrophoneUsageDescription`、语音识别权限提示、`NSMenu` 应用名、网关恢复提示、CUA 显示名。这些是 macOS 授权与 bundle 身份，改名会让用户在系统设置里找不到对应开关，属于“不能改声音、权限”的范围。
 
@@ -322,14 +322,14 @@ cd services/cle-studio && node build.mjs         → ui 1a0183a8b349
 |---|---|---|---|
 | D11 | `strings` 默认不输出中文，我先前的“中文串存在性”核对其实是空测 | 会给出假的通过结论 | 改为按 UTF-8 字节扫描二进制后再判断 |
 | D12 | 起始页 `.mark` 原有 `width:74px` 约束会裁切字标 | 字标被切边 | 改为 `width:auto` 并只留底部间距 |
-| D13 | 启动占位页同时有字标与 `C.le.` 文字，重复品牌 | 观感冗余 | 副标题改为 `Li An` |
+| D13 | 启动占位页同时有字标与 `C.le.` 文字，重复品牌 | 观感冗余 | 副标题改为 `碧琪` |
 | D14 | 旧厚块的真正成因是宽高比而非路径错误 | 只调 stroke-width 治不好 | 直接弃用自拼 SVG，改用应用既有文字字标 |
 
 ---
 
 ## 10. 第四轮：收纳标签可访问性 + under-page 配色（主控新报告）
 
-主控 CUA 已实测通过：新字标清楚、无旧粉外框、语音文案为 Li An、本机页 744 CSSpx 真实 100% → 适应窗口 1942 CSSpx、forceDark 黑白真实切换、拖动与四边四角缩放、右/顶/底向外推收纳并拖回、关闭再开保留页面与输入。
+主控 CUA 已实测通过：新字标清楚、无旧粉外框、语音文案为碧琪、本机页 744 CSSpx 真实 100% → 适应窗口 1942 CSSpx、forceDark 黑白真实切换、拖动与四边四角缩放、右/顶/底向外推收纳并拖回、关闭再开保留页面与输入。
 
 ### 10.1 `BrowserEdgeTab` 声明为按钮却没有 press 实现（已修）
 问题（主控准确指出，是代码缺口而非自动化怪癖）：标签 `setAccessibilityRole(.button)`，但只要 `drag`/`mouseDown`/`mouseUp` 与 `mouseEntered`/`mouseExited`。没有 `accessibilityPerformPress`，不能成为第一响应者，也没有 keyDown —— 对 VoiceOver 与 CUA 激活都是空操作。CUA 点击无展开、原地 2px 拖动无半幅，正是因为“点击”在这条路径上根本不存在。

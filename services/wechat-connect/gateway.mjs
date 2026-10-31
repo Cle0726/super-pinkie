@@ -223,7 +223,7 @@ export class WechatLoginManager {
 }
 
 export default {
-  id: 'pinkie-wechat-connect', name: 'Li An 微信连接',
+  id: 'pinkie-wechat-connect', name: '碧琪微信连接',
   register(api) {
     // CLI metadata/registration must not start workers. Only the running
     // gateway owns this manager, and each login has its own isolated stdin.

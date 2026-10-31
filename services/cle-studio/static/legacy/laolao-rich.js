@@ -1,6 +1,6 @@
-/* laolao-rich:v1 —— Li An 回复里的富内容
+/* laolao-rich:v1 —— 碧琪回复里的富内容
  *
- * Li An 在回复里写带语言标记的代码块，这里把它们原地变成能用的东西：
+ * 碧琪在回复里写带语言标记的代码块，这里把它们原地变成能用的东西：
  *   ```ui         选项按钮、表单、清单、方案卡片（C.le. 风格的轻量渲染器，写法沿用 A2UI 的思路）
  *   ```chart      图表（Chart.js）
  *   ```mermaid    流程图、思维导图、时间线、甘特图（Mermaid）
@@ -9,7 +9,7 @@
  *   ```app        能直接玩的小应用（隔离框架，配色由网关注入）
  *   表格           点表头排序
  * 三个库只在第一次用到时才加载。原代码块藏起来但保留，点右上角「源码」能看。
- * 只处理 Li An 的消息，流式输出中的气泡先不动，写完再变。 */
+ * 只处理碧琪的消息，流式输出中的气泡先不动，写完再变。 */
 (() => {
   'use strict';
   if (window.__laolaoRich) return;
@@ -56,7 +56,7 @@
   }
   const katexReady = () => (css(VENDOR.katexCss), script(VENDOR.katex).then(() => script(VENDOR.mhchem).catch(() => {})));
 
-  /* ── 发给 Li An：和提问卡一样走输入框，原来没打完的字放回去 ── */
+  /* ── 发给碧琪：和提问卡一样走输入框，原来没打完的字放回去 ── */
   const paneFor = origin => origin?.closest?.('openclaw-chat-pane') || document.querySelector('openclaw-chat-pane[active]') || document.querySelector('openclaw-chat-pane');
   const sessionFor = origin => paneFor(origin)?.state?.sessionKey || window.__laolaoSidebar?.currentSessionKey?.() || new URL(location.href).searchParams.get('session') || document.querySelector('.sidebar-recent-session--active[data-session-key]')?.dataset.sessionKey || '';
   const request = (method, params, timeout = 15000) => typeof window.__laolaoSidebar?.gwRequest === 'function'
@@ -255,7 +255,7 @@
         form.append(row);
       });
       root.append(form);
-      const submit = el('button', 'pk-btn pk-btn--primary', String(spec.submit || '发给 Li An')); submit.type = 'button';
+      const submit = el('button', 'pk-btn pk-btn--primary', String(spec.submit || '发给碧琪')); submit.type = 'button';
       submit.addEventListener('click', () => {
         const invalid = fields.find((f, i) => f.required && (values[String(f.id || 'f' + i)] == null || values[String(f.id || 'f' + i)] === '' || Array.isArray(values[String(f.id || 'f' + i)]) && !values[String(f.id || 'f' + i)].length));
         if (invalid) { inlineError(root, '请先填写「' + (invalid.label || invalid.id) + '」。'); return; }
@@ -533,7 +533,7 @@
     }
   }
 
-  /* ── 「接着问」：只在最新一条 Li An 回复上 ── */
+  /* ── 「接着问」：只在最新一条碧琪回复上 ── */
   // 只在内容真的变了时才动 DOM：这里每次扫描都会跑，删了再加会触发观察者，自己把自己循环起来
   const activeThread = () => document.querySelector('.chat-pane-cache__pane--active') || document;
   function placeFollowups() {

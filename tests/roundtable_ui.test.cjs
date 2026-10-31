@@ -100,7 +100,7 @@ test('assistant markdown is rendered as readable UI without allowing raw HTML', 
 });
 
 test('roundtable names agree with Party Space for shared members', () => {
-  for (const name of ['Li An','紫悦','云宝','珍奇','柔柔','苹果嘉儿']) assert.match(server, new RegExp(`'name': '${name}'`));
+  for (const name of ['碧琪','紫悦','云宝','珍奇','柔柔','苹果嘉儿']) assert.match(server, new RegExp(`'name': '${name}'`));
   for (const wrong of ['暮光闪闪','云宝黛西','小蝶']) assert.doesNotMatch(server, new RegExp(`'name': '${wrong}'`));
   assert.match(server, /laolao-party-twilight-v1\.png/);
   assert.match(server, /laolao-party-rainbow-v1\.png/);

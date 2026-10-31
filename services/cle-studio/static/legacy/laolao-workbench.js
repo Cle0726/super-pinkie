@@ -3,7 +3,7 @@
  *
  *  ┌──┬────────────┬──────────────────────────────┬───────────────┐
  *  │活│ 资源管理器 │ 标签  app.js ●  README.md     │               │
- *  │动│ ▾ src      │ src › app.js                 │  Li An 对话    │
+ *  │动│ ▾ src      │ src › app.js                 │  碧琪对话    │
  *  │栏│   app.js   │  1  const a = 1              │ （原来的聊天 │
  *  │  │ 搜索 / Git │                              │   原样保留）  │
  *  │  │            ├──────────────────────────────┤               │
@@ -14,7 +14,7 @@
  *
  * 工作台是挂在 body 上的独立一层，不改 Lit 渲染的聊天页；聊天只是被挤到右边（main.content 加左内边距）。
  * 编辑器 Monaco、终端复用应用自带的 openclaw-terminal-panel（ghostty），文件读写走插件的 pinkie.fs.*。
- * 挥洒模式不弹任何确认；删除和放弃改动都进 Li An 的回收站，提示条里一键撤销。 */
+ * 挥洒模式不弹任何确认；删除和放弃改动都进碧琪的回收站，提示条里一键撤销。 */
 (() => {
   'use strict';
   if (window.__pinkieWorkbench) return;
@@ -177,7 +177,7 @@
   }
 
   /* ───────── 骨架 ───────── */
-  const root = el('div', 'pk-wb'); root.setAttribute('role', 'application'); root.setAttribute('aria-label', 'Li An 工作台'); root.hidden = true;
+  const root = el('div', 'pk-wb'); root.setAttribute('role', 'application'); root.setAttribute('aria-label', '碧琪工作台'); root.hidden = true;
   const activity = el('nav', 'pk-wb-views'); activity.setAttribute('aria-label', '视图'); activity.setAttribute('role', 'tablist');
   const side = el('aside', 'pk-wb-side');
   const sideSash = el('div', 'pk-wb-sash pk-wb-sash--side');
@@ -201,10 +201,10 @@
     if (id === 'scm') { const badge = el('span', 'pk-wb-badge'); badge.hidden = true; b.append(badge); }
     activityButtons[id] = b; activity.append(b);
   }
-  // 终端、问 Li An、收起工作台：放在编辑卡片标题栏的最右边（常驻）
+  // 终端、问碧琪、收起工作台：放在编辑卡片标题栏的最右边（常驻）
   const benchTools = el('div', 'pk-wb-tabs__bench');
   const actTerminal = button('terminal', '终端（' + keyLabel('⌃`') + '）', () => togglePanel('terminal'));
-  const actChat = button('comment-discussion', '问 Li An（选中代码后 ' + keyLabel('⌘L') + '）', () => askPinkie());
+  const actChat = button('comment-discussion', '问碧琪（选中代码后 ' + keyLabel('⌘L') + '）', () => askPinkie());
   const actClose = button('screen-normal', '收起工作台，回到普通聊天（' + keyLabel('⌥⌘B') + '）', () => setEnabled(false));
   benchTools.append(actTerminal, actChat, actClose);
 
@@ -700,7 +700,7 @@
       {label: '新建文件夹…', icon: 'new-folder', run: () => newEntry(dir, 'dir')},
     ];
     if (path) items.push('-',
-      ...(kind === 'file' ? [{label: '打开', icon: 'go-to-file', run: () => openFile(path)}, {label: '让 Li An 看看这个文件', icon: 'comment-discussion', run: () => askAboutFile(path)}] : [{label: '在终端中打开', icon: 'terminal', run: () => terminalCd(path)}]),
+      ...(kind === 'file' ? [{label: '打开', icon: 'go-to-file', run: () => openFile(path)}, {label: '让碧琪看看这个文件', icon: 'comment-discussion', run: () => askAboutFile(path)}] : [{label: '在终端中打开', icon: 'terminal', run: () => terminalCd(path)}]),
       {label: '在访达中显示', icon: 'folder-opened', run: () => rpc('pinkie.fs.reveal', {path}).catch(e => toast(e.message))},
       '-',
       {label: '复制路径', icon: 'copy', key: '⌥⌘C', run: () => copyText(absolute(path))},
@@ -782,7 +782,7 @@
       const result = await rpc('pinkie.fs.trash', {path});
       for (const tab of affected) closeTab(tab.path, true);
       await loadDir(dirname(path)); renderTree(); refreshGit(); state.files = null;
-      toast('已把「' + basename(path) + '」放进 Li An 的回收站', {label: '撤销', run: async () => { try { await rpc('pinkie.fs.restore', {trashId: result.trashId}); await loadDir(dirname(path)); renderTree(); refreshGit(); toast('已恢复「' + basename(path) + '」'); } catch (e) { toast(e.message); } }});
+      toast('已把「' + basename(path) + '」放进碧琪的回收站', {label: '撤销', run: async () => { try { await rpc('pinkie.fs.restore', {trashId: result.trashId}); await loadDir(dirname(path)); renderTree(); refreshGit(); toast('已恢复「' + basename(path) + '」'); } catch (e) { toast(e.message); } }});
     } catch (error) { toast(error.message); }
   }
   // 营造模式用的「再按一次」：不是弹窗，只是第二次确认
@@ -831,7 +831,7 @@
   const hex = (c, a) => '#' + [c.r, c.g, c.b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('') + (a == null ? '' : Math.round(a * 255).toString(16).padStart(2, '0'));
   const mix = (a, b, t) => ({r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t});
   const luma = c => (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
-  // C.le. 主题：底色、强调色取当前模式的 CSS 变量；语法色固定一套 Li An 粉 + C.le. 蓝。
+  // C.le. 主题：底色、强调色取当前模式的 CSS 变量；语法色固定一套碧琪粉 + C.le. 蓝。
   function themeColors() {
     const v = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const elevated = cssColor(v('--bg-elevated') || '#2a2030', {r: 42, g: 32, b: 48, a: 1});
@@ -941,9 +941,9 @@
       fixedOverflowWidgets: true, contextmenu: true, unicodeHighlight: {ambiguousCharacters: false},
     });
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveActive());
-    editor.addAction({id: 'pinkie.ask', label: '问 Li An（带上选中的代码）', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyL], contextMenuGroupId: '0_pinkie', contextMenuOrder: 1, run: () => askPinkie()});
-    editor.addAction({id: 'pinkie.explain', label: '让 Li An 解释这段代码', contextMenuGroupId: '0_pinkie', contextMenuOrder: 2, run: () => askPinkie('请解释这段代码在做什么，有没有隐患：')});
-    editor.addAction({id: 'pinkie.fix', label: '在对话里让 Li An 修改这段代码', contextMenuGroupId: '0_pinkie', contextMenuOrder: 4, run: () => askPinkie('请修改这段代码：')});
+    editor.addAction({id: 'pinkie.ask', label: '问碧琪（带上选中的代码）', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyL], contextMenuGroupId: '0_pinkie', contextMenuOrder: 1, run: () => askPinkie()});
+    editor.addAction({id: 'pinkie.explain', label: '让碧琪解释这段代码', contextMenuGroupId: '0_pinkie', contextMenuOrder: 2, run: () => askPinkie('请解释这段代码在做什么，有没有隐患：')});
+    editor.addAction({id: 'pinkie.fix', label: '在对话里让碧琪修改这段代码', contextMenuGroupId: '0_pinkie', contextMenuOrder: 4, run: () => askPinkie('请修改这段代码：')});
     editor.addAction({id: 'pinkie.copyRef', label: '复制代码位置', contextMenuGroupId: '9_cutcopypaste', contextMenuOrder: 9, run: () => { const s = editor.getSelection(); copyText(state.active + ':' + s.startLineNumber + (s.endLineNumber !== s.startLineNumber ? '-' + s.endLineNumber : '')); }});
     editor.onDidChangeCursorSelection(() => renderStatusSoon());
     editor.onDidChangeModel(() => renderStatusSoon());
@@ -1214,10 +1214,10 @@
     welcome.replaceChildren();
     const mark = el('div', 'pk-wb-welcome__mark');
     mark.append(el('i', 'pk-wb-mark'));
-    const title = el('h1', 'pk-wb-welcome__title', state.info?.name || 'Li An 工作台');
+    const title = el('h1', 'pk-wb-welcome__title', state.info?.name || '碧琪工作台');
     const sub = el('p', 'pk-wb-welcome__sub', state.info?.error ? state.info.error : state.info ? (state.info.bound ? '项目文件夹 · ' : '工作区 · ') + state.info.root : '正在连接…');
     const keys = el('div', 'pk-wb-welcome__keys');
-    for (const [label, k, run] of [['快速打开文件', '⌘P', () => showQuick('')], ['在文件中搜索', '⇧⌘F', () => openView('search')], ['打开终端', '⌃`', () => togglePanel('terminal', true)], ['命令', '⇧⌘P', () => showQuick('>')], ['问 Li An', '⌘L', () => askPinkie()]]) {
+    for (const [label, k, run] of [['快速打开文件', '⌘P', () => showQuick('')], ['在文件中搜索', '⇧⌘F', () => openView('search')], ['打开终端', '⌃`', () => togglePanel('terminal', true)], ['命令', '⇧⌘P', () => showQuick('>')], ['问碧琪', '⌘L', () => askPinkie()]]) {
       const row = el('button', 'pk-wb-welcome__key'); row.type = 'button';
       row.append(el('span', '', label), el('kbd', '', keyLabel(k)));
       row.addEventListener('click', run);
@@ -1237,7 +1237,7 @@
     store.set(key, [path, ...store.get(key, []).filter(p => p !== path)].slice(0, 20));
   }
 
-  /* ───────── 保存、冲突、同步 Li An 的改动 ───────── */
+  /* ───────── 保存、冲突、同步碧琪的改动 ───────── */
   async function saveActive(force) {
     let tab = findTab(state.active);
     if (tab?.kind === 'diff') tab = findTab(tab.source);
@@ -1284,7 +1284,7 @@
       await openDiffTab({id: 'diff:disk:' + tab.path, title: tab.name + '（磁盘 ↔ 我的）', source: tab.path, original: m.editor.createModel(disk.content || '', languageFor(tab.path)), modified: tab.model, modifiedOwned: false});
     } catch (error) { toast(error.message); }
   }
-  // 打开的文件被 Li An（或别的程序）改了：没改动就直接载入新内容，有改动就提示冲突。
+  // 打开的文件被碧琪（或别的程序）改了：没改动就直接载入新内容，有改动就提示冲突。
   async function checkOpenFiles() {
     const tabs = state.tabs.filter(t => t.kind === 'text' && t.mtimeMs);
     if (!tabs.length || !state.visible || document.hidden) return;
@@ -1334,7 +1334,7 @@
       const result = await rpc('pinkie.fs.gitAction', {action, paths, ...extra}, 60000);
       if (action === 'discard') {
         for (const p of paths) { const tab = findTab(p); if (tab) await reloadTab(tab, true); }
-        toast('已放弃 ' + paths.length + ' 个文件的改动（原内容在 Li An 回收站）', {label: '撤销', run: async () => { for (const id of result.trashIds || []) await rpc('pinkie.fs.restore', {trashId: id}).catch(e => toast(e.message)); refreshSoon(); for (const p of paths) { const tab = findTab(p); if (tab) await reloadTab(tab, true); } }});
+        toast('已放弃 ' + paths.length + ' 个文件的改动（原内容在碧琪回收站）', {label: '撤销', run: async () => { for (const id of result.trashIds || []) await rpc('pinkie.fs.restore', {trashId: id}).catch(e => toast(e.message)); refreshSoon(); for (const p of paths) { const tab = findTab(p); if (tab) await reloadTab(tab, true); } }});
       }
       if (action === 'commit') toast('已提交：' + (result.summary || ''));
       await refreshGit(); refreshTree();
@@ -2000,7 +2000,7 @@
     for (const item of extraStatus.values()) { try { const node = item(tab); if (node) right.append(node); } catch {} }
     const live = document.documentElement.hasAttribute('data-cle-live');
     const pinkie = el('button', 'pk-wb-status__item pk-wb-status__pinkie' + (live ? ' is-live' : '')); pinkie.type = 'button';
-    pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? 'Li An 工作中' : 'Li An'));
+    pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? '碧琪工作中' : '碧琪'));
     pinkie.title = '把焦点移到对话输入框';
     pinkie.addEventListener('click', () => composer()?.focus());
     right.append(pinkie);
@@ -2008,7 +2008,7 @@
   }
   new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']});
 
-  /* ───────── 问 Li An ───────── */
+  /* ───────── 问碧琪 ───────── */
   const composer = () => document.querySelector('.agent-chat__input textarea');
   function insertIntoComposer(text) {
     const box = composer();
@@ -2124,11 +2124,11 @@
     {label: '编辑器：编辑器命令面板（Monaco）', key: 'F1', run: () => { editor?.focus(); editor?.trigger('quick', 'editor.action.quickCommand'); }},
     {label: 'Git：和上次提交比较', run: () => state.active && openDiff(state.active)},
     {label: 'Git：刷新', run: () => refreshGit()},
-    {label: 'Li An：问 Li An（带上选中的代码）', key: '⌘L', run: () => askPinkie()},
-    {label: 'Li An：让 Li An 看看当前文件', run: () => state.active && askAboutFile(state.active)},
-    {label: 'Li An：' + (store.get('follow', true) ? '关闭' : '打开') + '「跟随 Li An 的改动」', run: () => { store.set('follow', !store.get('follow', true)); toast(store.get('follow', true) ? 'Li An 改文件时会在工作台里打开' : '不再自动打开 Li An 改的文件'); }},
+    {label: '碧琪：问碧琪（带上选中的代码）', key: '⌘L', run: () => askPinkie()},
+    {label: '碧琪：让碧琪看看当前文件', run: () => state.active && askAboutFile(state.active)},
+    {label: '碧琪：' + (store.get('follow', true) ? '关闭' : '打开') + '「跟随碧琪的改动」', run: () => { store.set('follow', !store.get('follow', true)); toast(store.get('follow', true) ? '碧琪改文件时会在工作台里打开' : '不再自动打开碧琪改的文件'); }},
     {label: '运行：运行当前文件', key: 'F5', run: async () => (await codeModule()).runActive?.()},
-    {label: '编辑器：让 Li An 修改选中的代码（行内）', key: '⌘I', run: async () => (await codeModule()).inlineEdit?.()},
+    {label: '编辑器：让碧琪修改选中的代码（行内）', key: '⌘I', run: async () => (await codeModule()).inlineEdit?.()},
     {label: '项目：在访达中显示', run: () => rpc('pinkie.fs.reveal', {path: ''}).catch(e => toast(e.message))},
     {label: '项目：刷新文件', run: () => refreshAll()},
   ];
@@ -2282,7 +2282,7 @@
     if (key && key !== state.key) return;
     switchSession(state.key);
   });
-  // Li An 用工具改文件时，文件树、Git 和打开的标签跟着更新
+  // 碧琪用工具改文件时，文件树、Git 和打开的标签跟着更新
   window.addEventListener('pinkie:gateway-event', event => {
     if (!state.visible) return;
     const {event: name, payload} = event.detail || {};
@@ -2293,7 +2293,7 @@
     if ((name === 'agent' && payload?.stream === 'tool' && /^(write|edit|apply_patch|exec|bash|process)$/i.test(tool) && /result|end|done|complete/i.test(String(data.phase || data.state || 'result')))
       || (name === 'chat' && ['final', 'aborted', 'error'].includes(payload?.state))) refreshSoon();
   });
-  // Li An 用 workbench_show 指给先生看；写 / 改文件时（跟随开着）在预览标签里打开，不抢输入框的焦点
+  // 碧琪用 workbench_show 指给先生看；写 / 改文件时（跟随开着）在预览标签里打开，不抢输入框的焦点
   const toolArgs = new Map();
   function relativePath(raw) {
     let p = String(raw || '');

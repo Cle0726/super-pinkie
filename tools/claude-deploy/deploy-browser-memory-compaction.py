@@ -20,8 +20,8 @@ sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else No
 
 
 def branded_browser():
-    # The live plugin speaks as 碧琪; the repo source still says Li An.
-    return (REPO / 'services/mode-architecture/app-browser.mjs').read_text().replace('Li An', '碧琪')
+    # The live plugin speaks as 碧琪; the repo source still says 碧琪.
+    return (REPO / 'services/mode-architecture/app-browser.mjs').read_text().replace('碧琪', '碧琪')
 
 
 def apply(root):

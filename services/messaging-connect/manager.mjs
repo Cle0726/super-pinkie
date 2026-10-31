@@ -34,7 +34,7 @@ export function saveAccount(draft, options, credentials, resolveRoute) {
   section.accounts ||= {};
   section.enabled = true;
   const existing = section.accounts[accountId] || {};
-  const common = { ...existing, name: `Li An · ${label}`, enabled: true, appId: credentials.appId,
+  const common = { ...existing, name: `碧琪 · ${label}`, enabled: true, appId: credentials.appId,
     connectionMode: 'websocket', groupPolicy: 'disabled', streaming: true };
   if (channel === 'feishu') {
     section.accounts[accountId] = { ...common, domain: credentials.domain === 'lark' ? 'lark' : 'feishu',

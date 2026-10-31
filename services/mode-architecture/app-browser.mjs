@@ -151,7 +151,7 @@ function safeHomePath(home, file) {
   const stateFolder = /^\.openclaw(?:-.+)?$/.test(parts[0] || '');
   const workspace = stateFolder && isWorkspace(parts[1] || '');
   if (parts[0] === '.ssh' || (parts[0] === 'library' && parts[1] === 'keychains') || (stateFolder && !workspace)) {
-    throw new Error('这个位置包含密钥或 Li An 配置，不能从浏览器里打开。');
+    throw new Error('这个位置包含密钥或碧琪配置，不能从浏览器里打开。');
   }
 }
 function validateDirectory(raw, home, {requireHome = true} = {}) {
@@ -285,7 +285,7 @@ export class AppBrowserServers {
 
   records(ctx, params = {}) {
     const owner = sessionOwner(ctx);
-    if (!owner) throw new Error('缺少当前 Li An 会话，不能管理本地服务。');
+    if (!owner) throw new Error('缺少当前碧琪会话，不能管理本地服务。');
     if (params.pid !== undefined && (!Number.isInteger(params.pid) || params.pid < 1)) throw new Error('服务进程号无效。');
     if (params.port !== undefined && (!Number.isInteger(params.port) || params.port < 1 || params.port > 65535)) throw new Error('服务端口无效。');
     return [...this.servers].filter(record => record.owner === owner
@@ -311,7 +311,7 @@ export class AppBrowserServers {
   async startServe(ctx, params, {signal} = {}) {
     aborted(signal);
     if (this.disposed) throw new Error('网关正在退出，不能启动新的本地服务。');
-    if (!sessionOwner(ctx)) throw new Error('缺少当前 Li An 会话，不能启动本地服务。');
+    if (!sessionOwner(ctx)) throw new Error('缺少当前碧琪会话，不能启动本地服务。');
     // Fail before starting a process when there is no visible App browser.
     appBrowserEndpoint(this.environment);
     const staticMode = typeof params.dir === 'string' && params.dir.trim();
@@ -339,7 +339,7 @@ export class AppBrowserServers {
         addLog(record, '本地网页服务已启动。\n');
       } else {
         const cwd = validateDirectory(params.cwd, this.home, {requireHome: false});
-        if (await portOpen(params.port)) throw new Error('这个端口已经被其他服务占用，Li An 没有启动或接管它。');
+        if (await portOpen(params.port)) throw new Error('这个端口已经被其他服务占用，碧琪没有启动或接管它。');
         aborted(signal);
         if (this.disposed) throw new Error('网关正在退出，不能启动新的本地服务。');
         record.port = params.port;
@@ -409,7 +409,7 @@ export class AppBrowserServers {
   async stop(ctx, params = {}) {
     if (params.pid === undefined && params.port === undefined) throw new Error('停止服务需要 pid 或 port。');
     const records = this.records(ctx, params);
-    if (!records.length) throw new Error('当前会话没有启动这个服务，Li An 不会停止其他会话或用户的进程。');
+    if (!records.length) throw new Error('当前会话没有启动这个服务，碧琪不会停止其他会话或用户的进程。');
     await Promise.all(records.map(record => this.stopRecord(record)));
     return {ok: true, message: '本会话的本地服务已停止。', services: records.map(({url, pid, port}) => ({url, pid, port}))};
   }

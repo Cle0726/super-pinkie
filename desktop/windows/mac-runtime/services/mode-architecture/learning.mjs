@@ -1352,7 +1352,7 @@ export class LearningInteractionStore {
       example: cleanText(structured.example, 4000) || current.example || '',
       note: cleanText(structured.note, 4000) || current.note || '',
       ...(tags.length ? {tags} : {}),
-      ...(supplement && !originalHasChinese ? {supplementalMeaning: `碧琪 补充：${supplement}`} : {}),
+      ...(supplement && !originalHasChinese ? {supplementalMeaning: `碧琪补充：${supplement}`} : {}),
       lightOrganizedAt: Date.now(),
       updatedAt: Date.now(),
       original: current.original ?? current.content,
@@ -1688,7 +1688,7 @@ export class LearningInteractionStore {
           id: randomUUID(), title: operation.title, content, original: content,
           term: items.map(item => item.term).join(' / '), meaning: operation.differencePoints,
           example: '', note: '', kind: 'compare', compareItems: items, differencePoints: operation.differencePoints,
-          sourceSessionKey: sessionKey, sourceLabel: '碧琪 整理的对比卡', createdAt: now, updatedAt: now,
+          sourceSessionKey: sessionKey, sourceLabel: '碧琪整理的对比卡', createdAt: now, updatedAt: now,
           tags: ['易混'], status: 'active', deepOrganizedAt: now,
         });
         notes.unshift(card); byId.set(card.id, card);
@@ -2327,7 +2327,7 @@ export function learningPrompt(store, sessionKey) {
   let state = {enabled: false};
   try { state = store.status(sessionKey); } catch { /* Keep the save-only notebook usable while status reloads. */ }
   const noteRules = `
-【碧琪 学习笔记】
+【碧琪学习笔记】
 - 笔记抽屉使用独立整理模型，整理结果由抽屉直接显示。继续正常学习对话即可。
 `.trim();
   const questionHygieneRules = `

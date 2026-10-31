@@ -1,7 +1,7 @@
 {
   "id": "cle-studio",
   "name": "C.le. Studio",
-  "description": "The C.le. interface for Li An: the guardian cat, five rooms, gaze motion.",
+  "description": "The C.le. interface for 碧琪: the guardian cat, five rooms, gaze motion.",
   "version": "0.1.0",
   "activation": {
     "onStartup": true
@@ -22,7 +22,7 @@
     {
       "id": "cle",
       "name": "C.le.",
-      "description": "Ivory and ink around an oil painting; one sapphire gaze. Li An, a black cat, guards the white blossoms.",
+      "description": "Ivory and ink around an oil painting; one sapphire gaze. 碧琪, a black cat, guards the white blossoms.",
       "source": "themes/cle.json"
     }
   ],

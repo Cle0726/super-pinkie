@@ -2270,12 +2270,12 @@ not ok 24 - without a native bridge the entry advertises an in-page preview
   error: |-
     The input did not match the regular expression /页内预览/. Input:
     
-    '打开浏览器（与 Li An 共用）'
+    '打开浏览器（与碧琪共用）'
     
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected:
-  actual: '打开浏览器（与 Li An 共用）'
+  actual: '打开浏览器（与碧琪共用）'
   operator: 'match'
   stack: |-
     TestContext.<anonymous> (/Users/Admin/release-superpinkie/repo/tests/browser-entry-panes.test.cjs:193:10)
@@ -3450,7 +3450,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
                 case .notDetermined:
                     AVCaptureDevice.requestAccess(for: .audio) { allowed in
                         DispatchQueue.main.async {
-                            completion(allowed, allowed ? nil : "Li An 还没有麦克风权限。")
+                            completion(allowed, allowed ? nil : "碧琪还没有麦克风权限。")
                         }
                     }
                 default:
@@ -3478,7 +3478,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
     
         private func beginRecording() {
             guard let recognizer, recognizer.isAvailable else {
-                send(state: "error", message: "语音识别暂时不可用，Li An 晚点再试试。")
+                send(state: "error", message: "语音识别暂时不可用，碧琪晚点再试试。")
                 return
             }
     
@@ -3486,7 +3486,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
             task = nil
             request = SFSpeechAudioBufferRecognitionRequest()
             guard let request else {
-                send(state: "error", message: "Li An 没能准备好听写小本本。")
+                send(state: "error", message: "碧琪没能准备好听写小本本。")
                 return
             }
             request.shouldReportPartialResults = true
@@ -3521,7 +3521,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
                 }
             } catch {
                 inputNode.removeTap(onBus: 0)
-                send(state: "error", message: "麦克风启动失败，Li An 没能听清。")
+                send(state: "error", message: "麦克风启动失败，碧琪没能听清。")
             }
         }
     
@@ -4892,7 +4892,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
             let inset = min(12, min(bounds.width, bounds.height) / 8)
             let available = bounds.insetBy(dx: inset, dy: inset)
             // a small window by default: it floats in the upper right and leaves the conversation, the
-            // composer and Li An visible; it can be dragged larger, docked or made full from its toolbar
+            // composer and 碧琪 visible; it can be dragged larger, docked or made full from its toolbar
             let w0 = min(540, available.width * 0.42), h0 = min(420, available.height * 0.56)
             let initial = NSRect(x: available.maxX - w0, y: available.maxY - h0, width: w0, height: h0)
             let raw = proposed ?? initial
@@ -5436,7 +5436,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 // 超級碧琪's installer writes into ~/.openclaw; C.le. must never run it. Its own first
-                // run copies that data once into its own profile, as Li An.
+                // run copies that data once into its own profile, as 碧琪.
                 if RuntimeConfig.isCleBrand { CleFirstRun.runIfNeeded() } else { BundledSetup.apply() }
                 DispatchQueue.main.async {
                     self?.startBundledServices()
@@ -6269,7 +6269,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
             browserPresentationMenu?.isHidden = false
             for button in browserPresentationButtons.values { button.isHidden = true }
             browserStatusStack?.isHidden = (browserLoadingIndicator?.isHidden != false) && (browserActivityIndicator?.isHidden != false)
-            browserPresentationMenu?.toolTip = browserAgentActive ? "Li An 正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
+            browserPresentationMenu?.toolTip = browserAgentActive ? "碧琪正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
             updateBrowserToolbarVisibility()
         }
     
@@ -6856,7 +6856,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
               p{margin:0;color:var(--ink2);font-size:13px}
               .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
             </style>
-            <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+            <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>碧琪的浏览器</h1><p>在上方输入网址或搜索内容</p>
             <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
             """#
             browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -7779,7 +7779,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
                 case "roundtable":
                     panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
                 default:
-                    panel.message = "选择一个文件夹，Li An 会把它放进左侧项目栏。"
+                    panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
                 }
                 panel.prompt = "选择"
                 panel.canChooseFiles = false
@@ -8037,7 +8037,7 @@ not ok 56 - native window chrome and voice entry no longer use the old pink iden
               let active = false;
               let baseDraft = { value: "" };
     
-              const textForState = () => active ? "收好啦" : "Li An 听着呢";
+              const textForState = () => active ? "收好啦" : "碧琪听着呢";
               const updateButton = (message) => {
                 const button = document.getElementById(buttonId);
                 if (!button) return;
@@ -20741,7 +20741,7 @@ not ok 1415 - macOS hotfix keeps the same stable local identity used by full bui
           -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleIconFile CLeAppIcon" \
           -c "Add :CLEBrand string cle" "$CONTENTS/Info.plist"
       for key in $($PB -c Print "$CONTENTS/Info.plist" | sed -n 's/^ *\(NS[A-Za-z]*UsageDescription\) = .*/\1/p'); do
-        value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/Li An/g')"
+        value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/碧琪/g')"
         $PB -c "Set :$key $value" "$CONTENTS/Info.plist"
       done
     fi
@@ -21338,7 +21338,7 @@ not ok 1417 - macOS app owns an unrestricted computer-control driver and capable
           -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleIconFile CLeAppIcon" \
           -c "Add :CLEBrand string cle" "$CONTENTS/Info.plist"
       for key in $($PB -c Print "$CONTENTS/Info.plist" | sed -n 's/^ *\(NS[A-Za-z]*UsageDescription\) = .*/\1/p'); do
-        value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/Li An/g')"
+        value="$($PB -c "Print :$key" "$CONTENTS/Info.plist" | sed -e 's/超級碧琪/C.le./g' -e 's/碧琪/碧琪/g')"
         $PB -c "Set :$key $value" "$CONTENTS/Info.plist"
       done
     fi
@@ -22301,7 +22301,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
                 case .notDetermined:
                     AVCaptureDevice.requestAccess(for: .audio) { allowed in
                         DispatchQueue.main.async {
-                            completion(allowed, allowed ? nil : "Li An 还没有麦克风权限。")
+                            completion(allowed, allowed ? nil : "碧琪还没有麦克风权限。")
                         }
                     }
                 default:
@@ -22329,7 +22329,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
     
         private func beginRecording() {
             guard let recognizer, recognizer.isAvailable else {
-                send(state: "error", message: "语音识别暂时不可用，Li An 晚点再试试。")
+                send(state: "error", message: "语音识别暂时不可用，碧琪晚点再试试。")
                 return
             }
     
@@ -22337,7 +22337,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
             task = nil
             request = SFSpeechAudioBufferRecognitionRequest()
             guard let request else {
-                send(state: "error", message: "Li An 没能准备好听写小本本。")
+                send(state: "error", message: "碧琪没能准备好听写小本本。")
                 return
             }
             request.shouldReportPartialResults = true
@@ -22372,7 +22372,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
                 }
             } catch {
                 inputNode.removeTap(onBus: 0)
-                send(state: "error", message: "麦克风启动失败，Li An 没能听清。")
+                send(state: "error", message: "麦克风启动失败，碧琪没能听清。")
             }
         }
     
@@ -23743,7 +23743,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
             let inset = min(12, min(bounds.width, bounds.height) / 8)
             let available = bounds.insetBy(dx: inset, dy: inset)
             // a small window by default: it floats in the upper right and leaves the conversation, the
-            // composer and Li An visible; it can be dragged larger, docked or made full from its toolbar
+            // composer and 碧琪 visible; it can be dragged larger, docked or made full from its toolbar
             let w0 = min(540, available.width * 0.42), h0 = min(420, available.height * 0.56)
             let initial = NSRect(x: available.maxX - w0, y: available.maxY - h0, width: w0, height: h0)
             let raw = proposed ?? initial
@@ -24287,7 +24287,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 // 超級碧琪's installer writes into ~/.openclaw; C.le. must never run it. Its own first
-                // run copies that data once into its own profile, as Li An.
+                // run copies that data once into its own profile, as 碧琪.
                 if RuntimeConfig.isCleBrand { CleFirstRun.runIfNeeded() } else { BundledSetup.apply() }
                 DispatchQueue.main.async {
                     self?.startBundledServices()
@@ -25120,7 +25120,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
             browserPresentationMenu?.isHidden = false
             for button in browserPresentationButtons.values { button.isHidden = true }
             browserStatusStack?.isHidden = (browserLoadingIndicator?.isHidden != false) && (browserActivityIndicator?.isHidden != false)
-            browserPresentationMenu?.toolTip = browserAgentActive ? "Li An 正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
+            browserPresentationMenu?.toolTip = browserAgentActive ? "碧琪正在操作浏览器；点开切换显示方式" : "停靠、悬浮、铺满或在默认浏览器打开"
             updateBrowserToolbarVisibility()
         }
     
@@ -25707,7 +25707,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
               p{margin:0;color:var(--ink2);font-size:13px}
               .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
             </style>
-            <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>Li An 的浏览器</h1><p>在上方输入网址或搜索内容</p>
+            <main><div class="mark">\#(CleWordmark.html(pointSize: 64))</div><h1>碧琪的浏览器</h1><p>在上方输入网址或搜索内容</p>
             <p class="hint">⌘⇧B 打开 / 关闭 · 页面与登录状态会一直保留</p></main>
             """#
             browserWebView?.loadHTMLString(html, baseURL: nil)
@@ -26630,7 +26630,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
                 case "roundtable":
                     panel.message = "选择圆桌要完成工作的项目文件夹。工具和文件操作只会发生在这个目录里。"
                 default:
-                    panel.message = "选择一个文件夹，Li An 会把它放进左侧项目栏。"
+                    panel.message = "选择一个文件夹，碧琪会把它放进左侧项目栏。"
                 }
                 panel.prompt = "选择"
                 panel.canChooseFiles = false
@@ -26888,7 +26888,7 @@ not ok 1420 - native startup uses the bundled opaque mascot video instead of exp
               let active = false;
               let baseDraft = { value: "" };
     
-              const textForState = () => active ? "收好啦" : "Li An 听着呢";
+              const textForState = () => active ? "收好啦" : "碧琪听着呢";
               const updateButton = (message) => {
                 const button = document.getElementById(buttonId);
                 if (!button) return;

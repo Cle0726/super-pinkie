@@ -144,7 +144,7 @@ export class ProjectScope {
   }
 }
 export default {
-  id:'pinkie-project-scope',name:'Li An 项目工作锚点',
+  id:'pinkie-project-scope',name:'碧琪项目工作锚点',
   register(api) {
     const guard=new ProjectScope();
     api.registerGatewayMethod('pinkie.project.validate',({params,respond})=>{

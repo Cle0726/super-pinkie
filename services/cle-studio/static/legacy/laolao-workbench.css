@@ -1,4 +1,4 @@
-/* laolao-workbench:v1 —— Li An 工作台（营造模式 / 挥洒模式）
+/* laolao-workbench:v1 —— 碧琪工作台（营造模式 / 挥洒模式）
  * 全部颜色取页面现有变量（--bg-elevated / --text / --accent / --cle-accent …），
  * 所以五个模式、白天夜间自动跟随。C.le. 签名：粉 → 蓝 的细线，只出现在当前标签和活动栏指示条上。 */
 @import url("./laolao-vendor-codicons/codicon.css");

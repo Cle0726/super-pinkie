@@ -2,7 +2,7 @@
 //
 // 根目录 = 这段会话绑定的项目文件夹（pinkie-project-scope 的 bindings.json）；没有绑定就用该模式的工作区。
 // 项目是默认编辑、运行和 Git 目录；模式工作区和其他绝对路径始终可读。项目外写入沿用各模式的规则。
-// 删除和「放弃改动」都先放进 Li An 自己的回收站，
+// 删除和「放弃改动」都先放进碧琪自己的回收站，
 // 可以一键恢复，所以前端不需要确认弹窗。写入一律原子替换，并用修改时间防止覆盖外部刚改过的文件。
 import fs from 'node:fs';
 import os from 'node:os';
@@ -239,7 +239,7 @@ export class Workbench {
       if (!stat.isFile()) throw fail('这不是文件。');
       mode = stat.mode & 0o7777;
       const base = Number(params.baseMtimeMs);
-      if (!params.force && Number.isFinite(base) && base > 0 && Math.abs(Math.round(stat.mtimeMs) - base) > 1) throw fail('文件刚刚在别处被修改过（可能是 Li An 或其他程序）。', 'CONFLICT');
+      if (!params.force && Number.isFinite(base) && base > 0 && Math.abs(Math.round(stat.mtimeMs) - base) > 1) throw fail('文件刚刚在别处被修改过（可能是碧琪或其他程序）。', 'CONFLICT');
     } catch (error) {
       if (error.code === 'CONFLICT' || error.message === '这不是文件。') throw error;
       if (!params.create && params.baseMtimeMs) throw fail('文件已经不存在了，保存会重新创建它。', 'CONFLICT');
@@ -281,7 +281,7 @@ export class Workbench {
     return {from: this.display(scope, from), to: this.display(scope, to)};
   }
 
-  // 删除 = 移进 Li An 的回收站（带清单，可恢复）。不同磁盘时退回复制后删除。
+  // 删除 = 移进碧琪的回收站（带清单，可恢复）。不同磁盘时退回复制后删除。
   async trash(params) {
     const scope = this.scope(params);
     const target = this.resolve(scope, params.path);
@@ -774,7 +774,7 @@ export function registerWorkbench(api, options = {}) {
     if (typeof params.content !== 'string' || params.content.length > 4 * 1024 * 1024) throw new Error('没有要格式化的内容。');
     return formatText({language: String(params.language || ''), content: params.content, filePath: file, cwd: path.dirname(file)});
   });
-  // 给 Li An 的工具：改完代码自己检查；把文件在先生的工作台里打开给他看
+  // 给碧琪的工具：改完代码自己检查；把文件在先生的工作台里打开给他看
   const checker = options.checker || new CodeChecker();
   const reply = value => ({content: [{type: 'text', text: JSON.stringify(value)}], details: value});
   api.registerTool?.(ctx => createWorkbenchReadTool(bench, ctx), {name: 'workbench_read'});
@@ -807,7 +807,7 @@ export function registerWorkbench(api, options = {}) {
       } catch (error) { return {...reply({error: String(error.message || error)}), isError: true}; }
     },
   } : null), {name: 'workbench_show'});
-  // 让 Li An 知道工作台的能力（只在营造 / 习作 / 挥洒模式）
+  // 让碧琪知道工作台的能力（只在营造 / 习作 / 挥洒模式）
   api.on?.('before_prompt_build', (_event, ctx) => {
     if (!/^agent:(project|learning|unrestricted):/.test(String(ctx?.sessionKey || ''))) return;
     let location = '';

@@ -1,4 +1,4 @@
-/* laolao-plan:v2 —— Li An 的工作计划（plan_update 工具的真实状态）
+/* laolao-plan:v2 —— 碧琪的工作计划（plan_update 工具的真实状态）
  *
  *   计划  整理销售数据                         2 / 5  ⌄
  *   ▰▰▱▱▱

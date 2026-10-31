@@ -28,7 +28,7 @@ USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
-LABELS = {'pinkie': 'Li An', 'codex': 'Codex', 'openclaw': 'CLE Kk',
+LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'CLE Kk',
           'claude': 'Claude', 'gemini': 'Gemini', 'grok': 'Grok'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MAX_MESSAGE = 12000
@@ -781,7 +781,7 @@ class Manager:
             self.store.stream_message(task, 'reply', output, status='done')
             return
         if not isinstance(parsed, dict) or not isinstance(parsed.get('message'), str):
-            raise ValueError('Li An 的回复格式不完整，请重试')
+            raise ValueError('碧琪的回复格式不完整，请重试')
         reply_id = self.store.stream_message(task, 'reply', parsed['message'], status='done')
         if task['prompt'].startswith('[派对服务：只汇总]'):
             return

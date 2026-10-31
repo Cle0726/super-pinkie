@@ -1,4 +1,4 @@
-// In 线描 mode, the small posters elsewhere in the app (the 思考强度 tiers) become Li An in line too.
+// In 线描 mode, the small posters elsewhere in the app (the 思考强度 tiers) become 碧琪 in line too.
 import {lineArt, loadLine, drawLine} from './line.js';
 import {artStyle, onArtStyle} from '../core/modes.js';
 

@@ -110,7 +110,7 @@ enum CleWordmark {
 /// Shared by the App toolbar and the separate WebKit test host. It does not blink.
 final class BrowserActivityIndicator: NSStackView {
     private let dot = NSView(frame: .zero)
-    private let label = NSTextField(labelWithString: "Li An 正在使用浏览器")
+    private let label = NSTextField(labelWithString: "碧琪正在使用浏览器")
 
     init() {
         super.init(frame: .zero)

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/app-icon.png" width="160" alt="超級碧琪 图标">
+  <img src="docs/screenshots/app-icon.png" width="160" alt="超級碧琪图标">
 </p>
 
 <h1 align="center">超級碧琪 🎈 (Super Pinkie)</h1>
@@ -25,11 +25,11 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/mode-chat-day.jpg" alt="超級碧琪 日间唠嗑模式">
+      <img src="docs/screenshots/mode-chat-day.jpg" alt="超級碧琪日间唠嗑模式">
       <p align="center"><sub>日间界面 · 透明毛玻璃窗口与趴在输入框上的小碧琪</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/mode-thinking-night.jpg" alt="超級碧琪 夜间想法模式">
+      <img src="docs/screenshots/mode-thinking-night.jpg" alt="超級碧琪夜间想法模式">
       <p align="center"><sub>夜间界面 · 深色护眼主题与多档位深度思考</sub></p>
     </td>
   </tr>

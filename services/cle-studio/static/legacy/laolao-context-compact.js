@@ -293,7 +293,7 @@
       description = "可能需要几分钟，最近的内容会保留。";
     } else if (state.phase === "retrying") {
       message = "整理好了，接着处理～";
-      description = "Li An 正在恢复当前任务，工作进度会继续显示。";
+      description = "碧琪正在恢复当前任务，工作进度会继续显示。";
     }
     else if (state.phase === "complete") {
       const before = formatTokens(state.beforeTokens);

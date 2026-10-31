@@ -1,4 +1,4 @@
-// Focus while Li An works.
+// Focus while 碧琪 works.
 //
 // The original stage dimmed *everything else* — sidebar, rail, ambient canvas, and every
 // earlier turn — for as long as the run lasted. That reads as "the page went dark" once a run
