@@ -6189,6 +6189,7 @@ export default {
         cleKk.retireRetry(ctx.sessionKey || '');
         return;
       }
+      if (endedWithFailedAssistant(event)) return;
       // Always run both gates.  The architecture gate checks child/task
       // completion; the integrity gate checks real tool/evidence provenance.
       // Previously `a || b` skipped the second gate whenever the first one
