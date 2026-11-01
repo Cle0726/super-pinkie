@@ -192,6 +192,8 @@ if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
 }
 python tools/windows-package/clean_ui.py --check-package 'dist\超級碧琪'
 if ($LASTEXITCODE -ne 0) { throw "Windows 包含其他产品的素材或缺少安装器" }
+python tools/windows-package/check_runtime.py --package 'dist\超級碧琪'
+if ($LASTEXITCODE -ne 0) { throw "Windows 包缺少运行时文件，或打过补丁的文件被改回去了" }
 
 if ($LegacyOneFile) {
     pyinstaller @pyInstallerCommonArgs --onefile
