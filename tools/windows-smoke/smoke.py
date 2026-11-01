@@ -203,7 +203,7 @@ def collect_files(profile, out, label):
     return {"markers": markers, "workspaces": workspaces, "log_problems": sorted(set(problems))}
 
 
-PAGE_STATE = """() => {
+PAGE_STATE = r"""() => {
   const html = document.documentElement;
   const params = new URLSearchParams(location.search);
   const shell = document.querySelector('openclaw-app-shell');

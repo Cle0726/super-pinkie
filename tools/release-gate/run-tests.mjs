@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { outcomes } from "./tap.mjs";
+import { outcomes, appliesToPlatform } from "./tap.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const listPath = path.join(root, "tools/release-gate/known-failures.json");
@@ -56,14 +56,15 @@ const parsed = results.map(outcomes);
 const failed = new Set(parsed.flatMap((item) => [...item.failed]));
 const passed = new Set(parsed.flatMap((item) => [...item.passed]));
 const skipped = new Set(parsed.flatMap((item) => [...item.skipped]));
-const known = fs.existsSync(listPath) ? JSON.parse(fs.readFileSync(listPath, "utf8")) : {};
+const allKnown = fs.existsSync(listPath) ? JSON.parse(fs.readFileSync(listPath, "utf8")) : {};
+const known = Object.fromEntries(Object.entries(allKnown).filter(([, value]) => appliesToPlatform(value, process.platform)));
 const unexpected = [...failed].filter((key) => !(key in known)).sort();
 const fixed = Object.keys(known).filter((key) => passed.has(key) && !failed.has(key)).sort();
 const unavailable = Object.keys(known).filter((key) => skipped.has(key) && !failed.has(key)).sort();
 const missing = Object.keys(known).filter((key) => !failed.has(key) && !passed.has(key) && !skipped.has(key)).sort();
 
 if (update) {
-  const next = {};
+  const next = Object.fromEntries(Object.entries(allKnown).filter(([, value]) => !appliesToPlatform(value, process.platform)));
   for (const key of [...new Set([...failed, ...unavailable, ...missing])].sort()) next[key] = known[key] || "TODO: explain why this test is red";
   fs.writeFileSync(listPath, JSON.stringify(next, null, 2) + "\n");
   console.log(`known-failures.json updated: ${failed.size} entries`);

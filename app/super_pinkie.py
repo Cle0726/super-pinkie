@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import threading
 import time
+import traceback
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -635,11 +636,16 @@ def install_runtime_service(service_name, log):
         spec = importlib.util.spec_from_file_location(module_name, setup_file)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        # WebView can replace stdout after startup, leaving it in the Windows
+        # ANSI code page. Setup modules print Chinese; send their status to the
+        # launcher's UTF-8 log instead of a process-wide console handle.
+        module.print = lambda *values, **kwargs: log(kwargs.get("sep", " ").join(map(str, values)))
         changed = bool(module.install())
         log(f"  [{service_name}] {'已安装/更新' if changed else '已是最新'}")
         return changed
     except Exception as exc:
         log(f"  [{service_name}] 安装失败：{exc}")
+        log(traceback.format_exc())
         return False
 
 

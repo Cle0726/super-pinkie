@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import socket
@@ -21,6 +22,37 @@ from app.windows_desktop import (
 
 
 class WindowsDesktopPreservationTests(unittest.TestCase):
+    def test_setup_status_does_not_depend_on_console_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "setup.py"
+            script.write_text("def install():\n    print('模型已安装 🎈')\n    return True\n", encoding="utf-8")
+            output = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            messages = []
+            try:
+                with mock.patch.object(super_pinkie, "resource_path", return_value=script), mock.patch("sys.stdout", output):
+                    self.assertTrue(super_pinkie.install_runtime_service("fixture", messages.append))
+            finally:
+                output.close()
+            self.assertTrue(any("模型已安装 🎈" in message for message in messages))
+
+    def test_service_status_does_not_depend_on_console_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def serve(on_ready=None):\n    print('圆桌已启动 🎈')\n", encoding="utf-8")
+            output = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            messages = []
+            try:
+                with mock.patch("sys.stdout", output), \
+                     mock.patch.object(windows_desktop, "http_alive", return_value=False), \
+                     mock.patch.object(windows_desktop, "append_log", side_effect=lambda *args: messages.append(args)):
+                    services = LocalServices(runtime=mock.Mock(root=root))
+                    services._start("fixture", "service.py", "serve", (), "http://unused")
+                    services.threads[0].join(timeout=5)
+            finally:
+                output.close()
+            self.assertIn(("fixture", "圆桌已启动 🎈"), messages)
+            self.assertFalse(any("service failed" in str(item) for item in messages))
+
     def test_packaged_first_launch_keeps_existing_prompt_and_persona(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
