@@ -148,6 +148,26 @@ class ModeAgentRegistrationTests(unittest.TestCase):
             self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
         self.assertEqual(super_pinkie.configured_agent_ids()[0], "main")
 
+    def test_main_registration_does_not_overwrite_a_concurrent_config_edit(self):
+        self.write_config(["pinkie-party"])
+        config = self.home / ".openclaw/openclaw.json"
+        original_read = Path.read_bytes
+        reads = 0
+
+        def read_bytes(path):
+            nonlocal reads
+            if path == config:
+                reads += 1
+                if reads == 2:
+                    config.write_text('{"user_change": true}', encoding="utf-8")
+            return original_read(path)
+
+        with mock.patch.object(Path, "read_bytes", read_bytes):
+            self.assertFalse(super_pinkie.ensure_main_agent(self.logs.append, config))
+        self.assertEqual(json.loads(config.read_text(encoding="utf-8")), {"user_change": True})
+        self.assertEqual(list(config.parent.glob(".pinkie-main-*")), [])
+        self.assertTrue(any("没有覆盖" in message for message in self.logs))
+
     def test_playbooks_are_installed_and_existing_files_kept(self):
         workspace = self.home / ".openclaw/workspace-project"
         workspace.mkdir(parents=True)
