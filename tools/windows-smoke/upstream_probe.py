@@ -340,6 +340,30 @@ def plugin_copies(exe, profile):
     return [path for path in copies if path.is_file()]
 
 
+def port_free(port=18789, seconds=60):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        with socket.socket() as sock:
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                return True
+        time.sleep(1)
+    return False
+
+
+def relaunch(launch, kill_app, exe, env, out, label):
+    """Start the App after a previous run; one retry if the gateway flaps.
+
+    The previous gateway can still answer for a moment while it shuts down,
+    which made a fresh start look ready and then not."""
+    for attempt in range(2):
+        port_free()
+        process, ready, seconds = launch(exe, env, out, label if attempt == 0 else f"{label}-retry")
+        if ready:
+            return process, ready, seconds
+        kill_app(exe.parent)
+    return process, ready, seconds
+
+
 def bad_config(exe, profile, out, launch, kill_app, env):
     """The old control center's API form left a "model" key on the provider.
 
@@ -350,7 +374,7 @@ def bad_config(exe, profile, out, launch, kill_app, env):
     data["models"]["providers"]["probe"]["model"] = "probe-model"
     config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
-        _process, ready, seconds = launch(exe, env, out, "probe-bad-config")
+        _process, ready, seconds = relaunch(launch, kill_app, exe, env, out, "probe-bad-config")
     finally:
         kill_app(exe.parent)
     provider = json.loads(config.read_text(encoding="utf-8"))["models"]["providers"]["probe"]
@@ -390,7 +414,7 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             hidden.append(path)
         summary["hidden_plugin_files"] = [str(path) for path in hidden]
         try:
-            process, ready, seconds = launch(exe, env, out, "probe-plugin-missing")
+            process, ready, seconds = relaunch(launch, kill_app, exe, env, out, "probe-plugin-missing")
             if ready:
                 with sync_playwright() as playwright:
                     browser = playwright.chromium.launch(channel="msedge", headless=True)
