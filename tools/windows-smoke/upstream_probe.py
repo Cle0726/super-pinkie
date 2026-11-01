@@ -106,6 +106,32 @@ COUNT_REQUESTS = """(() => {
 })()"""
 
 
+# What the page is drawing.  The runner's software GPU process has climbed to
+# every core during the probe; this names the animation, video or canvas.
+VISUALS = """() => {
+  const running = document.getAnimations().filter((a) => a.playState === 'running');
+  const names = {};
+  for (const a of running) {
+    const target = a.effect && a.effect.target;
+    const where = target && target.nodeType === 1 ? (target.id || String(target.className || target.tagName)).slice(0, 40) : '?';
+    const key = (a.animationName || a.id || a.constructor.name) + ' @' + where;
+    names[key] = (names[key] || 0) + 1;
+  }
+  const top = Object.entries(names).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  let blurred = 0;
+  for (const el of document.querySelectorAll('body *')) {
+    const style = getComputedStyle(el);
+    if (style.backdropFilter && style.backdropFilter !== 'none') blurred += 1;
+  }
+  return {
+    animations: running.length, top,
+    canvases: document.querySelectorAll('canvas').length,
+    videos: [...document.querySelectorAll('video')].filter((v) => !v.paused).length,
+    blurred, nodes: document.getElementsByTagName('*').length,
+  };
+}"""
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -358,6 +384,7 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
     }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model", prompt])
     timeline = []
     rates = []
+    visuals = []
     notes = {}
     shot_taken = False
     started = time.monotonic()
@@ -372,6 +399,8 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
         state["requests"] = len(upstream.requests) - first_request
         try:
             rates.append({"t": state["t"], **page.evaluate("({...(window.__probeRequestCounts || {})})")})
+            if len(rates) % 5 == 1:
+                visuals.append({"t": state["t"], **page.evaluate(VISUALS)})
         except Exception as error:
             rates.append({"t": state["t"], "error": str(error)[:120]})
         last = timeline[-1] if timeline else {}
@@ -399,6 +428,7 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
         "timeline": timeline[:60],
         # Cumulative page→gateway requests by method, sampled once a second.
         "page_requests": rates[::5][:40],
+        "visuals": visuals[:40],
         "final": final,
         "ribbon_ever": sorted({entry.get("message", "") for entry in timeline if entry.get("state")}),
         "gateway": lines,
