@@ -1,9 +1,11 @@
 import importlib.util
+import io
 import json
 import shutil
 import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +15,14 @@ spec.loader.exec_module(smoke)
 
 
 class WindowsSmokeTests(unittest.TestCase):
+    def test_service_health_requires_both_expected_identities(self):
+        responses = [
+            io.BytesIO(json.dumps({"service": "super-pinkie-party"}).encode()),
+            io.BytesIO(json.dumps({"service": "some-other-service"}).encode()),
+        ]
+        with mock.patch.object(smoke.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(smoke.service_health(), {"party": True, "roundtable": False})
+
     @unittest.skipUnless(shutil.which("node"), "Node is required to check the page-state script")
     def test_page_state_script_detects_a_gateway_error(self):
         script = """

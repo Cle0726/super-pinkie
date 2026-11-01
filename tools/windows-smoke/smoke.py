@@ -85,6 +85,18 @@ def http_ready(url=GATEWAY):
         return False
 
 
+def service_health():
+    result = {}
+    for name, port in (("party", 18889), ("roundtable", 18891)):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=3) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            result[name] = data.get("service") == f"super-pinkie-{name}"
+        except (OSError, ValueError, AttributeError):
+            result[name] = False
+    return result
+
+
 def kill_app(app_dir):
     """Stop every process started from this App directory (exe, node, relays)."""
     script = (
@@ -226,16 +238,17 @@ PAGE_STATE = r"""() => {
 def drive_ui(out, label):
     from playwright.sync_api import sync_playwright
 
-    result = {"modes": {}, "console_errors": [], "page_errors": [], "failed_requests": []}
+    result = {"modes": {}, "console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": []}
     console = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge", headless=True)
         for scheme in ("light", "dark"):
             context = browser.new_context(viewport={"width": 1280, "height": 800}, color_scheme=scheme, locale="zh-CN")
             page = context.new_page()
-            page.on("console", lambda msg: console.append({"scheme": scheme, "type": msg.type, "text": msg.text, "url": page.url}))
+            page.on("console", lambda msg: console.append({"scheme": scheme, "type": msg.type, "text": msg.text, "url": page.url, "location": msg.location}))
             page.on("pageerror", lambda error: result["page_errors"].append({"scheme": scheme, "error": str(error)}))
             page.on("requestfailed", lambda req: result["failed_requests"].append({"scheme": scheme, "url": req.url, "failure": req.failure}))
+            page.on("response", lambda res: result["http_errors"].append({"scheme": scheme, "url": res.url, "status": res.status}) if res.status >= 400 else None)
             page.goto(CHAT, wait_until="domcontentloaded", timeout=120_000)
             try:
                 page.wait_for_selector(".laolao-mode-switcher", timeout=90_000)
@@ -247,6 +260,23 @@ def drive_ui(out, label):
             if scheme == "dark":
                 context.close()
                 break
+            # A plugin may fail to register without a visible load error. Ask
+            # the real gateway for two read-only methods supplied by it.
+            result["plugin_methods"] = page.evaluate("""async () => {
+              const checks = [
+                ['usage', 'pinkie.usage.get', {}],
+                ['workbench', 'pinkie.fs.status', {sessionKey: 'agent:project:main'}],
+              ];
+              const result = {};
+              for (const [name, method, params] of checks) {
+                try {
+                  if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
+                  await window.__laolaoSidebar.gwRequest(method, params, 15000);
+                  result[name] = {ok: true};
+                } catch (error) { result[name] = {ok: false, error: String(error)}; }
+              }
+              return result;
+            }""")
             for index, (mode, prefix) in enumerate(MODES):
                 entry = {"ok": False}
                 try:
@@ -303,18 +333,23 @@ def scenario(label, exe, profile, out, old_exe=None):
         if ready:
             summary["agents"] = agents_list(runtime_dir(exe), env, out, label)
             summary["ui"] = drive_ui(out, label)
+            summary["service_health"] = service_health()
     except Exception as error:
         summary["error"] = repr(error)
     finally:
         summary["files"] = collect_files(profile, out, label)
         kill_app(exe.parent)
     modes = summary.get("ui", {}).get("modes", {})
+    plugin_methods = summary.get("ui", {}).get("plugin_methods", {})
     summary["passed"] = bool(
         ready
         and not summary.get("agents", {}).get("missing", AGENTS)
         and not summary["files"]["log_problems"]
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
+        and len(plugin_methods) == 2
+        and all(entry.get("ok") for entry in plugin_methods.values())
+        and all(summary.get("service_health", {}).get(name) for name in ("party", "roundtable"))
         and not summary.get("ui", {}).get("page_errors")
     )
     return summary

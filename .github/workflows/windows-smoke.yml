@@ -9,16 +9,6 @@ name: Windows smoke
 on:
   push:
     branches: ["fix/windows-*"]
-    paths:
-      - ".github/workflows/windows-smoke.yml"
-      - "tools/windows-smoke/**"
-      - "app/**"
-      - "build-win.ps1"
-      - "desktop/windows/**"
-      - "installer/windows/**"
-      - "personas/**"
-      - "services/**"
-      - "ui/**"
   workflow_dispatch:
     inputs:
       package:
@@ -97,6 +87,14 @@ jobs:
         run: |
           gh release download "$env:OLD_TAG" -R "${{ github.repository }}" -p "*-portable.zip" -D smoke-old-dl
           Expand-Archive -Path (Get-ChildItem smoke-old-dl\*-portable.zip).FullName -DestinationPath smoke-old
+
+      - name: Check the workbench on Windows
+        shell: pwsh
+        run: |
+          $node = Get-ChildItem -Path smoke-app -Filter node.exe -Recurse | Where-Object { $_.FullName -like '*runtime\bin\node.exe' } | Select-Object -First 1
+          if (-not $node) { throw 'Bundled Node not found for the workbench test' }
+          & $node.FullName --test tests/windows-workbench.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows workbench test failed' }
 
       - name: Run smoke test
         shell: pwsh
