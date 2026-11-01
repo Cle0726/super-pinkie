@@ -1196,7 +1196,7 @@
         // ribbon when a real offline/retry state was previously announced.
         // A "won't retry" notice stays until a later real reply arrives.
         if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")
-          && stoppedNoticeSession !== currentSessionKey()) {
+          && stoppedNoticeSession !== currentSessionKey() && stoppedNoticeSession !== "*") {
           setWatchdogStatus("recovered", "连接已恢复，当前回复已同步");
         }
         return true;
@@ -1374,6 +1374,16 @@
   const RETRY_MESSAGE = "上游波动，碧琪正在自动重试…";
   const NO_PLUGIN_MESSAGE = "碧琪的核心插件没有加载，这次失败不会自动重试。请重启碧琪；还不行就重新安装。";
   let failureCheck = 0;
+  // 「unknown method」也可能只是插件版本较旧、还没有 watchdog.status（Mac 线上
+  // 插件就是）。用每个版本都有的 usage.get 确认插件到底在不在。
+  const corePluginMissing = async (rpc) => {
+    try {
+      await rpc("pinkie.usage.get", {}, 8000);
+      return false;
+    } catch (error) {
+      return /unknown method/i.test(String(error?.message || error));
+    }
+  };
   const showStoppedNotice = (sessionKey, message) => {
     stoppedNoticeSession = sessionKey;
     setWatchdogStatus("offline", message);
@@ -1391,7 +1401,9 @@
       try {
         status = await rpc("pinkie.watchdog.status", {sessionKey}, 5000);
       } catch (error) {
-        if (/unknown method/i.test(String(error?.message || error))) showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+        if (/unknown method/i.test(String(error?.message || error)) && await corePluginMissing(rpc)) {
+          showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+        }
         return;
       }
       if (status?.state === "stopped") {
@@ -1408,14 +1420,32 @@
   // 用户只看到「LLM request timed out.」之类却不知道碧琪会不会接着做。红条出现
   // 或换了内容时也去问一次看门狗。
   let lastErrorBanner = "";
+  // 核心插件整个没加载时，失败既不会出现失败卡也不会有人重试，页面只会一直
+  // 转「碧琪在比划着回你…」。打开页面时问一次，没有这个插件就一直提示。
+  let pluginChecked = false;
+  const checkCorePlugin = async () => {
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (pluginChecked || typeof rpc !== "function" || !gatewayConnected()) return;
+    pluginChecked = true;
+    try {
+      if (await corePluginMissing(rpc)) {
+        stoppedNoticeSession = "*";
+        setWatchdogStatus("offline", NO_PLUGIN_MESSAGE);
+      }
+    } catch {
+      pluginChecked = false;
+    }
+  };
   window.setInterval(() => {
     if (!location.pathname.startsWith("/chat")) return;
+    void checkCorePlugin();
     const banner = document.querySelector(".callout.danger.callout--dismissible");
     const text = banner?.textContent?.trim() || "";
     if (text && text !== lastErrorBanner) void explainRunFailure();
     lastErrorBanner = text;
   }, 1000);
   const onRunFailure = () => {
+    if (stoppedNoticeSession === "*") return;
     stoppedNoticeSession = "";
     setWatchdogStatus("retrying", RETRY_MESSAGE);
     void explainRunFailure();
@@ -1427,7 +1457,7 @@
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   window.addEventListener("pinkie:run-recovered", () => {
-    stoppedNoticeSession = "";
+    if (stoppedNoticeSession !== "*") stoppedNoticeSession = "";
     // This event is emitted only after the rendered transcript contains a
     // later real assistant terminal reply for every prior failure.
     clearWatchdogStatus();
