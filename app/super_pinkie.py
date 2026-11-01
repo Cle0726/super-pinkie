@@ -875,9 +875,19 @@ def update_api_config(provider_name, api_key, base_url, model_name, log):
         prov_data["apiKey"] = api_key
     if base_url:
         prov_data["baseUrl"] = base_url
+        prov_data.setdefault("api", "openai-completions")
+    # OpenClaw rejects an unknown "model" key on a provider, and then the
+    # gateway refuses to start: the page waited for 「上游恢复」 forever. The
+    # model belongs in the provider's models list and the agents' default.
+    prov_data.pop("model", None)
     if model_name:
-        prov_data["model"] = model_name
-        
+        models = prov_data.setdefault("models", [])
+        if not any(isinstance(item, dict) and item.get("id") == model_name for item in models):
+            models.append({"id": model_name, "name": model_name})
+        defaults = cfg.setdefault("agents", {}).setdefault("defaults", {})
+        current = defaults.get("model") if isinstance(defaults.get("model"), dict) else {}
+        defaults["model"] = {**current, "primary": f"{provider_name}/{model_name}"}
+
     cfg["models"]["providers"][provider_name] = prov_data
     
     # 确保主配置
