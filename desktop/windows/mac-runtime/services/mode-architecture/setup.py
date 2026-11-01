@@ -362,8 +362,37 @@ def install(home=None) -> bool:
     source_version = _package_version(source)
     installed_version = _package_version(extension)
     if installed_version <= source_version:
-        for name in ("index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs", "learning-explore.mjs", "learning-zsb-data.json", "learning-zsb-gen.mjs", "learning-zsb.mjs", "learning-requirements.txt", "learning-engine.py", "learning-c-trace.mjs", "learning-compute.mjs", "learning-practice.mjs", "learning-labs.mjs", "learning-pact.mjs", "learning-desk.mjs", "learning-recall.mjs", "learning-vocab.mjs", "learning-exams.mjs", "learning-companion.mjs", "learning-refs.mjs", "learning-holidays-cn.json", "learning-almanac.mjs", "learning-lesson.mjs", "learning-materials-jobs.mjs", "learning-materials-extract.mjs", "learning-materials.mjs", "learning-zsb-items.json", "learning-library.mjs", "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs", "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs", "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs", "rich-runtime.mjs", "package.json", "openclaw.plugin.json"):
-            changed |= _copy_if_changed(source / name, extension / name)
+        # Everything index.mjs imports, directly or through learning.mjs and
+        # workbench.mjs.  A missing module (workbench-*.mjs, vendor/) makes the
+        # whole plugin fail to load, which took every mode feature down.
+        for name in (
+            "index.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
+            "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
+            "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
+            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
+            "learning-desk.mjs", "learning-exams.mjs", "learning-vocab.mjs",
+            "learning-almanac.mjs", "learning-holidays-cn.json", "learning-refs.mjs",
+            "learning-recall.mjs", "learning-companion.mjs", "learning-lesson.mjs",
+            "learning-materials.mjs", "learning-materials-jobs.mjs",
+            "learning-materials-extract.mjs", "learning-zsb.mjs",
+            "learning-zsb-gen.mjs", "learning-zsb-data.json",
+            "learning-zsb-items.json", "learning-library.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs",
+            "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
+            "web-gpt-activity.mjs", "web-gpt-connection.mjs",
+            "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
+            "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs",
+            "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
+            "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
+            "package.json", "openclaw.plugin.json",
+        ):
+            if (source / name).is_file():
+                changed |= _copy_if_changed(source / name, extension / name)
+        vendor_dir = source / "vendor"
+        if vendor_dir.is_dir():
+            for vendor_file in vendor_dir.rglob("*"):
+                if vendor_file.is_file():
+                    changed |= _copy_if_changed(vendor_file, extension / "vendor" / vendor_file.relative_to(vendor_dir))
 
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative

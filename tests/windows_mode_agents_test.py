@@ -125,6 +125,29 @@ class ModeAgentRegistrationTests(unittest.TestCase):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
         self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted"])
 
+    def test_main_is_added_first_ahead_of_the_party_agents(self):
+        # What services/party leaves in a fresh profile: no main at all, so
+        # OpenClaw picked pinkie-party as the default and 唠嗑 ran as it.
+        self.write_config(["pinkie-party", "party-openclaw"])
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        ids = super_pinkie.configured_agent_ids()
+        self.assertEqual(ids[:3], ["main", "pinkie-party", "party-openclaw"])
+        config = json.loads((self.home / ".openclaw/openclaw.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["agents"]["list"][0]["workspace"], str(self.home / ".openclaw/workspace"))
+
+    def test_existing_main_is_moved_back_to_the_default_position(self):
+        self.write_config(["pinkie-party", "main", "project", "thinking", "learning", "unrestricted"])
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(super_pinkie.configured_agent_ids()[:2], ["main", "pinkie-party"])
+
+    def test_main_is_repaired_even_when_the_cli_fails(self):
+        self.write_config(["pinkie-party"])
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
+            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(super_pinkie.configured_agent_ids()[0], "main")
+
     def test_playbooks_are_installed_and_existing_files_kept(self):
         workspace = self.home / ".openclaw/workspace-project"
         workspace.mkdir(parents=True)

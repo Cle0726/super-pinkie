@@ -187,7 +187,20 @@ def collect_files(profile, out, label):
         soul = workspace / "SOUL.md"
         head = soul.read_text(encoding="utf-8", errors="replace").splitlines()[:2] if soul.is_file() else []
         workspaces[workspace.name] = {"files": files, "soul_head": head}
-    return {"markers": markers, "workspaces": workspaces}
+    problems = []
+    logs = state / "logs"
+    # Failures the launcher only writes to its own logs.
+    for name, pattern in (
+        ("setup.log", r"安装失败|⚠️"),
+        ("launcher.log", r"service failed|startup failed|gateway start failed"),
+        ("gateway.log", r"failed to load|plugin\(s\) failed"),
+    ):
+        path = logs / name
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if re.search(pattern, line):
+                    problems.append(f"{name}: {line.strip()[:300]}")
+    return {"markers": markers, "workspaces": workspaces, "log_problems": sorted(set(problems))}
 
 
 PAGE_STATE = """() => {
@@ -204,6 +217,8 @@ PAGE_STATE = """() => {
     switcher: Boolean(document.querySelector('.laolao-mode-switcher')),
     fonts: getComputedStyle(document.body).fontFamily,
     text: (document.body.innerText || '').slice(0, 600),
+    // Gateway errors surface as a banner, e.g. 'Unknown agent id "project"'.
+    gatewayError: ((document.body.innerText || '').match(/(GatewayRequestError[^\n]*|Unknown agent id[^\n]*)/) || [''])[0],
   };
 }"""
 
@@ -243,12 +258,16 @@ def drive_ui(out, label):
                     while time.monotonic() < deadline:
                         page.wait_for_timeout(500)
                         state = page.evaluate(PAGE_STATE)
-                        session = state["session"] or state["shellSession"]
+                        # The URL may carry the alias "main"; the shell's
+                        # resolved key says which agent really answers.
+                        session = state["shellSession"] or state["session"]
                         if state["mode"] == mode and not state["transition"] and session.startswith(prefix):
                             entry["ok"] = True
                             break
                     page.wait_for_timeout(1500)
                     entry["state"] = page.evaluate(PAGE_STATE)
+                    if entry["state"]["gatewayError"]:
+                        entry["ok"] = False
                 except Exception as error:
                     entry["error"] = str(error)
                     try:
@@ -276,6 +295,8 @@ def scenario(label, exe, profile, out, old_exe=None):
         summary["old"]["files"] = collect_files(profile, out, f"{label}-old")
         kill_app(old_exe.parent)
         process.wait(timeout=30) if process.poll() is None else None
+        # Judge the new version on its own log lines only.
+        shutil.rmtree(profile / "local/SuperPinkie/logs", ignore_errors=True)
     process, ready, seconds = launch(exe, env, out, label)
     summary.update({"gateway_ready": ready, "seconds": seconds})
     try:
@@ -291,6 +312,7 @@ def scenario(label, exe, profile, out, old_exe=None):
     summary["passed"] = bool(
         ready
         and not summary.get("agents", {}).get("missing", AGENTS)
+        and not summary["files"]["log_problems"]
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
         and not summary.get("ui", {}).get("page_errors")
