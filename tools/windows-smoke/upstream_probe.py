@@ -315,6 +315,8 @@ def judge(name, result):
     elif name == "plugin-missing":
         if final.get("state") == "retrying" or (claims_retry and not final.get("recovered")):
             problems.append("ribbon claims an automatic retry although no watchdog is loaded")
+        if "核心插件" not in final.get("message", ""):
+            problems.append(f"the page never said the core plugin is missing (ribbon {final.get('message')!r})")
     return problems
 
 
