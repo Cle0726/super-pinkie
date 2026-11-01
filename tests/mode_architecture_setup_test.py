@@ -42,7 +42,11 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertIn('C2C_TUNNEL_PROTOCOL', collab_wrapper)
             self.assertIn('http2', collab_wrapper)
             manifest = json.loads((home / '.openclaw/extensions/pinkie-mode-architecture/openclaw.plugin.json').read_text())
-            self.assertEqual(sorted(manifest['contracts']['tools']), ['ask_user', 'clekk_memory', 'computer', 'delivery_guard', 'learning_activity', 'web_gpt_activity'])
+            # The installed manifest is the shipped one; the core tools stay declared.
+            shipped = json.loads((Path(setup.__file__).resolve().parent / 'openclaw.plugin.json').read_text())
+            self.assertEqual(manifest['contracts']['tools'], shipped['contracts']['tools'])
+            for tool in ('ask_user', 'clekk_memory', 'computer', 'delivery_guard', 'learning_activity', 'web_gpt_activity'):
+                self.assertIn(tool, manifest['contracts']['tools'])
             for mode, relative in setup.MODE_WORKSPACES.items():
                 ws = home / relative
                 self.assertEqual((ws / 'SOUL.md').read_text(), 'USER CUSTOM CONTEXT\n')
