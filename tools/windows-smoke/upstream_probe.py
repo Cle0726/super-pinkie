@@ -327,6 +327,15 @@ def run(exe, profile, out, launch, kill_app, profile_env):
         upstream.stop()
         if (profile / "local/SuperPinkie/logs").is_dir():
             shutil.copytree(profile / "local/SuperPinkie/logs", out / "probe-logs", dirs_exist_ok=True)
+        # The transcripts hold the exact error text each failed turn ended with.
+        for transcript in (profile / "home/.openclaw/agents/main/sessions").glob("*.jsonl"):
+            if "probe" in transcript.read_text(encoding="utf-8", errors="replace")[:4000] or len(summary["cases"]) < 5:
+                (out / "probe-transcripts").mkdir(exist_ok=True)
+                shutil.copy2(transcript, out / "probe-transcripts" / transcript.name)
+        sessions = profile / "home/.openclaw/agents/main/sessions/sessions.json"
+        if sessions.is_file():
+            (out / "probe-transcripts").mkdir(exist_ok=True)
+            shutil.copy2(sessions, out / "probe-transcripts/sessions.json")
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
     summary["passed"] = bool(summary["cases"]) and len(summary["cases"]) == 4 and not any(
