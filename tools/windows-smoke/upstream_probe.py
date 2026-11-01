@@ -24,6 +24,7 @@ import json
 import re
 import shutil
 import socket
+import struct
 import threading
 import time
 import uuid
@@ -132,9 +133,12 @@ class FakeUpstream:
                 frame({"role": "assistant", "content": text})
                 if behaviour == "drop":
                     time.sleep(0.5)
-                    # Break the connection mid-body: no finish_reason, no
-                    # [DONE], no terminating chunk.  Node reports "terminated".
-                    self.connection.shutdown(socket.SHUT_RDWR)
+                    # Break the connection mid-body with a reset: no
+                    # finish_reason, no [DONE], no terminating chunk.  A plain
+                    # shutdown sometimes left Windows holding a half-open
+                    # stream until the client's idle timeout.
+                    self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    self.connection.close()
                     self.close_connection = True
                     return
                 frame({}, "stop", {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20})
@@ -233,8 +237,14 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
     upstream.plan = list(plan)
     first_request = len(upstream.requests)
     session = f"agent:main:probe-{name}"
-    page.goto(f"http://127.0.0.1:18789/chat?session={session}", wait_until="domcontentloaded", timeout=60_000)
-    page.wait_for_selector(".laolao-mode-switcher", timeout=60_000)
+    try:
+        page.goto(f"http://127.0.0.1:18789/chat?session={session}", wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_selector(".laolao-mode-switcher", timeout=60_000)
+    except Exception as error:
+        # A gateway still busy with the previous case must not cost the rest.
+        return {"sent": {"ok": False, "error": f"page did not load: {str(error)[:200]}"}, "seconds": 0,
+                "requests": 0, "watchdog_requests": 0, "request_log": [], "timeline": [], "final": {},
+                "ribbon_ever": [], "gateway": [], "watchdog_retries": 0}
     page.wait_for_timeout(6000)
     offset = log_path.stat().st_size if log_path.is_file() else 0
     sent = page.evaluate("""async ([sessionKey, key]) => {
