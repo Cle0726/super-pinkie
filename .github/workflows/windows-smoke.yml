@@ -42,6 +42,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PYTHONUTF8: "1"
+      PINKIE_SMOKE_PROFILE_GATEWAY: "1"
       # Push runs have no inputs: they build the pushed ref, or test the
       # published release when the commit message carries [smoke-release].
       PACKAGE: ${{ inputs.app_artifact != '' && 'artifact' || inputs.package || (contains(github.event.head_commit.message, '[smoke-release]') && 'release') || 'build' }}
