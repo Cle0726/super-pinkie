@@ -161,7 +161,20 @@ def configure(profile, port):
     config = profile / "home/.openclaw/openclaw.json"
     data = json.loads(config.read_text(encoding="utf-8"))
     providers = data.setdefault("models", {}).setdefault("providers", {})
-    providers["probe"] = {
+    # One provider per case: OpenClaw cools a provider down after a failure,
+    # and a shared one let one case's failure hold up the next case's turn.
+    for name in CASE_PROVIDERS.values():
+        providers[name] = provider(port)
+    providers["probe"] = provider(port)
+    data.setdefault("agents", {}).setdefault("defaults", {})["model"] = {"primary": "probe/probe-model", "fallbacks": []}
+    config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+CASE_PROVIDERS = {"disconnect": "probe-a", "not-found": "probe-b", "proxy-down": "probe-c", "plugin-missing": "probe-d"}
+
+
+def provider(port):
+    return {
         "api": "openai-completions",
         "auth": "api-key",
         "apiKey": "probe-dummy",
@@ -170,8 +183,6 @@ def configure(profile, port):
         "models": [{"id": "probe-model", "name": "Probe", "reasoning": False,
                     "contextWindow": 128000, "maxTokens": 4096, "input": ["text"]}],
     }
-    data.setdefault("agents", {}).setdefault("defaults", {})["model"] = {"primary": "probe/probe-model", "fallbacks": []}
-    config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 RIBBON = r"""() => {
@@ -247,13 +258,16 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
                 "ribbon_ever": [], "gateway": [], "watchdog_retries": 0}
     page.wait_for_timeout(6000)
     offset = log_path.stat().st_size if log_path.is_file() else 0
-    sent = page.evaluate("""async ([sessionKey, key]) => {
+    sent = page.evaluate("""async ([sessionKey, key, model]) => {
+      try {
+        await window.__laolaoSidebar.gwRequest('sessions.patch', {key: sessionKey, model}, 15000);
+      } catch (error) { /* the default probe model still answers */ }
       try {
         await window.__laolaoSidebar.gwRequest('chat.send',
           {sessionKey, message: '碧琪，测试一下：请回复一句话。', idempotencyKey: key, deliver: false}, 20000);
         return {ok: true};
       } catch (error) { return {ok: false, error: String(error)}; }
-    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}"])
+    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model"])
     timeline = []
     notes = {}
     shot_taken = False
@@ -308,7 +322,7 @@ def judge(name, result):
             problems.append("the launcher left the invalid provider key in place")
         return problems
     final = result["final"]
-    claims_retry = any("重试" in message or "续接" in message for message in result["ribbon_ever"])
+    claims_retry = any(entry.get("state") == "retrying" for entry in result["timeline"])
     if not result["sent"].get("ok"):
         problems.append(f"chat.send failed: {result['sent'].get('error')}")
     if name == "disconnect":
