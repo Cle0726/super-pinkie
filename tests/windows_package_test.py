@@ -47,6 +47,18 @@ class WindowsPackageTests(unittest.TestCase):
             self.assertEqual((control / "laolao-stats.json").read_text(), "null\n")
             self.assertEqual((control / "laolao-quota.json").read_text(), "null\n")
 
+    def test_rewrite_keeps_line_endings_so_inline_scripts_keep_their_csp_hash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = Path(directory) / "index.html"
+            original = b"\xef\xbb\xbf<script>\n  boot();\n</script>\n<script src=\"/laolao-cle-stage.js\"></script>\n"
+            index.write_bytes(original)
+            cleaner.rewrite(index, lambda text: cleaner.STAGE_TAG.sub("", text))
+            self.assertEqual(index.read_bytes(), b"\xef\xbb\xbf<script>\n  boot();\n</script>\n")
+            cleaner.check_inline_scripts(index)
+            index.write_bytes(b"<script>\r\n  boot();\r\n</script>\r\n")
+            with self.assertRaisesRegex(ValueError, "CRLF"):
+                cleaner.check_inline_scripts(index)
+
     def test_package_check_detects_the_other_products_installer(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
