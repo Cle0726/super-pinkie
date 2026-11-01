@@ -45,6 +45,21 @@ def transient_failure(value):
     return not PERMANENT_FAILURE.search(text) and bool(TRANSIENT_FAILURE.search(text))
 
 
+# A refused connection is usually a local proxy or CLI that is not running;
+# retrying it, or anything else, without end held the room for good.
+REFUSED_FAILURE = re.compile(r'(econnrefused|connection refused)', re.I)
+RETRY_LIMIT = 8
+
+
+def should_retry(error, attempts):
+    """attempts = retries already made for this task."""
+    if not transient_failure(error):
+        return False
+    if REFUSED_FAILURE.search(str(error or '')):
+        return attempts < 2
+    return attempts < RETRY_LIMIT
+
+
 def codex_models():
     """Read official model/list metadata only. Never start or inspect a chat."""
     binary = executable('codex')
@@ -737,7 +752,9 @@ class Manager:
                         output = self.execute(task, room, recovering=attempt > 0)
                         break
                     except Exception as error:
-                        if not transient_failure(error):
+                        if not should_retry(error, attempt):
+                            if attempt and transient_failure(error):
+                                raise ValueError(f'重试 {attempt} 次仍然连不上上游，先停下：{error}') from error
                             raise
                         attempt += 1
                         # Retry transient model/tool transport failures quickly
