@@ -63,6 +63,19 @@ class ApiConfigTests(unittest.TestCase):
             self.assertIn("openai", messages[0])
             self.assertFalse(super_pinkie.repair_provider_models(messages.append, config))
 
+    def test_gateway_auth_none_is_recorded_once_and_a_user_choice_is_kept(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "openclaw.json"
+            config.write_text(json.dumps({"agents": {"list": [{"id": "main"}]}}), encoding="utf-8")
+            self.assertTrue(super_pinkie.ensure_gateway_auth_none(lambda _m: None, config))
+            data = json.loads(config.read_text(encoding="utf-8"))
+            self.assertEqual(data["gateway"]["auth"], {"mode": "none"})
+            self.assertEqual(data["agents"], {"list": [{"id": "main"}]})
+            self.assertFalse(super_pinkie.ensure_gateway_auth_none(lambda _m: None, config))
+            config.write_text(json.dumps({"gateway": {"auth": {"mode": "token", "token": "t"}}}), encoding="utf-8")
+            self.assertFalse(super_pinkie.ensure_gateway_auth_none(lambda _m: None, config))
+            self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["gateway"]["auth"]["mode"], "token")
+
 
 if __name__ == "__main__":
     unittest.main()

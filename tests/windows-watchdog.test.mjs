@@ -89,3 +89,29 @@ test('a later successful turn or a new message clears the notice', async () => {
   dog.beforeModelResolve({prompt: '再试一次'}, ctx);
   assert.deepEqual(dog.status(key), {state: 'idle'});
 });
+
+test('a connection that never opens ("Connection error.") gets two tries, then is reported', async () => {
+  const {dog} = watchdog();
+  await fail(dog, 'Connection error.', 2);
+  assert.equal(dog.status(key).state, 'retrying');
+  await fail(dog, 'Connection error.', 1);
+  assert.equal(dog.status(key).state, 'stopped');
+});
+
+test('a resend the local gateway CLI refuses is not rescheduled forever', async () => {
+  const logs = [];
+  const runner = async () => {
+    const error = new Error('Command failed: node openclaw.mjs gateway call chat.send');
+    error.stderr = 'Gateway call failed: GatewayCredentialsRequiredError: gateway chat.send requires credentials before opening a websocket';
+    throw error;
+  };
+  const dog = new UpstreamWatchdog({session: {workflow}, logger: {info: l => logs.push(l), warn: l => logs.push(l)}},
+    () => '', runner, 'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+  await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
+  clearTimeout(dog.timers.get(key));
+  dog.timers.delete(key);
+  await dog.dispatchImmediate({sessionKey: key, agentId: 'main', runId: 'run-1', attempt: 1, tag: 't'});
+  assert.equal(dog.status(key).kind, 'dispatch');
+  assert.equal(dog.timers.has(key), false);
+  assert.match(logs.join('\n'), /watchdog not retrying .*kind=dispatch/);
+});

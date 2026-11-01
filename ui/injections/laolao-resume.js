@@ -1398,9 +1398,23 @@
         showStoppedNotice(sessionKey, status.message || "这次失败不会自动重试。");
         return;
       }
-      if (status?.state === "retrying") return;
+      if (status?.state === "retrying") {
+        if (!document.documentElement.getAttribute("data-laolao-watchdog-state")) setWatchdogStatus("retrying", RETRY_MESSAGE);
+        return;
+      }
     }
   };
+  // 多数失败（断流、404、连不上）在页面上只是原生的红色错误条，不会出现失败卡，
+  // 用户只看到「LLM request timed out.」之类却不知道碧琪会不会接着做。红条出现
+  // 或换了内容时也去问一次看门狗。
+  let lastErrorBanner = "";
+  window.setInterval(() => {
+    if (!location.pathname.startsWith("/chat")) return;
+    const banner = document.querySelector(".callout.danger.callout--dismissible");
+    const text = banner?.textContent?.trim() || "";
+    if (text && text !== lastErrorBanner) void explainRunFailure();
+    lastErrorBanner = text;
+  }, 1000);
   const onRunFailure = () => {
     stoppedNoticeSession = "";
     setWatchdogStatus("retrying", RETRY_MESSAGE);
