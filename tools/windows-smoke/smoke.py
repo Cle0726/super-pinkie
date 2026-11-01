@@ -351,6 +351,7 @@ def scenario(label, exe, profile, out, old_exe=None):
         and all(entry.get("ok") for entry in plugin_methods.values())
         and all(summary.get("service_health", {}).get(name) for name in ("party", "roundtable"))
         and not summary.get("ui", {}).get("page_errors")
+        and not any(item.get("type") == "error" for item in summary.get("ui", {}).get("console_errors", []))
     )
     return summary
 
