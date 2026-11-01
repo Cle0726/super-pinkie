@@ -99,7 +99,7 @@ jobs:
       - name: Run smoke test
         shell: pwsh
         run: |
-          $arguments = @('tools\windows-smoke\smoke.py', '--app', 'smoke-app', '--out', 'smoke-out', '--strict')
+          $arguments = @('tools\windows-smoke\smoke.py', '--app', 'smoke-app', '--out', 'smoke-out', '--strict', '--upstream-probe')
           if (Test-Path smoke-old) { $arguments += @('--old-app', 'smoke-old') }
           python @arguments
 

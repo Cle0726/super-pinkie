@@ -372,6 +372,8 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--work", default=None)
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--upstream-probe", action="store_true",
+                        help="after the fresh scenario, check how failed model turns are retried")
     args = parser.parse_args()
 
     out = Path(args.out).resolve()
@@ -389,6 +391,12 @@ def main():
     if http_ready():
         raise SystemExit("port 18789 is already in use before the smoke test")
     summaries["fresh"] = scenario("fresh", exe, work / "fresh", out)
+    if args.upstream_probe:
+        import upstream_probe
+
+        summaries["upstream_probe"] = upstream_probe.run(exe, work / "fresh", out, launch, kill_app, profile_env)
+        for name, result in summaries["upstream_probe"].get("cases", {}).items():
+            log(f"[probe] {name}: requests={result['requests']} final={result['final']} problems={result['problems']}")
     if args.old_app:
         summaries["upgrade"] = scenario("upgrade", exe, work / "upgrade", out, old_exe=find_exe(args.old_app))
     (out / "summary.json").write_text(json.dumps(summaries, ensure_ascii=False, indent=2), encoding="utf-8")
