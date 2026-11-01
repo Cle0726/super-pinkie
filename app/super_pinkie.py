@@ -529,13 +529,49 @@ def parse_agent_ids(text):
 
 
 def configured_agent_ids(config_path=None):
-    """Agent ids already registered in openclaw.json, or None when unreadable."""
+    """Agent ids registered in openclaw.json, in order, or None when unreadable."""
     try:
         data = json.loads(Path(config_path or openclaw_config_path()).read_text(encoding="utf-8"))
         agents = data.get("agents", {}).get("list", [])
-        return {item.get("id") for item in agents if isinstance(item, dict)}
+        return [item.get("id") for item in agents if isinstance(item, dict)]
     except (OSError, ValueError, AttributeError):
         return None
+
+
+def ensure_main_agent(log, config_path=None):
+    """Put the 唠嗑 agent `main` first in agents.list.
+
+    OpenClaw treats the first listed agent as the default, and the chat mode
+    opens the default session.  A fresh Windows profile only ever had the two
+    party agents written by services/party, so 唠嗑模式 silently ran as
+    pinkie-party.  The Mac install lists main first with this same workspace.
+    """
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_text(encoding="utf-8") if path.exists() else "{}"
+        data = json.loads(raw or "{}")
+        agents = data.setdefault("agents", {})
+        listed = agents.setdefault("list", [])
+        if not isinstance(listed, list):
+            log("  ⚠️ openclaw.json 的 agents.list 不是列表，没有改动")
+            return False
+        index = next((i for i, item in enumerate(listed) if isinstance(item, dict) and item.get("id") == "main"), None)
+        if index == 0:
+            return True
+        if index is None:
+            entry = {"id": "main", "workspace": str(path.parent / "workspace")}
+            log("  已补齐 main（唠嗑）模式")
+        else:
+            entry = listed.pop(index)
+            log("  已把 main（唠嗑）模式放回默认位置")
+        listed.insert(0, entry)
+        temporary = path.with_name(path.name + ".pinkie-tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 补齐 main（唠嗑）模式失败：{exc}")
+        return False
 
 
 def ensure_mode_agents(log):
@@ -546,8 +582,14 @@ def ensure_mode_agents(log):
     swallowed, so a broken run shows up in setup.log and is retried next time.
     """
     configured = configured_agent_ids()
-    if configured is not None and all(agent_id in configured for agent_id in MODE_AGENTS):
+    if configured and configured[0] == "main" and all(agent_id in configured for agent_id in MODE_AGENTS):
         return True
+    registered = register_mode_agents(log)
+    # After the CLI, which rewrites openclaw.json itself.
+    return ensure_main_agent(log) and registered
+
+
+def register_mode_agents(log):
     home = Path.home()
     try:
         code, output, errors = run_openclaw(("agents", "list", "--json"), timeout=60)
@@ -1129,7 +1171,25 @@ def run_relay(port, upstream):
     spec.loader.exec_module(module)
 
 
+def utf8_console():
+    """Never let a Chinese print() crash a setup or service.
+
+    A windowed exe has no stdout, but one started from a console or by another
+    process inherits handles that Python wraps in the ANSI code page.  Every
+    bundled setup.py and service prints Chinese status lines; cp1252 cannot
+    encode them and cp936 cannot encode emoji, so the print raised and the
+    caller logged the whole install or service as failed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main():
+    utf8_console()
     ports = relay_ports_from_argv()
     if ports:
         run_relay(*ports)
