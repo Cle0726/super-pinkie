@@ -128,6 +128,7 @@ VISUALS = """() => {
     canvases: document.querySelectorAll('canvas').length,
     videos: [...document.querySelectorAll('video')].filter((v) => !v.paused).length,
     blurred, nodes: document.getElementsByTagName('*').length,
+    lite: document.documentElement.hasAttribute('data-pinkie-lite'),
   };
 }"""
 

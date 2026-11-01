@@ -783,18 +783,18 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-companion.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-companion.js?v=companion6"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-companion.js?v=companion7"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-companion.js?v=companion6' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion6}g' "$index_file"
+  elif ! grep -Fq 'laolao-companion.js?v=companion7' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion7}g' "$index_file"
     DID_CHANGE=1
   fi
   # 会动的碧琪必须在 companion.js 之前加载
   if ! grep -Fq 'laolao-buddy-rig.js' "$index_file"; then
-    perl -0pi -e 's{(\s*<script defer src="\./laolao-companion\.js)}{\n    <script defer src="./laolao-buddy-rig.js?v=buddyrig2"></script>$1}' "$index_file"
+    perl -0pi -e 's{(\s*<script defer src="\./laolao-companion\.js)}{\n    <script defer src="./laolao-buddy-rig.js?v=buddyrig3"></script>$1}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-buddy-rig.js?v=buddyrig2' "$index_file"; then
-    perl -0pi -e 's{((?:\./|/)laolao-buddy-rig\.js)(?:\?v=[^"]*)?}{${1}?v=buddyrig2}g' "$index_file"
+  elif ! grep -Fq 'laolao-buddy-rig.js?v=buddyrig3' "$index_file"; then
+    perl -0pi -e 's{((?:\./|/)laolao-buddy-rig\.js)(?:\?v=[^"]*)?}{${1}?v=buddyrig3}g' "$index_file"
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-immersion.js' "$index_file"; then
@@ -909,7 +909,7 @@ apply_ui_skin() {
   if ! grep -Fq './laolao-learning-library.js' "$index_file"; then
     perl -0pi -e 's{</head>}{    <script defer src="./laolao-learning-library.js?v=deskfinal6"></script>\n</head>}' "$index_file"
   fi
-  perl -0pi -e 's{((?:\./|/)laolao-learning-library\.(?:js|css))(?:\?v=[^"]*)?}{${1}?v=library1}g; s{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion6}g' "$index_file"
+  perl -0pi -e 's{((?:\./|/)laolao-learning-library\.(?:js|css))(?:\?v=[^"]*)?}{${1}?v=library1}g; s{((?:\./|/)laolao-companion\.js)(?:\?v=[^"]*)?}{${1}?v=companion7}g' "$index_file"
 
   # Study desk: preserve script order, keep versions in sync with the head fragment.
   perl -0pi -e 's{[ \t]*<(?:script|link)\b[^>]*(?:src|href)="(?:\./|/)(?:vendor\/lucide\/icons\.js|vendor\/study\-desk\-before\.js|vendor\/gsap\/gsap\.min\.js|vendor\/gsap\/SplitText\.min\.js|vendor\/gsap\/DrawSVGPlugin\.min\.js|vendor\/canvas\-confetti\/confetti\.browser\.min\.js|vendor\/study\-desk\-after\.js|laolao\-desk\-kit\.css|laolao\-desk\-kit\.js|laolao\-study\-desk\.css|laolao\-study\-desk\-board\.css|laolao\-study\-desk\.js|laolao\-study\-desk\-board\.js|laolao\-study\-desk\-vocab\.css|laolao\-study\-desk\-vocab\.js|laolao\-study\-desk\-lesson\.css|laolao\-study\-desk\-lesson\.js|laolao\-learning\-reminder\.css|laolao\-learning\-reminder\.js|laolao\-study\-desk\-split\.css|laolao\-study\-desk\-split\.js|laolao\-study\-desk\-vocab\.css|laolao\-study\-desk\-vocab\.js|laolao\-study\-desk\-notes\.css|laolao\-study\-desk\-notes\.js|laolao\-desk\-chat\.css|laolao\-desk\-chat\.js|laolao\-study\-desk\-handbook\.css|laolao\-study\-desk\-handbook\.js|laolao\-study\-desk\-ink\.css|laolao\-study\-desk\-panes\.css|laolao\-study\-desk\-conversation\.js)(?:\?v=[^"]*)?"[^>]*>(?:</script>)?\n?}{}g' "$index_file"

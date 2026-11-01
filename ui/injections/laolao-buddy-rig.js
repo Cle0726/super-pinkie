@@ -500,6 +500,8 @@ void main() {
 
   const attach = (figure) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+    // 软件渲染（见 laolao-companion.js 的 data-pinkie-lite）下 3D 碧琪很吃 CPU，用静态图。
+    if (document.documentElement.hasAttribute("data-pinkie-lite")) return null;
     try { return new Rig(figure); } catch { return null; }
   };
 

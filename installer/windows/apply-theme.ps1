@@ -510,8 +510,8 @@ function Apply-UISkin {
         '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
         '<script defer src="./laolao-process-card.js?v=processcard11"></script>',
         '<script defer src="./laolao-desensitize.js?v=desensitize1"></script>',
-        '<script defer src="./laolao-buddy-rig.js?v=buddyrig2"></script>',
-        '<script defer src="./laolao-companion.js?v=companion6"></script>',
+        '<script defer src="./laolao-buddy-rig.js?v=buddyrig3"></script>',
+        '<script defer src="./laolao-companion.js?v=companion7"></script>',
         '<script defer src="./laolao-immersion.js?v=immersion2"></script>',
         '<script defer src="./laolao-splash-fx.js?v=splashfx2"></script>',
         '<script defer src="./laolao-splash.js?v=splash28"></script>'
@@ -550,7 +550,7 @@ function Apply-UISkin {
         'laolao-page-warmup.js' = 'warmup1'; 'laolao-motion-system.css' = 'motionsys1';
         'laolao-link-viewer.js' = 'link6';
         'laolao-sidebar-surface.css' = 'sidebarsurface7'; 'laolao-sidebar-autohide.js' = 'sidebarautohide8';
-        'laolao-companion.css' = 'companion5'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion6'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
+        'laolao-companion.css' = 'companion5'; 'laolao-buddy-rig.js' = 'buddyrig3'; 'laolao-companion.js' = 'companion7'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
         'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night2';
         'laolao-classic-shell.css' = 'classic19'; 'laolao-classic-shell.js' = 'classic20';
         'laolao-side-layout.css' = 'side21'; 'laolao-side-layout.js' = 'side12';

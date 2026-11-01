@@ -22,6 +22,27 @@
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  /* 没有显卡加速（虚拟机、显卡驱动被禁用的 Windows）时，浏览器用 CPU 软件渲染。
+     氛围画布每帧重画，再叠上二十多处毛玻璃模糊，会把所有 CPU 核吃满，连本机网关都跟着卡住。
+     这种机器上关掉氛围、3D 碧琪和毛玻璃，只留静态画面。 */
+  const softwareRendering = (() => {
+    try {
+      const gl = document.createElement("canvas").getContext("webgl", {failIfMajorPerformanceCaveat: true});
+      if (!gl) return true;
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      const renderer = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      return /swiftshader|basic render driver|llvmpipe|software/i.test(renderer);
+    } catch { return true; }
+  })();
+  if (softwareRendering) {
+    document.documentElement.setAttribute("data-pinkie-lite", "");
+    const sheet = document.createElement("style");
+    sheet.id = "pinkie-lite";
+    sheet.textContent = "html[data-pinkie-lite] *, html[data-pinkie-lite] *::before, html[data-pinkie-lite] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }";
+    document.head.append(sheet);
+  }
+  const lite = () => document.documentElement.hasAttribute("data-pinkie-lite");
 
   /* 手绘线条图标：替代表情符号，悬停时各有一个小动作（见 CSS .ico--*） */
   const ICON = {
@@ -706,7 +727,7 @@
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
     const sync = () => {
       const card = document.querySelector(".card.chat");
-      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
+      const want = prefs.ambient && !reduced() && !lite() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       if (!canvas || canvas.parentElement !== card) { canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; new ResizeObserver(() => canvas && resize()).observe(card); }
       if (currentMode !== mode()) { currentMode = mode(); resize(); }
