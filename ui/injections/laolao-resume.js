@@ -1020,6 +1020,7 @@
   // This is deliberately a data attribute/CSS ribbon: no fake chat message is
   // inserted and the internal watchdog control text never enters the transcript.
   let watchdogStatusTimer = null;
+  let stoppedNoticeSession = "";
   const setWatchdogStatus = (state, message) => {
     if (!location.pathname.startsWith("/chat")) return;
     const root = document.documentElement;
@@ -1193,7 +1194,9 @@
         if (!isBusy(pane)) scheduleQueueRecovery(pane, `history:${reason}`, recent);
         // Normal first-load/manual history sync is silent.  Only close the
         // ribbon when a real offline/retry state was previously announced.
-        if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")) {
+        // A "won't retry" notice stays until a later real reply arrives.
+        if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")
+          && stoppedNoticeSession !== currentSessionKey()) {
           setWatchdogStatus("recovered", "连接已恢复，当前回复已同步");
         }
         return true;
@@ -1365,10 +1368,43 @@
     }, delay);
   };
 
-  // 上游失败卡出现时只显示稳定的状态提示并排队恢复。失败续接完全交给
-  // 网关看门狗，前端不清空正在进行中的流，也不模拟停止。
+  // 失败卡出现时先问看门狗这次会不会重试。缺文件、核心插件没加载、模型地址
+  // 404、本机代理没开这类本机问题，看门狗不会重试；以前这里一律显示「正在
+  // 自动重试」，提示条就一直挂着却什么也不发生。
+  const RETRY_MESSAGE = "上游波动，碧琪正在自动重试…";
+  const NO_PLUGIN_MESSAGE = "碧琪的核心插件没有加载，这次失败不会自动重试。请重启碧琪；还不行就重新安装。";
+  let failureCheck = 0;
+  const showStoppedNotice = (sessionKey, message) => {
+    stoppedNoticeSession = sessionKey;
+    setWatchdogStatus("offline", message);
+  };
+  const explainRunFailure = async () => {
+    const check = ++failureCheck;
+    const sessionKey = currentSessionKey();
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!sessionKey || typeof rpc !== "function") return;
+    // 看门狗在 agent_end 之后才做决定，失败卡可能先到，所以等它一会儿。
+    for (const wait of [300, 700, 1200, 2000, 3000]) {
+      await new Promise((resolve) => window.setTimeout(resolve, wait));
+      if (check !== failureCheck || sessionKey !== currentSessionKey()) return;
+      let status;
+      try {
+        status = await rpc("pinkie.watchdog.status", {sessionKey}, 5000);
+      } catch (error) {
+        if (/unknown method/i.test(String(error?.message || error))) showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+        return;
+      }
+      if (status?.state === "stopped") {
+        showStoppedNotice(sessionKey, status.message || "这次失败不会自动重试。");
+        return;
+      }
+      if (status?.state === "retrying") return;
+    }
+  };
   const onRunFailure = () => {
-    setWatchdogStatus("retrying", "上游波动，碧琪正在自动重试…");
+    stoppedNoticeSession = "";
+    setWatchdogStatus("retrying", RETRY_MESSAGE);
+    void explainRunFailure();
     // A failed attempt is normally followed by a watchdog retry. Refreshing
     // the pane here briefly clears the live composer and causes a visible
     // jump, while the retry is still active. Arm one coalesced idle recovery;
@@ -1377,6 +1413,7 @@
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   window.addEventListener("pinkie:run-recovered", () => {
+    stoppedNoticeSession = "";
     // This event is emitted only after the rendered transcript contains a
     // later real assistant terminal reply for every prior failure.
     clearWatchdogStatus();
