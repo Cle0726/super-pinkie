@@ -48,6 +48,21 @@ class ApiConfigTests(unittest.TestCase):
         self.assertEqual(cfg["models"]["providers"]["deepseek"], {"apiKey": "sk-test"})
         self.assertNotIn("agents", cfg)
 
+    def test_launch_repairs_a_config_an_earlier_version_broke(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "openclaw.json"
+            config.write_text(json.dumps({"models": {"providers": {
+                "openai": {"apiKey": "sk", "baseUrl": "https://x/v1", "model": "gpt-4o"},
+                "mm": {"apiKey": "sk", "models": [{"id": "a", "name": "a"}]},
+            }}}), encoding="utf-8")
+            messages = []
+            self.assertTrue(super_pinkie.repair_provider_models(messages.append, config))
+            providers = json.loads(config.read_text(encoding="utf-8"))["models"]["providers"]
+            self.assertEqual(providers["openai"], {"apiKey": "sk", "baseUrl": "https://x/v1", "models": [{"id": "gpt-4o", "name": "gpt-4o"}]})
+            self.assertEqual(providers["mm"], {"apiKey": "sk", "models": [{"id": "a", "name": "a"}]})
+            self.assertIn("openai", messages[0])
+            self.assertFalse(super_pinkie.repair_provider_models(messages.append, config))
+
 
 if __name__ == "__main__":
     unittest.main()
