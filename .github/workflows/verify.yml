@@ -1,0 +1,33 @@
+name: Verify
+
+# The release's test gate.  Node tests go through tools/release-gate, which
+# fails on any failure not listed (with its reason) in known-failures.json and
+# on any listed test that has started passing.  Python tests must all pass.
+on:
+  push:
+    branches: ["fix/windows-*"]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Node tests against the known-failure list
+        run: node tools/release-gate/run-tests.mjs
+      - name: Python tests
+        run: python -m unittest discover -s tests -p '*_test.py' -v
+      - name: Check bundled scripts
+        run: |
+          find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
+          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
+          python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py tools/windows-smoke/smoke.py
