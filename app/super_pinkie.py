@@ -21,6 +21,7 @@ import json
 import importlib.util
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -549,8 +550,8 @@ def ensure_main_agent(log, config_path=None):
     """
     path = Path(config_path or openclaw_config_path())
     try:
-        raw = path.read_text(encoding="utf-8") if path.exists() else "{}"
-        data = json.loads(raw or "{}")
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
         agents = data.setdefault("agents", {})
         listed = agents.setdefault("list", [])
         if not isinstance(listed, list):
@@ -561,14 +562,26 @@ def ensure_main_agent(log, config_path=None):
             return True
         if index is None:
             entry = {"id": "main", "workspace": str(path.parent / "workspace")}
-            log("  已补齐 main（唠嗑）模式")
+            message = "  已补齐 main（唠嗑）模式"
         else:
             entry = listed.pop(index)
-            log("  已把 main（唠嗑）模式放回默认位置")
+            message = "  已把 main（唠嗑）模式放回默认位置"
         listed.insert(0, entry)
-        temporary = path.with_name(path.name + ".pinkie-tmp")
-        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        os.replace(temporary, path)
+        # The gateway may still be running after the window was closed. Do
+        # check for an edit made since we read the configuration.
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-main-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有覆盖；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log(message)
         return True
     except (OSError, ValueError, AttributeError) as exc:
         log(f"  ⚠️ 补齐 main（唠嗑）模式失败：{exc}")
