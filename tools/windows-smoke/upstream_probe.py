@@ -287,6 +287,9 @@ RIBBON = r"""() => {
     state: html.getAttribute('data-laolao-watchdog-state') || '',
     message: html.getAttribute('data-laolao-watchdog-message') || '',
     recovered: text.includes('PROBE-RECOVERED-OK'),
+    // The completion gate's honest terminal note: a toolless reply to an
+    // execution request is not accepted as done, but the turn still ends.
+    honestStop: text.includes('本轮未完成'),
     failureCard: text.includes('这次模型调用失败'),
     partial: text.includes('碧琪先说到一半'),
   };
@@ -405,12 +408,13 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
         except Exception as error:
             rates.append({"t": state["t"], "error": str(error)[:120]})
         last = timeline[-1] if timeline else {}
-        if any(state.get(k) != last.get(k) for k in ("state", "message", "recovered", "failureCard", "partial")):
+        if any(state.get(k) != last.get(k) for k in ("state", "message", "recovered", "honestStop", "failureCard", "partial")):
             timeline.append(state)
         if state.get("state") and not shot_taken:
             shot(page, out / f"probe-{name}-ribbon.png", notes)
             shot_taken = True
-        if stop_when_recovered and state.get("recovered") and state.get("state") in ("", "recovered"):
+        settled = state.get("recovered") or (name == "disconnect-action" and state.get("honestStop"))
+        if stop_when_recovered and settled and state.get("state") in ("", "recovered"):
             calm_since = calm_since or time.monotonic()
             if time.monotonic() - calm_since > 6:
                 break
@@ -463,7 +467,11 @@ def judge(name, result):
             problems.append("the fake upstream did not receive a watchdog continuation")
         if result["requests"] > 4:
             problems.append(f"the upstream received too many requests: {result['requests']}")
-        if not final.get("recovered"):
+        # The fake model cannot call tools, so the completion gate may refuse
+        # its reply to the execution-style request; then the turn must still
+        # end with the gate's honest note instead of spinning.
+        settled = final.get("recovered") or (name == "disconnect-action" and final.get("honestStop"))
+        if not settled:
             problems.append("the reply never arrived after the stream broke off")
         if final.get("state") not in ("", "recovered"):
             problems.append(f"ribbon still shows {final.get('message')!r}")

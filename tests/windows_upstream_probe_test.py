@@ -58,6 +58,18 @@ class UpstreamProbeTests(unittest.TestCase):
         result["requests"] = 5
         self.assertTrue(probe.judge("disconnect-action", result))
 
+    def test_action_case_accepts_the_gates_honest_stop_but_not_silence(self):
+        result = case()
+        result["gateway"] = ["watchdog retry scheduled session=agent:main:probe-disconnect-action"]
+        result["watchdog_requests"] = 1
+        result["requests"] = 3
+        self.assertTrue(probe.judge("disconnect-action", result))
+        result["final"]["honestStop"] = True
+        self.assertEqual(probe.judge("disconnect-action", result), [])
+        # A plain conversation reply must still arrive in full.
+        result["gateway"] = ["watchdog retry scheduled session=agent:main:probe-disconnect"]
+        self.assertTrue(probe.judge("disconnect", result))
+
 
 if __name__ == "__main__":
     unittest.main()
