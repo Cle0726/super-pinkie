@@ -1381,7 +1381,10 @@
       await rpc("pinkie.usage.get", {}, 8000);
       return false;
     } catch (error) {
-      return /unknown method/i.test(String(error?.message || error));
+      if (/unknown method/i.test(String(error?.message || error))) return true;
+      // A timeout or disconnect says nothing about whether the plugin exists.
+      // Let the caller try the check again once the gateway responds.
+      throw error;
     }
   };
   const showStoppedNotice = (sessionKey, message) => {
@@ -1401,8 +1404,10 @@
       try {
         status = await rpc("pinkie.watchdog.status", {sessionKey}, 5000);
       } catch (error) {
-        if (/unknown method/i.test(String(error?.message || error)) && await corePluginMissing(rpc)) {
-          showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+        if (/unknown method/i.test(String(error?.message || error))) {
+          try {
+            if (await corePluginMissing(rpc)) showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+          } catch {} // The gateway did not answer the plugin check yet.
         }
         return;
       }
@@ -1447,7 +1452,8 @@
   const onRunFailure = () => {
     if (stoppedNoticeSession === "*") return;
     stoppedNoticeSession = "";
-    setWatchdogStatus("retrying", RETRY_MESSAGE);
+    // The failure card alone does not prove a retry exists. Wait for the
+    // backend status before promising the user that it is retrying.
     void explainRunFailure();
     // A failed attempt is normally followed by a watchdog retry. Refreshing
     // the pane here briefly clears the live composer and causes a visible
