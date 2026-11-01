@@ -21,10 +21,12 @@ ribbon first appears and at the end of the case.
 """
 
 import json
+import os
 import re
 import shutil
 import socket
 import struct
+import subprocess
 import threading
 import time
 import uuid
@@ -203,8 +205,11 @@ def stuck_stack(page):
     frames = []
     try:
         cdp = page.context.new_cdp_session(page)
+        scripts = {}
+        cdp.on("Debugger.scriptParsed", lambda event: scripts.update({event["scriptId"]: event.get("url", "")}))
         cdp.on("Debugger.paused", lambda event: frames.extend(
-            f"{f.get('functionName') or '(anonymous)'} {f.get('url', '').rsplit('/', 1)[-1]}:"
+            f"{f.get('functionName') or '(anonymous)'} "
+            f"{scripts.get(f['location']['scriptId'], f.get('url', ''))}:"
             f"{f['location']['lineNumber'] + 1}:{f['location'].get('columnNumber', 0) + 1}"
             for f in event.get("callFrames", [])[:12]))
         cdp.send("Debugger.enable")
@@ -244,7 +249,23 @@ def gateway_lines(log_path, offset):
     return keep[-80:], offset + len(chunk)
 
 
-def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recovered):
+def session_errors(profile, session):
+    """Read the actual failed assistant turn, not just the absence of a ribbon."""
+    sessions = profile / "home/.openclaw/agents/main/sessions"
+    try:
+        index = json.loads((sessions / "sessions.json").read_text(encoding="utf-8"))
+        session_id = index[session]["sessionId"]
+        result = []
+        for line in (sessions / f"{session_id}.jsonl").read_text(encoding="utf-8").splitlines():
+            entry = json.loads(line).get("message") or {}
+            if entry.get("role") == "assistant" and entry.get("errorMessage"):
+                result.append(str(entry["errorMessage"])[:500])
+        return result
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_when_recovered):
     upstream.plan = list(plan)
     first_request = len(upstream.requests)
     session = f"agent:main:probe-{name}"
@@ -258,16 +279,16 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
                 "ribbon_ever": [], "gateway": [], "watchdog_retries": 0}
     page.wait_for_timeout(6000)
     offset = log_path.stat().st_size if log_path.is_file() else 0
-    sent = page.evaluate("""async ([sessionKey, key, model]) => {
+    sent = page.evaluate("""async ([sessionKey, key, model, name]) => {
       try {
         await window.__laolaoSidebar.gwRequest('sessions.patch', {key: sessionKey, model}, 15000);
-      } catch (error) { /* the default probe model still answers */ }
+      } catch (error) { return {ok: false, error: 'model selection failed: ' + String(error)}; }
       try {
         await window.__laolaoSidebar.gwRequest('chat.send',
-          {sessionKey, message: '碧琪，测试一下：请回复一句话。', idempotencyKey: key, deliver: false}, 20000);
+          {sessionKey, message: `你好，${name}，请说一句问候。`, idempotencyKey: key, deliver: false}, 20000);
         return {ok: true};
       } catch (error) { return {ok: false, error: String(error)}; }
-    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model"])
+    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model", name])
     timeline = []
     notes = {}
     shot_taken = False
@@ -307,6 +328,7 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
         "final": final,
         "ribbon_ever": sorted({entry.get("message", "") for entry in timeline if entry.get("state")}),
         "gateway": lines,
+        "session_errors": session_errors(profile, session),
         **notes,
         "watchdog_retries": sum(1 for line in lines if re.search(r"watchdog (?:retry scheduled|immediate retry accepted)", line)),
     }
@@ -325,12 +347,24 @@ def judge(name, result):
     claims_retry = any(entry.get("state") == "retrying" for entry in result["timeline"])
     if not result["sent"].get("ok"):
         problems.append(f"chat.send failed: {result['sent'].get('error')}")
+    if result.get("screenshot_errors"):
+        problems.append("the browser stopped responding while capturing the result")
     if name == "disconnect":
+        if not any("watchdog retry scheduled" in line for line in result["gateway"]):
+            problems.append("the upstream watchdog did not schedule the continuation")
+        if result["watchdog_requests"] < 1:
+            problems.append("the fake upstream did not receive a watchdog continuation")
         if not final.get("recovered"):
             problems.append("the reply never arrived after the stream broke off")
         if final.get("state") not in ("", "recovered"):
             problems.append(f"ribbon still shows {final.get('message')!r}")
     elif name in ("not-found", "proxy-down"):
+        if name == "not-found" and not any(r.get("behaviour") == "not-found" for r in result["request_log"]):
+            problems.append("the fake upstream never returned a 404")
+        errors = " ".join(result.get("session_errors", []))
+        expected = r"not found|404" if name == "not-found" else r"connect|network|refused"
+        if not re.search(expected, errors, re.I):
+            problems.append(f"the expected {name} failure was not recorded: {errors!r}")
         if result["requests"] > 3 or result["watchdog_retries"] > 3:
             problems.append(f"{result['requests']} model requests / {result['watchdog_retries']} watchdog retries"
                             " for a failure retrying cannot fix")
@@ -396,6 +430,38 @@ def bad_config(exe, profile, out, launch, kill_app, env):
             "models": [item.get("id") for item in provider.get("models", [])]}
 
 
+def start_gateway_profiler(exe, log_path, offset, out):
+    """Capture a CPU profile only on explicitly requested diagnostic runs."""
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(offset)
+            text = handle.read().decode("utf-8", "replace")
+        match = re.search(r"Debugger listening on (ws://127\.0\.0\.1:\d+/[^\s]+)", text)
+        if not match:
+            (out / "probe-profiler-error.txt").write_text("Gateway inspector URL not found", encoding="utf-8")
+            return None
+        node = next(exe.parent.rglob("runtime/bin/node.exe"))
+        env = os.environ.copy()
+        env.pop("NODE_OPTIONS", None)
+        return subprocess.Popen(
+            [str(node), str(Path(__file__).with_name("profile_gateway.mjs")), match.group(1), str(out / "probe-gateway.cpuprofile")],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+        )
+    except (OSError, StopIteration) as error:
+        (out / "probe-profiler-error.txt").write_text(str(error), encoding="utf-8")
+        return None
+
+
+def stop_gateway_profiler(process):
+    if not process or process.poll() is not None:
+        return
+    try:
+        process.communicate(input=b"stop\n", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        process.kill()
+        process.wait(timeout=5)
+
+
 def run(exe, profile, out, launch, kill_app, profile_env):
     from playwright.sync_api import sync_playwright
 
@@ -405,22 +471,29 @@ def run(exe, profile, out, launch, kill_app, profile_env):
     configure(profile, port)
     log_path = profile / "local/SuperPinkie/logs/gateway.log"
     summary = {"port": port, "cases": {}}
+    profiler = None
     try:
         env = profile_env(profile)
+        if os.environ.get("PINKIE_SMOKE_PROFILE_GATEWAY") == "1":
+            env["NODE_OPTIONS"] = "--inspect=127.0.0.1:0"
+        log_offset = log_path.stat().st_size if log_path.is_file() else 0
         process, ready, seconds = launch(exe, env, out, "probe")
         summary["gateway_ready"], summary["seconds"] = ready, seconds
         if not ready:
             return summary
+        profiler = start_gateway_profiler(exe, log_path, log_offset, out) if env.get("NODE_OPTIONS") else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(channel="msedge", headless=True)
             page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN").new_page()
-            summary["cases"]["disconnect"] = run_case(page, out, "disconnect", upstream, ["drop", "ok"], log_path, 120, True)
-            summary["cases"]["not-found"] = run_case(page, out, "not-found", upstream, ["not-found"], log_path, 75, False)
+            summary["cases"]["disconnect"] = run_case(page, out, "disconnect", upstream, ["drop", "ok"], log_path, profile, 120, True)
+            summary["cases"]["not-found"] = run_case(page, out, "not-found", upstream, ["not-found"], log_path, profile, 75, False)
             upstream.stop()
-            summary["cases"]["proxy-down"] = run_case(page, out, "proxy-down", upstream, ["ok"], log_path, 75, False)
+            summary["cases"]["proxy-down"] = run_case(page, out, "proxy-down", upstream, ["ok"], log_path, profile, 75, False)
             upstream = FakeUpstream(port)
             upstream.start()
             browser.close()
+        stop_gateway_profiler(profiler)
+        profiler = None
         kill_app(exe.parent)
         hidden = []
         for path in plugin_copies(exe, profile):
@@ -433,7 +506,7 @@ def run(exe, profile, out, launch, kill_app, profile_env):
                 with sync_playwright() as playwright:
                     browser = playwright.chromium.launch(channel="msedge", headless=True)
                     page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN").new_page()
-                    summary["cases"]["plugin-missing"] = run_case(page, out, "plugin-missing", upstream, ["drop", "ok"], log_path, 75, True)
+                    summary["cases"]["plugin-missing"] = run_case(page, out, "plugin-missing", upstream, ["drop", "ok"], log_path, profile, 75, True)
                     browser.close()
         finally:
             kill_app(exe.parent)
@@ -441,6 +514,7 @@ def run(exe, profile, out, launch, kill_app, profile_env):
                 shutil.move(str(path.with_name(path.name + ".probe-hidden")), str(path))
         summary["cases"]["bad-config"] = bad_config(exe, profile, out, launch, kill_app, env)
     finally:
+        stop_gateway_profiler(profiler)
         upstream.stop()
         if (profile / "local/SuperPinkie/logs").is_dir():
             shutil.copytree(profile / "local/SuperPinkie/logs", out / "probe-logs", dirs_exist_ok=True)
