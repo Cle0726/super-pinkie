@@ -394,7 +394,11 @@ def main():
     if args.upstream_probe:
         import upstream_probe
 
-        summaries["upstream_probe"] = upstream_probe.run(exe, work / "fresh", out, launch, kill_app, profile_env)
+        try:
+            summaries["upstream_probe"] = upstream_probe.run(exe, work / "fresh", out, launch, kill_app, profile_env)
+        except Exception as error:
+            summaries["upstream_probe"] = {"passed": False, "error": repr(error), "cases": {}}
+            kill_app(exe.parent)
         for name, result in summaries["upstream_probe"].get("cases", {}).items():
             log(f"[probe] {name}: requests={result.get('requests')} final={result.get('final')} problems={result['problems']}")
     if args.old_app:

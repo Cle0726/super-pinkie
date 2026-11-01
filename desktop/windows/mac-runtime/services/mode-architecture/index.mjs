@@ -3810,7 +3810,7 @@ export class UpstreamWatchdog {
     }
     this.attempts.set(sessionKey, attempt);
     this.outcomes.delete(sessionKey);
-    this.api.logger?.info?.(`watchdog retry scheduled session=${sessionKey} attempt=${attempt} reason=${shortReason(reason)}`);
+    this.api.logger?.warn?.(`watchdog retry scheduled session=${sessionKey} attempt=${attempt} reason=${shortReason(reason)}`);
     this.jobStore.set(sessionKey, {
       agentId: ctx.agentId, runId: event.runId, attempt, reason,
       model: this.models.get(sessionKey), kind: 'upstream',
