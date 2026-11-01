@@ -183,6 +183,14 @@ RIBBON = r"""() => {
 }"""
 
 
+def shot(page, path, result):
+    # A renderer that stops answering must not cost the rest of the evidence.
+    try:
+        page.screenshot(path=str(path), timeout=15_000)
+    except Exception as error:
+        result.setdefault("screenshot_errors", []).append(f"{path.name}: {str(error)[:200]}")
+
+
 def gateway_lines(log_path, offset):
     if not log_path.is_file():
         return [], offset
@@ -211,6 +219,7 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
       } catch (error) { return {ok: false, error: String(error)}; }
     }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}"])
     timeline = []
+    notes = {}
     shot_taken = False
     started = time.monotonic()
     calm_since = None
@@ -226,7 +235,7 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
         if any(state.get(k) != last.get(k) for k in ("state", "message", "recovered", "failureCard", "partial")):
             timeline.append(state)
         if state.get("state") and not shot_taken:
-            page.screenshot(path=str(out / f"probe-{name}-ribbon.png"))
+            shot(page, out / f"probe-{name}-ribbon.png", notes)
             shot_taken = True
         if stop_when_recovered and state.get("recovered") and state.get("state") in ("", "recovered"):
             calm_since = calm_since or time.monotonic()
@@ -234,7 +243,7 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
                 break
         else:
             calm_since = None
-    page.screenshot(path=str(out / f"probe-{name}-end.png"))
+    shot(page, out / f"probe-{name}-end.png", notes)
     final = timeline[-1] if timeline else {}
     lines, _ = gateway_lines(log_path, offset)
     requests = upstream.requests[first_request:]
@@ -248,6 +257,7 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
         "final": final,
         "ribbon_ever": sorted({entry.get("message", "") for entry in timeline if entry.get("state")}),
         "gateway": lines,
+        **notes,
         "watchdog_retries": sum(1 for line in lines if re.search(r"watchdog (?:retry scheduled|immediate retry accepted)", line)),
     }
 
