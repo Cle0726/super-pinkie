@@ -413,6 +413,17 @@ function hasIncompleteToolTurn(event = {}, reason = '') {
   return /^(?:toolUse|tool_use)$/i.test(String(lastAssistant?.stopReason || ''));
 }
 
+function failedAssistantMessage(message = {}) {
+  return message?.role === 'assistant'
+    && /^(?:error|aborted)$/i.test(String(message.stopReason || message.stop_reason || ''));
+}
+
+function endedWithFailedAssistant(event = {}) {
+  const messages = Array.isArray(event.messages) ? event.messages : [];
+  const last = messages.at(-1);
+  return failedAssistantMessage(last?.message || last);
+}
+
 // API 断链恢复属于会话层能力，不应只覆盖四个 UI 模式。实际运行时
 // OpenClaw 可能使用自定义 agentId（例如本地模型/工作区插件），但仍然
 // 会提供标准的 agent:<id>:<session> 会话键。只排除子代理，避免把同一
@@ -3182,6 +3193,9 @@ export class CleKkSupervisor {
   beforeMessageWrite(event = {}, ctx = {}, preDecision, prechecked = false) {
     const message = event.message || {};
     if (message.role !== 'assistant' || assistantMessageHasToolCall(message)) return;
+    // A truncated provider response is not a proposed final answer. Leave it
+    // to the transport watchdog instead of starting an integrity retry.
+    if (failedAssistantMessage(message)) return;
     const text = visibleAssistantText(message);
     if (!text || /^(?:toolUse|tool_use)$/i.test(String(message.stopReason || ''))) return;
     if (internalControlText(text)) return {block: true};
@@ -3741,7 +3755,11 @@ export class UpstreamWatchdog {
     }
     const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' ');
     const incompleteToolTurn = hasIncompleteToolTurn(event, reason);
-    if (event.success && !incompleteToolTurn) {
+    // Some OpenClaw versions mark agent_end success=true even when the last
+    // assistant message has stopReason=error and errorMessage=terminated.
+    // The message is the more precise result of the model stream.
+    const terminalFailure = endedWithFailedAssistant(event);
+    if (event.success && !incompleteToolTurn && !terminalFailure) {
       // A successful/manual follow-up may finish before the pending retry
       // timer fires. Remove both online and cron fallbacks to avoid a duplicate
       // invisible turn after the user already received a complete answer.
@@ -3773,7 +3791,7 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog retired non-retryable context overflow session=${sessionKey}`);
       return false;
     }
-    const failedParentTurn = event.success !== true || incompleteToolTurn;
+    const failedParentTurn = event.success !== true || incompleteToolTurn || terminalFailure;
     if (!failedParentTurn && !isTransientFailure(reason) && !incompleteToolTurn) return false;
     // Do not mistake an exhausted provider account for an endless disconnect.
     // Keep the user's original model for normal turns, but route the invisible
@@ -4118,13 +4136,8 @@ export class UpstreamWatchdog {
       if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       const output = `${stdout}\n${result?.error || result?.message || ''}`;
       if (result?.status === 'error' || result?.status === 'timeout') {
-        const blockedDelay = this.recoveryDelay(sessionKey, output);
-        // This reschedules the same attempt ordinal. Gateway drain/projection
-        // rebuilds therefore neither increment nor decrement the integrity
-        // budget; repeated infrastructure probes cannot turn attempt 4 back
-        // into the misleading 0/24 seen in earlier logs.
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
-        return false;
+        return await this.dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind,
+          generation: leaseGeneration, message: controlMessage, detail: output});
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
       this.gatewayBackoff.delete(sessionKey);
@@ -4135,19 +4148,28 @@ export class UpstreamWatchdog {
       if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
       const detail = `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`;
-      const failures = (this.dispatchFailures.get(sessionKey) || 0) + 1;
-      this.dispatchFailures.set(sessionKey, failures);
-      if (DISPATCH_SETUP_FAILURE.test(detail) || failures >= WATCHDOG_DISPATCH_FAILURE_LIMIT) {
-        await this.giveUp(sessionKey, runId, 'dispatch',
-          '碧琪没法把这一轮重新发出去（本机网关通道不可用），没有继续重试。请重启碧琪后再发一次。', detail);
-        return false;
-      }
-      const blockedDelay = this.recoveryDelay(sessionKey, detail);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
-      return false;
+      return await this.dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind,
+        generation: leaseGeneration, message: controlMessage, detail});
     } finally {
       this.dispatching.delete(sessionKey);
     }
+  }
+
+  async dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind, generation, message, detail}) {
+    const failures = (this.dispatchFailures.get(sessionKey) || 0) + 1;
+    this.dispatchFailures.set(sessionKey, failures);
+    if (DISPATCH_SETUP_FAILURE.test(detail) || failures >= WATCHDOG_DISPATCH_FAILURE_LIMIT) {
+      await this.giveUp(sessionKey, runId, 'dispatch',
+        '碧琪没法把这一轮重新发出去（本机网关通道不可用），没有继续重试。请重启碧琪后再发一次。', detail);
+      return false;
+    }
+    const blockedDelay = this.recoveryDelay(sessionKey, detail);
+    // Retry the same model-turn ordinal; the separate dispatch counter bounds
+    // failures whether the CLI throws or returns a JSON error/timeout.
+    this.scheduleImmediate({sessionKey, agentId, runId, attempt,
+      delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100),
+      tag, kind, generation, message});
+    return false;
   }
 
   async giveUp(sessionKey, runId, kind, message, reason) {
@@ -6194,6 +6216,7 @@ export default {
           message: {...message, stopReason: 'stop', content: [{type: 'text', text: stoppedReport}]},
         };
       }
+      if (failedAssistantMessage(message)) return;
       if (message.role !== 'assistant' || !isTerminalAssistantMessage(message)) {
         return cleKk.beforeMessageWrite(event, ctx);
       }
