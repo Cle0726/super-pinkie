@@ -64,6 +64,15 @@ test('an older failed message does not cause a completed reply to be retried', a
   assert.equal(dog.status(key).state, 'idle');
 });
 
+test('a host-success failed message still reports a missing module without retrying', async () => {
+  const {dog} = watchdog();
+  const retried = await dog.agentEnded({success: true, runId: 'run-1', messages: [
+    {message: {role: 'assistant', stopReason: 'error', errorMessage: "Cannot find module './vendor/reading-node.mjs'"}},
+  ]}, ctx);
+  assert.equal(retried, false);
+  assert.equal(dog.status(key).kind, 'setup');
+});
+
 test('a partial failed reply does not start an integrity retry', () => {
   const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog('')});
   supervisor.begin({prompt: '测试一下：请回复一句话。'}, ctx);
