@@ -21,10 +21,15 @@ INSTALLER_TAG = re.compile(
 
 
 def rewrite(path, transform):
-    text = path.read_text(encoding="utf-8-sig")
+    # Keep line endings byte for byte. Text mode on Windows turns LF into CRLF,
+    # and the gateway hashes index.html's inline scripts with the CR while the
+    # browser hashes them without it, so the CSP then blocks both scripts.
+    raw = path.read_bytes()
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
     # PowerShell 5 requires the BOM on a script containing Chinese.
-    encoding = "utf-8-sig" if path.suffix.lower() == ".ps1" else "utf-8"
-    path.write_text(transform(text), encoding=encoding)
+    keep_bom = bom or path.suffix.lower() == ".ps1"
+    path.write_bytes((b"\xef\xbb\xbf" if keep_bom else b"") + transform(text).encode("utf-8"))
 
 
 def clean(ui, control_ui, installer):
@@ -40,7 +45,7 @@ def clean(ui, control_ui, installer):
         icon.unlink(missing_ok=True)
     for document in (ui / "injections/laolao-head.fragment.html", control_ui / "index.html"):
         rewrite(document, lambda text: STAGE_TAG.sub("", text))
-        if STAGE_TAG.search(document.read_text(encoding="utf-8")):
+        if STAGE_TAG.search(document.read_bytes().decode("utf-8-sig")):
             raise ValueError(f"separate product stage still referenced in {document}")
     rewrite(installer / "apply-theme.ps1", lambda text: INSTALLER_TAG.sub("", text))
     # The frontend treats JSON null just like an absent legacy file. Supplying
@@ -48,7 +53,16 @@ def clean(ui, control_ui, installer):
     for name in ("laolao-stats.json", "laolao-quota.json"):
         target = control_ui / name
         if not target.exists():
-            target.write_text("null\n", encoding="utf-8")
+            target.write_bytes(b"null\n")
+
+
+def check_inline_scripts(index):
+    # The browser normalizes CRLF before hashing an inline script, the gateway
+    # does not; any CR inside one makes the CSP block it.
+    text = Path(index).read_bytes().decode("utf-8-sig")
+    for match in re.finditer(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", text, re.I):
+        if "\r" in match.group(1):
+            raise ValueError(f"inline script with CRLF line endings in {index}; the CSP would block it")
 
 
 def check_package(root):
@@ -56,6 +70,8 @@ def check_package(root):
     blocked = set(STAGE_FILES) | {"CLeAppIcon.icns"}
     if not (root / "_internal/installer/windows/apply-theme.ps1").is_file():
         raise ValueError("the packaged Windows installer is missing")
+    for index in root.rglob("control-ui/index.html"):
+        check_inline_scripts(index)
     for file in root.rglob("*"):
         parts = [part.lower() for part in file.relative_to(root).parts]
         if file.name in blocked or any(parts[i:i + 2] in (["installer", "cle"], ["services", "cle-studio"]) for i in range(len(parts) - 1)):
