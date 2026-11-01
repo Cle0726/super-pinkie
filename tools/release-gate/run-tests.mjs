@@ -10,12 +10,14 @@
 //
 //   node tools/release-gate/run-tests.mjs [--update] [--jobs 4]
 //
-// --update rewrites the list from the current results (keeps old reasons).
+// --update rewrites the list from the current results (keeps old reasons and
+// entries that were skipped or not observed on this host).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { outcomes } from "./tap.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const listPath = path.join(root, "tools/release-gate/known-failures.json");
@@ -41,18 +43,6 @@ function runFile(file) {
   });
 }
 
-// Top-level and nested `not ok` lines name the failing tests.  A file that
-// cannot even load is reported once under its own name.
-function failures({ file, code, output }) {
-  const names = [];
-  for (const line of output.split("\n")) {
-    const match = /^\s*not ok \d+ - (.+?)(?: # .*)?$/.exec(line);
-    if (match) names.push(match[1].trim());
-  }
-  if (code !== 0 && names.length === 0) names.push("<file failed>");
-  return [...new Set(names)].map((name) => `${file} :: ${name}`);
-}
-
 const results = [];
 let next = 0;
 await Promise.all(Array.from({ length: jobs }, async () => {
@@ -62,14 +52,19 @@ await Promise.all(Array.from({ length: jobs }, async () => {
   }
 }));
 
-const failed = new Set(results.flatMap(failures));
+const parsed = results.map(outcomes);
+const failed = new Set(parsed.flatMap((item) => [...item.failed]));
+const passed = new Set(parsed.flatMap((item) => [...item.passed]));
+const skipped = new Set(parsed.flatMap((item) => [...item.skipped]));
 const known = fs.existsSync(listPath) ? JSON.parse(fs.readFileSync(listPath, "utf8")) : {};
 const unexpected = [...failed].filter((key) => !(key in known)).sort();
-const fixed = Object.keys(known).filter((key) => !failed.has(key)).sort();
+const fixed = Object.keys(known).filter((key) => passed.has(key) && !failed.has(key)).sort();
+const unavailable = Object.keys(known).filter((key) => skipped.has(key) && !failed.has(key)).sort();
+const missing = Object.keys(known).filter((key) => !failed.has(key) && !passed.has(key) && !skipped.has(key)).sort();
 
 if (update) {
   const next = {};
-  for (const key of [...failed].sort()) next[key] = known[key] || "TODO: explain why this test is red";
+  for (const key of [...new Set([...failed, ...unavailable, ...missing])].sort()) next[key] = known[key] || "TODO: explain why this test is red";
   fs.writeFileSync(listPath, JSON.stringify(next, null, 2) + "\n");
   console.log(`known-failures.json updated: ${failed.size} entries`);
   process.exit(0);
@@ -78,8 +73,13 @@ if (update) {
 console.log(`${files.length} test files, ${failed.size} failing tests, ${Object.keys(known).length} known`);
 for (const key of unexpected) {
   console.log(`NEW FAILURE  ${key}`);
-  const result = results.find((item) => key.startsWith(item.file + " ::"));
-  if (result) console.log(result.output.split("\n").filter((line) => /not ok|Error|expected|actual/.test(line)).slice(0, 12).join("\n"));
+}
+// A complete TAP diagnostic includes the actual exception and stack. Print
+// each affected file once, rather than a few generic lines for every failure.
+for (const result of results.filter((item) => unexpected.some((key) => key.startsWith(item.file + " ::")))) {
+  console.log(`\n--- Diagnostics: ${result.file} ---\n${result.output}`);
 }
 for (const key of fixed) console.log(`NOW PASSING  ${key}  (remove it from known-failures.json)`);
-process.exit(unexpected.length || fixed.length ? 1 : 0);
+for (const key of unavailable) console.log(`SKIPPED KNOWN FAILURE  ${key}  (not verified on this runner)`);
+for (const key of missing) console.log(`MISSING KNOWN TEST  ${key}  (review the list)`);
+process.exit(unexpected.length || fixed.length || missing.length ? 1 : 0);
