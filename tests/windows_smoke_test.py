@@ -15,6 +15,13 @@ spec.loader.exec_module(smoke)
 
 
 class WindowsSmokeTests(unittest.TestCase):
+    def test_fresh_modes_use_pinkies_name_without_overriding_existing_users(self):
+        identities = {agent: "碧琪" for agent in smoke.AGENTS}
+        self.assertTrue(smoke.fresh_mode_identities_ok("fresh", {"identities": identities}))
+        identities["unrestricted"] = "助手"
+        self.assertFalse(smoke.fresh_mode_identities_ok("fresh", {"identities": identities}))
+        self.assertTrue(smoke.fresh_mode_identities_ok("upgrade", {"identities": identities}))
+
     def test_service_health_requires_both_expected_identities(self):
         responses = [
             io.BytesIO(json.dumps({"service": "super-pinkie-party"}).encode()),
