@@ -57,7 +57,9 @@ $sums = Join-Path $overlayRoot "SHA256SUMS"
 if (-not (Test-Path -LiteralPath $sums)) { throw "缺少本机 Mac 运行时快照 desktop\windows\mac-runtime" }
 $serviceStage = Join-Path $runtimeStage "bundled-services"
 $personaStage = Join-Path $runtimeStage "bundled-personas"
-foreach ($stage in @($serviceStage, $personaStage)) {
+$uiStage = Join-Path $runtimeStage "bundled-ui"
+$windowsInstallerStage = Join-Path $runtimeStage "bundled-windows-installer"
+foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerStage)) {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
 }
@@ -65,6 +67,8 @@ Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -R
 $cleStudio = Join-Path $serviceStage "cle-studio"
 if (Test-Path -LiteralPath $cleStudio) { Remove-Item -LiteralPath $cleStudio -Recurse -Force }
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
+Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
+Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
 
 function Install-MacSnapshot([string]$Relative, [string]$Destination, [string]$Expected) {
     $source = Join-Path $overlayRoot ($Relative -replace '/', '\')
@@ -112,6 +116,10 @@ if (-not $aiCopied) { throw "Mac 快照没有覆盖 @openclaw/ai" }
 $providerIcons = Join-Path $openclawRoot "dist\control-ui\provider-icons"
 New-Item -ItemType Directory -Force -Path $providerIcons | Out-Null
 Copy-Item -LiteralPath "ui\assets\ProviderIcon-crossmodel.svg" -Destination (Join-Path $providerIcons "ProviderIcon-crossmodel.svg") -Force
+$controlUi = Join-Path $openclawRoot "dist\control-ui"
+Copy-Item -LiteralPath "ui\assets\ProviderIcon-crossmodel.svg" -Destination (Join-Path $controlUi "ProviderIcon-crossmodel.svg") -Force
+python tools/windows-package/clean_ui.py --ui $uiStage --control-ui $controlUi --installer $windowsInstallerStage
+if ($LASTEXITCODE -ne 0) { throw "Windows 资源隔离失败" }
 $chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
 if (-not $chat) { throw "缺少聊天页" }
 $chatText = Get-Content -LiteralPath $chat.FullName -Raw
@@ -164,8 +172,8 @@ $pyInstallerCommonArgs = @(
     "--add-data", "$personaStage;personas",
     "--add-data", "skills;skills",
     "--add-data", "$serviceStage;services",
-    "--add-data", "ui;ui",
-    "--add-data", "installer;installer",
+    "--add-data", "$uiStage;ui",
+    "--add-data", "$windowsInstallerStage;installer\windows",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",
@@ -182,6 +190,8 @@ if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
 if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
     throw "Windows onedir 构建产物缺失"
 }
+python tools/windows-package/clean_ui.py --check-package 'dist\超級碧琪'
+if ($LASTEXITCODE -ne 0) { throw "Windows 包含其他产品的素材或缺少安装器" }
 
 if ($LegacyOneFile) {
     pyinstaller @pyInstallerCommonArgs --onefile
