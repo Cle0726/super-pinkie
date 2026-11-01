@@ -89,7 +89,8 @@ Get-Content -LiteralPath $sums | ForEach-Object {
     } elseif ($rel.StartsWith("services/")) {
         Install-MacSnapshot $rel (Join-Path $serviceStage ($rel.Substring(9) -replace '/', '\')) $expect
     } elseif ($rel.StartsWith("personas/")) {
-        Install-MacSnapshot $rel (Join-Path $personaStage ($rel.Substring(9) -replace '/', '\')) $expect
+        # 人格只以仓库 personas/ 为准；快照里的旧人格会盖掉新版本。
+        throw "快照不能带人格文件 $rel"
     } elseif ($rel.StartsWith("ai/")) {
         $name = Split-Path -Leaf $rel
         $dirs = @(
