@@ -134,7 +134,10 @@ test('the Windows package overlays the installed Mac runtime, not a newer patch 
   assert.match(index, /laolao-theme\.css\?v=theme91/);
   const mode = fs.readFileSync(path.join(snapshot, 'services/mode-architecture/index.mjs'), 'utf8');
   assert.doesNotMatch(mode, /C\.le\. 执行控制层/);
-  const soul = fs.readFileSync(path.join(snapshot, 'personas/chat/SOUL.md'), 'utf8');
+  // Personas ship from the repository; a snapshot copy used to overwrite them.
+  assert.ok(!sums.some((line) => line.includes('  personas/')), 'the Mac snapshot must not carry personas');
+  assert.ok(!fs.existsSync(path.join(snapshot, 'personas')));
+  const soul = fs.readFileSync(path.join(root, 'personas/chat/SOUL.md'), 'utf8');
   assert.match(soul, /碧琪/);
   assert.doesNotMatch(soul, /Li An/);
 });
