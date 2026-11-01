@@ -72,16 +72,22 @@ class CpuSampler(threading.Thread):
                         continue
                     now[proc.pid] = used
                     delta = used - last.get(proc.pid, used)
-                    if delta > 0.3:
+                    try:
+                        rss = proc.memory_info().rss >> 20
+                    except (psutil.Error, OSError):
+                        rss = 0
+                    if delta > 0.3 or rss > 400:
                         try:
                             cmd = " ".join(proc.cmdline())[-160:]
                         except (psutil.Error, OSError):
                             cmd = ""
-                        rows.append([round(delta, 1), proc.pid, proc.info["name"], cmd])
+                        rows.append([round(delta, 1), rss, proc.pid, proc.info["name"], cmd])
                 last = now
                 rows.sort(reverse=True)
+                memory = psutil.virtual_memory()
                 handle.write(json.dumps({"t": time.strftime("%H:%M:%S"), "case": self.label,
-                                         "top": rows[:6]}, ensure_ascii=False) + "\n")
+                                         "free_mb": memory.available >> 20, "cpu": psutil.cpu_percent(),
+                                         "top": rows[:8]}, ensure_ascii=False) + "\n")
                 handle.flush()
 
 
