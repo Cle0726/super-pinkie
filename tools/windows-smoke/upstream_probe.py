@@ -11,6 +11,8 @@ OpenAI-compatible model server on loopback.  Four cases:
                  started).  Retrying cannot help either.
   plugin-missing the core plugin misses one of its files, so it never loads;
                  the stream then breaks off once.  No watchdog exists to retry.
+  bad-config     the old control center's API form left a key OpenClaw
+                 rejects; the gateway never starts unless the launcher repairs it.
 
 For every case the summary records the model requests the fake server saw,
 the retry ribbon the page showed over time, the watchdog lines in the gateway
@@ -252,7 +254,14 @@ def run_case(page, out, name, upstream, plan, log_path, seconds, stop_when_recov
 
 def judge(name, result):
     """The behaviour 碧琪 must have; returns the reasons it falls short."""
-    final, problems = result["final"], []
+    problems = []
+    if name == "bad-config":
+        if not result["gateway_ready"]:
+            problems.append("the gateway did not start with the config the old API form wrote")
+        if result["model_key_left"]:
+            problems.append("the launcher left the invalid provider key in place")
+        return problems
+    final = result["final"]
     claims_retry = any("重试" in message or "续接" in message for message in result["ribbon_ever"])
     if not result["sent"].get("ok"):
         problems.append(f"chat.send failed: {result['sent'].get('error')}")
@@ -281,6 +290,24 @@ def plugin_copies(exe, profile):
     copies = list(exe.parent.rglob("services/mode-architecture/" + PLUGIN_FILE.as_posix()))
     copies.append(profile / "home/.openclaw/extensions/pinkie-mode-architecture" / PLUGIN_FILE)
     return [path for path in copies if path.is_file()]
+
+
+def bad_config(exe, profile, out, launch, kill_app, env):
+    """The old control center's API form left a "model" key on the provider.
+
+    OpenClaw refuses such a config and the gateway never starts; the page
+    then waits for 「上游恢复」 forever.  The launcher must repair it."""
+    config = profile / "home/.openclaw/openclaw.json"
+    data = json.loads(config.read_text(encoding="utf-8"))
+    data["models"]["providers"]["probe"]["model"] = "probe-model"
+    config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        _process, ready, seconds = launch(exe, env, out, "probe-bad-config")
+    finally:
+        kill_app(exe.parent)
+    provider = json.loads(config.read_text(encoding="utf-8"))["models"]["providers"]["probe"]
+    return {"gateway_ready": ready, "seconds": seconds, "model_key_left": "model" in provider,
+            "models": [item.get("id") for item in provider.get("models", [])]}
 
 
 def run(exe, profile, out, launch, kill_app, profile_env):
@@ -326,6 +353,7 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             kill_app(exe.parent)
             for path in hidden:
                 shutil.move(str(path.with_name(path.name + ".probe-hidden")), str(path))
+        summary["cases"]["bad-config"] = bad_config(exe, profile, out, launch, kill_app, env)
     finally:
         upstream.stop()
         if (profile / "local/SuperPinkie/logs").is_dir():
@@ -336,6 +364,6 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             shutil.copytree(sessions, out / "probe-transcripts", dirs_exist_ok=True)
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
-    summary["passed"] = bool(summary["cases"]) and len(summary["cases"]) == 4 and not any(
+    summary["passed"] = len(summary["cases"]) == 5 and not any(
         result["problems"] for result in summary["cases"].values())
     return summary

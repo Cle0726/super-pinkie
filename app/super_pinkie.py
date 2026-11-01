@@ -855,6 +855,46 @@ def restart_openclaw_gateway(log):
 
 
 # ---------------------------------------------------------------- 配置 openclaw.json
+def repair_provider_models(log, config_path=None):
+    """Move a provider's stray "model" key into its models list.
+
+    Earlier control centers wrote one; OpenClaw then rejects the whole config
+    and the gateway never starts, which the page shows as 「等待上游恢复」."""
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
+        providers = (data.get("models") or {}).get("providers") or {}
+        repaired = []
+        for name, provider in providers.items():
+            if not isinstance(provider, dict) or "model" not in provider:
+                continue
+            model = provider.pop("model")
+            models = provider.setdefault("models", [])
+            if isinstance(model, str) and model and not any(isinstance(item, dict) and item.get("id") == model for item in models):
+                models.append({"id": model, "name": model})
+            repaired.append(name)
+        if not repaired:
+            return False
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-provider-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有修复模型配置；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log(f"  已修复模型配置（{', '.join(repaired)}）：网关以前会因为它拒绝启动")
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 修复模型配置失败：{exc}")
+        return False
+
+
 def update_api_config(provider_name, api_key, base_url, model_name, log):
     """写入或更新 openclaw.json 的 API 配置"""
     cfg_file = openclaw_config_path()
@@ -1002,6 +1042,7 @@ def prepare_bundled_desktop(log):
         # on every launch, so one failed run is repaired by the next start.
         ensure_mode_agents(log)
 
+    repair_provider_models(log)
     ensure_workspace_avatars(log)
     for service in ("party", "context", "project-scope", "mode-architecture"):
         install_runtime_service(service, log)
