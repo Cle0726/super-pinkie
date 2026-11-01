@@ -10,13 +10,13 @@ const companion = read("ui/injections/laolao-companion.js");
 
 test("rig loads before companion everywhere it is installed", () => {
   const head = read("ui/injections/laolao-head.fragment.html");
-  assert.ok(head.indexOf("laolao-buddy-rig.js?v=buddyrig2") < head.indexOf("laolao-companion.js?v=companion6"));
+  assert.ok(head.indexOf("laolao-buddy-rig.js?v=buddyrig3") < head.indexOf("laolao-companion.js?v=companion7"));
   const sh = read("installer/macos/apply-theme.sh");
   assert.match(sh, /laolao-buddy-rig\.js \\\n\s+laolao-companion\.js \\/);
-  assert.match(sh, /<script defer src="\.\/laolao-buddy-rig\.js\?v=buddyrig2"><\/script>\$1/);
+  assert.match(sh, /<script defer src="\.\/laolao-buddy-rig\.js\?v=buddyrig3"><\/script>\$1/);
   const ps = read("installer/windows/apply-theme.ps1");
   assert.match(ps, /"laolao-buddy-rig\.js",/);
-  assert.match(ps, /'laolao-buddy-rig\.js' = 'buddyrig2'/);
+  assert.match(ps, /'laolao-buddy-rig\.js' = 'buddyrig3'/);
 });
 
 test("companion attaches the rig lazily and keeps the still image as fallback", () => {
