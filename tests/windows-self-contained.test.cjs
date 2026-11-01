@@ -193,6 +193,9 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(release, /windows-\*\.exe\.sha256/);
   assert.match(release, /portable\.zip/);
   assert.match(release, /portable\.zip\.sha256/);
+  for (const job of ['source', 'macos', 'windows-publish']) {
+    assert.match(release, new RegExp(`\\n  ${job}:\\n    needs: windows-smoke\\n`), `${job} must not publish before Windows smoke passes`);
+  }
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
