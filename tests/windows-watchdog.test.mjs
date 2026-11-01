@@ -73,6 +73,25 @@ test('a host-success failed message still reports a missing module without retry
   assert.equal(dog.status(key).kind, 'setup');
 });
 
+test('a host-success 404 stops instead of being called a recovered turn', async () => {
+  const {dog} = watchdog();
+  await dog.agentEnded({success: true, runId: 'run-1', messages: [
+    {role: 'assistant', stopReason: 'error', errorMessage: '404 page not found'},
+  ]}, ctx);
+  assert.equal(dog.status(key).kind, 'setup');
+  assert.match(dog.status(key).message, /404/);
+});
+
+test('a host-success connection failure keeps the two-retry bound', async () => {
+  const {dog} = watchdog();
+  const event = {success: true, messages: [{role: 'assistant', stopReason: 'error', errorMessage: 'Connection error.'}]};
+  await dog.agentEnded({...event, runId: 'run-1'}, ctx);
+  await dog.agentEnded({...event, runId: 'run-2'}, ctx);
+  assert.equal(dog.status(key).state, 'retrying');
+  await dog.agentEnded({...event, runId: 'run-3'}, ctx);
+  assert.equal(dog.status(key).kind, 'setup');
+});
+
 test('a partial failed reply does not start an integrity retry', () => {
   const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog('')});
   supervisor.begin({prompt: '测试一下：请回复一句话。'}, ctx);
