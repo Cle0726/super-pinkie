@@ -1,0 +1,139 @@
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from app import super_pinkie
+
+# What `openclaw agents list --json` prints for a fresh profile: UTF-8 with
+# Chinese and emoji.  Decoding it as cp936/cp1252 (subprocess text=True on
+# Windows) raises UnicodeDecodeError, which used to be swallowed silently.
+FRESH_LIST = json.dumps([{"id": "main", "identityName": "超級碧琪 🎈", "default": True}], ensure_ascii=False).encode("utf-8")
+
+
+def completed(stdout=b"", returncode=0, stderr=b""):
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+class FakeOpenClaw:
+    """Answers agents list/add/set-identity and records what was added."""
+
+    def __init__(self, listing=FRESH_LIST, list_code=0, add_code=0):
+        self.listing = listing
+        self.list_code = list_code
+        self.add_code = add_code
+        self.added = []
+        self.calls = []
+
+    def __call__(self, command, **kwargs):
+        self.calls.append((command, kwargs))
+        if "text" in kwargs or "encoding" in kwargs:
+            raise AssertionError("openclaw output must be read as bytes and decoded as UTF-8")
+        arguments = [str(part) for part in command]
+        if arguments[-3:] == ["agents", "list", "--json"]:
+            return completed(self.listing, self.list_code, b"boom" if self.list_code else b"")
+        if "add" in arguments:
+            agent_id = arguments[arguments.index("add") + 1]
+            if self.add_code == 0:
+                self.added.append(agent_id)
+            return completed(b"", self.add_code, b"add failed" if self.add_code else b"")
+        return completed(b"")
+
+
+class ModeAgentRegistrationTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        root = Path(self.directory.name)
+        self.home = root / "home"
+        self.state = root / "state"
+        self.resources = root / "resources"
+        (self.home / ".openclaw").mkdir(parents=True)
+        (self.resources / "personas/project/playbooks").mkdir(parents=True)
+        (self.resources / "personas/project/SOUL.md").write_text("发行人格", encoding="utf-8")
+        (self.resources / "personas/project/IDENTITY.md").write_text("- **Name:** 项目碧琪", encoding="utf-8")
+        (self.resources / "personas/project/playbooks/review.md").write_text("手册", encoding="utf-8")
+        (self.resources / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        self.logs = []
+        self.patches = [
+            mock.patch.object(super_pinkie.Path, "home", return_value=self.home),
+            mock.patch.object(super_pinkie, "prompts_dir", return_value=self.home / ".openclaw"),
+            mock.patch.object(super_pinkie, "windows_state_root", return_value=self.state),
+            mock.patch.object(super_pinkie, "resource_path", side_effect=lambda *parts: self.resources.joinpath(*parts)),
+            mock.patch.object(super_pinkie, "install_runtime_service", return_value=False),
+        ]
+        for patch in self.patches:
+            patch.start()
+
+    def tearDown(self):
+        for patch in reversed(self.patches):
+            patch.stop()
+        self.directory.cleanup()
+
+    def write_config(self, ids):
+        config = {"agents": {"list": [{"id": agent_id} for agent_id in ids]}}
+        (self.home / ".openclaw/openclaw.json").write_text(json.dumps(config), encoding="utf-8")
+
+    def test_utf8_listing_with_chinese_and_emoji_registers_missing_modes(self):
+        with self.assertRaises(UnicodeDecodeError):
+            FRESH_LIST.decode("cp1252")
+        fake = FakeOpenClaw()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted"])
+
+    def test_log_lines_before_json_are_tolerated(self):
+        fake = FakeOpenClaw(listing=b"[plugins] loading pinkie-mode-architecture\n" + FRESH_LIST + b"\n")
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(len(fake.added), 4)
+
+    def test_non_json_listing_is_logged_and_reported(self):
+        fake = FakeOpenClaw(listing=b"Error: config invalid")
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(fake.added, [])
+        self.assertTrue(any("读取模式列表失败" in line for line in self.logs))
+
+    def test_failed_list_and_failed_add_are_reported(self):
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
+            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertTrue(any("返回码 1" in line for line in self.logs))
+        self.logs.clear()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(add_code=2)):
+            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertTrue(any("补齐 project 模式失败" in line for line in self.logs))
+
+    def test_cli_timeout_is_logged_not_raised(self):
+        timeout = subprocess.TimeoutExpired(cmd="openclaw", timeout=60)
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=timeout):
+            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertTrue(self.logs)
+
+    def test_complete_config_skips_the_cli(self):
+        self.write_config(["main", "project", "thinking", "learning", "unrestricted"])
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("CLI must not run")):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+
+    def test_failed_first_launch_is_repaired_on_the_next_launch(self):
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
+            super_pinkie.prepare_bundled_desktop(self.logs.append)
+        self.assertTrue((self.state / "bundled-setup-9.9.9").exists())
+        fake = FakeOpenClaw()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            super_pinkie.prepare_bundled_desktop(self.logs.append)
+        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted"])
+
+    def test_playbooks_are_installed_and_existing_files_kept(self):
+        workspace = self.home / ".openclaw/workspace-project"
+        workspace.mkdir(parents=True)
+        (workspace / "SOUL.md").write_text("用户手改人格", encoding="utf-8")
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
+            super_pinkie.install_personas(self.logs.append, preserve_existing=True)
+        self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
+        self.assertEqual((workspace / "playbooks/review.md").read_text(encoding="utf-8"), "手册")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -431,6 +431,40 @@ def apply_patch(remove, log):
 
 
 # ---------------------------------------------------------------- 人格文件安装
+PERSONA_FILES = (
+    "SOUL.md",
+    "IDENTITY.md",
+    "AGENTS.md",
+    "AESTHETICS.md",
+    "METHODS.md",
+    "HEARTBEAT.md",
+    "DREAMS.md",
+    "memory-system.md",
+)
+# Whole directories copied file by file with the same rules as PERSONA_FILES.
+PERSONA_DIRS = ("playbooks",)
+# The mode switcher opens agent:<id>:main for each of these; every one must be
+# registered in openclaw.json or switching to that mode fails.
+MODE_AGENTS = {
+    "project": "workspace-project",
+    "thinking": "workspace-thinking",
+    "learning": "workspace-learning",
+    "unrestricted": "workspace-unrestricted",
+}
+
+
+def _install_persona_file(src_file, dst_file, keep_existing, backup_dir):
+    if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
+        return
+    if keep_existing and dst_file.exists():
+        return
+    if dst_file.exists():
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst_file, backup_dir / dst_file.name)
+    dst_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src_file, dst_file)
+
+
 def install_personas(log, preserve_existing=False):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
@@ -443,51 +477,109 @@ def install_personas(log, preserve_existing=False):
     }
     src_root = resource_path("personas")
     backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
-    template_files = (
-        "SOUL.md",
-        "IDENTITY.md",
-        "AGENTS.md",
-        "AESTHETICS.md",
-        "METHODS.md",
-        "HEARTBEAT.md",
-        "DREAMS.md",
-        "memory-system.md",
-    )
     for mode, target in mapping.items():
         src_mode = src_root / mode
         if src_mode.exists():
             target.mkdir(parents=True, exist_ok=True)
-            for fname in template_files:
+            for fname in PERSONA_FILES:
                 src_file = src_mode / fname
                 if src_file.exists():
-                    dst_file = target / fname
-                    if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
-                        continue
-                    if (preserve_existing or mode == "neutral" or fname == "DREAMS.md") and dst_file.exists():
-                        continue
-                    if dst_file.exists():
-                        bak_dir = backup_root / mode
-                        bak_dir.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(dst_file, bak_dir / fname)
-                    shutil.copyfile(src_file, dst_file)
+                    keep = preserve_existing or mode == "neutral" or fname == "DREAMS.md"
+                    _install_persona_file(src_file, target / fname, keep, backup_root / mode)
+            for dname in PERSONA_DIRS:
+                src_dir = src_mode / dname
+                if not src_dir.is_dir():
+                    continue
+                for src_file in sorted(src_dir.rglob("*")):
+                    if src_file.is_file():
+                        relative = src_file.relative_to(src_mode)
+                        keep = preserve_existing or mode == "neutral"
+                        _install_persona_file(src_file, target / relative, keep, backup_root / mode / relative.parent)
             log(f"  [{mode}] 人格文件 -> {target}")
-    
-    # 固定保留既有 agent id；只补齐缺少的三个模式，不改现有模型与工作区。
+    return ensure_mode_agents(log)
+
+
+def run_openclaw(arguments, timeout):
+    """Run the bundled openclaw CLI and return (returncode, text).
+
+    Node writes UTF-8.  subprocess text=True would decode it with the ANSI code
+    page instead (cp936 on Chinese Windows, cp1252 on English), and the agent
+    names contain Chinese and emoji, so read bytes and decode them ourselves.
+    """
+    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout)
+    output = (result.stdout or b"").decode("utf-8", "replace")
+    errors = (result.stderr or b"").decode("utf-8", "replace")
+    return result.returncode, output, errors
+
+
+def parse_agent_ids(text):
+    """Agent ids from `openclaw agents list --json`, tolerating log lines before the JSON."""
+    decoder = json.JSONDecoder()
+    start = text.find("[")
+    while start >= 0:
+        try:
+            items, _ = decoder.raw_decode(text[start:])
+        except ValueError:
+            items = None
+        # A log prefix such as "[plugins] ..." is not the listing; keep looking.
+        if isinstance(items, list) and all(isinstance(item, dict) for item in items):
+            return {item.get("id") for item in items}
+        start = text.find("[", start + 1)
+    raise ValueError("no JSON agent list in agents list output")
+
+
+def configured_agent_ids(config_path=None):
+    """Agent ids already registered in openclaw.json, or None when unreadable."""
     try:
-        res = subprocess.run(openclaw_command("agents", "list", "--json"), capture_output=True, text=True, timeout=12)
-        existing = {item.get("id") for item in json.loads(res.stdout or "[]") if isinstance(item, dict)}
-        for agent_id, workspace in {
-            "project": home / ".openclaw/workspace-project",
-            "thinking": home / ".openclaw/workspace-thinking",
-            "learning": home / ".openclaw/workspace-learning",
-            "unrestricted": home / ".openclaw/workspace-unrestricted",
-        }.items():
-            if agent_id not in existing:
-                subprocess.run(openclaw_command("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), capture_output=True, timeout=15)
-                log(f"  已补齐 {agent_id} 模式")
-            subprocess.run(openclaw_command("agents", "set-identity", "--agent", agent_id, "--identity-file", workspace / "IDENTITY.md"), capture_output=True, timeout=12)
-    except Exception:
-        pass
+        data = json.loads(Path(config_path or openclaw_config_path()).read_text(encoding="utf-8"))
+        agents = data.get("agents", {}).get("list", [])
+        return {item.get("id") for item in agents if isinstance(item, dict)}
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def ensure_mode_agents(log):
+    """Register any missing mode agent.  Returns True when all of them exist.
+
+    Safe to call on every launch: it reads openclaw.json first and only runs
+    the CLI when something is missing.  Every failure is logged instead of
+    swallowed, so a broken run shows up in setup.log and is retried next time.
+    """
+    configured = configured_agent_ids()
+    if configured is not None and all(agent_id in configured for agent_id in MODE_AGENTS):
+        return True
+    home = Path.home()
+    try:
+        code, output, errors = run_openclaw(("agents", "list", "--json"), timeout=60)
+        if code != 0:
+            log(f"  ⚠️ 读取模式列表失败（返回码 {code}）：{errors.strip()[-400:]}")
+            return False
+        existing = parse_agent_ids(output)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        log(f"  ⚠️ 读取模式列表失败：{exc}")
+        return False
+    complete = True
+    for agent_id, folder in MODE_AGENTS.items():
+        if agent_id in existing:
+            continue
+        workspace = home / ".openclaw" / folder
+        workspace.mkdir(parents=True, exist_ok=True)
+        try:
+            code, _, errors = run_openclaw(("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), timeout=60)
+            if code != 0:
+                complete = False
+                log(f"  ⚠️ 补齐 {agent_id} 模式失败（返回码 {code}）：{errors.strip()[-400:]}")
+                continue
+            log(f"  已补齐 {agent_id} 模式")
+            identity = workspace / "IDENTITY.md"
+            if identity.is_file():
+                code, _, errors = run_openclaw(("agents", "set-identity", "--agent", agent_id, "--identity-file", identity), timeout=60)
+                if code != 0:
+                    log(f"  ⚠️ 设置 {agent_id} 模式名片失败（返回码 {code}）：{errors.strip()[-400:]}")
+        except (OSError, subprocess.SubprocessError) as exc:
+            complete = False
+            log(f"  ⚠️ 补齐 {agent_id} 模式失败：{exc}")
+    return complete
 
 
 def install_runtime_service(service_name, log):
@@ -804,6 +896,10 @@ def prepare_bundled_desktop(log):
         ensure_prompts(log, preserve_existing=True)
         install_personas(log, preserve_existing=True)
         marker.write_text("preserved\n", encoding="utf-8")
+    else:
+        # The marker only covers the file copy.  Mode registration is checked
+        # on every launch, so one failed run is repaired by the next start.
+        ensure_mode_agents(log)
 
     for service in ("party", "context", "project-scope", "mode-architecture"):
         install_runtime_service(service, log)

@@ -43,7 +43,7 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
                 mock.patch.object(super_pinkie, "resource_path", side_effect=resource_path),
                 mock.patch.object(super_pinkie, "prompts_dir", return_value=prompt_dir),
                 mock.patch.object(super_pinkie.Path, "home", return_value=home),
-                mock.patch.object(super_pinkie.subprocess, "run", return_value=mock.Mock(stdout="[]")),
+                mock.patch.object(super_pinkie.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=b"[]", stderr=b"")),
             ):
                 super_pinkie.ensure_prompts(lambda _message: None, preserve_existing=True)
                 super_pinkie.install_personas(lambda _message: None, preserve_existing=True)
