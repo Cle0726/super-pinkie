@@ -5,6 +5,8 @@ OpenAI-compatible model server on loopback.  Four cases:
 
   disconnect     the stream breaks off half way, the next request succeeds:
                  a real upstream outage, which must be continued automatically.
+  disconnect-action the same interruption during an execution-style request;
+                 exercises the completion gate that caused the earlier stall.
   not-found      the model URL answers 404 for every request: a wrong path or
                  an endpoint that does not exist.  Retrying cannot help.
   proxy-down     nothing listens on the model port (a local proxy that never
@@ -172,7 +174,8 @@ def configure(profile, port):
     config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-CASE_PROVIDERS = {"disconnect": "probe-a", "not-found": "probe-b", "proxy-down": "probe-c", "plugin-missing": "probe-d"}
+CASE_PROVIDERS = {"disconnect": "probe-a", "not-found": "probe-b", "proxy-down": "probe-c",
+                  "plugin-missing": "probe-d", "disconnect-action": "probe-e"}
 
 
 def provider(port):
@@ -279,16 +282,17 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
                 "ribbon_ever": [], "gateway": [], "watchdog_retries": 0}
     page.wait_for_timeout(6000)
     offset = log_path.stat().st_size if log_path.is_file() else 0
-    sent = page.evaluate("""async ([sessionKey, key, model, name]) => {
+    prompt = "碧琪，测试一下：请回复一句话。" if name == "disconnect-action" else f"你好，{name}，请说一句问候。"
+    sent = page.evaluate("""async ([sessionKey, key, model, prompt]) => {
       try {
         await window.__laolaoSidebar.gwRequest('sessions.patch', {key: sessionKey, model}, 15000);
       } catch (error) { return {ok: false, error: 'model selection failed: ' + String(error)}; }
       try {
         await window.__laolaoSidebar.gwRequest('chat.send',
-          {sessionKey, message: `你好，${name}，请说一句问候。`, idempotencyKey: key, deliver: false}, 20000);
+          {sessionKey, message: prompt, idempotencyKey: key, deliver: false}, 20000);
         return {ok: true};
       } catch (error) { return {ok: false, error: String(error)}; }
-    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model", name])
+    }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model", prompt])
     timeline = []
     notes = {}
     shot_taken = False
@@ -349,11 +353,13 @@ def judge(name, result):
         problems.append(f"chat.send failed: {result['sent'].get('error')}")
     if result.get("screenshot_errors"):
         problems.append("the browser stopped responding while capturing the result")
-    if name == "disconnect":
+    if name in ("disconnect", "disconnect-action"):
         if not any("watchdog retry scheduled" in line for line in result["gateway"]):
             problems.append("the upstream watchdog did not schedule the continuation")
         if result["watchdog_requests"] < 1:
             problems.append("the fake upstream did not receive a watchdog continuation")
+        if result["requests"] > 4:
+            problems.append(f"the upstream received too many requests: {result['requests']}")
         if not final.get("recovered"):
             problems.append("the reply never arrived after the stream broke off")
         if final.get("state") not in ("", "recovered"):
@@ -361,10 +367,10 @@ def judge(name, result):
     elif name in ("not-found", "proxy-down"):
         if name == "not-found" and not any(r.get("behaviour") == "not-found" for r in result["request_log"]):
             problems.append("the fake upstream never returned a 404")
-        errors = " ".join(result.get("session_errors", []))
+        errors = " ".join(result.get("session_errors", []) + result.get("gateway", []))
         expected = r"not found|404" if name == "not-found" else r"connect|network|refused"
         if not re.search(expected, errors, re.I):
-            problems.append(f"the expected {name} failure was not recorded: {errors!r}")
+            problems.append(f"the expected {name} failure was not recorded: {errors[:500]!r}")
         if result["requests"] > 3 or result["watchdog_retries"] > 3:
             problems.append(f"{result['requests']} model requests / {result['watchdog_retries']} watchdog retries"
                             " for a failure retrying cannot fix")
@@ -491,6 +497,8 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             summary["cases"]["proxy-down"] = run_case(page, out, "proxy-down", upstream, ["ok"], log_path, profile, 75, False)
             upstream = FakeUpstream(port)
             upstream.start()
+            summary["cases"]["disconnect-action"] = run_case(
+                page, out, "disconnect-action", upstream, ["drop", "ok"], log_path, profile, 120, True)
             browser.close()
         stop_gateway_profiler(profiler)
         profiler = None
@@ -524,6 +532,6 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             shutil.copytree(sessions, out / "probe-transcripts", dirs_exist_ok=True)
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
-    summary["passed"] = len(summary["cases"]) == 5 and not any(
+    summary["passed"] = len(summary["cases"]) == 6 and not any(
         result["problems"] for result in summary["cases"].values())
     return summary

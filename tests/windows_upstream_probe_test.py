@@ -47,6 +47,17 @@ class UpstreamProbeTests(unittest.TestCase):
         result["screenshot_errors"] = ["timeout"]
         self.assertTrue(probe.judge("disconnect", result))
 
+    def test_action_case_must_also_use_the_upstream_watchdog(self):
+        result = case()
+        result["final"]["recovered"] = True
+        self.assertTrue(probe.judge("disconnect-action", result))
+        result["gateway"] = ["watchdog retry scheduled session=agent:main:probe-disconnect-action"]
+        result["watchdog_requests"] = 1
+        result["requests"] = 3
+        self.assertEqual(probe.judge("disconnect-action", result), [])
+        result["requests"] = 5
+        self.assertTrue(probe.judge("disconnect-action", result))
+
 
 if __name__ == "__main__":
     unittest.main()
