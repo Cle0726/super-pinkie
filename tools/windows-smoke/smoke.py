@@ -155,16 +155,19 @@ def agents_list(runtime, env, out, label):
         except UnicodeDecodeError as error:
             decode[codec] = f"UnicodeDecodeError: {error}"
     ids = []
+    identities = {}
     parse_error = None
     try:
         start = text.find("[")
         items = json.loads(text[start:] if start >= 0 else text)
         ids = [item.get("id") for item in items if isinstance(item, dict)]
+        identities = {item.get("id"): item.get("identityName") for item in items if isinstance(item, dict) and item.get("id")}
     except ValueError as error:
         parse_error = str(error)
     return {
         "returncode": result.returncode,
         "ids": ids,
+        "identities": identities,
         "missing": [agent for agent in AGENTS if agent not in ids],
         "stdout_is_pure_json": text.lstrip().startswith("["),
         "parse_error": parse_error,
@@ -178,6 +181,11 @@ def redact(value):
     if isinstance(value, list):
         return [redact(item) for item in value]
     return value
+
+
+def fresh_mode_identities_ok(label, agents):
+    # Existing users may have deliberately customized their identities.
+    return label != "fresh" or all(agents.get("identities", {}).get(agent) == "碧琪" for agent in AGENTS)
 
 
 def collect_files(profile, out, label):
@@ -344,6 +352,7 @@ def scenario(label, exe, profile, out, old_exe=None):
     summary["passed"] = bool(
         ready
         and not summary.get("agents", {}).get("missing", AGENTS)
+        and fresh_mode_identities_ok(label, summary.get("agents", {}))
         and not summary["files"]["log_problems"]
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
