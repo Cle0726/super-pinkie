@@ -855,6 +855,43 @@ def restart_openclaw_gateway(log):
 
 
 # ---------------------------------------------------------------- 配置 openclaw.json
+def ensure_gateway_auth_none(log, config_path=None):
+    """Record in openclaw.json that the bundled gateway runs without auth.
+
+    The desktop starts the gateway with `--auth none`, but that flag is not
+    in the config. OpenClaw's own CLI reads the config, assumes token auth
+    and refuses to call the gateway. The watchdog resends an interrupted turn
+    through that CLI, so on Windows no automatic continuation ever went out
+    and the retry looped every few seconds. The Mac config has mode "none".
+    """
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
+        gateway = data.setdefault("gateway", {})
+        auth = gateway.setdefault("auth", {})
+        if not isinstance(auth, dict) or auth.get("mode"):
+            return False
+        auth["mode"] = "none"
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-auth-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有写入网关认证方式；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log("  已写明本机网关不需要令牌（自动续接要用）")
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 写入网关认证方式失败：{exc}")
+        return False
+
+
 def repair_provider_models(log, config_path=None):
     """Move a provider's stray "model" key into its models list.
 
@@ -1043,6 +1080,7 @@ def prepare_bundled_desktop(log):
         ensure_mode_agents(log)
 
     repair_provider_models(log)
+    ensure_gateway_auth_none(log)
     ensure_workspace_avatars(log)
     for service in ("party", "context", "project-scope", "mode-architecture"):
         install_runtime_service(service, log)

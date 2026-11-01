@@ -228,11 +228,18 @@ const LOCAL_SETUP_FAILURES = [
   [/(?:\b404\b|not[_ ]found[_ ]error|page not found)/i,
     '模型服务地址不对（404），没有自动重试。请在设置里检查模型服务地址。'],
 ];
-// A local proxy may be restarting, so give a refused connection two quick
-// tries before calling it a setup problem.
-const LOCAL_SERVICE_DOWN = /(?:ECONNREFUSED|connection refused)/i;
+// A connection that never opens (a local proxy that is not running, a wrong
+// host, the machine offline) reaches agent_end only as "Connection error.".
+// A proxy may be restarting, so give it two quick tries, then say so. A
+// stream that breaks off half way ("terminated") stays in the long lane.
+const LOCAL_SERVICE_DOWN = /(?:ECONNREFUSED|connection refused|\bconnection error\b)/i;
 const LOCAL_SERVICE_DOWN_RETRIES = 2;
-const LOCAL_SERVICE_DOWN_MESSAGE = '连不上模型服务（端口没有开），已停止重试。请确认模型代理已经启动，或在设置里检查地址。';
+const LOCAL_SERVICE_DOWN_MESSAGE = '连不上模型服务，试了两次都没连上，先停下了。请确认模型代理已经启动、地址没写错、网络是通的，然后再发一次。';
+// The watchdog resends a turn through the local gateway CLI. When that CLI
+// cannot authenticate or start, every resend fails the same way; it used to
+// be rescheduled every few seconds for as long as the gateway ran.
+const DISPATCH_SETUP_FAILURE = /(?:GatewayCredentialsRequiredError|requires credentials before opening a websocket|cannot find module|ERR_MODULE_NOT_FOUND|\bENOENT\b)/i;
+const WATCHDOG_DISPATCH_FAILURE_LIMIT = 8;
 // Even a real outage should not loop forever with nobody told.
 const WATCHDOG_MAX_ATTEMPTS = Math.max(3, Number(process.env.PINKIE_WATCHDOG_MAX_ATTEMPTS) || 30);
 
@@ -3681,6 +3688,7 @@ export class UpstreamWatchdog {
     this.dispatching = new Set();
     // Why the watchdog gave up on a session, for the page's status ribbon.
     this.outcomes = new Map();
+    this.dispatchFailures = new Map();
     // Every explicit cancellation advances the session generation. Timers or
     // slow CLI calls from an older generation may finish, but they can no
     // longer re-arm themselves or schedule another invisible turn.
@@ -4120,13 +4128,21 @@ export class UpstreamWatchdog {
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
       this.gatewayBackoff.delete(sessionKey);
+      this.dispatchFailures.delete(sessionKey);
       this.api.logger?.info?.(`watchdog immediate retry accepted session=${sessionKey} attempt=${attempt}`);
       return true;
     } catch (error) {
       if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
-      const blockedDelay = this.recoveryDelay(sessionKey,
-        `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
+      const detail = `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`;
+      const failures = (this.dispatchFailures.get(sessionKey) || 0) + 1;
+      this.dispatchFailures.set(sessionKey, failures);
+      if (DISPATCH_SETUP_FAILURE.test(detail) || failures >= WATCHDOG_DISPATCH_FAILURE_LIMIT) {
+        await this.giveUp(sessionKey, runId, 'dispatch',
+          '碧琪没法把这一轮重新发出去（本机网关通道不可用），没有继续重试。请重启碧琪后再发一次。', detail);
+        return false;
+      }
+      const blockedDelay = this.recoveryDelay(sessionKey, detail);
       this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
       return false;
     } finally {
@@ -4156,6 +4172,7 @@ export class UpstreamWatchdog {
     this.integrityAttempts.delete(sessionKey);
     this.models.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
+    this.dispatchFailures.delete(sessionKey);
     this.jobStore.delete(sessionKey);
     if (suppressNextFailure) {
       this.skipNextFailure.add(sessionKey);
@@ -5855,7 +5872,7 @@ export default {
     registerModelSync(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
-    sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes']);
+    sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
     sharePluginState(cleKk, 'clekk', ['turns', 'orphaned', 'sessionByRunId', 'sessionBySessionId', 'sessionByToolCallId', 'pendingDeliverySessions', 'deliveryFallbackBySession']);
     sharePluginState(cleKk.audit, 'audit', ['sequence', 'lastHash', 'appendCounts']);
