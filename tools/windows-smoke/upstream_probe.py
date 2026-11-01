@@ -480,14 +480,15 @@ def run(exe, profile, out, launch, kill_app, profile_env):
     profiler = None
     try:
         env = profile_env(profile)
-        if os.environ.get("PINKIE_SMOKE_PROFILE_GATEWAY") == "1":
+        profile_enabled = os.environ.get("PINKIE_SMOKE_PROFILE_GATEWAY") == "1"
+        if profile_enabled:
             env["NODE_OPTIONS"] = "--inspect=127.0.0.1:0"
         log_offset = log_path.stat().st_size if log_path.is_file() else 0
         process, ready, seconds = launch(exe, env, out, "probe")
         summary["gateway_ready"], summary["seconds"] = ready, seconds
         if not ready:
             return summary
-        profiler = start_gateway_profiler(exe, log_path, log_offset, out) if env.get("NODE_OPTIONS") else None
+        profiler = start_gateway_profiler(exe, log_path, log_offset, out) if profile_enabled else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(channel="msedge", headless=True)
             page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN").new_page()
