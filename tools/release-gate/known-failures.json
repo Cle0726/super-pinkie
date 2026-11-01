@@ -12,6 +12,18 @@
   "tests/context-compaction-ui.test.cjs :: compaction progress survives refresh and gateway events cover automatic and manual paths": "压缩进度文案改过，测试还在找旧模板（99048b4 自述「未全量复核」）",
   "tests/learning-desk.test.mjs :: board has loading/failure/retry states and ignores late replies after unmount in WebKit without motion libraries": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/learning-desk.test.mjs :: board renders real metrics, evidence, range switches, themes and plan adoption in Chrome": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
+  "tests/learning-devices.test.mjs :: memory lab auto-runs a real program on present; unsupported traces stay explicit": {
+    "reason": "Ubuntu 不支持 learning-engine.py 所需的 macOS sandbox-exec / 固定 Clang 隔离环境；CI 41283230151 报「当前系统尚未配置隔离C运行环境」。Windows 的该功能未验证，不能当作通过。",
+    "platforms": [
+      "linux"
+    ]
+  },
+  "tests/learning-devices.test.mjs :: real C pointer run exposes memory cells and pointer targets, never fake addresses": {
+    "reason": "Ubuntu 不支持 learning-engine.py 所需的 macOS sandbox-exec / 固定 Clang 隔离环境；CI 41283230151 报「当前系统尚未配置隔离C运行环境」。Windows 的该功能未验证，不能当作通过。",
+    "platforms": [
+      "linux"
+    ]
+  },
   "tests/learning-notes-menu.test.cjs :: full-page note menus escape cards, fit inside the view, restore focus and close on navigation": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/queue-steer.test.cjs :: a busy native queue item with only a reserved run id is steered once": "排队/引导：Codex 正在改 laolao-queue-steer.js 和这条测试，未提交，等它交接",
   "tests/resume-ui.test.cjs :: an untouched reserved queue item can resume after the original run ends": "排队/引导：Codex 正在改 laolao-resume.js 和这条测试，未提交，等它交接",

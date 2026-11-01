@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {outcomes} from '../tools/release-gate/tap.mjs';
+import {outcomes, appliesToPlatform} from '../tools/release-gate/tap.mjs';
 
 test('release gate distinguishes passed, failed and skipped TAP tests', () => {
   const result = outcomes({file: 'tests/example.test.mjs', code: 1, output: [
@@ -16,4 +16,11 @@ test('release gate distinguishes passed, failed and skipped TAP tests', () => {
 test('release gate catches a test process that exits without a TAP failure', () => {
   const result = outcomes({file: 'tests/example.test.mjs', code: 1, output: 'crashed'});
   assert.deepEqual([...result.failed], ['tests/example.test.mjs :: <file failed>']);
+});
+
+test('platform-specific failures do not mask failures on another platform', () => {
+  const linuxOnly = {reason: 'requires macOS sandbox', platforms: ['linux']};
+  assert.equal(appliesToPlatform(linuxOnly, 'linux'), true);
+  assert.equal(appliesToPlatform(linuxOnly, 'darwin'), false);
+  assert.equal(appliesToPlatform('existing common failure', 'linux'), true);
 });

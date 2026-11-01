@@ -12,3 +12,7 @@ export function outcomes({file, code, output}) {
   if (code !== 0 && failed.size === 0) failed.add(`${file} :: <file failed>`);
   return {passed, failed, skipped};
 }
+
+export function appliesToPlatform(entry, platform) {
+  return typeof entry === 'string' || entry.platforms.includes(platform);
+}

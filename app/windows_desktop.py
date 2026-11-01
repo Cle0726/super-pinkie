@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -838,6 +839,10 @@ class LocalServices:
         def run():
             try:
                 module = load_file_module(f"pinkie_windows_{name}", self.runtime.root / relative)
+                # The webview may replace stdout with an ANSI stream after the
+                # launcher configured it. Keep service prints in a UTF-8 log
+                # without redirecting stdout globally across threads.
+                module.print = lambda *values, **kwargs: append_log(name, kwargs.get("sep", " ").join(map(str, values)))
 
                 def ready(server):
                     self.servers.append(server)
@@ -848,6 +853,7 @@ class LocalServices:
                     append_log("launcher", f"{name} service failed: {error}")
             except Exception as error:
                 append_log("launcher", f"{name} service failed: {error}")
+                append_log("launcher", traceback.format_exc())
 
         thread = threading.Thread(target=run, name=f"pinkie-{name}", daemon=True)
         thread.start()
