@@ -14,7 +14,7 @@ const plugin = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-windows-plugin-'));
 fs.cpSync(path.join(root, 'services/mode-architecture'), plugin, {recursive: true});
 fs.cpSync(path.join(root, 'desktop/windows/mac-runtime/services/mode-architecture'), plugin, {recursive: true});
 process.on('exit', () => fs.rmSync(plugin, {recursive: true, force: true}));
-const {UpstreamWatchdog, WatchdogJobStore, localSetupFailure} = await import(pathToFileURL(path.join(plugin, 'index.mjs')).href);
+const {UpstreamWatchdog, WatchdogJobStore, CleKkSupervisor, CleKkAuditLog, localSetupFailure} = await import(pathToFileURL(path.join(plugin, 'index.mjs')).href);
 
 const workflow = {
   enqueueNextTurnInjection: async () => ({}),
@@ -42,6 +42,37 @@ test('a stream that breaks off is continued automatically', async () => {
   assert.equal(dog.attempts.get(key), 3);
   assert.deepEqual(dog.status(key), {state: 'retrying', attempt: 3});
   assert.match(logs.join('\n'), /watchdog retry scheduled .*attempt=3 reason=terminated/);
+});
+
+test('a failed final stream is retried even when OpenClaw marks the run successful', async () => {
+  const {dog} = watchdog();
+  const retried = await dog.agentEnded({success: true, runId: 'run-1', messages: [
+    {role: 'user', content: '你好'},
+    {role: 'assistant', content: [{type: 'text', text: '半句话'}], stopReason: 'error', errorMessage: 'terminated'},
+  ]}, ctx);
+  assert.equal(retried, true);
+  assert.equal(dog.status(key).state, 'retrying');
+});
+
+test('an older failed message does not cause a completed reply to be retried', async () => {
+  const {dog} = watchdog();
+  const retried = await dog.agentEnded({success: true, runId: 'run-2', messages: [
+    {role: 'assistant', stopReason: 'error', errorMessage: 'terminated'},
+    {role: 'assistant', stopReason: 'stop', content: [{type: 'text', text: '回复完成'}]},
+  ]}, ctx);
+  assert.equal(retried, false);
+  assert.equal(dog.status(key).state, 'idle');
+});
+
+test('a partial failed reply does not start an integrity retry', () => {
+  const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog('')});
+  supervisor.begin({prompt: '测试一下：请回复一句话。'}, ctx);
+  const failed = {role: 'assistant', stopReason: 'error', errorMessage: 'terminated',
+    content: [{type: 'text', text: '碧琪先说到一半'}]};
+  assert.equal(supervisor.beforeMessageWrite({message: failed}, ctx), undefined);
+  assert.equal(supervisor.hasPending(key), false);
+  const completed = {...failed, stopReason: 'stop'};
+  assert.deepEqual(supervisor.beforeMessageWrite({message: completed}, ctx), {block: true});
 });
 
 for (const [name, error, message] of [
@@ -114,4 +145,30 @@ test('a resend the local gateway CLI refuses is not rescheduled forever', async 
   assert.equal(dog.status(key).kind, 'dispatch');
   assert.equal(dog.timers.has(key), false);
   assert.match(logs.join('\n'), /watchdog not retrying .*kind=dispatch/);
+});
+
+test('JSON error replies from the gateway are bounded too', async () => {
+  const dog = new UpstreamWatchdog({session: {workflow}}, () => '',
+    async () => ({stdout: JSON.stringify({status: 'timeout', error: 'gateway is draining'})}),
+    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+  await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
+  for (let i = 0; i < 8; i += 1) {
+    clearTimeout(dog.timers.get(key));
+    dog.timers.delete(key);
+    await dog.dispatchImmediate({sessionKey: key, agentId: 'main', runId: 'run-1', attempt: 1, tag: 't'});
+  }
+  assert.equal(dog.status(key).kind, 'dispatch');
+  assert.equal(dog.timers.has(key), false);
+});
+
+test('a JSON credentials error stops immediately', async () => {
+  const dog = new UpstreamWatchdog({session: {workflow}}, () => '',
+    async () => ({stdout: JSON.stringify({status: 'error', error: 'GatewayCredentialsRequiredError'})}),
+    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+  await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
+  clearTimeout(dog.timers.get(key));
+  dog.timers.delete(key);
+  await dog.dispatchImmediate({sessionKey: key, agentId: 'main', runId: 'run-1', attempt: 1, tag: 't'});
+  assert.equal(dog.status(key).kind, 'dispatch');
+  assert.equal(dog.timers.has(key), false);
 });
