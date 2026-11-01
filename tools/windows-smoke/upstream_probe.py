@@ -43,6 +43,63 @@ WATCHDOG_PREFIX = "[pinkie-watchdog]"
 PLUGIN_FILE = Path("vendor/reading-node.mjs")
 
 
+class CpuSampler(threading.Thread):
+    """Every few seconds, which processes on the runner used the CPU.
+
+    The gateway slowed down for minutes after a successful continuation; this
+    tells whether the gateway itself, the browser or a stray child is busy.
+    """
+
+    def __init__(self, path, every=3.0):
+        super().__init__(daemon=True)
+        self.path, self.every, self.label = path, every, ""
+        self.halt = threading.Event()
+
+    def run(self):
+        try:
+            import psutil
+        except ImportError:
+            return
+        last = {}
+        with self.path.open("a", encoding="utf-8") as handle:
+            while not self.halt.wait(self.every):
+                now, rows = {}, []
+                for proc in psutil.process_iter(["pid", "name"]):
+                    try:
+                        times = proc.cpu_times()
+                        used = times.user + times.system
+                    except (psutil.Error, OSError):
+                        continue
+                    now[proc.pid] = used
+                    delta = used - last.get(proc.pid, used)
+                    if delta > 0.3:
+                        try:
+                            cmd = " ".join(proc.cmdline())[-160:]
+                        except (psutil.Error, OSError):
+                            cmd = ""
+                        rows.append([round(delta, 1), proc.pid, proc.info["name"], cmd])
+                last = now
+                rows.sort(reverse=True)
+                handle.write(json.dumps({"t": time.strftime("%H:%M:%S"), "case": self.label,
+                                         "top": rows[:6]}, ensure_ascii=False) + "\n")
+                handle.flush()
+
+
+# Counts every gateway request the page sends, by method, so a request storm
+# shows up even though the gateway log leaves most fast responses out.
+COUNT_REQUESTS = """(() => {
+  const counts = window.__probeRequestCounts = {};
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    try {
+      const frame = JSON.parse(String(data));
+      if (frame && frame.method) counts[frame.method] = (counts[frame.method] || 0) + 1;
+    } catch {}
+    return send.call(this, data);
+  };
+})()"""
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -294,6 +351,7 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
       } catch (error) { return {ok: false, error: String(error)}; }
     }""", [session, f"probe-{name}-{uuid.uuid4().hex[:8]}", f"{CASE_PROVIDERS[name]}/probe-model", prompt])
     timeline = []
+    rates = []
     notes = {}
     shot_taken = False
     started = time.monotonic()
@@ -306,6 +364,10 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
             state = {"error": str(error)}
         state["t"] = round(time.monotonic() - started, 1)
         state["requests"] = len(upstream.requests) - first_request
+        try:
+            rates.append({"t": state["t"], **page.evaluate("({...(window.__probeRequestCounts || {})})")})
+        except Exception as error:
+            rates.append({"t": state["t"], "error": str(error)[:120]})
         last = timeline[-1] if timeline else {}
         if any(state.get(k) != last.get(k) for k in ("state", "message", "recovered", "failureCard", "partial")):
             timeline.append(state)
@@ -329,12 +391,16 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
         "watchdog_requests": sum(1 for r in requests if r["watchdog"]),
         "request_log": requests[:40],
         "timeline": timeline[:60],
+        # Cumulative page→gateway requests by method, sampled once a second.
+        "page_requests": rates[::5][:40],
         "final": final,
         "ribbon_ever": sorted({entry.get("message", "") for entry in timeline if entry.get("state")}),
         "gateway": lines,
         "session_errors": session_errors(profile, session),
         **notes,
-        "watchdog_retries": sum(1 for line in lines if re.search(r"watchdog (?:retry scheduled|immediate retry accepted)", line)),
+        # One attempt may log both scheduling and dispatch; do not count it
+        # twice when checking the connection-failure retry limit.
+        "watchdog_retries": sum(1 for line in lines if "watchdog retry scheduled" in line),
     }
 
 
@@ -367,11 +433,13 @@ def judge(name, result):
     elif name in ("not-found", "proxy-down"):
         if name == "not-found" and not any(r.get("behaviour") == "not-found" for r in result["request_log"]):
             problems.append("the fake upstream never returned a 404")
+        if name == "not-found" and (result["requests"] != 1 or result["watchdog_retries"] or claims_retry):
+            problems.append("a 404 must not be retried or advertised as retrying")
         errors = " ".join(result.get("session_errors", []) + result.get("gateway", []))
         expected = r"not found|404" if name == "not-found" else r"connect|network|refused"
         if not re.search(expected, errors, re.I):
             problems.append(f"the expected {name} failure was not recorded: {errors[:500]!r}")
-        if result["requests"] > 3 or result["watchdog_retries"] > 3:
+        if result["requests"] > 3 or result["watchdog_retries"] > 2:
             problems.append(f"{result['requests']} model requests / {result['watchdog_retries']} watchdog retries"
                             " for a failure retrying cannot fix")
         if final.get("state") == "retrying":
@@ -478,6 +546,8 @@ def run(exe, profile, out, launch, kill_app, profile_env):
     log_path = profile / "local/SuperPinkie/logs/gateway.log"
     summary = {"port": port, "cases": {}}
     profiler = None
+    sampler = CpuSampler(out / "probe-cpu.jsonl")
+    sampler.start()
     try:
         env = profile_env(profile)
         profile_enabled = os.environ.get("PINKIE_SMOKE_PROFILE_GATEWAY") == "1"
@@ -491,13 +561,19 @@ def run(exe, profile, out, launch, kill_app, profile_env):
         profiler = start_gateway_profiler(exe, log_path, log_offset, out) if profile_enabled else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(channel="msedge", headless=True)
-            page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN").new_page()
+            context = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN")
+            context.add_init_script(COUNT_REQUESTS)
+            page = context.new_page()
+            sampler.label = "disconnect"
             summary["cases"]["disconnect"] = run_case(page, out, "disconnect", upstream, ["drop", "ok"], log_path, profile, 120, True)
+            sampler.label = "not-found"
             summary["cases"]["not-found"] = run_case(page, out, "not-found", upstream, ["not-found"], log_path, profile, 75, False)
             upstream.stop()
+            sampler.label = "proxy-down"
             summary["cases"]["proxy-down"] = run_case(page, out, "proxy-down", upstream, ["ok"], log_path, profile, 75, False)
             upstream = FakeUpstream(port)
             upstream.start()
+            sampler.label = "disconnect-action"
             summary["cases"]["disconnect-action"] = run_case(
                 page, out, "disconnect-action", upstream, ["drop", "ok"], log_path, profile, 120, True)
             browser.close()
@@ -523,6 +599,7 @@ def run(exe, profile, out, launch, kill_app, profile_env):
                 shutil.move(str(path.with_name(path.name + ".probe-hidden")), str(path))
         summary["cases"]["bad-config"] = bad_config(exe, profile, out, launch, kill_app, env)
     finally:
+        sampler.halt.set()
         stop_gateway_profiler(profiler)
         upstream.stop()
         if (profile / "local/SuperPinkie/logs").is_dir():
