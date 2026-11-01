@@ -177,6 +177,21 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
         self.assertEqual((workspace / "playbooks/review.md").read_text(encoding="utf-8"), "手册")
 
+    def test_missing_workspace_avatars_are_filled_but_user_images_are_kept(self):
+        assets = self.resources / "ui/assets"
+        assets.mkdir(parents=True)
+        for mode in ("chat", "project", "thinking", "learning", "unrestricted"):
+            (assets / f"laolao-mode-{mode}-hd.png").write_bytes(mode.encode())
+        custom = self.home / ".openclaw/workspace-project/avatars/pinkie-pie.png"
+        custom.parent.mkdir(parents=True)
+        custom.write_bytes(b"my avatar")
+        super_pinkie.ensure_workspace_avatars(self.logs.append)
+        self.assertEqual(custom.read_bytes(), b"my avatar")
+        self.assertEqual((self.home / ".openclaw/workspace/avatars/pinkie-pie.png").read_bytes(), b"chat")
+        self.assertEqual((self.home / ".openclaw/workspace-learning/avatars/pinkie-pie.png").read_bytes(), b"learning")
+        self.assertEqual((self.home / ".openclaw/workspace-unrestricted/avatars/unrestricted-mode.png").read_bytes(), b"unrestricted")
+        self.assertFalse(self.logs)
+
 
 if __name__ == "__main__":
     unittest.main()

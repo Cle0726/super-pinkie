@@ -467,6 +467,36 @@ def _install_persona_file(src_file, dst_file, keep_existing, backup_dir):
     shutil.copyfile(src_file, dst_file)
 
 
+def ensure_workspace_avatars(log):
+    """Fill missing built-in avatars without changing any existing user file."""
+    home = Path.home() / ".openclaw"
+    assets = resource_path("ui", "assets")
+    mapping = (
+        ("workspace", "laolao-mode-chat-hd.png", "pinkie-pie.png"),
+        ("workspace-project", "laolao-mode-project-hd.png", "pinkie-pie.png"),
+        ("workspace-thinking", "laolao-mode-thinking-hd.png", "pinkie-pie.png"),
+        ("workspace-learning", "laolao-mode-learning-hd.png", "pinkie-pie.png"),
+        ("workspace-unrestricted", "laolao-mode-unrestricted-hd.png", "unrestricted-mode.png"),
+    )
+    for workspace, source, name in mapping:
+        src = assets / source
+        dst = home / workspace / "avatars" / name
+        if dst.exists():
+            continue
+        created = False
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            with src.open("rb") as reader, dst.open("xb") as writer:
+                created = True
+                shutil.copyfileobj(reader, writer)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            if created:
+                dst.unlink(missing_ok=True)
+            log(f"  ⚠️ 补齐 {workspace} 头像失败：{exc}")
+
+
 def install_personas(log, preserve_existing=False):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
@@ -962,6 +992,7 @@ def prepare_bundled_desktop(log):
         # on every launch, so one failed run is repaired by the next start.
         ensure_mode_agents(log)
 
+    ensure_workspace_avatars(log)
     for service in ("party", "context", "project-scope", "mode-architecture"):
         install_runtime_service(service, log)
 

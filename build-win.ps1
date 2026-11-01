@@ -107,6 +107,11 @@ Get-Content -LiteralPath $sums | ForEach-Object {
     }
 }
 if (-not $aiCopied) { throw "Mac 快照没有覆盖 @openclaw/ai" }
+# The shared model picker requests this neutral "other provider" icon. The
+# pinned runtime does not ship it, so include the Pinkie asset explicitly.
+$providerIcons = Join-Path $openclawRoot "dist\control-ui\provider-icons"
+New-Item -ItemType Directory -Force -Path $providerIcons | Out-Null
+Copy-Item -LiteralPath "ui\assets\ProviderIcon-crossmodel.svg" -Destination (Join-Path $providerIcons "ProviderIcon-crossmodel.svg") -Force
 $chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
 if (-not $chat) { throw "缺少聊天页" }
 $chatText = Get-Content -LiteralPath $chat.FullName -Raw
