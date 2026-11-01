@@ -183,12 +183,38 @@ RIBBON = r"""() => {
 }"""
 
 
+def stuck_stack(page):
+    """Pause the page's script and return where its main thread is busy."""
+    frames = []
+    try:
+        cdp = page.context.new_cdp_session(page)
+        cdp.on("Debugger.paused", lambda event: frames.extend(
+            f"{f.get('functionName') or '(anonymous)'} {f.get('url', '').rsplit('/', 1)[-1]}:"
+            f"{f['location']['lineNumber'] + 1}:{f['location'].get('columnNumber', 0) + 1}"
+            for f in event.get("callFrames", [])[:12]))
+        cdp.send("Debugger.enable")
+        cdp.send("Debugger.pause")
+        deadline = time.monotonic() + 10
+        while not frames and time.monotonic() < deadline:
+            # Sync Playwright only delivers CDP events inside its own calls.
+            page.wait_for_timeout(200)
+        try:
+            cdp.send("Debugger.resume")
+        except Exception:
+            pass
+    except Exception as error:
+        frames.append(f"cdp failed: {str(error)[:200]}")
+    return frames
+
+
 def shot(page, path, result):
     # A renderer that stops answering must not cost the rest of the evidence.
     try:
         page.screenshot(path=str(path), timeout=15_000)
     except Exception as error:
         result.setdefault("screenshot_errors", []).append(f"{path.name}: {str(error)[:200]}")
+        if "stuck_stack" not in result:
+            result["stuck_stack"] = stuck_stack(page)
 
 
 def gateway_lines(log_path, offset):
