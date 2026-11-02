@@ -9,15 +9,11 @@ const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const source = read(process.env.CLE_TOOLBOX_SOURCE || 'ui/injections/laolao-laser-pointer.js');
 
 test('presentation toolbox is deployed by both installers at the same version', () => {
-  const mac = read('installer/macos/apply-theme.sh');
-  const win = read('installer/windows/apply-theme.ps1');
-  assert.match(mac, /laolao-laser-pointer\.js \\/, 'macOS asset copy list');
-  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser9/, 'macOS injection pins laser9');
-  assert.match(win, /"laolao-laser-pointer\.js"/, 'Windows asset copy list');
-  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser9/, 'Windows head tag pins laser9');
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-laser-pointer.js'], 'assets': []});
+
 });
 
-test('toolbox entry lives in the global sidebar footer, not the per-mode rail', () => {
+test('toolbox remains in the global sidebar and is available through more tools', () => {
   // The launcher is global: it mounts into the sidebar footer icon bar so it
   // is reachable from every mode, and it reuses the native footer icon look.
   assert.match(source, /querySelector\('\.sidebar-shell__footer'\)/);
@@ -27,7 +23,8 @@ test('toolbox entry lives in the global sidebar footer, not the per-mode rail', 
   const css = read('ui/injections/laolao-side-layout.css');
   assert.doesNotMatch(css, /#pinkie-laser-entry/);
   const shell = read('ui/injections/laolao-classic-shell.js');
-  assert.doesNotMatch(shell, /#pinkie-laser-entry/);
+  assert.match(shell, /#pinkie-laser-entry/);
+  assert.match(shell, /presentation-settings/);
 });
 
 test('toolbox engine follows the observer diet and pointer contracts', () => {

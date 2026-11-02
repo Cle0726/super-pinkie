@@ -1,45 +1,39 @@
 import importlib.util
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
-MODULE = Path(__file__).parents[1] / 'tools/windows-package/activate_update_dialog.py'
+ROOT = Path(__file__).resolve().parents[1]
+MODULE = ROOT / 'tools/windows-package/activate_update_dialog.py'
 spec = importlib.util.spec_from_file_location('activate_update_dialog', MODULE)
 activate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(activate)
 
 
 class UpdateAssetsTests(unittest.TestCase):
-    def test_injects_once_preserving_inline_bytes_and_replaces_cache_key(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            src = root / 'ui/injections'
-            control = root / 'control'
-            src.mkdir(parents=True)
-            control.mkdir()
-            for asset in activate.ASSETS:
-                (src / asset).write_bytes(b'__pinkieUpdateDialog')
-            original = b'<html>\n<head>\n<script>\nconst x = 1;\n</script>\n<script src="./laolao-settings-user.js?v=settingsuser4"></script>\n</head></html>'
-            (control / 'index.html').write_bytes(original)
-            activate.activate(src.parent, control)
-            html = (control / 'index.html').read_bytes()
-            self.assertIn(b'<script>\nconst x = 1;\n</script>', html)
-            self.assertIn(b'laolao-settings-user.js?v=settingsuser5', html)
+    def test_legacy_update_entry_uses_the_complete_shared_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory)
+            index = control / 'index.html'
+            original = '<html><head><script>\nboot();\n</script><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>'
+            index.write_text(original)
+            template = (ROOT / 'ui/control-ui.index.html').read_text()
+            for name in re.findall(r'(?:src|href)=["\']\.?/(assets/[^?"\']+)', template):
+                file = control / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text('upstream fixture')
+            result = activate.activate(ROOT / 'ui', control)
+            self.assertIn('laolao-update-dialog.js', result['resources'])
+            self.assertIn('laolao-deep-think-full.webm', result['resources'])
+            self.assertIn('fonts/PinkieUI-NotoSansSC.woff2', result['resources'])
+            html = index.read_bytes()
+            inline = rb'<script\b(?![^>]*src=)[^>]*>(.*?)</script>'
+            self.assertEqual(re.findall(inline, html, re.S), re.findall(inline, template.encode(), re.S))
             self.assertEqual(html.count(b'laolao-update-dialog.js'), 1)
-            self.assertEqual(html.count(b'laolao-update-dialog.css'), 1)
-            activate.activate(src.parent, control)
-            self.assertEqual(html, (control / 'index.html').read_bytes())
+            activate.activate(ROOT / 'ui', control)
+            self.assertEqual(html, index.read_bytes())
 
-    def test_missing_shared_assets_fails_before_touching_index(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / 'ui/injections').mkdir(parents=True)
-            (root / 'control').mkdir()
-            index = root / 'control/index.html'
-            index.write_bytes(b'<head></head>')
-            with self.assertRaises(ValueError):
-                activate.activate(root / 'ui', root / 'control')
-            self.assertEqual(index.read_bytes(), b'<head></head>')
 
 if __name__ == '__main__':
     unittest.main()

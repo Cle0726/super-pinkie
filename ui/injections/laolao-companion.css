@@ -102,6 +102,67 @@
 .pinkie-buddy__dots i:nth-child(2) { animation-delay: .15s; }
 .pinkie-buddy__dots i:nth-child(3) { animation-delay: .3s; }
 
+/* 帮我说清楚：复述 + 最多两个选择 + 一下就发。同一个气泡位置，宽度固定，里面不再套框。 */
+.pinkie-buddy__bubble.is-card {
+  --clarify-ink: #2e2826; --clarify-ink-2: #6f5f58; --clarify-muted: #9a8b84; --clarify-chip: rgba(255, 255, 255, .9);
+  width: min(360px, calc(100vw - 32px)); max-width: none; padding: 14px 16px; box-sizing: border-box;
+  color: var(--clarify-ink); line-height: 1.65;
+}
+.pinkie-buddy__bubble.is-card .pinkie-buddy__close { right: 8px; top: 8px; }
+.pinkie-clarify__eyebrow { color: var(--clarify-muted); font-size: 12px; margin-bottom: 2px; }
+.pinkie-clarify__understood, .pinkie-clarify__title { padding-right: 18px; font-size: 15px; font-weight: 500; color: var(--clarify-ink); }
+.pinkie-clarify__wait { display: inline; color: var(--clarify-ink-2); font-size: 13.5px; }
+.pinkie-clarify__fix {
+  padding: 0; border: 0; border-bottom: 1px dashed currentColor; background: none; cursor: pointer;
+  color: color-mix(in srgb, var(--accent, #e94f91) 75%, var(--clarify-ink)); font: 400 12px/1.4 -apple-system, "PingFang SC", sans-serif;
+}
+.pinkie-clarify__q { margin-top: 12px; }
+.pinkie-clarify__qlabel { margin-bottom: 6px; color: var(--clarify-ink-2); font-size: 12.5px; }
+.pinkie-clarify__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pinkie-clarify__chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent, #e94f91) 22%, transparent); background: var(--clarify-chip);
+  color: var(--clarify-ink); font: 500 12.5px/1.5 -apple-system, "PingFang SC", sans-serif;
+  transition: background .15s, border-color .15s;
+}
+.pinkie-clarify__chip:hover { border-color: color-mix(in srgb, var(--accent, #e94f91) 45%, transparent); }
+.pinkie-clarify__chip.is-on {
+  background: color-mix(in srgb, var(--accent, #e94f91) 12%, #fff); border-color: color-mix(in srgb, var(--accent, #e94f91) 55%, transparent);
+  color: color-mix(in srgb, var(--accent, #e94f91) 70%, #2e2826);
+}
+.pinkie-clarify__rec { font-size: 10.5px; color: color-mix(in srgb, var(--accent, #e94f91) 80%, var(--clarify-ink)); }
+.pinkie-clarify__note { margin-top: 12px; color: var(--clarify-muted); font-size: 12px; line-height: 1.6; }
+.pinkie-clarify__actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.pinkie-clarify__send {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--accent, #e94f91); color: #fff; font: 600 13px/1.4 -apple-system, "PingFang SC", sans-serif;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent, #e94f91) 30%, transparent);
+}
+.pinkie-clarify__send kbd { font: 500 11px/1 -apple-system, sans-serif; opacity: .8; }
+.pinkie-clarify__send:focus-visible, .pinkie-clarify__chip:focus-visible, .pinkie-clarify__starter:focus-visible, .pinkie-clarify__ghost:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #e94f91) 55%, transparent); outline-offset: 2px;
+}
+.pinkie-clarify__ghost { padding: 0; border: 0; background: none; cursor: pointer; color: var(--clarify-ink-2); font: 400 12.5px/1.4 -apple-system, "PingFang SC", sans-serif; }
+.pinkie-clarify__ghost:hover { color: var(--clarify-ink); }
+.pinkie-clarify__starters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.pinkie-clarify__starter {
+  padding: 9px 11px; border-radius: 12px; cursor: pointer; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--accent, #e94f91) 14%, transparent); background: var(--clarify-chip);
+  color: var(--clarify-ink); font: 500 13px/1.45 -apple-system, "PingFang SC", sans-serif;
+  transition: border-color .15s, transform .15s;
+}
+.pinkie-clarify__starter:hover { border-color: color-mix(in srgb, var(--accent, #e94f91) 40%, transparent); transform: translateY(-1px); }
+.pinkie-clarify__starter small { display: block; color: var(--clarify-muted); font-size: 11.5px; font-weight: 400; }
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-buddy__bubble.is-card {
+  --clarify-ink: #f0e5eb; --clarify-ink-2: #cdbcc7; --clarify-muted: #a594a0; --clarify-chip: rgba(255, 255, 255, .06);
+  background: linear-gradient(180deg, #2c2430, color-mix(in srgb, var(--accent, #e94f91) 6%, #261f2a));
+  border-color: color-mix(in srgb, var(--accent, #e94f91) 26%, transparent);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .35);
+}
+html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-clarify__chip.is-on {
+  background: color-mix(in srgb, var(--accent, #e94f91) 22%, transparent); color: #fff;
+}
+
 /* 功能菜单：线条图标，悬停时各有一个小动作 */
 .pinkie-buddy__menu {
   position: absolute; right: 8px; bottom: calc(100% + 2px);

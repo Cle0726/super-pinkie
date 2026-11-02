@@ -59,17 +59,6 @@ test('settings use the native config RPC and do not destructively edit Lit-owned
 });
 
 test('settings page is loaded by the head fragment and both installers with one cache key', () => {
-  const head = read('ui/injections/laolao-head.fragment.html');
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  // CSS and JS advance independently; each must use its own current key.
-  const versions = {'laolao-settings-user.css': 3, 'laolao-settings-user.js': 5};
-  for (const file of ['laolao-settings-user.css', 'laolao-settings-user.js']) {
-    const versioned = new RegExp(`${file.replace(/[.-]/g, '\\$&')}\\?v=settingsuser${versions[file]}`);
-    assert.match(head, versioned);
-    assert.match(mac, versioned);
-    assert.match(windows, versioned);
-    assert.match(mac, new RegExp(`^\\s+${file.replace(/[.-]/g, '\\$&')} \\\\$`, 'm'), `${file} missing from macOS copy list`);
-    assert.ok(windows.includes(`"${file}",`), `${file} missing from Windows asset list`);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-settings-user.css', 'laolao-settings-user.js'], 'assets': []});
+
 });

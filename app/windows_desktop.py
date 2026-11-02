@@ -675,7 +675,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             return {"started": True, "version": self.prepared["version"]}
 
 
-def hidden_process_kwargs():
+def hidden_process_kwargs(hide_window=True):
     """Keep a helper's console out of sight, on the platforms that have one.
 
     creationflags is Windows-only; CREATE_NO_WINDOW does not exist elsewhere, so
@@ -684,9 +684,52 @@ def hidden_process_kwargs():
     """
     if os.name != "nt":
         return {}
-    return {
-        "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
-    }
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+    if not hide_window:
+        return flags  # Explorer/control-center windows are intentional UI.
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return {**flags, "startupinfo": startup}
+
+
+def configure_native_glass(window):
+    """Make the host transparent too, before its first paint on the GUI thread.
+
+    A transparent HTML body over an opaque WinForms background still renders
+    as a solid pink sheet. Give WebView2 an alpha-zero base and extend DWM's
+    glass over the whole client area. Keep the window/text alpha at 100%.
+    """
+    if os.name != "nt":
+        return
+    import ctypes
+    from System.Drawing import Color
+
+    class Margins(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int32) for name in ("left", "right", "top", "bottom")]
+
+    native = window.native
+    native.BackColor = Color.Black  # DWM's zero-alpha client canvas.
+    native.webview.DefaultBackgroundColor = Color.Transparent
+    dwm = ctypes.WinDLL("dwmapi", use_last_error=True)
+    extend = dwm.DwmExtendFrameIntoClientArea
+    extend.argtypes = [ctypes.c_void_p, ctypes.POINTER(Margins)]
+    extend.restype = ctypes.c_int32
+    margins = Margins(-1, -1, -1, -1)
+    handle = int(native.Handle.ToInt64())
+    result = extend(handle, ctypes.byref(margins))
+    if result < 0:
+        raise OSError(f"DwmExtendFrameIntoClientArea failed: 0x{result & 0xffffffff:08x}")
+    # pywebview's dark-theme default requests Mica. That would fill the clear
+    # canvas again. Use desktop transparency, matching Mac, in either theme.
+    # Windows 10 does not implement this Windows 11 attribute; full glass
+    # above remains in effect there.
+    attribute = dwm.DwmSetWindowAttribute
+    attribute.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
+    attribute.restype = ctypes.c_int32
+    backdrop_none = ctypes.c_int32(1)  # DWMWA_SYSTEMBACKDROP_TYPE / DWMSBT_NONE
+    attribute(handle, 38, ctypes.byref(backdrop_none), ctypes.sizeof(backdrop_none))
+    append_log("launcher", "native glass enabled: WebView2 alpha=0; DWM full client; window alpha=1")
 
 
 class BundledRuntime:
@@ -1015,7 +1058,7 @@ class NativeBridge:
         if payload.get("action") == "reveal":
             path = Path(str(payload.get("path", "")))
             if path.is_dir():
-                subprocess.Popen(["explorer.exe", str(path)], **hidden_process_kwargs())
+                subprocess.Popen(["explorer.exe", str(path)], **hidden_process_kwargs(hide_window=False))
             return {"requestId": request_id, "cancelled": not path.is_dir()}
         if payload.get("action") != "choose":
             return {"requestId": request_id, "cancelled": True}
@@ -1085,7 +1128,7 @@ class NativeBridge:
                 return {"ok": False, "message": "保存到下载文件夹失败，请检查磁盘空间和文件权限。"}
         if action == "reveal":
             try:
-                subprocess.Popen(["explorer.exe", "/select,", str(path)], **hidden_process_kwargs())
+                subprocess.Popen(["explorer.exe", "/select,", str(path)], **hidden_process_kwargs(hide_window=False))
                 return {"ok": True}
             except OSError:
                 return {"ok": False, "message": "无法在文件夹中显示这个文件。"}
@@ -1269,7 +1312,7 @@ class NativeBridge:
         self._window.destroy()
 
     def control_center(self):
-        subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs())
+        subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs(hide_window=False))
 
     def check_for_updates(self):
         return self._updater.check(force=True)
@@ -1582,10 +1625,13 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
+    # The official environment setting applies before WebView2's first paint;
+    # setting the API only after navigation can leave a white flash.
+    os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00000000"
     window = webview.create_window(
         "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
-        shadow=True, background_color="#efcbd3",
+        shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
     gateway = GatewaySupervisor(runtime)
@@ -1602,6 +1648,14 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             name="pinkie-native-bridge",
             daemon=True,
         ).start()
+
+    def before_show():
+        # This event runs synchronously on WinForms' GUI thread. Do not call
+        # evaluate_js or marshal back to the same thread from here.
+        try:
+            configure_native_glass(window)
+        except Exception as error:
+            append_log("launcher", f"native glass setup failed: {error}")
 
     def bootstrap():
         try:
@@ -1642,6 +1696,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         else:
             append_log("launcher", "window closed; keeping gateway for background sessions")
 
+    window.events.before_show += before_show
     window.events.loaded += loaded
     window.events.maximized += maximized
     window.events.restored += restored

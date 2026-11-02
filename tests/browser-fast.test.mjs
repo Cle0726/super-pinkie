@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {createAppBrowserTool} from '../services/mode-architecture/app-browser.mjs';
 const context={sessionKey:'agent:learning:browser-fixture'};
 test('native embeds the exact independently tested browser helper and retains its safety boundary',()=>{
- const swift=fs.readFileSync(new URL('../desktop/macos/Sources/BrowserControl.swift',import.meta.url),'utf8'),js=fs.readFileSync(new URL('../desktop/macos/Sources/BrowserControl.js',import.meta.url),'utf8').trimEnd();
+ const swift=fs.readFileSync(new URL('../desktop/macos/pinkie/Sources/BrowserControl.swift',import.meta.url),'utf8'),js=fs.readFileSync(new URL('../desktop/macos/pinkie/Sources/BrowserControl.js',import.meta.url),'utf8').trimEnd();
  const embedded=swift.split('private static let domScript = #"""\n')[1].split('\n    """#')[0].split('\n').map(line=>line.slice(4)).join('\n');assert.equal(embedded,js);
  assert.match(swift,/self\.userUntil > Date\(\)/);assert.match(swift,/BrowserControlPolicy\.allowsEvaluation/);assert.match(swift,/collaborationActive/);
 });

@@ -63,7 +63,8 @@ test('first paint stays CSS-only: blurred art that focuses by itself and letters
   assert.match(bootstrap, /letter\.style\.setProperty\("--i", String\(index\)\)/);
   assert.match(bootstrap, /title\.removeAttribute\("aria-label"\);\s*title\.textContent = details\.label;/);
   // 拆字的脚本是同步脚本，跟在开屏标记后面，所以首帧就已经拆好。
-  assert.match(read('ui/injections/laolao-body.fragment.html'), /<\/section>\s*<script src="\.\/laolao-handoff-bootstrap\.js\?v=handoff7"><\/script>/);
+  assert.match(read('tools/ui-parity/bundle.py'), /laolao-handoff-bootstrap\.js\?v=handoff7/);
+  assert.doesNotMatch(read('ui/injections/laolao-body.fragment.html'), /<script/);
 });
 
 test('splash.js hands the cold start to the FX only after first paint and keeps every gate', () => {
@@ -78,12 +79,6 @@ test('splash.js hands the cold start to the FX only after first paint and keeps 
 });
 
 test('both installers load the splash FX once, before the startup controller', () => {
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  assert.match(mac, /^\s+laolao-splash-fx\.js \\$/m);
-  assert.ok(mac.indexOf('laolao-splash-fx.js?v=splashfx2"></script>\\n</head>') < mac.indexOf('laolao-splash.js?v=splash28"></script>\\n</head>'));
-  assert.match(mac, /laolao-splash-fx\\\.js\(\?:\\\?\[\^" \]\*\)\?"\[\^>\]\*><\/script>/);
-  assert.ok(windows.includes('"laolao-splash-fx.js",'));
-  assert.ok(windows.indexOf("'<script defer src=\"./laolao-splash-fx.js?v=splashfx2\"></script>'") < windows.indexOf("'<script defer src=\"./laolao-splash.js?v=splash28\"></script>'"));
-  assert.match(windows, /'laolao-splash-fx\.js' = 'splashfx2'/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-splash-fx.js', 'laolao-splash.js'], 'assets': []});
+  assert.ok(head.indexOf('laolao-splash-fx.js') < head.indexOf('laolao-splash.js'));
 });

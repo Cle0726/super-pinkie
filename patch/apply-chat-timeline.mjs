@@ -10,6 +10,9 @@ import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
 export const marker = '/* pinkie-chat-timeline:v26 */';
+// Keep the v26 marker for the independently maintained optimistic-user patch.
+// This second marker lets older v26 installations upgrade the projection.
+const thinkingSegmentsMarker = '/* pinkie-thinking-segments:v1 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
 const previousMarkers = ['/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
@@ -930,6 +933,16 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const head = hasUserHead ? entries[0] : null;
   const steps = [];
   const tail = [];
+  const historySegments = [];
+  const captureHistoryThinking = (entry) => {
+    const message = entry?.message || {};
+    if (String(message.role || '').toLowerCase() !== 'assistant') return;
+    for (const part of textParts(message)) {
+      if (!['thinking', 'reasoning'].includes(partType(part))) continue;
+      const text = part.thinking || part.reasoning || part.text || '';
+      if (typeof text === 'string' && text.trim()) historySegments.push({text, ms: 0, anchor: steps.length});
+    }
+  };
   let liveItems = false;
   for (let index = firstStepIndex; index < entries.length; index += 1) {
     let item = entries[index];
@@ -969,6 +982,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     const role = String(item.role || '').toLowerCase();
     if (role === 'assistant' && index === finalAssistantIndex) {
       // The final response deliberately keeps the normal assistant bubble.
+      for (const entry of item.messages || []) captureHistoryThinking(entry);
       tail.push(item);
       continue;
     }
@@ -981,6 +995,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     const results = role === 'tool' ? resultParts(item, getToolCalls) : new Map();
     for (const entry of item.messages || []) {
       if (pairedResultKeys.has(entry.key)) continue;
+      captureHistoryThinking(entry);
       const augmented = role === 'tool'
         ? attachToolResults(entry, results, pairedResultKeys, getToolCalls)
         : entry;
@@ -993,10 +1008,28 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const ownerKey = String(head?.key || head?.messages?.[0]?.key
     || entries[0]?.key || entries[0]?.messages?.[0]?.key || 'turn');
   const processKey = pinkieProcessTurnKey(head || entries[0], ownerKey);
-  const historyThinking = entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
-    .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))
-    .filter(part => ['thinking', 'reasoning'].includes(partType(part)))
-    .map(part => part.thinking || part.reasoning || part.text || '').filter(text => typeof text === 'string' && text.trim()).join('\n\n');
+  let routedSession = '';
+  try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
+    || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
+  const segmented = !routedSession || /^agent:(?:main|project|thinking|learning):/.test(routedSession);
+  const historyThinking = segmented ? historySegments.map(segment => segment.text).join('\n\n')
+    : entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
+      .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))
+      .filter(part => ['thinking', 'reasoning'].includes(partType(part)))
+      .map(part => part.thinking || part.reasoning || part.text || '')
+      .filter(text => typeof text === 'string' && text.trim()).join('\n\n');
+  const toolAnchors = {};
+  steps.forEach((row, index) => {
+    for (const entry of row.messages || []) for (const part of textParts(entry.message)) {
+      if (!isToolCallPart(part)) continue;
+      const id = partCallId(part, entry.message);
+      if (id) toolAnchors[id] = index + 1;
+    }
+  });
+  // A property-only Lit update is invisible to MutationObserver. Expose a
+  // compact revision so the injection notices history arriving after mount.
+  let historyVersion = 2166136261;
+  for (const char of JSON.stringify([historySegments, toolAnchors])) historyVersion = Math.imul(historyVersion ^ char.charCodeAt(0), 16777619) >>> 0;
   const live = isLatestTurn && (liveItems || pinkieRunIsActive());
   // The live turn always gets its card, so thinking has a place before the
   // first step. A finished plain answer keeps one only when the page recorded
@@ -1035,10 +1068,15 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processLive: live,
     processCurrent: isLatestTurn,
     processThinking: historyThinking,
+    processThinkingSegments: segmented ? historySegments : [],
+    processToolAnchors: toolAnchors,
+    processHistoryVersion: historyVersion,
     processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
     processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
     processState: !live && processInterrupted ? 'oops' : '',
-    processRows: collapseTimelineRows(steps, maxRows, ownerKey),
+    processRowCount: steps.length,
+    processRows: collapseTimelineRows(steps.map((row, index) => ({...row,
+      pinkieThinkingAnchor: index, pinkieThinkingKey: processKey})), maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
       : live ? '碧琪正在干活'
@@ -1208,10 +1246,10 @@ function withScrollIntent(source) {
 
 /** Closed cards retain only their summary; Lit mounts rows on a user click. */
 export function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>n.kind===\`group\`?${groupName}(n,t):c)}</div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key} data-pinkie-row-count=\${e.processRowCount||0}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg="0" data-pinkie-history-revision=\${e.processHistoryVersion||0} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieHistorySegments=\${e.processThinkingSegments||[]} .pinkieToolAnchors=\${e.processToolAnchors||{}} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>s\`\${n.pinkieThinkingAnchor?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${n.pinkieThinkingAnchor}></div>\`:c}\${n.kind===\`group\`?${groupName}(n,t):c}\`)}</div><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${e.processRowCount||0} data-pinkie-thinking-tail="1"></div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
 }
 export function overflowBranchSource(groupName) {
-  return `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow" .open=\${pinkieTimelineView(e.key).open}><summary @click=\${n=>pinkieTimelineToggle(n,e.key)}>前面还有 \${e.overflowCount} 步</summary>\${pinkieTimelineView(e.key).open?s\`<div class="chat-timeline-overflow__body">\${pinkieTimelineRows(e,e.overflowItems).map(n=>n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):c)}\${pinkieTimelineView(e.key).count<e.overflowItems.length?s\`<button type="button" @click=\${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>\`:c}</div>\`:c}</details>\`;`;
+  return `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow" .open=\${pinkieTimelineView(e.key).open}><summary @click=\${n=>pinkieTimelineToggle(n,e.key)}>前面还有 \${e.overflowCount} 步</summary>\${pinkieTimelineView(e.key).open?s\`<div class="chat-timeline-overflow__body">\${pinkieTimelineRows(e,e.overflowItems).map(n=>s\`\${n.pinkieThinkingAnchor?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${n.pinkieThinkingKey} data-pinkie-thinking-seg=\${n.pinkieThinkingAnchor}></div>\`:c}\${n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):c}\`)}\${pinkieTimelineView(e.key).count<e.overflowItems.length?s\`<button type="button" @click=\${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>\`:c}</div>\`:c}</details>\`;`;
 }
 
 /** Add the process branch to a renderer patched by an older release. */
@@ -1338,7 +1376,7 @@ function upgradeBundle(original, previousMarker) {
         || !history.text.includes('pinkieBuildTimeline(__pinkieTimelineEntries,')) {
       throw new Error(`${version} history projection is missing`);
     }
-    const runtime = `${marker}${splitRuntimeSource()}\n`;
+    const runtime = `${marker}${splitRuntimeSource()}\n${thinkingSegmentsMarker}\n`;
     return {
       text: withLegacyHistoryPagingContext(withEarlierHistoryControl(withLoadedHistoryProjection(withReceivedFinal(withSessionMessageProgress(withChatCompactionSlot(withNativePresentation(withProcessBranch(sourceWithReplacement(original, markerIndex, history.start, runtime))))))))),
       changed: true,
@@ -1400,8 +1438,50 @@ export function transformLearningInlineKinds(original) {
   return original.slice(0, start) + patched + original.slice(end + tail.length);
 }
 
+// Two small send-path fixes, layered on every path (fresh, upgrade and
+// already-patched) and each skipped when its native anchor is not found.
+const userEchoMarker = '/* pinkie-early-user-echo:v1 */';
+const mediaCaptionMarker = '/* pinkie-media-caption:v1 */';
+
+/** Show the user's bubble as soon as Send is pressed. Natively it only appears
+ *  after chat.send is acknowledged, which with images can take seconds while
+ *  the attachment uploads; meanwhile the queue hides "sending" items, so the
+ *  message was visible nowhere. The early copy is removed right after the ack
+ *  (the native copy is added in the same tick) or when the send fails. */
+export function withEarlyUserEcho(source) {
+  if (source.includes(userEchoMarker)) return source;
+  const add = /if\(([\w$]+)\(e,o,c\?s:void 0,d(?:,r\.runId)?\),r\.status===`ok`\)/u.exec(source);
+  const tryAt = /try\{let r=a\.skillWorkshopRevision\?await /gu;
+  const ack = /(:await [\w$]+\(e,\{message:o,attachments:c\?s:void 0,runId:u,sessionKey:l,agentId:a\.agentId\}\);)/gu;
+  const fail = /(\}catch\(r\)\{)(?=let i=[\w$]+\(r\);return [\w$]+\(r,i\)\?\(od\()/gu;
+  if (!add || [tryAt, ack, fail].some((pattern) => (source.match(pattern) || []).length !== 1)) return source;
+  const drop = 'pinkieEcho&&(e.chatMessages=e.chatMessages.filter(x=>x!==pinkieEcho),pinkieEcho=null);';
+  return source
+    .replace(tryAt, `let pinkieEcho=${userEchoMarker}m()&&!a.skillWorkshopRevision&&/^agent:(?:main|project|thinking|learning):/.test(String(l))?${add[1]}(e,o,c?s:void 0,d,u):null;$&`)
+    .replace(ack, `$1${drop}`)
+    .replace(fail, `$1${drop}`);
+}
+
+/** An image sent without words is stored with this placeholder as its text;
+ *  the bubble shows only the image instead. */
+export function withMediaCaptionPlaceholder(source) {
+  if (source.includes(mediaCaptionMarker)) return source;
+  const strip = /(function [\w$]+\(e\)\{if\(!e\)return e;)(?=let t=e\.replace\([\w$]+,``\);if\(![\w$]+\.test\(t\)\)return t;)/gu;
+  if ((source.match(strip) || []).length !== 1) return source;
+  return source.replace(strip, `$1${mediaCaptionMarker}if(/^\\s*\\[User sent media without caption\\]\\s*$/.test(e))return\`\`;`);
+}
+
 function transformBundle(original) {
+  const result = transformBundleCore(original);
+  if (!result.text.includes(marker)) return result;
+  const text = withMediaCaptionPlaceholder(withEarlyUserEcho(result.text));
+  if (text === result.text) return result;
+  return {text, changed: true, reason: result.changed ? result.reason : 'send-path-updated'};
+}
+
+function transformBundleCore(original) {
   if (original.includes(marker)) {
+    if (!original.includes(thinkingSegmentsMarker)) return upgradeBundle(original, marker);
     if (!original.includes('function pinkieLearningInlineReferences(')) return {text: original, changed: false, reason: 'already-patched'};
     const text = transformLearningInlineKinds(original);
     return {text, changed: text !== original, reason: text === original ? 'already-patched' : 'learning-components-updated'};
@@ -1444,7 +1524,7 @@ function transformBundle(original) {
     const renderContextName = /([\w$]+)\(n\.message,n\.key,([\w$]+)\(e,n,r,t\),t\.onOpenSidebar\)/u.exec(source)?.[2];
     if (!messageRendererName || !renderContextName) throw new Error('cannot identify the native grouped-message renderer');
 
-    const timelineRuntime = `${marker}${splitRuntimeSource()}`;
+    const timelineRuntime = `${marker}${splitRuntimeSource()}\n${thinkingSegmentsMarker}`;
     const functionNeedle = `function ${historyFunctionName}(`;
     source = replaceExactlyOnce(source, new RegExp(escapeRegExp(functionNeedle), 'gu'),
       `${timelineRuntime}\n${functionNeedle}`, 'history renderer insertion');

@@ -85,11 +85,21 @@ def openclaw_config_path():
     return prompts_dir() / "openclaw.json"
 
 
+def hidden_process_kwargs():
+    """Keep setup/probe/maintenance children out of the desktop UI on Windows."""
+    if os.name != "nt":
+        return {}
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": startup}
+
+
 # ---------------------------------------------------------------- 依赖检测与安装
 def check_node():
     """检测 node 是否可用，返回版本号或 None"""
     try:
-        res = subprocess.run(node_command("-v"), capture_output=True, text=True, timeout=5)
+        res = subprocess.run(node_command("-v"), capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -102,7 +112,7 @@ def check_npm():
     if bundled_runtime_root():
         return "内置运行时"
     try:
-        res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -113,7 +123,7 @@ def check_npm():
 def check_openclaw_cli():
     """检测 openclaw CLI 是否可用"""
     try:
-        res = subprocess.run(openclaw_command("--version"), capture_output=True, text=True, timeout=5)
+        res = subprocess.run(openclaw_command("--version"), capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -127,7 +137,8 @@ def install_node_windows(log):
     try:
         proc = subprocess.Popen(
             ["winget", "install", "-e", "--id", "OpenJS.NodeJS.LTS", "--silent", "--accept-package-agreements", "--accept-source-agreements"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            **hidden_process_kwargs(),
         )
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
@@ -149,9 +160,9 @@ def install_openclaw_npm(log):
     try:
         cmd = ["npm", "install", "-g", "openclaw"]
         if os.name == "nt":
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True, **hidden_process_kwargs())
         else:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
         proc.wait()
@@ -260,7 +271,7 @@ def resolve_openclaw_root():
         return env
     cmd = "where" if os.name == "nt" else "which"
     try:
-        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=5).stdout
+        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=5, **hidden_process_kwargs()).stdout
         line = out.splitlines()[0].strip() if out.strip() else ""
         if line:
             real = os.path.realpath(line)
@@ -426,7 +437,7 @@ def apply_patch(remove, log):
             p = resource_path("patch", extra)
             if p.exists():
                 try:
-                    subprocess.run(node_command(str(p)), capture_output=True, text=True, timeout=10)
+                    subprocess.run(node_command(str(p)), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
                     log(f"  补丁扩展 {extra}: 已应用")
                 except Exception:
                     pass
@@ -572,7 +583,7 @@ def run_openclaw(arguments, timeout):
     page instead (cp936 on Chinese Windows, cp1252 on English), and the agent
     names contain Chinese and emoji, so read bytes and decode them ourselves.
     """
-    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout)
+    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout, **hidden_process_kwargs())
     output = (result.stdout or b"").decode("utf-8", "replace")
     errors = (result.stderr or b"").decode("utf-8", "replace")
     return result.returncode, output, errors
@@ -728,75 +739,28 @@ def install_runtime_service(service_name, log):
 
 # ---------------------------------------------------------------- UI 皮肤注入
 def install_theme(log):
-    log("==> 正在注入 来啦～老弟 UI 皮肤与静态资源...")
+    log("==> 正在安装碧琪完整界面...")
     root = resolve_openclaw_root()
     if not root:
-        log("  未定位到 CLE Kk UI 目录，跳过皮肤注入")
+        log("  未定位到碧琪 UI 目录，跳过界面安装")
         return
-    if os.name == "nt":
-        windows_installer = resource_path("installer", "windows", "apply-theme.ps1")
-        if windows_installer.exists():
-            env = dict(os.environ)
-            env["OPENCLAW_ROOT"] = str(root)
-            env["PINKIE_SKIP_APP_BUNDLES"] = "1"
-            try:
-                result = subprocess.run(
-                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(windows_installer)],
-                    capture_output=True, text=True, timeout=90, env=env,
-                )
-                if result.returncode == 0:
-                    log("  Windows 当前版 control-ui 已完成全量注入")
-                    return
-                log("  PowerShell 注入失败，改用内置兼容路径：" + (result.stderr.strip() or str(result.returncode)))
-            except Exception as exc:
-                log(f"  PowerShell 注入不可用，改用内置兼容路径：{exc}")
-
-    ui_candidates = [os.path.join(root, "dist", "control-ui"), os.path.join(root, "ui")]
-    ui_dir = next((path for path in ui_candidates if os.path.isfile(os.path.join(path, "index.html"))), ui_candidates[0])
-    index_html = os.path.join(ui_dir, "index.html")
-    if not os.path.isdir(ui_dir) or not os.path.isfile(index_html):
-        log(f"  未在 {ui_dir} 找到 index.html")
+    candidates = [Path(root) / "dist/control-ui", Path(root) / "ui"]
+    ui_dir = next((path for path in candidates if (path / "index.html").is_file()), None)
+    if ui_dir is None:
+        log("  未找到 control-ui/index.html")
         return
-    
-    asset_dir = resource_path("ui", "assets")
-    inject_dir = resource_path("ui", "injections")
-    
-    # 拷贝 assets 与 injections 文件
-    copied = 0
-    for src_folder in [asset_dir, inject_dir]:
-        if src_folder.exists():
-            for item in src_folder.iterdir():
-                if item.is_file():
-                    shutil.copyfile(item, os.path.join(ui_dir, item.name))
-                    copied += 1
-    log(f"  已复制 {copied} 个前端资源/脚本文件到 {ui_dir}")
-    
-    # 注入 head 和 body 片段
     try:
-        html = open(index_html, "r", encoding="utf-8").read()
-        head_frag_p = inject_dir / "laolao-head.fragment.html"
-        body_frag_p = inject_dir / "laolao-body.fragment.html"
-        handoff_p = inject_dir / "laolao-handoff-bootstrap.js"
-        
-        if handoff_p.exists():
-            shutil.copyfile(handoff_p, os.path.join(ui_dir, "laolao-handoff-bootstrap.js"))
-            
-        if head_frag_p.exists() and "laolao-head" not in html:
-            head_frag = head_frag_p.read_text(encoding="utf-8")
-            html = re.sub(r"(<head[^>]*>)", r"\1\n" + head_frag, html, flags=re.IGNORECASE)
-            
-        if body_frag_p.exists() and "laolao-body" not in html:
-            body_frag = body_frag_p.read_text(encoding="utf-8")
-            html = re.sub(r"(</body>)", body_frag + r"\n\1", html, flags=re.IGNORECASE)
-            
-        if "laolao-handoff-bootstrap" not in html:
-            html = re.sub(r"(<openclaw-app>)", r'    <script src="./laolao-handoff-bootstrap.js?v=handoff3"></script>\n    \1', html, flags=re.IGNORECASE)
-            
-        open(index_html, "w", encoding="utf-8").write(html)
-        log("  UI index.html 注入成功！")
-    except Exception as e:
-        log(f"  注入 index.html 失败: {e}")
-        
+        builder = resource_path("tools", "ui-parity", "bundle.py")
+        spec = importlib.util.spec_from_file_location("pinkie_shared_ui", builder)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        manifest = module.install(resource_path(), ui_dir)
+        log(f"  已核验 {len(manifest['resources'])} 个完整界面资源")
+    except Exception as exc:
+        log(f"  界面安装失败：{exc}")
+        raise
+    asset_dir = resource_path("ui", "assets")
+
     # 头像同步
     home = Path.home()
     avatar_map = [
@@ -836,6 +800,7 @@ class ProxyManager:
         self.proc = subprocess.Popen(
             [py, str(proxy_py), str(port)],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True,
+            **hidden_process_kwargs(),
         )
         threading.Thread(target=self._pump, daemon=True).start()
         self.log(f"代理已启动: 127.0.0.1:{port} -> 127.0.0.1:{upstream} (pid {self.proc.pid})")
@@ -882,7 +847,7 @@ def restart_openclaw_gateway(log):
     """重启 CLE Kk 网关"""
     log("==> 正在重启 CLE Kk 网关...")
     try:
-        res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10)
+        res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
     except Exception as e:
         log(f"  重启网关失败（可能尚未启动或未安装到 PATH）: {e}")
@@ -1036,18 +1001,20 @@ def pull_and_update(log):
             branch_res = subprocess.run(
                 ["git", "-C", str(repo_root), "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True, text=True, timeout=10,
+                **hidden_process_kwargs(),
             )
             branch = (branch_res.stdout or "").strip() or "main"
-            subprocess.run(["git", "-C", str(repo_root), "fetch", "origin"], capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(repo_root), "fetch", "origin"], capture_output=True, text=True, timeout=30, **hidden_process_kwargs())
             pull_res = subprocess.run(
                 ["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch],
                 capture_output=True, text=True, timeout=45,
+                **hidden_process_kwargs(),
             )
             if pull_res.returncode != 0:
                 log("  本地有未提交改动，自动暂存后拉取...")
-                subprocess.run(["git", "-C", str(repo_root), "stash", "push", "-m", "pinkie-auto-update"], capture_output=True, timeout=15)
-                subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch], capture_output=True, text=True, timeout=45, check=True)
-                subprocess.run(["git", "-C", str(repo_root), "stash", "pop"], capture_output=True, timeout=15)
+                subprocess.run(["git", "-C", str(repo_root), "stash", "push", "-m", "pinkie-auto-update"], capture_output=True, timeout=15, **hidden_process_kwargs())
+                subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch], capture_output=True, text=True, timeout=45, check=True, **hidden_process_kwargs())
+                subprocess.run(["git", "-C", str(repo_root), "stash", "pop"], capture_output=True, timeout=15, **hidden_process_kwargs())
             log(f"  ✅ Git 仓库已同步到最新 ({branch})")
         except Exception as exc:
             log(f"  ⚠️ Git 拉取失败: {exc}")

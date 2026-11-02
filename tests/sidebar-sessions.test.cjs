@@ -55,7 +55,7 @@ test('double-click is coalesced; server label race retries the same client key',
   assert.equal(created[0].params.label,'Demo · 新会话 2');assert.equal(created[1].params.label,'Demo · 新会话 3');assert.equal(f.ctx.state.projects.Demo.length,1);
 });
 test('all four modes create sessions with their own namespace; plain chat does not acquire a folder',async()=>{
-  for(const mode of ['main','project','thinking','unrestricted']){
+  for(const mode of ['main','project','thinking','learning']){
     const f=harness({mode});await f.ctx.createProjectSession(null);
     assert.ok(f.calls.find(c=>c.method==='sessions.create').params.key.startsWith(`agent:${mode}:`));
     assert.equal(f.calls.some(c=>c.method==='pinkie.project.bind'),false);
@@ -98,7 +98,7 @@ test('session manager exposes one confirmed bulk delete for the current mode',()
   const list=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-session-list.js'),'utf8');
   assert.match(list,/全部删除/);
   assert.match(source,/askDeleteAllSessions/);
-  assert.match(source,/patchSession,askDeleteAllSessions,queueAutoTitles,toast/);
+  assert.match(source,/patchSession,askDeleteAllSessions,openSessionManagement,queueAutoTitles,toast/);
   assert.match(source,/archived:true/);
   assert.match(source,/targets\.slice\(offset, offset \+ 5\)/);
   assert.match(source,/项目文件夹里的真实文件不会被动/);
@@ -110,7 +110,7 @@ test('managed sessions scroll inside the sidebar instead of covering its footer'
 });
 test('folder project stores validated canonical path and returns the existing project on duplicate',async()=>{
   const state={projects:{},projectFolders:{},collapsed:{}};
-  const ctx={state,stateMode:'project',requestNativeFolder:async()=>({path:'/tmp/project',name:'Demo'}),gwRequest:async()=>({path:'/private/tmp/project'}),uniqueProjectName:x=>x,toast(){},save(){},schedule(){}};
+  const ctx={state,stateMode:'project',pageSessionKey:()=>"agent:project:main",requestNativeFolder:async()=>({path:'/tmp/project',name:'Demo'}),gwRequest:async()=>({path:'/private/tmp/project'}),uniqueProjectName:x=>x,toast(){},save(){},schedule(){}};
   vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('  async function addFolderProject('),source.indexOf('  async function copyProjectPath(')),ctx);
   assert.equal(await ctx.addFolderProject(),'Demo');assert.equal(state.projectFolders.Demo,'/private/tmp/project');
   assert.equal(await ctx.addFolderProject(),'Demo');assert.equal(Object.keys(state.projects).length,1);

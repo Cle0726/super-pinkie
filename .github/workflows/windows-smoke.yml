@@ -3,12 +3,8 @@ name: Windows smoke
 # Opens the packaged Windows App on a real Windows runner: a brand-new profile
 # and an upgraded one, all five modes switched in Edge, screenshots and logs
 # uploaded.  Manual runs test a published release or build this ref; the
-# release workflow calls it with the onedir it just built.  A push to a
-# fix/windows-* branch runs it too, because workflow_dispatch only sees
-# workflows that already exist on the default branch.
+# release and UI parity workflows call it with the onedir they just built.
 on:
-  push:
-    branches: ["fix/windows-*"]
   workflow_dispatch:
     inputs:
       package:
@@ -18,7 +14,7 @@ on:
         default: release
       release_tag:
         description: "Release to test when package=release"
-        default: v2.5.23
+        default: v2.5.26
       old_tag:
         description: "Older release that seeds the upgrade profile (empty = fresh profile only)"
         default: v2.5.16
@@ -42,23 +38,28 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PYTHONUTF8: "1"
-      # Push runs have no inputs: they build the pushed ref, or test the
-      # published release when the commit message carries [smoke-release].
-      PACKAGE: ${{ inputs.app_artifact != '' && 'artifact' || inputs.package || (contains(github.event.head_commit.message, '[smoke-release]') && 'release') || 'build' }}
-      RELEASE_TAG: ${{ inputs.release_tag || 'v2.5.23' }}
-      OLD_TAG: ${{ github.event_name == 'push' && 'v2.5.16' || inputs.old_tag }}
+      PACKAGE: ${{ inputs.app_artifact != '' && 'artifact' || inputs.package || 'build' }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'v2.5.26' }}
+      OLD_TAG: ${{ inputs.old_tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install smoke dependencies
-        run: python -m pip install --disable-pip-version-check playwright pillow psutil
+        run: python -m pip install --disable-pip-version-check playwright pillow psutil pywin32
 
       - uses: actions/setup-node@v4
-        if: env.PACKAGE == 'build'
         with:
           node-version: "24.20.0"
+      - name: Install packaged WebView2 capture dependencies
+        shell: pwsh
+        run: |
+          $deps = Join-Path $env:RUNNER_TEMP 'pinkie-ui-deps'
+          npm install --prefix $deps --no-save playwright ws
+          if ($LASTEXITCODE -ne 0) { throw 'UI capture dependencies failed' }
+          "PINKIE_UI_DEPS=$deps" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build this ref
         if: env.PACKAGE == 'build'
         shell: pwsh

@@ -1194,7 +1194,6 @@
         if (!isBusy(pane)) scheduleQueueRecovery(pane, `history:${reason}`, recent);
         // Normal first-load/manual history sync is silent.  Only close the
         // ribbon when a real offline/retry state was previously announced.
-        // A "won't retry" notice stays until a later real reply arrives.
         if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")
           && stoppedNoticeSession !== currentSessionKey() && stoppedNoticeSession !== "*") {
           setWatchdogStatus("recovered", "连接已恢复，当前回复已同步");
@@ -1452,8 +1451,6 @@
   const onRunFailure = () => {
     if (stoppedNoticeSession === "*") return;
     stoppedNoticeSession = "";
-    // The failure card alone does not prove a retry exists. Wait for the
-    // backend status before promising the user that it is retrying.
     void explainRunFailure();
     // A failed attempt is normally followed by a watchdog retry. Refreshing
     // the pane here briefly clears the live composer and causes a visible
@@ -1833,7 +1830,11 @@
       ledger.evidence.delete(ledger.evidence.values().next().value);
     }
   };
-  const queueDeliveryUnconfirmed = (item) => Boolean(item?.pendingRunId || item?.kind === "steered"
+  const queueReservedButUnsent = (item) => /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
+    && item?.sendAttempts === 0 && (!item?.sendState || (item?.sendState === "waiting-reconnect" && item?.__pinkieReservedUnsent === true))
+    && !item?.pendingRunId && item?.kind !== "steered"
+    && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer";
+  const queueDeliveryUnconfirmed = (item) => !queueReservedButUnsent(item) && Boolean(item?.pendingRunId || item?.kind === "steered"
     || item?.sendRunId || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
     || ["unconfirmed", "held", "delivery-unknown", "sending", "submitting", "failed"].includes(item?.sendState));
   const queueItemNeedsRecovery = (item) => {
@@ -1841,12 +1842,14 @@
     // Only a card still queued behind the completed run is known unsent.
     // Missing history is not proof that an accepted/in-flight steer failed;
     // leave those cards for delivery confirmation or an explicit user retry.
-    return item.sendState === "waiting-model";
+    return item.sendState === "waiting-model" || queueReservedButUnsent(item);
   };
   const normalizeQueuedItem = (item) => {
+    const reservedUnsent = queueReservedButUnsent(item);
     const {pendingRunId, sendError, sendRequestStartedAtMs, kind, ...rest} = item;
     return {
       ...rest,
+      ...(reservedUnsent ? {__pinkieReservedUnsent: true} : {}),
       // Native retry accepts waiting-reconnect, while its own send routine
       // immediately promotes it to sending when the socket is usable.
       sendState: "waiting-reconnect",
@@ -1919,8 +1922,11 @@
           if (items.some((item) => deliveredIds.has(item?.id))) return false;
         }
 
+        const hasWaitingCandidate = items.some((item) => !item?.localCommandName
+          && !queueDeliveryUnconfirmed(item)
+          && item?.sendState === "waiting-reconnect");
         const next = items.map((item) => {
-          if (!queueItemNeedsRecovery(item)) return item;
+          if (hasWaitingCandidate || normalized > 0 || !queueItemNeedsRecovery(item)) return item;
           normalized += 1;
           return normalizeQueuedItem(item);
         });
@@ -2534,7 +2540,7 @@
         if (!gatewayOfflineSince) gatewayOfflineSince = Date.now();
         wasConnected = false;
         previousClient = client;
-        setWatchdogStatus("offline", "连接暂时中断，碧琪正在等待上游恢复…");
+        setWatchdogStatus("offline", "碧琪暂时掉线了，正在重新连上…");
         return;
       }
       if (!wasConnected || clientChanged) {

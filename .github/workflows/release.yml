@@ -26,7 +26,7 @@ jobs:
     uses: ./.github/workflows/verify.yml
 
   source:
-    needs: windows-smoke
+    needs: [windows-smoke, ui-parity]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
           files: dist/super-pinkie-full-*.zip
 
   macos:
-    needs: windows-smoke
+    needs: verify
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -58,11 +58,17 @@ jobs:
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
       - name: Build self-contained macOS app
         run: ./desktop/macos/build.sh
-      - uses: softprops/action-gh-release@v2
+      - name: Keep the actual packaged macOS UI manifest
+        uses: actions/upload-artifact@v4
         with:
-          body_path: desktop/windows/release-notes.md
-          fail_on_unmatched_files: true
-          files: dist/super-pinkie-macos-*.zip
+          name: macos-ui-manifest
+          path: dist/macos-ui-manifest.json
+      - name: Keep the Mac package until both platforms pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: dist/super-pinkie-macos-*.zip
+          retention-days: 3
 
   windows:
     needs: verify
@@ -87,6 +93,11 @@ jobs:
       - name: Build Windows exe
         shell: pwsh
         run: .\build-win.ps1 -LegacyOneFile
+      - name: Keep the actual packaged Windows UI manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: dist/windows-ui-manifest.json
       - name: Pack Windows onedir and compatibility exe
         shell: pwsh
         run: |
@@ -128,8 +139,44 @@ jobs:
     with:
       app_artifact: windows-onedir
 
+  # These manifests are read back from each final App, after all overlays and
+  # cleanup. No platform UI exceptions: native runtimes are outside the scope.
+  ui-parity:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-ui-manifest
+          path: parity/mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: parity/windows
+      - name: Require the same injection order and resource hashes
+        run: python tools/ui-parity/bundle.py compare parity/mac/macos-ui-manifest.json parity/windows/windows-ui-manifest.json
+
+  macos-publish:
+    needs: [windows-smoke, ui-parity]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: desktop/windows/release-notes.md
+          fail_on_unmatched_files: true
+          files: dist/super-pinkie-macos-*.zip
+
   windows-publish:
-    needs: windows-smoke
+    needs: [windows-smoke, ui-parity]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

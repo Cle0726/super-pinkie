@@ -24,19 +24,6 @@ test('full-page note menus escape cards, fit inside the view, restore focus and 
 });
 
 test('learning stage cache keys match across the head fragment and both installers', () => {
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  for (const asset of ['css', 'js']) {
-    const key = fragment.match(new RegExp(`laolao-learning-stage\\.${asset}\\?v=([a-z]+\\d+)`))[1];
-    // CSS and JS advance independently; each install site must match the
-    // fragment's own key for that asset.
-    assert.match(key, /^learning\d+$/);
-    const macKeys = [...mac.matchAll(new RegExp(`laolao-learning-stage\\.${asset}\\?v=([a-z]+\\d+)`, 'g'))].map(match => match[1]);
-    assert.ok(macKeys.length >= 2);
-    assert.deepEqual([...new Set(macKeys)], [key]);
-    assert.match(windows, new RegExp(`laolao-learning-stage\\.${asset}\\?v=${key}`));
-    assert.match(windows, new RegExp(`'laolao-learning-stage\\.${asset}' = '${key}'`));
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-learning-stage.css', 'laolao-learning-stage.js'], 'assets': []});
   assert.deepEqual([...fs.readFileSync(path.join(root, 'installer/windows/apply-theme.ps1')).subarray(0, 3)], [0xef, 0xbb, 0xbf]);
 });

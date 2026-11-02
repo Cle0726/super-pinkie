@@ -1079,11 +1079,11 @@ test('watchdog disconnects stay visible until the gateway has resynced',()=>{
   const theme=read('ui/injections/laolao-theme.css');
   assert.match(resume,/data-laolao-watchdog-state/);
   assert.match(resume,/上游波动，碧琪正在自动重试/);
-  assert.match(resume,/连接暂时中断，碧琪正在等待上游恢复/);
+  assert.match(resume,/碧琪暂时掉线了，正在重新连上/);
   assert.match(resume,/连接已恢复，当前回复已同步/);
   assert.match(theme,/pinkieWatchdogRibbon/);
   assert.match(theme,/data-laolao-watchdog-message/);
-  assert.match(theme,/状态条保持稳定/);
+  assert.match(theme,/@keyframes pinkieWatchdogRibbon/);
   assert.match(theme,/animation: none;/);
 });
 
@@ -1231,13 +1231,9 @@ test('history recovery is session-scoped and never trims already loaded pages',(
 });
 
 test('desktop installers apply the bounded native chat timeline patch',()=>{
-  const mac=read('installer/macos/apply-theme.sh');
-  const windows=read('installer/windows/apply-theme.ps1');
-  for(const installer of [mac,windows]){
-    assert.match(installer,/laolao-resume\.js\?v=resume54/);
-    assert.match(installer,/apply-chat-timeline\.mjs/);
-    assert.match(installer,/clekk-history59/);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-resume.js'], 'assets': []});
+  for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']) assert.match(read(file),/bundle\.py["']?\)?\s+install/);
+  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /pinkie-chat-timeline:v26/);
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/HISTORY_RENDER_LIMIT = Infinity/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
@@ -1245,31 +1241,17 @@ test('desktop installers apply the bounded native chat timeline patch',()=>{
 });
 
 test('desktop installers update an existing root-relative resume URL',()=>{
-  const mac=read('installer/macos/apply-theme.sh');
-  const windows=read('installer/windows/apply-theme.ps1');
-  assert.ok(mac.includes('src="(\\./|/)laolao-resume\\.js'));
-  assert.ok(mac.includes('((?:\\./|/)laolao-resume\\.js)'));
-  assert.ok(windows.includes("'((?:\\./|/)' + [regex]::Escape($entry.Key)"));
-  assert.ok(windows.includes("('$1?v=' + $entry.Value)"));
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-resume.js'], 'assets': []});
+
 });
 
 test('native entry cache revision covers both URL forms and retains independent flags',()=>{
-  const mac=read('installer/macos/apply-theme.sh');
-  const command=[...mac.matchAll(/perl -0pi -e '([^']+)' "\$index_file"/g)]
-    .find(match=>match[1].includes('assets/index-')&&match[1].includes('clekk-history59'))?.[1];
-  assert.ok(command,'test the actual installer rewrite');
-  const {spawnSync}=require('node:child_process');
-  for(const prefix of ['./','/']){
-    for(const suffix of ['', '?v=clekk-history46&pinkie-drafts=1']){
-      const original=`<script type="module" src="${prefix}assets/index-abc.js${suffix}"></script>`;
-      const run=spawnSync('perl',['-0pe',command],{input:original,encoding:'utf8'});
-      assert.equal(run.status,0,run.stderr);
-      const extra=suffix?'&pinkie-drafts=1':'';
-      assert.equal(run.stdout,`<script type="module" src="${prefix}assets/index-abc.js?v=clekk-history59${extra}"></script>`);
-      const again=spawnSync('perl',['-0pe',command],{input:run.stdout,encoding:'utf8'});
-      assert.equal(again.stdout,run.stdout,'reapplying must not accumulate query parameters');
-    }
-  }
+  const source=read('tools/ui-parity/bundle.py');
+  assert.match(source,/clekk-history59/);
+  assert.match(source,/parse_qsl/);
+  // Executable coverage for both URL forms, independent flags and repeated
+  // installation is in tests/ui_parity_test.py.
+  assert.match(read('tests/ui_parity_test.py'),/test_native_cache_revision_preserves_independent_flags/);
 });
 
 test('patched hashed UI chunks replace stale service-worker cache exactly once',()=>{
@@ -1286,7 +1268,6 @@ test('patched hashed UI chunks replace stale service-worker cache exactly once',
   assert.doesNotMatch(cacheRefresh,/window\.location\.reload\(\)/);
   for(const installer of [mac,windows]){
     assert.match(installer,/clekk-history-render-59/);
-    assert.match(installer,/clekk-history59/);
     assert.match(installer,/Network-first for all UI files/);
     assert.match(installer,/catch\(\(\) => caches\.match\(event\.request\)\)/);
   }

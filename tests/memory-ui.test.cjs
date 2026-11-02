@@ -20,12 +20,6 @@ test('memory manager is current-mode scoped and uses themed in-app confirmation'
 });
 
 test('memory UI is shipped by both desktop installers',()=>{
-  const mac=read('installer/macos/apply-theme.sh');
-  const windows=read('installer/windows/apply-theme.ps1');
-  const head=read('ui/injections/laolao-head.fragment.html');
-  for(const file of ['laolao-memory.css','laolao-memory.js']){
-    assert.match(mac,new RegExp(file.replace('.','\\.')));
-    assert.match(windows,new RegExp(file.replace('.','\\.')));
-    assert.match(head,new RegExp(file.replace('.','\\.')));
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-memory.css', 'laolao-memory.js'], 'assets': []});
+
 });

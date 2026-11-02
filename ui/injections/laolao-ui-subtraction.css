@@ -330,10 +330,12 @@ html:not([data-laolao-plain-composer]) .chat-main {
   container-type: inline-size;
 }
 @container pinkiechat (max-width: 680px) {
+  /* 半屏（模式双开）也只排一行：功能按钮 … 模型 · 档位 ✦ 容量圈；
+     项目路径退到下一行做小字。以前拆成三行，按钮行右边空一大块，模型行又被拉散。 */
   html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control {
-    grid-row: 3 !important;
-    grid-column: 1 / 11 !important;
-    justify-self: start !important;
+    grid-row: 2 !important;
+    grid-column: 10 !important;
+    justify-self: end !important;
     min-width: 0 !important;
     max-width: 100% !important;
   }
@@ -350,17 +352,15 @@ html:not([data-laolao-plain-composer]) .chat-main {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-deep-think-btn, .laolao-context-viewer, .context-usage, .laolao-context-compact-btn) {
-    grid-row: 3 !important;
-  }
-  html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) {
+  html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]):not(#laolao-project-scope) {
     grid-row: 2 !important;
-    grid-column: 9 / -1 !important;
+    grid-column: 9 !important;
     min-width: 0 !important;
   }
+  html:not([data-laolao-plain-composer]) .agent-chat__input { row-gap: 4px !important; }
   html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__composer-status-stack { grid-row: 4 !important; }
   html:not([data-laolao-plain-composer]) #laolao-project-scope {
-    grid-row: 4 !important;
+    grid-row: 3 !important;
     grid-column: 1 / -1 !important;
     justify-self: start !important;
     max-width: 100% !important;
@@ -430,3 +430,19 @@ html[data-pinkie-night]:is([data-laolao-workspace-split="1"], [data-laolao-works
 
 /* 对话栏去掉用户不需要的设置齿轮，侧栏设置入口保留。 */
 .agent-chat__input .chat-settings-popover-wrapper { display: none !important; }
+
+/* 输入框下面那一行不留莫名的空当：
+   - 模型名和下拉箭头贴在一起，不按隐藏的原始长名字撑宽；
+   - 「手动整理」只是容量圈弹层的定位锚，透明但以前照样占宽，把容量圈推得老远。 */
+html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control :is(details, .chat-controls__inline-select-trigger) {
+  width: auto !important;
+  flex: 0 1 auto !important;
+  justify-content: flex-start !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input .laolao-context-compact-btn {
+  width: 28px !important;
+  min-width: 0 !important;
+  max-width: 28px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
