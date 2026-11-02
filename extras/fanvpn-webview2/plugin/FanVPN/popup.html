@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep: #050810;
+      --bg-base: #0A0E1A;
+      --bg-elev: #131B2E;
+      --bg-card: #0F1525;
+      --line: rgba(120, 200, 255, 0.08);
+      --line-strong: rgba(120, 200, 255, 0.18);
+      --text-primary: #E8F1FF;
+      --text-secondary: #8FA3BF;
+      --text-tertiary: #5A6B85;
+      --neon: #00E5FF;
+      --neon-soft: rgba(0, 229, 255, 0.15);
+      --neon-glow: rgba(0, 229, 255, 0.4);
+      --green: #00FF94;
+      --amber: #FFB547;
+      --danger: #FF4757;
+    }
+
+    html { background: var(--bg-base); }
+
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 380px;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.5s ease;
+    }
+
+    /* 网格背景纹理 */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(120, 200, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 200, 255, 0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black, transparent);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black, transparent);
+    }
+
+    /* 顶部光斑 */
+    body::after {
+      content: "";
+      position: fixed;
+      top: -100px; left: 50%;
+      transform: translateX(-50%);
+      width: 320px; height: 240px;
+      background: radial-gradient(ellipse, rgba(0, 229, 255, 0.12), transparent 70%);
+      filter: blur(40px);
+      pointer-events: none;
+      z-index: 0;
+      transition: background 0.5s ease;
+    }
+
+    body.connected::after {
+      background: radial-gradient(ellipse, rgba(0, 255, 148, 0.18), transparent 70%);
+    }
+    body.connecting::after {
+      background: radial-gradient(ellipse, rgba(255, 181, 71, 0.15), transparent 70%);
+    }
+
+    #mainPage, #nodePage {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ==================== 主界面 ==================== */
+    .header {
+      padding: 18px 20px 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .brand {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 16px; font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
+    }
+    .brand-mark {
+      width: 24px; height: 24px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #00E5FF, #00FF94);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--bg-deep);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.3);
+    }
+
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 11px; border-radius: 100px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line-strong) !important;
+      font-size: 11px; font-weight: 600;
+      transition: all 0.3s;
+      color: var(--text-secondary) !important;
+    }
+    .status-pill #statusText {
+      color: inherit !important;
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-tertiary) !important;
+      transition: all 0.3s;
+      box-shadow: 0 0 0 0 rgba(0, 229, 255, 0);
+    }
+
+    /* 状态颜色覆盖 */
+    .status-pill[data-state="connecting"] {
+      border-color: rgba(255, 181, 71, 0.4) !important;
+      color: var(--amber) !important;
+      background: rgba(255, 181, 71, 0.08);
+    }
+    .status-pill[data-state="connecting"] .status-dot {
+      background: var(--amber) !important;
+      box-shadow: 0 0 8px var(--amber);
+      animation: dotBlink 1s infinite;
+    }
+    .status-pill[data-state="connected"] {
+      border-color: rgba(0, 255, 148, 0.4) !important;
+      color: var(--green) !important;
+      background: rgba(0, 255, 148, 0.08);
+    }
+    .status-pill[data-state="connected"] .status-dot {
+      background: var(--green) !important;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulseDot 2s infinite;
+    }
+
+    @keyframes dotBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes pulseDot {
+      0% { box-shadow: 0 0 0 0 rgba(0, 255, 148, 0.6); }
+      70% { box-shadow: 0 0 0 6px rgba(0, 255, 148, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 255, 148, 0); }
+    }
+
+    /* ==================== Hero 连接区 ==================== */
+    .hero {
+      padding: 28px 20px 22px;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+
+    .shield-area {
+      position: relative; width: 156px; height: 156px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* 三层环,适配深色主题 */
+    .ring3, .ring2, .ring1 {
+      position: absolute;
+      border-radius: 50%;
+      transition: all 0.4s ease;
+    }
+    .ring3 {
+      width: 156px; height: 156px;
+      border: 1px solid rgba(120, 200, 255, 0.1);
+    }
+    .ring2 {
+      width: 122px; height: 122px;
+      border: 1px solid rgba(120, 200, 255, 0.16);
+    }
+    .ring1 {
+      width: 92px; height: 92px;
+      border: 1px solid rgba(120, 200, 255, 0.22);
+      background: rgba(0, 229, 255, 0.02);
+    }
+    .ring3.on { border-color: rgba(0, 255, 148, 0.25); }
+    .ring2.on { border-color: rgba(0, 255, 148, 0.35); box-shadow: 0 0 24px rgba(0, 255, 148, 0.15); }
+    .ring1.on {
+      border-color: rgba(0, 255, 148, 0.5);
+      background: rgba(0, 255, 148, 0.06);
+      box-shadow: inset 0 0 30px rgba(0, 255, 148, 0.1);
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.55; }
+    }
+    .ring3.pulse { animation: pulse 2.5s infinite; }
+    .ring2.pulse { animation: pulse 2.5s infinite 0.3s; }
+
+    /* 中心连接按钮 */
+    #connectBtn {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 2;
+      transition: all 0.3s ease;
+      background: linear-gradient(160deg, #1A2340, #0F1525);
+      border: 1px solid var(--line-strong);
+      box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    #connectBtn:hover {
+      transform: scale(1.04);
+      border-color: rgba(0, 229, 255, 0.5);
+      box-shadow: 0 8px 32px rgba(0, 229, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    #connectBtn:active { transform: scale(0.96); }
+
+    #connectBtn.connecting {
+      background: linear-gradient(160deg, #2A2210, #1A1505);
+      border-color: rgba(255, 181, 71, 0.5);
+      box-shadow: 0 8px 32px rgba(255, 181, 71, 0.2);
+    }
+
+    #connectBtn.connected {
+      background: linear-gradient(160deg, #00E5FF, #00FF94);
+      border-color: transparent;
+      box-shadow:
+        0 8px 32px rgba(0, 255, 148, 0.4),
+        0 0 0 1px rgba(0, 255, 148, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    /* SVG 颜色由 popup.js 控制(setShieldColor),保持原逻辑 */
+    #btnIcon { transition: all 0.3s; }
+
+    /* Hero 文案 */
+    .hero-text { text-align: center; }
+    .hero-title {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      transition: color 0.3s;
+      line-height: 1.2;
+    }
+    .hero-sub {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+      font-weight: 400;
+      min-height: 16px;
+    }
+
+    /* 当前节点卡片 */
+    .node-card {
+      width: 100%;
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid var(--line);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .node-card:hover {
+      border-color: var(--line-strong);
+      background: var(--bg-elev);
+      transform: translateY(-1px);
+    }
+    .node-left { display: flex; align-items: center; gap: 11px; }
+
+    .flag-box {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-tertiary);
+      border: 1px solid var(--line);
+      transition: all 0.3s;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .flag-box.active {
+      background: rgba(0, 229, 255, 0.1);
+      color: var(--neon);
+      border-color: rgba(0, 229, 255, 0.3);
+    }
+
+    .node-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+    }
+    .node-sub {
+      font-size: 11px;
+      margin-top: 2px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      transition: color 0.3s;
+    }
+    .node-sub.active { color: var(--green); }
+
+    .chevron {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.3px;
+      transition: color 0.2s;
+    }
+    .node-card:hover .chevron { color: var(--neon); }
+
+    /* 通知条(v1.5.2) */
+    .notice-bar {
+      display: none;  /* 默认隐藏,有通知时由 JS 控制 */
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: rgba(0, 229, 255, 0.06);
+      border-top: 1px solid rgba(0, 229, 255, 0.15);
+      border-bottom: 1px solid rgba(0, 229, 255, 0.10);
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .notice-bar.show { display: flex; }
+    .notice-icon {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      color: var(--neon);
+    }
+    .notice-text {
+      flex: 1;
+      word-break: break-word;
+    }
+    .notice-close {
+      flex-shrink: 0;
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 14px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 3px;
+      transition: color .15s, background .15s;
+      user-select: none;
+    }
+    .notice-close:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* 底部 */
+    .footer {
+      padding: 14px 20px 16px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .chip {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      padding: 5px 14px;
+      border-radius: 100px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--line);
+      letter-spacing: 0.4px;
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      transition: all .18s ease;
+    }
+    .chip:hover {
+      color: var(--text-secondary);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .chip.active {
+      color: var(--green);
+      border-color: rgba(0, 255, 148, 0.35);
+      background: rgba(0, 255, 148, 0.06);
+    }
+    .chip.active:hover {
+      background: rgba(0, 255, 148, 0.10);
+    }
+    .footer-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      letter-spacing: 0.3px;
+      transition: color .15s;
+    }
+    .footer-link:hover {
+      color: var(--neon);
+    }
+
+    /* ==================== 节点列表页 ==================== */
+    #nodePage { display: none; }
+
+    .list-header {
+      padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-base);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+    .list-header-left { display: flex; align-items: center; gap: 8px; }
+
+    .back-btn {
+      font-size: 22px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0 6px 0 0;
+      line-height: 1;
+      font-weight: 300;
+      transition: color 0.2s;
+    }
+    .back-btn:hover { color: var(--neon); }
+
+    .list-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+    }
+
+    .refresh-btn {
+      font-size: 12px;
+      color: var(--neon);
+      font-weight: 600;
+      background: rgba(0, 229, 255, 0.06);
+      border: 1px solid rgba(0, 229, 255, 0.2);
+      cursor: pointer;
+      padding: 5px 10px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover {
+      background: rgba(0, 229, 255, 0.12);
+      border-color: rgba(0, 229, 255, 0.4);
+    }
+
+    /* 节点列表项 */
+    #nodeList { padding: 4px 0; }
+
+    .node-item {
+      padding: 12px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .node-item:last-child { border-bottom: none; }
+    .node-item:hover {
+      background: rgba(0, 229, 255, 0.04);
+    }
+    .node-item.disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .item-left { display: flex; align-items: center; gap: 11px; }
+
+    .item-flag {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-tertiary);
+      border: 1px solid var(--line);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .item-flag.active {
+      background: rgba(0, 229, 255, 0.1);
+      color: var(--neon);
+      border-color: rgba(0, 229, 255, 0.3);
+    }
+
+    .item-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+    }
+    .item-status {
+      font-size: 10.5px;
+      margin-top: 2px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .item-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 状态指示灯 */
+    .si {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .si-ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .si-fail { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+    .si-checking {
+      background: var(--neon);
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+
+    /* 选中圆圈 */
+    .check-on {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--neon), var(--green));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    }
+    .check-on::after {
+      content: '';
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--bg-deep);
+    }
+    .check-off {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--line-strong);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* 滚动条美化 */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 229, 255, 0.3); }
+  </style>
+</head>
+<body>
+
+<!-- 主界面 -->
+<div id="mainPage">
+  <div class="header">
+    <span class="brand">
+      <span class="brand-mark">F</span>
+      <span>FanVPN</span>
+    </span>
+    <div class="status-pill" id="statusPill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">未连接</span>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="shield-area">
+      <div class="ring3" id="ring3"></div>
+      <div class="ring2" id="ring2"></div>
+      <div class="ring1" id="ring1"></div>
+      <button id="connectBtn">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" id="btnIcon">
+          <path d="M16 3L4 8v9c0 6.6 5 12.7 12 14 7-1.3 12-7.4 12-14V8L16 3z" stroke="#5A6B85" stroke-width="1.8" fill="none" stroke-linejoin="round" id="shieldPath"/>
+          <path d="M11 16l4 4 6-7" stroke="#5A6B85" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="checkPath"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="hero-text">
+      <div class="hero-title" id="heroTitle">点击连接</div>
+      <div class="hero-sub" id="heroSub">安全访问全球网络</div>
+    </div>
+
+    <div class="node-card" id="nodeCard">
+      <div class="node-left">
+        <div class="flag-box" id="nodeFlag"></div>
+        <div>
+          <div class="node-name" id="nodeName">加载中…</div>
+          <div class="node-sub" id="nodeSub">自动选择</div>
+        </div>
+      </div>
+      <span class="chevron" id="switchBtn">选择 ›</span>
+    </div>
+  </div>
+
+  <!-- 通知条(v1.5.2,有内容时由 JS 显示) -->
+  <div class="notice-bar" id="noticeBar">
+    <svg class="notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <div class="notice-text" id="noticeText"></div>
+    <div class="notice-close" id="noticeClose">✕</div>
+  </div>
+
+  <div class="footer">
+    <span class="chip" id="modeChip" title="点击切换分流模式">智能分流</span>
+    <a href="https://fanvpn.net" target="_blank" rel="noopener noreferrer" class="footer-link">官网:fanvpn.net</a>
+  </div>
+</div>
+
+<!-- 节点列表页 -->
+<div id="nodePage">
+  <div class="list-header">
+    <div class="list-header-left">
+      <button class="back-btn" id="backBtn">‹</button>
+      <span class="list-title">选择节点</span>
+    </div>
+    <button class="refresh-btn" id="refreshBtn">↻ 检测</button>
+  </div>
+  <div id="nodeList"></div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
