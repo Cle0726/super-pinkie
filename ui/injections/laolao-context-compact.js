@@ -292,19 +292,13 @@
       + `<div class="lcv-bar" aria-hidden="true"></div>`
       + `<ul class="lcv-rows"></ul>`
       + `<small class="lcv-muted lcv-note"></small>`
-      + `<footer class="lcv-actions"><button type="button" class="laolao-context-viewer__compact">现在整理上下文</button>`
-      + `<div class="lcv-confirm" hidden><small class="lcv-muted">浓缩较早内容，最近对话和工作检查点继续保留。</small><div><button type="button" class="lcv-cancel">取消</button><button type="button" class="lcv-go">开始整理</button></div></div></footer>`
+      + `<footer class="lcv-actions"><button type="button" class="laolao-context-viewer__compact">现在整理上下文</button></footer>`
       + `</section>`;
     const panel = viewer.querySelector(".laolao-context-viewer__popover");
     viewer.__lcvPanel = panel;
-    const confirm = panel.querySelector(".lcv-confirm");
-    const main = panel.querySelector(".laolao-context-viewer__compact");
-    const setConfirm = (open) => { confirm.hidden = !open; main.hidden = open; if (open) panel.querySelector(".lcv-go").focus(); };
-    main.addEventListener("click", (event) => { event.preventDefault(); setConfirm(true); });
-    panel.querySelector(".lcv-cancel").addEventListener("click", (event) => { event.preventDefault(); setConfirm(false); main.focus(); });
-    panel.querySelector(".lcv-go").addEventListener("click", (event) => {
+    // One click compacts: the button is already behind the panel, no second confirm.
+    panel.querySelector(".laolao-context-viewer__compact").addEventListener("click", (event) => {
       event.preventDefault();
-      setConfirm(false);
       viewer.removeAttribute("open");
       compactFromPanel();
     });
@@ -315,7 +309,7 @@
         usageFetchedAt = 0;
         fetchContextCapacity();
         renderContextViewer();
-      } else setConfirm(false);
+      }
     });
     return viewer;
   };
@@ -415,10 +409,6 @@
     const disabled = compacting || streaming || !ratio;
     if (main.disabled !== disabled) main.disabled = disabled;
     placePanel(viewer);
-    if (disabled) {
-      const confirm = panel.querySelector(".lcv-confirm");
-      if (!confirm.hidden) { confirm.hidden = true; main.hidden = false; }
-    }
   };
 
   const renderCompactionNotice = () => {
@@ -685,13 +675,11 @@
 .lcv-row.lcv-c-messages>i{background:var(--lcv-messages)}.lcv-row.lcv-c-tools>i{background:var(--lcv-tools)}.lcv-row.lcv-c-rules>i{background:var(--lcv-rules)}.lcv-row.lcv-c-files>i{background:var(--lcv-files)}.lcv-row.lcv-c-skills>i{background:var(--lcv-skills)}.lcv-row.lcv-c-reserve>i{background:repeating-linear-gradient(135deg,var(--lcv-reserve) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--lcv-reserve)}.lcv-row.lcv-c-free>i{background:transparent;box-shadow:inset 0 0 0 1px var(--lcv-reserve)}
 .lcv-row.lcv-c-free,.lcv-row.lcv-c-reserve{color:var(--lcv-muted)}
 .lcv-note{display:block;margin-top:12px;padding-top:10px;border-top:1px solid rgba(119,107,136,.14);font-size:11px;line-height:1.5}.lcv-note:empty{display:none}
-.lcv-actions{margin-top:10px}.laolao-context-viewer__compact{display:block;width:100%;height:32px;border:1px solid rgba(184,99,136,.24);border-radius:10px;background:rgba(255,255,255,.78);color:inherit;font:500 12px/1 inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease}.laolao-context-viewer__compact:hover:not(:disabled){background:#fff;border-color:rgba(205,91,141,.38)}.laolao-context-viewer__compact:disabled{cursor:default;opacity:.6}.laolao-context-viewer__compact[hidden]{display:none}
-.lcv-confirm{display:grid;gap:8px}.lcv-confirm[hidden]{display:none}.lcv-confirm small{font-size:11px;line-height:1.45}.lcv-confirm div{display:flex;justify-content:flex-end;gap:6px}.lcv-confirm button{height:28px;padding:0 12px;border:1px solid rgba(184,99,136,.22);border-radius:999px;background:rgba(255,255,255,.6);color:inherit;font:500 11.5px/1 inherit;cursor:pointer}.lcv-confirm .lcv-go{border-color:rgba(205,76,132,.3);background:#d85b91;color:#fff}
+.lcv-actions{margin-top:10px}.laolao-context-viewer__compact{display:block;width:100%;height:32px;border:1px solid rgba(184,99,136,.24);border-radius:10px;background:rgba(255,255,255,.78);color:inherit;font:500 12px/1 inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease}.laolao-context-viewer__compact:hover:not(:disabled){background:#fff;border-color:rgba(205,91,141,.38)}.laolao-context-viewer__compact:disabled{cursor:default;opacity:.6}
 .laolao-context-viewer__popover :is(button):focus-visible{outline:2px solid rgba(207,66,130,.45);outline-offset:1px}
 html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover{--lcv-muted:#a99bb0;--lcv-reserve:rgba(220,205,230,.3);--lcv-free:rgba(255,255,255,.08)}
 html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-muted,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-free span,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-reserve span{color:var(--lcv-muted)!important}
 html[data-pinkie-night]:not(#_n) .lcv-note{border-top-color:rgba(255,255,255,.08)}
-html[data-pinkie-night]:not(#_n) .lcv-confirm .lcv-go{background:#c94f86!important;border-color:transparent!important;color:#fff!important}
 @media(prefers-reduced-motion:reduce){.lcv-bar i,.laolao-context-viewer__compact{transition:none}.laolao-context-viewer__popover.is-floating{animation:none}}
 .agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
