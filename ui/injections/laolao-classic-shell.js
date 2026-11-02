@@ -132,6 +132,18 @@
       label: () => "检查更新",
       icon: '<path d="M18.5 8A7 7 0 1 0 19 14"></path><path d="M18.5 3.5V8h-4.5"></path>',
     },
+    {
+      key: "presentation",
+      selectors: "#pinkie-laser-entry",
+      label: () => "演示工具",
+      icon: '<path d="M4 20 14 10M13 4l1-2 1 2 2 1-2 1-1 2-1-2-2-1zM18 13l.7-1.4.7 1.4 1.4.7-1.4.7-.7 1.4-.7-1.4-1.4-.7z"></path>',
+    },
+    {
+      key: "presentation-settings",
+      selectors: "#pinkie-laser-entry",
+      label: () => "演示工具设置",
+      icon: '<circle cx="12" cy="12" r="3"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path>',
+    },
   ];
 
   let footerMenu = null;
@@ -170,7 +182,15 @@
       const original = actionNode(spec);
       if (!original) continue;
       const originalItem = footerItemFor(original);
+      if (spec.key.startsWith("presentation") && !["chat", "project", "thinking", "learning"].includes(activeMode())) {
+        if (originalItem?.dataset.laolaoPolishSecondary === "1") {
+          delete originalItem.dataset.laolaoFooterSecondary;
+          delete originalItem.dataset.laolaoPolishSecondary;
+        }
+        continue;
+      }
       if (originalItem) originalItem.dataset.laolaoFooterSecondary = "1";
+      if (spec.key.startsWith("presentation") && originalItem) originalItem.dataset.laolaoPolishSecondary = "1";
       const row = document.createElement("button");
       row.type = "button";
       row.className = "laolao-footer-overflow__item";
@@ -181,7 +201,8 @@
       row.disabled = original.matches?.(":disabled") === true;
       row.addEventListener("click", () => {
         closeFooterMenu();
-        original.click();
+        if (spec.key === "presentation-settings") window.__laolaoLaser?.openSettings?.(footerMenuButton);
+        else original.click();
       });
       rows.push(row);
     }

@@ -63,7 +63,7 @@ test('settings page is loaded by the head fragment and both installers with one 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
   // CSS and JS advance independently; each must use its own current key.
-  const versions = {'laolao-settings-user.css': 3, 'laolao-settings-user.js': 4};
+  const versions = {'laolao-settings-user.css': 3, 'laolao-settings-user.js': 5};
   for (const file of ['laolao-settings-user.css', 'laolao-settings-user.js']) {
     const versioned = new RegExp(`${file.replace(/[.-]/g, '\\$&')}\\?v=settingsuser${versions[file]}`);
     assert.match(head, versioned);

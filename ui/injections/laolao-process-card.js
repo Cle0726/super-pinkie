@@ -31,6 +31,9 @@
     if (routed) return routed;
     return document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
   };
+  // Only the four included modes get the new segmented presentation. Other
+  // sessions retain the previous single combined thought at the top.
+  const segmentedAllowed = () => /^agent:(?:main|project|thinking|learning):/.test(sessionKey());
   const publishRunState = (key, active) => {
     if (!key) return;
     const runs = window.__pinkieActiveChatRuns instanceof Map
@@ -54,6 +57,7 @@
   window.__pinkieProcessKeep = keep;
   for (const key of Object.keys(store)) keep.add(key);
   const processCards = new Map();
+  const processCardKeys = new WeakMap();
   const dirtyCards = new Set();
   const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
   // v8: show each received thought before folding, including a block delivered
@@ -92,10 +96,11 @@
   // boundaryAt: when the model last started a new call (turn start, a tool
   // result). Some providers deliver a whole thought in one chunk just before
   // acting, so the wait since that boundary is the real thinking time.
-  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
+  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, boundaryToolId: "", buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
   const liveCardKey = () => {
     const known = processCards.get(run.key);
-    if (known?.isConnected && known.querySelector('details.pinkie-process[data-live="1"]')) return run.key;
+    if (known?.isConnected && known.dataset.pinkieProcess === run.key
+        && known.querySelector('details.pinkie-process[data-live="1"]')) return run.key;
     let key = "";
     for (const [id, card] of processCards) {
       if (card.isConnected && card.querySelector('details.pinkie-process[data-live="1"]')) key = id;
@@ -105,23 +110,87 @@
   const resolveKey = () => {
     const key = liveCardKey();
     if (key && key !== run.key) {
+      // The optimistic user row can be replaced by its durable history row
+      // while this very run is still streaming. Carry the current thought and
+      // its transient animation/open state to the new live card immediately.
+      const oldKey = run.key, previous = oldKey && store[oldKey];
+      if (run.startedAt && run.session === sessionKey() && previous?.text && !store[key]?.text) {
+        store[key] = {...previous, eps: previous.eps?.map(ep => ({...ep})),
+          turn: {session: run.session, id: key.slice(('pinkie:process:' + run.session + ':').length)}};
+        keep.add(key);
+        episodesOf(previous).forEach((_, index) => {
+          const from = epKey(oldKey, index), to = epKey(key, index);
+          if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
+          if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+        });
+        save();
+      }
       run.key = key;
       if (run.buffer) { appendThinking(run.buffer); run.buffer = ""; }
     }
     return run.key;
   };
+  // v12: each thinking burst is its own episode, anchored before the step that
+  // followed it. A single box at the top of the card made later thoughts
+  // appear above everything and pushed the whole card around while typing.
+  // `anchor` = how many work rows existed when the burst started; the box sits
+  // in front of row #anchor, or at the bottom of the card until that row exists.
+  const epKey = (key, index) => `${key}#${index}`;
+  const episodesOf = (record) => !segmentedAllowed() && record?.text
+    ? [{text: record.text, ms: record.ms || 0, anchor: 0, legacy: true}]
+    : Array.isArray(record?.eps) && record.eps.length ? record.eps
+    : record?.text ? [{text: record.text, ms: record.ms || 0, anchor: 0, legacy: true}] : [];
+  const overflowCount = (node) => node?.matches?.(".chat-timeline-overflow")
+    ? Number(/\d+/.exec(node.querySelector("summary")?.textContent || "")?.[0]) || 0 : 0;
+  function rowAnchor(key) {
+    const card = processCards.get(key);
+    const projectedCount = card?.dataset?.pinkieRowCount;
+    if (projectedCount !== undefined && Number.isFinite(Number(projectedCount))) return Number(projectedCount);
+    const rows = card?.querySelector?.(".pinkie-process__rows");
+    if (!rows) return null;
+    const kids = [...rows.children], hidden = overflowCount(kids[0]);
+    return hidden ? kids.length - 1 + hidden : kids.length;
+  }
   function appendThinking(text) {
     const key = resolveKey();
     if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
     record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
-    const before = record.text.length;
-    if (!run.thinkingSince) { run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1; if (record.text) record.text += "\n\n"; }
-    const combined = record.text + text, dropped = Math.max(0, combined.length - MAX_TEXT);
-    const previous = typing.get(key);
+    if (!segmentedAllowed()) {
+      if (!run.thinkingSince) {
+        run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1;
+        if (record.text) record.text += "\n\n";
+      }
+      const before = record.text.length, combined = record.text + text;
+      const dropped = Math.max(0, combined.length - MAX_TEXT), id = epKey(key, 0), previous = typing.get(id);
+      if (previous && dropped) { previous.from = Math.max(0, previous.from - dropped); previous.to = Math.max(0, previous.to - dropped); }
+      record.text = combined.slice(-MAX_TEXT);
+      typeOut(id, Math.max(0, before - dropped), record.text.length);
+      record.at = Date.now(); keep.add(key); save();
+      return;
+    }
+    if (!Array.isArray(record.eps)) record.eps = record.text ? [{text: record.text, ms: record.ms || 0, anchor: 0, legacy: true}] : [];
+    if (!run.thinkingSince) {
+      run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1;
+      if (record.text) record.text += "\n\n";
+      record.eps.push({text: "", ms: 0, anchor: rowAnchor(key),
+        ...(run.boundaryToolId ? {afterTool: run.boundaryToolId, pendingTool: true} : {})});
+    }
+    const index = record.eps.length - 1, ep = record.eps[index], before = ep.text.length;
+    ep.text += text;
+    record.text = (record.text + text).slice(-MAX_TEXT);
+    // Older bursts give up their text first; the live one is trimmed last.
+    let over = record.eps.reduce((sum, item) => sum + item.text.length, 0) - MAX_TEXT;
+    for (const item of record.eps) {
+      if (over <= 0 || item === ep) break;
+      const cut = Math.min(over, item.text.length);
+      item.text = item.text.slice(cut); over -= cut;
+    }
+    const dropped = Math.max(0, over);
+    if (dropped) ep.text = ep.text.slice(dropped);
+    const id = epKey(key, index), previous = typing.get(id);
     if (previous && dropped) { previous.from = Math.max(0, previous.from - dropped); previous.to = Math.max(0, previous.to - dropped); }
-    record.text = combined.slice(-MAX_TEXT);
-    typeOut(key, Math.max(0, before - dropped), record.text.length);
+    typeOut(id, Math.max(0, before - dropped), ep.text.length);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
     save();
@@ -129,11 +198,12 @@
   function stopThinking() {
     if (!run.thinkingSince) return;
     const record = store[run.key];
-    if (record) { record.ms += Date.now() - run.thinkingSince; save(); }
+    const spent = Date.now() - run.thinkingSince;
+    if (record) { record.ms += spent; const ep = segmentedAllowed() && record.eps?.at(-1); if (ep) ep.ms += spent; save(); }
     run.thinkingSince = 0;
     // A stream may have finished drawing while the model was still thinking.
     // Its one-second reading hold starts after thinking stops, never before.
-    const t = typing.get(run.key);
+    const t = record ? typing.get(epKey(run.key, segmentedAllowed() && record.eps?.length ? record.eps.length - 1 : 0)) : null;
     if (t) t.doneAt = 0;
   }
   function setState(state) {
@@ -154,7 +224,7 @@
         if (data.phase === "start") {
           if (run.state !== "asking" || run.session !== key) {
             stopThinking();
-            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), thinkingSince: 0, buffer: "", confetti: "", migrate: null});
+            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), boundaryToolId: "", thinkingSince: 0, buffer: "", confetti: "", migrate: null});
             run.oops.clear();
           }
           publishRunState(key, true);
@@ -169,7 +239,7 @@
       // content/tool event so lifecycle.end can clear the live card normally.
       if (!run.startedAt && Date.now() - run.doneAt > 3000
           && ["thinking", "assistant", "tool"].includes(payload.stream)) {
-        Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(),
+        Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), boundaryToolId: "",
           thinkingSince: 0, buffer: "", migrate: null});
         publishRunState(key, true);
       }
@@ -181,7 +251,11 @@
       if (payload.stream === "assistant") { if (run.state !== "asking") setState("writing"); return; }
       if (payload.stream === "tool") {
         if (data.phase === "start") setState(data.name === "ask_user" ? "asking" : "working");
-        else if (data.phase === "result") { run.boundaryAt = Date.now(); if (run.state === "working") setState("thinking"); }
+        else if (data.phase === "result") {
+          run.boundaryAt = Date.now();
+          run.boundaryToolId = String(data.toolCallId || data.tool_call_id || data.callId || "");
+          if (run.state === "working") setState("thinking");
+        }
       }
       return;
     }
@@ -206,7 +280,9 @@
     if (run.key && store[run.key]) rerender();
   }
 
-  function renderThinking(slot) {
+  // Lit owns the slots themselves; this script only owns the boxes inside
+  // those slots. A row or tail slot can be destroyed/reused by Lit safely.
+  function hydrate(slot) {
     const key = slot.dataset.pinkieThinking || "";
     let record = store[key];
     if (!record?.text) {
@@ -215,58 +291,144 @@
         || Object.values(store).find(record => record.turn?.id && key === 'pinkie:process:' + record.turn.session + ':' + record.turn.id);
       if (previous?.text) { record = store[key] = {...previous}; keep.add(key); save(); }
     }
-    if (!record?.text && slot.pinkieHistoryThinking) {
-      record = store[key] = {text: String(slot.pinkieHistoryThinking).slice(-MAX_TEXT), ms: 0, count: 1,
+    const history = segmentedAllowed() && Array.isArray(slot.pinkieHistorySegments) ? slot.pinkieHistorySegments.filter(ep => ep?.text) : [];
+    if (!record?.text && (history.length || slot.pinkieHistoryThinking)) {
+      const text = history.length ? history.map(ep => ep.text).join("\n\n") : String(slot.pinkieHistoryThinking);
+      record = store[key] = {text: text.slice(-MAX_TEXT), ms: 0, count: history.length || 1,
+        ...(history.length ? {eps: history.map(ep => ({text: ep.text, ms: 0, anchor: ep.anchor}))} : {}),
         at: Date.now(), fromHistory: true};
       record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
       keep.add(key); save();
     }
-    const thinking = Boolean(run.thinkingSince && run.key === key);
-    if (!record || !record.text) { if (slot.firstChild) slot.replaceChildren(); return; }
-    const now = performance.now(), t = typing.get(key);
-    const typed = t ? Math.min(record.text.length, Math.floor(typedLength(t, now))) : record.text.length;
-    const isTyping = typed < record.text.length;
+    const anchors = slot.pinkieToolAnchors || {};
+    let resolved = false;
+    for (const ep of record?.eps || []) {
+      if (ep.pendingTool && Object.prototype.hasOwnProperty.call(anchors, ep.afterTool)) {
+        ep.anchor = anchors[ep.afterTool]; ep.pendingTool = false; resolved = true;
+      }
+    }
+    if (resolved) save();
+    // The final history may know row positions more accurately than a live DOM
+    // snapshot. Match every episode first; never rewrite an old combined entry.
+    if (!run.startedAt && history.length && Array.isArray(record?.eps)
+        && history.length === record.eps.length
+        && history.every((ep, i) => !record.eps[i].legacy && String(ep.text).trim() === String(record.eps[i].text).trim())) {
+      let changed = false;
+      history.forEach((ep, i) => { if (record.eps[i].anchor !== ep.anchor) { record.eps[i].anchor = ep.anchor; changed = true; } });
+      if (changed) save();
+    }
+    return record;
+  }
+
+  function placeFor(card, slot, ep) {
+    if (ep.pendingTool) return [...card.querySelectorAll('[data-pinkie-thinking]')]
+      .find(node => node.dataset.pinkieThinkingTail === "1") || slot;
+    if (ep.legacy || !ep.anchor) return slot;
+    const slots = [...card.querySelectorAll('[data-pinkie-thinking]')];
+    const target = slots.find(node => Number(node.dataset.pinkieThinkingSeg) === ep.anchor);
+    if (target) return target;
+    const count = Number(card.dataset.pinkieRowCount);
+    if (!Number.isFinite(count)) return slot; // compatible with an older renderer
+    if (ep.anchor >= count) return slots.find(node => node.dataset.pinkieThinkingTail === "1") || slot;
+    return null; // the matching row is inside a closed overflow section
+  }
+
+  function renderThinking(slot) {
+    if (slot.dataset.pinkieThinkingTail === "1" || Number(slot.dataset.pinkieThinkingSeg || 0) !== 0) return;
+    const card = slot.closest?.(".chat-group--process[data-pinkie-process]");
+    const key = slot.dataset.pinkieThinking || "";
+    const record = hydrate(slot);
+    const eps = episodesOf(record);
+    const lastIndex = eps.length - 1;
+    const wanted = new Set();
+    const placements = [];
+    eps.forEach((ep, index) => {
+      if (!ep.text) return;
+      const target = card ? placeFor(card, slot, ep) : slot;
+      if (!target) return;
+      wanted.add(epKey(key, index));
+      placements.push([target, index, ep]);
+    });
+    const owned = card ? [...card.querySelectorAll(".pinkie-thinking[data-pinkie-ep]")] : [...slot.querySelectorAll(".pinkie-thinking")];
+    const stale = owned.filter(box => !wanted.has(box.dataset.pinkieEp));
+    const boxes = new Map(owned.map(box => [box.dataset.pinkieEp, box]));
+    const moves = [];
+    for (const [target, index] of placements) {
+      const id = epKey(key, index), box = boxes.get(id);
+      if (!box || box.parentNode !== target) moves.push([target, id]);
+    }
+    // Anything that adds, moves or removes a box keeps the reader's place.
+    if (stale.length || moves.length) {
+      preserveSlot(slot, () => {
+        stale.forEach(box => box.remove());
+        for (const [target, id] of moves) {
+          const box = boxes.get(id) || createBox(slot, id);
+          boxes.set(id, box);
+          target.append(box);
+        }
+        // Keep bursts that share a place in order.
+        for (const [target, index] of placements) target.append(boxes.get(epKey(key, index)));
+      });
+    }
+    for (const [target, index, ep] of placements) {
+      const box = target.querySelector(`:scope > [data-pinkie-ep="${CSS.escape(epKey(key, index))}"]`);
+      if (box) updateBox(slot, box, key, index, ep, record, index === lastIndex);
+    }
+  }
+
+  function createBox(slot, id) {
+    const box = el("div", "pinkie-thinking");
+    box.dataset.pinkieEp = id;
+    const head = el("button", "pinkie-thinking__head"); head.type = "button";
+    head.append(el("span", "pinkie-thinking__chev", "›"), el("span", "pinkie-thinking__label"));
+    const body = el("div", "pinkie-thinking__body");
+    body.id = "pinkie-thought-" + id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    head.setAttribute("aria-controls", body.id);
+    head.addEventListener("click", () => {
+      preserveSlot(slot, () => {
+        if (openedThoughts.has(id)) openedThoughts.delete(id); else openedThoughts.add(id);
+        if (slot.isConnected) renderThinking(slot);
+      });
+    });
+    body.append(el("div", "pinkie-thinking__text"));
+    box.append(head, body);
+    const t = typing.get(id);
+    if (t && t.to > t.from) box.classList.add("is-entering");
+    return box;
+  }
+
+  function updateBox(slot, box, key, index, ep, record, last) {
+    const id = epKey(key, index);
+    const thinking = Boolean(last && run.thinkingSince && run.key === key);
+    const now = performance.now(), t = typing.get(id);
+    const typed = t ? Math.min(ep.text.length, Math.floor(typedLength(t, now))) : ep.text.length;
+    const isTyping = typed < ep.text.length;
     if (t && !isTyping && !t.doneAt) {
       t.doneAt = now;
       setTimeout(schedule, TYPE_HOLD + 20);
     }
     const holding = Boolean(t && !isTyping && now - t.doneAt < TYPE_HOLD);
-    if (t && !isTyping && !holding && !thinking) typing.delete(key);
+    if (t && !isTyping && !holding && !thinking) typing.delete(id);
     if (isTyping) typingFrame = true;
     const live = thinking || isTyping || holding;
-    let box = slot.querySelector(".pinkie-thinking");
-    if (!box) {
-      box = el("div", "pinkie-thinking");
-      const head = el("button", "pinkie-thinking__head"); head.type = "button";
-      head.append(el("span", "pinkie-thinking__chev", "›"), el("span", "pinkie-thinking__label"));
-      const body = el("div", "pinkie-thinking__body");
-      body.id = "pinkie-thought-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
-      head.setAttribute("aria-controls", body.id);
-      head.addEventListener("click", () => {
-        preserveSlot(slot, () => {
-          if (openedThoughts.has(key)) openedThoughts.delete(key); else openedThoughts.add(key);
-          renderThinking(slot);
-        });
-      });
-      body.append(el("div", "pinkie-thinking__text"));
-      box.append(head, body);
-      if (live) box.classList.add("is-entering");
-      slot.replaceChildren(box);
-    }
+    const opened = openedThoughts.has(id);
+    // Folding a finished thought shrinks the card; keep the reader in place.
+    if (box.classList.contains("is-live") !== live && !live) preserveSlot(slot, () => box.classList.remove("is-live"));
     box.classList.toggle("is-live", live);
     box.classList.toggle("is-typing", isTyping);
-    box.classList.toggle("is-open", openedThoughts.has(key));
+    box.classList.toggle("is-open", opened);
     const head = box.querySelector(".pinkie-thinking__head");
-    const expanded = String(live || openedThoughts.has(key));
+    const expanded = String(live || opened);
     if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
     const label = box.querySelector(".pinkie-thinking__label");
-    const ms = record.ms + (thinking ? Date.now() - run.thinkingSince : 0);
-    const text = thinking ? `正在思考 · ${Math.round(ms / 1000)}s` : `思考了 ${duration(ms || 1000)}${record.count > 1 ? ` · ${record.count} 次` : ""}`;
+    const ms = (ep.legacy ? record.ms : ep.ms) + (thinking ? Date.now() - run.thinkingSince : 0);
+    const text = thinking ? `正在思考 · ${Math.round(ms / 1000)}s`
+      : `思考了 ${duration(ms || 1000)}${ep.legacy && record.count > 1 ? ` · ${record.count} 次` : ""}`;
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
-    const visibleText = isTyping ? record.text.slice(0, typed) : record.text;
+    const visibleText = isTyping ? ep.text.slice(0, typed) : ep.text;
     if (body.textContent !== visibleText) body.textContent = visibleText;
-    if (live && !openedThoughts.has(key)) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
+    if (live && !opened) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
   }
 
   function renderStatus(slot) {
@@ -324,10 +486,13 @@
     if (!key || key === move.from || !record?.text) return;
     const history = String(card.querySelector('[data-pinkie-thinking]')?.pinkieHistoryThinking || '').trim();
     if (history && !record.text.includes(history)) { run.migrate = null; return; }
-    store[key] = {...record};
+    store[key] = {...record, eps: record.eps?.map(ep => ({...ep}))};
     keep.add(key);
-    if (typing.has(move.from)) { typing.set(key, typing.get(move.from)); typing.delete(move.from); }
-    if (openedThoughts.has(move.from)) { openedThoughts.add(key); openedThoughts.delete(move.from); }
+    episodesOf(record).forEach((_, index) => {
+      const from = epKey(move.from, index), to = epKey(key, index);
+      if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
+      if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+    });
     if (run.doneKey === move.from) run.doneKey = key;
     if (run.oops.has(move.from)) run.oops.set(key, run.oops.get(move.from));
     run.migrate = null;
@@ -344,6 +509,9 @@
   function markCard(card) {
     if (!card?.matches?.('.chat-group--process[data-pinkie-process]')) return;
     const key = card.dataset.pinkieProcess;
+    const previous = processCardKeys.get(card);
+    if (previous && previous !== key && processCards.get(previous) === card) processCards.delete(previous);
+    processCardKeys.set(card, key);
     processCards.set(key, card);
     dirtyCards.add(card);
   }
@@ -386,7 +554,7 @@
   new MutationObserver(records => {
     let changed = false;
     for (const record of records) {
-      if (record.target.closest?.('[data-pinkie-thinking], [data-pinkie-status]')) continue;
+      if (record.type !== 'attributes' && record.target.closest?.('[data-pinkie-thinking], [data-pinkie-status]')) continue;
       const owner = record.target.closest?.('.chat-group--process[data-pinkie-process]');
       if (owner) { markCard(owner); changed = true; }
       for (const node of record.addedNodes || []) { indexCards(node); changed = true; }
@@ -398,7 +566,8 @@
       }
     }
     if (changed) schedule();
-  }).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-live', 'data-state']});
+  }).observe(document.documentElement, {childList: true, subtree: true, attributes: true,
+    attributeFilter: ['data-live', 'data-state', 'data-pinkie-process', 'data-pinkie-row-count', 'data-pinkie-thinking-seg', 'data-pinkie-history-revision']});
   indexCards(document);
   schedule();
   setInterval(() => { if (run.startedAt || run.doneAt > Date.now() - 3200) schedule(); }, 250);

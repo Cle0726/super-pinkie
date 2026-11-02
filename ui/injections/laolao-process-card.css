@@ -48,6 +48,7 @@
 .pinkie-process[open] > .pinkie-process__summary { padding-bottom: 4px; }
 .pinkie-process__rows { padding: 0 14px 8px; }
 .pinkie-process__thinking:not(:empty) { padding: 0 14px 4px; }
+.pinkie-process__rows .pinkie-process__thinking:not(:empty) { padding: 0 0 4px; }
 
 /* Rows inside the card: Pinkie's sentences become light text, tools keep their native rows. */
 .pinkie-process .chat-group.chat-group--timeline-step { margin: 0 !important; padding: 0 !important; animation: none !important; }

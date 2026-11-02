@@ -767,7 +767,7 @@
 
   const toggle = () => (active ? off() : on());
   window.__laolaoLaser = {
-    toggle, on, off, setTool,
+    toggle, on, off, setTool, openSettings,
     active: () => active,
     tool: () => tool,
     settings,

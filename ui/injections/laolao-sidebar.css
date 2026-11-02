@@ -1,4 +1,19 @@
 /* 来啦～老弟 · 侧边栏分组管理（置顶 / 项目 / 最近 + 一键清理） */
+.sidebar-shell__footer .laolao-sidebar-theme-toggle {
+  font-size: 18px; line-height: 1; color: #985474;
+}
+html[data-pinkie-night] .sidebar-shell__footer .laolao-sidebar-theme-toggle { color: #f1b3d1; }
+.sidebar-shell__footer .laolao-sidebar-theme-toggle:focus-visible {
+  outline: 2px solid #d45b96; outline-offset: 2px;
+}
+/* The original expand control slides offscreen on a collapsed desktop sidebar.
+   Keep the native topbar control reachable for mouse and keyboard users. */
+html[data-pinkie-sidebar-auto="1"]:is([data-laolao-mode="chat"], [data-laolao-mode="project"],
+  [data-laolao-mode="thinking"], [data-laolao-mode="learning"])
+  .shell--chat.shell--nav-collapsed .topbar .topbar-nav-toggle { display: inline-flex !important; visibility: visible !important; }
+/* These advanced pages remain available by URL; remove only their sidebar links. */
+html:is([data-laolao-mode="chat"], [data-laolao-mode="project"], [data-laolao-mode="thinking"], [data-laolao-mode="learning"])
+  .sidebar-nav a:is([href$="/instances"], [href$="/nodes"], [href$="/dreaming"]) { display: none !important; }
 #laolao-project-scope { padding:8px 14px 0; font-size:10px; line-height:1.5; color:#966b84; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none; }
 #laolao-project-scope[data-error="true"] { color:#b46362; }
 

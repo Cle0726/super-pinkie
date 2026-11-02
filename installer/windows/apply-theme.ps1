@@ -204,6 +204,8 @@ $Assets = @(
     "laolao-tool-stream.css",
     "laolao-settings-user.css",
     "laolao-settings-user.js",
+    "laolao-update-dialog.js",
+    "laolao-update-dialog.css",
     "laolao-ask-user.css",
     "laolao-ask-user.js",
     "laolao-process-card.css",
@@ -436,12 +438,12 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-learning-library.css?v=library1">',
         '<script defer src="./laolao-learning-library.js?v=deskfinal6"></script>',
         '<script src="./laolao-selection-actions.js?v=deskfinal6"></script>',
-        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar18">',
+        '<link rel="stylesheet" href="./laolao-sidebar.css?v=sidebar20">',
         '<link rel="stylesheet" href="./laolao-classic-shell.css?v=classic19">',
         '<link rel="stylesheet" href="./laolao-reading-view.css?v=readingview3">',
         '<script defer src="./laolao-reading-view.js?v=readingview2"></script>',
         '<link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface7">',
-        '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide8"></script>',
+        '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide9"></script>',
         '<link rel="stylesheet" href="./laolao-side-layout.css?v=side21">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction14">',
         '<link rel="stylesheet" href="./laolao-divider.css?v=divider1">',
@@ -460,19 +462,21 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser3">',
+        '<link rel="stylesheet" href="./laolao-update-dialog.css?v=update1">',
+        '<script defer src="./laolao-update-dialog.js?v=update1"></script>',
         '<link rel="stylesheet" href="./laolao-ask-user.css?v=askuser1">',
-        '<link rel="stylesheet" href="./laolao-process-card.css?v=processcard6">',
+        '<link rel="stylesheet" href="./laolao-process-card.css?v=processcard8">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
         '<link rel="stylesheet" href="./laolao-mode-menu-fx.css?v=modemenufx1">',
         '<link rel="stylesheet" href="./laolao-mode-transition-fx.css?v=modetransitionfx4">',
-        '<link rel="stylesheet" href="./laolao-companion.css?v=companion5">',
+        '<link rel="stylesheet" href="./laolao-companion.css?v=companion6">',
         '<link rel="stylesheet" href="./laolao-redesign.css?v=redesign8">',
         '<link rel="stylesheet" href="./laolao-night.css?v=night3">',
         '<link rel="stylesheet" href="./laolao-model-picker.css?v=modelpicker15">',
-        '<script src="./laolao-sidebar.js?v=sidebar37h1"></script>',
-        '<script src="./laolao-session-list.js?v=sessions11"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar39"></script>',
+        '<script src="./laolao-session-list.js?v=sessions12"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
-        '<script defer src="./laolao-classic-shell.js?v=classic20"></script>',
+        '<script defer src="./laolao-classic-shell.js?v=classic21"></script>',
         '<script src="./laolao-side-layout.js?v=side12"></script>',
         '<script defer src="./laolao-memory.js?v=memory2"></script>',
         '<link rel="stylesheet" href="/laolao-learning-practice.css?v=learningpractice4">',
@@ -487,7 +491,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-model-picker.js?v=modelpicker49"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
-        '<script defer src="./laolao-laser-pointer.js?v=laser9"></script>',
+        '<script defer src="./laolao-laser-pointer.js?v=laser10"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link6"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream5"></script>',
@@ -506,12 +510,12 @@ function Apply-UISkin {
         '<script defer src="./laolao-capabilities.js?v=capabilities4"></script>',
         '<link rel="stylesheet" href="./laolao-workbench.css?v=workbench14">',
         '<script defer src="./laolao-workbench.js?v=workbench16"></script>',
-        '<script defer src="./laolao-settings-user.js?v=settingsuser4"></script>',
+        '<script defer src="./laolao-settings-user.js?v=settingsuser5"></script>',
         '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
-        '<script defer src="./laolao-process-card.js?v=processcard11"></script>',
+        '<script defer src="./laolao-process-card.js?v=processcard13"></script>',
         '<script defer src="./laolao-desensitize.js?v=desensitize1"></script>',
         '<script defer src="./laolao-buddy-rig.js?v=buddyrig2"></script>',
-        '<script defer src="./laolao-companion.js?v=companion6"></script>',
+        '<script defer src="./laolao-companion.js?v=companion8"></script>',
         '<script defer src="./laolao-immersion.js?v=immersion2"></script>',
         '<script defer src="./laolao-splash-fx.js?v=splashfx2"></script>',
         '<script defer src="./laolao-splash.js?v=splash28"></script>'
@@ -529,8 +533,8 @@ function Apply-UISkin {
     # 下表由 tests/windows-self-contained.test.cjs 中的对照测试守着。
     $versions = @{
         'laolao-selection-actions.js' = 'deskfinal6';
-        'laolao-theme.css' = 'theme91'; 'laolao-splash.css' = 'splash21'; 'laolao-sidebar.css' = 'sidebar18';
-        'laolao-sidebar.js' = 'sidebar37h1'; 'laolao-session-list.js' = 'sessions11'; 'laolao-usage-stats.js' = 'stats16';
+        'laolao-theme.css' = 'theme91'; 'laolao-splash.css' = 'splash21'; 'laolao-sidebar.css' = 'sidebar20';
+        'laolao-sidebar.js' = 'sidebar39'; 'laolao-session-list.js' = 'sessions12'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases30'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx6'; 'laolao-mode-transition-fx.css' = 'modetransitionfx4';
         'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode45'; 'laolao-model-picker.js' = 'modelpicker49'; 'laolao-model-picker.css' = 'modelpicker15'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
@@ -539,9 +543,10 @@ function Apply-UISkin {
         'laolao-perf.js' = 'perf4';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-progress.js' = 'progress5';
-        'laolao-settings-user.css' = 'settingsuser3'; 'laolao-settings-user.js' = 'settingsuser4';
+        'laolao-update-dialog.css' = 'update1'; 'laolao-update-dialog.js' = 'update1';
+        'laolao-settings-user.css' = 'settingsuser3'; 'laolao-settings-user.js' = 'settingsuser5';
         'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
-        'laolao-process-card.css' = 'processcard6'; 'laolao-process-card.js' = 'processcard11';
+        'laolao-process-card.css' = 'processcard8'; 'laolao-process-card.js' = 'processcard13';
         'laolao-desensitize.js' = 'desensitize1';
         'laolao-ui-subtraction.css' = 'subtraction14'; 'laolao-usage-stats.css' = 'stats8';
         'laolao-material-preview.css' = 'material4'; 'laolao-material-preview.js' = 'material6';
@@ -549,10 +554,10 @@ function Apply-UISkin {
         'laolao-workspace-focus.css' = 'workspacefocus2'; 'laolao-workspace-focus.js' = 'workspacefocus2';
         'laolao-page-warmup.js' = 'warmup1'; 'laolao-motion-system.css' = 'motionsys1';
         'laolao-link-viewer.js' = 'link6';
-        'laolao-sidebar-surface.css' = 'sidebarsurface7'; 'laolao-sidebar-autohide.js' = 'sidebarautohide8';
-        'laolao-companion.css' = 'companion5'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion6'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
-        'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night2';
-        'laolao-classic-shell.css' = 'classic19'; 'laolao-classic-shell.js' = 'classic20';
+        'laolao-sidebar-surface.css' = 'sidebarsurface7'; 'laolao-sidebar-autohide.js' = 'sidebarautohide9';
+        'laolao-companion.css' = 'companion6'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion8'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
+        'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night3';
+        'laolao-classic-shell.css' = 'classic19'; 'laolao-classic-shell.js' = 'classic21';
         'laolao-side-layout.css' = 'side21'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'vendor/lucide/icons.js' = 'lucide04602';
@@ -656,7 +661,7 @@ function Apply-UISkin {
     # 开关总是先执行，样式总是最后覆盖；已有 fragment 也要重新定位。
     $html = [regex]::Replace($html, '(?is)\n?[ \t]*<script\b[^>]*\bsrc="(?:\./|/)?laolao-night\.js[^"]*"[^>]*>\s*</script>', '')
     $html = [regex]::Replace($html, '(?is)\n?[ \t]*<link\b[^>]*\bhref="(?:\./|/)?laolao-night\.css[^"]*"[^>]*>', '')
-    $html = $html -replace '(?i)(<head[^>]*>)', "`$1`n    <script src=`"./laolao-night.js?v=night2`"></script>"
+    $html = $html -replace '(?i)(<head[^>]*>)', "`$1`n    <script src=`"./laolao-night.js?v=night3`"></script>"
     $html = $html -replace '(?i)\s*(</head>)', "`n    <link rel=`"stylesheet`" href=`"./laolao-night.css?v=night3`">`n`$1"
 
     # 绝对到站点根目录，设置/概览等嵌套路由不再把头像和皮肤解析到
