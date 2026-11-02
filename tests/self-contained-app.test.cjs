@@ -348,7 +348,7 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_OPENCLAW_BIN/);
   assert.match(setup, /PINKIE_PYTHON_BIN/);
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
-  assert.match(setup, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
+  assert.match(setup, /bash "\$SCRIPT_DIR\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
   assert.match(build, /index\.mjs memory\.mjs learning\.mjs reasoning\.mjs model-sync\.mjs web-gpt-activity\.mjs web-gpt-connection\.mjs web-gpt-project-context\.mjs ask\.mjs reply-hygiene\.mjs setup\.py package\.json openclaw\.plugin\.json/);
 });
 
@@ -374,11 +374,16 @@ test('macOS hotfix keeps every bundled web surface and backend in sync', () => {
   assert.match(themeInstaller, /"\$PYTHON_BIN" "\$REPO_ROOT\/services\/mode-architecture\/setup\.py"/);
 });
 
-test('source updaters preserve every existing user persona and context file', () => {
+test('source updaters keep edited persona files and only refresh ones still as shipped', () => {
   const mac = read('install-full.sh');
+  const sync = read('installer/macos/sync-personas.sh');
   const windows = read('install.ps1');
-  assert.match(mac, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
-  assert.match(mac, /保留已有 \$filename/);
+  assert.match(mac, /bash "\$REPO_ROOT\/installer\/macos\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
+  // An existing file is replaced only when it is byte-for-byte a version we shipped.
+  assert.match(sync, /grep -qxF "\$dst_sha \$key" "\$SHIPPED"/);
+  assert.match(sync, /\[\[ -L "\$dst" \|\| "\$keep" == "1" \]\]/);
+  assert.match(sync, /"\$mode" == "neutral" \|\| "\$rel" == "DREAMS\.md"/);
+  assert.match(sync, /cp -p "\$dst" "\$BACKUP_DIR\/\$key"/);
   assert.match(windows, /if \(Test-Path \$dst\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
   assert.doesNotMatch(windows, /Copy-Item \$src \$dst -Force/);
   assert.match(mac, /restore_app_on_failure/);

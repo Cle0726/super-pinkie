@@ -152,6 +152,23 @@ foreach ($mode in $personaMap.Keys) {
         Copy-Item -LiteralPath $src -Destination $dst -Force
       }
     }
+    # Playbooks: always add missing ones; with -SyncPersonas also refresh changed ones (old copy backed up).
+    $srcPlaybooks = Join-Path $srcDir "playbooks"
+    if ((Test-Path $srcPlaybooks) -and $mode -ne "neutral") {
+      $dstPlaybooks = Join-Path $dstDir "playbooks"
+      New-Item -ItemType Directory -Force -Path $dstPlaybooks | Out-Null
+      foreach ($item in Get-ChildItem -LiteralPath $srcPlaybooks -File) {
+        $dst = Join-Path $dstPlaybooks $item.Name
+        if (Test-Path $dst) {
+          if (-not $SyncPersonas) { continue }
+          if ((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash) { continue }
+          $pbBackupDir = Join-Path $personaBackupRoot "$mode\playbooks"
+          New-Item -ItemType Directory -Force -Path $pbBackupDir | Out-Null
+          Copy-Item -LiteralPath $dst -Destination (Join-Path $pbBackupDir $item.Name) -Force
+        }
+        Copy-Item -LiteralPath $item.FullName -Destination $dst -Force
+      }
+    }
     Write-Host "    [$mode] -> $dstDir"
   }
 }
