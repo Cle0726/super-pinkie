@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {compactionBudget,sessionContextWindow} from '../services/context/budget.mjs';
+import {compactionBudget,sessionContextWindow,contextBreakdown} from '../services/context/budget.mjs';
 import {apply,transform} from '../patch/apply-context-budget.mjs';
 const policyHome=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-native-budget-'));
 const policyPath=path.join(policyHome,'Library/Application Support/SuperPinkie/context-policy.json');
@@ -49,7 +49,7 @@ const sessionList=`// gateway.sessions.list
 function list(result,sessions,cfg={}){
 return { ...result, sessions };
 }`;
-function executable(source,name){return Function('pinkieContextBudget','pinkieSessionContextWindow',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget,sessionContextWindow);}
+function executable(source,name){return Function('pinkieContextBudget','pinkieSessionContextWindow','pinkieContextBreakdown',source.replace(/^import .*$/gm,'')+';return '+name)(compactionBudget,sessionContextWindow,contextBreakdown);}
 test('compaction triggers at the configured window share and leaves recovery headroom',()=>{
   assert.equal(installedPolicy.modelLimits['mm/gemini-3.8-flash-tiered'],1000000);
   assert.equal(installedPolicy.modelLimits['deepseek/deepseek-flash'],1048576);
@@ -181,7 +181,10 @@ test('session capacity and compaction threshold follow a changed exact provider 
 
 test('a previously installed sessions v1 patch upgrades safely and v2 remains idempotent',()=>{
   const current=transform('sessions',sessionList);
-  const legacy=current.replace('sessions:v2','sessions:v1')
+  // A v1 install predates the breakdown layer; it is re-added on upgrade.
+  const legacy=current.replace(/^\/\* pinkie-context-breakdown:v1 \*\/\n.*\n/,'')
+    .replace(', pinkieContextBreakdown: pinkieContextBreakdown((typeof listStore === "object" ? listStore : null)?.[session.key]?.systemPromptReport)','')
+    .replace('sessions:v2','sessions:v1')
     .replace(', sessionContextWindow as pinkieSessionContextWindow','')
     .replace('const contextWindow = pinkieSessionContextWindow(session, cfg, result.defaults?.contextTokens);',
       'const contextWindow = session?.contextTokens > 0 ? session.contextTokens : result.defaults?.contextTokens;')
@@ -189,4 +192,16 @@ test('a previously installed sessions v1 patch upgrades safely and v2 remains id
   assert.equal(transform('sessions',legacy),current);
   assert.equal(transform('sessions',current),current);
   assert.throws(()=>transform('sessions',legacy.replace('session.contextTokens : result.defaults','0 : result.defaults')),/结构已变化/);
+});
+
+test('sessions.list rows carry the last run\'s context breakdown from OpenClaw\'s own report',()=>{
+  const report={source:'run',generatedAt:5,systemPrompt:{chars:300,projectContextChars:120,nonProjectContextChars:180},
+    skills:{promptChars:50,entries:[{},{}]},tools:{listChars:10,schemaChars:400,entries:[{},{},{}]},
+    injectedWorkspaceFiles:[{missing:false},{missing:true}]};
+  assert.deepEqual(contextBreakdown(report),{rules:130,files:120,skills:50,tools:410,toolCount:3,skillCount:2,fileCount:1,at:5});
+  assert.equal(contextBreakdown({...report,source:'estimate'}),undefined);
+  assert.equal(contextBreakdown(undefined),undefined);
+  const patched=transform('sessions',sessionList);
+  assert.match(patched,/pinkie-context-breakdown:v1/);
+  assert.equal(transform('sessions',patched),patched,'idempotent');
 });

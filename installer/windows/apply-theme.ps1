@@ -497,7 +497,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-tool-stream.js?v=toolstream5"></script>',
         '<script defer src="./laolao-deep-think.js?v=deepthink27"></script>',
         '<script defer src="./laolao-web-gpt-collab.js?v=webgpt33"></script>',
-        '<script defer src="./laolao-context-compact.js?v=contextcompact10"></script>',
+        '<script defer src="./laolao-context-compact.js?v=contextcompact11"></script>',
         '<script defer src="./laolao-resume.js?v=resume54"></script>',
         '<script defer src="./laolao-queue-steer.js?v=queuesteer3"></script>',
         '<script defer src="./laolao-perf.js?v=perf4"></script>',
@@ -598,7 +598,7 @@ function Apply-UISkin {
         'laolao-divider.css' = 'divider1'; 'laolao-tool-rows.css' = 'toolrows8';
         'laolao-cle-signature.js' = 'clesig1'; 'laolao-cle-stage.css' = 'clestage21'; 'laolao-cle-stage.js' = 'clestage22';
         'laolao-vendor-gsap.min.js' = 'gsap3150';
-        'laolao-context-compact.js' = 'contextcompact10'
+        'laolao-context-compact.js' = 'contextcompact11'
     }
     foreach ($entry in $versions.GetEnumerator()) {
         # 版本号字符集收紧，避免第二次运行时贪婪越过版本号把后续内容吃掉。
