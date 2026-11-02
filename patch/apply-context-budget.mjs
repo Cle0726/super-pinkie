@@ -11,6 +11,9 @@ const sessionsMarker='/* pinkie-context-budget:sessions:v2 */';
 // 2026.10 projects rows through `listProjectedSessions` instead of returning
 // `{...result, sessions}` inline, so the handler result is rewritten in place.
 const projectedSessionsMarker='/* pinkie-context-budget:sessions:v3 */';
+// Layered on top of either sessions shape: rows also carry the last run's
+// per-category context sizes for the composer's context panel.
+const breakdownMarker='/* pinkie-context-breakdown:v1 */';
 const header=marker+'\nimport {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";\n';
 const sessionsHeader=marker+'\nimport {compactionBudget as pinkieContextBudget, sessionContextWindow as pinkieSessionContextWindow} from "./pinkie-context-budget.mjs";\n';
 function replaceOnce(text,from,to){
@@ -27,6 +30,21 @@ function hasOnce(text,value){return text.split(value).length===2;}
 // hook right after the rows are decorated.
 const PROJECTED_RESULT='\t\t\t\tparams.onResult?.(result, sharedRows);\n';
 export function transform(kind,original){
+  if(kind==='sessions')return addBreakdown(transformBudget(kind,original));
+  return transformBudget(kind,original);
+}
+function addBreakdown(text){
+  if(text.includes(breakdownMarker))return text;
+  const inline='return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };';
+  const projected='\t\t\t\t\tpinkieSession.contextTokens = pinkieWindow;\n';
+  if(hasOnce(text,inline)){
+    text=replaceOnce(text,inline,'return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow), pinkieContextBreakdown: pinkieContextBreakdown((typeof listStore === "object" ? listStore : null)?.[session.key]?.systemPromptReport) };');
+  }else if(hasOnce(text,projected)){
+    text=replaceOnce(text,projected,projected+'\t\t\t\t\tpinkieSession.pinkieContextBreakdown = pinkieContextBreakdown(params.store?.[pinkieSession.key]?.systemPromptReport);\n');
+  }else throw new Error('OpenClaw 压缩代码结构已变化，未覆盖：sessions.list context breakdown');
+  return breakdownMarker+'\nimport {contextBreakdown as pinkieContextBreakdown} from "./pinkie-context-budget.mjs";\n'+text;
+}
+function transformBudget(kind,original){
   if(original.includes(kind==='sessions'?(original.includes(projectedSessionsMarker)?projectedSessionsMarker:sessionsMarker):marker))return original;
   let text=original;
   if(kind==='sessions' && original.includes(projectedSessionsMarker))return original;

@@ -214,6 +214,82 @@
       .finally(() => { usageRequest = null; });
   };
 
+  // OpenClaw's own estimate (chars / 4), the same one its /context report uses.
+  const estimateTokens = (chars) => Math.round((Number(chars) || 0) / 4);
+  const shortTokens = (value) => {
+    const number = Math.max(0, Number(value) || 0);
+    if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(number % 1_000_000 ? 2 : 0).replace(/\.?0+$/, "")}M`;
+    if (number >= 1000) return `${(number / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+    return String(Math.round(number));
+  };
+  const sharePercent = (value, limit) => {
+    const share = limit > 0 ? value / limit * 100 : 0;
+    return share > 0 && share < 0.1 ? "<0.1%" : `${share.toFixed(1)}%`;
+  };
+  // Rows of the panel. Fixed parts come from the last run's report; the
+  // conversation is whatever of the real usage those parts do not explain.
+  const contextRows = (capacity, breakdown) => {
+    const reserve = capacity.compactionBudget ? Math.max(0, capacity.limit - capacity.compactionBudget.threshold) : 0;
+    const fixed = breakdown ? [
+      {id: "tools", label: "工具定义", tokens: estimateTokens(breakdown.tools), count: breakdown.toolCount ? `${breakdown.toolCount} 个` : ""},
+      {id: "rules", label: "系统规则", tokens: estimateTokens(breakdown.rules)},
+      {id: "files", label: "人格与记忆文件", tokens: estimateTokens(breakdown.files), count: breakdown.fileCount ? `${breakdown.fileCount} 个` : ""},
+      {id: "skills", label: "技能目录", tokens: estimateTokens(breakdown.skills), count: breakdown.skillCount ? `${breakdown.skillCount} 个` : ""}
+    ] : [];
+    const fixedTotal = fixed.reduce((sum, row) => sum + row.tokens, 0);
+    // A stale total can be smaller than the estimate; never show negatives.
+    if (fixedTotal > capacity.used && fixedTotal > 0) fixed.forEach((row) => { row.tokens = Math.round(row.tokens * capacity.used / fixedTotal); });
+    const used = breakdown
+      ? [{id: "messages", label: "对话消息", tokens: Math.max(0, capacity.used - fixed.reduce((sum, row) => sum + row.tokens, 0))}, ...fixed]
+      : [{id: "messages", label: "已使用", tokens: capacity.used}];
+    const free = Math.max(0, capacity.limit - capacity.used - reserve);
+    return [
+      ...used,
+      ...(reserve ? [{id: "reserve", label: "自动整理预留", tokens: Math.min(reserve, Math.max(0, capacity.limit - capacity.used))}] : []),
+      {id: "free", label: "剩余空间", tokens: free}
+    ];
+  };
+
+  const compactFromPanel = () => {
+    const anchor = document.querySelector(`.${BUTTON_CLASS}`) || makeButton();
+    void compact(anchor);
+  };
+
+  const buildContextViewer = () => {
+    const viewer = document.createElement("details");
+    viewer.className = "laolao-context-viewer";
+    viewer.innerHTML = `<summary><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track"/><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__fill"/></svg><span class="laolao-context-viewer__percent"></span></summary>`
+      + `<section class="laolao-context-viewer__popover" role="dialog" aria-label="上下文">`
+      + `<header class="lcv-head"><strong>上下文</strong><small class="lcv-muted lcv-source"></small></header>`
+      + `<div class="lcv-total"><b class="lcv-used"></b><small class="lcv-muted lcv-amount"></small></div>`
+      + `<div class="lcv-bar" aria-hidden="true"></div>`
+      + `<ul class="lcv-rows"></ul>`
+      + `<small class="lcv-muted lcv-note"></small>`
+      + `<footer class="lcv-actions"><button type="button" class="laolao-context-viewer__compact">现在整理上下文</button>`
+      + `<div class="lcv-confirm" hidden><small class="lcv-muted">浓缩较早内容，最近对话和工作检查点继续保留。</small><div><button type="button" class="lcv-cancel">取消</button><button type="button" class="lcv-go">开始整理</button></div></div></footer>`
+      + `</section>`;
+    const confirm = viewer.querySelector(".lcv-confirm");
+    const main = viewer.querySelector(".laolao-context-viewer__compact");
+    const setConfirm = (open) => { confirm.hidden = !open; main.hidden = open; if (open) viewer.querySelector(".lcv-go").focus(); };
+    main.addEventListener("click", (event) => { event.preventDefault(); setConfirm(true); });
+    viewer.querySelector(".lcv-cancel").addEventListener("click", (event) => { event.preventDefault(); setConfirm(false); main.focus(); });
+    viewer.querySelector(".lcv-go").addEventListener("click", (event) => {
+      event.preventDefault();
+      setConfirm(false);
+      viewer.removeAttribute("open");
+      compactFromPanel();
+    });
+    viewer.addEventListener("toggle", () => {
+      if (viewer.open) {
+        // Opening always asks for fresh numbers instead of a 15s-old cache.
+        usageFetchedAt = 0;
+        fetchContextCapacity();
+        renderContextViewer();
+      } else setConfirm(false);
+    });
+    return viewer;
+  };
+
   const renderContextViewer = () => {
     const metas = document.querySelectorAll(".agent-chat__composer-meta");
     document.querySelectorAll(".laolao-context-viewer").forEach((node) => {
@@ -224,6 +300,7 @@
     if (metas.length !== 1 || !usageKey) return;
     const meta = metas[0];
     const ratio = usageKey === currentSessionKey() ? usage : null;
+    const breakdown = ratio && sessionInfo?.key === usageKey ? sessionInfo.session?.pinkieContextBreakdown || null : null;
     const describeThreshold = (capacity) => {
       const budget = capacity?.compactionBudget;
       if (!budget) return "";
@@ -231,39 +308,80 @@
     };
     let viewer = meta.querySelector(".laolao-context-viewer");
     if (!viewer) {
-      viewer = document.createElement("details");
-      viewer.className = "laolao-context-viewer";
-      viewer.innerHTML = `<summary><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track"/><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__fill"/></svg><span class="laolao-context-viewer__percent"></span></summary><section class="laolao-context-viewer__popover"><strong>上下文容量</strong><div class="laolao-context-viewer__amount"></div><div class="laolao-context-viewer__bar"><span></span></div><small class="laolao-context-viewer__note"></small><button type="button" class="laolao-context-viewer__compact">现在整理上下文</button></section>`;
-      // The ring owns manual compaction too: one entry instead of a second
-      // composer button. The original button stays in the DOM as the anchor
-      // and busy-state carrier for its confirmation popover.
-      viewer.querySelector(".laolao-context-viewer__compact").addEventListener("click", (event) => {
-        event.preventDefault();
-        viewer.removeAttribute("open");
-        document.querySelector(`.${BUTTON_CLASS}`)?.click();
-      });
+      viewer = buildContextViewer();
       meta.append(viewer);
     }
     const label = ratio ? `${ratio.approximate ? "约 " : ""}${ratio.percent}%` : "—";
     const setText = (selector, value) => {
       const node = viewer.querySelector(selector);
-      if (node.textContent !== value) node.textContent = value;
+      if (node && node.textContent !== value) node.textContent = value;
     };
     setText(".laolao-context-viewer__percent", label);
-    setText(".laolao-context-viewer__amount", ratio
-      ? `${formatTokens(ratio.used)} / ${formatTokens(ratio.limit)} 令牌` : "等待会话用量数据");
-    setText(".laolao-context-viewer__note", ratio
-      ? `${ratio.approximate ? "估算 · " : ""}剩余约 ${formatTokens(Math.max(0, ratio.limit - ratio.used))} 令牌${describeThreshold(ratio) ? `；${describeThreshold(ratio)}` : ""}` : "有用量数据后会自动更新");
     const offset = String(40.84 * (1 - (ratio?.percent || 0) / 100));
     const fill = viewer.querySelector(".laolao-context-viewer__fill");
     if (fill.style.strokeDashoffset !== offset) fill.style.strokeDashoffset = offset;
-    const width = `${ratio?.percent || 0}%`;
-    const bar = viewer.querySelector(".laolao-context-viewer__bar span");
-    if (bar.style.width !== width) bar.style.width = width;
-    const summary = viewer.querySelector("summary");
     const thresholdText = describeThreshold(ratio);
+    const summary = viewer.querySelector("summary");
     const aria = ratio ? `上下文容量：已用${label}，${formatTokens(ratio.used)} / ${formatTokens(ratio.limit)} 令牌${thresholdText ? `；${thresholdText}` : ""}` : "上下文容量：等待用量数据";
     if (summary.getAttribute("aria-label") !== aria) summary.setAttribute("aria-label", aria);
+    viewer.dataset.level = !ratio ? "" : ratio.compactionBudget && ratio.used >= ratio.compactionBudget.threshold * 0.9 ? "high" : ratio.percent >= 50 ? "mid" : "low";
+
+    // The panel is only rebuilt while it is open.
+    if (!viewer.open) return;
+    setText(".lcv-used", ratio ? `已使用 ${label}` : "等待会话用量数据");
+    setText(".lcv-amount", ratio ? `${shortTokens(ratio.used)} / ${shortTokens(ratio.limit)}` : "");
+    setText(".lcv-source", ratio ? (breakdown ? "明细为估算" : "") : "");
+    const rows = ratio ? contextRows(ratio, breakdown) : [];
+    const signature = JSON.stringify(rows.map((row) => [row.id, row.tokens, row.count || ""]));
+    if (viewer.dataset.rows !== signature) {
+      viewer.dataset.rows = signature;
+      const bar = viewer.querySelector(".lcv-bar");
+      const list = viewer.querySelector(".lcv-rows");
+      bar.replaceChildren(...rows.filter((row) => row.id !== "free" && row.tokens > 0).map((row) => {
+        const part = document.createElement("i");
+        part.className = `lcv-c-${row.id}`;
+        part.style.width = `${Math.max(0.6, row.tokens / ratio.limit * 100)}%`;
+        return part;
+      }));
+      list.replaceChildren(...rows.map((row) => {
+        const item = document.createElement("li");
+        item.className = `lcv-row lcv-c-${row.id}`;
+        const dot = document.createElement("i");
+        const name = document.createElement("span");
+        name.className = "lcv-name";
+        name.textContent = row.label;
+        if (row.count) {
+          const count = document.createElement("small");
+          count.className = "lcv-muted";
+          count.textContent = row.count;
+          name.append(" ", count);
+        }
+        const amount = document.createElement("b");
+        amount.textContent = shortTokens(row.tokens);
+        const share = document.createElement("small");
+        share.className = "lcv-muted";
+        share.textContent = sharePercent(row.tokens, ratio.limit);
+        item.append(dot, name, amount, share);
+        return item;
+      }));
+    }
+    const notes = [];
+    if (ratio?.approximate) notes.push("用量为估算");
+    if (thresholdText) notes.push(thresholdText);
+    if (ratio && !breakdown) notes.push("发一条消息后会显示每一类占多少");
+    setText(".lcv-note", ratio ? notes.join(" · ") : "有用量数据后会自动更新");
+    const main = viewer.querySelector(".laolao-context-viewer__compact");
+    const state = readCompactionState(usageKey);
+    const compacting = busy || ["active", "retrying"].includes(state?.phase);
+    const streaming = Boolean(document.querySelector(".chat-send-btn--stop"));
+    const mainText = compacting ? "正在整理上下文…" : streaming ? "回复结束后可以整理" : "现在整理上下文";
+    if (main.textContent !== mainText) main.textContent = mainText;
+    const disabled = compacting || streaming || !ratio;
+    if (main.disabled !== disabled) main.disabled = disabled;
+    if (disabled) {
+      const confirm = viewer.querySelector(".lcv-confirm");
+      if (!confirm.hidden) { confirm.hidden = true; main.hidden = false; }
+    }
   };
 
   const renderCompactionNotice = () => {
@@ -517,7 +635,26 @@
 #laolao-context-compact-popover{position:fixed;z-index:2147483000;width:min(286px,calc(100vw - 20px));padding:12px;border:1px solid rgba(255,255,255,.74);border-radius:17px;background:linear-gradient(145deg,rgba(255,252,253,.94),rgba(249,228,240,.91));color:#61394e;box-shadow:0 18px 42px rgba(84,42,65,.16),inset 0 1px rgba(255,255,255,.78);animation:laolao-context-pop .16s cubic-bezier(.2,.78,.28,1) both}.laolao-context-compact__copy{display:flex;flex-direction:column;gap:4px}.laolao-context-compact__copy strong{font-size:12px}.laolao-context-compact__copy span{color:rgba(97,57,78,.62);font-size:10.5px;line-height:1.45}.laolao-context-compact__actions{display:flex;justify-content:flex-end;gap:6px;margin-top:10px}.laolao-context-compact__actions button{padding:5px 10px;border:1px solid rgba(184,99,136,.18);border-radius:999px;background:rgba(255,255,255,.42);color:inherit;font-size:10.5px;cursor:pointer}.laolao-context-compact__actions button.is-primary{border-color:rgba(205,76,132,.26);background:#d85b91;color:white}
 #laolao-context-compact-toast{position:fixed;left:50%;bottom:72px;z-index:2147483647;max-width:min(520px,84vw);padding:8px 14px;border:1px solid rgba(255,255,255,.74);border-radius:999px;background:rgba(252,235,244,.96);color:#6d3650;box-shadow:0 10px 28px rgba(106,48,79,.16);font-size:12px;opacity:0;pointer-events:none;transform:translate(-50%,6px);transition:opacity .18s ease,transform .18s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#laolao-context-compact-toast.is-visible{opacity:1;transform:translate(-50%,0)}
 @keyframes laolao-context-spin{to{transform:rotate(360deg)}}@keyframes laolao-context-pop{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.laolao-context-compact-btn,.laolao-context-compact-btn svg,#laolao-context-compact-popover,#laolao-context-compact-toast{animation:none!important;transition:none!important}}
-.laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 9px);z-index:100;width:min(268px,calc(100vw - 24px));box-sizing:border-box;padding:14px;border:1px solid rgba(255,255,255,.78);border-radius:16px;background:linear-gradient(145deg,rgba(255,252,254,.97),rgba(248,234,244,.95));box-shadow:0 15px 38px rgba(88,54,77,.16);color:#503c56;font-size:11px}.laolao-context-viewer__popover strong{font-size:12px}.laolao-context-viewer__amount{margin-top:8px;font-variant-numeric:tabular-nums;font-weight:650}.laolao-context-viewer__bar{height:5px;margin:10px 0;border-radius:99px;background:rgba(119,107,136,.15);overflow:hidden}.laolao-context-viewer__bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c888b1,#9fa5db);transition:width .35s ease}.laolao-context-viewer__note{color:#766b7e;line-height:1.4}.laolao-context-viewer__compact{display:block;width:100%;height:28px;margin-top:10px;border:1px solid rgba(184,99,136,.22);border-radius:9px;background:rgba(255,255,255,.8);color:inherit;font:500 11.5px/1 inherit;cursor:pointer}.laolao-context-viewer__compact:hover{background:#fff}
+.laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer[data-level="mid"] .laolao-context-viewer__fill{stroke:#c9789f}.laolao-context-viewer[data-level="high"] .laolao-context-viewer__fill{stroke:#e0607e}
+.laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 10px);z-index:100;width:min(312px,calc(100vw - 24px));box-sizing:border-box;padding:16px 16px 14px;border:1px solid rgba(255,255,255,.8);border-radius:18px;background:linear-gradient(150deg,rgba(255,252,254,.97),rgba(249,236,245,.95));box-shadow:0 18px 44px rgba(88,54,77,.17),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);color:#4d3a52;font-size:12px;line-height:1.35;--lcv-messages:#d46a9d;--lcv-tools:#8e9be3;--lcv-rules:#e2a45f;--lcv-files:#5fb3a2;--lcv-skills:#b48ad8;--lcv-reserve:rgba(119,107,136,.32);--lcv-free:rgba(119,107,136,.12);--lcv-muted:#8a7c90}
+.laolao-context-viewer__popover .lcv-muted{color:var(--lcv-muted);font-weight:400}
+.lcv-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.lcv-head strong{font-size:13px;font-weight:650;letter-spacing:.02em}.lcv-source{font-size:10.5px}
+.lcv-total{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:10px;font-variant-numeric:tabular-nums}.lcv-used{font-size:17px;font-weight:650}.lcv-amount{font-size:12px}
+.lcv-bar{display:flex;gap:2px;height:7px;margin:10px 0 12px;border-radius:99px;background:var(--lcv-free);overflow:hidden}.lcv-bar i{display:block;height:100%;flex:none;border-radius:2px;transition:width .35s ease}
+.lcv-rows{display:grid;gap:7px;margin:0;padding:0;list-style:none}.lcv-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto 46px;align-items:center;gap:9px;font-variant-numeric:tabular-nums}.lcv-row>i{width:10px;height:10px;border-radius:3px}.lcv-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lcv-name small{font-size:10.5px}.lcv-row b{font-weight:550;text-align:right}.lcv-row>small{text-align:right;font-size:11px}
+.lcv-c-messages{background:var(--lcv-messages)}.lcv-c-tools{background:var(--lcv-tools)}.lcv-c-rules{background:var(--lcv-rules)}.lcv-c-files{background:var(--lcv-files)}.lcv-c-skills{background:var(--lcv-skills)}.lcv-c-reserve{background:repeating-linear-gradient(135deg,var(--lcv-reserve) 0 3px,transparent 3px 6px)}.lcv-c-free{background:var(--lcv-free)}
+.lcv-row.lcv-c-messages,.lcv-row.lcv-c-tools,.lcv-row.lcv-c-rules,.lcv-row.lcv-c-files,.lcv-row.lcv-c-skills,.lcv-row.lcv-c-reserve,.lcv-row.lcv-c-free{background:none}
+.lcv-row.lcv-c-messages>i{background:var(--lcv-messages)}.lcv-row.lcv-c-tools>i{background:var(--lcv-tools)}.lcv-row.lcv-c-rules>i{background:var(--lcv-rules)}.lcv-row.lcv-c-files>i{background:var(--lcv-files)}.lcv-row.lcv-c-skills>i{background:var(--lcv-skills)}.lcv-row.lcv-c-reserve>i{background:repeating-linear-gradient(135deg,var(--lcv-reserve) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--lcv-reserve)}.lcv-row.lcv-c-free>i{background:transparent;box-shadow:inset 0 0 0 1px var(--lcv-reserve)}
+.lcv-row.lcv-c-free,.lcv-row.lcv-c-reserve{color:var(--lcv-muted)}
+.lcv-note{display:block;margin-top:12px;padding-top:10px;border-top:1px solid rgba(119,107,136,.14);font-size:11px;line-height:1.5}.lcv-note:empty{display:none}
+.lcv-actions{margin-top:10px}.laolao-context-viewer__compact{display:block;width:100%;height:32px;border:1px solid rgba(184,99,136,.24);border-radius:10px;background:rgba(255,255,255,.78);color:inherit;font:500 12px/1 inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease}.laolao-context-viewer__compact:hover:not(:disabled){background:#fff;border-color:rgba(205,91,141,.38)}.laolao-context-viewer__compact:disabled{cursor:default;opacity:.6}.laolao-context-viewer__compact[hidden]{display:none}
+.lcv-confirm{display:grid;gap:8px}.lcv-confirm[hidden]{display:none}.lcv-confirm small{font-size:11px;line-height:1.45}.lcv-confirm div{display:flex;justify-content:flex-end;gap:6px}.lcv-confirm button{height:28px;padding:0 12px;border:1px solid rgba(184,99,136,.22);border-radius:999px;background:rgba(255,255,255,.6);color:inherit;font:500 11.5px/1 inherit;cursor:pointer}.lcv-confirm .lcv-go{border-color:rgba(205,76,132,.3);background:#d85b91;color:#fff}
+.laolao-context-viewer__popover :is(button):focus-visible{outline:2px solid rgba(207,66,130,.45);outline-offset:1px}
+html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover{--lcv-muted:#a99bb0;--lcv-reserve:rgba(220,205,230,.3);--lcv-free:rgba(255,255,255,.08)}
+html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-muted,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-free span,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-reserve span{color:var(--lcv-muted)!important}
+html[data-pinkie-night]:not(#_n) .lcv-note{border-top-color:rgba(255,255,255,.08)}
+html[data-pinkie-night]:not(#_n) .lcv-confirm .lcv-go{background:#c94f86!important;border-color:transparent!important;color:#fff!important}
+@media(prefers-reduced-motion:reduce){.lcv-bar i,.laolao-context-viewer__compact{transition:none}}
 .agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
 .pinkie-chat-compaction:empty{display:none}
@@ -549,8 +686,16 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
 
   document.addEventListener("pointerdown", (event) => {
     if (popover && !popover.contains(event.target) && !event.target.closest?.(`.${BUTTON_CLASS}`)) closePopover();
+    document.querySelectorAll(".laolao-context-viewer[open]").forEach((viewer) => {
+      if (!viewer.contains(event.target)) viewer.removeAttribute("open");
+    });
   }, true);
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePopover(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    closePopover();
+    const open = document.querySelector(".laolao-context-viewer[open]");
+    if (open) { open.removeAttribute("open"); open.querySelector("summary")?.focus(); }
+  });
   ensureStyle();
   render();
   setInterval(render, 900);
