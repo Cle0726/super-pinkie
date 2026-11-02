@@ -728,9 +728,9 @@ apply_ui_skin() {
     DID_CHANGE=1
   fi
   if ! grep -Fq 'laolao-settings-user.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-settings-user.js?v=settingsuser4"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-settings-user.js?v=settingsuser5"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq 'laolao-settings-user.js?v=settingsuser4' "$index_file"; then
+  elif ! grep -Fq 'laolao-settings-user.js?v=settingsuser5' "$index_file"; then
     perl -0pi -e 's{((?:\./|/)laolao-settings-user\.js)(?:\?v=[^"]*)?}{${1}?v=settingsuser3}g' "$index_file"
     DID_CHANGE=1
   fi
