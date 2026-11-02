@@ -1318,8 +1318,10 @@ test('tier limits and task routing match the new four-level design', () => {
 
   const plan = buildDeliberationPlan('full', 'project', 'checkpoint.md', 'implementation');
   assert.match(plan, /写代码\/修 bug/);
-  assert.match(plan, /不同解法/);
-  assert.match(plan, /反批评角色已停用/);
+  // 2026-11-02 档位升级：运行单按活儿种类写（work-kinds.mjs）。写代码在全开档派「用户视角试用」，
+  // 先读对应打法；不再对所有种类都列一遍求解 / 反批评。
+  assert.match(plan, /用户视角试用/);
+  assert.match(plan, /playbooks\/debugging\.md/);
   assert.doesNotMatch(plan, /COMPLETION_TRUTH_RULES|completionClaimed|delivery_guard|verify_completion\.py/);
 });
 
@@ -1616,8 +1618,14 @@ test('tiered prompts omit completion-gate internals in all five modes', t => {
     runtime.arm(sessionKey, 'boost');
     const prompt = runtime.prompt({prompt: '请解释闭包是什么'}, {agentId, sessionKey, workspaceDir: root});
     assert.doesNotMatch(prompt.appendSystemContext, /全局交付真实性门禁|completionClaimed|delivery_guard|verify_completion\.py/);
-    assert.match(prompt.appendSystemContext, /此问题无需多方案，已直接回答/);
-    assert.equal(runtime.status(sessionKey).workflow.label, '此问题无需多方案，已直接回答');
+    // 学习模式默认按讲题辅导走（档位升级 2026-11-02）；其余模式简单问题仍直接回答。
+    if (agentId === 'learning') {
+      assert.match(prompt.appendSystemContext, /做事流程：加强档 · 讲题 \/ 辅导/);
+      assert.equal(runtime.status(sessionKey).workflow.label, '讲题 / 辅导');
+    } else {
+      assert.match(prompt.appendSystemContext, /此问题无需多方案，已直接回答/);
+      assert.equal(runtime.status(sessionKey).workflow.label, '此问题无需多方案，已直接回答');
+    }
     // Pinkie's ask_user card stays out of unrestricted mode.
     if (agentId === 'unrestricted') assert.doesNotMatch(prompt.appendSystemContext, /ask_user/);
     else assert.match(prompt.appendSystemContext, /ask_user/);
@@ -1792,7 +1800,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(embeddedVerified.details.scope,'read-only-diagnostic');
   let response;
   await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost'},respond:(...args)=>{response=args;}});
-  assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/反批评/);
+  assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/做事流程：加强档/);
   await methods.get('pinkie.deepThink.disarm').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
 
@@ -2595,4 +2603,375 @@ test('a command still running in the background is an honest in-progress state, 
   guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
     result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
   assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
+});
+
+// 2026-11-01 实测：长跑档计划写了 6 个里程碑，只勾了第一个、跑过一次测试就交付了。
+test('marathon keeps going while the checkpoint still has unchecked milestones, then stops cleanly',t=>{
+  const root=workspace(t,'marathon');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:todo-marathon',runId:'m-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  const prompt=runtime.prompt({prompt:'做一个能增删改查、数据存本地的待办网页，带自动化测试'},ctx);
+  const checkpoint=path.join(root,sessionCheckpointRelative(ctx.sessionKey));
+  // 计划里给的是绝对路径：绑定了项目文件夹时相对路径会被写进项目里。
+  assert.ok(prompt.appendSystemContext.includes(checkpoint));
+  assert.match(prompt.appendSystemContext,/- \[ \] 里程碑 — 验证/);
+  // 改了文件、跑过测试，但还没写计划：推回去先写计划。
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'index.html')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 3'},ctx);
+  // 档位升级：网页要截图看过（长跑档按全开档标准，桌面 + 手机宽度）。
+  for(const flag of ['','  --mobile']){
+    const shot=path.join(root,flag?'index.mobile.preview.png':'index.preview.png');
+    runtime.afterTool({toolName:'exec',params:{command:'look-page '+path.join(root,'index.html')+flag},result:'网页：index.html 截图：'+shot},ctx);
+    runtime.afterTool({toolName:'read',params:{path:shot},result:{content:[{type:'text',text:'Read image file [image/png]'},{type:'image'}]}},ctx);
+  }
+  // 终稿写成一句真话（档位升级后，做了很多步却只回几个字会被当成截断）。
+  let decision=runtime.finalize({lastAssistantMessage:'待办网页做好了，增删改查都能用，数据存在本机。'},ctx);
+  assert.equal(decision.action,'revise');assert.match(decision.reason,/还没把计划写进检查点/);
+  fs.writeFileSync(checkpoint,'## 目标\n待办网页\n## 里程碑\n- [x] 页面骨架 — 验证：打开能看到\n- [ ] 本地存储 — 验证：刷新数据还在\n- [ ] 手机截图 — 验证：390 宽截图\n');
+  runtime.afterTool({toolName:'write',params:{path:checkpoint},result:'ok'},ctx);
+  decision=runtime.finalize({lastAssistantMessage:'页面骨架做好了，接着做本地存储。'},{...ctx,runId:'m-2'});
+  assert.equal(decision.action,'revise');
+  assert.match(decision.reason,/没勾掉的里程碑：本地存储 — 验证：刷新数据还在；手机截图/);
+  assert.match(decision.retry.instruction,/不要问用户要不要继续/);
+  // 接着做下一个里程碑不需要「这次和上次不同」的说法。
+  runtime.afterTool({toolName:'exec',params:{command:'node --test'},result:'pass 5'},ctx);
+  decision=runtime.finalize({lastAssistantMessage:'本地存储做好了，接着做手机适配。'},{...ctx,runId:'m-3'});
+  assert.equal(decision.action,'revise');assert.equal(runtime.status(ctx.sessionKey).active,true);
+  // 全部勾完（或写明放弃原因）就正常交付。
+  fs.writeFileSync(checkpoint,'- [x] 页面骨架\n- [x] 本地存储 — 刷新后 3 条还在\n- [x] 放弃：手机截图 — 本机没有浏览器\n');
+  runtime.afterTool({toolName:'write',params:{path:checkpoint},result:'ok 2'},ctx);
+  assert.equal(runtime.finalize({lastAssistantMessage:'全部做完了。'},{...ctx,runId:'m-4'}),undefined);
+});
+
+test('the same final reply checked before writing and again at finalize counts as one continuation, not two',t=>{
+  // r1/r2 实测：完整做完的长跑档，终稿被核验打回一次；写入前那道检查没有 runId，收尾那道有，
+  // 第二道就把同一条回复当成「没说明换了什么做法的第二次续跑」直接停掉，用户什么也没收到。
+  const integrity={action:'revise',reason:'回复里的说法缺少本轮证据',retry:{instruction:'补证据',idempotencyKey:'x',maxAttempts:3}};
+  const reply='待办网页做好了，单元测试 6 组和端到端 10 条都通过。';
+  for(const [agentId,stays] of [['project',true],['unrestricted',false]]){
+    const root=workspace(t,'dup-'+agentId);
+    const runtime=new ModeArchitecture();
+    const ctx={agentId,sessionKey:`agent:${agentId}:dup-final`,workspaceDir:root};
+    runtime.arm(ctx.sessionKey,'marathon');
+    runtime.prompt({prompt:'做一个能增删改查、数据存本地的待办网页，带自动化测试'},{...ctx,runId:'real-1'});
+    writeSessionCheckpoint(root,ctx.sessionKey,'- [x] 页面\n- [x] 测试 — 6 条通过\n');
+    runtime.afterTool({toolName:'write',params:{path:path.join(root,'index.html')},result:'ok'},{...ctx,runId:'real-1'});
+    runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 6'},{...ctx,runId:'real-1'});
+    const first=runtime.prepareRetryDecision(integrity,{lastAssistantMessage:reply},{...ctx,runId:''});
+    assert.equal(first?.action,'revise');
+    const second=runtime.prepareRetryDecision(integrity,{lastAssistantMessage:reply},{...ctx,runId:'real-1'});
+    if(stays){
+      assert.deepEqual(second,first,'same reply, same decision');
+      assert.equal(runtime.status(ctx.sessionKey).active,true);
+    } else {
+      assert.equal(second,undefined,'unrestricted mode keeps its old behaviour');
+    }
+  }
+});
+
+test('marathon milestone pushes stop after two continuations with no new evidence',t=>{
+  const root=workspace(t,'marathon-idle');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:idle-marathon',runId:'i-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  runtime.prompt({prompt:'写一个记账脚本并测试'},ctx);
+  writeSessionCheckpoint(root,ctx.sessionKey,'- [ ] 记账脚本\n- [ ] 测试\n');
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'ledger.py')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'pytest'},result:'1 passed'},ctx);
+  for(const run of ['i-1','i-2']) assert.equal(runtime.finalize({lastAssistantMessage:'先这样。'},{...ctx,runId:run})?.action,'revise');
+  assert.equal(runtime.finalize({lastAssistantMessage:'先这样。'},{...ctx,runId:'i-3'}),undefined);
+  assert.equal(runtime.status(ctx.sessionKey).active,false);
+  assert.match(runtime.stopReport({...ctx,runId:'i-3'}),/没有新增/);
+});
+
+test('ticking the on-screen plan or the checkpoint after tests does not invalidate the test evidence',t=>{
+  const root=workspace(t,'plan-tick');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:plan-tick',runId:'p-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'boost');
+  runtime.prompt({prompt:'做一个待办网页并写自动化测试'},ctx);
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'app.js')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 6'},ctx);
+  // 档位升级：网页要截图看过才算做完（加强档只要桌面截图）。
+  runtime.afterTool({toolName:'exec',params:{command:'look-page '+path.join(root,'index.html')},result:'截图：'+path.join(root,'index.preview.png')},ctx);
+  runtime.afterTool({toolName:'read',params:{path:path.join(root,'index.preview.png')},result:{content:[{type:'image'}]}},ctx);
+  runtime.afterTool({toolName:'plan_update',params:{items:[{text:'测试',status:'completed'}]},result:'{"ok":true}'},ctx);
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,sessionCheckpointRelative(ctx.sessionKey))},result:'ok'},ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).missing,[]);
+  runtime.afterTool({toolName:'edit',params:{path:path.join(root,'app.js')},result:'ok 2'},ctx);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/缺少本轮测试命令及结果/,'a real code change after the tests still needs a new test run');
+});
+
+test('work-first long-task changes do not change unrestricted mode',t=>{
+  assert.equal(classifyDeliberationTask('写一个记账脚本', 'none'), 'simple');
+  assert.equal(classifyDeliberationTask('写一个记账脚本', 'project'), 'implementation');
+  const root=workspace(t,'unrestricted-unchanged');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:preserved',runId:'u-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  const prompt=runtime.prompt({prompt:'做一个待办网页并写自动化测试'},ctx).appendSystemContext;
+  assert.match(prompt,/长跑档：沿用加强档思路持续执行/);
+  assert.doesNotMatch(prompt,/- \[ \] 里程碑 — 验证/);
+  assert.ok(prompt.includes(sessionCheckpointRelative(ctx.sessionKey)));
+  assert.ok(!prompt.includes(path.join(root,sessionCheckpointRelative(ctx.sessionKey))));
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'app.js')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 3'},ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).missing,[], 'no new checkpoint gate');
+  runtime.afterTool({toolName:'plan_update',params:{items:[{text:'测试',status:'completed'}]},result:'{"ok":true}'},ctx);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/缺少本轮测试命令及结果/, 'prior evidence behavior remains unchanged');
+});
+
+test('marathon compaction reloads its own checkpoint and warns against repeating side effects',t=>{
+  const root=workspace(t,'marathon-compaction');
+  const handoffs=new CompactionHandoffStore(path.join(root,'.handoffs'));
+  const runtime=new ModeArchitecture(null,null,handoffs);
+  const ctx={agentId:'project',sessionKey:'agent:project:marathon-compaction',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  runtime.prompt({prompt:'做一个待办网页并运行测试'},ctx);
+  writeSessionCheckpoint(root,ctx.sessionKey,'## 里程碑\n- [x] 页面 — 已保存\n- [ ] 测试 — 验证：运行测试\n下一步运行测试，不要重复安装。');
+  runtime.beforeCompaction({},ctx);
+  runtime.afterCompaction({},ctx);
+  const resumed=runtime.prompt({prompt:'\u2063'},ctx).appendSystemContext;
+  assert.match(resumed,/下一步运行测试，不要重复安装/);
+  assert.match(resumed,/禁止盲目重复/);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/没勾掉的里程碑/);
+});
+
+// ---- 2026-11-02 档位升级：按活儿种类走流程、要证据、多做几版 ----
+
+function tierRun(t,label,tier,prompt,agentId='project'){
+  const root=workspace(t,label);
+  const runtime=new ModeArchitecture();
+  const ctx={agentId,sessionKey:`agent:${agentId}:${label}`,runId:label+'-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,tier);
+  const plan=runtime.prompt({prompt},ctx)?.appendSystemContext||'';
+  const tool=(toolName,params,text,isError=false)=>runtime.afterTool({toolName,params,result:{content:[{type:'text',text}],...(isError?{isError:true}:{})}},ctx);
+  return {root,runtime,ctx,plan,tool,missing:()=>runtime.status(ctx.sessionKey).missing,status:()=>runtime.status(ctx.sessionKey)};
+}
+
+test('each tier asks each kind of work for the proof that kind needs',t=>{
+  // 网页：加强档要截图看过，全开档还要手机宽度，基础档不加硬门禁。
+  for(const [tier,expectGap] of [['base',null],['boost','改完的页面还没截图打开看过'],['full','改完的页面还没截图打开看过'],['marathon','改完的页面还没截图打开看过']]){
+    const run=tierRun(t,'web-'+tier,tier,'帮我做一个记账的小网页');
+    run.tool('write',{path:path.join(run.root,'index.html'),content:'<html>'},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+    const missing=run.missing().join('；');
+    if(expectGap) assert.match(missing,new RegExp(expectGap),tier); else assert.doesNotMatch(missing,/截图/,tier);
+    assert.equal(run.status().workflow.kind,'web_ui');
+    assert.equal(run.status().workflow.kindLabel,'网页 / 界面 / 小工具');
+  }
+  const full=tierRun(t,'web-full-phone','full','帮我做一个记账的小网页');
+  full.tool('write',{path:path.join(full.root,'index.html')},`Successfully wrote 6 bytes to ${full.root}/index.html`);
+  full.tool('exec',{command:'look-page index.html'},'截图：index.preview.png');
+  full.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
+  assert.match(full.missing().join(),/还没看过手机宽度的截图/);
+  assert.match(full.missing().join(),/独立起草 0\/1/);
+  assert.match(full.missing().join(),/看图审稿 0\/1/);
+  // PPT：只看了网页替身的截图不算；打开交出去的 .pptx 本身才算。
+  const deck=tierRun(t,'deck-boost','boost','帮我做个 5 页左右的 PPT，给新店员讲讲秋季新品');
+  deck.tool('exec',{command:'/Users/me/.openclaw/agent-env/bin/python3 generate_pptx.py'},'PPTX 成功生成并同步: 秋季新品.pptx');
+  deck.tool('read',{path:'slide_1.png'},'Read image file [image/png]');
+  assert.match(deck.missing().join(),/交出去的文件本身还没打开或转成图片核对过/);
+  deck.tool('exec',{command:"/Users/me/.openclaw/agent-env/bin/python3 -c \"from pptx import Presentation; print(len(Presentation('秋季新品.pptx').slides))\""},'5');
+  assert.deepEqual(deck.missing(),[]);
+  assert.equal(deck.status().workflow.label,'PPT / Word / PDF 文档');
+  assert.deepEqual(deck.status().workflow.stages.map(stage=>[stage.label,stage.used]),[['做出文件',true],['打开交付文件',true],['转图看过',false]]);
+  // 数据：程序算过、回复里的数字能在输出里找到。
+  const data=tierRun(t,'data-boost','boost','把成绩单整理一下算平均分');
+  assert.match(data.missing().join(),/关键数字还没用程序算过/);
+  data.tool('exec',{command:'python3 calc.py'},'语文平均分: 81.40\n数学平均分: 81.60');
+  assert.deepEqual(data.missing(),[]);
+  // 自动化：要「每天自动」就要真注册。
+  const auto=tierRun(t,'auto-boost','boost','每天早上 8 点自动把下载文件夹整理一下');
+  auto.tool('write',{path:path.join(auto.root,'tidy.py')},`Successfully wrote 9 bytes to ${auto.root}/tidy.py`);
+  auto.tool('exec',{command:'python3 tidy.py --dry-run ./test-downloads'},'将移动 12 个文件');
+  assert.match(auto.missing().join(),/还没看到注册成定时或常驻的输出/);
+  auto.tool('exec',{command:'launchctl load ~/Library/LaunchAgents/com.pinkie.tidy.plist'},'');
+  assert.deepEqual(auto.missing(),[]);
+  // 环境：本轮要真跑检测，TOOLS.md 里的旧记录不算。
+  const env=tierRun(t,'env-boost','boost','这台电脑能不能跑本地模型','main');
+  assert.match(env.missing().join(),/本轮还没跑检测或版本命令/);
+  env.tool('exec',{command:'bash playbooks/machine-check.sh'},'芯片：Apple M2\n内存：16 GB');
+  assert.deepEqual(env.missing(),[]);
+});
+
+test('writing, naming and trade-offs are not execution work: no file or test gate, drafts in the full tier',t=>{
+  for(const [tier,prompt] of [['boost','给我的奶茶店想个名字'],['boost','帮我写个小红书文案，推荐我们的桂花拿铁'],['full','给我的奶茶店想个名字']]){
+    const run=tierRun(t,'text-'+tier+prompt.length,tier,prompt,'thinking');
+    const missing=run.missing().join('；');
+    assert.doesNotMatch(missing,/测试|截图|文件|运行/,prompt);
+    if(tier==='full') assert.match(missing,/独立起草 0\/2/);
+    else assert.deepEqual(run.missing(),[]);
+  }
+  const full=tierRun(t,'naming-full','full','给我的奶茶店想个名字','thinking');
+  assert.match(full.plan,/派 2–3 个子任务，label 写「独立起草·1」「独立起草·2」/);
+  assert.match(full.plan,/playbooks\/ideas\.md/);
+  const spawn=full.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'独立起草',task:'父会话的草稿：慢半拍、桂语……'}},full.ctx);
+  assert.equal(spawn.block,undefined);
+  assert.match(spawn.params.task,/原始用户需求：\n给我的奶茶店想个名字/);
+  assert.doesNotMatch(spawn.params.task,/慢半拍/,'the helper never sees the parent draft');
+  assert.match(spawn.params.label,/^独立起草·\d$/);
+  // 看图审稿不是起名流程的环节。
+  assert.match(full.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'看图审稿'}},full.ctx).blockReason,/不是当前任务流程启用的环节/);
+});
+
+test('a reviewer is sent only after there is something to look at, and gets the files to open',t=>{
+  const run=tierRun(t,'review-order','full','做张海报，周末促销');
+  assert.match(run.plan,/做完派 1 个「看图审稿」/);
+  assert.match(run.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'看图审稿'}},run.ctx).blockReason,/先把成品做出来/);
+  run.tool('image_generate',{prompt:'poster'},'Background task started for image generation (abc).');
+  run.tool('exec',{command:'python3 compose.py'},`已保存到 ${run.root}/poster.png`);
+  const spawn=run.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'看图审稿'}},run.ctx);
+  assert.equal(spawn.block,undefined);
+  assert.ok(spawn.params.task.includes(`- ${run.root}/poster.png`));
+});
+
+test('learning mode tutors instead of answering, and a solver is never sent to do the homework',t=>{
+  const run=tierRun(t,'tutor-full','full','这道题怎么做：求 f(x)=x^3 在 x=2 处的导数','learning');
+  assert.equal(run.status().workflow.kind,'tutoring');
+  assert.match(run.plan,/讲思路和关键一步，不直接替他写答案/);
+  assert.match(run.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'求解'}},run.ctx).blockReason,/不是当前任务流程启用的环节/);
+  const spawn=run.runtime.beforeTool({toolName:'sessions_spawn',params:{label:'独立起草'}},run.ctx);
+  assert.match(spawn.params.task,/不替用户答题，也不给出用户作业题的最终答案/);
+  assert.match(run.missing().join(),/讲解里的关键计算还没验算过/);
+});
+
+test('unrestricted mode keeps its old plan and gates',t=>{
+  const run=tierRun(t,'none-web','full','帮我做一个记账的小网页','unrestricted');
+  assert.doesNotMatch(run.plan,/playbooks\//);
+  assert.doesNotMatch(run.plan,/【做事流程：/);
+  assert.equal(buildDeliberationPlan('full','none','x','implementation'),buildDeliberationPlan('full','none','x',{taskType:'implementation',workKinds:['web_ui']}),'work kinds never reach the unrestricted plan');
+  run.tool('write',{path:path.join(run.root,'index.html')},'Successfully wrote 6 bytes');
+  assert.doesNotMatch(run.missing().join(),/截图/);
+  assert.deepEqual(run.status().workflow.kinds,[]);
+});
+
+test('every tier plan stays short and names the playbook to read',()=>{
+  const lengths=[];
+  for(const tier of ['base','boost','full','marathon']){
+    for(const workKinds of [['web_ui'],['document'],['writing'],['data_charts'],['automation'],['video_motion'],['standard_answer'],['tradeoff'],['debugging'],['web_ui','publish'],['simple']]){
+      const plan=buildDeliberationPlan(tier,'project','/Users/me/.openclaw/workspace-project/memory/context/sessions/x.md',{taskType:'pending',workKinds},{playbookRoot:'/Users/me/.openclaw/workspace-project'});
+      lengths.push(plan.length);
+      assert.ok(plan.length<=1200,`${tier}/${workKinds}: ${plan.length}`);
+      if(workKinds[0]!=='simple'&&workKinds[0]!=='standard_answer') assert.match(plan,/先完整读 \/Users\/me\/\.openclaw\/workspace-project\/playbooks\//,`${tier}/${workKinds}`);
+    }
+  }
+  assert.ok(Math.max(...lengths)>Math.min(...lengths));
+  assert.match(buildDeliberationPlan('marathon','project','/c.md',{workKinds:['video_motion']}),/- \[ \] 里程碑 — 验证：成片真的生成（核对过时长或大小），并且抽帧图打开看过/);
+});
+
+test('an old saved tier run without work kinds still loads and falls back to the old five types',t=>{
+  const root=workspace(t,'old-state');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:old-state',runId:'o-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'boost');
+  runtime.prompt({prompt:'写一个函数判断是不是闰年，带单元测试'},ctx);
+  const state=runtime.getRun(ctx.sessionKey);
+  delete state.workKinds;delete state.workKind;
+  runtime.setRun(ctx.sessionKey,state);
+  const status=runtime.status(ctx.sessionKey);
+  assert.equal(status.workflow.kind,'code');
+  assert.equal(status.workflow.label,'写代码 / 修 bug');
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'leap.py')},result:'ok'},ctx);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/缺少本轮测试命令及结果/);
+});
+
+test('a final reply cut down to a word gets one more chance, then an honest stop that keeps what was done',t=>{
+  const run=tierRun(t,'short-final','boost','帮我统计一下这个月的开销');
+  for(let index=0;index<5;index+=1) run.tool('exec',{command:`python3 step${index}.py`},`合计 ${1200+index} 元，平均 ${40+index}.5 元`);
+  let decision=run.runtime.finalize({lastAssistantMessage:'碧'},run.ctx);
+  assert.equal(decision.action,'revise');
+  assert.match(decision.reason,/最终回复只有几个字，没交代结果/);
+  assert.match(decision.retry.instruction,/不用再调用工具，直接给出完整的最终回复/);
+  decision=run.runtime.finalize({lastAssistantMessage:'碧'},{...run.ctx,runId:'short-final-2'});
+  assert.equal(decision,undefined);
+  assert.match(run.runtime.stopReport({...run.ctx,runId:'short-final-2'}),/最终回复两次都只有几个字/);
+  // 「做好了。」先推一次要完整终稿；第二次还是这句，就是真说完了，照常交付，不报未完成。
+  const ok=tierRun(t,'short-ok','boost','帮我统计一下这个月的开销');
+  for(let index=0;index<5;index+=1) ok.tool('exec',{command:`python3 step${index}.py`},`合计 ${1200+index} 元，平均 ${40+index}.5 元`);
+  assert.match(ok.runtime.finalize({lastAssistantMessage:'做好了。'},ok.ctx).reason,/最终回复只有几个字/);
+  assert.equal(ok.runtime.finalize({lastAssistantMessage:'做好了。'},{...ok.ctx,runId:'short-ok-2'}),undefined);
+  assert.equal(ok.status().stopReason,'');
+  // 明确的完成说法（做完了、已经完成……）本来就不算截断。
+  const done=tierRun(t,'short-done','boost','帮我统计一下这个月的开销');
+  for(let index=0;index<5;index+=1) done.tool('exec',{command:`python3 step${index}.py`},`合计 ${1200+index} 元，平均 ${40+index}.5 元`);
+  assert.equal(done.runtime.finalize({lastAssistantMessage:'都做完了。'},done.ctx),undefined);
+});
+
+test('a retry carries the previous reply so the next one replaces it instead of repeating it',t=>{
+  const run=tierRun(t,'retry-draft','boost','帮我做一个记账的小网页');
+  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。';
+  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
+  assert.equal(decision.action,'revise');
+  assert.match(decision.retry.instruction,/只补做缺的那一步核对/);
+  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/);
+  assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'));
+  // 补了截图之后换了说法：不因为没背「这次和上次不同」而停掉。
+  run.tool('exec',{command:'look-page index.html'},'截图：index.preview.png');
+  run.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
+  assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'retry-draft-2'}),undefined);
+});
+
+test('a stop by the system still hands the user the last full reply',t=>{
+  const run=tierRun(t,'stop-draft','boost','帮我做一个记账的小网页');
+  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。';
+  // 同一版回复、没有新证据：第一次推回去补，第二次停下。
+  assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-1'}).action,'revise');
+  assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-2'}),undefined);
+  const report=run.runtime.stopReport({...run.ctx,runId:'s-2'});
+  assert.match(report,/^本轮未完成：/);
+  assert.match(report,/上一版回复（还没核对完，仅供参考）：\n记账网页做好了/);
+  // 如实说没做完：用碧琪自己的话，不套模板。
+  const honest=tierRun(t,'stop-honest','boost','帮我做一个记账的小网页');
+  honest.tool('write',{path:path.join(honest.root,'index.html')},'Successfully wrote 6 bytes');
+  const words='本轮未完成：页面写好了，但这台电脑的截图工具打不开，我没能亲眼看过效果。你可以双击 index.html 先看看。';
+  assert.equal(honest.runtime.finalize({lastAssistantMessage:words},honest.ctx),undefined);
+  assert.ok(honest.runtime.stopReport(honest.ctx).startsWith(words));
+});
+
+test('choosing 继续 keeps classifying by the last real request',t=>{
+  const run=tierRun(t,'continue-kind','boost','帮我做个 5 页左右的 PPT，给新店员讲讲秋季新品');
+  run.runtime.prompt({prompt:'继续'},{...run.ctx,runId:'continue-2'});
+  assert.equal(run.status().workflow.kind,'document');
+});
+
+test('every relative import of the plugin is shipped by each installer list',()=>{
+  const root=path.resolve(import.meta.dirname,'..');
+  const imports=new Set();
+  for(const file of ['index.mjs','reasoning.mjs','work-kinds.mjs']){
+    const text=fs.readFileSync(path.join(root,'services/mode-architecture',file),'utf8');
+    for(const match of text.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)) imports.add(match[1]);
+  }
+  assert.ok(imports.has('work-kinds.mjs')&&imports.has('reasoning.mjs'));
+  const setup=fs.readFileSync(path.join(root,'services/mode-architecture/setup.py'),'utf8');
+  const theme=fs.readFileSync(path.join(root,'installer/macos/apply-theme.sh'),'utf8');
+  const themeList=theme.match(/for service_file in index\.mjs memory\.mjs[^;]+;/)[0];
+  for(const name of imports){
+    assert.ok(setup.includes(`"${name}"`),`setup.py ships ${name}`);
+    assert.ok(themeList.includes(` ${name} `)||theme.includes(`services/mode-architecture/${name}"`),`apply-theme.sh ships ${name}`);
+  }
+  // Windows 包用 desktop/windows/mac-runtime 的 setup.py 覆盖仓库那份：档位用到的两个文件也要在它的清单里。
+  const snapshot=path.join(root,'desktop/windows/mac-runtime/services/mode-architecture/setup.py');
+  if(fs.existsSync(snapshot)){
+    const text=fs.readFileSync(snapshot,'utf8');
+    for(const name of ['reasoning.mjs','work-kinds.mjs']) assert.ok(text.includes(`"${name}"`),`Windows snapshot setup.py ships ${name}`);
+  }
+  const build=fs.readFileSync(path.join(root,'desktop/macos/build.sh'),'utf8');
+  assert.match(build,/for architecture_file in [^;]*reasoning\.mjs work-kinds\.mjs/);
+});
+
+test('evidence keeps the text the model saw, not the result envelope with exit codes and timings',t=>{
+  const run=tierRun(t,'envelope','boost','把成绩单整理一下算平均分');
+  // OpenClaw 的 after_tool_call 给整个结果对象：details 里的 exitCode、durationMs 不是「算出来的数字」。
+  run.runtime.afterTool({toolName:'exec',params:{command:'python3 make_table.py'},result:{content:[{type:'text',text:'done'}],details:{status:'completed',exitCode:0,durationMs:956,cwd:run.root}}},run.ctx);
+  assert.match(run.missing().join(),/关键数字还没用程序算过/);
+  run.runtime.afterTool({toolName:'exec',params:{command:'python3 calc.py'},result:{content:[{type:'text',text:'语文平均分: 81.40\n数学平均分: 81.60'}],details:{status:'completed',exitCode:0,durationMs:1200}}},run.ctx);
+  assert.deepEqual(run.missing(),[]);
+  const entry=run.runtime.getRun(run.ctx.sessionKey).verificationEvidence.at(-1);
+  assert.equal(entry.output,'语文平均分: 81.40\n数学平均分: 81.60');
+  // 图片结果只留一个标记，不存 base64。
+  run.runtime.afterTool({toolName:'read',params:{path:'chart.png'},result:{content:[{type:'text',text:'Read image file [image/png]'},{type:'image',data:'iVBORw0KGgo'.repeat(400)}]}},run.ctx);
+  assert.equal(run.runtime.getRun(run.ctx.sessionKey).verificationEvidence.at(-1).output,'Read image file [image/png]\n{"type":"image"}');
 });

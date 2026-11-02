@@ -562,7 +562,9 @@
   /* How a stop is actually carried out on the current route, mirroring
      recipeFor() in services/mode-architecture/reasoning.mjs:
      native = the model takes this effort directly; fill = the gap upward is
-     made up by process (independent solves, a critic, send-backs) on the same model;
+     made up by process on the same model — 碧琪替这个模型多做一步: break the task
+     down, independent drafts (two methods for a question, an acceptance checklist
+     for hands-on work), and a reviewer that opens the finished files;
      down = the model cannot go this low, so only the answer gets shorter. */
   function routeKind(level, natives) {
     if (!MATERIAL_RANK.has(level)) return "native";
@@ -580,13 +582,13 @@
     const top = pool.at(-1) || "off", bottom = pool[0] || "off";
     const name = value => LEVEL_LABELS[value] || value;
     const kind = routeKind(level, natives);
-    if (level === "max") return "用当前模型做 2 份独立解答（各换一种做法）+ 批评 + 交付验收，最多打回 2 轮";
-    if (level === "ultra") return "用当前模型做 3 份独立解答（直接解、换方法、列清单自查）+ 批评兼仲裁 + 交付验收，最多打回 3 轮";
+    if (level === "max") return "碧琪替当前模型多做一步：2 份独立起草（答题是两种解法，做东西是验收清单）+ 打开成品审稿，最多打回 2 轮";
+    if (level === "ultra") return "碧琪替当前模型多做一步：3 份独立起草（各换一种做法）+ 打开成品审稿兼仲裁，最多打回 3 轮";
     if (kind === "native") return "当前模型原生支持这一档";
-    if (level === "adaptive") return "按每条消息的难度：难题按 XHigh 做，简单题按 Low 做（模拟）";
-    if (kind === "down") return `当前模型最低只到 ${name(bottom)}；这一档让回答直接给结论、更快（模拟）`;
-    if (level === "xhigh") return `当前模型原生最高到 ${name(top)}；另做 1 份独立解答 + 批评，打回 1 轮（模拟）`;
-    return `当前模型原生最高到 ${name(top)}；回答前先拆清要求和约束（模拟）`;
+    if (level === "adaptive") return "按每条消息判断：动手的活和难题按 XHigh 做，闲聊和简单问题按 Low 做（模拟）";
+    if (kind === "down") return `当前模型最低只到 ${name(bottom)}；这一档让回答直接给结论、更快，动手的活仍做必要的一次验证（模拟）`;
+    if (level === "xhigh") return `当前模型原生最高到 ${name(top)}；碧琪补 1 份独立起草 + 打开成品审稿，打回 1 轮（模拟）`;
+    return `当前模型原生最高到 ${name(top)}；碧琪先替它拆清要求，动手的活先列验收清单（模拟）`;
   }
 
   function syncStops(slider, values, selectedIndex, natives = []) {
