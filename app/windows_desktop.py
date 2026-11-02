@@ -263,6 +263,91 @@ def http_identity(url):
         return {}
 
 
+def gateway_listener_pid(port=18789, runner=None):
+    """PID of the process listening on the loopback gateway port, if any."""
+    if os.name != "nt" and runner is None:
+        return None
+    try:
+        result = (runner or subprocess.run)(
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=5,
+            **hidden_process_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in str(result.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+            if parts[1].rsplit(":", 1)[-1] == str(port) and parts[4].isdigit():
+                return int(parts[4])
+    return None
+
+
+def process_image_and_start(pid):
+    """Executable path and creation time (epoch seconds) of a Windows process."""
+    if os.name != "nt" or not pid:
+        return None, None
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    handle = kernel.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None, None
+    try:
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        image = buffer.value if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)) else None
+        times = [wintypes.FILETIME() for _ in range(4)]
+        started = None
+        if kernel.GetProcessTimes(handle, *[ctypes.byref(value) for value in times]):
+            ticks = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime
+            started = ticks / 10_000_000 - 11644473600
+        return image, started
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _bundled_node(image):
+    """True for a node.exe that sits in a packaged app's runtime\\bin."""
+    parts = [part.lower() for part in Path(str(image).replace("\\", "/")).parts]
+    return parts[-3:] == ["runtime", "bin", "node.exe"]
+
+
+def stale_gateway_reason(listener, own_node, own_version, install_time, record=None, read_version=None):
+    """Say why a running gateway must be replaced, or None to keep using it.
+
+    The window keeps its gateway alive after closing, so a new version (an
+    in-place update, a fresh unzip elsewhere, or an old single-file EXE's temp
+    runtime) used to find the previous version still answering on 18789 and
+    simply attach to it: the update "installed" but nothing changed.  Only a
+    packaged runtime's node.exe is ever replaced; a user's own gateway is left
+    alone.
+    """
+    image = str((listener or {}).get("image") or "")
+    if not image or not _bundled_node(image):
+        return None
+    pid = listener.get("pid")
+    same_node = os.path.normcase(image) == os.path.normcase(str(own_node))
+    if isinstance(record, dict) and record.get("pid") == pid:
+        if str(record.get("version")) == str(own_version):
+            return None
+        return f"gateway pid {pid} belongs to {record.get('version') or 'an older version'}"
+    if same_node:
+        started = listener.get("started")
+        if started and install_time and started < install_time - 2:
+            return f"gateway pid {pid} started before this install"
+        return None
+    try:
+        other = (read_version or app_version)(Path(image.replace("\\", "/")).parents[2])
+    except Exception:
+        other = ""
+    other = "" if other == "0.0.0" else other  # app_version's "unreadable"
+    if other and other == str(own_version):
+        return None
+    return f"gateway pid {pid} runs from another install ({other or 'unknown version'}: {image})"
+
+
 def gateway_ui_url():
     """Return CLE Kk's chat route, including a legacy token when configured."""
     config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
@@ -586,11 +671,20 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
-  [Parameter(Mandatory=$true)][string]$LogPath
+  [Parameter(Mandatory=$true)][string]$LogPath,
+  [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+}
+function Write-UpdateFailure([string]$Message) {
+  # The restored old version reads this once and tells the user the update
+  # did not land, instead of silently coming back unchanged.
+  try {
+    @{ version = $Version; message = $Message; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
+  } catch {}
 }
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
@@ -637,9 +731,11 @@ try {
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'update completed'
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
+  Write-UpdateFailure $_.Exception.Message
   try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
@@ -658,17 +754,51 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
-  [Parameter(Mandatory=$true)][string]$LogPath
+  [Parameter(Mandatory=$true)][string]$LogPath,
+  [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
+function Write-UpdateFailure([string]$Message) {
+  # The restored old version reads this once and tells the user the update
+  # did not land, instead of silently coming back unchanged.
+  try {
+    @{ version = $Version; message = $Message; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
+  } catch {}
+}
+function Stop-InstallProcesses([string]$Root) {
+  # The window keeps its gateway (node.exe from runtime\bin) alive after it
+  # closes.  While anything runs from the install folder Windows refuses to
+  # rename it, so the swap failed and rolled back to the old version.
+  if (-not (Test-Path -LiteralPath $Root)) { return }
+  $prefix = (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') + '\'
+  for ($round = 0; $round -lt 20; $round++) {
+    $owned = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $_.ProcessId -ne $PID -and $_.ExecutablePath -and
+      $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($owned.Count -eq 0) { return }
+    if ($round -eq 0) {
+      Write-UpdateLog ('stopping processes still running from the install: ' + (($owned | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ', '))
+    }
+    foreach ($process in $owned) {
+      try { & taskkill.exe /PID $process.ProcessId /T /F | Out-Null } catch {}
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw 'processes from the old version are still running'
+}
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     try {
       if (Test-Path -LiteralPath $Backup) {
-        if (Test-Path -LiteralPath $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+        if (Test-Path -LiteralPath $TargetDir) {
+          try { Stop-InstallProcesses $TargetDir } catch {}
+          Remove-Item -LiteralPath $TargetDir -Recurse -Force
+        }
         Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
       }
       break
@@ -695,7 +825,15 @@ try {
   Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
-  Move-Item -LiteralPath $TargetDir -Destination $Backup -Force
+  Stop-InstallProcesses $TargetDir
+  for ($attempt = 0; ; $attempt++) {
+    try { Move-Item -LiteralPath $TargetDir -Destination $Backup -Force; break }
+    catch {
+      if ($attempt -ge 39) { throw "install folder is still in use: $($_.Exception.Message)" }
+      Stop-InstallProcesses $TargetDir
+      Start-Sleep -Milliseconds 250
+    }
+  }
   Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
@@ -713,13 +851,30 @@ try {
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'portable update completed'
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
+  Write-UpdateFailure $_.Exception.Message
   try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
+
+    @staticmethod
+    def take_last_failure():
+        """Read once what the replacer left behind when it rolled an update back."""
+        path = state_root() / "updates" / "last-failure.json"
+        try:
+            value = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        finally:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        return value if isinstance(value, dict) else None
 
     def launch_replacer(self):
         with self.lock:
@@ -733,12 +888,16 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             update_root = state_root() / "updates"
             health_root = update_root / "health"
             health_root.mkdir(parents=True, exist_ok=True)
+            # Windows PowerShell 5.1 reads a .ps1 without a BOM in the ANSI code
+            # page (GBK on Chinese Windows), which garbled the hard-coded
+            # 超級碧琪 folder name: every portable update failed its layout
+            # check and rolled back.  The BOM makes it read UTF-8.
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
             if self.portable:
                 target_dir = self.executable.parent
                 backup = target_dir.with_name(target_dir.name + ".previous")
-                helper.write_text(self._directory_helper_source(), encoding="utf-8")
+                helper.write_text(self._directory_helper_source(), encoding="utf-8-sig")
                 command = [
                     "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                     "-File", str(helper),
@@ -752,10 +911,11 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-HealthMarker", str(marker),
                     "-Token", token,
                     "-LogPath", str(state_root() / "logs/updater.log"),
+                    "-Version", str(self.prepared["version"]),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
-                helper.write_text(self._helper_source(), encoding="utf-8")
+                helper.write_text(self._helper_source(), encoding="utf-8-sig")
                 command = [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                 "-File", str(helper),
@@ -768,6 +928,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
+                "-Version", str(self.prepared["version"]),
                 ]
             try:
                 subprocess.Popen(
@@ -891,6 +1052,69 @@ class GatewaySupervisor:
         self.lock = threading.RLock()
         self.last_restart = 0.0
         self.failure_limit = 2
+        self.version = app_version(runtime.root)
+
+    @staticmethod
+    def _record_path():
+        return state_root() / "gateway-owner.json"
+
+    def _write_record(self, pid):
+        try:
+            path = self._record_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"pid": pid, "version": self.version, "node": str(self.runtime.node)}), encoding="utf-8")
+        except OSError as error:
+            append_log("launcher", f"gateway owner record not written: {error}")
+
+    @staticmethod
+    def _listener():
+        pid = gateway_listener_pid()
+        if not pid:
+            return None
+        image, started = process_image_and_start(pid)
+        return {"pid": pid, "image": image, "started": started}
+
+    def retire_stale(self, kill=None, wait=10.0):
+        """Stop a kept-alive gateway left by another version before attaching.
+
+        Runs before the window picks its first URL, so a stale gateway's page
+        is never shown.  Returns the reason when a gateway was retired.
+        """
+        if not http_ready(GATEWAY_URL):
+            return None
+        listener = self._listener()
+        if not listener:
+            return None
+        pid, image = listener["pid"], listener.get("image")
+        try:
+            record = json.loads(self._record_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = None
+        try:
+            install_time = (self.runtime.root / "VERSION").stat().st_ctime
+        except OSError:
+            install_time = None
+        reason = stale_gateway_reason(listener, self.runtime.node, self.version, install_time, record)
+        if not reason:
+            if image and os.path.normcase(str(image)) == os.path.normcase(str(self.runtime.node)) and (
+                not isinstance(record, dict) or record.get("pid") != pid
+            ):
+                self._write_record(pid)
+            return None
+        append_log("launcher", f"retiring stale gateway: {reason}")
+        try:
+            (kill or (lambda value: subprocess.run(
+                ["taskkill", "/PID", str(value), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+                **hidden_process_kwargs(),
+            )))(pid)
+        except (OSError, subprocess.SubprocessError) as error:
+            append_log("launcher", f"stale gateway could not be stopped: {error}")
+            return None
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline and http_ready(GATEWAY_URL):
+            time.sleep(.2)
+        return reason
 
     def start(self):
         with self.lock:
@@ -921,6 +1145,7 @@ class GatewaySupervisor:
                     **hidden_process_kwargs(),
                 )
                 append_log("launcher", f"gateway started pid={self.process.pid}")
+                self._write_record(self.process.pid)
             except OSError as error:
                 output.close()
                 append_log("launcher", f"gateway start failed: {error}")
@@ -1597,6 +1822,20 @@ BRIDGE_SCRIPT = r"""
       ok.onclick = () => shade.remove();
       actions.append(ok); card.append(mark, title, copy, notes, actions); shade.append(card); document.body.append(shade);
     };
+    window.__pinkieShowUpdateFailed = info => {
+      document.getElementById('pinkie-update-dialog')?.remove();
+      const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
+      const card = document.createElement('section'); card.className = 'pinkie-update-card';
+      const mark = document.createElement('span'); mark.className = 'pinkie-update-mark'; mark.textContent = '✦';
+      const title = document.createElement('h3'); title.textContent = `新版 ${info.version || ''} 没有装上`;
+      const copy = document.createElement('p');
+      copy.textContent = `已经自动回到 ${info.current || '原来的版本'}，记忆和设置都在。可以再点一次更新；还不行的话，关掉碧琪后手动下载新版。`;
+      const detail = document.createElement('p'); detail.className = 'pinkie-update-status'; detail.textContent = String(info.message || '');
+      const actions = document.createElement('div');
+      const ok = document.createElement('button'); ok.className = 'primary'; ok.textContent = '知道了';
+      ok.onclick = () => shade.remove();
+      actions.append(ok); card.append(mark, title, copy, detail, actions); shade.append(card); document.body.append(shade);
+    };
     window.__pinkiePresentUpdate = info => {
       if (!info?.available) return;
       window.__pinkieUpdateAvailable(info);
@@ -1708,7 +1947,24 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
         except Exception as error:
             append_log("launcher", f"installed notes skipped: {error}")
 
+    failure = None if update_health_token else updater.take_last_failure()
+    if failure:
+        try:
+            window.evaluate_js(
+                "window.__pinkieShowUpdateFailed?.("
+                + json.dumps(
+                    {"version": failure.get("version", ""), "current": updater.current_version,
+                     "message": str(failure.get("message", ""))[:300]},
+                    ensure_ascii=False,
+                )
+                + ")"
+            )
+        except Exception as error:
+            append_log("launcher", f"update failure notice skipped: {error}")
+
     def announce_update():
+        if failure:
+            return
         info = updater.check()
         if info.get("available"):
             try:
@@ -1733,6 +1989,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    gateway = GatewaySupervisor(runtime)
+    # A gateway kept alive by an older version would otherwise be adopted
+    # below, and the new version would show the old one's page.
+    gateway.retire_stale()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
@@ -1745,7 +2005,6 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
-    gateway = GatewaySupervisor(runtime)
     services = LocalServices(runtime)
 
     def loaded(*_):
