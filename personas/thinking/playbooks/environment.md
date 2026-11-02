@@ -58,3 +58,16 @@ Windows 刚装完的工具，当前终端可能还找不到（PATH 没刷新）�
 **Mac，用户要把一堆 Word 转成 PDF，电脑上没有 Office：**
 1. 先看 `TOOLS.md` 和 `command -v soffice`：没有 LibreOffice。
 2. 体积大 → 先说一声：「转 PDF 最稳的是装 LibreOffice，装好接近 1GB，装在应用程序里，要装吗？不装的话我用 python-docx 读文字再排成 PDF，但原来的排版会丢。」——这是体积大、要用户点头的情况，并且把降级的代价说在前面。
+
+## 七、推送来的工具和技能在这台电脑用不了时
+
+碧琪的工具（`look-page`、`look-doc`、`look-video`、检测脚本）、打法里的命令和 `skills/` 里的技能，多半是在 Mac 上写好、推送给所有人的。别人的电脑可能是 Windows、Intel 芯片、内存小、没装 Python / ffmpeg / Node、网络慢，照搬会报错。这是我的活，**不让用户自己去修**：
+
+1. **先看现状。** 跑一次检测（Mac：`bash playbooks/machine-check.sh`；Windows：`powershell -ExecutionPolicy Bypass -File playbooks\machine-check.ps1`），把报错原文读完。
+2. **判断是哪一类。**
+   - 缺依赖（`command not found`、`No module named`、「不是内部或外部命令」）→ 按第二节装进用户空间或碧琪自己的环境（`TOOLS.md` 里写的专用环境），不动系统。
+   - 路径或编码（写死了 `/opt/homebrew`、`~/Library`、`/System/Library/Fonts/…`、`qlmanage`、`open`、`pbcopy`、zsh 写法；中文路径乱码）→ 换成这台电脑的写法：Windows 字体在 `C:\Windows\Fonts\`（中文用 `msyh.ttc`），打开文件用 `start ""`，读写文件写明 UTF-8。
+   - 芯片或系统版本（arm64 / x64 的程序、太老的系统）→ 换对应的版本，或改用纯 Python / 纯 Node 的等价库。
+   - 网络（下载超时、GitHub 打不开）→ 按第三节换国内源或换渠道。
+3. **能修就修，修不了就换。** 先改用法（加参数、换路径、换字体）；再换等价工具——没有 `look-page` 用 `web-and-ui.md` 里的截图脚本，没有 `look-doc` 按 `documents-and-slides.md` 导出 PDF 再转图，没有 `look-video` 用 ffmpeg 抽帧；都不行就做一个能用的小版本，并在**第一句**说清差在哪。
+4. **记下来。** 改好的用法写进本机 `TOOLS.md`：哪个工具或技能、这台电脑上怎么调用、为什么跟原来的写法不一样。技能文件本身不改（更新会覆盖它），`TOOLS.md` 不会被覆盖，下次直接照着用。

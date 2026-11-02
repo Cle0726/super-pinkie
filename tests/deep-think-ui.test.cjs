@@ -56,7 +56,10 @@ test('tier menu keeps its glass design and observes mode changes without a subtr
   const src=read('ui/injections/laolao-deep-think.js');
   assert.match(src,/viewBox='0 0 24 24'/);
   assert.match(src,/grid-template-columns:repeat\(2/);
-  assert.match(src,/存档续跑直到做完/);
+  assert.match(src,/写好计划，一直做到完/);
+  // 卡片和 docs/DEEP-THINK-TIERS.md 一致：按活儿种类走、要真凭据、多做几版、写计划做到完。
+  for(const text of ['按活儿种类走对的做法','说做完，就要有真凭据','多做几版，挑出最好的']) assert.ok(src.includes(text),text);
+  assert.match(src,/"活儿种类"/);
   assert.match(src,/width:30px; height: 30px/);
   assert.match(src,/backdrop-filter:blur\(28px\)/);
   assert.match(src,/item\.dataset\.tier = tier\.id/);

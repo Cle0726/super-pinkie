@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs';
+import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, isHandsOnKind, kindLabel, solverModeFor} from './work-kinds.mjs';
 
 // 输入框思考等级滑块的 9 档属于碧琪，不属于任何模型的原生等级表。每一档先按当前模型真正支持的
 // 原生等级就近发送；原生够不到的部分，用流程补：
@@ -19,16 +20,25 @@ import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs'
 // 2026-10 的 Gemini 实测说明：同一个模型自己多推演几轮几乎没有用；有用的是换做法的独立解答对照、
 // 有证据的打回，以及核对交付（没验证就说完成、漏掉要求、文件不存在却给结果）。
 // 独立解答都在主回答进行的同时并行跑，不增加等待；批评在主回答结束后进行。
+// 2026-11-02 档位升级：按「活儿种类」（work-kinds.mjs）变用途——答题类独立解答；动手的活（网页、PPT、视频……）
+// 改成独立写验收清单；文案、点子独立写一版。审稿员带只读工具（read / image / pdf / web_fetch / web_search），
+// 打开交付物本身核对，不再只看文字。九档补强和四档思考强度同时选时合并成一次验收。
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
 export const LEVELS = Object.freeze(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']);
 const RANK = new Map(LEVELS.map((name, index) => [name, index]));
 const LABELS = {off: '关闭', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', adaptive: 'Adaptive', max: 'Max', ultra: 'Ultra'};
 // 思考强度档位（极致思考按钮）也带同一套交付验收：档位决定做事流程，验收在整个档位任务结束后才做。
+// 长跑档全部里程碑勾完后做一轮全开档式终审（审稿员打开成品挑毛病）。
 const WORK_TIERS = Object.freeze({
   boost: {solvers: 0, rounds: 1, critic: false},
   full: {solvers: 1, rounds: 2, critic: true},
-  marathon: {solvers: 0, rounds: 2, critic: false},
+  marathon: {solvers: 0, rounds: 2, critic: true},
 });
+// 审稿员只给只读工具：能打开截图、文档、网页，不能执行、写文件、操作浏览器。
+export const REVIEW_TOOLS = Object.freeze(['read', 'image', 'pdf', 'web_fetch', 'web_search']);
+const MODE_BY_AGENT = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
+// 同一条消息发送前，四档的 armTier 和九档的 prepare 先后登记：这么短的时间里的两次登记合并成一个验收。
+const MERGE_WINDOW_MS = 10 * 60_000;
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const MAX_MESSAGE = 12_000;
 const MAX_HISTORY = 10_000;
@@ -38,7 +48,8 @@ const INTENT_TTL_MS = 60 * 60_000;
 const FIX_PREFIX = '[pinkie-tier] 交付验收';
 // 网关方法（发送前登记、状态查询）和 Agent 运行时的钩子（注入、回合结束后核对）是插件的两个实例，
 // 内存不共享——旧版 Max/Ultra 的审阅笔记就是因此从来没能交给主模型。待核对的状态必须落盘。
-const FIELDS = ['requestId', 'tier', 'level', 'recipe', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'jobs', 'createdAt', 'updatedAt'];
+const FIELDS = ['requestId', 'tier', 'level', 'recipe', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'jobs', 'createdAt', 'updatedAt',
+  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply'];
 
 export class ReviewStore {
   constructor(root = path.join(openclawStateDir(), 'pinkie-deep-think', 'reviews')) {
@@ -147,6 +158,19 @@ export function messageDifficulty(text) {
   return score >= 3 ? 'hard' : 'easy';
 }
 
+// 这条消息是哪种活（无限制模式不分）。sessionKey 带出模式：学习模式默认按讲题辅导。
+export function workKindsFor(message = '', sessionKey = '') {
+  const mode = MODE_BY_AGENT[String(sessionKey).split(':')[1]] || '';
+  if (mode === 'none') return [];
+  return classifyWorkKind(message, {mode}).kinds;
+}
+
+// Adaptive 的难易：动手的活（网页、PPT、视频、代码、报错……）按难题走 XHigh 路线；一句话聊天按简单；
+// 其余按原来的分数（保留「恰好 N 个字」这类硬性计数写作按难题的实测规则）。
+export function adaptiveDifficulty(message = '', sessionKey = '') {
+  return adaptiveHint(workKindsFor(message, sessionKey)) || messageDifficulty(message);
+}
+
 const NO_LAYERS = {brevity: false, think: false, solvers: 0, critic: false, rounds: 0, audit: false};
 const UP_LAYERS = {
   medium: {...NO_LAYERS, think: true},
@@ -159,11 +183,11 @@ const ENHANCED_LAYERS = {
 };
 
 // 一个档位在当前模型上的实际做法。kind: native 原生 / down 往下补 / up 往上补 / enhanced Max·Ultra / adaptive 自适应模拟。
-export function recipeFor(level, record, {message = ''} = {}) {
+export function recipeFor(level, record, {message = '', sessionKey = ''} = {}) {
   const natives = nativeLevels(record);
   if (!RANK.has(level)) level = 'medium';
   if (level === 'adaptive' && !natives.includes('adaptive')) {
-    const difficulty = messageDifficulty(message);
+    const difficulty = adaptiveDifficulty(message, sessionKey);
     const inner = recipeFor(difficulty === 'hard' ? 'xhigh' : 'low', record);
     return {...inner, level, kind: 'adaptive', difficulty, as: difficulty === 'hard' ? 'xhigh' : 'low'};
   }
@@ -287,14 +311,48 @@ const SOLVER_ANGLES = [
   '刻意换一种和常规不同的方法：反向验证、换一种建模或拆解方式、用特例或极端情况检验。',
   '先逐条列出题目里的全部要求、约束和最容易出错的地方，再求解，并对照这张清单自查。',
 ];
+// 动手的活：独立解答没法替主回答动手，改成写一张能逐条核对的验收清单，交给审稿员当核对单。
+const CHECKLIST_ANGLES = [
+  '站在用户的位置：拿到成品第一眼最在意什么、怎样算真的能用。',
+  '站在挑剔的行家位置：这一行交付前一定会查的点，以及最容易翻车的地方。',
+  '站在核对的位置：每一条该用什么工具、看什么、多少算合格。',
+];
+// 文案、点子：独立写一版，给审稿员作对照（不要求一致）。
+const DRAFT_ANGLES = [
+  '照用户说的场景，写最稳妥、最像真人的一版。',
+  '换一个切入角度或结构写（先讲故事、反着说、换一个读者视角）。',
+  '写一版更短、更有记忆点的。',
+];
+export const SOLVER_LABELS = Object.freeze({
+  answer: ['直接解', '换方法', '列清单自查'],
+  checklist: ['用户视角清单', '行家挑错清单', '核对方法清单'],
+  draft: ['稳妥一版', '换角度一版', '短一版'],
+});
 
-export function solverPrompt({message, history, index = 0}) {
+export function solverPrompt({message, history, index = 0, workKind = ''}) {
+  const mode = solverModeFor([workKind]);
+  const context = [`最近对话（只用来理解上下文）：\n${history || '无'}`, `用户这一轮：\n${message}`];
+  if (mode === 'checklist') {
+    return [
+      `你是验收清单助手。这是一件「${kindLabel(workKind) || '动手的活'}」，别人正在动手做；你不做成品，只独立写一张验收清单，交付前会拿它逐条核对。`,
+      `做法：${CHECKLIST_ANGLES[index % CHECKLIST_ANGLES.length]}`,
+      '不调用工具，不假装做过任何操作。输出：①验收清单 5–8 条，每条能核对（看什么、多少算合格，用户的每条硬要求都要在里面）；②最可能翻车的 3 处；③每条用什么办法核对（截图、抽帧、转成图片、真运行、重算、打开交付文件本身）。800 字以内，不写泛泛的建议。',
+      ...context,
+    ].join('\n\n');
+  }
+  if (mode === 'draft') {
+    return [
+      '你是独立起草助手，只根据下面的对话独立写一版，给审稿时作对照。',
+      `做法：${DRAFT_ANGLES[index % DRAFT_ANGLES.length]}`,
+      '不调用工具。用户有字数、行数、格式、必须有和不能有的要求，逐条满足并自己数清；起名、点子类给 3–5 个同方向的候选，每个一句理由。最后单独一行写这一版的取舍。1500 字以内。',
+      ...context,
+    ].join('\n\n');
+  }
   return [
     '你是独立解题助手，只根据下面的对话独立完成用户这一轮的问题。',
     `做法：${SOLVER_ANGLES[index % SOLVER_ANGLES.length]}`,
     '不调用工具，不假装执行过任何操作。先给出明确结论，再给出能让别人复核的关键依据或推导（数字要算出来，不要只说思路）；需要实际运行或查证才能确定的地方，写明「需要核实」。1500 字以内。',
-    `最近对话（只用来理解上下文）：\n${history || '无'}`,
-    `用户这一轮：\n${message}`,
+    ...context,
   ].join('\n\n');
 }
 
@@ -313,47 +371,83 @@ export function replyFacts(reply = '') {
   return rows.join('\n');
 }
 
-export function auditPrompt({message, history, reply, evidence, independent, quality = false}) {
+// 审稿员按活儿种类重点看什么（打开交付物本身核对）。
+const REVIEW_FOCUS = {
+  web_ui: '打开截图（有手机宽度的也看）：排版、文字是否被挡住或溢出、按钮能不能看清点到、和用户要求是否一致。',
+  app_game_ai: '打开运行截图：是不是真的跑起来了、主要功能在不在、界面有没有明显错乱。',
+  document: '打开交付的那个 .pptx / .docx / .pdf 本身（或它转出的页面图）：页数、每页内容、字体和排版、有没有编造的事实；只看过 HTML 替身不算。',
+  video_motion: '打开抽帧拼图：画面内容、字幕清不清楚有没有乱码、时长和比例是否符合要求。',
+  image_print: '打开图片：主角、文字有没有错字乱码、尺寸比例；要印刷的看尺寸和出血。',
+  data_charts: '打开图表图片、读结果文件：关键数字和回复是否一致、图表标题是不是结论。',
+  automation: '读工具记录和脚本：是否真跑过一次、要求自动的是否真注册成功、会不会动到用户真的文件。',
+  code: '读改过的文件和测试输出：改完之后是否跑过测试且通过、是否改了不该改的地方。',
+  debugging: '读失败输出和修后输出：修之前有没有复现、修完同一步骤是否通过。',
+  environment: '读检测命令的输出：结论是否来自本轮真实数据，而不是旧记录。',
+  publish: '打开公开地址（web_fetch）：外面是否真能打开、内容对不对。',
+  writing: '逐条核对用户的硬要求（字数、行数、语气、必须有的内容），用下面的机械统计。',
+  ideas: '方向是否真的不同、有没有明确推荐、是否满足用户给的限制。',
+};
+
+export function auditPrompt({message, history, reply, evidence, independent, quality = false, workKind = '', artifacts = [], tools = false, earlier = ''}) {
   const answers = Array.isArray(independent) ? independent.filter(Boolean) : independent ? [independent] : [];
-  const answerText = answers.map((text, index) => (answers.length > 1 ? `〔独立解答 ${index + 1}〕\n${text}` : text)).join('\n\n');
+  const mode = workKind ? solverModeFor([workKind]) : 'answer';
+  const answerText = answers.map((text, index) => (answers.length > 1 ? `〔${mode === 'checklist' ? '验收清单' : mode === 'draft' ? '对照稿' : '独立解答'} ${index + 1}〕\n${text}` : text)).join('\n\n');
+  const independentTitle = mode === 'checklist'
+    ? '【其他助手独立写的验收清单（逐条拿来核对成品）】'
+    : mode === 'draft' ? '【其他助手独立写的一版（只作对照，不要求一致）】'
+      : '【其他助手不看回复、独立做出的解答（只作对照，不一定对）】';
+  const focus = REVIEW_FOCUS[workKind] || '';
+  const files = (Array.isArray(artifacts) ? artifacts : []).filter(Boolean).slice(0, 16);
   return [
     quality
       ? '你是严格的审稿人兼交付验收员。你的工作是找出这份回复里真实存在的错误和缺漏，不重写回答。'
       : '你是交付验收员，只做核对，不重写回答，也不给新建议。',
     `【最近对话（只用来理解上下文）】\n${history || '无'}`,
     `【用户这一轮的原话】\n${message}`,
-    `【助手的最终回复】\n${reply}`,
-    `【回复的机械统计（程序算出，准确；涉及字数、行数、句数的要求以这里为准，不要自己数）】\n${replyFacts(reply)}`,
+    earlier ? `【之前已经交给用户的回复】\n${earlier}` : '',
+    `【${earlier ? '这次补充的更正' : '助手的最终回复'}】\n${reply}`,
+    `【回复的机械统计（程序算出，准确；涉及字数、行数、句数的要求以这里为准，不要自己数）】\n${replyFacts(earlier ? `${earlier}\n${reply}` : reply)}`,
     `【本轮实际发生的工具调用和结果（节选，只有这里的内容算执行证据）】\n${evidence}`,
-    answerText ? `【其他助手不看回复、独立做出的解答（只作对照，不一定对）】\n${answerText}` : '',
+    workKind ? `【这是一件「${kindLabel(workKind)}」】${focus}` : '',
+    tools && (files.length || isHandsOnKind(workKind))
+      ? `【本轮做出来的文件和截图】\n${files.length ? files.map(file => `- ${file}`).join('\n') : '（工具记录里没认出路径，先在工作目录里找本轮做出来的成品）'}\n你可以用 read / pdf / image 打开它们，web_fetch 打开公开网址。动手的活必须打开交付物本身核对，不能只看工具记录；打不开（格式不支持、路径不对）时不要据此判不通过，只报告你真打开看到的问题。`
+      : '',
+    answerText ? `${independentTitle}\n${answerText}` : '',
     [
       '逐项核对：',
       '1. 用户明确提出的每一个要求（数量、格式、字数、范围、文件位置、必须有和不能有的内容）是否都满足了；有数字的要真的数。',
       '2. 回复里每个「已完成 / 已修复 / 测试通过 / 已生成 / 已写入 / 已发送」这类说法，在工具记录里有没有对应的真实结果；没有记录或记录显示失败，就是问题。',
       '3. 回复里的数字、事实、计算和文件内容，是否与工具结果矛盾；文件不存在、命令失败时是否编造了结果。',
-      answerText ? '4. 回复的关键结论与独立解答是否冲突；冲突时，用工具结果或你自己可复核的推导判断哪边有错，判断不了也算问题，要求重新核实。' : '',
+      answerText ? (mode === 'checklist'
+        ? '4. 拿验收清单逐条核对成品：清单里和用户要求直接相关的条目没做到、而且你打开成品确认了，就是问题；清单本身多余或拿不准的条目不算。'
+        : '4. 回复的关键结论与独立解答是否冲突；冲突时，用工具结果或你自己可复核的推导判断哪边有错，判断不了也算问题，要求重新核实。') : '',
       quality ? '5. 正确性：自己把关键计算、推理和结论重新做一遍；发现算错、推错、概念用错、引用了不存在的事实，就是问题。' : '',
       quality ? '6. 完整性：漏掉了会改变结论的情况、边界条件或反例；该给理由却只给结论；回答了别的问题。' : '',
       '用户要的是成品，却只给了计划或建议，也算问题。',
-      '只报告有具体依据的问题（引用原文、工具记录，或写出你能复核的推导）。语气、风格、可有可无的改进、你自己拿不准的猜测，都不算问题。',
+      '只报告有具体依据的问题（引用原文、工具记录、你打开文件看到的具体位置，或写出你能复核的推导）。语气、风格、可有可无的改进、你自己拿不准的猜测，都不算问题。',
     ].filter(Boolean).join('\n'),
-    '只输出一个 JSON 对象，不要 Markdown：全部通过时输出 {"pass": true}；否则输出 {"pass": false, "issues": [{"what": "哪里不对（引用回复原文）", "evidence": "依据（引用用户原话、工具记录或你的推导）", "fix": "应该怎么改"}]}，最多 5 条。',
+    '只输出一个 JSON 对象，不要 Markdown：全部通过时输出 {"pass": true}；否则输出 {"pass": false, "issues": [{"what": "哪里不对（引用回复原文）", "evidence": "依据（引用用户原话、工具记录、打开文件看到的内容或你的推导）", "fix": "应该怎么改"}]}，最多 5 条。',
   ].filter(Boolean).join('\n\n');
 }
 
+// 交付验收在回复已经交给用户之后才做：打回时只发更正，不把整段回答再发一遍（REPORT 第九节：重复回复）。
 export function fixMessage(issues = []) {
   const list = issues.map((item, index) => `${index + 1}. ${item.what}（依据：${item.evidence}${item.fix ? `；应改为：${item.fix}` : ''}）`).join('\n');
-  return `${FIX_PREFIX}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。改完直接给出修正后的完整最终回复，不要提到验收、检查或这条消息。\n${list}`;
+  return `${FIX_PREFIX}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。上一条回复用户已经看到了，所以只发更正：先用一句话说清改了什么，再给出改正后的那部分；问题牵动全文（字数、格式、结构、整体结论）时才给出完整的新版本。核实后都不是问题，就只回一句「核对过了，上面的回复不用改」。不要提到验收、检查或这条消息。\n${list}`;
 }
 
-function briefContext(recipe) {
+// 补强提示按活儿种类写：答题类拆要求、找易错、想验证；动手的活先写验收清单，做完逐条用工具核对。
+function briefContext(recipe, workKind = '') {
   const level = LABELS[recipe.level] || recipe.level;
   const native = LABELS[recipe.native] || recipe.native;
+  const hands = isHandsOnKind(workKind);
   if (recipe.brevity) {
-    return `这一条用户选了更快的「${level}」，但当前模型最低只能用「${native}」思考。请尽量快：直接给结论，不铺垫、不复述问题、不展开推导（用户要求时除外）；需要工具时照常使用，但只做必要的一两步。`;
+    return `这一条用户选了更快的「${level}」，但当前模型最低只能用「${native}」思考。请尽量快：直接给结论，不铺垫、不复述问题、不展开推导（用户要求时除外）；需要工具时照常使用，但只做必要的一两步。${hands ? '动手的活仍要做最必要的一次验证（打开、截图或运行一次），不能为了快说没做过的事。' : ''}`;
   }
   if (recipe.think) {
-    return `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。回答前先把问题拆清楚：列出用户的每条要求和关键约束、找出最容易出错的地方、想好至少一种验证方法；需要计算的真的算出来。正文只写结论和必要依据，不要把这段拆解过程写出来。`;
+    return hands
+      ? `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。动手前先在心里写一张验收清单：用户的每条要求、这一行交付前会查的点、最容易翻车的地方，每条想好用什么工具核对；做完逐条用工具核对（打开、截图、转成图片、运行或重算），不合格就改。正文不写这张清单。`
+      : `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。回答前先把问题拆清楚：列出用户的每条要求和关键约束、找出最容易出错的地方、想好至少一种验证方法；需要计算的真的算出来。正文只写结论和必要依据，不要把这段拆解过程写出来。`;
   }
   return '';
 }
@@ -365,6 +459,37 @@ function newJob(role, label, ref) {
 function summaryOf(text) {
   const line = String(text || '').replace(/\s+/g, ' ').trim();
   return line.length > 80 ? `${line.slice(0, 80)}…` : line;
+}
+
+// 一次 pass 的会话文件（JSONL）里，审稿员实际调用过的工具和打开过的文件。读不到就当没用过。
+async function passToolUse(file) {
+  try {
+    const rows = String(await fs.readFile(file, 'utf8')).split('\n').filter(Boolean)
+      .map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+    const entries = entriesFromMessages(rows.map((row) => row.message || row));
+    const opened = entries.filter((entry) => entry.ok).flatMap((entry) => ['path', 'file_path', 'image', 'url']
+      .map((key) => entry.params?.[key]).filter((value) => typeof value === 'string' && value));
+    return {tools: [...new Set(entries.map((entry) => entry.name).filter(Boolean))].slice(0, 12), opened: [...new Set(opened)].slice(0, 16)};
+  } catch {
+    return {tools: [], opened: []};
+  }
+}
+
+// 九档补强和四档思考强度同时选：保留一个验收，独立份数、打回轮数取大，批评任一要就要。
+function mergeRecipe(first = {}, second = {}) {
+  return {
+    ...first,
+    brevity: Boolean(first.brevity || second.brevity) && !(first.think || second.think),
+    think: Boolean(first.think || second.think),
+    solvers: Math.max(Number(first.solvers) || 0, Number(second.solvers) || 0),
+    rounds: Math.max(Number(first.rounds) || 0, Number(second.rounds) || 0),
+    critic: Boolean(first.critic || second.critic),
+    audit: true,
+  };
+}
+
+function mergeable(intent) {
+  return Boolean(intent && intent.phase === 'armed' && Date.now() - (Number(intent.createdAt) || 0) < MERGE_WINDOW_MS);
 }
 
 export class ReasoningEnhancer {
@@ -423,12 +548,12 @@ export class ReasoningEnhancer {
       const available = (this.api.config?.models?.providers?.[provider]?.models || []).filter(item =>
         item.available !== false && fixedEndpointLevel(item) && item.id.replace(/-(low|medium|high)$/, '') === family);
       const levels = [...new Set(available.map(fixedEndpointLevel))].sort((a,b) => RANK.get(a)-RANK.get(b));
-      const requested = level === 'adaptive' ? messageDifficulty(message) === 'hard' ? 'high' : 'low' : level;
+      const requested = level === 'adaptive' ? adaptiveDifficulty(message, sessionKey) === 'hard' ? 'high' : 'low' : level;
       const native = nearestNative(requested, levels);
       const candidate = available.find(item => fixedEndpointLevel(item) === native);
       if (candidate) { target = candidate.id; record = candidate; }
     }
-    const recipe = recipeFor(level, record, {message});
+    const recipe = recipeFor(level, record, {message, sessionKey});
     return {recipe, thinkingLevel: fixedEndpointLevel(record) ? 'off' : recipe.native,
       ...(target !== model ? {model: `${provider}/${target}`} : {})};
   }
@@ -457,13 +582,18 @@ export class ReasoningEnhancer {
       result = {prepared: false, recipe: summary, thinkingLevel, ...route};
     } else {
       const previous = this.store.get(sessionKey);
-      if (previous && previous.requestId !== requestId) this.controllers.get(previous.requestId)?.abort();
+      // 先选了思考强度档位（armTier 刚登记了这一条）：合并成一次验收，不把档位的验收冲掉。
+      const workTier = mergeable(previous) && previous.workTier && !previous.message ? previous.workTier : '';
+      if (previous && previous.requestId !== requestId && !workTier) this.controllers.get(previous.requestId)?.abort();
+      const merged = workTier ? mergeRecipe(recipe, previous.recipe) : recipe;
+      const workKinds = workKindsFor(message, sessionKey);
       this.store.set({
-        requestId, tier: level, level, recipe, message, sessionKey, history: historyText(params.history),
-        phase: 'armed', round: 0, maxRounds: recipe.rounds, crossCheck: recipe.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
+        requestId, tier: level, level, recipe: merged, message, sessionKey, history: historyText(params.history),
+        phase: 'armed', round: 0, maxRounds: merged.rounds, crossCheck: merged.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
+        workTier, workKinds, workKind: workKinds[0] || '',
       });
-      result = {prepared: true, tier: level, mode: recipe.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: recipe.rounds, crossCheck: recipe.solvers > 0,
-        recipe: summary, thinkingLevel, ...route};
+      result = {prepared: true, tier: level, mode: merged.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: merged.rounds, crossCheck: merged.solvers > 0,
+        recipe: summary, thinkingLevel, ...route, ...(workTier ? {workTier, merged: true} : {})};
     }
     this.completed.set(requestId, {sessionKey, level, message, result});
     if (this.completed.size > 200) this.completed.delete(this.completed.keys().next().value);
@@ -501,12 +631,15 @@ export class ReasoningEnhancer {
     let main = null;
     try { main = this.mainRef(intent.sessionKey); } catch {}
     const jobs = [];
+    const workKind = intent.workKind || '';
+    const mode = solverModeFor([workKind]);
+    const title = mode === 'checklist' ? '验收清单' : mode === 'draft' ? '独立起草' : '独立解答';
     for (let index = 0; index < count; index += 1) {
-      // 几份都用当前模型，各用一种做法（SOLVER_ANGLES），避免犯同一个错。
-      const label = `独立解答 ${['①', '②', '③'][index] || index + 1} · ${['直接解', '换方法', '列清单自查'][index % 3]}`;
+      // 几份都用当前模型，各用一种做法，避免犯同一个错；动手的活写验收清单，文案点子写对照稿。
+      const label = `${title} ${['①', '②', '③'][index] || index + 1} · ${SOLVER_LABELS[mode][index % 3]}`;
       const job = newJob('solver', label, main);
       const ref = main;
-      const prompt = solverPrompt({message: intent.message, history: intent.history, index});
+      const prompt = solverPrompt({message: intent.message, history: intent.history, index, workKind});
       jobs.push(this.runJob(intent, job, ref, prompt).catch(() => ''));
     }
     const all = Promise.all(jobs).then((answers) => answers.filter(Boolean));
@@ -515,17 +648,24 @@ export class ReasoningEnhancer {
   }
 
   // 思考强度档位：选档后下一条真实用户消息开启验收（消息内容到发送时才知道）。
+  // 九档补强已经为这一条登记过（prepare 在前）：合并进同一个验收，只在整个档位任务结束后审一次。
   armTier(sessionKey, tier) {
     if (!SESSION_KEY.test(sessionKey) || !WORK_TIERS[tier]) {
       this.cancel({sessionKey});
       return {armed: false};
     }
     const previous = this.store.get(sessionKey);
+    const work = {level: tier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[tier], audit: true};
+    if (mergeable(previous) && previous.message && !WORK_TIERS[previous.level]) {
+      const recipe = mergeRecipe(previous.recipe, work);
+      const value = this.store.set({...previous, workTier: tier, recipe, maxRounds: recipe.rounds, crossCheck: recipe.solvers > 0});
+      return {armed: true, requestId: value.requestId, merged: true};
+    }
     if (previous) this.controllers.get(previous.requestId)?.abort();
-    const recipe = {level: tier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[tier], audit: true};
     const value = this.store.set({
-      requestId: `tier-${tier}-${randomUUID().slice(0, 8)}`, tier, level: tier, recipe, message: '', sessionKey, history: '',
-      phase: 'armed', round: 0, maxRounds: recipe.rounds, crossCheck: recipe.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
+      requestId: `tier-${tier}-${randomUUID().slice(0, 8)}`, tier, level: tier, recipe: work, message: '', sessionKey, history: '',
+      phase: 'armed', round: 0, maxRounds: work.rounds, crossCheck: work.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
+      workTier: tier, workKinds: [], workKind: '',
     });
     return {armed: true, requestId: value.requestId};
   }
@@ -546,6 +686,7 @@ export class ReasoningEnhancer {
     const recipe = intent.recipe || {};
     return {
       phase: intent.phase, tier: intent.tier, level: intent.level || intent.tier, round: intent.round, maxRounds: intent.maxRounds,
+      workTier: intent.workTier || '', workKind: intent.workKind || '',
       issues: (intent.issues || []).length, requestId: intent.requestId, updatedAt: intent.updatedAt,
       recipe: {kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds, as: recipe.as},
       jobs: (intent.jobs || []).map(({output, ...job}) => ({...job, hasOutput: Boolean(output)})),
@@ -570,15 +711,20 @@ export class ReasoningEnhancer {
     if (intent.phase === 'armed' && matches) {
       if (!intent.message) intent.message = prompt.slice(0, MAX_MESSAGE);
       if (!intent.history) intent.history = historyFromMessages(event.messages);
+      if (!Array.isArray(intent.workKinds) || !intent.workKinds.length) {
+        intent.workKinds = workKindsFor(intent.message, sessionKey);
+        intent.workKind = intent.workKinds[0] || '';
+      }
+      if (typeof ctx.workspaceDir === 'string' && path.isAbsolute(ctx.workspaceDir)) intent.workspaceDir = ctx.workspaceDir;
       const parts = [];
-      const brief = briefContext(recipe);
+      const brief = briefContext(recipe, intent.workKind);
       if (brief) parts.push(`[pinkie:effort level=${recipe.level}]\n${brief}`);
       if (recipe.audit) {
         intent.phase = 'answering';
         intent.jobs = [newJob('main', '碧琪主回答', null)];
         this.store.set(intent);
         if (recipe.solvers > 0) this.startIndependent(intent);
-        parts.push(`${REVIEW_MARK} tier=${intent.tier}]\n这一条开启了交付验收：最终回复会被独立核对——用户的每条要求是否满足、每个「完成 / 通过 / 已生成」的说法是否有本轮真实的工具结果${recipe.critic ? '、结论和推导是否正确' : ''}。回复前先自己逐条对一遍。不要在回复里提到验收。`);
+        parts.push(`${REVIEW_MARK} tier=${intent.tier}]\n这一条开启了交付验收：最终回复会被独立核对——用户的每条要求是否满足、每个「完成 / 通过 / 已生成」的说法是否有本轮真实的工具结果${recipe.critic ? '、结论和推导是否正确' : ''}${isHandsOnKind(intent.workKind) ? '；审稿员会打开你做出来的文件和截图本身看' : ''}。回复前先自己逐条对一遍。不要在回复里提到验收。`);
       } else {
         // 只加一段提示的档位：用完即弃。
         this.store.delete(sessionKey);
@@ -588,17 +734,18 @@ export class ReasoningEnhancer {
     if (intent.phase === 'fixing' && prompt.startsWith(FIX_PREFIX)) {
       intent.phase = 'answering';
       this.store.set(intent);
-      this.updateJob(sessionKey, intent.requestId, newJob('fix', `按批评修改 · 第 ${intent.round} 轮`, null));
+      this.updateJob(sessionKey, intent.requestId, newJob('fix', `按批评更正 · 第 ${intent.round} 轮`, null));
     }
   }
 
-  async pass(sessionKey, prompt, signal, {ref = null, thinkLevel} = {}) {
+  async pass(sessionKey, prompt, signal, {ref = null, thinkLevel, tools = false, workspaceDir: cwd = '', onTools = null} = {}) {
     const api = this.api;
     const agentId = sessionKey.split(':')[1];
     const main = this.mainRef(sessionKey);
     const target = ref || main;
     const sameAsMain = target.provider === main.provider && target.model === main.model;
-    const workspaceDir = (api.config ? agentWorkspace(api.config, agentId) : '') || process.cwd();
+    // 审稿要能打开本轮做出来的文件：用会话真正的工作目录（项目绑定时 OpenClaw 给的就是项目那边），其次是模式工作区。
+    const workspaceDir = (cwd && path.isAbsolute(cwd) ? cwd : '') || (api.config ? agentWorkspace(api.config, agentId) : '') || process.cwd();
     // 认证配置只对主模型那家有效；换模型时让运行时自己选。
     const authProfileId = sameAsMain ? main.entry?.authProfileOverride || undefined : undefined;
     const record = catalogRecord(api.config, target.provider, target.model);
@@ -622,7 +769,9 @@ export class ReasoningEnhancer {
         // 用户要的是质量：独立解答和批评都用这个模型最高的思考档。
         thinkLevel: thinkLevel || bestEffort(record),
         modelRun: true,
-        disableTools: true,
+        // 独立解答不带工具（它不替主回答动手）；审稿带只读工具，能打开截图、文档和网页，
+        // 不能执行命令、写文件或操作浏览器（OpenClaw 的 toolsAllow 只留这几样）。
+        ...(tools ? {disableTools: false, toolsAllow: [...REVIEW_TOOLS]} : {disableTools: true}),
         disableMessageTool: true,
         // 走子代理通道：全局 main 通道只有 4 个位置，Ultra 的 3 份独立解答 + 批评挤在里面，
         // 会把用户其他对话（以及并发的档位任务）排队到几分钟后。
@@ -630,6 +779,8 @@ export class ReasoningEnhancer {
         abortSignal: signal,
       });
       if (signal?.aborted) throw new Error('增强审阅已取消');
+      // 审稿员用了哪些只读工具、打开了哪些文件：记录在这次 pass 的会话文件里，删之前读出来给面板和实测核对。
+      if (tools && typeof onTools === 'function') onTools(await passToolUse(path.join(tempDir, 'pass.json')));
       return outputText(result);
     } finally {
       await fs.rm(tempDir, {recursive: true, force: true}).catch(() => {});
@@ -650,11 +801,13 @@ export class ReasoningEnhancer {
     let lastError = null;
     for (const ref of attempts) {
       try {
-        const output = await this.pass(intent.sessionKey, prompt, signal, {ref});
+        let used = {tools: [], opened: []};
+        const output = await this.pass(intent.sessionKey, prompt, signal, {ref, tools: true, workspaceDir: intent.workspaceDir || '', onTools: (value) => { used = value; }});
         const verdict = parseVerdict(output);
         if (!verdict) { lastError = new Error('批评结果格式不对'); continue; }
         const summary = verdict.pass ? '通过' : `发现 ${verdict.issues.length} 处问题：${summaryOf(verdict.issues[0]?.what)}`;
-        this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'done', endedAt: Date.now(), model: ref ? `${ref.provider}/${ref.model}` : job.model, summary, output});
+        this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'done', endedAt: Date.now(), model: ref ? `${ref.provider}/${ref.model}` : job.model, summary, output,
+          toolsUsed: used.tools, opened: used.opened});
         return verdict;
       } catch (error) {
         lastError = error;
@@ -681,7 +834,11 @@ export class ReasoningEnhancer {
     }
     if (event.success === false || !reply) { const current = this.store.get(sessionKey); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
     const fresh = this.store.get(sessionKey);
+    // 打回之后这一条是「更正」：连同之前已交给用户的那条一起审，免得把只发更正当成没回答完整。
+    // 在等独立解答之前落盘：等完再写会用旧副本盖掉独立解答刚写进去的结果。
+    const earlier = fresh.round > 0 ? String(fresh.deliveredReply || '').slice(0, 6000) : '';
     fresh.phase = 'reviewing';
+    if (!fresh.round) fresh.deliveredReply = reply.slice(0, 8000);
     this.store.set(fresh);
     const signal = this.controller(fresh.requestId).signal;
     try {
@@ -692,6 +849,7 @@ export class ReasoningEnhancer {
       const recipe = fresh.recipe || {};
       const verdict = await this.critique(fresh, auditPrompt({
         message: fresh.message, history: fresh.history, reply: reply.slice(0, 8000), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
+        workKind: fresh.workKind || '', artifacts: artifactPaths(entriesFromMessages(messages)), tools: true, earlier,
       }), signal);
       const current = this.store.get(sessionKey);
       if (!current || current.requestId !== fresh.requestId) return {reviewed: false, cancelled: true};
