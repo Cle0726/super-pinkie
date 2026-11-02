@@ -86,6 +86,8 @@ cd $HOME\super-pinkie
 - 日志位于 `%LOCALAPPDATA%\SuperPinkie\logs`，网关异常会由 App 内的看门狗自动重启。
 - 想打开保留的旧维护界面，可运行 `超級碧琪.exe --control-center`。
 - 模型服务商的 API Key 仍需由用户自行配置；EXE 不会内置、上传或替换私人 Key。
+- 应用内更新的记录在 `%LOCALAPPDATA%\SuperPinkie\logs\updater.log`。没装上时会自动退回旧版，下次打开会提示原因。
+- 发版前先在装好新版碧琪的 Mac 上运行 `python tools/windows-package/refresh_mac_runtime.py --check`。Windows 包不直接跑补丁脚本，而是带一份 Mac 已打好补丁的 OpenClaw 文件（`desktop/windows/mac-runtime`）；这份快照过期，Mac 上修好的问题在 Windows 上就还在。检查不通过时去掉 `--check` 再跑一次即可刷新，`services/` 下列出的文件带有 Windows 自己的修复，需要手动合并。
 
 ## 源码模式说明与排障
 

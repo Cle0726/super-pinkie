@@ -1,3 +1,5 @@
+/* pinkie-context-breakdown:v1 */
+import {contextBreakdown as pinkieContextBreakdown} from "./pinkie-context-budget.mjs";
 /* pinkie-context-budget:sessions:v2 */
 /* pinkie-context-budget:v1 */
 import {compactionBudget as pinkieContextBudget, sessionContextWindow as pinkieSessionContextWindow} from "./pinkie-context-budget.mjs";
@@ -484,7 +486,7 @@ const sessionsHandlers = {
 				sessions: sessions.map((session) => {
 					const contextWindow = pinkieSessionContextWindow(session, cfg, result.defaults?.contextTokens);
 					if (!pinkieBudgets.has(contextWindow)) pinkieBudgets.set(contextWindow, pinkieContextBudget(contextWindow));
-					return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow) };
+					return { ...session, contextTokens: contextWindow, pinkieCompactionBudget: pinkieBudgets.get(contextWindow), pinkieContextBreakdown: pinkieContextBreakdown((typeof listStore === "object" ? listStore : null)?.[session.key]?.systemPromptReport) };
 				})
 			};
 		}, {
