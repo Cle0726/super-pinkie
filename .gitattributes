@@ -1,1 +1,3 @@
 desktop/windows/mac-runtime/** text eol=lf
+personas/**/*.sh text eol=lf
+personas/**/*.ps1 -text
