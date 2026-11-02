@@ -19,6 +19,23 @@
     } catch { return ""; }
   }
 
+  // 输入框滑块上选的那一档（9 档之一）和它实际发出去的原生等级；见 laolao-model-picker.js。
+  const effortChoiceKey = (sessionKey) => `pinkie:effort-choice:v1:${sessionKey}`;
+  function effortChoice(sessionKey) {
+    try { return JSON.parse(localStorage.getItem(effortChoiceKey(sessionKey)) || "null") || null; } catch { return null; }
+  }
+  // 要不要在发送前登记做法：Max / Ultra / Adaptive，或者所选档位当前模型原生做不到（往上补、往下补）。
+  function effortLevel(sessionKey) {
+    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    const enhanced = reasoningTier(sessionKey);
+    if (enhanced) return enhanced;
+    const choice = effortChoice(sessionKey);
+    const level = String(choice?.tier || "");
+    if (!level) return "";
+    if (level === "adaptive") return level;
+    return choice.backend && choice.backend !== level ? level : "";
+  }
+
   function emitReasoningProgress(detail) {
     document.dispatchEvent(new CustomEvent("pinkie:reasoning-preparing", {detail}));
   }
@@ -34,7 +51,7 @@
   };
   function watchReview(sessionKey, requestId, tier) {
     clearTimeout(reviewWatchers.get(sessionKey));
-    const label = {ultra: "Ultra", max: "Max", boost: "加强档", full: "全开档", marathon: "长跑档"}[tier] || "Max";
+    const label = {ultra: "Ultra", max: "Max", xhigh: "XHigh", adaptive: "Adaptive", boost: "加强档", full: "全开档", marathon: "长跑档"}[tier] || "Max";
     const deadline = Date.now() + 15 * 60_000;
     const tick = async () => {
       let status = {};
@@ -151,30 +168,39 @@
               stage = 'workbench';
               await window.__pinkieWorkbench?.flushContext?.(key);
               if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');
-              const tier = reasoningTier(key);
+              const tier = effortLevel(key);
+              const enhanced = tier === 'max' || tier === 'ultra';
               const message = messageText(request.params?.message).trim();
               if (tier && message && !message.startsWith('/')) {
                 stage = 'reasoning';
-                if (message.length > 12_000) throw new Error('消息太长，增强推演没有启动；请缩短或先关闭增强档位');
-                const requestId = request.id || window.crypto?.randomUUID?.() || `reasoning-${Date.now()}`;
-                job = {requestId, cancelled: false};
-                reasoningJobs.set(key, job);
-                emitReasoningProgress({active: true, sessionKey: key, requestId, tier});
-                let history = [];
-                try {
-                  const agentId = String(key).match(/^agent:([^:]+):/)?.[1];
-                  const result = await gwRequest('chat.history', {sessionKey: key, agentId, limit: 8, maxChars: 10000}, 15_000);
-                  const items = Array.isArray(result?.messages) ? result.messages : Array.isArray(result?.items) ? result.items : [];
-                  history = items.map((item) => ({
-                    role: String(item?.role || item?.message?.role || '').toLowerCase(),
-                    text: messageText(item?.message ?? item).slice(0, 1600),
-                  })).filter((item) => ['user', 'assistant'].includes(item.role) && item.text);
-                } catch { /* A history refresh is optional; never lose the draft over it. */ }
-                if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
-                const prepared = await gwRequest('pinkie.reasoning.prepare', {sessionKey: key, requestId, tier, message, history}, 30_000);
-                if (!prepared?.prepared) throw new Error('交付验收没有开启');
-                if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
-                job.review = {requestId, tier};
+                if (message.length > 12_000) {
+                  if (enhanced) throw new Error('消息太长，增强推演没有启动；请缩短或先关闭增强档位');
+                } else {
+                  const requestId = request.id || window.crypto?.randomUUID?.() || `reasoning-${Date.now()}`;
+                  job = {requestId, cancelled: false};
+                  reasoningJobs.set(key, job);
+                  emitReasoningProgress({active: true, sessionKey: key, requestId, tier});
+                  // 对话历史由后端在这一轮开始时自己取，这里不再多等一次 chat.history。
+                  let prepared = null;
+                  try {
+                    prepared = await gwRequest('pinkie.reasoning.prepare', {sessionKey: key, requestId, level: tier, message}, 30_000);
+                  } catch (error) {
+                    // Max / Ultra 没登记上就不发，免得以为核对过；其他档位只是少了补充，照常发送。
+                    if (enhanced) throw error;
+                  }
+                  if (enhanced && !prepared?.prepared) throw new Error('交付验收没有开启');
+                  if (job.cancelled || (abortVersions.get(key)||0)!==version) throw new Error('增强推演已取消');
+                  // Adaptive 模拟：这条按难度换一个原生等级，发送前先改好会话，并让滑块记住还是 Adaptive。
+                  if (prepared?.recipe?.kind === 'adaptive' && prepared.thinkingLevel) {
+                    const agentId = String(key).match(/^agent:([^:]+):/)?.[1];
+                    try {
+                      await gwRequest('sessions.patch', {key, ...(agentId ? {agentId} : {}), thinkingLevel: prepared.thinkingLevel}, 15_000);
+                      const choice = effortChoice(key);
+                      if (choice) localStorage.setItem(effortChoiceKey(key), JSON.stringify({...choice, backend: prepared.thinkingLevel}));
+                    } catch { /* 改不了就按当前等级发，不丢消息。 */ }
+                  }
+                  if (prepared?.prepared && prepared.mode === 'delivery-review') job.review = {requestId, tier};
+                }
               }
               send(data);
               if (job?.review) watchReview(key, job.review.requestId, job.review.tier);

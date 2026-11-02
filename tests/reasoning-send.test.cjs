@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../ui/injections/laolao-sidebar.js'), 'utf8');
 const prefix = source.slice(0, source.indexOf('  /* ---------- 1. 状态与模式隔离')) + '})();';
 
-function harness(tier = 'max') {
+function harness(tier = 'max', {storage = null, prepared = {prepared: true, passes: 2}} = {}) {
   const calls = [];
   const events = new Map();
   const progress = [];
@@ -21,9 +21,10 @@ function harness(tier = 'max') {
       const request = JSON.parse(data);
       calls.push(request);
       if (request.method === 'chat.history') this.reply(request.id, {messages: []});
+      if (request.method === 'sessions.patch') this.reply(request.id, {ok: true});
       if (request.method === 'pinkie.reasoning.cancel') this.reply(request.id, {cancelled: true});
       if (request.method === 'pinkie.reasoning.prepare') {
-        releasePrepare = () => this.reply(request.id, {prepared: true, passes: 2});
+        releasePrepare = () => this.reply(request.id, prepared);
       }
     }
     reply(id, payload) { queueMicrotask(() => this.dispatchEvent({type: 'message', data: JSON.stringify({type: 'res', id, ok: true, payload})})); }
@@ -34,7 +35,7 @@ function harness(tier = 'max') {
   };
   const window = {WebSocket: FakeSocket, crypto: {randomUUID: () => `gateway-${++nextId}`}, addEventListener(name, fn) { events.set(name, fn); }};
   const context = {
-    window, document, localStorage: {getItem: (key) => key.endsWith(':one') ? tier : ''},
+    window, document, localStorage: {getItem: (key) => storage ? storage.get(key) ?? null : key.endsWith(':one') ? tier : '', setItem: (key, value) => storage?.set(key, value)},
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     MessageEvent: class { constructor(type, options) { this.type = type; this.data = options.data; } },
     crypto: window.crypto, setTimeout, clearTimeout,
@@ -49,7 +50,8 @@ test('enhanced chat prepares before one native send; another session is not bloc
   const h = harness();
   h.socket.send(JSON.stringify({type: 'req', id: 'request-12345678', method: 'chat.send', params: {sessionKey: 'agent:learning:one', message: '题目'}}));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.deepEqual(h.calls.map((call) => call.method), ['chat.history', 'pinkie.reasoning.prepare']);
+  assert.deepEqual(h.calls.map((call) => call.method), ['pinkie.reasoning.prepare'], 'history is read by the backend, not awaited before sending');
+  assert.equal(h.calls[0].params.level, 'max');
   h.socket.send(JSON.stringify({type: 'req', id: 'request-other', method: 'chat.send', params: {sessionKey: 'agent:learning:two', message: '另一题'}}));
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.ok(h.calls.some((call) => call.id === 'request-other' && call.method === 'chat.send'), 'other pane can send while first prepares');
@@ -69,4 +71,37 @@ test('cancelled enhanced turn never forwards its original chat.send', async () =
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(h.calls.filter((call) => call.method === 'chat.send').length, 0);
   assert.ok(h.calls.some((call) => call.method === 'pinkie.reasoning.cancel'));
+});
+
+test('a stop the model cannot reach natively is registered too, and a failed registration never blocks the send', async () => {
+  const storage = new Map([['pinkie:effort-choice:v1:agent:learning:one', JSON.stringify({tier: 'off', model: 'mm/workbuddy/glm-5.3', backend: 'high'})]]);
+  const h = harness('', {storage, prepared: {prepared: true, mode: 'prompt', recipe: {kind: 'down'}, thinkingLevel: 'high'}});
+  h.socket.send(JSON.stringify({type: 'req', id: 'request-12345678', method: 'chat.send', params: {sessionKey: 'agent:learning:one', message: '题目'}}));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(h.calls[0].method, 'pinkie.reasoning.prepare');
+  assert.equal(h.calls[0].params.level, 'off');
+  h.release();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(h.calls.filter((call) => call.method === 'chat.send').length, 1);
+});
+
+test('adaptive picks a native effort for this message before sending, and the slider still remembers Adaptive', async () => {
+  const key = 'pinkie:effort-choice:v1:agent:learning:one';
+  const storage = new Map([[key, JSON.stringify({tier: 'adaptive', model: 'mm/gemini-3.8-flash-tiered', backend: 'medium'})]]);
+  const h = harness('', {storage, prepared: {prepared: false, recipe: {kind: 'adaptive', as: 'xhigh'}, thinkingLevel: 'xhigh'}});
+  h.socket.send(JSON.stringify({type: 'req', id: 'request-12345678', method: 'chat.send', params: {sessionKey: 'agent:learning:one', message: '证明这道题'}}));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  h.release();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(h.calls.map((call) => call.method), ['pinkie.reasoning.prepare', 'sessions.patch', 'chat.send']);
+  assert.equal(h.calls[1].params.thinkingLevel, 'xhigh');
+  assert.deepEqual(JSON.parse(storage.get(key)), {tier: 'adaptive', model: 'mm/gemini-3.8-flash-tiered', backend: 'xhigh'});
+});
+
+test('a stop the model runs natively sends at once without registering anything', async () => {
+  const storage = new Map([['pinkie:effort-choice:v1:agent:learning:one', JSON.stringify({tier: 'high', backend: 'high'})]]);
+  const h = harness('', {storage});
+  h.socket.send(JSON.stringify({type: 'req', id: 'request-12345678', method: 'chat.send', params: {sessionKey: 'agent:learning:one', message: '题目'}}));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(h.calls.map((call) => call.method), ['chat.send']);
 });
