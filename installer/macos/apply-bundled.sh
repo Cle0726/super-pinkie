@@ -48,24 +48,8 @@ fi
 
 if [[ ! -f "$MARKER" ]]; then
   BACKUP_ROOT="$STATE_ROOT/backups/bundled-$(date +%Y%m%d-%H%M%S)"
-  install_persona() {
-    local source_dir="$1"
-    local target_dir="$2"
-    local label="$3"
-    mkdir -p "$target_dir"
-    for filename in SOUL.md IDENTITY.md AGENTS.md AESTHETICS.md METHODS.md HEARTBEAT.md DREAMS.md memory-system.md; do
-      [[ -f "$source_dir/$filename" ]] || continue
-      if [[ -e "$target_dir/$filename" || -L "$target_dir/$filename" ]]; then
-        continue
-      fi
-      cp "$source_dir/$filename" "$target_dir/$filename"
-    done
-  }
-  install_persona "$REPO_ROOT/personas/chat" "$HOME/.openclaw/workspace" chat
-  install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
-  install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
-  install_persona "$REPO_ROOT/personas/learning" "$HOME/.openclaw/workspace-learning" learning
-  install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
+  # Once per version: add new manuals/playbooks and update the ones the owner never edited.
+  bash "$SCRIPT_DIR/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" "$BACKUP_ROOT/personas"
   OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
   if [[ -z "$OPENCLAW_BIN" ]]; then
     for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do

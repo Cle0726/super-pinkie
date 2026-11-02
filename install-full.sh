@@ -60,19 +60,6 @@ if [[ ! -f "$CONFIG_ROOT/config.json" ]]; then
   cp "$REPO_ROOT/config.example.json" "$CONFIG_ROOT/config.json"
 fi
 
-install_persona() {
-  local source_dir="$1"
-  local target_dir="$2"
-  local label="$3"
-  mkdir -p "$target_dir"
-  for filename in SOUL.md IDENTITY.md; do
-    if [[ -e "$target_dir/$filename" || -L "$target_dir/$filename" ]]; then
-      echo "    [$label] 保留已有 $filename"
-      continue
-    fi
-    cp "$source_dir/$filename" "$target_dir/$filename"
-  done
-}
 
 ensure_project_agent() {
   command -v openclaw >/dev/null 2>&1 || return 0
@@ -109,13 +96,10 @@ ensure_learning_agent() {
   openclaw agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
 }
 
-echo "==> 1/6 安装人格文件（原有三套保持原样）"
+echo "==> 1/6 安装人格文件和打法（自己改过的保持原样）"
 if [[ "$INSTALL_AGENTS" == "1" ]]; then
-  install_persona "$REPO_ROOT/personas/chat" "$HOME/.openclaw/workspace" chat
-  install_persona "$REPO_ROOT/personas/project" "$HOME/.openclaw/workspace-project" project
-  install_persona "$REPO_ROOT/personas/thinking" "$HOME/.openclaw/workspace-thinking" thinking
-  install_persona "$REPO_ROOT/personas/learning" "$HOME/.openclaw/workspace-learning" learning
-  install_persona "$REPO_ROOT/personas/neutral" "$HOME/.openclaw/workspace-unrestricted" neutral
+  bash "$REPO_ROOT/installer/macos/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" \
+    "$HOME/.openclaw/backups/personas-$(date +%Y%m%d-%H%M%S)"
 else
   echo "    已跳过"
 fi
