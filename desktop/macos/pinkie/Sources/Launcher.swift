@@ -70,6 +70,12 @@ private enum BundledRuntime {
         if exists(pythonURL) {
             environment["PINKIE_PYTHON_BIN"] = pythonURL?.path
         }
+        if let skills = resourceRoot?.appendingPathComponent("bundled-skills", isDirectory: true),
+           FileManager.default.fileExists(atPath: skills.path) {
+            environment["PINKIE_MANAGED_SKILLS_DIR"] = skills.path
+        } else {
+            environment.removeValue(forKey: "PINKIE_MANAGED_SKILLS_DIR")
+        }
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
         // CLE Kk is a private loopback desktop App. OpenClaw otherwise marks
         // webchat turns as non-owner and silently removes gateway/nodes/cron
@@ -1919,6 +1925,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let windowControlHandlerName = "laolaoWindowControl"
     private let materialPreviewHandlerName = "laolaoMaterialPreview"
     private var updateLaunchInProgress = false
+    private var updateStageTask: Process?
     private let party = PartyService()
     private let roundtable = RoundtableService()
     private let tts = TTSService()
@@ -2186,50 +2193,133 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     @objc func checkForUpdates(_ sender: Any?) {
         guard !updateLaunchInProgress else { return }
+        guard let webView else { legacyCheckForUpdates(); return }
+        webView.evaluateJavaScript("Boolean(window.__pinkieUpdateDialog?.open())") { [weak self] value, _ in
+            if (value as? Bool) != true { self?.legacyCheckForUpdates() }
+        }
+    }
+
+    private func legacyCheckForUpdates() {
+        guard !updateLaunchInProgress else { return }
         let confirmation = NSAlert()
-        confirmation.messageText = "主动拉取 CLE Kk 更新？"
+        confirmation.messageText = "现在更新碧琪？"
         confirmation.informativeText = "确认后旧 App 会退出。独立更新程序会继续拉取、安装并重新打开；期间网关重启或页面断开都不会中止更新。人格、会话、项目、图片和视频不会参与替换。"
         confirmation.alertStyle = .informational
         confirmation.addButton(withTitle: "拉取并更新")
         confirmation.addButton(withTitle: "取消")
         guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+        _ = launchDetachedUpdate(prepared: false)
+    }
 
-        guard let root = BundledRuntime.resourceRoot else { return }
-        let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
-        let stateRoot = FileManager.default.homeDirectoryForCurrentUser
+    private func updateStateRoot() -> URL {
+        if let configured = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !configured.isEmpty {
+            return URL(fileURLWithPath: configured, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
-        let updateRoot = stateRoot.appendingPathComponent("updates", isDirectory: true)
+    }
+
+    @discardableResult private func launchDetachedUpdate(prepared: Bool) -> Bool {
+        guard !updateLaunchInProgress, let root = BundledRuntime.resourceRoot else { return false }
+        let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
+        let stageScript = root.appendingPathComponent("installer/macos/stage-git-update.py")
+        let updateRoot = updateStateRoot().appendingPathComponent("updates", isDirectory: true)
+        if prepared && (!FileManager.default.fileExists(atPath: stageScript.path)
+            || !FileManager.default.fileExists(atPath: updateRoot.appendingPathComponent("prepared-git.json").path)) { return false }
         let helper = updateRoot.appendingPathComponent("manual-update.sh")
         let task = Process()
         do {
             try FileManager.default.createDirectory(at: updateRoot, withIntermediateDirectories: true)
-            if FileManager.default.fileExists(atPath: helper.path) {
-                try FileManager.default.removeItem(at: helper)
-            }
+            if FileManager.default.fileExists(atPath: helper.path) { try FileManager.default.removeItem(at: helper) }
             try FileManager.default.copyItem(at: bundledScript, to: helper)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.runModal()
-            return
-        }
-
-        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        task.arguments = [helper.path, String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
-        task.environment = BundledRuntime.environment()
-        task.standardInput = FileHandle.nullDevice
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        do {
+            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            task.arguments = [helper.path, String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
+                + (prepared ? ["--prepared", stageScript.path] : [])
+            task.environment = BundledRuntime.environment()
+            task.standardInput = FileHandle.nullDevice
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
             try task.run()
             updateLaunchInProgress = true
             notifyWebView("pinkie:update-detached")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                NSApp.terminate(nil)
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { NSApp.terminate(nil) }
+            return true
         } catch {
-            let alert = NSAlert(error: error)
-            alert.runModal()
+            if !prepared { NSAlert(error: error).runModal() }
+            return false
+        }
+    }
+
+    private func sendUpdateResult(_ request: Int, _ value: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript("window.__pinkieUpdateResult?.(\(request),\(json))", completionHandler: nil)
+    }
+
+    private func sendUpdateProgress(_ value: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript("window.__pinkieUpdateProgress?.(\(json))", completionHandler: nil)
+    }
+
+    private func handleUpdateRequest(_ body: [String: Any]) {
+        guard let action = body["action"] as? String, let request = body["request"] as? Int,
+              request > 0, request < 1_000_000_000 else { return }
+        if action == "apply" {
+            guard updateStageTask == nil else { sendUpdateResult(request, ["started": false, "message": "更新仍在准备，请稍等。"]); return }
+            let started = launchDetachedUpdate(prepared: true)
+            sendUpdateResult(request, ["started": started, "message": started ? "" : "无法启动安装，请重新准备更新。"])
+            return
+        }
+        guard ["check", "prepare"].contains(action), updateStageTask == nil,
+              let root = BundledRuntime.resourceRoot, let python = BundledRuntime.pythonExecutable() else {
+            sendUpdateResult(request, ["temporaryError": true, "message": "更新服务暂时不可用，请稍后重试。"]); return
+        }
+        let script = root.appendingPathComponent("installer/macos/stage-git-update.py")
+        guard FileManager.default.fileExists(atPath: script.path) else {
+            sendUpdateResult(request, ["temporaryError": true, "message": "更新组件缺失，请手动下载安装。"]); return
+        }
+        let task = Process(), pipe = Pipe()
+        task.executableURL = python
+        task.arguments = [script.path, action]
+        var environment = BundledRuntime.environment()
+        // 国内线路：更新弹窗里选了「国内线路」时，Git 走加速代理（见 stage-git-update.py）。
+        if body["route"] as? String == "mirror" { environment["PINKIE_UPDATE_ROUTE"] = "mirror" }
+        else { environment.removeValue(forKey: "PINKIE_UPDATE_ROUTE") }
+        task.environment = environment
+        task.standardInput = FileHandle.nullDevice
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do { try task.run(); updateStageTask = task }
+        catch { sendUpdateResult(request, ["temporaryError": true, "message": "更新服务没有启动，请稍后重试。"]); return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var buffered = Data(), receivedResult = false
+            while true {
+                let part = pipe.fileHandleForReading.readData(ofLength: 4096)
+                if part.isEmpty { break }
+                buffered.append(part)
+                if buffered.count > 1_048_576 { task.terminate(); break }
+                while let newline = buffered.firstIndex(of: 10) {
+                    let line = Data(buffered[..<newline]); buffered.removeSubrange(...newline)
+                    guard let packet = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+                          let kind = packet["type"] as? String else { continue }
+                    if kind == "progress", let event = packet["event"] as? [String: Any] {
+                        DispatchQueue.main.async { self?.sendUpdateProgress(event) }
+                    } else if kind == "result", let value = packet["value"] as? [String: Any] {
+                        receivedResult = true
+                        DispatchQueue.main.async { self?.sendUpdateResult(request, value) }
+                    }
+                }
+            }
+            task.waitUntilExit()
+            let failedWithoutResult = !receivedResult
+            DispatchQueue.main.async {
+                self?.updateStageTask = nil
+                if failedWithoutResult { self?.sendUpdateResult(request, ["temporaryError": true, "message": "更新服务中断，请稍后重试。"]) }
+            }
         }
     }
 
@@ -2365,7 +2455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // Mark only the native shell. The web UI uses this to avoid whole-page
         // opacity animation while keeping its decorative motion intact.
         controller.addUserScript(WKUserScript(
-            source: "window.__pinkieBootNight = \(nightAppearance ? "true" : "false"); document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
+            source: "window.__pinkieMacUpdaterV2 = \(docked ? "false" : "true"); window.__pinkieBootNight = \(nightAppearance ? "true" : "false"); document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
@@ -4399,7 +4489,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         if message.name == "laolaoParty" { openParty(in: sourceWebView); return }
         if message.name == "laolaoRoundtable" { openRoundtable(in: sourceWebView); return }
-        if message.name == updateHandlerName { checkForUpdates(nil); return }
+        if message.name == updateHandlerName {
+            if let body = message.body as? [String: Any], body["action"] as? String != "pull" {
+                if message.webView === webView { handleUpdateRequest(body) }
+            } else { checkForUpdates(nil) }
+            return
+        }
         if message.name == windowControlHandlerName,
            let body = message.body as? [String: Any],
            body["action"] as? String == "toggle-fullscreen" {

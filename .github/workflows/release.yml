@@ -90,6 +90,15 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
           }
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
+      - name: Point the China update route at the bucket (when one is configured)
+        if: ${{ vars.CN_MIRROR_BASE_URL != '' }}
+        shell: pwsh
+        env:
+          CN_MIRROR_BASE_URL: ${{ vars.CN_MIRROR_BASE_URL }}
+        run: |
+          $settings = Get-Content -Raw update-mirrors.json | ConvertFrom-Json
+          $settings.bucket = $env:CN_MIRROR_BASE_URL
+          $settings | ConvertTo-Json | Set-Content -LiteralPath update-mirrors.json -Encoding utf8
       - name: Build Windows exe
         shell: pwsh
         run: .\build-win.ps1 -LegacyOneFile
@@ -193,3 +202,44 @@ jobs:
             dist/super-pinkie-windows-*.exe.sha256
             dist/super-pinkie-windows-*-portable.zip
             dist/super-pinkie-windows-*-portable.zip.sha256
+
+  # 国内线路：每个版本附一份 latest.json；配置了国内存储桶（S3 兼容：阿里云 OSS / 腾讯云 COS）就把整套文件传一份过去。
+  # 需要：仓库变量 CN_MIRROR_BASE_URL（下载用的 https 地址，结尾 /）、CN_MIRROR_S3_ENDPOINT、CN_MIRROR_S3_BUCKET、
+  # CN_MIRROR_S3_PREFIX（可空）；密钥 CN_MIRROR_ACCESS_KEY_ID、CN_MIRROR_SECRET_ACCESS_KEY。没配置就只发 latest.json。
+  mirror-publish:
+    needs: [source, macos-publish, windows-publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist
+      - name: Describe every release file in latest.json
+        run: |
+          git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
+          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" desktop/windows/release-notes.md dist mirror/latest.json
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: desktop/windows/release-notes.md
+          fail_on_unmatched_files: true
+          files: mirror/latest.json
+      - name: Copy the release to the China bucket
+        if: ${{ vars.CN_MIRROR_S3_BUCKET != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CN_MIRROR_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CN_MIRROR_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          ENDPOINT: ${{ vars.CN_MIRROR_S3_ENDPOINT }}
+          BUCKET: ${{ vars.CN_MIRROR_S3_BUCKET }}
+          PREFIX: ${{ vars.CN_MIRROR_S3_PREFIX }}
+        run: |
+          aws configure set default.s3.addressing_style virtual
+          target="s3://$BUCKET/${PREFIX:+${PREFIX%/}/}"
+          # 先传安装包，最后才换 latest.json：客户端看到新版本时文件一定已经在了。
+          aws s3 cp dist/ "${target}${GITHUB_REF_NAME}/" --recursive --endpoint-url "$ENDPOINT" --no-progress
+          aws s3 cp mirror/latest.json "${target}latest.json" --endpoint-url "$ENDPOINT" --cache-control "no-cache" --no-progress

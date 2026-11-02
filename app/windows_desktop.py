@@ -39,6 +39,11 @@ TRUSTED_UPDATE_HOSTS = {
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
 }
+UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+# 国内线路：每个版本都附一份 latest.json（版本、说明、每个文件的 SHA-256 和大小），
+# 经 GitHub 加速代理或国内存储桶读它，再从同一条线路下载安装包。
+UPDATE_MANIFEST_NAME = "latest.json"
+DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
 
 
 DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
@@ -58,9 +63,46 @@ def version_tuple(value):
     return tuple(int(part or 0) for part in match.groups())
 
 
-def trusted_update_url(value):
+def trusted_update_url(value, hosts=TRUSTED_UPDATE_HOSTS):
     parsed = urllib.parse.urlparse(str(value))
-    return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
+    return parsed.scheme == "https" and parsed.hostname in hosts
+
+
+def _mirror_base(value):
+    value = str(value or "").strip()
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.query or parsed.fragment:
+        return ""
+    return value if value.endswith("/") else value + "/"
+
+
+def update_mirrors(resource_root):
+    """国内线路的候选，按顺序试：先国内存储桶（发版时配置了才有），再 GitHub 加速代理。
+
+    `update-mirrors.json` 由发版流程写进包里：{"bucket": "https://…/super-pinkie/", "proxies": [...]}。
+    文件不存在或写错时只用内置的加速代理。
+    """
+    settings = {}
+    try:
+        settings = json.loads((Path(resource_root) / "update-mirrors.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        settings = {}
+    if not isinstance(settings, dict):
+        settings = {}
+    routes = []
+    bucket = _mirror_base(settings.get("bucket"))
+    if bucket:
+        routes.append({"label": "国内服务器", "manifest": bucket + UPDATE_MANIFEST_NAME,
+                       "asset": lambda version, name, base=bucket: f"{base}v{version}/{name}"})
+    proxies = settings.get("proxies")
+    proxies = proxies if isinstance(proxies, list) and proxies else list(DEFAULT_UPDATE_PROXIES)
+    for proxy in proxies:
+        base = _mirror_base(proxy)
+        if not base:
+            continue
+        routes.append({"label": "国内加速", "manifest": f"{base}{UPDATE_RELEASES_URL}/latest/download/{UPDATE_MANIFEST_NAME}",
+                       "asset": lambda version, name, base=base: f"{base}{UPDATE_RELEASES_URL}/download/v{version}/{name}"})
+    return routes
 
 
 _NOTES_CUT = re.compile(
@@ -120,6 +162,35 @@ def release_update(release, current_version, portable=False):
         "checksumUrl": checksum_url,
         "releaseUrl": str(release.get("html_url", "")),
         "notes": release_notes_text(release.get("body")),
+    }
+
+
+def manifest_update(manifest, current_version, asset_url, portable=False):
+    """读国内线路上的 latest.json，挑出和本机安装方式对应的包。"""
+    if not isinstance(manifest, dict):
+        return None
+    version = str(manifest.get("version", "")).strip().removeprefix("v")
+    if version_tuple(version) <= version_tuple(current_version):
+        return None
+    suffix = "-portable.zip" if portable else ".exe"
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}{suffix}"
+    assets = manifest.get("assets") if isinstance(manifest.get("assets"), dict) else {}
+    entry = assets.get(expected_name) if isinstance(assets.get(expected_name), dict) else {}
+    digest = str(entry.get("sha256", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return None
+    official = f"{UPDATE_RELEASES_URL}/download/v{version}/{expected_name}"
+    return {
+        "available": True,
+        "version": version,
+        "name": expected_name,
+        "executableUrl": asset_url(version, expected_name),
+        "portable": portable,
+        # 优先用 GitHub 官方的校验和（连得上的话）；连不上才用这份清单里的。
+        "checksumUrl": official + ".sha256",
+        "sha256": digest,
+        "releaseUrl": f"{UPDATE_RELEASES_URL}/tag/v{version}",
+        "notes": release_notes_text(manifest.get("notes")),
     }
 
 
@@ -244,6 +315,11 @@ class WindowsUpdater:
         self.last_checked = 0.0
         self.latest = None
         self.prepared = None
+        self.mirrors = update_mirrors(resource_root)
+        self.trusted_hosts = set(TRUSTED_UPDATE_HOSTS) | {
+            urllib.parse.urlparse(route["manifest"]).hostname for route in self.mirrors}
+        self.mirror_latest = None
+        self.mirror_checked = 0.0
 
     @staticmethod
     def _is_onedir(executable):
@@ -264,9 +340,8 @@ class WindowsUpdater:
                 return True
         return False
 
-    @staticmethod
-    def _request(url):
-        if not trusted_update_url(url):
+    def _request(self, url):
+        if not trusted_update_url(url, self.trusted_hosts):
             raise ValueError("untrusted update address")
         return urllib.request.Request(
             url,
@@ -277,16 +352,18 @@ class WindowsUpdater:
             },
         )
 
-    def _read(self, url, limit):
-        with self.opener(self._request(url), timeout=20) as response:
+    def _read(self, url, limit, timeout=20):
+        with self.opener(self._request(url), timeout=timeout) as response:
             value = response.read(limit + 1)
         if len(value) > limit:
             raise ValueError("update metadata is too large")
         return value
 
-    def check(self, force=False):
+    def check(self, force=False, route=None):
         if not self.enabled:
             return {"available": False, "supported": False, "currentVersion": self.current_version}
+        if route == "mirror":
+            return self._check_mirror(force)
         with self.lock:
             if not force and self.latest is not None and time.monotonic() - self.last_checked < 7200:
                 return dict(self.latest)
@@ -306,8 +383,44 @@ class WindowsUpdater:
                     "supported": True,
                     "currentVersion": self.current_version,
                     "temporaryError": True,
+                    "suggestMirror": bool(self.mirrors),
                 }
             return dict(self.latest)
+
+    def _check_mirror(self, force=False):
+        with self.lock:
+            if not force and self.mirror_latest is not None and time.monotonic() - self.mirror_checked < 7200:
+                return dict(self.mirror_latest)
+            self.mirror_checked = time.monotonic()
+            for route in self.mirrors:
+                try:
+                    manifest = json.loads(self._read(route["manifest"], 256 * 1024).decode("utf-8"))
+                except Exception as error:
+                    append_log("updater", f"mirror {urllib.parse.urlparse(route['manifest']).hostname} unavailable: {error}")
+                    continue
+                if not isinstance(manifest, dict) or not str(manifest.get("version", "")).strip():
+                    continue
+                try:
+                    selected = manifest_update(manifest, self.current_version, route["asset"], portable=self.portable)
+                except ValueError:
+                    continue
+                self.mirror_latest = ({**selected, "route": "mirror", "mirror": route["label"]} if selected else
+                                      {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version})
+                return dict(self.mirror_latest)
+            self.mirror_latest = None
+            return {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version,
+                    "temporaryError": True, "message": "国内线路暂时都连不上，可以稍后重试，或换回官方线路。"}
+
+    def _expected_checksum(self, metadata):
+        try:
+            return self._checksum(self._read(metadata["checksumUrl"], 4096, timeout=8 if metadata.get("sha256") else 20),
+                                  metadata["name"])
+        except Exception as error:
+            if not metadata.get("sha256"):
+                raise
+            # 国内线路：GitHub 官方校验和拿不到时，用 latest.json 里的。下载后照样逐字节核对。
+            append_log("updater", f"official checksum unavailable, using the mirror manifest: {error}")
+            return metadata["sha256"]
 
     @staticmethod
     def _checksum(value, expected_name):
@@ -430,17 +543,15 @@ class WindowsUpdater:
         if received < 1024 * 1024:
             raise ValueError("update package is incomplete")
 
-    def prepare(self, progress=None):
+    def prepare(self, progress=None, route=None):
         with self.lock:
-            metadata = self.check(force=True)
+            metadata = self.check(force=True, route=route)
             if not metadata.get("available"):
                 return {**metadata, "ready": False}
             directory = state_root() / "updates" / metadata["version"]
             directory.mkdir(parents=True, exist_ok=True)
             payload = directory / metadata["name"]
-            expected = self._checksum(
-                self._read(metadata["checksumUrl"], 4096), metadata["name"]
-            )
+            expected = self._expected_checksum(metadata)
             if not payload.is_file() or self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
                 self._download(metadata["executableUrl"], payload, progress=progress)
@@ -1314,15 +1425,15 @@ class NativeBridge:
     def control_center(self):
         subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs(hide_window=False))
 
-    def check_for_updates(self):
-        return self._updater.check(force=True)
+    def check_for_updates(self, route=None):
+        return self._updater.check(force=True, route="mirror" if route == "mirror" else None)
 
-    def prepare_update(self):
+    def prepare_update(self, route=None):
         try:
             def progress(event):
                 if self._window:
                     self._window.evaluate_js("window.__pinkieUpdateProgress?.(" + json.dumps(event) + ")")
-            return self._updater.prepare(progress=progress)
+            return self._updater.prepare(progress=progress, route="mirror" if route == "mirror" else None)
         except Exception as error:
             append_log("updater", f"update preparation failed: {error}")
             return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
