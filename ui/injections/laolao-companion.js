@@ -1,7 +1,7 @@
 /* 碧琪小伙伴 + 模式氛围 + 输入框动效。
    - 碧琪趴在输入框上边沿偏右：平时安静（只有很轻的呼吸），你打字时抬头看，碧琪输出时托腮，
      完成时欢呼一下，很久没操作会睡着。点她打开功能菜单。
-   - 功能：这是啥意思 / 一句话总结 / 帮我把问题问清楚 / 专注 25 分钟；模型请求走插件方法
+   - 功能：帮我说清楚 / 这是啥意思 / 一句话总结 / 专注 25 分钟；模型请求走插件方法
      pinkie.companion.ask（独立模型），右键可设置模型与参数，只有测试预览使用演示回答。
    - 发送、完成时按模式放一点点缀（气球、彩带、光点…）；氛围画布很轻，页面不可见或切换模式时停。 */
 (() => {
@@ -49,7 +49,8 @@
 
   /* ── 模型请求 ─────────────────────────────────────────────────────────── */
   const DEMO = {
-    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，碧琪会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
+    explain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "一个程序留给别的程序用的入口，按约定的格式发请求，就能拿到数据或让它办事" : /token/i.test(t) ? "模型读写文字时切成的小块，块数决定花多少钱、一次能看多少内容" : "一个专门的工具或概念，碧琪会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
+    legacyExplain: (t) => `<strong>${esc(t)}</strong>，用大白话说：${/api/i.test(t) ? "就像餐厅的点菜窗口——你按规矩递单子，后厨照单做菜，你不用进厨房" : /token/i.test(t) ? "模型读文字时用的「小积木块」，块数决定花多少钱、能记住多少" : "一个专门的工具或概念，碧琪会结合当前聊天讲给你"}。<div class="muted">样板演示回答，接上模型后会结合上下文现讲</div>`,
     summary: () => `一句话：碧琪把这周学习排成每天不超过 50 分钟，周三只复习 15 分钟，周末空着。<div class="muted">样板演示回答</div>`,
   };
   const helperRequests = new Set();
@@ -59,16 +60,21 @@
     try {
     if (preview) {
       await new Promise((resolve) => setTimeout(resolve, 650));
-      if (kind === "clarify") return {text: `${payload.text.replace(/[？?。]*$/, "")}。请给我具体建议，并说明需要注意的地方。`};
+      if (kind === "clarify") return job.mode === "unrestricted"
+        ? {text: `${payload.text.replace(/[？?。]*$/, "")}。请给我具体建议，并说明需要注意的地方。`}
+        : {clarify: DEMO_CLARIFY(payload.text || "")};
+      if (kind === "explain" && job.mode === "unrestricted") return {html: DEMO.legacyExplain(payload.text || "")};
       return {html: DEMO[kind] ? DEMO[kind](payload.text || "") : "这个功能还没有演示回答。"};
     }
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (typeof rpc === "function") {
       try {
         const res = await rpc("pinkie.companion.ask", {kind, mode: job.mode, ...payload}, 135000);
+        if (kind === "clarify" && job.mode !== "unrestricted") return res?.clarify ? {clarify: res.clarify} : {error: res?.error || "没有整理结果"};
         if (res && typeof res.text === "string" && res.text.trim()) return {html: esc(res.text).replace(/\n/g, "<br>"), text: res.text};
         if (res?.error) return {html: `碧琪这次没想出来：${esc(res.error)}`};
       } catch (error) {
+        if (kind === "clarify" && job.mode !== "unrestricted") return {error: String(error?.message || error)};
         if (!/unknown method|not found|invalid/i.test(String(error?.message || ""))) return {html: `碧琪这次没连上：${esc(error?.message || error)}`};
       }
     }
@@ -98,11 +104,19 @@
         event.preventDefault(); event.stopPropagation(); openSettings();
       }
     });
+    // 卡片里回车 = 主按钮（就这样发 / 直接发），焦点在选项上也一样；次要按钮和「不对」保留自己的回车。
+    bubble.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing || !bubble.classList.contains("is-card") || typeof bubble.__clarifyPrimary !== "function") return;
+      if (event.target.closest?.(".pinkie-clarify__ghost, .pinkie-clarify__fix, .pinkie-buddy__close, .pinkie-clarify__starter")) return;
+      event.preventDefault(); event.stopPropagation(); bubble.__clarifyPrimary();
+    });
     bubble.addEventListener("mouseenter", () => clearTimeout(bubbleTimer));
     bubble.addEventListener("mouseleave", () => { if (!bubble.dataset.sticky) scheduleHide(4000); });
     document.addEventListener("click", (event) => { if (!buddy.contains(event.target)) hideMenu(); });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && (menu.classList.contains("is-shown") || bubble.classList.contains("is-shown"))) {
+        // 关掉「帮我说清楚」卡片时，还在等的整理结果也作废，别过一会儿又弹出来。
+        if (bubble.classList.contains("is-card")) { requestVersion += 1; setState("rest"); }
         event.preventDefault(); hideMenu(); hideBubble(); figure.focus(); return;
       }
       if (!menu.classList.contains("is-shown") || !buddy.contains(event.target)) return;
@@ -201,7 +215,7 @@
 
   /* ── 气泡 & 菜单 ─────────────────────────────────────────────────────── */
   const say = (html, {sticky = false, ms = 6000, close = sticky} = {}) => {
-    hideMenu();
+    hideMenu(); resetBubble();
     bubble.innerHTML = html;
     if (close) {
       const x = el("button", "pinkie-buddy__close"); x.type = "button"; x.setAttribute("aria-label", "收起");
@@ -218,6 +232,7 @@
   };
   const scheduleHide = (ms) => { clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, ms); };
   const hideBubble = () => { bubble.classList.remove("is-shown"); bubble.dataset.sticky = ""; bubble.inert = true; };
+  const resetBubble = () => bubble.classList.remove("is-card");
   const hideMenu = () => { menu.classList.remove("is-shown"); menu.inert = true; figure.setAttribute("aria-expanded", "false"); };
   const toggleMenu = () => {
     if (menu.classList.contains("is-shown")) return hideMenu();
@@ -231,9 +246,11 @@
       b.addEventListener("click", (e) => { e.stopPropagation(); hideMenu(); fn(); });
       menu.append(b);
     };
+    // 其它模式用新卡片；无限制模式保留原有的菜单位置与流程。
+    if (mode() !== "unrestricted") item("clarify", "帮我说清楚", clarifyFlow);
     item("explain", "这是啥意思", explainFlow, "选中词也行");
     item("summary", "一句话总结", summaryFlow);
-    item("clarify", "帮我把问题问清楚", clarifyFlow);
+    if (mode() === "unrestricted") item("clarify", "帮我把问题问清楚", legacyClarifyFlow);
     item("focus", focus ? "结束专注" : `专注 ${FOCUS_MINUTES} 分钟`, focus ? () => stopFocus() : startFocus);
     menu.append(el("div", "pinkie-buddy__sep"));
     item("ambient", prefs.ambient ? "关掉氛围" : "打开氛围", () => { prefs.ambient = !prefs.ambient; savePrefs(); ambient.sync(); });
@@ -254,7 +271,7 @@
     const title=el("h2","",`${MODE_NAMES[originMode]}小碧琪 · 模型与参数`); title.id="pinkie-buddy-settings-title";
     const close=el("button","pinkie-buddy-settings__close","×"); close.type="button"; close.setAttribute("aria-label","关闭模型设置");
     close.addEventListener("click",()=>dialog.close()); heading.append(title,close);
-    const note=el("p","pinkie-buddy-settings__note","这组设置用于小碧琪的解释、总结和提问整理。");
+    const note=el("p","pinkie-buddy-settings__note",originMode === "unrestricted" ? "这组设置用于小碧琪的解释、总结和提问整理。" : "这组设置用于小碧琪的解释、总结和「帮我说清楚」。");
     const form=el("form","pinkie-buddy-settings__form"), fields=el("fieldset","pinkie-buddy-settings__fields");
     fields.disabled=true;
     const field=(label,input,hint="")=>{const row=el("label","pinkie-buddy-settings__field");row.append(el("span","",label),input);if(hint)row.append(el("small","",hint));fields.append(row);return input;};
@@ -362,7 +379,8 @@
     if (ticket !== requestVersion || originMode !== mode()) return;
     happyUntil = Date.now() + 1800; setState("happy"); say(res.html, {sticky: true});
   };
-  const clarifyFlow = async () => {
+  // 保留无限制模式改版前的输入框整理方式。
+  const legacyClarifyFlow = async () => {
     const ta = document.querySelector(".agent-chat__composer-combobox textarea");
     const draft = (ta?.value || "").trim();
     if (!draft) return say(`${callUser()}先在输入框里随便写几句，碧琪帮你整理成更清楚的问题。`);
@@ -380,6 +398,165 @@
       });
       bubble.querySelector("[data-keep]").addEventListener("click", (e) => { e.stopPropagation(); hideBubble(); });
     } else say(res.html || "碧琪这次没整理出来。", {sticky: true});
+  };
+  /* 帮我说清楚：复述碧琪听懂的意思 + 最多两个只有用户能定的选择（推荐项已选好），一下就发。
+     不改写用户的话：发出去的是原话，后面补上选择和「其余你按推荐来」。 */
+  const STARTERS = {
+    project: [["做个小工具或网页", "我想做一个"], ["有个报错要修", "运行的时候出错了："], ["改改现有的东西", "这个我想改成"], ["搞懂一个新东西", "这个是干嘛的："]],
+    thinking: [["想个点子", "我想给……想个点子："], ["做个设计", "帮我设计一个"], ["起个名字", "帮我起个名字，用在"], ["做个视频或 PPT", "我想做一个……的视频"]],
+    chat: [["帮我办件事", "帮我"], ["帮我查一下", "帮我查一下"], ["帮我写点东西", "帮我写一段"], ["随便聊聊", "我今天"]],
+    learning: [["这题不会", "这道题我不会："], ["讲个知识点", "给我讲讲"], ["帮我出几道题", "给我出几道关于……的题"], ["帮我排个计划", "帮我排一下复习计划"]],
+  };
+  const DEMO_CLARIFY = (text) => /按钮|改成|标题/.test(text)
+    ? {understood: text.replace(/[吧呀啊。！!]+$/, "") + "。", ready: true, questions: [], defaults: ["改完截图给你看", "手机宽度也检查一遍"]}
+    : {understood: "做一个记账的小东西，平时记花销、看看钱花在哪。", ready: false,
+      questions: [{q: "给谁用？", options: ["只有我", "全家一起记"], recommended: 0}, {q: "平时在哪记得多？", options: ["电脑", "手机"], recommended: 1}],
+      defaults: ["打开就能用的网页", "数据存在本机", "带本月花销图"]};
+  const composer = () => document.querySelector(".agent-chat__composer-combobox textarea");
+  const putCaret = (ta, text) => {
+    // 句子里有「……」就把它选中，直接打字就能替换；否则光标放句尾。
+    const at = text.indexOf("……");
+    ta.focus();
+    if (at >= 0) ta.setSelectionRange(at, at + 2); else ta.setSelectionRange(text.length, text.length);
+  };
+  const fillComposer = (ta, text) => {
+    ta.value = text; ta.dispatchEvent(new Event("input", {bubbles: true}));
+    putCaret(ta, text);
+  };
+  // 最近 3 轮对话（新的在前，总共 ≤ 2400 字），给小帮手理解「这个」「刚才那个」。
+  const recentContext = () => {
+    const groups = [...document.querySelectorAll(".chat-thread .chat-group:not(.chat-group--timeline-step)")]
+      .filter((g) => g.classList.contains("user") || g.classList.contains("assistant")).slice(-6).reverse();
+    let left = 2400; const lines = [];
+    for (const g of groups) {
+      const who = g.classList.contains("user") ? "用户" : "碧琪";
+      const t = [...g.querySelectorAll(".chat-text")].map((n) => n.innerText).join("\n").replace(/\s+\n/g, "\n").trim();
+      if (!t || left <= 0) continue;
+      const part = `${who}：${t.slice(0, Math.min(900, left))}`;
+      lines.push(part); left -= part.length;
+    }
+    return lines.reverse().join("\n");
+  };
+  const projectName = () => {
+    const key = new URLSearchParams(location.search).get("session") || "";
+    const projects = window.__laolaoSidebar?.state?.projects || {};
+    return Object.entries(projects).find(([, keys]) => Array.isArray(keys) && keys.includes(key))?.[0] || "";
+  };
+  const CLOSE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  // 卡片和普通气泡共用一个位置，但自己一套结构：不出现框套框，按钮只用 chip 和主按钮两种。
+  const card = (build) => {
+    hideMenu();
+    bubble.textContent = ""; bubble.__clarifyPrimary = null;
+    bubble.classList.add("is-card"); bubble.classList.remove("has-close");
+    const x = el("button", "pinkie-buddy__close"); x.type = "button"; x.setAttribute("aria-label", "关闭"); x.innerHTML = CLOSE_SVG;
+    x.addEventListener("click", (e) => { e.stopPropagation(); requestVersion += 1; hideBubble(); setState("rest"); });
+    bubble.append(x);
+    build(bubble);
+    bubble.dataset.sticky = "1"; bubble.inert = false; bubble.classList.add("is-shown");
+    clearTimeout(bubbleTimer);
+  };
+  const cardLine = (cls, text) => el("div", `pinkie-clarify__${cls}`, text);
+  const actions = (primaryLabel, onPrimary, ghostLabel, onGhost) => {
+    const row = el("div", "pinkie-clarify__actions");
+    const send = el("button", "pinkie-clarify__send"); send.type = "button";
+    send.append(document.createTextNode(primaryLabel + " "), el("kbd", "", "↵"));
+    send.addEventListener("click", (e) => { e.stopPropagation(); onPrimary(); });
+    bubble.__clarifyPrimary = onPrimary;
+    row.append(send);
+    if (ghostLabel) {
+      const ghost = el("button", "pinkie-clarify__ghost", ghostLabel); ghost.type = "button";
+      ghost.addEventListener("click", (e) => { e.stopPropagation(); onGhost(); });
+      row.append(ghost);
+    }
+    return {row, send};
+  };
+  // 发送走现有路径：填进输入框 → input 事件 → 点发送按钮，队列、引导、附件、档位照常生效。
+  const sendViaComposer = async (ta, text) => {
+    fillComposer(ta, text);
+    // 等输入框组件吃进新内容、发送按钮亮起（Lit 在微任务里更新）；不用 rAF，窗口在后台时它不跑。
+    await new Promise((r) => setTimeout(r, 80));
+    const btn = document.querySelector(".agent-chat__input .chat-send-btn:not(.chat-send-btn--stop)");
+    if (ta.value !== text) return stale();
+    if (!btn || btn.disabled) { putCaret(ta, text); return say("已经放进输入框了，按回车就能发。"); }
+    btn.click();
+  };
+  const changedSince = (ta, draft) => !ta || ta.value !== draft;
+  const stale = () => say("输入框里的内容已经变了，碧琪先保留你现在写的。", {sticky: true});
+  const startersCard = (ta) => card((box) => {
+    box.append(cardLine("title", "想让碧琪帮你做点什么？"));
+    const grid = el("div", "pinkie-clarify__starters");
+    for (const [label, fill] of STARTERS[mode()] || STARTERS.chat) {
+      const b = el("button", "pinkie-clarify__starter"); b.type = "button";
+      b.append(el("span", "", label), el("small", "", fill.replace(/[：:]$/, "") + (fill.includes("……") ? "" : "……")));
+      b.addEventListener("click", (e) => {
+        e.stopPropagation(); hideBubble();
+        if (ta.value.trim()) return say("输入框里已经有内容了，碧琪不覆盖。", {sticky: true});
+        fillComposer(ta, fill);
+      });
+      grid.append(b);
+    }
+    box.append(grid, cardLine("note", "说半句也行，碧琪会自己补全。"));
+    grid.querySelector("button")?.focus({preventScroll: true});
+  });
+  const clarifyFlow = async () => {
+    const ta = composer();
+    if (!ta) return say("先打开一段对话，碧琪再帮你说清楚。");
+    const draft = ta.value;
+    if (!draft.trim()) return startersCard(ta);
+    const ticket = ++requestVersion, originMode = mode();
+    setState("working");
+    card((box) => box.append(cardLine("wait", "碧琪在理一理"), Object.assign(el("span"), {innerHTML: thinkingDots})));
+    bubble.querySelector(".pinkie-buddy__dots")?.classList.add("pinkie-clarify__dots");
+    const res = await Promise.race([
+      ask("clarify", {text: draft, context: recentContext(), project: mode() === "project" ? projectName() : ""}),
+      new Promise((r) => setTimeout(() => r({error: "超时"}), 45000)),
+    ]);
+    if (ticket !== requestVersion || originMode !== mode()) return;
+    setState("rest");
+    const c = res.clarify;
+    if (!c || !c.understood) {
+      return card((box) => {
+        box.append(cardLine("title", "没理出来也没关系，直接发吧，碧琪会自己补全。"));
+        const {row, send} = actions("直接发", () => { if (changedSince(ta, draft)) return stale(); hideBubble(); sendViaComposer(ta, draft); });
+        box.append(row); send.focus({preventScroll: true});
+      });
+    }
+    const picks = c.questions.map((q) => q.recommended);
+    card((box) => {
+      box.append(cardLine("eyebrow", "碧琪听懂的是"));
+      const said = cardLine("understood", c.understood + " ");
+      if (!c.ready) {
+        const fix = el("button", "pinkie-clarify__fix", "不对"); fix.type = "button";
+        fix.addEventListener("click", (e) => { e.stopPropagation(); hideBubble(); putCaret(ta, ta.value); });
+        said.append(fix);
+      }
+      box.append(said);
+      c.questions.forEach((q, qi) => {
+        const wrap = el("div", "pinkie-clarify__q");
+        wrap.append(cardLine("qlabel", q.q));
+        const chips = el("div", "pinkie-clarify__chips"); chips.setAttribute("role", "radiogroup"); chips.setAttribute("aria-label", q.q);
+        q.options.forEach((o, oi) => {
+          const chip = el("button", "pinkie-clarify__chip", o); chip.type = "button"; chip.setAttribute("role", "radio");
+          if (oi === q.recommended) chip.append(el("span", "pinkie-clarify__rec", "推荐"));
+          const sync = () => chips.querySelectorAll("button").forEach((b, bi) => { b.classList.toggle("is-on", bi === picks[qi]); b.setAttribute("aria-checked", String(bi === picks[qi])); });
+          chip.addEventListener("click", (e) => { e.stopPropagation(); picks[qi] = oi; sync(); });
+          chips.append(chip); sync();
+        });
+        wrap.append(chips); box.append(wrap);
+      });
+      const defaults = c.defaults.join("，");
+      if (c.ready) box.append(cardLine("note", "这句已经很清楚了，碧琪能直接开工。" + (defaults ? `会顺手：${defaults}。` : "")));
+      else if (defaults) box.append(cardLine("note", `其余碧琪按推荐来：${defaults}。`));
+      const message = () => c.ready || !c.questions.length ? draft
+        : `${draft}\n我的选择：${c.questions.map((q, qi) => q.options[picks[qi]]).join("；")}。其余你按推荐来。`;
+      const {row, send} = c.ready
+        ? actions("直接发", () => { if (changedSince(ta, draft)) return stale(); hideBubble(); sendViaComposer(ta, draft); },
+          "我再补一句", () => { hideBubble(); putCaret(ta, ta.value); })
+        : actions("就这样发", () => { if (changedSince(ta, draft)) return stale(); hideBubble(); sendViaComposer(ta, message()); },
+          "放回输入框改改", () => { if (changedSince(ta, draft)) return stale(); hideBubble(); fillComposer(ta, message()); });
+      box.append(row);
+      send.focus({preventScroll: true});
+    });
   };
 
   /* 专注计时：输入框上边沿一条细细的进度线 + 碧琪身边的小时间 */

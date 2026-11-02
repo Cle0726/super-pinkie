@@ -16,7 +16,7 @@ const DELIVERY_TYPES = new Set([
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp', 'heic', 'heif', 'tif', 'tiff',
   'mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg',
   'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf', 'epub', 'key', 'pages', 'numbers',
-  'html', 'htm', 'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml',
+  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml',
   'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'py', 'swift', 'go', 'rs', 'rb',
   'c', 'h', 'cpp', 'hpp', 'java', 'kt', 'sql', 'sh', 'bash', 'zsh', 'ipynb',
   'zip', '7z', 'tar', 'gz', 'tgz', 'rar',
