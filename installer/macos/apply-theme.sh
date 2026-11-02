@@ -63,7 +63,7 @@ apply_ui_skin() {
   # Force a fresh stylesheet URL when the visual skin changes. WebKit can keep
   # the previous query-keyed CSS in memory across a gateway reload, which made
   # a small bubble-only adjustment look like it had not been deployed.
-  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme90}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker49}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases30}g' "$index_file"
+  perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme90}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker50}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases30}g' "$index_file"
 
   for asset in \
     laolao-avatar.png \
@@ -601,10 +601,10 @@ apply_ui_skin() {
   fi
 
   if ! grep -Fq 'laolao-model-picker.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-model-picker.js?v=modelpicker49"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-model-picker.js?v=modelpicker50"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-model-picker.js?v=modelpicker49' "$index_file"; then
-    perl -0pi -e 's{\./laolao-model-picker\.js(?:\?v=[^"]*)?}{./laolao-model-picker.js?v=modelpicker49}g' "$index_file"
+  elif ! grep -Fq './laolao-model-picker.js?v=modelpicker50' "$index_file"; then
+    perl -0pi -e 's{\./laolao-model-picker\.js(?:\?v=[^"]*)?}{./laolao-model-picker.js?v=modelpicker50}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -962,10 +962,10 @@ apply_ui_skin() {
 
   # 极致思考四档按钮 (全模式可用; 破甲与否由注入层按 session 门控)
   if ! grep -Fq './laolao-deep-think.js' "$index_file"; then
-    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink27"></script>\n</head>}' "$index_file"
+    perl -0pi -e 's{</head>}{    <script defer src="./laolao-deep-think.js?v=deepthink28"></script>\n</head>}' "$index_file"
     DID_CHANGE=1
-  elif ! grep -Fq './laolao-deep-think.js?v=deepthink27' "$index_file"; then
-    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink27}g' "$index_file"
+  elif ! grep -Fq './laolao-deep-think.js?v=deepthink28' "$index_file"; then
+    perl -0pi -e 's{\./laolao-deep-think\.js\?v=[^"]*}{./laolao-deep-think.js?v=deepthink28}g' "$index_file"
     DID_CHANGE=1
   fi
 
@@ -1157,7 +1157,7 @@ apply_ui_skin() {
   fi
   # 旧版 index.html 可能已经使用 /laolao-* 根路径；上面的相对路径
   # 条件不会命中，因此这里无条件校正本次改动涉及的缓存键。
-  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme91}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx4}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx6}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode45}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker49}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases30}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume54}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer3}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic19}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar40}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions12}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink27}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt33}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact13}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction14}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side23}g' "$index_file"
+  perl -0pi -e 's{(?:\./|/)laolao-theme\.css(?:\?v=[^" ]*)?}{/laolao-theme.css?v=theme91}g; s{(?:\./|/)laolao-mode-menu-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-menu-fx.css?v=modemenufx1}g; s{(?:\./|/)laolao-mode-transition-fx\.css(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.css?v=modetransitionfx4}g; s{(?:\./|/)laolao-mode-transition-fx\.js(?:\?v=[^" ]*)?}{/laolao-mode-transition-fx.js?v=modetransitionfx6}g; s{(?:\./|/)laolao-mode-switcher\.js(?:\?v=[^" ]*)?}{/laolao-mode-switcher.js?v=mode45}g; s{(?:\./|/)laolao-model-picker\.js(?:\?v=[^" ]*)?}{/laolao-model-picker.js?v=modelpicker50}g; s{(?:\./|/)laolao-phrases\.js(?:\?v=[^" ]*)?}{/laolao-phrases.js?v=phrases30}g; s{(?:\./|/)laolao-resume\.js(?:\?v=[^" ]*)?}{/laolao-resume.js?v=resume54}g; s{(?:\./|/)laolao-queue-steer\.js(?:\?v=[^" ]*)?}{/laolao-queue-steer.js?v=queuesteer3}g; s{(?:\./|/)laolao-classic-shell\.css(?:\?v=[^" ]*)?}{/laolao-classic-shell.css?v=classic19}g; s{(?:\./|/)laolao-sidebar\.js(?:\?v=[^" ]*)?}{/laolao-sidebar.js?v=sidebar40}g; s{(?:\./|/)laolao-session-list\.js(?:\?v=[^" ]*)?}{/laolao-session-list.js?v=sessions12}g; s{(?:\./|/)laolao-usage-stats\.js(?:\?v=[^" ]*)?}{/laolao-usage-stats.js?v=stats16}g; s{(?:\./|/)laolao-usage-stats\.css(?:\?v=[^" ]*)?}{/laolao-usage-stats.css?v=stats8}g; s{(?:\./|/)laolao-deep-think\.js(?:\?v=[^" ]*)?}{/laolao-deep-think.js?v=deepthink28}g; s{(?:\./|/)laolao-web-gpt-collab\.js(?:\?v=[^" ]*)?}{/laolao-web-gpt-collab.js?v=webgpt33}g; s{(?:\./|/)laolao-context-compact\.js(?:\?v=[^" ]*)?}{/laolao-context-compact.js?v=contextcompact13}g; s{(?:\./|/)laolao-ui-subtraction\.css(?:\?v=[^" ]*)?}{/laolao-ui-subtraction.css?v=subtraction14}g; s{(?:\./|/)laolao-side-layout\.css(?:\?v=[^" ]*)?}{/laolao-side-layout.css?v=side23}g' "$index_file"
   # 黑夜模式：开关脚本放在 <head> 最前面，启动画面出现前就定好深浅；样式层放在 </head> 前最后一个。
   # fragment 或旧版安装可能已经把开关放在 head 后面；无条件重新定位，
   # 并使用站点根路径，保证直接打开 /settings/general 也能加载。
@@ -1335,7 +1335,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/project-scope/$service_file" \
       "$bundled_root/services/project-scope/$service_file"
   done
-  for service_file in index.mjs memory.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json openclaw-paths.mjs companion.mjs reasoning.mjs background-jobs.mjs work-status.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json openclaw-paths.mjs companion.mjs reasoning.mjs work-kinds.mjs background-jobs.mjs work-status.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
     if [[ -f "$REPO_ROOT/services/mode-architecture/$service_file" ]]; then
       copy_if_changed \
         "$REPO_ROOT/services/mode-architecture/$service_file" \
@@ -1630,7 +1630,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
   if [[ -f "$OPENCLAW_ROOT/dist/control-ui/index.html" ]]; then
     # 原生模块和 CSS 也必须从根目录加载，否则直接打开嵌套设置页会停在开屏。
     perl -0pi -e 's{((?:src|href)=")\./assets/}{$1/assets/}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
-    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme90}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker49}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases30}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
+    perl -0pi -e 's{(laolao-theme\.css\?v=)theme[0-9]+}{${1}theme90}g; s{(laolao-model-picker\.js\?v=)modelpicker[0-9]+}{${1}modelpicker50}g; s{(laolao-phrases\.js\?v=)phrases[0-9]+}{${1}phrases30}g' "$OPENCLAW_ROOT/dist/control-ui/index.html"
   fi
 else
   echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2

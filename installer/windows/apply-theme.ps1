@@ -488,14 +488,14 @@ function Apply-UISkin {
         '<script defer src="./laolao-learning-inline.js?v=deskfinal6"></script>',
         '<script defer src="./laolao-learning-stage.js?v=learning20"></script>',
         '<script defer src="./laolao-mode-transition-fx.js?v=modetransitionfx6"></script>',
-        '<script defer src="./laolao-model-picker.js?v=modelpicker49"></script>',
+        '<script defer src="./laolao-model-picker.js?v=modelpicker50"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
         '<script defer src="./laolao-laser-pointer.js?v=laser11"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link6"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream5"></script>',
-        '<script defer src="./laolao-deep-think.js?v=deepthink27"></script>',
+        '<script defer src="./laolao-deep-think.js?v=deepthink28"></script>',
         '<script defer src="./laolao-web-gpt-collab.js?v=webgpt33"></script>',
         '<script defer src="./laolao-context-compact.js?v=contextcompact13"></script>',
         '<script defer src="./laolao-resume.js?v=resume54"></script>',
@@ -537,7 +537,7 @@ function Apply-UISkin {
         'laolao-sidebar.js' = 'sidebar40'; 'laolao-session-list.js' = 'sessions12'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases30'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx6'; 'laolao-mode-transition-fx.css' = 'modetransitionfx4';
-        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode45'; 'laolao-model-picker.js' = 'modelpicker49'; 'laolao-model-picker.css' = 'modelpicker15'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
+        'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode45'; 'laolao-model-picker.js' = 'modelpicker50'; 'laolao-model-picker.css' = 'modelpicker15'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
         'laolao-handoff-bootstrap.js' = 'handoff7'; 'laolao-motion.js' = 'motion6'; 'laolao-resume.js' = 'resume54';
         'laolao-queue-steer.js' = 'queuesteer3';
         'laolao-perf.js' = 'perf4';
@@ -592,7 +592,7 @@ function Apply-UISkin {
         'laolao-learning-library.js' = 'deskfinal6'; 'laolao-learning-library.css' = 'library1';
         'laolao-learning-practice.css' = 'learningpractice4'; 'laolao-learning-practice.js' = 'learningpractice4'; 'laolao-learning-inline.css' = 'learninginline5'; 'laolao-learning-inline.js' = 'deskfinal6'; 'laolao-learning-explore.css' = 'learningexplore1'; 'laolao-learning-explore.js' = 'learningexplore1';
         'laolao-learning-stage.css' = 'learning13'; 'laolao-learning-stage.js' = 'learning20';
-        'laolao-deep-think.js' = 'deepthink27'; 'laolao-web-gpt-collab.js' = 'webgpt33';
+        'laolao-deep-think.js' = 'deepthink28'; 'laolao-web-gpt-collab.js' = 'webgpt33';
         'laolao-rich.js' = 'rich4'; 'laolao-rich.css' = 'rich5'; 'laolao-plan.js' = 'plan3'; 'laolao-capabilities.js' = 'capabilities4';
         'laolao-workbench.js' = 'workbench16'; 'laolao-workbench.css' = 'workbench14';
         'laolao-divider.css' = 'divider1'; 'laolao-tool-rows.css' = 'toolrows8';

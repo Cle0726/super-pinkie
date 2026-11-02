@@ -11,6 +11,7 @@ import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
+import {WORK_ROLES, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {BackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
@@ -52,6 +53,8 @@ const ROLE_LABELS = Object.freeze({
   planner: '规划', solver: '求解', critic: '批评', judge: '仲裁',
   decomposer: '递归分解', pipeline: '独立流水线', debater: '多轮对抗',
   verifier: '真实验证', assumption: '假设审查', countercritic: '反批评',
+  // 全开档按活儿种类多做几版（work-kinds.mjs）：独立起草、独立复算、看图审稿、用户视角试用。
+  ...WORK_ROLE_LABELS,
 });
 const TASK_WORKFLOWS = Object.freeze({
   pending: {label: '等待本轮问题', stages: ['收到问题'], roles: {}},
@@ -232,7 +235,7 @@ function watchdogControlMessage(instruction = '') {
     || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
   return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
 }
-const PLUGIN_BUILD = '2026-10-14.5-models';
+const PLUGIN_BUILD = '2026-11-02.1-work-kinds';
 
 // 同一个网关进程里，OpenClaw 会把本插件加载好几份：网关注册表一份（界面调用的 RPC 走这里），
 // agent runtime 注册表一份（运行中的钩子、工具走这里），按工作区 / 运行还会再建（日志 instance=3、4…）。
@@ -1228,7 +1231,10 @@ function workFirstContext(ctx = {}) {
 function workFirstTextTask(prompt = '') {
   const text = intentText(prompt);
   if (FILE_OR_RUN_REQUEST.test(text) || /(?:调用|skill|技能|发布|发到|发送到|发给|上传|安装|启动|图片|图像|海报|视频|音频|网页|页面|网站|程序|脚本|代码|应用|工具|头像|头图|图标|招牌|门头|logo)/i.test(text)) return false;
-  return /(?:起.{0,4}名字|想.{0,8}(?:名字|名称|标题)|取.{0,4}名|写(?:一段|段|一份|份|个)?(?:话|文案|祝福|简介|介绍|文章|故事|邮件|总结|计划)|润色|改写|翻译)/.test(text);
+  if (/(?:起.{0,4}名字|想.{0,8}(?:名字|名称|标题)|取.{0,4}名|写(?:一段|段|一份|份|个)?(?:话|文案|祝福|简介|介绍|文章|故事|邮件|总结|计划)|润色|改写|翻译)/.test(text)) return true;
+  // 「做个小红书文案」「出几个活动点子」这类只交文字的活：交付就是回复本身（档位升级 2026-11-02）。
+  const kinds = classifyWorkKind(text).kinds;
+  return kinds.length > 0 && kinds.every(id => id === 'writing' || id === 'ideas');
 }
 function workFirstProgressNote(entry = {}, ctx = {}) {
   const name = String(entry.name || '').toLowerCase();
@@ -4378,6 +4384,8 @@ export function modeForContext(ctx = {}) {
 }
 
 function roleForLabel(value = '') {
+  const work = roleFromLabel(value);
+  if (work) return work;
   const text = String(value || '').toLowerCase();
   if (/counter.?critic|反批评|反驳批评/.test(text)) return 'countercritic';
   if (/decompos|recursive|递归|分解/.test(text)) return 'decomposer';
@@ -4455,27 +4463,61 @@ function completedEvidence(state) {
 ${chunks.join('')}`.trim();
 }
 
-export function deliberationRequirements(tier, mode, taskType = 'pending') {
+// 这一轮按哪几种活走：新状态记在 workKinds；旧运行状态和无限制模式按旧五类换算（work-kinds.mjs legacyKinds）。
+function kindsOf(state) {
+  const legacy = legacyKinds(normalizedTaskType(state?.taskType || 'pending'));
+  if (state?.mode === 'none') return legacy;
+  const kinds = Array.isArray(state?.workKinds) ? state.workKinds.filter(isWorkKind) : [];
+  return kinds.length ? kinds : legacy;
+}
+
+// 一条真实请求进来时：taskType 继续存旧五类（兼容旧测试、旧状态），workKinds 存活儿种类。
+// 只说「继续」时沿用上一条真实请求（fallback），不把长任务降成简单问答。无限制模式不加新分类。
+function classifyTierTask(state, prompt = '', fallback = '') {
+  const text = String(prompt || '');
+  const objective = state.mode !== 'none' && CONTINUATION_ONLY_PROMPT.test(text.trim()) && fallback ? fallback : text;
+  if (objective !== text) state.taskPrompt = objective;
+  state.taskType = classifyDeliberationTask(objective, state.mode);
+  if (state.mode === 'none') { state.workKind = ''; state.workKinds = []; return state; }
+  const result = classifyWorkKind(workFirstPrompt(objective, state.mode), {mode: state.mode});
+  state.workKind = result.kind === 'pending' ? '' : result.kind;
+  state.workKinds = result.kinds;
+  return state;
+}
+
+export function deliberationRequirements(tier, mode, taskType = 'pending', workKinds = null) {
   const normalizedTier = TIER_RETRY_LIMITS[tier] ? tier : 'boost';
   const type = normalizedTaskType(taskType);
   const maxSolvers = SOLVER_LIMITS[normalizedTier];
-  const roles = ['standard_answer', 'tradeoff'].includes(type)
-    ? {solver: 2}
-    : {};
-  const needsEvidence = type === 'fact_check'
+  const kinds = mode !== 'none' && Array.isArray(workKinds) && workKinds.some(isWorkKind)
+    ? workKinds.filter(isWorkKind) : legacyKinds(type);
+  const primary = kinds[0] || (type === 'pending' ? 'pending' : 'simple');
+  // 无限制模式保持旧语义：只有旧五类和它们的证据要求，不加打法、不加新子任务。
+  const work = mode === 'none' ? {roles: {}, caps: {}} : kindRoles(kinds, normalizedTier);
+  const roles = {...(['standard_answer', 'tradeoff'].includes(primary) ? {solver: 2} : {}), ...work.roles};
+  const optionalCaps = Object.fromEntries(Object.entries(work.caps).filter(([role]) => !roles[role]));
+  const legacyEvidence = primary === 'fact_check'
     || (normalizedTier !== 'base' && !['pending', 'simple'].includes(type));
+  // 工作模式里，写代码、网页、文档这些活的证据由 evidenceGaps 按种类核对；这里只留旧的两种：
+  // 查事实要两个来源、有标准答案的题（加强档起）要一次验算。
+  const needsEvidence = mode === 'none' ? legacyEvidence
+    : primary === 'fact_check' || (normalizedTier !== 'base' && primary === 'standard_answer');
   return {
     roles,
     maxSolvers,
     optionalRoles: {
-      critic: normalizedTier === 'full' && ['standard_answer', 'tradeoff'].includes(type) ? 1 : 0,
-      judge: type === 'standard_answer' ? 1 : 0,
+      critic: normalizedTier === 'full' && ['standard_answer', 'tradeoff'].includes(primary) ? 1 : 0,
+      judge: primary === 'standard_answer' ? 1 : 0,
+      ...optionalCaps,
     },
+    roleCaps: work.caps,
     workflow: TASK_WORKFLOWS[type],
     taskType: type,
+    workKinds: kinds,
+    tier: normalizedTier,
     needsEvidence,
-    evidenceKind: type === 'implementation' ? 'test'
-      : type === 'fact_check' ? 'sources'
+    evidenceKind: primary === 'code' || type === 'implementation' ? 'test'
+      : primary === 'fact_check' ? 'sources'
         : needsEvidence ? 'verification' : '',
     retryLimit: TIER_RETRY_LIMITS[normalizedTier],
   };
@@ -4505,11 +4547,12 @@ function sourceReferences(value = '') {
 
 function captureWorkflowFinalClaims(state, reply = '') {
   const text = String(reply || '');
-  if (state.taskType === 'tradeoff') {
+  const primary = kindsOf(state)[0];
+  if (primary === 'tradeoff') {
     state.tradeoffCompared = /(?:比较|对比|差异|优缺点|成本|代价)/i.test(text);
     state.tradeoffPresented = /(?:请.{0,12}选择|由你.{0,8}选择|你可以选择|选择其中|建议你选择|请选择|交给.{0,8}选择)/i.test(text);
   }
-  if (state.taskType === 'fact_check') {
+  if (primary === 'fact_check') {
     state.finalSourceSummary = sourceReferences(text).length >= 2
       && /(?:不确定|暂未核实|无法确认|来源之间|存在差异|存疑|证据不足|无法判定|未能确定)/i.test(text);
   }
@@ -4520,7 +4563,8 @@ function captureVerificationEvidence(state, event = {}) {
   const params = event.params && typeof event.params === 'object'
     ? JSON.stringify(event.params).slice(0, 2_000)
     : String(event.params || '').slice(0, 2_000);
-  let output = resultText(event.result).slice(0, 2_000);
+  // 工作模式存模型看到的正文（work-kinds.mjs toolResultText），头尾都留；无限制模式保持原来的记法。
+  let output = state?.mode === 'none' ? resultText(event.result).slice(0, 2_000) : clipToolOutput(toolResultText(event.result));
   const isError = toolResultFailed(event, output)
     || /(?:\bnot ok\b|(?:fail(?:ed|ure)?|error)\s*[:=]\s*[1-9]\d*|\bfail(?:ed|ure)?\s+[1-9]\d*\b)/i.test(output);
   const lowerName = name.toLowerCase();
@@ -4534,7 +4578,8 @@ function captureVerificationEvidence(state, event = {}) {
   // 更新会话检查点、审议草稿、界面上的任务清单（plan_update）只是记账：算进度，但不算改动产物。
   // 否则「先跑测试、再勾计划」会让测试证据作废（2026-11-01 长跑档实测：最后勾完计划被判「缺测试」，续跑后被系统停掉，用户没收到最终回复）。
   if (state?.mode !== 'none' && kind === 'mutation' && (/memory[\\/]context[\\/]/.test(params) || /^(?:plan_update|update_plan|todo_?write)$/i.test(name))) kind = 'note';
-  if (!output && !isError && kind === 'mutation') output = '工具操作已返回';
+  // 看图、读文件不靠「改了什么」记录，结果为空也要留下（浏览器截图、读图片的结果常常只有一张图）。
+  if (!output && !isError && (kind === 'mutation' || (state?.mode !== 'none' && /^(?:read|image|app_browser|browser)$/i.test(name)))) output = '工具操作已返回';
   if (!output && !isError) return null;
   const digest = hashForAudit(name + '\n' + params + '\n' + output);
   if (state.progressDigests.includes(digest)) return null;
@@ -4553,6 +4598,11 @@ function captureVerificationEvidence(state, event = {}) {
   state.verificationEvidence = state.verificationEvidence.slice(-120);
   state.progressDigests.push(digest);
   state.progressDigests = state.progressDigests.slice(-120);
+  // 过程中改判：做出了 .pptx 就按文档验、出了 .mp4 就按视频验、注册了定时就按自动化验（只往更具体的方向改）。
+  if (state?.mode !== 'none') {
+    const refined = refineKinds(kindsOf(state), entry, {mode: state.mode});
+    if (refined) { state.workKinds = refined; state.workKind = refined[0] || ''; }
+  }
   return entry;
 }
 
@@ -4629,7 +4679,8 @@ function checkpointMilestones(file = '') {
 }
 function marathonMissing(state) {
   if (state?.mode === 'none' || state?.tier !== 'marathon' || !state.checkpointFile) return [];
-  if (['simple', 'pending'].includes(normalizedTaskType(state.taskType || 'pending'))) return [];
+  const primary = kindsOf(state)[0] || 'pending';
+  if (['simple', 'pending'].includes(primary)) return [];
   const milestones = checkpointMilestones(state.checkpointFile);
   if (!milestones || (!milestones.open.length && !milestones.done.length)) return [PLAN_MISSING];
   return milestones.open.length ? [MILESTONE_MISSING + milestones.open.slice(0, 3).join('；')] : [];
@@ -4638,16 +4689,33 @@ function onlyMilestonesMissing(missing = []) {
   return missing.length > 0 && missing.every(item => item.startsWith(MILESTONE_MISSING) || item === PLAN_MISSING);
 }
 
+// 做了很多工具调用、终稿只有几个字（REPORT 第九节「碧」）：当作没有终稿，补发一次。
+const SHORT_FINAL = '最终回复只有几个字，没交代结果';
+// 补发过一次后还是「做好了。」：是真说完了，不是被截断，照常交付，不报「本轮未完成」。
+const SHORT_DONE = /^(?:都|全部|已经|已)?(?:做|改|弄|写|修|装|发|整理|处理|搞|生成|导出)(?:好|完)了?[。！!~～\s]*$|^(?:搞定|已?完成|done)了?[。！!~～\s]*$/i;
+const FINAL_GAPS = new Set([SHORT_FINAL, '最终答复缺少方案差异和代价对比', '最终答复还没有交给用户选择', '最终答复缺少两个来源和不确定性说明']);
+
 function auditDeliberation(state, reply = '') {
   if (state?.stopRequested) return {complete: true, missing: []};
-  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType);
+  const kinds = kindsOf(state);
+  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType, kinds);
+  const primary = requirement.workKinds[0] || requirement.taskType;
   const missing = [];
   for (const [role, count] of Object.entries(requirement.roles)) {
     const actual = state?.completedRoles?.get?.(role) || 0;
     if (actual < count) missing.push((ROLE_LABELS[role] || role) + ' ' + actual + '/' + count);
   }
   if (state?.pendingChildren?.size) missing.push('等待中的子任务 ' + state.pendingChildren.size);
-  if (requirement.needsEvidence) {
+  // 按活儿种类核对证据（加强档起）：网页要截图看过、PPT 要打开交付文件本身、数据要程序算过……
+  if (state?.mode !== 'none') {
+    for (const gap of evidenceGaps(kinds, requirement.tier, verificationEvidence(state), {prompt: state?.taskPrompt || '', reply})) missing.push(gap.text);
+    const used = verificationEvidence(state).filter(entry => entry?.ok).length;
+    // 和交付门禁的 short-final 一致：「做好了。」这种明确的完成说法另有证据核对，不算被截断。
+    if (reply && truncatedFinal(reply, used) && !isHonestIncomplete(reply)
+        && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply)
+        && !((Number(state?.shortFinalNudges) || 0) >= 1 && SHORT_DONE.test(reply.trim()))) missing.push(SHORT_FINAL);
+  }
+  if (requirement.needsEvidence && !(state?.mode !== 'none' && requirement.evidenceKind === 'test')) {
     const needed = requirement.evidenceKind === 'sources' ? 2 : 1;
     const actual = verificationEvidenceCount(state, requirement);
     if (actual < needed) {
@@ -4658,22 +4726,21 @@ function auditDeliberation(state, reply = '') {
           : '缺少与本任务相关的实际验证证据');
     }
   }
-  if (requirement.taskType === 'tradeoff') {
+  if (primary === 'tradeoff') {
     if (!/(?:比较|对比|差异|优缺点|成本|代价)/i.test(String(reply || ''))) missing.push('最终答复缺少方案差异和代价对比');
     if (!/(?:请.{0,12}选择|由你.{0,8}选择|你可以选择|选择其中|建议你选择|请选择|交给.{0,8}选择)/i.test(String(reply || ''))) {
       missing.push('最终答复还没有交给用户选择');
     }
   }
-  if (requirement.taskType === 'fact_check' && !state?.finalSourceSummary) {
+  if (primary === 'fact_check' && !state?.finalSourceSummary) {
     missing.push('最终答复缺少两个来源和不确定性说明');
   }
   missing.push(...marathonMissing(state));
   return {complete: missing.length === 0, missing, requirement};
 }
 
-function workflowProgress(state) {
-  const type = normalizedTaskType(state?.taskType || 'pending');
-  const requirement = deliberationRequirements(state?.tier, state?.mode, type);
+// 旧五类的环节判断（写代码、有标准答案、取舍、查事实、简单）：标签和测试都沿用。
+function legacyWorkflowStages(type, state, requirement) {
   const evidence = verificationEvidence(state);
   const solvers = state?.completedRoles?.get?.('solver') || 0;
   const used = new Set();
@@ -4700,17 +4767,54 @@ function workflowProgress(state) {
     used.add('此问题无需多方案，已直接回答');
   }
   if (requirement.optionalRoles.critic && state?.completedRoles?.get?.('critic')) used.add('按需证据审查');
-  const stageLabels = [...requirement.workflow.stages];
+  const stageLabels = [...TASK_WORKFLOWS[type].stages];
   if (requirement.optionalRoles.critic) stageLabels.push('按需证据审查');
+  return stageLabels.map(label => ({label, used: used.has(label)}));
+}
+
+// 旧五类 ↔ 新种类：这几种的面板沿用旧的流程名和环节。
+const LEGACY_TYPE_OF_KIND = {code: 'implementation', standard_answer: 'standard_answer', tradeoff: 'tradeoff', fact_check: 'fact_check', simple: 'simple', pending: 'pending'};
+
+function workflowProgress(state) {
+  const type = normalizedTaskType(state?.taskType || 'pending');
+  const kinds = kindsOf(state);
+  const requirement = deliberationRequirements(state?.tier, state?.mode, type, kinds);
+  const primary = kinds[0] || 'pending';
+  const legacyType = state?.mode === 'none' ? type : LEGACY_TYPE_OF_KIND[primary];
+  let stages;
+  let label;
+  if (legacyType) {
+    stages = legacyWorkflowStages(legacyType, state, requirement);
+    label = TASK_WORKFLOWS[legacyType].label;
+  } else {
+    stages = workStages([primary], verificationEvidence(state), {replied: Boolean(state?.endedAt)});
+    label = kindLabel(primary);
+  }
+  if (state?.mode !== 'none') {
+    // 附带活的环节和全开档派出的子任务也列出来：面板上看得到这一轮真实用过哪些环节。
+    for (const stage of workStages(kinds.slice(1), verificationEvidence(state), {replied: Boolean(state?.endedAt)})) {
+      if (!stages.some(item => item.label === stage.label)) stages.push(stage);
+    }
+    for (const [role, count] of Object.entries(requirement.roles)) {
+      if (role === 'solver' || !WORK_ROLES.includes(role)) continue;
+      stages.push({label: ROLE_LABELS[role], used: (state?.completedRoles?.get?.(role) || 0) >= count});
+    }
+    const secondary = kinds.slice(1).map(kindLabel).filter(Boolean);
+    if (secondary.length && primary !== 'simple') label = [label, ...secondary].join(' + ');
+  }
   return {
     type,
-    label: requirement.workflow.label,
-    stages: stageLabels.map(label => ({label, used: used.has(label)})),
+    kind: primary === 'pending' ? '' : primary,
+    kinds: state?.mode === 'none' ? [] : kinds,
+    kindLabel: kinds.map(kindLabel).filter(Boolean).join(' + '),
+    tierLabel: tierName(state?.tier),
+    label,
+    stages,
   };
 }
 
 function deliberationProgress(state) {
-  const requirement = deliberationRequirements(state.tier, state.mode, state.taskType);
+  const requirement = deliberationRequirements(state.tier, state.mode, state.taskType, kindsOf(state));
   const pendingByRole = new Map();
   for (const child of state.pendingChildren || []) {
     const role = state.childRoles.get(child) || '';
@@ -4758,12 +4862,13 @@ function requirementSummary(tier, mode, taskType = 'pending') {
 
 function roleSpawnCap(state, role) {
   if (!role) return 0;
-  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType);
-  if (requirement.taskType === 'pending') return 0;
+  const kinds = kindsOf(state);
+  const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType, kinds);
+  if (requirement.taskType === 'pending' && !kinds.length) return 0;
   if (role === 'solver') return requirement.roles.solver ? requirement.maxSolvers : 0;
   if (role === 'critic') return requirement.optionalRoles.critic;
   if (role === 'judge') return requirement.optionalRoles.judge;
-  return 0;
+  return requirement.roleCaps?.[role] || 0;
 }
 
 function isInside(root, target) {
@@ -4797,7 +4902,8 @@ function section(relative, content) {
   return content ? `\n--- ${relative}（本轮从当前模式工作区完整重载）---\n${content.trim()}\n` : '';
 }
 
-export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点', taskType = 'pending') {
+// 无限制模式的运行单：保持原样（不加打法、不加新门禁）。
+function legacyDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点', taskType = 'pending') {
   const normalizedTier = TIER_RETRY_LIMITS[tier] ? tier : 'boost';
   const workflow = TASK_WORKFLOWS[normalizedTaskType(taskType)];
   const rules = [
@@ -4823,6 +4929,60 @@ export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话
   ];
   return rules.join('\n');
 }
+// 运行单：短、具体、按种类（Gemini 3.8 Flash 读长规则会漏）。结构：标题 → 读哪份打法 → 这种活的步骤 →
+// 算做完要什么证据 → 全开档多做几版 → 通用的重试和汇报规则 → 长跑档的检查点计划。
+// task 可以是旧的 taskType 字符串，也可以是运行状态（带 workKinds）。每档每类都不超过 1200 字。
+export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话专属检查点', task = 'pending', {playbookRoot = ''} = {}) {
+  const normalizedTier = TIER_RETRY_LIMITS[tier] ? tier : 'boost';
+  const taskType = typeof task === 'string' ? task : String(task?.taskType || 'pending');
+  if (mode === 'none') return legacyDeliberationPlan(normalizedTier, mode, checkpointPath, taskType);
+  const kinds = task && typeof task === 'object' ? kindsOf({...task, mode}) : legacyKinds(normalizedTaskType(taskType));
+  const primary = kinds[0] || '';
+  const lines = kindPlanSection(kinds, normalizedTier, {playbookRoot, mode});
+  if (!primary || primary === 'simple') return lines.join('\n');
+  if (['standard_answer', 'tradeoff'].includes(primary)) {
+    lines.push(primary === 'tradeoff'
+      ? '不同立场：派 2 个「求解」子任务，各按一组不同的优先级独立成案；只给原始问题，不给你的倾向。'
+      : '独立求解：派 2–3 个「求解」子任务，每个用不同解法，只给原始问题。结论一致就直接用；不一致先跑检查或查来源，仍分不出再派「仲裁」，仲裁只能从已有候选里选一个。');
+  }
+  lines.push('重试前先说「这次和上次不同：换思路/换信息/换模型 + 具体变化」；连续两次没有新证据就停下，说清卡在哪。最终只汇报结果、依据和没解决的问题，不汇报档位、流程和子任务数量。');
+  lines.push('本档续跑上限 ' + TIER_RETRY_LIMITS[normalizedTier] + ' 次。');
+  if (normalizedTier === 'marathon') {
+    lines.push('长跑档：开工前先把计划写进当前会话检查点“' + checkpointPath + '”：目标（一句话）、验收标准（几条能检查的）、里程碑 3 到 8 个（每个写成「- [ ] 里程碑 — 验证：' + milestoneCheck(kinds) + '」这样具体的验法）、风险和未知、现在做到哪。给用户看 3 到 6 行的短计划后马上开工。每做完一个里程碑：验证 → 在检查点里改成「- [x]」并记下证据 → 给用户一句进展 → 直接做下一个，不问要不要继续。检查点里还有没勾的里程碑时，系统会推你接着做；确实做不了或只有用户能决定的，写成「- [x] 放弃：原因」或如实报告未完成。全部勾完后按全开档的标准打磨一轮再交付，交付后还有一次打开成品的终审。');
+  }
+  return lines.join('\n');
+}
+
+// 续跑缺口分几类：缺子任务、缺证据、终稿缺内容、只剩长跑里程碑。决定续跑提示怎么写、要不要先说明「这次和上次不同」。
+function retryGapKind(missing = []) {
+  if (!missing.length) return '';
+  if (missing.every(item => FINAL_GAPS.has(item))) return 'final';
+  if (missing.some(item => /^\S+ \d+\/\d+$/.test(item) || item.startsWith('等待中的子任务'))) return 'roles';
+  return 'evidence';
+}
+
+function visibleReplyText(reply = '') {
+  return [...String(reply || '').replace(/\s/g, '')].join('');
+}
+
+// 档位续跑提示：说清还差什么、只补缺的那一步。上一版回复没发给用户（被拦下了），这一版要完整替代它，
+// 但内容不用改的地方就沿用原文，不把同一段话写两遍（REPORT 第九节：起名、记账被续跑成两三段几乎一样的话）。
+function tierRetryInstruction(missing = [], gapKind = '', draft = '') {
+  const parts = ['当前任务还差：' + missing.join('；') + '。'];
+  if (gapKind === 'roles') parts.push('先用 sessions_spawn 派出缺的子任务（label 写上面的角色名），用 sessions_yield 等这一批结果，收齐后再整合。');
+  else if (gapKind === 'final') parts.push('不用再调用工具，直接给出完整的最终回复：结果、依据、没解决的问题。');
+  else parts.push('只补做缺的那一步核对（打开、截图、转图片、运行或重算），不要重做已经做完的部分。');
+  parts.push('确实做不到就如实说本轮没做完、卡在哪。');
+  const text = String(draft || '').trim();
+  if (text) {
+    parts.push('上一版回复没有发给用户，这一版会替代它，所以要完整；核对后不用改的内容沿用上一版原文，只改确实要改的地方，不要把同一段话写两遍，也不要提到这条提醒。上一版回复：<<<'
+      + text.slice(0, 2400) + (text.length > 2400 ? '…（后略）' : '') + '>>>');
+  } else {
+    parts.push('不要在回复里提到这条提醒。');
+  }
+  return parts.join('');
+}
+
 export class ModeArchitecture {
   constructor(runStore = null, memory = null, handoffStore = null, learning = null) {
     this.runStore = runStore;
@@ -4893,7 +5053,7 @@ export class ModeArchitecture {
       // received between model/tool boundaries; it only changes the latest
       // user objective for the next decision and keeps the run lease intact.
       state.taskPrompt = prompt;
-      state.taskType = classifyDeliberationTask(prompt, state.mode);
+      classifyTierTask(state, prompt);
       state.lastEventAt = Date.now();
       this.setRun(sessionKey, state);
     }
@@ -5147,12 +5307,12 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const taskPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
       if (state && taskPrompt && !internalControlText(taskPrompt)) {
         state.taskPrompt = taskPrompt;
-        state.taskType = classifyDeliberationTask(taskPrompt, state.mode);
+        classifyTierTask(state, taskPrompt, this.lastUserPrompts.get(sessionKey)?.text || '');
         state.lastEventAt = Date.now();
         this.setRun(sessionKey, state);
       }
       if (mode !== 'none' && state && root && checkpointRelative) { state.checkpointFile = path.join(root, checkpointRelative); this.setRun(sessionKey, state); }
-      blocks.push('\n' + buildDeliberationPlan(tier, armed.mode, checkpointShown, state?.taskType || 'pending') + '\n');
+      blocks.push('\n' + buildDeliberationPlan(tier, armed.mode, checkpointShown, state || 'pending', {playbookRoot: root}) + '\n');
     } else {
       const state = this.getRun(this.resolveParent(sessionKey));
       // 子代理只执行父代理分配的单项职责。若把整份档位运行单也塞给
@@ -5161,12 +5321,12 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         const taskPrompt = String(event.prompt || '').trim();
         if (taskPrompt && !internalControlText(taskPrompt) && !CONTINUATION_ONLY_PROMPT.test(taskPrompt)) {
           state.taskPrompt = taskPrompt;
-          state.taskType = classifyDeliberationTask(taskPrompt, state.mode);
+          classifyTierTask(state, taskPrompt);
           state.lastEventAt = Date.now();
           this.setRun(sessionKey, state);
         }
         if (mode !== 'none' && root && checkpointRelative && state.checkpointFile !== path.join(root, checkpointRelative)) { state.checkpointFile = path.join(root, checkpointRelative); this.setRun(sessionKey, state); }
-        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, checkpointShown, state.taskType) + '\n');
+        blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, checkpointShown, state, {playbookRoot: root}) + '\n');
         const evidence = completedEvidence(state);
         if (evidence) blocks.push('\n' + evidence + '\n');
       }
@@ -5296,6 +5456,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       if (role === 'judge' && !verificationEvidence(state).some(entry => entry.ok)) {
         return {block: true, blockReason: '先运行或查证可核验的结果，再决定是否需要模型仲裁。'};
       }
+      const workGate = WORK_ROLES.includes(role) ? workRoleGate(role, verificationEvidence(state)) : '';
+      if (workGate) return {block: true, blockReason: workGate};
     }
     if (state?.active) {
       const reservationKey = `${event.runId || ctx.runId || 'run'}:${event.toolCallId || randomUUID()}`;
@@ -5350,6 +5512,10 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         evidence.map(entry => '实际检验结果（' + entry.name + '）：\n' + entry.output).join('\n\n'),
         '输出格式：选择：候选方案 A/B/C；依据：引用具体通过或未通过的检验结果。无法区分时，明确列出候选及依据。',
       ].join('\n\n');
+    } else if (state?.active && WORK_ROLES.includes(role)) {
+      const ordinal = Math.max(0, [...state.childRoles.values()].filter(childRole => childRole === role).length
+        + [...state.reservations.values()].filter(value => value?.role === role).length - 1);
+      params.task = workRoleTask(role, {kinds: kindsOf(state), prompt: state.taskPrompt, ordinal, artifacts: artifactPaths(verificationEvidence(state))});
     }
     // 只传当前角色所需材料；隔离上下文避免子任务继承父会话的猜测。
     delete params.agentId;
@@ -5456,7 +5622,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const successful = !event.outcome || event.outcome === 'ok';
       // A short, evidence-free “no findings” result is explicitly valid for a
       // critic. Other roles still need a substantive result before they count.
-      const substantive = role === 'critic' && hasEvidenceBackedCritique(resultText)
+      const substantive = (role === 'critic' && hasEvidenceBackedCritique(resultText))
+        || (role === 'reviewer' && hasEvidenceBackedReview(resultText))
         ? true
         : meaningfulChildResult(resultText);
       const lateEmpty = state.emptyChildren?.has(event.targetSessionKey);
@@ -5481,6 +5648,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       ));
       let acceptedSuccess = successful && substantive && !duplicated;
       if (acceptedSuccess && role === 'critic' && !hasEvidenceBackedCritique(resultText)) acceptedSuccess = false;
+      if (acceptedSuccess && role === 'reviewer' && !hasEvidenceBackedReview(resultText)) acceptedSuccess = false;
       if (acceptedSuccess && role === 'judge') {
         const candidates = [...state.childResults.values()].filter(entry => entry.role === 'solver' && entry.candidateId);
         const decision = validateJudgeSelection(resultText, candidates, verificationEvidence(state));
@@ -5557,30 +5725,42 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (state.lastRetryDecision && (state.lastRetryRunId === runId
       || (state.mode !== 'none' && replyKey && state.lastRetryReplyKey === replyKey
         && (!hasRunId || state.lastRetryWithoutRunId)))) return state.lastRetryDecision;
-    const marathonOpen = state.tier === 'marathon' && onlyMilestonesMissing(auditDeliberation(state, reply).missing);
+    const workFirst = state.mode !== 'none';
+    const audit = auditDeliberation(state, reply);
+    const marathonOpen = state.tier === 'marathon' && onlyMilestonesMissing(audit.missing);
+    const gapKind = workFirst ? retryGapKind(audit.missing) : '';
+    const fingerprint = deliberationFingerprint(state);
+    const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint;
+    const stop = (reason) => {
+      state.stopRequested = true;
+      state.stopReason = reason;
+      state.active = false;
+      state.lastRetryRunId = runId;
+      state.lastRetryDecision = null;
+      state.stopRunId = runId;
+      state.stopReportPending = true;
+      state.lastEventAt = Date.now();
+      if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, 6000);
+      this.setRun(state.parentSessionKey, state);
+    };
 
     // 接着做下一个里程碑不是「重试」，不要求先说明换了什么做法；空转由下面的无进展检查兜底。
-    if (state.retryAttempts > 0 && !marathonOpen) {
+    // 工作模式里只拦「这一轮什么新证据都没有、又没说换了什么做法」的空转：补一次截图、补一句终稿
+    // 都是真进展，不该因为没背那句话就把整轮停掉、让用户收不到回复。无限制模式保持原规则。
+    const needDifference = state.retryAttempts > 0 && !marathonOpen
+      && (!workFirst || (stalled && gapKind !== 'final'));
+    if (needDifference) {
       const difference = RETRY_DIFFERENCE.exec(reply);
       if (!difference) {
-        state.stopRequested = true;
-        state.stopReason = '续跑没有先说明与上次不同的做法，系统已停止本轮。';
-        state.active = false;
-        state.lastRetryRunId = runId;
-        state.lastRetryDecision = null;
-        state.stopRunId = runId;
-        state.stopReportPending = true;
-        state.lastEventAt = Date.now();
-        this.setRun(state.parentSessionKey, state);
+        stop('续跑没有先说明与上次不同的做法，系统已停止本轮。');
         return;
       }
       state.retryDifferences.push(difference[0].slice(0, 300));
       state.retryDifferences = state.retryDifferences.slice(-10);
     }
 
-    const fingerprint = deliberationFingerprint(state);
     if (state.lastProgressFingerprint) {
-      state.noProgressCycles = fingerprint === state.lastProgressFingerprint
+      state.noProgressCycles = stalled
         ? (state.noProgressCycles || 0) + 1
         : 0;
     }
@@ -5589,44 +5769,50 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     state.lastRetryReplyKey = replyKey;
     state.lastRetryWithoutRunId = !hasRunId;
     if (state.noProgressCycles >= NO_PROGRESS_LIMIT) {
-      state.stopRequested = true;
-      state.stopReason = '连续两次续跑没有新增测试结果、文件变化或来源证据，系统已停止本轮。';
-      state.active = false;
-      state.lastRetryDecision = null;
-      state.stopRunId = runId;
-      state.stopReportPending = true;
-      state.lastEventAt = Date.now();
-      this.setRun(state.parentSessionKey, state);
+      stop('连续两次续跑没有新增测试结果、文件变化或来源证据，系统已停止本轮。');
+      return;
+    }
+    // 截断的终稿只补发一次；第二次还是几个字，就如实报告并附上已做的事。
+    if (workFirst && audit.missing.includes(SHORT_FINAL) && (Number(state.shortFinalNudges) || 0) >= 1) {
+      stop('最终回复两次都只有几个字，没能交代结果。');
       return;
     }
     const maxAttempts = TIER_RETRY_LIMITS[state.tier] || TIER_RETRY_LIMITS.boost;
     if (state.retryAttempts >= maxAttempts) {
-      state.stopRequested = true;
-      state.stopReason = '已达到本档续跑上限 ' + maxAttempts + ' 次，系统已停止本轮。';
-      state.active = false;
-      state.lastRetryDecision = null;
-      state.stopRunId = runId;
-      state.stopReportPending = true;
-      state.lastEventAt = Date.now();
-      this.setRun(state.parentSessionKey, state);
+      stop('已达到本档续跑上限 ' + maxAttempts + ' 次，系统已停止本轮。');
       return;
     }
     state.retryAttempts += 1;
-    const openNow = marathonOpen ? auditDeliberation(state, reply).missing.join('；') : '';
-    const safeDecision = marathonOpen ? {
+    if (workFirst && audit.missing.includes(SHORT_FINAL)) state.shortFinalNudges = (Number(state.shortFinalNudges) || 0) + 1;
+    if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, 6000);
+    const idempotencyKey = 'pinkie-task-progress-' + hashForAudit(state.parentSessionKey + ':' + runId).slice(0, 16);
+    // 长跑档还有没勾的里程碑：不论还差不差别的核对，都按「接着做下一个里程碑」推，不问用户要不要继续。
+    const milestonesOpen = marathonOpen || (workFirst && state.tier === 'marathon'
+      && audit.missing.some(item => item.startsWith(MILESTONE_MISSING) || item === PLAN_MISSING));
+    const openNow = milestonesOpen ? audit.missing.join('；') : '';
+    const safeDecision = milestonesOpen ? {
       action: 'revise',
       reason: '长跑档还没做完：' + openNow,
       retry: {
         instruction: '长跑档还没做完：' + openNow + '。不要收尾，也不要问用户要不要继续：先读检查点和项目现场，接着做下一个没勾掉的里程碑；做完并验证后在检查点里改成「- [x]」、记下证据，再做下一个。全部勾完后打磨一轮再交付。某一项确实做不了或只有用户能决定，就在检查点里写成「- [x] 放弃：原因」，或如实报告本轮未完成和卡点。',
-        idempotencyKey: 'pinkie-task-progress-' + hashForAudit(state.parentSessionKey + ':' + runId).slice(0, 16),
+        idempotencyKey,
         maxAttempts,
       },
+    } : workFirst && audit.missing.length ? {
+      action: 'revise',
+      reason: '当前任务还差：' + audit.missing.join('；'),
+      retry: {instruction: tierRetryInstruction(audit.missing, gapKind, state.lastDraftReply || ''), idempotencyKey, maxAttempts},
+    } : workFirst && decision.retry?.instruction ? {
+      // 档位这边都齐了、是全局交付门禁要补的：用门禁自己更具体的那句，只换成档位的续跑预算。
+      action: 'revise',
+      reason: decision.reason || '当前任务还需要补充实际结果。',
+      retry: {...decision.retry, idempotencyKey, maxAttempts},
     } : {
       action: 'revise',
       reason: '当前任务还需要补充实际结果，请回到用户原始目标继续。',
       retry: {
         instruction: '继续处理用户原始任务。下一步必须与上次不同，并在开始前用一句短进度说明“这次和上次不同：换思路/换信息/换模型 + 具体变化”。用新结果推进；不要重复没有新结果的做法。若已无法推进，说明卡点、已尝试的方法和缺失信息，并如实报告未完成。',
-        idempotencyKey: 'pinkie-task-progress-' + hashForAudit(state.parentSessionKey + ':' + runId).slice(0, 16),
+        idempotencyKey,
         maxAttempts,
       },
     };
@@ -5644,9 +5830,15 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const methods = state.retryDifferences.length
       ? state.retryDifferences.join('；')
       : [...new Set(verificationEvidence(state).map(entry => entry.name).filter(Boolean))].join('、') || '尚未取得新的工具结果';
+    // 工作模式：如实说明未完成时，用碧琪自己的话；被系统停下时，附上最后一版回复，用户不至于什么都拿不到。
+    if (state.mode !== 'none' && state.stopKind === 'honest' && state.honestReply) {
+      return state.honestReply.trim() + '\n\n已尝试：' + methods;
+    }
+    const draft = state.mode !== 'none' ? String(state.lastDraftReply || '').trim() : '';
     return '本轮未完成：' + state.stopReason + '\n已尝试：' + methods
       + '\n当前流程：' + workflowProgress(state).label
-      + '。请查看本轮已有结果后，再决定下一步。';
+      + '。请查看本轮已有结果后，再决定下一步。'
+      + (draft ? '\n\n上一版回复（还没核对完，仅供参考）：\n' + draft.slice(0, 4000) : '');
   }
 
   stopForHonestIncomplete(state, reply, audit, ctx = {}) {
@@ -5659,6 +5851,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     state.active = false;
     state.stopRunId = runId;
     state.stopReportPending = true;
+    if (state.mode !== 'none') { state.stopKind = 'honest'; state.honestReply = String(reply || '').slice(0, 6000); }
     state.lastEventAt = Date.now();
     this.setRun(state.parentSessionKey, state);
     return true;
