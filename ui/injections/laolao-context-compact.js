@@ -255,6 +255,33 @@
     void compact(anchor);
   };
 
+  // While open, the panel lives directly under <body>: inside the composer
+  // it shares the composer's stacking context, so page content outside the
+  // composer (the start page greeting) could paint over it.
+  const panelOf = (viewer) => viewer.__lcvPanel;
+  const placePanel = (viewer) => {
+    const panel = panelOf(viewer);
+    const summary = viewer.querySelector("summary");
+    if (!panel || !summary || panel.parentElement !== document.body) return;
+    const rect = summary.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const left = `${Math.round(Math.max(12, Math.min(rect.right - width, innerWidth - width - 12)))}px`;
+    const bottom = `${Math.round(Math.max(12, innerHeight - rect.top + 10))}px`;
+    if (panel.style.left !== left) panel.style.left = left;
+    if (panel.style.bottom !== bottom) panel.style.bottom = bottom;
+  };
+  const dockPanel = (viewer) => {
+    const panel = panelOf(viewer);
+    if (!panel) return;
+    if (viewer.open && viewer.isConnected) {
+      if (panel.parentElement !== document.body) { document.body.append(panel); panel.classList.add("is-floating"); }
+      placePanel(viewer);
+    } else if (panel.parentElement !== viewer) {
+      panel.classList.remove("is-floating");
+      if (viewer.isConnected) viewer.append(panel); else panel.remove();
+    }
+  };
+
   const buildContextViewer = () => {
     const viewer = document.createElement("details");
     viewer.className = "laolao-context-viewer";
@@ -268,18 +295,21 @@
       + `<footer class="lcv-actions"><button type="button" class="laolao-context-viewer__compact">现在整理上下文</button>`
       + `<div class="lcv-confirm" hidden><small class="lcv-muted">浓缩较早内容，最近对话和工作检查点继续保留。</small><div><button type="button" class="lcv-cancel">取消</button><button type="button" class="lcv-go">开始整理</button></div></div></footer>`
       + `</section>`;
-    const confirm = viewer.querySelector(".lcv-confirm");
-    const main = viewer.querySelector(".laolao-context-viewer__compact");
-    const setConfirm = (open) => { confirm.hidden = !open; main.hidden = open; if (open) viewer.querySelector(".lcv-go").focus(); };
+    const panel = viewer.querySelector(".laolao-context-viewer__popover");
+    viewer.__lcvPanel = panel;
+    const confirm = panel.querySelector(".lcv-confirm");
+    const main = panel.querySelector(".laolao-context-viewer__compact");
+    const setConfirm = (open) => { confirm.hidden = !open; main.hidden = open; if (open) panel.querySelector(".lcv-go").focus(); };
     main.addEventListener("click", (event) => { event.preventDefault(); setConfirm(true); });
-    viewer.querySelector(".lcv-cancel").addEventListener("click", (event) => { event.preventDefault(); setConfirm(false); main.focus(); });
-    viewer.querySelector(".lcv-go").addEventListener("click", (event) => {
+    panel.querySelector(".lcv-cancel").addEventListener("click", (event) => { event.preventDefault(); setConfirm(false); main.focus(); });
+    panel.querySelector(".lcv-go").addEventListener("click", (event) => {
       event.preventDefault();
       setConfirm(false);
       viewer.removeAttribute("open");
       compactFromPanel();
     });
     viewer.addEventListener("toggle", () => {
+      dockPanel(viewer);
       if (viewer.open) {
         // Opening always asks for fresh numbers instead of a 15s-old cache.
         usageFetchedAt = 0;
@@ -293,7 +323,11 @@
   const renderContextViewer = () => {
     const metas = document.querySelectorAll(".agent-chat__composer-meta");
     document.querySelectorAll(".laolao-context-viewer").forEach((node) => {
-      if (!node.closest(".agent-chat__composer-meta") || metas.length !== 1) node.remove();
+      if (!node.closest(".agent-chat__composer-meta") || metas.length !== 1) { node.remove(); panelOf(node)?.remove(); }
+    });
+    document.querySelectorAll(".laolao-context-viewer__popover.is-floating").forEach((panel) => {
+      const owner = Array.from(document.querySelectorAll(".laolao-context-viewer")).find((node) => panelOf(node) === panel);
+      if (!owner?.open) panel.remove();
     });
     // One capacity control for every mode and for both known/missing usage.
     // Keep Lit's native meter in place; CSS hides it only while ours is present.
@@ -312,8 +346,9 @@
       meta.append(viewer);
     }
     const label = ratio ? `${ratio.approximate ? "约 " : ""}${ratio.percent}%` : "—";
+    const panel = panelOf(viewer);
     const setText = (selector, value) => {
-      const node = viewer.querySelector(selector);
+      const node = viewer.querySelector(selector) || panel?.querySelector(selector);
       if (node && node.textContent !== value) node.textContent = value;
     };
     setText(".laolao-context-viewer__percent", label);
@@ -327,6 +362,7 @@
     viewer.dataset.level = !ratio ? "" : ratio.compactionBudget && ratio.used >= ratio.compactionBudget.threshold * 0.9 ? "high" : ratio.percent >= 50 ? "mid" : "low";
 
     // The panel is only rebuilt while it is open.
+    dockPanel(viewer);
     if (!viewer.open) return;
     setText(".lcv-used", ratio ? `已使用 ${label}` : "等待会话用量数据");
     setText(".lcv-amount", ratio ? `${shortTokens(ratio.used)} / ${shortTokens(ratio.limit)}` : "");
@@ -335,8 +371,8 @@
     const signature = JSON.stringify(rows.map((row) => [row.id, row.tokens, row.count || ""]));
     if (viewer.dataset.rows !== signature) {
       viewer.dataset.rows = signature;
-      const bar = viewer.querySelector(".lcv-bar");
-      const list = viewer.querySelector(".lcv-rows");
+      const bar = panel.querySelector(".lcv-bar");
+      const list = panel.querySelector(".lcv-rows");
       bar.replaceChildren(...rows.filter((row) => row.id !== "free" && row.tokens > 0).map((row) => {
         const part = document.createElement("i");
         part.className = `lcv-c-${row.id}`;
@@ -370,7 +406,7 @@
     if (thresholdText) notes.push(thresholdText);
     if (ratio && !breakdown) notes.push("发一条消息后会显示每一类占多少");
     setText(".lcv-note", ratio ? notes.join(" · ") : "有用量数据后会自动更新");
-    const main = viewer.querySelector(".laolao-context-viewer__compact");
+    const main = panel.querySelector(".laolao-context-viewer__compact");
     const state = readCompactionState(usageKey);
     const compacting = busy || ["active", "retrying"].includes(state?.phase);
     const streaming = Boolean(document.querySelector(".chat-send-btn--stop"));
@@ -378,8 +414,9 @@
     if (main.textContent !== mainText) main.textContent = mainText;
     const disabled = compacting || streaming || !ratio;
     if (main.disabled !== disabled) main.disabled = disabled;
+    placePanel(viewer);
     if (disabled) {
-      const confirm = viewer.querySelector(".lcv-confirm");
+      const confirm = panel.querySelector(".lcv-confirm");
       if (!confirm.hidden) { confirm.hidden = true; main.hidden = false; }
     }
   };
@@ -637,6 +674,7 @@
 @keyframes laolao-context-spin{to{transform:rotate(360deg)}}@keyframes laolao-context-pop{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.laolao-context-compact-btn,.laolao-context-compact-btn svg,#laolao-context-compact-popover,#laolao-context-compact-toast{animation:none!important;transition:none!important}}
 .laolao-context-viewer{position:relative;color:#776b88;flex:none}.laolao-context-viewer summary{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border-radius:999px;cursor:pointer;list-style:none;font-size:11px;font-variant-numeric:tabular-nums}.laolao-context-viewer summary::-webkit-details-marker{display:none}.laolao-context-viewer summary:hover,.laolao-context-viewer[open] summary{background:rgba(206,140,181,.13)}.laolao-context-viewer svg{transform:rotate(-90deg);flex:none}.laolao-context-viewer circle{fill:none;stroke-width:2.5}.laolao-context-viewer__track{stroke:rgba(119,107,136,.22)}.laolao-context-viewer__fill{stroke:#bd73a2;stroke-linecap:round;stroke-dasharray:40.84;transition:stroke-dashoffset .35s ease}.laolao-context-viewer[data-level="mid"] .laolao-context-viewer__fill{stroke:#c9789f}.laolao-context-viewer[data-level="high"] .laolao-context-viewer__fill{stroke:#e0607e}
 .laolao-context-viewer__popover{position:absolute;right:0;bottom:calc(100% + 10px);z-index:100;width:min(312px,calc(100vw - 24px));box-sizing:border-box;padding:16px 16px 14px;border:1px solid rgba(255,255,255,.8);border-radius:18px;background:linear-gradient(150deg,rgba(255,252,254,.97),rgba(249,236,245,.95));box-shadow:0 18px 44px rgba(88,54,77,.17),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);color:#4d3a52;font-size:12px;line-height:1.35;--lcv-messages:#d46a9d;--lcv-tools:#8e9be3;--lcv-rules:#e2a45f;--lcv-files:#5fb3a2;--lcv-skills:#b48ad8;--lcv-reserve:rgba(119,107,136,.32);--lcv-free:rgba(119,107,136,.12);--lcv-muted:#8a7c90}
+.laolao-context-viewer__popover.is-floating{position:fixed;right:auto;bottom:auto;z-index:2147482000;animation:lcv-pop .18s cubic-bezier(.2,.78,.28,1) both}@keyframes lcv-pop{from{opacity:0;translate:0 6px;scale:.98}to{opacity:1;translate:0 0;scale:1}}
 .laolao-context-viewer__popover .lcv-muted{color:var(--lcv-muted);font-weight:400}
 .lcv-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.lcv-head strong{font-size:13px;font-weight:650;letter-spacing:.02em}.lcv-source{font-size:10.5px}
 .lcv-total{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:10px;font-variant-numeric:tabular-nums}.lcv-used{font-size:17px;font-weight:650}.lcv-amount{font-size:12px}
@@ -654,7 +692,7 @@ html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover{--lcv-muted:#a9
 html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-muted,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-free span,html[data-pinkie-night]:not(#_n) .laolao-context-viewer__popover .lcv-row.lcv-c-reserve span{color:var(--lcv-muted)!important}
 html[data-pinkie-night]:not(#_n) .lcv-note{border-top-color:rgba(255,255,255,.08)}
 html[data-pinkie-night]:not(#_n) .lcv-confirm .lcv-go{background:#c94f86!important;border-color:transparent!important;color:#fff!important}
-@media(prefers-reduced-motion:reduce){.lcv-bar i,.laolao-context-viewer__compact{transition:none}}
+@media(prefers-reduced-motion:reduce){.lcv-bar i,.laolao-context-viewer__compact{transition:none}.laolao-context-viewer__popover.is-floating{animation:none}}
 .agent-chat__composer-meta:has(> .laolao-context-viewer) > .context-usage{display:none!important}
 .compaction-indicator--active:not(.laolao-compaction-notice),.compaction-indicator--complete:not(.laolao-compaction-notice){display:none!important}
 .pinkie-chat-compaction:empty{display:none}
@@ -687,7 +725,7 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
   document.addEventListener("pointerdown", (event) => {
     if (popover && !popover.contains(event.target) && !event.target.closest?.(`.${BUTTON_CLASS}`)) closePopover();
     document.querySelectorAll(".laolao-context-viewer[open]").forEach((viewer) => {
-      if (!viewer.contains(event.target)) viewer.removeAttribute("open");
+      if (!viewer.contains(event.target) && !panelOf(viewer)?.contains(event.target)) viewer.removeAttribute("open");
     });
   }, true);
   document.addEventListener("keydown", (event) => {
@@ -696,6 +734,8 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
     const open = document.querySelector(".laolao-context-viewer[open]");
     if (open) { open.removeAttribute("open"); open.querySelector("summary")?.focus(); }
   });
+  // Keep the floating panel beside its ring when the window changes size.
+  window.addEventListener("resize", () => document.querySelectorAll(".laolao-context-viewer[open]").forEach(placePanel), {passive: true});
   ensureStyle();
   render();
   setInterval(render, 900);
