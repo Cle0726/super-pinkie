@@ -1438,7 +1438,48 @@ export function transformLearningInlineKinds(original) {
   return original.slice(0, start) + patched + original.slice(end + tail.length);
 }
 
+// Two small send-path fixes, layered on every path (fresh, upgrade and
+// already-patched) and each skipped when its native anchor is not found.
+const userEchoMarker = '/* pinkie-early-user-echo:v1 */';
+const mediaCaptionMarker = '/* pinkie-media-caption:v1 */';
+
+/** Show the user's bubble as soon as Send is pressed. Natively it only appears
+ *  after chat.send is acknowledged, which with images can take seconds while
+ *  the attachment uploads; meanwhile the queue hides "sending" items, so the
+ *  message was visible nowhere. The early copy is removed right after the ack
+ *  (the native copy is added in the same tick) or when the send fails. */
+export function withEarlyUserEcho(source) {
+  if (source.includes(userEchoMarker)) return source;
+  const add = /if\(([\w$]+)\(e,o,c\?s:void 0,d(?:,r\.runId)?\),r\.status===`ok`\)/u.exec(source);
+  const tryAt = /try\{let r=a\.skillWorkshopRevision\?await /gu;
+  const ack = /(:await [\w$]+\(e,\{message:o,attachments:c\?s:void 0,runId:u,sessionKey:l,agentId:a\.agentId\}\);)/gu;
+  const fail = /(\}catch\(r\)\{)(?=let i=[\w$]+\(r\);return [\w$]+\(r,i\)\?\(od\()/gu;
+  if (!add || [tryAt, ack, fail].some((pattern) => (source.match(pattern) || []).length !== 1)) return source;
+  const drop = 'pinkieEcho&&(e.chatMessages=e.chatMessages.filter(x=>x!==pinkieEcho),pinkieEcho=null);';
+  return source
+    .replace(tryAt, `let pinkieEcho=${userEchoMarker}m()&&!a.skillWorkshopRevision&&/^agent:(?:main|project|thinking|learning):/.test(String(l))?${add[1]}(e,o,c?s:void 0,d,u):null;$&`)
+    .replace(ack, `$1${drop}`)
+    .replace(fail, `$1${drop}`);
+}
+
+/** An image sent without words is stored with this placeholder as its text;
+ *  the bubble shows only the image instead. */
+export function withMediaCaptionPlaceholder(source) {
+  if (source.includes(mediaCaptionMarker)) return source;
+  const strip = /(function [\w$]+\(e\)\{if\(!e\)return e;)(?=let t=e\.replace\([\w$]+,``\);if\(![\w$]+\.test\(t\)\)return t;)/gu;
+  if ((source.match(strip) || []).length !== 1) return source;
+  return source.replace(strip, `$1${mediaCaptionMarker}if(/^\\s*\\[User sent media without caption\\]\\s*$/.test(e))return\`\`;`);
+}
+
 function transformBundle(original) {
+  const result = transformBundleCore(original);
+  if (!result.text.includes(marker)) return result;
+  const text = withMediaCaptionPlaceholder(withEarlyUserEcho(result.text));
+  if (text === result.text) return result;
+  return {text, changed: true, reason: result.changed ? result.reason : 'send-path-updated'};
+}
+
+function transformBundleCore(original) {
   if (original.includes(marker)) {
     if (!original.includes(thinkingSegmentsMarker)) return upgradeBundle(original, marker);
     if (!original.includes('function pinkieLearningInlineReferences(')) return {text: original, changed: false, reason: 'already-patched'};
