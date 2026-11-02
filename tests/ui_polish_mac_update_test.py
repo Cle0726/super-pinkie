@@ -24,7 +24,9 @@ class StageGitUpdateTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='pinkie-git-update-')
         self.root=Path(self.temp.name)
-        self.env={key:getattr(module,key) for key in ('STATE','CONFIG','UPDATES','MANAGED','MANIFEST')}
+        self.env={key:getattr(module,key) for key in ('STATE','CONFIG','UPDATES','MANAGED','MANIFEST','latest_release')}
+        # 测试里不连 GitHub：默认「查不到正式发布」，跟分支走；跟 tag 的测试自己指定版本。
+        module.latest_release=lambda repo: None
         module.STATE=self.root/'state';module.CONFIG=self.root/'config/install.env';module.UPDATES=module.STATE/'updates';module.MANAGED=module.STATE/'repository';module.MANIFEST=module.UPDATES/'prepared-git.json'
         self.remote=self.root/'remote.git';self.writer=self.root/'writer';self.repo=self.root/'installed'
         run('init','--bare',self.remote)
@@ -74,6 +76,35 @@ class StageGitUpdateTests(unittest.TestCase):
             applied=module.apply();self.assertEqual(Path(applied['repo']),module.MANAGED.resolve());self.assertTrue(module.MANAGED.is_dir())
         finally:
             module.DEFAULT_REMOTE=old_remote
+    def tag_release(self, tag):
+        run('-C',self.writer,'tag','-a',tag,'-m',tag);run('-C',self.writer,'push','origin',tag)
+        target=run('-C',self.writer,'rev-parse','HEAD')
+        # 发版之后 main 上又有没发布的提交：更新必须停在发布的那一版。
+        (self.writer/'VERSION').write_text('9.9.9-unreleased\n',encoding='utf-8');run('-C',self.writer,'add','VERSION');run('-C',self.writer,'commit','-m','unreleased');run('-C',self.writer,'push','origin','main')
+        module.latest_release=lambda repo: tag
+        return target
+    def test_follows_the_published_release_tag_not_the_branch_head(self):
+        target=self.tag_release('v1.1.0')
+        info=module.check();self.assertEqual(info['version'],'1.1.0')
+        with contextlib.redirect_stdout(io.StringIO()):result=module.prepare()
+        self.assertTrue(result['ready']);self.assertEqual(result['version'],'1.1.0')
+        self.assertEqual(json.loads(module.MANIFEST.read_text())['target'],target)
+        module.apply();self.assertEqual(run('-C',self.repo,'rev-parse','HEAD'),target)
+    def test_first_install_from_a_release_tag_gets_a_local_branch(self):
+        target=self.tag_release('v1.1.0')
+        old_remote=module.DEFAULT_REMOTE
+        try:
+            module.DEFAULT_REMOTE=str(self.remote);module.CONFIG.unlink()
+            with contextlib.redirect_stdout(io.StringIO()):self.assertTrue(module.prepare()['ready'])
+            applied=module.apply();self.assertEqual(applied['target'],target)
+            self.assertEqual(run('-C',module.MANAGED,'branch','--show-current'),'release')
+        finally:
+            module.DEFAULT_REMOTE=old_remote
+    def test_release_lookup_only_for_the_official_repository(self):
+        module.latest_release=self.env['latest_release']
+        self.assertIsNone(module.latest_release(self.repo))
+        run('-C',self.repo,'remote','set-url','origin','https://github.com/Cle0726/super-pinkie.git')
+        self.assertTrue(module.official_checkout(self.repo))
     def run_detached_prepared_branch(self):
         # Run only the prepared-install branch, with a fake installer entirely
         # inside this temporary Git repo. Never inspect or stop a real gateway.
