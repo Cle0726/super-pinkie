@@ -497,6 +497,7 @@
     pin: svg('<path d="M9 4h6l1 6 3 3v2H5v-2l3-3z"/><path d="M12 15v6"/>'),
     folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     plus: svg('<path d="M12 5v14M5 12h14"/>'),
+    more: svg('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
     trash: svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/>'),
     archive: svg('<path d="M4 7h16v12H4z"/><path d="M3 4h18v3H3zM9 11h6"/>'),
     restore: svg('<path d="M4 11a8 8 0 1 0 2-5.3L4 8"/><path d="M4 3v5h5"/>'),
@@ -957,12 +958,43 @@
   /* The mobile drawer can be active in a narrow single window as well as in
      either split pane. Close the upstream component's state, not only its DOM
      class, whenever a session or window transition could leave its scrim up. */
-  function closeNavigationDrawer(){
+  const drawerFocusFixAllowed=()=>/^agent:(?:main|project|thinking|learning):/.test(pageSessionKey());
+  let drawerFocusShell=null, drawerFocusObserver=null;
+  function syncDrawerFocusability(){
+    const shell=drawerFocusShell;
+    const host=document.querySelector('openclaw-app-shell');
+    const nav=shell?.querySelector(':scope > .shell-nav');
+    if(!nav||!host)return;
+    const root=document.documentElement;
+    const split=['data-laolao-workspace-split','data-laolao-workspace-dock','data-laolao-browser-workspace']
+      .some(name=>root.getAttribute(name)==='1');
+    const hidden=drawerFocusFixAllowed()&&(window.innerWidth<=1100||split)
+      &&!host.navDrawerOpen&&!shell.classList.contains('shell--nav-drawer-open');
+    // Only remove inert when this guard added it; preserve any other owner's
+    // inert state, for example while the application is onboarding.
+    if(hidden&&!nav.hasAttribute('inert')){
+      nav.setAttribute('inert','');nav.setAttribute('data-pinkie-drawer-inert','1');
+    }else if(!hidden&&nav.getAttribute('data-pinkie-drawer-inert')==='1'){
+      nav.removeAttribute('data-pinkie-drawer-inert');nav.removeAttribute('inert');
+    }
+  }
+  function ensureDrawerFocusGuard(){
+    const shell=document.querySelector('.shell.shell--chat');
+    if(shell!==drawerFocusShell){
+      drawerFocusObserver?.disconnect();drawerFocusShell=shell;
+      if(shell&&typeof MutationObserver==='function'){
+        drawerFocusObserver=new MutationObserver(syncDrawerFocusability);
+        drawerFocusObserver.observe(shell,{attributes:true,attributeFilter:['class']});
+      }
+    }
+    syncDrawerFocusability();
+  }
+  function closeNavigationDrawer(restoreFocus=false){
     const host=document.querySelector('openclaw-app-shell');
     const shell=document.querySelector('.shell.shell--nav-drawer-open');
     if(!shell&&!host?.navDrawerOpen)return;
     if(typeof host?.closeNavDrawer==='function'){
-      host.closeNavDrawer({restoreFocus:false});
+      host.closeNavDrawer({restoreFocus:restoreFocus===true});
       return;
     }
     const toggle=shell?.querySelector('.topbar-nav-toggle');
@@ -974,19 +1006,27 @@
       const target=event.target;
       if(!target||typeof target.closest!=='function')return;
       const shell=document.querySelector('.shell.shell--nav-drawer-open');
-      if(shell&&!target.closest('.shell-nav, .topbar-nav-toggle'))closeNavigationDrawer();
+      if(shell&&!target.closest('.shell-nav, .topbar-nav-toggle')){
+        // Let the native backdrop click close the drawer and return focus to
+        // its opener. Closing on pointerdown would focus the hidden backdrop.
+        if(drawerFocusFixAllowed()&&target.closest('.shell-nav-backdrop'))return;
+        closeNavigationDrawer();
+      }
     },true);
     document.addEventListener('click',event=>{
       const target=event.target;
       if(!target||typeof target.closest!=='function'||!target.closest('.shell-nav a[href*="session="]'))return;
       setTimeout(closeNavigationDrawer,0);
     },true);
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')closeNavigationDrawer();},true);
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')closeNavigationDrawer(drawerFocusFixAllowed());},true);
   }
   if(typeof window.addEventListener==='function'){
     window.addEventListener('popstate',closeNavigationDrawer);
+    window.addEventListener('popstate',ensureDrawerFocusGuard);
     window.addEventListener('pageshow',closeNavigationDrawer);
+    window.addEventListener('pageshow',ensureDrawerFocusGuard);
     window.addEventListener('resize',closeNavigationDrawer,{passive:true});
+    window.addEventListener('resize',ensureDrawerFocusGuard,{passive:true});
     window.addEventListener('pinkie:app-foreground',closeNavigationDrawer,{passive:true});
   }
 
@@ -1303,6 +1343,15 @@
     });
   }
 
+  function openSessionManagement(anchor) {
+    openMenu(anchor, menu => {
+      const cleanup = menuItem(menu, ICONS.trash, '一键清理会话记录…', () => { closeMenu(); askCleanup(); });
+      const remove = menuItem(menu, ICONS.trash, '删除当前模式全部会话…', () => { closeMenu(); askDeleteAllSessions(); });
+      cleanup.classList.add('laolao-menu__item--danger');
+      remove.classList.add('laolao-menu__item--danger');
+    });
+  }
+
   /* ---------- 6. 行内按钮与项目菜单 ---------- */
   function keyOfRow(row) {
     const link = row.querySelector("a.sidebar-recent-session__link");
@@ -1484,9 +1533,19 @@
       labelText.textContent = "最近";
     }
     const head = recent.querySelector(".sidebar-recent-sessions__head");
-    if (head && !head.querySelector(".laolao-cleanup-btn")) {
-      const cleanBtn = makeIconBtn(ICONS.trash, "一键清理会话记录", askCleanup, "laolao-cleanup-btn");
-      head.appendChild(cleanBtn);
+    if (head) {
+      let cleanBtn = head.querySelector(".laolao-cleanup-btn");
+      if (!cleanBtn) {
+        cleanBtn = makeIconBtn(ICONS.trash, "一键清理会话记录", (event) => {
+          if (drawerFocusFixAllowed()) openSessionManagement(event.currentTarget); else askCleanup();
+        }, "laolao-cleanup-btn");
+        head.appendChild(cleanBtn);
+      }
+      const managed = drawerFocusFixAllowed(), label = managed ? '更多会话管理' : '一键清理会话记录';
+      if (cleanBtn.dataset.polishManaged !== String(managed)) {
+        cleanBtn.dataset.polishManaged = String(managed); cleanBtn.innerHTML = managed ? ICONS.more : ICONS.trash;
+        cleanBtn.title = label; cleanBtn.setAttribute('aria-label', label);
+      }
     }
     return { pins, projWrap, recent };
   }
@@ -1641,7 +1700,42 @@
     }
   }
 
+  function syncSidebarThemeButton() {
+    const button = document.querySelector('.laolao-sidebar-theme-toggle');
+    if (!button) return;
+    const night = Boolean(window.__pinkieNight?.on);
+    const label = night ? '切换到浅色模式' : '切换到深色模式';
+    const icon = night ? '☀' : '☾';
+    if (button.textContent !== icon) button.textContent = icon;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('title', label);
+    button.setAttribute('aria-pressed', String(night));
+  }
+
+  function ensureSidebarThemeButton() {
+    const footer = document.querySelector('.sidebar-shell__footer');
+    const host = footer?.querySelector('.sidebar-footer-actions') || footer?.querySelector('.sidebar-footer-bar');
+    if (!host) return;
+    let button = host.querySelector('.laolao-sidebar-theme-toggle');
+    if (!drawerFocusFixAllowed()) {
+      button?.remove();
+      return;
+    }
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'sidebar-brand__icon sidebar-footer-icon laolao-sidebar-theme-toggle';
+      button.addEventListener('click', () => window.__pinkieNight?.toggle(button));
+      host.insertBefore(button, host.querySelector('.laolao-footer-more'));
+    }
+    syncSidebarThemeButton();
+  }
+
+  window.addEventListener('pinkie:night', syncSidebarThemeButton);
+
   function run() {
+    ensureDrawerFocusGuard();
+    ensureSidebarThemeButton();
     if (applying) return;
     const section = document.querySelector("section.sidebar-sessions");
     if (!section) return;
@@ -1650,7 +1744,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,queueAutoTitles,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,queueAutoTitles,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }

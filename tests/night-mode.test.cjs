@@ -44,7 +44,7 @@ test('night switch follows the native color mode and tells the native shell', ()
 
 test('night switch runs before anything paints and the night stylesheet loads last', () => {
   const sh = read('installer/macos/apply-theme.sh');
-  assert.match(sh, /<script src="\/laolao-night\.js\?v=night2"><\/script>/);
+  assert.match(sh, /<script src="\/laolao-night\.js\?v=night3"><\/script>/);
   const fragment = read('ui/injections/laolao-head.fragment.html');
   const scripts = fragment.match(/laolao-[\w-]+\.js/g);
   // The property that matters is ordering against stylesheets, not being the
@@ -75,7 +75,7 @@ test('installing over an old fragment moves night assets, uses root paths and st
       const run = () => execFileSync('bash', ['-c', `set -e; ui_root="$1"; index_file="$1/index.html"; DID_CHANGE=0; normalize() {\n${block}\n}; normalize`, 'night-test', dir]);
       run();
       const output = fs.readFileSync(file, 'utf8');
-      assert.match(output, /<head\b[^>]*>\s*<script src="\/laolao-night.js\?v=night2"><\/script>/i);
+      assert.match(output, /<head\b[^>]*>\s*<script src="\/laolao-night.js\?v=night3"><\/script>/i);
       assert.match(output, /<link rel="stylesheet" href="\/laolao-night.css\?v=night3">\s*<\/head>/i);
       assert.equal((output.match(/laolao-night\.js/g) || []).length, 1);
       assert.equal((output.match(/laolao-night\.css/g) || []).length, 1);

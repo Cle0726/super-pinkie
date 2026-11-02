@@ -116,8 +116,8 @@ test('split keeps the menu as an overlay and leaves real workspace controls visi
 
 test('session navigation clears a stale mobile drawer in single and split windows', () => {
   const sidebar = read('ui/injections/laolao-sidebar.js');
-  assert.match(sidebar, /function closeNavigationDrawer\(\)/);
-  assert.match(sidebar, /host\.closeNavDrawer\(\{restoreFocus:false\}\)/);
+  assert.match(sidebar, /function closeNavigationDrawer\([^)]*\)/);
+  assert.match(sidebar, /host\.closeNavDrawer\(\{restoreFocus:(?:false|restoreFocus===true)\}\)/);
   assert.match(sidebar, /shell\.navigate\('chat',\{search\}\)/);
   assert.match(sidebar, /\.shell\.shell--nav-drawer-open/);
   assert.match(sidebar, /closeNavigationDrawer\(\);\s*const current=new URL\(window\.location\.href\)/);

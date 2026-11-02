@@ -918,7 +918,7 @@ test('the renderer keeps closed cards lazy and preserves the user expansion stat
   assert.match(v5, /data-pinkie-thinking=\$\{e\.key\}/);
   assert.match(v5, /data-pinkie-status=\$\{e\.key\}/);
   assert.match(v5, /data-state=\$\{e\.processState\|\|`\`\}/);
-  assert.match(v5, /e\.processRows\.map\(n=>n\.kind===`group`\?_S\(n,t\):c\)/);
+  assert.match(v5, /data-pinkie-thinking-seg/);
 });
 
 test('an installed v3 bundle gains the process-card renderer when it upgrades to the current runtime', () => {

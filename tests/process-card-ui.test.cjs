@@ -36,8 +36,8 @@ test('the card matches the original bubbles and respects reduced motion', () => 
   assert.match(css, /\.pinkie-process\[data-live="1"\]/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   for (const source of [read('ui/injections/laolao-head.fragment.html'), read('installer/macos/apply-theme.sh'), read('installer/windows/apply-theme.ps1')]) {
-    assert.match(source, /laolao-process-card\.css\?v=processcard6/);
-    assert.match(source, /laolao-process-card\.js\?v=processcard11/);
+    assert.match(source, /laolao-process-card\.css\?v=processcard8/);
+    assert.match(source, /laolao-process-card\.js\?v=processcard13/);
   }
 });
 
@@ -46,9 +46,9 @@ test('a thought that arrives in one chunk is typed out instead of popping in', (
   assert.match(script, /const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;/);
   // A later chunk resumes from where the previous one stopped, so only the new
   // text is typed out instead of the whole thought popping in.
-  assert.match(script, /typeOut\(key, Math\.max\(0, before - dropped\), record\.text\.length\)/);
+  assert.match(script, /typeOut\(id, Math\.max\(0, before - dropped\), ep\.text\.length\)/);
   assert.match(script, /stopThinking\(\);\s*hurryTyping\(\);/);
-  assert.match(script, /const visibleText = isTyping \? record\.text\.slice\(0, typed\) : record\.text;/);
+  assert.match(script, /const visibleText = isTyping \? ep\.text\.slice\(0, typed\) : ep\.text;/);
   // Reduced motion collapses the type-out to zero duration instead of starting
   // a timer, so the thought is shown immediately rather than animating.
   assert.match(script, /typing\.set\(key, \{from: reduced\(\) \? length : from, to: length/);
@@ -140,4 +140,35 @@ test('removing an expired status pill preserves the chat viewport', () => {
   removal.callback();
   assert.equal(removed, true);
   assert.equal(h.window.keptViewport, true);
+});
+
+test('each thinking burst is recorded as its own episode anchored to the next work row', () => {
+  const h = processHarness();
+  const api = h.window.__laolaoProcessCard;
+  const key = h.current.dataset.pinkieProcess;
+  let rowCount = 0;
+  const rows = {get children() { return Array.from({length: rowCount}, () => ({matches: () => false})); }};
+  h.current.details.live = true;
+  const query = h.current.querySelector;
+  h.current.querySelector = selector => selector === '.pinkie-process__rows' ? rows : query(selector);
+  const send = (stream, data) => h.listeners.get('pinkie:gateway-event')({detail: {event: 'agent', payload: {sessionKey: 'agent:main:test', stream, data}}});
+  send('lifecycle', {phase: 'start'});
+  send('thinking', {delta: 'first idea'});
+  send('tool', {phase: 'start', name: 'read'});
+  rowCount = 2; // narration + tool row
+  send('tool', {phase: 'result', name: 'read'});
+  send('thinking', {delta: 'second idea'});
+  send('assistant', {delta: 'answer'});
+  const record = api.store[key];
+  assert.equal(record.eps.length, 2);
+  assert.equal(JSON.stringify(record.eps.map(ep => [ep.text, ep.anchor])), JSON.stringify([['first idea', 0], ['second idea', 2]]));
+  assert.equal(record.text, 'first idea\n\nsecond idea', 'the joined text stays for migration and older readers');
+});
+
+test('later bursts use only the renderer-owned slots', () => {
+  assert.match(script, /function placeFor\(card, slot, ep\)/);
+  assert.match(script, /slots\.find\(node => Number\(node\.dataset\.pinkieThinkingSeg\) === ep\.anchor\)/);
+  assert.doesNotMatch(script, /host\.prepend\(holder\)|details\.append\(tail\)/);
+  assert.match(script, /preserveSlot\(slot, \(\) => box\.classList\.remove\("is-live"\)\)/);
+  assert.match(css, /\.pinkie-process__rows \.pinkie-process__thinking:not\(:empty\)/);
 });

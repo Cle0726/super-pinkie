@@ -81,5 +81,5 @@ test("demo tool settings: values never clip, clean type, filled tracks, colours 
 test("macOS installer bumps the sidebar surface and auto-hide cache keys on upgrade, not only on first install", () => {
   const mac = read("installer/macos/apply-theme.sh");
   assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-surface\.css\?v=sidebarsurface7' "\$index_file"; then/);
-  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-autohide\.js\?v=sidebarautohide8' "\$index_file"; then/);
+  assert.match(mac, /elif ! grep -Fq 'laolao-sidebar-autohide\.js\?v=sidebarautohide9' "\$index_file"; then/);
 });
