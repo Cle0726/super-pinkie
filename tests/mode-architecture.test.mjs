@@ -2567,3 +2567,18 @@ test('every visible model output increases the persistent display estimate',t=>{
   const migrated=JSON.parse(fs.readFileSync(file,'utf8'));
   assert.equal(migrated.requests,3);assert.ok(migrated.cost>0.03&&migrated.cost<0.04);
 });
+
+test('a command still running in the background is an honest in-progress state, not an empty promise',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:background-build',runId:'run-background-build'};
+  guard.begin({prompt:'帮我把项目打包，生成 dist/app.zip。'},ctx);
+  guard.beforeTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true}},ctx);
+  guard.afterTool({toolName:'exec',toolCallId:'bg-build',params:{command:'npm run build && zip -r dist/app.zip build',background:true},
+    result:{content:[{type:'text',text:'Command still running (session tidal-harbor, pid 28573). Use process (list/poll/log/write/send-keys/submit/paste/kill/clear/remove) for follow-up.'}],details:{status:'running'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已在后台运行，大约两分钟，跑完我接着核对并告诉你。'},ctx),undefined);
+  assert.equal(guard.finalize({lastAssistantMessage:'稍等，等我做完再告诉你。'},ctx),undefined,'the waiting phrase is fine while the command really runs');
+  assert.equal(guard.finalize({lastAssistantMessage:'打包已经完成，dist/app.zip 已生成。'},ctx)?.action,'revise','a finished claim still needs evidence');
+  guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
+    result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
+  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
+});
