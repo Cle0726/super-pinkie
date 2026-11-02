@@ -714,8 +714,9 @@
   const onLeave = () => { seen = false; };
 
   const syncButton = () => {
-    const btn = document.getElementById('pinkie-laser-entry');
-    if (btn) btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    for (const btn of document.querySelectorAll('#pinkie-laser-entry, #pinkie-laser-rail-entry')) {
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
   };
 
   const on = () => {
@@ -805,6 +806,31 @@
   // Poll instead of a subtree-wide observer: during streaming every markdown
   // chunk rebuilds the DOM, and wide observers each receive a copy of every
   // mutation record. mount() is idempotent, so a slow 1.5s poll is plenty.
+  // The right rail gets the same launcher, right under the day/night toggle.
+  const mountRail = () => {
+    const rail = document.querySelector('.chat-workbench > .chat-workspace-rail, .chat-workspace-rail');
+    let btn = document.getElementById('pinkie-laser-rail-entry');
+    if (!rail) { btn?.remove(); return; }
+    if (btn?.parentElement === rail) return;
+    btn?.remove();
+    btn = document.createElement('button');
+    btn.id = 'pinkie-laser-rail-entry';
+    btn.type = 'button';
+    btn.className = 'pinkie-rail-quick';
+    btn.title = '演示工具：左键开启，右键设置（ESC 退出）';
+    btn.setAttribute('aria-label', '演示工具：激光笔、画笔、荧光笔、聚光灯、放大镜');
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.innerHTML = svgWrap(TOOLS.laser.icon);
+    btn.addEventListener('click', toggle);
+    btn.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      openSettings(btn);
+    });
+    const anchor = rail.querySelector('#laolao-browser-workspace-entry, #pinkie-party-entry');
+    rail.insertBefore(btn, anchor || null);
+  };
+  setInterval(mountRail, 1500);
   setInterval(mount, 1500);
   mount();
+  mountRail();
 })();
