@@ -57,3 +57,24 @@ export function sessionContextWindow(session, cfg, fallback) {
   const window = declared ?? positive(session?.contextTokens) ?? positive(fallback);
   return window && agentCap ? Math.min(window, agentCap) : window;
 }
+
+
+/** Per-category sizes of what the last run sent, from OpenClaw's own
+ *  systemPromptReport. Characters only; the page turns them into an estimate.
+ *  Skills sit inside the non-project part of the system prompt. */
+export function contextBreakdown(report) {
+  if (report?.source !== 'run') return undefined;
+  const count = (value) => Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  const skills = count(report.skills?.promptChars);
+  const nonProject = count(report.systemPrompt?.nonProjectContextChars);
+  return {
+    rules: Math.max(0, nonProject - skills),
+    files: count(report.systemPrompt?.projectContextChars),
+    skills,
+    tools: count(report.tools?.schemaChars) + count(report.tools?.listChars),
+    toolCount: Array.isArray(report.tools?.entries) ? report.tools.entries.length : 0,
+    skillCount: Array.isArray(report.skills?.entries) ? report.skills.entries.length : 0,
+    fileCount: Array.isArray(report.injectedWorkspaceFiles) ? report.injectedWorkspaceFiles.filter((file) => !file?.missing).length : 0,
+    at: count(report.generatedAt)
+  };
+}

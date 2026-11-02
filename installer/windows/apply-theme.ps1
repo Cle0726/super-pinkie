@@ -106,6 +106,7 @@ foreach ($packageRoot in $packageRoots) {
             $node = Get-Command node -ErrorAction SilentlyContinue
             $runtimePatches = @(
                 'apply-context-budget.mjs',
+                'apply-history-image-thumbnails.mjs',
                 'apply-compaction-boundary-recovery.mjs',
                 'apply-loopback-model-reliability.mjs',
                 'apply-work-thinking.mjs',
