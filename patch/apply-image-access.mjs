@@ -195,12 +195,15 @@ export function transform(original) {
 export function apply(root, { backupRoot } = {}) {
   const dist = path.join(root, "dist");
   // 2026.10 emits .mjs bundles (one is only a re-export shim), 2026.7 used
-  // .js; pick the single chunk that actually implements the boundary.
+  // .js; pick the single chunk that actually implements the boundary
+  // (2026.10: resolveLocalMediaBoundary, 2026.7: assertLocalMediaAllowed).
   const candidates = fs.readdirSync(dist)
     .filter((n) => n.startsWith("local-media-access-") && /\.m?js$/.test(n))
     .filter((n) => {
       const source = fs.readFileSync(path.join(dist, n), "utf8");
-      return source.includes(marker) || /function resolveLocalMediaBoundary\(/u.test(source);
+      return source.includes(marker)
+        || /function resolveLocalMediaBoundary\(/u.test(source)
+        || /function assertLocalMediaAllowed\(/u.test(source);
     });
   if (candidates.length !== 1) {
     throw new Error("无法唯一确认 local-media-access 模块: " + candidates.join(", "));
