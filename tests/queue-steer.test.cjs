@@ -28,18 +28,38 @@ function loadQueueSteer(options = {}) {
       ...(options.pruneDelivered ? {pruneDelivered: options.pruneDelivered} : {}),
     },
   };
+  const listeners = {};
   const document = {
     readyState: 'loading',
-    addEventListener() {},
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
     querySelector() { return null; },
     querySelectorAll() { return options.panes || []; },
+    createElement(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        dataset: {},
+        attributes: {},
+        classList: {
+          set: new Set(),
+          contains(name) { return this.set.has(name); },
+          toggle(name, force) {
+            const on = force === undefined ? !this.set.has(name) : Boolean(force);
+            if (on) this.set.add(name); else this.set.delete(name);
+            return on;
+          },
+        },
+        setAttribute(k, v) { this.attributes[k] = String(v); },
+        getAttribute(k) { return this.attributes[k] || null; },
+        addEventListener(type, fn) { (this._on ||= {})[type] = fn; },
+      };
+    },
   };
   class CustomEvent { constructor(type, options) { this.type = type; this.detail = options?.detail; } }
   vm.runInNewContext(read('ui/injections/laolao-queue-steer.js'), {
     window, document, CustomEvent, Event, WeakMap, Set, Array, Object, String, Date, Promise,
     console,
   }, {filename: 'laolao-queue-steer.js'});
-  return {api: window.__laolaoQueueSteer, recoveryCalls, notices};
+  return {api: window.__laolaoQueueSteer, recoveryCalls, notices, listeners, document};
 }
 
 function queuePane(queue, {runId = 'run-live'} = {}) {
@@ -291,6 +311,106 @@ test('queue presentation follows the native stable item ID instead of a filtered
   api.syncQueueControls();
   assert.equal(row.dataset.pinkieQueueId, 'waiting');
   assert.equal(row.dataset.pinkieQueueLabel, '结束后发送');
+});
+
+test('clicking .chat-queue__steer on a queued card delegates through steerQueued with prune and disconnect protection', async () => {
+  const pane = queuePane([{id: 'q-manual', text: '排队转立即追加', sessionKey: 'agent:learning:test'}]);
+  pane.state.sessionKey = 'agent:learning:test';
+  let prunes = 0, steerCalls = 0;
+  const {api, listeners, notices} = loadQueueSteer({
+    panes: [pane],
+    pruneDelivered: async (owner) => {
+      prunes += 1;
+      owner.state.chatQueue = [];
+      return ['q-manual'];
+    },
+  });
+  pane.state.steerQueuedChatMessage = async function(id) {
+    steerCalls += 1;
+    this.chatQueue = this.chatQueue.map((item) => item.id === id ? {...item, kind: 'steered', pendingRunId: this.chatRunId} : item);
+  };
+  const row = {
+    dataset: {pinkieQueueId: 'q-manual'},
+    getAttribute(name) { return name === 'data-chat-queue-item' ? 'q-manual' : null; },
+    matches(sel) { return sel === '.chat-queue__item'; },
+  };
+  const btn = {
+    disabled: false,
+    hasAttribute() { return false; },
+    matches(sel) { return sel === '.chat-queue__steer'; },
+    closest(sel) { return sel === '.chat-queue__item' ? row : null; },
+  };
+  pane.tagName = 'OPENCLAW-CHAT-PANE';
+  let prevented = false, stopped = false;
+  for (const fn of listeners.click || []) {
+    fn({
+      target: btn,
+      composedPath: () => [btn, row, pane],
+      preventDefault() { prevented = true; },
+      stopPropagation() { stopped = true; },
+      stopImmediatePropagation() { stopped = true; },
+    });
+  }
+  await sleep(20);
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.equal(steerCalls, 1);
+  assert.equal(prunes, 1);
+  assert.equal(pane.state.chatQueue.length, 0);
+  assert.ok(notices.includes('已追加到当前任务。'));
+});
+
+test('followUpMode toggles between steer and queue while busy and resets when idle', async () => {
+  const pane = queuePane([], {runId: 'run-live'});
+  pane.dataset = {};
+  pane.state.sessionKey = 'agent:learning:test';
+  const sendBtn = {
+    disabled: false,
+    hasAttribute() { return false; },
+    matches(sel) { return sel === '.chat-send-btn'; },
+    classList: {
+      set: new Set(['chat-send-btn']),
+      contains(name) { return this.set.has(name); },
+      toggle(name, force) {
+        const on = force === undefined ? !this.set.has(name) : Boolean(force);
+        if (on) this.set.add(name); else this.set.delete(name);
+        return on;
+      },
+    },
+  };
+  const actions = {
+    children: [],
+    querySelector(sel) { return sel === '.laolao-followup-mode-btn' ? this.children[0] || null : null; },
+    append(child) { this.children.push(child); },
+  };
+  pane.querySelector = (sel) => sel === '.agent-chat__composer-actions' ? actions : null;
+  pane.querySelectorAll = (sel) => sel === '.chat-send-btn' ? [sendBtn] : [];
+  const {api, listeners, notices} = loadQueueSteer({panes: [pane]});
+  assert.equal(api.getFollowUpMode(pane), 'steer');
+  assert.equal(api.toggleFollowUpMode(pane), 'queue');
+  assert.equal(api.getFollowUpMode(pane), 'queue');
+  assert.equal(sendBtn.classList.contains('chat-send-btn--queue'), true);
+  assert.equal(actions.children.length, 1);
+  assert.equal(actions.children[0].dataset.pinkieFollowupLabel, '结束后发');
+  assert.ok(notices.includes('已切换为本轮结束后发送。'));
+
+  // While in queue mode, pressing Enter does not schedule an automatic steer.
+  let steered = 0;
+  pane.state.steerQueuedChatMessage = async () => { steered += 1; };
+  const input = {value: '本轮结束后发', matches(sel) { return sel === '.agent-chat__composer-combobox textarea'; }};
+  pane.tagName = 'OPENCLAW-CHAT-PANE';
+  for (const fn of listeners.keydown || []) {
+    fn({key: 'Enter', shiftKey: false, isComposing: false, altKey: false, composedPath: () => [input, pane]});
+  }
+  pane.state.chatQueue = [{id: 'q-after', text: '本轮结束后发', sessionKey: 'agent:learning:test'}];
+  await sleep(60);
+  assert.equal(steered, 0);
+
+  // When the run finishes, syncQueueControls resets followUpMode to steer and removes chat-send-btn--queue.
+  pane.state.chatRunId = null;
+  api.syncQueueControls();
+  assert.equal(api.getFollowUpMode(pane), 'steer');
+  assert.equal(sendBtn.classList.contains('chat-send-btn--queue'), false);
 });
 
 test('steering layer delegates only to native queue actions, never a parallel chat.send', () => {

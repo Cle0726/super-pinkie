@@ -52,9 +52,18 @@
   const sameSession = (pane, item) => !item?.sessionKey || !pane?.state?.sessionKey
     || item.sessionKey === pane.state.sessionKey;
   const itemFor = (pane, id) => queueFor(pane).find((item) => item?.id === id && sameSession(pane, item)) || null;
-  const nativeInFlight = (item) => Boolean(item?.sendRunId || item?.pendingRunId
-    || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
-    || ["sending", "submitting", "waiting-model", "unconfirmed", "held", "delivery-unknown"].includes(item?.sendState));
+  const nativeInFlight = (item) => {
+    // The native busy queue allocates its future send ID and timestamp before
+    // sending anything. Treat that exact untouched state as queued; an ID by
+    // itself is not a receipt or an in-flight submission.
+    const reservedOnly = /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
+      && item?.sendAttempts === 0 && !item?.sendState && !item?.pendingRunId
+      && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer" && item?.kind !== "steered";
+    if (reservedOnly) return false;
+    return Boolean(item?.sendRunId || item?.pendingRunId
+      || item?.sendRequestStartedAtMs || item?.queueMode === "steer"
+      || ["sending", "submitting", "waiting-model", "unconfirmed", "held", "delivery-unknown"].includes(item?.sendState));
+  };
 
   // A queued card is already the recoverable source of the user's text. Copying
   // it into the composer as well makes Enter submit a second copy.
@@ -279,16 +288,124 @@
       .some((name) => button.classList?.contains(name))) return null;
     return button;
   };
+  const visibleQueueFor = (pane) => queueFor(pane).filter((item) => sameSession(pane, item)
+    && !["sending", "submitting"].includes(item?.sendState));
+  const queueSteerButton = (event) => {
+    const button = pathMatch(event, ".chat-queue__steer");
+    if (!button || button.disabled || button.hasAttribute?.("disabled")) return null;
+    return button;
+  };
+  const queueItemIdForRow = (pane, row) => {
+    if (!pane || !row) return null;
+    const direct = row.getAttribute?.("data-chat-queue-item") || row.dataset?.pinkieQueueId;
+    if (direct && itemFor(pane, direct)) return direct;
+    const visible = visibleQueueFor(pane);
+    const rows = Array.from(pane.querySelectorAll?.(".chat-queue__item") || []);
+    const index = rows.indexOf(row);
+    return index >= 0 && index < visible.length ? visible[index]?.id || null : null;
+  };
+
+  const followUpModeByPane = new WeakMap();
+  const isIncludedModePane = (pane) => {
+    const key = String(pane?.state?.sessionKey || "");
+    if (key) return /^agent:(?:main|project|thinking|learning):/.test(key);
+    const mode = document.documentElement?.getAttribute?.("data-laolao-mode") || "";
+    return !mode || ["chat", "main", "project", "thinking", "learning"].includes(mode);
+  };
+  const getFollowUpMode = (pane) => {
+    const entry = pane && followUpModeByPane.get(pane);
+    return entry?.mode === "queue" && entry.sessionKey === String(pane?.state?.sessionKey || "")
+      ? "queue" : "steer";
+  };
+  const syncPaneFollowUpControls = (pane) => {
+    if (!pane || !isIncludedModePane(pane)) return;
+    const busy = paneBusy(pane);
+    const entry = followUpModeByPane.get(pane);
+    if (entry && entry.sessionKey !== String(pane.state?.sessionKey || "")) followUpModeByPane.delete(pane);
+    if (!busy && followUpModeByPane.has(pane)) followUpModeByPane.delete(pane);
+    const mode = busy ? getFollowUpMode(pane) : "steer";
+    if (pane.dataset && pane.dataset.pinkieFollowupMode !== mode) {
+      pane.dataset.pinkieFollowupMode = mode;
+    }
+    const actions = pane.querySelector?.(".agent-chat__composer-actions");
+    if (actions && typeof document.createElement === "function") {
+      let toggle = actions.querySelector?.(".laolao-followup-mode-btn");
+      if (!toggle && busy) {
+        toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "laolao-followup-mode-btn";
+        toggle.addEventListener("click", (event) => {
+          event.preventDefault?.();
+          event.stopPropagation?.();
+          toggleFollowUpMode(pane);
+        });
+        actions.append?.(toggle);
+      }
+      if (toggle && toggle.dataset.pinkieFollowupMode !== mode) {
+        toggle.dataset.pinkieFollowupMode = mode;
+        toggle.dataset.pinkieFollowupLabel = mode === "queue" ? "结束后发" : "立即追加";
+        toggle.setAttribute("aria-pressed", mode === "queue" ? "true" : "false");
+        toggle.setAttribute(
+          "aria-label",
+          mode === "queue" ? "当前：结束后发（点击切换为立即追加）" : "当前：立即追加（点击切换为结束后发）"
+        );
+        toggle.setAttribute(
+          "title",
+          mode === "queue" ? "本轮结束后自动发送（点击切换为立即追加）" : "立即追加到当前任务（点击切换为本轮结束后发送，或按 Option+Enter）"
+        );
+      }
+    }
+    const shouldQueue = busy && mode === "queue";
+    const buttons = pane.querySelectorAll?.(".chat-send-btn") || [];
+    buttons.forEach((btn) => {
+      if (["chat-send-btn--stop", "chat-send-btn--voice", "chat-send-btn--laolao-dictation"]
+        .some((name) => btn.classList?.contains(name))) return;
+      if (Boolean(btn.classList?.contains("chat-send-btn--queue")) !== shouldQueue) {
+        btn.classList?.toggle?.("chat-send-btn--queue", shouldQueue);
+      }
+    });
+  };
+  const setFollowUpMode = (pane, mode) => {
+    if (!pane) return "steer";
+    const next = mode === "queue" && isIncludedModePane(pane) ? "queue" : "steer";
+    if (next === "queue") followUpModeByPane.set(pane, {mode: "queue", sessionKey: String(pane.state?.sessionKey || "")});
+    else followUpModeByPane.delete(pane);
+    syncPaneFollowUpControls(pane);
+    return next;
+  };
+  const toggleFollowUpMode = (pane) => {
+    const next = getFollowUpMode(pane) === "queue" ? "steer" : "queue";
+    const applied = setFollowUpMode(pane, next);
+    notify(applied === "queue" ? "已切换为本轮结束后发送。" : "已切换为立即追加到当前任务。");
+    return applied;
+  };
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.altKey) return;
+    const pane = paneForEvent(event);
+    if (getFollowUpMode(pane) === "queue") return;
     const input = composerForEvent(event);
-    if (input?.value) scheduleDefaultSteer(paneForEvent(event), input.value);
+    if (input?.value) scheduleDefaultSteer(pane, input.value);
   }, true);
   document.addEventListener("click", (event) => {
+    const steerBtn = queueSteerButton(event);
+    if (steerBtn) {
+      const pane = paneForEvent(event);
+      if (!isIncludedModePane(pane)) return;
+      const row = pathMatch(event, ".chat-queue__item") || steerBtn.closest?.(".chat-queue__item");
+      const id = queueItemIdForRow(pane, row);
+      if (pane && id) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        void steerQueued(pane, id, {automatic: false});
+      }
+      return;
+    }
     const button = sendButton(event);
     if (!button) return;
     const pane = paneForEvent(event);
+    if (getFollowUpMode(pane) === "queue") return;
     const input = composerForEvent(event) || pane?.querySelector?.(".agent-chat__composer-combobox textarea")
       || document.querySelector?.(".agent-chat__composer-combobox textarea");
     if (input?.value) scheduleDefaultSteer(pane, input.value);
@@ -297,8 +414,8 @@
   const syncQueueControls = () => {
     for (const pane of document.querySelectorAll?.("openclaw-chat-pane") || []) {
       void pruneDelivered(pane);
-      const visible = queueFor(pane).filter((item) => sameSession(pane, item)
-        && !["sending", "submitting"].includes(item?.sendState));
+      syncPaneFollowUpControls(pane);
+      const visible = visibleQueueFor(pane);
       const rows = pane.querySelectorAll?.(".chat-queue__item") || [];
       rows.forEach((row, index) => {
         const id = row.getAttribute?.("data-chat-queue-item");
@@ -330,6 +447,7 @@
 
   window.__laolaoQueueSteer = {
     steerQueued, makeQueuedAgain, restoreMissingQueuedItem, syncQueueControls,
+    getFollowUpMode, setFollowUpMode, toggleFollowUpMode,
     // Kept as a small diagnostic/test seam for bundle API drift. It never
     // sends directly; both functions resolve and call native queue actions.
     scheduleDefaultSteer, nativeQueueMethod, pruneDelivered,
