@@ -5,7 +5,7 @@
 ## 一、先认清这台电脑（每个新会话第一次要动手时做一次）
 
 - 系统提示 Runtime 一行里有 `os=`（darwin = Mac，win32 = Windows，linux）和 `arch=`（arm64 / x64）。
-- 再看 `TOOLS.md`：这台电脑已经核对过的工具和坑都记在那里，照它来。
+- 再看 `TOOLS.md`：这台电脑已经核对过的工具和坑都记在那里，照它来。里面「这台电脑」那一段是检测脚本写的配置和档位；要干重活（渲染、本地模型、大批量处理）而这一段没有或超过 30 天，先按 `machine.md` 跑一次检测。
 - 拿不准某个工具在不在、是哪个版本，就查一下，不凭印象：
   - Mac：`command -v python3 node git ffmpeg; python3 --version; node --version`
   - Windows PowerShell：`Get-Command py, python, node, git, ffmpeg -ErrorAction SilentlyContinue | Select-Object Name, Source; py -3 --version`
