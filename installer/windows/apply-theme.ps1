@@ -737,6 +737,7 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-chat-linebreaks.mjs',
                 'apply-composer-drafts.mjs',
                 'apply-context-budget.mjs',
+                'apply-history-image-thumbnails.mjs',
                 'apply-compaction-boundary-recovery.mjs',
                 'apply-loopback-model-reliability.mjs',
                 'apply-work-thinking.mjs',
