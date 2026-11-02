@@ -250,6 +250,43 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual(payload, destination.read_bytes())
         self.assertEqual([None, f"bytes={first_chunk}-"], seen)
 
+    def test_progress_reports_real_bytes_and_unknown_totals(self):
+        payload = b"x" * (2 * 1024 * 1024)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exe = root / "app.exe"
+            exe.write_bytes(b"old")
+            for declared in (len(payload), None):
+                seen = []
+                updater = WindowsUpdater(root, executable=exe,
+                    opener=lambda request, timeout=0: SizedResponse(payload, content_length=declared))
+                destination = root / ("known" if declared else "unknown")
+                updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, progress=seen.append)
+                self.assertEqual(len(payload), seen[-1]["downloaded"])
+                self.assertEqual(declared, seen[-1]["total"])
+                self.assertTrue(all(item["stage"] == "download" for item in seen))
+
+    def test_resumed_progress_uses_content_range_not_partial_length(self):
+        payload = b"p" * (3 * 1024 * 1024)
+        offset = 1024 * 1024
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exe = root / "app.exe"
+            exe.write_bytes(b"old")
+            destination = root / "payload.exe"
+            destination.with_suffix('.exe.download').write_bytes(payload[:offset])
+            def opener(request, timeout=0):
+                response = SizedResponse(payload[offset:], status=206, content_length=len(payload)-offset)
+                response.headers['Content-Range'] = f'bytes {offset}-{len(payload)-1}/{len(payload)}'
+                return response
+            seen = []
+            updater = WindowsUpdater(root, executable=exe, opener=opener)
+            updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, progress=seen.append)
+            self.assertEqual(offset, seen[0]['downloaded'])
+            self.assertEqual(len(payload), seen[0]['total'])
+            self.assertEqual(len(payload), seen[-1]['downloaded'])
+            self.assertEqual(payload, destination.read_bytes())
+
     def test_portable_replacer_verifies_the_package_before_swapping(self):
         """便携包必须先验哈希再展开/替换，坏包不能碰安装目录。"""
         helper = WindowsUpdater._directory_helper_source()

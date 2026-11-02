@@ -59,7 +59,8 @@ $serviceStage = Join-Path $runtimeStage "bundled-services"
 $personaStage = Join-Path $runtimeStage "bundled-personas"
 $uiStage = Join-Path $runtimeStage "bundled-ui"
 $windowsInstallerStage = Join-Path $runtimeStage "bundled-windows-installer"
-foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerStage)) {
+$managedSkillStage = Join-Path $runtimeStage "bundled-skills"
+foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerStage, $managedSkillStage)) {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
 }
@@ -69,6 +70,11 @@ if (Test-Path -LiteralPath $cleStudio) { Remove-Item -LiteralPath $cleStudio -Re
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
+foreach ($skill in @("deep-think", "pinkie-deep-research", "web-gpt-collab")) {
+    $source = Join-Path $RepoRoot "skills\$skill"
+    if (-not (Test-Path -LiteralPath (Join-Path $source "SKILL.md"))) { throw "缺少打包技能 $skill" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $managedSkillStage $skill) -Recurse -Force
+}
 
 function Install-MacSnapshot([string]$Relative, [string]$Destination, [string]$Expected) {
     $source = Join-Path $overlayRoot ($Relative -replace '/', '\')
@@ -111,6 +117,9 @@ Get-Content -LiteralPath $sums | ForEach-Object {
     }
 }
 if (-not $aiCopied) { throw "Mac 快照没有覆盖 @openclaw/ai" }
+$env:OPENCLAW_ROOT = $openclawRoot
+& $node ".\patch\apply-pinkie-managed-skills.mjs"
+if ($LASTEXITCODE -ne 0) { throw "内置技能的分模式加载补丁失败" }
 # The shared model picker requests this neutral "other provider" icon. The
 # pinned runtime does not ship it, so include the Pinkie asset explicitly.
 $providerIcons = Join-Path $openclawRoot "dist\control-ui\provider-icons"
@@ -120,6 +129,10 @@ $controlUi = Join-Path $openclawRoot "dist\control-ui"
 Copy-Item -LiteralPath "ui\assets\ProviderIcon-crossmodel.svg" -Destination (Join-Path $controlUi "ProviderIcon-crossmodel.svg") -Force
 python tools/windows-package/clean_ui.py --ui $uiStage --control-ui $controlUi --installer $windowsInstallerStage
 if ($LASTEXITCODE -ne 0) { throw "Windows 资源隔离失败" }
+# The snapshot overwrites index.html after apply-theme. Reinstall the shared
+# update UI without changing any inline-script bytes (their CSP is hashed).
+python tools/windows-package/activate_update_dialog.py $uiStage $controlUi
+if ($LASTEXITCODE -ne 0) { throw "统一更新界面资源缺失或页面入口异常" }
 $chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
 if (-not $chat) { throw "缺少聊天页" }
 $chatText = Get-Content -LiteralPath $chat.FullName -Raw
@@ -170,7 +183,7 @@ $pyInstallerCommonArgs = @(
     "--add-data", "proxy;proxy",
     "--add-data", "patch;patch",
     "--add-data", "$personaStage;personas",
-    "--add-data", "skills;skills",
+    "--add-data", "$managedSkillStage;bundled-skills",
     "--add-data", "$serviceStage;services",
     "--add-data", "$uiStage;ui",
     "--add-data", "$windowsInstallerStage;installer\windows",
