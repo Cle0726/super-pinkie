@@ -444,7 +444,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-reading-view.js?v=readingview2"></script>',
         '<link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface7">',
         '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide9"></script>',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side21">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side22">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction14">',
         '<link rel="stylesheet" href="./laolao-divider.css?v=divider1">',
         '<link rel="stylesheet" href="./laolao-cle-stage.css?v=clestage21">',
@@ -558,7 +558,7 @@ function Apply-UISkin {
         'laolao-companion.css' = 'companion6'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion8'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
         'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night3';
         'laolao-classic-shell.css' = 'classic19'; 'laolao-classic-shell.js' = 'classic21';
-        'laolao-side-layout.css' = 'side21'; 'laolao-side-layout.js' = 'side12';
+        'laolao-side-layout.css' = 'side22'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'vendor/lucide/icons.js' = 'lucide04602';
         'vendor/study-desk-before.js' = 'studydesk2';

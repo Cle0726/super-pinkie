@@ -321,3 +321,15 @@ html[data-laolao-classic-shell="1"] .laolao-usage__chip[data-fit-hidden] {
   .laolao-classic-breadcrumb__sep,
   .laolao-classic-breadcrumb em { display: none !important; }
 }
+
+/* 右侧快捷栏只留碧琪自己的入口：原生的「展开文件面板」、装饰用的文件图标和
+   终端按钮对普通用户没有用，隐藏掉（能力还在，只是不再占位置）。 */
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.chat-workspace-rail--collapsed :is(
+  .chat-workspace-rail__collapse-toggle,
+  .chat-workspace-rail__collapsed-icon,
+  .chat-workspace-rail__terminal
+),
+/* 折叠栏里只有这两个原生按钮带 openclaw-tooltip 外壳，碧琪的入口都不带。 */
+html[data-laolao-classic-shell="1"] body .chat-workspace-rail.chat-workspace-rail--collapsed > openclaw-tooltip {
+  display: none !important;
+}
