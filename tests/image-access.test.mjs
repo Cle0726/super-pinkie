@@ -101,3 +101,14 @@ test('2026.10 picks the real .mjs chunk, not a re-export shim',()=>{
     assert.doesNotMatch(fs.readFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'utf8'),/pinkie/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('2026.7 picks the unpatched .js chunk (the runtime the release build installs)',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-2026-7-'));
+  try{
+    const dist=path.join(root,'dist');fs.mkdirSync(dist);
+    const file=path.join(dist,'local-media-access-olAlkTss.js');
+    fs.writeFileSync(file,legacy);
+    assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-olAlkTss.js');
+    assert.match(fs.readFileSync(file,'utf8'),/pinkie-image-access:v3/);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
