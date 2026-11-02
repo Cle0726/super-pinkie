@@ -1,0 +1,20 @@
+/* One licensed, bundled typeface on both systems. No network font requests. */
+@font-face {
+  font-family: "Pinkie UI";
+  src: url("/fonts/PinkieUI-NotoSansSC.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  --pinkie-ui-font: "Pinkie UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+html body,
+html .shell,
+html body :is(button, input, textarea, select),
+html .shell :is(.chat-text, .chat-text p, .chat-text li, .nav, .nav-item, .chat-controls__model, .laolao-mode-switcher),
+html #pinkie-study-desk {
+  font-family: var(--pinkie-ui-font) !important;
+}
+/* Preserve formula, terminal and code fonts. */
+html body :is(pre, pre code) { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace !important; }

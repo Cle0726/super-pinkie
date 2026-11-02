@@ -1,0 +1,7 @@
+{
+  "native_only_assets": {
+    "PinkieAppIcon.icns": "macOS native App icon, outside the browser surface"
+  },
+  "platform_differences": [],
+  "notes": "The browser surface has no platform exclusions. Native runtimes, window controls and app icons are outside its manifest."
+}

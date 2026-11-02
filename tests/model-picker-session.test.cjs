@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const sources = ['ui/injections/laolao-model-picker.js', 'services/cle-studio/static/legacy/laolao-model-picker.js'];
+const sources = ['ui/injections/laolao-model-picker.js'];
 const settle = () => new Promise(setImmediate);
 function harness(source) {
   let key = 'agent:main:A', now = 10000, busy = true;

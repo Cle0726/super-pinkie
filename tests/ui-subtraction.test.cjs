@@ -46,9 +46,6 @@ test('session rows keep titles and actions but drop permanent relative timestamp
 });
 
 test('installer ships the subtraction stylesheet without replacing the pink theme',()=>{
-  const installer=read('installer/macos/apply-theme.sh');
-  const head=read('ui/injections/laolao-head.fragment.html');
-  assert.match(installer,/laolao-ui-subtraction\.css/);
-  assert.match(head,/laolao-theme\.css/);
-  assert.match(head,/laolao-ui-subtraction\.css/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-theme.css', 'laolao-ui-subtraction.css'], 'assets': []});
+
 });

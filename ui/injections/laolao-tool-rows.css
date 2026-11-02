@@ -9,9 +9,9 @@
  *   ○ 思路  6,935 字  ›                                  ← 几千字的推演收起来，只留最后一句说明
  *   碧琪先来创建 lib 目录。
  *   ● 已读取 1 个文件  USER.md:1–2  ›
- *   [C.le.] 正在回复 · 35 秒                            ← 状态行在最底下（laolao-cle-stage.css）
+ *   碧琪正在回复 · 35 秒                            ← 状态行在最底下
  *
- * 运行中新来的步骤依次淡入（laolao-cle-stage.js 打 data-cle-enter 并错开延迟）。 */
+ * 保留共用的工具行样式；旧分组类名只是兼容标记，没有独立舞台入口。 */
 html:not(#p1):not(#p2):not(#p3) .pinkie-process {
   --tr-read: #2f7fe0; --tr-write: #c9821a; --tr-edit: #16956f; --tr-exec: #d83f83;
   --tr-fg: #3c2833; --tr-mute: rgba(60, 40, 51, .56); --tr-hover: rgba(233, 79, 145, .06);

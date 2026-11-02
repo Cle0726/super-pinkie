@@ -1,3 +1,7 @@
 desktop/windows/mac-runtime/** text eol=lf
 personas/**/*.sh text eol=lf
 personas/**/*.ps1 -text
+# Shared UI hashes must describe identical bytes after Windows checkout too.
+# Git's core.autocrlf previously changed hundreds of scripts/styles on Windows.
+ui/** -text
+tools/ui-parity/** text eol=lf

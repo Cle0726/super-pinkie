@@ -127,6 +127,19 @@
     // native state/renderer so Escape, outside clicks and navigation close it.
     const drawerToggle = event.target.closest?.('.topbar-nav-toggle');
     const sidebarToggle = event.target.closest?.('.sidebar [data-pinkie-sidebar-toggle]');
+    // On a wide single window the original expand button has slid outside the
+    // viewport. The topbar button remains keyboard reachable and pins the
+    // same native sidebar again, while synchronising this auto-hide owner.
+    if (drawerToggle && desktop() && auto
+        && /^(?:chat|project|thinking|learning)$/.test(root.getAttribute('data-laolao-mode') || '')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      clearTimeout(closeTimer); clearTimeout(collapseTimer);
+      const before = shiftFrom();
+      auto = false; peek = false; cardUntil = 0; paint();
+      if (collapsed()) nativeToggle();
+      requestAnimationFrame(() => { paint(); shiftTo(before); });
+      return;
+    }
     if (splitPane() && (sidebarToggle || (drawerToggle && innerWidth > 1100))) {
       const host = document.querySelector('openclaw-app-shell');
       if (typeof host?.requestUpdate === 'function') {

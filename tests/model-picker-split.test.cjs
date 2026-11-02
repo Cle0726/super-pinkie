@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const sources = ['ui/injections/laolao-model-picker.js', 'services/cle-studio/static/legacy/laolao-model-picker.js'];
+const sources = ['ui/injections/laolao-model-picker.js'];
 function harness(source) {
   const listeners = new Map(), windowEvents = new Map(), storage = new Map(), props = new Map(), motionAttributes = new Set(), frames = [];
   let sessionKey = 'agent:main:A';

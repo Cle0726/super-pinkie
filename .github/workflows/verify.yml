@@ -30,6 +30,8 @@ jobs:
         run: node tools/release-gate/run-tests.mjs
       - name: Python tests
         run: python -m unittest discover -s tests -p '*_test.py' -v
+      - name: Check the one shared UI source and Git-tracked resources
+        run: python tools/ui-parity/bundle.py source --tracked
       - name: Check bundled scripts
         run: |
           find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check

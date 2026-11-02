@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
-const sources = ['ui/injections/laolao-model-picker.js', 'services/cle-studio/static/legacy/laolao-model-picker.js'];
+const sources = ['ui/injections/laolao-model-picker.js'];
 
 class Node {
   constructor(tag = 'div') {

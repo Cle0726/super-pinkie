@@ -21,6 +21,7 @@ import locale
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -74,7 +75,31 @@ def profile_env(profile):
         "LOCALAPPDATA": str(local),
         "APPDATA": str(roaming),
     })
+    # Only this isolated smoke profile opens a localhost debugging endpoint.
+    # Capture the actual packaged WebView2, not Edge's separate renderer.
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        debug_port = listener.getsockname()[1]
+    env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={debug_port}"
+    env["PINKIE_SMOKE_WEBVIEW_CDP"] = f"http://127.0.0.1:{debug_port}"
     return env
+
+
+def capture_native_ui(exe, env, out, label, pid):
+    runtime = runtime_dir(exe)
+    script = Path(__file__).resolve().parents[1] / "ui-parity/capture.mjs"
+    command = [str(runtime / "bin/node.exe"), str(script),
+               "--control-ui", str(runtime / "node_modules/openclaw/dist/control-ui"),
+               "--cdp", env["PINKIE_SMOKE_WEBVIEW_CDP"], "--browser", "webview2",
+               "--native-platform", "windows", "--label", "native-" + label,
+               "--desktop-python", sys.executable, "--app-pid", str(pid),
+               "--out", str(out.resolve()), "--strict"]
+    result = subprocess.run(command, env=env, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=360)
+    (out / f"{label}-native-capture.log").write_text(result.stdout + result.stderr, encoding="utf-8")
+    if result.returncode:
+        raise RuntimeError(f"packaged WebView2 UI capture failed: {result.returncode}")
+    return {"passed": True, "engine": "packaged WebView2", "views": ["home", "chat", "cards", "sidebar", "learning"]}
 
 
 def http_ready(url=GATEWAY):
@@ -342,6 +367,7 @@ def scenario(label, exe, profile, out, old_exe=None):
             summary["agents"] = agents_list(runtime_dir(exe), env, out, label)
             summary["ui"] = drive_ui(out, label)
             summary["service_health"] = service_health()
+            summary["native_ui"] = capture_native_ui(exe, env, out, label, process.pid)
     except Exception as error:
         summary["error"] = repr(error)
     finally:
@@ -354,6 +380,7 @@ def scenario(label, exe, profile, out, old_exe=None):
         and not summary.get("agents", {}).get("missing", AGENTS)
         and fresh_mode_identities_ok(label, summary.get("agents", {}))
         and not summary["files"]["log_problems"]
+        and summary.get("native_ui", {}).get("passed")
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
         and len(plugin_methods) == 2
@@ -375,6 +402,8 @@ def main():
     parser.add_argument("--upstream-probe", action="store_true",
                         help="after the fresh scenario, check how failed model turns are retried")
     args = parser.parse_args()
+
+    subprocess.run([sys.executable, str(Path(__file__).with_name('desktop_shot.py')), '--prepare'], check=True)
 
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)

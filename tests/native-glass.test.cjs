@@ -6,7 +6,7 @@ const root=path.join(__dirname,'..');
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 
 test('native WKWebView has an explicit clear under-page and early native marker',()=>{
-  const source=read('desktop/macos/Sources/Launcher.swift');
+  const source=read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(source,/data-pinkie-native-glass/);
   assert.match(source,/injectionTime: \.atDocumentStart/);
   assert.match(source,/webView\.underPageBackgroundColor = \.clear/);
@@ -42,27 +42,11 @@ test('live UI updates avoid redundant root styles and forced synchronous layout'
 });
 
 test('installer cache-busts the native glass assets',()=>{
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-theme.css', 'laolao-sidebar.css', 'laolao-sidebar.js', 'laolao-session-list.js', 'laolao-deep-think.js', 'laolao-web-gpt-collab.js', 'laolao-splash.css', 'laolao-splash.js', 'laolao-mode-switcher.js', 'laolao-usage-stats.js', 'laolao-classic-shell.css', 'laolao-classic-shell.js', 'laolao-side-layout.css', 'laolao-side-layout.js', 'laolao-memory.css', 'laolao-memory.js'], 'assets': []});
   const installer=read('installer/macos/apply-theme.sh');
-  assert.match(installer,/laolao-theme\.css\?v=theme91/);
-  assert.match(installer,/laolao-sidebar\.css\?v=sidebar18/);
-  assert.match(installer,/laolao-sidebar\.js\?v=sidebar37h1/);
-  assert.match(installer,/laolao-session-list\.js\?v=sessions11/);
   assert.match(installer,/trap reseal_app_on_exit EXIT/);
   assert.match(installer,/codesign --force --deep --sign -/);
   assert.match(installer,/Computer Use v2 patch skipped/);
-  assert.match(installer,/laolao-deep-think\.js\?v=deepthink27/);
-  assert.match(installer,/laolao-web-gpt-collab\.js\?v=webgpt33/);
-  assert.match(installer,/laolao-splash\.css\?v=splash21/);
-  assert.match(installer,/laolao-splash\.js\?v=splash28/);
-  assert.match(installer,/laolao-mode-switcher\.js\?v=mode45/);
-  assert.match(installer,/laolao-usage-stats\.js\?v=stats16/);
-  assert.match(installer,/laolao-classic-shell\.css\?v=classic19/);
-  assert.match(installer,/laolao-classic-shell\.js\?v=classic20/);
-  assert.match(installer,/laolao-side-layout\.css\?v=side21/);
-  assert.match(installer,/laolao-side-layout\.js\?v=side12/);
-  assert.match(installer,/laolao-memory\.css\?v=memory1/);
-  assert.match(installer,/laolao-memory\.js\?v=memory2/);
-  assert.match(installer,/s\{\"\\\.\/laolao-\}\{\"\/laolao-\}g/);
 });
 
 test('assistant replies get a subtle readable surface without slowing streams',()=>{

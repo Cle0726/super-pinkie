@@ -108,7 +108,7 @@
           quotaNote: stats.quotaNote || "",
           requests: stats.requests || null,
           successRate: stats.successRate ?? null,
-          source: runtime ? '本机全模型累计 · 展示估算' : (stats.source || (stats.scope === "daily" ? "今日 · C.le 本地统计" : "累计 · C.le 本地统计")),
+          source: runtime ? '本机全模型累计 · 展示估算' : (stats.source || (stats.scope === "daily" ? "今日 · 碧琪本地统计" : "累计 · 碧琪本地统计")),
         };
       } else {
         const [quotaFile, payload] = await Promise.all([

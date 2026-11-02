@@ -53,5 +53,15 @@
     observer.observe(root, {attributes: true, attributeFilter: ["data-theme-mode"]});
     apply();
   });
-  window.__pinkieNight = {get on() { return Boolean(last); }, apply};
+  // Let the native theme controller persist the same preference used by its
+  // settings page; writing only an HTML attribute would be lost on refresh.
+  const setMode = (mode, element) => {
+    if (mode !== "light" && mode !== "dark") return false;
+    const theme = document.querySelector?.("openclaw-app-shell")?.context?.theme;
+    if (typeof theme?.setMode !== "function") return false;
+    theme.setMode(mode, element);
+    return true;
+  };
+  window.__pinkieNight = {get on() { return Boolean(last); }, apply, setMode,
+    toggle: (element) => setMode(resolve() ? "light" : "dark", element)};
 })();

@@ -24,7 +24,7 @@ function harness(overrides = {}) {
     },
   };
   const document = { addEventListener(name, fn) { listeners.set(name, fn); } };
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), { window: { addEventListener() {}, removeEventListener() {} }, document, requestAnimationFrame() {} });
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), { window: { addEventListener() {}, removeEventListener() {} }, document, requestAnimationFrame() {} });
   const range = {
     min: '0', max: '4', step: '1', value: '0', disabled: false,
     closest: (selector) => (selector === '.chat-controls__reasoning-slider' ? slider : details),
@@ -44,7 +44,7 @@ test('the compact picker lights up only at the actual highest reasoning step', (
     },
   };
   const document = { addEventListener(name, fn) { listeners.set(name, fn); } };
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), { window: { addEventListener() {}, removeEventListener() {} }, document, requestAnimationFrame() {} });
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), { window: { addEventListener() {}, removeEventListener() {} }, document, requestAnimationFrame() {} });
   const range = {
     min: '0', max: '4', step: '1', value: '3', disabled: false,
     closest() { return details; },
@@ -61,7 +61,7 @@ test('the compact picker lights up only at the actual highest reasoning step', (
 });
 
 test('an empty native picker recovers the live model catalog and session slider without closing', async () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {ensureFallbackData, ensureFallbackRange};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {ensureFallbackData, ensureFallbackRange};})();');
   const requests = [];
   const listeners = new Map();
   const timers = new Map();
@@ -152,7 +152,7 @@ test('an empty native picker recovers the live model catalog and session slider 
 });
 
 test('effort-suffixed Gemini endpoints become two family rows while the slider keeps their real IDs', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel, fallbackModelName};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel, fallbackModelName};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
   const model = (id, name = id) => ({provider: 'mm', id, name, reasoning: true, input: ['text', 'image'], contextWindow: 1000000});
@@ -180,7 +180,7 @@ test('effort-suffixed Gemini endpoints become two family rows while the slider k
 });
 
 test('Gemini 2.5 Flash Thinking is one slider family while Lite stays separate', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel, fallbackModelName};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel, fallbackModelName};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
   const model = (id, reasoning = true) => ({provider: 'mm', id, name: id, reasoning,
@@ -199,7 +199,7 @@ test('Gemini 2.5 Flash Thinking is one slider family while Lite stays separate',
 });
 
 test('new reasoning and non-reasoning endpoints join one future slider family', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, familyTargetModel};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
   const models = ['grok-4.20-0309-non-reasoning', 'grok-4.20-0309-reasoning']
@@ -214,7 +214,7 @@ test('new reasoning and non-reasoning endpoints join one future slider family', 
 });
 
 test('model list groups by AI family and folds identical IDs across providers without losing the route', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, groupedPresentationModels, modelGroup};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {presentationModels, groupedPresentationModels, modelGroup};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
   const models = [
@@ -246,7 +246,7 @@ test('model list groups by AI family and folds identical IDs across providers wi
 });
 
 test('the gateway catalog is authoritative even for older model names', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {groupedPresentationModels, fallbackModelName, syncModelBrands};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
@@ -282,7 +282,7 @@ test('the gateway catalog is authoritative even for older model names', () => {
 });
 
 test('the rendered picker shows a model group once and one selected row for two provider routes', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   let list;
   const document = {
@@ -306,7 +306,7 @@ test('the rendered picker shows a model group once and one selected row for two 
 });
 
 test('brand tabs show only their models and switch without closing the picker', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {renderFallbackCatalog, fallbackStates};})();');
   const listeners = new Map();
   const window = { addEventListener() {}, removeEventListener() {} };
@@ -350,7 +350,7 @@ test('brand tabs show only their models and switch without closing the picker', 
 });
 
 test('verified DeepSeek routes get their own brand tab and selectable rows', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {renderFallbackCatalog};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   let list;
@@ -375,7 +375,7 @@ test('verified DeepSeek routes get their own brand tab and selectable rows', () 
 });
 
 test('clicking the single selected row can move an old route to its displayed backing model', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates, pendingPatches};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates, pendingPatches};})();');
   const listeners = new Map();
   const key = 'agent:project:deduped-model';
   const details = {open: true, isConnected: true, dataset: {}, querySelector() { return null; }, closest() { return null; }};
@@ -403,7 +403,7 @@ test('clicking the single selected row can move an old route to its displayed ba
 });
 
 test('each selectable model receives its actual AI brand mark beside the name', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {modelBrand, syncModelBrands};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {modelBrand, syncModelBrands};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
   const entries = ['mm/gemini-2.5-flash', 'mm/claude-opus-4-6-thinking',
@@ -460,7 +460,7 @@ const pickerDocument = () => ({
 });
 
 test('the closed picker decorates only the tier word and preserves the plain model name', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {writeTriggerLabel};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {writeTriggerLabel};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   vm.runInNewContext(source, {window, document: pickerDocument(), requestAnimationFrame() {}});
   const label = nativeTriggerLabel('Gemini 2.5 Flash · Ultra');
@@ -494,7 +494,7 @@ test('the closed picker decorates only the tier word and preserves the plain mod
 });
 
 test('the closed model label stays independent from external tier changes', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {syncTrigger};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {syncTrigger};})();');
   const label = nativeTriggerLabel('Gemini 2.5 Flash · High');
   let ariaLabel = '';
   const summary = {
@@ -522,7 +522,7 @@ test('the closed model label stays independent from external tier changes', () =
 });
 
 test('changing a grouped slider stop saves the matching backend model without closing', async () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {fallbackStates};})();');
   const key = 'agent:project:grouped-test';
   const listeners = new Map();
   const patches = [];
@@ -633,7 +633,7 @@ test('session-scoped enhanced Max and Ultra reuse their own art without faking t
   const details = {attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); }, toggleAttribute() {}, style: {setProperty() {}}};
   const slider = {style: {setProperty() {}}};
   const document = {addEventListener(name, fn) { listeners.set(name, fn); }};
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {window, document, requestAnimationFrame() {}});
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {window, document, requestAnimationFrame() {}});
   const range = {
     min: '0', max: '5', step: '1', value: '5', disabled: false,
     dataset: {chatThinkingValues: 'off,minimal,low,medium,high,xhigh'},
@@ -648,107 +648,7 @@ test('session-scoped enhanced Max and Ultra reuse their own art without faking t
   assert.equal(details.attributes.get('data-pinkie-material'), 'ultra');
 });
 
-test('Max and Ultra are slider stops with a live label, without passing virtual values to the native picker', async () => {
-  const listeners = new Map();
-  const stored = new Map();
-  const nativeInputs = [];
-  const nativeChanges = [];
-  const key = 'laolao:reasoning-enhance:v1:agent:learning:lesson';
-  const window = {
-    addEventListener() {}, removeEventListener() {},
-    location: {search: '?session=agent%3Alearning%3Alesson'},
-    localStorage: {
-      getItem: (name) => stored.get(name) || null,
-      setItem: (name, value) => stored.set(name, value),
-      removeItem: (name) => stored.delete(name),
-    },
-  };
-  let label;
-  let button;
-  const nameNode = {textContent: ''};
-  const panel = {prepend(node) { label = node; }, querySelector() { return label; }};
-  const save = {disabled: true, dataset: {}};
-  const slider = {style: {setProperty() {}}};
-  const menu = {
-    querySelector(selector) {
-      if (selector === '.chat-controls__reasoning-range') return range;
-      if (selector === '.chat-controls__model-browser, .chat-controls__model-options') return {};
-      if (selector === ':scope > .pinkie-model-current') return button;
-      if (selector === '.chat-controls__reasoning-panel') return panel;
-      if (selector === '.chat-controls__picker-actions .primary') return save;
-      return null;
-    },
-    insertBefore(node) { button = node; },
-  };
-  const details = {
-    isConnected: true, open: true, dataset: {}, style: {setProperty() {}},
-    matches(selector) { return selector === 'details.chat-controls__model, details.chat-controls__model-picker'; },
-    querySelector(selector) {
-      if (selector === '.chat-controls__inline-select-menu--combined, .chat-controls__model-menu') return menu;
-      if (selector === '.chat-controls__inline-select-label') return {textContent: 'Gemini 3.8 Flash Tiered · High'};
-      return null;
-    },
-    closest() { return null; },
-    hasAttribute() { return false; },
-    setAttribute() {}, toggleAttribute() {}, removeAttribute(name) { if (name === 'open') this.open = false; },
-  };
-  const range = {
-    min: '0', max: '5', step: '1', value: '5', disabled: false,
-    dataset: {chatThinkingValues: 'off,minimal,low,medium,high,xhigh'},
-    closest(selector) { return selector === '.chat-controls__reasoning-slider' ? slider : details; },
-    matches(selector) { return selector === '.chat-controls__reasoning-range'; },
-    setAttribute(name, value) { this[name] = value; },
-    dispatchEvent(event) { dispatch('input', event); },
-  };
-  const document = {
-    addEventListener(name, listener) { listeners.set(name, listener); },
-    createElement(tag) {
-      if (tag === 'button') return {setAttribute() {}, querySelector: () => nameNode};
-      return {textContent: ''};
-    },
-  };
-  function dispatch(type, event) {
-    event.target = range;
-    event.stopImmediatePropagation = () => { event.stopped = true; };
-    listeners.get(type)(event);
-    if (!event.stopped) (type === 'input' ? nativeInputs : nativeChanges).push(range.value);
-  }
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {
-    window, document, Event: class { constructor(type) { this.type = type; } },
-    MutationObserver: class {observe() {} disconnect() {}},
-    requestAnimationFrame(fn) { fn(); },
-  });
-  listeners.get('toggle')({target: details});
-  assert.equal(range.max, '8');
-  assert.equal(range.dataset.chatThinkingValues, 'off,minimal,low,medium,high,xhigh,adaptive,max,ultra');
-  assert.equal(label.textContent, 'XHigh');
-  assert.equal(menu.querySelector('[data-pinkie-enhancement]'), null, 'no separate tier buttons');
 
-  range.value = '7';
-  dispatch('input', {});
-  assert.equal(stored.get(key), 'max');
-  assert.equal(range.value, '7');
-  assert.equal(label.textContent, 'Max');
-  assert.equal(save.disabled, true, 'the hidden native Save action is no longer used');
-  assert.deepEqual(nativeInputs, [], 'already-native-XHigh should not send a fake Max input');
-  dispatch('change', {});
-  assert.deepEqual(nativeChanges, [], 'the native handler must not see the virtual stop on release');
-
-  range.value = '8';
-  dispatch('input', {});
-  assert.equal(stored.get(key), 'ultra');
-  assert.equal(label.textContent, 'Ultra');
-  range.value = '4';
-  dispatch('input', {});
-  assert.equal(stored.has(key), false);
-  assert.equal(label.textContent, 'High');
-  assert.deepEqual(nativeInputs, ['4'], 'native steps still reach the native picker');
-
-  range.value = '7';
-  dispatch('input', {});
-  assert.equal(details.open, true, 'selecting a tier leaves the picker open');
-  assert.equal(stored.get(key), 'max');
-});
 
 test('unfilled stops reveal every clickable tier and vanish behind the selected fill', () => {
   const listeners = new Map();
@@ -770,7 +670,7 @@ test('unfilled stops reveal every clickable tier and vanish behind the selected 
       };
     },
   };
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {window: {addEventListener() {}, removeEventListener() {}}, document, requestAnimationFrame() {}});
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {window: {addEventListener() {}, removeEventListener() {}}, document, requestAnimationFrame() {}});
   const range = {
     min: '0', max: '7', step: '1', value: '2', disabled: false,
     dataset: {chatThinkingValues: 'off,minimal,low,medium,high,xhigh,max,ultra'},
@@ -816,7 +716,7 @@ test('composer model label stays stable across session-specific effort changes',
     body: null,
     querySelectorAll() { return [details]; },
   };
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window, document, MutationObserver: class {observe() {} disconnect() {}}, requestAnimationFrame(fn) { fn(); },
   });
   assert.equal(shown(), 'Gemini 3.1 Pro');
@@ -856,7 +756,7 @@ test('model and slider selections patch the session without closing the picker',
     dispatchEvent() {},
   };
   const document = {addEventListener(name, fn) { listeners.set(name, fn); }};
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window, document, Event: class { constructor(type) { this.type = type; } }, requestAnimationFrame() {},
   });
   const option = {disabled: false, getAttribute(name) { return name === 'data-chat-model-option' ? 'mm/gemini-3.1-pro' : 'false'; }};
@@ -905,7 +805,7 @@ test('model header opens by pointer and click-away or Escape closes only when re
     return null;
   }};
   const document = {...pickerDocument(), body: null, addEventListener(name, fn) { listeners.set(name, fn); }, querySelectorAll() { return [details]; }};
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window: {addEventListener() {}, removeEventListener() {}}, document, MutationObserver: class {observe() {} disconnect() {}}, requestAnimationFrame() {},
   });
   listeners.get('pointerdown')({button: 0, target: button});
@@ -1049,7 +949,7 @@ test('changing a reasoning step hands off between two preloaded background layer
     set src(value) { this.url = value; this.onload(); }
     decode() { return Promise.resolve(); }
   }
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'), {
+  vm.runInNewContext(read('ui/injections/laolao-model-picker.js'), {
     window: { Image: ImageMock, addEventListener() {}, removeEventListener() {} }, document, requestAnimationFrame: (fn) => fn(),
   });
   listeners.get('input')({ target: range });
@@ -1108,7 +1008,7 @@ test('party energy rises step by step and scene changes avoid double exposure', 
   }
   assert.match(ladder, /opacity 150ms ease/);
   assert.match(ladder, /opacity 350ms ease 160ms/, '旧图退场后新图才进场，避免重影');
-  assert.match(read('services/cle-studio/static/legacy/laolao-model-picker.js'), /classList\.add\("is-initial"\)/);
+  assert.match(read('ui/injections/laolao-model-picker.js'), /classList\.add\("is-initial"\)/);
 });
 
 test('each character frame stays in a corner and the ambient halo rises by tier', () => {
@@ -1143,7 +1043,7 @@ test('model picker keeps the artwork visible in a compact two-row layout', () =>
   assert.match(layout, /\.pinkie-model-current__chevron \{ display: none; \}/);
   assert.match(layout, /chat-controls__reasoning-panel \{[\s\S]*?flex: 0 0 69px/);
   assert.match(layout, /\.pinkie-reasoning-current \{[\s\S]*?top: 2px;/);
-  assert.doesNotMatch(read('services/cle-studio/static/legacy/laolao-model-picker.js'), /思考等级 ·/);
+  assert.doesNotMatch(read('ui/injections/laolao-model-picker.js'), /思考等级 ·/);
   assert.match(layout, /chat-controls__picker-actions \{\s*display: none !important;/);
   assert.match(layout, /pinkie-model-frame \{[\s\S]*?inset: 0;/);
   assert.match(layout, /data-pinkie-models-open="1"[\s\S]*?pinkie-model-frame \{ visibility: hidden; \}/, '展开模型清单时，人物不能挡住选项');
@@ -1156,47 +1056,11 @@ test('model picker keeps the artwork visible in a compact two-row layout', () =>
 });
 
 
-test('namespaced models use vendor groups and marks without dropping their upstream route', () => {
-  const window = { addEventListener() {}, removeEventListener() {} };
-  vm.runInNewContext(read('services/cle-studio/static/legacy/laolao-model-picker.js'),
-    {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
-  const api = window.__laolaoModelPickerCatalog;
-  const cases = [
-    ['workbuddy/deepseek-v4.1-flash', 'DeepSeek', 'deepseek'],
-    ['workbuddy/glm-5.3', 'GLM', 'zai'], ['workbuddy/glm-5v-turbo', 'GLM', 'zai'],
-    ['workbuddy/kimi-k3-1', 'Kimi', 'kimi'], ['workbuddy/minimax-m3', 'MiniMax', 'minimax'],
-    ['workbuddy/hy3', '混元', 'hunyuan'], ['workbuddy/hy3-x', '混元', 'hunyuan'],
-    ['workbuddy/hy4-preview', '混元', 'hunyuan'],
-    ['workbuddy/auto', 'WorkBuddy', 'workbuddy'], ['workbuddy/space-bunny', 'WorkBuddy', 'workbuddy'],
-    ['tab_flash_lite_preview', 'Antigravity', 'antigravity'],
-    ['tab_jump_flash_lite_preview', 'Antigravity', 'antigravity'],
-  ];
-  for (const [id, group, brand] of cases) {
-    assert.equal(api.group({provider: 'mm', id}), group, id);
-    assert.equal(api.brand('mm', id), brand, id);
-  }
-  const models = cases.map(([id]) => ({id, provider: 'mm', name: id.split('/').at(-1) + ' · WorkBuddy'}));
-  const rows = api.present(models, 'mm/workbuddy/glm-5.3');
-  assert.equal(rows.length, cases.length);
-  assert.ok(rows.every(row => !/Work\s*Buddy/i.test(row.name)));
-  const glm = rows.find((item) => item.id === 'workbuddy/glm-5.3');
-  assert.equal(glm.sources[0], 'mm/workbuddy/glm-5.3');
-  assert.equal(glm.name, 'glm-5.3');
-  assert.equal(rows.find(row=>row.id==='workbuddy/deepseek-v4.1-flash').name, 'deepseek-v4.1-flash · WB');
-  assert.equal(api.present([{id: 'workbuddy/auto', provider: 'mm', name: 'Auto'}, {id: 'tab_flash_lite_preview', provider: 'mm', name: 'Tab Flash Lite'}]).length, 2);
-  assert.equal(api.present([{provider: 'mm', id: 'gemini-3.6-flash', name: 'Old'}]).length, 1);
-  const css = read('ui/injections/laolao-theme.css');
-  for (const brand of ['hunyuan']) {
-    assert.match(css, new RegExp(`laolao-provider-${brand}\\.svg`));
-    assert.ok(read(`ui/assets/laolao-provider-${brand}.svg`).includes('<svg'));
-    assert.ok(read('installer/macos/apply-theme.sh').includes(`laolao-provider-${brand}.svg`));
-    assert.ok(read('installer/windows/apply-theme.ps1').includes(`laolao-provider-${brand}.svg`));
-  }
-});
+
 
 
 test('reopening a saved namespaced model selects its brand and exact route', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {renderFallbackCatalog};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   let list;
   const document = {
@@ -1219,7 +1083,7 @@ test('reopening a saved namespaced model selects its brand and exact route', () 
 
 
 test('composer brand follows the exact session route without modifying Lit text or reasoning', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {syncTrigger, fallbackStates};})();');
   const window = { addEventListener() {}, removeEventListener() {},location:{search:'?session=agent%3Alearning%3Abrand-test'}};
   const label = nativeTriggerLabel('Gemini 3.8 Flash Tiered · High');
@@ -1251,7 +1115,7 @@ test('composer brand follows the exact session route without modifying Lit text 
 
 
 test('brand motion pauses on hidden pages and resumes without fetching models', () => {
-  const source = read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {syncBrandMotion};})();');
   const window = { addEventListener() {}, removeEventListener() {} };
   const document = pickerDocument();
@@ -1266,7 +1130,7 @@ test('brand motion pauses on hidden pages and resumes without fetching models', 
   assert.equal(attributes.size, 0);
 });
 
-for (const file of ['ui/injections/laolao-model-picker.js', 'services/cle-studio/static/legacy/laolao-model-picker.js']) {
+for (const file of ['ui/injections/laolao-model-picker.js']) {
   test(`${file}: native foreground resumes material even while WebKit visibility is stale`, () => {
     const source = read(file).replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {syncBrandMotion, triggerObservers};})();');
     const events = new Map(), windowEvents = new Map();
@@ -1295,7 +1159,7 @@ for (const file of ['ui/injections/laolao-model-picker.js', 'services/cle-studio
 }
 
 test('selecting a supported Work model enables its native thinking stream without changing other providers',()=>{
-  const source=read('services/cle-studio/static/legacy/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
+  const source=read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {modelSelectionPatch};})();');
   const window={addEventListener() {}, removeEventListener() {}};
   vm.runInNewContext(source,{window,document:pickerDocument(),requestAnimationFrame(){}});

@@ -196,13 +196,3 @@ test('manual grading corrections require a reason and retain the actual attempt 
   assert.equal(h.calls[0].params.id, 'attempt-1'); assert.equal(h.calls[0].params.sessionKey, 'agent:learning:one');
   assert.equal(h.calls[0].params.correct, true); assert.equal(h.calls[0].params.reason, '同义答案也表达了这个概念');
 });
-
-test('native port keeps pane ownership and the same per-item contract', () => {
-  const port = fs.readFileSync(require('node:path').join(__dirname, '../services/cle-studio/static/legacy/laolao-learning-stage.js'), 'utf8');
-  assert.match(port, /const instances = new Set/);
-  assert.match(port, /const pageSessionKey = \(\) => sessionKeyFor\(state\.pane\)/);
-  for (const marker of ['  const activityItems =', '  const renderStage =']) {
-    const block = value => value.slice(value.indexOf(marker), value.indexOf('\n  const ', value.indexOf(marker) + marker.length));
-    assert.equal(block(source), block(port), `shared implementation drift at ${marker}`);
-  }
-});

@@ -18,7 +18,7 @@ $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
-python -m pip install --disable-pip-version-check --upgrade pip pyinstaller pywebview pywin32 edge-tts aiohttp
+python -m pip install --disable-pip-version-check --upgrade pip pyinstaller "pywebview==6.2.1" pywin32 edge-tts aiohttp
 if ($LASTEXITCODE -ne 0) { throw "Python 构建依赖安装失败，请检查本机网络或 Python 3.12 环境" }
 python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
@@ -50,8 +50,8 @@ $env:PINKIE_SKIP_RUNTIME_PATCHES = "1"
 python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
 if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
 
-# 皮肤资源来自仓库，页面和网关补丁来自本机正在运行的 超級碧琪.app。
-# 仓库里的补丁比那份应用新，直接打会让 Windows 的聊天页、材料预览和模式层跟 Mac 不一致。
+# 后台网关继续采用已验证的 Mac 兼容快照；完整浏览器 UI 统一来自 ui/。
+# 所有覆盖及清理结束后，必须再装公共入口、渲染器和资源，不能恢复旧页面。
 $overlayRoot = Join-Path $RepoRoot "desktop\windows\mac-runtime"
 $sums = Join-Path $overlayRoot "SHA256SUMS"
 if (-not (Test-Path -LiteralPath $sums)) { throw "缺少本机 Mac 运行时快照 desktop\windows\mac-runtime" }
@@ -129,16 +129,16 @@ $controlUi = Join-Path $openclawRoot "dist\control-ui"
 Copy-Item -LiteralPath "ui\assets\ProviderIcon-crossmodel.svg" -Destination (Join-Path $controlUi "ProviderIcon-crossmodel.svg") -Force
 python tools/windows-package/clean_ui.py --ui $uiStage --control-ui $controlUi --installer $windowsInstallerStage
 if ($LASTEXITCODE -ne 0) { throw "Windows 资源隔离失败" }
-# The snapshot overwrites index.html after apply-theme. Reinstall the shared
-# update UI without changing any inline-script bytes (their CSP is hashed).
-python tools/windows-package/activate_update_dialog.py $uiStage $controlUi
-if ($LASTEXITCODE -ne 0) { throw "统一更新界面资源缺失或页面入口异常" }
+# The runtime snapshot owns backend chunks only. Rebuild the final browser UI from
+# the shared repository source AFTER all overlays and package cleanup.
+python tools/ui-parity/bundle.py install --control-ui $controlUi --output (Join-Path $runtimeStage 'windows-ui-manifest.json')
+if ($LASTEXITCODE -ne 0) { throw "Mac/Windows shared UI installation failed" }
 $chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
 if (-not $chat) { throw "缺少聊天页" }
 $chatText = Get-Content -LiteralPath $chat.FullName -Raw
-if ($chatText -notmatch 'pinkie-chat-timeline:v25') { throw "聊天页不是本机 Mac 的时间线 v25" }
+if ($chatText -notmatch 'pinkie-chat-timeline:v26' -or $chatText -notmatch 'pinkie-thinking-segments:v1') { throw "聊天页不是本机 Mac 的完整时间线 v26" }
 $indexText = Get-Content -LiteralPath (Join-Path $openclawRoot "dist\control-ui\index.html") -Raw
-foreach ($needle in @('pinkie-surface=6', 'pinkie-browser=3', 'pinkie-learning=8', 'laolao-theme.css?v=theme91')) {
+foreach ($needle in @('pinkie-surface=6', 'pinkie-browser=3', 'pinkie-learning=8')) {
     if ($indexText -notlike "*$needle*") { throw "页面入口缺少 $needle" }
 }
 $modeIndex = Join-Path $serviceStage "mode-architecture\index.mjs"
@@ -159,7 +159,7 @@ $runtimeInfo = @{
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
 $pyInstallerCommonArgs = @(
-    "--noconfirm", "--clean", "--windowed",
+    "--noconfirm", "--clean", "--windowed", "--uac-admin",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
@@ -187,6 +187,7 @@ $pyInstallerCommonArgs = @(
     "--add-data", "$serviceStage;services",
     "--add-data", "$uiStage;ui",
     "--add-data", "$windowsInstallerStage;installer\windows",
+    "--add-data", "tools\ui-parity;tools\ui-parity",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",
@@ -205,6 +206,8 @@ if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
 }
 python tools/windows-package/clean_ui.py --check-package 'dist\超級碧琪'
 if ($LASTEXITCODE -ne 0) { throw "Windows 包含其他产品的素材或缺少安装器" }
+python tools/ui-parity/bundle.py check --control-ui 'dist\超級碧琪\_internal\runtime\node_modules\openclaw\dist\control-ui' --output 'dist\windows-ui-manifest.json'
+if ($LASTEXITCODE -ne 0) { throw 'Packaged Control UI differs from the shared source' }
 python tools/windows-package/check_runtime.py --package 'dist\超級碧琪'
 if ($LASTEXITCODE -ne 0) { throw "Windows 包缺少运行时文件，或打过补丁的文件被改回去了" }
 
