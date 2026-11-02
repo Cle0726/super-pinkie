@@ -1701,15 +1701,32 @@
   }
 
   function syncSidebarThemeButton() {
-    const button = document.querySelector('.laolao-sidebar-theme-toggle');
-    if (!button) return;
     const night = Boolean(window.__pinkieNight?.on);
     const label = night ? '切换到浅色模式' : '切换到深色模式';
     const icon = night ? '☀' : '☾';
-    if (button.textContent !== icon) button.textContent = icon;
-    button.setAttribute('aria-label', label);
-    button.setAttribute('title', label);
-    button.setAttribute('aria-pressed', String(night));
+    for (const button of document.querySelectorAll('.laolao-sidebar-theme-toggle, #pinkie-night-rail-entry')) {
+      if (button.textContent !== icon) button.textContent = icon;
+      button.setAttribute('aria-label', label);
+      button.setAttribute('title', label);
+      button.setAttribute('aria-pressed', String(night));
+    }
+  }
+
+  // 右侧快捷栏也放一个昼夜开关：紧跟在左栏开关后面，常用的放手边。
+  function ensureRailThemeButton() {
+    const rail = document.querySelector('.chat-workbench > .chat-workspace-rail, .chat-workspace-rail');
+    let button = document.getElementById('pinkie-night-rail-entry');
+    if (!rail || !drawerFocusFixAllowed()) { button?.remove(); return; }
+    if (button?.parentElement === rail) return;
+    button?.remove();
+    button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'pinkie-night-rail-entry';
+    button.className = 'pinkie-rail-quick';
+    button.addEventListener('click', () => window.__pinkieNight?.toggle(button));
+    const anchor = rail.querySelector('#pinkie-laser-rail-entry, #laolao-browser-workspace-entry, #pinkie-party-entry');
+    rail.insertBefore(button, anchor || null);
+    syncSidebarThemeButton();
   }
 
   function ensureSidebarThemeButton() {
@@ -1732,10 +1749,13 @@
   }
 
   window.addEventListener('pinkie:night', syncSidebarThemeButton);
+  // 原生快捷栏在折叠/展开时会整块重画，慢轮询把开关补回去（幂等）。
+  if (typeof setInterval === 'function') setInterval(ensureRailThemeButton, 1500);
 
   function run() {
     ensureDrawerFocusGuard();
     ensureSidebarThemeButton();
+    ensureRailThemeButton();
     if (applying) return;
     const section = document.querySelector("section.sidebar-sessions");
     if (!section) return;

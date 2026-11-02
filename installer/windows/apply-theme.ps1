@@ -444,7 +444,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-reading-view.js?v=readingview2"></script>',
         '<link rel="stylesheet" href="./laolao-sidebar-surface.css?v=sidebarsurface7">',
         '<script defer src="./laolao-sidebar-autohide.js?v=sidebarautohide9"></script>',
-        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side22">',
+        '<link rel="stylesheet" href="./laolao-side-layout.css?v=side23">',
         '<link rel="stylesheet" href="./laolao-ui-subtraction.css?v=subtraction14">',
         '<link rel="stylesheet" href="./laolao-divider.css?v=divider1">',
         '<link rel="stylesheet" href="./laolao-cle-stage.css?v=clestage21">',
@@ -473,7 +473,7 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-redesign.css?v=redesign8">',
         '<link rel="stylesheet" href="./laolao-night.css?v=night3">',
         '<link rel="stylesheet" href="./laolao-model-picker.css?v=modelpicker15">',
-        '<script src="./laolao-sidebar.js?v=sidebar39"></script>',
+        '<script src="./laolao-sidebar.js?v=sidebar40"></script>',
         '<script src="./laolao-session-list.js?v=sessions12"></script>',
         '<script src="./laolao-usage-stats.js?v=stats16"></script>',
         '<script defer src="./laolao-classic-shell.js?v=classic21"></script>',
@@ -491,7 +491,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-model-picker.js?v=modelpicker49"></script>',
         '<script defer src="./laolao-party-entry.js?v=party4"></script>',
         '<script defer src="./laolao-roundtable-entry.js?v=roundtable3"></script>',
-        '<script defer src="./laolao-laser-pointer.js?v=laser10"></script>',
+        '<script defer src="./laolao-laser-pointer.js?v=laser11"></script>',
         '<script defer src="./laolao-stream-fx.js?v=stream4"></script>',
         '<script defer src="./laolao-link-viewer.js?v=link6"></script>',
         '<script defer src="./laolao-tool-stream.js?v=toolstream5"></script>',
@@ -534,7 +534,7 @@ function Apply-UISkin {
     $versions = @{
         'laolao-selection-actions.js' = 'deskfinal6';
         'laolao-theme.css' = 'theme91'; 'laolao-splash.css' = 'splash21'; 'laolao-sidebar.css' = 'sidebar20';
-        'laolao-sidebar.js' = 'sidebar39'; 'laolao-session-list.js' = 'sessions12'; 'laolao-usage-stats.js' = 'stats16';
+        'laolao-sidebar.js' = 'sidebar40'; 'laolao-session-list.js' = 'sessions12'; 'laolao-usage-stats.js' = 'stats16';
         'laolao-phrases.js' = 'phrases30'; 'laolao-live-voice.js' = 'voice4'; 'laolao-stream-fx.js' = 'stream4';
         'laolao-mode-transition-fx.js' = 'modetransitionfx6'; 'laolao-mode-transition-fx.css' = 'modetransitionfx4';
         'laolao-mode-menu-fx.css' = 'modemenufx1'; 'laolao-mode-switcher.js' = 'mode45'; 'laolao-model-picker.js' = 'modelpicker49'; 'laolao-model-picker.css' = 'modelpicker15'; 'laolao-splash.js' = 'splash28'; 'laolao-splash-fx.js' = 'splashfx2';
@@ -558,7 +558,7 @@ function Apply-UISkin {
         'laolao-companion.css' = 'companion6'; 'laolao-buddy-rig.js' = 'buddyrig2'; 'laolao-companion.js' = 'companion8'; 'laolao-redesign.css' = 'redesign8'; 'laolao-immersion.js' = 'immersion2';
         'laolao-night.css' = 'night3'; 'laolao-night.js' = 'night3';
         'laolao-classic-shell.css' = 'classic19'; 'laolao-classic-shell.js' = 'classic21';
-        'laolao-side-layout.css' = 'side22'; 'laolao-side-layout.js' = 'side12';
+        'laolao-side-layout.css' = 'side23'; 'laolao-side-layout.js' = 'side12';
         'laolao-memory.css' = 'memory1'; 'laolao-memory.js' = 'memory2';
         'vendor/lucide/icons.js' = 'lucide04602';
         'vendor/study-desk-before.js' = 'studydesk2';

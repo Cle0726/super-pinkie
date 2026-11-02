@@ -12,9 +12,9 @@ test('presentation toolbox is deployed by both installers at the same version', 
   const mac = read('installer/macos/apply-theme.sh');
   const win = read('installer/windows/apply-theme.ps1');
   assert.match(mac, /laolao-laser-pointer\.js \\/, 'macOS asset copy list');
-  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser10/, 'macOS injection pins laser10');
+  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser11/, 'macOS injection pins laser11');
   assert.match(win, /"laolao-laser-pointer\.js"/, 'Windows asset copy list');
-  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser10/, 'Windows head tag pins laser10');
+  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser11/, 'Windows head tag pins laser11');
 });
 
 test('toolbox remains in the global sidebar and is available through more tools', () => {
