@@ -32,10 +32,14 @@ test('each stop is marked native, made up by process, or only faster on this mod
 
 test('the hover text says plainly what each kind of stop does', () => {
   assert.equal(routeDescription('high', GEMINI), '当前模型原生支持这一档');
-  assert.match(routeDescription('minimal', GLM), /最低只到 High.*更快（模拟）/);
-  assert.match(routeDescription('xhigh', GLM), /原生最高到 High；另做 1 份独立解答 \+ 批评/);
-  assert.match(routeDescription('max', GEMINI), /当前模型做 2 份独立解答/);
-  assert.match(routeDescription('ultra', GLM), /3 份独立解答/);
+  assert.match(routeDescription('minimal', GLM), /最低只到 High.*更快.*（模拟）/);
+  assert.match(routeDescription('xhigh', GLM), /原生最高到 High；碧琪补 1 份独立起草 \+ 打开成品审稿/);
+  assert.match(routeDescription('high', ['off']), /拆清要求，动手的活先列验收清单/);
+  // 补强 = 碧琪替这个模型多做一步：拆题 / 独立起草 / 打开成品审稿（reasoning.mjs 的审稿员带只读工具）。
+  assert.match(routeDescription('max', GEMINI), /碧琪替当前模型多做一步：2 份独立起草.*打开成品审稿/);
+  assert.match(routeDescription('ultra', GLM), /3 份独立起草/);
+  assert.match(routeDescription('adaptive', GLM), /动手的活和难题按 XHigh/);
+  assert.match(routeDescription('minimal', GLM), /动手的活仍做必要的一次验证/);
   assert.doesNotMatch(routeDescription('ultra', GLM) + routeDescription('max', GLM), /换模型/, 'helpers always use the selected model');
 });
 

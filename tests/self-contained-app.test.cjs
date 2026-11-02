@@ -337,7 +337,7 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_PYTHON_BIN/);
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
   assert.match(setup, /bash "\$SCRIPT_DIR\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
-  assert.match(build, /index\.mjs memory\.mjs learning\.mjs reasoning\.mjs model-sync\.mjs web-gpt-activity\.mjs web-gpt-connection\.mjs web-gpt-project-context\.mjs ask\.mjs reply-hygiene\.mjs setup\.py package\.json openclaw\.plugin\.json/);
+  assert.match(build, /index\.mjs memory\.mjs learning\.mjs reasoning\.mjs work-kinds\.mjs model-sync\.mjs web-gpt-activity\.mjs web-gpt-connection\.mjs web-gpt-project-context\.mjs ask\.mjs reply-hygiene\.mjs setup\.py package\.json openclaw\.plugin\.json/);
 });
 
 test('managed macOS startup never rewrites its own signed UI bundle', () => {
