@@ -1006,6 +1006,10 @@
   }
   async function checkForUpdates() {
     setStatus("updates", "正在打开更新检查…", "busy");
+    if (window.__pinkieUpdateDialog?.open()) {
+      setStatus("updates", "更新窗口已打开。", "success");
+      return;
+    }
     let action = null;
     for (const node of document.querySelectorAll("*")) {
       const overlays = node?.context?.overlays;

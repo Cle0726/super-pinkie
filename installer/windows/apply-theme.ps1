@@ -204,6 +204,8 @@ $Assets = @(
     "laolao-tool-stream.css",
     "laolao-settings-user.css",
     "laolao-settings-user.js",
+    "laolao-update-dialog.js",
+    "laolao-update-dialog.css",
     "laolao-ask-user.css",
     "laolao-ask-user.js",
     "laolao-process-card.css",
@@ -460,6 +462,8 @@ function Apply-UISkin {
         '<link rel="stylesheet" href="./laolao-usage-stats.css?v=stats8">',
         '<link rel="stylesheet" href="./laolao-tool-stream.css?v=toolstream3">',
         '<link rel="stylesheet" href="./laolao-settings-user.css?v=settingsuser3">',
+        '<link rel="stylesheet" href="./laolao-update-dialog.css?v=update1">',
+        '<script defer src="./laolao-update-dialog.js?v=update1"></script>',
         '<link rel="stylesheet" href="./laolao-ask-user.css?v=askuser1">',
         '<link rel="stylesheet" href="./laolao-process-card.css?v=processcard6">',
         '<link rel="stylesheet" href="./laolao-motion-system.css?v=motionsys1">',
@@ -506,7 +510,7 @@ function Apply-UISkin {
         '<script defer src="./laolao-capabilities.js?v=capabilities4"></script>',
         '<link rel="stylesheet" href="./laolao-workbench.css?v=workbench14">',
         '<script defer src="./laolao-workbench.js?v=workbench16"></script>',
-        '<script defer src="./laolao-settings-user.js?v=settingsuser4"></script>',
+        '<script defer src="./laolao-settings-user.js?v=settingsuser5"></script>',
         '<script defer src="./laolao-ask-user.js?v=askuser1"></script>',
         '<script defer src="./laolao-process-card.js?v=processcard11"></script>',
         '<script defer src="./laolao-desensitize.js?v=desensitize1"></script>',
@@ -539,7 +543,8 @@ function Apply-UISkin {
         'laolao-perf.js' = 'perf4';
         'laolao-tool-stream.css' = 'toolstream3';
         'laolao-progress.js' = 'progress5';
-        'laolao-settings-user.css' = 'settingsuser3'; 'laolao-settings-user.js' = 'settingsuser4';
+        'laolao-update-dialog.css' = 'update1'; 'laolao-update-dialog.js' = 'update1';
+        'laolao-settings-user.css' = 'settingsuser3'; 'laolao-settings-user.js' = 'settingsuser5';
         'laolao-ask-user.css' = 'askuser1'; 'laolao-ask-user.js' = 'askuser1';
         'laolao-process-card.css' = 'processcard6'; 'laolao-process-card.js' = 'processcard11';
         'laolao-desensitize.js' = 'desensitize1';

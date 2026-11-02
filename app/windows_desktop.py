@@ -328,7 +328,7 @@ class WindowsUpdater:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024, attempts=4):
+    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024, attempts=4, progress=None):
         """下载更新包，核对 Content-Length，被掐断时用 Range 续传重试。
 
         urllib 的 read() 在连接提前关闭时只返回空串、并不抛错，所以旧实现会把「下了一半
@@ -345,7 +345,7 @@ class WindowsUpdater:
         temporary = destination.with_suffix(destination.suffix + ".download")
         for attempt in range(1, attempts + 1):
             try:
-                self._fetch(url, temporary, maximum)
+                self._fetch(url, temporary, maximum, progress=progress)
                 break
             except Exception as error:
                 kept = temporary.stat().st_size if temporary.is_file() else 0
@@ -363,7 +363,7 @@ class WindowsUpdater:
                 time.sleep(min(2 ** attempt, 10))
         os.replace(temporary, destination)
 
-    def _fetch(self, url, temporary, maximum):
+    def _fetch(self, url, temporary, maximum, progress=None):
         offset = temporary.stat().st_size if temporary.is_file() else 0
         request = self._request(url)
         if offset:
@@ -385,6 +385,34 @@ class WindowsUpdater:
             if declared is not None and start + declared > maximum:
                 raise ValueError("update package is too large")
             received = start
+            # A partial response's Content-Length is only the length of this
+            # response. Use Content-Range for the whole file; if it is absent,
+            # report an unknown total instead of inventing a percentage.
+            total = declared if start == 0 and status != 206 else None
+            content_range = headers.get("Content-Range", "") if headers is not None else ""
+            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
+            if match and int(match.group(1)) == start and match.group(3) != "*":
+                range_end, range_total = int(match.group(2)), int(match.group(3))
+                if range_end >= start and range_total > range_end and (declared is None or range_end - start + 1 == declared):
+                    total = range_total
+            began = time.monotonic()
+            last_sent = 0.0
+            def publish(final=False):
+                nonlocal last_sent
+                now = time.monotonic()
+                if not progress or (not final and last_sent and now - last_sent < .25):
+                    return
+                elapsed = now - began
+                speed = (received - start) / elapsed if elapsed > .01 and received > start else None
+                eta = (total - received) / speed if total is not None and speed and total >= received else None
+                try:
+                    progress({"stage": "download", "downloaded": received, "total": total,
+                              "bytesPerSecond": speed, "etaSeconds": eta})
+                except Exception:
+                    # A closed window or failed UI callback must not corrupt a download.
+                    pass
+                last_sent = now
+            publish(final=True)
             with temporary.open("r+b" if start else "wb") as handle:
                 handle.seek(start)
                 while True:
@@ -395,12 +423,14 @@ class WindowsUpdater:
                     if received > maximum:
                         raise ValueError("update package is too large")
                     handle.write(chunk)
+                    publish()
+            publish(final=True)
         if declared is not None and received != start + declared:
             raise ValueError(f"update package download was cut short ({received} of {start + declared} bytes)")
         if received < 1024 * 1024:
             raise ValueError("update package is incomplete")
 
-    def prepare(self):
+    def prepare(self, progress=None):
         with self.lock:
             metadata = self.check(force=True)
             if not metadata.get("available"):
@@ -413,7 +443,12 @@ class WindowsUpdater:
             )
             if not payload.is_file() or self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
-                self._download(metadata["executableUrl"], payload)
+                self._download(metadata["executableUrl"], payload, progress=progress)
+            if progress:
+                try:
+                    progress({"stage": "verify"})
+                except Exception:
+                    pass
             if self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
                 # 走到这里说明字节数是够的（_download 已核对 Content-Length），
@@ -670,6 +705,11 @@ class BundledRuntime:
         environment["OPENCLAW_ROOT"] = str(self.openclaw.parent)
         environment["PINKIE_NODE_BIN"] = str(self.node)
         environment["PINKIE_OPENCLAW_ENTRY"] = str(self.openclaw)
+        skills = self.root / "bundled-skills"
+        if skills.is_dir():
+            environment["PINKIE_MANAGED_SKILLS_DIR"] = str(skills)
+        else:
+            environment.pop("PINKIE_MANAGED_SKILLS_DIR", None)
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
         # The private loopback gateway belongs to this desktop user. Keep all
         # registered tools available in every CLE Kk mode; upstream's
@@ -1236,7 +1276,10 @@ class NativeBridge:
 
     def prepare_update(self):
         try:
-            return self._updater.prepare()
+            def progress(event):
+                if self._window:
+                    self._window.evaluate_js("window.__pinkieUpdateProgress?.(" + json.dumps(event) + ")")
+            return self._updater.prepare(progress=progress)
         except Exception as error:
             append_log("updater", f"update preparation failed: {error}")
             return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
@@ -1358,6 +1401,7 @@ BRIDGE_SCRIPT = r"""
       controls.querySelector('[data-act="update"]')?.classList.add('has-update');
     };
     const updateDialog = info => {
+      if (window.__pinkieUpdateDialog?.open(info)) return;
       document.getElementById('pinkie-update-dialog')?.remove();
       const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
       const card = document.createElement('section'); card.className = 'pinkie-update-card';
@@ -1406,6 +1450,7 @@ BRIDGE_SCRIPT = r"""
       updateDialog(info);
     };
     const inspectUpdate = async manual => {
+      if (window.__pinkieUpdateDialog?.open()) return;
       const button = controls.querySelector('[data-act="update"]'); button?.classList.add('is-checking');
       const info = await call('check_for_updates'); button?.classList.remove('is-checking');
       if (info?.available) { window.__pinkieUpdateAvailable(info); updateDialog(info); }
