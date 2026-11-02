@@ -5211,6 +5211,49 @@ html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn.c
   grid-row: 1; grid-column: 12; justify-self: end; position: relative; z-index: 1;
   width: 34px !important; min-width: 34px !important; max-width: 34px !important; height: 34px !important; min-height: 34px !important; margin: 0 9px 0 0 !important; border-radius: 999px !important; border: 0 !important;
 }
+html:not([data-laolao-plain-composer]) openclaw-chat-pane[data-pinkie-followup-mode] .agent-chat__input:has(.chat-send-btn--stop) button.chat-send-btn.chat-send-btn:not(.chat-send-btn--stop):not(#__p1):not(#__p2) {
+  margin: 0 49px 0 0 !important;
+  z-index: 2;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn {
+  display: none !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--stop) button.laolao-followup-mode-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  grid-row: 1 !important;
+  grid-column: 12 !important;
+  justify-self: end !important;
+  position: relative;
+  z-index: 2;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  margin: 0 49px 0 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, .92)) !important;
+  color: color-mix(in srgb, var(--accent) 82%, #3a2a32) !important;
+  font: 600 11.5px/1 -apple-system, "PingFang SC", sans-serif !important;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 12%, transparent) !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--stop):has(button.chat-send-btn:not(.chat-send-btn--stop)) button.laolao-followup-mode-btn {
+  margin: 0 89px 0 0 !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn[data-pinkie-followup-mode="queue"] {
+  background: color-mix(in srgb, var(--accent) 20%, #fff) !important;
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent) !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn::before {
+  content: attr(data-pinkie-followup-label);
+}
+html[data-pinkie-night]:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--stop) button.laolao-followup-mode-btn {
+  background: color-mix(in srgb, var(--accent) 22%, rgba(28, 22, 30, .92)) !important;
+  color: color-mix(in srgb, var(--accent) 75%, #fff) !important;
+}
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn svg { width: 16px !important; height: 16px !important; }
 html:not([data-laolao-plain-composer]) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #fff !important; color: #fff !important; }
 
