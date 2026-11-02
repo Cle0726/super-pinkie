@@ -2596,3 +2596,126 @@ test('a command still running in the background is an honest in-progress state, 
     result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
   assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
 });
+
+// 2026-11-01 实测：长跑档计划写了 6 个里程碑，只勾了第一个、跑过一次测试就交付了。
+test('marathon keeps going while the checkpoint still has unchecked milestones, then stops cleanly',t=>{
+  const root=workspace(t,'marathon');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:todo-marathon',runId:'m-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  const prompt=runtime.prompt({prompt:'做一个能增删改查、数据存本地的待办网页，带自动化测试'},ctx);
+  const checkpoint=path.join(root,sessionCheckpointRelative(ctx.sessionKey));
+  // 计划里给的是绝对路径：绑定了项目文件夹时相对路径会被写进项目里。
+  assert.ok(prompt.appendSystemContext.includes(checkpoint));
+  assert.match(prompt.appendSystemContext,/- \[ \] 里程碑 — 验证/);
+  // 改了文件、跑过测试，但还没写计划：推回去先写计划。
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'index.html')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 3'},ctx);
+  let decision=runtime.finalize({lastAssistantMessage:'待办网页做好了。'},ctx);
+  assert.equal(decision.action,'revise');assert.match(decision.reason,/还没把计划写进检查点/);
+  fs.writeFileSync(checkpoint,'## 目标\n待办网页\n## 里程碑\n- [x] 页面骨架 — 验证：打开能看到\n- [ ] 本地存储 — 验证：刷新数据还在\n- [ ] 手机截图 — 验证：390 宽截图\n');
+  runtime.afterTool({toolName:'write',params:{path:checkpoint},result:'ok'},ctx);
+  decision=runtime.finalize({lastAssistantMessage:'做好了。'},{...ctx,runId:'m-2'});
+  assert.equal(decision.action,'revise');
+  assert.match(decision.reason,/没勾掉的里程碑：本地存储 — 验证：刷新数据还在；手机截图/);
+  assert.match(decision.retry.instruction,/不要问用户要不要继续/);
+  // 接着做下一个里程碑不需要「这次和上次不同」的说法。
+  runtime.afterTool({toolName:'exec',params:{command:'node --test'},result:'pass 5'},ctx);
+  decision=runtime.finalize({lastAssistantMessage:'本地存储做好了，接着做手机适配。'},{...ctx,runId:'m-3'});
+  assert.equal(decision.action,'revise');assert.equal(runtime.status(ctx.sessionKey).active,true);
+  // 全部勾完（或写明放弃原因）就正常交付。
+  fs.writeFileSync(checkpoint,'- [x] 页面骨架\n- [x] 本地存储 — 刷新后 3 条还在\n- [x] 放弃：手机截图 — 本机没有浏览器\n');
+  runtime.afterTool({toolName:'write',params:{path:checkpoint},result:'ok 2'},ctx);
+  assert.equal(runtime.finalize({lastAssistantMessage:'全部做完了。'},{...ctx,runId:'m-4'}),undefined);
+});
+
+test('the same final reply checked before writing and again at finalize counts as one continuation, not two',t=>{
+  // r1/r2 实测：完整做完的长跑档，终稿被核验打回一次；写入前那道检查没有 runId，收尾那道有，
+  // 第二道就把同一条回复当成「没说明换了什么做法的第二次续跑」直接停掉，用户什么也没收到。
+  const integrity={action:'revise',reason:'回复里的说法缺少本轮证据',retry:{instruction:'补证据',idempotencyKey:'x',maxAttempts:3}};
+  const reply='待办网页做好了，单元测试 6 组和端到端 10 条都通过。';
+  for(const [agentId,stays] of [['project',true],['unrestricted',false]]){
+    const root=workspace(t,'dup-'+agentId);
+    const runtime=new ModeArchitecture();
+    const ctx={agentId,sessionKey:`agent:${agentId}:dup-final`,workspaceDir:root};
+    runtime.arm(ctx.sessionKey,'marathon');
+    runtime.prompt({prompt:'做一个能增删改查、数据存本地的待办网页，带自动化测试'},{...ctx,runId:'real-1'});
+    writeSessionCheckpoint(root,ctx.sessionKey,'- [x] 页面\n- [x] 测试 — 6 条通过\n');
+    runtime.afterTool({toolName:'write',params:{path:path.join(root,'index.html')},result:'ok'},{...ctx,runId:'real-1'});
+    runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 6'},{...ctx,runId:'real-1'});
+    const first=runtime.prepareRetryDecision(integrity,{lastAssistantMessage:reply},{...ctx,runId:''});
+    assert.equal(first?.action,'revise');
+    const second=runtime.prepareRetryDecision(integrity,{lastAssistantMessage:reply},{...ctx,runId:'real-1'});
+    if(stays){
+      assert.deepEqual(second,first,'same reply, same decision');
+      assert.equal(runtime.status(ctx.sessionKey).active,true);
+    } else {
+      assert.equal(second,undefined,'unrestricted mode keeps its old behaviour');
+    }
+  }
+});
+
+test('marathon milestone pushes stop after two continuations with no new evidence',t=>{
+  const root=workspace(t,'marathon-idle');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:idle-marathon',runId:'i-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  runtime.prompt({prompt:'写一个记账脚本并测试'},ctx);
+  writeSessionCheckpoint(root,ctx.sessionKey,'- [ ] 记账脚本\n- [ ] 测试\n');
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'ledger.py')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'pytest'},result:'1 passed'},ctx);
+  for(const run of ['i-1','i-2']) assert.equal(runtime.finalize({lastAssistantMessage:'先这样。'},{...ctx,runId:run})?.action,'revise');
+  assert.equal(runtime.finalize({lastAssistantMessage:'先这样。'},{...ctx,runId:'i-3'}),undefined);
+  assert.equal(runtime.status(ctx.sessionKey).active,false);
+  assert.match(runtime.stopReport({...ctx,runId:'i-3'}),/没有新增/);
+});
+
+test('ticking the on-screen plan or the checkpoint after tests does not invalidate the test evidence',t=>{
+  const root=workspace(t,'plan-tick');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:plan-tick',runId:'p-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'boost');
+  runtime.prompt({prompt:'做一个待办网页并写自动化测试'},ctx);
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'app.js')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 6'},ctx);
+  runtime.afterTool({toolName:'plan_update',params:{items:[{text:'测试',status:'completed'}]},result:'{"ok":true}'},ctx);
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,sessionCheckpointRelative(ctx.sessionKey))},result:'ok'},ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).missing,[]);
+  runtime.afterTool({toolName:'edit',params:{path:path.join(root,'app.js')},result:'ok 2'},ctx);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/缺少本轮测试命令及结果/,'a real code change after the tests still needs a new test run');
+});
+
+test('work-first long-task changes do not change unrestricted mode',t=>{
+  assert.equal(classifyDeliberationTask('写一个记账脚本', 'none'), 'simple');
+  assert.equal(classifyDeliberationTask('写一个记账脚本', 'project'), 'implementation');
+  const root=workspace(t,'unrestricted-unchanged');
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'unrestricted',sessionKey:'agent:unrestricted:preserved',runId:'u-1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  const prompt=runtime.prompt({prompt:'做一个待办网页并写自动化测试'},ctx).appendSystemContext;
+  assert.match(prompt,/长跑档：沿用加强档思路持续执行/);
+  assert.doesNotMatch(prompt,/- \[ \] 里程碑 — 验证/);
+  assert.ok(prompt.includes(sessionCheckpointRelative(ctx.sessionKey)));
+  assert.ok(!prompt.includes(path.join(root,sessionCheckpointRelative(ctx.sessionKey))));
+  runtime.afterTool({toolName:'write',params:{path:path.join(root,'app.js')},result:'ok'},ctx);
+  runtime.afterTool({toolName:'exec',params:{command:'npm test'},result:'pass 3'},ctx);
+  assert.deepEqual(runtime.status(ctx.sessionKey).missing,[], 'no new checkpoint gate');
+  runtime.afterTool({toolName:'plan_update',params:{items:[{text:'测试',status:'completed'}]},result:'{"ok":true}'},ctx);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/缺少本轮测试命令及结果/, 'prior evidence behavior remains unchanged');
+});
+
+test('marathon compaction reloads its own checkpoint and warns against repeating side effects',t=>{
+  const root=workspace(t,'marathon-compaction');
+  const handoffs=new CompactionHandoffStore(path.join(root,'.handoffs'));
+  const runtime=new ModeArchitecture(null,null,handoffs);
+  const ctx={agentId:'project',sessionKey:'agent:project:marathon-compaction',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'marathon');
+  runtime.prompt({prompt:'做一个待办网页并运行测试'},ctx);
+  writeSessionCheckpoint(root,ctx.sessionKey,'## 里程碑\n- [x] 页面 — 已保存\n- [ ] 测试 — 验证：运行测试\n下一步运行测试，不要重复安装。');
+  runtime.beforeCompaction({},ctx);
+  runtime.afterCompaction({},ctx);
+  const resumed=runtime.prompt({prompt:'\u2063'},ctx).appendSystemContext;
+  assert.match(resumed,/下一步运行测试，不要重复安装/);
+  assert.match(resumed,/禁止盲目重复/);
+  assert.match(runtime.status(ctx.sessionKey).missing.join(),/没勾掉的里程碑/);
+});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {CompanionAssistant, DEFAULT_COMPANION_MODEL, registerCompanionGateway} from '../services/mode-architecture/companion.mjs';
+import {CompanionAssistant, DEFAULT_COMPANION_MODEL, CLARIFY_MODEL, normalizeClarify, registerCompanionGateway} from '../services/mode-architecture/companion.mjs';
 
 function fixture(options = {}) {
   const config = {models: {providers: {mm: {api: 'openai-completions', baseUrl: 'http://127.0.0.1:1467/v1', apiKey: 'helper-test-key',
@@ -26,13 +26,13 @@ test('all helper tasks use a fixed independent model and leave an active chat un
   }});
   const chat = {modelOverride: 'mm/chat-large', runId: 'running-chat', draft: '写了一半', history: ['PRIVATE_CHAT_SENTINEL']};
   const before = JSON.stringify({chat, config});
-  for (const kind of ['explain', 'summary', 'clarify']) {
+  for (const kind of ['explain', 'summary']) {
     const result = await assistant.ask({kind, mode: 'learning', text: 'API', context: '选中的一段话', sessionKey: 'private-session', chat});
     assert.equal(result.model, DEFAULT_COMPANION_MODEL);
     assert.equal(result.independent, true);
     assert.equal(result.text, '用简单的话解释。');
   }
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   for (const request of calls) {
     const body = JSON.parse(request.body);
     assert.equal(body.model, 'gemini-2.5-flash-lite');
@@ -60,7 +60,7 @@ test('explicit helper configuration uses the configured provider without modifyi
   const {config, assistant} = fixture({fetchImpl: async (url, options) => { request = {url: String(url), ...options}; return reply('问题正文'); }});
   config.plugins = {entries: {'pinkie-mode-architecture': {config: {companionModel: 'other/small'}}}};
   const before = JSON.stringify(config);
-  await assistant.ask({kind: 'clarify', mode: 'project', text: '怎么安排工作'});
+  await assistant.ask({kind: 'explain', mode: 'project', text: '怎么安排工作'});
   assert.equal(request.url, 'http://127.0.0.1:1468/v1/chat/completions');
   assert.equal(JSON.parse(request.body).model, 'small');
   assert.match(JSON.parse(request.body).messages[0].content, /老板/);
@@ -160,4 +160,126 @@ test('saved waiting time is honored rather than silently falling back to twenty 
   assistant.transport.requestModel=async(_model,_rules,_notes,_deep,value)=>{options=value;return{text:'结果'};};
   assistant.setSettings({mode:'project',settings:{timeoutSeconds:120}});await assistant.ask({mode:'project',kind:'explain',text:'API'});
   assert.equal(options.timeoutMs,120000);
+});
+
+const clarifyReply = value => new Response(JSON.stringify({choices: [{message: {content: JSON.stringify(value)}, finish_reason: 'stop'}]}));
+
+test('clarify uses the strong default model with low thinking, recent context and the project name', async () => {
+  let request;
+  const {config, assistant} = fixture({fetchImpl: async (url, options) => { request = {url: String(url), body: JSON.parse(options.body)}; return clarifyReply({
+    understood: '做一个记账的小东西，平时记花销、看看钱花在哪。', ready: false,
+    questions: [{q: '给谁用？', options: ['只有我', '全家一起记'], recommended: 0}],
+    defaults: ['打开就能用的网页', '数据存在本机'],
+  }); }});
+  config.models.providers.mm.models.push({id: 'gemini-3.8-flash-tiered', name: 'Gemini 3.8', reasoning: true});
+  const result = await assistant.ask({kind: 'clarify', mode: 'project', text: '帮我做个记账的', context: '用户：你好\n碧琪：在', project: '记账本'});
+  assert.equal(result.model, CLARIFY_MODEL);
+  assert.equal(request.body.model, 'gemini-3.8-flash-tiered');
+  assert.equal(request.body.reasoning_effort, 'low');
+  assert.ok(request.body.max_tokens >= 4000);
+  const system = request.body.messages[0].content, input = JSON.parse(request.body.messages[1].content).notes[0];
+  assert.match(system, /帮用户少说话/);
+  assert.match(system, /绝不问技术问题/);
+  assert.doesNotMatch(system, /称呼用户为/);
+  assert.match(input.context, /^当前项目文件夹：记账本\n用户：你好/);
+  assert.match(input.mode, /项目/);
+  assert.deepEqual(result.clarify.questions, [{q: '给谁用？', options: ['只有我', '全家一起记'], recommended: 0}]);
+  assert.equal(result.text, result.clarify.understood);
+});
+
+test('a model chosen in the helper settings still wins for clarify', async () => {
+  let body;
+  const {config, assistant} = fixture({fetchImpl: async (_url, options) => { body = JSON.parse(options.body); return clarifyReply({understood: '把按钮改成描边的', ready: true, questions: [], defaults: []}); }});
+  config.models.providers.mm.models.push({id: 'gemini-3.8-flash-tiered', reasoning: true});
+  assistant.setSettings({mode: 'project', settings: {model: 'other/small'}});
+  const result = await assistant.ask({kind: 'clarify', mode: 'project', text: '把按钮改成描边的'});
+  assert.equal(body.model, 'small');
+  assert.equal(result.clarify.ready, true);
+});
+
+test('clarify input is bounded to a 2000 character draft and 2400 characters of context', async () => {
+  let input;
+  const {assistant} = fixture({fetchImpl: async (_url, options) => { input = JSON.parse(JSON.parse(options.body).messages[1].content).notes[0]; return clarifyReply({understood: '好的', ready: true}); }});
+  await assistant.ask({kind: 'clarify', text: 'a'.repeat(5000), context: 'b'.repeat(5000)});
+  assert.equal(input.text.length, 2000);
+  assert.equal(input.context.length, 2400);
+});
+
+test('clarify output is validated: at most two questions, short options, no technical questions, ready clears questions', () => {
+  const value = normalizeClarify({
+    understood: '做'.repeat(80), ready: false,
+    questions: [
+      {q: '用什么编程语言？', options: ['Python', 'JavaScript'], recommended: 1},
+      {q: '给谁用？', options: ['只有我', '全家一起记', '这是一个特别特别长的不合格选项', '第四个'], recommended: 7},
+      {q: '在哪用？', options: ['电脑', '手机'], recommended: 1},
+      {q: '想要什么感觉？', options: ['安静', '活泼'], recommended: 0},
+    ],
+    defaults: ['打开就能用的网页', '数据存在本机', '这一条默认事项写得实在是太长了超过十六个字', '带本月花销图', '第四条'],
+  });
+  assert.equal([...value.understood].length, 60);
+  assert.deepEqual(value.questions.map(q => q.q), ['给谁用？', '在哪用？']);
+  assert.deepEqual(value.questions[0].options, ['只有我', '全家一起记', '第四个']);
+  assert.equal(value.questions[0].recommended, 0);
+  assert.equal(value.questions[1].recommended, 1);
+  assert.deepEqual(value.defaults, ['打开就能用的网页', '数据存在本机', '带本月花销图']);
+  assert.deepEqual(normalizeClarify({understood: '改按钮', ready: true, questions: [{q: '给谁用？', options: ['我', '家人']}]}).questions, []);
+  assert.equal(normalizeClarify({understood: '改按钮', ready: false, questions: []}).ready, true);
+  for (const bad of [null, [], {}, {understood: ''}, {understood: 3}]) assert.throws(() => normalizeClarify(bad), /格式不正确/);
+});
+
+test('clarify keeps the recommended option when an earlier option is discarded', () => {
+  const result = normalizeClarify({understood:'做一个记账工具', ready:false, questions:[{
+    q:'给谁用？', options:['这个选项很长超过十二个字所以要丢弃', '只有我', '全家一起记'], recommended:2,
+  }]});
+  assert.deepEqual(result.questions, [{q:'给谁用？', options:['只有我','全家一起记'], recommended:1}]);
+});
+
+test('broken clarify JSON returns the readable helper error so the card can offer a direct send', async () => {
+  const {assistant} = fixture({fetchImpl: async () => new Response(JSON.stringify({choices: [{message: {content: '不是 JSON'}, finish_reason: 'stop'}]}))});
+  await assert.rejects(assistant.ask({kind: 'clarify', text: '帮我做个记账的'}), /小帮手返回的内容不完整/);
+  const missing = fixture({fetchImpl: async () => clarifyReply({ready: true})}).assistant;
+  await assert.rejects(missing.ask({kind: 'clarify', text: '帮我做个记账的'}), /格式不正确/);
+  assert.equal(missing.pending.size, 0);
+});
+
+test('explain no longer asks for forced everyday analogies', async () => {
+  let system;
+  const {assistant} = fixture({fetchImpl: async (_url, options) => { system = JSON.parse(options.body).messages[0].content; return reply('结果'); }});
+  await assistant.ask({kind: 'explain', text: 'API'});
+  assert.match(system, /只有特别贴切时才打比方/);
+  assert.doesNotMatch(system, /贴近日常的比喻/);
+});
+
+test('front end: clarify is first in work modes and sends the original words plus choices', () => {
+  const source = fs.readFileSync(new URL('../ui/injections/laolao-companion.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(mode\(\) !== "unrestricted"\) item\("clarify", "帮我说清楚", clarifyFlow\);\s*item\("explain"/);
+  assert.match(source, /if \(mode\(\) === "unrestricted"\) item\("clarify", "帮我把问题问清楚", legacyClarifyFlow\)/);
+  assert.match(source, /\$\{draft\}\\n我的选择：/);
+  assert.match(source, /其余你按推荐来。/);
+  assert.match(source, /没理出来也没关系，直接发吧，碧琪会自己补全。/);
+  assert.match(source, /changedSince\(ta, draft\)/);
+  for (const m of ['project', 'thinking', 'chat', 'learning']) assert.match(source, new RegExp(`${m}: \\[\\["`));
+});
+
+test('unrestricted helper keeps its existing request and response contract', async () => {
+  const calls = [];
+  const {config, assistant} = fixture({fetchImpl: async (_url, options) => { calls.push(JSON.parse(options.body)); return reply('原有整理结果'); }});
+  config.models.providers.mm.models.push({id: 'gemini-3.8-flash-tiered', reasoning: true});
+  const result = await assistant.ask({kind: 'clarify', mode: 'unrestricted', text: 'a'.repeat(5000), context: 'b'.repeat(2000), project: 'ignored'});
+  assert.equal(result.model, DEFAULT_COMPANION_MODEL);
+  assert.equal(result.text, '原有整理结果');
+  assert.equal(result.clarify, undefined);
+  const input = JSON.parse(calls[0].messages[1].content).notes[0];
+  assert.equal(input.text.length, 5000);
+  assert.equal(input.context.length, 1600);
+  assert.equal(input.mode, undefined);
+  assert.match(calls[0].messages[0].content, /整理得清楚、具体/);
+  await assistant.ask({kind: 'explain', mode: 'unrestricted', text: 'API'});
+  assert.match(calls[1].messages[0].content, /必要时给一个贴近日常的比喻/);
+});
+
+
+test('a clear request does not get a redundant defaults row', () => {
+  const result = normalizeClarify({understood: '把标题字号稍微调小一点，其他地方不动', ready: true, questions: [], defaults: ['调小一个标准字号', '保持原有排版不变']});
+  assert.deepEqual(result.defaults, []);
 });
