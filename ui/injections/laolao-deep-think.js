@@ -42,7 +42,7 @@
     stopped: "本轮协作已停止",
   });
 
-  // 四档预设 (文案与架构文档五、六节对齐)
+  // 四档预设：文案和 docs/DEEP-THINK-TIERS.md、skills/deep-think/SKILL.md、运行单一致（2026-11-02 按活儿种类改版）
   const TIERS = [
     {
       id: "base",
@@ -50,8 +50,8 @@
       numeral: "Ⅰ",
       art: "/laolao-deep-think-base.png?v=tierart3",
       motion: "/laolao-deep-think-base.webm?v=tiermotion2",
-      short: "按任务类型走流程",
-      desc: "简单问题直接答；改代码先复现再修再测；难题用独立解法验算",
+      short: "按活儿种类走对的做法",
+      desc: "先认清是哪种活，照这种活的打法做；简单问题直接答",
     },
     {
       id: "boost",
@@ -59,8 +59,8 @@
       numeral: "Ⅱ",
       art: "/laolao-deep-think-boost.png?v=tierart3",
       motion: "/laolao-deep-think-boost.webm?v=tiermotion2",
-      short: "完成必须有真实证据",
-      desc: "基础流程 + 说完成前要有本轮的测试、运行或来源证据；拿不到就照实说没完成",
+      short: "说做完，就要有真凭据",
+      desc: "每种活都要拿到它该有的证据才算完成：网页要打开看过、PPT 要看过交出去的文件、数据要重算过；拿不到就照实说",
     },
     {
       id: "full",
@@ -68,8 +68,8 @@
       numeral: "Ⅲ",
       art: "/laolao-deep-think-full.png?v=tierart3",
       motion: "/laolao-deep-think-full.webm?v=tiermotion2",
-      short: "多版独立解法互相核对",
-      desc: "加强档 + 有标准答案或要取舍的问题多做几版独立解法；批评必须附反例或失败的测试",
+      short: "多做几版，挑出最好的",
+      desc: "难题、取舍、设计、文案、点子会独立做出几版再比较；审稿员会打开成品挑毛病，每条都要有证据",
     },
     {
       id: "marathon",
@@ -77,8 +77,8 @@
       numeral: "Ⅳ",
       art: "/laolao-deep-think-marathon.png?v=tierart3",
       motion: "/laolao-deep-think-marathon.webm?v=tiermotion2",
-      short: "存档续跑直到做完",
-      desc: "加强档 + 每个阶段写检查点，中断自动续跑，直到完成或报告明确卡点；适合长任务",
+      short: "写好计划，一直做到完",
+      desc: "先写计划和验收清单，按里程碑一个个做、一个个验，中断了也能接着跑，最后再整体打磨一轮",
     },
   ];
 
@@ -257,10 +257,20 @@
       seen.add(key);
       return row;
     };
-    if (workflow?.label) {
+    // 活儿种类（网页、PPT、视频……）：和流程名一样时只显示一行，不重复。
+    const kindText = String(workflow?.kindLabel || "");
+    if (kindText) {
+      const kind = ensureRow("workflow-kind");
+      setText(kind.children[0], "活儿种类");
+      setText(kind.children[1], kindText);
+      if (details.firstElementChild !== kind) details.prepend(kind);
+    }
+    if (workflow?.label && workflow.label !== kindText) {
       const route = ensureRow("workflow-route");
       setText(route.children[0], "本次流程");
       setText(route.children[1], workflow.label);
+    }
+    if (workflow?.label) {
       const stages = Array.isArray(workflow.stages) ? workflow.stages : [];
       const used = stages.filter((stage) => stage?.used).map((stage) => stage.label);
       const pending = stages.filter((stage) => !stage?.used).map((stage) => stage.label);

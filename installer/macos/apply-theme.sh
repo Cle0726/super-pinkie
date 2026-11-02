@@ -1211,7 +1211,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/project-scope/$service_file" \
       "$bundled_root/services/project-scope/$service_file"
   done
-  for service_file in index.mjs memory.mjs learning.mjs companion.mjs reasoning.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs learning.mjs companion.mjs reasoning.mjs work-kinds.mjs openclaw-paths.mjs background-jobs.mjs learning-library.mjs rich-runtime.mjs workbench.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs setup.py package.json openclaw.plugin.json; do
     copy_if_changed \
       "$REPO_ROOT/services/mode-architecture/$service_file" \
       "$bundled_root/services/mode-architecture/$service_file"
