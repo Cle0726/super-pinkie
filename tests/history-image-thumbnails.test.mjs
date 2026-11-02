@@ -49,3 +49,17 @@ test('the installers apply it', () => {
   assert.match(fs.readFileSync(new URL('../installer/macos/apply-theme.sh', import.meta.url), 'utf8'), /apply-history-image-thumbnails\.mjs/);
   assert.match(fs.readFileSync(new URL('../installer/windows/apply-theme.ps1', import.meta.url), 'utf8'), /apply-history-image-thumbnails\.mjs/);
 });
+
+test('the transcript reader keeps an oversized user line without its inline image', async () => {
+  const {readerHelper, transformReader, readerMarker} = await import('../patch/apply-history-image-thumbnails.mjs');
+  const slimOf = Function(`${readerHelper};return pinkieSlimOversizedUserRecord`)();
+  const line = JSON.stringify({type: 'message', id: 'u1', parentId: 'p', message: {role: 'user', MediaPath: '/x.png', content: [{type: 'text', text: '这个是什么？'}, {type: 'image', mimeType: 'image/png', data: 'z'.repeat(400000)}]}});
+  const slim = slimOf(line);
+  assert.deepEqual(slim.message.content, [{type: 'text', text: '这个是什么？'}, {type: 'image', mimeType: 'image/png', pinkieDataOnDisk: true}]);
+  assert.equal(slim.message.MediaPath, '/x.png');
+  assert.equal(slimOf(JSON.stringify({message: {role: 'assistant', content: [{type: 'image', data: 'z'}]}})), null);
+  const reader = 'function buildOversizedIndexedRawEntry(params) {\n\treturn null;\n}\nfunction buildOversizedTranscriptRecord(line) {\n\treturn null;\n}\n';
+  const patched = transformReader(reader);
+  assert.ok(patched.includes(readerMarker));
+  assert.equal(transformReader(patched), patched);
+});
