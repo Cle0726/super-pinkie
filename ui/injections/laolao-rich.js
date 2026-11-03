@@ -1,7 +1,7 @@
 /* laolao-rich:v1 —— 碧琪回复里的富内容
  *
  * 碧琪在回复里写带语言标记的代码块，这里把它们原地变成能用的东西：
- *   ```ui         选项按钮、表单、清单、方案卡片（碧琪风格的轻量渲染器，写法沿用 A2UI 的思路）
+ *   ```ui         选项按钮、表单、清单、方案卡片（C.le. 风格的轻量渲染器，写法沿用 A2UI 的思路）
  *   ```chart      图表（Chart.js）
  *   ```mermaid    流程图、思维导图、时间线、甘特图（Mermaid）
  *   $…$  $$…$$    数学公式（KaTeX；apply-chat-math.mjs 先让 markdown 原样保住公式）
@@ -300,7 +300,7 @@
     const m = window.mermaid;
     const dark = night(), theme = dark ? 'night' : 'day';
     if (mermaidTheme !== theme) {
-      // 碧琪配色：蓝框浅底的节点、柔和的连线；思维导图各分支依次用调色板里的颜色
+      // C.le. 配色：蓝框浅底的节点、柔和的连线；思维导图各分支依次用调色板里的颜色
       const pal = PALETTE[theme], vars = dark
         ? {darkMode: true, background: 'transparent', primaryColor: '#1f2540', primaryBorderColor: '#8ec0ff', primaryTextColor: '#ece3e8',
            secondaryColor: '#2a1f31', tertiaryColor: '#1d1a26', lineColor: '#7d7894', textColor: '#ece3e8', edgeLabelBackground: '#1b1622', clusterBkg: '#1d1a26', clusterBorder: '#3a3450'}

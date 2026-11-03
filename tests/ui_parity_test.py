@@ -33,10 +33,11 @@ class SharedUiBundleTests(unittest.TestCase):
             control = root / platform
             control.mkdir()
             # Model an old runtime overlay and duplicate obsolete injections.
-            (control / 'index.html').write_bytes(b'<html><head>\n<script>\n  boot();\n\n\n</script>\n<script src="./laolao-night.js?v=old"></script><script type="module" src="./assets/index-abc.js?pinkie-surface=6"></script><link href="./laolao-cle-stage.css?v=1" rel="stylesheet"></head><body><openclaw-app></openclaw-app></body></html>')
+            (control / 'index.html').write_bytes(b'<html><head>\n<script>\n  boot();\n\n\n</script>\n<script src="./laolao-night.js?v=old"></script><script type="module" src="./assets/index-abc.js?pinkie-surface=6"></script><link href="./laolao-retired-stage.css?v=1" rel="stylesheet"></head><body><openclaw-app></openclaw-app></body></html>')
             (control / 'assets').mkdir()
             (control / 'assets/index-abc.js').write_text('upstreamEntry()')
-            (control / 'laolao-cle-stage.css').write_bytes(b'cat stage')
+            (control / 'laolao-retired-stage.css').write_bytes(b'obsolete injection')
+            (control / 'CLeAppIcon.icns').write_bytes(b'cat app icon')
         return root / 'mac', root / 'windows'
 
     def test_both_overlaid_packages_have_the_same_complete_nested_resources_and_entry(self):
@@ -48,8 +49,9 @@ class SharedUiBundleTests(unittest.TestCase):
             self.assertIn('deep-think/tier.webm', left['resources'])
             self.assertIn('fonts/type.woff2', left['resources'])
             self.assertIn('vendor/nested/effect.js', left['resources'])
-            self.assertFalse((windows / 'laolao-cle-stage.css').exists())
-            self.assertNotIn('laolao-cle-', (windows / 'index.html').read_text())
+            self.assertFalse((windows / 'laolao-retired-stage.css').exists())
+            self.assertFalse((windows / 'CLeAppIcon.icns').exists())
+            self.assertNotIn('laolao-retired-stage', (windows / 'index.html').read_text())
             # Actual read-back detects both missing media and post-overlay edits.
             (windows / 'deep-think/tier.webm').unlink()
             with self.assertRaisesRegex(ValueError, 'missing UI resource'):

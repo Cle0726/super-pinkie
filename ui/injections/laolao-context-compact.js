@@ -434,7 +434,7 @@
       const icon = document.createElement("span");
       icon.className = "laolao-compaction-notice__icon";
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "碧琪";
+      icon.textContent = "C.le.";
       const copy = document.createElement("strong");
       copy.className = "laolao-compaction-notice__copy";
       const note = document.createElement("span");

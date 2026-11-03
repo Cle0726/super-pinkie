@@ -39,9 +39,11 @@ def owned(ref):
 
 
 def retired(path):
+    # Only the separate C.le. Studio product (cat app icon, cat plugin, its
+    # installer) is retired. The laolao-cle-* files are the author's C.le.
+    # signature on the process card and stay in every package.
     parts = Path(path).parts
-    return (Path(path).name.startswith('laolao-cle-')
-            or Path(path).name == 'CLeAppIcon.icns'
+    return (Path(path).name == 'CLeAppIcon.icns'
             or any(parts[i:i + 2] in (('services', 'cle-studio'), ('installer', 'cle'))
                    for i in range(len(parts) - 1)))
 
