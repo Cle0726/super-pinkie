@@ -22,6 +22,7 @@
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const lite = () => document.documentElement.hasAttribute("data-pinkie-lite");
 
   /* 手绘线条图标：替代表情符号，悬停时各有一个小动作（见 CSS .ico--*） */
   const ICON = {
@@ -883,7 +884,7 @@
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
     const sync = () => {
       const card = document.querySelector(".card.chat");
-      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
+      const want = prefs.ambient && !reduced() && !lite() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       if (!canvas || canvas.parentElement !== card) { canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; new ResizeObserver(() => canvas && resize()).observe(card); }
       if (currentMode !== mode()) { currentMode = mode(); resize(); }

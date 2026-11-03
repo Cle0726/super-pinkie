@@ -2454,8 +2454,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         // Mark only the native shell. The web UI uses this to avoid whole-page
         // opacity animation while keeping its decorative motion intact.
+        let lowMemory = ProcessInfo.processInfo.physicalMemory <= 8 * 1024 * 1024 * 1024
         controller.addUserScript(WKUserScript(
-            source: "window.__pinkieMacUpdaterV2 = \(docked ? "false" : "true"); window.__pinkieBootNight = \(nightAppearance ? "true" : "false"); document.documentElement.setAttribute('data-pinkie-native-glass', '1')",
+            source: "window.__pinkieMacUpdaterV2 = \(docked ? "false" : "true"); window.__pinkieBootNight = \(nightAppearance ? "true" : "false"); document.documentElement.setAttribute('data-pinkie-native-glass', '1')" + (lowMemory ? "; document.documentElement.setAttribute('data-pinkie-lite', '')" : ""),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
