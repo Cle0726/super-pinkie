@@ -18,7 +18,6 @@ import os
 import re
 import sys
 import json
-import hashlib
 import importlib.util
 import shutil
 import subprocess
@@ -467,35 +466,18 @@ MODE_AGENTS = {
 }
 
 
-def _shipped_digest(path):
-    """SHA-256 with carriage returns removed, matching personas/shipped-hashes.txt."""
-    return hashlib.sha256(path.read_bytes().replace(b"\r", b"")).hexdigest()
-
-
-def load_shipped_persona_hashes(src_root):
-    """Every persona file version ever released, as "<sha256> <mode>/<path>" lines."""
-    try:
-        text = (src_root / "shipped-hashes.txt").read_text(encoding="utf-8")
-    except OSError:
-        return set()
-    return {line.strip() for line in text.splitlines() if line.strip()}
-
-
-def _install_persona_file(src_file, dst_file, keep_existing, backup_dir, shipped=None, key=None):
+def _install_persona_file(src_file, dst_file, keep_existing, backup_dir):
     """Copy one bundled persona file.
 
-    keep_existing protects the owner's edits: an existing file is replaced only
-    when it is still exactly a version we shipped (listed in `shipped` under
-    `key`), i.e. nobody on this machine ever changed it.
+    Manuals and playbooks follow the official version: a different copy on
+    this machine is backed up, then replaced. keep_existing (the unrestricted
+    mode, DREAMS.md) leaves an existing file alone. Memory and the owner's own
+    files (USER.md, TOOLS.md, MEMORY.md, memory/) are not bundled, so never touched.
     """
     if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
         return
     if keep_existing and dst_file.exists():
-        if not shipped or not key:
-            return
-        current = _shipped_digest(dst_file)
-        if f"{current} {key}" not in shipped or current == _shipped_digest(src_file):
-            return
+        return
     if dst_file.exists():
         backup_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(dst_file, backup_dir / dst_file.name)
@@ -533,7 +515,7 @@ def ensure_workspace_avatars(log):
             log(f"  ⚠️ 补齐 {workspace} 头像失败：{exc}")
 
 
-def install_personas(log, preserve_existing=False):
+def install_personas(log):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
     mapping = {
@@ -545,8 +527,6 @@ def install_personas(log, preserve_existing=False):
     }
     src_root = resource_path("personas")
     backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
-    # Updates keep the owner's edits but still refresh files nobody changed.
-    shipped = load_shipped_persona_hashes(src_root) if preserve_existing else None
     for mode, target in mapping.items():
         src_mode = src_root / mode
         if src_mode.exists():
@@ -555,10 +535,7 @@ def install_personas(log, preserve_existing=False):
                 src_file = src_mode / fname
                 if src_file.exists():
                     never_replace = mode == "neutral" or fname == "DREAMS.md"
-                    _install_persona_file(
-                        src_file, target / fname, preserve_existing or never_replace, backup_root / mode,
-                        None if never_replace else shipped, f"{mode}/{fname}",
-                    )
+                    _install_persona_file(src_file, target / fname, never_replace, backup_root / mode)
             for dname in PERSONA_DIRS:
                 src_dir = src_mode / dname
                 if not src_dir.is_dir():
@@ -568,9 +545,7 @@ def install_personas(log, preserve_existing=False):
                         relative = src_file.relative_to(src_mode)
                         never_replace = mode == "neutral"
                         _install_persona_file(
-                            src_file, target / relative, preserve_existing or never_replace,
-                            backup_root / mode / relative.parent,
-                            None if never_replace else shipped, f"{mode}/{relative.as_posix()}",
+                            src_file, target / relative, never_replace, backup_root / mode / relative.parent,
                         )
             log(f"  [{mode}] 人格文件 -> {target}")
     return ensure_mode_agents(log)
@@ -1021,7 +996,7 @@ def pull_and_update(log):
             return False
         ensure_prompts(log)
         apply_patch(False, log)
-        install_personas(log, preserve_existing=False)
+        install_personas(log)
         for service in ("party", "context", "project-scope", "mode-architecture"):
             install_runtime_service(service, log)
         install_theme(log)
@@ -1070,10 +1045,10 @@ def prepare_bundled_desktop(log):
     version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else "current"
     marker = state / f"bundled-setup-{version}"
     if not marker.exists():
-        # Packaged App only fills missing defaults. Existing user-authored
-        # prompts/personas are valuable state and are never reverted on launch.
+        # Once per version: user-authored prompts are kept; persona manuals and
+        # playbooks follow this version (old copies backed up), memory untouched.
         ensure_prompts(log, preserve_existing=True)
-        install_personas(log, preserve_existing=True)
+        install_personas(log)
         marker.write_text("preserved\n", encoding="utf-8")
     else:
         # The marker only covers the file copy.  Mode registration is checked

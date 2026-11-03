@@ -96,7 +96,7 @@ ensure_learning_agent() {
   openclaw agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
 }
 
-echo "==> 1/6 安装人格文件和打法（自己改过的保持原样）"
+echo "==> 1/6 安装人格文件和打法（跟随官方版本，旧的先备份；记忆不动）"
 if [[ "$INSTALL_AGENTS" == "1" ]]; then
   bash "$REPO_ROOT/installer/macos/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" \
     "$HOME/.openclaw/backups/personas-$(date +%Y%m%d-%H%M%S)"

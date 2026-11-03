@@ -1,4 +1,3 @@
-import hashlib
 import shutil
 import subprocess
 import sys
@@ -12,13 +11,6 @@ SYNC = ROOT / "installer/macos/sync-personas.sh"
 
 
 class PersonaBundleTests(unittest.TestCase):
-    def test_shipped_hash_list_covers_every_bundled_file(self):
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "tools/personas/shipped_hashes.py"), "--check"],
-            capture_output=True, text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
     def test_every_mode_gets_the_same_playbooks_and_their_references_exist(self):
         modes = ("chat", "project", "thinking", "learning")
         names = {mode: sorted(p.name for p in (PERSONAS / mode / "playbooks").iterdir()) for mode in modes}
@@ -35,7 +27,7 @@ class PersonaBundleTests(unittest.TestCase):
         self.assertTrue(data.startswith(b"\xef\xbb\xbf"), "Windows PowerShell 5.1 needs the BOM to read Chinese text")
 
     @unittest.skipUnless(shutil.which("bash"), "needs bash")
-    def test_mac_sync_updates_untouched_files_and_keeps_edited_ones(self):
+    def test_mac_sync_makes_manuals_follow_the_official_version_and_keeps_memory(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             personas = tmp / "personas"
@@ -43,25 +35,31 @@ class PersonaBundleTests(unittest.TestCase):
             (personas / "neutral").mkdir(parents=True)
             (personas / "project/AGENTS.md").write_text("新手册\n", encoding="utf-8")
             (personas / "project/SOUL.md").write_text("新人格\n", encoding="utf-8")
+            (personas / "project/DREAMS.md").write_text("新梦\n", encoding="utf-8")
             (personas / "project/playbooks/new.md").write_text("新打法\n", encoding="utf-8")
             (personas / "neutral/IDENTITY.md").write_text("新身份\n", encoding="utf-8")
-            old = {"project/AGENTS.md": "旧手册\n", "project/SOUL.md": "旧人格\n", "neutral/IDENTITY.md": "旧身份\n"}
-            (personas / "shipped-hashes.txt").write_text(
-                "".join(f"{hashlib.sha256(text.encode()).hexdigest()} {key}\n" for key, text in old.items()),
-                encoding="utf-8",
-            )
             home = tmp / "home"
-            (home / "workspace-project").mkdir(parents=True)
+            project = home / "workspace-project"
+            (project / "memory").mkdir(parents=True)
             (home / "workspace-unrestricted").mkdir(parents=True)
-            (home / "workspace-project/AGENTS.md").write_bytes("旧手册\r\n".encode())
-            (home / "workspace-project/SOUL.md").write_text("我自己改的\n", encoding="utf-8")
+            (project / "AGENTS.md").write_bytes("旧手册\r\n".encode())
+            (project / "SOUL.md").write_text("本机改过的人格\n", encoding="utf-8")
+            (project / "DREAMS.md").write_text("我的梦\n", encoding="utf-8")
+            (project / "MEMORY.md").write_text("长期记忆\n", encoding="utf-8")
+            (project / "memory/2026-11-02.md").write_text("当天记忆\n", encoding="utf-8")
+            (project / "USER.md").write_text("关于我\n", encoding="utf-8")
             (home / "workspace-unrestricted/IDENTITY.md").write_text("旧身份\n", encoding="utf-8")
             subprocess.run(["bash", str(SYNC), str(personas), str(home), str(tmp / "backup")], check=True, capture_output=True)
-            self.assertEqual((home / "workspace-project/AGENTS.md").read_text(encoding="utf-8"), "新手册\n")
-            self.assertEqual((home / "workspace-project/SOUL.md").read_text(encoding="utf-8"), "我自己改的\n")
-            self.assertEqual((home / "workspace-project/playbooks/new.md").read_text(encoding="utf-8"), "新打法\n")
-            self.assertEqual((home / "workspace-unrestricted/IDENTITY.md").read_text(encoding="utf-8"), "旧身份\n")
+            self.assertEqual((project / "AGENTS.md").read_text(encoding="utf-8"), "新手册\n")
+            self.assertEqual((project / "SOUL.md").read_text(encoding="utf-8"), "新人格\n")
+            self.assertEqual((project / "playbooks/new.md").read_text(encoding="utf-8"), "新打法\n")
             self.assertEqual((tmp / "backup/project/AGENTS.md").read_bytes(), "旧手册\r\n".encode())
+            self.assertEqual((tmp / "backup/project/SOUL.md").read_text(encoding="utf-8"), "本机改过的人格\n")
+            self.assertEqual((project / "DREAMS.md").read_text(encoding="utf-8"), "我的梦\n")
+            self.assertEqual((project / "MEMORY.md").read_text(encoding="utf-8"), "长期记忆\n")
+            self.assertEqual((project / "memory/2026-11-02.md").read_text(encoding="utf-8"), "当天记忆\n")
+            self.assertEqual((project / "USER.md").read_text(encoding="utf-8"), "关于我\n")
+            self.assertEqual((home / "workspace-unrestricted/IDENTITY.md").read_text(encoding="utf-8"), "旧身份\n")
 
 
 if __name__ == "__main__":

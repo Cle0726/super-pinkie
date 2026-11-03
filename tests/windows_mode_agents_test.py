@@ -169,44 +169,33 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertEqual(list(config.parent.glob(".pinkie-main-*")), [])
         self.assertTrue(any("没有覆盖" in message for message in self.logs))
 
-    def test_playbooks_are_installed_and_existing_files_kept(self):
-        workspace = self.home / ".openclaw/workspace-project"
-        workspace.mkdir(parents=True)
-        (workspace / "SOUL.md").write_text("用户手改人格", encoding="utf-8")
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
-            super_pinkie.install_personas(self.logs.append, preserve_existing=True)
-        self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
-        self.assertEqual((workspace / "playbooks/review.md").read_text(encoding="utf-8"), "手册")
-
-    def write_shipped(self, *entries):
-        lines = []
-        for key, text in entries:
-            digest = hashlib.sha256(text.encode("utf-8").replace(b"\r", b"")).hexdigest()
-            lines.append(f"{digest} {key}")
-        (self.resources / "personas/shipped-hashes.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    def test_untouched_shipped_files_are_updated_and_edited_ones_kept(self):
+    def test_manuals_follow_the_official_version_and_memory_is_kept(self):
         workspace = self.home / ".openclaw/workspace-project"
         (workspace / "playbooks").mkdir(parents=True)
-        self.write_shipped(("project/IDENTITY.md", "旧版身份\n"), ("project/playbooks/review.md", "旧手册\n"))
-        # Same old release, checked out with Windows line endings: still counts as untouched.
+        (workspace / "memory").mkdir()
         (workspace / "IDENTITY.md").write_bytes("旧版身份\r\n".encode("utf-8"))
+        (workspace / "SOUL.md").write_text("本机改过的人格", encoding="utf-8")
         (workspace / "playbooks/review.md").write_text("旧手册\n", encoding="utf-8")
-        (workspace / "SOUL.md").write_text("用户手改人格", encoding="utf-8")
+        (workspace / "MEMORY.md").write_text("长期记忆", encoding="utf-8")
+        (workspace / "memory/2026-11-02.md").write_text("当天记忆", encoding="utf-8")
+        (workspace / "USER.md").write_text("关于我", encoding="utf-8")
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
-            super_pinkie.install_personas(self.logs.append, preserve_existing=True)
+            super_pinkie.install_personas(self.logs.append)
         self.assertEqual((workspace / "IDENTITY.md").read_text(encoding="utf-8"), "- **Name:** 项目碧琪")
+        self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), (self.resources / "personas/project/SOUL.md").read_text(encoding="utf-8"))
         self.assertEqual((workspace / "playbooks/review.md").read_text(encoding="utf-8"), "手册")
-        self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
+        self.assertEqual((workspace / "MEMORY.md").read_text(encoding="utf-8"), "长期记忆")
+        self.assertEqual((workspace / "memory/2026-11-02.md").read_text(encoding="utf-8"), "当天记忆")
+        self.assertEqual((workspace / "USER.md").read_text(encoding="utf-8"), "关于我")
         backups = list(self.state.glob("backups/personas-*/project/IDENTITY.md"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_bytes(), "旧版身份\r\n".encode("utf-8"))
+        self.assertEqual(list(self.state.glob("backups/personas-*/project/SOUL.md"))[0].read_text(encoding="utf-8"), "本机改过的人格")
 
     def test_unrestricted_and_dreams_are_never_replaced(self):
         (self.resources / "personas/neutral").mkdir(parents=True)
         (self.resources / "personas/neutral/IDENTITY.md").write_text("新身份", encoding="utf-8")
         (self.resources / "personas/project/DREAMS.md").write_text("新梦", encoding="utf-8")
-        self.write_shipped(("neutral/IDENTITY.md", "旧身份"), ("project/DREAMS.md", "旧梦"))
         free = self.home / ".openclaw/workspace-unrestricted"
         project = self.home / ".openclaw/workspace-project"
         free.mkdir(parents=True)
@@ -214,7 +203,7 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         (free / "IDENTITY.md").write_text("旧身份", encoding="utf-8")
         (project / "DREAMS.md").write_text("旧梦", encoding="utf-8")
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
-            super_pinkie.install_personas(self.logs.append, preserve_existing=True)
+            super_pinkie.install_personas(self.logs.append)
         self.assertEqual((free / "IDENTITY.md").read_text(encoding="utf-8"), "旧身份")
         self.assertEqual((project / "DREAMS.md").read_text(encoding="utf-8"), "旧梦")
 

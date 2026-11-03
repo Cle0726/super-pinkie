@@ -362,18 +362,19 @@ test('macOS hotfix keeps every bundled web surface and backend in sync', () => {
   assert.match(themeInstaller, /"\$PYTHON_BIN" "\$REPO_ROOT\/services\/mode-architecture\/setup\.py"/);
 });
 
-test('source updaters keep edited persona files and only refresh ones still as shipped', () => {
+test('source updaters make persona manuals follow the official version and keep memory', () => {
   const mac = read('install-full.sh');
   const sync = read('installer/macos/sync-personas.sh');
   const windows = read('install.ps1');
   assert.match(mac, /bash "\$REPO_ROOT\/installer\/macos\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
-  // An existing file is replaced only when it is byte-for-byte a version we shipped.
-  assert.match(sync, /grep -qxF "\$dst_sha \$key" "\$SHIPPED"/);
+  // A different copy on this machine is backed up, then replaced.
+  assert.match(sync, /cmp -s "\$src" "\$dst"/);
+  assert.doesNotMatch(sync, /SHIPPED|kept: edited/);
   assert.match(sync, /\[\[ -L "\$dst" \|\| "\$keep" == "1" \]\]/);
   assert.match(sync, /"\$mode" == "neutral" \|\| "\$rel" == "DREAMS\.md"/);
   assert.match(sync, /cp -p "\$dst" "\$BACKUP_DIR\/\$key"/);
-  assert.match(windows, /if \(Test-Path \$dst\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
-  assert.doesNotMatch(windows, /Copy-Item \$src \$dst -Force/);
+  assert.match(windows, /if \(\$mode -eq "neutral" -or \$f -eq "DREAMS\.md"\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
+  assert.doesNotMatch(windows, /-not \$SyncPersonas/);
   assert.match(mac, /restore_app_on_failure/);
   assert.match(mac, /已恢复上一版超級碧琪\.app/);
 });

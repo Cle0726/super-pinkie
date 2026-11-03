@@ -53,7 +53,7 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
             self.assertIn(("fixture", "圆桌已启动 🎈"), messages)
             self.assertFalse(any("service failed" in str(item) for item in messages))
 
-    def test_packaged_first_launch_keeps_existing_prompt_and_persona(self):
+    def test_packaged_first_launch_keeps_prompt_and_memory_and_updates_the_persona(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             resources = root / "resources"
@@ -66,7 +66,8 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
             workspace = prompt_dir / "workspace"
             workspace.mkdir(parents=True)
             (prompt_dir / "unrestricted-prompt-gemini.txt").write_text("用户手改提示词", encoding="utf-8")
-            (workspace / "SOUL.md").write_text("用户手改人格", encoding="utf-8")
+            (workspace / "SOUL.md").write_text("本机旧人格", encoding="utf-8")
+            (workspace / "MEMORY.md").write_text("长期记忆", encoding="utf-8")
 
             def resource_path(*parts):
                 return resources.joinpath(*parts)
@@ -75,16 +76,20 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
                 mock.patch.object(super_pinkie, "resource_path", side_effect=resource_path),
                 mock.patch.object(super_pinkie, "prompts_dir", return_value=prompt_dir),
                 mock.patch.object(super_pinkie.Path, "home", return_value=home),
+                mock.patch.object(super_pinkie, "windows_state_root", return_value=root / "state"),
                 mock.patch.object(super_pinkie.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=b"[]", stderr=b"")),
             ):
                 super_pinkie.ensure_prompts(lambda _message: None, preserve_existing=True)
-                super_pinkie.install_personas(lambda _message: None, preserve_existing=True)
+                super_pinkie.install_personas(lambda _message: None)
 
             self.assertEqual(
                 (prompt_dir / "unrestricted-prompt-gemini.txt").read_text(encoding="utf-8"),
                 "用户手改提示词",
             )
-            self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
+            self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "发行人格")
+            self.assertEqual((workspace / "MEMORY.md").read_text(encoding="utf-8"), "长期记忆")
+            backup, = (root / "state").glob("backups/personas-*/chat/SOUL.md")
+            self.assertEqual(backup.read_text(encoding="utf-8"), "本机旧人格")
 
 
 class ForeignProxyHandler(BaseHTTPRequestHandler):
