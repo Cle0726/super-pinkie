@@ -175,6 +175,9 @@ const CORPUS = [
   // tradeoff
   ['比较这两个方案的成本', 'tradeoff'],
   ['MacBook Air 和 Pro 选哪个', 'tradeoff'],
+  // 11-02 隔离实测：剪视频、写代码是买来干嘛，不是要做的活
+  ['MacBook Air 和 MacBook Pro 我该买哪个？主要剪视频和写代码', 'tradeoff'],
+  ['想买个显示器，主要用来剪视频，哪款好', 'tradeoff'],
   ['租房还是买房划算', 'tradeoff'],
   ['vue 和 react 哪个更适合新手', 'tradeoff'],
   ['should I buy the iPhone or the Pixel', 'tradeoff'],
@@ -313,6 +316,11 @@ test('page work: writes, look-page desktop and mobile, reading the screenshot, t
   // 看图工具读不到（路径不在允许目录）不算看过。
   assert.deepEqual(sig(rec('image', {image: '/tmp/pinkie-snapshot-4a99/99bd.png', prompt: '看排版'}, '{\n  "status": "error",\n  "tool": "image",\n  "error": "Local media path is not under an allowed directory: /tmp/x.png"\n}')), []);
   assert.ok(sig(rec('image', {image: `${P}/index.preview.png`, prompt: '看排版'}, '页面整体留白合理……')).includes('image_viewed'));
+  // 11-02 隔离实测：自己写的 Playwright 脚本只在输出里说截了图；which look-page 只是看装没装；README 正文提到 index.html 不算改网页。
+  assert.ok(sig(rec('exec', {command: 'python3 verify_e2e.py'}, 'Desktop screenshot generated: shot-desktop.png\nMobile screenshot generated: shot-mobile.png')).includes('screenshot'));
+  assert.ok(sig(rec('exec', {command: 'python3 verify_e2e.py'}, 'E2E tests and screenshots updated cleanly.')).includes('screenshot'));
+  assert.ok(!sig(rec('exec', {command: 'which look-page || true; python3 -c "import playwright"'}, '/usr/local/bin/look-page')).includes('screenshot'));
+  assert.deepEqual(sig(rec('write', {path: `${P}/使用说明.md`, content: '双击 index.html 就能打开'}, `Successfully wrote 30 bytes to ${P}/使用说明.md`)), ['mutation']);
   const local = rec('app_browser', {action: 'open', url: `file://${P}/index.html`}, '{"open":true,"observation":{"readyState":"complete"}}');
   assert.ok(sig(local).includes('browser_open') && !sig(local).includes('public_url_ok'));
   assert.deepEqual(sig(rec('app_browser', {action: 'open', url: 'file:///x.html'}, '{"ok":false,"reason":"当前 App 的侧栏浏览器尚未连接"}', {ok: false})), []);
@@ -585,6 +593,9 @@ test('a reviewer waits for something to look at, and its findings must point at 
   assert.equal(hasEvidenceBackedReview('1. 排版有问题，不够好看'), false);
   assert.equal(hasEvidenceBackedReview('1. 第 3 页标题被图片挡住了一半\n2. index.mobile.preview.png 里底部按钮溢出屏幕'), true);
   assert.equal(hasEvidenceBackedReview('1. 第 3 页标题被挡住\n2. 颜色有问题'), false, 'every finding needs its evidence');
+  // 11-02 隔离实测 K-full-max-web：标题行写问题、证据写在下面的小点里，也算有证据
+  assert.equal(hasEvidenceBackedReview('发现以下 2 处真实存在的问题：\n\n### 1. 移动端导航缺少菜单入口（严重）\n- 证据位置：shot-mobile.png 顶部导航栏\n- 看到现象：只剩店名\n\n### 2. 次级按钮边框过淡\n- 证据位置：shot-desktop.png 首屏按钮区'), true);
+  assert.equal(hasEvidenceBackedReview('### 1. 标题被遮挡\n- 证据：shot.png 顶部\n### 2. 配色不一致\n- 感觉不太协调'), false, 'a finding block without any evidence still fails');
 });
 
 test('artifact paths and tool records come out of real message shapes', () => {
@@ -646,4 +657,41 @@ test('machines without the look-* tools: the playbook fallbacks count as the sam
   assert.ok(sig(rec('exec', {command: 'Get-Command py, node -ErrorAction SilentlyContinue'}, 'py C:\\Windows\\py.exe')).includes('machine_probe'));
   // 运行单里提到没有 look-* 时怎么办。
   assert.match(kindPlanSection(['web_ui'], 'boost').join('\n'), /没有就用打法里的 shot\.py/);
+});
+
+test('a slide deck is checked on the deck itself, not on an HTML / PDF twin (isolated run K-deck-marathon)', () => {
+  const made = rec('exec', {command: 'python3 generate_pptx.py'}, `PPTX 成功生成: ${P}/plan.pptx`);
+  const twin = rec('exec', {command: 'python3 generate_pdf.py && pdfinfo plan.pdf'}, `已生成: ${P}/plan.pdf\nPages: 8`);
+  const twinPages = rec('exec', {command: 'pdftoppm -png -r 150 plan.pdf slides_preview/page'}, '');
+  const look = rec('read', {path: 'slides_preview/page-1.png'}, 'Read image file [image/png]');
+  const pptxText = rec('exec', {command: `python3 -c "from pptx import Presentation; print(len(Presentation('${P}/plan.pptx').slides))"`}, '8');
+  const ids = (tier, entries) => evidenceGaps(['document'], tier, entries).map(gap => gap.id);
+  const view = () => rec('read', {path: 'deck/page-1.png'}, 'Read image file [image/png]');
+  // 只看了替身：加强档也不算打开过交付文件。
+  assert.deepEqual(ids('boost', [made, twin, twinPages, look]), ['doc_opened']);
+  // python-pptx 打开幻灯片本身：加强档够了；全开档还要把幻灯片本身转图看。
+  assert.deepEqual(ids('boost', [made, twin, twinPages, look, pptxText]), []);
+  assert.deepEqual(ids('full', [made, twin, twinPages, look, pptxText]), ['doc_pages_viewed']);
+  // soffice 把 .pptx 转成 PDF，再把这份 PDF 转图看：算。
+  const convert = rec('exec', {command: `soffice --headless --convert-to pdf ${P}/plan.pptx --outdir out`}, `convert ${P}/plan.pptx -> out/plan.pdf`);
+  const deckPages = rec('exec', {command: 'pdftoppm -png out/plan.pdf deck/page'}, '');
+  assert.deepEqual(ids('full', [made, twin, twinPages, look, pptxText, convert, deckPages, view()]), []);
+  // look-doc 直接看 .pptx 也算。
+  assert.deepEqual(ids('full', [made, rec('exec', {command: `look-doc ${P}/plan.pptx`}, '第 1 页：deck/page-1.png'), view()]), []);
+});
+
+test('automation: test fixtures do not turn the job into document work, and a bare launchctl list proves nothing (isolated run K-auto-boost)', () => {
+  const fixture = rec('exec', {command: 'echo "测试" > 下载/市场分析报告.pdf && python3 organize_downloads.py'}, '已移动 1 个文件到 下载/文档/市场分析报告.pdf');
+  assert.equal(refineKinds(['automation'], fixture), null);
+  assert.equal(refineKinds(['code'], fixture), null);
+  assert.ok(!sig(rec('exec', {command: 'launchctl list | head -n 10'}, 'PID\tStatus\tLabel\n-\t0\tcom.apple.x')).includes('schedule_registered'));
+  assert.ok(sig(rec('exec', {command: 'launchctl list com.biqi.organize'}, '{ "Label" = "com.biqi.organize"; }')).includes('schedule_registered'));
+  assert.ok(sig(rec('exec', {command: 'launchctl list | grep biqi'}, '-\t0\tcom.biqi.organize')).includes('schedule_registered'));
+});
+
+test('a named source file before the verb is code work; visible UI tweaks in a .js stay web work', () => {
+  assert.equal(classifyWorkKind('给 utils.js 里的 parseDate 加上对 2026/11/02 这种斜杠写法的支持，带测试', {mode: 'project'}).kind, 'code');
+  assert.equal(classifyWorkKind('修一下 main.go 里的空指针', {mode: 'project'}).kind, 'code');
+  assert.equal(classifyWorkKind('给 api.py 加个重试，带测试', {mode: 'project'}).kind, 'code');
+  assert.equal(classifyWorkKind('把 app.js 里的按钮颜色改成蓝色', {mode: 'project'}).kind, 'web_ui');
 });
