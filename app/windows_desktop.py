@@ -1977,8 +1977,23 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
     threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
 
 
+def smoke_debug_port(environ=os.environ):
+    """Localhost DevTools port for the isolated smoke run only.
+
+    pywebview sets WebView2's AdditionalBrowserArguments itself, which makes
+    WebView2 ignore WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS; the port has to go
+    through pywebview's own setting. Normal starts never set this variable.
+    """
+    match = re.fullmatch(r"http://127\.0\.0\.1:(\d{2,5})", environ.get("PINKIE_SMOKE_WEBVIEW_CDP", ""))
+    port = int(match[1]) if match else 0
+    return port if 1024 <= port <= 65535 else None
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
+    debug_port = smoke_debug_port()
+    if debug_port:
+        webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
 
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
