@@ -1890,6 +1890,34 @@ BRIDGE_SCRIPT = r"""
 """
 
 
+NATIVE_READING_SCRIPT = r"""
+(() => {
+  // Native Windows material preference, not a different browser bundle.
+  // Raise the surface's paint alpha; never fade the window or its text.
+  const install = () => {
+    if (!document.body) return false;
+    if (window.__pinkieNativeReadingSurface) {
+      window.__pinkieNativeReadingSurface.apply();
+      return true;
+    }
+    const root = document.documentElement;
+    const apply = () => {
+      const night = root.hasAttribute('data-pinkie-night') ||
+        root.getAttribute('data-theme') === 'dark' || root.getAttribute('data-theme-mode') === 'dark';
+      document.body.style.setProperty('background-color',
+        night ? 'rgba(20,17,25,.96)' : 'rgba(255,250,249,.94)', 'important');
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, {attributes:true, attributeFilter:['data-pinkie-night','data-theme','data-theme-mode']});
+    window.__pinkieNativeReadingSurface = {apply, lightAlpha:.94, darkAlpha:.96};
+    return true;
+  };
+  if (!install()) document.addEventListener('DOMContentLoaded', install, {once:true});
+})();
+"""
+
+
 def show_startup_error(window):
     window.evaluate_js("""
       (()=>{const box=document.createElement('div');box.style.cssText='position:fixed;left:50%;bottom:9%;transform:translateX(-50%);padding:10px 16px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22';box.textContent='本机服务还没有准备好，现有资料没有改动。重新打开 App 会继续恢复。';(document.body||document.documentElement).append(box)})();
@@ -1930,7 +1958,7 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
             append_log("launcher", f"update health marker not written: {error}")
 
     try:
-        window.evaluate_js(BRIDGE_SCRIPT)
+        window.evaluate_js(NATIVE_READING_SCRIPT + BRIDGE_SCRIPT)
     except Exception as error:
         append_log("launcher", f"native bridge setup skipped: {error}")
 
