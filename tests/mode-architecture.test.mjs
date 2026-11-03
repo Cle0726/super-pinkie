@@ -1758,6 +1758,10 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
     }},
   });
   for(const name of ['before_agent_run','message_received','before_prompt_build','before_tool_call','after_tool_call','subagent_spawned','subagent_ended','before_compaction','after_compaction','before_agent_finalize','before_message_write','reply_payload_sending','model_call_started','model_call_ended','llm_output','agent_end'])assert.ok(hooks.has(name));
+  const modelText='我已经检查完配置了。';
+  const rendered=await hooks.get('reply_payload_sending')({payload:{text:modelText}},{agentId:'main',sessionKey:'agent:main:first-person-renderer'});
+  assert.equal(rendered.payload.text,'碧琪已经检查完配置了。');
+  assert.equal(modelText,'我已经检查完配置了。');
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
