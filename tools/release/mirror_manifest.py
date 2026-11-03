@@ -24,6 +24,7 @@ def main(version, notes_path, dist, out):
     if not assets:
         raise SystemExit("no release files to describe")
     manifest = {"version": version.removeprefix("v"), "notes": Path(notes_path).read_text(encoding="utf-8-sig"), "assets": assets}
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"latest.json: {len(assets)} files")
 
