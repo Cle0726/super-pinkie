@@ -15,8 +15,6 @@
     ]
   },
   "tests/learning-notes-menu.test.cjs :: full-page note menus escape cards, fit inside the view, restore focus and close on navigation": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
-  "tests/self-contained-app.test.cjs :: macOS app owns an unrestricted computer-control driver and capable node": "Mac 原生 Swift/build.sh 检查：签名身份和开屏写法已改，测试未跟上（Mac 壳漂移，不影响 Windows）",
-  "tests/self-contained-app.test.cjs :: macOS hotfix keeps the same stable local identity used by full builds": "Mac 原生 Swift/build.sh 检查：签名身份和开屏写法已改，测试未跟上（Mac 壳漂移，不影响 Windows）",
   "tests/sidebar-handshake.test.cjs :: a gwRequest sent before connect is held until hello-ok, and again after the gateway restarts": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/study-desk-chat-entry.test.cjs :: chromium: new learning chats stay in chat; explicit desk views remain session-local": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/study-desk-chat-entry.test.cjs :: webkit: new learning chats stay in chat; explicit desk views remain session-local": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
