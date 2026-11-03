@@ -135,7 +135,8 @@ class ReplacerTest(unittest.TestCase):
             updater = WindowsUpdater(Path(temp), executable=exe)
             updater.prepared = {"payload": str(payload), "sha256": updater._file_hash(payload), "version": "2.5.27"}
             with mock.patch.object(windows_desktop, "state_root", return_value=Path(temp) / "state"), \
-                    mock.patch.object(windows_desktop.subprocess, "Popen") as popen:
+                    mock.patch.object(windows_desktop.subprocess, "Popen") as popen, \
+                    mock.patch.object(WindowsUpdater, "_wait_for_replacer", return_value=True):
                 self.assertTrue(updater.launch_replacer()["started"])
             command = popen.call_args.args[0]
             self.assertEqual("2.5.27", command[command.index("-Version") + 1])
