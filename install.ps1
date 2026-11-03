@@ -94,6 +94,8 @@ python (Join-Path $RepoDir "services\project-scope\setup.py")
 if ($LASTEXITCODE -ne 0) { throw "Project scope setup failed" }
 python (Join-Path $RepoDir "services\mode-architecture\setup.py")
 if ($LASTEXITCODE -ne 0) { throw "Mode architecture setup failed" }
+python (Join-Path $RepoDir "services\first-person-renderer\setup.py")
+if ($LASTEXITCODE -ne 0) { throw "First-person renderer setup failed" }
 
 # 本地回环网关不应被浏览器 token 欢迎页拦住；保留 token 字段，只收口启动方式。
 $ConfigPath = Join-Path $PromptsDir "openclaw.json"

@@ -997,7 +997,7 @@ def pull_and_update(log):
         ensure_prompts(log)
         apply_patch(False, log)
         install_personas(log)
-        for service in ("party", "context", "project-scope", "mode-architecture"):
+        for service in ("party", "context", "project-scope", "mode-architecture", "first-person-renderer"):
             install_runtime_service(service, log)
         install_theme(log)
         restart_openclaw_gateway(log)
@@ -1074,7 +1074,7 @@ def prepare_bundled_desktop(log):
     repair_provider_models(log)
     ensure_gateway_auth_none(log)
     ensure_workspace_avatars(log)
-    for service in ("party", "context", "project-scope", "mode-architecture"):
+    for service in ("party", "context", "project-scope", "mode-architecture", "first-person-renderer"):
         install_runtime_service(service, log)
 
 
@@ -1177,6 +1177,7 @@ def run_control_center():
         # 5.1 安装项目目录继承与四模式隔离运行层（不覆盖用户上下文）
         install_runtime_service("project-scope", log)
         install_runtime_service("mode-architecture", log)
+        install_runtime_service("first-person-renderer", log)
         
         # 6. 注入皮肤
         install_theme(log)
