@@ -6699,7 +6699,12 @@ export default {
         return {payload: {text: stoppedReport}};
       }
       const payload = event?.payload;
-      const text = typeof payload?.text === 'string' ? workFirstReplyText(payload.text, ctx) : null;
+      // This runs after model generation and payload normalization.  Keep the
+      // model/session text untouched; only the user-visible outbound payload
+      // receives Pinkie's first-person display name.
+      const text = typeof payload?.text === 'string'
+        ? workFirstReplyText(payload.text, ctx).replaceAll('我', '碧琪')
+        : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))
         .then((result) => fileDelivery.replyResult(!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}, event, ctx));
