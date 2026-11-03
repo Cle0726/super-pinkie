@@ -100,3 +100,17 @@ test('a turn that presented or graded a learning card is delivered without file 
   guard.afterTool({toolName: 'learning_activity', toolCallId: 'card', params: {action: 'present'}, result: 'ok'}, ctx);
   assert.equal(guard.finalize({lastAssistantMessage: '已经全部完成。'}, ctx, {verifyExternal: false})?.action, 'revise');
 });
+
+// 工作台插件把【工作台】说明接在每条项目消息后面（2026-11-01 实测：「你是什么模型？」因此被当成
+// 执行型请求打回重写，多花一轮、聊天记录里先生那句也被改写掉）。
+const WORKBENCH = '\n\n【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。\n当前项目/默认工作目录："/tmp/x"';
+test('the workbench note appended to a question does not turn it into an execution request', (t) => {
+  for (const question of ['你是什么模型？', '给我的奶茶店想个名字']) {
+    const {guard, ctx} = setup(t, question + WORKBENCH);
+    assert.equal(guard.finalize({lastAssistantMessage: '我是碧琪，由 Gemini 3.8 Flash 驱动。'}, ctx, {verifyExternal: false}), undefined);
+  }
+  const {guard, ctx} = setup(t, '帮我做个记账的网页' + WORKBENCH);
+  const decision = guard.finalize({lastAssistantMessage: '记账页做好了。'}, ctx, {verifyExternal: false});
+  assert.equal(decision?.action, 'revise', 'a real build request still needs execution evidence');
+  assert.match(decision.reason, /执行型请求/);
+});
