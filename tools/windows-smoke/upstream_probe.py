@@ -325,12 +325,19 @@ def stuck_stack(page):
 
 def shot(page, path, result):
     # A renderer that stops answering must not cost the rest of the evidence.
-    try:
-        page.screenshot(path=str(path), timeout=15_000)
-    except Exception as error:
-        result.setdefault("screenshot_errors", []).append(f"{path.name}: {str(error)[:200]}")
-        if "stuck_stack" not in result:
-            result["stuck_stack"] = stuck_stack(page)
+    # The headless renderer on a busy Windows runner can stall once and then
+    # recover; retry the capture before treating it as a real hang.
+    last_error = None
+    for _attempt in range(2):
+        try:
+            page.screenshot(path=str(path), timeout=15_000)
+            return
+        except Exception as error:
+            last_error = error
+            page.wait_for_timeout(1500)
+    result.setdefault("screenshot_errors", []).append(f"{path.name}: {str(last_error)[:200]}")
+    if "stuck_stack" not in result:
+        result["stuck_stack"] = stuck_stack(page)
 
 
 def gateway_lines(log_path, offset):
@@ -365,12 +372,23 @@ def run_case(page, out, name, upstream, plan, log_path, profile, seconds, stop_w
     upstream.plan = list(plan)
     first_request = len(upstream.requests)
     session = f"agent:main:probe-{name}"
-    try:
-        page.goto(f"http://127.0.0.1:18789/chat?session={session}", wait_until="domcontentloaded", timeout=60_000)
-        page.wait_for_selector(".laolao-mode-switcher", timeout=60_000)
-    except Exception as error:
+    # The headless browser on a busy Windows runner can time out on the very
+    # first navigation even though the gateway is healthy.  Retry the load a
+    # couple of times before giving up: a page that merely loaded slowly must
+    # not fail the case, but a page that never comes up still does.
+    load_error = None
+    for _attempt in range(3):
+        try:
+            page.goto(f"http://127.0.0.1:18789/chat?session={session}", wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_selector(".laolao-mode-switcher", timeout=60_000)
+            load_error = None
+            break
+        except Exception as error:
+            load_error = error
+            page.wait_for_timeout(2000)
+    if load_error is not None:
         # A gateway still busy with the previous case must not cost the rest.
-        return {"sent": {"ok": False, "error": f"page did not load: {str(error)[:200]}"}, "seconds": 0,
+        return {"sent": {"ok": False, "error": f"page did not load: {str(load_error)[:200]}"}, "seconds": 0,
                 "requests": 0, "watchdog_requests": 0, "request_log": [], "timeline": [], "final": {},
                 "ribbon_ever": [], "gateway": [], "watchdog_retries": 0}
     page.wait_for_timeout(6000)
