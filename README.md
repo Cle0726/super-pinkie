@@ -214,6 +214,11 @@ curl -fsSL https://raw.githubusercontent.com/Cle0726/super-pinkie/main/bootstrap
 ./update-full.sh
 ```
 
+同一台 Mac 有多个系统用户时，每个用户都可以在自己的会话中点击更新：能写入
+`/Applications` 的管理员会更新共享 App；普通用户会自动获得并更新自己的
+`~/Applications/超級碧琪.app`。各用户的模型配置、会话、记忆和更新记录仍保留在各自的
+Home 目录，互不覆盖。
+
 ---
 
 ## 项目结构

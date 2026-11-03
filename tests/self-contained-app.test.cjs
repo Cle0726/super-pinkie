@@ -394,6 +394,17 @@ test('macOS manual update leaves the gateway page before replacing the App', () 
   assert.match(updater, /旧版没有被改动|保留或恢复旧版/);
 });
 
+test('macOS updater gives a standard account its own writable App copy', () => {
+  const updater = read('installer/macos/detached-update.sh');
+  assert.match(updater, /resolve_update_app_path\(\)/);
+  assert.match(updater, /shared_parent="\$\(dirname "\$APP_PATH"\)"/);
+  assert.match(updater, /user_root="\$HOME\/Applications"/);
+  assert.match(updater, /printf '%s\/超級碧琪\.app\\n' "\$user_root"/);
+  assert.match(updater, /ORIGINAL_APP_PATH="\$APP_PATH"/);
+  assert.match(updater, /shared App is not writable; installing this user's copy/);
+  assert.match(updater, /\[\[ "\$APP_PATH" == "\$ORIGINAL_APP_PATH" \]\] && ! stop_exact_clekk_gateway/);
+});
+
 test('release workflow publishes both desktop formats from self-contained builders', () => {
   const release = read('.github/workflows/release.yml');
   assert.match(release, /\.\/desktop\/macos\/build\.sh/);
