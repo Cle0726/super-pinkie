@@ -961,6 +961,10 @@ try {
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
   $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
   if (Test-Path -LiteralPath $stage) { throw 'update staging path already exists' }
+  # This helper has no visible PowerShell window. Per-entry console progress
+  # adds substantial overhead for the tens of thousands of portable files;
+  # suppress only that hidden process's progress records, not App effects.
+  $ProgressPreference = 'SilentlyContinue'
   Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }

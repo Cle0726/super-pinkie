@@ -308,6 +308,13 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertFalse(WindowsUpdater._wait_for_replacer(process, marker, 'correct', timeout=1))
         self.assertTrue(marker.exists())
 
+    def test_portable_extraction_suppresses_only_hidden_shell_progress(self):
+        helper = WindowsUpdater._directory_helper_source()
+        progress = helper.index("$ProgressPreference = 'SilentlyContinue'")
+        extraction = helper.index("Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force")
+        self.assertLess(progress, extraction)
+        self.assertLess(helper.index("Get-FileHash -LiteralPath $Payload"), extraction)
+
     def test_replacer_timeout_stops_only_the_unready_helper(self):
         marker = Path(self.temporary.name) / 'missing-helper-ready'
         process = mock.Mock()
