@@ -232,7 +232,7 @@ function watchdogControlMessage(instruction = '') {
     || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
   return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
 }
-const PLUGIN_BUILD = '2026-11-02.1-work-kinds';
+const PLUGIN_BUILD = '2026-11-02.5-work-kinds';
 
 // 同一个网关进程里，OpenClaw 会把本插件加载好几份：网关注册表一份（界面调用的 RPC 走这里），
 // agent runtime 注册表一份（运行中的钩子、工具走这里），按工作区 / 运行还会再建（日志 instance=3、4…）。
@@ -365,6 +365,23 @@ function startedBackgroundTask(message) {
   const details = message?.details;
   if (details?.async === true && /^(?:started|running|queued)$/i.test(String(details.status || ''))) return true;
   return /Background task started for \w+ generation\b/.test(resultText(message?.content ?? message?.result));
+}
+
+function yieldedTurn(message) {
+  if (!/^(?:toolResult|tool_result)$/i.test(String(message?.role || ''))) return false;
+  if (!/^sessions_yield$/i.test(String(message?.toolName || message?.name || ''))) return false;
+  return !message?.isError && (message?.details?.status === 'yielded' || /"status"\s*:\s*"yielded"/.test(resultText(message?.content ?? message?.result)));
+}
+
+// 这一轮以 sessions_yield 收尾：有意停下等子任务，不是「没写最终回复」。
+function endsWithYield(messages = []) {
+  const list = (Array.isArray(messages) ? messages.slice(-8) : []).map(entry => (
+    entry?.message && typeof entry.message === 'object' ? entry.message : entry
+  ));
+  const lastAssistant = [...list].reverse().find(message => message?.role === 'assistant');
+  const trailing = list.slice(list.lastIndexOf(lastAssistant) + 1)
+    .filter(message => /^(?:toolResult|tool_result)$/i.test(String(message?.role || '')));
+  return trailing.length > 0 && trailing.every(yieldedTurn);
 }
 
 function hasIncompleteToolTurn(event = {}, reason = '', ctx = {}) {
@@ -2219,6 +2236,15 @@ function internalControlText(value = '') {
   return /(?:\u2063|pinkie-(?:tier|integrity|watchdog|marathon)|自动续接保护|档位控制器|档位续跑|全局交付真实性门禁)/i.test(text);
 }
 
+// OpenClaw 自己塞进会话的「用户」轮：后台生图/生视频完成通知、内部上下文事件、交付前改写请求。
+// 它们不是用户的新要求，不能拿来重新判活儿种类（11-02 隔离实测：生图失败通知把视频活判成简单问答，
+// 「Before accepting … apply this revision request」把查 iPhone 版本判成 App 活）。
+function runtimeTurnText(value = '') {
+  const text = String(value || '').trimStart();
+  return /^(?:A background task completed\.|Continue the OpenClaw runtime event\b|Before accepting the previous final answer, apply this revision request|\[Internal task completion event\])/.test(text)
+    || text.includes('<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>');
+}
+
 function visibleAssistantText(message = {}) {
   if (!message || message.role !== 'assistant') return '';
   if (typeof message.content === 'string') return message.content.trim();
@@ -3454,6 +3480,7 @@ function decodeRun(value) {
     verificationEvidence: Array.isArray(value.verificationEvidence) ? value.verificationEvidence.slice(-120) : [],
     progressDigests: Array.isArray(value.progressDigests) ? [...new Set(value.progressDigests)].slice(-120) : [],
     progressSequence: Math.max(0, Number(value.progressSequence) || 0),
+    lastMutationSequence: Math.max(0, Number(value.lastMutationSequence) || 0),
     tradeoffCompared: Boolean(value.tradeoffCompared),
     tradeoffPresented: Boolean(value.tradeoffPresented),
     retryAttempts: Math.max(0, Number(value.retryAttempts) || 0),
@@ -3823,7 +3850,11 @@ export class UpstreamWatchdog {
       return false;
     }
     const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' ');
-    const incompleteToolTurn = hasIncompleteToolTurn(event, reason, ctx);
+    // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
+    // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
+    const waitingOnChildren = workFirstContext(ctx) && endsWithYield(event.messages)
+      && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey)));
+    const incompleteToolTurn = !waitingOnChildren && hasIncompleteToolTurn(event, reason, ctx);
     if (event.success && !incompleteToolTurn) {
       // A successful/manual follow-up may finish before the pending retry
       // timer fires. Remove both online and cron fallbacks to avoid a duplicate
@@ -4149,7 +4180,7 @@ export class UpstreamWatchdog {
     return true;
   }
 
-  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation, message: controlMessage}) {
+  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation, message: controlMessage, waitedOnChildren = false}) {
     if (!this.cliEntry) return false;
     const leaseGeneration = generation ?? this.generationFor(sessionKey);
     if (leaseGeneration !== this.generationFor(sessionKey)) return false;
@@ -4160,7 +4191,32 @@ export class UpstreamWatchdog {
     if (activity.parentRunning || pending > 0 || quietForMs < WATCHDOG_QUIET_FENCE_MS) {
       const delayMs = activity.parentRunning || pending > 0
         ? WATCHDOG_ACTIVITY_POLL_MS : Math.max(250, WATCHDOG_QUIET_FENCE_MS - quietForMs);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind, generation: leaseGeneration, message: controlMessage});
+      this.scheduleImmediate({sessionKey, agentId, runId, attempt, tag, delayMs, kind, generation: leaseGeneration, message: controlMessage,
+        waitedOnChildren: waitedOnChildren || pending > 0});
+      return false;
+    }
+    // 档位任务里等过子任务的续跑：子任务一收齐，档位续跑器就会叫醒父会话（它在同一刻发出）。
+    // 两条一起排进会话，这条旧的「还差：独立复算 0/1」会在新终稿之后再跑一轮（11-02 隔离实测 K-data-full）。
+    // 交给档位续跑器；那一轮的交付核对还缺什么，会自己再定续跑。
+    const yieldToTier = workFirstContext({sessionKey}) && waitedOnChildren && Boolean(this.tierFor(sessionKey));
+    // 这条续跑是针对 runId 那一轮定的；等子任务的这段时间里父会话已经又跑过一轮（档位续跑器叫醒它、
+    // 已经交了新终稿），那一轮自己的交付核对会另算缺口。再发旧的「还差：独立起草 0/1」只会让它
+    // 再写一版终稿（11-02 隔离实测 K-tutor-full）。
+    if (yieldToTier || (workFirstContext({sessionKey}) && runId && this.latestRuns.has(sessionKey)
+        && this.latestRuns.get(sessionKey) !== String(runId))) {
+      this.jobStore.delete(sessionKey);
+      try { await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: tag || safeTag(sessionKey)}); } catch {}
+      this.api.logger?.info?.(`watchdog dropped stale ${kind || 'retry'} session=${sessionKey} run=${runId} ${yieldToTier ? 'yielded=tier' : `newer=${this.latestRuns.get(sessionKey)}`}`);
+      return false;
+    }
+    // 这条续跑是针对 runId 那一轮定的；等子任务的这段时间里父会话已经又跑过一轮（档位续跑器叫醒它、
+    // 已经交了新终稿），那一轮自己的交付核对会另算缺口。再发旧的「还差：独立起草 0/1」只会让它
+    // 再写一版终稿（11-02 隔离实测 K-tutor-full）。
+    if (workFirstContext({sessionKey}) && runId && this.latestRuns.has(sessionKey)
+        && this.latestRuns.get(sessionKey) !== String(runId)) {
+      this.jobStore.delete(sessionKey);
+      try { await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: tag || safeTag(sessionKey)}); } catch {}
+      this.api.logger?.info?.(`watchdog dropped stale ${kind || 'retry'} session=${sessionKey} run=${runId} newer=${this.latestRuns.get(sessionKey)}`);
       return false;
     }
     this.dispatching.add(sessionKey);
@@ -4570,7 +4626,10 @@ function captureVerificationEvidence(state, event = {}) {
   // 看图、读文件不靠「改了什么」记录，结果为空也要留下（浏览器截图、读图片的结果常常只有一张图）。
   if (!output && !isError && (kind === 'mutation' || (state?.mode !== 'none' && /^(?:read|image|app_browser|browser)$/i.test(name)))) output = '工具操作已返回';
   if (!output && !isError) return null;
-  const digest = hashForAudit(name + '\n' + params + '\n' + output);
+  // 改完东西后再打开同一张截图、再跑同一条命令，是新的核对，不是空转：去重时带上最后一次改动的序号。
+  // 否则「改完再看一眼」会被当成重复记录丢掉，缺口补不上、还被判没进展而停掉整轮（11-02 隔离实测 K-web-boost）。
+  const since = state?.mode !== 'none' && kind !== 'mutation' ? '\n@' + (Number(state.lastMutationSequence) || 0) : '';
+  const digest = hashForAudit(name + '\n' + params + '\n' + output + since);
   if (state.progressDigests.includes(digest)) return null;
   const entry = {
     name,
@@ -4583,6 +4642,7 @@ function captureVerificationEvidence(state, event = {}) {
     ok: !isError,
   };
   state.progressSequence = entry.sequence;
+  if (kind === 'mutation') state.lastMutationSequence = entry.sequence;
   state.verificationEvidence.push(entry);
   state.verificationEvidence = state.verificationEvidence.slice(-120);
   state.progressDigests.push(digest);
@@ -5015,7 +5075,7 @@ export class ModeArchitecture {
     // A bare “继续” is a control acknowledgement, not the actual task. Keep
     // the last substantive request so a compaction does not reduce a complex
     // task to one word when the user merely asked it to carry on.
-    if (!sessionKey || !text || internalControlText(text) || CONTINUATION_ONLY_PROMPT.test(text)) return;
+    if (!sessionKey || !text || internalControlText(text) || runtimeTurnText(text) || CONTINUATION_ONLY_PROMPT.test(text)) return;
     this.lastUserPrompts.set(sessionKey, {text: handoffText(text), at: Date.now()});
     if (this.lastUserPrompts.size > 128) {
       const oldest = this.lastUserPrompts.keys().next().value;
@@ -5032,7 +5092,7 @@ export class ModeArchitecture {
   receiveUserMessage(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
     const prompt = String(event.content ?? event.body ?? event.prompt ?? '').trim();
-    if (!sessionKey || !prompt || internalControlText(prompt) || isInternalExecutionSession(sessionKey)) return '';
+    if (!sessionKey || !prompt || internalControlText(prompt) || runtimeTurnText(prompt) || isInternalExecutionSession(sessionKey)) return '';
     const parent = this.resolveParent(sessionKey);
     this.rememberUserPrompt(sessionKey, prompt);
     const state = this.getRun(parent);
@@ -5127,6 +5187,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       progressMarks: 0, stagnantCycles: 0, lastCheckpointAt: 0,
       taskPrompt: '', taskType: 'pending', verificationEvidence: [], progressDigests: [],
       progressSequence: 0,
+      lastMutationSequence: 0,
       tradeoffCompared: false, tradeoffPresented: false,
       retryAttempts: 0, noProgressCycles: 0, lastProgressFingerprint: '', lastRetryRunId: '',
       retryDifferences: [], stopRequested: false, stopReason: '', finalSourceSummary: false,
@@ -5293,7 +5354,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const armed = this.arm(sessionKey, tier);
       const state = this.getRun(sessionKey);
       const taskPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
-      if (state && taskPrompt && !internalControlText(taskPrompt)) {
+      if (state && taskPrompt && !internalControlText(taskPrompt) && !runtimeTurnText(taskPrompt)) {
         state.taskPrompt = taskPrompt;
         classifyTierTask(state, taskPrompt, this.lastUserPrompts.get(sessionKey)?.text || '');
         state.lastEventAt = Date.now();
@@ -5307,7 +5368,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       // 子代理，它会再次派生同一批角色，形成指数级嵌套和完成通知拥堵。
       if (state?.active && sessionKey === state.parentSessionKey) {
         const taskPrompt = String(event.prompt || '').trim();
-        if (taskPrompt && !internalControlText(taskPrompt) && !CONTINUATION_ONLY_PROMPT.test(taskPrompt)) {
+        if (taskPrompt && !internalControlText(taskPrompt) && !runtimeTurnText(taskPrompt) && !CONTINUATION_ONLY_PROMPT.test(taskPrompt)) {
           state.taskPrompt = taskPrompt;
           classifyTierTask(state, taskPrompt);
           state.lastEventAt = Date.now();
@@ -5424,12 +5485,17 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     if (state?.active && role) {
       const reservedForRole = [...state.reservations.values()].filter(value => value?.role === role).length;
-      const spawnedForRole = [...state.childRoles.values()].filter(childRole => childRole === role).length;
+      // 结果被退回的子任务（空结果、没证据的审稿）不占名额，可以补派；总数到两倍名额为止，免得来回补派。
+      // 不然「看图审稿 0/1」既补不齐又派不出，续跑没有新进展，整轮被停（11-02 隔离实测 K-full-max-web）。
+      const roleChildren = [...state.childRoles.entries()].filter(([, childRole]) => childRole === role);
+      // 只对四种干活的子任务这样补派；求解、批评这些照旧「派过就算」（总派生上限），无限制模式也保持旧规则。
+      const spawnedForRole = state.mode === 'none' || !WORK_ROLES.includes(role) ? roleChildren.length
+        : roleChildren.filter(([key]) => !state.completedChildren.has(key) || state.childResults.has(key)).length;
       const cap = roleSpawnCap(state, role);
       if (cap < 1) {
         return {block: true, blockReason: ROLE_LABELS[role] + '不是当前任务流程启用的环节。'};
       }
-      if (spawnedForRole + reservedForRole >= cap) {
+      if (spawnedForRole + reservedForRole >= cap || roleChildren.length + reservedForRole >= cap * 2) {
         return {block: true, blockReason: ROLE_LABELS[role] + '已达到本流程派发上限 ' + cap + '，不要重复派生。'};
       }
       const taskRequirements = deliberationRequirements(state.tier, state.mode, state.taskType);
@@ -5605,6 +5671,17 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         || state.childRoles.has(event.targetSessionKey)
         || state.completedChildren.has(event.targetSessionKey);
       if (!tracked) return;
+      // 一个子任务结束会来两个事件（agent_end、subagent_ended），先后不定。已经收下有内容的结果后，
+      // 后到的那个（常常不带正文）不能把它改记成失败（11-02 隔离实测：每个子任务都显示「失败」）。
+      if (state.completedChildren.has(event.targetSessionKey) && state.childResults.has(event.targetSessionKey)) {
+        state.lastEventAt = Date.now();
+        this.setRun(parent, state);
+        const pending = this.pendingByParent.get(parent);
+        pending?.delete(event.targetSessionKey);
+        if (!pending?.size) this.pendingByParent.delete(parent);
+        this.lastChildEventAt.set(parent, Date.now());
+        return;
+      }
       const role = state.childRoles.get(event.targetSessionKey) || '';
       const resultText = String(event.resultText || '').trim();
       const successful = !event.outcome || event.outcome === 'ok';
