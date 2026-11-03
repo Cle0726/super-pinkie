@@ -23,67 +23,17 @@ const cacheVersions = (text, tableForm) => {
 };
 
 test('Windows injects the same asset versions as macOS, never older ones', () => {
-  // Both installers write into the same ui\injections assets. A version below
-  // the asset's actual generation lets WebView2 keep its cached copy, so an
-  // upgrade looks like it did nothing. macOS is the reference implementation.
-  const mac = cacheVersions(read('installer/macos/apply-theme.sh'));
-  const windows = cacheVersions(read('installer/windows/apply-theme.ps1'), true);
-  const fragment = cacheVersions(read('ui/injections/laolao-head.fragment.html'));
-
-  const stale = [];
-  for (const [asset, target] of mac) {
-    const current = windows.get(asset);
-    // Absent from the table is fine only when the fragment already carries the
-    // right version; the table runs afterwards and would otherwise rewrite it.
-    if (!current) {
-      const fromFragment = fragment.get(asset);
-      if (!fromFragment || fromFragment.number < target.number) stale.push(`${asset}: missing, macOS has ${target.version}`);
-      continue;
-    }
-    if (current.number < target.number) stale.push(`${asset}: ${current.version} < macOS ${target.version}`);
-  }
-  assert.deepEqual(stale, [], `Windows cache-bust versions are behind macOS:\n${stale.join('\n')}`);
-
-  const downgraded = [];
-  for (const [asset, fromFragment] of fragment) {
-    const current = windows.get(asset);
-    if (current && current.number < fromFragment.number) {
-      downgraded.push(`${asset}: table ${current.version} < fragment ${fromFragment.version}`);
-    }
-  }
-  assert.deepEqual(downgraded, [], `Windows lowers the version the shared head fragment injects:\n${downgraded.join('\n')}`);
-
-  const windowsSource = read('installer/windows/apply-theme.ps1');
-  assert.match(windowsSource, /"laolao-mode-menu-fx\.css"/);
-  assert.match(windowsSource, /<link rel="stylesheet" href="\.\/laolao-mode-menu-fx\.css\?v=modemenufx1">/);
-  assert.match(windowsSource, /'laolao-mode-menu-fx\.css' = 'modemenufx1'/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-mode-menu-fx.css'], 'assets': []});
+  const source=read('build-win.ps1');
+  assert.ok(source.indexOf('bundle.py') > source.indexOf('clean_ui.py'));
+  assert.match(source,/windows-ui-manifest\.json/);
+  assert.match(read('.github/workflows/release.yml'),/ui-parity:/);
 });
 
 test('the Windows installer pins one version per asset, not two', () => {
-  // $headTags adds tags to legacy fragments that lack them, then the $versions
-  // table normalises every reference.  When the two disagree the tag list wins
-  // for the tags it injects, so a lower number there keeps serving the stale
-  // cached copy even though the table looks correct.
-  const source = read('installer/windows/apply-theme.ps1');
-  const tags = source.slice(source.indexOf('$headTags = @('), source.indexOf('$versions = @{'));
-  const table = source.slice(source.indexOf('$versions = @{'), source.indexOf('foreach ($entry in $versions.GetEnumerator())'));
-  const pinned = (text, tableForm) => {
-    const found = new Map();
-    const collect = (asset, version) => { if (!found.has(asset)) found.set(asset, version); };
-    for (const [, asset, version] of text.matchAll(/laolao-([a-z-]+\.(?:js|css))\?v=([a-z]+\d+)/g)) collect(asset, version);
-    if (tableForm) {
-      for (const [, asset, version] of text.matchAll(/'laolao-([a-z-]+\.(?:js|css))'\s*=\s*'([a-z]+\d+)'/g)) collect(asset, version);
-    }
-    return found;
-  };
-  const fromTags = pinned(tags), fromTable = pinned(table, true);
-  const mismatched = [];
-  for (const [asset, version] of fromTags) {
-    const other = fromTable.get(asset);
-    if (other && other !== version) mismatched.push(`${asset}: $headTags ${version} vs $versions ${other}`);
-  }
-  assert.deepEqual(mismatched, [], `The Windows installer pins two versions for one asset:\n${mismatched.join('\n')}`);
-  assert.ok(fromTags.size >= 20, `the legacy-fragment tag list should still pin the shipped assets, saw ${fromTags.size}`);
+  const source=read('installer/windows/apply-theme.ps1');
+  assert.doesNotMatch(source, /\$headTags = @\(|\$versions = @\{/);
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-theme.css','laolao-sidebar.js']});
 });
 
 test('Windows exe embeds its own Node and OpenClaw runtime', () => {
@@ -111,7 +61,7 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   assert.match(build, /\$personaStage;personas/);
 });
 
-test('the Windows package overlays the installed Mac runtime, not a newer patch generation', () => {
+test('both packages share the complete Mac browser renderer and preserve the backend snapshot', () => {
   const snapshot = path.join(root, 'desktop/windows/mac-runtime');
   const sums = fs.readFileSync(path.join(snapshot, 'SHA256SUMS'), 'utf8').trim().split('\n');
   assert.ok(sums.length >= 60, `the Mac snapshot is incomplete: ${sums.length} files`);
@@ -124,17 +74,21 @@ test('the Windows package overlays the installed Mac runtime, not a newer patch 
     const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
     assert.equal(actual, expected, relative);
   }
-  const chat = fs.readFileSync(path.join(snapshot, 'openclaw/dist/control-ui/assets/chat-page-DrPkxqJK.js'), 'utf8');
-  assert.match(chat, /\/\* pinkie-chat-timeline:v25 \*\//);
-  assert.doesNotMatch(chat, /pinkie-chat-timeline:v26/);
-  const index = fs.readFileSync(path.join(snapshot, 'openclaw/dist/control-ui/index.html'), 'utf8');
+  const chat = read('ui/runtime/chat-page-DrPkxqJK.js');
+  assert.match(chat, /\/\* pinkie-chat-timeline:v26 \*\//);
+  assert.match(chat, /pinkie-thinking-segments:v1/);
+  assert.doesNotMatch(chat, /pinkie-chat-timeline:v25/);
+  const index = read('ui/control-ui.index.html');
   assert.match(index, /pinkie-surface=6/);
   assert.match(index, /pinkie-browser=3/);
   assert.match(index, /pinkie-learning=8/);
-  assert.match(index, /laolao-theme\.css\?v=theme91/);
+  assert.doesNotMatch(index, /laolao-[^" ]+\.(?:js|css)/, "runtime snapshot must not own a second skin");
   const mode = fs.readFileSync(path.join(snapshot, 'services/mode-architecture/index.mjs'), 'utf8');
   assert.doesNotMatch(mode, /C\.le\. 执行控制层/);
-  const soul = fs.readFileSync(path.join(snapshot, 'personas/chat/SOUL.md'), 'utf8');
+  // Personas ship from the repository; a snapshot copy used to overwrite them.
+  assert.ok(!sums.some((line) => line.includes('  personas/')), 'the Mac snapshot must not carry personas');
+  assert.ok(!fs.existsSync(path.join(snapshot, 'personas')));
+  const soul = fs.readFileSync(path.join(root, 'personas/chat/SOUL.md'), 'utf8');
   assert.match(soul, /碧琪/);
   assert.doesNotMatch(soul, /Li An/);
 });
@@ -190,6 +144,9 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(release, /windows-\*\.exe\.sha256/);
   assert.match(release, /portable\.zip/);
   assert.match(release, /portable\.zip\.sha256/);
+  for (const job of ['source', 'macos-publish', 'windows-publish']) {
+    assert.match(release, new RegExp(`\\n  ${job}:\\n    needs: \\[windows-smoke, ui-parity\\]\\n`), `${job} must not publish before Windows smoke passes`);
+  }
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
@@ -210,7 +167,8 @@ test('Windows shell keeps all local spaces, project picker, voice and startup mo
   assert.match(launcher, /SAPI\.SpSharedRecognizer/);
   assert.match(launcher, /pywebview-drag-region/);
   assert.match(launcher, /min_size=\(760, 500\), resizable=True/);
-  assert.match(launcher, /shadow=True/);
+  assert.match(launcher, /transparent=True/);
+  assert.match(launcher, /configure_native_glass/);
   assert.match(launcher, /pinkie-native-resize-handles/);
   for (const edge of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']) {
     assert.match(launcher, new RegExp(`data-edge=\\"?${edge}|['\"]${edge}['\"]`));

@@ -55,8 +55,8 @@ test('materials stay inside the workspace rail and image click can reuse the exi
 });
 
 test('both desktop shells provide a local material transport without changing tool access', () => {
-  const mac = read('desktop/macos/Sources/Launcher.swift');
-  const material = read('desktop/macos/Sources/MaterialPreview.swift');
+  const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const material = read('desktop/macos/pinkie/Sources/MaterialPreview.swift');
   const windows = read('app/windows_desktop.py');
   assert.match(material, /final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler/);
   assert.match(mac, /configuration\.setURLSchemeHandler\(materialPreview, forURLScheme: "clekk-material"\)/);
@@ -222,18 +222,6 @@ test('simulated assistant replay offers actions only for a path accepted by the 
 });
 
 test('installers ship and inject the material viewer on both platforms', () => {
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  for (const source of [fragment, mac, windows]) {
-    assert.match(source, /laolao-material-preview\.css/);
-    assert.match(source, /laolao-material-preview\.js/);
-  }
-  assert.match(mac, /laolaoMaterialPreview/);
-  const fragmentVersion = fragment.match(/laolao-material-preview\.js\?v=(material\d+)/)?.[1];
-  const windowsVersion = windows.match(/'laolao-material-preview\.js' = '(material\d+)'/)?.[1];
-  const macVersion = mac.match(/laolao-material-preview\.js\?v=(material\d+)/)?.[1];
-  assert.ok(fragmentVersion, 'viewer cache version is present');
-  assert.equal(windowsVersion, fragmentVersion, 'Windows uses the same viewer cache version');
-  assert.equal(macVersion, fragmentVersion, 'macOS uses the same viewer cache version');
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-material-preview.css', 'laolao-material-preview.js'], 'assets': []});
+  assert.match(read('installer/macos/apply-theme.sh'), /laolaoMaterialPreview/);
 });

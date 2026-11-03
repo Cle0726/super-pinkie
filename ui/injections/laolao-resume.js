@@ -1020,6 +1020,7 @@
   // This is deliberately a data attribute/CSS ribbon: no fake chat message is
   // inserted and the internal watchdog control text never enters the transcript.
   let watchdogStatusTimer = null;
+  let stoppedNoticeSession = "";
   const setWatchdogStatus = (state, message) => {
     if (!location.pathname.startsWith("/chat")) return;
     const root = document.documentElement;
@@ -1193,7 +1194,8 @@
         if (!isBusy(pane)) scheduleQueueRecovery(pane, `history:${reason}`, recent);
         // Normal first-load/manual history sync is silent.  Only close the
         // ribbon when a real offline/retry state was previously announced.
-        if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")) {
+        if (document.documentElement.getAttribute?.("data-laolao-watchdog-state")
+          && stoppedNoticeSession !== currentSessionKey() && stoppedNoticeSession !== "*") {
           setWatchdogStatus("recovered", "连接已恢复，当前回复已同步");
         }
         return true;
@@ -1365,10 +1367,91 @@
     }, delay);
   };
 
-  // 上游失败卡出现时只显示稳定的状态提示并排队恢复。失败续接完全交给
-  // 网关看门狗，前端不清空正在进行中的流，也不模拟停止。
+  // 失败卡出现时先问看门狗这次会不会重试。缺文件、核心插件没加载、模型地址
+  // 404、本机代理没开这类本机问题，看门狗不会重试；以前这里一律显示「正在
+  // 自动重试」，提示条就一直挂着却什么也不发生。
+  const RETRY_MESSAGE = "上游波动，碧琪正在自动重试…";
+  const NO_PLUGIN_MESSAGE = "碧琪的核心插件没有加载，这次失败不会自动重试。请重启碧琪；还不行就重新安装。";
+  let failureCheck = 0;
+  // 「unknown method」也可能只是插件版本较旧、还没有 watchdog.status（Mac 线上
+  // 插件就是）。用每个版本都有的 usage.get 确认插件到底在不在。
+  const corePluginMissing = async (rpc) => {
+    try {
+      await rpc("pinkie.usage.get", {}, 8000);
+      return false;
+    } catch (error) {
+      if (/unknown method/i.test(String(error?.message || error))) return true;
+      // A timeout or disconnect says nothing about whether the plugin exists.
+      // Let the caller try the check again once the gateway responds.
+      throw error;
+    }
+  };
+  const showStoppedNotice = (sessionKey, message) => {
+    stoppedNoticeSession = sessionKey;
+    setWatchdogStatus("offline", message);
+  };
+  const explainRunFailure = async () => {
+    const check = ++failureCheck;
+    const sessionKey = currentSessionKey();
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (!sessionKey || typeof rpc !== "function") return;
+    // 看门狗在 agent_end 之后才做决定，失败卡可能先到，所以等它一会儿。
+    for (const wait of [300, 700, 1200, 2000, 3000]) {
+      await new Promise((resolve) => window.setTimeout(resolve, wait));
+      if (check !== failureCheck || sessionKey !== currentSessionKey()) return;
+      let status;
+      try {
+        status = await rpc("pinkie.watchdog.status", {sessionKey}, 5000);
+      } catch (error) {
+        if (/unknown method/i.test(String(error?.message || error))) {
+          try {
+            if (await corePluginMissing(rpc)) showStoppedNotice(sessionKey, NO_PLUGIN_MESSAGE);
+          } catch {} // The gateway did not answer the plugin check yet.
+        }
+        return;
+      }
+      if (status?.state === "stopped") {
+        showStoppedNotice(sessionKey, status.message || "这次失败不会自动重试。");
+        return;
+      }
+      if (status?.state === "retrying") {
+        if (!document.documentElement.getAttribute("data-laolao-watchdog-state")) setWatchdogStatus("retrying", RETRY_MESSAGE);
+        return;
+      }
+    }
+  };
+  // 多数失败（断流、404、连不上）在页面上只是原生的红色错误条，不会出现失败卡，
+  // 用户只看到「LLM request timed out.」之类却不知道碧琪会不会接着做。红条出现
+  // 或换了内容时也去问一次看门狗。
+  let lastErrorBanner = "";
+  // 核心插件整个没加载时，失败既不会出现失败卡也不会有人重试，页面只会一直
+  // 转「碧琪在比划着回你…」。打开页面时问一次，没有这个插件就一直提示。
+  let pluginChecked = false;
+  const checkCorePlugin = async () => {
+    const rpc = window.__laolaoSidebar?.gwRequest;
+    if (pluginChecked || typeof rpc !== "function" || !gatewayConnected()) return;
+    pluginChecked = true;
+    try {
+      if (await corePluginMissing(rpc)) {
+        stoppedNoticeSession = "*";
+        setWatchdogStatus("offline", NO_PLUGIN_MESSAGE);
+      }
+    } catch {
+      pluginChecked = false;
+    }
+  };
+  window.setInterval(() => {
+    if (!location.pathname.startsWith("/chat")) return;
+    void checkCorePlugin();
+    const banner = document.querySelector(".callout.danger.callout--dismissible");
+    const text = banner?.textContent?.trim() || "";
+    if (text && text !== lastErrorBanner) void explainRunFailure();
+    lastErrorBanner = text;
+  }, 1000);
   const onRunFailure = () => {
-    setWatchdogStatus("retrying", "上游波动，碧琪正在自动重试…");
+    if (stoppedNoticeSession === "*") return;
+    stoppedNoticeSession = "";
+    void explainRunFailure();
     // A failed attempt is normally followed by a watchdog retry. Refreshing
     // the pane here briefly clears the live composer and causes a visible
     // jump, while the retry is still active. Arm one coalesced idle recovery;
@@ -1377,6 +1460,7 @@
   };
   window.addEventListener("pinkie:run-failed", onRunFailure);
   window.addEventListener("pinkie:run-recovered", () => {
+    if (stoppedNoticeSession !== "*") stoppedNoticeSession = "";
     // This event is emitted only after the rendered transcript contains a
     // later real assistant terminal reply for every prior failure.
     clearWatchdogStatus();
@@ -2456,7 +2540,7 @@
         if (!gatewayOfflineSince) gatewayOfflineSince = Date.now();
         wasConnected = false;
         previousClient = client;
-        setWatchdogStatus("offline", "连接暂时中断，碧琪正在等待上游恢复…");
+        setWatchdogStatus("offline", "碧琪暂时掉线了，正在重新连上…");
         return;
       }
       if (!wasConnected || clientChanged) {

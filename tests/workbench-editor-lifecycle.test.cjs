@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-for(const file of ['ui/injections/laolao-workbench.js','services/cle-studio/static/legacy/laolao-workbench.js']) {
+for(const file of ['ui/injections/laolao-workbench.js']) {
   const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
   const method=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
   const close=method('  function closeTab(path, force) {','  function renderTabs() {');

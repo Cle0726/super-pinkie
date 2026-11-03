@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 test('native ChatGPT bridge counts assistant turns even when wrappers have no frame', () => {
-  const native = read('desktop/macos/Sources/Launcher.swift');
+  const native = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const selector = "document.querySelectorAll('[data-message-author-role=\"assistant\"]')";
   assert.equal(native.split(selector).length - 1, 2);
   assert.doesNotMatch(native, /querySelectorAll\('\[data-message-author-role="assistant"\]'\)\)\.filter\(visible\)/);
@@ -281,7 +281,7 @@ test('deep-think interception does not trigger a local run after direct web repl
 test('collaboration panel exposes honest activity and maintainable account controls', () => {
   const ui = read('ui/injections/laolao-web-gpt-collab.js');
   const connection = read('services/mode-architecture/web-gpt-connection.mjs');
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(ui, /连接与账号/);
   assert.match(ui, /pinkie\.webGpt\.connection\.get/);
   assert.match(ui, /pinkie\.webGpt\.connection\.pair/);
@@ -352,7 +352,7 @@ test('macOS installer and App bundle include the collaboration UI, skill and run
   const build = read('desktop/macos/build.sh');
   // Cache key must match the installer's current version, otherwise a stale
   // copy of the collaboration UI keeps loading after an update.
-  assert.match(installer, /laolao-web-gpt-collab\.js\?v=webgpt33/);
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-web-gpt-collab.js']});
   assert.match(installer, /web-gpt-project-context\.mjs/);
   assert.match(installer, /services\/chatgpt-collab/);
   assert.match(installer, /skills\/web-gpt-collab/);

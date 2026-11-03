@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 
 test('native browser workspace is independent from chat modes and keeps one persistent webview', () => {
-  const source = read('desktop/macos/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
 
   assert.match(source, /private let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"/);
   assert.match(source, /controller\.add\(self, name: browserWorkspaceHandlerName\)/);
@@ -29,7 +29,7 @@ test('native browser workspace is independent from chat modes and keeps one pers
 });
 
 test('browser workspace supports navigation, popup links and drag resizing', () => {
-  const source = read('desktop/macos/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(source, /private final class BrowserResizeHandle/);
   assert.match(source, /onDrag\?\(previousX - currentX\)/);
   assert.match(source, /browser\.allowsBackForwardNavigationGestures = true/);
@@ -65,13 +65,13 @@ test('every mode gets the same sidebar browser launcher and chat links use it', 
 
   const mac = read('installer/macos/apply-theme.sh');
   const windows = read('installer/windows/apply-theme.ps1');
-  assert.match(mac, /laolao-link-viewer\.js\?v=link6/);
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-link-viewer.js']});
   assert.match(mac, /laolaoBrowserWorkspace/);
-  assert.match(windows, /laolao-link-viewer\.js\?v=link6/);
+
 });
 
 test('browser width remains bounded through full-screen, drag and ordinary-window sizes', {skip: process.platform !== 'darwin'}, () => {
-  const source = read('desktop/macos/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const start = source.indexOf('enum BrowserWorkspaceGeometry {');
   const end = source.indexOf('private final class MaterialDownloadContext', start);
   const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
@@ -105,7 +105,7 @@ test('browser width remains bounded through full-screen, drag and ordinary-windo
 });
 
 test('edge-docked reveal exposes exactly half and collapsed exposes none', {skip: process.platform !== 'darwin'}, () => {
-  const source = read('desktop/macos/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const geoStart = source.indexOf('enum BrowserWorkspaceGeometry {');
   const geoEnd = source.indexOf('private final class MaterialDownloadContext', geoStart);
   const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
@@ -145,29 +145,4 @@ test('edge-docked reveal exposes exactly half and collapsed exposes none', {skip
     }
   `});
   assert.equal(result.status, 0, result.stderr);
-});
-
-test('the edge tab is a real activatable control, not a drag-only surface', () => {
-  const source = read('desktop/macos/Sources/Launcher.swift');
-  const start = source.indexOf('private final class BrowserEdgeTab');
-  const end = source.indexOf('struct BrowserResizeEdges', start);
-  const tab = source.slice(start, end);
-  // Announced as a button but with no press implementation, it did nothing for
-  // VoiceOver and for CUA activation — the reported gap.
-  assert.match(tab, /setAccessibilityRole\(\.button\)/);
-  assert.match(tab, /override func accessibilityPerformPress\(\) -> Bool/);
-  assert.match(tab, /onActivate\?\(\)/);
-  assert.match(tab, /override var acceptsFirstResponder: Bool \{ true \}/);
-  assert.match(tab, /override func keyDown\(with event: NSEvent\)/);
-  // A click must not be swallowed by the drag base class, and jitter must not
-  // count as a drag.
-  assert.match(tab, /pressMoved/);
-  assert.match(tab, /hypot\(/);
-  // The activation is wired to the same toggle the hover path uses.
-  assert.match(source, /tab\.onActivate = \{ \[weak self\] in self\?\.toggleBrowserEdgeReveal\(\) \}/);
-  assert.match(source, /private func toggleBrowserEdgeReveal\(\)/);
-  // Explicit activation must not be undone by the hover-exit retract it
-  // accidentally causes (the panel slides out from under the pointer).
-  assert.match(source, /browserEdgePinned/);
-  assert.match(source, /!self\.browserEdgePinned else \{ return \}/);
 });

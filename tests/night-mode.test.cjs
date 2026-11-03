@@ -37,55 +37,39 @@ test('night switch follows the native color mode and tells the native shell', ()
   assert.match(js, /prefers-color-scheme: dark/);
   assert.match(js, /laolaoWindowControl/);
   assert.match(js, /disconnect\(\)/);
-  const swift = read('desktop/macos/Sources/Launcher.swift');
+  const swift = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(swift, /"appearance"/);
   assert.match(swift, /func applyNightAppearance\(\)/);
 });
 
 test('night switch runs before anything paints and the night stylesheet loads last', () => {
-  const sh = read('installer/macos/apply-theme.sh');
-  assert.match(sh, /<script src="\/laolao-night\.js\?v=night3"><\/script>/);
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  const scripts = fragment.match(/laolao-[\w-]+\.js/g);
-  // The property that matters is ordering against stylesheets, not being the
-  // literal first script: the night switch must run before any CSS loads.
-  assert.ok(scripts.includes('laolao-night.js'));
-  const nightAt = fragment.indexOf('laolao-night.js');
-  const firstStyle = fragment.indexOf('<link rel="stylesheet"');
-  assert.ok(firstStyle > -1 && nightAt < firstStyle, 'night switch runs before the first stylesheet');
-  const ps1 = read('installer/windows/apply-theme.ps1');
-  assert.match(ps1, /<head\[\^>\]\*>/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-night.js', 'laolao-night.css'], 'assets': []});
+  const nightAt = head.indexOf('laolao-night.js');
+  assert.ok(nightAt < head.indexOf('<link'), 'night runs before any stylesheet');
+  assert.ok(head.indexOf('laolao-night.css') > head.indexOf('laolao-theme.css'));
 });
 
 test('installing over an old fragment moves night assets, uses root paths and stays idempotent', () => {
-  const sh = read('installer/macos/apply-theme.sh');
-  const start = sh.indexOf('  # fragment 或旧版安装');
-  assert.ok(start > 0);
-  const block = sh.slice(start, sh.indexOf('\n}', start));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-night-'));
   const file = path.join(dir, 'index.html');
-  const fixtures = [
-    '<html><head><script src="./assets/main.js"></script><link rel="stylesheet" href="./assets/late.css"></head><body></body></html>',
-    '<html><head data-boot="1"><script src="/main.js"></script><script defer src="./laolao-night.js?v=night3"></script><link rel="stylesheet" href="./laolao-night.css?v=night3"><link rel="stylesheet" href="/late.css"></head><body></body></html>',
-    '<html><HEAD><script src="/laolao-night.js?v=night3"></script><script src="./laolao-night.js"></script><link href="/laolao-night.css" rel="stylesheet"></HEAD></html>',
-  ];
   try {
-    for (const fixture of fixtures) {
-      fs.writeFileSync(file, fixture);
-      const run = () => execFileSync('bash', ['-c', `set -e; ui_root="$1"; index_file="$1/index.html"; DID_CHANGE=0; normalize() {\n${block}\n}; normalize`, 'night-test', dir]);
-      run();
-      const output = fs.readFileSync(file, 'utf8');
-      assert.match(output, /<head\b[^>]*>\s*<script src="\/laolao-night.js\?v=night3"><\/script>/i);
-      assert.match(output, /<link rel="stylesheet" href="\/laolao-night.css\?v=night3">\s*<\/head>/i);
+    const template = fs.readFileSync(path.join(root, 'ui/control-ui.index.html'), 'utf8');
+    for (const match of template.matchAll(/(?:src|href)=["']\.?\/(assets\/[^?"']+)/g)) {
+      const asset = path.join(dir, match[1]);
+      fs.mkdirSync(path.dirname(asset), {recursive: true});
+      fs.writeFileSync(asset, 'upstream fixture');
+    }
+    for (const prefix of ['./', '/']) {
+      fs.writeFileSync(file, `<html><head data-boot="1"><script type="module" src="${prefix}assets/index-fixture.js?pinkie-surface=6"></script><script defer src="${prefix}laolao-night.js?v=old"></script><link rel="stylesheet" href="${prefix}laolao-night.css?v=old"></head><body><openclaw-app></openclaw-app></body></html>`);
+      const run = () => execFileSync('python3', [path.join(root, 'tools/ui-parity/bundle.py'), 'install', '--root', root, '--control-ui', dir]);
+      run(); const output = fs.readFileSync(file, 'utf8');
+      assert.match(output, /<head\b[^>]*>\s*<script src="\/laolao-night\.js\?v=[^" ]+"><\/script>/i);
       assert.equal((output.match(/laolao-night\.js/g) || []).length, 1);
       assert.equal((output.match(/laolao-night\.css/g) || []).length, 1);
-      assert.ok(!output.includes('"./assets/'), output);
-      run();
-      assert.equal(fs.readFileSync(file, 'utf8'), output);
+      assert.ok(!output.includes('"./assets/'));
+      run(); assert.equal(fs.readFileSync(file, 'utf8'), output);
     }
   } finally { fs.rmSync(dir, {recursive:true, force:true}); }
-  const ps1 = read('installer/windows/apply-theme.ps1');
-  assert.ok(ps1.includes("$html.Replace('\"./assets/', '\"/assets/')"));
 });
 
 function nightHarness({saved = 'system', mediaDark = false, native = null, unrelated = null} = {}) {
@@ -140,24 +124,16 @@ test('switching dark to system still updates native preference when both resolve
   h.setSaved('system');
   assert.equal(h.window.__pinkieNight.on, true);
   assert.equal(h.messages.at(-1).mode, 'system');
-  const swift = read('desktop/macos/Sources/Launcher.swift');
+  const swift = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(swift, /NSApp\.appearance = followSystem \? nil : appearance/);
   assert.match(swift, /message\.webView === webView,\s*let body[^]*?body\["action"\] as\? String == "appearance"/);
 });
 
 test('companion, redesign, immersion and the 25 companion poses ship on both platforms', () => {
-  const sh = read('installer/macos/apply-theme.sh');
-  const ps1 = read('installer/windows/apply-theme.ps1');
-  const files = ['laolao-companion.css', 'laolao-companion.js', 'laolao-redesign.css', 'laolao-immersion.js', 'laolao-night.css', 'laolao-night.js'];
-  for (const mode of ['chat', 'project', 'thinking', 'learning', 'unrestricted']) {
-    for (const state of ['rest', 'typing', 'working', 'happy', 'sleepy']) files.push(`laolao-pinkie-buddy-${mode}-${state}.png`);
-  }
-  for (const file of files) {
-    assert.ok(sh.includes(file), `macOS installer misses ${file}`);
-    assert.ok(ps1.includes(file), `Windows installer misses ${file}`);
-    const source = file.endsWith('.png') ? `ui/assets/${file}` : `ui/injections/${file}`;
-    assert.ok(fs.existsSync(path.join(root, source)), `${source} is missing`);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-companion.css', 'laolao-companion.js', 'laolao-redesign.css', 'laolao-immersion.js', 'laolao-night.css', 'laolao-night.js'], 'assets': []});
+  for (const mode of ['chat','project','thinking','learning','unrestricted'])
+    for (const state of ['rest','typing','working','happy','sleepy'])
+      require('./fixtures/shared-ui.cjs').sharedUi({assets:[`laolao-pinkie-buddy-${mode}-${state}.png`]});
 });
 
 test('Pinkie steps aside while a composer popover is open, and typing adds no effects', () => {

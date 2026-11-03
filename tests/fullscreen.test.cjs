@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(
-  path.join(root, 'desktop/macos/Sources/Launcher.swift'),
+  path.join(root, 'desktop/macos/pinkie/Sources/Launcher.swift'),
   'utf8',
 );
 

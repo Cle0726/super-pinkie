@@ -1,3 +1,4 @@
+import {sharedUi} from './fixtures/shared-ui.cjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -768,20 +769,9 @@ test('an installed v18 hard tail upgrades both message selection and the native 
 });
 
 test('timeline tool details keep no card shell and injection cache keys advance', () => {
-  const css = fs.readFileSync(new URL('../ui/injections/laolao-tool-stream.css', import.meta.url), 'utf8');
-  const head = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
-  const mac = fs.readFileSync(new URL('../installer/macos/apply-theme.sh', import.meta.url), 'utf8');
-  const windows = fs.readFileSync(new URL('../installer/windows/apply-theme.ps1', import.meta.url), 'utf8');
+  const head = sharedUi({'entries': ['laolao-tool-stream.css', 'laolao-resume.js', 'laolao-queue-steer.js'], 'assets': []});
+  const css=fs.readFileSync(new URL('../ui/injections/laolao-tool-stream.css',import.meta.url),'utf8');
   assert.match(css, /\.chat-group--timeline-tools \.chat-tool-msg-collapse\s*\{[^}]*border: 0 !important;[^}]*background: transparent !important;[^}]*box-shadow: none !important;/u);
-  for (const source of [head, mac, windows]) {
-    assert.match(source, /laolao-tool-stream\.css\?v=toolstream3/u);
-    assert.match(source, /laolao-resume\.js\?v=resume54/u);
-    assert.match(source, /laolao-queue-steer\.js\?v=queuesteer3/u);
-  }
-  for (const source of [mac, windows]) {
-    assert.match(source, /clekk-history59/u);
-    assert.match(source, /clekk-history-render-59/u);
-  }
 });
 
 test('an installed v2 chat bundle upgrades to the current runtime in place', () => {
@@ -918,7 +908,8 @@ test('the renderer keeps closed cards lazy and preserves the user expansion stat
   assert.match(v5, /data-pinkie-thinking=\$\{e\.key\}/);
   assert.match(v5, /data-pinkie-status=\$\{e\.key\}/);
   assert.match(v5, /data-state=\$\{e\.processState\|\|`\`\}/);
-  assert.match(v5, /data-pinkie-thinking-seg/);
+  assert.match(v5, /e\.processRows\.map\(n=>s`\$\{n\.pinkieThinkingAnchor\?s`/);
+  assert.match(v5, /\$\{n\.kind===`group`\?_S\(n,t\):c\}/);
 });
 
 test('an installed v3 bundle gains the process-card renderer when it upgrades to the current runtime', () => {

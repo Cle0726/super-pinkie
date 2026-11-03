@@ -9,16 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  verify:
+  tag:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24.20.0"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - name: Require a versioned release tag
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
@@ -26,18 +20,13 @@ jobs:
             echo "Release must run from the tag matching VERSION: v$version" >&2
             exit 1
           fi
-      - name: Run all execution, recovery, UI and desktop regression tests
-        run: |
-          node --test tests/*.test.cjs tests/*.test.mjs
-          python -m unittest discover -s tests -p '*_test.py' -v
-      - name: Check bundled scripts
-        run: |
-          find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
-          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
-          python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
+
+  verify:
+    needs: tag
+    uses: ./.github/workflows/verify.yml
 
   source:
-    needs: verify
+    needs: [windows-smoke, ui-parity]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,13 +58,20 @@ jobs:
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
       - name: Build self-contained macOS app
         run: ./desktop/macos/build.sh
-      - uses: softprops/action-gh-release@v2
+      - name: Keep the actual packaged macOS UI manifest
+        uses: actions/upload-artifact@v4
         with:
-          body_path: desktop/windows/release-notes.md
-          fail_on_unmatched_files: true
-          files: dist/super-pinkie-macos-*.zip
+          name: macos-ui-manifest
+          path: dist/macos-ui-manifest.json
+      - name: Keep the Mac package until both platforms pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: dist/super-pinkie-macos-*.zip
+          retention-days: 3
 
   windows:
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,9 +90,23 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
           }
           if ($errors.Count) { $errors | Format-List; throw 'PowerShell syntax check failed' }
+      - name: Point the China update route at the bucket (when one is configured)
+        if: ${{ vars.CN_MIRROR_BASE_URL != '' }}
+        shell: pwsh
+        env:
+          CN_MIRROR_BASE_URL: ${{ vars.CN_MIRROR_BASE_URL }}
+        run: |
+          $settings = Get-Content -Raw update-mirrors.json | ConvertFrom-Json
+          $settings.bucket = $env:CN_MIRROR_BASE_URL
+          $settings | ConvertTo-Json | Set-Content -LiteralPath update-mirrors.json -Encoding utf8
       - name: Build Windows exe
         shell: pwsh
         run: .\build-win.ps1 -LegacyOneFile
+      - name: Keep the actual packaged Windows UI manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: dist/windows-ui-manifest.json
       - name: Pack Windows onedir and compatibility exe
         shell: pwsh
         run: |
@@ -113,6 +123,76 @@ jobs:
           Compress-Archive -Path 'dist\超級碧琪' -DestinationPath "dist\$portable" -Force
           $portableHash = (Get-FileHash -LiteralPath "dist\$portable" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$portableHash  $portable" | Set-Content -LiteralPath "dist\$portable.sha256" -Encoding ascii -NoNewline
+      - name: Keep the onedir for the smoke test
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-onedir
+          path: dist/超級碧琪
+          retention-days: 3
+      - name: Keep the release files until the smoke test passes
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          retention-days: 3
+          path: |
+            dist/super-pinkie-windows-*.exe
+            dist/super-pinkie-windows-*.exe.sha256
+            dist/super-pinkie-windows-*-portable.zip
+            dist/super-pinkie-windows-*-portable.zip.sha256
+
+  # The packaged App is opened on a real Windows runner (fresh and upgraded
+  # profile, all five modes) before anything is uploaded to the release.
+  windows-smoke:
+    needs: windows
+    uses: ./.github/workflows/windows-smoke.yml
+    with:
+      app_artifact: windows-onedir
+
+  # These manifests are read back from each final App, after all overlays and
+  # cleanup. No platform UI exceptions: native runtimes are outside the scope.
+  ui-parity:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-ui-manifest
+          path: parity/mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: parity/windows
+      - name: Require the same injection order and resource hashes
+        run: python tools/ui-parity/bundle.py compare parity/mac/macos-ui-manifest.json parity/windows/windows-ui-manifest.json
+
+  macos-publish:
+    needs: [windows-smoke, ui-parity]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: desktop/windows/release-notes.md
+          fail_on_unmatched_files: true
+          files: dist/super-pinkie-macos-*.zip
+
+  windows-publish:
+    needs: [windows-smoke, ui-parity]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
       - uses: softprops/action-gh-release@v2
         with:
           body_path: desktop/windows/release-notes.md
@@ -122,3 +202,44 @@ jobs:
             dist/super-pinkie-windows-*.exe.sha256
             dist/super-pinkie-windows-*-portable.zip
             dist/super-pinkie-windows-*-portable.zip.sha256
+
+  # 国内线路：每个版本附一份 latest.json；配置了国内存储桶（S3 兼容：阿里云 OSS / 腾讯云 COS）就把整套文件传一份过去。
+  # 需要：仓库变量 CN_MIRROR_BASE_URL（下载用的 https 地址，结尾 /）、CN_MIRROR_S3_ENDPOINT、CN_MIRROR_S3_BUCKET、
+  # CN_MIRROR_S3_PREFIX（可空）；密钥 CN_MIRROR_ACCESS_KEY_ID、CN_MIRROR_SECRET_ACCESS_KEY。没配置就只发 latest.json。
+  mirror-publish:
+    needs: [source, macos-publish, windows-publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist
+      - name: Describe every release file in latest.json
+        run: |
+          git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
+          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" desktop/windows/release-notes.md dist mirror/latest.json
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: desktop/windows/release-notes.md
+          fail_on_unmatched_files: true
+          files: mirror/latest.json
+      - name: Copy the release to the China bucket
+        if: ${{ vars.CN_MIRROR_S3_BUCKET != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CN_MIRROR_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CN_MIRROR_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          ENDPOINT: ${{ vars.CN_MIRROR_S3_ENDPOINT }}
+          BUCKET: ${{ vars.CN_MIRROR_S3_BUCKET }}
+          PREFIX: ${{ vars.CN_MIRROR_S3_PREFIX }}
+        run: |
+          aws configure set default.s3.addressing_style virtual
+          target="s3://$BUCKET/${PREFIX:+${PREFIX%/}/}"
+          # 先传安装包，最后才换 latest.json：客户端看到新版本时文件一定已经在了。
+          aws s3 cp dist/ "${target}${GITHUB_REF_NAME}/" --recursive --endpoint-url "$ENDPOINT" --no-progress
+          aws s3 cp mirror/latest.json "${target}latest.json" --endpoint-url "$ENDPOINT" --cache-control "no-cache" --no-progress

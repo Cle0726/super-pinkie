@@ -1,0 +1,113 @@
+name: Windows smoke
+
+# Opens the packaged Windows App on a real Windows runner: a brand-new profile
+# and an upgraded one, all five modes switched in Edge, screenshots and logs
+# uploaded.  Manual runs test a published release or build this ref; the
+# release and UI parity workflows call it with the onedir they just built.
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "release = download a published portable zip; build = build this ref with build-win.ps1"
+        type: choice
+        options: [release, build]
+        default: release
+      release_tag:
+        description: "Release to test when package=release"
+        default: v2.5.26
+      old_tag:
+        description: "Older release that seeds the upgrade profile (empty = fresh profile only)"
+        default: v2.5.16
+  workflow_call:
+    inputs:
+      app_artifact:
+        description: "Name of an uploaded artifact holding the onedir 超級碧琪 folder"
+        type: string
+        required: true
+      old_tag:
+        type: string
+        default: v2.5.16
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: "1"
+      PACKAGE: ${{ inputs.app_artifact != '' && 'artifact' || inputs.package || 'build' }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'v2.5.26' }}
+      OLD_TAG: ${{ inputs.old_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install smoke dependencies
+        run: python -m pip install --disable-pip-version-check playwright pillow psutil pywin32
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - name: Install packaged WebView2 capture dependencies
+        shell: pwsh
+        run: |
+          $deps = Join-Path $env:RUNNER_TEMP 'pinkie-ui-deps'
+          npm install --prefix $deps --no-save playwright ws
+          if ($LASTEXITCODE -ne 0) { throw 'UI capture dependencies failed' }
+          "PINKIE_UI_DEPS=$deps" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build this ref
+        if: env.PACKAGE == 'build'
+        shell: pwsh
+        run: |
+          .\build-win.ps1
+          New-Item -ItemType Directory -Force -Path smoke-app | Out-Null
+          Move-Item -LiteralPath 'dist\超級碧琪' -Destination 'smoke-app\'
+
+      - name: Download published release
+        if: env.PACKAGE == 'release'
+        shell: pwsh
+        run: |
+          gh release download "$env:RELEASE_TAG" -R "${{ github.repository }}" -p "*-portable.zip" -D smoke-dl
+          Expand-Archive -Path (Get-ChildItem smoke-dl\*-portable.zip).FullName -DestinationPath smoke-app
+
+      - name: Download artifact under test
+        if: env.PACKAGE == 'artifact'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.app_artifact }}
+          path: smoke-app
+
+      - name: Download older release for the upgrade profile
+        if: env.OLD_TAG != ''
+        shell: pwsh
+        run: |
+          gh release download "$env:OLD_TAG" -R "${{ github.repository }}" -p "*-portable.zip" -D smoke-old-dl
+          Expand-Archive -Path (Get-ChildItem smoke-old-dl\*-portable.zip).FullName -DestinationPath smoke-old
+
+      - name: Check the workbench on Windows
+        shell: pwsh
+        run: |
+          $node = Get-ChildItem -Path smoke-app -Filter node.exe -Recurse | Where-Object { $_.FullName -like '*runtime\bin\node.exe' } | Select-Object -First 1
+          if (-not $node) { throw 'Bundled Node not found for the workbench test' }
+          & $node.FullName --test tests/windows-workbench.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows workbench test failed' }
+
+      - name: Run smoke test
+        shell: pwsh
+        run: |
+          $arguments = @('tools\windows-smoke\smoke.py', '--app', 'smoke-app', '--out', 'smoke-out', '--strict', '--upstream-probe')
+          if (Test-Path smoke-old) { $arguments += @('--old-app', 'smoke-old') }
+          python @arguments
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-${{ github.run_id }}
+          path: smoke-out
+          if-no-files-found: warn

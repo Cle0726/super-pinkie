@@ -14,7 +14,7 @@ function picker(file){
 }
 const record=(id,provider='mm')=>({provider,id,name:id,reasoning:false,input:['text'],contextWindow:128000});
 const variants=base=>[record(base),...['low','medium','high'].map(level=>record(base+'-'+level))];
-for(const file of [process.env.PINKIE_TEST_MODEL_PICKER || path.join(repo,'ui/injections/laolao-model-picker.js'),path.join(repo,'services/cle-studio/static/legacy/laolao-model-picker.js')]){
+for(const file of [process.env.PINKIE_TEST_MODEL_PICKER || path.join(repo,'ui/injections/laolao-model-picker.js')]){
   const ui=picker(file);
   test(path.basename(path.dirname(file))+': both Claude pools survive, only At levels fold together',()=>{
     for(const base of ['claude-sonnet-5-5','claude-opus-5-5']){

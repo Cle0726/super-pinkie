@@ -2202,7 +2202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func legacyCheckForUpdates() {
         guard !updateLaunchInProgress else { return }
         let confirmation = NSAlert()
-        confirmation.messageText = "主动拉取 CLE Kk 更新？"
+        confirmation.messageText = "现在更新碧琪？"
         confirmation.informativeText = "确认后旧 App 会退出。独立更新程序会继续拉取、安装并重新打开；期间网关重启或页面断开都不会中止更新。人格、会话、项目、图片和视频不会参与替换。"
         confirmation.alertStyle = .informational
         confirmation.addButton(withTitle: "拉取并更新")
@@ -2285,7 +2285,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let task = Process(), pipe = Pipe()
         task.executableURL = python
         task.arguments = [script.path, action]
-        task.environment = BundledRuntime.environment()
+        var environment = BundledRuntime.environment()
+        // 国内线路：更新弹窗里选了「国内线路」时，Git 走加速代理（见 stage-git-update.py）。
+        if body["route"] as? String == "mirror" { environment["PINKIE_UPDATE_ROUTE"] = "mirror" }
+        else { environment.removeValue(forKey: "PINKIE_UPDATE_ROUTE") }
+        task.environment = environment
         task.standardInput = FileHandle.nullDevice
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -38,6 +39,11 @@ TRUSTED_UPDATE_HOSTS = {
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
 }
+UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+# 国内线路：每个版本都附一份 latest.json（版本、说明、每个文件的 SHA-256 和大小），
+# 经 GitHub 加速代理或国内存储桶读它，再从同一条线路下载安装包。
+UPDATE_MANIFEST_NAME = "latest.json"
+DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
 
 
 DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
@@ -57,9 +63,46 @@ def version_tuple(value):
     return tuple(int(part or 0) for part in match.groups())
 
 
-def trusted_update_url(value):
+def trusted_update_url(value, hosts=TRUSTED_UPDATE_HOSTS):
     parsed = urllib.parse.urlparse(str(value))
-    return parsed.scheme == "https" and parsed.hostname in TRUSTED_UPDATE_HOSTS
+    return parsed.scheme == "https" and parsed.hostname in hosts
+
+
+def _mirror_base(value):
+    value = str(value or "").strip()
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.query or parsed.fragment:
+        return ""
+    return value if value.endswith("/") else value + "/"
+
+
+def update_mirrors(resource_root):
+    """国内线路的候选，按顺序试：先国内存储桶（发版时配置了才有），再 GitHub 加速代理。
+
+    `update-mirrors.json` 由发版流程写进包里：{"bucket": "https://…/super-pinkie/", "proxies": [...]}。
+    文件不存在或写错时只用内置的加速代理。
+    """
+    settings = {}
+    try:
+        settings = json.loads((Path(resource_root) / "update-mirrors.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        settings = {}
+    if not isinstance(settings, dict):
+        settings = {}
+    routes = []
+    bucket = _mirror_base(settings.get("bucket"))
+    if bucket:
+        routes.append({"label": "国内服务器", "manifest": bucket + UPDATE_MANIFEST_NAME,
+                       "asset": lambda version, name, base=bucket: f"{base}v{version}/{name}"})
+    proxies = settings.get("proxies")
+    proxies = proxies if isinstance(proxies, list) and proxies else list(DEFAULT_UPDATE_PROXIES)
+    for proxy in proxies:
+        base = _mirror_base(proxy)
+        if not base:
+            continue
+        routes.append({"label": "国内加速", "manifest": f"{base}{UPDATE_RELEASES_URL}/latest/download/{UPDATE_MANIFEST_NAME}",
+                       "asset": lambda version, name, base=base: f"{base}{UPDATE_RELEASES_URL}/download/v{version}/{name}"})
+    return routes
 
 
 _NOTES_CUT = re.compile(
@@ -119,6 +162,35 @@ def release_update(release, current_version, portable=False):
         "checksumUrl": checksum_url,
         "releaseUrl": str(release.get("html_url", "")),
         "notes": release_notes_text(release.get("body")),
+    }
+
+
+def manifest_update(manifest, current_version, asset_url, portable=False):
+    """读国内线路上的 latest.json，挑出和本机安装方式对应的包。"""
+    if not isinstance(manifest, dict):
+        return None
+    version = str(manifest.get("version", "")).strip().removeprefix("v")
+    if version_tuple(version) <= version_tuple(current_version):
+        return None
+    suffix = "-portable.zip" if portable else ".exe"
+    expected_name = f"{UPDATE_ASSET_PREFIX}{version}{suffix}"
+    assets = manifest.get("assets") if isinstance(manifest.get("assets"), dict) else {}
+    entry = assets.get(expected_name) if isinstance(assets.get(expected_name), dict) else {}
+    digest = str(entry.get("sha256", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return None
+    official = f"{UPDATE_RELEASES_URL}/download/v{version}/{expected_name}"
+    return {
+        "available": True,
+        "version": version,
+        "name": expected_name,
+        "executableUrl": asset_url(version, expected_name),
+        "portable": portable,
+        # 优先用 GitHub 官方的校验和（连得上的话）；连不上才用这份清单里的。
+        "checksumUrl": official + ".sha256",
+        "sha256": digest,
+        "releaseUrl": f"{UPDATE_RELEASES_URL}/tag/v{version}",
+        "notes": release_notes_text(manifest.get("notes")),
     }
 
 
@@ -191,6 +263,91 @@ def http_identity(url):
         return {}
 
 
+def gateway_listener_pid(port=18789, runner=None):
+    """PID of the process listening on the loopback gateway port, if any."""
+    if os.name != "nt" and runner is None:
+        return None
+    try:
+        result = (runner or subprocess.run)(
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=5,
+            **hidden_process_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in str(result.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+            if parts[1].rsplit(":", 1)[-1] == str(port) and parts[4].isdigit():
+                return int(parts[4])
+    return None
+
+
+def process_image_and_start(pid):
+    """Executable path and creation time (epoch seconds) of a Windows process."""
+    if os.name != "nt" or not pid:
+        return None, None
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    handle = kernel.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None, None
+    try:
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        image = buffer.value if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)) else None
+        times = [wintypes.FILETIME() for _ in range(4)]
+        started = None
+        if kernel.GetProcessTimes(handle, *[ctypes.byref(value) for value in times]):
+            ticks = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime
+            started = ticks / 10_000_000 - 11644473600
+        return image, started
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _bundled_node(image):
+    """True for a node.exe that sits in a packaged app's runtime\\bin."""
+    parts = [part.lower() for part in Path(str(image).replace("\\", "/")).parts]
+    return parts[-3:] == ["runtime", "bin", "node.exe"]
+
+
+def stale_gateway_reason(listener, own_node, own_version, install_time, record=None, read_version=None):
+    """Say why a running gateway must be replaced, or None to keep using it.
+
+    The window keeps its gateway alive after closing, so a new version (an
+    in-place update, a fresh unzip elsewhere, or an old single-file EXE's temp
+    runtime) used to find the previous version still answering on 18789 and
+    simply attach to it: the update "installed" but nothing changed.  Only a
+    packaged runtime's node.exe is ever replaced; a user's own gateway is left
+    alone.
+    """
+    image = str((listener or {}).get("image") or "")
+    if not image or not _bundled_node(image):
+        return None
+    pid = listener.get("pid")
+    same_node = os.path.normcase(image) == os.path.normcase(str(own_node))
+    if isinstance(record, dict) and record.get("pid") == pid:
+        if str(record.get("version")) == str(own_version):
+            return None
+        return f"gateway pid {pid} belongs to {record.get('version') or 'an older version'}"
+    if same_node:
+        started = listener.get("started")
+        if started and install_time and started < install_time - 2:
+            return f"gateway pid {pid} started before this install"
+        return None
+    try:
+        other = (read_version or app_version)(Path(image.replace("\\", "/")).parents[2])
+    except Exception:
+        other = ""
+    other = "" if other == "0.0.0" else other  # app_version's "unreadable"
+    if other and other == str(own_version):
+        return None
+    return f"gateway pid {pid} runs from another install ({other or 'unknown version'}: {image})"
+
+
 def gateway_ui_url():
     """Return CLE Kk's chat route, including a legacy token when configured."""
     config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
@@ -243,6 +400,11 @@ class WindowsUpdater:
         self.last_checked = 0.0
         self.latest = None
         self.prepared = None
+        self.mirrors = update_mirrors(resource_root)
+        self.trusted_hosts = set(TRUSTED_UPDATE_HOSTS) | {
+            urllib.parse.urlparse(route["manifest"]).hostname for route in self.mirrors}
+        self.mirror_latest = None
+        self.mirror_checked = 0.0
 
     @staticmethod
     def _is_onedir(executable):
@@ -263,9 +425,8 @@ class WindowsUpdater:
                 return True
         return False
 
-    @staticmethod
-    def _request(url):
-        if not trusted_update_url(url):
+    def _request(self, url):
+        if not trusted_update_url(url, self.trusted_hosts):
             raise ValueError("untrusted update address")
         return urllib.request.Request(
             url,
@@ -276,16 +437,18 @@ class WindowsUpdater:
             },
         )
 
-    def _read(self, url, limit):
-        with self.opener(self._request(url), timeout=20) as response:
+    def _read(self, url, limit, timeout=20):
+        with self.opener(self._request(url), timeout=timeout) as response:
             value = response.read(limit + 1)
         if len(value) > limit:
             raise ValueError("update metadata is too large")
         return value
 
-    def check(self, force=False):
+    def check(self, force=False, route=None):
         if not self.enabled:
             return {"available": False, "supported": False, "currentVersion": self.current_version}
+        if route == "mirror":
+            return self._check_mirror(force)
         with self.lock:
             if not force and self.latest is not None and time.monotonic() - self.last_checked < 7200:
                 return dict(self.latest)
@@ -305,8 +468,44 @@ class WindowsUpdater:
                     "supported": True,
                     "currentVersion": self.current_version,
                     "temporaryError": True,
+                    "suggestMirror": bool(self.mirrors),
                 }
             return dict(self.latest)
+
+    def _check_mirror(self, force=False):
+        with self.lock:
+            if not force and self.mirror_latest is not None and time.monotonic() - self.mirror_checked < 7200:
+                return dict(self.mirror_latest)
+            self.mirror_checked = time.monotonic()
+            for route in self.mirrors:
+                try:
+                    manifest = json.loads(self._read(route["manifest"], 256 * 1024).decode("utf-8"))
+                except Exception as error:
+                    append_log("updater", f"mirror {urllib.parse.urlparse(route['manifest']).hostname} unavailable: {error}")
+                    continue
+                if not isinstance(manifest, dict) or not str(manifest.get("version", "")).strip():
+                    continue
+                try:
+                    selected = manifest_update(manifest, self.current_version, route["asset"], portable=self.portable)
+                except ValueError:
+                    continue
+                self.mirror_latest = ({**selected, "route": "mirror", "mirror": route["label"]} if selected else
+                                      {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version})
+                return dict(self.mirror_latest)
+            self.mirror_latest = None
+            return {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version,
+                    "temporaryError": True, "message": "国内线路暂时都连不上，可以稍后重试，或换回官方线路。"}
+
+    def _expected_checksum(self, metadata):
+        try:
+            return self._checksum(self._read(metadata["checksumUrl"], 4096, timeout=8 if metadata.get("sha256") else 20),
+                                  metadata["name"])
+        except Exception as error:
+            if not metadata.get("sha256"):
+                raise
+            # 国内线路：GitHub 官方校验和拿不到时，用 latest.json 里的。下载后照样逐字节核对。
+            append_log("updater", f"official checksum unavailable, using the mirror manifest: {error}")
+            return metadata["sha256"]
 
     @staticmethod
     def _checksum(value, expected_name):
@@ -327,7 +526,7 @@ class WindowsUpdater:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024, attempts=4):
+    def _download(self, url, destination, maximum=2 * 1024 * 1024 * 1024, attempts=4, progress=None):
         """下载更新包，核对 Content-Length，被掐断时用 Range 续传重试。
 
         urllib 的 read() 在连接提前关闭时只返回空串、并不抛错，所以旧实现会把「下了一半
@@ -344,7 +543,7 @@ class WindowsUpdater:
         temporary = destination.with_suffix(destination.suffix + ".download")
         for attempt in range(1, attempts + 1):
             try:
-                self._fetch(url, temporary, maximum)
+                self._fetch(url, temporary, maximum, progress=progress)
                 break
             except Exception as error:
                 kept = temporary.stat().st_size if temporary.is_file() else 0
@@ -362,7 +561,7 @@ class WindowsUpdater:
                 time.sleep(min(2 ** attempt, 10))
         os.replace(temporary, destination)
 
-    def _fetch(self, url, temporary, maximum):
+    def _fetch(self, url, temporary, maximum, progress=None):
         offset = temporary.stat().st_size if temporary.is_file() else 0
         request = self._request(url)
         if offset:
@@ -384,6 +583,34 @@ class WindowsUpdater:
             if declared is not None and start + declared > maximum:
                 raise ValueError("update package is too large")
             received = start
+            # A partial response's Content-Length is only the length of this
+            # response. Use Content-Range for the whole file; if it is absent,
+            # report an unknown total instead of inventing a percentage.
+            total = declared if start == 0 and status != 206 else None
+            content_range = headers.get("Content-Range", "") if headers is not None else ""
+            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
+            if match and int(match.group(1)) == start and match.group(3) != "*":
+                range_end, range_total = int(match.group(2)), int(match.group(3))
+                if range_end >= start and range_total > range_end and (declared is None or range_end - start + 1 == declared):
+                    total = range_total
+            began = time.monotonic()
+            last_sent = 0.0
+            def publish(final=False):
+                nonlocal last_sent
+                now = time.monotonic()
+                if not progress or (not final and last_sent and now - last_sent < .25):
+                    return
+                elapsed = now - began
+                speed = (received - start) / elapsed if elapsed > .01 and received > start else None
+                eta = (total - received) / speed if total is not None and speed and total >= received else None
+                try:
+                    progress({"stage": "download", "downloaded": received, "total": total,
+                              "bytesPerSecond": speed, "etaSeconds": eta})
+                except Exception:
+                    # A closed window or failed UI callback must not corrupt a download.
+                    pass
+                last_sent = now
+            publish(final=True)
             with temporary.open("r+b" if start else "wb") as handle:
                 handle.seek(start)
                 while True:
@@ -394,25 +621,30 @@ class WindowsUpdater:
                     if received > maximum:
                         raise ValueError("update package is too large")
                     handle.write(chunk)
+                    publish()
+            publish(final=True)
         if declared is not None and received != start + declared:
             raise ValueError(f"update package download was cut short ({received} of {start + declared} bytes)")
         if received < 1024 * 1024:
             raise ValueError("update package is incomplete")
 
-    def prepare(self):
+    def prepare(self, progress=None, route=None):
         with self.lock:
-            metadata = self.check(force=True)
+            metadata = self.check(force=True, route=route)
             if not metadata.get("available"):
                 return {**metadata, "ready": False}
             directory = state_root() / "updates" / metadata["version"]
             directory.mkdir(parents=True, exist_ok=True)
             payload = directory / metadata["name"]
-            expected = self._checksum(
-                self._read(metadata["checksumUrl"], 4096), metadata["name"]
-            )
+            expected = self._expected_checksum(metadata)
             if not payload.is_file() or self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
-                self._download(metadata["executableUrl"], payload)
+                self._download(metadata["executableUrl"], payload, progress=progress)
+            if progress:
+                try:
+                    progress({"stage": "verify"})
+                except Exception:
+                    pass
             if self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
                 # 走到这里说明字节数是够的（_download 已核对 Content-Length），
@@ -439,11 +671,20 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
-  [Parameter(Mandatory=$true)][string]$LogPath
+  [Parameter(Mandatory=$true)][string]$LogPath,
+  [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+}
+function Write-UpdateFailure([string]$Message) {
+  # The restored old version reads this once and tells the user the update
+  # did not land, instead of silently coming back unchanged.
+  try {
+    @{ version = $Version; message = $Message; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
+  } catch {}
 }
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
@@ -490,9 +731,11 @@ try {
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'update completed'
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
+  Write-UpdateFailure $_.Exception.Message
   try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
@@ -511,17 +754,51 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$UpdateRoot,
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
-  [Parameter(Mandatory=$true)][string]$LogPath
+  [Parameter(Mandatory=$true)][string]$LogPath,
+  [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
+function Write-UpdateFailure([string]$Message) {
+  # The restored old version reads this once and tells the user the update
+  # did not land, instead of silently coming back unchanged.
+  try {
+    @{ version = $Version; message = $Message; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
+  } catch {}
+}
+function Stop-InstallProcesses([string]$Root) {
+  # The window keeps its gateway (node.exe from runtime\bin) alive after it
+  # closes.  While anything runs from the install folder Windows refuses to
+  # rename it, so the swap failed and rolled back to the old version.
+  if (-not (Test-Path -LiteralPath $Root)) { return }
+  $prefix = (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') + '\'
+  for ($round = 0; $round -lt 20; $round++) {
+    $owned = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $_.ProcessId -ne $PID -and $_.ExecutablePath -and
+      $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($owned.Count -eq 0) { return }
+    if ($round -eq 0) {
+      Write-UpdateLog ('stopping processes still running from the install: ' + (($owned | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ', '))
+    }
+    foreach ($process in $owned) {
+      try { & taskkill.exe /PID $process.ProcessId /T /F | Out-Null } catch {}
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw 'processes from the old version are still running'
+}
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     try {
       if (Test-Path -LiteralPath $Backup) {
-        if (Test-Path -LiteralPath $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+        if (Test-Path -LiteralPath $TargetDir) {
+          try { Stop-InstallProcesses $TargetDir } catch {}
+          Remove-Item -LiteralPath $TargetDir -Recurse -Force
+        }
         Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
       }
       break
@@ -548,7 +825,15 @@ try {
   Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
-  Move-Item -LiteralPath $TargetDir -Destination $Backup -Force
+  Stop-InstallProcesses $TargetDir
+  for ($attempt = 0; ; $attempt++) {
+    try { Move-Item -LiteralPath $TargetDir -Destination $Backup -Force; break }
+    catch {
+      if ($attempt -ge 39) { throw "install folder is still in use: $($_.Exception.Message)" }
+      Stop-InstallProcesses $TargetDir
+      Start-Sleep -Milliseconds 250
+    }
+  }
   Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
@@ -566,13 +851,30 @@ try {
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
   Write-UpdateLog 'portable update completed'
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
+  Write-UpdateFailure $_.Exception.Message
   try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
+
+    @staticmethod
+    def take_last_failure():
+        """Read once what the replacer left behind when it rolled an update back."""
+        path = state_root() / "updates" / "last-failure.json"
+        try:
+            value = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        finally:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        return value if isinstance(value, dict) else None
 
     def launch_replacer(self):
         with self.lock:
@@ -586,12 +888,16 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             update_root = state_root() / "updates"
             health_root = update_root / "health"
             health_root.mkdir(parents=True, exist_ok=True)
+            # Windows PowerShell 5.1 reads a .ps1 without a BOM in the ANSI code
+            # page (GBK on Chinese Windows), which garbled the hard-coded
+            # 超級碧琪 folder name: every portable update failed its layout
+            # check and rolled back.  The BOM makes it read UTF-8.
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
             if self.portable:
                 target_dir = self.executable.parent
                 backup = target_dir.with_name(target_dir.name + ".previous")
-                helper.write_text(self._directory_helper_source(), encoding="utf-8")
+                helper.write_text(self._directory_helper_source(), encoding="utf-8-sig")
                 command = [
                     "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                     "-File", str(helper),
@@ -605,10 +911,11 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-HealthMarker", str(marker),
                     "-Token", token,
                     "-LogPath", str(state_root() / "logs/updater.log"),
+                    "-Version", str(self.prepared["version"]),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
-                helper.write_text(self._helper_source(), encoding="utf-8")
+                helper.write_text(self._helper_source(), encoding="utf-8-sig")
                 command = [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                 "-File", str(helper),
@@ -621,6 +928,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
+                "-Version", str(self.prepared["version"]),
                 ]
             try:
                 subprocess.Popen(
@@ -639,7 +947,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             return {"started": True, "version": self.prepared["version"]}
 
 
-def hidden_process_kwargs():
+def hidden_process_kwargs(hide_window=True):
     """Keep a helper's console out of sight, on the platforms that have one.
 
     creationflags is Windows-only; CREATE_NO_WINDOW does not exist elsewhere, so
@@ -648,9 +956,52 @@ def hidden_process_kwargs():
     """
     if os.name != "nt":
         return {}
-    return {
-        "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
-    }
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+    if not hide_window:
+        return flags  # Explorer/control-center windows are intentional UI.
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return {**flags, "startupinfo": startup}
+
+
+def configure_native_glass(window):
+    """Make the host transparent too, before its first paint on the GUI thread.
+
+    A transparent HTML body over an opaque WinForms background still renders
+    as a solid pink sheet. Give WebView2 an alpha-zero base and extend DWM's
+    glass over the whole client area. Keep the window/text alpha at 100%.
+    """
+    if os.name != "nt":
+        return
+    import ctypes
+    from System.Drawing import Color
+
+    class Margins(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int32) for name in ("left", "right", "top", "bottom")]
+
+    native = window.native
+    native.BackColor = Color.Black  # DWM's zero-alpha client canvas.
+    native.webview.DefaultBackgroundColor = Color.Transparent
+    dwm = ctypes.WinDLL("dwmapi", use_last_error=True)
+    extend = dwm.DwmExtendFrameIntoClientArea
+    extend.argtypes = [ctypes.c_void_p, ctypes.POINTER(Margins)]
+    extend.restype = ctypes.c_int32
+    margins = Margins(-1, -1, -1, -1)
+    handle = int(native.Handle.ToInt64())
+    result = extend(handle, ctypes.byref(margins))
+    if result < 0:
+        raise OSError(f"DwmExtendFrameIntoClientArea failed: 0x{result & 0xffffffff:08x}")
+    # pywebview's dark-theme default requests Mica. That would fill the clear
+    # canvas again. Use desktop transparency, matching Mac, in either theme.
+    # Windows 10 does not implement this Windows 11 attribute; full glass
+    # above remains in effect there.
+    attribute = dwm.DwmSetWindowAttribute
+    attribute.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
+    attribute.restype = ctypes.c_int32
+    backdrop_none = ctypes.c_int32(1)  # DWMWA_SYSTEMBACKDROP_TYPE / DWMSBT_NONE
+    attribute(handle, 38, ctypes.byref(backdrop_none), ctypes.sizeof(backdrop_none))
+    append_log("launcher", "native glass enabled: WebView2 alpha=0; DWM full client; window alpha=1")
 
 
 class BundledRuntime:
@@ -669,6 +1020,11 @@ class BundledRuntime:
         environment["OPENCLAW_ROOT"] = str(self.openclaw.parent)
         environment["PINKIE_NODE_BIN"] = str(self.node)
         environment["PINKIE_OPENCLAW_ENTRY"] = str(self.openclaw)
+        skills = self.root / "bundled-skills"
+        if skills.is_dir():
+            environment["PINKIE_MANAGED_SKILLS_DIR"] = str(skills)
+        else:
+            environment.pop("PINKIE_MANAGED_SKILLS_DIR", None)
         environment["PINKIE_MANAGED_GATEWAY"] = "1"
         # The private loopback gateway belongs to this desktop user. Keep all
         # registered tools available in every CLE Kk mode; upstream's
@@ -696,6 +1052,69 @@ class GatewaySupervisor:
         self.lock = threading.RLock()
         self.last_restart = 0.0
         self.failure_limit = 2
+        self.version = app_version(runtime.root)
+
+    @staticmethod
+    def _record_path():
+        return state_root() / "gateway-owner.json"
+
+    def _write_record(self, pid):
+        try:
+            path = self._record_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"pid": pid, "version": self.version, "node": str(self.runtime.node)}), encoding="utf-8")
+        except OSError as error:
+            append_log("launcher", f"gateway owner record not written: {error}")
+
+    @staticmethod
+    def _listener():
+        pid = gateway_listener_pid()
+        if not pid:
+            return None
+        image, started = process_image_and_start(pid)
+        return {"pid": pid, "image": image, "started": started}
+
+    def retire_stale(self, kill=None, wait=10.0):
+        """Stop a kept-alive gateway left by another version before attaching.
+
+        Runs before the window picks its first URL, so a stale gateway's page
+        is never shown.  Returns the reason when a gateway was retired.
+        """
+        if not http_ready(GATEWAY_URL):
+            return None
+        listener = self._listener()
+        if not listener:
+            return None
+        pid, image = listener["pid"], listener.get("image")
+        try:
+            record = json.loads(self._record_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = None
+        try:
+            install_time = (self.runtime.root / "VERSION").stat().st_ctime
+        except OSError:
+            install_time = None
+        reason = stale_gateway_reason(listener, self.runtime.node, self.version, install_time, record)
+        if not reason:
+            if image and os.path.normcase(str(image)) == os.path.normcase(str(self.runtime.node)) and (
+                not isinstance(record, dict) or record.get("pid") != pid
+            ):
+                self._write_record(pid)
+            return None
+        append_log("launcher", f"retiring stale gateway: {reason}")
+        try:
+            (kill or (lambda value: subprocess.run(
+                ["taskkill", "/PID", str(value), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+                **hidden_process_kwargs(),
+            )))(pid)
+        except (OSError, subprocess.SubprocessError) as error:
+            append_log("launcher", f"stale gateway could not be stopped: {error}")
+            return None
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline and http_ready(GATEWAY_URL):
+            time.sleep(.2)
+        return reason
 
     def start(self):
         with self.lock:
@@ -726,6 +1145,7 @@ class GatewaySupervisor:
                     **hidden_process_kwargs(),
                 )
                 append_log("launcher", f"gateway started pid={self.process.pid}")
+                self._write_record(self.process.pid)
             except OSError as error:
                 output.close()
                 append_log("launcher", f"gateway start failed: {error}")
@@ -838,6 +1258,10 @@ class LocalServices:
         def run():
             try:
                 module = load_file_module(f"pinkie_windows_{name}", self.runtime.root / relative)
+                # The webview may replace stdout with an ANSI stream after the
+                # launcher configured it. Keep service prints in a UTF-8 log
+                # without redirecting stdout globally across threads.
+                module.print = lambda *values, **kwargs: append_log(name, kwargs.get("sep", " ").join(map(str, values)))
 
                 def ready(server):
                     self.servers.append(server)
@@ -848,6 +1272,7 @@ class LocalServices:
                     append_log("launcher", f"{name} service failed: {error}")
             except Exception as error:
                 append_log("launcher", f"{name} service failed: {error}")
+                append_log("launcher", traceback.format_exc())
 
         thread = threading.Thread(target=run, name=f"pinkie-{name}", daemon=True)
         thread.start()
@@ -969,7 +1394,7 @@ class NativeBridge:
         if payload.get("action") == "reveal":
             path = Path(str(payload.get("path", "")))
             if path.is_dir():
-                subprocess.Popen(["explorer.exe", str(path)], **hidden_process_kwargs())
+                subprocess.Popen(["explorer.exe", str(path)], **hidden_process_kwargs(hide_window=False))
             return {"requestId": request_id, "cancelled": not path.is_dir()}
         if payload.get("action") != "choose":
             return {"requestId": request_id, "cancelled": True}
@@ -1039,7 +1464,7 @@ class NativeBridge:
                 return {"ok": False, "message": "保存到下载文件夹失败，请检查磁盘空间和文件权限。"}
         if action == "reveal":
             try:
-                subprocess.Popen(["explorer.exe", "/select,", str(path)], **hidden_process_kwargs())
+                subprocess.Popen(["explorer.exe", "/select,", str(path)], **hidden_process_kwargs(hide_window=False))
                 return {"ok": True}
             except OSError:
                 return {"ok": False, "message": "无法在文件夹中显示这个文件。"}
@@ -1223,14 +1648,17 @@ class NativeBridge:
         self._window.destroy()
 
     def control_center(self):
-        subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs())
+        subprocess.Popen([sys.executable, "--control-center"], **hidden_process_kwargs(hide_window=False))
 
-    def check_for_updates(self):
-        return self._updater.check(force=True)
+    def check_for_updates(self, route=None):
+        return self._updater.check(force=True, route="mirror" if route == "mirror" else None)
 
-    def prepare_update(self):
+    def prepare_update(self, route=None):
         try:
-            return self._updater.prepare()
+            def progress(event):
+                if self._window:
+                    self._window.evaluate_js("window.__pinkieUpdateProgress?.(" + json.dumps(event) + ")")
+            return self._updater.prepare(progress=progress, route="mirror" if route == "mirror" else None)
         except Exception as error:
             append_log("updater", f"update preparation failed: {error}")
             return {"available": True, "ready": False, "temporaryError": True, "message": "新版下载没有完成，稍后再点一次就会重试"}
@@ -1352,6 +1780,7 @@ BRIDGE_SCRIPT = r"""
       controls.querySelector('[data-act="update"]')?.classList.add('has-update');
     };
     const updateDialog = info => {
+      if (window.__pinkieUpdateDialog?.open(info)) return;
       document.getElementById('pinkie-update-dialog')?.remove();
       const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
       const card = document.createElement('section'); card.className = 'pinkie-update-card';
@@ -1393,6 +1822,20 @@ BRIDGE_SCRIPT = r"""
       ok.onclick = () => shade.remove();
       actions.append(ok); card.append(mark, title, copy, notes, actions); shade.append(card); document.body.append(shade);
     };
+    window.__pinkieShowUpdateFailed = info => {
+      document.getElementById('pinkie-update-dialog')?.remove();
+      const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
+      const card = document.createElement('section'); card.className = 'pinkie-update-card';
+      const mark = document.createElement('span'); mark.className = 'pinkie-update-mark'; mark.textContent = '✦';
+      const title = document.createElement('h3'); title.textContent = `新版 ${info.version || ''} 没有装上`;
+      const copy = document.createElement('p');
+      copy.textContent = `已经自动回到 ${info.current || '原来的版本'}，记忆和设置都在。可以再点一次更新；还不行的话，关掉碧琪后手动下载新版。`;
+      const detail = document.createElement('p'); detail.className = 'pinkie-update-status'; detail.textContent = String(info.message || '');
+      const actions = document.createElement('div');
+      const ok = document.createElement('button'); ok.className = 'primary'; ok.textContent = '知道了';
+      ok.onclick = () => shade.remove();
+      actions.append(ok); card.append(mark, title, copy, detail, actions); shade.append(card); document.body.append(shade);
+    };
     window.__pinkiePresentUpdate = info => {
       if (!info?.available) return;
       window.__pinkieUpdateAvailable(info);
@@ -1400,6 +1843,7 @@ BRIDGE_SCRIPT = r"""
       updateDialog(info);
     };
     const inspectUpdate = async manual => {
+      if (window.__pinkieUpdateDialog?.open()) return;
       const button = controls.querySelector('[data-act="update"]'); button?.classList.add('is-checking');
       const info = await call('check_for_updates'); button?.classList.remove('is-checking');
       if (info?.available) { window.__pinkieUpdateAvailable(info); updateDialog(info); }
@@ -1503,7 +1947,24 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
         except Exception as error:
             append_log("launcher", f"installed notes skipped: {error}")
 
+    failure = None if update_health_token else updater.take_last_failure()
+    if failure:
+        try:
+            window.evaluate_js(
+                "window.__pinkieShowUpdateFailed?.("
+                + json.dumps(
+                    {"version": failure.get("version", ""), "current": updater.current_version,
+                     "message": str(failure.get("message", ""))[:300]},
+                    ensure_ascii=False,
+                )
+                + ")"
+            )
+        except Exception as error:
+            append_log("launcher", f"update failure notice skipped: {error}")
+
     def announce_update():
+        if failure:
+            return
         info = updater.check()
         if info.get("available"):
             try:
@@ -1516,8 +1977,23 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
     threading.Thread(target=announce_update, name="pinkie-update-check", daemon=True).start()
 
 
+def smoke_debug_port(environ=os.environ):
+    """Localhost DevTools port for the isolated smoke run only.
+
+    pywebview sets WebView2's AdditionalBrowserArguments itself, which makes
+    WebView2 ignore WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS; the port has to go
+    through pywebview's own setting. Normal starts never set this variable.
+    """
+    match = re.fullmatch(r"http://127\.0\.0\.1:(\d{2,5})", environ.get("PINKIE_SMOKE_WEBVIEW_CDP", ""))
+    port = int(match[1]) if match else 0
+    return port if 1024 <= port <= 65535 else None
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
+    debug_port = smoke_debug_port()
+    if debug_port:
+        webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
 
     runtime = BundledRuntime(resource_root)
     if not runtime.valid():
@@ -1528,16 +2004,22 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    gateway = GatewaySupervisor(runtime)
+    # A gateway kept alive by an older version would otherwise be adopted
+    # below, and the new version would show the old one's page.
+    gateway.retire_stale()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
+    # The official environment setting applies before WebView2's first paint;
+    # setting the API only after navigation can leave a white flash.
+    os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00000000"
     window = webview.create_window(
         "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
-        shadow=True, background_color="#efcbd3",
+        shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
-    gateway = GatewaySupervisor(runtime)
     services = LocalServices(runtime)
 
     def loaded(*_):
@@ -1551,6 +2033,14 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             name="pinkie-native-bridge",
             daemon=True,
         ).start()
+
+    def before_show():
+        # This event runs synchronously on WinForms' GUI thread. Do not call
+        # evaluate_js or marshal back to the same thread from here.
+        try:
+            configure_native_glass(window)
+        except Exception as error:
+            append_log("launcher", f"native glass setup failed: {error}")
 
     def bootstrap():
         try:
@@ -1591,6 +2081,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         else:
             append_log("launcher", "window closed; keeping gateway for background sessions")
 
+    window.events.before_show += before_show
     window.events.loaded += loaded
     window.events.maximized += maximized
     window.events.restored += restored

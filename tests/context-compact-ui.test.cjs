@@ -16,11 +16,8 @@ test('manual context control uses native compaction without posting a chat comma
 });
 
 test('manual context control ships in both UI installers',()=>{
-  for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']){
-    const source=read(file);
-    assert.match(source,/laolao-context-compact\.js/);
-    assert.match(source,/contextcompact13/);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-context-compact.js'], 'assets': []});
+
 });
 
 test('context capacity uses real session usage, never a guessed percentage',()=>{

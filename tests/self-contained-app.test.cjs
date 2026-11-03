@@ -8,7 +8,7 @@ const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 
 test('macOS app ships and prefers its own gateway, node and python runtimes', () => {
   const build = read('desktop/macos/build.sh');
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(build, /RUNTIME_ROOT\/openclaw/);
   assert.match(build, /RUNTIME_ROOT\/python/);
   assert.match(build, /RUNTIME_ROOT\/bin\/node/);
@@ -56,7 +56,7 @@ test('macOS updater selects a build Node with npm when the bundled runtime has n
 });
 
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
-  const mac = read('desktop/macos/Sources/Launcher.swift');
+  const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const windows = read('app/windows_desktop.py');
   const patcher = read('patch/apply-local-unrestricted-policy.mjs');
   const macTheme = read('installer/macos/apply-theme.sh');
@@ -86,7 +86,7 @@ test('macOS updater removes only its old app rollback copies after a healthy ins
 });
 
 test('macOS launcher replaces only a stale gateway proven to belong to an older CLE Kk app', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(launcher, /private static let bundledNodeSuffix = "\/Contents\/Resources\/SuperPinkie\/runtime\/bin\/node"/);
   assert.match(launcher, /task\.executableURL = lsof/);
   assert.match(launcher, /"-sTCP:LISTEN", "-Fp"/);
@@ -125,7 +125,7 @@ test('macOS hotfix keeps the same stable local identity used by full builds', ()
 });
 
 test('macOS gateway provenance detects an old executable replaced at the same app path', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(launcher, /private struct ExecutableIdentity: Equatable/);
   assert.match(launcher, /let device: UInt64\s+let inode: UInt64/);
   assert.match(launcher, /mappedExecutableIdentity\(for pid: pid_t, matching executablePath: String\)/);
@@ -137,7 +137,7 @@ test('macOS gateway provenance detects an old executable replaced at the same ap
 
 test('macOS app owns an unrestricted computer-control driver and capable node', () => {
   const build = read('desktop/macos/build.sh');
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const manifest = read('desktop/macos/runtime-manifest.json.in');
   assert.match(build, /CUA_DRIVER_VERSION="0\.22\.0"/);
   assert.match(build, /59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727/);
@@ -211,7 +211,7 @@ test('installed App keeps every runtime repair patch beside its cold-start boots
 });
 
 test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const windows = read('app/windows_desktop.py');
   const setup = read('services/mode-architecture/setup.py');
   for (const source of [launcher, windows]) {
@@ -220,12 +220,12 @@ test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater
     assert.match(source, /PINKIE_RUNTIME_CONFIG_SCHEMA/);
   }
   assert.match(setup, /update\["checkOnStart"\] = False/);
-  assert.match(launcher, /主动拉取 CLE Kk 更新/);
+  assert.match(launcher, /主动拉取更新/);
   assert.match(windows, /Cle0726\/super-pinkie\/releases\/latest/);
 });
 
 test('native startup uses the bundled opaque mascot video instead of exposing the desktop', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const loading = read('ui/launcher-loading.html');
   assert.match(launcher, /ui\/launcher-loading\.html/);
   assert.match(loading, /<video class="scene"/);
@@ -275,8 +275,7 @@ test('startup splash controller is mounted once and tolerates the current app sh
   assert.match(splash, /laolaoSplashController/);
   assert.match(splash, /openclaw-app-shell, openclaw-app \.shell/);
   assert.match(splash, /readyMode = !switching && ids\.includes\(mountedMode\)/);
-  assert.match(installer, /exactly one startup controller/);
-  assert.match(installer, /laolao-splash\.js\?v=splash28/);
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-splash.js']});
 });
 
 test('current runtime keeps the classic single-chat shell instead of the upstream control console', () => {
@@ -326,18 +325,7 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(js, /先生，今天想学点什么？/);
   assert.match(css, /data-pinkie-native-glass="1"/);
   assert.match(css, /\.laolao-splash, \.laolao-mode-transition/);
-  assert.match(mac, /laolao-classic-shell\.css/);
-  assert.match(mac, /laolao-classic-shell\.js/);
-  assert.match(mac, /laolao-side-layout\.css/);
-  assert.match(mac, /laolao-side-layout\.js/);
-  assert.match(windows, /laolao-classic-shell\.css/);
-  assert.match(windows, /laolao-classic-shell\.js/);
-  assert.match(windows, /laolao-side-layout\.css/);
-  assert.match(windows, /laolao-side-layout\.js/);
-  assert.match(mac, /laolao-memory\.css/);
-  assert.match(mac, /laolao-memory\.js/);
-  assert.match(windows, /laolao-memory\.css/);
-  assert.match(windows, /laolao-memory\.js/);
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-classic-shell.css','laolao-classic-shell.js','laolao-side-layout.css','laolao-side-layout.js','laolao-memory.css','laolao-memory.js']});
 });
 
 test('bundle keeps user state external and first launch uses bundled executables', () => {
@@ -348,7 +336,7 @@ test('bundle keeps user state external and first launch uses bundled executables
   assert.match(setup, /PINKIE_OPENCLAW_BIN/);
   assert.match(setup, /PINKIE_PYTHON_BIN/);
   assert.match(setup, /PINKIE_MANAGED_GATEWAY/);
-  assert.match(setup, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
+  assert.match(setup, /bash "\$SCRIPT_DIR\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
   assert.match(build, /index\.mjs memory\.mjs learning\.mjs reasoning\.mjs work-kinds\.mjs model-sync\.mjs web-gpt-activity\.mjs web-gpt-connection\.mjs web-gpt-project-context\.mjs ask\.mjs reply-hygiene\.mjs setup\.py package\.json openclaw\.plugin\.json/);
 });
 
@@ -374,19 +362,25 @@ test('macOS hotfix keeps every bundled web surface and backend in sync', () => {
   assert.match(themeInstaller, /"\$PYTHON_BIN" "\$REPO_ROOT\/services\/mode-architecture\/setup\.py"/);
 });
 
-test('source updaters preserve every existing user persona and context file', () => {
+test('source updaters make persona manuals follow the official version and keep memory', () => {
   const mac = read('install-full.sh');
+  const sync = read('installer/macos/sync-personas.sh');
   const windows = read('install.ps1');
-  assert.match(mac, /\[\[ -e "\$target_dir\/\$filename" \|\| -L "\$target_dir\/\$filename" \]\]/);
-  assert.match(mac, /保留已有 \$filename/);
-  assert.match(windows, /if \(Test-Path \$dst\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
-  assert.doesNotMatch(windows, /Copy-Item \$src \$dst -Force/);
+  assert.match(mac, /bash "\$REPO_ROOT\/installer\/macos\/sync-personas\.sh" "\$REPO_ROOT\/personas"/);
+  // A different copy on this machine is backed up, then replaced.
+  assert.match(sync, /cmp -s "\$src" "\$dst"/);
+  assert.doesNotMatch(sync, /SHIPPED|kept: edited/);
+  assert.match(sync, /\[\[ -L "\$dst" \|\| "\$keep" == "1" \]\]/);
+  assert.match(sync, /"\$mode" == "neutral" \|\| "\$rel" == "DREAMS\.md"/);
+  assert.match(sync, /cp -p "\$dst" "\$BACKUP_DIR\/\$key"/);
+  assert.match(windows, /if \(\$mode -eq "neutral" -or \$f -eq "DREAMS\.md"\) \{[\s\S]*?keeping existing \$f[\s\S]*?continue/);
+  assert.doesNotMatch(windows, /-not \$SyncPersonas/);
   assert.match(mac, /restore_app_on_failure/);
   assert.match(mac, /已恢复上一版超級碧琪\.app/);
 });
 
 test('macOS manual update leaves the gateway page before replacing the App', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const updater = read('installer/macos/detached-update.sh');
   assert.match(launcher, /laolaoUpdate/);
   assert.match(launcher, /主动拉取更新/);

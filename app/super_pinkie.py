@@ -21,8 +21,10 @@ import json
 import importlib.util
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
+import traceback
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -82,11 +84,21 @@ def openclaw_config_path():
     return prompts_dir() / "openclaw.json"
 
 
+def hidden_process_kwargs():
+    """Keep setup/probe/maintenance children out of the desktop UI on Windows."""
+    if os.name != "nt":
+        return {}
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": startup}
+
+
 # ---------------------------------------------------------------- 依赖检测与安装
 def check_node():
     """检测 node 是否可用，返回版本号或 None"""
     try:
-        res = subprocess.run(node_command("-v"), capture_output=True, text=True, timeout=5)
+        res = subprocess.run(node_command("-v"), capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -99,7 +111,7 @@ def check_npm():
     if bundled_runtime_root():
         return "内置运行时"
     try:
-        res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run(["npm", "-v"], capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -110,7 +122,7 @@ def check_npm():
 def check_openclaw_cli():
     """检测 openclaw CLI 是否可用"""
     try:
-        res = subprocess.run(openclaw_command("--version"), capture_output=True, text=True, timeout=5)
+        res = subprocess.run(openclaw_command("--version"), capture_output=True, text=True, timeout=5, **hidden_process_kwargs())
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:
@@ -124,7 +136,8 @@ def install_node_windows(log):
     try:
         proc = subprocess.Popen(
             ["winget", "install", "-e", "--id", "OpenJS.NodeJS.LTS", "--silent", "--accept-package-agreements", "--accept-source-agreements"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            **hidden_process_kwargs(),
         )
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
@@ -146,9 +159,9 @@ def install_openclaw_npm(log):
     try:
         cmd = ["npm", "install", "-g", "openclaw"]
         if os.name == "nt":
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True, **hidden_process_kwargs())
         else:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
         proc.wait()
@@ -257,7 +270,7 @@ def resolve_openclaw_root():
         return env
     cmd = "where" if os.name == "nt" else "which"
     try:
-        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=5).stdout
+        out = subprocess.run([cmd, "openclaw"], capture_output=True, text=True, timeout=5, **hidden_process_kwargs()).stdout
         line = out.splitlines()[0].strip() if out.strip() else ""
         if line:
             real = os.path.realpath(line)
@@ -423,7 +436,7 @@ def apply_patch(remove, log):
             p = resource_path("patch", extra)
             if p.exists():
                 try:
-                    subprocess.run(node_command(str(p)), capture_output=True, text=True, timeout=10)
+                    subprocess.run(node_command(str(p)), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
                     log(f"  补丁扩展 {extra}: 已应用")
                 except Exception:
                     pass
@@ -431,7 +444,78 @@ def apply_patch(remove, log):
 
 
 # ---------------------------------------------------------------- 人格文件安装
-def install_personas(log, preserve_existing=False):
+PERSONA_FILES = (
+    "SOUL.md",
+    "IDENTITY.md",
+    "AGENTS.md",
+    "AESTHETICS.md",
+    "METHODS.md",
+    "HEARTBEAT.md",
+    "DREAMS.md",
+    "memory-system.md",
+)
+# Whole directories copied file by file with the same rules as PERSONA_FILES.
+PERSONA_DIRS = ("playbooks",)
+# The mode switcher opens agent:<id>:main for each of these; every one must be
+# registered in openclaw.json or switching to that mode fails.
+MODE_AGENTS = {
+    "project": "workspace-project",
+    "thinking": "workspace-thinking",
+    "learning": "workspace-learning",
+    "unrestricted": "workspace-unrestricted",
+}
+
+
+def _install_persona_file(src_file, dst_file, keep_existing, backup_dir):
+    """Copy one bundled persona file.
+
+    Manuals and playbooks follow the official version: a different copy on
+    this machine is backed up, then replaced. keep_existing (the unrestricted
+    mode, DREAMS.md) leaves an existing file alone. Memory and the owner's own
+    files (USER.md, TOOLS.md, MEMORY.md, memory/) are not bundled, so never touched.
+    """
+    if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
+        return
+    if keep_existing and dst_file.exists():
+        return
+    if dst_file.exists():
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst_file, backup_dir / dst_file.name)
+    dst_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src_file, dst_file)
+
+
+def ensure_workspace_avatars(log):
+    """Fill missing built-in avatars without changing any existing user file."""
+    home = Path.home() / ".openclaw"
+    assets = resource_path("ui", "assets")
+    mapping = (
+        ("workspace", "laolao-mode-chat-hd.png", "pinkie-pie.png"),
+        ("workspace-project", "laolao-mode-project-hd.png", "pinkie-pie.png"),
+        ("workspace-thinking", "laolao-mode-thinking-hd.png", "pinkie-pie.png"),
+        ("workspace-learning", "laolao-mode-learning-hd.png", "pinkie-pie.png"),
+        ("workspace-unrestricted", "laolao-mode-unrestricted-hd.png", "unrestricted-mode.png"),
+    )
+    for workspace, source, name in mapping:
+        src = assets / source
+        dst = home / workspace / "avatars" / name
+        if dst.exists():
+            continue
+        created = False
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            with src.open("rb") as reader, dst.open("xb") as writer:
+                created = True
+                shutil.copyfileobj(reader, writer)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            if created:
+                dst.unlink(missing_ok=True)
+            log(f"  ⚠️ 补齐 {workspace} 头像失败：{exc}")
+
+
+def install_personas(log):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
     mapping = {
@@ -443,51 +527,165 @@ def install_personas(log, preserve_existing=False):
     }
     src_root = resource_path("personas")
     backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
-    template_files = (
-        "SOUL.md",
-        "IDENTITY.md",
-        "AGENTS.md",
-        "AESTHETICS.md",
-        "METHODS.md",
-        "HEARTBEAT.md",
-        "DREAMS.md",
-        "memory-system.md",
-    )
     for mode, target in mapping.items():
         src_mode = src_root / mode
         if src_mode.exists():
             target.mkdir(parents=True, exist_ok=True)
-            for fname in template_files:
+            for fname in PERSONA_FILES:
                 src_file = src_mode / fname
                 if src_file.exists():
-                    dst_file = target / fname
-                    if dst_file.exists() and dst_file.read_bytes() == src_file.read_bytes():
-                        continue
-                    if (preserve_existing or mode == "neutral" or fname == "DREAMS.md") and dst_file.exists():
-                        continue
-                    if dst_file.exists():
-                        bak_dir = backup_root / mode
-                        bak_dir.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(dst_file, bak_dir / fname)
-                    shutil.copyfile(src_file, dst_file)
+                    never_replace = mode == "neutral" or fname == "DREAMS.md"
+                    _install_persona_file(src_file, target / fname, never_replace, backup_root / mode)
+            for dname in PERSONA_DIRS:
+                src_dir = src_mode / dname
+                if not src_dir.is_dir():
+                    continue
+                for src_file in sorted(src_dir.rglob("*")):
+                    if src_file.is_file():
+                        relative = src_file.relative_to(src_mode)
+                        never_replace = mode == "neutral"
+                        _install_persona_file(
+                            src_file, target / relative, never_replace, backup_root / mode / relative.parent,
+                        )
             log(f"  [{mode}] 人格文件 -> {target}")
-    
-    # 固定保留既有 agent id；只补齐缺少的三个模式，不改现有模型与工作区。
+    return ensure_mode_agents(log)
+
+
+def run_openclaw(arguments, timeout):
+    """Run the bundled openclaw CLI and return (returncode, text).
+
+    Node writes UTF-8.  subprocess text=True would decode it with the ANSI code
+    page instead (cp936 on Chinese Windows, cp1252 on English), and the agent
+    names contain Chinese and emoji, so read bytes and decode them ourselves.
+    """
+    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout, **hidden_process_kwargs())
+    output = (result.stdout or b"").decode("utf-8", "replace")
+    errors = (result.stderr or b"").decode("utf-8", "replace")
+    return result.returncode, output, errors
+
+
+def parse_agent_ids(text):
+    """Agent ids from `openclaw agents list --json`, tolerating log lines before the JSON."""
+    decoder = json.JSONDecoder()
+    start = text.find("[")
+    while start >= 0:
+        try:
+            items, _ = decoder.raw_decode(text[start:])
+        except ValueError:
+            items = None
+        # A log prefix such as "[plugins] ..." is not the listing; keep looking.
+        if isinstance(items, list) and all(isinstance(item, dict) for item in items):
+            return {item.get("id") for item in items}
+        start = text.find("[", start + 1)
+    raise ValueError("no JSON agent list in agents list output")
+
+
+def configured_agent_ids(config_path=None):
+    """Agent ids registered in openclaw.json, in order, or None when unreadable."""
     try:
-        res = subprocess.run(openclaw_command("agents", "list", "--json"), capture_output=True, text=True, timeout=12)
-        existing = {item.get("id") for item in json.loads(res.stdout or "[]") if isinstance(item, dict)}
-        for agent_id, workspace in {
-            "project": home / ".openclaw/workspace-project",
-            "thinking": home / ".openclaw/workspace-thinking",
-            "learning": home / ".openclaw/workspace-learning",
-            "unrestricted": home / ".openclaw/workspace-unrestricted",
-        }.items():
-            if agent_id not in existing:
-                subprocess.run(openclaw_command("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), capture_output=True, timeout=15)
-                log(f"  已补齐 {agent_id} 模式")
-            subprocess.run(openclaw_command("agents", "set-identity", "--agent", agent_id, "--identity-file", workspace / "IDENTITY.md"), capture_output=True, timeout=12)
-    except Exception:
-        pass
+        data = json.loads(Path(config_path or openclaw_config_path()).read_text(encoding="utf-8"))
+        agents = data.get("agents", {}).get("list", [])
+        return [item.get("id") for item in agents if isinstance(item, dict)]
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def ensure_main_agent(log, config_path=None):
+    """Put the 唠嗑 agent `main` first in agents.list.
+
+    OpenClaw treats the first listed agent as the default, and the chat mode
+    opens the default session.  A fresh Windows profile only ever had the two
+    party agents written by services/party, so 唠嗑模式 silently ran as
+    pinkie-party.  The Mac install lists main first with this same workspace.
+    """
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
+        agents = data.setdefault("agents", {})
+        listed = agents.setdefault("list", [])
+        if not isinstance(listed, list):
+            log("  ⚠️ openclaw.json 的 agents.list 不是列表，没有改动")
+            return False
+        index = next((i for i, item in enumerate(listed) if isinstance(item, dict) and item.get("id") == "main"), None)
+        if index == 0:
+            return True
+        if index is None:
+            entry = {"id": "main", "workspace": str(path.parent / "workspace")}
+            message = "  已补齐 main（唠嗑）模式"
+        else:
+            entry = listed.pop(index)
+            message = "  已把 main（唠嗑）模式放回默认位置"
+        listed.insert(0, entry)
+        # The gateway may still be running after the window was closed. Do
+        # check for an edit made since we read the configuration.
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-main-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有覆盖；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log(message)
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 补齐 main（唠嗑）模式失败：{exc}")
+        return False
+
+
+def ensure_mode_agents(log):
+    """Register any missing mode agent.  Returns True when all of them exist.
+
+    Safe to call on every launch: it reads openclaw.json first and only runs
+    the CLI when something is missing.  Every failure is logged instead of
+    swallowed, so a broken run shows up in setup.log and is retried next time.
+    """
+    configured = configured_agent_ids()
+    if configured and configured[0] == "main" and all(agent_id in configured for agent_id in MODE_AGENTS):
+        return True
+    registered = register_mode_agents(log)
+    # After the CLI, which rewrites openclaw.json itself.
+    return ensure_main_agent(log) and registered
+
+
+def register_mode_agents(log):
+    home = Path.home()
+    try:
+        code, output, errors = run_openclaw(("agents", "list", "--json"), timeout=60)
+        if code != 0:
+            log(f"  ⚠️ 读取模式列表失败（返回码 {code}）：{errors.strip()[-400:]}")
+            return False
+        existing = parse_agent_ids(output)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        log(f"  ⚠️ 读取模式列表失败：{exc}")
+        return False
+    complete = True
+    for agent_id, folder in MODE_AGENTS.items():
+        if agent_id in existing:
+            continue
+        workspace = home / ".openclaw" / folder
+        workspace.mkdir(parents=True, exist_ok=True)
+        try:
+            code, _, errors = run_openclaw(("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), timeout=60)
+            if code != 0:
+                complete = False
+                log(f"  ⚠️ 补齐 {agent_id} 模式失败（返回码 {code}）：{errors.strip()[-400:]}")
+                continue
+            log(f"  已补齐 {agent_id} 模式")
+            identity = workspace / "IDENTITY.md"
+            if identity.is_file():
+                code, _, errors = run_openclaw(("agents", "set-identity", "--agent", agent_id, "--identity-file", identity), timeout=60)
+                if code != 0:
+                    log(f"  ⚠️ 设置 {agent_id} 模式名片失败（返回码 {code}）：{errors.strip()[-400:]}")
+        except (OSError, subprocess.SubprocessError) as exc:
+            complete = False
+            log(f"  ⚠️ 补齐 {agent_id} 模式失败：{exc}")
+    return complete
 
 
 def install_runtime_service(service_name, log):
@@ -501,85 +699,43 @@ def install_runtime_service(service_name, log):
         spec = importlib.util.spec_from_file_location(module_name, setup_file)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        # WebView can replace stdout after startup, leaving it in the Windows
+        # ANSI code page. Setup modules print Chinese; send their status to the
+        # launcher's UTF-8 log instead of a process-wide console handle.
+        module.print = lambda *values, **kwargs: log(kwargs.get("sep", " ").join(map(str, values)))
         changed = bool(module.install())
         log(f"  [{service_name}] {'已安装/更新' if changed else '已是最新'}")
         return changed
     except Exception as exc:
         log(f"  [{service_name}] 安装失败：{exc}")
+        log(traceback.format_exc())
         return False
 
 
 # ---------------------------------------------------------------- UI 皮肤注入
 def install_theme(log):
-    log("==> 正在注入 来啦～老弟 UI 皮肤与静态资源...")
+    log("==> 正在安装碧琪完整界面...")
     root = resolve_openclaw_root()
     if not root:
-        log("  未定位到 CLE Kk UI 目录，跳过皮肤注入")
+        log("  未定位到碧琪 UI 目录，跳过界面安装")
         return
-    if os.name == "nt":
-        windows_installer = resource_path("installer", "windows", "apply-theme.ps1")
-        if windows_installer.exists():
-            env = dict(os.environ)
-            env["OPENCLAW_ROOT"] = str(root)
-            env["PINKIE_SKIP_APP_BUNDLES"] = "1"
-            try:
-                result = subprocess.run(
-                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(windows_installer)],
-                    capture_output=True, text=True, timeout=90, env=env,
-                )
-                if result.returncode == 0:
-                    log("  Windows 当前版 control-ui 已完成全量注入")
-                    return
-                log("  PowerShell 注入失败，改用内置兼容路径：" + (result.stderr.strip() or str(result.returncode)))
-            except Exception as exc:
-                log(f"  PowerShell 注入不可用，改用内置兼容路径：{exc}")
-
-    ui_candidates = [os.path.join(root, "dist", "control-ui"), os.path.join(root, "ui")]
-    ui_dir = next((path for path in ui_candidates if os.path.isfile(os.path.join(path, "index.html"))), ui_candidates[0])
-    index_html = os.path.join(ui_dir, "index.html")
-    if not os.path.isdir(ui_dir) or not os.path.isfile(index_html):
-        log(f"  未在 {ui_dir} 找到 index.html")
+    candidates = [Path(root) / "dist/control-ui", Path(root) / "ui"]
+    ui_dir = next((path for path in candidates if (path / "index.html").is_file()), None)
+    if ui_dir is None:
+        log("  未找到 control-ui/index.html")
         return
-    
-    asset_dir = resource_path("ui", "assets")
-    inject_dir = resource_path("ui", "injections")
-    
-    # 拷贝 assets 与 injections 文件
-    copied = 0
-    for src_folder in [asset_dir, inject_dir]:
-        if src_folder.exists():
-            for item in src_folder.iterdir():
-                if item.is_file():
-                    shutil.copyfile(item, os.path.join(ui_dir, item.name))
-                    copied += 1
-    log(f"  已复制 {copied} 个前端资源/脚本文件到 {ui_dir}")
-    
-    # 注入 head 和 body 片段
     try:
-        html = open(index_html, "r", encoding="utf-8").read()
-        head_frag_p = inject_dir / "laolao-head.fragment.html"
-        body_frag_p = inject_dir / "laolao-body.fragment.html"
-        handoff_p = inject_dir / "laolao-handoff-bootstrap.js"
-        
-        if handoff_p.exists():
-            shutil.copyfile(handoff_p, os.path.join(ui_dir, "laolao-handoff-bootstrap.js"))
-            
-        if head_frag_p.exists() and "laolao-head" not in html:
-            head_frag = head_frag_p.read_text(encoding="utf-8")
-            html = re.sub(r"(<head[^>]*>)", r"\1\n" + head_frag, html, flags=re.IGNORECASE)
-            
-        if body_frag_p.exists() and "laolao-body" not in html:
-            body_frag = body_frag_p.read_text(encoding="utf-8")
-            html = re.sub(r"(</body>)", body_frag + r"\n\1", html, flags=re.IGNORECASE)
-            
-        if "laolao-handoff-bootstrap" not in html:
-            html = re.sub(r"(<openclaw-app>)", r'    <script src="./laolao-handoff-bootstrap.js?v=handoff3"></script>\n    \1', html, flags=re.IGNORECASE)
-            
-        open(index_html, "w", encoding="utf-8").write(html)
-        log("  UI index.html 注入成功！")
-    except Exception as e:
-        log(f"  注入 index.html 失败: {e}")
-        
+        builder = resource_path("tools", "ui-parity", "bundle.py")
+        spec = importlib.util.spec_from_file_location("pinkie_shared_ui", builder)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        manifest = module.install(resource_path(), ui_dir)
+        log(f"  已核验 {len(manifest['resources'])} 个完整界面资源")
+    except Exception as exc:
+        log(f"  界面安装失败：{exc}")
+        raise
+    asset_dir = resource_path("ui", "assets")
+
     # 头像同步
     home = Path.home()
     avatar_map = [
@@ -619,6 +775,7 @@ class ProxyManager:
         self.proc = subprocess.Popen(
             [py, str(proxy_py), str(port)],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True,
+            **hidden_process_kwargs(),
         )
         threading.Thread(target=self._pump, daemon=True).start()
         self.log(f"代理已启动: 127.0.0.1:{port} -> 127.0.0.1:{upstream} (pid {self.proc.pid})")
@@ -665,13 +822,90 @@ def restart_openclaw_gateway(log):
     """重启 CLE Kk 网关"""
     log("==> 正在重启 CLE Kk 网关...")
     try:
-        res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10)
+        res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
     except Exception as e:
         log(f"  重启网关失败（可能尚未启动或未安装到 PATH）: {e}")
 
 
 # ---------------------------------------------------------------- 配置 openclaw.json
+def ensure_gateway_auth_none(log, config_path=None):
+    """Record in openclaw.json that the bundled gateway runs without auth.
+
+    The desktop starts the gateway with `--auth none`, but that flag is not
+    in the config. OpenClaw's own CLI reads the config, assumes token auth
+    and refuses to call the gateway. The watchdog resends an interrupted turn
+    through that CLI, so on Windows no automatic continuation ever went out
+    and the retry looped every few seconds. The Mac config has mode "none".
+    """
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
+        gateway = data.setdefault("gateway", {})
+        auth = gateway.setdefault("auth", {})
+        if not isinstance(auth, dict) or auth.get("mode"):
+            return False
+        auth["mode"] = "none"
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-auth-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有写入网关认证方式；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log("  已写明本机网关不需要令牌（自动续接要用）")
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 写入网关认证方式失败：{exc}")
+        return False
+
+
+def repair_provider_models(log, config_path=None):
+    """Move a provider's stray "model" key into its models list.
+
+    Earlier control centers wrote one; OpenClaw then rejects the whole config
+    and the gateway never starts, which the page shows as 「等待上游恢复」."""
+    path = Path(config_path or openclaw_config_path())
+    try:
+        raw = path.read_bytes() if path.exists() else None
+        data = json.loads(raw.decode("utf-8") if raw else "{}")
+        providers = (data.get("models") or {}).get("providers") or {}
+        repaired = []
+        for name, provider in providers.items():
+            if not isinstance(provider, dict) or "model" not in provider:
+                continue
+            model = provider.pop("model")
+            models = provider.setdefault("models", [])
+            if isinstance(model, str) and model and not any(isinstance(item, dict) and item.get("id") == model for item in models):
+                models.append({"id": model, "name": model})
+            repaired.append(name)
+        if not repaired:
+            return False
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-provider-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            if (path.read_bytes() if path.exists() else None) != raw:
+                log("  ⚠️ openclaw.json 正在变化，没有修复模型配置；下次启动重试")
+                return False
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        log(f"  已修复模型配置（{', '.join(repaired)}）：网关以前会因为它拒绝启动")
+        return True
+    except (OSError, ValueError, AttributeError) as exc:
+        log(f"  ⚠️ 修复模型配置失败：{exc}")
+        return False
+
+
 def update_api_config(provider_name, api_key, base_url, model_name, log):
     """写入或更新 openclaw.json 的 API 配置"""
     cfg_file = openclaw_config_path()
@@ -692,9 +926,19 @@ def update_api_config(provider_name, api_key, base_url, model_name, log):
         prov_data["apiKey"] = api_key
     if base_url:
         prov_data["baseUrl"] = base_url
+        prov_data.setdefault("api", "openai-completions")
+    # OpenClaw rejects an unknown "model" key on a provider, and then the
+    # gateway refuses to start: the page waited for 「上游恢复」 forever. The
+    # model belongs in the provider's models list and the agents' default.
+    prov_data.pop("model", None)
     if model_name:
-        prov_data["model"] = model_name
-        
+        models = prov_data.setdefault("models", [])
+        if not any(isinstance(item, dict) and item.get("id") == model_name for item in models):
+            models.append({"id": model_name, "name": model_name})
+        defaults = cfg.setdefault("agents", {}).setdefault("defaults", {})
+        current = defaults.get("model") if isinstance(defaults.get("model"), dict) else {}
+        defaults["model"] = {**current, "primary": f"{provider_name}/{model_name}"}
+
     cfg["models"]["providers"][provider_name] = prov_data
     
     # 确保主配置
@@ -732,25 +976,27 @@ def pull_and_update(log):
             branch_res = subprocess.run(
                 ["git", "-C", str(repo_root), "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True, text=True, timeout=10,
+                **hidden_process_kwargs(),
             )
             branch = (branch_res.stdout or "").strip() or "main"
-            subprocess.run(["git", "-C", str(repo_root), "fetch", "origin"], capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(repo_root), "fetch", "origin"], capture_output=True, text=True, timeout=30, **hidden_process_kwargs())
             pull_res = subprocess.run(
                 ["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch],
                 capture_output=True, text=True, timeout=45,
+                **hidden_process_kwargs(),
             )
             if pull_res.returncode != 0:
                 log("  本地有未提交改动，自动暂存后拉取...")
-                subprocess.run(["git", "-C", str(repo_root), "stash", "push", "-m", "pinkie-auto-update"], capture_output=True, timeout=15)
-                subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch], capture_output=True, text=True, timeout=45, check=True)
-                subprocess.run(["git", "-C", str(repo_root), "stash", "pop"], capture_output=True, timeout=15)
+                subprocess.run(["git", "-C", str(repo_root), "stash", "push", "-m", "pinkie-auto-update"], capture_output=True, timeout=15, **hidden_process_kwargs())
+                subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only", "origin", branch], capture_output=True, text=True, timeout=45, check=True, **hidden_process_kwargs())
+                subprocess.run(["git", "-C", str(repo_root), "stash", "pop"], capture_output=True, timeout=15, **hidden_process_kwargs())
             log(f"  ✅ Git 仓库已同步到最新 ({branch})")
         except Exception as exc:
             log(f"  ⚠️ Git 拉取失败: {exc}")
             return False
         ensure_prompts(log)
         apply_patch(False, log)
-        install_personas(log, preserve_existing=False)
+        install_personas(log)
         for service in ("party", "context", "project-scope", "mode-architecture"):
             install_runtime_service(service, log)
         install_theme(log)
@@ -799,12 +1045,19 @@ def prepare_bundled_desktop(log):
     version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else "current"
     marker = state / f"bundled-setup-{version}"
     if not marker.exists():
-        # Packaged App only fills missing defaults. Existing user-authored
-        # prompts/personas are valuable state and are never reverted on launch.
+        # Once per version: user-authored prompts are kept; persona manuals and
+        # playbooks follow this version (old copies backed up), memory untouched.
         ensure_prompts(log, preserve_existing=True)
-        install_personas(log, preserve_existing=True)
+        install_personas(log)
         marker.write_text("preserved\n", encoding="utf-8")
+    else:
+        # The marker only covers the file copy.  Mode registration is checked
+        # on every launch, so one failed run is repaired by the next start.
+        ensure_mode_agents(log)
 
+    repair_provider_models(log)
+    ensure_gateway_auth_none(log)
+    ensure_workspace_avatars(log)
     for service in ("party", "context", "project-scope", "mode-architecture"):
         install_runtime_service(service, log)
 
@@ -1033,7 +1286,25 @@ def run_relay(port, upstream):
     spec.loader.exec_module(module)
 
 
+def utf8_console():
+    """Never let a Chinese print() crash a setup or service.
+
+    A windowed exe has no stdout, but one started from a console or by another
+    process inherits handles that Python wraps in the ANSI code page.  Every
+    bundled setup.py and service prints Chinese status lines; cp1252 cannot
+    encode them and cp936 cannot encode emoji, so the print raised and the
+    caller logged the whole install or service as failed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main():
+    utf8_console()
     ports = relay_ports_from_argv()
     if ports:
         run_relay(*ports)
