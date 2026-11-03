@@ -24,8 +24,44 @@ notify() {
 reopen_app() {
   if [[ -d "$APP_PATH" ]]; then
     /usr/bin/open "$APP_PATH" >/dev/null 2>&1 || true
+  elif [[ -n "${ORIGINAL_APP_PATH:-}" && -d "$ORIGINAL_APP_PATH" ]]; then
+    /usr/bin/open "$ORIGINAL_APP_PATH" >/dev/null 2>&1 || true
   fi
 }
+
+# `/Applications` is normally owned by an administrator.  A standard macOS
+# account can still run that shared App, but cannot replace it during an
+# update.  Never make the update depend on another account's credentials:
+# transparently move that account onto its own writable copy instead.  Its
+# OpenClaw profile, cache, logs and update checkout already live below $HOME,
+# so no user data is shared or overwritten.
+resolve_update_app_path() {
+  local shared_parent
+  shared_parent="$(dirname "$APP_PATH")"
+  if [[ -w "$shared_parent" ]]; then
+    printf '%s\n' "$APP_PATH"
+    return 0
+  fi
+  local user_root="$HOME/Applications"
+  mkdir -p "$user_root"
+  if [[ ! -w "$user_root" ]]; then
+    echo "neither shared nor per-user Applications directory is writable" >&2
+    return 1
+  fi
+  printf '%s/超級碧琪.app\n' "$user_root"
+}
+
+ORIGINAL_APP_PATH="$APP_PATH"
+if ! APP_PATH="$(resolve_update_app_path)"; then
+  echo "no writable App destination for this macOS user"
+  notify "没有可写入的应用程序目录，本次没有更新"
+  APP_PATH="$ORIGINAL_APP_PATH"
+  reopen_app
+  exit 1
+fi
+if [[ "$APP_PATH" != "$ORIGINAL_APP_PATH" ]]; then
+  echo "shared App is not writable; installing this user's copy at $APP_PATH"
+fi
 
 gateway_listener_pids() {
   /usr/sbin/lsof -nP -a -iTCP:18789 -sTCP:LISTEN -Fp 2>/dev/null \
@@ -120,9 +156,10 @@ while [[ "$CURRENT_PID" =~ ^[0-9]+$ ]] && (( CURRENT_PID > 1 )) && kill -0 "$CUR
 done
 
 # The gateway is intentionally detached from the native App during ordinary
-# relaunches. For an explicit update, stop its exact executable before any App
-# files are replaced; otherwise the new UI silently reconnects to old code.
-if ! stop_exact_clekk_gateway; then
+# relaunches. Stop it only when replacing this exact App copy.  A standard
+# account installing its own copy must not signal a gateway owned by the shared
+# /Applications bundle or another macOS account.
+if [[ "$APP_PATH" == "$ORIGINAL_APP_PATH" ]] && ! stop_exact_clekk_gateway; then
   echo "gateway could not be stopped without risking another process"
   notify "旧网关无法安全停止，本次没有更新"
   reopen_app
