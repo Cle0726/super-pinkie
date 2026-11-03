@@ -210,6 +210,10 @@ mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
 for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs work-kinds.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
+mkdir -p "$CONTENTS/Resources/SuperPinkie/services/first-person-renderer"
+for renderer_file in index.mjs setup.py package.json openclaw.plugin.json; do
+  cp "$REPO_ROOT/services/first-person-renderer/$renderer_file" "$CONTENTS/Resources/SuperPinkie/services/first-person-renderer/"
+done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/watchdog"
 cp "$REPO_ROOT/services/watchdog/cle-watchdog.sh" "$CONTENTS/Resources/SuperPinkie/services/watchdog/cle-watchdog.sh"
 cp "$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in" "$CONTENTS/Resources/SuperPinkie/services/watchdog/ai.openclaw.watchdog.plist.in"

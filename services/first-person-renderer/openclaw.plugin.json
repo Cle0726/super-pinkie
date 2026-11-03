@@ -1,0 +1,13 @@
+{
+  "id": "pinkie-first-person-renderer",
+  "name": "Pinkie First-Person Renderer",
+  "version": "1.0.0",
+  "description": "Replaces 我 with 碧琪 in outbound reply text only.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}
