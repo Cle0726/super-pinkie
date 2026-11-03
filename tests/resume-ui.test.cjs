@@ -1908,6 +1908,28 @@ test('an untouched reserved queue item can resume after the original run ends',a
   assert.equal(calls.retry[0].sendRunId,'reserved-run');assert.equal(calls.retry[0].sendState,'waiting-reconnect');
 });
 
+test('multiple untouched reserved queue items normalize and retry one per turn without turning the second item into waiting-reconnect early',async()=>{
+  const now=1_700_000_000_000;
+  const h=loadTwoPaneHarness(async(method)=>method==='sessions.list'
+    ? {sessions:[{key:h.leftKey,hasActiveRun:false}]}
+    : {messages:[],hasMore:false},{clock:true,now});
+  h.panes.pop();
+  const calls=attachNativeQueueApi(h.left,[
+    {id:'q1',text:'first after run',createdAt:now-2,sessionKey:h.leftKey,sendAttempts:0,sendRunId:'run-q1',sendSubmittedAtMs:100},
+    {id:'q2',text:'second after run',createdAt:now-1,sessionKey:h.leftKey,sendAttempts:0,sendRunId:'run-q2',sendSubmittedAtMs:101},
+  ]);
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('first-turn-ended'),true);
+  assert.deepEqual(calls.retry.map((item)=>item.id),['q1']);
+  assert.equal(h.left.state.chatQueue.length,1);
+  assert.equal(h.left.state.chatQueue[0].id,'q2');
+  assert.equal(h.left.state.chatQueue[0].sendState,undefined);
+  assert.equal(h.left.state.chatQueue[0].__pinkieReservedUnsent,undefined);
+
+  assert.equal(await h.window.__laolaoQueueRecovery.recover('second-turn-ended'),true);
+  assert.deepEqual(calls.retry.map((item)=>item.id),['q1','q2']);
+  assert.equal(h.left.state.chatQueue.length,0);
+});
+
 
 test('idle recovery cannot reuse delivery evidence already consumed by active pruning',async()=>{
   const now=Date.now();
