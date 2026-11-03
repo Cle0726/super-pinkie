@@ -30,6 +30,7 @@ public class Fixture {
     string kind = args.Length == 0 ? "" : args[0];
     if (kind == "--hold") { Thread.Sleep(120000); return 0; }
     if (kind == "--child") {
+      File.WriteAllText(Environment.GetEnvironmentVariable("FIXTURE_CHILD_PID"),Process.GetCurrentProcess().Id.ToString());
       string stop=Environment.GetEnvironmentVariable("FIXTURE_CHILD_STOP");
       for (int i=0;i<300 && !File.Exists(stop);i++) Thread.Sleep(100);
       return 0;
@@ -37,8 +38,7 @@ public class Fixture {
     if (kind == "--gateway" || kind == "openclaw.mjs") {
       var listener=new TcpListener(IPAddress.Loopback,Int32.Parse(Environment.GetEnvironmentVariable("FIXTURE_PORT")));
       try { listener.Start(); } catch (SocketException) { return 2; }
-      var child=Process.Start(Environment.GetEnvironmentVariable("FIXTURE_CHILD_EXE"),"--child");
-      File.WriteAllText(Environment.GetEnvironmentVariable("FIXTURE_CHILD_PID"),child.Id.ToString());
+      Process.Start(Environment.GetEnvironmentVariable("FIXTURE_CHILD_EXE"),"--child");
       Thread.Sleep(120000); return 0;
     }
     if (kind.StartsWith("--update-health-token=")) {
@@ -174,6 +174,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             digest=hashlib.sha256(payload.read_bytes()).hexdigest()
             caller=root/'caller.py';caller.write_text(CALLER,encoding='utf-8')
             result=root/'caller-result.json';child_pid=root/'child-pid';child_stop=root/'child-stop';new_pid=root/'new-pid'
+            revived_child_pid=root/'revived-child-pid'
             for path in (target,previous,outside,state,payload,child_stop):path.resolve().relative_to(root)
             with socket.socket() as reserve:
                 reserve.bind(('127.0.0.1',0));port=reserve.getsockname()[1]
@@ -220,7 +221,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         while time.monotonic()<until and not (target/'new-version.txt').is_file():
                             if stop_watch.wait(.1):return
                         if stop_watch.is_set() or not (target/'new-version.txt').is_file():return
-                        restarted=subprocess.Popen([str(gateway_exe),*gateway_args],env=env,creationflags=hidden)
+                        revived_env=env.copy();revived_env['FIXTURE_CHILD_PID']=str(revived_child_pid)
+                        restarted=subprocess.Popen([str(gateway_exe),*gateway_args],env=revived_env,creationflags=hidden)
                         revived.append(restarted)
                         (state/'gateway-owner.json').write_text(json.dumps({'pid':restarted.pid,'node':str(gateway_exe)}),encoding='utf-8')
                     watcher=threading.Thread(target=revive_previous_gateway,daemon=True);watcher.start()
@@ -282,8 +284,11 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 for process in children+revived:
                     try:process.wait(timeout=5)
                     except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
-                deadline=time.monotonic()+5
-                while child_id and time.monotonic()<deadline and fixture_child_alive(child_id,outside_exe):time.sleep(.1)
+                child_ids={child_id} if child_id else set()
+                if revived_child_pid.exists():child_ids.add(int(revived_child_pid.read_text()))
+                deadline=time.monotonic()+15
+                while time.monotonic()<deadline and any(fixture_child_alive(pid,outside_exe) for pid in child_ids):time.sleep(.1)
+                self.assertFalse(any(fixture_child_alive(pid,outside_exe) for pid in child_ids),'fixture child did not exit after stop signal')
                 if update_started and new_pid.exists():
                     fresh_id=int(new_pid.read_text());deadline=time.monotonic()+5
                     while time.monotonic()<deadline and fixture_child_alive(fresh_id,executable):time.sleep(.1)
