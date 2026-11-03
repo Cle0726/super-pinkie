@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -41,12 +42,25 @@ public class Fixture {
       Thread.Sleep(120000); return 0;
     }
     if (kind.StartsWith("--update-health-token=")) {
-      var listener=new TcpListener(IPAddress.Loopback,Int32.Parse(Environment.GetEnvironmentVariable("FIXTURE_PORT")));
-      try { listener.Start(); } catch (SocketException) { return 2; }
+      int port=Int32.Parse(Environment.GetEnvironmentVariable("FIXTURE_PORT"));
+      bool oldUi=Environment.GetEnvironmentVariable("FIXTURE_EXTERNAL_REAPPEARS")=="1";
+      TcpListener listener=null;
+      if (oldUi) {
+        // The actual App can load an old gateway's page and then signal health.
+        Thread.Sleep(8000);
+        try { using (var connection=new TcpClient()) connection.Connect(IPAddress.Loopback,port); }
+        catch (SocketException) { return 2; }
+      } else {
+        listener=new TcpListener(IPAddress.Loopback,port);
+        try { listener.Start(); } catch (SocketException) { return 2; }
+      }
       string token=kind.Substring("--update-health-token=".Length);
       string marker=Path.Combine(Environment.GetEnvironmentVariable("PINKIE_STATE_ROOT"),"updates","health",token+".ready");
+      File.WriteAllText(Environment.GetEnvironmentVariable("FIXTURE_NEW_PID"),Process.GetCurrentProcess().Id.ToString());
       File.WriteAllText(marker,"ready");
-      Thread.Sleep(1200); listener.Stop(); return 0;
+      string stop=Environment.GetEnvironmentVariable("FIXTURE_CHILD_STOP");
+      for (int i=0;i<300 && !File.Exists(stop);i++) Thread.Sleep(100);
+      if (listener!=null) listener.Stop(); return 0;
     }
     return 0;
   }
@@ -130,6 +144,9 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
     def test_real_directory_acl_denial_is_reported_before_window_shutdown(self):
         self._run_case('acl_denied')
 
+    def test_reappearing_old_gateway_cannot_make_old_ui_look_like_success(self):
+        self._run_case('external_reappears')
+
     def _run_case(self, gateway_kind):
         with tempfile.TemporaryDirectory(prefix='pinkie-portable-update-') as temp:
             root=Path(temp).resolve()
@@ -156,7 +173,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 archive.writestr('超級碧琪/new-version.txt','new')
             digest=hashlib.sha256(payload.read_bytes()).hexdigest()
             caller=root/'caller.py';caller.write_text(CALLER,encoding='utf-8')
-            result=root/'caller-result.json';child_pid=root/'child-pid';child_stop=root/'child-stop'
+            result=root/'caller-result.json';child_pid=root/'child-pid';child_stop=root/'child-stop';new_pid=root/'new-pid'
             for path in (target,previous,outside,state,payload,child_stop):path.resolve().relative_to(root)
             with socket.socket() as reserve:
                 reserve.bind(('127.0.0.1',0));port=reserve.getsockname()[1]
@@ -167,9 +184,11 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 encoding='ascii')
             env=os.environ.copy()
             env.update(PINKIE_STATE_ROOT=str(state),FIXTURE_PORT=str(port),FIXTURE_CHILD_EXE=str(outside_exe),
-                       FIXTURE_CHILD_PID=str(child_pid),FIXTURE_CHILD_STOP=str(child_stop),
+                       FIXTURE_CHILD_PID=str(child_pid),FIXTURE_CHILD_STOP=str(child_stop),FIXTURE_NEW_PID=str(new_pid),
                        PSModulePath=str(shadow.parent)+os.pathsep+env.get('PSModulePath',''))
-            children=[];child_id=None;acl_changed=False
+            if gateway_kind=='external_reappears':env['FIXTURE_EXTERNAL_REAPPEARS']='1'
+            children=[];child_id=None;acl_changed=False;update_started=False
+            stop_watch=threading.Event();revived=[];watcher=None
             acl_script=root/'acl-fixture.ps1';acl_script.write_text(ACL_FIXTURE,encoding='utf-8-sig')
             saved_acl=root/'acl-original.sddl'
             def fixture_acl(action):
@@ -188,9 +207,23 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertTrue(child_pid.is_file(),'test gateway did not start')
                 child_id=int(child_pid.read_text())
                 self.assertTrue(fixture_child_alive(child_id,outside_exe))
-                if gateway_kind in ('verified_external','mismatched_record','wrong_command'):
+                if gateway_kind in ('verified_external','mismatched_record','wrong_command','external_reappears'):
                     recorded_exe=str(gateway_exe)+('.wrong' if gateway_kind=='mismatched_record' else '')
                     (state/'gateway-owner.json').write_text(json.dumps({'pid':gateway.pid,'node':recorded_exe}),encoding='utf-8')
+                if gateway_kind=='external_reappears':
+                    def revive_previous_gateway():
+                        try:gateway.wait(timeout=40)
+                        except subprocess.TimeoutExpired:return
+                        # Restart only after the old-gateway stop and folder swap
+                        # have completed, so the test exercises the later race.
+                        until=time.monotonic()+35
+                        while time.monotonic()<until and not (target/'new-version.txt').is_file():
+                            if stop_watch.wait(.1):return
+                        if stop_watch.is_set() or not (target/'new-version.txt').is_file():return
+                        restarted=subprocess.Popen([str(gateway_exe),*gateway_args],env=env,creationflags=hidden)
+                        revived.append(restarted)
+                        (state/'gateway-owner.json').write_text(json.dumps({'pid':restarted.pid,'node':str(gateway_exe)}),encoding='utf-8')
+                    watcher=threading.Thread(target=revive_previous_gateway,daemon=True);watcher.start()
                 if gateway_kind=='acl_denied':
                     fixture_acl('deny');acl_changed=True
                 repo=Path(__file__).resolve().parents[1]
@@ -213,11 +246,24 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     return
                 self.assertEqual(process.returncode,0,err.decode('utf-8',errors='replace'))
                 self.assertTrue(outcome['started'])
+                update_started=True
                 log=state/'logs/updater.log';deadline=time.monotonic()+40;text=''
                 while time.monotonic()<deadline:
                     if log.exists():text=log.read_text(encoding='utf-8-sig',errors='replace')
                     if 'portable update completed' in text or 'portable update failed' in text:break
                     time.sleep(.2)
+                if gateway_kind=='external_reappears':
+                    self.assertTrue(revived and revived[0].poll() is None,'previous gateway did not reappear')
+                    self.assertIn('portable update failed',text)
+                    self.assertIn('new version attached to a different install gateway',text)
+                    until=time.monotonic()+20
+                    while time.monotonic()<until and not (target/'old-version.txt').is_file():time.sleep(.2)
+                    self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored')
+                    self.assertFalse((target/'new-version.txt').exists())
+                    self.assertIsNone(other.poll())
+                    self.assertTrue(fixture_child_alive(child_id,outside_exe))
+                    self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
+                    return
                 self.assertIn('portable update completed',text)
                 self.assertTrue((target/'new-version.txt').is_file())
                 self.assertFalse((target/'old-version.txt').exists())
@@ -228,16 +274,19 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
             finally:
                 if acl_changed:fixture_acl('restore')
+                stop_watch.set()
+                if watcher:watcher.join(timeout=5)
                 child_stop.write_text('stop')
-                for process in reversed(children):
+                for process in reversed(children+revived):
                     if process.poll() is None:process.terminate()
-                for process in children:
+                for process in children+revived:
                     try:process.wait(timeout=5)
                     except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
                 deadline=time.monotonic()+5
                 while child_id and time.monotonic()<deadline and fixture_child_alive(child_id,outside_exe):time.sleep(.1)
-                # The new fixture exits 1.2 seconds after signalling health.
-                time.sleep(1.5)
+                if update_started and new_pid.exists():
+                    fresh_id=int(new_pid.read_text());deadline=time.monotonic()+5
+                    while time.monotonic()<deadline and fixture_child_alive(fresh_id,executable):time.sleep(.1)
 
 
 if __name__=='__main__':unittest.main()

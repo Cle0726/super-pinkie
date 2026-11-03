@@ -108,6 +108,15 @@ class ReplacerTest(unittest.TestCase):
         self.assertIn("ExecutablePath.StartsWith($prefix", helper)
         self.assertIn("install folder is still in use", helper)
 
+    def test_health_marker_is_not_enough_when_an_old_gateway_reappears(self):
+        helper = WindowsUpdater._directory_helper_source()
+        health = helper.index("new version did not become healthy")
+        validate = helper.index("  Confirm-NewInstallGateway\n", health)
+        remove_backup = helper.index("Remove-Item -LiteralPath $Backup -Recurse", validate)
+        self.assertLess(health, validate)
+        self.assertLess(validate, remove_backup)
+        self.assertIn("new version attached to a different install gateway", helper)
+
     def test_both_replacers_record_a_rollback_for_the_next_launch(self):
         for helper in (WindowsUpdater._helper_source(), WindowsUpdater._directory_helper_source()):
             self.assertIn("[string]$Version = ''", helper)
