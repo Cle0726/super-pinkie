@@ -388,6 +388,18 @@ const REVIEW_FOCUS = {
   ideas: '方向是否真的不同、有没有明确推荐、是否满足用户给的限制。',
 };
 
+// 本轮做出来的文件（绝对路径）共同所在的文件夹；路径太散（只剩 / 或主目录）就不给。
+function workFolder(files = []) {
+  const dirs = files.map(String).filter(file => path.isAbsolute(file)).map(file => path.dirname(file).split(path.sep));
+  if (!dirs.length) return '';
+  const common = [];
+  for (let i = 0; i < dirs[0].length; i += 1) {
+    if (dirs.every(parts => parts[i] === dirs[0][i])) common.push(dirs[0][i]); else break;
+  }
+  const folder = common.join(path.sep);
+  return common.length >= 4 && folder !== os.homedir() ? folder : '';
+}
+
 export function auditPrompt({message, history, reply, evidence, independent, quality = false, workKind = '', artifacts = [], tools = false, earlier = ''}) {
   const answers = Array.isArray(independent) ? independent.filter(Boolean) : independent ? [independent] : [];
   const mode = workKind ? solverModeFor([workKind]) : 'answer';
@@ -398,6 +410,7 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
       : '【其他助手不看回复、独立做出的解答（只作对照，不一定对）】';
   const focus = REVIEW_FOCUS[workKind] || '';
   const files = (Array.isArray(artifacts) ? artifacts : []).filter(Boolean).slice(0, 16);
+  const folder = workFolder(files);
   return [
     quality
       ? '你是严格的审稿人兼交付验收员。你的工作是找出这份回复里真实存在的错误和缺漏，不重写回答。'
@@ -412,6 +425,9 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
     tools && (files.length || isHandsOnKind(workKind))
       ? `【本轮做出来的文件和截图】\n${files.length ? files.map(file => `- ${file}`).join('\n') : '（工具记录里没认出路径，先在工作目录里找本轮做出来的成品）'}\n你可以用 read / pdf / image 打开它们，web_fetch 打开公开网址。动手的活必须打开交付物本身核对，不能只看工具记录；打不开（格式不支持、路径不对）时不要据此判不通过，只报告你真打开看到的问题。`
       : '',
+    // 审稿员自己的当前目录是模式的工作区，不是绑定的项目文件夹（11-02 隔离实测 K-script-marathon：
+    // 按工作区去读 cli.py，报「文件不存在」，打回了一个没问题的回复）。
+    folder ? `【本轮做文件的文件夹】${folder}\n回复里的相对路径和「python3 cli.py」这类命令，都按这个文件夹理解，不按你自己的当前目录。` : '',
     answerText ? `${independentTitle}\n${answerText}` : '',
     [
       '逐项核对：',
@@ -424,6 +440,7 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
       quality ? '5. 正确性：自己把关键计算、推理和结论重新做一遍；发现算错、推错、概念用错、引用了不存在的事实，就是问题。' : '',
       quality ? '6. 完整性：漏掉了会改变结论的情况、边界条件或反例；该给理由却只给结论；回答了别的问题。' : '',
       '用户要的是成品，却只给了计划或建议，也算问题。',
+      '成品是文件（代码、文档、网页、图片）时，回复说清放在哪、怎么用就够了；不要求把文件内容（源码、全文）贴进回复。',
       '只报告有具体依据的问题（引用原文、工具记录、你打开文件看到的具体位置，或写出你能复核的推导）。语气、风格、可有可无的改进、你自己拿不准的猜测，都不算问题。',
     ].filter(Boolean).join('\n'),
     '只输出一个 JSON 对象，不要 Markdown：全部通过时输出 {"pass": true}；否则输出 {"pass": false, "issues": [{"what": "哪里不对（引用回复原文）", "evidence": "依据（引用用户原话、工具记录、打开文件看到的内容或你的推导）", "fix": "应该怎么改"}]}，最多 5 条。',
@@ -768,10 +785,14 @@ export class ReasoningEnhancer {
         authProfileIdSource: authProfileId ? 'user' : 'auto',
         // 用户要的是质量：独立解答和批评都用这个模型最高的思考档。
         thinkLevel: thinkLevel || bestEffort(record),
-        modelRun: true,
-        // 独立解答不带工具（它不替主回答动手）；审稿带只读工具，能打开截图、文档和网页，
+        // 独立解答不带工具（它不替主回答动手），走裸模型调用；审稿带只读工具，能打开截图、文档和网页，
         // 不能执行命令、写文件或操作浏览器（OpenClaw 的 toolsAllow 只留这几样）。
-        ...(tools ? {disableTools: false, toolsAllow: [...REVIEW_TOOLS]} : {disableTools: true}),
+        // 审稿不能用 modelRun：OpenClaw 把裸模型调用的工具全部关掉（disableTools || isRawModelRun），
+        // toolsAllow 就一个都匹配不上，审稿直接报错。改用普通调用 + 不注入工作区手册（lightweight）；
+        // 有 toolsAllow 时 OpenClaw 自动用精简系统提示、不带技能清单。
+        ...(tools
+          ? {disableTools: false, toolsAllow: [...REVIEW_TOOLS], bootstrapContextMode: 'lightweight'}
+          : {modelRun: true, disableTools: true}),
         disableMessageTool: true,
         // 走子代理通道：全局 main 通道只有 4 个位置，Ultra 的 3 份独立解答 + 批评挤在里面，
         // 会把用户其他对话（以及并发的档位任务）排队到几分钟后。
