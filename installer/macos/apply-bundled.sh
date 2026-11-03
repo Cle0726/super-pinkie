@@ -48,7 +48,7 @@ fi
 
 if [[ ! -f "$MARKER" ]]; then
   BACKUP_ROOT="$STATE_ROOT/backups/bundled-$(date +%Y%m%d-%H%M%S)"
-  # Once per version: add new manuals/playbooks and update the ones the owner never edited.
+  # Once per version: manuals and playbooks follow this version (old copies backed up); memory untouched.
   bash "$SCRIPT_DIR/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" "$BACKUP_ROOT/personas"
   OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
   if [[ -z "$OPENCLAW_BIN" ]]; then

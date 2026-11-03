@@ -177,13 +177,10 @@ cd super-pinkie
 # 2. 一键安装（自动配置提示词、传输层补丁、五模式人格、UI 皮肤与代理服务）
 .\install.ps1 -Provider mm
 
-# 3. 日常拉取最新代码并重装皮肤与补丁（保留个人记忆与配置）
+# 3. 日常拉取最新代码并重装皮肤、补丁和最新人格手册（旧手册先备份；保留个人记忆与配置）
 .\update.ps1
 
-# 4. 若希望连同仓库最新人格模板一起覆盖同步
-.\update.ps1 -SyncPersonas
-
-# 5. 本机打包独立 Windows 桌面端 (.exe)
+# 4. 本机打包独立 Windows 桌面端 (.exe)
 .\build-win.ps1
 ```
 

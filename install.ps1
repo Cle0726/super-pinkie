@@ -22,6 +22,7 @@ param(
   [string]$Provider     = "",
   [switch]$Remove       = $false,
   [switch]$SkipTheme    = $false,
+  # Persona manuals always follow this version now; the switch stays for old update.ps1 callers.
   [switch]$SyncPersonas = $false
 )
 
@@ -136,7 +137,7 @@ foreach ($mode in $personaMap.Keys) {
       $dst = Join-Path $dstDir $f
       if (Test-Path $src) {
         if (Test-Path $dst) {
-          if (-not $SyncPersonas -or $mode -eq "neutral" -or $f -eq "DREAMS.md") {
+          if ($mode -eq "neutral" -or $f -eq "DREAMS.md") {
             Write-Host "    [$mode] keeping existing $f"
             continue
           }
@@ -152,7 +153,7 @@ foreach ($mode in $personaMap.Keys) {
         Copy-Item -LiteralPath $src -Destination $dst -Force
       }
     }
-    # Playbooks: always add missing ones; with -SyncPersonas also refresh changed ones (old copy backed up).
+    # Playbooks follow this version too: add missing ones, replace changed ones (old copy backed up).
     $srcPlaybooks = Join-Path $srcDir "playbooks"
     if ((Test-Path $srcPlaybooks) -and $mode -ne "neutral") {
       $dstPlaybooks = Join-Path $dstDir "playbooks"
@@ -160,7 +161,6 @@ foreach ($mode in $personaMap.Keys) {
       foreach ($item in Get-ChildItem -LiteralPath $srcPlaybooks -File) {
         $dst = Join-Path $dstPlaybooks $item.Name
         if (Test-Path $dst) {
-          if (-not $SyncPersonas) { continue }
           if ((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash) { continue }
           $pbBackupDir = Join-Path $personaBackupRoot "$mode\playbooks"
           New-Item -ItemType Directory -Force -Path $pbBackupDir | Out-Null
