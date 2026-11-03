@@ -2781,6 +2781,29 @@ test('each tier asks each kind of work for the proof that kind needs',t=>{
   assert.deepEqual(env.missing(),[]);
 });
 
+test('re-opening the same screenshot after a later change counts as a new check (isolated run K-web-boost)',t=>{
+  const run=tierRun(t,'web-reopen','boost','帮我做一个记账的小网页');
+  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  // 自己写的 Playwright 脚本截图：命令里看不出，输出里写了。
+  run.tool('exec',{command:'python3 verify_e2e.py'},'Desktop screenshot generated: shot-desktop.png\nMobile screenshot generated: shot-mobile.png');
+  run.tool('read',{path:'shot-desktop.png'},'Read image file [image/png]');
+  assert.deepEqual(run.missing(),[]);
+  // 写说明文档（正文里提到 index.html）不算改了页面。
+  run.tool('write',{path:path.join(run.root,'使用说明.md'),content:'双击 index.html 打开'},`Successfully wrote 30 bytes to ${run.root}/使用说明.md`);
+  assert.deepEqual(run.missing(),[]);
+  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 7 bytes to ${run.root}/index.html`);
+  run.tool('exec',{command:'python3 verify_e2e.py'},'E2E tests and screenshots updated cleanly.');
+  assert.match(run.missing().join(),/改完的页面还没截图打开看过/);
+  // 同一个文件、同样的工具结果：改动之后再看一次是新证据。
+  run.tool('read',{path:'shot-desktop.png'},'Read image file [image/png]');
+  assert.deepEqual(run.missing(),[]);
+  // 什么都没改又看一遍，仍按重复记录去掉（空转检查要靠它）。
+  const before=run.runtime.getRun(run.ctx.sessionKey).progressDigests.length;
+  run.tool('read',{path:'shot-desktop.png'},'Read image file [image/png]');
+  const after=run.runtime.getRun(run.ctx.sessionKey).progressDigests.length;
+  assert.equal(after,before);
+});
+
 test('writing, naming and trade-offs are not execution work: no file or test gate, drafts in the full tier',t=>{
   for(const [tier,prompt] of [['boost','给我的奶茶店想个名字'],['boost','帮我写个小红书文案，推荐我们的桂花拿铁'],['full','给我的奶茶店想个名字']]){
     const run=tierRun(t,'text-'+tier+prompt.length,tier,prompt,'thinking');
@@ -2960,4 +2983,121 @@ test('evidence keeps the text the model saw, not the result envelope with exit c
   // 图片结果只留一个标记，不存 base64。
   run.runtime.afterTool({toolName:'read',params:{path:'chart.png'},result:{content:[{type:'text',text:'Read image file [image/png]'},{type:'image',data:'iVBORw0KGgo'.repeat(400)}]}},run.ctx);
   assert.equal(run.runtime.getRun(run.ctx.sessionKey).verificationEvidence.at(-1).output,'Read image file [image/png]\n{"type":"image"}');
+});
+
+// ---- 11-02 档位升级·验证会话：隔离实测 tiers-r2 找到的四处 ----
+test('runtime turns (background results, internal events, finalize revisions) never re-route the tier task',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-runtime-turns-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'thinking',sessionKey:'agent:thinking:runtime-turns',runId:'r1',workspaceDir:root};
+  runtime.arm(ctx.sessionKey,'full');
+  runtime.prompt({prompt:'帮我做一条 10 秒的竖屏短视频，介绍我们店新出的桂花拿铁，要有字幕',messages:[]},ctx);
+  assert.equal(runtime.status(ctx.sessionKey).workflow.kind,'video_motion');
+  for(const prompt of [
+    'A background task completed. Use this result to reply to the user in your normal assistant voice.\n\nsource: image_generation\nstatus: failed',
+    '<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>\nOpenClaw runtime context (internal):\n[Internal task completion event]',
+    'Continue the OpenClaw runtime event.',
+    'Before accepting the previous final answer, apply this revision request and produce the revised final answer.\n\n当前任务还差：最终答复缺少两个来源',
+  ]){
+    runtime.prompt({prompt,messages:[]},ctx);
+    assert.equal(runtime.receiveUserMessage({content:prompt},ctx),'');
+    assert.equal(runtime.status(ctx.sessionKey).workflow.kind,'video_motion',prompt.slice(0,40));
+    assert.match(runtime.getRun(ctx.sessionKey).taskPrompt,/桂花拿铁/);
+  }
+});
+
+test('a turn that yields to running children is not re-driven by the watchdog',async t=>{
+  const scheduled=[];
+  const api={session:{workflow:{scheduleSessionTurn:async job=>{scheduled.push(job);return {id:'x'};},enqueueNextTurnInjection:async()=>({}),unscheduleSessionTurnsByTag:async()=>({removed:0})}}};
+  let activity={pending:2,quietForMs:0};
+  const watchdog=new UpstreamWatchdog(api,()=>'',async()=>({stdout:'{}'}),'',()=>activity);
+  const key='agent:main:yield-wait';
+  t.after(()=>void watchdog.cancel(key));
+  const messages=[
+    {role:'assistant',stopReason:'toolUse',content:[{type:'toolCall',name:'sessions_yield',arguments:{}}]},
+    {role:'toolResult',toolName:'sessions_yield',content:[{type:'text',text:'{"status":"yielded","message":"Turn yielded."}'}],details:{status:'yielded'},isError:false},
+  ];
+  assert.equal(await watchdog.agentEnded({runId:'y1',success:true,messages},{agentId:'main',sessionKey:key}),false);
+  assert.equal(scheduled.length,0);
+  // 没有子任务在跑、也没有档位续跑器会叫醒它：照旧当成没写完，接着推。
+  activity={pending:0,quietForMs:Infinity};
+  assert.equal(await watchdog.agentEnded({runId:'y2',success:true,messages},{agentId:'main',sessionKey:key}),true);
+});
+
+test('a retry decided for an older parent run is dropped once a newer run has answered',async t=>{
+  const calls=[],removed=[];
+  const runner=async()=>{calls.push('sent');return {stdout:'{"status":"started"}',stderr:''};};
+  const api={session:{workflow:{unscheduleSessionTurnsByTag:async value=>{removed.push(value);return {removed:1};}}}};
+  const watchdog=new UpstreamWatchdog(api,()=>'full',runner,'/runtime/openclaw/dist/index.js',()=>({pending:0,quietForMs:20_000}));
+  const key='agent:learning:stale-retry';
+  t.after(()=>void watchdog.cancel(key));
+  watchdog.modelStarted({sessionKey:key,runId:'yield-run'});
+  watchdog.modelStarted({sessionKey:key,runId:'tier-control-run'});
+  assert.equal(await watchdog.dispatchImmediate({sessionKey:key,agentId:'learning',runId:'yield-run',attempt:2,tag:'stale',kind:'integrity',message:'当前任务还差：独立起草 0/1。'}),false);
+  assert.equal(calls.length,0);
+  assert.deepEqual(removed,[{sessionKey:key,tag:'stale'}]);
+  assert.equal(await watchdog.dispatchImmediate({sessionKey:key,agentId:'learning',runId:'tier-control-run',attempt:3,tag:'fresh',kind:'integrity'}),true);
+  assert.equal(calls.length,1);
+});
+
+test('an empty end event after an accepted child result does not turn it into a failure',()=>{
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:late-empty',runId:'r'};
+  runtime.arm(ctx.sessionKey,'full');
+  const child=`${ctx.sessionKey}:subagent:d1`;
+  runtime.spawned({childSessionKey:child,label:'独立起草'},{requesterSessionKey:ctx.sessionKey});
+  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:'验收清单：1. 双击能玩；2. 手机宽度不出横向滚动；3. 计分正确，倒计时结束后显示总分并能重开。'});
+  runtime.ended({targetSessionKey:child,outcome:'ok',resultText:''});
+  const status=runtime.status(ctx.sessionKey);
+  assert.equal(status.failedChildren,0);
+  assert.equal(status.completedRoles.drafter,1);
+  assert.equal(status.children[0].state,'done');
+  assert.equal(runtime.activityFor(ctx.sessionKey).pending,0);
+});
+
+test('a rejected reviewer does not use up the only reviewer slot, but replacements stop at twice the cap',()=>{
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'project',sessionKey:'agent:project:review-replace',runId:'r'};
+  runtime.arm(ctx.sessionKey,'full');
+  const state=runtime.getRun(ctx.sessionKey);
+  state.taskPrompt='做个落地页介绍我的烘焙店';state.workKinds=['web_ui'];state.workKind='web_ui';
+  state.verificationEvidence=[{name:'exec',kind:'run',params:'{"command":"look-page index.html"}',output:'saved index.preview.png',ok:true}];
+  runtime.setRun(ctx.sessionKey,state);
+  const spawn=(n)=>runtime.beforeTool({toolName:'sessions_spawn',toolCallId:'s'+n,runId:'r',params:{label:'看图审稿',task:'打开 index.preview.png 挑毛病'}},ctx);
+  const finish=(n,text)=>{
+    const child=`${ctx.sessionKey}:subagent:rv${n}`;
+    const st=runtime.getRun(ctx.sessionKey);st.reservations.clear();runtime.setRun(ctx.sessionKey,st);
+    runtime.spawned({childSessionKey:child,label:'看图审稿'},{requesterSessionKey:ctx.sessionKey});
+    runtime.ended({targetSessionKey:child,outcome:'ok',resultText:text});
+  };
+  const first=spawn(1);
+  if(first?.block) assert.doesNotMatch(first.blockReason,/上限/);
+  finish(1,'整体还行，颜色有点问题，排版不太好看。');
+  const second=spawn(2);
+  assert.ok(!second?.block||!/上限/.test(second.blockReason),'a rejected review leaves room for one replacement');
+  finish(2,'1. 配色有问题\n2. 字太小');
+  const third=spawn(3);
+  assert.equal(third?.block,true);assert.match(third.blockReason,/上限/);
+});
+
+test('a tier retry that waited for children hands the next turn to the tier continuation',async t=>{
+  const calls=[];
+  let activity={pending:1,quietForMs:20_000};
+  const runner=async()=>{calls.push('sent');return {stdout:'{"status":"started"}',stderr:''};};
+  const api={session:{workflow:{unscheduleSessionTurnsByTag:async()=>({removed:1})}}};
+  const watchdog=new UpstreamWatchdog(api,()=>'full',runner,'/runtime/openclaw/dist/index.js',()=>activity);
+  const key='agent:project:waited-retry';
+  t.after(()=>void watchdog.cancel(key));
+  assert.equal(await watchdog.dispatchImmediate({sessionKey:key,agentId:'project',runId:'yield-run',attempt:1,tag:'w',kind:'integrity',message:'当前任务还差：独立复算 0/1。'}),false);
+  const rescheduled=watchdog.timers.get(key);assert.ok(rescheduled);clearTimeout(rescheduled);watchdog.timers.delete(key);
+  activity={pending:0,quietForMs:20_000};
+  // 子任务收齐后：带着「等过子任务」的这条不再发，档位续跑器接手。
+  assert.equal(await watchdog.dispatchImmediate({sessionKey:key,agentId:'project',runId:'yield-run',attempt:1,tag:'w',kind:'integrity',waitedOnChildren:true}),false);
+  assert.equal(calls.length,0);
+  // 没在档位里的会话照旧发。
+  const plain=new UpstreamWatchdog(api,()=>'',runner,'/runtime/openclaw/dist/index.js',()=>activity);
+  t.after(()=>void plain.cancel(key));
+  assert.equal(await plain.dispatchImmediate({sessionKey:key,agentId:'project',runId:'yield-run',attempt:1,tag:'w',kind:'integrity',waitedOnChildren:true}),true);
+  assert.equal(calls.length,1);
 });

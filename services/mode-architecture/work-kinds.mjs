@@ -114,6 +114,10 @@ const PATTERNS = {
     p(/(?:正则|函数|代码|脚本|sql|接口|方法).{0,12}(?:不对|有问题|写错|改改|改一下|改下|优化一下|重写)/i, 4),
     p(/(?:写|改|编写|实现)(?:一个|个|一段|段)?[^，。,.！？!?\s]{0,6}?(?:脚本|程序|函数)/, 5),
     p(/(?:调整|修改|改|更新|重构|优化|实现)[^。\n]{0,40}\.(?:m?js|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|sh|ps1|c|cc|cpp|h|rb|php)\b/i, 5),
+    // 「给 utils.js 里的 parseDate 加上斜杠写法的支持，带测试」「修一下 main.go 里的空指针」：先说文件、动词在后面
+    // （11-02 隔离实测 K-code-full 被判成简单问答，后来又被改动的 .js 带偏成网页）。
+    p(/(?:给|在|往|把|对|修一下|看下|看看)\s*[\w./-]+\.(?:m?js|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|sh|ps1|c|cc|cpp|h|rb|php)\b[^。\n]{0,40}(?:加|改|修|支持|实现|重构|优化|补|删|换成|写|空指针|报错)/i, 5),
+    p(/(?:带|附|配)上?(?:单元|自动化)?测试/, 2),
     p(/(?:修复?|修好|修一下|解决|fix)(?:一下|掉)?(?:这个|那个|个|这几个)?.{0,8}?(?:bug|缺陷)|(?:运行|跑一下|跑跑)(?:相关)?测试/i, 5),
     p(/```/, 2),
   ],
@@ -224,6 +228,11 @@ function attachmentKinds(prompt = '') {
  * mode：chat / project / ideas / learning / none（index.mjs 的显示模式名）。学习模式默认是讲题辅导，
  * 除非明确要做东西。continuation 只说「继续」时，交给调用方沿用上一条真实请求。
  */
+const CHOICE_QUESTION = /(?:该买哪|买哪|选哪|该选|怎么选|哪(?:个|款|台|部)(?:更)?(?:好|合适|适合|划算|值得?))/;
+const USAGE_CLAUSE = /(?:(?:主要|平时|日常|一般|打算|准备)(?:是|就是)?(?:用来|拿来|用于)?|用来|拿来|用于)[^，。,.!?！？；;]{1,30}/g;
+
+const UI_LOOK = /(?:按钮|颜色|配色|字号|字体|布局|样式|界面|页面|好看|难看|对齐|间距|图标)/;
+
 export function classifyWorkKind(prompt = '', {mode = ''} = {}) {
   const raw = instructionText(prompt);
   const attached = attachmentKinds(prompt);
@@ -233,9 +242,12 @@ export function classifyWorkKind(prompt = '', {mode = ''} = {}) {
   const pasted = raw.length > 60 ? pastedSourceInstruction(raw) : null;
   const text = (pasted !== null ? pasted : raw).replace(NEGATED_CLAUSE, ' ');
   const scores = {};
+  // 「MacBook Air 和 Pro 该买哪个？主要剪视频和写代码」：剪视频、写代码是买来干嘛，不是要碧琪做的活
+  // （11-02 隔离实测 K-tradeoff-full 被判成写代码）。是在问选哪个时，先去掉「主要 / 用来 …」这段再打分。
+  const scored = CHOICE_QUESTION.test(text) ? text.replace(USAGE_CLAUSE, ' ') : text;
   for (const [id, rules] of Object.entries(PATTERNS)) {
     let score = 0;
-    for (const rule of rules) if (rule.re.test(text)) score += rule.w;
+    for (const rule of rules) if (rule.re.test(scored)) score += rule.w;
     if (score) scores[id] = score;
   }
   if (pasted !== null) scores.writing = Math.max(scores.writing || 0, 6);
@@ -288,6 +300,8 @@ export function classifyWorkKind(prompt = '', {mode = ''} = {}) {
   if (present.has('debugging') && primary !== 'debugging' && (scores.debugging || 0) >= 5) primary = 'debugging';
   // 写脚本去做批量处理、做数据：脚本是手段，主活是自动化 / 数据。
   if (primary === 'code') for (const id of ['automation', 'data_charts']) if ((scores[id] || 0) >= 4) { primary = id; break; }
+  // 「把 app.js 里的按钮颜色改成蓝色」：改的是看得见的界面，主活按网页要截图；写代码留作第二种。
+  if (primary === 'code' && (scores.web_ui || 0) >= 3 && UI_LOOK.test(text)) primary = 'web_ui';
   const kinds = [primary];
   for (const [id, score] of ranked) {
     if (id === primary || kinds.length >= 3) continue;
@@ -341,7 +355,10 @@ const RUN_COMMAND = /(?:^|[;&|(]\s*|\s|\/)(?:node|python\d*(?:\.\d+)?|py\s|deno|
 const INSPECT_ONLY = /^\s*(?:ls|cat|head|tail|pwd|which|where|echo|mkdir|cd|wc|find|grep|rg|tree|stat|file|du|df|open)\b[^;&|]*$/i;
 const SCREENSHOT_COMMAND = /\blook-page\b|\bscreencapture\b|--screenshot\b|\bwkhtmltoimage\b|\bshot-scraper\b|capture-website|\.screenshot\s*\(|\bpage\.screenshot\b|\bplaywright\b[\s\S]{0,400}screenshot/i;
 const MOBILE_MARK = /--mobile\b|\biPhone\b|\bPixel\s?\d|is_mobile|isMobile|devices\s*\[|viewport[^}]{0,40}?width["'\s:=]+(?:3[2-9]\d|4[0-7]\d)\b|['"]width['"]\s*:\s*(?:3[2-9]\d|4[0-7]\d)\b|--window-size[=\s](?:3[2-9]\d|4[0-7]\d),|手机(?:尺寸|宽度)/i;
-const SHOT_OUTPUT = /(?:截图|screenshots?(?: saved)?)\s*[：:][^\n]{0,200}?\.(?:png|jpe?g|webp)\b/i;
+// 自己写的截图脚本的输出：「截图：x.png」「Desktop screenshot generated: shot-desktop.png」「screenshots updated」。
+const SHOT_OUTPUT = /(?:截图|screenshots?(?: saved)?)\s*[：:][^\n]{0,200}?\.(?:png|jpe?g|webp)\b|\bscreenshots?\s+(?:generated|saved|written|created|taken|captured|updated)\b|截图(?:已)?(?:生成|保存|更新)/i;
+const TOOL_PROBE = /\b(?:which|where|type|command\s+-v)\s+[\w.-]+/gi;
+const WROTE_TO = /(?:wrote \d+ bytes to|Successfully (?:edited|replaced text in|updated)) (\S+?)(?=$|\s|[.。](?:\s|$))/gi;
 const FRAME_COMMAND = /\blook-video\b|\bffmpeg\b[\s\S]{0,600}(?:-frames:v|-vframes|\bfps=|select=|thumbnail|tile=)/i;
 const PROBE_COMMAND = /\bffprobe\b|\blook-video\b|\bmediainfo\b|\b(?:ls\s+-[a-z]*l|stat|du|mdls)\b[^;&|]*\.(?:mp4|mov|m4v|webm|mkv|avi|gif)\b/i;
 // Windows 上用 PowerPoint / Word 的 COM 导出、Mac 上用 Keynote（documents-and-slides.md 第四节的几条路）也算打开了交付文件。
@@ -355,6 +372,7 @@ const COMPUTE_COMMAND = /\b(?:python\d*(?:\.\d+)?|node|deno|bun|ruby|Rscript|sql
 const PRINT_PROBE = /\b(?:identify|sips\s+(?:-g|--getProperty)|pdfinfo|exiftool|mdls)\b|\bdpi\b|dpiWidth|\.info\.get\(\s*['"]dpi/i;
 const SCHEDULE_COMMAND = /\blaunchctl\s+(?:load|bootstrap|enable|kickstart)\b|\bcrontab\s+(?!-[lr]\b)\S|\bschtasks(?:\.exe)?\s+\/(?:create|run)\b|\b(?:Register|Start)-ScheduledTask\b|\bsystemctl\s+--user\s+(?:enable|start)\b|\bpm2\s+(?:start|save)\b|\bnohup\b|\bat\s+\d{1,2}:\d{2}\b/i;
 const SCHEDULE_QUERY = /\blaunchctl\s+(?:list|print)\b|\bcrontab\s+-l\b|\bschtasks(?:\.exe)?\s+\/query\b|\bGet-ScheduledTask\b|\bsystemctl\s+--user\s+status\b|\bpm2\s+(?:list|ls|status)\b/i;
+const SCHEDULE_LIST_ALL = /\blaunchctl\s+list\b(?!\s+[\w.-]*[A-Za-z][\w.-]*)(?![^\n]*\|\s*grep\b)/i;
 const SCHEDULE_EMPTY = /no crontab|could not find|not found|找不到|不存在|ERROR:|cannot find|does not exist|inactive \(dead\)/i;
 const MACHINE_COMMAND = /machine-check\.(?:sh|ps1)|\bsysctl\s+(?:-n\s+)?(?:hw|machdep)|\bvm_stat\b|\bdf\s+-h\b|\bmemory_pressure\b|\bsystem_profiler\b|\bsw_vers\b|\buname\s+-[a-z]*m|\btop\s+-l\b|\bpmset\s+-g\b|Get-CimInstance|Get-ComputerInfo|\bsysteminfo\b|\bwmic\b|Get-PSDrive|\bnvidia-smi\b|\bfree\s+-h\b|\blscpu\b|\b(?:which|where(?:\.exe)?|command\s+-v|type\s+-a|Get-Command)\s+\S|\S+\s+(?:--version|-V\b|-version\b)|\bpy\s+-3\s+--version|\bbrew\s+list\b|\bpip\d*\s+(?:show|list)\b|\bnpm\s+(?:ls|list)\b/i;
 const DEPLOY_COMMAND = /\b(?:vercel|netlify|surge|wrangler|gh-pages|firebase\s+deploy|rsync|scp|sftp|lftp|git\s+push|cloudflared|ngrok|caddy|nginx\s+-s|pm2\s+start|docker\s+push|fly\s+deploy|railway\s+up)\b/i;
@@ -429,6 +447,11 @@ function groupOf(file = '') {
   return '';
 }
 
+// 写入工具自己说写的是哪个文件（参数里的 path，或结果里的「wrote N bytes to PATH」）。
+function ownTargets(n) {
+  return [...paramPaths(n), ...[...n.output.slice(0, 400).matchAll(WROTE_TO)].map(match => match[1])];
+}
+
 function paramPaths(n) {
   const params = n.params || {};
   return ['path', 'file_path', 'filePath', 'image', 'target', 'destination', 'outputPath', 'output_path', 'file', 'filename', 'url']
@@ -459,7 +482,9 @@ export function evidenceSignals(entry = {}) {
     if (!n.ok) return [];
     signals.add('mutation');
     // 参数在记录里会被截到 2000 字，内容在前时路径就丢了；写入结果里还有一份（「Successfully wrote N bytes to PATH」）。
-    for (const file of [...paramPaths(n), ...pathsIn(n.paramsText.slice(0, 600)), ...pathsIn(n.output.slice(0, 400))]) {
+    // 知道写的是哪个文件时只看它：README 正文里提到 index.html 不算改了网页（11-02 隔离实测 K-web-boost）。
+    const own = ownTargets(n);
+    for (const file of own.length ? own : [...pathsIn(n.paramsText.slice(0, 600)), ...pathsIn(n.output.slice(0, 400))]) {
       const group = groupOf(file);
       if (group && !(group === 'image' && PREVIEW_NAME.test(file))) signals.add(`produced:${group}`);
     }
@@ -481,7 +506,8 @@ export function evidenceSignals(entry = {}) {
     if (TEST_COMMAND.test(command) || n.kind === 'test') signals.add('test');
     if (RUN_COMMAND.test(command) && !INSPECT_ONLY.test(command)) signals.add('run');
     // 没有 look-page 的电脑（别人的 Mac、Windows）照 web-and-ui.md 第五节跑 shot.py：命令里看不出截图，输出里有「截图：x.png」。
-    if (SCREENSHOT_COMMAND.test(command) || SHOT_OUTPUT.test(output)) {
+    // 「which look-page」只是看装没装，不是截了图。
+    if (SCREENSHOT_COMMAND.test(command.replace(TOOL_PROBE, ' ')) || SHOT_OUTPUT.test(output)) {
       signals.add('screenshot');
       if (MOBILE_MARK.test(command) || /手机尺寸|[-_.]mobile[\w.-]*\.(?:png|jpe?g|webp)\b/i.test(output)) signals.add('mobile_screenshot');
     }
@@ -498,7 +524,8 @@ export function evidenceSignals(entry = {}) {
     const numbersOut = (output.match(/\d+(?:\.\d+)?/g) || []).length;
     if ((COMPUTE_COMMAND.test(command) && /\d/.test(output))
         || (/\b(?:python\d*(?:\.\d+)?|node|Rscript|sqlite3|duckdb|julia)\b/.test(command) && !INSPECT_ONLY.test(command) && numbersOut >= 2)) signals.add('recomputed');
-    if (SCHEDULE_COMMAND.test(command) || (SCHEDULE_QUERY.test(command) && /\S/.test(output) && !SCHEDULE_EMPTY.test(output))) signals.add('schedule_registered');
+    // 查询要点名自己那一项（launchctl list <label>、| grep …）；光 `launchctl list` 列出一堆别人的任务不算注册成功。
+    if (SCHEDULE_COMMAND.test(command) || (SCHEDULE_QUERY.test(command) && !SCHEDULE_LIST_ALL.test(command) && /\S/.test(output) && !SCHEDULE_EMPTY.test(output))) signals.add('schedule_registered');
     if (MACHINE_COMMAND.test(command)) signals.add('machine_probe');
     if (PRINT_PROBE.test(command) && /\d/.test(output)) signals.add('print_probe');
     if (DEPLOY_COMMAND.test(command)) signals.add('deploy');
@@ -588,8 +615,12 @@ export function refineKinds(kinds = [], entry = {}, {mode = ''} = {}) {
   if (current[0] === 'tutoring') return null;
   const signals = evidenceSignals(entry);
   const found = [];
+  // 自动化、写代码、修 bug 时程序造出来的文件（测试用的假 PDF、整理结果、日志图）是这件活的输入输出，
+  // 不是另一件要交付的活（11-02 隔离实测 K-auto-boost：echo 一个假 .pdf 测整理脚本，被改判成文档活，
+  // 一直被推去「打开交付的 PDF」，最后停掉）。要交的成品在用户原话里就能认出来。
+  const toolWork = ['automation', 'code', 'debugging'].includes(current[0]);
   for (const signal of signals) {
-    if (signal.startsWith('produced:')) {
+    if (signal.startsWith('produced:') && !toolWork) {
       const id = PRODUCED_KIND[signal.slice(9)];
       // 网页、代码活里顺手生成的图片（图标、示意图）不把整件事改判成「海报」。
       if (id === 'image_print' && current.some(k => ['web_ui', 'app_game_ai', 'video_motion', 'document', 'data_charts', 'code'].includes(k))) continue;
@@ -653,7 +684,7 @@ const GAP = {
   video_probe: '成片还没核对过时长或文件大小',
   video_frames: '成片还没抽帧打开看过',
   doc_opened: '交出去的文件本身还没打开或转成图片核对过',
-  doc_pages_viewed: '交出去的文件还没转成页面图片打开看过',
+  doc_pages_viewed: '交出去的文件还没转成页面图片打开看过（另做的 HTML / PDF 替身不算）',
   recomputed: '关键数字还没用程序算过',
   numbers_found: '回复里的关键数字在本轮计算输出里找不到',
   chart_viewed: '做出来的图表图片还没打开看过',
@@ -697,6 +728,33 @@ function keyNumbers(text = '', exclude = '') {
   return [...new Set(values)].slice(0, 12);
 }
 
+// 幻灯片证据：本轮做出过哪些 .pptx / .key，哪条命令把它（或它转出的 PDF）转成了图片。
+const SLIDE_FILE = /\.(?:pptx?|key|odp)$/i;
+const SLIDE_CONVERT = /--convert-to\b|\bsoffice\b|\blibreoffice\b|\blook-doc\b|\bqlmanage\b|ExportAsFixedFormat|\.SaveAs\(|tell application "(?:Keynote|Microsoft PowerPoint)"/i;
+const stemOf = (file) => String(file).split(/[\\/]/).pop().replace(/\.[^.]+$/, '').toLowerCase();
+function deckEvidence(rows) {
+  const filesOf = (row) => {
+    const n = normalizeEntry(row.entry);
+    return row.signals.has('mutation') ? ownTargets(n).concat(ownTargets(n).length ? [] : pathsIn(n.output.slice(0, 400)))
+      : pathsIn(`${n.command}\n${n.output.slice(0, 2000)}`);
+  };
+  const decks = new Set();
+  for (const row of rows) if (hasProduced(row.signals, 'doc')) for (const file of filesOf(row)) if (SLIDE_FILE.test(file)) decks.add(stemOf(file));
+  // 由幻灯片转出来的 PDF：同名、并且有一条转换命令点到了那份幻灯片。
+  const converted = new Set();
+  for (const row of rows) {
+    const command = normalizeEntry(row.entry).command || '';
+    if (!SLIDE_CONVERT.test(command)) continue;
+    for (const file of pathsIn(command)) if (SLIDE_FILE.test(file) && decks.has(stemOf(file))) converted.add(stemOf(file));
+  }
+  const renders = (row) => {
+    if (!decks.size || !row.signals.has('doc_render')) return false;
+    const command = normalizeEntry(row.entry).command || '';
+    return pathsIn(command).some(file => decks.has(stemOf(file)) && (SLIDE_FILE.test(file) || (/\.pdf$/i.test(file) && converted.has(stemOf(file)))));
+  };
+  return {slides: decks.size > 0, renders};
+}
+
 /**
  * 这几种活在这一档还缺哪些证据。entries 是本轮的工具记录（成功失败都可以传，会自己挑）。
  * 返回 [{id, text}]；文字说的是用户能懂的缺口，续跑提示也直接用这句。
@@ -714,7 +772,9 @@ export function evidenceGaps(kinds = [], tier = 'boost', entries = [], {prompt =
     if (id === 'code') {
       if (!after(rows, lastMutation === -Infinity ? Infinity : lastMutation, s => anySignal(s, 'test', 'run'))) add('test_after_change');
     } else if (id === 'web_ui') {
-      const changed = Math.max(changeSeq('page'), lastMutation);
+      // 改了说明文档、测试脚本这类明确不是页面的文件，不用再截一遍图；不知道改了哪个文件的照旧算。
+      const changed = rows.reduce((last, row) => row.signals.has('mutation')
+        && (hasProduced(row.signals, 'page') || !ownTargets(normalizeEntry(row.entry)).length) ? Math.max(last, row.seq) : last, -Infinity);
       if (!viewedAfter(rows, changed, s => s.has('screenshot'))) add('page_viewed');
       else if (level >= 2 && !viewedAfter(rows, changed, s => s.has('mobile_screenshot'))) add('mobile_viewed');
     } else if (id === 'app_game_ai') {
@@ -733,9 +793,16 @@ export function evidenceGaps(kinds = [], tier = 'boost', entries = [], {prompt =
       if (!viewedAfter(rows, made, s => s.has('frames_extracted'))) add('video_frames');
     } else if (id === 'document') {
       const made = changeSeq('doc');
-      const opened = rows.some(row => row.seq > made && [...row.signals].some(sig => /^opened_deliverable:(?:pptx?|key|docx?|pdf|odp|odt|pages|rtf)$/.test(sig)));
+      // 做的是幻灯片（.pptx / .key）时，只认看的是它本身：把它转成图片，或把它转出的 PDF 再转图。
+      // 另做一份 HTML / PDF 替身转图看，看的不是交出去的东西（11-02 隔离实测 K-deck-marathon，改前改后都犯）。
+      const deck = deckEvidence(rows);
+      const openedRow = (row) => [...row.signals].some(sig => deck.slides
+        ? /^opened_deliverable:(?:pptx?|key|odp)$/.test(sig)
+        : /^opened_deliverable:(?:pptx?|key|docx?|pdf|odp|odt|pages|rtf)$/.test(sig)) || deck.renders(row);
+      const opened = rows.some(row => row.seq > made && openedRow(row));
       if (!opened) add('doc_opened');
-      else if (level >= 2 && !viewedAfter(rows, made, s => s.has('doc_render'))) add('doc_pages_viewed');
+      else if (level >= 2 && !rows.some(row => row.seq > made && (deck.slides ? deck.renders(row) : row.signals.has('doc_render'))
+        && (row.signals.has('image_viewed') || rows.some(later => later.seq > row.seq && later.signals.has('image_viewed'))))) add('doc_pages_viewed');
     } else if (id === 'data_charts') {
       if (!anyRow(s => anySignal(s, 'recomputed', 'test'))) add('recomputed');
       const chart = changeSeq('image');
@@ -1026,11 +1093,21 @@ export function workRoleGate(role, entries = []) {
 export function hasEvidenceBackedReview(text = '') {
   const value = String(text || '');
   const noFindings = /(?:没有发现问题|未发现问题|没有可证实的问题|没发现问题)/;
-  const lines = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-    .filter(line => !noFindings.test(line) && /(?:问题|错误|不对|遮挡|挡住|溢出|错位|对不齐|太小|太大|看不清|乱码|方框|截断|缺|漏|重叠|模糊|不一致|失败|报错)/.test(line));
-  if (!lines.length) return noFindings.test(value);
+  const problem = /(?:问题|错误|不对|遮挡|挡住|溢出|错位|对不齐|太小|太大|看不清|乱码|方框|截断|缺|漏|重叠|模糊|不一致|失败|报错)/;
   const evidence = /(?:第\s*\d+\s*(?:页|帧|张|行|秒|屏)|截图|图里|图中|画面|左上|右上|左下|右下|顶部|底部|中间|标题|按钮|「[^」]{1,40}」|“[^”]{1,40}”|"[^"]{1,40}"|\.(?:png|jpe?g|webp|pdf|pptx|docx|html?)\b|https?:\/\/|输出|报错|失败的?(?:测试|命令))/;
-  return lines.every(line => evidence.test(line));
+  // 按「一条问题」核对：标题行 / 编号行和它下面的小点算一条，这一条里有证据（哪张图、什么位置、哪行）就行。
+  // 逐行要求会把「### 2. 移动端导航缺少菜单入口」这种标题行判成没证据——证据就写在它下面一行
+  // （11-02 隔离实测 K-full-max-web：五条都有截图位置和代码行的审稿被拒，看图审稿名额又满了，整轮被停）。
+  const blocks = [];
+  for (const line of value.split(/\r?\n/).map(item => item.trim()).filter(Boolean)) {
+    if (!blocks.length || /^(?:#{1,6}\s|\d{1,2}\s*[.、)）]|[-*]\s*\*\*\d|-{3,}$)/.test(line)) blocks.push([]);
+    blocks.at(-1).push(line);
+  }
+  // 「发现以下 5 处问题，按严重程度排序：」是总述，不是一条问题。
+  const summary = /^(?:[^。！？\n]{0,20})(?:发现|找到|共有?|列出|以下)[^。！？\n]{0,16}\d+\s*(?:处|个|条|项)[^。！？\n]{0,20}(?:问题|毛病)[^。！？\n]{0,16}[：:]?$/;
+  const findings = blocks.filter(block => block.some(line => !noFindings.test(line) && !summary.test(line) && problem.test(line)));
+  if (!findings.length) return noFindings.test(value);
+  return findings.every(block => block.some(line => evidence.test(line)));
 }
 
 // 本轮做出来的文件和截图（给审稿员和看图审稿子任务打开用）。entries 是工具记录。
