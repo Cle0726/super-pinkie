@@ -44,6 +44,9 @@ UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
 # 经 GitHub 加速代理或国内存储桶读它，再从同一条线路下载安装包。
 UPDATE_MANIFEST_NAME = "latest.json"
 DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
+# Only this configured proxy was verified to carry GitHub's public release API.
+# Do not spray API requests at other hosts or silently invent a release version.
+UPDATE_RELEASE_API_PROXY_HOSTS = frozenset({"gh-proxy.com"})
 
 
 DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
@@ -100,8 +103,11 @@ def update_mirrors(resource_root):
         base = _mirror_base(proxy)
         if not base:
             continue
-        routes.append({"label": "国内加速", "manifest": f"{base}{UPDATE_RELEASES_URL}/latest/download/{UPDATE_MANIFEST_NAME}",
-                       "asset": lambda version, name, base=base: f"{base}{UPDATE_RELEASES_URL}/download/v{version}/{name}"})
+        route = {"label": "国内加速", "manifest": f"{base}{UPDATE_RELEASES_URL}/latest/download/{UPDATE_MANIFEST_NAME}",
+                 "asset": lambda version, name, base=base: f"{base}{UPDATE_RELEASES_URL}/download/v{version}/{name}"}
+        if urllib.parse.urlparse(base).hostname.lower() in UPDATE_RELEASE_API_PROXY_HOSTS:
+            route["release_api"] = base + UPDATE_API_URL
+        routes.append(route)
     return routes
 
 
@@ -192,6 +198,32 @@ def manifest_update(manifest, current_version, asset_url, portable=False):
         "releaseUrl": f"{UPDATE_RELEASES_URL}/tag/v{version}",
         "notes": release_notes_text(manifest.get("notes")),
     }
+
+
+def mirrored_release_update(release, current_version, asset_url, portable=False):
+    """Fallback for older releases that predate latest.json, with the same SHA-256 gate."""
+    if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+        raise ValueError("invalid latest release metadata")
+    version = str(release.get("tag_name", "")).strip().removeprefix("v")
+    if version_tuple(version) <= version_tuple(current_version):
+        return None
+    selected = release_update(release, current_version, portable=portable)
+    if not selected:
+        raise ValueError("new release has no matching package and checksum")
+    official = f"{UPDATE_RELEASES_URL}/download/v{version}/{selected['name']}"
+    if selected["executableUrl"] != official or selected["checksumUrl"] != official + ".sha256":
+        raise ValueError("release assets are not from the expected repository and tag")
+    selected["executableUrl"] = asset_url(version, selected["name"])
+    selected["metadataSource"] = "release-api"
+    entry = next((item for item in release.get("assets", [])
+                  if isinstance(item, dict) and item.get("name") == selected["name"]), {})
+    digest = entry.get("digest")
+    if digest:
+        match = re.fullmatch(r"sha256:([a-fA-F0-9]{64})", str(digest))
+        if not match:
+            raise ValueError("invalid release asset digest")
+        selected["sha256"] = match.group(1).lower()
+    return selected
 
 
 def app_version(resource_root):
@@ -477,24 +509,43 @@ class WindowsUpdater:
             if not force and self.mirror_latest is not None and time.monotonic() - self.mirror_checked < 7200:
                 return dict(self.mirror_latest)
             self.mirror_checked = time.monotonic()
+            missing_manifest = False
             for route in self.mirrors:
                 try:
                     manifest = json.loads(self._read(route["manifest"], 256 * 1024).decode("utf-8"))
                 except Exception as error:
+                    if isinstance(error, urllib.error.HTTPError) and error.code == 404:
+                        missing_manifest = True
                     append_log("updater", f"mirror {urllib.parse.urlparse(route['manifest']).hostname} unavailable: {error}")
                     continue
                 if not isinstance(manifest, dict) or not str(manifest.get("version", "")).strip():
                     continue
                 try:
                     selected = manifest_update(manifest, self.current_version, route["asset"], portable=self.portable)
+                    if not selected and version_tuple(manifest["version"]) > version_tuple(self.current_version):
+                        raise ValueError("new mirror release is missing a valid package digest")
                 except ValueError:
                     continue
                 self.mirror_latest = ({**selected, "route": "mirror", "mirror": route["label"]} if selected else
                                       {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version})
                 return dict(self.mirror_latest)
+            # Old published releases have no latest.json. When the configured,
+            # verified API proxy is available, read its public release metadata
+            # and still require the official checksum or the release SHA-256.
+            if missing_manifest:
+                for route in (r for r in self.mirrors if r.get("release_api")):
+                    try:
+                        release = json.loads(self._read(route["release_api"], 1024 * 1024).decode("utf-8"))
+                        selected = mirrored_release_update(release, self.current_version, route["asset"], portable=self.portable)
+                        self.mirror_latest = ({**selected, "route": "mirror", "mirror": route["label"]} if selected else
+                                              {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version})
+                        return dict(self.mirror_latest)
+                    except Exception as error:
+                        append_log("updater", f"mirror legacy release metadata unavailable: {error}")
             self.mirror_latest = None
             return {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version,
-                    "temporaryError": True, "message": "国内线路暂时都连不上，可以稍后重试，或换回官方线路。"}
+                    "temporaryError": True, "message": ("国内线路缺少版本清单，暂时无法检查；可换官方线路或手动下载。" if missing_manifest else
+                                                          "国内线路暂时都连不上，可以稍后重试，或换回官方线路。")}
 
     def _expected_checksum(self, metadata):
         try:
@@ -504,7 +555,7 @@ class WindowsUpdater:
             if not metadata.get("sha256"):
                 raise
             # 国内线路：GitHub 官方校验和拿不到时，用 latest.json 里的。下载后照样逐字节核对。
-            append_log("updater", f"official checksum unavailable, using the mirror manifest: {error}")
+            append_log("updater", f"official checksum unavailable, using the mirror metadata SHA-256: {error}")
             return metadata["sha256"]
 
     @staticmethod

@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+from urllib.error import HTTPError
 
 from app.windows_desktop import (
     UPDATE_API_URL,
@@ -404,7 +405,7 @@ class WindowsUpdateTests(unittest.TestCase):
 
 
     # ---- 国内线路（11-02）----
-    def _mirror_case(self, root, bodies, settings=None, fail=()):
+    def _mirror_case(self, root, bodies, settings=None, fail=(), missing_404=False):
         (root / "VERSION").write_text("2.5.1", encoding="utf-8")
         if settings is not None:
             (root / "update-mirrors.json").write_text(json.dumps(settings), encoding="utf-8")
@@ -415,6 +416,8 @@ class WindowsUpdateTests(unittest.TestCase):
         def opener(request, timeout=0):
             seen.append(request.full_url)
             if request.full_url in fail or request.full_url not in bodies:
+                if missing_404 and request.full_url.endswith('/latest.json'):
+                    raise HTTPError(request.full_url, 404, 'not found', {}, None)
                 raise OSError("unreachable")
             return Response(bodies[request.full_url])
 
@@ -458,6 +461,94 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual("国内加速", updater.check(force=True, route="mirror")["mirror"])
             self.assertTrue(updater.prepare(route="mirror")["ready"])
             self.assertEqual("https://down.example.cn/sp/latest.json", seen[0])
+
+    def _legacy_release(self, version, name, digest):
+        asset = f"https://github.com/Cle0726/super-pinkie/releases/download/v{version}/{name}"
+        return {"tag_name":f"v{version}", "body":"- 旧版发布说明", "assets":[
+            {"name":name,"browser_download_url":asset,"digest":"sha256:"+digest},
+            {"name":name+".sha256","browser_download_url":asset+".sha256"}]}
+
+    def test_missing_legacy_manifest_uses_verified_proxy_api_to_detect_no_newer_release(self):
+        version, name = "2.5.26", "super-pinkie-windows-2.5.26.exe"
+        api = "https://gh-proxy.com/" + UPDATE_API_URL
+        bodies = {api:json.dumps(self._legacy_release(version,name,"a"*64)).encode()}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, seen = self._mirror_case(Path(temporary), bodies, missing_404=True)
+            updater.current_version = "2.5.27"
+            result = updater.check(force=True, route="mirror")
+            self.assertFalse(result["available"])
+            self.assertFalse(result.get("temporaryError", False))
+            self.assertEqual(result["currentVersion"], "2.5.27")
+            self.assertIn(api, seen)
+            self.assertFalse(any(url.startswith('https://ghfast.top/https://api.github.com') for url in seen))
+
+    def test_missing_legacy_manifest_can_prepare_a_newer_verified_mirror_package(self):
+        version, name = "9.8.7", "super-pinkie-windows-9.8.7.exe"
+        payload=b"legacy-mirror"*100000
+        digest=hashlib.sha256(payload).hexdigest()
+        api="https://gh-proxy.com/"+UPDATE_API_URL
+        asset=f"https://gh-proxy.com/https://github.com/Cle0726/super-pinkie/releases/download/v{version}/{name}"
+        bodies={api:json.dumps(self._legacy_release(version,name,digest)).encode(),asset:payload}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, seen = self._mirror_case(Path(temporary), bodies, missing_404=True)
+            info=updater.check(force=True,route="mirror")
+            self.assertEqual(info["metadataSource"],"release-api")
+            self.assertEqual(info["executableUrl"],asset)
+            self.assertEqual(info["sha256"],digest)
+            self.assertTrue(updater.prepare(route="mirror")["ready"])
+            self.assertIn(asset,seen)
+
+    def test_missing_legacy_manifest_selects_and_verifies_the_portable_package(self):
+        version, name = "9.8.7", "super-pinkie-windows-9.8.7-portable.zip"
+        payload = b"portable-release-fixture" * 100000
+        digest = hashlib.sha256(payload).hexdigest()
+        api = "https://gh-proxy.com/" + UPDATE_API_URL
+        asset = f"https://gh-proxy.com/https://github.com/Cle0726/super-pinkie/releases/download/v{version}/{name}"
+        bodies = {api: json.dumps(self._legacy_release(version, name, digest)).encode(), asset: payload}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, _ = self._mirror_case(Path(temporary), bodies, missing_404=True)
+            updater.portable = True
+            result = updater.check(force=True, route="mirror")
+            self.assertTrue(result["portable"])
+            self.assertEqual(result["name"], name)
+            self.assertEqual(result["sha256"], digest)
+            self.assertTrue(updater.prepare(route="mirror")["ready"])
+
+    def test_incomplete_newer_mirror_manifest_is_not_reported_as_up_to_date(self):
+        manifest = "https://ghfast.top/https://github.com/Cle0726/super-pinkie/releases/latest/download/latest.json"
+        bodies = {manifest: json.dumps({"version": "9.8.7", "assets": {}}).encode()}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, _ = self._mirror_case(Path(temporary), bodies)
+            result = updater.check(force=True, route="mirror")
+            self.assertTrue(result["temporaryError"])
+            self.assertFalse(result["available"])
+
+    def test_legacy_api_does_not_accept_a_tampered_package(self):
+        version, name="9.8.7","super-pinkie-windows-9.8.7.exe"
+        api="https://gh-proxy.com/"+UPDATE_API_URL
+        asset=f"https://gh-proxy.com/https://github.com/Cle0726/super-pinkie/releases/download/v{version}/{name}"
+        bodies={api:json.dumps(self._legacy_release(version,name,"0"*64)).encode(),asset:b"tampered"*200000}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, _=self._mirror_case(Path(temporary),bodies,missing_404=True)
+            with self.assertRaises(ValueError):
+                updater.prepare(route="mirror")
+            self.assertFalse(list((self.state/"updates"/version).glob("*.exe")))
+
+    def test_legacy_api_rejects_wrong_repository_and_incomplete_new_release(self):
+        version, name="9.8.7","super-pinkie-windows-9.8.7.exe"
+        api="https://gh-proxy.com/"+UPDATE_API_URL
+        for mutation in ("other-repository", "missing-checksum", "bad-digest"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                release=self._legacy_release(version,name,"1"*64)
+                if mutation=="other-repository":
+                    release["assets"][0]["browser_download_url"]=release["assets"][0]["browser_download_url"].replace('Cle0726/super-pinkie','other/other')
+                elif mutation=="missing-checksum": release["assets"].pop()
+                else: release["assets"][0]["digest"]="sha256:not-a-digest"
+                updater,_=self._mirror_case(Path(temporary),{api:json.dumps(release).encode()},missing_404=True)
+                result=updater.check(force=True,route="mirror")
+                self.assertTrue(result["temporaryError"])
+                self.assertFalse(result["available"])
+                self.assertIn("缺少版本清单",result["message"])
 
     def test_mirror_package_that_does_not_match_is_rejected(self):
         version, name = "9.8.7", "super-pinkie-windows-9.8.7.exe"
