@@ -1030,9 +1030,25 @@ def pull_and_update(log):
 
 
 def prepare_bundled_desktop(log):
+    config = openclaw_config_path()
+    if os.environ.get("PINKIE_PRESERVE_EXISTING_PROFILE") == "1":
+        # Explicit opt-in for starting a known, already prepared profile while
+        # leaving its config, managed extensions, and workspaces untouched.
+        # The environment is inherited by the update helper and the restarted
+        # App; a shortcut can pass --preserve-existing-profile on later starts.
+        if not config.is_file():
+            raise RuntimeError("保留现有资料模式需要已经存在的配置文件")
+        try:
+            existing = json.loads(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise RuntimeError("保留现有资料模式无法读取已有配置") from error
+        if not isinstance(existing, dict):
+            raise RuntimeError("保留现有资料模式需要有效的配置对象")
+        log("按启动参数保留现有资料，跳过自动部署和配置迁移")
+        return
+
     state = windows_state_root()
     state.mkdir(parents=True, exist_ok=True)
-    config = openclaw_config_path()
     if not config.exists():
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text("{}\n", encoding="utf-8")
@@ -1313,6 +1329,8 @@ def main():
         pull_and_update(print)
         return
     if os.name == "nt" and getattr(sys, "frozen", False) and bundled_runtime_root() and "--control-center" not in sys.argv:
+        if "--preserve-existing-profile" in sys.argv[1:]:
+            os.environ["PINKIE_PRESERVE_EXISTING_PROFILE"] = "1"
         from windows_desktop import run_desktop, update_health_token_from_argv
         run_desktop(resource_path(), prepare_bundled_desktop, update_health_token_from_argv())
         return
