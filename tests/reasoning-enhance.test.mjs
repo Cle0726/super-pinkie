@@ -144,6 +144,9 @@ test('only the matching real turn is reviewed; solves and the critic all use the
       // 审稿员只带只读工具：能打开截图、文档、网页，不能执行、写文件、操作浏览器。
       assert.equal(call.disableTools, false);
       assert.deepEqual(call.toolsAllow, [...REVIEW_TOOLS]);
+      // OpenClaw turns every tool off for raw model runs, which left toolsAllow matching nothing.
+      assert.notEqual(call.modelRun, true, 'review pass must not be a raw model run');
+      assert.equal(call.bootstrapContextMode, 'lightweight');
       for (const name of ['exec', 'write', 'edit', 'apply_patch', 'browser', 'app_browser', 'process']) assert.ok(!call.toolsAllow.includes(name), name);
     }
     assert.equal(call.lane, 'subagent', 'helpers queue on the subagent lane, not the 4-slot main lane');
@@ -489,4 +492,12 @@ test('a send-back only asks for a correction, never the whole answer again', () 
   assert.match(hands, /工具记录里没认出路径/);
   assert.match(hands, /只看过 HTML 替身不算/);
   assert.doesNotMatch(auditPrompt({message: '做个 PPT', reply: '做好了', evidence: 'e', workKind: 'document', artifacts: ['/a/b.pptx']}), /\/a\/b\.pptx/, 'no tools, no file list');
+});
+
+test('the reviewer is told which folder the files were made in and that file deliverables need no pasted source', () => {
+  const text = auditPrompt({message: '写一个记账命令行脚本，带测试', history: '', reply: '在当前目录运行 python3 cli.py 即可。', evidence: 'exec pytest: 5 passed',
+    workKind: 'code', tools: true, artifacts: ['/Users/me/projects/ledger/cli.py', '/Users/me/projects/ledger/tests/test_ledger.py', 'cli.py']});
+  assert.match(text, /【本轮做文件的文件夹】\/Users\/me\/projects\/ledger\n/);
+  assert.match(text, /不要求把文件内容（源码、全文）贴进回复/);
+  assert.doesNotMatch(auditPrompt({message: 'x', reply: 'y', evidence: '', artifacts: ['a.png']}), /本轮做文件的文件夹/);
 });
