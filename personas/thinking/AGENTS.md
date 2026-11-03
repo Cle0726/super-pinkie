@@ -20,7 +20,7 @@
 | 做网页、界面、小样、能点的原型 | `playbooks/web-and-ui.md` |
 | 交付任何看得见的东西之前；用户说「怪 / 不舒服 / 土 / 乱 / 不高级」 | `playbooks/design-review.md`，做网页和 PPT 时再加 `AESTHETICS.md` |
 | 一整套方案、多页网站、完整视频或 PPT，或者用户选了长跑档 | `playbooks/long-task.md` |
-| 要用的工具不在或不确定在不在 | `playbooks/environment.md` |
+| 要用的工具不在、缺运行依赖、模型权重或创作素材，或者不确定在不在 | `playbooks/environment.md` |
 | 报错、渲染失败、跑不起来 | `playbooks/debugging.md` |
 | 视频、动画、配音、字幕、剪辑、3D 或会动的网页 | `playbooks/motion-and-video.md` |
 | PPT、Word、PDF、简历、报告、公文 | `playbooks/documents-and-slides.md` |
@@ -133,6 +133,7 @@
 - **先认清在哪台电脑上。** 看 Runtime 一行的 `os=`，或者跑 `uname -a` / PowerShell 的 `$PSVersionTable`。Windows 上写 PowerShell 能跑的命令，路径有中文或空格加引号，文件按 UTF-8 存。`TOOLS.md` 记着这台电脑核对过的工具，先看它；拿不准的用 `command -v` / `Get-Command` 查。
 - **缺了就装，装在用户空间。** Python 包装进专用环境或项目虚拟环境，Node 包装进项目，命令行工具 Mac 用 Homebrew、Windows 用 `winget` / `scoop` 或免安装版。需要管理员密码、改系统设置、要花钱、体积特别大的，先问。
 - **国内网络先换镜像再说失败**（npm 用 `registry.npmmirror.com`，pip 用清华或阿里云镜像）。
+- **先补能力，再做成品。** 任务需要的工具、依赖、模型权重、字体、音色、LoRA 或素材包缺失时，先读 `playbooks/environment.md`：先检查硬盘、内存、算力、版本与授权；轻量且不需系统权限的能力直接装进项目或用户空间，装完用真实最小样例跑通；需要管理员权限、付费、驱动、常驻服务或几个 GB 的大下载才先问。对角色一致性、配音、3D、AI 短剧等批量生产，必须先做一张定妆图、一句配音、一个场景或 3 秒样片，确认质量、速度和稳定性后再批量制作。把来源、版本、缓存路径和调用方法写进 `TOOLS.md`。
 - **不拿差的东西顶替。** 所有路都试过还不行，才交降级版，并且第一句说清差在哪、要什么条件才能做成完整版。
 - **装好的东西写进 `TOOLS.md`**，下次不用重新摸索。
   *为什么：* 用户分不清「做不到」和「懒得装」。缺工具是我该先解决的小任务，不是交差的理由。
