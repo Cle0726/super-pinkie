@@ -50,8 +50,11 @@ def capture(pid, prefix, verify=False, maximize=False):
     app = windows[0]
     original_rect = win32gui.GetWindowRect(app)
     win32gui.ShowWindow(app, win32con.SW_MAXIMIZE if maximize else win32con.SW_RESTORE)
-    win32gui.SetWindowPos(app, win32con.HWND_TOP, 0, 0, 0, 0,
-                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW)
+    # HWND_TOP cannot lift a background process's window over the foreground
+    # one (the CI runner's console), which then covered the sampled regions.
+    # Topmost is allowed; the test surface inserted right below inherits it.
+    win32gui.SetWindowPos(app, win32con.HWND_TOPMOST, 0, 0, 0, 0,
+                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW | win32con.SWP_NOACTIVATE)
     left, top, right, bottom = win32gui.GetWindowRect(app)
     width, height = right - left, bottom - top
     screen = (win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1))
@@ -99,6 +102,8 @@ def capture(pid, prefix, verify=False, maximize=False):
     finally:
         if background:
             win32gui.DestroyWindow(background)
+        win32gui.SetWindowPos(app, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
+                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
         win32gui.UnregisterClass(window_class.lpszClassName, window_class.hInstance)
         if maximize:
             win32gui.ShowWindow(app, win32con.SW_RESTORE)
