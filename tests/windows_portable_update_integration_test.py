@@ -124,8 +124,57 @@ def fixture_child_alive(pid, expected):
     finally:kernel.CloseHandle(handle)
 
 
+def fixture_unlink_executable(path, root, timeout=15):
+    """Remove only the test-owned child binary after Windows releases it.
+
+    A process can stop being queryable briefly before its executable image is
+    released.  Retry the actual cleanup, without ignoring a persistent lock or
+    changing any update assertions.  The resolved path must stay in this test's
+    newly created temporary root.
+    """
+    path=path.resolve()
+    path.relative_to(root.resolve())
+    deadline=time.monotonic()+timeout
+    while True:
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except OSError as error:
+            if getattr(error,'winerror',None) not in (5,32,33) or time.monotonic()>=deadline:
+                raise
+            time.sleep(.1)
+
+
 @unittest.skipUnless(os.name=='nt', 'portable process replacement requires Windows')
 class PortableUpdateIntegrationTests(unittest.TestCase):
+    def test_fixture_cleanup_waits_for_the_actual_image_lock_and_stays_in_root(self):
+        with tempfile.TemporaryDirectory(prefix='pinkie-portable-cleanup-') as temp:
+            root=Path(temp).resolve()
+            source=root/'fixture.cs';source.write_text(PROGRAM,encoding='utf-8')
+            executable=root/'node.exe'
+            csc=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+            hidden=getattr(subprocess,'CREATE_NO_WINDOW',0)
+            subprocess.run([str(csc),'/nologo','/target:winexe','/out:'+str(executable),str(source)],
+                           check=True,creationflags=hidden,capture_output=True)
+            process=subprocess.Popen([str(executable),'--hold'],creationflags=hidden)
+            try:
+                time.sleep(.2)
+                with self.assertRaises(PermissionError):executable.unlink()
+                def stop_after_delay():
+                    time.sleep(.5)
+                    if process.poll() is None:process.terminate()
+                stopper=threading.Thread(target=stop_after_delay)
+                stopper.start()
+                fixture_unlink_executable(executable,root)
+                stopper.join(timeout=5)
+                self.assertFalse(stopper.is_alive())
+                self.assertFalse(executable.exists())
+                with self.assertRaises(ValueError):
+                    fixture_unlink_executable(root.parent/'not-a-fixture.exe',root)
+            finally:
+                if process.poll() is None:process.terminate()
+                process.wait(timeout=5)
+
     def test_gateway_releases_port_new_package_starts_and_other_processes_survive(self):
         self._run_case('same_install')
 
@@ -292,6 +341,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 if update_started and new_pid.exists():
                     fresh_id=int(new_pid.read_text());deadline=time.monotonic()+5
                     while time.monotonic()<deadline and fixture_child_alive(fresh_id,executable):time.sleep(.1)
+                fixture_unlink_executable(outside_exe,root)
 
 
 if __name__=='__main__':unittest.main()
