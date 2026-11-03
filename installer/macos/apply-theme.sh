@@ -208,6 +208,7 @@ sync_launcher_resources() {
     "$bundled_root/services/context" \
     "$bundled_root/services/project-scope" \
     "$bundled_root/services/mode-architecture" \
+    "$bundled_root/services/first-person-renderer" \
     "$bundled_root/services/chatgpt-collab" \
     "$bundled_root/skills/deep-think" \
     "$bundled_root/skills/web-gpt-collab" \
@@ -222,6 +223,11 @@ sync_launcher_resources() {
     copy_if_changed \
       "$REPO_ROOT/services/project-scope/$service_file" \
       "$bundled_root/services/project-scope/$service_file"
+  done
+  for service_file in index.mjs setup.py package.json openclaw.plugin.json; do
+    copy_if_changed \
+      "$REPO_ROOT/services/first-person-renderer/$service_file" \
+      "$bundled_root/services/first-person-renderer/$service_file"
   done
   for service_file in index.mjs memory.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json openclaw-paths.mjs companion.mjs reasoning.mjs work-kinds.mjs background-jobs.mjs work-status.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
     if [[ -f "$REPO_ROOT/services/mode-architecture/$service_file" ]]; then
@@ -484,6 +490,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
       # watchdog and project-tool logic until a later cold launch.
       "$PYTHON_BIN" "$REPO_ROOT/services/project-scope/setup.py"
       "$PYTHON_BIN" "$REPO_ROOT/services/mode-architecture/setup.py"
+      "$PYTHON_BIN" "$REPO_ROOT/services/first-person-renderer/setup.py"
     fi
     # 图片白名单扩展：允许个人目录和精确的 ~/.openclaw/workspace* 工作区
     # 显示本轮产出；整个 ~/.openclaw 配置目录仍不在白名单中。

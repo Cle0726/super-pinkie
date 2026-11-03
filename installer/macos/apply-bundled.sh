@@ -97,3 +97,6 @@ fi
 if [[ -f "$REPO_ROOT/services/mode-architecture/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/mode-architecture/setup.py"
 fi
+if [[ -f "$REPO_ROOT/services/first-person-renderer/setup.py" ]]; then
+  "$PYTHON_BIN" "$REPO_ROOT/services/first-person-renderer/setup.py"
+fi
