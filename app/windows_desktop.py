@@ -905,6 +905,20 @@ function Stop-VerifiedGateway {
   }
   throw 'old gateway port is still in use'
 }
+function Confirm-NewInstallGateway {
+  # A different App or watchdog can revive an older gateway while the new
+  # window is opening. A window health marker alone can come from that old UI.
+  $prefix = (Get-Item -LiteralPath $TargetDir).FullName.TrimEnd('\') + '\'
+  $listeners = @(Get-GatewayListeners)
+  if ($listeners.Count -eq 0) { throw 'new gateway is not listening' }
+  foreach ($gatewayId in $listeners) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$gatewayId" -ErrorAction Stop
+    if (-not $process -or -not $process.ExecutablePath -or
+        -not $process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw 'new version attached to a different install gateway'
+    }
+  }
+}
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     try {
@@ -972,6 +986,7 @@ try {
     if (-not $launched.HasExited) { & taskkill.exe /PID $launched.Id /T /F | Out-Null }
     throw 'new version did not become healthy'
   }
+  Confirm-NewInstallGateway
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
