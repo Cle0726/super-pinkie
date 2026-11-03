@@ -220,7 +220,7 @@ test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater
     assert.match(source, /PINKIE_RUNTIME_CONFIG_SCHEMA/);
   }
   assert.match(setup, /update\["checkOnStart"\] = False/);
-  assert.match(launcher, /主动拉取 CLE Kk 更新/);
+  assert.match(launcher, /主动拉取更新/);
   assert.match(windows, /Cle0726\/super-pinkie\/releases\/latest/);
 });
 

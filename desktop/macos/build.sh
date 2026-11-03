@@ -214,19 +214,12 @@ mkdir -p "$CONTENTS/Resources/SuperPinkie/services/watchdog"
 cp "$REPO_ROOT/services/watchdog/cle-watchdog.sh" "$CONTENTS/Resources/SuperPinkie/services/watchdog/cle-watchdog.sh"
 cp "$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in" "$CONTENTS/Resources/SuperPinkie/services/watchdog/ai.openclaw.watchdog.plist.in"
 ditto "$REPO_ROOT/services/chatgpt-collab" "$CONTENTS/Resources/SuperPinkie/services/chatgpt-collab"
-if [[ "$CLE_BRAND" == 1 ]]; then
-  for skill in deep-think web-gpt-collab; do
-    mkdir -p "$CONTENTS/Resources/SuperPinkie/skills/$skill"
-    cp "$REPO_ROOT/skills/$skill/SKILL.md" "$CONTENTS/Resources/SuperPinkie/skills/$skill/SKILL.md"
-  done
-else
-  # The normal setup script looks for skills/ and would copy over users'
-  # workspace versions. Keep the packaged set in its own low-priority root.
-  for skill in deep-think pinkie-deep-research web-gpt-collab; do
-    [[ -f "$REPO_ROOT/skills/$skill/SKILL.md" ]] || { echo "missing skill: $skill" >&2; exit 1; }
-    ditto "$REPO_ROOT/skills/$skill" "$CONTENTS/Resources/SuperPinkie/bundled-skills/$skill"
-  done
-fi
+# The normal setup script looks for skills/ and would copy over users'
+# workspace versions. Keep the packaged set in its own low-priority root.
+for skill in deep-think pinkie-deep-research web-gpt-collab; do
+  [[ -f "$REPO_ROOT/skills/$skill/SKILL.md" ]] || { echo "missing skill: $skill" >&2; exit 1; }
+  ditto "$REPO_ROOT/skills/$skill" "$CONTENTS/Resources/SuperPinkie/bundled-skills/$skill"
+done
 
 # The shipped App owns its runtime. User configuration, model keys, history and
 # workspaces remain in ~/.openclaw and are deliberately not copied into it.
@@ -273,9 +266,7 @@ PINKIE_BUNDLE_BUILD_ONLY=1 \
 PINKIE_SKIP_APP_BUNDLES=1 \
   /bin/bash "$REPO_ROOT/installer/macos/apply-theme.sh"
 
-if [[ "$CLE_BRAND" != 1 ]]; then
-  OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/patch/apply-pinkie-managed-skills.mjs"
-fi
+OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/patch/apply-pinkie-managed-skills.mjs"
 
 sed \
   -e "s/@VERSION@/$VERSION/g" \
