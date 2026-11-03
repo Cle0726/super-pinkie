@@ -296,6 +296,91 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertLess(verify, helper.index("Expand-Archive"))
         self.assertLess(verify, helper.index("Move-Item -LiteralPath $TargetDir -Destination $Backup"))
 
+    def test_replacer_ready_requires_exact_token_and_a_live_child(self):
+        marker = Path(self.temporary.name) / 'helper-ready'
+        process = mock.Mock()
+        process.poll.return_value = None
+        marker.write_text('correct', encoding='ascii')
+        self.assertTrue(WindowsUpdater._wait_for_replacer(process, marker, 'correct', timeout=1))
+        self.assertFalse(marker.exists())
+        marker.write_text('wrong', encoding='ascii')
+        process.poll.return_value = 1
+        self.assertFalse(WindowsUpdater._wait_for_replacer(process, marker, 'correct', timeout=1))
+        self.assertTrue(marker.exists())
+
+    def test_replacer_timeout_stops_only_the_unready_helper(self):
+        marker = Path(self.temporary.name) / 'missing-helper-ready'
+        process = mock.Mock()
+        process.poll.return_value = None
+        self.assertFalse(WindowsUpdater._wait_for_replacer(process, marker, 'token', timeout=0))
+        process.terminate.assert_called_once_with()
+        process.wait.assert_called_once_with(timeout=5)
+
+    def test_both_package_types_wait_for_helper_and_preserve_existing_backup(self):
+        root = Path(self.temporary.name)
+        for portable in (False, True):
+            with self.subTest(portable=portable):
+                install = root / ('portable' if portable else 'onefile')
+                install.mkdir()
+                exe = install / '超級碧琪.exe'
+                exe.write_bytes(b'old')
+                if portable:
+                    (install / '_internal').mkdir()
+                    previous = install.with_name(install.name + '.previous')
+                    previous.mkdir()
+                    sentinel = previous / 'keep'
+                else:
+                    sentinel = install / '超級碧琪.previous.exe'
+                sentinel.write_text('do not delete', encoding='utf-8')
+                payload = root / ('portable.zip' if portable else 'single.exe')
+                payload.write_bytes(b'new')
+                updater = WindowsUpdater(root, executable=exe)
+                updater.prepared = {'payload': payload, 'sha256': updater._file_hash(payload), 'version': '9.9.9'}
+                process = mock.Mock()
+                process.poll.return_value = None
+                def spawn(command, **_):
+                    token = command[command.index('-Token') + 1]
+                    marker = Path(command[command.index('-ReadyMarker') + 1])
+                    marker.write_text(token, encoding='ascii')
+                    self.assertIn(token, command[command.index('-Backup') + 1])
+                    return process
+                with mock.patch('app.windows_desktop.subprocess.Popen', side_effect=spawn):
+                    self.assertTrue(updater.launch_replacer()['started'])
+                self.assertEqual(sentinel.read_text(encoding='utf-8'), 'do not delete')
+                process.terminate.assert_not_called()
+
+    def test_early_helper_failure_does_not_claim_started(self):
+        root = Path(self.temporary.name)
+        exe = root / 'app.exe'
+        payload = root / 'payload.exe'
+        exe.write_bytes(b'old'); payload.write_bytes(b'new')
+        updater = WindowsUpdater(root, executable=exe)
+        updater.prepared = {'payload': payload, 'sha256': updater._file_hash(payload), 'version': '9.9.9'}
+        process = mock.Mock(); process.poll.return_value = 1
+        with mock.patch('app.windows_desktop.subprocess.Popen', return_value=process):
+            result = updater.launch_replacer()
+        self.assertFalse(result['started'])
+        self.assertIn('当前版本仍在运行', result['message'])
+        self.assertEqual(exe.read_bytes(), b'old')
+
+    def test_permission_failure_is_reported_without_closing_the_old_app(self):
+        root = Path(self.temporary.name)
+        exe = root / 'app.exe'; payload = root / 'payload.exe'
+        exe.write_bytes(b'old'); payload.write_bytes(b'new')
+        updater = WindowsUpdater(root, executable=exe)
+        updater.prepared = {'payload': payload, 'sha256': updater._file_hash(payload), 'version': '9.9.9'}
+        process = mock.Mock(); process.poll.return_value = 1
+        def denied(command, **_):
+            marker = Path(command[command.index('-ReadyMarker') + 1] + '.error')
+            marker.write_text(json.dumps({'kind':'UnauthorizedAccessException','hresult':-2147024891}), encoding='utf-8')
+            return process
+        with mock.patch('app.windows_desktop.subprocess.Popen', side_effect=denied):
+            result = updater.launch_replacer()
+        self.assertFalse(result['started'])
+        self.assertIn('管理员授权', result['message'])
+        self.assertIn('当前版本仍在运行', result['message'])
+        self.assertEqual(exe.read_bytes(), b'old')
+
     def test_replacer_waits_for_health_and_rolls_back(self):
         helper = WindowsUpdater._helper_source()
         self.assertIn("new version did not become healthy", helper)

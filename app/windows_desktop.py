@@ -672,9 +672,15 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath,
+  [Parameter(Mandatory=$true)][string]$ReadyMarker,
   [string]$Version = ''
 )
+# A parent started by PowerShell 7 can pass its module paths to Windows
+# PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
+# as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $ErrorActionPreference = 'Stop'
+$script:backupCreated = $false
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
@@ -686,10 +692,27 @@ function Write-UpdateFailure([string]$Message) {
       Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
   } catch {}
 }
+function Test-UpdateWriteAccess([string]$Folder) {
+  $probe = [IO.Path]::Combine($Folder, '.pinkie-write-test-' + $Token + '.tmp')
+  $created = $false
+  try {
+    $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $created = $true
+    $stream.Dispose()
+  } finally { if ($created) { [IO.File]::Delete($probe) } }
+}
+function Write-StartupFailure($Record) {
+  try {
+    $cause = $Record.Exception
+    while ($cause.InnerException) { $cause = $cause.InnerException }
+    $data = @{ kind = $cause.GetType().Name; hresult = $cause.HResult } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($ReadyMarker + '.error', $data, [Text.Encoding]::UTF8)
+  } catch {}
+}
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     try {
-      if (Test-Path -LiteralPath $Backup) {
+      if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
         if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Force }
         Move-Item -LiteralPath $Backup -Destination $Target -Force
       }
@@ -702,14 +725,20 @@ function Restore-PreviousVersion {
   if (Test-Path -LiteralPath $Target) { Start-Process -FilePath $Target | Out-Null }
 }
 try {
+  [void](Get-Command Get-FileHash -ErrorAction Stop)
+  if ($Token -notmatch '^[0-9a-f]{32}$') { throw 'invalid update token' }
+  if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) { throw 'installed executable not found' }
+  if (Test-Path -LiteralPath $Backup) { throw 'update backup path already exists' }
+  Test-UpdateWriteAccess ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Target)))
+  [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 250
   }
   if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
-  Move-Item -LiteralPath $Target -Destination $Backup -Force
+  Move-Item -LiteralPath $Target -Destination $Backup
+  $script:backupCreated = $true
   Move-Item -LiteralPath $Payload -Destination $Target -Force
   $actual = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
@@ -736,7 +765,11 @@ try {
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
   Write-UpdateFailure $_.Exception.Message
-  try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+  if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
+    try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+  } else {
+    Write-StartupFailure $_
+  }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
@@ -755,9 +788,17 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$HealthMarker,
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath,
+  [Parameter(Mandatory=$true)][string]$ReadyMarker,
+  [Parameter(Mandatory=$true)][string]$GatewayRecord,
+  [Parameter(Mandatory=$true)][int]$GatewayPort,
   [string]$Version = ''
 )
+# A parent started by PowerShell 7 can pass its module paths to Windows
+# PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
+# as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $ErrorActionPreference = 'Stop'
+$script:backupCreated = $false
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
@@ -769,14 +810,34 @@ function Write-UpdateFailure([string]$Message) {
       Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
   } catch {}
 }
+function Test-UpdateWriteAccess([string]$Folder) {
+  $probe = [IO.Path]::Combine($Folder, '.pinkie-write-test-' + $Token + '.tmp')
+  $created = $false
+  try {
+    $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $created = $true
+    $stream.Dispose()
+  } finally { if ($created) { [IO.File]::Delete($probe) } }
+}
+function Write-StartupFailure($Record) {
+  try {
+    $cause = $Record.Exception
+    while ($cause.InnerException) { $cause = $cause.InnerException }
+    $details = @{ kind = $cause.GetType().Name; hresult = $cause.HResult }
+    if ($cause.Message -eq 'gateway-owned-by-another-app') { $details.reason = 'gateway-owned-by-another-app' }
+    $data = $details | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($ReadyMarker + '.error', $data, [Text.Encoding]::UTF8)
+  } catch {}
+}
 function Stop-InstallProcesses([string]$Root) {
   # The window keeps its gateway (node.exe from runtime\bin) alive after it
-  # closes.  While anything runs from the install folder Windows refuses to
-  # rename it, so the swap failed and rolled back to the old version.
+  # closes. Windows may even rename the folder while the old gateway keeps
+  # serving the old UI, so stop only processes owned by this install first.
   if (-not (Test-Path -LiteralPath $Root)) { return }
   $prefix = (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') + '\'
   for ($round = 0; $round -lt 20; $round++) {
-    $owned = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    # A failed process query is not evidence that there are no old processes.
+    $owned = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
       $_.ProcessId -ne $PID -and $_.ExecutablePath -and
       $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
     })
@@ -785,16 +846,69 @@ function Stop-InstallProcesses([string]$Root) {
       Write-UpdateLog ('stopping processes still running from the install: ' + (($owned | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ', '))
     }
     foreach ($process in $owned) {
-      try { & taskkill.exe /PID $process.ProcessId /T /F | Out-Null } catch {}
+      # Do not kill unrelated child processes merely because a gateway or
+      # relay launched them. Every PID stopped here must itself be in Root.
+      try { & taskkill.exe /PID $process.ProcessId /F | Out-Null } catch {}
     }
     Start-Sleep -Milliseconds 500
   }
   throw 'processes from the old version are still running'
 }
+function Get-GatewayListeners {
+  # Query all listeners before filtering: -LocalPort reports an error when
+  # there is no listener, whereas an empty result here means the port is free.
+  @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object {
+    $_.LocalPort -eq $GatewayPort
+  } | Select-Object -ExpandProperty OwningProcess -Unique)
+}
+function Get-VerifiedGateway([int]$GatewayId) {
+  $process = Get-CimInstance Win32_Process -Filter "ProcessId=$GatewayId" -ErrorAction Stop
+  if (-not $process -or -not $process.ExecutablePath) { throw 'gateway-owned-by-another-app' }
+  $prefix = (Get-Item -LiteralPath $TargetDir).FullName.TrimEnd('\') + '\'
+  if ($process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return $process }
+
+  # A previous copy can leave its gateway behind. Only its recorded listener
+  # with the expected bundled node executable and gateway arguments is ours.
+  try { $owner = Get-Content -LiteralPath $GatewayRecord -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
+  catch { throw 'gateway-owned-by-another-app' }
+  $pattern = '(?i)(?:^|[\\/\s"])openclaw\.mjs"?(?:\s+)gateway(?:\s+)run(?:\s+)--port(?:\s+)' +
+    [regex]::Escape([string]$GatewayPort) + '(?:\s|$)'
+  if (-not $owner -or $owner.pid -ne $GatewayId -or -not $owner.node -or
+      -not [string]::Equals([string]$owner.node, $process.ExecutablePath, [System.StringComparison]::OrdinalIgnoreCase) -or
+      $process.ExecutablePath -notmatch '(?i)[\\/]runtime[\\/]bin[\\/]node\.exe$' -or
+      -not $process.CommandLine -or $process.CommandLine -notmatch $pattern) {
+    throw 'gateway-owned-by-another-app'
+  }
+  return $process
+}
+function Confirm-GatewayOwnership {
+  foreach ($gatewayId in @(Get-GatewayListeners)) { [void](Get-VerifiedGateway $gatewayId) }
+}
+function Stop-VerifiedGateway {
+  for ($round = 0; $round -lt 20; $round++) {
+    $listeners = @(Get-GatewayListeners)
+    if ($listeners.Count -eq 0) { return }
+    foreach ($gatewayId in $listeners) {
+      $info = Get-VerifiedGateway $gatewayId
+      # Get-Process pins a process handle; checking its image again also avoids
+      # stopping a different process if a listener PID changed during lookup.
+      $running = Get-Process -Id $gatewayId -ErrorAction Stop
+      [void]$running.Handle
+      if (-not [string]::Equals($running.MainModule.FileName, $info.ExecutablePath, [System.StringComparison]::OrdinalIgnoreCase) -or
+          ($running.StartTime.ToUniversalTime() - $info.CreationDate.ToUniversalTime()).Duration().TotalSeconds -gt 1) {
+        throw 'gateway-owned-by-another-app'
+      }
+      Write-UpdateLog ('stopping verified old gateway #' + $gatewayId)
+      $running.Kill()
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw 'old gateway port is still in use'
+}
 function Restore-PreviousVersion {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     try {
-      if (Test-Path -LiteralPath $Backup) {
+      if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
         if (Test-Path -LiteralPath $TargetDir) {
           try { Stop-InstallProcesses $TargetDir } catch {}
           Remove-Item -LiteralPath $TargetDir -Recurse -Force
@@ -810,24 +924,36 @@ function Restore-PreviousVersion {
   if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
 }
 try {
+  [void](Get-Command Get-FileHash -ErrorAction Stop)
+  [void](Get-Command Get-CimInstance -ErrorAction Stop)
+  [void](Get-Command Get-NetTCPConnection -ErrorAction Stop)
+  [void](Get-Command Expand-Archive -ErrorAction Stop)
+  if ($Token -notmatch '^[0-9a-f]{32}$') { throw 'invalid update token' }
+  if ($GatewayPort -lt 1 -or $GatewayPort -gt 65535) { throw 'invalid gateway port' }
+  if (-not (Test-Path -LiteralPath $TargetDir -PathType Container)) { throw 'installed directory not found' }
+  if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'installed executable not found' }
+  if (Test-Path -LiteralPath $Backup) { throw 'update backup path already exists' }
+  Test-UpdateWriteAccess ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($TargetDir).TrimEnd('\')))
+  Confirm-GatewayOwnership
+  [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 250
   }
   if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
   # 先验包、再动安装目录：包一旦损坏，展开和替换都不该发生。
   $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
   $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
-  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $stage) { throw 'update staging path already exists' }
   Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
   Stop-InstallProcesses $TargetDir
+  Stop-VerifiedGateway
   for ($attempt = 0; ; $attempt++) {
-    try { Move-Item -LiteralPath $TargetDir -Destination $Backup -Force; break }
+    try { Move-Item -LiteralPath $TargetDir -Destination $Backup; $script:backupCreated = $true; break }
     catch {
       if ($attempt -ge 39) { throw "install folder is still in use: $($_.Exception.Message)" }
       Stop-InstallProcesses $TargetDir
@@ -856,7 +982,11 @@ try {
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
   Write-UpdateFailure $_.Exception.Message
-  try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+  if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
+    try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+  } else {
+    Write-StartupFailure $_
+  }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
@@ -876,6 +1006,33 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 pass
         return value if isinstance(value, dict) else None
 
+    @staticmethod
+    def _wait_for_replacer(process, ready_marker, token, timeout=20.0):
+        """Keep the App open unless the exact helper confirms it can run."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                ready = ready_marker.read_text(encoding="ascii").strip() == token
+            except (OSError, UnicodeError):
+                ready = False
+            if process.poll() is not None:
+                return False
+            if ready:
+                try:
+                    ready_marker.unlink()
+                except OSError:
+                    pass
+                return True
+            time.sleep(.1)
+        # A delayed helper must not run an update later after the user closes
+        # the App for an unrelated reason. This is our own child process.
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return False
+
     def launch_replacer(self):
         with self.lock:
             if not self.prepared:
@@ -894,9 +1051,10 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             # check and rolled back.  The BOM makes it read UTF-8.
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
+            ready_marker = health_root / f"{token}.helper-ready"
             if self.portable:
                 target_dir = self.executable.parent
-                backup = target_dir.with_name(target_dir.name + ".previous")
+                backup = target_dir.with_name(target_dir.name + ".previous-" + token)
                 helper.write_text(self._directory_helper_source(), encoding="utf-8-sig")
                 command = [
                     "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -911,10 +1069,13 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-HealthMarker", str(marker),
                     "-Token", token,
                     "-LogPath", str(state_root() / "logs/updater.log"),
+                    "-ReadyMarker", str(ready_marker),
+                    "-GatewayRecord", str(state_root() / "gateway-owner.json"),
+                    "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
                     "-Version", str(self.prepared["version"]),
                 ]
             else:
-                backup = self.executable.with_name(self.executable.stem + ".previous" + self.executable.suffix)
+                backup = self.executable.with_name(self.executable.stem + ".previous-" + token + self.executable.suffix)
                 helper.write_text(self._helper_source(), encoding="utf-8-sig")
                 command = [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -928,10 +1089,11 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-HealthMarker", str(marker),
                 "-Token", token,
                 "-LogPath", str(state_root() / "logs/updater.log"),
+                "-ReadyMarker", str(ready_marker),
                 "-Version", str(self.prepared["version"]),
                 ]
             try:
-                subprocess.Popen(
+                process = subprocess.Popen(
                     command,
                     cwd=str(update_root),
                     stdin=subprocess.DEVNULL,
@@ -943,6 +1105,29 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             except OSError as error:
                 append_log("updater", f"cannot launch update helper: {error}")
                 return {"started": False, "message": "更新程序没有启动，请稍后再试"}
+            if not self._wait_for_replacer(process, ready_marker, token):
+                append_log("updater", "update helper did not become ready; keeping the current window open")
+                failure_marker = Path(str(ready_marker) + ".error")
+                permission_denied = False
+                gateway_conflict = False
+                try:
+                    failure = json.loads(failure_marker.read_text(encoding="utf-8-sig"))
+                    gateway_conflict = failure.get("reason") == "gateway-owned-by-another-app"
+                    permission_denied = (failure.get("kind") in ("UnauthorizedAccessException", "SecurityException") or
+                                         int(failure.get("hresult", 0)) & 0xffffffff == 0x80070005)
+                except (OSError, ValueError, TypeError, AttributeError):
+                    pass
+                finally:
+                    try:
+                        failure_marker.unlink()
+                    except OSError:
+                        pass
+                message = ("更新程序无法写入安装目录，请确认 Windows 管理员授权或检查目录权限；当前版本仍在运行"
+                           if permission_denied else
+                           "网关端口被其他程序占用，无法安全更新；请先关闭占用该端口的程序，当前版本仍在运行"
+                           if gateway_conflict else
+                           "更新程序没有准备好，当前版本仍在运行，请稍后再试")
+                return {"started": False, "message": message}
             append_log("updater", f"switching to {self.prepared['version']}")
             return {"started": True, "version": self.prepared["version"]}
 
