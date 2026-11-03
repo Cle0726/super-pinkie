@@ -335,5 +335,16 @@ class NativeBridgeHealthMarkerTests(unittest.TestCase):
         self.assertEqual([], window.injected)
 
 
+class WindowsSmokeDebugPortTests(unittest.TestCase):
+    def test_debug_port_only_for_the_isolated_smoke_endpoint(self):
+        port = windows_desktop.smoke_debug_port
+        self.assertEqual(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938"}), 63938)
+        self.assertIsNone(port({}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://0.0.0.0:63938"}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:80"}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938/x"}))
+
+
+
 if __name__ == "__main__":
     unittest.main()
