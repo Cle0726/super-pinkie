@@ -287,7 +287,7 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
   # toggle still appears enabled. Give local builds a stable bundle-identifier
   # requirement; Developer ID builds keep their stronger certificate-derived DR.
   codesign --force --options runtime --sign - \
-    --requirements "=designated => identifier \"$BUNDLE_ID\"" \
+    --requirements '=designated => identifier "com.cle0726.super-pinkie"' \
     "$APP_PATH"
 fi
 codesign --verify --deep --strict "$APP_PATH"
