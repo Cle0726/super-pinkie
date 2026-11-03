@@ -334,7 +334,7 @@ button.pk-wb-status__item:hover { color: var(--wb-text); background: color-mix(i
 @keyframes pk-wb-pulse { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* C.le. 标志：用遮罩上粉蓝渐变，白天夜间都清楚 */
-.pk-wb-mark { display: inline-block; flex: none; background: linear-gradient(110deg, var(--accent, #ff7aa2), var(--cle-accent, #62b4ff)); -webkit-mask: url("./ProviderIcon-crossmodel.svg") center / contain no-repeat; mask: url("./ProviderIcon-crossmodel.svg") center / contain no-repeat; }
+.pk-wb-mark { display: inline-block; flex: none; background: linear-gradient(110deg, var(--accent, #ff7aa2), var(--cle-accent, #62b4ff)); -webkit-mask: url("./laolao-cle-mark.svg") center / contain no-repeat; mask: url("./laolao-cle-mark.svg") center / contain no-repeat; }
 
 /* ── 浮层：快速打开、菜单、提示 ── */
 .pk-wb-quick, .pk-wb-menu {

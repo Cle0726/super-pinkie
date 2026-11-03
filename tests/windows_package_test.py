@@ -11,39 +11,29 @@ spec.loader.exec_module(cleaner)
 
 
 class WindowsPackageTests(unittest.TestCase):
-    def test_separate_product_assets_are_removed_without_breaking_the_workbench_icon(self):
+    def test_retired_product_is_removed_and_the_author_signature_stays(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ui, control, installer = root / "ui", root / "control-ui", root / "installer"
             for path in (ui / "injections", ui / "assets", control, installer):
                 path.mkdir(parents=True, exist_ok=True)
+            signature = ("laolao-cle-signature.js", "laolao-cle-stage.js", "laolao-cle-stage.css", "laolao-cle-space.js", "laolao-cle-mark.svg")
             for path in (ui / "injections", control):
-                for name in cleaner.STAGE_FILES:
-                    (path / name).write_text("separate product", encoding="utf-8")
-                (path / "laolao-workbench.css").write_text('mask: url("./laolao-cle-mark.svg")', encoding="utf-8")
+                for name in signature:
+                    (path / name).write_text("C.le.", encoding="utf-8")
                 (path / "laolao-context-compact.js").write_text('icon.textContent = "C.le.";', encoding="utf-8")
-                (path / "laolao-usage-stats.js").write_text('"今日 · C.le 本地统计"', encoding="utf-8")
             (ui / "assets/CLeAppIcon.icns").write_bytes(b"icon")
             (control / "CLeAppIcon.icns").write_bytes(b"icon")
-            markup = '<link rel="stylesheet" href="/laolao-cle-stage.css?v=1">\n<script defer src="/laolao-cle-signature.js"></script>\n<script type="module" src="/laolao-cle-stage.js"></script>\n<script src="/pinkie.js"></script>\n'
-            for file in (ui / "injections/laolao-head.fragment.html", control / "index.html"):
-                file.write_text(markup, encoding="utf-8")
-            script = installer / "apply-theme.ps1"
-            script.write_text("$headTags = @(\n    '<script defer src=\"./laolao-cle-signature.js\"></script>',\n    '<script src=\"./pinkie.js\"></script>'\n)\n", encoding="utf-8-sig")
+            markup = '<link rel="stylesheet" href="/laolao-cle-stage.css?v=1">\n<script defer src="/laolao-cle-signature.js"></script>\n<script src="/pinkie.js"></script>\n'
+            index = control / "index.html"
+            index.write_text(markup, encoding="utf-8")
             cleaner.clean(ui, control, installer)
             for path in (ui / "injections", control):
-                self.assertTrue(all(not (path / name).exists() for name in cleaner.STAGE_FILES))
-                self.assertIn('url("./ProviderIcon-crossmodel.svg")', (path / "laolao-workbench.css").read_text())
-                self.assertIn('icon.textContent = "碧琪"', (path / "laolao-context-compact.js").read_text())
-                self.assertIn('碧琪本地统计', (path / "laolao-usage-stats.js").read_text())
+                self.assertTrue(all((path / name).exists() for name in signature))
+                self.assertIn('icon.textContent = "C.le."', (path / "laolao-context-compact.js").read_text())
+            self.assertEqual(index.read_text(), markup)
             self.assertFalse((ui / "assets/CLeAppIcon.icns").exists())
             self.assertFalse((control / "CLeAppIcon.icns").exists())
-            for file in (ui / "injections/laolao-head.fragment.html", control / "index.html"):
-                result = file.read_text()
-                self.assertNotIn("laolao-cle-", result)
-                self.assertIn('/pinkie.js', result)
-            self.assertNotIn("<script defer src=\"./laolao-cle-signature.js", script.read_text(encoding="utf-8-sig"))
-            self.assertTrue(script.read_bytes().startswith(b"\xef\xbb\xbf"))
             self.assertEqual((control / "laolao-stats.json").read_text(), "null\n")
             self.assertEqual((control / "laolao-quota.json").read_text(), "null\n")
 
@@ -52,7 +42,7 @@ class WindowsPackageTests(unittest.TestCase):
             index = Path(directory) / "index.html"
             original = b"\xef\xbb\xbf<script>\n  boot();\n</script>\n<script src=\"/laolao-cle-stage.js\"></script>\n"
             index.write_bytes(original)
-            cleaner.rewrite(index, lambda text: cleaner.STAGE_TAG.sub("", text))
+            cleaner.rewrite(index, lambda text: text.replace('<script src="/laolao-cle-stage.js"></script>\n', ""))
             self.assertEqual(index.read_bytes(), b"\xef\xbb\xbf<script>\n  boot();\n</script>\n")
             cleaner.check_inline_scripts(index)
             index.write_bytes(b"<script>\r\n  boot();\r\n</script>\r\n")
