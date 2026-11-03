@@ -47,36 +47,10 @@ test('FX falls back to the old transition when it cannot animate', () => {
 });
 
 test('fragments and both installers carry the same splash and FX revisions', () => {
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  const body = read('ui/injections/laolao-body.fragment.html');
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  const revisions = {
-    'laolao-mode-transition-fx.js': 'modetransitionfx6',
-    'laolao-mode-transition-fx.css': 'modetransitionfx4',
-    'laolao-splash-fx.js': 'splashfx2',
-    'laolao-splash.js': 'splash28',
-    'laolao-splash.css': 'splash21',
-    'laolao-handoff-bootstrap.js': 'handoff7',
-  };
-  for (const [file, revision] of Object.entries(revisions)) {
-    assert.match(mac, new RegExp(`${file.replace('.', '\\.') }\\?v=${revision}`), `macOS: ${file}`);
-    assert.match(windows, new RegExp(`'${file.replace('.', '\\.') }' = '${revision}'`), `Windows: ${file}`);
-  }
-  assert.match(fragment, /laolao-splash\.css\?v=splash21/);
-  assert.match(fragment, /laolao-mode-transition-fx\.css\?v=modetransitionfx4/);
-  assert.match(fragment, /laolao-mode-transition-fx\.js\?v=modetransitionfx6/);
-  assert.match(fragment, /laolao-splash-fx\.js\?v=splashfx2/);
-  assert.match(body, /laolao-handoff-bootstrap\.js\?v=handoff7/);
-  for (const file of ['laolao-splash-fx.js', 'laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']) {
-    assert.match(mac, new RegExp(file.replace(/\./g, '\\.')), `macOS copies ${file}`);
-    assert.match(windows, new RegExp(file.replace(/\./g, '\\.')), `Windows copies ${file}`);
-  }
-  assert.ok(fragment.indexOf('laolao-mode-transition-fx.css') > fragment.indexOf('laolao-motion-system.css'));
-  assert.ok(fragment.indexOf('laolao-mode-transition-fx.js') < fragment.indexOf('laolao-mode-switcher.js'));
-  assert.match(fragment, /laolao-mode-switcher\.js\?v=mode45/);
-  assert.match(windows, /\$fxPattern[\s\S]*\$switcherMatch[\s\S]*\$html\.Substring\(0, \$switcherMatch\.Index\)/);
-  assert.match(windows, /\$switcherTag[\s\S]*\$1/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-mode-transition-fx.js', 'laolao-mode-transition-fx.css', 'laolao-splash-fx.js', 'laolao-splash.js', 'laolao-splash.css'], 'assets': ['laolao-splash-mask.png', 'laolao-splash-plate.webp', 'laolao-splash-plate-soft.png', 'laolao-splash-char-soft.png']});
+  assert.ok(head.indexOf('laolao-mode-transition-fx.css') > head.indexOf('laolao-motion-system.css'));
+  assert.ok(head.indexOf('laolao-mode-transition-fx.js') < head.indexOf('laolao-mode-switcher.js'));
+  assert.ok(head.indexOf('laolao-splash-fx.js') < head.indexOf('laolao-splash.js'));
 });
 
 test('an unavailable or broken FX controller keeps the legacy transition path available', () => {

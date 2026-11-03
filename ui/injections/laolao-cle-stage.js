@@ -11,7 +11,7 @@
  * - 工具调用的参数（命令、路径）按 toolCallId 记在本机：历史记录里只有工具结果，没有参数，
  *   展开卡片时把「执行命令 · Exec  date」补回来。
  * - 运行期间 html[data-cle-live]：其他焦点退后（见 css）。
- * - WebGL 不可用或「减少动态效果」：只用静态签名小标，不压暗界面。
+ * - WebGL 不可用、「减少动态效果」或软件渲染（html[data-pinkie-lite]）：只用静态签名小标，不压暗界面。
  */
 import {CleSpace} from './laolao-cle-space.js?v=5';
 
@@ -33,7 +33,7 @@ if (!window.__laolaoCleStage) {
   // 本轮运行（来自网关事件）。seen：这一轮收到过事件，之后就只信事件
   const run = {on: false, seen: false, since: 0, endedAt: 0, stopped: false, queue: [], cur: null, bg: 'think', pumpT: 0, kind: 'think', text: '', mono: false, quiet: 0};
 
-  const canAnimate = () => !(reduce && reduce.matches) && webglOK();
+  const canAnimate = () => !(reduce && reduce.matches) && !root.hasAttribute('data-pinkie-lite') && webglOK();
   function webglOK() {
     try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
   }

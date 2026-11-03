@@ -37,21 +37,9 @@ test('reduced motion zeroes every token and removes press offsets and entrances'
 });
 
 test('motion system loads after the theme on macOS and Windows with matching versions', () => {
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  assert.match(mac, /laolao-motion-system\.css \\/);
-  assert.match(mac, /laolao-motion-system\.css\?v=motionsys1/);
-  assert.match(windows, /"laolao-motion-system\.css"/);
-  assert.match(windows, /'laolao-motion-system\.css' = 'motionsys1'/);
-  assert.match(mac, /laolao-mode-menu-fx\.css \\/);
-  assert.match(mac, /laolao-mode-menu-fx\.css\?v=modemenufx1/);
-  assert.match(windows, /"laolao-mode-menu-fx\.css"/);
-  assert.match(windows, /'laolao-mode-menu-fx\.css' = 'modemenufx1'/);
-  assert.ok(fragment.indexOf('laolao-motion-system.css') > fragment.indexOf('laolao-theme.css'));
-  assert.ok(fragment.indexOf('laolao-mode-menu-fx.css') > fragment.indexOf('laolao-motion-system.css'));
-  // New links are appended before </head>, after the theme link inserted earlier.
-  assert.ok(mac.indexOf("grep -Fq 'laolao-motion-system.css'") > mac.indexOf("grep -Fq './laolao-theme.css'"));
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-motion-system.css', 'laolao-mode-menu-fx.css', 'laolao-theme.css'], 'assets': []});
+  assert.ok(head.indexOf('laolao-motion-system.css') > head.indexOf('laolao-theme.css'));
+  assert.ok(head.indexOf('laolao-mode-menu-fx.css') > head.indexOf('laolao-motion-system.css'));
   assert.doesNotMatch(css, /MutationObserver|<script/);
   assert.doesNotMatch(modeMenuFx, /MutationObserver|<script/);
 });

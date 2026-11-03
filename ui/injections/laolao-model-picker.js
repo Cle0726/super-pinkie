@@ -1392,9 +1392,7 @@
   }
   function surfaceBrand(node, brand) {
     if (node.dataset.pinkieBrand !== brand) node.dataset.pinkieBrand = brand;
-    const modern = document.documentElement.hasAttribute("data-cle");
-    const asset = modern ? `/cle/static/legacy/brand/${brand}.svg`
-      : brand === "crossmodel" ? "/provider-icons/ProviderIcon-crossmodel.svg" : `/laolao-provider-${brand}.svg`;
+    const asset = brand === "crossmodel" ? "/provider-icons/ProviderIcon-crossmodel.svg" : `/laolao-provider-${brand}.svg`;
     const mono = ["crossmodel", "openai", "codex", "grok", "groq", "kimi", "zai", "ollama"].includes(brand);
     const set = (key, value) => { if (node.style.getPropertyValue(key) !== value) node.style.setProperty(key, value); };
     set("--model-brand-mask", mono ? `url("${asset}")` : "none");

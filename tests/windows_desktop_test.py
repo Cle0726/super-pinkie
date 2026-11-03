@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import socket
@@ -21,7 +22,38 @@ from app.windows_desktop import (
 
 
 class WindowsDesktopPreservationTests(unittest.TestCase):
-    def test_packaged_first_launch_keeps_existing_prompt_and_persona(self):
+    def test_setup_status_does_not_depend_on_console_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "setup.py"
+            script.write_text("def install():\n    print('模型已安装 🎈')\n    return True\n", encoding="utf-8")
+            output = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            messages = []
+            try:
+                with mock.patch.object(super_pinkie, "resource_path", return_value=script), mock.patch("sys.stdout", output):
+                    self.assertTrue(super_pinkie.install_runtime_service("fixture", messages.append))
+            finally:
+                output.close()
+            self.assertTrue(any("模型已安装 🎈" in message for message in messages))
+
+    def test_service_status_does_not_depend_on_console_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def serve(on_ready=None):\n    print('圆桌已启动 🎈')\n", encoding="utf-8")
+            output = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            messages = []
+            try:
+                with mock.patch("sys.stdout", output), \
+                     mock.patch.object(windows_desktop, "http_alive", return_value=False), \
+                     mock.patch.object(windows_desktop, "append_log", side_effect=lambda *args: messages.append(args)):
+                    services = LocalServices(runtime=mock.Mock(root=root))
+                    services._start("fixture", "service.py", "serve", (), "http://unused")
+                    services.threads[0].join(timeout=5)
+            finally:
+                output.close()
+            self.assertIn(("fixture", "圆桌已启动 🎈"), messages)
+            self.assertFalse(any("service failed" in str(item) for item in messages))
+
+    def test_packaged_first_launch_keeps_prompt_and_memory_and_updates_the_persona(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             resources = root / "resources"
@@ -34,7 +66,8 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
             workspace = prompt_dir / "workspace"
             workspace.mkdir(parents=True)
             (prompt_dir / "unrestricted-prompt-gemini.txt").write_text("用户手改提示词", encoding="utf-8")
-            (workspace / "SOUL.md").write_text("用户手改人格", encoding="utf-8")
+            (workspace / "SOUL.md").write_text("本机旧人格", encoding="utf-8")
+            (workspace / "MEMORY.md").write_text("长期记忆", encoding="utf-8")
 
             def resource_path(*parts):
                 return resources.joinpath(*parts)
@@ -43,16 +76,20 @@ class WindowsDesktopPreservationTests(unittest.TestCase):
                 mock.patch.object(super_pinkie, "resource_path", side_effect=resource_path),
                 mock.patch.object(super_pinkie, "prompts_dir", return_value=prompt_dir),
                 mock.patch.object(super_pinkie.Path, "home", return_value=home),
-                mock.patch.object(super_pinkie.subprocess, "run", return_value=mock.Mock(stdout="[]")),
+                mock.patch.object(super_pinkie, "windows_state_root", return_value=root / "state"),
+                mock.patch.object(super_pinkie.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=b"[]", stderr=b"")),
             ):
                 super_pinkie.ensure_prompts(lambda _message: None, preserve_existing=True)
-                super_pinkie.install_personas(lambda _message: None, preserve_existing=True)
+                super_pinkie.install_personas(lambda _message: None)
 
             self.assertEqual(
                 (prompt_dir / "unrestricted-prompt-gemini.txt").read_text(encoding="utf-8"),
                 "用户手改提示词",
             )
-            self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "用户手改人格")
+            self.assertEqual((workspace / "SOUL.md").read_text(encoding="utf-8"), "发行人格")
+            self.assertEqual((workspace / "MEMORY.md").read_text(encoding="utf-8"), "长期记忆")
+            backup, = (root / "state").glob("backups/personas-*/chat/SOUL.md")
+            self.assertEqual(backup.read_text(encoding="utf-8"), "本机旧人格")
 
 
 class ForeignProxyHandler(BaseHTTPRequestHandler):
@@ -301,6 +338,17 @@ class NativeBridgeHealthMarkerTests(unittest.TestCase):
 
         self.assertFalse(written, "only the gateway page may confirm that an update is healthy")
         self.assertEqual([], window.injected)
+
+
+class WindowsSmokeDebugPortTests(unittest.TestCase):
+    def test_debug_port_only_for_the_isolated_smoke_endpoint(self):
+        port = windows_desktop.smoke_debug_port
+        self.assertEqual(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938"}), 63938)
+        self.assertIsNone(port({}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://0.0.0.0:63938"}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:80"}))
+        self.assertIsNone(port({"PINKIE_SMOKE_WEBVIEW_CDP": "http://127.0.0.1:63938/x"}))
+
 
 
 if __name__ == "__main__":

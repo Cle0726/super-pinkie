@@ -9,12 +9,8 @@ const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const source = read(process.env.CLE_TOOLBOX_SOURCE || 'ui/injections/laolao-laser-pointer.js');
 
 test('presentation toolbox is deployed by both installers at the same version', () => {
-  const mac = read('installer/macos/apply-theme.sh');
-  const win = read('installer/windows/apply-theme.ps1');
-  assert.match(mac, /laolao-laser-pointer\.js \\/, 'macOS asset copy list');
-  assert.match(mac, /\.\/laolao-laser-pointer\.js\?v=laser11/, 'macOS injection pins laser11');
-  assert.match(win, /"laolao-laser-pointer\.js"/, 'Windows asset copy list');
-  assert.match(win, /\.\/laolao-laser-pointer\.js\?v=laser11/, 'Windows head tag pins laser11');
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-laser-pointer.js'], 'assets': []});
+
 });
 
 test('toolbox remains in the global sidebar and is available through more tools', () => {

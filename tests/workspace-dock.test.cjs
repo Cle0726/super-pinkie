@@ -15,7 +15,7 @@ const between = (source, start, end) => {
 };
 
 test('workspace dock defaults to its mode root and rejects other-mode or subagent sessions', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const expected = {
     chat: 'agent:main:main',
     project: 'agent:project:main',
@@ -43,7 +43,7 @@ test('workspace dock defaults to its mode root and rejects other-mode or subagen
 });
 
 test('workspace dock is a full-height companion split in the same native window, not another runtime', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const dock = between(
     launcher,
     'private func openWorkspaceDock(',
@@ -81,7 +81,7 @@ test('split close action lives in the existing primary dock picker, not a second
 });
 
 test('docked companion route carries an explicit no-splash marker', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const splash = read('ui/injections/laolao-splash.js');
   const urlBuilder = between(launcher, 'private func chatURL(', 'private func trustedFrame');
 
@@ -97,7 +97,7 @@ test('docked companion route carries an explicit no-splash marker', () => {
 
 test('split keeps the menu as an overlay and leaves real workspace controls visible', () => {
   const theme = read('ui/injections/laolao-ui-subtraction.css');
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   assert.match(theme, /data-laolao-workspace-split/);
   assert.match(theme, /data-laolao-workspace-dock/);
   assert.match(theme, /grid-template-columns: minmax\(0, 1fr\) !important/);
@@ -116,8 +116,8 @@ test('split keeps the menu as an overlay and leaves real workspace controls visi
 
 test('session navigation clears a stale mobile drawer in single and split windows', () => {
   const sidebar = read('ui/injections/laolao-sidebar.js');
-  assert.match(sidebar, /function closeNavigationDrawer\([^)]*\)/);
-  assert.match(sidebar, /host\.closeNavDrawer\(\{restoreFocus:(?:false|restoreFocus===true)\}\)/);
+  assert.match(sidebar, /function closeNavigationDrawer\(restoreFocus=false\)/);
+  assert.match(sidebar, /host\.closeNavDrawer\(\{restoreFocus:restoreFocus===true\}\)/);
   assert.match(sidebar, /shell\.navigate\('chat',\{search\}\)/);
   assert.match(sidebar, /\.shell\.shell--nav-drawer-open/);
   assert.match(sidebar, /closeNavigationDrawer\(\);\s*const current=new URL\(window\.location\.href\)/);
@@ -126,7 +126,7 @@ test('session navigation clears a stale mobile drawer in single and split window
 });
 
 test('native bridge always routes companion messages back to their source WKWebView', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const handler = between(
     launcher,
     'func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage)',
@@ -150,7 +150,7 @@ test('native bridge always routes companion messages back to their source WKWebV
 });
 
 test('a failed companion navigation retries only the dock and never reloads the primary chat', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const failure = between(
     launcher,
     'func webView(_ webView: WKWebView, didFailProvisionalNavigation',
@@ -171,7 +171,7 @@ test('a failed companion navigation retries only the dock and never reloads the 
 });
 
 test('foreground recovery reaches both primary and companion chat views', () => {
-  const launcher = read('desktop/macos/Sources/Launcher.swift');
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const notifications = between(launcher, 'func applicationDidResignActive', 'private func isCompanion');
 
   assert.match(notifications, /applicationDidBecomeActive[\s\S]{0,260}notifyWebView\("pinkie:app-foreground"\)/);

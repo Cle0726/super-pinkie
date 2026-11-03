@@ -4220,6 +4220,16 @@ export class UpstreamWatchdog {
       this.api.logger?.info?.(`watchdog dropped stale ${kind || 'retry'} session=${sessionKey} run=${runId} ${yieldToTier ? 'yielded=tier' : `newer=${this.latestRuns.get(sessionKey)}`}`);
       return false;
     }
+    // 这条续跑是针对 runId 那一轮定的；等子任务的这段时间里父会话已经又跑过一轮（档位续跑器叫醒它、
+    // 已经交了新终稿），那一轮自己的交付核对会另算缺口。再发旧的「还差：独立起草 0/1」只会让它
+    // 再写一版终稿（11-02 隔离实测 K-tutor-full）。
+    if (workFirstContext({sessionKey}) && runId && this.latestRuns.has(sessionKey)
+        && this.latestRuns.get(sessionKey) !== String(runId)) {
+      this.jobStore.delete(sessionKey);
+      try { await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: tag || safeTag(sessionKey)}); } catch {}
+      this.api.logger?.info?.(`watchdog dropped stale ${kind || 'retry'} session=${sessionKey} run=${runId} newer=${this.latestRuns.get(sessionKey)}`);
+      return false;
+    }
     this.dispatching.add(sessionKey);
     try {
       const request = {

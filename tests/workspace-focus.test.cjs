@@ -42,12 +42,6 @@ test('process rows fold by default while delivery, material, and attachments rem
 });
 
 test('both desktop installers ship the focused workspace rail', () => {
-  const fragment = read('ui/injections/laolao-head.fragment.html');
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  for (const source of [fragment, mac, windows]) {
-    assert.match(source, /laolao-workspace-focus\.css/);
-    assert.match(source, /laolao-workspace-focus\.js/);
-  }
-  assert.match(windows, /'laolao-workspace-focus\.js' = 'workspacefocus2'/);
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-workspace-focus.css', 'laolao-workspace-focus.js'], 'assets': []});
+
 });

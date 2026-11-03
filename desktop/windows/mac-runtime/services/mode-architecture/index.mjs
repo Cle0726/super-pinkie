@@ -224,6 +224,41 @@ const CONTEXT_OVERFLOW_FAILURE = /(?:context overflow|prompt too large for (?:th
 const AUTO_COMPACTION_RECOVERY_FAILURE = /(?:auto[ -]?compaction.{0,96}(?:could not recover|cannot recover|failed|unable to recover)|compacted (?:history|transcript).{0,96}(?:could not recover|failed)|自动(?:上下文)?压缩.{0,96}(?:无法|不能|未能).{0,32}(?:恢复|续接)|压缩后.{0,96}(?:无法|不能|未能).{0,32}(?:恢复|续接))/i;
 const CONTINUATION_ONLY_PROMPT = /^(?:(?:好|好的|可以|对|嗯|明白了|收到)[，,、\s]*)?(?:继续|接着|往下|做下去|继续完成)(?:吧|啊|呀)?[！!。,.\s]*$/u;
 const PERMANENT_FAILURE = /(?:cancel(?:led|ed) by (?:the )?user|user (?:cancelled|canceled|aborted)|abort requested|cancel requested|stopped by (?:the )?user|unauthori[sz]ed|invalid api.?key|permission|forbidden|unsupported model|unknown model|model (?:not found|does not exist)|billing|policy)/i;
+// Failures that come from this machine rather than the network: a missing
+// file or plugin module, a model URL that does not exist, a local proxy that
+// never started. Sending the same turn again cannot fix them, yet they used to
+// be retried forever behind 「上游波动，碧琪正在自动重试」 (seen on Windows
+// installs that missed files). Stop and say what is wrong instead.
+const LOCAL_SETUP_FAILURES = [
+  [/(?:cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|\bENOENT\b|no such file or directory)/i,
+    '碧琪缺少运行需要的文件，没有自动重试。请重新安装或更新碧琪。'],
+  [/(?:unknown method|method not found)/i,
+    '碧琪的核心插件没有完整加载，没有自动重试。请重启碧琪；还不行就重新安装。'],
+  [/(?:\b404\b|not[_ ]found[_ ]error|page not found)/i,
+    '模型服务地址不对（404），没有自动重试。请在设置里检查模型服务地址。'],
+];
+// A connection that never opens (a local proxy that is not running, a wrong
+// host, the machine offline) reaches agent_end only as "Connection error.".
+// A proxy may be restarting, so give it two quick tries, then say so. A
+// stream that breaks off half way ("terminated") stays in the long lane.
+const LOCAL_SERVICE_DOWN = /(?:ECONNREFUSED|connection refused|\bconnection error\b)/i;
+const LOCAL_SERVICE_DOWN_RETRIES = 2;
+const LOCAL_SERVICE_DOWN_MESSAGE = '连不上模型服务，试了两次都没连上，先停下了。请确认模型代理已经启动、地址没写错、网络是通的，然后再发一次。';
+// The watchdog resends a turn through the local gateway CLI. When that CLI
+// cannot authenticate or start, every resend fails the same way; it used to
+// be rescheduled every few seconds for as long as the gateway ran.
+const DISPATCH_SETUP_FAILURE = /(?:GatewayCredentialsRequiredError|requires credentials before opening a websocket|cannot find module|ERR_MODULE_NOT_FOUND|\bENOENT\b)/i;
+const WATCHDOG_DISPATCH_FAILURE_LIMIT = 8;
+// Even a real outage should not loop forever with nobody told.
+const WATCHDOG_MAX_ATTEMPTS = Math.max(3, Number(process.env.PINKIE_WATCHDOG_MAX_ATTEMPTS) || 30);
+
+export function localSetupFailure(reason = '', attempts = 0) {
+  const text = String(reason || '');
+  for (const [pattern, message] of LOCAL_SETUP_FAILURES) if (pattern.test(text)) return message;
+  if (LOCAL_SERVICE_DOWN.test(text) && attempts >= LOCAL_SERVICE_DOWN_RETRIES) return LOCAL_SERVICE_DOWN_MESSAGE;
+  return '';
+}
+
 const WATCHDOG_MESSAGE = '\u2063';
 // 续接消息不能只是一个看不见的字符：模型会把它当成空消息/心跳，按 OpenClaw 的规则回 NO_REPLY，
 // 先生就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
@@ -423,6 +458,17 @@ function hasIncompleteToolTurn(event = {}, reason = '', ctx = {}) {
   return /^(?:toolUse|tool_use)$/i.test(String(lastAssistant?.stopReason || ''));
 }
 
+function failedAssistantMessage(message = {}) {
+  return message?.role === 'assistant'
+    && /^(?:error|aborted)$/i.test(String(message.stopReason || message.stop_reason || ''));
+}
+
+function endedWithFailedAssistant(event = {}) {
+  const messages = Array.isArray(event.messages) ? event.messages : [];
+  const last = messages.at(-1);
+  return failedAssistantMessage(last?.message || last);
+}
+
 // API 断链恢复属于会话层能力，不应只覆盖四个 UI 模式。实际运行时
 // OpenClaw 可能使用自定义 agentId（例如本地模型/工作区插件），但仍然
 // 会提供标准的 agent:<id>:<session> 会话键。只排除子代理，避免把同一
@@ -433,6 +479,10 @@ function isWatchdogParentContext(ctx = {}) {
   if (!sessionKey || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return false;
   if (String(process.env.PINKIE_WATCHDOG_ALL || '1') === '0') return Boolean(modeForContext(ctx));
   return Boolean(ctx.agentId || agentFromSessionKey(sessionKey));
+}
+
+function shortReason(reason = '') {
+  return String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 240) || '未知错误';
 }
 
 function safeTag(sessionKey) {
@@ -3255,6 +3305,9 @@ export class CleKkSupervisor {
   beforeMessageWrite(event = {}, ctx = {}, preDecision, prechecked = false) {
     const message = event.message || {};
     if (message.role !== 'assistant' || assistantMessageHasToolCall(message)) return;
+    // A truncated provider response is not a proposed final answer. Leave it
+    // to the transport watchdog instead of starting an integrity retry.
+    if (failedAssistantMessage(message)) return;
     const text = visibleAssistantText(message);
     if (!text || /^(?:toolUse|tool_use)$/i.test(String(message.stopReason || ''))) return;
     if (internalControlText(text)) return {block: true};
@@ -3768,6 +3821,9 @@ export class UpstreamWatchdog {
     this.timers = new Map();
     this.gatewayBackoff = new Map();
     this.dispatching = new Set();
+    // Why the watchdog gave up on a session, for the page's status ribbon.
+    this.outcomes = new Map();
+    this.dispatchFailures = new Map();
     // Every explicit cancellation advances the session generation. Timers or
     // slow CLI calls from an older generation may finish, but they can no
     // longer re-arm themselves or schedule another invisible turn.
@@ -3808,6 +3864,7 @@ export class UpstreamWatchdog {
     if (!key || isInternalExecutionSession(key)) return;
     if (!internalControlText(event.prompt)) {
       this.models.delete(key);
+      this.outcomes.delete(key);
       userStops.delete(key);
       return;
     }
@@ -3833,11 +3890,16 @@ export class UpstreamWatchdog {
     const waitingOnChildren = workFirstContext(ctx) && endsWithYield(event.messages)
       && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey)));
     const incompleteToolTurn = !waitingOnChildren && hasIncompleteToolTurn(event, reason, ctx);
-    if (event.success && !incompleteToolTurn) {
+    // Some OpenClaw versions mark agent_end success=true even when the last
+    // assistant message has stopReason=error and errorMessage=terminated.
+    // The message is the more precise result of the model stream.
+    const terminalFailure = endedWithFailedAssistant(event);
+    if (event.success && !incompleteToolTurn && !terminalFailure) {
       // A successful/manual follow-up may finish before the pending retry
       // timer fires. Remove both online and cron fallbacks to avoid a duplicate
       // invisible turn after the user already received a complete answer.
       await this.cancel(sessionKey);
+      this.outcomes.delete(sessionKey);
       if (event.runId) this.failures.delete(event.runId);
       return false;
     }
@@ -3845,7 +3907,11 @@ export class UpstreamWatchdog {
     // providers do not all expose failures with the same fields, so a failed
     // parent turn must recover by default. Only explicit user cancellation and
     // errors that cannot improve through retry are allowed to stop it.
-    if (PERMANENT_FAILURE.test(reason)) return false;
+    if (PERMANENT_FAILURE.test(reason)) {
+      return this.giveUp(sessionKey, event.runId, 'permanent', `这次失败重试也解决不了：${shortReason(reason)}`, reason);
+    }
+    const setupProblem = localSetupFailure(reason, this.attempts.get(sessionKey) || 0);
+    if (setupProblem) return this.giveUp(sessionKey, event.runId, 'setup', setupProblem, reason);
     // The plugin has already given this precise native hand-back failure its
     // own two-attempt checkpoint lane. Once that lane is exhausted, never
     // reinterpret it as a generic transport outage: that used to recreate an
@@ -3860,7 +3926,7 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog retired non-retryable context overflow session=${sessionKey}`);
       return false;
     }
-    const failedParentTurn = event.success !== true || incompleteToolTurn;
+    const failedParentTurn = event.success !== true || incompleteToolTurn || terminalFailure;
     if (!failedParentTurn && !isTransientFailure(reason) && !incompleteToolTurn) return false;
     // Do not mistake an exhausted provider account for an endless disconnect.
     // Keep the user's original model for normal turns, but route the invisible
@@ -3891,7 +3957,13 @@ export class UpstreamWatchdog {
       }
     }
     const attempt = (this.attempts.get(sessionKey) || 0) + 1;
+    if (attempt > WATCHDOG_MAX_ATTEMPTS) {
+      return this.giveUp(sessionKey, event.runId, 'exhausted',
+        `上游一直没有恢复，碧琪已经连续重试 ${WATCHDOG_MAX_ATTEMPTS} 次，先停下了。稍后再发一次即可。`, reason);
+    }
     this.attempts.set(sessionKey, attempt);
+    this.outcomes.delete(sessionKey);
+    this.api.logger?.warn?.(`watchdog retry scheduled session=${sessionKey} attempt=${attempt} reason=${shortReason(reason)}`);
     this.jobStore.set(sessionKey, {
       agentId: ctx.agentId, runId: event.runId, attempt, reason,
       model: this.models.get(sessionKey), kind: 'upstream',
@@ -4224,28 +4296,56 @@ export class UpstreamWatchdog {
       if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       const output = `${stdout}\n${result?.error || result?.message || ''}`;
       if (result?.status === 'error' || result?.status === 'timeout') {
-        const blockedDelay = this.recoveryDelay(sessionKey, output);
-        // This reschedules the same attempt ordinal. Gateway drain/projection
-        // rebuilds therefore neither increment nor decrement the integrity
-        // budget; repeated infrastructure probes cannot turn attempt 4 back
-        // into the misleading 0/24 seen in earlier logs.
-        this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
-        return false;
+        return await this.dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind,
+          generation: leaseGeneration, message: controlMessage, detail: output});
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
       this.gatewayBackoff.delete(sessionKey);
+      this.dispatchFailures.delete(sessionKey);
       this.api.logger?.info?.(`watchdog immediate retry accepted session=${sessionKey} attempt=${attempt}`);
       return true;
     } catch (error) {
       if (leaseGeneration !== this.generationFor(sessionKey)) return false;
       this.api.logger?.warn?.(`watchdog immediate retry deferred to cron session=${sessionKey} error=${String(error)}`);
-      const blockedDelay = this.recoveryDelay(sessionKey,
-        `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`);
-      this.scheduleImmediate({sessionKey, agentId, runId, attempt, delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100), tag, kind, generation: leaseGeneration, message: controlMessage});
-      return false;
+      const detail = `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`;
+      return await this.dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind,
+        generation: leaseGeneration, message: controlMessage, detail});
     } finally {
       this.dispatching.delete(sessionKey);
     }
+  }
+
+  async dispatchFailed({sessionKey, agentId, runId, attempt, tag, kind, generation, message, detail}) {
+    const failures = (this.dispatchFailures.get(sessionKey) || 0) + 1;
+    this.dispatchFailures.set(sessionKey, failures);
+    if (DISPATCH_SETUP_FAILURE.test(detail) || failures >= WATCHDOG_DISPATCH_FAILURE_LIMIT) {
+      await this.giveUp(sessionKey, runId, 'dispatch',
+        '碧琪没法把这一轮重新发出去（本机网关通道不可用），没有继续重试。请重启碧琪后再发一次。', detail);
+      return false;
+    }
+    const blockedDelay = this.recoveryDelay(sessionKey, detail);
+    // Retry the same model-turn ordinal; the separate dispatch counter bounds
+    // failures whether the CLI throws or returns a JSON error/timeout.
+    this.scheduleImmediate({sessionKey, agentId, runId, attempt,
+      delayMs: blockedDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, 250 + attempt * 100),
+      tag, kind, generation, message});
+    return false;
+  }
+
+  async giveUp(sessionKey, runId, kind, message, reason) {
+    await this.cancel(sessionKey);
+    if (runId) this.failures.delete(runId);
+    this.outcomes.set(sessionKey, {state: 'stopped', kind, message, reason: shortReason(reason), at: Date.now()});
+    this.api.logger?.warn?.(`watchdog not retrying session=${sessionKey} kind=${kind} reason=${shortReason(reason)}`);
+    return false;
+  }
+
+  status(sessionKey) {
+    const outcome = this.outcomes.get(sessionKey);
+    if (outcome) return outcome;
+    const attempt = Number(this.attempts.get(sessionKey) || 0);
+    if (attempt > 0 || this.timers.has(sessionKey) || this.dispatching.has(sessionKey)) return {state: 'retrying', attempt};
+    return {state: 'idle'};
   }
 
   async cancel(sessionKey, suppressNextFailure = false) {
@@ -4254,6 +4354,7 @@ export class UpstreamWatchdog {
     this.integrityAttempts.delete(sessionKey);
     this.models.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
+    this.dispatchFailures.delete(sessionKey);
     this.jobStore.delete(sessionKey);
     if (suppressNextFailure) {
       this.skipNextFailure.add(sessionKey);
@@ -6218,7 +6319,7 @@ export default {
     registerModelSync(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
-    sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations']);
+    sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
     sharePluginState(cleKk, 'clekk', ['turns', 'orphaned', 'sessionByRunId', 'sessionBySessionId', 'sessionByToolCallId', 'pendingDeliverySessions', 'deliveryFallbackBySession']);
     sharePluginState(cleKk.audit, 'audit', ['sequence', 'lastHash', 'appendCounts']);
@@ -6359,6 +6460,13 @@ export default {
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
       }
+    }, {scope: 'operator.admin'});
+    // The page asks this before it shows 「正在自动重试」, so the ribbon can say
+    // why nothing is retried instead of promising a retry that never comes.
+    api.registerGatewayMethod('pinkie.watchdog.status', async ({params, respond}) => {
+      const sessionKey = String(params?.sessionKey || '');
+      if (!sessionKey) return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少会话标识'});
+      respond(true, watchdog.status(sessionKey));
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.usage.get', async ({respond}) => {
       respond(true, usage.read());
@@ -6506,6 +6614,7 @@ export default {
         cleKk.retireRetry(ctx.sessionKey || '');
         return;
       }
+      if (endedWithFailedAssistant(event)) return;
       // Always run both gates.  The architecture gate checks child/task
       // completion; the integrity gate checks real tool/evidence provenance.
       // Previously `a || b` skipped the second gate whenever the first one
@@ -6538,6 +6647,7 @@ export default {
           message: {...message, stopReason: 'stop', content: [{type: 'text', text: stoppedReport}]},
         };
       }
+      if (failedAssistantMessage(message)) return;
       if (message.role !== 'assistant' || !isTerminalAssistantMessage(message)) {
         return cleKk.beforeMessageWrite(event, ctx);
       }

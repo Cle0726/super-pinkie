@@ -9,6 +9,7 @@ from unittest import mock
 
 from app.windows_desktop import (
     UPDATE_API_URL,
+    update_mirrors,
     WindowsUpdater,
     release_notes_text,
     release_update,
@@ -250,6 +251,43 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual(payload, destination.read_bytes())
         self.assertEqual([None, f"bytes={first_chunk}-"], seen)
 
+    def test_progress_reports_real_bytes_and_unknown_totals(self):
+        payload = b"x" * (2 * 1024 * 1024)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exe = root / "app.exe"
+            exe.write_bytes(b"old")
+            for declared in (len(payload), None):
+                seen = []
+                updater = WindowsUpdater(root, executable=exe,
+                    opener=lambda request, timeout=0: SizedResponse(payload, content_length=declared))
+                destination = root / ("known" if declared else "unknown")
+                updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, progress=seen.append)
+                self.assertEqual(len(payload), seen[-1]["downloaded"])
+                self.assertEqual(declared, seen[-1]["total"])
+                self.assertTrue(all(item["stage"] == "download" for item in seen))
+
+    def test_resumed_progress_uses_content_range_not_partial_length(self):
+        payload = b"p" * (3 * 1024 * 1024)
+        offset = 1024 * 1024
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exe = root / "app.exe"
+            exe.write_bytes(b"old")
+            destination = root / "payload.exe"
+            destination.with_suffix('.exe.download').write_bytes(payload[:offset])
+            def opener(request, timeout=0):
+                response = SizedResponse(payload[offset:], status=206, content_length=len(payload)-offset)
+                response.headers['Content-Range'] = f'bytes {offset}-{len(payload)-1}/{len(payload)}'
+                return response
+            seen = []
+            updater = WindowsUpdater(root, executable=exe, opener=opener)
+            updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination, progress=seen.append)
+            self.assertEqual(offset, seen[0]['downloaded'])
+            self.assertEqual(len(payload), seen[0]['total'])
+            self.assertEqual(len(payload), seen[-1]['downloaded'])
+            self.assertEqual(payload, destination.read_bytes())
+
     def test_portable_replacer_verifies_the_package_before_swapping(self):
         """便携包必须先验哈希再展开/替换，坏包不能碰安装目录。"""
         helper = WindowsUpdater._directory_helper_source()
@@ -272,6 +310,95 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertEqual(token, update_health_token_from_argv([f"--update-health-token={token}"]))
         self.assertIsNone(update_health_token_from_argv(["--update-health-token=../../bad"]))
 
+
+    # ---- 国内线路（11-02）----
+    def _mirror_case(self, root, bodies, settings=None, fail=()):
+        (root / "VERSION").write_text("2.5.1", encoding="utf-8")
+        if settings is not None:
+            (root / "update-mirrors.json").write_text(json.dumps(settings), encoding="utf-8")
+        executable = root / "超級碧琪.exe"
+        executable.write_bytes(b"old")
+        seen = []
+
+        def opener(request, timeout=0):
+            seen.append(request.full_url)
+            if request.full_url in fail or request.full_url not in bodies:
+                raise OSError("unreachable")
+            return Response(bodies[request.full_url])
+
+        return WindowsUpdater(root, opener=opener, executable=executable), seen
+
+    def _manifest(self, version, name, digest):
+        return json.dumps({"version": version, "notes": "- 国内线路也能更新",
+                           "assets": {name: {"sha256": digest, "size": 1}}}).encode()
+
+    def test_mirror_route_prefers_the_bucket_and_the_official_checksum(self):
+        payload = b"pinkie-mirror" * 90000
+        digest = hashlib.sha256(payload).hexdigest()
+        version, name = "9.8.7", "super-pinkie-windows-9.8.7.exe"
+        bucket = "https://pinkie.oss-cn-hangzhou.aliyuncs.com/super-pinkie/"
+        official = f"https://github.com/Cle0726/super-pinkie/releases/download/v{version}/{name}"
+        bodies = {bucket + "latest.json": self._manifest(version, name, digest),
+                  f"{bucket}v{version}/{name}": payload,
+                  official + ".sha256": f"{digest}  {name}".encode()}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, seen = self._mirror_case(Path(temporary), bodies, {"bucket": bucket})
+            info = updater.check(force=True, route="mirror")
+            self.assertTrue(info["available"])
+            self.assertEqual("国内服务器", info["mirror"])
+            self.assertEqual(["国内线路也能更新"], info["notes"].splitlines())
+            self.assertTrue(updater.prepare(route="mirror")["ready"])
+            self.assertIn(official + ".sha256", seen)
+            self.assertIn(f"{bucket}v{version}/{name}", seen)
+            self.assertNotIn(official, seen, "the package itself must not come from GitHub on the mirror route")
+
+    def test_mirror_route_falls_back_to_a_proxy_and_the_manifest_checksum(self):
+        payload = b"pinkie-proxy" * 90000
+        digest = hashlib.sha256(payload).hexdigest()
+        version, name = "9.8.7", "super-pinkie-windows-9.8.7.exe"
+        proxy = "https://ghfast.top/"
+        releases = "https://github.com/Cle0726/super-pinkie/releases"
+        bodies = {f"{proxy}{releases}/latest/download/latest.json": self._manifest(version, name, digest),
+                  f"{proxy}{releases}/download/v{version}/{name}": payload}
+        with tempfile.TemporaryDirectory() as temporary:
+            # 存储桶连不上、GitHub 官方校验和也拿不到：走加速代理，用清单里的 SHA-256 核对。
+            updater, seen = self._mirror_case(Path(temporary), bodies, {"bucket": "https://down.example.cn/sp/"})
+            self.assertEqual("国内加速", updater.check(force=True, route="mirror")["mirror"])
+            self.assertTrue(updater.prepare(route="mirror")["ready"])
+            self.assertEqual("https://down.example.cn/sp/latest.json", seen[0])
+
+    def test_mirror_package_that_does_not_match_is_rejected(self):
+        version, name = "9.8.7", "super-pinkie-windows-9.8.7.exe"
+        proxy = "https://ghfast.top/"
+        releases = "https://github.com/Cle0726/super-pinkie/releases"
+        bodies = {f"{proxy}{releases}/latest/download/latest.json": self._manifest(version, name, "0" * 64),
+                  f"{proxy}{releases}/download/v{version}/{name}": b"tampered" * 200000}
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, _ = self._mirror_case(Path(temporary), bodies)
+            with self.assertRaises(ValueError):
+                updater.prepare(route="mirror")
+            self.assertFalse(list((self.state / "updates" / version).glob("*.exe")))
+
+    def test_mirror_settings_only_accept_https_bases(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "update-mirrors.json").write_text(json.dumps(
+                {"bucket": "http://insecure.example.cn/", "proxies": ["https://p.example.cn", "ftp://x"]}), encoding="utf-8")
+            routes = update_mirrors(root)
+            self.assertEqual(["https://p.example.cn/https://github.com/Cle0726/super-pinkie/releases/latest/download/latest.json"],
+                             [route["manifest"] for route in routes])
+            (root / "update-mirrors.json").write_text("not json", encoding="utf-8")
+            self.assertEqual(3, len(update_mirrors(root)))
+
+    def test_official_failure_suggests_the_mirror(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            updater, _ = self._mirror_case(Path(temporary), {})
+            info = updater.check(force=True)
+            self.assertTrue(info["temporaryError"])
+            self.assertTrue(info["suggestMirror"])
+            mirror = updater.check(force=True, route="mirror")
+            self.assertTrue(mirror["temporaryError"])
+            self.assertIn("国内线路", mirror["message"])
 
 if __name__ == "__main__":
     unittest.main()

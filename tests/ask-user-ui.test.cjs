@@ -36,15 +36,7 @@ test('the ask card answers through the native composer and never touches Lit cha
 });
 
 test('ask card files, stickers and cache keys ship through both installers', () => {
-  assert.match(fragment, /laolao-ask-user\.css\?v=askuser1/);
-  assert.match(fragment, /laolao-ask-user\.js\?v=askuser1/);
-  for (const source of [mac, windows]) {
-    assert.match(source, /laolao-ask-user\.css/);
-    assert.match(source, /laolao-ask-user\.js/);
-    for (const name of STICKERS) assert.match(source, new RegExp(`laolao-pinkie-status-${name}\\.png`));
-    assert.match(source, /askuser1/);
-    assert.match(source, /sidebar40/);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-ask-user.css', 'laolao-ask-user.js'], 'assets': []});
   for (const name of STICKERS) assert.ok(fs.statSync(path.join(root, `ui/assets/laolao-pinkie-status-${name}.png`)).size > 10_000);
   assert.ok(windows.startsWith('﻿'));
 });

@@ -158,7 +158,7 @@ test('mode switching prewarms every local scene and has no old multi-second arti
   assert.doesNotMatch(mode,/setTimeout\(preloadTransitions, 3600\)/);
 });
 test('shared motion module is shipped for both app and party',()=>{
-  assert.match(read('installer/macos/apply-theme.sh'),/laolao-motion\.js/);
-  assert.match(read('services/party/server.py'),/'\/party-motion\.js': ROOT \/ 'ui\/injections\/laolao-motion\.js'/);
-  const html=read('ui/party/index.html');assert.ok(html.indexOf('/party-motion.js')<html.indexOf('src="/party.js'));
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-motion.js'], 'assets': []});
+  assert.match(read('services/party/server.py'), /'\/party-motion\.js': ROOT \/ 'ui\/injections\/laolao-motion\.js'/);
+  const html=read('ui/party/index.html'); assert.ok(html.indexOf('/party-motion.js')<html.indexOf('src="/party.js'));
 });

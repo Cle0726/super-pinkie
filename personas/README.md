@@ -8,4 +8,4 @@
 - `learning/`：学习模式（含 `METHODS.md` 方法卡与辅导规则，称呼「先生」）
 - `neutral/`：无限制模式使用的无碧琪人格工作区文件（保持原样，不随改版改写）
 
-安装与更新流程只同步通用人格与工作手册（`SOUL.md`、`IDENTITY.md`、`AGENTS.md`、`AESTHETICS.md`、`METHODS.md`、`HEARTBEAT.md`），绝不上传或覆盖用户自己的 `USER.md`、`TOOLS.md`、长期记忆与聊天记录。
+安装与更新时，人格与工作手册（`SOUL.md`、`IDENTITY.md`、`AGENTS.md`、`AESTHETICS.md`、`METHODS.md`、`HEARTBEAT.md`、`memory-system.md`）和 `playbooks/` 一律跟随官方版本：本机的不同版本先备份到 `backups/`，再换成新版。`DREAMS.md`、无限制模式，以及用户自己的 `USER.md`、`TOOLS.md`、`MEMORY.md`、`memory/` 长期记忆与聊天记录绝不覆盖、绝不上传。

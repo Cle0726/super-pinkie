@@ -20,10 +20,6 @@ test('page warmup prefetches only bounded static routes and keeps live chat dema
 });
 
 test('both desktop installers ship the page warmup hook', () => {
-  const mac = read('installer/macos/apply-theme.sh');
-  const windows = read('installer/windows/apply-theme.ps1');
-  for (const installer of [mac, windows]) {
-    assert.match(installer, /laolao-page-warmup\.js/);
-    assert.match(installer, /warmup1/);
-  }
+  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-page-warmup.js'], 'assets': []});
+
 });

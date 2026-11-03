@@ -35,10 +35,7 @@ test('the card matches the original bubbles and respects reduced motion', () => 
   assert.match(css, /linear-gradient\(135deg, rgba\(255, 253, 254, 0\.74\), rgba\(255, 247, 251, 0\.52\)\)/);
   assert.match(css, /\.pinkie-process\[data-live="1"\]/);
   assert.match(css, /prefers-reduced-motion: reduce/);
-  for (const source of [read('ui/injections/laolao-head.fragment.html'), read('installer/macos/apply-theme.sh'), read('installer/windows/apply-theme.ps1')]) {
-    assert.match(source, /laolao-process-card\.css\?v=processcard8/);
-    assert.match(source, /laolao-process-card\.js\?v=processcard13/);
-  }
+  require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-process-card.css','laolao-process-card.js']});
 });
 
 test('a thought that arrives in one chunk is typed out instead of popping in', () => {

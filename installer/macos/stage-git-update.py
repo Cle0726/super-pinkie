@@ -24,6 +24,17 @@ UPDATES = STATE / 'updates'
 MANAGED = STATE / 'repository'
 MANIFEST = UPDATES / 'prepared-git.json'
 DEFAULT_REMOTE = 'https://github.com/Cle0726/super-pinkie.git'
+# 国内线路：GitHub 加速代理，按顺序试，第一个能列出远端分支的就用它。
+# 走代理时 Git 本身仍校验对象哈希，暂存后再核对目标提交，代理改不了内容而不被发现。
+MIRRORS = [m.strip() for m in os.environ.get('PINKIE_UPDATE_MIRRORS', 'https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/').split() if m.strip().startswith('https://')]
+ROUTE = 'mirror' if os.environ.get('PINKIE_UPDATE_ROUTE') == 'mirror' else 'official'
+GIT_ROUTE = []
+ROUTE_PREFIX = []
+# 跟正式发布走，不跟某个分支：main 早就不是发版分支了（11-02 实测 main 停在 10-31、VERSION 写 2.6.0），
+# 跟 main 会把用户「更新」回旧代码。发版时附带的 latest.json 写着版本号，对应的 tag 就是要装的提交。
+RELEASES = 'https://github.com/Cle0726/super-pinkie/releases'
+RELEASE_API = 'https://api.github.com/repos/Cle0726/super-pinkie/releases/latest'
+VERSION_TEXT = re.compile(r'^\d+(?:\.\d+){1,3}$')
 SHA = re.compile(r'^[0-9a-f]{40,64}$')
 BYTES = re.compile(r'(\d+(?:\.\d+)?)\s*(KiB|MiB|GiB|bytes)(?:\s*\|\s*(\d+(?:\.\d+)?)\s*(KiB|MiB|GiB|bytes)/s)?', re.I)
 
@@ -32,8 +43,35 @@ def emit(value):
     print(json.dumps(value, ensure_ascii=False, separators=(',', ':')), flush=True)
 
 
+def mirror_config(prefix):
+    base = prefix.rstrip('/') + '/https://github.com/'
+    return ['-c', f'url.{base}.insteadOf=https://github.com/', '-c', f'url.{base}.insteadOf=git@github.com:',
+            '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=60']
+
+
+def choose_route(repo):
+    """国内线路：挑第一个能连上的加速代理；都连不上就报错，不悄悄退回官方线路。"""
+    GIT_ROUTE.clear()
+    ROUTE_PREFIX.clear()
+    if ROUTE != 'mirror':
+        return 'official'
+    remote = 'origin' if repo else DEFAULT_REMOTE
+    for prefix in MIRRORS:
+        cmd = ['git'] + mirror_config(prefix) + (['-C', str(repo)] if repo else []) + ['ls-remote', '--heads', remote, 'refs/heads/main']
+        try:
+            ok = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=25,
+                                env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'}).returncode == 0
+        except subprocess.TimeoutExpired:
+            ok = False
+        if ok:
+            GIT_ROUTE.extend(mirror_config(prefix))
+            ROUTE_PREFIX[:] = [prefix]
+            return prefix
+    raise RuntimeError('国内线路暂时都连不上，请稍后重试，或换回官方线路。')
+
+
 def git(repo, *args, check=True):
-    cmd = ['git'] + (['-C', str(repo)] if repo else []) + list(args)
+    cmd = ['git'] + GIT_ROUTE + (['-C', str(repo)] if repo else []) + list(args)
     env = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, env=env)
     if check and result.returncode:
@@ -81,15 +119,53 @@ def remote_head(repo, branch):
     return hits[0]
 
 
+def official_checkout(repo):
+    if not repo:
+        return True
+    url = git(repo, 'config', '--get', 'remote.origin.url', check=False)
+    return bool(re.search(r'github\.com[:/]Cle0726/super-pinkie(?:\.git)?/?$', url))
+
+
+def latest_release(repo):
+    """最新正式发布的 tag（v2.5.27）。不是官方仓库（自己的分叉、开发用的检出）或查不到时返回 None，照旧跟当前分支。"""
+    if not official_checkout(repo):
+        return None
+    import urllib.request
+    prefix = ROUTE_PREFIX[0].rstrip('/') + '/' if ROUTE_PREFIX else ''
+    for url, field in ((prefix + RELEASES + '/latest/download/latest.json', 'version'), (RELEASE_API, 'tag_name')):
+        try:
+            request = urllib.request.Request(url, headers={'User-Agent': 'SuperPinkie-Mac-Updater', 'Accept': 'application/json'})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                value = str(json.loads(response.read(256 * 1024).decode('utf-8')).get(field, '')).strip().removeprefix('v')
+        except Exception:
+            continue
+        if VERSION_TEXT.fullmatch(value):
+            return 'v' + value
+    return None
+
+
+def remote_tag(repo, tag):
+    remote = 'origin' if repo else DEFAULT_REMOTE
+    lines = git(repo, 'ls-remote', '--tags', remote, 'refs/tags/' + tag, 'refs/tags/' + tag + '^{}').splitlines()
+    refs = {line.split()[1]: line.split()[0] for line in lines if len(line.split()) == 2}
+    target = refs.get('refs/tags/' + tag + '^{}') or refs.get('refs/tags/' + tag)
+    if not target or not SHA.fullmatch(target):
+        raise RuntimeError('没有找到这次发布对应的版本。')
+    return target
+
+
 def check():
     repo = selected_repo()
+    route = choose_route(repo)
+    tag = latest_release(repo)
     branch = branch_of(repo) if repo else 'main'
     current = git(repo, 'rev-parse', 'HEAD') if repo else None
-    latest = remote_head(repo, branch)
+    latest = remote_tag(repo, tag) if tag else remote_head(repo, branch)
     # The installed App does not record the Git commit it was built from.
     # Even if the checkout is current it may need to be reapplied, so do not
     # claim the App is definitely current based on the checkout alone.
-    return {'supported': True, 'available': True,
+    return {'supported': True, 'available': True, 'route': ROUTE, 'mirror': route if ROUTE == 'mirror' else '',
+            **({'version': tag[1:]} if tag else {}),
             'unchangedCheckout': current is not None and current == latest}
 
 
@@ -147,6 +223,11 @@ def notes(repo, revision):
     version = git(repo, 'show', f'{revision}:VERSION', check=False).strip()
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,32}', version):
         return {'version': '', 'notes': ''}
+    # 发版分支的更新说明写在 desktop/windows/release-notes.md（GitHub 发布页用的同一份）。
+    release_notes = git(repo, 'show', f'{revision}:desktop/windows/release-notes.md', check=False)
+    picked = [m.group(1)[:240] for m in (re.match(r'^\s*[-*]\s+(.+)', raw) for raw in release_notes.splitlines()) if m][:5]
+    if picked:
+        return {'version': version, 'notes': '\n'.join(picked)}
     lines = []
     inside = False
     for raw in text.splitlines():
@@ -177,14 +258,17 @@ def prepare():
         staging = None
         stage_ref = None
         try:
+            choose_route(repo)
+            tag = latest_release(repo)
+            source = ('+refs/tags/' + tag) if tag else None
             if repo:
                 ensure_clean(repo)
                 branch = branch_of(repo)
                 old = git(repo, 'rev-parse', 'HEAD')
                 stage_ref = 'refs/pinkie-staged/' + uuid.uuid4().hex
-                run_progress(['git', '-C', str(repo), 'fetch', '--progress', 'origin',
-                              '+refs/heads/' + branch + ':' + stage_ref])
-                target = git(repo, 'rev-parse', stage_ref)
+                run_progress(['git'] + GIT_ROUTE + ['-C', str(repo), 'fetch', '--progress', '--no-tags', 'origin',
+                              (source or '+refs/heads/' + branch) + ':' + stage_ref])
+                target = git(repo, 'rev-parse', stage_ref + '^{commit}')
                 if not SHA.fullmatch(target) or subprocess.run(['git','-C',str(repo),'merge-base','--is-ancestor',old,target],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
                     raise RuntimeError('更新分支不能安全快进，原文件没有改变。')
                 ensure_clean(repo)
@@ -192,9 +276,15 @@ def prepare():
                     raise RuntimeError('源码版本已改变，请重新下载。')
                 kind = 'existing'
             else:
-                branch, old = 'main', ''
+                branch, old = ('release' if tag else 'main'), ''
                 staging = Path(tempfile.mkdtemp(prefix='pinkie-repository-', dir=UPDATES))
-                run_progress(['git','clone','--progress','--branch',branch,'--single-branch',DEFAULT_REMOTE,str(staging)])
+                # 国内线路只拉最新一版（--depth 1）：完整历史经加速代理太大，容易半路被掐断；以后的 fetch 照常快进。
+                shallow = ['--depth', '1'] if GIT_ROUTE else []
+                run_progress(['git'] + GIT_ROUTE + ['clone','--progress',*shallow,'--branch',tag or branch,'--single-branch',DEFAULT_REMOTE,str(staging)])
+                if tag:
+                    # 按 tag 克隆是游离的 HEAD；建一个本地 release 分支，下次更新照常快进。
+                    git(staging, 'checkout', '-q', '-B', 'release')
+                # 克隆下来的 origin 仍写官方地址：以后换回官方线路不用改配置。
                 repo = staging.resolve()
                 target = git(repo, 'rev-parse', 'HEAD')
                 if not SHA.fullmatch(target):
@@ -203,7 +293,7 @@ def prepare():
             emit({'type':'progress','event':{'stage':'verify'}})
             git(repo, 'cat-file', '-e', f'{target}^{{commit}}')
             info = notes(repo, target)
-            manifest = {'kind':kind,'repo':str(repo),'branch':branch,'old':old,'target':target,'ref':stage_ref}
+            manifest = {'kind':kind,'repo':str(repo),'branch':branch,'old':old,'target':target,'ref':stage_ref,'route':ROUTE}
             fd, temporary = tempfile.mkstemp(prefix='prepared-', dir=UPDATES)
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as out:
@@ -235,7 +325,7 @@ def apply():
         ensure_clean(repo)
         if branch_of(repo) != branch or git(repo,'rev-parse','HEAD') != old:
             raise RuntimeError('源码版本已改变，请重新下载。')
-        if git(repo,'rev-parse',stage_ref) != target:
+        if git(repo,'rev-parse',stage_ref + '^{commit}') != target:
             raise RuntimeError('暂存的版本已改变，请重新下载。')
         git(repo,'cat-file','-e',f'{target}^{{commit}}')
         if subprocess.run(['git','-C',str(repo),'merge-base','--is-ancestor',old,target],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:

@@ -2149,6 +2149,14 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   animation: pinkieWatchdogRecovered 1.8s ease-out both;
 }
 
+/* 断线只留顶部这一条碧琪提示：原生的「Gateway 连接已断开 / 立即重试」胶囊和
+   聊天区黄色「已断开与网关的连接。」都在说同一件事，重复且出戏。
+   网关自己会重连；顶部提示不在时（非聊天页）原生胶囊照常显示。 */
+html[data-laolao-watchdog-state] .connection-banner { display: none !important; }
+html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.chat > .callout:not(.danger):not(.info):not(.warn):not(.success) {
+  display: none !important;
+}
+
 @keyframes pinkieWatchdogRibbon {
   0%, 100% { opacity: .82; box-shadow: 0 8px 24px rgba(164, 62, 117, .13), inset 0 1px rgba(255, 255, 255, .95); }
   50% { opacity: 1; box-shadow: 0 10px 28px rgba(164, 62, 117, .23), inset 0 1px rgba(255, 255, 255, .98); }
@@ -5131,18 +5139,8 @@ html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__compose
 }
 html:not([data-laolao-plain-composer]) .agent-chat__input openclaw-tooltip { display: contents !important; }
 
-@media (max-width: 640px) {
-  /* 小窗口换行，但各组内部的顺序保持一致。 */
-  html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control {
-    grid-row: 3 !important;
-    grid-column: 1 / 11;
-    min-width: 0;
-    max-width: 100%;
-  }
-  html:not([data-laolao-plain-composer]) .agent-chat__input :is(.laolao-deep-think-btn, .laolao-context-viewer, .context-usage, .laolao-context-compact-btn) { grid-row: 3 !important; }
-  html:not([data-laolao-plain-composer]) .agent-chat__input > div:not([class]) { grid-column: 9 / -1; min-width: 0; }
-  html:not([data-laolao-plain-composer]) .agent-chat__input > .agent-chat__composer-status-stack { grid-row: 4 !important; }
-}
+/* 窄聊天栏（含模式双开的半屏）的排法统一放在 laolao-ui-subtraction.css 的 @container pinkiechat 里，
+   这里不再按窗口宽度另拆三行。 */
 
 /* 第 2 行控件统一成透明的小图标 / 文字，悬停才出底 */
 html:not([data-laolao-plain-composer]) .agent-chat__input :is(
