@@ -6,6 +6,19 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import plugin,{CleKkAuditLog,CleKkSupervisor,CompactionHandoffStore,CompletionIntegrityGuard,FileRunStore,ModeArchitecture,ModelUsageLedger,TierContinuation,UpstreamWatchdog,WatchdogJobStore,TIER_RETRY_LIMITS,buildDeliberationPlan,classifyDeliberationTask,createCuaComputerTool,deliberationRequirements,hasEvidenceBackedCritique,isTransientFailure,modeForContext,sessionCheckpointRelative,validateJudgeSelection} from '../services/mode-architecture/index.mjs';
 
+// Never let a test write into the user's real state. When these tests run from
+// a shell the gateway started (e.g. 碧琪 running them in project mode), the
+// inherited PINKIE_MANAGED_GATEWAY=1 made UpstreamWatchdog persist fake retry
+// leases under ~/Library/Application Support/SuperPinkie, and the real App then
+// "resumed" 11 nonexistent sessions on every launch (11-04 startup lag).
+delete process.env.PINKIE_MANAGED_GATEWAY;
+delete process.env.OPENCLAW_SERVICE_KIND;
+{
+  const testStateRoot=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-test-state-'));
+  process.env.PINKIE_STATE_ROOT=testStateRoot;
+  process.on('exit',()=>fs.rmSync(testStateRoot,{recursive:true,force:true}));
+}
+
 function workspace(t,label){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mode-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
