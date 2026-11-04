@@ -108,6 +108,15 @@ class ReplacerTest(unittest.TestCase):
         self.assertIn("ExecutablePath.StartsWith($prefix", helper)
         self.assertIn("install folder is still in use", helper)
 
+    def test_health_marker_is_not_enough_when_an_old_gateway_reappears(self):
+        helper = WindowsUpdater._directory_helper_source()
+        health = helper.index("new version did not become healthy")
+        validate = helper.index("  Confirm-NewInstallGateway\n", health)
+        remove_backup = helper.index("Remove-Item -LiteralPath $Backup -Recurse", validate)
+        self.assertLess(health, validate)
+        self.assertLess(validate, remove_backup)
+        self.assertIn("new version attached to a different install gateway", helper)
+
     def test_both_replacers_record_a_rollback_for_the_next_launch(self):
         for helper in (WindowsUpdater._helper_source(), WindowsUpdater._directory_helper_source()):
             self.assertIn("[string]$Version = ''", helper)
@@ -135,7 +144,8 @@ class ReplacerTest(unittest.TestCase):
             updater = WindowsUpdater(Path(temp), executable=exe)
             updater.prepared = {"payload": str(payload), "sha256": updater._file_hash(payload), "version": "2.5.27"}
             with mock.patch.object(windows_desktop, "state_root", return_value=Path(temp) / "state"), \
-                    mock.patch.object(windows_desktop.subprocess, "Popen") as popen:
+                    mock.patch.object(windows_desktop.subprocess, "Popen") as popen, \
+                    mock.patch.object(WindowsUpdater, "_wait_for_replacer", return_value=True):
                 self.assertTrue(updater.launch_replacer()["started"])
             command = popen.call_args.args[0]
             self.assertEqual("2.5.27", command[command.index("-Version") + 1])

@@ -247,7 +247,7 @@ class Store:
         if 'archived' not in {row['name'] for row in self.db.execute('PRAGMA table_info(rooms)')}:
             if self.db.execute('SELECT COUNT(*) FROM rooms').fetchone()[0]:
                 backup_path = self.root / ('before-room-management-' + str(time.time_ns()) + '.sqlite3')
-                with sqlite3.connect(str(backup_path)) as backup:
+                with contextlib.closing(sqlite3.connect(str(backup_path))) as backup:
                     self.db.backup(backup)
                 os.chmod(backup_path, 0o600)
             self.db.execute('ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')

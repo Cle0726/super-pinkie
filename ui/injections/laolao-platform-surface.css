@@ -8,6 +8,7 @@
 }
 :root {
   --pinkie-ui-font: "Pinkie UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --cle-sans: var(--pinkie-ui-font);
 }
 html body,
 html .shell,
@@ -16,5 +17,25 @@ html .shell :is(.chat-text, .chat-text p, .chat-text li, .nav, .nav-item, .chat-
 html #pinkie-study-desk {
   font-family: var(--pinkie-ui-font) !important;
 }
+/* These labels set their own font shorthand, so a font on their parent does
+   not reach them. Use the bundled face for actual glyphs, not just a loaded
+   FontFace entry. Keep the deliberate book-face welcome and code/math alone. */
+html body :is(.laolao-mode-button__label, .laolao-mode-menu__title, .laolao-mode-menu__desc,
+  .topbar-brand__title, .dashboard-header__breadcrumb-link, .sidebar-recent-session__title,
+  .pinkie-buddy__caption, .pinkie-buddy__bubble, .pinkie-buddy__hint,
+  .pinkie-buddy-settings, .pinkie-buddy-settings__heading h2,
+  .laolao-startup-home__item-title, .laolao-startup-home__item-meta,
+  .chat-controls__inline-select-label, .pinkie-model-current__name) {
+  font-family: var(--pinkie-ui-font) !important;
+}
 /* Preserve formula, terminal and code fonts. */
 html body :is(pre, pre code) { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace !important; }
+
+/* In the Windows multi-page study desk, each page's close button sits over
+   the right edge of the date row. Reserve its hit area instead of letting it
+   cover the nearby calendar link. A single page has no close button. */
+html[data-pinkie-platform="windows"] #pinkie-study-desk.pk-ink:not([data-pages="1"])
+  .desk-page[data-view="today"] .desk-date-row {
+  box-sizing: border-box;
+  padding-right: 42px;
+}
