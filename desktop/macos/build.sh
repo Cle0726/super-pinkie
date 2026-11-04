@@ -223,10 +223,15 @@ cp "$REPO_ROOT/services/watchdog/ai.openclaw.watchdog.plist.in" "$CONTENTS/Resou
 ditto "$REPO_ROOT/services/chatgpt-collab" "$CONTENTS/Resources/SuperPinkie/services/chatgpt-collab"
 # The normal setup script looks for skills/ and would copy over users'
 # workspace versions. Keep the packaged set in its own low-priority root.
-for skill in deep-think pinkie-deep-research web-gpt-collab; do
+# Community skills (skills/community-skills.json) ship beside them; the router in
+# services/mode-architecture/skill-routes.mjs hands their paths to the model.
+COMMUNITY_SKILLS="$("$NODE_BIN" -e 'console.log(require(process.argv[1]).skills.map(s => s.name).join(" "))' "$REPO_ROOT/skills/community-skills.json")"
+[[ -n "$COMMUNITY_SKILLS" ]] || { echo "community skill manifest is empty" >&2; exit 1; }
+for skill in deep-think pinkie-deep-research web-gpt-collab pinkie-skill-library $COMMUNITY_SKILLS; do
   [[ -f "$REPO_ROOT/skills/$skill/SKILL.md" ]] || { echo "missing skill: $skill" >&2; exit 1; }
-  ditto "$REPO_ROOT/skills/$skill" "$CONTENTS/Resources/SuperPinkie/bundled-skills/$skill"
+  ditto --norsrc --noextattr "$REPO_ROOT/skills/$skill" "$CONTENTS/Resources/SuperPinkie/bundled-skills/$skill"
 done
+cp "$REPO_ROOT/skills/THIRD_PARTY_SKILLS.md" "$CONTENTS/Resources/SuperPinkie/bundled-skills/THIRD_PARTY_SKILLS.md"
 
 # The shipped App owns its runtime. User configuration, model keys, history and
 # workspaces remain in ~/.openclaw and are deliberately not copied into it.

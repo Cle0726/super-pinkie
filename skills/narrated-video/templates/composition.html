@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=%%W%%, height=%%H%%" />
+<title>%%TITLE%%</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  @font-face { font-family: "Manrope"; font-weight: 500; src: url("fonts/manrope-500.woff2") format("woff2"); }
+  @font-face { font-family: "Manrope"; font-weight: 600; src: url("fonts/manrope-600.woff2") format("woff2"); }
+  @font-face { font-family: "Manrope"; font-weight: 700; src: url("fonts/manrope-700.woff2") format("woff2"); }
+  @font-face { font-family: "Manrope"; font-weight: 800; src: url("fonts/manrope-800.woff2") format("woff2"); }
+  :root { --ink: #12172b; --term: #201e21; --u: %%U%%; }
+  html, body { margin: 0; background: #e8edf2; font-family: "Manrope", system-ui, sans-serif; color: var(--ink); }
+  #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #e8edf2; }
+  .clip { position: absolute; inset: 0; overflow: hidden; }
+  /* One backdrop for the whole video with a very slow push-in, so it never jumps at a cut: an image, or a gradient. */
+  .world { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 34%; }
+  .world.grad { background: linear-gradient(135deg, #cfe0f7 0%, #dcd6f5 55%, #efe4f3 100%); }
+  /* Narrated layout: the 1200x792 window is scaled and shifted left so the talking-head bubble has its own column. */
+  .win { position: absolute; left: %%WIN_X%%px; top: %%WIN_Y%%px; width: 1200px; border-radius: 12px; overflow: hidden; background: #fff;
+    transform: scale(%%WIN_S%%); transform-origin: 0 0;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 1px 0 1px rgba(20, 35, 60, 0.1), 0 40px 100px rgba(30, 50, 80, 0.34); }
+  .titlebar { height: 42px; background: linear-gradient(#f7f7f8, #ececee); border-bottom: 1px solid #d5d5da; display: flex; align-items: center; padding: 0 14px; gap: 8px; box-sizing: border-box; }
+  .titlebar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15); }
+  .titlebar i:nth-child(2) { background: #febc2e; } .titlebar i:nth-child(3) { background: #28c840; }
+  .titlebar .url { margin: 0 auto; font-family: system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #4a4a52; background: #e2e2e6; padding: 4px 16px; border-radius: 7px; transform: translateX(-30px); }
+  .content { position: relative; width: 1200px; height: 750px; overflow: hidden; background: #fff; }
+  .canvas1440 { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform: scale(0.833333); transform-origin: 0 0; }
+  .zoom-outer { position: absolute; inset: 0; transform-origin: 720px 450px; will-change: transform; }
+  .zoom-inner { position: absolute; inset: 0; will-change: transform; }
+  .zoom-inner img { display: block; width: 1440px; height: 900px; }
+  .zoom-inner img.tall { height: auto; }
+  .zoom-inner.stack img { position: absolute; left: 0; top: 0; opacity: 0; }
+  .zoom-inner.stack img:first-child { opacity: 1; }
+  /* Pointer: lives inside a camera layer in screenshot CSS px, tip at its GSAP (x, y). Counter-scaled by zoom^-0.5 in JS. */
+  .cur { position: absolute; left: 0; top: 0; width: 26px; height: 36px; margin: -2.2px 0 0 -2.5px; opacity: 0; z-index: 20; transform-origin: 2.5px 2.2px; will-change: transform; }
+  .cur-p { width: 100%; height: 100%; transform-origin: 2.5px 2.2px; }
+  .cur svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
+  .rip { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; z-index: 19; opacity: 0;
+    background: rgba(44, 95, 214, 0.2); border: 2px solid rgba(44, 95, 214, 0.8); box-sizing: border-box; transform: scale(0.3);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9); } /* the white halo keeps the ring visible on the app's blue buttons */
+  .ovl { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+  .fade { position: absolute; inset: 0; opacity: 0; }
+  /* Screen recordings: the pane camera works in 1200x750 pane pixels; a terminal pane is the terminal's own grey so overscroll is invisible. */
+  .vz-o { position: absolute; inset: 0; transform-origin: 600px 375px; will-change: transform; background: var(--term); }
+  .vz-o.page { background: #fff; }
+  .vz-i { position: absolute; inset: 0; will-change: transform; }
+  .rec { position: absolute; inset: 0; width: 1200px; height: 750px; object-fit: cover; }
+  /* End card: an image (a 16:10 slide such as the product's OG image) in the window's place: same edges, centre, corners, shadow. */
+  .og { position: absolute; left: %%WIN_X%%px; top: calc(%%WIN_Y%%px + 21px * %%WIN_S%%); width: 1200px; height: 750px; border-radius: 12px; overflow: hidden;
+    transform: scale(%%WIN_S%%); transform-origin: 0 0; opacity: 0; background: #e9eef2;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 1px 0 1px rgba(20, 35, 60, 0.1), 0 40px 100px rgba(30, 50, 80, 0.34); }
+  .og img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .label { position: absolute; left: %%LABEL_X%%px; bottom: calc(30px * var(--u)); width: max-content; max-width: calc(1000px * var(--u)); padding: calc(26px * var(--u)) calc(42px * var(--u)) calc(30px * var(--u)); border-radius: calc(18px * var(--u)); text-align: center;
+    background: #ffffff; color: var(--ink); border: 1px solid #d8dde6; box-shadow: 0 calc(24px * var(--u)) calc(60px * var(--u)) rgba(30, 50, 80, 0.3); opacity: 0; }
+  .label h2 { margin: 0; font-size: calc(58px * var(--u)); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; color: inherit; }
+  .label h2.long { font-size: calc(50px * var(--u)); }
+  /* The webcam circle is composited here by ffmpeg after the render (composite.py uses the same box). */
+  .cam-slot { position: absolute; left: %%CAM_X%%px; top: %%CAM_Y%%px; width: %%CAM_D%%px; height: %%CAM_D%%px; border-radius: 50%; background: #1b1f2a;
+    box-shadow: 0 0 0 calc(5px * var(--u)) #ffffff, 0 calc(22px * var(--u)) calc(56px * var(--u)) rgba(30, 50, 80, 0.38); }
+%%EXTRA_CSS%%
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="%%W%%" data-height="%%H%%" data-duration="%%TOTAL%%">
+
+%%SECTIONS%%
+</div>
+
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const W = 1440, H = 900, K = 1; // camera space of a 1440x900 screenshot inside the window (independent of the canvas size)
+%%TIMES%%
+  // Camera over a 1440-wide screenshot (imgH tall): frame a CSS-px box, clamped so no blank edge shows.
+  function frame(box, maxScale, imgH = 900) {
+    const [x, y, w, h] = box;
+    let s = Math.min(W / w, H / h) * 0.92;
+    if (maxScale) s = Math.min(s, maxScale);
+    s = Math.max(s, 1);
+    const tx = Math.max(-(W / 2 - W / (2 * s)), Math.min(W / 2 - W / (2 * s), W / 2 - (x + w / 2)));
+    const ty = Math.max(H / (2 * s) + H / 2 - imgH, Math.min(H / 2 - H / (2 * s), H / 2 - (y + h / 2)));
+    return { s, tx, ty };
+  }
+  // The pointer in a layer grows a little when the camera punches in (zoom^0.5), never the full zoom.
+  function curScale(i, s, at, dur, ease) {
+    const el = document.querySelector(i + ' > .cur'); if (!el) return;
+    if (dur) tl.to(el, { scale: Math.pow(s, -0.5), duration: dur, ease }, at); else tl.set(el, { scale: Math.pow(s, -0.5) }, at);
+  }
+  function setFrame(o, i, box, maxScale, imgH) { const f = frame(box, maxScale, imgH); tl.set(o, { scale: f.s }, 0); tl.set(i, { x: f.tx, y: f.ty }, 0); curScale(i, f.s, 0); }
+  function moveTo(o, i, box, at, dur, ease, maxScale, imgH) {
+    const f = frame(box, maxScale, imgH);
+    tl.to(o, { scale: f.s, duration: dur, ease }, at); tl.to(i, { x: f.tx, y: f.ty, duration: dur, ease }, at);
+    curScale(i, f.s, at, dur, ease);
+  }
+  // Same camera for a recording pane (1200x750). free: allow centring past the bottom edge (pane is terminal grey).
+  function frameV(box, maxScale, free) {
+    const PW = 1200, PH = 750; const [x, y, w, h] = box;
+    let s = Math.min(PW / w, PH / h) * 0.92; if (maxScale) s = Math.min(s, maxScale); s = Math.max(s, 1);
+    const tx = Math.max(-(PW / 2 - PW / (2 * s)), Math.min(PW / 2 - PW / (2 * s), PW / 2 - (x + w / 2)));
+    let ty = PH / 2 - (y + h / 2);
+    if (!free) ty = Math.max(-(PH / 2 - PH / (2 * s)), Math.min(PH / 2 - PH / (2 * s), ty));
+    return { s, tx, ty };
+  }
+  function setFrameV(o, i, box, maxScale, free) { const f = frameV(box, maxScale, free); tl.set(o, { scale: f.s }, 0); tl.set(i, { x: f.tx, y: f.ty }, 0); }
+  function moveToV(o, i, box, at, dur, ease, maxScale, free) { const f = frameV(box, maxScale, free); tl.to(o, { scale: f.s, duration: dur, ease }, at); tl.to(i, { x: f.tx, y: f.ty, duration: dur, ease }, at); }
+  // Starts 0.05 s late so it never begins on the frame a camera move ends (a relative tween must not start while another
+  // writer of the same property is active, or a render worker that starts mid-video can place it differently).
+  function drift(i, px, at, dur, axis = 'y') { tl.to(i, { [axis]: '-=' + px, duration: Math.max(0.1, dur - 0.1), ease: 'none' }, at + 0.05); }
+  function fadeIn(sel, at, dur = 0.3) { tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: dur }, at); }
+  function show(sel, at, dur = 0.4) { tl.to(sel, { opacity: 1, duration: dur, ease: 'power1.inOut' }, at); }
+  function hide(sel, at, dur = 0.4) { tl.to(sel, { opacity: 0, duration: dur, ease: 'power1.inOut' }, at); }
+  function out(k, dur = 0.3) { tl.to(`#s-${k} .fade`, { opacity: 1, duration: dur, ease: 'power1.in' }, E(k) - dur); }
+  function label(sel, at, until) {
+    tl.fromTo(sel, { opacity: 0, y: 22, xPercent: -50 }, { opacity: 1, y: 0, xPercent: -50, duration: 0.45, ease: 'power3.out' }, at);
+    tl.to(sel, { opacity: 0, y: 12, duration: 0.35, ease: 'power2.in' }, until - 0.35);
+  }
+  // Pointer helpers. i is the camera layer ('#cpf-i'); x, y are screenshot CSS px. Moves use different eases on x and y
+  // so the path bows slightly, like a hand on a trackpad. Clicks press the pointer and drop a ripple at the tip.
+  const CUR = {}, CLICKS = [];
+  function cursorOf(i) { const id = i.slice(1); return CUR[id] || (CUR[id] = { el: `#${id}-cur` }); }
+  function cAt(i, x, y, at) { tl.set(cursorOf(i).el, { x, y }, at); }
+  function cShow(i, at, dur = 0.2) { tl.to(cursorOf(i).el, { opacity: 1, duration: dur, ease: 'power1.out' }, at); }
+  function cOn(i, at) { tl.set(cursorOf(i).el, { opacity: 1 }, at); }
+  function cHide(i, at, dur = 0.25) { tl.to(cursorOf(i).el, { opacity: 0, duration: dur, ease: 'power1.in' }, at); }
+  function cMove(i, x, y, at, dur) { const c = cursorOf(i).el; tl.to(c, { x, duration: dur, ease: 'power2.inOut' }, at); tl.to(c, { y, duration: dur, ease: 'sine.inOut' }, at); }
+  function cClick(i, x, y, at) {
+    const c = cursorOf(i).el;
+    tl.to(c + ' .cur-p', { scale: 0.8, duration: 0.07, ease: 'power2.out' }, at);
+    tl.to(c + ' .cur-p', { scale: 1, duration: 0.16, ease: 'power2.out' }, at + 0.07);
+    CLICKS.push({ i, x, y, at });
+  }
+  // Every click gets the same pulse. It is drawn in the scene's overlay (above all camera layers, so a page that fades in
+  // right after the click cannot cover it) at the click point's on-screen position, read from the camera at that instant.
+  function placeRipples() {
+    const pools = {};
+    const clicks = CLICKS.slice().sort((a, b) => a.at - b.at);
+    for (const k of clicks) {
+      tl.seek(k.at);
+      const inner = document.querySelector(k.i), outer = inner.parentElement;
+      const s = gsap.getProperty(outer, 'scale'), tx = gsap.getProperty(inner, 'x'), ty = gsap.getProperty(inner, 'y');
+      const scene = inner.closest('section').id.slice(2), pool = pools[scene] || (pools[scene] = { n: 0 });
+      Object.assign(k, { r: `#${scene}-q${pool.n++ % 4}`, qx: 720 + s * (k.x + tx - 720), qy: 450 + s * (k.y + ty - 450), g: Math.sqrt(s) });
+    }
+    // A set then a to (not a fromTo): both record the state they replace, so seeking back before a click restores the
+    // hidden ripple instead of leaving it drawn.
+    for (const k of clicks) {
+      tl.set(k.r, { x: k.qx, y: k.qy, scale: 0.3 * k.g, opacity: 1 }, k.at);
+      tl.to(k.r, { opacity: 0, scale: 1.35 * k.g, duration: 0.55, ease: 'power2.out' }, k.at);
+    }
+    tl.seek(0);
+  }
+  function showFrame(sel, at) { tl.set(sel, { opacity: 1 }, at); }
+  // Real per-keystroke screenshots: frames from..to of a stack, one every `per` seconds.
+  function typeFrames(i, from, to, at, per) { for (let n = from; n <= to; n++) showFrame(`${i}-${n}`, at + (n - from) * per); }
+
+  // Backdrop: one slow push-in across the whole video.
+  tl.fromTo('#world', { scale: 1.0 }, { scale: 1.08, duration: TOTAL, ease: 'none' }, 0);
+
+%%CHOREO%%
+  placeRipples();
+  window.__timelines['main'] = tl;
+  tl.seek(0);
+</script>
+</body>
+</html>

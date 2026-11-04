@@ -1,0 +1,69 @@
+{
+  "_note": "随碧琪发布的社区技能（四个普通模式能用，无限制模式没有）。tools/skills/vendor_community_skills.py 按这份清单拉取、带上原许可证和来源。只收许可证允许再分发的；2026-11-04 逐个核过。 收录时给每个 SKILL.md 头部加一行 disable-model-invocation: true（不进系统技能清单，免得挤掉其他技能的说明；碧琪按活儿自动挑、或者从 pinkie-skill-library 目录里找；先生仍可以用 /技能名 直接调用），其余原样。",
+  "repos": {
+    "ui-ux-pro-max": {"repo": "nextlevelbuilder/ui-ux-pro-max-skill", "commit": "dd9a1b4", "license": "MIT", "licenseFile": "LICENSE"},
+    "anthropic": {"repo": "anthropics/skills", "commit": "ca45fc4", "license": "Apache-2.0（只收文件夹里带 LICENSE.txt 的；仓库整体没有许可证，doc-coauthoring 和 docx/pdf/pptx/xlsx 不收）", "licenseFile": "per-skill LICENSE.txt"},
+    "antv": {"repo": "antvis/Infographic", "commit": "5ae0d93", "license": "MIT", "licenseFile": "LICENSE"},
+    "hyperframes": {"repo": "heygen-com/hyperframes", "commit": "1ff4cef", "license": "Apache-2.0", "licenseFile": "LICENSE"},
+    "lemo": {"repo": "lemomo-ai/lemo-opuscar", "commit": "bebbbe1", "license": "MIT（样片 CC BY 4.0，署名 LemoLab）", "licenseFile": "LICENSE"},
+    "every-app": {"repo": "every-app/video-skills", "commit": "01afbd2", "license": "MIT", "licenseFile": "LICENSE"},
+    "neelshah": {"repo": "Neelshah1810/Claude-Video-Skills", "commit": "d164549", "license": "MIT", "licenseFile": "LICENSE"},
+    "superpowers": {"repo": "obra/superpowers", "commit": "22f0b46", "license": "MIT", "licenseFile": "LICENSE"},
+    "xhs": {"repo": "Beatatata/xhs-cover-templates", "commit": "381473f", "license": "MIT", "licenseFile": "LICENSE"}
+  },
+  "skills": [
+    {"name": "ui-ux-pro-max", "from": "ui-ux-pro-max", "path": ".claude/skills/ui-ux-pro-max", "zh": "做网页、App 界面前先查：按行业挑风格、配色、字体、UX 规则（带可搜索的数据表）"},
+    {"name": "design-system", "from": "ui-ux-pro-max", "path": ".claude/skills/design-system", "zh": "搭一整套设计系统：颜色、字号、间距、组件规范"},
+    {"name": "design", "from": "ui-ux-pro-max", "path": ".claude/skills/design", "zh": "通用视觉设计方法：版式、层级、留白、配色"},
+    {"name": "brand", "from": "ui-ux-pro-max", "path": ".claude/skills/brand", "zh": "logo 和品牌：配色、字体、用法规范一整套"},
+    {"name": "banner-design", "from": "ui-ux-pro-max", "path": ".claude/skills/banner-design", "zh": "横幅、头图、封面、广告图、电商主图的版式和尺寸"},
+    {"name": "slides", "from": "ui-ux-pro-max", "path": ".claude/skills/slides", "zh": "做 PPT / 演示稿：结构、每页怎么排"},
+    {"name": "ui-styling", "from": "ui-ux-pro-max", "path": ".claude/skills/ui-styling", "zh": "Tailwind / shadcn 的界面样式做法"},
+
+    {"name": "frontend-design", "from": "anthropic", "path": "skills/frontend-design", "zh": "做出有设计感、不俗气的前端页面"},
+    {"name": "canvas-design", "from": "anthropic", "path": "skills/canvas-design", "zh": "海报、印刷品、艺术感单张视觉（带一批可用字体）"},
+    {"name": "theme-factory", "from": "anthropic", "path": "skills/theme-factory", "zh": "给 PPT、文档、网页套一整套主题配色（10 套现成主题）"},
+    {"name": "algorithmic-art", "from": "anthropic", "path": "skills/algorithmic-art", "zh": "用代码做生成艺术、图案、粒子、纹理"},
+    {"name": "web-artifacts-builder", "from": "anthropic", "path": "skills/web-artifacts-builder", "zh": "复杂单页应用（React + 组件），打成一个 HTML"},
+    {"name": "webapp-testing", "from": "anthropic", "path": "skills/webapp-testing", "zh": "用浏览器自动点一遍网页、截图验证"},
+    {"name": "slack-gif-creator", "from": "anthropic", "path": "skills/slack-gif-creator", "zh": "做 GIF 动图、表情包（尺寸、帧数、体积都控好）"},
+
+    {"name": "infographic-creator", "from": "antv", "path": "skills/infographic-creator", "zh": "AntV 信息图：约 200 种现成版式（流程、时间轴、对比、层级……），写几行就出图"},
+    {"name": "infographic-syntax-creator", "from": "antv", "path": "skills/infographic-syntax-creator", "zh": "AntV 信息图的语法写法（infographic-creator 的细节）"},
+    {"name": "infographic-structure-creator", "from": "antv", "path": "skills/infographic-structure-creator", "zh": "自己设计新的信息图结构（现成版式不够时）"},
+    {"name": "infographic-item-creator", "from": "antv", "path": "skills/infographic-item-creator", "zh": "自己设计新的信息图条目样式（现成版式不够时）"},
+
+    {"name": "hyperframes", "from": "hyperframes", "path": "skills/hyperframes", "zh": "视频 / 动画总入口：用 HTML 做视频、渲染成 MP4"},
+    {"name": "hyperframes-cli", "from": "hyperframes", "path": "skills/hyperframes-cli", "zh": "HyperFrames 命令行：预览、检查、渲染"},
+    {"name": "hyperframes-registry", "from": "hyperframes", "path": "skills/hyperframes-registry", "zh": "约 400 件现成动效积木：转场、故障风、胶片、图表动画、地图"},
+    {"name": "media-use", "from": "hyperframes", "path": "skills/media-use", "zh": "配乐、音效、配音、字幕、抠图、调色素材一条龙"},
+    {"name": "slideshow", "from": "hyperframes", "path": "skills/slideshow", "zh": "照片 / PPT 做成视频、电子相册、卡点"},
+    {"name": "style-sampling", "from": "hyperframes", "path": "skills/style-sampling", "zh": "从参考图、网页里取风格"},
+    {"name": "reverse-any-video", "from": "hyperframes", "path": "skills/reverse-any-video", "zh": "照着一个现成视频拆解、复刻"},
+
+    {"name": "lemo-opuscar", "from": "lemo", "path": "plugin/skills/lemo-opuscar", "zh": "66 种用代码做的片子风格（水墨、油画、浮世绘、像素、纪录片……），首次使用自动下载风格库"},
+
+    {"name": "narrated-video", "from": "every-app", "path": "skills/narrated-video", "zh": "带旁白配音的讲述视频"},
+    {"name": "teaser-video", "from": "every-app", "path": "skills/teaser-video", "zh": "预告片、悬念片"},
+
+    {"name": "brand-film", "from": "neelshah", "path": "brand-film", "zh": "品牌片：宣言、品牌故事、logo 收尾"},
+    {"name": "data-story", "from": "neelshah", "path": "data-story", "zh": "数据会动的讲述视频、年度报告"},
+    {"name": "event-promo", "from": "neelshah", "path": "event-promo", "zh": "活动宣传、开业、促销、倒计时视频"},
+    {"name": "explainer-video", "from": "neelshah", "path": "explainer-video", "zh": "讲解 / 科普视频"},
+    {"name": "feature-update", "from": "neelshah", "path": "feature-update", "zh": "新功能、版本更新视频"},
+    {"name": "launch-film", "from": "neelshah", "path": "launch-film", "zh": "新品发布片"},
+    {"name": "motion-film", "from": "neelshah", "path": "motion-film", "zh": "动效短片、片头片尾、动态海报"},
+    {"name": "product-walkthrough", "from": "neelshah", "path": "product-walkthrough", "zh": "产品演示、功能演示视频"},
+    {"name": "social-ad", "from": "neelshah", "path": "social-ad", "zh": "竖屏短视频广告（抖音、视频号、Reels）"},
+    {"name": "testimonial-video", "from": "neelshah", "path": "testimonial-video", "zh": "口碑、好评、客户证言视频"},
+    {"name": "tutorial-video", "from": "neelshah", "path": "tutorial-video", "zh": "教程、手把手教学视频"},
+
+    {"name": "systematic-debugging", "from": "superpowers", "path": "skills/systematic-debugging", "zh": "排错：先复现、找根因、再修"},
+    {"name": "test-driven-development", "from": "superpowers", "path": "skills/test-driven-development", "zh": "写代码先写会失败的测试"},
+    {"name": "verification-before-completion", "from": "superpowers", "path": "skills/verification-before-completion", "zh": "说做完之前先拿到真凭据"},
+    {"name": "writing-plans", "from": "superpowers", "path": "skills/writing-plans", "zh": "大活先写计划，拆成能验证的小步"},
+    {"name": "executing-plans", "from": "superpowers", "path": "skills/executing-plans", "zh": "按写好的计划一步步做、每步验证"},
+
+    {"name": "xhs-cover-templates", "from": "xhs", "path": ".", "files": ["*.html", "塔塔的封面分类研究.md", "README.md"], "skillMd": "xhs-cover-templates.SKILL.md", "zh": "16 套小红书封面现成模板（亮 / 暗两版）"}
+  ]
+}

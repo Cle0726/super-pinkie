@@ -1,0 +1,39 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>%%TITLE%%</title>
+<style>
+[hidden]{display:none!important}
+:root{--bg:#fff;--fg:#1f2328;--muted:#59636e;--rule:#d1d9e0;--pending:#f6f8fa;--warn:#9a6700;color-scheme:light}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;padding-inline:16px;padding-block:32px 80px}
+main{max-width:860px;margin:0 auto}
+h1{font-size:2em;font-weight:600;margin:0 0 16px;padding-bottom:.3em;border-bottom:1px solid var(--rule);text-wrap:balance}
+h2{font-size:1.5em;font-weight:600;margin:40px 0 16px;padding-bottom:.3em;border-bottom:1px solid var(--rule)}
+h3{font-size:1.25em;font-weight:600;margin:32px 0 8px}
+h3 small{font-weight:400;font-size:14px;color:var(--muted);margin-left:6px}
+.sub{max-width:70ch}
+.over{color:var(--warn)}
+.onscreen{color:var(--muted);margin:0 0 8px}
+ul,ol{padding-left:2em;margin:8px 0 0}
+li+li{margin-top:.25em}
+.tip{border-left:.25em solid var(--rule);color:var(--muted);padding:0 1em;margin:12px 0 0}
+img.zoom{display:block;width:100%;cursor:zoom-in;border:1px solid var(--rule);border-radius:6px;margin:8px 0}
+.pending{background:var(--pending);border:1px solid var(--rule);border-radius:6px;color:var(--muted);font-size:14px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin:8px 0}
+details{margin-top:24px}
+summary{cursor:pointer;font-weight:600}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+#lb img{max-width:100%;max-height:100%;border:0;margin:0}
+</style>
+<main>
+<h1>%%TITLE%%</h1>
+<p class="sub">%%SUBTITLE%%</p>
+%%BODY%%
+</main>
+<div id="lb" hidden><img alt=""></div>
+<script>
+const lb = document.getElementById('lb'), lbImg = lb.querySelector('img');
+document.addEventListener('click', (e) => {
+  if (e.target.matches('img.zoom')) { lbImg.src = e.target.src; lbImg.alt = e.target.alt; lb.hidden = false; }
+  else if (e.target.closest('#lb')) lb.hidden = true;
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lb.hidden = true; });
+</script>

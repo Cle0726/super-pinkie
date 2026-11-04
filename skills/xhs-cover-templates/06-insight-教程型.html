@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=375">
+<title>06 教程型</title>
+<style>
+  html { display:flex; justify-content:center; align-items:center; min-height:100vh; background:#E5E5E5; }
+  :root, [data-theme="light"] {
+    --bg: #FFFFFF;
+    --text-primary: #1A1A1A;
+    --text-muted: #888888;
+    --highlight-bg: #0B62DB;
+    --highlight-text: #FFFFFF;
+    --card-bg: #F8F8F8;
+    --step-num-bg: #1A1A1A;
+    --step-num-text: #FFFFFF;
+    --tool-bg: #EEE9FF;
+    --tool-text: #6B5CE7;
+    --preview-bg: #F0F0F0;
+    --brand-color: rgba(0,0,0,0.3);
+  }
+  [data-theme="dark"] {
+    --bg: #0D0D0D;
+    --text-primary: #F0F0F0;
+    --text-muted: #666666;
+    --highlight-bg: #0B62DB;
+    --highlight-text: #FFFFFF;
+    --card-bg: #1A1A1A;
+    --step-num-bg: #60A5FA;
+    --step-num-text: #FFFFFF;
+    --tool-bg: #1A1540;
+    --tool-text: #A48FFF;
+    --preview-bg: #1E1E1E;
+    --brand-color: rgba(255,255,255,0.25);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:375px; height:500px; overflow:hidden;
+    background:var(--bg);
+    font-family:"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; flex-shrink:0;
+  }
+  .canvas {
+    width:375px; height:500px; background:var(--bg);
+    display:flex; flex-direction:column;
+    justify-content:center;
+    padding:22px 22px;
+  }
+  .brand { font-size:10px; font-weight:700; color:var(--brand-color); letter-spacing:0.2em; text-transform:uppercase; margin-bottom:14px; opacity:0.55; }
+  .hero { margin-bottom:18px; }
+  .hero-num { font-size:48px; font-weight:900; color:var(--text-primary); line-height:1.0; letter-spacing:-1px; display:inline; }
+  .hero-unit { font-size:28px; font-weight:900; color:var(--text-primary); display:inline; letter-spacing:-0.5px; }
+  .hero-sub { font-size:24px; font-weight:900; color:var(--text-primary); line-height:1.15; margin-top:2px; letter-spacing:-0.5px; }
+  .hero-sub .hl { display:inline; background:var(--highlight-bg); color:var(--highlight-text); padding:1px 4px 2px; border-radius:3px; }
+  /* 步骤 */
+  .steps { display:flex; flex-direction:column; gap:10px; }
+  .step {
+    background:var(--card-bg); border-radius:10px; padding:10px 12px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .step-num {
+    width:26px; height:26px; border-radius:50%;
+    background:var(--step-num-bg); color:var(--step-num-text);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:900; flex-shrink:0;
+  }
+  .step-body { flex:1; }
+  .step-title { font-size:14px; font-weight:700; color:var(--text-primary); line-height:1.3; }
+  .step-desc { font-size:12px; color:var(--text-muted); line-height:1.35; margin-top:1px; }
+  .step-tag { font-size:10px; font-weight:700; color:var(--tool-text); background:var(--tool-bg); padding:2px 6px; border-radius:14px; white-space:nowrap; flex-shrink:0; }
+  /* 效果预览条 */
+  .preview {
+    margin-top:12px; background:var(--preview-bg); border-radius:8px;
+    padding:10px 12px; display:flex; align-items:center; gap:8px;
+  }
+  .preview-icon { font-size:16px; }
+  .preview-text { font-size:12px; color:var(--text-muted); }
+  .preview-text strong { color:var(--text-primary); font-weight:700; }
+
+  /* Editor toolbar */
+  body { height: auto !important; min-height: 100vh; }
+  .toolbar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:#fff; border-top:1px solid #e5e5e5;
+    padding:10px 14px; display:flex; align-items:center;
+    gap:12px; flex-wrap:wrap; z-index:999;
+    font-family:"PingFang SC",sans-serif; font-size:11px;
+    box-shadow:0 -2px 8px rgba(0,0,0,0.06);
+  }
+  .tool-group { display:flex; align-items:center; gap:4px; }
+  .tool-group label { color:#666; white-space:nowrap; font-size:11px; }
+  .tool-group input[type="color"] { width:24px; height:24px; border:1px solid #ddd; border-radius:6px; cursor:pointer; padding:0; }
+  .tool-group input[type="range"] { width:70px; accent-color:#0B62DB; }
+  .toolbar button {
+    background:#0B62DB; color:#fff; border:none;
+    padding:7px 14px; border-radius:8px; font-size:12px;
+    font-weight:600; cursor:pointer; margin-left:auto;
+  }
+  .toolbar button:hover { background:#0950b0; }
+  [contenteditable]:hover { outline:1px dashed rgba(11,98,219,0.3); border-radius:3px; }
+  [contenteditable]:focus { outline:2px solid rgba(11,98,219,0.5); border-radius:3px; background:rgba(11,98,219,0.03); }
+
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="brand" contenteditable="true">TATALAB · TUTORIAL</div>
+  <div class="hero">
+    <div><span class="hero-num" contenteditable="true">3</span><span class="hero-unit">步搞定</span></div>
+    <div class="hero-sub" contenteditable="true">用Obsidian搭建<br>你的<span class="hl">AI知识库</span></div>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title" contenteditable="true">安装插件三件套</div>
+        <div class="step-desc">Dataview + Templater + Smart Connections</div>
+      </div>
+      <div class="step-tag">Obsidian</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title" contenteditable="true">设计知识目录</div>
+        <div class="step-desc">收集→加工→输出，三层文件夹结构</div>
+      </div>
+      <div class="step-tag">架构</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title" contenteditable="true">让Cola接管整理</div>
+        <div class="step-desc">剪藏一键归档，每天自动知识简报</div>
+      </div>
+      <div class="step-tag">Cola AI</div>
+    </div>
+  </div>
+  <div class="preview">
+    <span class="preview-icon">📚</span>
+    <span class="preview-text"><strong>3个月</strong>归档 400+ 笔记，检索 &lt; 3秒</span>
+  </div>
+</div>
+<script>
+  window.addEventListener('message', e => {
+    if (e.data && e.data.theme) document.documentElement.setAttribute('data-theme', e.data.theme);
+  });
+</script>
+
+<div class="toolbar" id="toolbar">
+  <div class="tool-group">
+    <label>背景</label>
+    <input type="color" id="ctl-bg" value="#FFFFFF" oninput="document.querySelector('.canvas').style.background=this.value">
+  </div>
+  <div class="tool-group">
+    <label>文字</label>
+    <input type="color" id="ctl-text" value="#1A1A1A" oninput="document.querySelectorAll('.canvas [contenteditable]').forEach(e=>e.style.color=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>强调</label>
+    <input type="color" id="ctl-accent" value="#0B62DB" oninput="document.querySelectorAll('.hl,.highlight-bg,.accent,.tag-hl,.badge').forEach(e=>e.style.background=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>标题 <span id="sz-val">36</span></label>
+    <input type="range" id="ctl-size" min="20" max="64" value="36" oninput="document.getElementById('sz-val').textContent=this.value;document.querySelectorAll('.line,.main-title,.main-title-cn,.main-title-line1,.main-title-line2,.main-title-line3,.title,.header-title,.quote-text,.hero-num').forEach(e=>e.style.fontSize=this.value+'px')">
+  </div>
+  <div class="tool-group">
+    <label>间距 <span id="pd-val">28</span></label>
+    <input type="range" id="ctl-pad" min="12" max="44" value="28" oninput="document.getElementById('pd-val').textContent=this.value;document.querySelector('.canvas').style.padding=this.value+'px'">
+  </div>
+  <button onclick="exportPNG()">📥 导出PNG</button>
+</div>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script>
+function exportPNG(){
+  const tb=document.getElementById('toolbar');
+  tb.style.display='none';
+  html2canvas(document.querySelector('.canvas'),{scale:3,useCORS:true,backgroundColor:null}).then(c=>{
+    tb.style.display='flex';
+    const a=document.createElement('a');
+    a.download='cover-'+Date.now()+'.png';
+    a.href=c.toDataURL('image/png');
+    a.click();
+  }).catch(()=>{tb.style.display='flex';alert('导出失败，请重试');});
+}
+</script>
+
+</body>
+</html>

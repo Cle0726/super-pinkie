@@ -4,6 +4,7 @@ import {
   KIND_IDS, WORK_KINDS, classifyWorkKind, evidenceSignals, evidenceGaps, refineKinds, kindRoles, kindPlanSection,
   workStages, workRoleTask, workRoleGate, hasEvidenceBackedReview, artifactPaths, entriesFromMessages, linkBackgroundRuns,
   solverModeFor, adaptiveHint, truncatedFinal, clipToolOutput, producedPaths, roleFromLabel, milestoneCheck, legacyKinds,
+  WHILE_WAITING, waitingSection,
 } from '../services/mode-architecture/work-kinds.mjs';
 
 // ---------- 分类：真实说法 ----------
@@ -70,10 +71,14 @@ const CORPUS = [
   ['帮我剪掉视屏开头的 5 秒', 'video_motion'],
   ['make a 15 second intro video for my channel', 'video_motion'],
   ['给视频加中文字幕', 'video_motion'],
+  // 11-04 技能路由实测：以前被当成闲聊
+  ['剪一个30秒的抖音广告 卖咖啡', 'video_motion'],
+  ['帮我配个bgm', 'video_motion'],
   // document
   ['帮我做个 5 页左右的 PPT，给新店员讲讲秋季新品', 'document'],
   ['改一下我的简历', 'document'],
   ['做份年终汇报的幻灯片', 'document'],
+  ['给公司写一份年度规划方案', 'document'],
   ['把这份报告排版成 Word', 'document'],
   ['帮我把讲义导出成 pdf', 'document'],
   ['写一份合同，租房用的', 'document'],
@@ -694,4 +699,13 @@ test('a named source file before the verb is code work; visible UI tweaks in a .
   assert.equal(classifyWorkKind('修一下 main.go 里的空指针', {mode: 'project'}).kind, 'code');
   assert.equal(classifyWorkKind('给 api.py 加个重试，带测试', {mode: 'project'}).kind, 'code');
   assert.equal(classifyWorkKind('把 app.js 里的按钮颜色改成蓝色', {mode: 'project'}).kind, 'web_ui');
+});
+
+test('every hands-on kind says what to do while a background command runs; text kinds say nothing', () => {
+  for (const id of KIND_IDS) {
+    if (WORK_KINDS[id].hands) assert.ok(WHILE_WAITING[id]?.length >= 2, `${id} has no while-waiting list`);
+    else assert.equal(waitingSection([id]), '', id);
+  }
+  assert.match(waitingSection(['video_motion']), /^【这件活放后台等的时候】.*1）.*抽帧.*TOOLS\.md「这台电脑」/);
+  assert.equal(waitingSection([]), '');
 });

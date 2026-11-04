@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=375">
+<title>15 标签墙身份标签型</title>
+<style>
+  html { display:flex; justify-content:center; align-items:center; min-height:100vh; background:#E5E5E5; }
+  :root, [data-theme="light"] {
+    --bg: #FFFFFF;
+    --text-primary: #1A1A1A;
+    --text-muted: #888888;
+    --accent: #0B62DB;
+    --brand-color: rgba(0,0,0,0.3);
+    --t1:#1A1A1A; --t1c:#FFFFFF;
+    --t2:#0B62DB; --t2c:#FFFFFF;
+    --t3:#FF6B9D; --t3c:#FFFFFF;
+    --t4:#F59E0B; --t4c:#FFFFFF;
+    --t5:#22C55E; --t5c:#FFFFFF;
+    --t6:#8B5CF6; --t6c:#FFFFFF;
+    --t7:#0EA5E9; --t7c:#FFFFFF;
+    --t8:#F0F0F0; --t8c:#555555;
+    --t9:#EEF2FF; --t9c:#0B62DB;
+    --t10:#FDF2F8; --t10c:#FF6B9D;
+  }
+  [data-theme="dark"] {
+    --bg: #0D0D0D;
+    --text-primary: #F0F0F0;
+    --text-muted: #555555;
+    --accent: #60A5FA;
+    --brand-color: rgba(255,255,255,0.25);
+    --t1:#F0F0F0; --t1c:#0D0D0D;
+    --t2:#1E40AF; --t2c:#FFFFFF;
+    --t3:#BE185D; --t3c:#FFFFFF;
+    --t4:#B45309; --t4c:#FFFFFF;
+    --t5:#166534; --t5c:#FFFFFF;
+    --t6:#5B21B6; --t6c:#FFFFFF;
+    --t7:#0369A1; --t7c:#FFFFFF;
+    --t8:#2A2A2A; --t8c:#AAAAAA;
+    --t9:#1A2540; --t9c:#60A5FA;
+    --t10:#200018; --t10c:#FF6B9D;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:375px; height:500px; overflow:hidden;
+    background:var(--bg);
+    font-family:"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; flex-shrink:0;
+  }
+  .canvas {
+    width:375px; height:500px; background:var(--bg);
+    display:flex; flex-direction:column;
+    justify-content:center;
+    padding:24px 22px;
+  }
+  .brand { font-size:10px; font-weight:700; color:var(--brand-color); letter-spacing:0.2em; text-transform:uppercase; margin-bottom:16px; opacity:0.55; }
+  .title { font-size:34px; font-weight:900; color:var(--text-primary); line-height:1.12; letter-spacing:-0.5px; margin-bottom:4px; }
+  .title .year { color:var(--accent); }
+  .subtitle { font-size:13px; color:var(--text-muted); margin-bottom:22px; }
+  /* 标签墙 */
+  .tags-wall { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
+  .tags-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+  .pill {
+    display:inline-flex; align-items:center; padding:0 10px;
+    border-radius:100px; font-weight:700; letter-spacing:0.01em;
+  }
+  .pill.xl { height:30px; font-size:13px; }
+  .pill.lg { height:26px; font-size:13px; }
+  .pill.md { height:24px; font-size:12px; }
+  .pill.sm { height:22px; font-size:12px; }
+  .s1{background:var(--t1);color:var(--t1c);}
+  .s2{background:var(--t2);color:var(--t2c);}
+  .s3{background:var(--t3);color:var(--t3c);}
+  .s4{background:var(--t4);color:var(--t4c);}
+  .s5{background:var(--t5);color:var(--t5c);}
+  .s6{background:var(--t6);color:var(--t6c);}
+  .s7{background:var(--t7);color:var(--t7c);}
+  .s8{background:var(--t8);color:var(--t8c);}
+  .s9{background:var(--t9);color:var(--t9c);}
+  .s10{background:var(--t10);color:var(--t10c);}
+  .footer { font-size:12px; color:var(--text-muted); text-align:center; }
+
+  /* Editor toolbar */
+  body { height: auto !important; min-height: 100vh; }
+  .toolbar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:#fff; border-top:1px solid #e5e5e5;
+    padding:10px 14px; display:flex; align-items:center;
+    gap:12px; flex-wrap:wrap; z-index:999;
+    font-family:"PingFang SC",sans-serif; font-size:11px;
+    box-shadow:0 -2px 8px rgba(0,0,0,0.06);
+  }
+  .tool-group { display:flex; align-items:center; gap:4px; }
+  .tool-group label { color:#666; white-space:nowrap; font-size:11px; }
+  .tool-group input[type="color"] { width:24px; height:24px; border:1px solid #ddd; border-radius:6px; cursor:pointer; padding:0; }
+  .tool-group input[type="range"] { width:70px; accent-color:#0B62DB; }
+  .toolbar button {
+    background:#0B62DB; color:#fff; border:none;
+    padding:7px 14px; border-radius:8px; font-size:12px;
+    font-weight:600; cursor:pointer; margin-left:auto;
+  }
+  .toolbar button:hover { background:#0950b0; }
+  [contenteditable]:hover { outline:1px dashed rgba(11,98,219,0.3); border-radius:3px; }
+  [contenteditable]:focus { outline:2px solid rgba(11,98,219,0.5); border-radius:3px; background:rgba(11,98,219,0.03); }
+
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="brand" contenteditable="true">TATALAB · TREND</div>
+  <div class="title" contenteditable="true"><span class="year">2026年</span><br>必须掌握的AI技能</div>
+  <div class="subtitle" contenteditable="true">普通人弯道超车的机会就在这里</div>
+  <div class="tags-wall">
+    <div class="tags-row">
+      <div class="pill xl s1">Prompt Engineering</div>
+      <div class="pill xl s3">Vibe Coding</div>
+    </div>
+    <div class="tags-row">
+      <div class="pill lg s2">AI Agent</div>
+      <div class="pill lg s5">RAG</div>
+      <div class="pill lg s6">MCP</div>
+    </div>
+    <div class="tags-row">
+      <div class="pill md s4">Fine-tuning</div>
+      <div class="pill md s7">向量数据库</div>
+      <div class="pill md s8">多模态</div>
+    </div>
+    <div class="tags-row">
+      <div class="pill sm s9">AI工作流</div>
+      <div class="pill sm s10">内容自动化</div>
+      <div class="pill sm s8">知识管理</div>
+    </div>
+    <div class="tags-row">
+      <div class="pill sm s2">Cola</div>
+      <div class="pill sm s1">Cursor</div>
+      <div class="pill sm s6">Obsidian</div>
+      <div class="pill sm s3">即梦</div>
+      <div class="pill sm s5">Perplexity</div>
+    </div>
+  </div>
+  <div class="footer">学会用AI，就是学会用杠杆</div>
+</div>
+<script>
+  window.addEventListener('message', e => {
+    if (e.data && e.data.theme) document.documentElement.setAttribute('data-theme', e.data.theme);
+  });
+</script>
+
+<div class="toolbar" id="toolbar">
+  <div class="tool-group">
+    <label>背景</label>
+    <input type="color" id="ctl-bg" value="#FFFFFF" oninput="document.querySelector('.canvas').style.background=this.value">
+  </div>
+  <div class="tool-group">
+    <label>文字</label>
+    <input type="color" id="ctl-text" value="#1A1A1A" oninput="document.querySelectorAll('.canvas [contenteditable]').forEach(e=>e.style.color=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>强调</label>
+    <input type="color" id="ctl-accent" value="#0B62DB" oninput="document.querySelectorAll('.hl,.highlight-bg,.accent,.tag-hl,.badge').forEach(e=>e.style.background=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>标题 <span id="sz-val">36</span></label>
+    <input type="range" id="ctl-size" min="20" max="64" value="36" oninput="document.getElementById('sz-val').textContent=this.value;document.querySelectorAll('.line,.main-title,.main-title-cn,.main-title-line1,.main-title-line2,.main-title-line3,.title,.header-title,.quote-text,.hero-num').forEach(e=>e.style.fontSize=this.value+'px')">
+  </div>
+  <div class="tool-group">
+    <label>间距 <span id="pd-val">28</span></label>
+    <input type="range" id="ctl-pad" min="12" max="44" value="28" oninput="document.getElementById('pd-val').textContent=this.value;document.querySelector('.canvas').style.padding=this.value+'px'">
+  </div>
+  <button onclick="exportPNG()">📥 导出PNG</button>
+</div>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script>
+function exportPNG(){
+  const tb=document.getElementById('toolbar');
+  tb.style.display='none';
+  html2canvas(document.querySelector('.canvas'),{scale:3,useCORS:true,backgroundColor:null}).then(c=>{
+    tb.style.display='flex';
+    const a=document.createElement('a');
+    a.download='cover-'+Date.now()+'.png';
+    a.href=c.toDataURL('image/png');
+    a.click();
+  }).catch(()=>{tb.style.display='flex';alert('导出失败，请重试');});
+}
+</script>
+
+</body>
+</html>

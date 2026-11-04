@@ -377,7 +377,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs", "work-kinds.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "reasoning.mjs", "work-kinds.mjs", "skill-routes.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",

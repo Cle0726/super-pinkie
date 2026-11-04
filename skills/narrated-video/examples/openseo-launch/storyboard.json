@@ -1,0 +1,29 @@
+{
+  "title": "OpenSEO launch video",
+  "subtitle": "Record one take over these cards: a quick tour of the app, then how easy it is to set up with your agent, then the launch offer over the closing card.",
+  "target_seconds": 120,
+  "notes": [
+    "One take, webcam and voice together (QuickTime: File > New Movie Recording)",
+    "Talk from the bullets; don't read them",
+    "Flubbed a line? Pause and say the sentence again; the edit keeps the clean one",
+    "Pause for a beat between cards",
+    "Say what happens on screen as it happens: \"copy the setup prompt\", \"visa services\", the numbers"
+  ],
+  "cards": [
+    {"title": "Intro", "image": "cv/db.png", "on_screen": "The OpenSEO dashboard", "seconds": 7,
+     "say": ["A quick tour of OpenSEO", "At the end: how easy it is to set up with your agent"], "tip": "This frame is the poster"},
+    {"title": "The app", "image": "cv/db.png", "on_screen": "The sidebar's tools", "seconds": 12,
+     "say": ["I mostly use it through the MCP", "The UI shows the data your agent works with"]},
+    {"title": "Competitor research", "image": "v/12-domain-overview-tall.png", "on_screen": "atlys.com typed in; its keywords, then its top pages", "seconds": 19,
+     "say": ["Something people don't know SEO tools do", "Any competitor's keywords on Google", "Their top pages", "Use it to inform your strategy"]},
+    {"title": "Keyword ideas", "image": "v/14c-kw-mc.png", "on_screen": "\"ai visa assistant\" (10 a month), then \"visa services\" (2,400)", "seconds": 36,
+     "say": ["Veeza: an AI visa assistant", "\"AI visa assistant\": about 10 searches a month", "\"Visa services\": 2,000 a month", "A bunch of ideas for what to write"],
+     "tip": "The longest scene"},
+    {"title": "And much more", "image": "v/18-audit-issues.png", "on_screen": "The sidebar, then the site audit", "seconds": 12,
+     "say": ["Everything else you'd want for SEO", "Like the technical site audit", "Before I go: setup with your agent"]},
+    {"title": "Agent setup", "image": "cv/aip-0.png", "on_screen": "Copy setup prompt, the agents, then the Skills tab", "seconds": 17,
+     "say": ["Copy this, paste it into Claude, ChatGPT, Grok Bot", "It sets itself up, skills included", "Try the keyword research or SEO audit skill"]},
+    {"title": "Thanks", "image": "og.png", "on_screen": "The OpenSEO card", "seconds": 10,
+     "say": ["Thanks for watching", "Our launch offer: three months free", "Give it a try"]}
+  ]
+}

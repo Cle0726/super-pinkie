@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=375">
+<title>05 对比型</title>
+<style>
+  html { display:flex; justify-content:center; align-items:center; min-height:100vh; background:#E5E5E5; }
+  :root, [data-theme="light"] {
+    --bg: #FFFFFF;
+    --text-primary: #1A1A1A;
+    --text-muted: #999999;
+    --col-a-bg: #1A1A1A;
+    --col-a-text: #FFFFFF;
+    --col-a-muted: rgba(255,255,255,0.5);
+    --col-b-bg: #F5F5F5;
+    --col-b-text: #1A1A1A;
+    --col-b-muted: #888888;
+    --divider: #E8E8E8;
+    --accent: #0B62DB;
+    --brand-color: rgba(0,0,0,0.3);
+  }
+  [data-theme="dark"] {
+    --bg: #0D0D0D;
+    --text-primary: #F0F0F0;
+    --text-muted: #555555;
+    --col-a-bg: #1A2540;
+    --col-a-text: #F0F0F0;
+    --col-a-muted: rgba(240,240,240,0.5);
+    --col-b-bg: #1A1A1A;
+    --col-b-text: #F0F0F0;
+    --col-b-muted: #666666;
+    --divider: #2A2A2A;
+    --accent: #60A5FA;
+    --brand-color: rgba(255,255,255,0.25);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:375px; height:500px; overflow:hidden;
+    background:var(--bg);
+    font-family:"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; flex-shrink:0;
+  }
+  .canvas {
+    width:375px; height:500px; background:var(--bg);
+    display:flex; flex-direction:column;
+    padding:22px 22px 18px;
+  }
+  .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .brand { font-size:10px; font-weight:700; color:var(--brand-color); letter-spacing:0.2em; text-transform:uppercase; opacity:0.55; }
+  .badge { font-size:10px; color:var(--text-muted); opacity:0.6; }
+  .title { font-size:36px; font-weight:900; color:var(--text-primary); line-height:1.12; letter-spacing:-0.5px; margin-bottom:4px; }
+  .title .hl { color:var(--accent); }
+  .subtitle { font-size:13px; color:var(--text-muted); margin-bottom:14px; line-height:1.5; }
+  /* 双列表格 */
+  .compare { flex:1; display:flex; gap:10px; min-height:0; }
+  .col {
+    flex:1; border-radius:12px; padding:14px 12px;
+    display:flex; flex-direction:column;
+  }
+  .col.a { background:var(--col-a-bg); }
+  .col.b { background:var(--col-b-bg); }
+  .col-label { font-size:12px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:10px; padding-bottom:8px; }
+  .col.a .col-label { color:var(--col-a-text); border-bottom:1px solid rgba(255,255,255,0.1); }
+  .col.b .col-label { color:var(--col-b-text); border-bottom:1px solid var(--divider); }
+  .row { margin-bottom:10px; }
+  .row:last-child { margin-bottom:0; }
+  .row-title { font-size:13px; font-weight:700; margin-bottom:1px; }
+  .row-desc { font-size:12px; line-height:1.4; }
+  .col.a .row-title { color:var(--col-a-text); }
+  .col.a .row-desc { color:var(--col-a-muted); }
+  .col.b .row-title { color:var(--col-b-text); }
+  .col.b .row-desc { color:var(--col-b-muted); }
+  .col-verdict { margin-top:auto; font-size:11px; font-weight:700; padding:4px 8px; border-radius:6px; text-align:center; }
+  .col.a .col-verdict { background:rgba(255,255,255,0.1); color:var(--col-a-text); }
+  .col.b .col-verdict { background:var(--divider); color:var(--col-b-text); }
+  .footer { margin-top:10px; font-size:12px; color:var(--text-muted); text-align:center; }
+
+  /* Editor toolbar */
+  body { height: auto !important; min-height: 100vh; }
+  .toolbar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:#fff; border-top:1px solid #e5e5e5;
+    padding:10px 14px; display:flex; align-items:center;
+    gap:12px; flex-wrap:wrap; z-index:999;
+    font-family:"PingFang SC",sans-serif; font-size:11px;
+    box-shadow:0 -2px 8px rgba(0,0,0,0.06);
+  }
+  .tool-group { display:flex; align-items:center; gap:4px; }
+  .tool-group label { color:#666; white-space:nowrap; font-size:11px; }
+  .tool-group input[type="color"] { width:24px; height:24px; border:1px solid #ddd; border-radius:6px; cursor:pointer; padding:0; }
+  .tool-group input[type="range"] { width:70px; accent-color:#0B62DB; }
+  .toolbar button {
+    background:#0B62DB; color:#fff; border:none;
+    padding:7px 14px; border-radius:8px; font-size:12px;
+    font-weight:600; cursor:pointer; margin-left:auto;
+  }
+  .toolbar button:hover { background:#0950b0; }
+  [contenteditable]:hover { outline:1px dashed rgba(11,98,219,0.3); border-radius:3px; }
+  [contenteditable]:focus { outline:2px solid rgba(11,98,219,0.5); border-radius:3px; background:rgba(11,98,219,0.03); }
+
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="top">
+    <div class="brand" contenteditable="true">TATALAB</div>
+    <div class="badge">深度对比</div>
+  </div>
+  <div class="title" contenteditable="true">程序员用 <span class="hl">vs</span><br>非技术人用</div>
+  <div class="subtitle" contenteditable="true">AI编程工具选择指南 · 对号入座</div>
+  <div class="compare">
+    <div class="col a">
+      <div class="col-label">🖥 程序员</div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">Cursor</div>
+        <div class="row-desc">AI写代码，补全极快</div>
+      </div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">Claude Code</div>
+        <div class="row-desc">命令行Agent，深度调试</div>
+      </div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">GitHub Copilot</div>
+        <div class="row-desc">IDE内嵌，无缝集成</div>
+      </div>
+      <div class="col-verdict">适合：有代码基础</div>
+    </div>
+    <div class="col b">
+      <div class="col-label">👩‍💼 非技术人</div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">Bolt.new</div>
+        <div class="row-desc">自然语言→完整网站</div>
+      </div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">v0.dev</div>
+        <div class="row-desc">描述UI→直接生成</div>
+      </div>
+      <div class="row">
+        <div class="row-title" contenteditable="true">Replit Agent</div>
+        <div class="row-desc">对话式搭建App</div>
+      </div>
+      <div class="col-verdict">适合：零代码基础</div>
+    </div>
+  </div>
+  <div class="footer">你是哪一类？找到你的工具 →</div>
+</div>
+<script>
+  window.addEventListener('message', e => {
+    if (e.data && e.data.theme) document.documentElement.setAttribute('data-theme', e.data.theme);
+  });
+</script>
+
+<div class="toolbar" id="toolbar">
+  <div class="tool-group">
+    <label>背景</label>
+    <input type="color" id="ctl-bg" value="#FFFFFF" oninput="document.querySelector('.canvas').style.background=this.value">
+  </div>
+  <div class="tool-group">
+    <label>文字</label>
+    <input type="color" id="ctl-text" value="#1A1A1A" oninput="document.querySelectorAll('.canvas [contenteditable]').forEach(e=>e.style.color=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>强调</label>
+    <input type="color" id="ctl-accent" value="#0B62DB" oninput="document.querySelectorAll('.hl,.highlight-bg,.accent,.tag-hl,.badge').forEach(e=>e.style.background=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>标题 <span id="sz-val">36</span></label>
+    <input type="range" id="ctl-size" min="20" max="64" value="36" oninput="document.getElementById('sz-val').textContent=this.value;document.querySelectorAll('.line,.main-title,.main-title-cn,.main-title-line1,.main-title-line2,.main-title-line3,.title,.header-title,.quote-text,.hero-num').forEach(e=>e.style.fontSize=this.value+'px')">
+  </div>
+  <div class="tool-group">
+    <label>间距 <span id="pd-val">28</span></label>
+    <input type="range" id="ctl-pad" min="12" max="44" value="28" oninput="document.getElementById('pd-val').textContent=this.value;document.querySelector('.canvas').style.padding=this.value+'px'">
+  </div>
+  <button onclick="exportPNG()">📥 导出PNG</button>
+</div>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script>
+function exportPNG(){
+  const tb=document.getElementById('toolbar');
+  tb.style.display='none';
+  html2canvas(document.querySelector('.canvas'),{scale:3,useCORS:true,backgroundColor:null}).then(c=>{
+    tb.style.display='flex';
+    const a=document.createElement('a');
+    a.download='cover-'+Date.now()+'.png';
+    a.href=c.toDataURL('image/png');
+    a.click();
+  }).catch(()=>{tb.style.display='flex';alert('导出失败，请重试');});
+}
+</script>
+
+</body>
+</html>

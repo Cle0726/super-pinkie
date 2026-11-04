@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=375">
+<title>11 口播型</title>
+<style>
+  html { display:flex; justify-content:center; align-items:center; min-height:100vh; background:#E5E5E5; }
+  :root, [data-theme="light"] {
+    --bg: #F0F0F0;
+    --text-primary: #FFFFFF;
+    --title-shadow: rgba(0,0,0,0.6);
+    --photo-overlay: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.55) 100%);
+    --badge-bg: rgba(255,255,255,0.2);
+    --badge-text: #FFFFFF;
+    --brand-color: rgba(255,255,255,0.6);
+    --ep-bg: rgba(255,255,255,0.15);
+  }
+  [data-theme="dark"] {
+    --bg: #0D0D0D;
+    --text-primary: #F0F0F0;
+    --title-shadow: rgba(0,0,0,0.8);
+    --photo-overlay: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%);
+    --badge-bg: rgba(255,255,255,0.15);
+    --badge-text: #F0F0F0;
+    --brand-color: rgba(255,255,255,0.5);
+    --ep-bg: rgba(255,255,255,0.1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:375px; height:500px; overflow:hidden;
+    background:var(--bg);
+    font-family:"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; flex-shrink:0;
+  }
+  .canvas {
+    width:375px; height:500px;
+    position:relative; overflow:hidden;
+  }
+  /* 模拟照片背景 */
+  .photo-bg {
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .photo-overlay {
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    background:var(--photo-overlay);
+  }
+  /* 人物占位区 */
+  .person-placeholder {
+    position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+    width:180px; height:240px; border-radius:16px;
+    background:rgba(255,255,255,0.05);
+    border:2px dashed rgba(255,255,255,0.15);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; color:rgba(255,255,255,0.3);
+  }
+  /* 内容层 */
+  .content {
+    position:relative; z-index:1;
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    padding:20px 22px;
+  }
+  .top-row { display:flex; justify-content:space-between; align-items:center; }
+  .brand { font-size:10px; font-weight:700; color:var(--brand-color); letter-spacing:0.2em; text-transform:uppercase; opacity:0.6; }
+  .ep-badge { font-size:10px; font-weight:700; color:var(--badge-text); background:var(--ep-bg); padding:3px 8px; border-radius:14px; backdrop-filter:blur(4px); }
+  .spacer { flex:1; }
+  .title-block { margin-bottom:20px; }
+  .main-title {
+    font-size:34px; font-weight:900; color:var(--text-primary);
+    line-height:1.1; letter-spacing:-0.5px;
+    text-shadow:0 2px 12px var(--title-shadow);
+  }
+  .sub-title {
+    font-size:14px; color:rgba(255,255,255,0.7);
+    margin-top:6px;
+    text-shadow:0 1px 4px var(--title-shadow);
+  }
+
+  /* Editor toolbar */
+  body { height: auto !important; min-height: 100vh; }
+  .toolbar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:#fff; border-top:1px solid #e5e5e5;
+    padding:10px 14px; display:flex; align-items:center;
+    gap:12px; flex-wrap:wrap; z-index:999;
+    font-family:"PingFang SC",sans-serif; font-size:11px;
+    box-shadow:0 -2px 8px rgba(0,0,0,0.06);
+  }
+  .tool-group { display:flex; align-items:center; gap:4px; }
+  .tool-group label { color:#666; white-space:nowrap; font-size:11px; }
+  .tool-group input[type="color"] { width:24px; height:24px; border:1px solid #ddd; border-radius:6px; cursor:pointer; padding:0; }
+  .tool-group input[type="range"] { width:70px; accent-color:#0B62DB; }
+  .toolbar button {
+    background:#0B62DB; color:#fff; border:none;
+    padding:7px 14px; border-radius:8px; font-size:12px;
+    font-weight:600; cursor:pointer; margin-left:auto;
+  }
+  .toolbar button:hover { background:#0950b0; }
+  [contenteditable]:hover { outline:1px dashed rgba(11,98,219,0.3); border-radius:3px; }
+  [contenteditable]:focus { outline:2px solid rgba(11,98,219,0.5); border-radius:3px; background:rgba(11,98,219,0.03); }
+
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="photo-bg"></div>
+  <div class="photo-overlay"></div>
+  <div class="person-placeholder">真人照片区</div>
+  <div class="content">
+    <div class="top-row">
+      <div class="brand" contenteditable="true">TATALAB</div>
+      <div class="ep-badge">第3期</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="title-block" contenteditable="true">
+      <div class="main-title" contenteditable="true">停止混沌地<br>活着</div>
+      <div class="sub-title" contenteditable="true">一个人也能活成一支队伍</div>
+    </div>
+  </div>
+</div>
+<script>
+  window.addEventListener('message', e => {
+    if (e.data && e.data.theme) document.documentElement.setAttribute('data-theme', e.data.theme);
+  });
+</script>
+
+<div class="toolbar" id="toolbar">
+  <div class="tool-group">
+    <label>背景</label>
+    <input type="color" id="ctl-bg" value="#FFFFFF" oninput="document.querySelector('.canvas').style.background=this.value">
+  </div>
+  <div class="tool-group">
+    <label>文字</label>
+    <input type="color" id="ctl-text" value="#1A1A1A" oninput="document.querySelectorAll('.canvas [contenteditable]').forEach(e=>e.style.color=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>强调</label>
+    <input type="color" id="ctl-accent" value="#0B62DB" oninput="document.querySelectorAll('.hl,.highlight-bg,.accent,.tag-hl,.badge').forEach(e=>e.style.background=this.value)">
+  </div>
+  <div class="tool-group">
+    <label>标题 <span id="sz-val">36</span></label>
+    <input type="range" id="ctl-size" min="20" max="64" value="36" oninput="document.getElementById('sz-val').textContent=this.value;document.querySelectorAll('.line,.main-title,.main-title-cn,.main-title-line1,.main-title-line2,.main-title-line3,.title,.header-title,.quote-text,.hero-num').forEach(e=>e.style.fontSize=this.value+'px')">
+  </div>
+  <div class="tool-group">
+    <label>间距 <span id="pd-val">28</span></label>
+    <input type="range" id="ctl-pad" min="12" max="44" value="28" oninput="document.getElementById('pd-val').textContent=this.value;document.querySelector('.canvas').style.padding=this.value+'px'">
+  </div>
+  <button onclick="exportPNG()">📥 导出PNG</button>
+</div>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script>
+function exportPNG(){
+  const tb=document.getElementById('toolbar');
+  tb.style.display='none';
+  html2canvas(document.querySelector('.canvas'),{scale:3,useCORS:true,backgroundColor:null}).then(c=>{
+    tb.style.display='flex';
+    const a=document.createElement('a');
+    a.download='cover-'+Date.now()+'.png';
+    a.href=c.toDataURL('image/png');
+    a.click();
+  }).catch(()=>{tb.style.display='flex';alert('导出失败，请重试');});
+}
+</script>
+
+</body>
+</html>

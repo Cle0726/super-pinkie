@@ -28,8 +28,17 @@ function alive(pid) {
 export function wakeMessage(job) {
   const seconds = Math.max(1, Math.round(((job.endedAt || Date.now()) - job.startedAt) / 1000));
   return `${WAKE_PREFIX}：你之前放到后台的命令已经结束（exec 会话 ${job.execId}，用时约 ${seconds} 秒，命令：${job.command.slice(0, 300)}）。`
-    + '先用 process 工具的 log 动作读取它的完整输出，确认成功还是失败；然后接着完成用户原来的任务，把真实结果告诉用户。'
+    + '先用 process 工具的 log 动作读取它的完整输出，确认成功还是失败；失败就照打法找原因、修好重跑。'
+    + '成功了就把等它的时候做好的部分合进来，补上交付前的亲眼验证（打开文件看、抽帧、截图），还有别的长命令要跑就接着放后台、继续做不依赖它的事；'
+    + '最后把真实结果告诉用户。'
     + '这条消息由系统自动发出，用户看不到，回复里不要提到它。';
+}
+
+// 只读：这个会话里还在跑的后台命令（新的一轮开始时告诉碧琪「还有这些在跑」）。不新建守望实例。
+export function runningBackgroundJobs(sessionKey = '') {
+  const jobs = globalThis[STATE]?.jobs;
+  if (!jobs || !sessionKey) return [];
+  return [...jobs.values()].filter((job) => job.sessionKey === sessionKey && job.state === 'running');
 }
 
 export class BackgroundJobs {

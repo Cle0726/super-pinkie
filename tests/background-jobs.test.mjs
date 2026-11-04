@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BackgroundJobs, WAKE_PREFIX, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
+import {BackgroundJobs, WAKE_PREFIX, runningBackgroundJobs, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
 
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
 function fresh(options = {}) {
@@ -72,4 +72,20 @@ test('only real chat sessions are watched, and foreground results are ignored', 
   assert.equal(jobs.afterTool({toolName: 'exec', params: {}, result: 'hello\n'}, ctx), null);
   assert.equal(jobs.runningFor('agent:project:abc').length, 0);
   assert.match(wakeMessage({execId: 'a', command: 'make', startedAt: 0, endedAt: 3000}), /用时约 3 秒/);
+});
+
+test('wake-up tells 碧琪 to merge what she did while waiting, and the running list is read-only', () => {
+  const text = wakeMessage({execId: 'a', command: 'render', startedAt: 0, endedAt: 1000});
+  assert.match(text, /等它的时候做好的部分合进来/);
+  assert.match(text, /亲眼验证/);
+  const STATE = Symbol.for('pinkie.backgroundJobs.v1');
+  const shared = globalThis[STATE] ||= {jobs: new Map(), timer: null};
+  const owner = shared.owner;
+  shared.jobs.set('bg-r1', {id: 'bg-r1', sessionKey: 'agent:main:r', state: 'running', command: 'x', startedAt: 0});
+  shared.jobs.set('bg-r2', {id: 'bg-r2', sessionKey: 'agent:main:r', state: 'done', command: 'y', startedAt: 0});
+  try {
+    assert.deepEqual(runningBackgroundJobs('agent:main:r').map(job => job.id), ['bg-r1']);
+    assert.deepEqual(runningBackgroundJobs(''), []);
+    assert.equal(shared.owner, owner, 'reading must not install a new waker');
+  } finally { shared.jobs.delete('bg-r1'); shared.jobs.delete('bg-r2'); }
 });
