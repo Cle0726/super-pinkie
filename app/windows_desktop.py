@@ -1220,6 +1220,75 @@ def hidden_process_kwargs(hide_window=True):
     return {**flags, "startupinfo": startup}
 
 
+def native_corner_geometry(width, height, dpi, maximized=False):
+    if maximized or width <= 0 or height <= 0:
+        return None
+    # The shared HTML shell has a 22 CSS-pixel outer radius. HWND regions use
+    # physical pixels; the real test machine is at 125%, not 96 DPI.
+    diameter = round(44 * dpi / 96)
+    return (0, 0, width + 1, height + 1, diameter, diameter)
+
+
+def configure_native_corners(window):
+    """Clip the HWND as well as HTML, including resize/DPI/maximize changes."""
+    if os.name != "nt":
+        return
+    import ctypes
+
+    class Rect(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int32) for name in ("left", "top", "right", "bottom")]
+
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    gdi = ctypes.WinDLL("gdi32", use_last_error=True)
+    user.GetClientRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(Rect)]
+    user.GetClientRect.restype = ctypes.c_int32
+    user.GetDpiForWindow.argtypes = [ctypes.c_void_p]
+    user.GetDpiForWindow.restype = ctypes.c_uint32
+    user.IsZoomed.argtypes = [ctypes.c_void_p]
+    user.IsZoomed.restype = ctypes.c_int32
+    user.SetWindowRgn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32]
+    user.SetWindowRgn.restype = ctypes.c_int32
+    gdi.CreateRoundRectRgn.argtypes = [ctypes.c_int32] * 6
+    gdi.CreateRoundRectRgn.restype = ctypes.c_void_p
+    gdi.DeleteObject.argtypes = [ctypes.c_void_p]
+    gdi.DeleteObject.restype = ctypes.c_int32
+    native = window.native
+    handle = int(native.Handle.ToInt64())
+    last = []
+
+    def apply(*_):
+        rect = Rect()
+        if not user.GetClientRect(handle, ctypes.byref(rect)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        geometry = native_corner_geometry(rect.right, rect.bottom, user.GetDpiForWindow(handle) or 96,
+                                          bool(user.IsZoomed(handle)))
+        if last == [geometry]:
+            return
+        region = gdi.CreateRoundRectRgn(*geometry) if geometry else None
+        if geometry and not region:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not user.SetWindowRgn(handle, region, True):
+            if region:
+                gdi.DeleteObject(region)
+            raise ctypes.WinError(ctypes.get_last_error())
+        # Windows owns the region after SetWindowRgn succeeds. Deleting it
+        # here would invalidate the active clipping mask.
+        last[:] = [geometry]
+
+    def changed(*_):
+        try:
+            apply()
+        except Exception as error:
+            append_log("launcher", f"native corner update failed: {error}")
+
+    native.Resize += changed
+    if hasattr(native, "DpiChanged"):
+        native.DpiChanged += changed
+    window._pinkie_corner_handler = changed  # Keep the managed event delegate alive.
+    apply()
+    append_log("launcher", "native corners enabled: 22 CSS px; physical-DPI HWND region; square only when maximized")
+
+
 def configure_native_glass(window):
     """Make the host transparent too, before its first paint on the GUI thread.
 
@@ -2023,7 +2092,16 @@ BRIDGE_SCRIPT = r"""
     document.body.append(resize);
     const controls = document.createElement('div');
     controls.id = 'pinkie-native-window-controls';
-    controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="主动拉取更新"><span>✦</span></button><button data-act="min" aria-label="最小化"><span aria-hidden="true"></span></button><button data-act="max" aria-label="最大化"><span aria-hidden="true"></span></button><button data-act="close" aria-label="关闭"><span aria-hidden="true"></span></button>';
+    controls.setAttribute('role', 'toolbar');
+    controls.setAttribute('aria-label', '窗口操作');
+    const captionIcon = paths => `<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">${paths}</svg>`;
+    const maximizeIcon = '<rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/>';
+    const restoreIcon = '<path d="M7.5 4.5v-1h9v9h-1"/><rect x="3.5" y="6.5" width="10" height="10" rx="1.5"/>';
+    controls.innerHTML = '<button type="button" class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="检查更新">'
+      + captionIcon('<path d="m10 2 1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8Z"/><path d="M16 14v4m-2-2h4"/>') + '</button>'
+      + '<button type="button" data-act="min" aria-label="最小化" title="最小化">' + captionIcon('<path d="M4.5 12.5h11"/>') + '</button>'
+      + '<button type="button" data-act="max" aria-label="最大化" title="最大化" aria-pressed="false">' + captionIcon(maximizeIcon) + '</button>'
+      + '<button type="button" data-act="close" aria-label="关闭" title="关闭">' + captionIcon('<path d="m5 5 10 10M15 5 5 15"/>') + '</button>';
     const toast = message => {
       let node = document.getElementById('pinkie-update-toast');
       if (!node) { node = document.createElement('div'); node.id = 'pinkie-update-toast'; document.body.append(node); }
@@ -2107,7 +2185,12 @@ BRIDGE_SCRIPT = r"""
     window.__pinkieNativeWindowState = state => {
       const maximized = Boolean(state?.maximized);
       document.documentElement.toggleAttribute('data-pinkie-maximized', maximized);
-      controls.querySelector('[data-act="max"]')?.setAttribute('aria-label', maximized ? '还原窗口' : '最大化');
+      const button = controls.querySelector('[data-act="max"]');
+      const label = maximized ? '还原窗口' : '最大化';
+      button?.setAttribute('aria-label', label); button?.setAttribute('title', label);
+      button?.setAttribute('aria-pressed', String(maximized));
+      const icon = button?.querySelector('svg');
+      if (icon) icon.innerHTML = maximized ? restoreIcon : maximizeIcon;
     };
     controls.onclick = async event => {
       const action = event.target.closest('button')?.dataset.act;
@@ -2122,8 +2205,138 @@ BRIDGE_SCRIPT = r"""
     document.body.append(controls);
     const style = document.createElement('style');
     style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147483000;top:7px;right:112px;width:74px;height:27px;background:rgba(255,242,248,.14);border:1px solid rgba(255,255,255,.18);border-radius:999px;box-sizing:border-box;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}#pinkie-native-drag-strip:active{cursor:grabbing}#pinkie-native-drag-strip::after{position:absolute;top:11px;left:50%;width:28px;height:3px;border-radius:999px;background:rgba(179,79,125,.22);content:"";transform:translateX(-50%);transition:background .16s ease,transform .16s ease}#pinkie-native-drag-strip:hover::after{background:rgba(179,79,125,.42);transform:translateX(-50%) scaleX(1.12)}#pinkie-native-resize-handles{position:fixed;z-index:2147483647;inset:0;pointer-events:none}#pinkie-native-resize-handles i{position:absolute;display:block;pointer-events:auto;touch-action:none}#pinkie-native-resize-handles [data-edge="n"],#pinkie-native-resize-handles [data-edge="s"]{left:12px;right:12px;height:7px}#pinkie-native-resize-handles [data-edge="n"]{top:0;cursor:n-resize}#pinkie-native-resize-handles [data-edge="s"]{bottom:0;cursor:s-resize}#pinkie-native-resize-handles [data-edge="e"],#pinkie-native-resize-handles [data-edge="w"]{top:12px;bottom:12px;width:7px}#pinkie-native-resize-handles [data-edge="e"]{right:0;cursor:e-resize}#pinkie-native-resize-handles [data-edge="w"]{left:0;cursor:w-resize}#pinkie-native-resize-handles [data-edge="ne"],#pinkie-native-resize-handles [data-edge="se"],#pinkie-native-resize-handles [data-edge="sw"],#pinkie-native-resize-handles [data-edge="nw"]{width:14px;height:14px}#pinkie-native-resize-handles [data-edge="ne"]{top:0;right:0;cursor:ne-resize}#pinkie-native-resize-handles [data-edge="se"]{right:0;bottom:0;cursor:se-resize}#pinkie-native-resize-handles [data-edge="sw"]{bottom:0;left:0;cursor:sw-resize}#pinkie-native-resize-handles [data-edge="nw"]{top:0;left:0;cursor:nw-resize}html[data-pinkie-maximized] #pinkie-native-resize-handles{display:none}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px);-webkit-app-region:no-drag}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button[data-act="max"]::after{position:absolute;inset:3px;border:1px solid rgba(105,55,78,.48);border-radius:1px;content:""}html[data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"]::after{inset:2px 4px 4px 2px;box-shadow:2px 2px 0 -1px #dca0bb,2px 2px 0 0 rgba(105,55,78,.48)}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}#pinkie-native-window-controls .pinkie-update-control{width:21px;height:21px;margin:-5px 1px -5px -4px;color:#b73974;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(250,199,222,.78));box-shadow:0 3px 10px rgba(169,48,103,.16);opacity:.82;font:11px/21px system-ui}#pinkie-native-window-controls .pinkie-update-control span{display:block;transition:transform .35s ease}.pinkie-update-control.is-checking span{animation:pinkieUpdateSpin .8s linear infinite}.pinkie-update-control.has-update{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.72),0 0 15px rgba(229,73,142,.65);animation:pinkieUpdateGlow 1.8s ease-in-out infinite}#pinkie-update-toast{position:fixed;z-index:2147483647;top:48px;right:14px;padding:9px 14px;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#773b5a;background:rgba(255,239,247,.9);box-shadow:0 12px 30px rgba(92,39,65,.16);backdrop-filter:blur(18px);font:12px system-ui;opacity:0;transform:translateY(-7px);pointer-events:none;transition:.22s ease}#pinkie-update-toast.is-visible{opacity:1;transform:none}#pinkie-update-dialog{position:fixed;z-index:2147483646;inset:0;display:grid;place-items:center;background:rgba(63,30,48,.16);backdrop-filter:blur(8px)}.pinkie-update-card{width:min(390px,calc(100vw - 42px));max-height:calc(100vh - 42px);box-sizing:border-box;overflow:auto;padding:clamp(18px,4vw,26px);border:1px solid rgba(255,255,255,.78);border-radius:28px;text-align:center;color:#713d58;background:linear-gradient(145deg,rgba(255,247,251,.95),rgba(247,211,228,.91));box-shadow:0 28px 80px rgba(67,28,49,.25)}.pinkie-update-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border-radius:15px;color:#c13678;background:rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(190,50,112,.18)}.pinkie-update-card h3{margin:0;font:600 18px/1.4 system-ui}.pinkie-update-card p{margin:9px 0;font:13px/1.65 system-ui}.pinkie-update-notes{margin:4px auto 0;padding:0 0 0 1.15em;max-width:32em;text-align:left;color:#7a4660;font:13px/1.55 system-ui}.pinkie-update-notes li{margin:3px 0}.pinkie-update-notes[hidden]{display:none}.pinkie-update-card .pinkie-update-status{min-height:20px;color:#9c607e;font-size:12px}.pinkie-update-card>div{display:flex;justify-content:center;gap:10px;margin-top:17px}.pinkie-update-card button{min-width:100px;padding:9px 16px;border:1px solid rgba(192,64,120,.22);border-radius:16px;color:#824866;background:rgba(255,255,255,.64);font:13px system-ui}.pinkie-update-card button.primary{color:#fff;background:linear-gradient(135deg,#de6299,#ba3674);box-shadow:0 8px 20px rgba(186,54,116,.23)}.pinkie-update-card button:disabled{opacity:.52}.pinkie-update-card.is-working .pinkie-update-mark{animation:pinkieUpdateSpin 1.1s linear infinite}@media(max-width:900px){#pinkie-native-drag-strip{right:105px;width:56px}#pinkie-native-window-controls{top:6px;right:7px;gap:6px}}@media(max-height:620px){#pinkie-update-toast{top:42px}.pinkie-update-card{padding:16px;border-radius:22px}.pinkie-update-mark{width:34px;height:34px;margin-bottom:7px}.pinkie-update-card p{margin:6px 0;line-height:1.45}.pinkie-update-card>div{margin-top:10px}}@keyframes pinkieUpdateSpin{to{transform:rotate(360deg)}}@keyframes pinkieUpdateGlow{50%{transform:translateY(-1px);filter:saturate(1.3)}}';
-    style.textContent += 'html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{top:0;left:264px;right:176px;width:auto;height:33px;border:0;border-radius:0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after{display:none}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;height:33px;gap:0;padding:0;border:0;border-left:1px solid rgba(255,255,255,.26);border-bottom:1px solid rgba(202,117,157,.12);border-radius:0 16px 0 13px;background:linear-gradient(180deg,rgba(255,248,252,.62),rgba(250,224,237,.38));box-shadow:0 5px 18px rgba(105,47,75,.08);backdrop-filter:blur(16px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button{display:grid;place-items:center;width:42px;height:32px;margin:0;padding:0;border:0;border-radius:0;color:#7c5368;background:transparent;opacity:.76;transition:background .14s ease,color .14s ease,opacity .14s ease}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:hover{background:rgba(255,255,255,.52);opacity:1}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]{border-radius:0 16px 0 0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover{color:#fff;background:#d9578d}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="min"] span{width:10px;height:1px;background:currentColor}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="max"] span{width:9px;height:9px;border:1px solid currentColor;box-sizing:border-box}html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"] span{box-shadow:2px -2px 0 -1px rgba(255,255,255,.9),2px -2px 0 0 currentColor;transform:translate(-1px,1px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span{position:relative;width:11px;height:11px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before,html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{position:absolute;top:5px;left:0;width:11px;height:1px;background:currentColor;content:""}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before{transform:rotate(45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{transform:rotate(-45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control{width:36px;height:32px;margin:0;color:#b73974;background:transparent;box-shadow:none;font:12px/32px system-ui}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover{background:rgba(255,255,255,.52)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update{box-shadow:inset 0 -2px 0 #e34c8f;animation:pinkieUpdateGlow 1.8s ease-in-out infinite}html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls,html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls button[data-act="close"]{border-top-right-radius:0!important}html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header{padding-right:136px!important}html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed){padding-top:36px!important}html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header{padding-right:172px!important}html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs{padding-right:172px!important}@media(max-width:900px){html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{left:54px;right:164px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;gap:0}}';
+    // Native-only caption adapter: the same soft material as the Mac UI,
+    // with familiar Windows actions and full-contrast, accessible SVG icons.
+    style.textContent += `
+      html[data-pinkie-platform="windows"] #pinkie-native-drag-strip {
+        top:0;left:264px;right:184px;width:auto;height:34px;
+        border:0;border-radius:0;background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after { display:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls {
+        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);
+        top:4px;right:12px;height:36px;gap:3px;padding:2px;box-sizing:border-box;
+        border:1px solid rgba(255,255,255,.7);border-radius:14px;
+        background:linear-gradient(145deg,rgba(255,254,254,.82),rgba(252,233,242,.7));
+        box-shadow:0 3px 12px rgba(113,60,86,.06),inset 0 1px rgba(255,255,255,.65);
+        backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button {
+        display:grid;place-items:center;width:32px;height:30px;margin:0;padding:0;
+        border:0;border-radius:10px;color:var(--caption-ink);background:transparent;
+        opacity:1;cursor:default;box-shadow:none;
+        transition:background .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button::after { content:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls svg {
+        display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.45;
+        stroke-linecap:round;stroke-linejoin:round;pointer-events:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:hover {
+        background:var(--caption-hover);box-shadow:0 2px 6px rgba(100,51,74,.07);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:active {
+        transform:translateY(1px);box-shadow:none;background:rgba(206,146,176,.18);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus:not(:focus-visible) { outline:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus-visible {
+        outline:2px solid var(--accent,#bf487e);outline-offset:-2px;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] {
+        border-radius:10px;background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover {
+        color:#fff;background:#cc477d;box-shadow:0 3px 9px rgba(185,57,111,.2);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control {
+        width:32px;height:30px;margin:0;color:var(--accent,#ba487d);background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover { background:var(--caption-hover) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg {
+        animation:pinkieUpdateSpin .8s linear infinite;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update {
+        box-shadow:inset 0 0 0 1px rgba(211,75,136,.3),0 0 9px rgba(229,73,142,.16);
+        animation:pinkieUpdateGlow 1.8s ease-in-out infinite;
+      }
+      html[data-pinkie-platform="windows"][data-pinkie-night] #pinkie-native-window-controls {
+        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);
+        background:linear-gradient(145deg,rgba(54,39,52,.92),rgba(41,31,43,.82));
+        border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
+      }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:184px!important }
+      @media(max-width:900px) {
+        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:184px }
+        html[data-pinkie-platform="windows"] #pinkie-native-window-controls { top:4px;right:10px }
+      }
+    `;
+    // The shared renderer uses .topbar, not the retired .chat-pane__header.
+    // Reserve native caption-button space so link/cost chips remain readable.
+    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:184px!important}';
     document.head.append(style);
+    // Keep the native drag surface away from every visible header action.
+    (() => {
+      // This is also installed by the native bridge. Keep header actions above the
+      // draggable surface rather than synthesizing clicks on covered controls.
+      // Reuse the elements just created above rather than querying a document
+      // which can still be attaching them during WebView2's first load.
+      window.__pinkieNativeDragLayout?.dispose();
+      const chooseDragInterval = (left, right, occupied, minimum = 30) => {
+        const sorted = occupied.map(r => [Math.max(left,r.left-4),Math.min(right,r.right+4)])
+          .filter(([a,b]) => b>a).sort((a,b) => a[0]-b[0]);
+        let cursor=left, best=null;
+        for(const [start,end] of sorted){
+          if(start-cursor >= minimum && (!best || start-cursor > best.width)) best={left:cursor,width:start-cursor};
+          cursor=Math.max(cursor,end);
+        }
+        if(right-cursor >= minimum && (!best || right-cursor > best.width)) best={left:cursor,width:right-cursor};
+        return best;
+      };
+      const selector = 'button,a[href],input,select,textarea,summary,[role="button"],[role="tab"],[role="menuitem"],[role="link"],[contenteditable="true"],[onclick],[data-pinkie-no-drag],[title]';
+      // Never measure every chat descendant: content-visibility deliberately
+      // skips long conversation history, and forcing its layout harms streaming.
+      const headers='.topbar,.pk-wb-tabs,.pk-workspace-header,.sidebar-brand,.chat-pane__header';
+      const update = () => {
+        if(!drag.isConnected || !controls.isConnected)return;
+        const left=innerWidth<=900?54:264;
+        const caption=controls.getBoundingClientRect();
+        const right=Math.max(left,caption.width>0 ? Math.min(innerWidth-184,caption.left-8) : innerWidth-12);
+        const occupied=[];
+        const candidates=[...document.querySelectorAll(headers)].flatMap(header=>[...header.querySelectorAll(selector)]);
+        for(const e of candidates){
+          if(e===drag || drag.contains(e) || controls.contains(e))continue;
+          const r=e.getBoundingClientRect();
+          if(r.width<=0 || r.height<=0 || r.bottom<=7 || r.top>=34 || r.right<=left || r.left>=right)continue;
+          const s=getComputedStyle(e);
+          if(s.display==='none'||s.visibility==='hidden'||s.pointerEvents==='none')continue;
+          occupied.push({left:r.left,right:r.right});
+        }
+        const interval=chooseDragInterval(left,right,occupied);
+        if(interval){
+          drag.style.left=`${interval.left}px`; drag.style.right='auto'; drag.style.width=`${interval.width}px`;
+          drag.style.pointerEvents='auto';
+        }else drag.style.pointerEvents='none';
+        return {interval,occupiedCount:occupied.length};
+      };
+      let timer=0;
+      const schedule = () => {if(!timer)timer=setTimeout(()=>{timer=0;update();},80);};
+      const observer=typeof MutationObserver === 'function' ? new MutationObserver(records=>{
+        if(records.some(r=>{
+          const e=r.target.nodeType===1?r.target:r.target.parentElement;
+          if(e?.closest?.(headers))return true;
+          return [...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&(n.matches?.(headers)||n.querySelector?.(headers)));
+        })) schedule();
+      }) : null;
+      observer?.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','aria-hidden','aria-expanded','class']});
+      window.addEventListener('resize',schedule,{passive:true});
+      document.addEventListener('scroll',schedule,{passive:true,capture:true});
+      const interval=setInterval(update,1200);
+      window.__pinkieNativeDragLayout={update,dispose(){clearInterval(interval);clearTimeout(timer);observer?.disconnect();window.removeEventListener('resize',schedule);document.removeEventListener('scroll',schedule,true);}};
+      return update();
+    })();
     window.__pinkieCheckForUpdates = () => inspectUpdate(false);
     setInterval(() => inspectUpdate(false), 7200000);
     return true;
@@ -2320,10 +2533,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def before_show():
         # This event runs synchronously on WinForms' GUI thread. Do not call
         # evaluate_js or marshal back to the same thread from here.
-        try:
-            configure_native_glass(window)
-        except Exception as error:
-            append_log("launcher", f"native glass setup failed: {error}")
+        for label, configure in (("glass", configure_native_glass), ("corners", configure_native_corners)):
+            try:
+                configure(window)
+            except Exception as error:
+                append_log("launcher", f"native {label} setup failed: {error}")
 
     def bootstrap():
         try:

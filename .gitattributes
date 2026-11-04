@@ -1,4 +1,6 @@
 desktop/windows/mac-runtime/** text eol=lf
+*.ps1 text eol=lf
+.github/workflows/*.yml text eol=lf
 personas/**/*.sh text eol=lf
 personas/**/*.ps1 -text
 # Shared UI hashes must describe identical bytes after Windows checkout too.
