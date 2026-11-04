@@ -137,6 +137,16 @@ test('a video built from generated or downloaded assets must say where they came
   const ok = told.guard.finalize({lastAssistantMessage: '广告已经完成。画面是 AI 生成的普通拿铁，换成你们店的实拍再发；配音是 edge-tts 晓晓，可以商用。'}, told.ctx, {verifyExternal: false});
   assert.notEqual(ok?.action, 'revise', ok?.reason);
 
+  // routes-e: the picture came from an earlier turn, the voice from Python calling say, the music was copied in.
+  const quiet = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  quiet.guard.afterTool({toolName: 'exec', toolCallId: 'cp', params: {command: 'cp ../old/bgm_15s.wav assets/'}, result: ''}, quiet.ctx);
+  const ad3 = path.join(quiet.root, 'ad.mp4');
+  produce(quiet.guard, quiet.ctx, 'render', `python3 render_video_15s.py "${ad3}"`, ad3);
+  quiet.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(quiet.root, 'ad.preview.png')}, result: 'image'}, quiet.ctx);
+  const q = quiet.guard.finalize({lastAssistantMessage: '15 秒广告已经完成，1080×1920。'}, quiet.ctx, {verifyExternal: false});
+  assert.equal(q?.action, 'revise');
+  assert.match(q.reason, /素材从哪来/);
+
   const own = setup(t, '帮我把这个视频剪成 30 秒');
   const cut = path.join(own.root, 'cut.mp4');
   produce(own.guard, own.ctx, 'cut', `ffmpeg -y -ss 0 -t 30 -i in.mp4 "${cut}"`, cut);

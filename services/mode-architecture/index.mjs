@@ -1378,16 +1378,20 @@ function contentInspectionReason(state) {
 }
 
 // 视频里的画面、配音、音乐是碧琪生成或下载来的，交付时要说清从哪来、能不能商用（motion-and-video.md 第 117 行）。
-// 11-04 隔离实测 R-ad 两轮都漏：手册写了、等待清单也写了，交付那一刻没有东西提醒。剪先生自己给的视频不提醒。
+// 11-04 隔离实测 R-ad 三轮都漏：手册写了、等待清单也写了，交付那一刻没有东西提醒。
+// 不靠猜它用了哪个工具做素材（routes-e：生图在上一轮、配音是 Python 里调 say、背景音乐是 cp 来的，一条都没认出来）：
+// 交了视频、回复没说来源，除非先生这句话明确是拿他自己的素材来剪，就提醒一次。
 const ASSET_MAKING_TOOL = /^(?:image_generate|video_generate|music_generate|tts|speech|text_to_speech)$/i;
-const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
+const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|['"]say['"]\s*,\s*['"]-v|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
+const USER_SUPPLIED_MEDIA = /(?:这(?:个|段|些|条|几个?)(?:视频|片子|素材|照片|图片|录像|音频|录音|镜头)|我(?:拍|录|剪)的|我的(?:视频|素材|照片|录像|录音)|附件|上传的|发给你的|\.(?:mp4|mov|m4v|avi|mkv|mp3|wav|m4a|jpe?g|png|heic)\b)/i;
 const SOURCE_DISCLOSED = /(?:来源|出处|来自|生成的|AI\s*(?:生成|画)|生图|图库|素材库|曲库|可商用|商用|版权|授权|(?:先生|你|您)(?:给|提供|发来)的|实拍|合成的|程序(?:生成|合成)|(?:配音|配乐|音乐|画面|素材)(?:是|用|采用|取自)|edge-tts|晓晓|云希|Xiaoxiao|Yunxi)/i;
 
 function sourceDisclosureReason(state, reply = '') {
   if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))) return '';
+  if (SOURCE_DISCLOSED.test(proseOnly(reply))) return '';
   const madeAssets = state.tools.some(entry => !entry.failed && (ASSET_MAKING_TOOL.test(String(entry.name || ''))
     || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
-  if (!madeAssets || SOURCE_DISCLOSED.test(proseOnly(reply))) return '';
+  if (!madeAssets && USER_SUPPLIED_MEDIA.test(String(state.prompt || ''))) return '';
   return '交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」';
 }
 
