@@ -57,6 +57,12 @@ public class Fixture {
       string token=kind.Substring("--update-health-token=".Length);
       string marker=Path.Combine(Environment.GetEnvironmentVariable("PINKIE_STATE_ROOT"),"updates","health",token+".ready");
       File.WriteAllText(Environment.GetEnvironmentVariable("FIXTURE_NEW_PID"),Process.GetCurrentProcess().Id.ToString());
+      string delay=Environment.GetEnvironmentVariable("FIXTURE_READY_DELAY_MS");
+      if (!String.IsNullOrEmpty(delay)) {
+        // A real first start: alive at once, gateway ready much later.
+        File.WriteAllText(Path.ChangeExtension(marker,".started"),"started");
+        Thread.Sleep(Int32.Parse(delay));
+      }
       File.WriteAllText(marker,"ready");
       string stop=Environment.GetEnvironmentVariable("FIXTURE_CHILD_STOP");
       for (int i=0;i<300 && !File.Exists(stop);i++) Thread.Sleep(100);
@@ -81,6 +87,7 @@ exe=Path(exe);payload=Path(payload)
 updater=WindowsUpdater(exe.parent/'_internal',executable=exe)
 assert updater.portable
 updater.prepared={'payload':payload,'sha256':digest,'version':'9.9.9'}
+if os.environ.get('FIXTURE_START_SECONDS'):updater.health_start_seconds=int(os.environ['FIXTURE_START_SECONDS'])
 outcome=updater.launch_replacer()
 Path(result).write_text(json.dumps(outcome),encoding='utf-8')
 raise SystemExit(0 if outcome.get('started') else 1)
@@ -196,6 +203,15 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
     def test_reappearing_old_gateway_cannot_make_old_ui_look_like_success(self):
         self._run_case('external_reappears')
 
+    def test_slow_first_start_is_kept_instead_of_rolled_back(self):
+        # 2.5.27-2.5.31 killed a new version that had not shown its page
+        # within 120 s and moved the old folder back. Scaled down here: the
+        # start budget is 5 s and the new gateway needs 12 s.
+        self._run_case('slow_ready')
+
+    def test_unpacked_files_held_open_by_a_scanner_do_not_fail_the_swap(self):
+        self._run_case('scanner_lock')
+
     def _run_case(self, gateway_kind):
         with tempfile.TemporaryDirectory(prefix='pinkie-portable-update-') as temp:
             root=Path(temp).resolve()
@@ -237,6 +253,23 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                        FIXTURE_CHILD_PID=str(child_pid),FIXTURE_CHILD_STOP=str(child_stop),FIXTURE_NEW_PID=str(new_pid),
                        PSModulePath=str(shadow.parent)+os.pathsep+env.get('PSModulePath',''))
             if gateway_kind=='external_reappears':env['FIXTURE_EXTERNAL_REAPPEARS']='1'
+            if gateway_kind=='slow_ready':env.update(FIXTURE_READY_DELAY_MS='12000',FIXTURE_START_SECONDS='5')
+            locker=None;lock_seen=[]
+            if gateway_kind=='scanner_lock':
+                def hold_unpacked_file():
+                    # Like a virus scanner reading the fresh unpack: a plain
+                    # open handle (no delete sharing) blocks renaming its folder.
+                    until=time.monotonic()+60
+                    while time.monotonic()<until:
+                        found=list((state/'updates').glob('.pinkie-stage-*/超級碧琪/new-version.txt'))
+                        if found:
+                            try:
+                                with open(found[0],'rb'):
+                                    lock_seen.append(found[0]);time.sleep(6)
+                                return
+                            except OSError:pass  # still being written; try again
+                        time.sleep(.02)
+                locker=threading.Thread(target=hold_unpacked_file,daemon=True)
             children=[];child_id=None;acl_changed=False;update_started=False
             stop_watch=threading.Event();revived=[];watcher=None
             acl_script=root/'acl-fixture.ps1';acl_script.write_text(ACL_FIXTURE,encoding='utf-8-sig')
@@ -277,6 +310,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     watcher=threading.Thread(target=revive_previous_gateway,daemon=True);watcher.start()
                 if gateway_kind=='acl_denied':
                     fixture_acl('deny');acl_changed=True
+                if locker:locker.start()
                 repo=Path(__file__).resolve().parents[1]
                 process=subprocess.Popen([sys.executable,'-X','utf8',str(caller),str(repo),str(executable),
                                           str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
@@ -298,7 +332,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertEqual(process.returncode,0,err.decode('utf-8',errors='replace'))
                 self.assertTrue(outcome['started'])
                 update_started=True
-                log=state/'logs/updater.log';deadline=time.monotonic()+40;text=''
+                log=state/'logs/updater.log';deadline=time.monotonic()+60;text=''
                 while time.monotonic()<deadline:
                     if log.exists():text=log.read_text(encoding='utf-8-sig',errors='replace')
                     if 'portable update completed' in text or 'portable update failed' in text:break
@@ -316,6 +350,12 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
                 self.assertIn('portable update completed',text)
+                if gateway_kind=='slow_ready':
+                    self.assertIn('new version started; waiting for its gateway',text)
+                if gateway_kind=='scanner_lock':
+                    self.assertTrue(lock_seen,'the fixture never held an unpacked file open')
+                    self.assertIn('unpacked new version is busy, retrying',text)
+                self.assertFalse(list((state/'updates').glob('.pinkie-stage-*')),'staging folder left behind')
                 self.assertTrue((target/'new-version.txt').is_file())
                 self.assertFalse((target/'old-version.txt').exists())
                 self.assertIsNotNone(gateway.poll())

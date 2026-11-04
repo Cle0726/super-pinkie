@@ -420,6 +420,11 @@ def cleanup_orphan_webview(storage):
 class WindowsUpdater:
     """Release updater for a frozen EXE or PyInstaller onedir directory."""
 
+    # How long the replacer waits for the new version: to report that it
+    # started at all, then (while it keeps running) to report its gateway.
+    health_start_seconds = 120
+    health_ready_seconds = 900
+
     def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
@@ -437,6 +442,7 @@ class WindowsUpdater:
             urllib.parse.urlparse(route["manifest"]).hostname for route in self.mirrors}
         self.mirror_latest = None
         self.mirror_checked = 0.0
+        self.health_reporter = None
 
     @staticmethod
     def _is_onedir(executable):
@@ -724,8 +730,12 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath,
   [Parameter(Mandatory=$true)][string]$ReadyMarker,
-  [string]$Version = ''
+  [string]$Version = '',
+  [int]$StartSeconds = 120,
+  [int]$ReadySeconds = 900
 )
+# pinkie-update-protocol: 2  (see the portable helper: started, then ready)
+$StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
 # A parent started by PowerShell 7 can pass its module paths to Windows
 # PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
 # as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
@@ -793,21 +803,26 @@ try {
   Move-Item -LiteralPath $Payload -Destination $Target -Force
   $actual = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $Target -ArgumentList "--update-health-token=$Token" -PassThru
-  $healthDeadline = (Get-Date).AddSeconds(120)
-  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
-    Start-Sleep -Milliseconds 500
+  $startDeadline = (Get-Date).AddSeconds($StartSeconds)
+  $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
+  $started = $false
+  while (-not (Test-Path -LiteralPath $HealthMarker)) {
     $launched.Refresh()
-  }
-  if (-not (Test-Path -LiteralPath $HealthMarker)) {
-    if (-not $launched.HasExited) {
+    if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
+    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) { $started = $true; Write-UpdateLog 'new version started; waiting for its gateway' }
+    if (-not $started -and (Get-Date) -ge $startDeadline) {
       & taskkill.exe /PID $launched.Id /T /F | Out-Null
       try { Wait-Process -Id $launched.Id -Timeout 10 -ErrorAction SilentlyContinue } catch {}
+      throw 'new version did not start'
     }
-    throw 'new version did not become healthy'
+    if ($started -and (Get-Date) -ge $readyDeadline) { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it"; break }
+    Start-Sleep -Milliseconds 500
   }
   Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -842,8 +857,20 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$ReadyMarker,
   [Parameter(Mandatory=$true)][string]$GatewayRecord,
   [Parameter(Mandatory=$true)][int]$GatewayPort,
-  [string]$Version = ''
+  [string]$Version = '',
+  [int]$StartSeconds = 120,
+  [int]$ReadySeconds = 900,
+  [int]$SwapSeconds = 90
 )
+# pinkie-update-protocol: 2
+# The new version reads this line from its own apply-<token>.ps1 to learn that
+# this helper waits for "<token>.started" first and then, while the new process
+# stays alive, for "<token>.ready".  Older helpers (2.5.27-2.5.31) only know
+# "<token>.ready" and allow 120 s, which a new version's first start (per-version
+# setup plus a cold gateway over freshly unpacked files that the virus scanner
+# reads for the first time) can exceed; they then killed a healthy new version
+# and moved the old folder back -- "updated, restarted, nothing changed".
+$StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
 # A parent started by PowerShell 7 can pass its module paths to Windows
 # PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
 # as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
@@ -869,6 +896,28 @@ function Test-UpdateWriteAccess([string]$Folder) {
     $created = $true
     $stream.Dispose()
   } finally { if ($created) { [IO.File]::Delete($probe) } }
+}
+function Show-UpdateProblem([string]$Text) {
+  # Last resort when no App window will come back to explain what happened.
+  try {
+    Add-Type -AssemblyName PresentationFramework
+    [void][System.Windows.MessageBox]::Show($Text, '超級碧琪更新', 'OK', 'Warning')
+  } catch { Write-UpdateLog "could not show update problem: $($_.Exception.Message)" }
+}
+function Invoke-WithRetry([scriptblock]$Action, [string]$What, [int]$Seconds) {
+  # Windows refuses to rename a folder while any file inside is open. Right
+  # after a 30,000-file unpack, the virus scanner, the search indexer or a
+  # OneDrive/Desktop sync client routinely holds some of them for a while.
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  $logged = $false
+  while ($true) {
+    try { & $Action; return }
+    catch {
+      if ((Get-Date) -ge $deadline) { throw "$What is still in use: $($_.Exception.Message)" }
+      if (-not $logged) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $true }
+      Start-Sleep -Milliseconds 500
+    }
+  }
 }
 function Write-StartupFailure($Record) {
   try {
@@ -971,22 +1020,19 @@ function Confirm-NewInstallGateway {
   }
 }
 function Restore-PreviousVersion {
-  for ($attempt = 0; $attempt -lt 40; $attempt++) {
-    try {
-      if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
-        if (Test-Path -LiteralPath $TargetDir) {
-          try { Stop-InstallProcesses $TargetDir } catch {}
-          Remove-Item -LiteralPath $TargetDir -Recurse -Force
-        }
-        Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
-      }
-      break
-    } catch {
-      if ($attempt -eq 39) { throw }
-      Start-Sleep -Milliseconds 250
+  if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
+    if (Test-Path -LiteralPath $TargetDir) {
+      # Move the failed copy aside instead of deleting it in place: a rename
+      # either happens completely or not at all, so a half-deleted tree can
+      # never be left where the user starts the App.
+      $failed = $TargetDir.TrimEnd('\') + '.failed-' + $Token
+      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
+      Remove-Item -LiteralPath $failed -Recurse -Force -ErrorAction SilentlyContinue
     }
+    Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
   }
   if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
+  else { throw 'previous version is missing after rollback' }
 }
 try {
   [void](Get-Command Get-FileHash -ErrorAction Stop)
@@ -1010,7 +1056,17 @@ try {
   # 先验包、再动安装目录：包一旦损坏，展开和替换都不该发生。
   $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
-  $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
+  # Unpack under the App's own data folder when it is on the same drive, so
+  # the final swap is still a rename but a Desktop/OneDrive/Documents install
+  # does not get 30,000 temporary files synced or indexed next to it.
+  $installParent = Split-Path -Parent ([IO.Path]::GetFullPath($TargetDir).TrimEnd('\'))
+  $stageParent = $installParent
+  if ([string]::Equals([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($UpdateRoot)),
+                       [IO.Path]::GetPathRoot($installParent), [System.StringComparison]::OrdinalIgnoreCase)) {
+    $stageParent = $UpdateRoot
+  }
+  $script:stage = Join-Path $stageParent ('.pinkie-stage-' + $Token)
+  $stage = $script:stage
   if (Test-Path -LiteralPath $stage) { throw 'update staging path already exists' }
   # This helper has no visible PowerShell window. Per-entry console progress
   # adds substantial overhead for the tens of thousands of portable files;
@@ -1021,29 +1077,44 @@ try {
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
   Stop-InstallProcesses $TargetDir
   Stop-VerifiedGateway
-  for ($attempt = 0; ; $attempt++) {
-    try { Move-Item -LiteralPath $TargetDir -Destination $Backup; $script:backupCreated = $true; break }
-    catch {
-      if ($attempt -ge 39) { throw "install folder is still in use: $($_.Exception.Message)" }
-      Stop-InstallProcesses $TargetDir
-      Start-Sleep -Milliseconds 250
-    }
-  }
-  Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
+  Invoke-WithRetry {
+    Stop-InstallProcesses $TargetDir
+    Move-Item -LiteralPath $TargetDir -Destination $Backup
+    $script:backupCreated = $true
+  } 'install folder' $SwapSeconds
+  # This rename used to have no retry at all: one file of the fresh unpack
+  # still open in the virus scanner failed the whole update and rolled back.
+  Invoke-WithRetry { Move-Item -LiteralPath $newDir -Destination $TargetDir } 'unpacked new version' $SwapSeconds
+  if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'new version is missing after the swap' }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
-  $healthDeadline = (Get-Date).AddSeconds(120)
-  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
-    Start-Sleep -Milliseconds 500
+  $startDeadline = (Get-Date).AddSeconds($StartSeconds)
+  $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
+  $started = $false
+  $ready = $false
+  while ($true) {
+    if (Test-Path -LiteralPath $HealthMarker) { $ready = $true; break }
     $launched.Refresh()
+    if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
+    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) {
+      $started = $true
+      Write-UpdateLog 'new version started; waiting for its gateway'
+    }
+    if (-not $started -and (Get-Date) -ge $startDeadline) {
+      & taskkill.exe /PID $launched.Id /T /F | Out-Null
+      throw 'new version did not start'
+    }
+    # A new version that is running from the new folder is never killed just
+    # for being slow: rolling it back cannot make the next start any faster.
+    if ($started -and (Get-Date) -ge $readyDeadline) { break }
+    Start-Sleep -Milliseconds 500
   }
-  if (-not (Test-Path -LiteralPath $HealthMarker)) {
-    if (-not $launched.HasExited) { & taskkill.exe /PID $launched.Id /T /F | Out-Null }
-    throw 'new version did not become healthy'
-  }
-  Confirm-NewInstallGateway
+  if ($ready) { Confirm-NewInstallGateway }
+  else { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it" }
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -1053,10 +1124,16 @@ try {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
   Write-UpdateFailure $_.Exception.Message
   if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
-    try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+    try { Restore-PreviousVersion }
+    catch {
+      Write-UpdateLog "rollback failed: $($_.Exception.Message)"
+      $where = if (Test-Path -LiteralPath $Backup) { "原来的版本保存在：`n$Backup`n把这个文件夹改回「$(Split-Path -Leaf $TargetDir)」就能继续用。" } else { '请重新下载便携版。' }
+      Show-UpdateProblem ("新版 $Version 没有装上，自动恢复也没有完成。`n$where`n记忆和设置都在，不受影响。`n`n详细记录：$LogPath")
+    }
   } else {
     Write-StartupFailure $_
   }
+  if ($script:stage) { Remove-Item -LiteralPath $script:stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
@@ -1143,6 +1220,8 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-GatewayRecord", str(state_root() / "gateway-owner.json"),
                     "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
                     "-Version", str(self.prepared["version"]),
+                    "-StartSeconds", str(int(self.health_start_seconds)),
+                    "-ReadySeconds", str(int(self.health_ready_seconds)),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous-" + token + self.executable.suffix)
@@ -1161,6 +1240,8 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-LogPath", str(state_root() / "logs/updater.log"),
                 "-ReadyMarker", str(ready_marker),
                 "-Version", str(self.prepared["version"]),
+                "-StartSeconds", str(int(self.health_start_seconds)),
+                "-ReadySeconds", str(int(self.health_ready_seconds)),
                 ]
             try:
                 process = subprocess.Popen(
@@ -2407,6 +2488,96 @@ def update_health_token_from_argv(arguments=None):
     return None
 
 
+def update_helper_protocol(token, root=None):
+    """Which replacer launched this update start, read from its own script.
+
+    "two-phase": this version's helper -- ``.started`` now, ``.ready`` once our
+                 gateway listens; it never kills a new version for being slow.
+    "gateway":   2.5.29-2.5.31 helpers -- only ``.ready`` within 120 s, and at
+                 that moment a gateway from the new folder must be listening.
+    "marker":    2.5.27-2.5.28 portable and every onefile helper -- only
+                 ``.ready`` within 120 s, nothing else is checked.
+    Unknown or unreadable scripts are treated as "gateway", the strictest.
+    """
+    path = Path(root or state_root()) / "updates" / f"apply-{token}.ps1"
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return "gateway"
+    if "pinkie-update-protocol: 2" in text:
+        return "two-phase"
+    if "Confirm-NewInstallGateway" in text:
+        return "gateway"
+    return "marker"
+
+
+class UpdateHealthReporter:
+    """Tell the replacer that this freshly swapped-in version came up.
+
+    The replacer of the version being *replaced* decides whether to keep this
+    one, so this side adapts to what that helper can understand.  Old helpers
+    gave the whole first start -- per-version setup, a cold gateway over files
+    the virus scanner reads for the first time, and the page load -- 120 s, and
+    rolled a healthy new version back when it took longer.  Writing the marker
+    at the earliest moment each helper accepts is what lets an update from
+    those versions land.
+    """
+
+    def __init__(self, token, own_node, listener=None, root=None, poll=.5, limit=900.0):
+        self.token = token
+        self.own_node = str(own_node)
+        self.listener = listener
+        self.root = root
+        self.poll = poll
+        self.limit = limit
+        self.protocol = update_helper_protocol(token, root)
+        self.done = threading.Event()
+
+    def _marker(self, suffix):
+        directory = Path(self.root or state_root()) / "updates" / "health"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{self.token}{suffix}"
+
+    def _write(self, suffix):
+        try:
+            self._marker(suffix).write_text("ready\n" if suffix == ".ready" else "started\n", encoding="ascii")
+            return True
+        except OSError as error:
+            append_log("launcher", f"update {suffix[1:]} marker not written: {error}")
+            return False
+
+    def ready(self):
+        if not self.done.is_set() and self._write(".ready"):
+            self.done.set()
+            append_log("launcher", f"update health confirmed ({self.protocol})")
+
+    def own_gateway_listening(self):
+        listener = (self.listener or GatewaySupervisor._listener)()
+        image = str((listener or {}).get("image") or "")
+        return bool(image) and os.path.normcase(image) == os.path.normcase(self.own_node)
+
+    def start(self):
+        self._write(".started")
+        append_log("launcher", f"update start reported to a {self.protocol} helper")
+        if self.protocol == "marker":
+            self.ready()
+            return None
+        thread = threading.Thread(target=self._watch, name="pinkie-update-health", daemon=True)
+        thread.start()
+        return thread
+
+    def _watch(self):
+        deadline = time.monotonic() + self.limit
+        while not self.done.is_set() and time.monotonic() < deadline:
+            try:
+                if self.own_gateway_listening():
+                    self.ready()
+                    return
+            except Exception as error:  # diagnostics only; the page load still reports
+                append_log("launcher", f"update health check failed: {error}")
+            self.done.wait(self.poll)
+
+
 def install_native_bridge(window, updater, update_health_token=None, installed_notes=""):
     """Dress the gateway page with the native bridge and confirm a fresh update.
 
@@ -2425,12 +2596,16 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
         return
 
     if update_health_token:
-        try:
-            health = state_root() / "updates/health" / f"{update_health_token}.ready"
-            health.parent.mkdir(parents=True, exist_ok=True)
-            health.write_text("ready\n", encoding="ascii")
-        except OSError as error:
-            append_log("launcher", f"update health marker not written: {error}")
+        reporter = getattr(updater, "health_reporter", None)
+        if reporter and reporter.token == update_health_token:
+            reporter.ready()
+        else:
+            try:
+                health = state_root() / "updates/health" / f"{update_health_token}.ready"
+                health.parent.mkdir(parents=True, exist_ok=True)
+                health.write_text("ready\n", encoding="ascii")
+            except OSError as error:
+                append_log("launcher", f"update health marker not written: {error}")
 
     try:
         window.evaluate_js(NATIVE_READING_SCRIPT + BRIDGE_SCRIPT)
@@ -2511,6 +2686,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # A gateway kept alive by an older version would otherwise be adopted
     # below, and the new version would show the old one's page.
     gateway.retire_stale()
+    if update_health_token:
+        # Report "started" before the per-version setup and the cold gateway
+        # start, which together can outlast an old replacer's 120 s budget.
+        updater.health_reporter = UpdateHealthReporter(update_health_token, runtime.node)
+        updater.health_reporter.start()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
