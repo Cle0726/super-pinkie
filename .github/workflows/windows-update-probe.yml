@@ -3,8 +3,11 @@ name: Windows portable update probe
 # Presses 「更新并重启」 for real on a Windows runner: an unpacked portable release
 # updates itself in place to a portable zip built from this ref, using the
 # replacer that ships in that release.  See tools/windows-smoke/update_probe.py.
-# Isolated profile only; manual runs only.
+# Isolated profile only. Runs manually, or on a push to the fix branch (a
+# workflow can only be dispatched once it exists on the default branch).
 on:
+  push:
+    branches: [fix/portable-update]
   workflow_dispatch:
     inputs:
       from_tags:
@@ -24,8 +27,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PYTHONUTF8: "1"
-      FROM_TAGS: ${{ inputs.from_tags }}
-      BASELINE_TAG: ${{ inputs.baseline_tag }}
+      FROM_TAGS: ${{ inputs.from_tags || 'v2.5.30 v2.5.27' }}
+      BASELINE_TAG: ${{ github.event_name == 'push' && 'v2.5.31' || inputs.baseline_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
