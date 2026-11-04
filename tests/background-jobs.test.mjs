@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BackgroundJobs, WAKE_PREFIX, runningBackgroundJobs, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
+import {BackgroundJobs, WAKE_PREFIX, rememberKinds, runningBackgroundJobs, waitNudge, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
 
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
 function fresh(options = {}) {
@@ -88,4 +88,36 @@ test('wake-up tells 碧琪 to merge what she did while waiting, and the running 
     assert.deepEqual(runningBackgroundJobs(''), []);
     assert.equal(shared.owner, owner, 'reading must not install a new waker');
   } finally { shared.jobs.delete('bg-r1'); shared.jobs.delete('bg-r2'); }
+});
+
+test('a second wait in a row on a running job is turned into the while-waiting list; real work resets it', () => {
+  const STATE = Symbol.for('pinkie.backgroundJobs.v1');
+  const shared = globalThis[STATE] ||= {jobs: new Map(), timer: null};
+  const jobs = new BackgroundJobs({now: () => 100_000});
+  const sessionKey = 'agent:thinking:wait';
+  shared.jobs.set('bg-w1', {id: 'bg-w1', sessionKey, state: 'running', command: 'python3 render.py', startedAt: 40_000});
+  rememberKinds(sessionKey, ['video_motion']);
+  const ctx = {sessionKey};
+  const poll = {toolName: 'process', params: {action: 'poll', sessionId: 'x', timeout: 25000}};
+  try {
+    assert.equal(jobs.beforeTool({toolName: 'process', params: {action: 'log', sessionId: 'x'}}, ctx), null, 'first look is fine');
+    const blocked = jobs.beforeTool(poll, ctx);
+    assert.equal(blocked?.block, true);
+    assert.match(blocked.blockReason, /「python3 render\.py」（已跑约 60 秒）还在后台跑/);
+    assert.match(blocked.blockReason, /抽帧/, 'video list');
+    assert.equal(jobs.beforeTool({toolName: 'exec', params: {command: 'ps aux | grep render.py | grep -v grep'}}, ctx)?.block, true, 'ps is waiting too');
+    assert.equal(jobs.beforeTool({toolName: 'exec', params: {command: 'sleep 20'}}, ctx)?.block, true);
+    assert.equal(jobs.beforeTool({toolName: 'write', params: {path: 'cover.html'}}, ctx), null, 'real work');
+    assert.equal(jobs.beforeTool(poll, ctx), null, 'streak reset');
+    assert.equal(jobs.beforeTool({toolName: 'exec', params: {command: 'ls output && python3 make_cover.py'}}, ctx), null, 'mixed command is work');
+    // stuck case: after 4 blocked waits in a row it lets the wait through
+    jobs.beforeTool(poll, ctx);
+    let allowed = 0;
+    for (let i = 0; i < 6; i += 1) if (!jobs.beforeTool(poll, ctx)) allowed += 1;
+    assert.ok(allowed >= 1);
+    assert.equal(jobs.beforeTool(poll, {sessionKey: 'agent:unrestricted:wait'}), null, 'not in unrestricted mode');
+    shared.jobs.get('bg-w1').state = 'done';
+    assert.equal(jobs.beforeTool(poll, ctx), null, 'nothing running → no guard');
+    assert.match(waitNudge([{command: 'x', startedAt: 0}], [], 5000), /写好交付说明/, 'generic list');
+  } finally { shared.jobs.delete('bg-w1'); shared.waitStreak?.delete(sessionKey); shared.kinds?.delete(sessionKey); }
 });

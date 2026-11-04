@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {waitingItems} from './work-kinds.mjs';
 
 // 后台命令守望。OpenClaw 自带的「后台命令结束就叫醒」走心跳：只有默认智能体开着心跳，
 // 而且心跳回复默认不进聊天记录（2026-10-25 实测：项目模式完全没被叫醒；唠嗑模式被叫醒了，
@@ -34,6 +35,33 @@ export function wakeMessage(job) {
     + '这条消息由系统自动发出，用户看不到，回复里不要提到它。';
 }
 
+// 后台命令还在跑时，小模型常连着 poll / log / sleep / ps 干等（11-04 隔离实测：渲染放后台后
+// log → poll 25 秒 → log → ps → poll 25 秒 → ls → poll 25 秒）。系统提示里的规则它看过就忘，
+// 所以在它第二次连着「等」的那一刻拦下来，把这件活的等待清单直接当成工具结果给它。
+const WAIT_ACTIONS = new Set(['poll', 'log', 'list']);
+const WAIT_SEGMENT = /^\s*(?:sleep\s+\d|ps\b|pgrep\b|ls\b|du\b|tail\b|wc\b|stat\b|grep\b|cat\s+\S*\.(?:log|txt)\b|echo\b|true\b)/;
+const MAX_BLOCKED_WAITS = 4;
+
+export function rememberKinds(sessionKey = '', kinds = []) {
+  const shared = globalThis[STATE] ||= {jobs: new Map(), timer: null};
+  shared.kinds ||= new Map();
+  if (sessionKey && kinds.length) shared.kinds.set(sessionKey, [...kinds]);
+}
+
+function waitingCall(name, params = {}) {
+  if (name === 'process') return WAIT_ACTIONS.has(String(params.action || ''));
+  if (!/(?:^|_)exec$/.test(name)) return false;
+  const command = String(params.command || params.cmd || '').trim();
+  return Boolean(command) && command.split(/&&|\|\||;|\|/).every((part) => !part.trim() || WAIT_SEGMENT.test(part));
+}
+
+export function waitNudge(jobs = [], kinds = [], now = Date.now()) {
+  const list = jobs.slice(0, 3).map((job) => `「${String(job.command || '').replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((now - job.startedAt) / 1000))} 秒）`).join('、');
+  return `${list}还在后台跑，跑完系统会自动叫你，不用再查。现在先做不依赖它的事：`
+    + waitingItems(kinds).map((item, i) => `${i + 1}）${item}`).join('；')
+    + '。真的一件都不剩了，就用一句话告诉先生在跑什么、大概要多久，然后结束这一轮。';
+}
+
 // 只读：这个会话里还在跑的后台命令（新的一轮开始时告诉碧琪「还有这些在跑」）。不新建守望实例。
 export function runningBackgroundJobs(sessionKey = '') {
   const jobs = globalThis[STATE]?.jobs;
@@ -56,6 +84,21 @@ export class BackgroundJobs {
   }
 
   get jobs() { return this.shared.jobs; }
+
+  // before_tool_call：后台命令还在跑、又连着第二次「等」→ 拦下，改成等待清单。干别的就清零。
+  beforeTool(event = {}, ctx = {}) {
+    const sessionKey = String(ctx.sessionKey || '');
+    if (!SESSION_KEY.test(sessionKey) || /^agent:unrestricted:/.test(sessionKey) || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return null;
+    const shared = this.shared;
+    shared.waitStreak ||= new Map();
+    const running = this.runningFor(sessionKey);
+    const name = String(event.toolName || '').toLowerCase();
+    if (!running.length || !waitingCall(name, event.params || {})) { shared.waitStreak.delete(sessionKey); return null; }
+    const streak = (shared.waitStreak.get(sessionKey) || 0) + 1;
+    shared.waitStreak.set(sessionKey, streak);
+    if (streak < 2 || streak > MAX_BLOCKED_WAITS + 1) return null;
+    return {block: true, blockReason: waitNudge(running, shared.kinds?.get(sessionKey) || [], this.now())};
+  }
 
   // after_tool_call：exec 转后台就登记；process 读到结束就算碧琪自己已经知道了，不必再叫醒。
   afterTool(event = {}, ctx = {}) {

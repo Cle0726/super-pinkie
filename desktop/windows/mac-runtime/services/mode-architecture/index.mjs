@@ -13,7 +13,7 @@ import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reason
 import {skillRouteBlock} from './skill-routes.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
-import {BackgroundJobs, runningBackgroundJobs} from './background-jobs.mjs';
+import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
@@ -1406,9 +1406,10 @@ const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|�
 
 // 回复只是「准备向先生汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
 // 最终回复却只有一句「碧琪准备向先生汇报。」）。
-const REPORT_ANNOUNCE_TAIL = /(?:准备|这就|马上|现在|下面|接下来|即将)(?:就)?(?:向|给|跟)?(?:先生|老板|您)?(?:做个?|进行)?(?:汇报|报告|总结|说明结果|交付结果)[。.!！~～]*$/;
+// 11-04 隔离实测 R-infographic：图做好了，最后一句是「现在进行正式回复。」就结束了。
+const REPORT_ANNOUNCE_TAIL = /(?:准备|这就|马上|现在|下面|接下来|即将|开始)(?:就)?(?:向|给|跟)?(?:先生|老板|您)?(?:做个?|进行|开始|来)?(?:正式|最终的?|最后的?)?(?:汇报|报告|总结|说明结果|交付结果|交付|回复|答复|回答)[。.!！~～]*$/;
 
-function promiseWithoutActionReason(reply = '') {
+export function promiseWithoutActionReason(reply = '') {
   const text = String(reply || '').trim();
   const tail = text.slice(-140);
   if (tail && text.length <= 200 && REPORT_ANNOUNCE_TAIL.test(tail) && !/[？?]/.test(tail)) {
@@ -5501,6 +5502,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
         try {
           const routed = classifyWorkKind(routedPrompt, {mode});
+          if (routed.kinds?.length && !['simple', 'pending'].includes(routed.kind)) rememberKinds(sessionKey, routed.kinds);
           const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
           const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
           if (block) blocks.push('\n' + block + '\n');
@@ -6646,6 +6648,8 @@ export default {
     api.on('before_tool_call', (event, ctx) => {
       const decision = architecture.beforeTool(event, ctx);
       if (!decision?.block) {
+        const waiting = background.beforeTool(event, ctx);
+        if (waiting) return waiting;
         cleKk.beforeTool({...event, params: decision?.params || event.params}, ctx);
       }
       return decision;
