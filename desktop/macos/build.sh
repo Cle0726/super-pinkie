@@ -225,7 +225,7 @@ ditto "$REPO_ROOT/services/chatgpt-collab" "$CONTENTS/Resources/SuperPinkie/serv
 # workspace versions. Keep the packaged set in its own low-priority root.
 # Community skills (skills/community-skills.json) ship beside them; the router in
 # services/mode-architecture/skill-routes.mjs hands their paths to the model.
-COMMUNITY_SKILLS="$("$NODE_BIN" -e 'console.log(require(process.argv[1]).skills.map(s => s.name).join(" "))' "$REPO_ROOT/skills/community-skills.json")"
+COMMUNITY_SKILLS="$("$NODE_BIN" -e 'const m = require(process.argv[1]); console.log([...(m.own || []), ...m.skills].map(s => s.name).join(" "))' "$REPO_ROOT/skills/community-skills.json")"
 [[ -n "$COMMUNITY_SKILLS" ]] || { echo "community skill manifest is empty" >&2; exit 1; }
 for skill in deep-think pinkie-deep-research web-gpt-collab pinkie-skill-library $COMMUNITY_SKILLS; do
   [[ -f "$REPO_ROOT/skills/$skill/SKILL.md" ]] || { echo "missing skill: $skill" >&2; exit 1; }

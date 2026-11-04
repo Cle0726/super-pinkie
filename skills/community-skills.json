@@ -9,7 +9,24 @@
     "every-app": {"repo": "every-app/video-skills", "commit": "01afbd2", "license": "MIT", "licenseFile": "LICENSE"},
     "neelshah": {"repo": "Neelshah1810/Claude-Video-Skills", "commit": "d164549", "license": "MIT", "licenseFile": "LICENSE"},
     "superpowers": {"repo": "obra/superpowers", "commit": "22f0b46", "license": "MIT", "licenseFile": "LICENSE"},
-    "xhs": {"repo": "Beatatata/xhs-cover-templates", "commit": "381473f", "license": "MIT", "licenseFile": "LICENSE"}
+    "xhs": {"repo": "Beatatata/xhs-cover-templates", "commit": "381473f", "license": "MIT", "licenseFile": "LICENSE"},
+    "officecli": {"repo": "iOfficeAI/OfficeCLI", "commit": "c56512c", "license": "Apache-2.0", "licenseFile": "LICENSE"},
+    "taste": {"repo": "Leonxlnx/taste-skill", "commit": "12af471", "license": "MIT", "licenseFile": "LICENSE"},
+    "archify": {"repo": "tt-a1i/archify", "commit": "a406594", "license": "Apache-2.0", "licenseFile": "LICENSE"},
+    "ppt-master": {"repo": "hugohe3/ppt-master", "commit": "4a68cdd", "license": "MIT", "licenseFile": "LICENSE"},
+    "frontend-slides": {"repo": "zarazhangrui/frontend-slides", "commit": "9906a34", "license": "MIT", "licenseFile": "LICENSE"},
+    "antv-charts": {"repo": "antvis/chart-visualization-skills", "commit": "a105fa1", "license": "MIT（不收会把数据发到远程渲染服务的 chart-visualization / gpt-vis）", "licenseFile": "LICENSE"},
+    "threejs": {"repo": "CloudAI-X/threejs-skills", "commit": "0e18186", "license": "MIT", "licenseFile": "LICENSE"},
+    "mermaid": {"repo": "imxv/Pretty-mermaid-skills", "commit": "e234ab7", "license": "MIT", "licenseFile": "LICENSE"},
+    "dashmotion": {"repo": "csthink/dashmotion", "commit": "ae2fe4f", "license": "MIT", "licenseFile": "LICENSE"},
+    "ecommerce": {"repo": "xianyu110/ecommerce-image-skills", "commit": "f4566fd", "license": "MIT", "licenseFile": "LICENSE"},
+    "ip-logo": {"repo": "s1dashu/ip-as-logo-skill", "commit": "798d4e6", "license": "MIT", "licenseFile": "LICENSE"},
+    "naming": {"repo": "glacierphonk/naming", "commit": "e7af8a5", "license": "MIT", "licenseFile": "LICENSE"},
+    "marketing": {"repo": "coreyhaines31/marketingskills", "commit": "88c79f6", "license": "MIT", "licenseFile": "LICENSE"},
+    "addy": {"repo": "addyosmani/agent-skills", "commit": "301b02b", "license": "MIT", "licenseFile": "LICENSE"},
+    "gameforge": {"repo": "AlterLab-IEU/AlterLab_GameForge", "commit": "5f5148d", "license": "MIT", "licenseFile": "LICENSE"},
+    "openai": {"repo": "openai/skills", "commit": "49f948f", "license": "Apache-2.0（只收文件夹里带 LICENSE.txt 的）", "licenseFile": "per-skill LICENSE.txt"},
+    "mesh": {"repo": "9929y/genai-mesh-gradient", "commit": "a251ed4", "license": "MIT", "licenseFile": "LICENSE"}
   },
   "skills": [
     {"name": "ui-ux-pro-max", "from": "ui-ux-pro-max", "path": ".claude/skills/ui-ux-pro-max", "zh": "做网页、App 界面前先查：按行业挑风格、配色、字体、UX 规则（带可搜索的数据表）"},
@@ -64,6 +81,105 @@
     {"name": "writing-plans", "from": "superpowers", "path": "skills/writing-plans", "zh": "大活先写计划，拆成能验证的小步"},
     {"name": "executing-plans", "from": "superpowers", "path": "skills/executing-plans", "zh": "按写好的计划一步步做、每步验证"},
 
-    {"name": "xhs-cover-templates", "from": "xhs", "path": ".", "files": ["*.html", "塔塔的封面分类研究.md", "README.md"], "skillMd": "xhs-cover-templates.SKILL.md", "zh": "16 套小红书封面现成模板（亮 / 暗两版）"}
+    {"name": "xhs-cover-templates", "from": "xhs", "path": ".", "files": ["*.html", "塔塔的封面分类研究.md", "README.md"], "skillMd": "xhs-cover-templates.SKILL.md", "zh": "16 套小红书封面现成模板（亮 / 暗两版）"},
+
+    {"name": "officecli", "from": "officecli", "path": "skills/officecli", "zh": "Word / Excel / PPT 总入口（officecli 单文件命令行，不用装 Office）：新建、修改、检查、加图表，交付前质检"},
+    {"name": "officecli-docx", "from": "officecli", "path": "skills/officecli-docx", "zh": "Word 文档：目录、页码、多级编号、表格、报告和公文排版"},
+    {"name": "officecli-xlsx", "from": "officecli", "path": "skills/officecli-xlsx", "zh": "Excel 表格：公式、条件格式、冻结窗格、图表、打印设置"},
+    {"name": "officecli-pptx", "from": "officecli", "path": "skills/officecli-pptx", "zh": "真 .pptx 演示稿：版式、图表、流程图、设计规范"},
+    {"name": "officecli-pitch-deck", "from": "officecli", "path": "skills/officecli-pitch-deck", "zh": "路演 / 融资 / 招商 deck"},
+    {"name": "officecli-academic-paper", "from": "officecli", "path": "skills/officecli-academic-paper", "zh": "论文和学术文档的 Word 排版"},
+    {"name": "officecli-data-dashboard", "from": "officecli", "path": "skills/officecli-data-dashboard", "zh": "Excel 数据看板"},
+    {"name": "officecli-financial-model", "from": "officecli", "path": "skills/officecli-financial-model", "zh": "财务模型（Excel：预算、预测、三张报表）"},
+    {"name": "officecli-word-form", "from": "officecli", "path": "skills/officecli-word-form", "zh": "Word 表单：申请表、登记表、可填写的表格"},
+    {"name": "morph-ppt", "from": "officecli", "path": "skills/morph-ppt", "zh": "50 多种现成 PPT 风格（每种都有 .pptx 成品和生成脚本），带平滑切换动画"},
+    {"name": "morph-ppt-3d", "from": "officecli", "path": "skills/morph-ppt-3d", "zh": "PPT 里的 3D 模型和平滑切换"},
+
+    {"name": "design-taste-frontend", "from": "taste", "path": "skills/taste-skill", "zh": "网页审美总监：从 247 个获奖网站总结的方向库，定方向再做页面、截图自查，让网页不像 AI 模板"},
+
+    {"name": "archify", "from": "archify", "path": "archify", "zh": "架构图、流程图、时序图、ER 图、状态图、时间线等图解：可交互的单页 HTML，能导出图片", "exclude": ["examples/*-rendered.html"]},
+
+    {"name": "ppt-master", "from": "ppt-master", "path": "skills/ppt-master", "zh": "可编辑 PPT（.pptx）全流程：课件、汇报、路演，品牌模板、上万个图标、音效和动画", "fetch": true, "size": "约 40 MB、一万多个文件"},
+
+    {"name": "frontend-slides", "from": "frontend-slides", "path": ".", "zh": "网页版幻灯片：动画丰富的 HTML 演示，也能把 PPT 转成网页", "exclude": ["plugins/*", "plugins/**", ".claude-plugin/*", ".gitignore"]},
+
+    {"name": "antv-g2-chart", "from": "antv-charts", "path": "skills/antv-g2-chart", "zh": "AntV G2 图表：柱状、折线、饼图、散点、雷达、热力等（本地渲染）"},
+    {"name": "antv-g6-graph", "from": "antv-charts", "path": "skills/antv-g6-graph", "zh": "关系图、网络图、树图、脑图（AntV G6）"},
+
+    {"name": "threejs-fundamentals", "from": "threejs", "path": "skills/threejs-fundamentals", "zh": "3D 网页基础：场景、相机、渲染、动画循环"},
+    {"name": "threejs-animation", "from": "threejs", "path": "skills/threejs-animation", "zh": "3D 动画"},
+    {"name": "threejs-interaction", "from": "threejs", "path": "skills/threejs-interaction", "zh": "3D 交互：点击、拖拽、视角控制"},
+    {"name": "threejs-materials", "from": "threejs", "path": "skills/threejs-materials", "zh": "3D 材质"},
+    {"name": "threejs-lighting", "from": "threejs", "path": "skills/threejs-lighting", "zh": "3D 灯光和阴影"},
+    {"name": "threejs-textures", "from": "threejs", "path": "skills/threejs-textures", "zh": "3D 贴图"},
+    {"name": "threejs-geometry", "from": "threejs", "path": "skills/threejs-geometry", "zh": "3D 几何体"},
+    {"name": "threejs-loaders", "from": "threejs", "path": "skills/threejs-loaders", "zh": "加载 3D 模型（glTF 等）"},
+    {"name": "threejs-shaders", "from": "threejs", "path": "skills/threejs-shaders", "zh": "着色器特效"},
+    {"name": "threejs-postprocessing", "from": "threejs", "path": "skills/threejs-postprocessing", "zh": "3D 后期特效（泛光、景深）"},
+    {"name": "threejs-performance", "from": "threejs", "path": "skills/threejs-performance", "zh": "3D 性能优化"},
+    {"name": "threejs-react-three-fiber", "from": "threejs", "path": "skills/threejs-react-three-fiber", "zh": "React 里的 3D（R3F）"},
+    {"name": "threejs-asset-pipeline", "from": "threejs", "path": "skills/threejs-asset-pipeline", "zh": "3D 素材处理流程"},
+
+    {"name": "pretty-mermaid", "from": "mermaid", "path": ".", "zh": "流程图、时序图、思维导图、甘特图等 Mermaid 图，渲染成好看的 SVG / PNG", "exclude": ["docs/*", "docs/**", ".github/*", ".github/**", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "RELEASING.md", "SECURITY.md", "README_JA.md", ".gitignore"]},
+
+    {"name": "dashmotion", "from": "dashmotion", "path": "skills/dashmotion", "zh": "会动的技术图：连线流动的流程图、架构图（单个 HTML）"},
+
+    {"name": "taobao-detail-long-image", "from": "ecommerce", "path": "skills/taobao-detail-long-image", "zh": "淘宝 / 拼多多 / 京东详情页长图（750 宽，一屏一屏拼起来）"},
+    {"name": "sale-banner", "from": "ecommerce", "path": "skills/sale-banner", "zh": "电商促销横幅"},
+    {"name": "selling-point-infographic", "from": "ecommerce", "path": "skills/selling-point-infographic", "zh": "商品卖点信息图"},
+    {"name": "size-chart", "from": "ecommerce", "path": "skills/size-chart", "zh": "尺码表"},
+    {"name": "ecommerce-listing-suite", "from": "ecommerce", "path": "skills/ecommerce-listing-suite", "zh": "一套上架图：主图、卖点、场景、细节"},
+    {"name": "lifestyle-scene", "from": "ecommerce", "path": "skills/lifestyle-scene", "zh": "商品场景图"},
+    {"name": "amazon-white-background", "from": "ecommerce", "path": "skills/amazon-white-background", "zh": "白底商品图"},
+    {"name": "batch-background-swap", "from": "ecommerce", "path": "skills/batch-background-swap", "zh": "商品图批量换背景"},
+    {"name": "multi-angle-set", "from": "ecommerce", "path": "skills/multi-angle-set", "zh": "商品多角度图"},
+    {"name": "model-try-on", "from": "ecommerce", "path": "skills/model-try-on", "zh": "模特上身图"},
+    {"name": "amazon-a-plus", "from": "ecommerce", "path": "skills/amazon-a-plus", "zh": "亚马逊 A+ 页面"},
+    {"name": "xiaohongshu-cover", "from": "ecommerce", "path": "skills/xiaohongshu-cover", "zh": "小红书种草封面（电商商品）"},
+
+    {"name": "ip-as-logo", "from": "ip-logo", "path": ".", "zh": "IP 形象 logo：极简、圆润、可爱的拟人角色", "exclude": [".gitignore"]},
+
+    {"name": "naming", "from": "naming", "path": ".", "zh": "起名：品牌、产品、店名、App（隐喻法，查重名和域名）", "exclude": [".github/*", ".github/**", ".markdownlint.yml", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md"]},
+
+    {"name": "copywriting", "from": "marketing", "path": "skills/copywriting", "zh": "营销文案：落地页、广告、产品介绍"},
+    {"name": "copy-editing", "from": "marketing", "path": "skills/copy-editing", "zh": "文案修改润色"},
+    {"name": "social", "from": "marketing", "path": "skills/social", "zh": "社交媒体内容：帖子、话题、发布日历"},
+    {"name": "emails", "from": "marketing", "path": "skills/emails", "zh": "营销邮件和邮件序列"},
+    {"name": "ad-creative", "from": "marketing", "path": "skills/ad-creative", "zh": "广告创意和投放素材"},
+    {"name": "launch", "from": "marketing", "path": "skills/launch", "zh": "产品发布方案"},
+    {"name": "marketing-ideas", "from": "marketing", "path": "skills/marketing-ideas", "zh": "营销点子大全"},
+    {"name": "pricing", "from": "marketing", "path": "skills/pricing", "zh": "定价策略"},
+    {"name": "offers", "from": "marketing", "path": "skills/offers", "zh": "促销和优惠方案"},
+    {"name": "product-marketing", "from": "marketing", "path": "skills/product-marketing", "zh": "产品定位和卖点"},
+    {"name": "content-strategy", "from": "marketing", "path": "skills/content-strategy", "zh": "内容规划"},
+    {"name": "marketing-psychology", "from": "marketing", "path": "skills/marketing-psychology", "zh": "营销心理学"},
+    {"name": "cro", "from": "marketing", "path": "skills/cro", "zh": "转化率优化：落地页、表单、注册"},
+
+    {"name": "frontend-ui-engineering", "from": "addy", "path": "skills/frontend-ui-engineering", "zh": "前端界面工程：组件、状态、可访问性"},
+    {"name": "browser-testing-with-devtools", "from": "addy", "path": "skills/browser-testing-with-devtools", "zh": "用浏览器开发者工具测网页"},
+    {"name": "api-and-interface-design", "from": "addy", "path": "skills/api-and-interface-design", "zh": "接口设计"},
+    {"name": "code-review-and-quality", "from": "addy", "path": "skills/code-review-and-quality", "zh": "代码审查"},
+    {"name": "code-simplification", "from": "addy", "path": "skills/code-simplification", "zh": "代码化简"},
+    {"name": "performance-optimization", "from": "addy", "path": "skills/performance-optimization", "zh": "性能优化"},
+    {"name": "security-and-hardening", "from": "addy", "path": "skills/security-and-hardening", "zh": "安全加固"},
+    {"name": "shipping-and-launch", "from": "addy", "path": "skills/shipping-and-launch", "zh": "上线前检查"},
+    {"name": "idea-refine", "from": "addy", "path": "skills/idea-refine", "zh": "把模糊的想法打磨成能做的方案"},
+    {"name": "spec-driven-development", "from": "addy", "path": "skills/spec-driven-development", "zh": "先写规格再写代码"},
+
+    {"name": "game-designer", "from": "gameforge", "path": "skills/agents/game-designer", "zh": "游戏设计：玩法、关卡、手感"},
+    {"name": "game-prototype", "from": "gameforge", "path": "skills/workflows/game-prototype", "zh": "快速做出能玩的游戏原型"},
+    {"name": "game-jam-mode", "from": "gameforge", "path": "skills/workflows/game-jam-mode", "zh": "限时做完一个小游戏"},
+    {"name": "game-playtest", "from": "gameforge", "path": "skills/workflows/game-playtest", "zh": "游戏试玩测试"},
+    {"name": "game-balance-check", "from": "gameforge", "path": "skills/workflows/game-balance-check", "zh": "游戏数值平衡"},
+
+    {"name": "pdf", "from": "openai", "path": "skills/.curated/pdf", "zh": "PDF：生成、读取、检查（渲染成图片看排版）"},
+
+    {"name": "genai-mesh-gradient", "from": "mesh", "path": ".", "zh": "渐变背景：网页、PPT、品牌视觉", "exclude": ["AGENTS.md"]}
+  ],
+  "own": [
+    {"name": "pinkie-id-photo", "zh": "证件照：换白 / 蓝 / 红底、一寸二寸等标准尺寸、六寸排版冲印（底层 HivisionIDPhotos，Apache-2.0，本地跑）"},
+    {"name": "pinkie-remove-background", "zh": "抠图去背景、换纯色底或背景图、批量处理（底层 rembg，MIT，本地跑）"},
+    {"name": "pinkie-kids-worksheets", "zh": "字帖（田字格 / 米字格 / 回宫格、拼音、描红）和口算题卡（带答案页），A4 PDF"},
+    {"name": "pinkie-resume", "zh": "简历：填一份 YAML 出排版好的 PDF，多套主题，中英文（底层 RenderCV，MIT）"}
   ]
 }
