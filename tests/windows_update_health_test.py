@@ -12,6 +12,7 @@ never rolls back a started version merely for being slow.
 """
 from pathlib import Path
 import os
+import socket
 import tempfile
 import time
 import unittest
@@ -66,10 +67,24 @@ class ReporterTest(unittest.TestCase):
     def _marker(self, suffix):
         return self.root / "updates" / "health" / f"{TOKEN}{suffix}"
 
-    def _reporter(self, helper):
+    def _reporter(self, helper, port=None):
         (self.root / "updates" / f"apply-{TOKEN}.ps1").write_text(helper, encoding="utf-8-sig")
         return UpdateHealthReporter(TOKEN, self.node, listener=lambda: dict(self.listener),
-                                    root=self.root, poll=.01, limit=5)
+                                    root=self.root, poll=.01, limit=5, port=port or self._free_port(), hold_limit=5)
+
+    @staticmethod
+    def _free_port():
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            return probe.getsockname()[1]
+
+    @staticmethod
+    def _listening(port):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=.5):
+                return True
+        except OSError:
+            return False
 
     def _wait(self, path, seconds=2):
         deadline = time.monotonic() + seconds
@@ -85,22 +100,50 @@ class ReporterTest(unittest.TestCase):
         self.assertTrue(self._marker(".started").is_file())
         self.assertTrue(self._marker(".ready").is_file())
 
-    def test_gateway_helper_is_answered_once_our_own_gateway_listens(self):
-        # 2.5.29-2.5.31 reject the update if no gateway from the new folder is
-        # listening when the marker appears, so wait for exactly that -- but
-        # not for the page load, which costs more of the 120 s budget.
-        reporter = self._reporter(HELPER_2_5_29)
+    def test_gateway_helper_is_answered_within_seconds_from_the_new_exe(self):
+        # 2.5.29-2.5.31 accept only if every listener on the gateway port runs
+        # from the new folder, and give up after 120 s.  Users in China cannot
+        # fall back to a manual GitHub download, so the new exe answers at once
+        # by listening on the port itself, then frees it for the real gateway
+        # as soon as the old helper has finished (it deletes its own script).
+        port = self._free_port()
+        reporter = self._reporter(HELPER_2_5_29, port=port)
         thread = reporter.start()
         self.assertTrue(self._marker(".started").is_file())
-        time.sleep(.1)
-        self.assertFalse(self._marker(".ready").exists())
-        self.listener["image"] = str(self.root / "old" / "_internal" / "runtime" / "bin" / "node.exe")
-        time.sleep(.1)
-        self.assertFalse(self._marker(".ready").exists(), "an old install's gateway must not count")
-        self.listener["image"] = str(self.node)
-        self.assertTrue(self._wait(self._marker(".ready")))
+        self.assertTrue(self._marker(".ready").is_file(), "must not wait for the cold gateway")
+        self.assertTrue(self._listening(port))
+        self.assertFalse(reporter.port_free.is_set(), "the real gateway must wait for the helper")
+        time.sleep(.3)
+        self.assertFalse(reporter.port_free.is_set())
+        (self.root / "updates" / f"apply-{TOKEN}.ps1").unlink()  # helper finished
+        self.assertTrue(reporter.wait_for_gateway_port(timeout=3))
         thread.join(timeout=2)
-        self.assertFalse(thread.is_alive())
+        self.assertFalse(self._listening(port))
+        # The port can now be bound by the real gateway.
+        with socket.socket() as gateway:
+            gateway.bind(("127.0.0.1", port))
+
+    def test_gateway_helper_without_a_free_port_waits_for_our_own_gateway(self):
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0)); busy.listen(1)
+            reporter = self._reporter(HELPER_2_5_29, port=busy.getsockname()[1])
+            thread = reporter.start()
+            self.assertTrue(reporter.port_free.is_set())
+            time.sleep(.1)
+            self.assertFalse(self._marker(".ready").exists())
+            self.listener["image"] = str(self.root / "old" / "_internal" / "runtime" / "bin" / "node.exe")
+            time.sleep(.1)
+            self.assertFalse(self._marker(".ready").exists(), "an old install's gateway must not count")
+            self.listener["image"] = str(self.node)
+            self.assertTrue(self._wait(self._marker(".ready")))
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+
+    def test_helper_that_never_finishes_cannot_block_the_gateway_forever(self):
+        reporter = self._reporter(HELPER_2_5_29)
+        reporter.hold_limit = .3
+        reporter.start()
+        self.assertTrue(reporter.wait_for_gateway_port(timeout=3))
 
     def test_two_phase_helper_gets_started_now_and_ready_from_the_page_or_gateway(self):
         reporter = self._reporter(WindowsUpdater._directory_helper_source())

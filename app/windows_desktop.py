@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -2523,7 +2524,7 @@ class UpdateHealthReporter:
     those versions land.
     """
 
-    def __init__(self, token, own_node, listener=None, root=None, poll=.5, limit=900.0):
+    def __init__(self, token, own_node, listener=None, root=None, poll=.5, limit=900.0, port=None, hold_limit=90.0):
         self.token = token
         self.own_node = str(own_node)
         self.listener = listener
@@ -2532,6 +2533,12 @@ class UpdateHealthReporter:
         self.limit = limit
         self.protocol = update_helper_protocol(token, root)
         self.done = threading.Event()
+        self.port = port or urllib.parse.urlparse(GATEWAY_URL).port or 18789
+        self.hold_limit = hold_limit
+        # Set while the gateway port is free for our real gateway to bind.
+        self.port_free = threading.Event()
+        self.port_free.set()
+        self._placeholder = None
 
     def _marker(self, suffix):
         directory = Path(self.root or state_root()) / "updates" / "health"
@@ -2562,9 +2569,64 @@ class UpdateHealthReporter:
         if self.protocol == "marker":
             self.ready()
             return None
+        if self.protocol == "gateway" and self._hold_gateway_port():
+            # 2.5.29-2.5.31: answered within seconds instead of after a cold
+            # gateway start, which on a slow, virus-scanned first start runs
+            # past their fixed 120 s and rolled the update back.  Users who
+            # cannot download from GitHub have no manual way around that.
+            self.ready()
+            thread = threading.Thread(target=self._release_after_helper, name="pinkie-update-port", daemon=True)
+            thread.start()
+            return thread
         thread = threading.Thread(target=self._watch, name="pinkie-update-health", daemon=True)
         thread.start()
         return thread
+
+    def _hold_gateway_port(self):
+        """Listen on the gateway port from this new install's own process.
+
+        Those helpers accept the update when every listener on the gateway port
+        runs from the new install folder -- their guard against an *old*
+        gateway being adopted.  This process is the new install's own exe, so
+        it truthfully passes that check; the stale-gateway retirement above has
+        already run.  The real gateway is started only after the helper has
+        finished and this placeholder is closed (see wait_for_gateway_port).
+        """
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+            if exclusive is not None:
+                listener.setsockopt(socket.SOL_SOCKET, exclusive, 1)
+            listener.bind(("127.0.0.1", self.port))
+            listener.listen(16)
+        except OSError as error:
+            listener.close()
+            append_log("launcher", f"update port placeholder unavailable ({error}); waiting for the gateway instead")
+            return False
+        self._placeholder = listener
+        self.port_free.clear()
+        return True
+
+    def _release_after_helper(self):
+        helper = Path(self.root or state_root()) / "updates" / f"apply-{self.token}.ps1"
+        deadline = time.monotonic() + self.hold_limit
+        # The old helper deletes its own script as its very last step.
+        while helper.exists() and time.monotonic() < deadline:
+            time.sleep(.2)
+        self.release_port()
+
+    def release_port(self):
+        listener, self._placeholder = self._placeholder, None
+        if listener is not None:
+            try:
+                listener.close()
+            except OSError:
+                pass
+            append_log("launcher", "update port placeholder released")
+        self.port_free.set()
+
+    def wait_for_gateway_port(self, timeout=None):
+        return self.port_free.wait(self.hold_limit + 5 if timeout is None else timeout)
 
     def _watch(self):
         deadline = time.monotonic() + self.limit
@@ -2730,6 +2792,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         try:
             prepare(lambda message: append_log("setup", message))
             services.start()
+            reporter = getattr(updater, "health_reporter", None)
+            if reporter is not None:
+                # An old replacer may still be checking the gateway port.
+                if not reporter.wait_for_gateway_port():
+                    reporter.release_port()
             gateway.start()
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
             # The splash page polls the local gateway itself.  Do not call
