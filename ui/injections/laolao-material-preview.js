@@ -197,6 +197,10 @@
   };
 
   const requestSidebarPreview = (target) => {
+    // Windows has a separate, unprivileged web browser. Keep local materials
+    // in the existing validated native preview instead of sending file paths
+    // to that browser (which intentionally only accepts HTTP(S) URLs).
+    if (document.documentElement?.dataset.pinkiePlatform === "windows" && window.pywebview?.api?.preview_material) return Promise.resolve(false);
     const handler = window.webkit?.messageHandlers?.laolaoBrowserWorkspace;
     if (!handler) return Promise.resolve(false);
     if (sidebarPreviews.has(target.path)) return sidebarPreviews.get(target.path);

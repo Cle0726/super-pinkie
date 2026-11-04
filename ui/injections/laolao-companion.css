@@ -165,8 +165,9 @@ html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-clarify__chip.is-
 
 /* 功能菜单：线条图标，悬停时各有一个小动作 */
 .pinkie-buddy__menu {
-  position: absolute; right: 8px; bottom: calc(100% + 2px);
-  width: 214px; padding: 6px;
+  position: fixed; inset: auto; margin: 0; z-index: 10050;
+  width: 228px; padding: 6px; box-sizing: border-box;
+  max-width: calc(100vw - 24px); overflow: auto; overscroll-behavior: contain;
   border-radius: 16px;
   background: rgba(255, 253, 251, .97);
   border: 1px solid color-mix(in srgb, var(--accent, #e94f91) 16%, transparent);
@@ -175,6 +176,8 @@ html:is([data-theme-mode="dark"], [data-pinkie-night]) .pinkie-clarify__chip.is-
   transition: opacity .16s, transform .24s cubic-bezier(.3, 1.4, .5, 1);
   pointer-events: none;
 }
+.pinkie-buddy__menu::backdrop { background: transparent; pointer-events: none; }
+.pinkie-buddy__menu[data-placement="below"] { transform-origin: calc(100% - 30px) 0; }
 .pinkie-buddy__menu.is-shown { opacity: 1; visibility: visible; transform: none; pointer-events: auto; }
 .pinkie-buddy__item {
   display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 9px;

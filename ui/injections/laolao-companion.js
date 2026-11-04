@@ -95,11 +95,21 @@
     bubble = el("div", "pinkie-buddy__bubble"); bubble.setAttribute("role", "status");
     menu = el("div", "pinkie-buddy__menu"); menu.setAttribute("role", "menu");
     menu.id = "pinkie-buddy-menu"; menu.inert = true; bubble.inert = true;
+    // A composer transform and the chat pane's overflow clip trap ordinary
+    // z-index menus. Keep the DOM relationship, but render in the top layer.
+    if (typeof menu.showPopover === "function") menu.setAttribute("popover", "manual");
     buddy.append(figure, caption, bubble, menu);
-    figure.addEventListener("click", (event) => { event.stopPropagation(); nudge("is-boop"); toggleMenu(); });
+    figure.addEventListener("click", (event) => { event.stopPropagation(); nudge("is-boop"); toggleMenu(event.detail === 0); });
     figure.title = "左键打开小菜单，右键设置模型与参数";
     figure.addEventListener("contextmenu", (event) => { event.preventDefault(); event.stopPropagation(); openSettings(); });
     figure.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault(); event.stopPropagation();
+        if (!menu.classList.contains("is-shown")) toggleMenu();
+        const items = menu.querySelectorAll("button");
+        items[event.key === "ArrowUp" ? items.length - 1 : 0]?.focus();
+        return;
+      }
       if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
         event.preventDefault(); event.stopPropagation(); openSettings();
       }
@@ -112,14 +122,15 @@
     });
     bubble.addEventListener("mouseenter", () => clearTimeout(bubbleTimer));
     bubble.addEventListener("mouseleave", () => { if (!bubble.dataset.sticky) scheduleHide(4000); });
-    document.addEventListener("click", (event) => { if (!buddy.contains(event.target)) hideMenu(); });
+    document.addEventListener("click", (event) => { if (!buddy.contains(event.target) && !menu.contains(event.target)) hideMenu(); });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && (menu.classList.contains("is-shown") || bubble.classList.contains("is-shown"))) {
         // 关掉「帮我说清楚」卡片时，还在等的整理结果也作废，别过一会儿又弹出来。
         if (bubble.classList.contains("is-card")) { requestVersion += 1; setState("rest"); }
         event.preventDefault(); hideMenu(); hideBubble(); figure.focus(); return;
       }
-      if (!menu.classList.contains("is-shown") || !buddy.contains(event.target)) return;
+      if (!menu.classList.contains("is-shown") || (!buddy.contains(event.target) && !menu.contains(event.target))) return;
+      if (event.key === "Tab") { hideMenu(); figure.focus(); return; }
       const items = [...menu.querySelectorAll("button")];
       let index = items.indexOf(document.activeElement);
       if (event.key === "ArrowDown") index = (index + 1) % items.length;
@@ -129,6 +140,14 @@
       else return;
       event.preventDefault(); items[index]?.focus();
     });
+    window.addEventListener("resize", queueMenuPosition, {passive: true});
+    document.addEventListener("scroll", queueMenuPosition, {capture: true, passive: true});
+    window.visualViewport?.addEventListener("resize", queueMenuPosition, {passive: true});
+    window.visualViewport?.addEventListener("scroll", queueMenuPosition, {passive: true});
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(queueMenuPosition);
+      observer.observe(figure); observer.observe(menu);
+    }
   };
   /* 会动的碧琪（laolao-buddy-rig.js，加载先后不限）：画出第一帧后才把静态图藏起来；不可用时一直用静态图 */
   // 创建画布要编译着色器（二三十毫秒），等开场画面结束、页面渲染完再做，免得和首屏抢时间；最多等 8 秒。
@@ -214,6 +233,40 @@
   };
 
   /* ── 气泡 & 菜单 ─────────────────────────────────────────────────────── */
+  // CSS-pixel geometry: the same rules apply at every Windows DPI and on Mac.
+  const menuLayout = (anchor, size, viewport, headerBottom = 0) => {
+    const gap = 10, pad = 12;
+    const leftEdge = viewport.left + pad, rightEdge = viewport.left + viewport.width - pad;
+    const bottomEdge = viewport.top + viewport.height - pad;
+    const topEdge = Math.min(bottomEdge, Math.max(viewport.top + pad, headerBottom + 8));
+    const width = Math.max(0, Math.min(size.width, rightEdge - leftEdge));
+    const above = Math.max(0, anchor.top - gap - topEdge);
+    const below = Math.max(0, bottomEdge - anchor.bottom - gap);
+    const placement = size.height <= above || above >= below ? "above" : "below";
+    // Short windows scroll the menu rather than cutting off the first items.
+    const maxHeight = Math.max(0, Math.min(bottomEdge - topEdge, Math.max(above, below, 144)));
+    const height = Math.min(size.height, maxHeight);
+    const left = Math.max(leftEdge, Math.min(anchor.right - width - 8, rightEdge - width));
+    const preferredTop = placement === "above" ? anchor.top - gap - height : anchor.bottom + gap;
+    const top = Math.max(topEdge, Math.min(preferredTop, bottomEdge - height));
+    return {left, top, width, maxHeight, placement};
+  };
+  const positionMenu = () => {
+    if (!menu?.classList.contains("is-shown") || !figure?.isConnected) return;
+    const v = window.visualViewport;
+    const viewport = {left: v?.offsetLeft || 0, top: v?.offsetTop || 0,
+      width: v?.width || document.documentElement.clientWidth, height: v?.height || document.documentElement.clientHeight};
+    menu.style.width = `${Math.max(0, Math.min(228, viewport.width - 24))}px`;
+    const layout = menuLayout(figure.getBoundingClientRect(), {width: menu.offsetWidth, height: menu.scrollHeight + 2},
+      viewport, document.querySelector(".topbar")?.getBoundingClientRect().bottom || 0);
+    for (const key of ["left", "top", "width", "maxHeight"]) menu.style[key] = `${layout[key]}px`;
+    menu.dataset.placement = layout.placement;
+  };
+  let menuPositionFrame = 0;
+  const queueMenuPosition = () => {
+    if (!menu?.classList.contains("is-shown") || menuPositionFrame) return;
+    menuPositionFrame = requestAnimationFrame(() => { menuPositionFrame = 0; positionMenu(); });
+  };
   const say = (html, {sticky = false, ms = 6000, close = sticky} = {}) => {
     hideMenu(); resetBubble();
     bubble.innerHTML = html;
@@ -233,8 +286,12 @@
   const scheduleHide = (ms) => { clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, ms); };
   const hideBubble = () => { bubble.classList.remove("is-shown"); bubble.dataset.sticky = ""; bubble.inert = true; };
   const resetBubble = () => bubble.classList.remove("is-card");
-  const hideMenu = () => { menu.classList.remove("is-shown"); menu.inert = true; figure.setAttribute("aria-expanded", "false"); };
-  const toggleMenu = () => {
+  const hideMenu = () => {
+    menu.classList.remove("is-shown"); menu.inert = true; figure.setAttribute("aria-expanded", "false");
+    if (menu.hasAttribute("popover") && menu.matches(":popover-open")) menu.hidePopover();
+    cancelAnimationFrame(menuPositionFrame); menuPositionFrame = 0;
+  };
+  const toggleMenu = (focusFirst = false) => {
     if (menu.classList.contains("is-shown")) return hideMenu();
     hideBubble();
     menu.textContent = "";
@@ -256,8 +313,11 @@
     item("ambient", prefs.ambient ? "关掉氛围" : "打开氛围", () => { prefs.ambient = !prefs.ambient; savePrefs(); ambient.sync(); });
     item("narrate", prefs.narrate ? "不播报进度" : "播报干活进度", () => { prefs.narrate = !prefs.narrate; savePrefs(); if (!prefs.narrate) caption.classList.remove("is-shown"); });
     item("settings", "模型与参数", openSettings, "也可右键");
-    menu.classList.add("is-shown");
+    if (menu.hasAttribute("popover")) menu.showPopover();
+    else if (menu.parentElement !== document.body) document.body.append(menu);
     menu.inert = false; figure.setAttribute("aria-expanded", "true");
+    menu.classList.add("is-shown"); positionMenu();
+    if (focusFirst) menu.querySelector("button")?.focus();
   };
 
   const openSettings = async () => {
