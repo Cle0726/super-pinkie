@@ -283,3 +283,30 @@ test('a clear request does not get a redundant defaults row', () => {
   const result = normalizeClarify({understood: '把标题字号稍微调小一点，其他地方不动', ready: true, questions: [], defaults: ['调小一个标准字号', '保持原有排版不变']});
   assert.deepEqual(result.defaults, []);
 });
+
+test('random quotes use the helper model in app-quote style, never the 碧琪 persona, and render 我 as 碧琪', async () => {
+  const calls = [];
+  const {assistant} = fixture({fetchImpl: async (url, options) => {
+    calls.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({choices: [{message: {content: JSON.stringify({quotes: [
+      '“我也曾怕过，后来我就去做了。”', '你不是太慢，你只是还没停。', '你不是太慢，你只是还没停', '1. 怕，就带着怕去做。',
+      '#加油', 'https://example.com', '短', '我们一起走过的路不会白走。',
+    ]})}, finish_reason: 'stop'}]}));
+  }});
+  const result = await assistant.ask({kind: 'quotes', mode: 'learning', count: 6, avoid: ['怕，就带着怕去做']});
+  assert.deepEqual(result.quotes, ['碧琪也曾怕过，后来碧琪就去做了。', '你不是太慢，你只是还没停。', '我们一起走过的路不会白走。']);
+  assert.equal(result.model, DEFAULT_COMPANION_MODEL);
+  assert.equal(calls.length, 1);
+  const system = calls[0].messages.find(item => item.role === 'system')?.content || '';
+  assert.match(system, /励志类 App/);
+  assert.doesNotMatch(system, /你是碧琪|称呼用户/);
+  const user = JSON.stringify(calls[0].messages.filter(item => item.role !== 'system'));
+  assert.match(user, /怕，就带着怕去做/);
+  assert.match(user, /学习/);
+  assert.equal(calls[0].temperature, 1.05);
+});
+
+test('quotes with nothing usable fail with a helper message', async () => {
+  const {assistant} = fixture({fetchImpl: async () => new Response(JSON.stringify({choices: [{message: {content: '{"quotes":[]}'}, finish_reason: 'stop'}]}))});
+  await assert.rejects(assistant.ask({kind: 'quotes', mode: 'chat'}), /没写出句子/);
+});

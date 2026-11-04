@@ -2,7 +2,7 @@
   "id": "pinkie-first-person-renderer",
   "name": "Pinkie First-Person Renderer",
   "version": "1.0.0",
-  "description": "Replaces 我 with 碧琪 in outbound reply text only.",
+  "description": "Renders 碧琪's first-person 我 as 碧琪 in outbound reply text (code, links, 我们 and idioms untouched).",
   "activation": {
     "onStartup": true
   },
