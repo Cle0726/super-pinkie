@@ -62,16 +62,35 @@ if [[ ! -f "$MARKER" ]]; then
   if [[ -n "$OPENCLAW_BIN" ]]; then
     PROJECT_AGENT_ADDED=0
     LEARNING_AGENT_ADDED=0
-    if ! "$OPENCLAW_BIN" agents list --json 2>/dev/null | grep -Eq '"id"[[:space:]]*:[[:space:]]*"project"'; then
+    # This validates the OpenClaw configuration. Reuse the result while it is
+    # unchanged rather than starting the full CLI once for each existing mode.
+    if ! AGENTS_JSON="$("$OPENCLAW_BIN" agents list --json 2>/dev/null)"; then
+      AGENTS_JSON=""
+    fi
+    UNCHANGED_IDENTITIES=""
+    if [[ "${PINKIE_MANAGED_GATEWAY:-0}" == "1" && -f "$SCRIPT_DIR/agent-setup-plan.py" ]]; then
+      UNCHANGED_IDENTITIES="$("$PYTHON_BIN" "$SCRIPT_DIR/agent-setup-plan.py" "$REPO_ROOT/runtime/openclaw/package.json" "$OPENCLAW_BIN" 2>/dev/null || true)"
+    fi
+    if ! printf '%s\n' "$AGENTS_JSON" | grep -Eq '"id"[[:space:]]*:[[:space:]]*"project"'; then
       "$OPENCLAW_BIN" agents add project --non-interactive --workspace "$HOME/.openclaw/workspace-project"
       PROJECT_AGENT_ADDED=1
     fi
-    "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
-    if ! "$OPENCLAW_BIN" agents list --json 2>/dev/null | grep -Eq '"id"[[:space:]]*:[[:space:]]*"learning"'; then
+    if [[ "$PROJECT_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" project "* ]]; then
+      "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
+    fi
+    if [[ "$PROJECT_AGENT_ADDED" == "1" ]]; then
+      # Adding a mode changes the config, so fetch a fresh view for learning.
+      if ! AGENTS_JSON="$("$OPENCLAW_BIN" agents list --json 2>/dev/null)"; then
+        AGENTS_JSON=""
+      fi
+    fi
+    if ! printf '%s\n' "$AGENTS_JSON" | grep -Eq '"id"[[:space:]]*:[[:space:]]*"learning"'; then
       "$OPENCLAW_BIN" agents add learning --non-interactive --workspace "$HOME/.openclaw/workspace-learning"
       LEARNING_AGENT_ADDED=1
     fi
-    "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
+    if [[ "$LEARNING_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" learning "* ]]; then
+      "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
+    fi
     if [[ ("$PROJECT_AGENT_ADDED" == "1" || "$LEARNING_AGENT_ADDED" == "1") && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
       "$OPENCLAW_BIN" gateway restart >/dev/null 2>&1 || true
     fi
