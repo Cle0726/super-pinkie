@@ -38,6 +38,10 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             plugin = installed['plugins']['entries']['pinkie-mode-architecture']
             self.assertTrue(plugin['hooks']['allowPromptInjection'])
             self.assertTrue(plugin['hooks']['allowConversationAccess'])
+            chat_core = (home / '.openclaw/workspace/persona/core.md').read_text(encoding='utf-8')
+            self.assertIn('碧琪', chat_core)
+            self.assertNotIn('公猫', chat_core)
+            self.assertNotIn('雅叙', chat_core)
             collab_wrapper = (home / 'Library/Application Support/SuperPinkie/web-gpt-collab/pinkie-collab').read_text()
             self.assertIn('C2C_TUNNEL_PROTOCOL', collab_wrapper)
             self.assertIn('http2', collab_wrapper)

@@ -210,6 +210,9 @@ mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
 for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs work-kinds.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
+# setup.py also installs the imported learning, workbench and vendor modules.
+# Ship the complete shared service, not only index.mjs's former shortlist.
+ditto --norsrc --noextattr "$REPO_ROOT/services/mode-architecture" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/first-person-renderer"
 for renderer_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/first-person-renderer/$renderer_file" "$CONTENTS/Resources/SuperPinkie/services/first-person-renderer/"
@@ -275,6 +278,9 @@ OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/patc
 sed \
   -e "s/@VERSION@/$VERSION/g" \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
+
+"$PYTHON_DRIVER" "$REPO_ROOT/tools/macos-package/check_runtime.py" \
+  --resource-root "$CONTENTS/Resources/SuperPinkie" --node "$RUNTIME_ROOT/bin/node"
 
 "$PYTHON_DRIVER" "$REPO_ROOT/tools/ui-parity/bundle.py" check \
   --control-ui "$RUNTIME_ROOT/openclaw/dist/control-ui" --output "$OUTPUT_ROOT/macos-ui-manifest.json"
