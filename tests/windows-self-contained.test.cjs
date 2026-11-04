@@ -178,8 +178,12 @@ test('Windows shell keeps all local spaces, project picker, voice and startup mo
   assert.match(launcher, /window\.events\.restored/);
   assert.match(launcher, /data-pinkie-maximized/);
   assert.match(launcher, /data-pinkie-platform', 'windows/);
-  assert.match(launcher, /data-act="close"\] span::before/);
-  assert.match(launcher, /width:42px;height:32px/);
+  // The refined Windows caption uses real SVGs, not the old span pseudo-elements.
+  assert.match(launcher, /captionIcon\('<path d="m5 5 10 10M15 5 5 15"\/>/);
+  assert.match(launcher, /width:32px;height:30px/);
+  assert.match(launcher, /button:focus-visible \{\s*outline:2px solid/);
+  assert.match(launcher, /button\?\.setAttribute\('aria-pressed', String\(maximized\)\)/);
+  assert.match(launcher, /icon\.innerHTML = maximized \? restoreIcon : maximizeIcon/);
   assert.match(launcher, /launcher-loading\.html/);
   assert.match(launcher, /PINKIE_STATE_ROOT/);
   assert.match(launcher, /storage_path=/);

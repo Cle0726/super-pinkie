@@ -161,7 +161,7 @@ class WindowsStartupTests(unittest.TestCase):
             (control / 'index.html').write_text('<html><head><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>')
             # Model the pinned upstream package's entry resources. The shared
             # installer must now reject missing upstream chunks as well.
-            template = (Path(__file__).resolve().parents[1] / 'ui/control-ui.index.html').read_text()
+            template = (Path(__file__).resolve().parents[1] / 'ui/control-ui.index.html').read_text(encoding='utf-8')
             for name in re.findall(r'(?:src|href)=["\']\.?/(assets/[^?"\']+)', template):
                 file = control / name
                 file.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,7 @@ class WindowsStartupTests(unittest.TestCase):
                  mock.patch.object(super_pinkie.subprocess, 'run') as process:
                 super_pinkie.install_theme(lambda _: None)
             process.assert_not_called()
-            html = (control / 'index.html').read_text()
+            html = (control / 'index.html').read_text(encoding='utf-8')
             self.assertIn('laolao-theme.css?v=composer1101&h=', html)
             self.assertEqual(html.count('laolao-handoff-bootstrap.js'), 1)
             self.assertTrue((control / 'laolao-deep-think-full.webm').exists())
