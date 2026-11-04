@@ -1,0 +1,121 @@
+name: Windows portable update probe
+
+# Presses 「更新并重启」 for real on a Windows runner: an unpacked portable release
+# updates itself in place to a portable zip built from this ref, using the
+# replacer that ships in that release.  See tools/windows-smoke/update_probe.py.
+# Isolated profile only. Runs manually, or on a push to the fix branch (a
+# workflow can only be dispatched once it exists on the default branch).
+on:
+  push:
+    branches: [fix/portable-update]
+  workflow_dispatch:
+    inputs:
+      from_tags:
+        description: "Space-separated releases to update FROM with their own replacer"
+        default: "v2.5.30 v2.5.27"
+      baseline_tag:
+        description: "Unfixed release to update TO first, to measure the old behaviour (empty = skip)"
+        default: v2.5.31
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: "1"
+      FROM_TAGS: ${{ inputs.from_tags || 'v2.5.30 v2.5.27' }}
+      BASELINE_TAG: ${{ github.event_name == 'push' && 'v2.5.31' || inputs.baseline_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - name: Install probe dependencies
+        run: python -m pip install --disable-pip-version-check playwright pillow psutil pywin32
+
+      - name: Record the runner's virus scanner state
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path probe-out | Out-Null
+          Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled |
+            ConvertTo-Json | Set-Content probe-out\defender.json
+
+      - name: Build this ref and pack it the way release.yml does
+        shell: pwsh
+        run: |
+          .\build-win.ps1
+          Compress-Archive -Path 'dist\超級碧琪' -DestinationPath 'new-portable.zip' -Force
+          # Same checksum, wrong layout: the replacer must refuse it and the
+          # restored old version must tell the user.
+          python -c "import zipfile; z=zipfile.ZipFile('broken-portable.zip','w'); z.writestr('超級碧琪/readme.txt','not an app'); z.close()"
+
+      - name: Download the releases to update from
+        shell: pwsh
+        run: |
+          $tags = @($env:FROM_TAGS -split '\s+' | Where-Object { $_ })
+          if ($env:BASELINE_TAG) { $tags += $env:BASELINE_TAG }
+          foreach ($tag in ($tags | Select-Object -Unique)) {
+            gh release download $tag -R "${{ github.repository }}" -p "*-portable.zip" -D "dl-$tag"
+            if ($LASTEXITCODE -ne 0) { throw "download $tag failed" }
+            Expand-Archive -Path (Get-ChildItem "dl-$tag\*-portable.zip").FullName -DestinationPath "old-$tag"
+            # Raw bytes: a PowerShell pipe would re-encode the Chinese folder name.
+            python -c "import subprocess,sys; open(sys.argv[2],'wb').write(subprocess.check_output(['git','show',sys.argv[1]]))" "${tag}:app/windows_desktop.py" "old-$tag.py"
+            if ($LASTEXITCODE -ne 0) { throw "source of $tag not found" }
+          }
+
+      - name: Baseline - unfixed release with its predecessor's replacer
+        if: env.BASELINE_TAG != ''
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $from = ($env:FROM_TAGS -split '\s+' | Where-Object { $_ })[0]
+          $zip = (Get-ChildItem "dl-$env:BASELINE_TAG\*-portable.zip").FullName
+          python tools\windows-smoke\update_probe.py --case "baseline-$from-to-$env:BASELINE_TAG" `
+            --old-app "old-$from" --old-source "old-$from.py" --new-zip $zip --out probe-out
+
+      - name: Update from each release to this build
+        shell: pwsh
+        run: |
+          $failed = @()
+          foreach ($tag in @($env:FROM_TAGS -split '\s+' | Where-Object { $_ })) {
+            python tools\windows-smoke\update_probe.py --case "$tag-to-build" --old-app "old-$tag" `
+              --old-source "old-$tag.py" --new-zip new-portable.zip --out probe-out
+            if ($LASTEXITCODE -ne 0) { $failed += $tag }
+            Write-Host "machine PSModulePath: $([Environment]::GetEnvironmentVariable('PSModulePath','Machine'))"
+          }
+          if ($failed) { throw "update did not land from: $($failed -join ', ')" }
+
+      - name: This build updates itself from a Chinese Desktop-like path
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          Expand-Archive -Path new-portable.zip -DestinationPath built-app
+          python tools\windows-smoke\update_probe.py --case "build-to-build-chinese-path" --chinese-path `
+            --old-app built-app --old-source app\windows_desktop.py --new-zip new-portable.zip --out probe-out
+          if ($LASTEXITCODE -ne 0) { throw 'self update failed' }
+
+      - name: A broken package is refused and the user is told
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python tools\windows-smoke\update_probe.py --case "build-broken-package" --expect rolled-back `
+            --old-app built-app --old-source app\windows_desktop.py --new-zip broken-portable.zip --new-version 9.9.9 --out probe-out
+          if ($LASTEXITCODE -ne 0) { throw 'failed update was not handled' }
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-update-probe-${{ github.run_id }}
+          path: probe-out
+          if-no-files-found: warn

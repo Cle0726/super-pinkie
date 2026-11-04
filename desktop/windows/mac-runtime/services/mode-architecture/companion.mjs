@@ -2,6 +2,7 @@ import {LearningNotesOrganizer} from './learning.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {renderFirstPerson} from './first-person.mjs';
 
 // This model belongs to the helper. Never resolve a model from a chat session
 // or fall back to the conversation agent when the helper is unavailable.
@@ -32,6 +33,43 @@ const OUTPUT = {
 };
 // 模型偶尔还是会问技术问题；这类问题零基础用户答不上，后端直接丢掉，交给碧琪按推荐定。
 const TECH_QUESTION = /技术栈|技术选型|框架|编程语言|开发语言|什么语言|哪种语言|数据库|依赖|接口|API|SDK|参数|部署|服务器|前端|后端|React|Vue|Python|Java|Node|SQL|HTML|CSS|JavaScript|TypeScript/i;
+// 小碧琪不时冒出的一句话：励志类 App 的那种短句——直击情绪、带点哲理和力量感。
+// 只借这种文风，不带碧琪的人格设定；输出里的「我」统一呈现为「碧琪」。
+const QUOTE_THEMES = {
+  chat: ['情绪', '疲惫', '自我怀疑', '孤独', '放下', '慢慢来', '生活', '勇气', '温柔', '重新开始'],
+  project: ['行动', '专注', '耐心', '把事做完', '失败', '迭代', '坚持', '创造', '细节', '开始'],
+  thinking: ['好奇', '想法', '勇气', '不确定', '突破', '问题', '视角', '灵感', '简单', '敢想'],
+  learning: ['坚持', '积累', '考试', '熬夜', '进步', '基础', '耐心', '自律', '努力', '相信自己'],
+  unrestricted: ['自由', '选择', '边界', '真实', '冒险', '做自己', '时间', '改变', '野心', '无畏'],
+};
+const QUOTES_RULES = `你为一款励志类 App 写每日短句。文风：简短、直击情绪、带一点哲理和力量感，像深夜突然被一句话击中。
+要求：
+- 每句 8 到 18 个汉字，越短越有力；一句话说完，最多一个逗号，前半句说出处境，后半句把它翻过来；
+- 文风参考（不要照抄）：「你不是太慢，你只是还没停。」「怕，就带着怕去做。」；
+- 对「你」说话，具体、有画面，少用空泛大词；不用「加油」「奥利给」「宝子」这类口头禅，不用表情、井号、引号、署名或出处；
+- 不提 App、模型、碧琪或任何角色设定，不说教，不鸡汤式堆砌排比；
+- 各句主题和句式都要不同，也不要和 avoid 里的句子相同或相近；
+- theme 只是这批句子的方向提示，mode 是用户正在做的事，可以贴近也可以只沾一点边。
+只输出一个 JSON 对象 {"quotes":["……","……"]}，不要 Markdown 代码块或额外说明。`;
+const QUOTE_LIMIT = 8;
+export function normalizeQuotes(raw, avoid = []) {
+  const seen = new Set(avoid.map(item => String(item).replace(/[\s，。！？、,.!?]/g, '')));
+  const list = Array.isArray(raw?.quotes) ? raw.quotes : Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    let line = item.replace(/\s+/g, ' ').trim().replace(/^[\s"'“”‘’「」『』《》\-—·•\d.、]+|[\s"'“”‘’「」『』《》]+$/g, '');
+    if (!line || /[#@<>{}\[\]]|https?:/i.test(line)) continue;
+    const length = [...line].length;
+    if (length < 4 || length > 24) continue;
+    const key = line.replace(/[\s，。！？、,.!?]/g, '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(renderFirstPerson(line));
+    if (out.length >= QUOTE_LIMIT) break;
+  }
+  return out;
+}
 const clip = (value, limit) => typeof value === 'string' ? [...value.replace(/\s+/g, ' ').trim()].slice(0, limit).join('') : '';
 
 export function normalizeClarify(raw) {
@@ -138,6 +176,7 @@ export class CompanionAssistant {
 
   async ask(params = {}) {
     const kind = cleanText(params.kind, 24);
+    if (kind === 'quotes') return this.quotes(params);
     if (!TASKS[kind] || kind === 'test') throw new Error('小帮手不支持这个功能');
     const mode = MODES.has(params.mode) ? params.mode : 'chat';
     const clarify = kind === 'clarify' && mode !== 'unrestricted';
@@ -146,6 +185,39 @@ export class CompanionAssistant {
     const project = clarify ? cleanText(params.project, 80) : '';
     const context = (project ? `当前项目文件夹：${project}\n` : '') + cleanText(params.context, clarify ? 2400 : 1600);
     return this.runRequest(kind,mode,this.settings(mode),text,context);
+  }
+
+  async quotes(params = {}) {
+    const mode = MODES.has(params.mode) ? params.mode : 'chat';
+    const settings = this.settings(mode);
+    const {reference, target} = this.target(mode, settings);
+    if (!target) throw new Error('小帮手的独立模型暂时不可用，请右键小碧琪选择模型');
+    if (this.pending.size >= 4) throw new Error('小帮手正在处理其他请求，请稍后再试');
+    const avoid = (Array.isArray(params.avoid) ? params.avoid : []).map(item => cleanText(item, 40)).filter(Boolean).slice(-40);
+    const themes = QUOTE_THEMES[mode];
+    const theme = [...themes].sort(() => Math.random() - .5).slice(0, 3).join('、');
+    const count = Math.min(QUOTE_LIMIT, Math.max(3, Number.isInteger(params.count) ? params.count : 6));
+    const ticket = Symbol('quotes');
+    this.pending.add(ticket);
+    try {
+      // 随机程度高一点，句子才不会每批都像；用户在设置里填过就用用户的。
+      const temperature = settings.temperature ?? (target.model.compat?.supportsTemperature === false ? undefined : 1.05);
+      const result = await this.transport.requestModel(reference, QUOTES_RULES,
+        [{kind: 'quotes', mode: MODE_LABELS[mode], theme, count: count + 4, avoid}], false,
+        {maxTokens: Math.min(settings.maxTokens, 1200), temperature,
+          reasoningEffort: settings.thinking !== 'auto' ? settings.thinking : undefined,
+          timeoutMs: Math.min(this.timeoutMs ?? Infinity, settings.timeoutSeconds * 1000)});
+      const quotes = normalizeQuotes(result, avoid).slice(0, count);
+      if (!quotes.length) throw new Error('小帮手这次没写出句子，请稍后再试');
+      return {quotes, model: reference, independent: true};
+    } catch (error) {
+      const message = String(error?.message || '');
+      if (message.startsWith('小帮手')) throw error;
+      if (/超时/.test(message)) throw new Error('小帮手等独立模型回复超时了，请稍后再试');
+      throw new Error('小帮手暂时没连上独立模型，请稍后再试');
+    } finally {
+      this.pending.delete(ticket);
+    }
   }
 
   async testConnection(params={}) {
