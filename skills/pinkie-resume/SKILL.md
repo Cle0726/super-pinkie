@@ -32,7 +32,7 @@ rendercv new "张三" --theme classic
 
 - 打开 YAML，把示例内容全部换成先生的真实经历：`cv.name`、`headline`（一句话定位）、`email`、`phone`、`location`，`sections` 里按「教育 / 工作经历 / 项目 / 技能」填。
 - 每条经历写成「做了什么 + 结果（尽量有数字）」。先生没给的数字、日期、公司名不要编：用【请补充】标出来，交付时列给他。
-- 中文简历：在 `design:` 下面加
+- 中文简历：把 YAML 末尾的 `design:` 和 `locale:` 换成
 
   ```yaml
   design:
@@ -41,9 +41,13 @@ rendercv new "张三" --theme classic
       size: a4
     typography:
       font_family: PingFang SC      # Mac；Windows 用 Microsoft YaHei
+    templates:
+      single_date: YEAR.MONTH_IN_TWO_DIGITS   # 日期显示成 2022.07，不是「7 月 2022」
+  locale:
+    language: mandarin_chinese      # 「至今」「最后更新于」
   ```
 
-  渲染出来有方框（缺字）时：下载开源的思源黑体（Noto Sans SC，SIL OFL）放到 YAML 旁边的 `fonts/` 文件夹，`font_family: Noto Sans SC`，记进下载账本。
+  `end_date: present` 会显示成「至今」。渲染出来有方框（缺字）时：下载开源的思源黑体（Noto Sans SC，SIL OFL）放到 YAML 旁边的 `fonts/` 文件夹，`font_family: Noto Sans SC`，记进下载账本。
 - 英文简历保持默认字体，`page: size:` 投美国用 `us-letter`，其他用 `a4`。
 
 ## 4. 出 PDF
@@ -52,7 +56,7 @@ rendercv new "张三" --theme classic
 rendercv render "张三_CV.yaml"
 ```
 
-结果在 `rendercv_output/`：PDF、每页 PNG、Markdown、HTML。YAML 写错时它会指出哪一行，照提示改。
+结果在 `rendercv_output/`：PDF、每页 PNG（`<名字>_CV_1.png`）、Markdown、HTML。YAML 写错时它会指出哪一行，照提示改。
 
 ## 5. 交付前
 

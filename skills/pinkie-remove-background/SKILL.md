@@ -16,7 +16,7 @@ description: 抠图去背景：人像、商品、宠物、logo 一键抠成透�
 <python> -m pip install "rembg[cpu,cli]"
 ```
 
-装好后命令是同一个环境里的 `rembg`（Mac：`<环境>/bin/rembg`，Windows：`<环境>\Scripts\rembg.exe`）。第一次抠图会自动下载模型到 `~/.u2net/`（一百多 MB），下好记进下载账本。可以放后台装，等的时候先准备要换的背景。
+装好后命令是同一个环境里的 `rembg`（Mac：`<环境>/bin/rembg`，Windows：`<环境>\Scripts\rembg.exe`）。第一次抠图会自动下载模型（`isnet-general-use` 179 MB），默认放在 `~/.rembg/models/`；设环境变量 `REMBG_HOME=<工具目录>/rembg` 就放进碧琪的工具目录。下好记进下载账本。可以放后台装，等的时候先准备要换的背景。
 
 ## 2. 抠一张
 
@@ -51,4 +51,4 @@ rembg p -m isnet-general-use 输入文件夹 输出文件夹
 
 - 抠好的图放到**深色和浅色两种底**上各看一次（用 Pillow 拼一张对比图，`read` 打开看）：边缘有没有白边、缺块、头发被吃掉。
 - 不满意先换模型或加 `-a` 再抠，不要把有白边的交出去。
-- 证件照（换底 + 标准尺寸 + 排版冲印）用 `pinkie-id-photo`，比这里更合适。
+- 证件照（换底 + 标准尺寸 + 排版冲印）用 `pinkie-id-photo`，比这里更合适。它有自己的独立环境，别把它的依赖装进这里（会把 numpy 降级，rembg 就不能用了）。

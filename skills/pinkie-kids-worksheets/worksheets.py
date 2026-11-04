@@ -123,8 +123,10 @@ def copybook(args):
                     c.setFont(font, s * 0.78)
                     c.drawCentredString(x + s / 2, cell_y + s * 0.2, ch)
                     if args.pinyin and sound:
-                        c.setFont(latin, py_h * 0.72)
-                        c.drawCentredString(x + s / 2, y - py_h * 0.82, sound)
+                        # 四线三格：基线压第三条线，字母中段占中间一格；长拼音（chuáng）缩到格子宽度以内，不和隔壁连成一串。
+                        size = min(py_h * 0.62, s * 0.88 / max(c.stringWidth(sound, latin, 1), 0.01))
+                        c.setFont(latin, size)
+                        c.drawCentredString(x + s / 2, y - py_h * 2 / 3, sound)
             y -= row_h
     c.save()
     print(f"字帖：{args.out}（{len(chars)} 个字）")
