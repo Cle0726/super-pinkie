@@ -1,6 +1,8 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 path = Path(__file__).resolve().parents[1] / "tools/windows-smoke/upstream_probe.py"
 spec = importlib.util.spec_from_file_location("upstream_probe", path)
@@ -18,6 +20,32 @@ def case():
 
 
 class UpstreamProbeTests(unittest.TestCase):
+    def test_outage_probe_uses_the_packaged_app_webview(self):
+        page = SimpleNamespace(url="http://127.0.0.1:18789/chat")
+        splash = SimpleNamespace(url="file:///isolated/launcher-loading.html")
+        context = SimpleNamespace(pages=[splash, page])
+        browser = SimpleNamespace(contexts=[context])
+        endpoints = []
+        chromium = SimpleNamespace(connect_over_cdp=lambda endpoint, timeout: (endpoints.append((endpoint, timeout)) or browser))
+        playwright = SimpleNamespace(chromium=chromium)
+        self.assertEqual(probe.connect_packaged_webview(playwright, "http://127.0.0.1:23456"),
+                         (browser, context, page))
+        self.assertEqual(endpoints, [("http://127.0.0.1:23456", 5000)])
+        with self.assertRaises(RuntimeError):
+            probe.connect_packaged_webview(playwright, "http://example.com:23456")
+        with self.assertRaises(RuntimeError):
+            probe.connect_packaged_webview(playwright, "")
+
+    def test_outage_probe_waits_for_native_page_without_closing_the_app(self):
+        context = SimpleNamespace(pages=[])
+        browser = SimpleNamespace(contexts=[context])
+        playwright = SimpleNamespace(chromium=SimpleNamespace(
+            connect_over_cdp=lambda endpoint, timeout: browser))
+        page = SimpleNamespace(url="file:///isolated/launcher-loading.html")
+        with patch.object(probe.time, "sleep", side_effect=lambda _: context.pages.append(page)):
+            self.assertEqual(probe.connect_packaged_webview(playwright, "http://127.0.0.1:23456"),
+                             (browser, context, page))
+
     def test_recovered_reply_alone_is_not_proof_of_upstream_retry(self):
         result = case()
         result["final"]["recovered"] = True
