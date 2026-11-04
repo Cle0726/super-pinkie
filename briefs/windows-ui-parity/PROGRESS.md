@@ -2,6 +2,13 @@
 
 Status: **in progress; visual parity and full Windows acceptance are not complete**.
 
+## 2026-11-03 — publish previously local UI fixes on the current branch
+
+- The user requested that the Windows UI work be pushed. Earlier pushes included the accepted thicker reading surface and font/study-header adjustments, but did not include every local UI change. This review starts from `5bd4907` on `fix/windows-2.5.24`, preserving the newer Mac commits; it does not use `origin/main`.
+- Bring over the previously committed companion-menu clipping/stacking and keyboard-navigation fix, and keep Windows local-file previews on the validated native preview path. Advance only the corresponding cache versions, preserving the newer `buddyrig4` and other upstream injections. Nine targeted Node 24.20.0 checks passed for menu geometry, top-layer ownership and Windows/Mac material-preview routing.
+- A separate Edge DOM/layout harness exercised actual hit-tested mouse input at 1000×700 and 420×340: the first menu item was clickable, the menu stayed inside the viewport, and Escape closed it. The first harness attempt timed out waiting for Playwright's stability condition because the figure deliberately breathes continuously. The rerun used a hit-tested physical mouse click without disabling or reducing that animation; this synthetic harness does not replace real packaged-App acceptance.
+- This is a partial source push, not a visual acceptance or release. The current packaged App's built-in browser has exhibited a black content area; its root cause and correction are still under active investigation in a separate worktree. Uncommitted browser/VPN work from that session has not been overwritten or included. The full packaged-App checks and same-source Mac visual comparison remain required.
+
 ## Scope in this partial push
 
 - Apply the bundled Chinese font to UI labels that otherwise override their parent's font; leave book-style welcome text, code, mathematics and animations intact.
