@@ -16,6 +16,40 @@ class Event:
 
 
 class WindowsNativeUiPublishTests(unittest.TestCase):
+    def test_maximize_and_restore_work_when_native_events_arrive_synchronously(self):
+        bridge = desktop.NativeBridge(None)
+        calls = []
+
+        def maximize():
+            calls.append('maximize')
+            bridge.maximized = True  # The native maximized event already fired.
+
+        def restore():
+            calls.append('restore')
+            bridge.maximized = False  # The native restored event already fired.
+
+        bridge.attach(SimpleNamespace(maximize=maximize, restore=restore))
+        self.assertEqual(bridge.toggle_maximize(), {'maximized': True})
+        self.assertEqual(bridge.toggle_maximize(), {'maximized': False})
+        self.assertEqual(calls, ['maximize', 'restore'])
+
+    def test_maximize_state_is_optimistic_when_native_event_arrives_later(self):
+        bridge = desktop.NativeBridge(None)
+        window = SimpleNamespace(maximize=mock.Mock(), restore=mock.Mock())
+        bridge.attach(window)
+        self.assertEqual(bridge.toggle_maximize(), {'maximized': True})
+        self.assertEqual(bridge.toggle_maximize(), {'maximized': False})
+        window.maximize.assert_called_once_with()
+        window.restore.assert_called_once_with()
+
+    def test_failed_native_maximize_restores_the_previous_state(self):
+        bridge = desktop.NativeBridge(None)
+        window = SimpleNamespace(maximize=mock.Mock(side_effect=RuntimeError('native error')))
+        bridge.attach(window)
+        with self.assertRaisesRegex(RuntimeError, 'native error'):
+            bridge.toggle_maximize()
+        self.assertFalse(bridge.maximized)
+
     def test_native_radius_tracks_physical_dpi_and_maximized_window_has_no_round_crop(self):
         self.assertEqual(desktop.native_corner_geometry(1000, 700, 120), (0, 0, 1001, 701, 55, 55))
         self.assertEqual(desktop.native_corner_geometry(1000, 700, 96), (0, 0, 1001, 701, 44, 44))
