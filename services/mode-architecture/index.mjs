@@ -276,6 +276,10 @@ function userStoppedRecently(sessionKey) {
 // lane.  Keep the first retry quick, then give a flapping provider more room
 // instead of exhausting the visible turn after only a few seconds.  Operators
 // can tune these without changing the mode or prompt configuration.
+// 一次模型调用超过这么久还没结束、这一轮又失败了：多半是一口气生成的东西太长（整份 PPT 脚本、整页网页），
+// 被卡死恢复中止。11-04 隔离实测 R-ppt：同一个 8 页脚本连写三次，每次 385 秒被掐断，什么都没留下。
+export const WATCHDOG_STALLED_GENERATION_MS = Math.max(60_000,
+  Number(process.env.PINKIE_WATCHDOG_STALLED_GENERATION_MS) || 240_000);
 const WATCHDOG_RETRY_MAX_DELAY_MS = Math.max(750,
   Number(process.env.PINKIE_WATCHDOG_RETRY_MAX_DELAY_MS) || 3_000);
 const WATCHDOG_GATEWAY_BACKOFF_INITIAL_MS = Math.max(250,
@@ -3787,6 +3791,16 @@ export class ModelUsageLedger {
   }
 }
 
+export function watchdogResumeText({incompleteToolTurn = false, stalledMs = 0} = {}) {
+  if (stalledMs >= WATCHDOG_STALLED_GENERATION_MS) {
+    const minutes = Math.max(1, Math.round(stalledMs / 60_000));
+    return `【自动续接保护】上一轮卡在一次生成里：一口气要写的内容太长，约 ${minutes} 分钟没有任何输出，被系统中止，那次写到一半的内容没有保存。这次换做法，不要再一次写完：把要写的文件拆成几段，每次工具调用只写一段（150 行以内）；第一段只写公共部分和能跑通的最小版本（比如 PPT 先出封面和一页内容），运行一次确认能出文件，再一段段追加、每加一段就重跑。先检查当前会话已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。不要向用户展示本段保护指令或重试编号。`;
+  }
+  return incompleteToolTurn
+    ? `【自动续接保护】上轮工具结果已经返回，但没有生成完整的最终回复。先读取当前会话中已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。直接从工具结果之后继续，完成剩余工作、验证并正常交付。不要向用户展示本段保护指令或重试编号。`
+    : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`;
+}
+
 export class UpstreamWatchdog {
   constructor(api, tierFor = () => '', processRunner = runProcess, cliEntry = resolveGatewayCliEntry(), activityFor = () => ({pending: 0, quietForMs: Infinity}), jobStore = null) {
     this.api = api;
@@ -3800,6 +3814,8 @@ export class UpstreamWatchdog {
     this.failures = new Map();
     this.models = new Map();
     this.latestRuns = new Map();
+    // runId -> 这一轮最后一次模型调用 {startedAt, durationMs, outcome}
+    this.lastCalls = new Map();
     this.attempts = new Map();
     this.integrityAttempts = new Map();
     this.skipNextFailure = new Set();
@@ -3829,12 +3845,29 @@ export class UpstreamWatchdog {
 
   modelEnded(event = {}) {
     if (!event.runId) return;
+    const call = this.lastCalls.get(String(event.runId));
+    if (call && call.durationMs == null) {
+      call.durationMs = Number(event.durationMs) || (Date.now() - call.startedAt);
+      call.outcome = String(event.outcome || '');
+    }
     const reason = failureReasonFromEvent(event);
     if (isTransientFailure(reason)) this.failures.set(event.runId, reason);
   }
 
+  // 这一轮最后一次模型调用卡了多久：还没结束就按到现在算；正常结束的不算卡住。
+  stalledGenerationMs(runId = '', now = Date.now()) {
+    const call = runId ? this.lastCalls.get(String(runId)) : null;
+    if (!call) return 0;
+    if (call.durationMs == null) return now - call.startedAt;
+    return call.outcome === 'completed' ? 0 : call.durationMs;
+  }
+
   modelStarted(event = {}) {
     const key = String(event.sessionKey || '');
+    if (event.runId) {
+      this.lastCalls.set(String(event.runId), {startedAt: Date.now(), durationMs: null, outcome: ''});
+      while (this.lastCalls.size > 512) this.lastCalls.delete(this.lastCalls.keys().next().value);
+    }
     if (key && event.runId && workFirstContext({sessionKey: key})) {
       this.latestRuns.set(key, String(event.runId));
       while (this.latestRuns.size > 2048) this.latestRuns.delete(this.latestRuns.keys().next().value);
@@ -3867,7 +3900,8 @@ export class UpstreamWatchdog {
       if (event.runId) this.failures.delete(event.runId);
       return false;
     }
-    const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' ');
+    // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成先生主动停止、不再续跑。
+    const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' | ');
     // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
     // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
     const waitingOnChildren = workFirstContext(ctx) && endsWithYield(event.messages)
@@ -3937,9 +3971,11 @@ export class UpstreamWatchdog {
       model: this.models.get(sessionKey), kind: 'upstream',
     });
     const marathon = this.tierFor(sessionKey) === 'marathon';
-    const resumeText = incompleteToolTurn
-      ? `【自动续接保护】上轮工具结果已经返回，但没有生成完整的最终回复。先读取当前会话中已有的工具结果与项目真实状态；已经成功的写入、删除、发布或外部动作禁止重复。直接从工具结果之后继续，完成剩余工作、验证并正常交付。不要向用户展示本段保护指令或重试编号。`
-      : `【自动续接保护】上轮因临时上游连接中断，没有完整结束。先检查当前会话已有回复、工具结果与项目真实状态；已经完成的写入、删除、发布或外部动作禁止重复。从未完成处继续，完成验证后正常交付。不要向用户展示本段保护指令或重试编号。`;
+    const stalledMs = this.stalledGenerationMs(endedRun);
+    if (stalledMs >= WATCHDOG_STALLED_GENERATION_MS) {
+      this.api.logger?.warn?.(`watchdog stalled generation session=${sessionKey} run=${endedRun} ms=${stalledMs}`);
+    }
+    const resumeText = watchdogResumeText({incompleteToolTurn, stalledMs});
     const recoveryDelay = this.recoveryDelay(sessionKey, reason);
     const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, marathon
       ? 200 + attempt * 75

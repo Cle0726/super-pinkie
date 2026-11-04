@@ -53,3 +53,37 @@ test('ordinary watchdog restores its original model across restart without chang
   await recovered.cancel(key);
   assert.equal(recovered.beforeModelResolve({prompt:'\u2063'},{sessionKey:key}),undefined);
 });
+
+test('a run that dies inside one very long model call resumes with "write it in parts", not "the network dropped"', async () => {
+  const {UpstreamWatchdog, WATCHDOG_STALLED_GENERATION_MS, watchdogResumeText} = await import('../services/mode-architecture/index.mjs');
+  const injected = [];
+  const workflow = {
+    enqueueNextTurnInjection: async value => { injected.push(value); return {enqueued: true}; },
+    unscheduleSessionTurnsByTag: async () => ({removed: 0, failed: 0}),
+    scheduleSessionTurn: async () => ({id: 'retry'}),
+  };
+  const watchdog = new UpstreamWatchdog({session: {workflow}}, () => '', async () => ({stdout: '{}'}), '');
+  // 11-04 R-ppt: the 8-slide script was generated in one call; stuck recovery aborted it at 385 s.
+  watchdog.modelStarted({runId: 'long', sessionKey: 'agent:project:deck', provider: 'mm', model: 'flash'});
+  watchdog.lastCalls.get('long').startedAt -= 385_000;
+  watchdog.modelEnded({runId: 'long', durationMs: 385_000, outcome: 'error', failureKind: 'aborted'});
+  await watchdog.agentEnded({runId: 'long', success: false, error: 'AbortError: Reply operation aborted by user'}, {agentId: 'project', sessionKey: 'agent:project:deck'});
+  assert.equal(injected.length, 1);
+  assert.match(injected[0].text, /一口气要写的内容太长，约 6 分钟没有任何输出/);
+  assert.match(injected[0].text, /拆成几段.+150 行以内.+最小版本/);
+  assert.match(injected[0].text, /禁止重复/);
+
+  // A call that never reported its end counts up to now; a quick failure is still an ordinary outage.
+  watchdog.modelStarted({runId: 'open', sessionKey: 'agent:project:two', provider: 'mm', model: 'flash'});
+  watchdog.lastCalls.get('open').startedAt -= WATCHDOG_STALLED_GENERATION_MS + 1_000;
+  assert.ok(watchdog.stalledGenerationMs('open') >= WATCHDOG_STALLED_GENERATION_MS);
+  watchdog.modelStarted({runId: 'quick', sessionKey: 'agent:project:three', provider: 'mm', model: 'flash'});
+  watchdog.modelEnded({runId: 'quick', durationMs: 4_000, outcome: 'error', failureKind: 'connection_reset'});
+  assert.equal(watchdog.stalledGenerationMs('quick'), 4_000);
+  assert.match(watchdogResumeText({stalledMs: 4_000}), /临时上游连接中断/);
+  assert.match(watchdogResumeText({incompleteToolTurn: true, stalledMs: 4_000}), /工具结果已经返回/);
+  // A long call that completed normally is not a stall, even if the turn failed later.
+  watchdog.modelStarted({runId: 'done', sessionKey: 'agent:project:four', provider: 'mm', model: 'flash'});
+  watchdog.modelEnded({runId: 'done', durationMs: 400_000, outcome: 'completed'});
+  assert.equal(watchdog.stalledGenerationMs('done'), 0);
+});
