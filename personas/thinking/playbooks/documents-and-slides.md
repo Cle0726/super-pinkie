@@ -54,6 +54,8 @@
 - **避开一眼 AI 味：** 每页一个 emoji、三列卡片配渐变、每段都有小标题、满屏「赋能」「助力」。
 - **字体：** 用放映那台电脑一定有的字体（Windows 上的微软雅黑、等线）；用了特别的字体就同时交一份 PDF 备用，免得到现场字体被换。
 
+- **生成脚本分几次写，别一次写完整份。** 8 页的样式和内容一口气写进一个工具调用，生成要好几分钟，常被中途掐断、什么都没留下（11-04 实测连断三次）。先写公共样式 + 封面 + 一页内容，跑一次确认出了 .pptx；再每次追加两三页（写进单独的 `slides_3_4.js` 之类再 `require`，或 `cat >>` 追加），每加一次重跑一次。
+
 **pptxgenjs 最小骨架**（项目里 `npm install pptxgenjs --registry=https://registry.npmmirror.com`）：
 ```js
 const pptxgen = require("pptxgenjs");
