@@ -2443,6 +2443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         controller.add(self, name: materialPreviewHandlerName)
         controller.add(self, name: "laolaoParty")
         controller.add(self, name: "laolaoRoundtable")
+        controller.add(self, name: "pinkieMotion")
         controller.addUserScript(WKUserScript(
             source: nativeDictationBridge,
             injectionTime: .atDocumentEnd,
@@ -2857,7 +2858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func updateBrowserToolbarVisibility() {
         // Keep geometry and keyboard/accessibility targets stable; only fade decoration.
         let active = browserToolbarHovered || browserAddressField?.currentEditor() != nil
-        let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0.0 : 0.12
+        let duration = PinkieMotion.reduce ? 0.0 : 0.12
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
             for view in [browserBackButton, browserForwardButton, browserReloadButton, browserPresentationMenu].compactMap({ $0 }) {
@@ -3925,7 +3926,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         applyNightAppearance()
         content.layoutSubtreeIfNeeded()
         if window?.isVisible == true, previousFrame.width > 0, let layer = panel.layer,
-           !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, previousFrame != panel.frame {
+           !PinkieMotion.reduce, previousFrame != panel.frame {
             let position = layer.position
             let slide = CABasicAnimation(keyPath: "position")
             slide.fromValue = NSValue(point:NSPoint(x:position.x+previousFrame.minX-panel.frame.minX,y:position.y+previousFrame.minY-panel.frame.minY))
@@ -4468,6 +4469,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         guard trustedFrame(message.frameInfo) else { return }
         let sourceWebView = message.webView ?? webView
+        if message.name == "pinkieMotion" {
+            // The in-app 减少动效 switch, not the OS flag, drives native motion too.
+            if let body = message.body as? [String: Any], let reduce = body["reduce"] as? Bool { PinkieMotion.reduce = reduce }
+            return
+        }
         if message.name == windowControlHandlerName,
            message.webView === webView, message.frameInfo.isMainFrame,
            let body = message.body as? [String: Any], body["action"] as? String == "window-drag-regions" {
@@ -4985,5 +4991,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             .observe(document.documentElement, { childList: true, subtree: true });
         })();
         """#
+    }
+}
+
+/// Effects are part of 碧琪's identity: they follow the in-app 减少动效 switch
+/// (laolao-motion-preference.js), never the OS "reduce motion" flag, so every
+/// Mac shows the same experience by default.
+enum PinkieMotion {
+    static var reduce: Bool {
+        get { UserDefaults.standard.bool(forKey: "PinkieReduceMotion") }
+        set { UserDefaults.standard.set(newValue, forKey: "PinkieReduceMotion") }
     }
 }

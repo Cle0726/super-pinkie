@@ -2,6 +2,9 @@
 
 ## 待发布
 
+### 2.5.31
+- 新增 `laolao-motion-preference.js`（紧跟 night 引导加载）：`prefers-reduced-motion` 的 CSS 规则和 `matchMedia` 查询都改为由应用内「减少动效」开关回答，默认完整特效；Mac 原生壳的三处小动画也改读同一开关（`pinkieMotion` 消息）。
+
 ### 2.5.30
 - 发送前的预压缩（preflight compaction）现在也会向界面发 `compaction` 事件（新补丁 `apply-preflight-compaction-events.mjs`，Mac 安装与 Windows 快照都已带上），压缩动画不再只在罕见的回复中途溢出时出现。
 - 上下文用量圈在回复或压缩结束时立即刷新（原先受 15 秒缓存限制）。
