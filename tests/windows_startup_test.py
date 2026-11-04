@@ -115,7 +115,8 @@ class WindowsStartupTests(unittest.TestCase):
                 super_pinkie.prepare_bundled_desktop(lambda _: None)
             agents.assert_called_once()
             self.assertEqual([call.args[0] for call in install.call_args_list],
-                             ['party', 'context', 'project-scope', 'mode-architecture'])
+                             ['party', 'context', 'project-scope', 'mode-architecture',
+                              'first-person-renderer'])
 
     def test_probe_gateway_and_helper_flags_hide_windows_without_losing_existing_flags(self):
         for module in (super_pinkie, windows_desktop):

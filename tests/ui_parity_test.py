@@ -150,18 +150,19 @@ class SharedUiBundleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'LFS pointer'):
                 bundle.source_files(root)
 
-    def test_slow_rendering_keeps_static_pinkie_and_drops_blur(self):
+    def test_complete_visuals_are_not_disabled_by_memory_or_software_renderer(self):
         source = (ROOT / 'ui/injections/laolao-companion.js').read_text()
-        self.assertIn('data-pinkie-lite', source)
+        self.assertNotIn('data-pinkie-lite', source)
         self.assertIn('requestAnimationFrame(draw)', source)
         self.assertIn('if (now - last < 33)', source)
         rig = (ROOT / 'ui/injections/laolao-buddy-rig.js').read_text()
-        self.assertIn('data-pinkie-lite', rig)
+        self.assertNotIn('data-pinkie-lite', rig)
         profile = (ROOT / 'ui/injections/laolao-platform-surface.js').read_text()
-        self.assertIn('failIfMajorPerformanceCaveat', profile)
-        self.assertIn('setAttribute("data-pinkie-lite"', profile)
-        self.assertNotIn('removeAttribute("data-pinkie-lite"', profile)
-        self.assertIn('backdrop-filter: none !important', profile)
+        self.assertIn('removeAttribute("data-pinkie-lite"', profile)
+        self.assertNotIn('setAttribute("data-pinkie-lite"', profile)
+        self.assertNotIn('backdrop-filter: none !important', profile)
+        launcher = (ROOT / 'desktop/macos/pinkie/Sources/Launcher.swift').read_text()
+        self.assertNotIn("setAttribute('data-pinkie-lite'", launcher)
 
 
 if __name__ == '__main__':

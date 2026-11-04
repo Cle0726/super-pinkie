@@ -3802,6 +3802,8 @@ export class UpstreamWatchdog {
     this.timers = new Map();
     this.gatewayBackoff = new Map();
     this.dispatching = new Set();
+    this.dispatchQueueTail = Promise.resolve();
+    this.queuedDispatches = new Set();
     // Every explicit cancellation advances the session generation. Timers or
     // slow CLI calls from an older generation may finish, but they can no
     // longer re-arm themselves or schedule another invisible turn.
@@ -4066,7 +4068,9 @@ export class UpstreamWatchdog {
         await this.api.session.workflow.enqueueNextTurnInjection({
           sessionKey,
           placement:'append_context',
-          ttlMs:300_000,
+          // Queueing avoids a burst of CLI processes at startup. Keep the
+          // context alive even if earlier calls each use their full timeout.
+          ttlMs:300_000 + jobs.length * (WATCHDOG_CLI_TIMEOUT_MS + 2_000),
           idempotencyKey:`${tag}-restart-${attempt}-${Date.now()}`,
           metadata:{watchdog:true,recovered:true,attempt},
           text: job.kind === 'compaction'
@@ -4078,7 +4082,7 @@ export class UpstreamWatchdog {
           agentId:String(job.agentId || agentFromSessionKey(sessionKey)),
           runId:String(job.runId || 'gateway-restart'),
           attempt,
-          delayMs:250,
+          delayMs:8_000,
           tag,
           kind: job.kind,
         });
@@ -4192,7 +4196,29 @@ export class UpstreamWatchdog {
     return true;
   }
 
-  async dispatchImmediate({sessionKey, agentId, runId, attempt, tag, kind, generation, message: controlMessage, waitedOnChildren = false}) {
+  async dispatchImmediate(params) {
+    if (!this.cliEntry) return false;
+    const sessionKey = String(params.sessionKey || '');
+    const generation = params.generation ?? this.generationFor(sessionKey);
+    if (generation !== this.generationFor(sessionKey)) return false;
+    const queueKey = `${sessionKey}\0${generation}`;
+    if (this.queuedDispatches.has(queueKey)) return false;
+    this.queuedDispatches.add(queueKey);
+    const previous = this.dispatchQueueTail;
+    let release;
+    this.dispatchQueueTail = new Promise(resolve => { release = resolve; });
+    try {
+      await previous;
+      // A user may have cancelled while this retry waited its turn.
+      if (generation !== this.generationFor(sessionKey)) return false;
+      return await this.dispatchImmediateNow({...params, sessionKey, generation});
+    } finally {
+      this.queuedDispatches.delete(queueKey);
+      release();
+    }
+  }
+
+  async dispatchImmediateNow({sessionKey, agentId, runId, attempt, tag, kind, generation, message: controlMessage, waitedOnChildren = false}) {
     if (!this.cliEntry) return false;
     const leaseGeneration = generation ?? this.generationFor(sessionKey);
     if (leaseGeneration !== this.generationFor(sessionKey)) return false;
