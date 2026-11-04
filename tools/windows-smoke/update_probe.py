@@ -106,10 +106,15 @@ def main():
     # A user starts the App from Explorer. This runner step is PowerShell 7,
     # whose module path makes Windows PowerShell 5.1 (the replacer) load
     # PowerShell 7 modules: 2.5.27's helper then fails on Get-FileHash.
-    env.pop("PSModulePath", None)
+    inherited_module_path = env.get("PSModulePath", "")
+    env["PSModulePath"] = os.pathsep.join([
+        str(Path(env["USERPROFILE"]) / "Documents/WindowsPowerShell/Modules"),
+        str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "WindowsPowerShell/Modules"),
+        str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "system32/WindowsPowerShell/v1.0/Modules"),
+    ])
     state = Path(env["LOCALAPPDATA"]) / "SuperPinkie"
     summary = {"case": args.case, "from": old_version, "to": new_version, "install": str(target),
-               "expect": args.expect, "problems": []}
+               "expect": args.expect, "problems": [], "runner_module_path": inherited_module_path}
     log(f"[{args.case}] {old_version} -> {new_version} in {target}")
 
     app = subprocess.Popen([str(exe)], env=env, cwd=str(target))
