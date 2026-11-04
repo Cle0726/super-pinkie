@@ -162,3 +162,17 @@ test('a video built from generated or downloaded assets must say where they came
   own.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(own.root, 'cut.preview.png')}, result: 'image'}, own.ctx);
   assert.notEqual(own.guard.finalize({lastAssistantMessage: '剪好了，30 秒，已经完成。'}, own.ctx, {verifyExternal: false})?.action, 'revise');
 });
+
+test('a turn opened by a background completion event is judged against the user\'s last real request', (t) => {
+  // routes-g: the delivering turn began with the image_generate completion event, so it was not an action request.
+  const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  guard.finalize({lastAssistantMessage: '正在生成画面，生成好碧琪继续。'}, ctx, {verifyExternal: false});
+  guard.end({}, ctx);
+  guard.begin({prompt: '<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>\n[Internal task completion event]\nsource: image_generation\nstatus: failed'}, ctx);
+  const video = path.join(root, 'ad.mp4');
+  produce(guard, ctx, 'render', `python3 render.py "${video}"`, video);
+  guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
+  const v = guard.finalize({lastAssistantMessage: '成片已经剪好，可以直接发抖音。'}, ctx, {verifyExternal: false});
+  assert.equal(v?.action, 'revise');
+  assert.match(v.reason, /素材从哪来/);
+});

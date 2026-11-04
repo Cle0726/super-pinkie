@@ -1595,6 +1595,8 @@ function verificationFailure(text = '') {
 export class CompletionIntegrityGuard {
   constructor() {
     this.runs = new Map();
+    // 会话 -> 先生最后一条真实的话。生图 / 后台命令完成、看门狗续跑这些内部轮不是新要求。
+    this.userPrompts = new Map();
   }
 
   reset(key) {
@@ -1608,9 +1610,19 @@ export class CompletionIntegrityGuard {
   begin(event = {}, ctx = {}) {
     const key = completionRunKey(event, ctx);
     if (!key || this.runs.has(key)) return;
+    // 11-04 隔离实测 R-ad：最后交付的那一轮是「生图任务完成」内部事件开的头，拿它当先生的话，
+    // 判不出是执行型请求，亲眼看和素材来源两项交付检查整段跳过。内部轮沿用先生上一条真实的话。
+    const raw = workFirstPrompt(event.prompt, modeForContext(ctx));
+    const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
+    const injected = runtimeTurnText(raw) || internalControlText(raw);
+    if (sessionKey && !injected && raw.trim()) {
+      this.userPrompts.delete(sessionKey);
+      this.userPrompts.set(sessionKey, raw);
+      while (this.userPrompts.size > 512) this.userPrompts.delete(this.userPrompts.keys().next().value);
+    }
     this.runs.set(key, {
       ...contractTimeBoundary(),
-      prompt: workFirstPrompt(event.prompt, modeForContext(ctx)),
+      prompt: (injected && this.userPrompts.get(sessionKey)) || raw,
       tools: [],
       skills: new Map(),
       loadedSkills: new Set(),
