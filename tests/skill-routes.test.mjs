@@ -11,17 +11,30 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS = path.join(ROOT, 'skills');
 const manifest = JSON.parse(fs.readFileSync(path.join(SKILLS, 'community-skills.json'), 'utf8'));
 const names = manifest.skills.map(s => s.name);
+const own = (manifest.own || []).map(s => s.name);
 const route = (text, mode = 'main') => routeSkills(classifyWorkKind(text, {mode}).kinds, text).map(r => r.skill);
 
 test('every routed skill ships, and every shipped community skill is complete and licensed', () => {
-  const shipped = new Set([...names, 'deep-think', 'pinkie-deep-research', 'web-gpt-collab']);
+  const shipped = new Set([...names, ...own, 'deep-think', 'pinkie-deep-research', 'web-gpt-collab']);
+  for (const name of own) {
+    const md = fs.readFileSync(path.join(SKILLS, name, 'SKILL.md'), 'utf8');
+    assert.match(md, /^---\ndisable-model-invocation: true\n/, `${name} must stay out of the catalog`);
+    assert.match(md, new RegExp(`^name: ${name}$`, 'm'));
+  }
+  for (const item of manifest.skills.filter(s => s.fetch)) {
+    const md = fs.readFileSync(path.join(SKILLS, item.name, 'SKILL.md'), 'utf8');
+    assert.match(md, new RegExp(`fetch_skill\\.py" ${item.name}`), `${item.name} stub must say how to download`);
+    assert.ok(fs.readdirSync(path.join(SKILLS, item.name)).length <= 4, `${item.name} is downloaded on first use, not shipped`);
+  }
+  assert.ok(fs.existsSync(path.join(SKILLS, 'pinkie-skill-library', 'fetch_skill.py')));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(SKILLS, 'pinkie-skill-library', 'community-skills.json'), 'utf8')).skills.length, names.length);
   for (const r of SKILL_ROUTES) assert.ok(shipped.has(r.skill), `${r.skill} is routed but not shipped`);
   assert.equal(new Set(names).size, names.length, 'duplicate skill names');
   for (const name of names) {
     const dir = path.join(SKILLS, name);
     const md = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8');
     assert.match(md, /^---\ndisable-model-invocation: true\n/, `${name} must stay out of the 18k skill catalog`);
-    assert.match(md, new RegExp(`^name: ${name}$`, 'm'), `${name} frontmatter name`);
+    assert.match(md, new RegExp(`^name: ["']?${name}["']?$`, 'm'), `${name} frontmatter name`);
     assert.ok(['LICENSE', 'LICENSE.txt', 'LICENSE.md'].some(f => fs.existsSync(path.join(dir, f))), `${name} has no license`);
     assert.ok(fs.existsSync(path.join(dir, 'SOURCE.md')), `${name} has no SOURCE.md`);
     assert.ok(statSize(md) <= 256_000, `${name} SKILL.md is over OpenClaw's 256 KB limit`);
@@ -29,7 +42,7 @@ test('every routed skill ships, and every shipped community skill is complete an
   }
   const index = fs.readFileSync(path.join(SKILLS, 'pinkie-skill-library', 'SKILL.md'), 'utf8');
   assert.doesNotMatch(index, /disable-model-invocation/, 'the index is the one catalog entry');
-  for (const name of names) assert.ok(index.includes(`\`../${name}/SKILL.md\``), `${name} missing from the index`);
+  for (const name of [...own, ...names]) assert.ok(index.includes(`\`../${name}/SKILL.md\``), `${name} missing from the index`);
   const notices = fs.readFileSync(path.join(SKILLS, 'THIRD_PARTY_SKILLS.md'), 'utf8');
   for (const name of names) assert.ok(notices.includes(`| ${name} |`), `${name} missing from THIRD_PARTY_SKILLS.md`);
 });
@@ -62,7 +75,26 @@ test('routing picks the specific skill for what the user said', () => {
     ['把这个流程做成一张信息图', 'infographic-creator'],
     ['做个记账网页', 'ui-ux-pro-max'],
     ['做个表情包GIF', 'slack-gif-creator'],
-    ['帮我做个周报PPT', 'slides'],
+    ['帮我做个周报PPT', 'ppt-master'],
+    ['做一份讲解光合作用的课件', 'morph-ppt'],
+    ['做个融资路演的PPT', 'officecli-pitch-deck'],
+    ['做个网页版的幻灯片', 'frontend-slides'],
+    ['帮我做个工资表 excel 带公式', 'officecli-xlsx'],
+    ['把这份合同排成 word 文档', 'officecli-docx'],
+    ['画一张系统架构图', 'archify'],
+    ['画个项目甘特图', 'pretty-mermaid'],
+    ['做个3D产品展示页面', 'threejs-fundamentals'],
+    ['做个打地鼠小游戏', 'game-prototype'],
+    ['帮我做淘宝详情页', 'taobao-detail-long-image'],
+    ['帮我做个一寸蓝底证件照', 'pinkie-id-photo'],
+    ['把这张图抠出来换成白底', 'pinkie-remove-background'],
+    ['给孩子做一张田字格字帖', 'pinkie-kids-worksheets'],
+    ['出100道20以内口算题', 'pinkie-kids-worksheets'],
+    ['帮我做一份简历', 'pinkie-resume'],
+    ['给我的奶茶店起个名字', 'naming'],
+    ['帮我写个产品文案', 'copywriting'],
+    ['做个公司官网', 'design-taste-frontend'],
+    ['把这个pdf转成图片看看排版', 'pdf'],
     ['npm test 报错了', 'systematic-debugging'],
     ['能帮我做个小红书封面吗？', 'xhs-cover-templates'],
     ['帮我做个婚礼请柬', 'canvas-design'],
@@ -75,7 +107,7 @@ test('routing picks the specific skill for what the user said', () => {
 });
 
 test('chat, questions and thanks get no skills', () => {
-  for (const text of ['你好', '谢谢', '长跑档是什么意思？', '帮我写封邮件跟客户道歉', '给我的奶茶店想个名字', '小红书是什么？', '什么是信息图？']) {
+  for (const text of ['你好', '谢谢', '长跑档是什么意思？', '帮我写封邮件跟客户道歉', '小红书是什么？', '什么是信息图？']) {
     assert.deepEqual(route(text), [], text);
   }
 });

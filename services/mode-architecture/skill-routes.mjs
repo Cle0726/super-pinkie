@@ -7,25 +7,67 @@ import {openclawStateDir} from './openclaw-paths.mjs';
 
 // when：这条消息里出现这些说法才用（更具体的排前面）；没有 when 的是这种活的默认技能。
 export const SKILL_ROUTES = Object.freeze([
-  // 图片 / 印刷
+  // 证件照 / 抠图 / 练习纸 / 简历（碧琪自己写的薄技能，底下是开源工具）
+  {skill: 'pinkie-id-photo', kinds: ['image_print', 'craft', 'document'], when: /证件照|一寸照?|二寸照?|换底色?|蓝底|红底|白底照|签证照|报名照|简历照|护照照/, why: '证件照：换白 / 蓝 / 红底、标准尺寸、六寸排版（本地跑，不上传照片）'},
+  {skill: 'pinkie-remove-background', kinds: ['image_print', 'craft', 'automation'], when: /抠图|抠出来|去背景|去掉背景|透明底|透明背景|换背景|白底图/, why: '抠图去背景、换底、批量处理（本地跑）'},
+  {skill: 'pinkie-kids-worksheets', kinds: ['document', 'tutoring', 'image_print', 'craft', 'writing', 'standard_answer'], when: /字帖|练字|描红|田字格|米字格|回宫格|生字本|口算|计算题|算术题|练习纸|作业纸/, why: '字帖（田字格 / 米字格、拼音、描红）和口算题卡（带答案），A4 PDF'},
+  {skill: 'pinkie-resume', kinds: ['document', 'writing', 'craft'], when: /简历|履历|\bcv\b|resume/i, why: '简历：填一份 YAML 出排版好的 PDF，多套主题，中英文都行'},
+  // 图片 / 印刷 / 电商
   {skill: 'xhs-cover-templates', kinds: ['image_print', 'writing', 'web_ui', 'craft'], when: /小红书|红书|笔记封面|笔记首图|\bxhs\b/i, why: '16 套小红书封面现成模板（亮 / 暗两版）'},
-  {skill: 'banner-design', kinds: ['image_print', 'web_ui', 'craft'], when: /横幅|banner|头图|首图|封面|广告图|电商主图|轮播图|朋友圈图|公众号/i, why: '横幅、头图、封面、广告图的版式和尺寸'},
+  {skill: 'taobao-detail-long-image', kinds: ['image_print', 'web_ui', 'craft'], when: /详情页|详情长图|商品详情|淘宝|天猫|拼多多|京东/, why: '电商详情页长图（750 宽，一屏一屏规划）；配图用碧琪自己的生图工具，不用技能里的 API 脚本'},
+  {skill: 'ecommerce-listing-suite', kinds: ['image_print', 'craft'], when: /上架|主图|商品图|产品图|电商图|一套.{0,4}(?:图|主图)/, why: '一套上架图：主图、卖点、场景、细节；配图用碧琪自己的生图工具'},
+  {skill: 'selling-point-infographic', kinds: ['image_print', 'craft'], when: /卖点/, why: '商品卖点信息图'},
+  {skill: 'size-chart', kinds: ['image_print', 'craft'], when: /尺码/, why: '尺码表'},
+  {skill: 'model-try-on', kinds: ['image_print', 'craft'], when: /试穿|上身图|模特.{0,4}(?:穿|上身)/, why: '模特上身图（用碧琪自己的生图工具）'},
+  {skill: 'lifestyle-scene', kinds: ['image_print', 'craft'], when: /场景图|使用场景/, why: '商品场景图'},
+  {skill: 'multi-angle-set', kinds: ['image_print', 'craft'], when: /多角度|多个角度/, why: '商品多角度图'},
+  {skill: 'amazon-a-plus', kinds: ['image_print', 'web_ui', 'craft'], when: /a\+|亚马逊|amazon/i, why: '亚马逊 A+ 页面'},
+  {skill: 'sale-banner', kinds: ['image_print', 'web_ui', 'craft'], when: /促销|大促|双十一|双11|618|满减|秒杀/, why: '电商促销横幅'},
+  {skill: 'banner-design', kinds: ['image_print', 'web_ui', 'craft'], when: /横幅|banner|头图|首图|封面|广告图|轮播图|朋友圈图|公众号/i, why: '横幅、头图、封面、广告图的版式和尺寸'},
+  {skill: 'ip-as-logo', kinds: ['image_print', 'craft', 'ideas'], when: /ip形象|吉祥物|卡通.{0,4}(?:logo|形象|头像)|拟人|萌.{0,4}(?:logo|形象)|可爱.{0,4}(?:logo|形象)/i, why: '极简可爱的 IP 形象 logo'},
   {skill: 'brand', kinds: ['image_print', 'web_ui', 'craft', 'ideas'], when: /logo|标志|品牌|vi\b|字标|名片|店招|门头/i, why: '品牌和 logo：配色、字体、用法一整套'},
   {skill: 'slack-gif-creator', kinds: ['image_print', 'video_motion', 'craft'], when: /gif|表情包|动图|贴纸/i, why: '做 GIF 动图、表情包'},
-  {skill: 'algorithmic-art', kinds: ['image_print', 'web_ui', 'app_game_ai', 'craft'], when: /生成艺术|图案|纹理|粒子|流体|分形|艺术感|抽象/i, why: '用代码做生成艺术、图案、粒子'},
+  {skill: 'genai-mesh-gradient', kinds: ['image_print', 'web_ui', 'document'], when: /渐变|弥散|mesh/i, why: '渐变背景'},
+  {skill: 'algorithmic-art', kinds: ['image_print', 'web_ui', 'app_game_ai', 'craft'], when: /生成艺术|图案|纹理|分形|艺术感|抽象/i, why: '用代码做生成艺术、图案、纹理'},
   {skill: 'canvas-design', kinds: ['image_print', 'craft'], why: '海报、印刷品、艺术感视觉的设计方法（带字体）'},
-  // 信息图（放在数据、文档、图片里都可能出现）
-  {skill: 'infographic-creator', kinds: ['data_charts', 'image_print', 'document', 'writing', 'craft', 'tutoring'], when: /信息图|长图|一图读懂|图解|流程图|步骤图|时间线|时间轴|对比图|架构图|层级|组织架构|金字塔|漏斗|思维导图|知识卡片/i, why: 'AntV 信息图：约 200 种现成版式，写几行就出图'},
-  // 网页 / 界面
+  // 图解和图表
+  {skill: 'archify', kinds: ['craft', 'image_print', 'document', 'data_charts', 'code', 'web_ui', 'tutoring', 'writing'], when: /架构图|系统图|部署图|时序图|er ?图|实体关系|状态图|数据流|泳道|类图/i, why: '架构图、时序图、ER 图、状态图等，可交互单页 HTML，能导出图片'},
+  {skill: 'dashmotion', kinds: ['craft', 'image_print', 'document', 'code', 'web_ui', 'video_motion'], when: /会动的?.{0,4}(?:流程图|架构图|示意图)|动态.{0,2}(?:流程图|架构图)|动画.{0,2}(?:流程图|架构图)/, why: '会动的流程图、架构图（连线在流动）'},
+  {skill: 'pretty-mermaid', kinds: ['craft', 'image_print', 'document', 'data_charts', 'code', 'writing', 'tutoring'], when: /mermaid|流程图|甘特图|思维导图|脑图|时序图/i, why: 'Mermaid 流程图、甘特图、思维导图，渲染成好看的 SVG / PNG'},
+  {skill: 'infographic-creator', kinds: ['data_charts', 'image_print', 'document', 'writing', 'craft', 'tutoring'], when: /信息图|长图|一图读懂|图解|流程图|步骤图|时间线|时间轴|对比图|层级|组织架构|金字塔|漏斗|知识卡片/i, why: 'AntV 信息图：约 200 种现成版式，写几行就出图'},
+  {skill: 'antv-g6-graph', kinds: ['data_charts', 'image_print', 'web_ui', 'craft'], when: /关系图|网络图|知识图谱|拓扑|树图|人物关系/, why: '关系图、网络图、树图（AntV G6）'},
+  {skill: 'officecli-data-dashboard', kinds: ['data_charts', 'document'], when: /(?:excel|表格).{0,6}(?:看板|仪表盘|dashboard)|(?:看板|仪表盘).{0,6}(?:excel|表格)/i, why: 'Excel 数据看板'},
+  {skill: 'officecli-financial-model', kinds: ['data_charts', 'document'], when: /财务模型|三张?报?表|现金流|利润表|资产负债|估值模型|收入预测|营收预测/, why: '财务模型（Excel）'},
+  {skill: 'officecli-xlsx', kinds: ['data_charts', 'document', 'automation'], when: /excel|xlsx|电子表格|表格|公式|透视表|工资表|预算表|报表|考勤表/i, why: '做 / 改 Excel：公式、条件格式、冻结窗格、图表'},
+  {skill: 'antv-g2-chart', kinds: ['data_charts', 'web_ui', 'document'], when: /图表|柱状|折线|饼图|散点|雷达|热力图|趋势图|统计图|chart/i, why: 'AntV G2 图表（本地渲染）'},
+  // 网页 / 界面 / 3D / 游戏
+  {skill: 'design-taste-frontend', kinds: ['web_ui'], why: '网页审美：从获奖网站总结的方向库，先定方向再做，截图自查，避免 AI 模板味'},
   {skill: 'ui-ux-pro-max', kinds: ['web_ui', 'app_game_ai'], why: '先查设计系统：按行业挑风格、配色、字体、UX 规则'},
   {skill: 'frontend-design', kinds: ['web_ui', 'app_game_ai'], why: '做出不俗气、有设计感的前端界面'},
+  {skill: 'threejs-fundamentals', kinds: ['web_ui', 'app_game_ai', 'craft'], when: /3d|三维|立体|three\.?js|webgl|模型展示|360.{0,3}(?:展示|旋转)/i, why: '3D 网页基础：场景、相机、灯光、动画循环'},
+  {skill: 'threejs-loaders', kinds: ['web_ui', 'app_game_ai', 'craft'], when: /glb|gltf|\.obj|模型文件|导入.{0,4}模型/i, why: '加载 3D 模型文件'},
+  {skill: 'threejs-shaders', kinds: ['web_ui', 'app_game_ai', 'craft'], when: /着色器|shader|粒子|光效|炫酷特效/i, why: '着色器特效、粒子'},
+  {skill: 'threejs-interaction', kinds: ['web_ui', 'app_game_ai', 'craft'], when: /3d.{0,10}(?:点击|拖|交互|控制|旋转)/i, why: '3D 交互：点击、拖拽、视角控制'},
+  {skill: 'game-jam-mode', kinds: ['app_game_ai'], when: /限时|game ?jam|赶紧做.{0,4}游戏|快速.{0,4}游戏/i, why: '限时做完一个小游戏'},
+  {skill: 'game-prototype', kinds: ['app_game_ai'], when: /游戏|game/i, why: '快速做出能玩的游戏原型'},
+  {skill: 'game-designer', kinds: ['app_game_ai'], when: /玩法|关卡|手感|游戏设计|好玩/, why: '游戏设计：玩法、关卡、手感'},
+  {skill: 'game-balance-check', kinds: ['app_game_ai'], when: /数值|平衡|太难|太简单/, why: '游戏数值平衡'},
   {skill: 'design-system', kinds: ['web_ui', 'app_game_ai'], when: /设计系统|组件库|设计规范|token|一整套界面/i, why: '搭一套设计系统'},
   {skill: 'ui-styling', kinds: ['web_ui', 'app_game_ai'], when: /tailwind|shadcn|样式|配色不好|好看点|美化/i, why: 'Tailwind / shadcn 的样式做法'},
   {skill: 'web-artifacts-builder', kinds: ['web_ui', 'app_game_ai'], when: /react|单页|小工具|应用|计算器|看板|后台|仪表盘|dashboard/i, why: '复杂单页应用（React + 组件）'},
+  {skill: 'browser-testing-with-devtools', kinds: ['web_ui', 'app_game_ai', 'debugging'], when: /控制台|devtools|开发者工具|网页.{0,6}(?:慢|卡|报错|白屏)/i, why: '用浏览器开发者工具查网页问题'},
   {skill: 'webapp-testing', kinds: ['web_ui', 'app_game_ai', 'debugging'], when: /测试|点一遍|试一下|试用|自测|bug|点不动|没反应/i, why: '用浏览器自动点一遍网页、截图验证'},
-  // 文档 / PPT
-  {skill: 'slides', kinds: ['document', 'tutoring'], when: /ppt|幻灯片|演示|汇报|路演|答辩|述职|课件|slides?\b|deck|keynote/i, why: '演示稿的结构、每页版式和文案套路（它本身做网页版幻灯片；先生要 PPT 时只借结构和版式，交付照打法做 .pptx）'},
-  {skill: 'theme-factory', kinds: ['document', 'web_ui', 'image_print'], when: /ppt|幻灯片|演示|报告|文档|主题|配色|风格统一/i, why: '10 套现成主题配色和字体，PPT、文档、网页都能套'},
+  // 文档 / PPT / PDF
+  {skill: 'officecli-pitch-deck', kinds: ['document'], when: /路演|融资|招商|投资人|pitch|\bbp\b|商业计划/i, why: '路演 / 融资 deck'},
+  {skill: 'ppt-master', kinds: ['document', 'tutoring'], when: /ppt|pptx|幻灯片|演示文稿|课件|汇报|路演|答辩|述职|deck|keynote/i, why: '可编辑 .pptx 全流程：课件、汇报、路演，品牌模板、图标、动画（第一次用要下载，放后台）'},
+  {skill: 'morph-ppt', kinds: ['document', 'tutoring'], when: /ppt|pptx|幻灯片|演示文稿|课件|汇报|路演|答辩|述职|deck/i, why: '50 多种现成 PPT 风格（.pptx 成品）和平滑切换动画'},
+  {skill: 'frontend-slides', kinds: ['document', 'web_ui', 'tutoring'], when: /网页版|网页幻灯片|html.{0,4}(?:幻灯片|演示|slides)|在线演示|reveal/i, why: '网页版幻灯片（动画丰富的 HTML）'},
+  {skill: 'officecli-academic-paper', kinds: ['document', 'writing'], when: /论文|毕业设计|开题报告|学术|期刊|参考文献/, why: '论文的 Word 排版'},
+  {skill: 'officecli-word-form', kinds: ['document'], when: /表单|申请表|登记表|报名表|调查表/, why: 'Word 表单'},
+  {skill: 'officecli-docx', kinds: ['document', 'writing'], when: /word|docx|文档|公文|红头|通知|报告|手册|说明书|合同|方案|规划|计划书|申请书|总结/i, why: '做 / 改 Word：目录、页码、编号、表格、排版'},
+  {skill: 'pdf', kinds: ['document', 'writing', 'data_charts'], when: /pdf/i, why: 'PDF：生成、读取，渲染成图片检查排版'},
+  {skill: 'theme-factory', kinds: ['document', 'web_ui', 'image_print'], when: /主题|配色|风格统一/i, why: '10 套现成主题配色和字体，PPT、文档、网页都能套'},
+  {skill: 'officecli', kinds: ['document'], why: 'Word / Excel / PPT 总入口（officecli 单文件命令行，不用装 Office），交付前质检'},
   // 视频 / 动效：总入口 + 按片子类型
   {skill: 'reverse-any-video', kinds: ['video_motion'], when: /照着.{0,8}(?:视频|片子)|模仿.{0,8}(?:视频|片子)|复刻|拆解.{0,6}视频|做成一样的/i, why: '照着一个现成视频拆解、复刻'},
   {skill: 'style-sampling', kinds: ['video_motion', 'image_print', 'web_ui'], when: /参考.{0,6}风格|这种风格|照着这个风格|同款风格|按这张图的感觉/i, why: '从参考图 / 网页里取风格'},
@@ -44,11 +86,33 @@ export const SKILL_ROUTES = Object.freeze([
   {skill: 'slideshow', kinds: ['video_motion', 'document'], when: /相册|照片.{0,4}(?:视频|轮播)|ppt.{0,4}(?:转|做成)视频|电子相册|卡点/i, why: '照片 / PPT 做成视频'},
   {skill: 'motion-film', kinds: ['video_motion', 'image_print'], when: /动效|motion|动态海报|片头|片尾|标题动画/i, why: '动效短片、片头片尾'},
   {skill: 'lemo-opuscar', kinds: ['video_motion'], when: /短片|电影感|片子|风格|纪录|动画片|水墨|像素|复古|胶片|微缩|剪纸|皮影|手绘/i, why: '66 种用代码做的片子风格（水墨、像素、剪纸、纪录片……）'},
-  {skill: 'media-use', kinds: ['video_motion', 'image_print', 'audio'], when: /配乐|音乐|bgm|音效|配音|字幕|素材|抠图|去背景|调色|滤镜/i, why: '配乐、音效、配音、字幕、抠图、调色'},
+  {skill: 'media-use', kinds: ['video_motion', 'image_print', 'audio'], when: /配乐|音乐|bgm|音效|配音|字幕|素材|调色|滤镜/i, why: '配乐、音效、配音、字幕、调色'},
   {skill: 'hyperframes-registry', kinds: ['video_motion'], when: /特效|转场|故障|胶片|crt|glitch|粒子|光效|图表动画|地图动画/i, why: '现成的动效积木（约 400 件）'},
   {skill: 'hyperframes', kinds: ['video_motion'], why: '视频 / 动画的总入口（HyperFrames：HTML 做视频）'},
+  // 文案 / 营销 / 点子
+  {skill: 'naming', kinds: ['ideas', 'writing'], when: /起名|取名|名字|店名|品牌名|命名|叫什么好/, why: '起名：隐喻法，查重名和域名'},
+  {skill: 'copy-editing', kinds: ['writing'], when: /改.{0,4}文案|润色.{0,4}文案|文案.{0,4}(?:改|润色|优化)/, why: '文案修改润色'},
+  {skill: 'copywriting', kinds: ['writing', 'web_ui'], when: /文案|广告语|slogan|标语|宣传语|产品介绍|落地页/i, why: '营销文案：落地页、广告、产品介绍'},
+  {skill: 'social', kinds: ['writing', 'ideas'], when: /小红书|公众号|朋友圈|微博|抖音.{0,4}文案|帖子|社媒|内容日历/, why: '社交媒体内容：帖子、话题、发布节奏'},
+  {skill: 'emails', kinds: ['writing'], when: /营销邮件|邮件序列|开发信|推广邮件|newsletter/i, why: '营销邮件和邮件序列'},
+  {skill: 'ad-creative', kinds: ['writing', 'image_print', 'ideas'], when: /广告(?:创意|投放|素材)|投放素材|信息流广告/, why: '广告创意和投放素材'},
+  {skill: 'marketing-ideas', kinds: ['ideas', 'writing'], when: /营销|推广|引流|拉新|涨粉|获客|曝光/, why: '营销点子大全'},
+  {skill: 'offers', kinds: ['ideas', 'writing'], when: /优惠|促销方案|满减|套餐|会员卡|活动方案/, why: '促销和优惠方案'},
+  {skill: 'pricing', kinds: ['ideas', 'tradeoff'], when: /定价|价格策略|怎么定价|收费模式/, why: '定价策略'},
+  {skill: 'launch', kinds: ['ideas', 'writing'], when: /发布会|上新|新品发布|产品发布/, why: '产品发布方案'},
+  {skill: 'product-marketing', kinds: ['ideas', 'writing'], when: /产品定位|卖点提炼|差异化|竞品/, why: '产品定位和卖点'},
+  {skill: 'content-strategy', kinds: ['ideas', 'writing'], when: /内容规划|选题|内容策略|账号定位/, why: '内容规划'},
+  {skill: 'cro', kinds: ['web_ui', 'ideas'], when: /转化率|注册率|落地页.{0,4}(?:优化|转化)/, why: '转化率优化'},
+  {skill: 'idea-refine', kinds: ['ideas'], when: /想法|这个主意|能不能做成|可行吗|方案打磨/, why: '把模糊的想法打磨成能做的方案'},
   // 写代码 / 排错 / 长活
   {skill: 'systematic-debugging', kinds: ['debugging'], why: '先复现、找根因、再修，不瞎改'},
+  {skill: 'performance-optimization', kinds: ['code', 'web_ui', 'debugging', 'app_game_ai'], when: /性能|太慢|卡顿|加载慢|优化速度/, why: '性能优化'},
+  {skill: 'security-and-hardening', kinds: ['code', 'web_ui', 'publish'], when: /安全|漏洞|加固|注入|xss|密码存/i, why: '安全加固'},
+  {skill: 'code-review-and-quality', kinds: ['code'], when: /审查|review|代码质量|看看.{0,4}代码/i, why: '代码审查'},
+  {skill: 'code-simplification', kinds: ['code'], when: /化简|简化|重构|太乱/, why: '代码化简'},
+  {skill: 'api-and-interface-design', kinds: ['code', 'app_game_ai'], when: /接口设计|api ?设计|设计.{0,4}接口/i, why: '接口设计'},
+  {skill: 'spec-driven-development', kinds: ['code', 'app_game_ai', 'web_ui'], when: /需求文档|规格|spec\b|prd/i, why: '先写规格再写代码'},
+  {skill: 'shipping-and-launch', kinds: ['publish', 'code', 'web_ui'], when: /上线|发布到|部署/, why: '上线前检查'},
   {skill: 'test-driven-development', kinds: ['code'], when: /功能|实现|写一个|写个|改一下|函数|脚本|接口|算法|逻辑/i, why: '先写会失败的测试，再写代码'},
   {skill: 'writing-plans', kinds: ['code', 'app_game_ai', 'automation', 'web_ui'], when: /完整的|一整套|系统|平台|大项目|从零|很多功能|多个页面|长期/i, why: '大活先写计划：拆成能验证的小步'},
   {skill: 'verification-before-completion', kinds: ['code', 'debugging', 'automation', 'app_game_ai'], why: '说做完之前先拿到真凭据'},
@@ -89,9 +153,10 @@ export function routeSkills(kinds = [], prompt = '', {limit = 3, available = nul
   return picked;
 }
 
-// 在本机找技能文件夹：工作区 skills/ > ~/.openclaw/skills/ > 碧琪自带（PINKIE_MANAGED_SKILLS_DIR）。
+// 在本机找技能文件夹：工作区 skills/ > ~/.openclaw/skills/ > 已经按需下载好的大技能（pinkie-skills/）
+// > 碧琪自带（PINKIE_MANAGED_SKILLS_DIR；大技能在这里只是一份「第一次用时下载」的说明）。
 export function resolveSkillFile(name, {workspace = '', stateDir = openclawStateDir(), managedDir = process.env.PINKIE_MANAGED_SKILLS_DIR || ''} = {}) {
-  const roots = [workspace && path.join(workspace, 'skills'), stateDir && path.join(stateDir, 'skills'), managedDir].filter(Boolean);
+  const roots = [workspace && path.join(workspace, 'skills'), stateDir && path.join(stateDir, 'skills'), stateDir && path.join(stateDir, 'pinkie-skills'), managedDir].filter(Boolean);
   for (const root of roots) {
     const file = path.join(root, name, 'SKILL.md');
     try { if (fs.statSync(file).isFile()) return file; } catch {}

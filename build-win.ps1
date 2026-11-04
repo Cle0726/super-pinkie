@@ -71,7 +71,8 @@ Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -R
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
 # 社区技能按 skills/community-skills.json 一起打包；技能路由（skill-routes.mjs）把路径直接给模型。
-$communitySkills = @((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $RepoRoot "skills\community-skills.json") | ConvertFrom-Json).skills | ForEach-Object { $_.name })
+$skillManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $RepoRoot "skills\community-skills.json") | ConvertFrom-Json
+$communitySkills = @(@($skillManifest.own) + @($skillManifest.skills) | Where-Object { $_ } | ForEach-Object { $_.name })
 if ($communitySkills.Count -eq 0) { throw "社区技能清单是空的" }
 foreach ($skill in @("deep-think", "pinkie-deep-research", "web-gpt-collab", "pinkie-skill-library") + $communitySkills) {
     $source = Join-Path $RepoRoot "skills\$skill"
