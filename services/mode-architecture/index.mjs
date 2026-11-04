@@ -24,6 +24,7 @@ import {createFileDelivery} from './file-delivery.mjs';
 import {registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
+import {renderFirstPerson} from './first-person.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -6715,7 +6716,7 @@ export default {
       // model/session text untouched; only the user-visible outbound payload
       // receives Pinkie's first-person display name.
       const text = typeof payload?.text === 'string'
-        ? workFirstReplyText(payload.text, ctx).replaceAll('我', '碧琪')
+        ? renderFirstPerson(workFirstReplyText(payload.text, ctx))
         : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))

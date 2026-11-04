@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -420,6 +421,11 @@ def cleanup_orphan_webview(storage):
 class WindowsUpdater:
     """Release updater for a frozen EXE or PyInstaller onedir directory."""
 
+    # How long the replacer waits for the new version: to report that it
+    # started at all, then (while it keeps running) to report its gateway.
+    health_start_seconds = 120
+    health_ready_seconds = 900
+
     def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
@@ -437,6 +443,7 @@ class WindowsUpdater:
             urllib.parse.urlparse(route["manifest"]).hostname for route in self.mirrors}
         self.mirror_latest = None
         self.mirror_checked = 0.0
+        self.health_reporter = None
 
     @staticmethod
     def _is_onedir(executable):
@@ -724,8 +731,12 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$Token,
   [Parameter(Mandatory=$true)][string]$LogPath,
   [Parameter(Mandatory=$true)][string]$ReadyMarker,
-  [string]$Version = ''
+  [string]$Version = '',
+  [int]$StartSeconds = 120,
+  [int]$ReadySeconds = 900
 )
+# pinkie-update-protocol: 2  (see the portable helper: started, then ready)
+$StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
 # A parent started by PowerShell 7 can pass its module paths to Windows
 # PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
 # as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
@@ -793,21 +804,26 @@ try {
   Move-Item -LiteralPath $Payload -Destination $Target -Force
   $actual = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $Target -ArgumentList "--update-health-token=$Token" -PassThru
-  $healthDeadline = (Get-Date).AddSeconds(120)
-  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
-    Start-Sleep -Milliseconds 500
+  $startDeadline = (Get-Date).AddSeconds($StartSeconds)
+  $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
+  $started = $false
+  while (-not (Test-Path -LiteralPath $HealthMarker)) {
     $launched.Refresh()
-  }
-  if (-not (Test-Path -LiteralPath $HealthMarker)) {
-    if (-not $launched.HasExited) {
+    if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
+    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) { $started = $true; Write-UpdateLog 'new version started; waiting for its gateway' }
+    if (-not $started -and (Get-Date) -ge $startDeadline) {
       & taskkill.exe /PID $launched.Id /T /F | Out-Null
       try { Wait-Process -Id $launched.Id -Timeout 10 -ErrorAction SilentlyContinue } catch {}
+      throw 'new version did not start'
     }
-    throw 'new version did not become healthy'
+    if ($started -and (Get-Date) -ge $readyDeadline) { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it"; break }
+    Start-Sleep -Milliseconds 500
   }
   Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -842,8 +858,23 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [Parameter(Mandatory=$true)][string]$ReadyMarker,
   [Parameter(Mandatory=$true)][string]$GatewayRecord,
   [Parameter(Mandatory=$true)][int]$GatewayPort,
-  [string]$Version = ''
+  [string]$Version = '',
+  [int]$StartSeconds = 120,
+  [int]$ReadySeconds = 900,
+  [int]$SwapSeconds = 90
 )
+# pinkie-update-protocol: 2
+# The new version reads this line from its own apply-<token>.ps1 to learn that
+# this helper waits for "<token>.started" first and then, while the new process
+# stays alive, for "<token>.ready".  Older helpers (2.5.27-2.5.31) only know
+# "<token>.ready" and allow 120 s, which a new version's first start (per-version
+# setup plus a cold gateway over freshly unpacked files that the virus scanner
+# reads for the first time) can exceed; they then killed a healthy new version
+# and moved the old folder back -- "updated, restarted, nothing changed".
+$StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
+# While this file names a live helper, starting the App shows 「正在更新」
+# instead of opening the old version over a half-finished swap.
+$InProgress = Join-Path $UpdateRoot 'in-progress.json'
 # A parent started by PowerShell 7 can pass its module paths to Windows
 # PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
 # as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
@@ -869,6 +900,28 @@ function Test-UpdateWriteAccess([string]$Folder) {
     $created = $true
     $stream.Dispose()
   } finally { if ($created) { [IO.File]::Delete($probe) } }
+}
+function Show-UpdateProblem([string]$Text) {
+  # Last resort when no App window will come back to explain what happened.
+  try {
+    Add-Type -AssemblyName PresentationFramework
+    [void][System.Windows.MessageBox]::Show($Text, '超級碧琪更新', 'OK', 'Warning')
+  } catch { Write-UpdateLog "could not show update problem: $($_.Exception.Message)" }
+}
+function Invoke-WithRetry([scriptblock]$Action, [string]$What, [int]$Seconds) {
+  # Windows refuses to rename a folder while any file inside is open. Right
+  # after a 30,000-file unpack, the virus scanner, the search indexer or a
+  # OneDrive/Desktop sync client routinely holds some of them for a while.
+  $deadline = (Get-Date).AddSeconds($Seconds)
+  $logged = $false
+  while ($true) {
+    try { & $Action; return }
+    catch {
+      if ((Get-Date) -ge $deadline) { throw "$What is still in use: $($_.Exception.Message)" }
+      if (-not $logged) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $true }
+      Start-Sleep -Milliseconds 500
+    }
+  }
 }
 function Write-StartupFailure($Record) {
   try {
@@ -971,22 +1024,20 @@ function Confirm-NewInstallGateway {
   }
 }
 function Restore-PreviousVersion {
-  for ($attempt = 0; $attempt -lt 40; $attempt++) {
-    try {
-      if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
-        if (Test-Path -LiteralPath $TargetDir) {
-          try { Stop-InstallProcesses $TargetDir } catch {}
-          Remove-Item -LiteralPath $TargetDir -Recurse -Force
-        }
-        Move-Item -LiteralPath $Backup -Destination $TargetDir -Force
-      }
-      break
-    } catch {
-      if ($attempt -eq 39) { throw }
-      Start-Sleep -Milliseconds 250
+  if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
+    if (Test-Path -LiteralPath $TargetDir) {
+      # Move the failed copy aside instead of deleting it in place: a rename
+      # either happens completely or not at all, so a half-deleted tree can
+      # never be left where the user starts the App.
+      $failed = $TargetDir.TrimEnd('\') + '.failed-' + $Token
+      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
+      Remove-Item -LiteralPath $failed -Recurse -Force -ErrorAction SilentlyContinue
     }
+    Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
   }
+  Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
+  else { throw 'previous version is missing after rollback' }
 }
 try {
   [void](Get-Command Get-FileHash -ErrorAction Stop)
@@ -1000,6 +1051,8 @@ try {
   if (Test-Path -LiteralPath $Backup) { throw 'update backup path already exists' }
   Test-UpdateWriteAccess ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($TargetDir).TrimEnd('\')))
   Confirm-GatewayOwnership
+  @{ pid = $PID; version = $Version; token = $Token } | ConvertTo-Json -Compress |
+    Set-Content -LiteralPath $InProgress -Encoding UTF8
   [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
@@ -1010,40 +1063,77 @@ try {
   # 先验包、再动安装目录：包一旦损坏，展开和替换都不该发生。
   $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
-  $stage = Join-Path (Split-Path -Parent $TargetDir) ('.pinkie-stage-' + $Token)
+  # Unpack under the App's own data folder when it is on the same drive, so
+  # the final swap is still a rename but a Desktop/OneDrive/Documents install
+  # does not get 30,000 temporary files synced or indexed next to it.
+  $installParent = Split-Path -Parent ([IO.Path]::GetFullPath($TargetDir).TrimEnd('\'))
+  $stageParent = $installParent
+  if ([string]::Equals([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($UpdateRoot)),
+                       [IO.Path]::GetPathRoot($installParent), [System.StringComparison]::OrdinalIgnoreCase)) {
+    $stageParent = $UpdateRoot
+  }
+  $script:stage = Join-Path $stageParent ('.pinkie-stage-' + $Token)
+  $stage = $script:stage
   if (Test-Path -LiteralPath $stage) { throw 'update staging path already exists' }
   # This helper has no visible PowerShell window. Per-entry console progress
   # adds substantial overhead for the tens of thousands of portable files;
   # suppress only that hidden process's progress records, not App effects.
   $ProgressPreference = 'SilentlyContinue'
-  Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  # The window is already closed here, so every second counts. ZipFile is
+  # several times faster than Windows PowerShell 5.1's Expand-Archive on
+  # ~30,000 entries (2-3 minutes on CI); Expand-Archive stays as a fallback.
+  $unpackStarted = Get-Date
+  try {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Payload, $stage)
+  } catch {
+    Write-UpdateLog "fast unpack failed, using Expand-Archive: $($_.Exception.Message)"
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  }
+  Write-UpdateLog ('unpacked in ' + [int]((Get-Date) - $unpackStarted).TotalSeconds + ' s')
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
   Stop-InstallProcesses $TargetDir
   Stop-VerifiedGateway
-  for ($attempt = 0; ; $attempt++) {
-    try { Move-Item -LiteralPath $TargetDir -Destination $Backup; $script:backupCreated = $true; break }
-    catch {
-      if ($attempt -ge 39) { throw "install folder is still in use: $($_.Exception.Message)" }
-      Stop-InstallProcesses $TargetDir
-      Start-Sleep -Milliseconds 250
-    }
-  }
-  Move-Item -LiteralPath $newDir -Destination $TargetDir -Force
+  Invoke-WithRetry {
+    Stop-InstallProcesses $TargetDir
+    Move-Item -LiteralPath $TargetDir -Destination $Backup
+    $script:backupCreated = $true
+  } 'install folder' $SwapSeconds
+  # This rename used to have no retry at all: one file of the fresh unpack
+  # still open in the virus scanner failed the whole update and rolled back.
+  Invoke-WithRetry { Move-Item -LiteralPath $newDir -Destination $TargetDir } 'unpacked new version' $SwapSeconds
+  if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'new version is missing after the swap' }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
-  $healthDeadline = (Get-Date).AddSeconds(120)
-  while (-not (Test-Path -LiteralPath $HealthMarker) -and -not $launched.HasExited -and (Get-Date) -lt $healthDeadline) {
-    Start-Sleep -Milliseconds 500
+  $startDeadline = (Get-Date).AddSeconds($StartSeconds)
+  $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
+  $started = $false
+  $ready = $false
+  while ($true) {
+    if (Test-Path -LiteralPath $HealthMarker) { $ready = $true; break }
     $launched.Refresh()
+    if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
+    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) {
+      $started = $true
+      Write-UpdateLog 'new version started; waiting for its gateway'
+    }
+    if (-not $started -and (Get-Date) -ge $startDeadline) {
+      & taskkill.exe /PID $launched.Id /T /F | Out-Null
+      throw 'new version did not start'
+    }
+    # A new version that is running from the new folder is never killed just
+    # for being slow: rolling it back cannot make the next start any faster.
+    if ($started -and (Get-Date) -ge $readyDeadline) { break }
+    Start-Sleep -Milliseconds 500
   }
-  if (-not (Test-Path -LiteralPath $HealthMarker)) {
-    if (-not $launched.HasExited) { & taskkill.exe /PID $launched.Id /T /F | Out-Null }
-    throw 'new version did not become healthy'
-  }
-  Confirm-NewInstallGateway
+  if ($ready) { Confirm-NewInstallGateway }
+  else { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it" }
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -1053,11 +1143,18 @@ try {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
   Write-UpdateFailure $_.Exception.Message
   if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
-    try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+    try { Restore-PreviousVersion }
+    catch {
+      Write-UpdateLog "rollback failed: $($_.Exception.Message)"
+      $where = if (Test-Path -LiteralPath $Backup) { "原来的版本保存在：`n$Backup`n把这个文件夹改回「$(Split-Path -Leaf $TargetDir)」就能继续用。" } else { '请重新下载便携版。' }
+      Show-UpdateProblem ("新版 $Version 没有装上，自动恢复也没有完成。`n$where`n记忆和设置都在，不受影响。`n`n详细记录：$LogPath")
+    }
   } else {
     Write-StartupFailure $_
   }
+  if ($script:stage) { Remove-Item -LiteralPath $script:stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
+Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
@@ -1143,6 +1240,8 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-GatewayRecord", str(state_root() / "gateway-owner.json"),
                     "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
                     "-Version", str(self.prepared["version"]),
+                    "-StartSeconds", str(int(self.health_start_seconds)),
+                    "-ReadySeconds", str(int(self.health_ready_seconds)),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous-" + token + self.executable.suffix)
@@ -1161,6 +1260,8 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-LogPath", str(state_root() / "logs/updater.log"),
                 "-ReadyMarker", str(ready_marker),
                 "-Version", str(self.prepared["version"]),
+                "-StartSeconds", str(int(self.health_start_seconds)),
+                "-ReadySeconds", str(int(self.health_ready_seconds)),
                 ]
             try:
                 process = subprocess.Popen(
@@ -1218,6 +1319,75 @@ def hidden_process_kwargs(hide_window=True):
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = subprocess.SW_HIDE
     return {**flags, "startupinfo": startup}
+
+
+def native_corner_geometry(width, height, dpi, maximized=False):
+    if maximized or width <= 0 or height <= 0:
+        return None
+    # The shared HTML shell has a 22 CSS-pixel outer radius. HWND regions use
+    # physical pixels; the real test machine is at 125%, not 96 DPI.
+    diameter = round(44 * dpi / 96)
+    return (0, 0, width + 1, height + 1, diameter, diameter)
+
+
+def configure_native_corners(window):
+    """Clip the HWND as well as HTML, including resize/DPI/maximize changes."""
+    if os.name != "nt":
+        return
+    import ctypes
+
+    class Rect(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int32) for name in ("left", "top", "right", "bottom")]
+
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    gdi = ctypes.WinDLL("gdi32", use_last_error=True)
+    user.GetClientRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(Rect)]
+    user.GetClientRect.restype = ctypes.c_int32
+    user.GetDpiForWindow.argtypes = [ctypes.c_void_p]
+    user.GetDpiForWindow.restype = ctypes.c_uint32
+    user.IsZoomed.argtypes = [ctypes.c_void_p]
+    user.IsZoomed.restype = ctypes.c_int32
+    user.SetWindowRgn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32]
+    user.SetWindowRgn.restype = ctypes.c_int32
+    gdi.CreateRoundRectRgn.argtypes = [ctypes.c_int32] * 6
+    gdi.CreateRoundRectRgn.restype = ctypes.c_void_p
+    gdi.DeleteObject.argtypes = [ctypes.c_void_p]
+    gdi.DeleteObject.restype = ctypes.c_int32
+    native = window.native
+    handle = int(native.Handle.ToInt64())
+    last = []
+
+    def apply(*_):
+        rect = Rect()
+        if not user.GetClientRect(handle, ctypes.byref(rect)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        geometry = native_corner_geometry(rect.right, rect.bottom, user.GetDpiForWindow(handle) or 96,
+                                          bool(user.IsZoomed(handle)))
+        if last == [geometry]:
+            return
+        region = gdi.CreateRoundRectRgn(*geometry) if geometry else None
+        if geometry and not region:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not user.SetWindowRgn(handle, region, True):
+            if region:
+                gdi.DeleteObject(region)
+            raise ctypes.WinError(ctypes.get_last_error())
+        # Windows owns the region after SetWindowRgn succeeds. Deleting it
+        # here would invalidate the active clipping mask.
+        last[:] = [geometry]
+
+    def changed(*_):
+        try:
+            apply()
+        except Exception as error:
+            append_log("launcher", f"native corner update failed: {error}")
+
+    native.Resize += changed
+    if hasattr(native, "DpiChanged"):
+        native.DpiChanged += changed
+    window._pinkie_corner_handler = changed  # Keep the managed event delegate alive.
+    apply()
+    append_log("launcher", "native corners enabled: 22 CSS px; physical-DPI HWND region; square only when maximized")
 
 
 def configure_native_glass(window):
@@ -1890,13 +2060,20 @@ class NativeBridge:
         return self._begin_nonclient_action(hit_tests.get(str(direction).lower(), 0))
 
     def toggle_maximize(self):
-        if self.maximized:
-            self._window.restore()
-        else:
-            self._window.maximize()
-        # The native maximized/restored events are the source of truth. This
-        # optimistic value keeps double-clicks correct before that event lands.
-        self.maximized = not self.maximized
+        previous = self.maximized
+        target = not previous
+        # Set the optimistic target before asking the host to change state.
+        # The native event may arrive synchronously: flipping the value after
+        # maximize()/restore() can then undo that event and break the next click.
+        self.maximized = target
+        try:
+            if target:
+                self._window.maximize()
+            else:
+                self._window.restore()
+        except Exception:
+            self.maximized = previous
+            raise
         return {"maximized": self.maximized}
 
     def window_close(self):
@@ -2023,7 +2200,16 @@ BRIDGE_SCRIPT = r"""
     document.body.append(resize);
     const controls = document.createElement('div');
     controls.id = 'pinkie-native-window-controls';
-    controls.innerHTML = '<button class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="主动拉取更新"><span>✦</span></button><button data-act="min" aria-label="最小化"><span aria-hidden="true"></span></button><button data-act="max" aria-label="最大化"><span aria-hidden="true"></span></button><button data-act="close" aria-label="关闭"><span aria-hidden="true"></span></button>';
+    controls.setAttribute('role', 'toolbar');
+    controls.setAttribute('aria-label', '窗口操作');
+    const captionIcon = paths => `<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">${paths}</svg>`;
+    const maximizeIcon = '<rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/>';
+    const restoreIcon = '<path d="M7.5 4.5v-1h9v9h-1"/><rect x="3.5" y="6.5" width="10" height="10" rx="1.5"/>';
+    controls.innerHTML = '<button type="button" class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="检查更新">'
+      + captionIcon('<path d="m10 2 1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8Z"/><path d="M16 14v4m-2-2h4"/>') + '</button>'
+      + '<button type="button" data-act="min" aria-label="最小化" title="最小化">' + captionIcon('<path d="M4.5 12.5h11"/>') + '</button>'
+      + '<button type="button" data-act="max" aria-label="最大化" title="最大化" aria-pressed="false">' + captionIcon(maximizeIcon) + '</button>'
+      + '<button type="button" data-act="close" aria-label="关闭" title="关闭">' + captionIcon('<path d="m5 5 10 10M15 5 5 15"/>') + '</button>';
     const toast = message => {
       let node = document.getElementById('pinkie-update-toast');
       if (!node) { node = document.createElement('div'); node.id = 'pinkie-update-toast'; document.body.append(node); }
@@ -2055,7 +2241,7 @@ BRIDGE_SCRIPT = r"""
         install.disabled = true; later.disabled = true; status.textContent = '正在把新版安全地收好…'; card.classList.add('is-working');
         const ready = await call('prepare_update');
         if (!ready?.ready) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = ready?.message || '网络有点晃，稍后再试就好。'; return; }
-        status.textContent = '校验完成，正在重启…';
+        status.textContent = '校验完成。窗口会先关掉，换好后自动打开新版，可能要几分钟；这期间不用自己打开碧琪。';
         const applied = await call('apply_update');
         if (!applied?.started) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = applied?.message || '还没有完成，稍后再试。'; }
       };
@@ -2107,7 +2293,12 @@ BRIDGE_SCRIPT = r"""
     window.__pinkieNativeWindowState = state => {
       const maximized = Boolean(state?.maximized);
       document.documentElement.toggleAttribute('data-pinkie-maximized', maximized);
-      controls.querySelector('[data-act="max"]')?.setAttribute('aria-label', maximized ? '还原窗口' : '最大化');
+      const button = controls.querySelector('[data-act="max"]');
+      const label = maximized ? '还原窗口' : '最大化';
+      button?.setAttribute('aria-label', label); button?.setAttribute('title', label);
+      button?.setAttribute('aria-pressed', String(maximized));
+      const icon = button?.querySelector('svg');
+      if (icon) icon.innerHTML = maximized ? restoreIcon : maximizeIcon;
     };
     controls.onclick = async event => {
       const action = event.target.closest('button')?.dataset.act;
@@ -2122,8 +2313,138 @@ BRIDGE_SCRIPT = r"""
     document.body.append(controls);
     const style = document.createElement('style');
     style.textContent = '#pinkie-native-drag-strip{position:fixed;z-index:2147483000;top:7px;right:112px;width:74px;height:27px;background:rgba(255,242,248,.14);border:1px solid rgba(255,255,255,.18);border-radius:999px;box-sizing:border-box;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}#pinkie-native-drag-strip:active{cursor:grabbing}#pinkie-native-drag-strip::after{position:absolute;top:11px;left:50%;width:28px;height:3px;border-radius:999px;background:rgba(179,79,125,.22);content:"";transform:translateX(-50%);transition:background .16s ease,transform .16s ease}#pinkie-native-drag-strip:hover::after{background:rgba(179,79,125,.42);transform:translateX(-50%) scaleX(1.12)}#pinkie-native-resize-handles{position:fixed;z-index:2147483647;inset:0;pointer-events:none}#pinkie-native-resize-handles i{position:absolute;display:block;pointer-events:auto;touch-action:none}#pinkie-native-resize-handles [data-edge="n"],#pinkie-native-resize-handles [data-edge="s"]{left:12px;right:12px;height:7px}#pinkie-native-resize-handles [data-edge="n"]{top:0;cursor:n-resize}#pinkie-native-resize-handles [data-edge="s"]{bottom:0;cursor:s-resize}#pinkie-native-resize-handles [data-edge="e"],#pinkie-native-resize-handles [data-edge="w"]{top:12px;bottom:12px;width:7px}#pinkie-native-resize-handles [data-edge="e"]{right:0;cursor:e-resize}#pinkie-native-resize-handles [data-edge="w"]{left:0;cursor:w-resize}#pinkie-native-resize-handles [data-edge="ne"],#pinkie-native-resize-handles [data-edge="se"],#pinkie-native-resize-handles [data-edge="sw"],#pinkie-native-resize-handles [data-edge="nw"]{width:14px;height:14px}#pinkie-native-resize-handles [data-edge="ne"]{top:0;right:0;cursor:ne-resize}#pinkie-native-resize-handles [data-edge="se"]{right:0;bottom:0;cursor:se-resize}#pinkie-native-resize-handles [data-edge="sw"]{bottom:0;left:0;cursor:sw-resize}#pinkie-native-resize-handles [data-edge="nw"]{top:0;left:0;cursor:nw-resize}html[data-pinkie-maximized] #pinkie-native-resize-handles{display:none}#pinkie-native-window-controls{position:fixed;z-index:2147483647;top:8px;right:9px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid rgba(255,255,255,.45);border-radius:999px;background:rgba(255,242,248,.38);backdrop-filter:blur(13px);-webkit-app-region:no-drag}#pinkie-native-window-controls button{position:relative;width:11px;height:11px;padding:0;border:0;border-radius:50%;background:#dca0bb;opacity:.55}#pinkie-native-window-controls:hover button{opacity:.92}#pinkie-native-window-controls button[data-act="close"]{background:#d85b91}#pinkie-native-window-controls button[data-act="max"]::after{position:absolute;inset:3px;border:1px solid rgba(105,55,78,.48);border-radius:1px;content:""}html[data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"]::after{inset:2px 4px 4px 2px;box-shadow:2px 2px 0 -1px #dca0bb,2px 2px 0 0 rgba(105,55,78,.48)}#pinkie-native-window-controls button:focus-visible{outline:1px solid #fff;outline-offset:2px}#pinkie-native-window-controls .pinkie-update-control{width:21px;height:21px;margin:-5px 1px -5px -4px;color:#b73974;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(250,199,222,.78));box-shadow:0 3px 10px rgba(169,48,103,.16);opacity:.82;font:11px/21px system-ui}#pinkie-native-window-controls .pinkie-update-control span{display:block;transition:transform .35s ease}.pinkie-update-control.is-checking span{animation:pinkieUpdateSpin .8s linear infinite}.pinkie-update-control.has-update{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.72),0 0 15px rgba(229,73,142,.65);animation:pinkieUpdateGlow 1.8s ease-in-out infinite}#pinkie-update-toast{position:fixed;z-index:2147483647;top:48px;right:14px;padding:9px 14px;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#773b5a;background:rgba(255,239,247,.9);box-shadow:0 12px 30px rgba(92,39,65,.16);backdrop-filter:blur(18px);font:12px system-ui;opacity:0;transform:translateY(-7px);pointer-events:none;transition:.22s ease}#pinkie-update-toast.is-visible{opacity:1;transform:none}#pinkie-update-dialog{position:fixed;z-index:2147483646;inset:0;display:grid;place-items:center;background:rgba(63,30,48,.16);backdrop-filter:blur(8px)}.pinkie-update-card{width:min(390px,calc(100vw - 42px));max-height:calc(100vh - 42px);box-sizing:border-box;overflow:auto;padding:clamp(18px,4vw,26px);border:1px solid rgba(255,255,255,.78);border-radius:28px;text-align:center;color:#713d58;background:linear-gradient(145deg,rgba(255,247,251,.95),rgba(247,211,228,.91));box-shadow:0 28px 80px rgba(67,28,49,.25)}.pinkie-update-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border-radius:15px;color:#c13678;background:rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(190,50,112,.18)}.pinkie-update-card h3{margin:0;font:600 18px/1.4 system-ui}.pinkie-update-card p{margin:9px 0;font:13px/1.65 system-ui}.pinkie-update-notes{margin:4px auto 0;padding:0 0 0 1.15em;max-width:32em;text-align:left;color:#7a4660;font:13px/1.55 system-ui}.pinkie-update-notes li{margin:3px 0}.pinkie-update-notes[hidden]{display:none}.pinkie-update-card .pinkie-update-status{min-height:20px;color:#9c607e;font-size:12px}.pinkie-update-card>div{display:flex;justify-content:center;gap:10px;margin-top:17px}.pinkie-update-card button{min-width:100px;padding:9px 16px;border:1px solid rgba(192,64,120,.22);border-radius:16px;color:#824866;background:rgba(255,255,255,.64);font:13px system-ui}.pinkie-update-card button.primary{color:#fff;background:linear-gradient(135deg,#de6299,#ba3674);box-shadow:0 8px 20px rgba(186,54,116,.23)}.pinkie-update-card button:disabled{opacity:.52}.pinkie-update-card.is-working .pinkie-update-mark{animation:pinkieUpdateSpin 1.1s linear infinite}@media(max-width:900px){#pinkie-native-drag-strip{right:105px;width:56px}#pinkie-native-window-controls{top:6px;right:7px;gap:6px}}@media(max-height:620px){#pinkie-update-toast{top:42px}.pinkie-update-card{padding:16px;border-radius:22px}.pinkie-update-mark{width:34px;height:34px;margin-bottom:7px}.pinkie-update-card p{margin:6px 0;line-height:1.45}.pinkie-update-card>div{margin-top:10px}}@keyframes pinkieUpdateSpin{to{transform:rotate(360deg)}}@keyframes pinkieUpdateGlow{50%{transform:translateY(-1px);filter:saturate(1.3)}}';
-    style.textContent += 'html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{top:0;left:264px;right:176px;width:auto;height:33px;border:0;border-radius:0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after{display:none}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;height:33px;gap:0;padding:0;border:0;border-left:1px solid rgba(255,255,255,.26);border-bottom:1px solid rgba(202,117,157,.12);border-radius:0 16px 0 13px;background:linear-gradient(180deg,rgba(255,248,252,.62),rgba(250,224,237,.38));box-shadow:0 5px 18px rgba(105,47,75,.08);backdrop-filter:blur(16px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button{display:grid;place-items:center;width:42px;height:32px;margin:0;padding:0;border:0;border-radius:0;color:#7c5368;background:transparent;opacity:.76;transition:background .14s ease,color .14s ease,opacity .14s ease}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:hover{background:rgba(255,255,255,.52);opacity:1}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]{border-radius:0 16px 0 0;background:transparent}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover{color:#fff;background:#d9578d}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="min"] span{width:10px;height:1px;background:currentColor}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="max"] span{width:9px;height:9px;border:1px solid currentColor;box-sizing:border-box}html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls button[data-act="max"] span{box-shadow:2px -2px 0 -1px rgba(255,255,255,.9),2px -2px 0 0 currentColor;transform:translate(-1px,1px)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span{position:relative;width:11px;height:11px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before,html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{position:absolute;top:5px;left:0;width:11px;height:1px;background:currentColor;content:""}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::before{transform:rotate(45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] span::after{transform:rotate(-45deg)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control{width:36px;height:32px;margin:0;color:#b73974;background:transparent;box-shadow:none;font:12px/32px system-ui}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover{background:rgba(255,255,255,.52)}html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update{box-shadow:inset 0 -2px 0 #e34c8f;animation:pinkieUpdateGlow 1.8s ease-in-out infinite}html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls,html[data-pinkie-platform="windows"][data-pinkie-maximized] #pinkie-native-window-controls button[data-act="close"]{border-top-right-radius:0!important}html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header{padding-right:136px!important}html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed){padding-top:36px!important}html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header{padding-right:172px!important}html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs{padding-right:172px!important}@media(max-width:900px){html[data-pinkie-platform="windows"] #pinkie-native-drag-strip{left:54px;right:164px}html[data-pinkie-platform="windows"] #pinkie-native-window-controls{top:0;right:0;gap:0}}';
+    // Native-only caption adapter: the same soft material as the Mac UI,
+    // with familiar Windows actions and full-contrast, accessible SVG icons.
+    style.textContent += `
+      html[data-pinkie-platform="windows"] #pinkie-native-drag-strip {
+        top:0;left:264px;right:184px;width:auto;height:34px;
+        border:0;border-radius:0;background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after { display:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls {
+        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);
+        top:4px;right:12px;height:36px;gap:3px;padding:2px;box-sizing:border-box;
+        border:1px solid rgba(255,255,255,.7);border-radius:14px;
+        background:linear-gradient(145deg,rgba(255,254,254,.82),rgba(252,233,242,.7));
+        box-shadow:0 3px 12px rgba(113,60,86,.06),inset 0 1px rgba(255,255,255,.65);
+        backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button {
+        display:grid;place-items:center;width:32px;height:30px;margin:0;padding:0;
+        border:0;border-radius:10px;color:var(--caption-ink);background:transparent;
+        opacity:1;cursor:default;box-shadow:none;
+        transition:background .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button::after { content:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls svg {
+        display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.45;
+        stroke-linecap:round;stroke-linejoin:round;pointer-events:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:hover {
+        background:var(--caption-hover);box-shadow:0 2px 6px rgba(100,51,74,.07);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:active {
+        transform:translateY(1px);box-shadow:none;background:rgba(206,146,176,.18);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus:not(:focus-visible) { outline:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus-visible {
+        outline:2px solid var(--accent,#bf487e);outline-offset:-2px;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"] {
+        border-radius:10px;background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover {
+        color:#fff;background:#cc477d;box-shadow:0 3px 9px rgba(185,57,111,.2);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control {
+        width:32px;height:30px;margin:0;color:var(--accent,#ba487d);background:transparent;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover { background:var(--caption-hover) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg {
+        animation:pinkieUpdateSpin .8s linear infinite;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update {
+        box-shadow:inset 0 0 0 1px rgba(211,75,136,.3),0 0 9px rgba(229,73,142,.16);
+        animation:pinkieUpdateGlow 1.8s ease-in-out infinite;
+      }
+      html[data-pinkie-platform="windows"][data-pinkie-night] #pinkie-native-window-controls {
+        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);
+        background:linear-gradient(145deg,rgba(54,39,52,.92),rgba(41,31,43,.82));
+        border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
+      }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:184px!important }
+      @media(max-width:900px) {
+        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:184px }
+        html[data-pinkie-platform="windows"] #pinkie-native-window-controls { top:4px;right:10px }
+      }
+    `;
+    // The shared renderer uses .topbar, not the retired .chat-pane__header.
+    // Reserve native caption-button space so link/cost chips remain readable.
+    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:184px!important}';
     document.head.append(style);
+    // Keep the native drag surface away from every visible header action.
+    (() => {
+      // This is also installed by the native bridge. Keep header actions above the
+      // draggable surface rather than synthesizing clicks on covered controls.
+      // Reuse the elements just created above rather than querying a document
+      // which can still be attaching them during WebView2's first load.
+      window.__pinkieNativeDragLayout?.dispose();
+      const chooseDragInterval = (left, right, occupied, minimum = 30) => {
+        const sorted = occupied.map(r => [Math.max(left,r.left-4),Math.min(right,r.right+4)])
+          .filter(([a,b]) => b>a).sort((a,b) => a[0]-b[0]);
+        let cursor=left, best=null;
+        for(const [start,end] of sorted){
+          if(start-cursor >= minimum && (!best || start-cursor > best.width)) best={left:cursor,width:start-cursor};
+          cursor=Math.max(cursor,end);
+        }
+        if(right-cursor >= minimum && (!best || right-cursor > best.width)) best={left:cursor,width:right-cursor};
+        return best;
+      };
+      const selector = 'button,a[href],input,select,textarea,summary,[role="button"],[role="tab"],[role="menuitem"],[role="link"],[contenteditable="true"],[onclick],[data-pinkie-no-drag],[title]';
+      // Never measure every chat descendant: content-visibility deliberately
+      // skips long conversation history, and forcing its layout harms streaming.
+      const headers='.topbar,.pk-wb-tabs,.pk-workspace-header,.sidebar-brand,.chat-pane__header';
+      const update = () => {
+        if(!drag.isConnected || !controls.isConnected)return;
+        const left=innerWidth<=900?54:264;
+        const caption=controls.getBoundingClientRect();
+        const right=Math.max(left,caption.width>0 ? Math.min(innerWidth-184,caption.left-8) : innerWidth-12);
+        const occupied=[];
+        const candidates=[...document.querySelectorAll(headers)].flatMap(header=>[...header.querySelectorAll(selector)]);
+        for(const e of candidates){
+          if(e===drag || drag.contains(e) || controls.contains(e))continue;
+          const r=e.getBoundingClientRect();
+          if(r.width<=0 || r.height<=0 || r.bottom<=7 || r.top>=34 || r.right<=left || r.left>=right)continue;
+          const s=getComputedStyle(e);
+          if(s.display==='none'||s.visibility==='hidden'||s.pointerEvents==='none')continue;
+          occupied.push({left:r.left,right:r.right});
+        }
+        const interval=chooseDragInterval(left,right,occupied);
+        if(interval){
+          drag.style.left=`${interval.left}px`; drag.style.right='auto'; drag.style.width=`${interval.width}px`;
+          drag.style.pointerEvents='auto';
+        }else drag.style.pointerEvents='none';
+        return {interval,occupiedCount:occupied.length};
+      };
+      let timer=0;
+      const schedule = () => {if(!timer)timer=setTimeout(()=>{timer=0;update();},80);};
+      const observer=typeof MutationObserver === 'function' ? new MutationObserver(records=>{
+        if(records.some(r=>{
+          const e=r.target.nodeType===1?r.target:r.target.parentElement;
+          if(e?.closest?.(headers))return true;
+          return [...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&(n.matches?.(headers)||n.querySelector?.(headers)));
+        })) schedule();
+      }) : null;
+      observer?.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','aria-hidden','aria-expanded','class']});
+      window.addEventListener('resize',schedule,{passive:true});
+      document.addEventListener('scroll',schedule,{passive:true,capture:true});
+      const interval=setInterval(update,1200);
+      window.__pinkieNativeDragLayout={update,dispose(){clearInterval(interval);clearTimeout(timer);observer?.disconnect();window.removeEventListener('resize',schedule);document.removeEventListener('scroll',schedule,true);}};
+      return update();
+    })();
     window.__pinkieCheckForUpdates = () => inspectUpdate(false);
     setInterval(() => inspectUpdate(false), 7200000);
     return true;
@@ -2187,6 +2508,157 @@ def update_health_token_from_argv(arguments=None):
     return None
 
 
+def update_helper_protocol(token, root=None):
+    """Which replacer launched this update start, read from its own script.
+
+    "two-phase": this version's helper -- ``.started`` now, ``.ready`` once our
+                 gateway listens; it never kills a new version for being slow.
+    "gateway":   2.5.29-2.5.31 helpers -- only ``.ready`` within 120 s, and at
+                 that moment a gateway from the new folder must be listening.
+    "marker":    2.5.27-2.5.28 portable and every onefile helper -- only
+                 ``.ready`` within 120 s, nothing else is checked.
+    Unknown or unreadable scripts are treated as "gateway", the strictest.
+    """
+    path = Path(root or state_root()) / "updates" / f"apply-{token}.ps1"
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return "gateway"
+    if "pinkie-update-protocol: 2" in text:
+        return "two-phase"
+    if "Confirm-NewInstallGateway" in text:
+        return "gateway"
+    return "marker"
+
+
+class UpdateHealthReporter:
+    """Tell the replacer that this freshly swapped-in version came up.
+
+    The replacer of the version being *replaced* decides whether to keep this
+    one, so this side adapts to what that helper can understand.  Old helpers
+    gave the whole first start -- per-version setup, a cold gateway over files
+    the virus scanner reads for the first time, and the page load -- 120 s, and
+    rolled a healthy new version back when it took longer.  Writing the marker
+    at the earliest moment each helper accepts is what lets an update from
+    those versions land.
+    """
+
+    def __init__(self, token, own_node, listener=None, root=None, poll=.5, limit=900.0, port=None, hold_limit=90.0):
+        self.token = token
+        self.own_node = str(own_node)
+        self.listener = listener
+        self.root = root
+        self.poll = poll
+        self.limit = limit
+        self.protocol = update_helper_protocol(token, root)
+        self.done = threading.Event()
+        self.port = port or urllib.parse.urlparse(GATEWAY_URL).port or 18789
+        self.hold_limit = hold_limit
+        # Set while the gateway port is free for our real gateway to bind.
+        self.port_free = threading.Event()
+        self.port_free.set()
+        self._placeholder = None
+
+    def _marker(self, suffix):
+        directory = Path(self.root or state_root()) / "updates" / "health"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{self.token}{suffix}"
+
+    def _write(self, suffix):
+        try:
+            self._marker(suffix).write_text("ready\n" if suffix == ".ready" else "started\n", encoding="ascii")
+            return True
+        except OSError as error:
+            append_log("launcher", f"update {suffix[1:]} marker not written: {error}")
+            return False
+
+    def ready(self):
+        if not self.done.is_set() and self._write(".ready"):
+            self.done.set()
+            append_log("launcher", f"update health confirmed ({self.protocol})")
+
+    def own_gateway_listening(self):
+        listener = (self.listener or GatewaySupervisor._listener)()
+        image = str((listener or {}).get("image") or "")
+        return bool(image) and os.path.normcase(image) == os.path.normcase(self.own_node)
+
+    def start(self):
+        self._write(".started")
+        append_log("launcher", f"update start reported to a {self.protocol} helper")
+        if self.protocol == "marker":
+            self.ready()
+            return None
+        if self.protocol == "gateway" and self._hold_gateway_port():
+            # 2.5.29-2.5.31: answered within seconds instead of after a cold
+            # gateway start, which on a slow, virus-scanned first start runs
+            # past their fixed 120 s and rolled the update back.  Users who
+            # cannot download from GitHub have no manual way around that.
+            self.ready()
+            thread = threading.Thread(target=self._release_after_helper, name="pinkie-update-port", daemon=True)
+            thread.start()
+            return thread
+        thread = threading.Thread(target=self._watch, name="pinkie-update-health", daemon=True)
+        thread.start()
+        return thread
+
+    def _hold_gateway_port(self):
+        """Listen on the gateway port from this new install's own process.
+
+        Those helpers accept the update when every listener on the gateway port
+        runs from the new install folder -- their guard against an *old*
+        gateway being adopted.  This process is the new install's own exe, so
+        it truthfully passes that check; the stale-gateway retirement above has
+        already run.  The real gateway is started only after the helper has
+        finished and this placeholder is closed (see wait_for_gateway_port).
+        """
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+            if exclusive is not None:
+                listener.setsockopt(socket.SOL_SOCKET, exclusive, 1)
+            listener.bind(("127.0.0.1", self.port))
+            listener.listen(16)
+        except OSError as error:
+            listener.close()
+            append_log("launcher", f"update port placeholder unavailable ({error}); waiting for the gateway instead")
+            return False
+        self._placeholder = listener
+        self.port_free.clear()
+        return True
+
+    def _release_after_helper(self):
+        helper = Path(self.root or state_root()) / "updates" / f"apply-{self.token}.ps1"
+        deadline = time.monotonic() + self.hold_limit
+        # The old helper deletes its own script as its very last step.
+        while helper.exists() and time.monotonic() < deadline:
+            time.sleep(.2)
+        self.release_port()
+
+    def release_port(self):
+        listener, self._placeholder = self._placeholder, None
+        if listener is not None:
+            try:
+                listener.close()
+            except OSError:
+                pass
+            append_log("launcher", "update port placeholder released")
+        self.port_free.set()
+
+    def wait_for_gateway_port(self, timeout=None):
+        return self.port_free.wait(self.hold_limit + 5 if timeout is None else timeout)
+
+    def _watch(self):
+        deadline = time.monotonic() + self.limit
+        while not self.done.is_set() and time.monotonic() < deadline:
+            try:
+                if self.own_gateway_listening():
+                    self.ready()
+                    return
+            except Exception as error:  # diagnostics only; the page load still reports
+                append_log("launcher", f"update health check failed: {error}")
+            self.done.wait(self.poll)
+
+
 def install_native_bridge(window, updater, update_health_token=None, installed_notes=""):
     """Dress the gateway page with the native bridge and confirm a fresh update.
 
@@ -2205,12 +2677,16 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
         return
 
     if update_health_token:
-        try:
-            health = state_root() / "updates/health" / f"{update_health_token}.ready"
-            health.parent.mkdir(parents=True, exist_ok=True)
-            health.write_text("ready\n", encoding="ascii")
-        except OSError as error:
-            append_log("launcher", f"update health marker not written: {error}")
+        reporter = getattr(updater, "health_reporter", None)
+        if reporter and reporter.token == update_health_token:
+            reporter.ready()
+        else:
+            try:
+                health = state_root() / "updates/health" / f"{update_health_token}.ready"
+                health.parent.mkdir(parents=True, exist_ok=True)
+                health.write_text("ready\n", encoding="ascii")
+            except OSError as error:
+                append_log("launcher", f"update health marker not written: {error}")
 
     try:
         window.evaluate_js(NATIVE_READING_SCRIPT + BRIDGE_SCRIPT)
@@ -2272,8 +2748,41 @@ def smoke_debug_port(environ=os.environ):
     return port if 1024 <= port <= 65535 else None
 
 
+def update_in_progress(root=None, image_of=None):
+    """Version being installed when a live replacer owns the install, else None."""
+    path = Path(root or state_root()) / "updates" / "in-progress.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8-sig"))
+        pid = int(record["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    image = None
+    try:
+        image = (image_of or (lambda value: process_image_and_start(value)[0]))(pid)
+    except Exception:
+        image = None
+    if not image or Path(str(image).replace("\\", "/")).name.lower() != "powershell.exe":
+        return None  # helper is gone: a leftover file must never lock the user out
+    return str(record.get("version") or "新版")
+
+
+def show_update_in_progress(version):
+    message = f"碧琪正在换上 {version}，换好后会自动打开，请稍等几分钟。\n\n现在打开会看到旧版本，还可能打断更新。"
+    append_log("launcher", f"start refused: update to {version} in progress")
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, message, "超級碧琪", 0x40)
+    except Exception:
+        pass
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
+    if not update_health_token:
+        installing = update_in_progress()
+        if installing:
+            show_update_in_progress(installing)
+            return
     debug_port = smoke_debug_port()
     if debug_port:
         webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
@@ -2291,6 +2800,11 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # A gateway kept alive by an older version would otherwise be adopted
     # below, and the new version would show the old one's page.
     gateway.retire_stale()
+    if update_health_token:
+        # Report "started" before the per-version setup and the cold gateway
+        # start, which together can outlast an old replacer's 120 s budget.
+        updater.health_reporter = UpdateHealthReporter(update_health_token, runtime.node)
+        updater.health_reporter.start()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
@@ -2320,15 +2834,21 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def before_show():
         # This event runs synchronously on WinForms' GUI thread. Do not call
         # evaluate_js or marshal back to the same thread from here.
-        try:
-            configure_native_glass(window)
-        except Exception as error:
-            append_log("launcher", f"native glass setup failed: {error}")
+        for label, configure in (("glass", configure_native_glass), ("corners", configure_native_corners)):
+            try:
+                configure(window)
+            except Exception as error:
+                append_log("launcher", f"native {label} setup failed: {error}")
 
     def bootstrap():
         try:
             prepare(lambda message: append_log("setup", message))
             services.start()
+            reporter = getattr(updater, "health_reporter", None)
+            if reporter is not None:
+                # An old replacer may still be checking the gateway port.
+                if not reporter.wait_for_gateway_port():
+                    reporter.release_port()
             gateway.start()
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
             # The splash page polls the local gateway itself.  Do not call

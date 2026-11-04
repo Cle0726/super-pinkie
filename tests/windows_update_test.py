@@ -391,7 +391,8 @@ class WindowsUpdateTests(unittest.TestCase):
 
     def test_replacer_waits_for_health_and_rolls_back(self):
         helper = WindowsUpdater._helper_source()
-        self.assertIn("new version did not become healthy", helper)
+        self.assertIn("new version did not start", helper)
+        self.assertIn("new version exited before it was ready", helper)
         self.assertIn("Restore-PreviousVersion", helper)
         self.assertIn("Get-FileHash", helper)
         self.assertIn("taskkill.exe", helper)
