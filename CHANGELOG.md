@@ -2,6 +2,9 @@
 
 ## 待发布
 
+### 2.5.32
+- Windows 便携/单文件更新改为两段式确认（`pinkie-update-protocol: 2`）：新版启动即写 `.started`，网关监听后写 `.ready`；运行中的新版不会因慢被回滚。新版按旧替换脚本的代际（2.5.27/28 标记、2.5.29–31 网关占位）尽早回报健康。所有文件夹改名重试 90 秒，解压放 LOCALAPPDATA，用 ZipFile 解压，更新中二次启动提示「正在更新」，回滚失败弹框。Windows 快照的 `edge_tts_server.py` 同步到不再把健康令牌当端口的版本。新增 `windows-update-probe.yml` 真机更新演练（run 41836792160 五组全部通过）。
+
 ### 2.5.31
 - 新增 `laolao-motion-preference.js`（紧跟 night 引导加载）：`prefers-reduced-motion` 的 CSS 规则和 `matchMedia` 查询都改为由应用内「减少动效」开关回答，默认完整特效；Mac 原生壳的三处小动画也改读同一开关（`pinkieMotion` 消息）。
 
