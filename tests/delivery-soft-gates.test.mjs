@@ -114,3 +114,32 @@ test('the workbench note appended to a question does not turn it into an executi
   assert.equal(decision?.action, 'revise', 'a real build request still needs execution evidence');
   assert.match(decision.reason, /执行型请求/);
 });
+
+test('a video built from generated or downloaded assets must say where they came from; editing the user\'s own clip need not', (t) => {
+  // 11-04 R-ad: image_generate pictures + edge-tts voice + synthesized music, delivered without a word about sources.
+  const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  guard.afterTool({toolName: 'image_generate', toolCallId: 'img', params: {prompt: 'latte'}, result: 'Background task started'}, ctx);
+  guard.afterTool({toolName: 'exec', toolCallId: 'tts', params: {command: 'edge-tts --voice zh-CN-XiaoxiaoNeural --text 秋天 --write-media vo.mp3'}, result: 'ok'}, ctx);
+  const video = path.join(root, 'ad.mp4');
+  produce(guard, ctx, 'render', `ffmpeg -y -i frames/%04d.png -i vo.mp3 "${video}"`, video);
+  guard.afterTool({toolName: 'exec', toolCallId: 'look', params: {command: `look-video "${video}" 9`}, result: 'ok'}, ctx);
+  guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
+  const silent = guard.finalize({lastAssistantMessage: '15 秒竖屏广告已经完成：1080×1920，30fps，H.264 + AAC。'}, ctx, {verifyExternal: false});
+  assert.equal(silent?.action, 'revise');
+  assert.match(silent.reason, /素材从哪来.+能不能商用/);
+  assert.doesNotMatch(silent.reason, /没有亲自看过/, 'it did look; only the sources are missing');
+
+  const told = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  told.guard.afterTool({toolName: 'image_generate', toolCallId: 'img', params: {prompt: 'latte'}, result: 'Background task started'}, told.ctx);
+  const ad2 = path.join(told.root, 'ad.mp4');
+  produce(told.guard, told.ctx, 'render', `ffmpeg -y -i frames/%04d.png "${ad2}"`, ad2);
+  told.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(told.root, 'ad.preview.png')}, result: 'image'}, told.ctx);
+  const ok = told.guard.finalize({lastAssistantMessage: '广告已经完成。画面是 AI 生成的普通拿铁，换成你们店的实拍再发；配音是 edge-tts 晓晓，可以商用。'}, told.ctx, {verifyExternal: false});
+  assert.notEqual(ok?.action, 'revise', ok?.reason);
+
+  const own = setup(t, '帮我把这个视频剪成 30 秒');
+  const cut = path.join(own.root, 'cut.mp4');
+  produce(own.guard, own.ctx, 'cut', `ffmpeg -y -ss 0 -t 30 -i in.mp4 "${cut}"`, cut);
+  own.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(own.root, 'cut.preview.png')}, result: 'image'}, own.ctx);
+  assert.notEqual(own.guard.finalize({lastAssistantMessage: '剪好了，30 秒，已经完成。'}, own.ctx, {verifyExternal: false})?.action, 'revise');
+});
