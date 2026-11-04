@@ -1405,6 +1405,20 @@ function contentInspectionReason(state) {
     + '用 look-video、look-page 或 look-doc 生成预览图，再用 read 打开看一遍，对照用户的要求，不满意就改好再交付';
 }
 
+// 视频里的画面、配音、音乐是碧琪生成或下载来的，交付时要说清从哪来、能不能商用（motion-and-video.md 第 117 行）。
+// 11-04 隔离实测 R-ad 两轮都漏：手册写了、等待清单也写了，交付那一刻没有东西提醒。剪先生自己给的视频不提醒。
+const ASSET_MAKING_TOOL = /^(?:image_generate|video_generate|music_generate|tts|speech|text_to_speech)$/i;
+const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
+const SOURCE_DISCLOSED = /(?:来源|出处|来自|生成的|AI\s*(?:生成|画)|生图|图库|素材库|曲库|可商用|商用|版权|授权|(?:先生|你|您)(?:给|提供|发来)的|实拍|合成的|程序(?:生成|合成)|(?:配音|配乐|音乐|画面|素材)(?:是|用|采用|取自)|edge-tts|晓晓|云希|Xiaoxiao|Yunxi)/i;
+
+function sourceDisclosureReason(state, reply = '') {
+  if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))) return '';
+  const madeAssets = state.tools.some(entry => !entry.failed && (ASSET_MAKING_TOOL.test(String(entry.name || ''))
+    || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
+  if (!madeAssets || SOURCE_DISCLOSED.test(proseOnly(reply))) return '';
+  return '交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」';
+}
+
 // 回复最后说「这就去做」却就此结束：预告不等于做了。
 const PROMISE_TAIL = /(?:这就(?:去|开始|动手|做|弄|安排)|马上(?:去|开始|动手|处理|做|弄|安排)|现在就(?:去|开始|动手)|稍等(?:一下|片刻|一会儿?)?|请稍候|接下来(?:碧琪|我)?(?:会|就|先|来|去|马上)|(?:碧琪|我)(?:先|这就|马上|立刻|立即)(?:去|来|开始|动手)|等(?:碧琪|我)(?:一下|一会儿?|做完|弄好))/;
 const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|老板)(?:确认|决定|选|同意|提供|告诉|回复)|无法|不能|没法|做不到|卡在|卡住|阻塞|失败|报错|权限|缺少|额度|网络/;
@@ -2166,7 +2180,8 @@ export class CompletionIntegrityGuard {
       }
     }
     if (completionClaimed) {
-      const unseen = contentInspectionReason(state);
+      // 一轮只提醒一次（remindOnce），所以「没亲眼看」和「没说素材来源」合成同一条。
+      const unseen = [contentInspectionReason(state), sourceDisclosureReason(state, reply)].filter(Boolean).join('；另外，');
       const nudged = unseen && this.softRevise(key, state, 'inspection', reply, unseen);
       if (nudged) return nudged;
     }
