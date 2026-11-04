@@ -1,11 +1,10 @@
-/* 拿不到顺畅的 WebGL（软件渲染、驱动被关掉、WebKit 判定有性能顾虑）时，
-   关掉 3D 碧琪、氛围画布和毛玻璃。这些效果会占满主线程，8GB 的机器一开窗口就换页。 */
+/* Rendering diagnostics only. Both platforms keep the complete Mac visuals. */
 (() => {
   "use strict";
   if (window.__pinkieSurface) return;
   let software = false, renderer = "unavailable";
   try {
-    const gl = document.createElement("canvas").getContext("webgl", {failIfMajorPerformanceCaveat: true});
+    const gl = document.createElement("canvas").getContext("webgl");
     if (!gl) software = true;
     else {
       const info = gl.getExtension("WEBGL_debug_renderer_info");
@@ -14,17 +13,8 @@
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     }
   } catch { software = true; }
-  const lite = software
-    || document.documentElement.hasAttribute("data-pinkie-lite")
-    || Boolean(navigator.deviceMemory && navigator.deviceMemory <= 8)
-    || (typeof localStorage !== "undefined" && localStorage.getItem("pinkie-lite") === "1");
-  window.__pinkieSurface = Object.freeze({software, renderer, lite});
-  if (!lite) return;
-  document.documentElement.setAttribute("data-pinkie-lite", "");
-  if (!document.getElementById("pinkie-lite")) {
-    const sheet = document.createElement("style");
-    sheet.id = "pinkie-lite";
-    sheet.textContent = "html[data-pinkie-lite] *, html[data-pinkie-lite] *::before, html[data-pinkie-lite] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }";
-    document.head.append(sheet);
-  }
+  window.__pinkieSurface = Object.freeze({software, renderer, lite: false});
+  // Retire the old memory/software-renderer switch, including cached markup.
+  document.documentElement.removeAttribute("data-pinkie-lite");
+  document.getElementById("pinkie-lite")?.remove();
 })();

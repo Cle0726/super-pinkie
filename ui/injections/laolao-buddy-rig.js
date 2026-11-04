@@ -500,8 +500,6 @@ void main() {
 
   const attach = (figure) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
-    // 软件渲染或 WebKit 判定画不动时（data-pinkie-lite）3D 碧琪会占满一颗核，改用静态图。
-    if (document.documentElement.hasAttribute("data-pinkie-lite")) return null;
     try { return new Rig(figure); } catch { return null; }
   };
 
