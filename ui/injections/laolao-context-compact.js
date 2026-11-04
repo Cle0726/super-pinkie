@@ -483,6 +483,17 @@
     if (phaseChanged) host.closest("openclaw-chat-pane")?.requestUpdate?.();
   };
 
+  // Usage is persisted when a run (or a compaction) ends. Ask right away and
+  // once more shortly after, instead of waiting out the 15s cache.
+  let usageRefreshTimer = 0;
+  const refreshUsageSoon = (key) => {
+    if (key !== currentSessionKey()) return;
+    usageFetchedAt = 0;
+    fetchContextCapacity();
+    clearTimeout(usageRefreshTimer);
+    usageRefreshTimer = setTimeout(() => { usageFetchedAt = 0; fetchContextCapacity(); }, 1800);
+  };
+
   const handleCompactionEvent = (event) => {
     const name = event.detail?.event;
     const payload = event.detail?.payload || {};
@@ -492,6 +503,7 @@
       && ["end", "error"].includes(payload.data?.phase)
       || name === "chat" && ["final", "aborted", "error"].includes(payload.state);
     if (terminal) {
+      refreshUsageSoon(key);
       const state = readCompactionState(key);
       // The compaction already succeeded before retrying the original task.
       // Its matching terminal event clears the continuation notice, including
@@ -504,6 +516,7 @@
     if (name === "session.operation" && payload.operation === "compact") {
       if (payload.phase === "start") beginCompaction(key, "manual", payload.operationId || "");
       else if (payload.phase === "end") {
+        refreshUsageSoon(key);
         finishCompaction(key, {
           completed: payload.completed === true,
           outcome: payload.completed === false ? "failed" : "",
@@ -525,7 +538,16 @@
         saveCompactionState(key, state);
         renderCompactionNotice();
       }
+    } else if (details.phase === "end" && details.preflight === true && details.skipped === true) {
+      // The pre-send check decided nothing needed compacting: drop the notice
+      // quietly instead of announcing a non-event.
+      const state = readCompactionState(key);
+      if (state && ["active", "retrying"].includes(state.phase)) {
+        try { localStorage.removeItem(compactionStorageKey(key)); } catch {}
+        renderCompactionNotice();
+      }
     } else if (details.phase === "end") {
+      refreshUsageSoon(key);
       finishCompaction(key, {
         completed: details.completed === true,
         outcome: details.completed === false ? "failed" : "",

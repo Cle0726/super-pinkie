@@ -31,7 +31,11 @@ test('compaction progress survives refresh and gateway events cover automatic an
   assert.match(source,/name === "session\.operation"/);
   assert.match(source,/payload\.stream !== "compaction"/);
   assert.match(source,/已用时/);
-  assert.match(source,/整理前 \$\{before\} → \$\{after\} 令牌/);
+  assert.match(source,/整理前 \$\{before\} → 整理后 \$\{after\} 令牌/);
+  // Pre-send compaction (gateway patch) animates too, and a skipped check stays quiet.
+  assert.match(source,/details\.preflight === true && details\.skipped === true/);
+  // Usage refreshes as soon as a reply or compaction ends instead of after the 15s cache.
+  assert.match(source,/if \(terminal\) \{\n      refreshUsageSoon\(key\);/);
 });
 
 test('compaction divider becomes one Chinese timeline row and drops the checkpoint action',()=>{

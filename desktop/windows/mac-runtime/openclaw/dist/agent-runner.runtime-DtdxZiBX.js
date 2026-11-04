@@ -1,3 +1,4 @@
+/* pinkie-preflight-compaction-events:v1 */
 /* pinkie-same-session-recovery:v1 */
 /* pinkie-context-budget:v1 */
 import {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";
@@ -3594,7 +3595,18 @@ async function runPreflightCompactionIfNeeded(params) {
 	const compactionTrigger = shouldCompactByTranscriptBytes ? "transcript_bytes" : "tokens";
 	logVerbose(`preflightCompaction triggered: sessionKey=${params.sessionKey} tokenCount=${tokenCountForCompaction ?? freshPersistedTokens ?? "undefined"} threshold=${threshold} trigger=${compactionTrigger} activeTranscriptBytes=${activeTranscriptBytes ?? "undefined"} maxActiveTranscriptBytes=${maxActiveTranscriptBytes ?? "undefined"}`);
 	params.replyOperation.setPhase("preflight_compacting");
+	const pinkiePreflightCompactionRunId = `pinkie-preflight-compaction:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 	const notifyCompaction = async (phase) => {
+		try {
+			if (params.sessionKey) emitAgentEvent({
+				runId: pinkiePreflightCompactionRunId,
+				sessionKey: params.sessionKey,
+				stream: "compaction",
+				data: phase === "start" ? { phase: "start", preflight: true } : { phase: "end", completed: phase === "end", ...phase === "skipped" ? { skipped: true } : {}, preflight: true }
+			});
+		} catch (err) {
+			logVerbose(`preflightCompaction event failed: ${String(err)}`);
+		}
 		try {
 			await params.onCompactionNotice?.(phase);
 		} catch (err) {
