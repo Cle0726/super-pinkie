@@ -581,6 +581,37 @@ def stop_gateway_profiler(process):
         process.wait(timeout=5)
 
 
+def connect_packaged_webview(playwright, endpoint, timeout=45):
+    """Drive the isolated App's real WebView2, never an unrelated browser.
+
+    The smoke profile enables a fresh loopback-only CDP port. The gateway can
+    be ready a little before the window, so wait for the actual page as well.
+    A missing native window remains a test failure, not a reason to fall back
+    to a separate Edge process or skip any outage assertion.
+    """
+    endpoint = str(endpoint or "")
+    if not re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", endpoint):
+        raise RuntimeError("isolated packaged WebView2 debugging endpoint is missing")
+    deadline = time.monotonic() + timeout
+    last_error = None
+    browser = None
+    while time.monotonic() < deadline:
+        try:
+            if browser is None:
+                browser = playwright.chromium.connect_over_cdp(endpoint, timeout=5000)
+            for context in browser.contexts:
+                pages = context.pages
+                if pages:
+                    page = next((item for item in pages if item.url.startswith("http://127.0.0.1:18789/")), pages[0])
+                    return browser, context, page
+            last_error = RuntimeError("the packaged WebView2 has no page yet")
+        except Exception as error:
+            last_error = error
+            browser = None
+        time.sleep(0.5)
+    raise RuntimeError(f"packaged WebView2 did not become available: {last_error}")
+
+
 def run(exe, profile, out, launch, kill_app, profile_env):
     from playwright.sync_api import sync_playwright
 
@@ -605,10 +636,8 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             return summary
         profiler = start_gateway_profiler(exe, log_path, log_offset, out) if profile_enabled else None
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="msedge", headless=True)
-            context = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN")
+            browser, context, page = connect_packaged_webview(playwright, env.get("PINKIE_SMOKE_WEBVIEW_CDP"))
             context.add_init_script(COUNT_REQUESTS)
-            page = context.new_page()
             sampler.label = "disconnect"
             summary["cases"]["disconnect"] = run_case(page, out, "disconnect", upstream, ["drop", "ok"], log_path, profile, 120, True)
             sampler.label = "not-found"
@@ -634,8 +663,8 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             process, ready, seconds = relaunch(launch, kill_app, exe, env, out, "probe-plugin-missing")
             if ready:
                 with sync_playwright() as playwright:
-                    browser = playwright.chromium.launch(channel="msedge", headless=True)
-                    page = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN").new_page()
+                    browser, context, page = connect_packaged_webview(playwright, env.get("PINKIE_SMOKE_WEBVIEW_CDP"))
+                    context.add_init_script(COUNT_REQUESTS)
                     summary["cases"]["plugin-missing"] = run_case(page, out, "plugin-missing", upstream, ["drop", "ok"], log_path, profile, 75, True)
                     browser.close()
         finally:
