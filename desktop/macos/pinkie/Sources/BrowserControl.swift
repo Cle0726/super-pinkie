@@ -81,7 +81,7 @@ private final class BrowserFeedbackView: NSView {
 enum BrowserClickFeedback {
     static func show(in browser: WKWebView, x: Double, y: Double) {
         guard !browser.subviews.contains(where: { $0 is BrowserAgentPointer && !$0.isHidden }) else { return }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+        guard !PinkieMotion.reduce,
               x.isFinite, y.isFinite else { return }
         let spot = BrowserFeedbackView(frame: NSRect(x: x - 12, y: Double(browser.bounds.height) - y - 12, width: 24, height: 24))
         spot.wantsLayer = true
@@ -148,16 +148,16 @@ private final class BrowserAgentPointer: NSView {
         arrow.position = point
         target.path = CGPath(ellipseIn:CGRect(x:-6,y:-6,width:12,height:12),transform:nil)
         target.position = point; target.strokeColor = accent.withAlphaComponent(0.6).cgColor
-        if phase == "drag", let last, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if phase == "drag", let last, !PinkieMotion.reduce {
             if recent.isEmpty { recent.append(last) }; recent.append(point); recent=Array(recent.suffix(7))
             let path = CGMutablePath(); path.move(to:recent[0]); for p in recent.dropFirst(){path.addLine(to:p)}
             trail.path = path; trail.strokeColor = accent.withAlphaComponent(0.22).cgColor
         } else { recent.removeAll(keepingCapacity:true); trail.path = nil }
         CATransaction.commit()
-        if phase != "drag",let from,!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,from != point {
+        if phase != "drag",let from,!PinkieMotion.reduce,from != point {
             let motion=CABasicAnimation(keyPath:"position");motion.fromValue=NSValue(point:from);motion.toValue=NSValue(point:point);motion.duration=0.09;motion.timingFunction=CAMediaTimingFunction(name:.easeOut);arrow.add(motion,forKey:"travel")
         }
-        if phase == "click", !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if phase == "click", !PinkieMotion.reduce {
             let fade = CABasicAnimation(keyPath:"opacity");fade.fromValue=0.65;fade.toValue=0
             let scale = CABasicAnimation(keyPath:"transform.scale");scale.fromValue=0.7;scale.toValue=1.7
             let pulse=CAAnimationGroup();pulse.animations=[fade,scale];pulse.duration=0.32;pulse.timingFunction=CAMediaTimingFunction(name:.easeOut)
@@ -165,7 +165,7 @@ private final class BrowserAgentPointer: NSView {
         }
         last = point
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
-            guard let self,self.generation==ticket,!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else{return}
+            guard let self,self.generation==ticket,!PinkieMotion.reduce else{return}
             let fade=CABasicAnimation(keyPath:"opacity");fade.fromValue=1;fade.toValue=0;fade.duration=0.2;fade.fillMode = .forwards;fade.isRemovedOnCompletion=false;self.layer?.add(fade,forKey:"idle-fade")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.32) { [weak self] in

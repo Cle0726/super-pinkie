@@ -277,6 +277,23 @@
         () => chooseNativeThemeMode(value));
       state.themeModeButtons.push([value, node]);
     }
+    // Effects no longer follow the OS "reduce motion" flag; this is the one switch.
+    const motionRow = row(appearanceCard, "减少动效", "默认开启完整特效。容易晕动或想更安静时再打开。" );
+    const motionGroup = element("div", "pinkie-user-settings__segments", motionRow.control);
+    const motionButtons = [[false, "完整特效"], [true, "减少动效"]].map(([value, label]) => {
+      const node = button(label, "pinkie-user-settings__choice", motionGroup, () => {
+        window.__pinkieMotion?.set(value);
+        syncMotion();
+        setStatus("appearance", value ? "已减少动效" : "已恢复完整特效", "success");
+      });
+      return [value, node];
+    });
+    const syncMotion = () => {
+      const reduce = Boolean(window.__pinkieMotion?.reduce);
+      for (const [value, node] of motionButtons) setPressed(node, value === reduce);
+    };
+    syncMotion();
+    window.addEventListener("pinkie:motion-change", syncMotion);
     element("p", "pinkie-user-settings__soft-note", appearanceCard,
       "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。" );
     makeStatus(appearanceCard, "appearance");
