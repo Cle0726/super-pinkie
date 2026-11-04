@@ -17,7 +17,7 @@
   const SLEEPY_AFTER = 10 * 60_000;
   const FOCUS_MINUTES = 25;
   const preview = window.__pinkieCompanionPreview === true;
-  const prefs = (() => { try { return {ambient: true, narrate: false, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}")}; } catch { return {ambient: true, narrate: false}; } })();
+  const prefs = (() => { try { return {ambient: true, narrate: false, quotes: true, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}")}; } catch { return {ambient: true, narrate: false, quotes: true}; } })();
   const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} };
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
@@ -31,6 +31,7 @@
     focus: '<svg viewBox="0 0 24 24"><circle class="draw" cx="12" cy="13.5" r="7.5"/><path class="hand" d="M12 13.5V9.5"/><path d="M10 2.5h4M12 2.5V6"/></svg>',
     ambient: '<svg viewBox="0 0 24 24"><path class="draw" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/><path class="spark" d="M17 3v3M15.5 4.5h3"/></svg>',
     narrate: '<svg viewBox="0 0 24 24"><path class="draw" d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>',
+    quote: '<svg viewBox="0 0 24 24"><path class="draw" d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path class="l1" d="M8 10.5h8"/><path class="l2" d="M8 13.5h5"/></svg>',
     settings: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>',
   };
 
@@ -285,7 +286,7 @@
   };
   const scheduleHide = (ms) => { clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, ms); };
   const hideBubble = () => { bubble.classList.remove("is-shown"); bubble.dataset.sticky = ""; bubble.inert = true; };
-  const resetBubble = () => bubble.classList.remove("is-card");
+  const resetBubble = () => bubble.classList.remove("is-card", "is-quote");
   const hideMenu = () => {
     menu.classList.remove("is-shown"); menu.inert = true; figure.setAttribute("aria-expanded", "false");
     if (menu.hasAttribute("popover") && menu.matches(":popover-open")) menu.hidePopover();
@@ -311,6 +312,7 @@
     item("focus", focus ? "结束专注" : `专注 ${FOCUS_MINUTES} 分钟`, focus ? () => stopFocus() : startFocus);
     menu.append(el("div", "pinkie-buddy__sep"));
     item("ambient", prefs.ambient ? "关掉氛围" : "打开氛围", () => { prefs.ambient = !prefs.ambient; savePrefs(); ambient.sync(); });
+    item("quote", prefs.quotes ? "不说随机一句" : "随机说一句", () => { prefs.quotes = !prefs.quotes; savePrefs(); quotes.reschedule(); if (prefs.quotes) quotes.showSoon(); else if (bubble.classList.contains("is-quote")) hideBubble(); });
     item("narrate", prefs.narrate ? "不播报进度" : "播报干活进度", () => { prefs.narrate = !prefs.narrate; savePrefs(); if (!prefs.narrate) caption.classList.remove("is-shown"); });
     item("settings", "模型与参数", openSettings, "也可右键");
     if (menu.hasAttribute("popover")) menu.showPopover();
@@ -777,6 +779,193 @@
     requestAnimationFrame(() => { scrollPending = false; rig?.impulse("scroll", scrollSum); scrollSum = 0; });
   }, {passive: true, capture: true});
 
+  /* ── 随机一句：每个模式的小碧琪隔一阵冒一句励志短句 ─────────────────────
+     句子由小碧琪自己的独立模型一次写一批（pinkie.companion.quotes 走 ask 的 quotes 分支），
+     按模式各存一小队，用完再要；只在页面可见、你没在打字、没有别的气泡或菜单时说。
+     后端已把句子里的「我」呈现为「碧琪」。最近说过的句子记在本地，避免重复。 */
+  const quotes = (() => {
+    const SEEN_KEY = "pinkie-buddy-quotes-seen-v1", QUEUE_KEY = "pinkie-buddy-quotes-queue-v1";
+    const FIRST = [15_000, 40_000], GAP = [40_000, 110_000], SHOW_MS = 8000, RETRY_MS = 5 * 60_000;
+    const DEMO_QUOTES = ["你不是太慢，你只是还没停。", "怕，就带着怕去做。", "没人看见的时候，才是你变强的时候。", "今天的累，是明天的底气。"];
+    const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } };
+    const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+    const queue = load(QUEUE_KEY, {}), seen = load(SEEN_KEY, []);
+    const rand = ([a, b]) => a + Math.random() * (b - a);
+    let nextAt = Date.now() + rand(FIRST), fetching = null, failedUntil = 0, showing = false;
+    const refill = (m) => {
+      if (fetching || Date.now() < failedUntil) return fetching;
+      const rpc = window.__laolaoSidebar?.gwRequest;
+      if (preview) { queue[m] = [...DEMO_QUOTES].sort(() => Math.random() - .5); return null; }
+      if (typeof rpc !== "function") return null;
+      fetching = rpc("pinkie.companion.ask", {kind: "quotes", mode: m, count: 6, avoid: seen.slice(-40)}, 60000)
+        .then((res) => {
+          const list = Array.isArray(res?.quotes) ? res.quotes.filter((q) => typeof q === "string" && q.trim()) : [];
+          if (!list.length) throw new Error("empty");
+          queue[m] = [...(queue[m] || []), ...list].slice(-12); store(QUEUE_KEY, queue);
+        })
+        .catch(() => { failedUntil = Date.now() + RETRY_MS; })
+        .finally(() => { fetching = null; });
+      return fetching;
+    };
+    const quiet = () => document.visibilityState === "visible" && !document.hidden
+      && !bubble.classList.contains("is-shown") && !menu.classList.contains("is-shown") && !settingsDialog?.open
+      && !["typing", "sleepy"].includes(state) && !document.querySelector("dialog[open]")
+      && !document.documentElement.hasAttribute("data-laolao-mode-pending");
+    // 每个模式一套和她手边道具呼应的气泡：聊天是气球、项目是工作夹板、想法是灵感便利贴、
+    // 学习是星星笔记本、自由是彩虹。结构相同，样子和进出场都在 CSS 里按 data-m 区分。
+    const STAR = '<svg viewBox="0 0 24 24"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8Z"/></svg>';
+    const SPARK = '<svg viewBox="0 0 24 24"><path d="M12 1.5c.6 5.2 3.3 7.9 8.5 8.5-5.2.6-7.9 3.3-8.5 8.5-.6-5.2-3.3-7.9-8.5-8.5 5.2-.6 7.9-3.3 8.5-8.5Z"/></svg>';
+    const DECO = {
+      chat: '<i class="pq__dot"></i><i class="pq__dot"></i><i class="pq__dot"></i>',
+      project: '<span class="pq__label">今日便签</span><svg class="pq__check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>',
+      thinking: `<i class="pq__spark">${SPARK}</i><i class="pq__spark">${SPARK}</i><i class="pq__spark">${SPARK}</i>`,
+      learning: `<i class="pq__sticker">${STAR}</i>`,
+      unrestricted: `<i class="pq__star">${STAR}</i><i class="pq__star">${STAR}</i><i class="pq__star">${STAR}</i>`,
+    };
+    /* 气泡外形：按文字排好后的实际大小现画（SVG），每个模式一个轮廓，都带卡通描边。
+       小碧琪在气泡右下方，所以尾巴都朝右下。 */
+    const M = 56, f = (n) => Math.round(n * 10) / 10;
+    const roundTail = (w, h, r, tail) => {
+      const {x, tw, tx, ty} = tail;
+      return `M${r},0H${w - r}A${r},${r} 0 0 1 ${w},${r}V${h - r}A${r},${r} 0 0 1 ${w - r},${h}`
+        + `H${x + tw / 2}Q${x + tw / 2 - 2},${f(h + (ty - h) * .45)} ${tx},${ty}Q${x - 2},${f(h + (ty - h) * .35)} ${x - tw / 2},${h}`
+        + `H${r}A${r},${r} 0 0 1 0,${h - r}V${r}A${r},${r} 0 0 1 ${r},0Z`;
+    };
+    // 圆角矩形周长上等距取点（顺时针，从上边左端开始）
+    const perimeter = (x0, y0, x1, y1, r, step) => {
+      const w = x1 - x0, h = y1 - y0, arc = Math.PI * r / 2;
+      const segs = [["l", x0 + r, y0, 1, 0, w - 2 * r], ["a", x1 - r, y0 + r, -Math.PI / 2, arc], ["l", x1, y0 + r, 0, 1, h - 2 * r], ["a", x1 - r, y1 - r, 0, arc],
+        ["l", x1 - r, y1, -1, 0, w - 2 * r], ["a", x0 + r, y1 - r, Math.PI / 2, arc], ["l", x0, y1 - r, 0, -1, h - 2 * r], ["a", x0 + r, y0 + r, Math.PI, arc]];
+      const total = segs.reduce((sum, sg) => sum + (sg[0] === "l" ? sg[5] : sg[4]), 0), n = Math.max(8, Math.round(total / step)), pts = [];
+      for (let k = 0; k < n; k += 1) {
+        let d = k * total / n;
+        for (const sg of segs) {
+          const len = sg[0] === "l" ? sg[5] : sg[4];
+          if (d > len) { d -= len; continue; }
+          if (sg[0] === "l") pts.push([sg[1] + sg[3] * d, sg[2] + sg[4] * d]);
+          else { const t = sg[3] + d / r; pts.push([sg[1] + r * Math.cos(t), sg[2] + r * Math.sin(t)]); }
+          break;
+        }
+      }
+      return pts;
+    };
+    const SHAPE = {
+      chat: (w, h, id, t) => {
+        const r = Math.min(h / 2, 30), kx = t;
+        return `<path class="pq__body" d="${roundTail(w, h, r, {x: kx, tw: 0, tx: kx, ty: h})}" fill="url(#${id}g)"/>`
+          + `<path class="pq__knot" d="M${kx - 6},${h - 1}L${kx},${h + 8}L${kx + 6},${h - 1}Z"/>`
+          + `<path class="pq__string" d="M${kx},${h + 8}c4,7 -6,10 1,17s8,9 14,18"/>`
+          + `<ellipse class="pq__gloss" cx="${f(Math.min(40, w * .2))}" cy="11" rx="${f(Math.min(22, w * .1))}" ry="5.5" transform="rotate(-12 ${f(Math.min(40, w * .2))} 11)"/>`;
+      },
+      project: (w, h, id, t) => `<path class="pq__body" d="${roundTail(w, h, 12, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}g)"/>`
+        + `<path class="pq__lines" d="${roundTail(w, h, 12, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}p)"/>`
+        + `<rect class="pq__clip" x="${f(w / 2 - 26)}" y="-9" width="52" height="17" rx="6"/><rect class="pq__clip-hole" x="${f(w / 2 - 9)}" y="-5" width="18" height="5" rx="2.5"/>`,
+      thinking: (w, h, id, t) => {
+        const pts = perimeter(6, 6, w - 6, h - 6, Math.min(22, h / 2 - 6), 30);
+        let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+        pts.forEach((pt, k) => { const q = pts[(k + 1) % pts.length], rr = f(Math.hypot(q[0] - pt[0], q[1] - pt[1]) * .62); d += `A${rr},${rr} 0 0 1 ${f(q[0])},${f(q[1])}`; });
+        return `<path class="pq__body" d="${d}Z" fill="url(#${id}g)"/>`
+          + `<circle class="pq__body pq__puff" cx="${t + 8}" cy="${h + 13}" r="7.5" fill="url(#${id}g)"/><circle class="pq__body pq__puff" cx="${t - 2}" cy="${h + 29}" r="4.5" fill="url(#${id}g)"/>`;
+      },
+      learning: (w, h, id, t) => {
+        let rings = "";
+        for (let x = 26; x < w - 20; x += 22) rings += `<circle class="pq__hole" cx="${x}" cy="9" r="2.6"/><path class="pq__ring" d="M${x - 4},10C${x - 6},-4 ${x + 6},-6 ${x + 3},9"/>`;
+        return `<path class="pq__body" d="${roundTail(w, h, 14, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}g)"/>`
+          + `<path class="pq__lines" d="${roundTail(w, h, 14, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}p)"/>${rings}`;
+      },
+      unrestricted: (w, h, id, t) => {
+        const pts = perimeter(5, 5, w - 5, h - 5, Math.min(24, h / 2 - 5), 12);
+        let d = "", tipped = false;
+        pts.forEach((pt, k) => {
+          const prev = pts[(k + pts.length - 1) % pts.length], next = pts[(k + 1) % pts.length];
+          const dx = next[0] - prev[0], dy = next[1] - prev[1], len = Math.hypot(dx, dy) || 1;
+          let [x, y] = pt;
+          if (k % 2 === 0) { x += dy / len * 8; y -= dx / len * 8; }
+          // 底边上离她最近的那个尖拉长成尾巴
+          if (!tipped && y > h - 6 && x < t + 8 && x > t - 14) { x = t; y = h + 24; tipped = true; }
+          d += `${k ? "L" : "M"}${f(x)},${f(y)}`;
+        });
+        return `<path class="pq__body" d="${d}Z" fill="url(#${id}g)" style="stroke:url(#${id}r)"/>`;
+      },
+    };
+    let shapeId = 0;
+    const drawShape = (card) => {
+      const m = card.dataset.m, w = card.offsetWidth, h = card.offsetHeight;
+      if (!SHAPE[m] || !w || !h) return;
+      // 尾巴指向她的脑袋（头在图的左边三成左右）
+      const fr = figure.getBoundingClientRect(), br = bubble.getBoundingClientRect();
+      const t = Math.round(Math.max(44, Math.min(w - 30, fr.left + fr.width * .3 - br.left)));
+      const id = `pq${++shapeId}`;
+      const spin = reduced() ? "" : '<animateTransform attributeName="gradientTransform" type="rotate" from="0 .5 .5" to="360 .5 .5" dur="5s" repeatCount="indefinite"/>';
+      const svg = `<svg class="pq__shape" width="${w + M * 2}" height="${h + M * 2}" viewBox="${-M} ${-M} ${w + M * 2} ${h + M * 2}" aria-hidden="true"><defs>`
+        + `<linearGradient id="${id}g" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" style="stop-color:var(--pq-fill-a)"/><stop offset="1" style="stop-color:var(--pq-fill-b)"/></linearGradient>`
+        + `<pattern id="${id}p" width="14" height="${m === "project" ? 27 : 14}" patternUnits="userSpaceOnUse" y="${m === "project" ? 4 : 0}">`
+        + (m === "project" ? '<rect y="26" width="14" height="1" class="pq__rule"/>' : '<circle cx="7" cy="7" r="1.1" class="pq__rule"/>') + "</pattern>"
+        + `<linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4f8b"/><stop offset=".33" stop-color="#ffc93d"/><stop offset=".66" stop-color="#4fc3ff"/><stop offset="1" stop-color="#b47cff"/>${spin}</linearGradient>`
+        + `</defs>${SHAPE[m](w, h, id, t)}</svg>`;
+      card.querySelector(".pq__shape")?.remove();
+      card.insertAdjacentHTML("afterbegin", svg);
+    };
+    const NEXT_ICON = '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+    const speak = () => {
+      const m = mode();
+      if (!(queue[m] || []).length) refill(m);
+      const list = queue[m] || [];
+      const line = list.shift(); store(QUEUE_KEY, queue);
+      if (list.length < 2) refill(m);
+      if (!line) return false;
+      seen.push(line); if (seen.length > 120) seen.splice(0, seen.length - 120); store(SEEN_KEY, seen);
+      const chars = [...line];
+      // 按标点分成小段，每段尽量不拆开：换行落在逗号后面，而不是一句话中间
+      let i = 0;
+      const text = (line.match(/[^，,；;：:！!？?。]+[，,；;：:！!？?。]*|[，,；;：:！!？?。]+/g) || [line])
+        .map((seg) => `<span class="pq__seg">${[...seg].map((c) => `<span class="pq__c" style="--i:${i++}">${esc(c)}</span>`).join("")}</span>`).join("");
+      // 字号跟着句子长短走：短句大一点更有分量，长句小一点不挤成好几行
+      const n = chars.length, fs = n <= 8 ? 18 : n <= 12 ? 16.5 : n <= 18 ? 15.5 : 14.5;
+      say(`<div class="pq" data-m="${m}" style="--n:${n};--fs:${fs}px"><span class="pq__deco" aria-hidden="true">${DECO[m] || ""}</span>`
+        + `<p class="pq__text" aria-label="${esc(line)}"><span aria-hidden="true">${text}</span></p>`
+        + `<button class="pq__next" type="button" aria-label="换一句" title="换一句">${NEXT_ICON}</button></div>`, {ms: Math.min(12000, 6500 + chars.length * 140)});
+      bubble.classList.add("is-quote");
+      const card = bubble.querySelector(".pq");
+      drawShape(card);
+      document.fonts?.ready?.then(() => { if (card.isConnected) drawShape(card); });
+      rig?.impulse("perk");
+      return true;
+    };
+    // 点句子：按模式的方式收起（气球啪地破掉、便签被勾掉、便利贴飘走、笔记本翻页、彩虹散开）；点「换一句」直接换。
+    let bound = null;
+    const bind = () => { if (bound === bubble) return; bound = bubble; bubble.addEventListener("click", (event) => {
+      if (!bubble.classList.contains("is-quote")) return;
+      const card = bubble.querySelector(".pq");
+      if (!card || card.classList.contains("is-leaving")) return;
+      event.stopPropagation();
+      if (event.target.closest(".pq__next")) {
+        card.classList.add("is-leaving", "is-swap");
+        setTimeout(() => { if ((queue[mode()] || []).length) speak(); else Promise.resolve(refill(mode())).finally(() => { if (!speak()) hideBubble(); }); }, 260);
+        nextAt = Date.now() + rand(GAP);
+        return;
+      }
+      card.classList.add("is-leaving");
+      burstFrom(card, ["chat", "unrestricted"].includes(card.dataset.m) ? "done" : "send");
+      rig?.impulse("boop");
+      clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, 520);
+    }); };
+    const tick = (now) => {
+      if (bubble) bind();
+      if (!prefs.quotes || showing || now < nextAt) return;
+      if (!quiet()) { nextAt = now + 4000; return; }
+      if (!(queue[mode()] || []).length) {
+        showing = true;
+        Promise.resolve(refill(mode())).finally(() => { showing = false; if (quiet() && speak()) nextAt = Date.now() + rand(GAP); else nextAt = Date.now() + 8000; });
+        nextAt = now + 60_000;
+        return;
+      }
+      speak();
+      nextAt = now + rand(GAP);
+    };
+    return {tick, reschedule: () => { nextAt = Date.now() + rand(GAP); }, showSoon: () => { nextAt = Date.now() + 1500; }, speak};
+  })();
+
   /* ── 状态循环 ─────────────────────────────────────────────────────────── */
   const running = () => Boolean(document.querySelector(".chat-send-btn--stop"));
   const loop = () => {
@@ -803,6 +992,7 @@
     gaze(run, typing, ta);
     if (run) narrate(); else if (!focus) caption.classList.remove("is-shown");
     tickFocus();
+    quotes.tick(now);
   };
   /* 会动的碧琪：打字时每敲一下跟着点一下头；鼠标靠近时头偏向鼠标 */
   document.addEventListener("input", (e) => { if (rig && e.target.closest?.(".agent-chat__composer-combobox textarea")) rig.impulse("key"); }, true);
@@ -958,5 +1148,5 @@
   })();
 
   setInterval(() => { try { loop(); ambient.sync(); } catch (e) { console.error("[pinkie-buddy]", e); } }, 400);
-  window.__pinkieBuddy = {get rig() { return rig; }, say: (t) => say(esc(t)), setState, explain, startFocus, stopFocus, ambient, prefs, burst: (k) => burstFrom(figure, k), onSend, toggleMenu, openSettings};
+  window.__pinkieBuddy = {get rig() { return rig; }, say: (t) => say(esc(t)), setState, explain, startFocus, stopFocus, ambient, prefs, quotes, burst: (k) => burstFrom(figure, k), onSend, toggleMenu, openSettings};
 })();
