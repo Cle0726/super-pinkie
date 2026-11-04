@@ -20,6 +20,7 @@ const ORDER = [
   'apply-composer-drafts.mjs',
   'apply-context-budget.mjs',
   'apply-compaction-boundary-recovery.mjs',
+  'apply-preflight-compaction-events.mjs',
   'apply-loopback-model-reliability.mjs',
   'apply-work-thinking.mjs',
   'apply-thinking-capabilities.mjs',
