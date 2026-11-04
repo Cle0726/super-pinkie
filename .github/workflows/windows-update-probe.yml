@@ -91,10 +91,12 @@ jobs:
             python tools\windows-smoke\update_probe.py --case "$tag-to-build" --old-app "old-$tag" `
               --old-source "old-$tag.py" --new-zip new-portable.zip --out probe-out
             if ($LASTEXITCODE -ne 0) { $failed += $tag }
+            Write-Host "machine PSModulePath: $([Environment]::GetEnvironmentVariable('PSModulePath','Machine'))"
           }
           if ($failed) { throw "update did not land from: $($failed -join ', ')" }
 
       - name: This build updates itself from a Chinese Desktop-like path
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           Expand-Archive -Path new-portable.zip -DestinationPath built-app
@@ -103,6 +105,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'self update failed' }
 
       - name: A broken package is refused and the user is told
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           python tools\windows-smoke\update_probe.py --case "build-broken-package" --expect rolled-back `
