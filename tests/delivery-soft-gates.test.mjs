@@ -147,6 +147,15 @@ test('a video built from generated or downloaded assets must say where they came
   assert.equal(q?.action, 'revise');
   assert.match(q.reason, /素材从哪来/);
 
+  // routes-f: a nudge to swap in real footage is not a statement of where the footage came from.
+  const vague = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  const ad4 = path.join(vague.root, 'ad.mp4');
+  produce(vague.guard, vague.ctx, 'render', `python3 render.py "${ad4}"`, ad4);
+  vague.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(vague.root, 'ad.preview.png')}, result: 'image'}, vague.ctx);
+  const v = vague.guard.finalize({lastAssistantMessage: '成片已经剪好，可以直接发抖音。配音与暖调 Lo-Fi 爵士伴奏混音。小建议：店里有高清实拍拿铁特写就发给我替换。'}, vague.ctx, {verifyExternal: false});
+  assert.equal(v?.action, 'revise');
+  assert.match(v.reason, /素材从哪来/);
+
   const own = setup(t, '帮我把这个视频剪成 30 秒');
   const cut = path.join(own.root, 'cut.mp4');
   produce(own.guard, own.ctx, 'cut', `ffmpeg -y -ss 0 -t 30 -i in.mp4 "${cut}"`, cut);

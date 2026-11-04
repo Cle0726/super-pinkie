@@ -992,6 +992,8 @@ function isLikelyActionRequest(prompt = '') {
   if (QUESTION_ONLY.test(text) && !/(?:帮我|请你|直接|现在就|落地|动手|改成|修复好|执行一下|跑一下)/i.test(text)) return false;
   if (/(?:调用|执行|运行|打开|删除|安装|部署|打包|测试|验证)/i.test(text)) return true;
   if (/(?:skill|技能|工作|任务|项目|文件|文件夹|目录|图片|图像|视频|素材|程序|脚本|代码|应用|\bapp\b|页面|网页|网站|\bui\b|发布|下载)/i.test(text)) return true;
+  // 11-04 隔离实测 R-ad：「剪一个 15 秒的竖屏抖音广告……出 MP4 给我」没被认成执行型，交付检查整段跳过。
+  if (/(?:\bmp4\b|\bmov\b|\bgif\b|\bpptx?\b|\bxlsx\b|\bexcel\b|\bpdf\b|\bdocx?\b|\bword\b|广告|短片|片子|海报|封面|长图|信息图|幻灯片|演示文稿|表格|字帖|简历|证件照|logo)/i.test(text)) return true;
   if (/(?:帮我|请你|给我|直接|现在就).{0,12}(?:改|修|做|生成|创建|制作|更新|替换|移动|重命名|完成)/i.test(text)) return true;
   return false;
 }
@@ -1412,11 +1414,14 @@ function contentInspectionReason(state) {
 const ASSET_MAKING_TOOL = /^(?:image_generate|video_generate|music_generate|tts|speech|text_to_speech)$/i;
 const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|['"]say['"]\s*,\s*['"]-v|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
 const USER_SUPPLIED_MEDIA = /(?:这(?:个|段|些|条|几个?)(?:视频|片子|素材|照片|图片|录像|音频|录音|镜头)|我(?:拍|录|剪)的|我的(?:视频|素材|照片|录像|录音)|附件|上传的|发给你的|\.(?:mp4|mov|m4v|avi|mkv|mp3|wav|m4a|jpe?g|png|heic)\b)/i;
-const SOURCE_DISCLOSED = /(?:来源|出处|来自|生成的|AI\s*(?:生成|画)|生图|图库|素材库|曲库|可商用|商用|版权|授权|(?:先生|你|您)(?:给|提供|发来)的|实拍|合成的|程序(?:生成|合成)|(?:配音|配乐|音乐|画面|素材)(?:是|用|采用|取自)|edge-tts|晓晓|云希|Xiaoxiao|Yunxi)/i;
+// 要同时说出从哪来、能不能商用。routes-f 只写了「有实拍随时发我替换」就被放过了：那不是交代来源。
+const SOURCE_ORIGIN = /(?:来源|出处|来自|取自|生成|合成|AI|图库|曲库|素材库|(?:先生|你|您)(?:给|提供|发来)的|程序画|代码画|自己画|TTS|edge-tts|\bsay\b|晓晓|云希|婷婷|Xiaoxiao|Yunxi|Tingting)/i;
+const SOURCE_RIGHTS = /(?:可(?:以)?商用|不(?:能|可)商用|商用|版权|授权|免费可用|开源许可)/;
 
 function sourceDisclosureReason(state, reply = '') {
   if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))) return '';
-  if (SOURCE_DISCLOSED.test(proseOnly(reply))) return '';
+  const prose = proseOnly(reply);
+  if (SOURCE_ORIGIN.test(prose) && SOURCE_RIGHTS.test(prose)) return '';
   const madeAssets = state.tools.some(entry => !entry.failed && (ASSET_MAKING_TOOL.test(String(entry.name || ''))
     || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
   if (!madeAssets && USER_SUPPLIED_MEDIA.test(String(state.prompt || ''))) return '';
@@ -2183,7 +2188,8 @@ export class CompletionIntegrityGuard {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
       }
     }
-    if (completionClaimed) {
+    // 「成片已经剪好」「封面做好了」不含「完成」二字，也是交付：执行型请求一样要过这两项。
+    if (completionClaimed || actionRun) {
       // 一轮只提醒一次（remindOnce），所以「没亲眼看」和「没说素材来源」合成同一条。
       const unseen = [contentInspectionReason(state), sourceDisclosureReason(state, reply)].filter(Boolean).join('；另外，');
       const nudged = unseen && this.softRevise(key, state, 'inspection', reply, unseen);
