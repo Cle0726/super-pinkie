@@ -9,7 +9,10 @@ import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = os.environ.get("PINKIE_TTS_HOST", "127.0.0.1")
-PORT = int(os.environ.get("PINKIE_TTS_PORT", sys.argv[1] if len(sys.argv) > 1 else "18888"))
+# This file is also imported by the desktop host. Its command line can carry
+# updater or profile-protection flags, which are not a TTS port argument.
+cli_port = sys.argv[1] if __name__ == "__main__" and len(sys.argv) > 1 else "18888"
+PORT = int(os.environ.get("PINKIE_TTS_PORT", cli_port))
 ALLOWED_ORIGIN = os.environ.get("PINKIE_GATEWAY_ORIGIN", "http://127.0.0.1:18789")
 DEFAULT_RATE = os.environ.get("PINKIE_TTS_RATE", "+10%")
 DEFAULT_PITCH = os.environ.get("PINKIE_TTS_PITCH", "+8Hz")

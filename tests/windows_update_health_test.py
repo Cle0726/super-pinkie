@@ -17,7 +17,7 @@ import tempfile
 import time
 import unittest
 
-from app.windows_desktop import UpdateHealthReporter, WindowsUpdater, update_helper_protocol
+from app.windows_desktop import UpdateHealthReporter, WindowsUpdater, update_helper_protocol, update_in_progress
 
 TOKEN = "0123456789abcdef0123456789abcdef"
 
@@ -156,6 +156,38 @@ class ReporterTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
 
 
+class InProgressGuardTest(unittest.TestCase):
+    """Opening the App during the swap used to show the old version."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        (self.root / "updates").mkdir()
+        (self.root / "updates" / "in-progress.json").write_text('{"pid": 42, "version": "2.5.32"}', encoding="utf-8-sig")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_live_helper_blocks_a_second_start(self):
+        image = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        self.assertEqual("2.5.32", update_in_progress(self.root, image_of=lambda pid: image if pid == 42 else None))
+
+    def test_leftover_file_never_locks_the_user_out(self):
+        self.assertIsNone(update_in_progress(self.root, image_of=lambda pid: None))
+        self.assertIsNone(update_in_progress(self.root, image_of=lambda pid: r"C:\Windows\notepad.exe"))
+        (self.root / "updates" / "in-progress.json").write_text("not json", encoding="utf-8")
+        self.assertIsNone(update_in_progress(self.root, image_of=lambda pid: "powershell.exe"))
+
+    def test_helper_writes_and_clears_the_guard(self):
+        helper = WindowsUpdater._directory_helper_source()
+        written = helper.index("Set-Content -LiteralPath $InProgress")
+        self.assertLess(written, helper.index("[IO.File]::WriteAllText($ReadyMarker, $Token"))
+        restore = helper.index("function Restore-PreviousVersion")
+        self.assertLess(helper.index("Remove-Item -LiteralPath $InProgress", restore),
+                        helper.index("Start-Process -FilePath $TargetExe | Out-Null", restore))
+        self.assertIn("Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue\nRemove-Item -LiteralPath $PSCommandPath", helper)
+
+
 class NewHelperTest(unittest.TestCase):
     def setUp(self):
         self.helpers = (WindowsUpdater._directory_helper_source(), WindowsUpdater._helper_source())
@@ -186,6 +218,12 @@ class NewHelperTest(unittest.TestCase):
         self.assertIn("$stageParent = $UpdateRoot", helper)
         self.assertIn("GetPathRoot", helper)
         self.assertIn("Remove-Item -LiteralPath $script:stage -Recurse", helper)
+
+    def test_unpack_uses_the_fast_extractor_with_a_fallback(self):
+        helper = WindowsUpdater._directory_helper_source()
+        fast = helper.index("[System.IO.Compression.ZipFile]::ExtractToDirectory($Payload, $stage)")
+        self.assertLess(helper.index("Get-FileHash -LiteralPath $Payload"), fast)
+        self.assertLess(fast, helper.index("Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force"))
 
     def test_failed_rollback_is_shown_to_the_user(self):
         helper = WindowsUpdater._directory_helper_source()

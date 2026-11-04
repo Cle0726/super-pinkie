@@ -103,6 +103,10 @@ def main():
     new_version = args.new_version or zip_version(new_zip)
     digest = hashlib.sha256(new_zip.read_bytes()).hexdigest()
     env = profile_env(work / "profile")
+    # A user starts the App from Explorer. This runner step is PowerShell 7,
+    # whose module path makes Windows PowerShell 5.1 (the replacer) load
+    # PowerShell 7 modules: 2.5.27's helper then fails on Get-FileHash.
+    env.pop("PSModulePath", None)
     state = Path(env["LOCALAPPDATA"]) / "SuperPinkie"
     summary = {"case": args.case, "from": old_version, "to": new_version, "install": str(target),
                "expect": args.expect, "problems": []}
