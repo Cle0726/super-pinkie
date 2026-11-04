@@ -56,7 +56,7 @@ def ui_resource(name):
 def source_files(root):
     """Keep nested fonts, vendors and art automatically; no platform file lists."""
     root = Path(root)
-    policy = json.loads((root / 'ui/parity-policy.json').read_text())
+    policy = json.loads((root / 'ui/parity-policy.json').read_text(encoding='utf-8'))
     excluded = set(policy['native_only_assets'])
     result = {}
     folded = {}
@@ -100,7 +100,7 @@ def version_tag(tag, files):
 
 
 def entry_tags(root, files):
-    fragment = (Path(root) / 'ui/injections/laolao-head.fragment.html').read_text()
+    fragment = (Path(root) / 'ui/injections/laolao-head.fragment.html').read_text(encoding='utf-8')
     if fragment.count(NATIVE_SLOT) != 1:
         raise ValueError('shared head must contain exactly one native-assets slot')
     before, after = fragment.split(NATIVE_SLOT)
@@ -166,7 +166,7 @@ def normalize_index(html, root, files):
     html = re.sub(r'(<head\b[^>]*>)\s*', lambda m: m[1] + '\n    ' + early + '\n', html, count=1, flags=re.I)
     html = re.sub(r'\s*</head\s*>', lambda m: '\n    ' + block.replace('\n', '\n    ') + '\n  </head>', html, count=1, flags=re.I)
     if 'id="laolao-splash"' not in html:
-        body = (Path(root) / 'ui/injections/laolao-body.fragment.html').read_text().replace('\r\n', '\n').replace('"./laolao-', '"/laolao-')
+        body = (Path(root) / 'ui/injections/laolao-body.fragment.html').read_text(encoding='utf-8').replace('\r\n', '\n').replace('"./laolao-', '"/laolao-')
         html = re.sub(r'(<body\b[^>]*>)', lambda m: m[1] + '\n' + body, html, count=1, flags=re.I)
     handoff = version_tag('<script src="/laolao-handoff-bootstrap.js?v=handoff7"></script>', files)
     html = re.sub(r'\s*(?=<openclaw-app\b)', lambda m: '\n    ' + handoff + '\n    ', html, count=1)
@@ -304,7 +304,7 @@ def main():
     if args.action == 'compare':
         if len(args.manifests) != 2:
             parser.error('compare requires the actual Mac and Windows manifests')
-        first, second = [json.loads(p.read_text()) for p in args.manifests]
+        first, second = [json.loads(p.read_text(encoding='utf-8')) for p in args.manifests]
         if first != second:
             raise ValueError('Mac and Windows packaged UI manifests differ')
         print(f'Mac/Windows UI identical: {len(first["injections"])} entries, {len(first["resources"])} resources')
@@ -314,7 +314,7 @@ def main():
     result = (install if args.action == 'install' else inspect)(args.root, args.control_ui)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'shared UI {args.action} OK: {len(result["injections"])} entries, {len(result["resources"])} resources')
 
 
