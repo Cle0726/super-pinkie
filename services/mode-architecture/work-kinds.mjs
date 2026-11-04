@@ -48,6 +48,11 @@ export const WHILE_WAITING = Object.freeze({
   craft: ['先做不依赖它的部分', '已经出来的部分先亲眼看一遍', '写好交付说明'],
 });
 
+export function waitingItems(kinds = []) {
+  const id = kinds.find(kind => WHILE_WAITING[kind]);
+  return id ? WHILE_WAITING[id] : WHILE_WAITING.craft;
+}
+
 export function waitingSection(kinds = []) {
   const id = kinds.find(kind => WHILE_WAITING[kind]);
   if (!id) return '';

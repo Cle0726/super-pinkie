@@ -194,3 +194,11 @@ test('the Windows build layout (repo services + Mac snapshot overlay) routes too
   assert.equal(run.status, 0, run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), {route: true, waiting: true, rules: true, warned: ''});
 });
+
+test('a final that only announces the reply is sent back', async () => {
+  const {promiseWithoutActionReason} = await import('../services/mode-architecture/index.mjs');
+  const announced = '一切就绪，可以向老板交付最终成品。包含核心图表、四个阶段的清晰拆解与指引说明。\n依据交付规范：\n1. 第一句直接给出结果；\n2. 附上 MEDIA 行指引最终图片文件；\n\n现在进行正式回复。';
+  assert.match(promiseWithoutActionReason(announced), /只说准备汇报/);
+  assert.match(promiseWithoutActionReason('碧琪准备向先生汇报。'), /只说准备汇报/);
+  assert.equal(promiseWithoutActionReason('报销流程信息图做好了：MEDIA:/tmp/flow.png\n四步从左到右，每步一句说明。'), '');
+});
