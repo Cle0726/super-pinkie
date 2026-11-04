@@ -37,7 +37,7 @@ class WindowsNativeUiPublishTests(unittest.TestCase):
         native = SimpleNamespace(Handle=SimpleNamespace(ToInt64=lambda:0x123456789), Resize=Event(), DpiChanged=Event(), Opacity=1)
         window = SimpleNamespace(native=native)
         with mock.patch.object(desktop.os, 'name', 'nt'), \
-             mock.patch.object(ctypes, 'WinDLL', side_effect=lambda name, **_:user if name=='user32' else gdi), \
+             mock.patch.object(ctypes, 'WinDLL', create=True, side_effect=lambda name, **_:user if name=='user32' else gdi), \
              mock.patch.object(desktop, 'append_log'):
             desktop.configure_native_corners(window)
             gdi.CreateRoundRectRgn.assert_called_once_with(0, 0, 1001, 701, 55, 55)
