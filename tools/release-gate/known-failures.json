@@ -1,5 +1,4 @@
 {
-  "tests/context-compaction-ui.test.cjs :: compaction progress survives refresh and gateway events cover automatic and manual paths": "压缩进度文案改过，测试还在找旧模板（99048b4 自述「未全量复核」）",
   "tests/learning-desk.test.mjs :: board has loading/failure/retry states and ignores late replies after unmount in WebKit without motion libraries": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/learning-desk.test.mjs :: board renders real metrics, evidence, range switches, themes and plan adoption in Chrome": "依赖 tools/study-desk/harness.mjs：属于笔记本 v2 流程，还没提交进仓库（要提交需用户点头）",
   "tests/learning-devices.test.mjs :: memory lab auto-runs a real program on present; unsupported traces stay explicit": {
