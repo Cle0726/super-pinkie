@@ -1959,13 +1959,20 @@ class NativeBridge:
         return self._begin_nonclient_action(hit_tests.get(str(direction).lower(), 0))
 
     def toggle_maximize(self):
-        if self.maximized:
-            self._window.restore()
-        else:
-            self._window.maximize()
-        # The native maximized/restored events are the source of truth. This
-        # optimistic value keeps double-clicks correct before that event lands.
-        self.maximized = not self.maximized
+        previous = self.maximized
+        target = not previous
+        # Set the optimistic target before asking the host to change state.
+        # The native event may arrive synchronously: flipping the value after
+        # maximize()/restore() can then undo that event and break the next click.
+        self.maximized = target
+        try:
+            if target:
+                self._window.maximize()
+            else:
+                self._window.restore()
+        except Exception:
+            self.maximized = previous
+            raise
         return {"maximized": self.maximized}
 
     def window_close(self):
