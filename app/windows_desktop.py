@@ -872,6 +872,9 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 # reads for the first time) can exceed; they then killed a healthy new version
 # and moved the old folder back -- "updated, restarted, nothing changed".
 $StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
+# While this file names a live helper, starting the App shows 「正在更新」
+# instead of opening the old version over a half-finished swap.
+$InProgress = Join-Path $UpdateRoot 'in-progress.json'
 # A parent started by PowerShell 7 can pass its module paths to Windows
 # PowerShell 5.1. Prefer this interpreter's own inbox modules so commands such
 # as Get-FileHash and Expand-Archive cannot resolve to incompatible versions.
@@ -1032,6 +1035,7 @@ function Restore-PreviousVersion {
     }
     Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
   }
+  Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
   else { throw 'previous version is missing after rollback' }
 }
@@ -1047,6 +1051,8 @@ try {
   if (Test-Path -LiteralPath $Backup) { throw 'update backup path already exists' }
   Test-UpdateWriteAccess ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($TargetDir).TrimEnd('\')))
   Confirm-GatewayOwnership
+  @{ pid = $PID; version = $Version; token = $Token } | ConvertTo-Json -Compress |
+    Set-Content -LiteralPath $InProgress -Encoding UTF8
   [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
@@ -1073,7 +1079,19 @@ try {
   # adds substantial overhead for the tens of thousands of portable files;
   # suppress only that hidden process's progress records, not App effects.
   $ProgressPreference = 'SilentlyContinue'
-  Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  # The window is already closed here, so every second counts. ZipFile is
+  # several times faster than Windows PowerShell 5.1's Expand-Archive on
+  # ~30,000 entries (2-3 minutes on CI); Expand-Archive stays as a fallback.
+  $unpackStarted = Get-Date
+  try {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Payload, $stage)
+  } catch {
+    Write-UpdateLog "fast unpack failed, using Expand-Archive: $($_.Exception.Message)"
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    Expand-Archive -LiteralPath $Payload -DestinationPath $stage -Force
+  }
+  Write-UpdateLog ('unpacked in ' + [int]((Get-Date) - $unpackStarted).TotalSeconds + ' s')
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
   Stop-InstallProcesses $TargetDir
@@ -1136,6 +1154,7 @@ try {
   }
   if ($script:stage) { Remove-Item -LiteralPath $script:stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
+Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
@@ -2222,7 +2241,7 @@ BRIDGE_SCRIPT = r"""
         install.disabled = true; later.disabled = true; status.textContent = '正在把新版安全地收好…'; card.classList.add('is-working');
         const ready = await call('prepare_update');
         if (!ready?.ready) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = ready?.message || '网络有点晃，稍后再试就好。'; return; }
-        status.textContent = '校验完成，正在重启…';
+        status.textContent = '校验完成。窗口会先关掉，换好后自动打开新版，可能要几分钟；这期间不用自己打开碧琪。';
         const applied = await call('apply_update');
         if (!applied?.started) { install.disabled = false; later.disabled = false; card.classList.remove('is-working'); status.textContent = applied?.message || '还没有完成，稍后再试。'; }
       };
@@ -2729,8 +2748,41 @@ def smoke_debug_port(environ=os.environ):
     return port if 1024 <= port <= 65535 else None
 
 
+def update_in_progress(root=None, image_of=None):
+    """Version being installed when a live replacer owns the install, else None."""
+    path = Path(root or state_root()) / "updates" / "in-progress.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8-sig"))
+        pid = int(record["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    image = None
+    try:
+        image = (image_of or (lambda value: process_image_and_start(value)[0]))(pid)
+    except Exception:
+        image = None
+    if not image or Path(str(image).replace("\\", "/")).name.lower() != "powershell.exe":
+        return None  # helper is gone: a leftover file must never lock the user out
+    return str(record.get("version") or "新版")
+
+
+def show_update_in_progress(version):
+    message = f"碧琪正在换上 {version}，换好后会自动打开，请稍等几分钟。\n\n现在打开会看到旧版本，还可能打断更新。"
+    append_log("launcher", f"start refused: update to {version} in progress")
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, message, "超級碧琪", 0x40)
+    except Exception:
+        pass
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
+    if not update_health_token:
+        installing = update_in_progress()
+        if installing:
+            show_update_in_progress(installing)
+            return
     debug_port = smoke_debug_port()
     if debug_port:
         webview.settings["REMOTE_DEBUGGING_PORT"] = debug_port
