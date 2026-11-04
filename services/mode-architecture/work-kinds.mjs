@@ -30,6 +30,29 @@ export const WORK_KINDS = Object.freeze({
   simple: kind('simple', '简单问答', []),
 });
 export const KIND_IDS = Object.freeze(Object.keys(WORK_KINDS));
+
+// 命令放到后台跑（渲染、装依赖、构建、下载、长测试、批量处理）时，等的这段时间先做什么。
+// 只列不依赖那个结果、做了一定有用的事；小模型最常见的毛病是开了后台就结束这一轮干等。
+export const WHILE_WAITING = Object.freeze({
+  video_motion: ['已经出来的小样或前几秒先抽帧看：字有没有出框、画面糊不糊、节奏对不对', '做好封面图 / 缩略图（同一套配色和字体）', '核对旁白稿、字幕的错别字和时间点', '写好交付说明：时长、尺寸、想改字去哪改'],
+  web_ui: ['先写不依赖它的部分：文案、示例数据、样式、图标', '把验收要点列出来（手机宽度、空数据、长文字、每个按钮）', '准备打开就有内容的演示数据'],
+  app_game_ai: ['先写不依赖它的部分：关卡 / 数据、文案、图标、说明页', '把验收要点列出来（手机上能不能玩、重开、存档、出错提示）', '准备演示用的数据或存档'],
+  document: ['核对每页标题是不是结论、数字和出处对不对', '准备讲稿备注或一页摘要', '已经导出的页先转图看'],
+  data_charts: ['先抽查前 20 行，确认口径（单位、日期、去重）', '把图表标题写成结论', '写好结论摘要和数据来源'],
+  image_print: ['先排好版式和文字，用占位等图', '准备第二个配色或版式，给先生挑', '核对尺寸、分辨率、出血和安全区'],
+  automation: ['先抽查已经处理好的前几个', '写好怎么停、怎么撤回、出错看哪', '准备运行记录或结果清单'],
+  code: ['读相关代码，找同类问题', '写好改动说明', '把没覆盖到的情况补成测试'],
+  debugging: ['读相关代码和日志，列出其他可能的原因', '准备修好之后要重跑的验证步骤'],
+  environment: ['先做不需要它的部分', '把装了什么、装在哪、怎么删记进下载账本'],
+  publish: ['准备分享文案和二维码', '列出上线后要点开看的页面，逐个看'],
+  craft: ['先做不依赖它的部分', '已经出来的部分先亲眼看一遍', '写好交付说明'],
+});
+
+export function waitingSection(kinds = []) {
+  const id = kinds.find(kind => WHILE_WAITING[kind]);
+  if (!id) return '';
+  return `【这件活放后台等的时候】命令放到后台后别结束这一轮干等，先做这些不依赖它的事：${WHILE_WAITING[id].map((item, i) => `${i + 1}）${item}`).join('；')}。互不依赖的长命令可以同时放后台（先看 TOOLS.md「这台电脑」，内存小的机器同时最多两个重活）。`;
+}
 // 平分时按这个顺序取主活：越具体越靠前。
 const SPECIFICITY = ['debugging', 'video_motion', 'document', 'data_charts', 'image_print', 'app_game_ai', 'automation', 'web_ui',
   'environment', 'publish', 'code', 'writing', 'ideas', 'tradeoff', 'fact_check', 'standard_answer', 'tutoring', 'craft', 'simple'];
@@ -71,6 +94,8 @@ const PATTERNS = {
   ],
   video_motion: [
     p(/(?:视频|视屏|短片|片头|片尾|宣传片|vlog|剪辑|剪个|剪一下|剪成|剪掉|配音|配乐|字幕|动画片|mg动画|转场|短视频|抖音视频|渲染成|录屏|旁白|口播|卡点|混剪)/i, 4),
+    // 「剪一个 30 秒的抖音广告」「配个 bgm」（11-04 技能路由实测被判成闲聊）
+    p(/(?:剪(?:一)?(?:个|段|条|支|部)|(?:抖音|快手|视频号|b站|tiktok|reels?)(?:广告|短片|宣传|带货)|广告片|带货视频|bgm|背景音乐|配(?:个|段|首)(?:音乐|歌))/i, 4),
     p(/(?:动画|动图|gif)/i, 2),
     p(/\b(?:video|subtitles?|captions? (?:for|on) (?:the|my) (?:video|clip)|voice ?-?over|intro clip|motion graphics?|animation|render (?:a|the) (?:video|clip)|mp4)\b/i, 4),
   ],
@@ -78,6 +103,8 @@ const PATTERNS = {
     p(/(?:ppt|pptx|幻灯片|演示文稿|课件|keynote|汇报材料|路演稿|slides?\b|deck\b)/i, 5),
     p(/(?:word文档|word 文档|docx|简历|论文排版|排版成|公文|红头文件|通知书|合同|说明书|标书|申请书|证明信|pdf|讲义|宣传册)/i, 4),
     p(/(?:报告|文档|手册|方案书|计划书)/, 2),
+    // 「给公司写一份年度规划方案」：要交一份文档，不是在问选哪个方案（11-04 实测被判成取舍）
+    p(/(?:写|做|出|拟|整理)(?:一|个|几)?(?:份|篇|个|套)?[^，。？?]{0,10}(?:方案|规划|计划书|策划书|提案|白皮书)(?!.{0,6}(?:哪个|哪种|对比|比较|选))/, 4),
     p(/\b(?:resume|cv\b|word doc(?:ument)?|pdf|report (?:document|in word))\b/i, 3),
   ],
   data_charts: [

@@ -70,11 +70,15 @@ if (Test-Path -LiteralPath $cleStudio) { Remove-Item -LiteralPath $cleStudio -Re
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
-foreach ($skill in @("deep-think", "pinkie-deep-research", "web-gpt-collab")) {
+# 社区技能按 skills/community-skills.json 一起打包；技能路由（skill-routes.mjs）把路径直接给模型。
+$communitySkills = @((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $RepoRoot "skills\community-skills.json") | ConvertFrom-Json).skills | ForEach-Object { $_.name })
+if ($communitySkills.Count -eq 0) { throw "社区技能清单是空的" }
+foreach ($skill in @("deep-think", "pinkie-deep-research", "web-gpt-collab", "pinkie-skill-library") + $communitySkills) {
     $source = Join-Path $RepoRoot "skills\$skill"
     if (-not (Test-Path -LiteralPath (Join-Path $source "SKILL.md"))) { throw "缺少打包技能 $skill" }
     Copy-Item -LiteralPath $source -Destination (Join-Path $managedSkillStage $skill) -Recurse -Force
 }
+Copy-Item -LiteralPath (Join-Path $RepoRoot "skills\THIRD_PARTY_SKILLS.md") -Destination (Join-Path $managedSkillStage "THIRD_PARTY_SKILLS.md") -Force
 
 function Install-MacSnapshot([string]$Relative, [string]$Destination, [string]$Expected) {
     $source = Join-Path $overlayRoot ($Relative -replace '/', '\')

@@ -1,0 +1,26 @@
+{
+ "start": 2.75,
+ "end": 134.75,
+ "cuts": [
+  [
+   10.05,
+   10.49,
+   "dead air after the opening sentence: \"agent.\" ends 9.70, \"So I mostly use\" starts 10.84 (1.14 s -> 0.70 s)"
+  ],
+  [
+   41.09,
+   58.87,
+   "the restart: \"And you can try to understand like.\" (abandoned), 3.2 s of dead air, a false start of the keyword line (\"And then another feature, um, that's really powerful is this keyword ideas, um, or is this keyword research feature.\"), a second one (\"And then another research, another feature which is really...\") and the dead air between them; the third, clean attempt is kept. \"website.\" ends 41.03; a lip click at 58.83 stays out; the kept attempt starts 59.585 (0.78 s of silence at the splice, the scene change to keyword ideas)"
+  ],
+  [
+   95.26,
+   95.76,
+   "dead air before \"We have a bunch of other features\": \"ChatGPT.\" ends 94.66, \"We\" starts 96.06 (1.40 s -> 0.90 s)"
+  ],
+  [
+   125.65,
+   126.25,
+   "dead air before \"Thanks so much for watching\": \"skill.\" ends 125.05, \"Thanks\" starts 126.55 (1.50 s -> 0.90 s)"
+  ]
+ ]
+}

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>OpenSEO AI visibility teaser</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=block" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<script src="timeline.js"></script>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; font-family: "Inter", system-ui, sans-serif; }
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .clip, .fill { position: absolute; inset: 0; }
+  #glow { background: radial-gradient(900px 600px at 50% 50%, var(--glow), transparent 70%); }
+  /* A scene: its capture under its own camera. The camera is translate(centre) rotateZ(roll) rotateX(tilt) scale(z),
+     then the page is shifted by minus the focus point, so the page tilts about the point the camera looks at. */
+  .scene { perspective: 2600px; overflow: hidden; }
+  .cam, .page { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .page { width: 1440px; }
+  .page > img, .stack > img { display: block; width: 1440px; }
+  .stack > img { position: absolute; left: 0; top: 0; opacity: 0; }
+  .stack > img:first-child { position: relative; opacity: 1; }
+  .tall { overflow: hidden; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 80px 160px -30px rgba(0, 0, 0, 0.7); }
+  /* A row that lands: a window onto the same capture at the row's own box. */
+  .crop { position: absolute; overflow: hidden; }
+  .crop > img { position: absolute; width: 1440px; }
+  .lit { position: absolute; inset: 0; opacity: 0; }
+  .cur { position: absolute; left: 0; top: 0; opacity: 0; }
+  .cur-s, .cur-p { transform-origin: 0 0; }
+  .cur svg { display: block; margin: -2.9px 0 0 -3.3px; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3)); }
+  .ring { position: absolute; width: 88px; height: 88px; margin: -44px 0 0 -44px; border-radius: 50%; box-sizing: border-box; opacity: 0; }
+  .caption { position: absolute; left: 50%; bottom: 84px; display: flex; gap: 0.28em; padding: 20px 46px 24px; border-radius: 999px;
+    backdrop-filter: blur(18px); border: 1px solid oklch(100% 0 0 / 0.14); font-size: 60px; font-weight: 700; letter-spacing: -0.035em;
+    line-height: 1.1; white-space: nowrap; box-shadow: 0 24px 70px -10px rgba(0, 0, 0, 0.75); opacity: 0; }
+  .caption .w { display: inline-block; overflow: hidden; padding-bottom: 6px; margin-bottom: -6px; }
+  .caption .w > span { display: inline-block; }
+  #end-card { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #end-glow { background: radial-gradient(520px 380px at 50% 46%, var(--end-glow), transparent 70%); opacity: 0; }
+  #end-icon { width: 188px; height: 188px; border-radius: 44px; display: block; opacity: 0;
+    box-shadow: 0 0 0 1px oklch(100% 0 0 / 0.12), 0 30px 80px -10px rgba(0, 0, 0, 0.8); }
+  #end-name { display: flex; margin-top: 34px; font-size: 120px; font-weight: 800; letter-spacing: -0.05em; line-height: 1; }
+  #end-name span { display: inline-block; opacity: 0; }
+  #end-url { margin-top: 30px; font-size: 46px; font-weight: 500; letter-spacing: -0.01em; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="10" data-fps="60">
+  <!-- The music clip: from 51.91 s of the song (timeline.js HIT times are in video time from here), faded in and out. -->
+  <audio id="music" src="assets/bgm2.mp3" data-start="0" data-duration="10" data-media-start="51.91" data-fade-in="0.1" data-fade-out="0.45"></audio>
+  <div class="fill" id="glow"></div>
+  <div class="fill" id="stage">
+    <section class="clip scene" id="s-form"><div class="cam"><div class="page" id="form"><div class="stack"></div></div></div></section>
+    <section class="clip scene" id="s-review"><div class="cam"><div class="page" id="review"></div></div></section>
+    <section class="clip scene" id="s-topics"><div class="cam"><div class="page tall" id="topics"></div></div></section>
+  </div>
+  <div id="captions"></div>
+  <section class="clip" id="end">
+    <div class="fill" id="end-glow"></div>
+    <div class="fill" id="end-card">
+      <div id="end-pulse"><img id="end-icon" alt="" /></div>
+      <div id="end-name"></div>
+      <div id="end-url"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Everything below reads the timing table in timeline.js. The DOM is built first (synchronously, so the images are
+  // part of the page load), then one paused GSAP timeline drives every frame.
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, cls, parent, style = {}) => { const e = document.createElement(tag); if (cls) e.className = cls; Object.assign(e.style, style); parent.appendChild(e); return e; };
+  const img = (src, parent, style) => { const i = el('img', '', parent, style); i.src = src; i.alt = ''; return i; };
+  const VW = 1920, VH = 1080, CAP_W = 1440;
+  const root = $('#root');
+  root.style.background = C.bg;
+  root.style.setProperty('--glow', C.glow);
+  root.style.setProperty('--end-glow', C.endGlow);
+
+  // Timed layers. A scene stays up until the next one has fully dissolved in over it.
+  const windows = { form: [0, T.review + DISSOLVE], review: [T.review, T.topics + DISSOLVE], topics: [T.topics, TOTAL], end: [T.endCard, TOTAL] };
+  for (const [k, [a, b]] of Object.entries(windows)) {
+    const s = k === 'end' ? $('#end') : $(`#s-${k}`);
+    s.dataset.start = a; s.dataset.duration = +(b - a).toFixed(4);
+  }
+
+  // Scene pages: the capture, then the mask and the rows that land on it.
+  const stack = $('#form .stack');
+  CAP.form.frames.forEach((f) => img(f, stack));
+  const crop = (page, src, x, y, w, h) => { const c = el('div', 'crop', page, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' }); img(src, c, { left: -x + 'px', top: -y + 'px' }); return c; };
+  const review = $('#review');
+  img(CAP.review.src, review);
+  const [rx, ry, rw] = REVIEW_ROWS[0], rLast = REVIEW_ROWS[REVIEW_ROWS.length - 1];
+  const reviewMask = el('div', 'crop', review, { left: rx + 'px', top: ry + 'px', width: rw + 'px', height: rLast[1] + rLast[3] - ry + 'px', background: C.row });
+  const reviewRows = REVIEW_ROWS.map(([x, y, w, h]) => crop(review, CAP.review.src, x, y, w, h));
+  const topics = $('#topics');
+  topics.style.height = CAP.topics.h + 'px';
+  img(CAP.topics.src, topics);
+  const tFirst = TOPIC_ROWS[0], tLast = TOPIC_ROWS[TOPIC_ROWS.length - 1];
+  const topicsMask = el('div', 'crop', topics, { left: LIST.x + 'px', top: tFirst.top + 'px', width: LIST.w + 'px', height: tLast.top + tLast.h - tFirst.top + 'px', background: C.row });
+  const topicRows = TOPIC_ROWS.map((r) => {
+    const c = crop(topics, CAP.topics.src, LIST.x, r.top, LIST.w, r.h);
+    if (r.header) el('div', 'lit', c, { background: `linear-gradient(90deg, color-mix(in oklch, ${C.primary} 32%, transparent), color-mix(in oklch, ${C.primary} 6%, transparent) 60%, transparent)`, boxShadow: `inset 4px 0 0 ${C.primary}` });
+    return c;
+  });
+
+  // Pointer and click ring, in the form page's capture space (the page is flat by then). The pointer is counter-scaled
+  // by the zoom so it keeps its size on screen.
+  const cur = el('div', 'cur', $('#form'));
+  cur.innerHTML = '<div class="cur-s"><div class="cur-p"><svg viewBox="0 0 26 36" width="34" height="47"><path d="M2.5 2.2 L2.5 28.6 L9.2 22.3 L13.6 32.6 L18 30.7 L13.7 20.6 L22.6 20.6 Z" fill="#111" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></div></div>';
+  const ring = el('div', 'ring', $('#form'), { left: POINTER.end[0] + 'px', top: POINTER.end[1] + 'px', border: `4px solid ${C.bright}`, boxShadow: `0 0 24px color-mix(in oklch, ${C.primary} 60%, transparent)`, background: `color-mix(in oklch, ${C.primary} 22%, transparent)` });
+
+  // Captions: one glass pill per beat, each word in its own mask.
+  const caps = CAPTIONS.map((c) => {
+    const p = el('div', 'caption', $('#captions'), { background: C.pill, color: C.text });
+    c.text.split(' ').forEach((w) => { el('span', 'w', p).appendChild(document.createElement('span')).textContent = w; });
+    return p;
+  });
+
+  // End card.
+  $('#end-icon').src = END.icon;
+  const letters = END.name.split('').map((ch) => { const s = el('span', '', $('#end-name')); s.textContent = ch; return s; });
+  $('#end-name').style.color = C.text;
+  Object.assign($('#end-url'), { textContent: END.url }).style.color = C.muted;
+
+  const tl = gsap.timeline({ paused: true });
+  // Glow drifting across the whole video, seen around the tipped-back page and behind the end card.
+  tl.fromTo('#glow', { x: -300, y: 180 }, { x: 300, y: -140, duration: TOTAL, ease: 'sine.inOut' }, 0);
+
+  // Cameras. While the page is flat, each key is clamped so no edge of the capture shows; the clamp blends out as the
+  // tilt grows (off by 4 degrees) so a tipped-back page can float over the background.
+  const clampTo = (v, half, size) => (half >= size / 2 ? size / 2 : Math.min(Math.max(v, half), size - half));
+  function camera(k) {
+    const cam = $(`#s-${k} .cam`), page = $(`#s-${k} .page`), h = CAP[k].h;
+    const keys = CAMERA[k].map((c) => {
+      const w = 1 - Math.min(1, Math.abs(c.tilt || 0) / 4);
+      return { ...c, x: c.x + (clampTo(c.x, VW / (2 * c.z), CAP_W) - c.x) * w, y: c.y + (clampTo(c.y, VH / (2 * c.z), h) - c.y) * w };
+    });
+    const [a] = keys;
+    tl.set(cam, { x: VW / 2, y: VH / 2, rotation: a.roll || 0, rotationX: a.tilt || 0, scale: a.z }, 0);
+    tl.set(page, { x: -a.x, y: -a.y }, 0);
+    keys.slice(1).forEach((b, i) => {
+      const p = keys[i], vars = { duration: b.t - p.t, ease: b.ease || 'sine.inOut' };
+      tl.to(cam, { ...vars, rotation: b.roll || 0, rotationX: b.tilt || 0, scale: b.z }, p.t);
+      tl.to(page, { ...vars, x: -b.x, y: -b.y }, p.t);
+    });
+  }
+  ['form', 'review', 'topics'].forEach(camera);
+
+  // Dissolves: the next scene fades in with a blur that clears, over the one below, which keeps its own camera.
+  for (const k of ['review', 'topics']) {
+    const s = windows[k][0];
+    tl.fromTo(`#s-${k}`, { opacity: 0 }, { opacity: 1, duration: DISSOLVE, ease: 'power2.out' }, s);
+    tl.fromTo(`#s-${k} .cam`, { filter: 'blur(10px)' }, { filter: 'blur(0px)', duration: DISSOLVE, ease: 'power2.out' }, s);
+    tl.set(`#s-${k} .cam`, { filter: 'none' }, s + DISSOLVE); // a filter flattens 3D: keep it off once clear
+  }
+
+  // 1. Typing: one real frame per keystroke.
+  [...stack.children].slice(1).forEach((f, i) => tl.set(f, { opacity: 1 }, T.typeStart + i * T.typePer));
+
+  // Pointer: one glide (different eases on x and y bow the path), the press, the ring on the clicked point.
+  const zoomAt = (t) => { tl.seek(t); return gsap.getProperty('#s-form .cam', 'scale'); };
+  const zFrom = zoomAt(POINTER.from), zTo = zoomAt(POINTER.to), zClick = zoomAt(POINTER.click);
+  tl.set(cur, { x: POINTER.start[0], y: POINTER.start[1] }, 0);
+  tl.fromTo(cur.firstChild, { scale: 1 / zFrom }, { scale: 1 / zTo, duration: POINTER.to - POINTER.from, ease: 'none' }, POINTER.from);
+  tl.to(cur, { opacity: 1, duration: 0.2 }, POINTER.from);
+  const [g0, g1] = POINTER.glide;
+  tl.to(cur, { x: POINTER.end[0], duration: g1 - g0, ease: 'power2.inOut' }, g0);
+  tl.to(cur, { y: POINTER.end[1], duration: g1 - g0, ease: 'sine.inOut' }, g0);
+  tl.to(cur, { opacity: 0, duration: 0.25 }, POINTER.to - 0.25);
+  tl.to('.cur-p', { scale: 0.8, duration: 0.07, ease: 'power1.out' }, POINTER.click);
+  tl.to('.cur-p', { scale: 1, duration: 0.18, ease: 'power1.out' }, POINTER.click + 0.07);
+  tl.set(ring, { opacity: 1, scale: 0.2 / zClick }, POINTER.click);
+  tl.to(ring, { opacity: 0, scale: 1.1 / zClick, duration: 0.6, ease: 'power2.out' }, POINTER.click);
+
+  // 2. Competitor rows land in their own places; once all have, the mask comes off and the frame is the capture.
+  reviewRows.forEach((r, i) => tl.fromTo(r, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: T.rowDur, ease: 'expo.out' }, T.rows + i * T.rowStep));
+  tl.set(reviewMask, { opacity: 0 }, T.rows + (REVIEW_ROWS.length - 1) * T.rowStep + T.rowDur);
+
+  // 3. The topic list builds in reading order; headers flash the primary colour as they land.
+  topicRows.forEach((r, n) => {
+    const t = T.cascade + n * T.step;
+    tl.fromTo(r, { opacity: 0, y: 30, scale: 1.03, boxShadow: '0 18px 40px rgba(0,0,0,0.5)' },
+      { opacity: 1, y: 0, scale: 1, boxShadow: '0 0px 0px rgba(0,0,0,0)', duration: T.rowDur, ease: 'expo.out' }, t);
+    if (TOPIC_ROWS[n].header) {
+      tl.to(r.lastChild, { opacity: 1, duration: 0.2, ease: 'none' }, t + 0.15);
+      tl.to(r.lastChild, { opacity: 0, duration: 0.75, ease: 'none' }, t + 0.35);
+    }
+  });
+  tl.set(topicsMask, { opacity: 0 }, T.cascade + (TOPIC_ROWS.length - 1) * T.step + T.rowDur);
+
+  // Captions: rise in, words lift out of their masks 0.08 s apart; fade, lift and blur out over the last 0.4 s.
+  CAPTIONS.forEach((c, i) => {
+    const p = caps[i];
+    tl.set(p, { xPercent: -50 }, 0);
+    tl.fromTo(p, { y: 20, scale: 0.94 }, { y: 0, scale: 1, duration: 0.7, ease: 'expo.out' }, c.from);
+    tl.fromTo(p, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: 'none' }, c.from);
+    p.querySelectorAll('.w > span').forEach((w, j) =>
+      tl.fromTo(w, { yPercent: 105, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.7, ease: 'expo.out' }, c.from + 0.1 + j * 0.08));
+    tl.to(p, { opacity: 0, y: -8, scale: 0.98, filter: 'blur(6px)', duration: 0.4, ease: 'power1.in' }, c.to - 0.4);
+  });
+
+  // 4. The app fades, blurs and shrinks away; the icon blooms on the strongest hit, the name rises in letter by letter,
+  //    the URL lands on the next hit, and the final hit gives the icon and its glow one soft pulse.
+  tl.to('#stage', { opacity: 0, duration: 0.7, ease: 'none' }, T.end);
+  tl.fromTo('#stage', { filter: 'blur(0px)' }, { filter: 'blur(16px)', duration: 0.7, ease: 'none' }, T.end);
+  tl.to('#stage', { scale: 0.94, duration: 0.8, ease: 'power2.in' }, T.end);
+  const e = T.endCard;
+  tl.fromTo('#end-card', { scale: 0.98 }, { scale: 1.02, duration: TOTAL - e, ease: 'none' }, e);
+  tl.to('#end-glow', { opacity: 0.7, duration: 0.8, ease: 'none' }, e);
+  tl.to('#end-icon', { opacity: 1, duration: 0.26, ease: 'none' }, e + 0.04);
+  tl.fromTo('#end-icon', { scale: 0.8 }, { scale: 1, duration: 0.9, ease: 'expo.out' }, e);
+  tl.fromTo('#end-icon', { filter: 'blur(10px)' }, { filter: 'blur(0px)', duration: 0.41, ease: 'none' }, e + 0.04);
+  letters.forEach((s, i) => tl.fromTo(s, { opacity: 0, y: 34, filter: 'blur(10px)' }, { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.7, ease: 'expo.out' }, e + 0.2 + i * 0.04));
+  tl.fromTo('#end-url', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: 'expo.out' }, HIT.url - 0.1);
+  tl.to('#end-pulse', { scale: 1.035, duration: 0.1, ease: 'power1.out' }, HIT.final - 0.03);
+  tl.to('#end-pulse', { scale: 1, duration: 0.5, ease: 'power1.out' }, HIT.final + 0.07);
+  tl.to('#end-glow', { opacity: 1, duration: 0.1, ease: 'power1.out' }, HIT.final - 0.03);
+  tl.to('#end-glow', { opacity: 0.7, duration: 0.5, ease: 'power1.out' }, HIT.final + 0.07);
+
+  tl.seek(0);
+  window.__timelines = window.__timelines || {};
+  window.__timelines.main = tl;
+</script>
+</body>
+</html>

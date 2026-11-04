@@ -11,8 +11,9 @@ import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
-import {WORK_ROLES, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
-import {BackgroundJobs} from './background-jobs.mjs';
+import {skillRouteBlock} from './skill-routes.mjs';
+import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
+import {BackgroundJobs, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
@@ -515,7 +516,8 @@ const TOOL_PROGRESS_RULES = `
 const BACKGROUND_WORK_RULES = `
 【长时间命令放后台】
 - 预计超过半分钟的命令（构建、渲染、下载、长测试、批量处理）用 exec 的 background: true 放到后台，不要反复 poll、不要 sleep 干等。
-- 启动后用一句话告诉用户在跑什么、大概要多久，然后可以先做别的，或直接结束这一轮；命令结束时系统会自动叫你继续，那时再读输出、核对结果并汇报。
+- 启动后用一句话告诉用户在跑什么、大概要多久。然后别闲着：先把不依赖这个结果的事做掉——这件活剩下的部分（文案、版式、数据、演示内容）、已经出来的部分先验（抽帧、截图、抽查前几个）、交付说明、检查点。互不依赖的长命令可以同时放后台。
+- 等的时候做的事要有用：不推翻已经定下的东西、不为了显得忙去改无关文件、不重复开同一个命令。真的没有不依赖它的事了，才结束这一轮；命令结束时系统会自动叫你继续，那时先读完整输出核对成败，再把等待时做好的部分合进来、补上亲眼验证，然后汇报。
 - 后台还没结束的事情不能说成已完成；也不要承诺一个具体时间点会主动汇报。
 `.trim();
 
@@ -5417,6 +5419,29 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         blocks.push('\n' + buildDeliberationPlan(state.tier, state.mode, checkpointShown, state, {playbookRoot: root}) + '\n');
         const evidence = completedEvidence(state);
         if (evidence) blocks.push('\n' + evidence + '\n');
+      }
+    }
+    // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠先生点名、不靠模型自己翻）。
+    if (mode !== 'none') {
+      const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
+      if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
+        try {
+          const routed = classifyWorkKind(routedPrompt, {mode});
+          const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
+          const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
+          if (block) blocks.push('\n' + block + '\n');
+          const waiting = waitingSection(routed.kinds || []);
+          if (waiting) blocks.push('\n' + waiting + '\n');
+        } catch (error) {
+          // 不能让路由拖垮这一轮，但也不能悄悄失效（11-04：Windows 快照少一个 import，路由整个没生效也没人知道）。
+          if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
+        }
+      }
+      // 先生在后台命令还没跑完时发来新消息：先回这条，回完接着做等待清单，别把在跑的事忘了。
+      const stillRunning = runningBackgroundJobs(sessionKey);
+      if (stillRunning.length) {
+        const list = stillRunning.slice(0, 4).map(job => `「${job.command.replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((Date.now() - job.startedAt) / 60_000))} 分钟）`).join('、');
+        blocks.push(`\n【后台还在跑】${list}。先回先生这条消息；回完继续做不依赖它的事，结束时系统会叫你，别重复开同一个命令，也别说成已经做完。\n`);
       }
     }
     const reloaded = this.recentCompaction.get(sessionKey);
