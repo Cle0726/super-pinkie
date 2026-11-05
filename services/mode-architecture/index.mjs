@@ -957,8 +957,30 @@ function isLikelyActionRequest(prompt = '') {
 // 本身就是成品，不需要工具记录。只在先生没有要求文件、目录、运行或测试时这样算。
 const INLINE_DELIVERABLE = /```(?:app|ui|chart|mermaid)[ \t]*\n[\s\S]{40,}?```/;
 const FILE_OR_RUN_REQUEST = /(?:文件|目录|文件夹|路径|保存|存到|存成|写进|写入|工作区|仓库|项目里|\.(?:html?|jsx?|tsx?|py|md|json|css|txt|csv)\b|运行|执行|跑一下|测试|部署|安装|下载|上传|发布)/i;
-function inlineDeliveryOnly(prompt = '', reply = '') {
-  return INLINE_DELIVERABLE.test(String(reply || '')) && !FILE_OR_RUN_REQUEST.test(intentText(prompt));
+// 只有按钮 / 方案卡片的 ui 块是在问先生下一步，本身不是成品。
+function choiceOnlyUiBlock(body = '') {
+  try {
+    const value = JSON.parse(body);
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+      && (Array.isArray(value.buttons) || Array.isArray(value.cards))
+      && !value.fields && !value.checklist;
+  } catch {
+    return false;
+  }
+}
+// 11-04 隔离实测 routes-l R-ad：交了 MP4、末尾附「满意，直接导出 / 微调文案」三个按钮，
+// 这里把按钮当成聊天里交付的成品，亲眼看和素材来源两项交付检查整段跳过。
+// 回复交出了文件（MEDIA: 附件，或正文写了成品文件的路径——附件发不出去时运行时会把 MEDIA: 换成
+// 「Media failed」，routes-i R-ad-2 就是这样），或这一轮做出了文件、ui 块只是下一步按钮：成品是文件，照常查。
+// 开工前用按钮问先生（这一轮还没做出文件）保持原样。
+function inlineDeliveryOnly(prompt = '', reply = '', state = null) {
+  const text = String(reply || '');
+  if (!INLINE_DELIVERABLE.test(text) || FILE_OR_RUN_REQUEST.test(intentText(prompt))) return false;
+  if (replyDeliveredKinds(text).length > 0) return false;
+  const inline = text.replace(/```ui[ \t]*\n([\s\S]*?)```/g, (block, body) => (choiceOnlyUiBlock(body) ? ' ' : block));
+  if (!INLINE_DELIVERABLE.test(inline)
+      && (state?.tools || []).some(entry => !entry.failed && producedDeliverables(entry, state.prompt).length > 0)) return false;
+  return true;
 }
 
 function isReadOnlyDiagnosticRequest(prompt = '') {
@@ -1392,10 +1414,15 @@ const SOURCE_RIGHTS = /(?:可(?:以)?商用|不(?:能|可)商用|商用|版权|�
 
 // 回复里用 MEDIA: 交出去的文件。11-04 routes-i R-ad：成片是后台 Python 脚本里调 ffmpeg 写出来的，
 // 工具记录里一个 .mp4 都没有（exec 只有 python3 render.py），只看工具就认不出交了视频。
+// 附件发不出去时运行时把 MEDIA: 换成「Media failed」（routes-i R-ad-2），正文里写出的成品绝对路径一样算交付。
+const REPLY_FILE_PATH = /(?:^|[\s`'"(（：:])((?:\/|~\/|[A-Za-z]:\\)[^\s`'"]*\.(?:mp4|mov|m4v|webm|gif|png|jpe?g|webp|svg|pdf|pptx?|key|docx?|xlsx))(?=$|[\s`'"),，。；;:：\]])/gim;
 function replyDeliveredKinds(reply = '') {
   const kinds = new Set();
-  for (const match of String(reply || '').matchAll(/^\s*MEDIA:\s*(\S+)/gim)) {
-    const ext = DELIVERABLE_EXT.exec(match[1].replace(/[\s'"),;\]]+$/, ''));
+  const text = String(reply || '');
+  const paths = [...text.matchAll(/^\s*MEDIA:\s*(\S+)/gim)].map(match => match[1])
+    .concat([...text.replace(/```[\s\S]*?(?:```|$)/g, ' ').matchAll(REPLY_FILE_PATH)].map(match => match[1]));
+  for (const file of paths) {
+    const ext = DELIVERABLE_EXT.exec(file.replace(/[\s'"),;\]]+$/, ''));
     if (ext && DELIVERABLE_KIND[ext[1].toLowerCase()]) kinds.add(DELIVERABLE_KIND[ext[1].toLowerCase()]);
   }
   return [...kinds];
@@ -2192,7 +2219,7 @@ export class CompletionIntegrityGuard {
     // A bare "continue" is ambiguous, but a terminal completion claim is not:
     // it must never be accepted with zero execution evidence merely because
     // this turn's short follow-up omitted the original action wording.
-    if (inlineDeliveryOnly(state.prompt, reply)) return;
+    if (inlineDeliveryOnly(state.prompt, reply, state)) return;
     const requiresExecution = actionRun || (completionClaimed && !QUESTION_ONLY.test(state.prompt));
     if (requiresExecution) {
       // A read/inspect request is still real work, but it does not need a
