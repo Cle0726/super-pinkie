@@ -22,7 +22,7 @@ const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 
 // Windows 版还没有侧栏浏览器（Mac 是 App 原生的 WKWebView）。没有侧栏时，open / show_file / serve
 // 退回到系统默认浏览器或默认程序，让用户仍然看得到；看页面、点按钮这类操作明确指向 browser 工具，
 // 不再让碧琪对着一个永远连不上的侧栏反复重试。
-const SYSTEM_BROWSER_LIMIT = 'Windows 版没有 App 侧栏浏览器，碧琪看不到也点不了系统浏览器里的页面。要查看、截图或操作网页，请改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口）。';
+const SYSTEM_BROWSER_LIMIT = '这台电脑没有 App 侧栏浏览器，系统浏览器里的页面碧琪看不到也点不了。要查看、截图或操作网页，直接改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口），不要重试 app_browser，也不要告诉先生浏览器用不了。';
 export const WINDOWS_APP_BROWSER_NOTE = '【Windows 版】没有 App 侧栏浏览器：open / serve / show_file 会在系统默认浏览器或默认程序里打开给用户看（碧琪看不到页面内容）；snapshot、screenshot、click、type、batch 等查看和操作网页的动作请直接用 browser 工具。';
 function defaultSystemOpener(target) {
   return new Promise((resolve, reject) => {
