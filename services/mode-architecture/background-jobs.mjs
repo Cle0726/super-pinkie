@@ -86,14 +86,26 @@ export class BackgroundJobs {
   get jobs() { return this.shared.jobs; }
 
   // before_tool_call：后台命令还在跑、又连着第二次「等」→ 拦下，改成等待清单。干别的就清零。
+  // 刚放到后台、中间一件别的事都没做就去等，第一次也拦（11-04 隔离实测 routes-m R-ad 两遍都是
+  // exec 转后台 → 紧接着 poll，评审两遍都扣「干等」）。
   beforeTool(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
     if (!SESSION_KEY.test(sessionKey) || /^agent:unrestricted:/.test(sessionKey) || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return null;
     const shared = this.shared;
     shared.waitStreak ||= new Map();
+    shared.idleSinceStart ||= new Map();
     const running = this.runningFor(sessionKey);
     const name = String(event.toolName || '').toLowerCase();
-    if (!running.length || !waitingCall(name, event.params || {})) { shared.waitStreak.delete(sessionKey); return null; }
+    const waiting = waitingCall(name, event.params || {});
+    if (!waiting) shared.idleSinceStart.delete(sessionKey);
+    if (!running.length || !waiting) { shared.waitStreak.delete(sessionKey); return null; }
+    const startedJob = shared.idleSinceStart.get(sessionKey);
+    if (startedJob && running.some((job) => job.id === startedJob)) {
+      shared.idleSinceStart.delete(sessionKey);
+      shared.waitStreak.set(sessionKey, 1);
+      return {block: true, blockReason: waitNudge(running, shared.kinds?.get(sessionKey) || [], this.now())};
+    }
+    shared.idleSinceStart.delete(sessionKey);
     const streak = (shared.waitStreak.get(sessionKey) || 0) + 1;
     shared.waitStreak.set(sessionKey, streak);
     if (streak < 2 || streak > MAX_BLOCKED_WAITS + 1) return null;
@@ -115,6 +127,7 @@ export class BackgroundJobs {
         state: 'running', startedAt: this.now(), endedAt: 0, seenByAgent: false, woke: false,
       };
       this.jobs.set(job.id, job);
+      (this.shared.idleSinceStart ||= new Map()).set(sessionKey, job.id);
       this.ensureTimer();
       return job;
     }

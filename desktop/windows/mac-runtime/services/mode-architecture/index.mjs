@@ -1456,6 +1456,32 @@ function replyDeliveredKinds(reply = '') {
   return [...kinds];
 }
 
+// 提醒里附上工具记录能证实的来路。11-04 routes-m R-ad：画面和配乐是 Python urllib 从图库下的，
+// 只收到「说清从哪来」的提醒，它凭印象写成了「产品样图为 AI 生成、配乐为无版权合成」。
+const DOWNLOAD_CALL = /(?:\bcurl\b|\bwget\b|urlretrieve|urlopen|requests\.get|httpx\.get|\bfetch\(|aria2c|yt-dlp)/i;
+function assetProvenance(state) {
+  const hosts = new Set();
+  const voices = new Set();
+  for (const entry of state.tools || []) {
+    if (entry.failed) continue;
+    const text = [entry.params?.command, entry.params?.cmd, entry.params?.content].filter(Boolean).join('\n');
+    if (!text) continue;
+    if (DOWNLOAD_CALL.test(text)) {
+      for (const match of text.matchAll(/https?:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?=[/:'"\s?]|$)/gi)) {
+        const host = match[1].toLowerCase();
+        if (!/^(?:localhost|127\.|0\.0\.0\.0)/.test(host)) hosts.add(host);
+      }
+    }
+    if (/\bedge-tts\b/.test(text)) voices.add('edge-tts');
+    if (/\bsay\s+-v\b|['"]say['"]\s*,\s*['"]-v/.test(text)) voices.add('macOS 自带的 say');
+    if (/\bpiper\b/.test(text)) voices.add('piper');
+  }
+  const facts = [];
+  if (hosts.size) facts.push(`从 ${[...hosts].slice(0, 4).join('、')} 下载过素材`);
+  if (voices.size) facts.push(`配音用 ${[...voices].join('、')} 在本机合成`);
+  return facts.length ? `工具记录里能看到：${facts.join('；')}。照这些如实写，没生成成功的不要写成 AI 生成` : '';
+}
+
 function sourceDisclosureReason(state, reply = '') {
   if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))
       && !replyDeliveredKinds(reply).includes('视频')) return '';
@@ -1464,7 +1490,8 @@ function sourceDisclosureReason(state, reply = '') {
   const madeAssets = state.tools.some(entry => !entry.failed && (ASSET_MAKING_TOOL.test(String(entry.name || ''))
     || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
   if (!madeAssets && USER_SUPPLIED_MEDIA.test(String(state.prompt || ''))) return '';
-  return '交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」';
+  const facts = assetProvenance(state);
+  return `交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」${facts ? `。${facts}` : ''}`;
 }
 
 // 回复最后说「这就去做」却就此结束：预告不等于做了。
@@ -2378,6 +2405,13 @@ function internalControlText(value = '') {
 // 它们不是用户的新要求，不能拿来重新判活儿种类（11-02 隔离实测：生图失败通知把视频活判成简单问答，
 // 「Before accepting … apply this revision request」把查 iPhone 版本判成 App 活；r4：长任务压缩上下文前的
 // 「Pre-compaction memory flush」把海报、视频判成简单问答）。心跳轮同理。
+// 运行时自己的整理轮：压缩前把要点写进记忆（钩子 ctx.trigger === 'memory'）。不属于正在做的那件活。
+const HOUSEKEEPING_TURN = /Pre-compaction memory flush\b/;
+function housekeepingTurn(event = {}, ctx = {}, prompt = '') {
+  return String(ctx.trigger || event.trigger || '') === 'memory'
+    || HOUSEKEEPING_TURN.test(`${event.prompt || ''}\n${prompt || ''}`);
+}
+
 function runtimeTurnText(value = '') {
   const text = String(value || '').trimStart();
   return /^(?:A background task completed\.|Continue the OpenClaw runtime event\b|Before accepting the previous final answer, apply this revision request|\[Internal task completion event\]|Pre-compaction memory flush\b|Read HEARTBEAT\.md if it exists)/.test(text)
@@ -2774,6 +2808,8 @@ export class CleKkSupervisor {
     this.logger = logger;
     this.turns = new Map();
     this.orphaned = new Map();
+    // 运行时自己开的整理轮（压缩前写记忆、心跳）插进一件还没交付完的活时：run id -> 会话。
+    this.housekeepingRuns = new Map();
     // OpenClaw's tool hooks may omit ctx.sessionKey even though the matching
     // agent/model hooks include it. Bind the provider run id to its owning
     // parent session so real tool evidence is never stranded under a run-id
@@ -2928,7 +2964,14 @@ export class CleKkSupervisor {
     };
   }
 
+  isHousekeepingRun(event = {}, ctx = {}) {
+    const runId = String(ctx.runId || event.runId || '');
+    return Boolean(runId && this.housekeepingRuns.has(runId))
+      || String(ctx.trigger || event.trigger || '') === 'memory';
+  }
+
   beforeTool(event = {}, ctx = {}) {
+    if (this.isHousekeepingRun(event, ctx)) return;
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
     const toolCallId = String(event.toolCallId || ctx.toolCallId || '');
@@ -2954,6 +2997,7 @@ export class CleKkSupervisor {
   }
 
   finalizeDecision(event = {}, ctx = {}, options = {}) {
+    if (this.isHousekeepingRun(event, ctx)) return;
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
     return this.remindOnce(this.integrity.finalize(bound.event, bound.ctx, options), bound.event, bound.ctx);
@@ -3118,6 +3162,18 @@ export class CleKkSupervisor {
     // still-live harness (or its remaining tool evidence would be discarded).
     const inboundUserMessage = event.__pinkieInboundUserMessage === true;
     let turn = this.turns.get(key) || this.restore(key);
+    // 11-04 隔离实测 routes-m R-ad：交付被提醒退回、续跑还在排队时，运行时先插了一轮「压缩前写记忆」
+    // （记录里只显示 Continue the OpenClaw runtime event.）。这一轮被当成先生的新消息，整件活的工具记录
+    // 被清空；随后的续跑只看到 ls / ffprobe，误报「做完之后没有亲自看过成品」，把剩下的时间耗光。
+    // 整理轮不动正在做的那件活的记录，它自己的工具、收尾也不算进来。
+    const housekeepingRunId = String(ctx.runId || event.runId || '');
+    if (housekeepingRunId && housekeepingTurn(event, ctx, prompt)) {
+      this.housekeepingRuns.set(housekeepingRunId, key);
+      while (this.housekeepingRuns.size > 256) this.housekeepingRuns.delete(this.housekeepingRuns.keys().next().value);
+      return;
+    }
+    // 真正的一轮开始了：这个会话之前没收尾的整理轮标记作废，免得一直挡着这个会话的交付检查。
+    for (const [runId, sessionKey] of this.housekeepingRuns) if (sessionKey === key) this.housekeepingRuns.delete(runId);
     const backgroundResult = workFirstContext(ctx) && turn?.waitingBackground && workFirstBackgroundResult(prompt);
     const control = internalControlText(prompt) || backgroundResult;
     if (backgroundResult) turn.waitingBackground = false;
@@ -3139,7 +3195,8 @@ export class CleKkSupervisor {
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
     const incomingRunId = String(ctx.runId || event.runId || '');
-    const distinctUserTurn = !control && turn && prompt && (
+    // 运行时开的别的内部轮（后台任务完成、运行时事件）接着同一件活，不是先生的新要求。
+    const distinctUserTurn = !control && turn && prompt && !runtimeTurnText(prompt) && (
       turn.corrupted
       || (Boolean(turn.prompt) && (
         prompt !== turn.prompt
@@ -3234,6 +3291,7 @@ export class CleKkSupervisor {
   }
 
   afterTool(event = {}, ctx = {}) {
+    if (this.isHousekeepingRun(event, ctx)) return;
     const bound = this.boundContext(event, ctx);
     if (!bound) return;
     const {sessionKey: key} = bound;
@@ -3259,6 +3317,7 @@ export class CleKkSupervisor {
   }
 
   recordFinalize(event = {}, ctx = {}, decision) {
+    if (this.isHousekeepingRun(event, ctx)) return decision;
     const key = this.key(event, ctx);
     if (!key) return decision;
     let turn = this.turns.get(key);
@@ -3324,7 +3383,9 @@ export class CleKkSupervisor {
     // 只有真正通过门禁的终稿，或明确告诉用户“尚未完成/被阻塞”的诚实
     // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
     // 静默改成成功，否则下一轮又会失去续接依据。
-    if (reply && !internalControlText(reply)) {
+    // NO_REPLY / HEARTBEAT_OK 先生看不到，不是对被退回那一版的回答：不能把待续跑的提醒清掉。
+    const silentReply = /^(?:NO_REPLY|HEARTBEAT_OK)$/i.test(reply);
+    if (reply && !internalControlText(reply) && !(silentReply && hadPending)) {
       if (hadPending && !turn.reminded && isLikelyActionRequest(turn.prompt)
         && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !explicitIncomplete) {
         this.persist(key, turn);
@@ -3422,6 +3483,10 @@ export class CleKkSupervisor {
     const text = visibleAssistantText(message);
     if (!text || /^(?:toolUse|tool_use)$/i.test(String(message.stopReason || ''))) return;
     if (internalControlText(text)) return {block: true};
+    // 写记录这一步拿不到 run id：整理轮正在跑的会话，这条（通常是 NO_REPLY）不当交付，也不拦。
+    const writingSession = this.key({}, ctx);
+    if (this.isHousekeepingRun(event, ctx)
+        || (writingSession && [...this.housekeepingRuns.values()].includes(writingSession))) return;
     // The model transcript can be persisted before OpenClaw's finalize hook
     // runs. Re-evaluate the cheap, deterministic gate here so a false
     // completion cannot enter JSONL even when the host ignores a revision
@@ -3507,6 +3572,11 @@ export class CleKkSupervisor {
   }
 
   end(event = {}, ctx = {}) {
+    const housekeepingRunId = String(ctx.runId || event.runId || '');
+    if (housekeepingRunId && this.housekeepingRuns.has(housekeepingRunId)) {
+      this.housekeepingRuns.delete(housekeepingRunId);
+      return false;
+    }
     const key = this.key(event, ctx);
     if (!key) return true;
     const turn = this.turns.get(key);

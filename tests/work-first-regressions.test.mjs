@@ -138,3 +138,67 @@ test('background cleanup may stay silent without the fragment nudge', t => {
   for (let i=0;i<3;i++) guard.afterTool({toolName:'read',toolCallId:`read-${i}`,params:{path:`/tmp/notes-${i}`},result:'notes'},ctx);
   assert.equal(guard.finalize({lastAssistantMessage:'NO_REPLY'},ctx,{verifyExternal:false}),undefined);
 });
+
+test('a pre-compaction memory flush between a rejected delivery and its retry keeps the task evidence', t => {
+  // 11-04 routes-m R-ad: the delivery was sent back for its sources; before the retry ran, the runtime
+  // inserted a memory-flush turn (transcript: "Continue the OpenClaw runtime event."). It was taken for a new
+  // user message, the evidence window was wiped, and the retry was then told it never looked at the video.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-flush-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const flushCtx of [{trigger: 'memory'}, {}]) {
+    const key = `agent:thinking:flush-${flushCtx.trigger || 'prompt-only'}`;
+    const ctx = {agentId: 'thinking', sessionKey: key, runId: 'deliver'};
+    const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog(path.join(root, `audit-${flushCtx.trigger || 'p'}`)), integrity: new CompletionIntegrityGuard()});
+    supervisor.begin({prompt: '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我'}, ctx);
+    const video = path.join(root, `ad-${flushCtx.trigger || 'p'}.mp4`);
+    supervisor.beforeTool({toolName: 'exec', toolCallId: 'dl', runId: 'deliver', params: {command: 'python3 -c "import urllib.request; urllib.request.urlretrieve(\'https://images.unsplash.com/photo-1\', \'assets/cup.jpg\')"'}}, ctx);
+    supervisor.afterTool({toolName: 'exec', toolCallId: 'dl', runId: 'deliver', params: {command: 'python3 -c "import urllib.request; urllib.request.urlretrieve(\'https://images.unsplash.com/photo-1\', \'assets/cup.jpg\')"'}, result: 'ok'}, ctx);
+    supervisor.beforeTool({toolName: 'exec', toolCallId: 'render', runId: 'deliver', params: {command: `ffmpeg -y -i frames/%04d.png "${video}"`}}, ctx);
+    fs.writeFileSync(video, 'mp4');
+    supervisor.afterTool({toolName: 'exec', toolCallId: 'render', runId: 'deliver', params: {command: `ffmpeg -y -i frames/%04d.png "${video}"`}, result: 'ok'}, ctx);
+    supervisor.afterTool({toolName: 'exec', toolCallId: 'look', runId: 'deliver', params: {command: `look-video "${video}" 12`}, result: 'ok'}, ctx);
+    supervisor.afterTool({toolName: 'read', toolCallId: 'see', runId: 'deliver', params: {path: video.replace(/\.mp4$/, '.preview.png')}, result: 'image'}, ctx);
+    const delivered = {lastAssistantMessage: `广告已经剪好，可以直接发抖音。\n\nMEDIA:${video}`};
+    const rejected = supervisor.recordFinalize(delivered, ctx, supervisor.finalizeDecision(delivered, ctx, {verifyExternal: false}));
+    assert.equal(rejected?.action, 'revise');
+    assert.match(rejected.reason, /素材从哪来/);
+    assert.match(rejected.reason, /images\.unsplash\.com/, 'the reminder names the download it can see');
+
+    // The runtime's own memory flush. before_message_write carries no run id.
+    const flush = {...ctx, ...flushCtx, runId: 'flush'};
+    supervisor.begin({prompt: flushCtx.trigger ? 'Continue the OpenClaw runtime event.' : 'Pre-compaction memory flush. Store durable memories now.'}, flush);
+    supervisor.afterTool({toolName: 'write', toolCallId: 'mem', runId: 'flush', params: {path: 'memory/2026-11-04.md', content: '- 桂花拿铁广告'}, result: 'Appended'}, flush);
+    supervisor.beforeMessageWrite({message: {role: 'assistant', stopReason: 'stop', content: [{type: 'text', text: 'NO_REPLY'}]}}, {sessionKey: key});
+    supervisor.recordFinalize({lastAssistantMessage: 'NO_REPLY'}, flush, supervisor.finalizeDecision({lastAssistantMessage: 'NO_REPLY'}, flush, {verifyExternal: false}));
+    assert.equal(supervisor.end({success: true, messages: [{role: 'assistant', stopReason: 'stop', content: 'NO_REPLY'}]}, flush), false);
+    assert.ok(supervisor.hasPending(key), 'the rejected delivery still waits for its retry');
+    const state = supervisor.integrity.runs.get(key);
+    assert.ok(state.tools.some(entry => /look-video/.test(String(entry.params?.command || ''))), 'evidence survives the flush');
+    assert.ok(!state.tools.some(entry => entry.name === 'write'), 'the flush\'s own memory write is not task evidence');
+
+    // The retry: adds the sources and is accepted without a false "never looked at it".
+    const retry = {...ctx, runId: 'retry'};
+    supervisor.begin({prompt: '⁣[pinkie-watchdog] 交付前提醒（只提醒这一次）：交付的视频没说清素材从哪来。'}, retry);
+    supervisor.afterTool({toolName: 'exec', toolCallId: 'probe', runId: 'retry', params: {command: `ffprobe "${video}"`}, result: 'Duration: 00:00:15'}, retry);
+    const fixed = {lastAssistantMessage: `广告已经剪好。画面是从 Unsplash 图库下载的（可免费商用），配乐来自免版税曲库，配音是本机语音合成；换成你们店的实拍再发更好。\n\nMEDIA:${video}`};
+    assert.notEqual(supervisor.finalizeDecision(fixed, retry, {verifyExternal: false})?.action, 'revise');
+  }
+});
+
+test('a runtime-event turn continues an open task instead of opening a new evidence window', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-runtime-event-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const key = 'agent:project:runtime-event';
+  const ctx = {agentId: 'project', sessionKey: key, runId: 'one'};
+  const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog(root), integrity: new CompletionIntegrityGuard()});
+  supervisor.begin({prompt: '帮我做一份 8 页左右的 PPT，出 pptx 文件给我'}, ctx);
+  supervisor.afterTool({toolName: 'exec', toolCallId: 'build', runId: 'one', params: {command: 'python3 build_deck.py'}, result: 'ok'}, ctx);
+  const draft = {lastAssistantMessage: 'PPT 已经做好了，共 8 页。'};
+  supervisor.recordFinalize(draft, ctx, {action: 'revise', reason: '全局交付真实性门禁：本轮做出了演示文稿，但做完之后没有亲自看过'});
+  assert.ok(supervisor.hasPending(key));
+  supervisor.begin({prompt: 'Continue the OpenClaw runtime event.'}, {...ctx, runId: 'event'});
+  assert.ok(supervisor.integrity.runs.get(key).tools.some(entry => entry.name === 'exec'), 'evidence kept');
+  // A genuinely new request from 先生 still opens a fresh window.
+  supervisor.begin({prompt: '再帮我写一段开业致辞'}, {...ctx, runId: 'two'});
+  assert.equal(supervisor.integrity.runs.get(key)?.tools.length || 0, 0);
+});
