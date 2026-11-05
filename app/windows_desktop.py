@@ -772,16 +772,33 @@ function Write-StartupFailure($Record) {
   } catch {}
 }
 function Restore-PreviousVersion {
-  for ($attempt = 0; $attempt -lt 40; $attempt++) {
-    try {
-      if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
-        if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Force }
-        Move-Item -LiteralPath $Backup -Destination $Target -Force
+  # Never delete the exe the user clicks. Rename a failed new file aside, put
+  # the previous exe back on that same path, and only then delete the failed
+  # one. If the previous exe cannot return, put the failed file back so the
+  # desktop shortcut never points at nothing.
+  $failed = $null
+  if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
+    if (Test-Path -LiteralPath $Target) {
+      $failed = $Target + '.failed-' + $Token
+      if (Test-Path -LiteralPath $failed) { Remove-Item -LiteralPath $failed -Force -ErrorAction SilentlyContinue }
+      for ($attempt = 0; $attempt -lt 40; $attempt++) {
+        try { Move-Item -LiteralPath $Target -Destination $failed -Force; break }
+        catch { if ($attempt -eq 39) { throw }; Start-Sleep -Milliseconds 250 }
       }
-      break
-    } catch {
-      if ($attempt -eq 39) { throw }
-      Start-Sleep -Milliseconds 250
+    }
+    $restored = $false
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+      try { Move-Item -LiteralPath $Backup -Destination $Target -Force; $restored = $true; break }
+      catch { if ($attempt -eq 39) { break }; Start-Sleep -Milliseconds 250 }
+    }
+    if (-not $restored -or -not (Test-Path -LiteralPath $Target)) {
+      if (-not (Test-Path -LiteralPath $Target) -and $failed -and (Test-Path -LiteralPath $failed)) {
+        try { Move-Item -LiteralPath $failed -Destination $Target -Force } catch {}
+      }
+      throw 'previous version is missing after rollback'
+    }
+    if ($failed -and (Test-Path -LiteralPath $failed)) {
+      Remove-Item -LiteralPath $failed -Force -ErrorAction SilentlyContinue
     }
   }
   if (Test-Path -LiteralPath $Target) { Start-Process -FilePath $Target | Out-Null }
@@ -809,6 +826,7 @@ try {
   $startDeadline = (Get-Date).AddSeconds($StartSeconds)
   $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
   $started = $false
+  $ready = $false
   while (-not (Test-Path -LiteralPath $HealthMarker)) {
     $launched.Refresh()
     if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
@@ -821,19 +839,33 @@ try {
     if ($started -and (Get-Date) -ge $readyDeadline) { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it"; break }
     Start-Sleep -Milliseconds 500
   }
-  Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
-  Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
-  Write-UpdateLog 'update completed'
+  if (Test-Path -LiteralPath $HealthMarker) { $ready = $true }
+  # The previous exe stays until this one has actually reported ready. A slow
+  # or invisible start must not erase the only copy on the desktop.
+  if ($ready -and (Test-Path -LiteralPath $Target)) {
+    Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
+      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
+    Write-UpdateLog 'update completed'
+  } else {
+    Write-UpdateLog 'previous executable kept until the new version is ready'
+  }
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
   Write-UpdateFailure $_.Exception.Message
   if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
-    try { Restore-PreviousVersion } catch { Write-UpdateLog "rollback failed: $($_.Exception.Message)" }
+    try { Restore-PreviousVersion }
+    catch {
+      Write-UpdateLog "rollback failed: $($_.Exception.Message)"
+      try {
+        Add-Type -AssemblyName PresentationFramework
+        [void][System.Windows.MessageBox]::Show("新版没有装上，原来的程序也没能自动放回去。请到原来的位置找带 previous 的文件，把它改回原来的名字就能继续用。`n`n$($_.Exception.Message)", '超級碧琪更新', 'OK', 'Warning')
+      } catch {}
+    }
   } else {
     Write-StartupFailure $_
   }
@@ -917,7 +949,7 @@ $title.Text = if ($Version) { "碧琪正在更新到 $Version" } else { '碧琪�
 $line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'; $line.Text = '正在准备…'
 $bar = New-Object Windows.Controls.ProgressBar; $bar.Height = 8; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Margin = '0,12,0,8'
 $hint = New-Object Windows.Controls.TextBlock; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'
-$hint.Text = '更新完成后碧琪会自动打开，请不要关机。记忆和设置不会丢。'
+$hint.Text = '请不要点击桌面上的碧琪，也不要关机。换好后会自己打开。记忆和设置不会丢。'
 foreach ($node in @($title, $line, $bar, $hint)) { [void]$panel.Children.Add($node) }
 $window.Content = $panel
 $started = Get-Date
@@ -930,10 +962,14 @@ $timer.Add_Tick({
     $data = Get-Content -LiteralPath $Status -Raw -Encoding UTF8 | ConvertFrom-Json
     $line.Text = "第 $($data.step)/$($data.total) 步：$($data.text)（已用 $seconds 秒）"
     $bar.Value = [Math]::Min(100, [double]$data.step / [double]$data.total * 100)
-    if ($data.state -ne 'running' -and -not $script:closeAt) { $script:closeAt = (Get-Date).AddSeconds(4) }
   } catch {}
+  # Stay up until the replacer itself exits. Closing when the status flips
+  # made people click the desktop icon while the exe was still being moved,
+  # and Windows then said the program had been deleted.
+  $ownerAlive = $false
+  try { $ownerAlive = [bool](Get-Process -Id $Owner -ErrorAction SilentlyContinue) } catch {}
+  if (-not $ownerAlive -and -not $script:closeAt) { $script:closeAt = (Get-Date).AddSeconds(8) }
   if ($script:closeAt -and (Get-Date) -ge $script:closeAt) { $window.Close() }
-  if (-not $script:closeAt -and -not (Get-Process -Id $Owner -ErrorAction SilentlyContinue)) { $script:closeAt = (Get-Date).AddSeconds(2) }
   if ($seconds -gt 1200) { $window.Close() }
 })
 $timer.Start()
@@ -1079,6 +1115,10 @@ function Confirm-NewInstallGateway {
   }
 }
 function Restore-PreviousVersion {
+  # Put the previous folder back BEFORE deleting anything. Deleting the new
+  # copy first left the desktop path empty: the shortcut said the program had
+  # been deleted, and a failed move then removed the only remaining exe.
+  $failed = $null
   if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
     if (Test-Path -LiteralPath $TargetDir) {
       # Move the failed copy aside instead of deleting it in place: a rename
@@ -1086,9 +1126,18 @@ function Restore-PreviousVersion {
       # never be left where the user starts the App.
       $failed = $TargetDir.TrimEnd('\') + '.failed-' + $Token
       Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
+    }
+    try {
+      Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
+    } catch {
+      if (-not (Test-Path -LiteralPath $TargetDir) -and $failed -and (Test-Path -LiteralPath $failed)) {
+        try { Move-Item -LiteralPath $failed -Destination $TargetDir -Force } catch {}
+      }
+      throw
+    }
+    if ((Test-Path -LiteralPath $TargetExe) -and $failed) {
       Remove-Item -LiteralPath $failed -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
   }
   Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
@@ -1180,8 +1229,10 @@ try {
     if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) {
       $started = $true
       Write-UpdateLog 'new version started; waiting for its gateway'
-      # The new window is open now and shows its own first-start progress.
-      Set-UpdateProgress 5 '新版本已经打开，正在完成首次启动' 'done'
+      # .started only means the process is up. The window may still be coming.
+      # Telling people it is already open made them click the desktop icon
+      # while the folder was still being swapped.
+      Set-UpdateProgress 5 '新版本正在打开，请不要点击桌面上的图标' 'running'
     }
     if (-not $started -and (Get-Date) -ge $startDeadline) {
       & taskkill.exe /PID $launched.Id /T /F | Out-Null
@@ -1192,16 +1243,21 @@ try {
     if ($started -and (Get-Date) -ge $readyDeadline) { break }
     Start-Sleep -Milliseconds 500
   }
-  if ($ready) { Confirm-NewInstallGateway }
-  else { Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it" }
-  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
-  Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
-  Write-UpdateLog 'portable update completed'
+  if ($ready -and (Test-Path -LiteralPath $TargetExe)) {
+    Confirm-NewInstallGateway
+    Set-UpdateProgress 5 '新版已经打开' 'done'
+    Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $UpdateRoot -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
+      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
+    Write-UpdateLog 'portable update completed'
+  } else {
+    Write-UpdateLog "new version is still starting after $ReadySeconds s; keeping it"
+    Write-UpdateLog 'previous folder kept until the new version is ready'
+  }
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
   Set-UpdateProgress 5 '这次没装上，正在恢复原来的版本' 'failed'
@@ -2907,10 +2963,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # below, and the new version would show the old one's page.
     gateway.retire_stale()
     if update_health_token:
-        # Report "started" before the per-version setup and the cold gateway
-        # start, which together can outlast an old replacer's 120 s budget.
+        # The object is created now, but .started is written only after the
+        # window exists. Writing it earlier made the replacer delete the
+        # previous copy while this window had not opened yet.
         updater.health_reporter = UpdateHealthReporter(update_health_token, runtime.node)
-        updater.health_reporter.start()
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
@@ -2923,6 +2979,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
+    if update_health_token and updater.health_reporter is not None:
+        # Old replacers only wait 120 s, so this still happens before setup
+        # and the cold gateway. It just no longer happens before a window exists.
+        updater.health_reporter.start()
     services = LocalServices(runtime)
 
     def loaded(*_):
@@ -2947,9 +3007,17 @@ def run_desktop(resource_root, prepare, update_health_token=None):
                 append_log("launcher", f"native {label} setup failed: {error}")
 
     def bootstrap():
+        # Setup can fail or take a long time. The splash only leaves when the
+        # gateway answers, so a setup error must not skip starting it.
         try:
             prepare(lambda message: append_log("setup", message))
+        except Exception as error:
+            append_log("launcher", f"startup setup failed: {error}")
+        try:
             services.start()
+        except Exception as error:
+            append_log("launcher", f"local services failed: {error}")
+        try:
             reporter = getattr(updater, "health_reporter", None)
             if reporter is not None:
                 # An old replacer may still be checking the gateway port.
@@ -2961,7 +3029,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             # pywebview window APIs from this worker thread: WebView2 can block
             # its GUI message pump when load_url/evaluate_js crosses threads.
         except Exception as error:
-            append_log("launcher", f"startup failed: {error}")
+            append_log("launcher", f"gateway start failed: {error}")
 
     def sync_window_state(maximized):
         bridge.maximized = bool(maximized)

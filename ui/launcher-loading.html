@@ -44,18 +44,26 @@
     const updated = new URLSearchParams(location.search).get("updated") || "";
     if (updated && status) status.textContent = "更新已装好，正在打开新版本…";
     const probe = async () => {
+      // A socket that accepts TCP and never writes HTTP (the update
+      // placeholder holds 18789 that way) makes fetch wait for the browser
+      // timeout. One hung probe used to freeze this page on “正在启动本机网关”
+      // even after the real gateway came up. Abort and try again.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
       try {
         // Any HTTP response (including an auth response) means the listener
         // exists. Navigation happens inside WebView2's own UI thread, avoiding
         // cross-thread load_url calls that can make the window appear hung.
         // file:// -> http:// is cross-origin. Without no-cors, a healthy
         // Gateway response is rejected by CORS and the splash waits forever.
-        await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors" });
+        await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors", signal: controller.signal });
+        clearTimeout(timer);
         // The gateway root is the upstream control-console overview. CLE Kk
         // always enters through the themed chat route after the movie.
         location.replace("http://127.0.0.1:18789/chat");
         return;
       } catch (_) {
+        clearTimeout(timer);
         elapsed += 1;
         if (status) status.textContent = updated
           ? (elapsed < 180
