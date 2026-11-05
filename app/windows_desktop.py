@@ -425,6 +425,7 @@ class WindowsUpdater:
     # started at all, then (while it keeps running) to report its gateway.
     health_start_seconds = 120
     health_ready_seconds = 900
+    swap_seconds = 90
 
     def __init__(self, resource_root, opener=None, executable=None):
         self.current_version = app_version(resource_root)
@@ -1114,6 +1115,27 @@ function Confirm-NewInstallGateway {
     }
   }
 }
+function Copy-PreviousVersion {
+  # Fallback when the previous folder cannot be renamed back. Returns $true
+  # only when a complete copy (with its exe) is in place at $TargetDir.
+  if (Test-Path -LiteralPath $TargetDir) { return $false }
+  $copying = $TargetDir.TrimEnd('\') + '.restoring-' + $Token
+  try {
+    Remove-Item -LiteralPath $copying -Recurse -Force -ErrorAction SilentlyContinue
+    & robocopy.exe $Backup $copying /E /COPY:DAT /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+    $code = $LASTEXITCODE
+    if ($code -ge 8) { throw "robocopy exit code $code" }
+    if (-not (Test-Path -LiteralPath (Join-Path $copying (Split-Path -Leaf $TargetExe)) -PathType Leaf)) { throw 'copied version has no exe' }
+    # The copy was made beside the target; this rename touches only new files.
+    Invoke-WithRetry { Move-Item -LiteralPath $copying -Destination $TargetDir } 'copied previous version' 30
+    Write-UpdateLog "previous version restored by copy; the original stays at $Backup"
+    return $true
+  } catch {
+    Write-UpdateLog "copying the previous version failed: $($_.Exception.Message)"
+    Remove-Item -LiteralPath $copying -Recurse -Force -ErrorAction SilentlyContinue
+    return $false
+  }
+}
 function Restore-PreviousVersion {
   # Put the previous folder back BEFORE deleting anything. Deleting the new
   # copy first left the desktop path empty: the shortcut said the program had
@@ -1128,12 +1150,18 @@ function Restore-PreviousVersion {
       Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
     }
     try {
-      Invoke-WithRetry { Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
+      Invoke-WithRetry { try { Stop-InstallProcesses $Backup } catch {}; Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
     } catch {
-      if (-not (Test-Path -LiteralPath $TargetDir) -and $failed -and (Test-Path -LiteralPath $failed)) {
-        try { Move-Item -LiteralPath $failed -Destination $TargetDir -Force } catch {}
+      Write-UpdateLog "rename back failed, copying the previous version instead: $($_.Exception.Message)"
+      # A scanner, indexer or a stray child process can keep a handle in the
+      # previous folder for minutes, which blocks a rename but not reading.
+      # Copying it back leaves the user a working App on the same path.
+      if (-not (Copy-PreviousVersion)) {
+        if (-not (Test-Path -LiteralPath $TargetDir) -and $failed -and (Test-Path -LiteralPath $failed)) {
+          try { Move-Item -LiteralPath $failed -Destination $TargetDir -Force } catch {}
+        }
+        throw
       }
-      throw
     }
     if ((Test-Path -LiteralPath $TargetExe) -and $failed) {
       Remove-Item -LiteralPath $failed -Recurse -Force -ErrorAction SilentlyContinue
@@ -1362,6 +1390,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-Version", str(self.prepared["version"]),
                     "-StartSeconds", str(int(self.health_start_seconds)),
                     "-ReadySeconds", str(int(self.health_ready_seconds)),
+                    "-SwapSeconds", str(int(self.swap_seconds)),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous-" + token + self.executable.suffix)

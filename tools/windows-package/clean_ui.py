@@ -50,6 +50,10 @@ def check_package(root):
     blocked = set(RETIRED_FILES)
     if not (root / "_internal/installer/windows/apply-theme.ps1").is_file():
         raise ValueError("the packaged Windows installer is missing")
+    # The window falls back to this page while the gateway starts or fails;
+    # run_desktop() loads it from the onedir resource root (_internal).
+    if not (root / "_internal/ui/launcher-loading.html").is_file():
+        raise ValueError("the packaged startup page _internal/ui/launcher-loading.html is missing")
     for index in root.rglob("control-ui/index.html"):
         check_inline_scripts(index)
     for file in root.rglob("*"):
