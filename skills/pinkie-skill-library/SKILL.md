@@ -1,6 +1,6 @@
 ---
 name: pinkie-skill-library
-description: 碧琪自带的 125 个现成技能的目录（视频短片、动效、海报封面、小红书、logo 品牌、PPT、信息图、网页界面、GIF、排错、写计划……）。要做出一件成品、而系统这条消息没有给你配好技能时，先读这份目录挑最合适的一个。
+description: 碧琪自带的 161 个现成技能的目录（视频短片、动效、海报封面、小红书、logo 品牌、PPT、信息图、网页界面、GIF、排错、写计划……）。要做出一件成品、而系统这条消息没有给你配好技能时，先读这份目录挑最合适的一个。
 ---
 
 # 碧琪自带的现成技能
@@ -139,3 +139,39 @@ description: 碧琪自带的 125 个现成技能的目录（视频短片、动�
 | game-balance-check | 游戏数值平衡 | `../game-balance-check/SKILL.md` |
 | pdf | PDF：生成、读取、检查（渲染成图片看排版） | `../pdf/SKILL.md` |
 | genai-mesh-gradient | 渐变背景：网页、PPT、品牌视觉 | `../genai-mesh-gradient/SKILL.md` |
+| huashu-design | 92 种带样张的设计风格：网页、App 原型、可编辑 PPT、信息图、小红书图文 | `../huashu-design/SKILL.md` |
+| kami | 纸面排版模板：简历、一页纸、推荐信、财报点评、幻灯片，出 PDF / PNG / PPT | `../kami/SKILL.md` |
+| poster-studio | 乔木画布：小红书封面、知识卡片、社媒海报工作台 | `../poster-studio/SKILL.md` |
+| cover-xiaohongshu | 小红书封面样图和排版库 | `../cover-xiaohongshu/SKILL.md` |
+| baoyan-poster | 讲座 / 分享会 / 宣讲会海报：改 YAML 出 54 套配色的可编辑 PPTX | `../baoyan-poster/SKILL.md` |
+| cuhk-poster | 香港中文大学海报模板 | `../cuhk-poster/SKILL.md` |
+| paper2poster | 把论文生成学术海报 | `../paper2poster/SKILL.md` |
+| jinba-pptx | 咨询公司风格的可编辑 PPT | `../jinba-pptx/SKILL.md` |
+| academic-pptx | 学术会议、研讨会幻灯片 | `../academic-pptx/SKILL.md` |
+| claude-pptx-skills | 19 个幻灯片母版和版式技能 | `../claude-pptx-skills/SKILL.md` |
+| editable-pptx | 分层、可编辑形状的 PowerPoint | `../editable-pptx/SKILL.md` |
+| polished-slides | 把幻灯片做成设计师级版式 | `../polished-slides/SKILL.md` |
+| image-to-pptx | 图片、框架图转成可编辑 PPT | `../image-to-pptx/SKILL.md` |
+| md-wechat | 公众号 Markdown 排版，26 套主题 | `../md-wechat/SKILL.md` |
+| md2wechat-lite | Markdown 转公众号排版 | `../md2wechat-lite/SKILL.md` |
+| billryan-resume | 英文 LaTeX 简历模板 | `../billryan-resume/SKILL.md` |
+| resume-chinese | 中文 LaTeX 简历模板 | `../resume-chinese/SKILL.md` |
+| king-of-pigeon | 计算机保研简历和文书模板 | `../king-of-pigeon/SKILL.md` |
+| latex-templates | 学位论文和简历 LaTeX 模板合集 | `../latex-templates/SKILL.md` |
+| easy-paper | 开箱即用的 Typst 中文论文模板 | `../easy-paper/SKILL.md` |
+| hust-typst | 华中科技大学毕业论文 Typst 模板 | `../hust-typst/SKILL.md` |
+| pkuthss-typst | 北京大学学位论文 Typst 模板 | `../pkuthss-typst/SKILL.md` |
+| bupt-typst | 北京邮电大学毕设 Typst 模板 | `../bupt-typst/SKILL.md` |
+| sjtu-thesis | 上海交通大学学位论文 Typst 模板 | `../sjtu-thesis/SKILL.md` |
+| quarto-chinese | Quarto 中文论文模板 | `../quarto-chinese/SKILL.md` |
+| html-email | 响应式 HTML 邮件模板 | `../html-email/SKILL.md` |
+| mailgun-email | 交易、订单类 HTML 邮件模板 | `../mailgun-email/SKILL.md` |
+| cerberus-email | 新闻邮件、响应式邮件版式 | `../cerberus-email/SKILL.md` |
+| marp-academic | 学术风 Marp 幻灯片主题 | `../marp-academic/SKILL.md` |
+| marpstyle | 多套好看的 Marp 主题 | `../marpstyle/SKILL.md` |
+| thu-marp | 清华大学组会 Marp 幻灯片 | `../thu-marp/SKILL.md` |
+| slidev-academic | 学术风 Slidev 主题 | `../slidev-academic/SKILL.md` |
+| slidev-neversink | Slidev Neversink 主题 | `../slidev-neversink/SKILL.md` |
+| typst-poster | Typst 学术海报模板 | `../typst-poster/SKILL.md` |
+| beamer-execushares | 现代极简 Beamer 幻灯片主题 | `../beamer-execushares/SKILL.md` |
+| beamer-arguelles | 排版向的极简 Beamer 主题 Arguelles | `../beamer-arguelles/SKILL.md` |
