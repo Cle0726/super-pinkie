@@ -6445,6 +6445,8 @@ function computerToolResult(value, isError = false) {
 
 function cuaEndpoint(environment = process.env) {
   const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
+  // Windows 版没有桌面执行器（Mac 用 App 自带的 CuaDriver）；别让碧琪以为稍后会连上而反复重试。
+  if (!raw && process.platform === 'win32') throw new Error('Windows 版暂不支持电脑操控（computer），不要重试。网页请用 browser 工具；本机文件和命令用 read、write、exec。');
   if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
   let endpoint;
   try {

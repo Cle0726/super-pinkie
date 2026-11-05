@@ -1,3 +1,10 @@
+# Every text file ships with LF, also when the Windows build checks the repo out
+# (core.autocrlf=true on GitHub's Windows runners). CRLF services, skills and
+# patches broke exact-text checks there: SKILL.md front matter such as
+# `disable-model-invocation`, byte-identical UI/service copies, patch anchors.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
 desktop/windows/mac-runtime/** text eol=lf
 *.ps1 text eol=lf
 .github/workflows/*.yml text eol=lf
