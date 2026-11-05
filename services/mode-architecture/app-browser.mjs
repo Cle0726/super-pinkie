@@ -19,6 +19,24 @@ const WRITE_ACTIONS = new Set(['serve','stop_serve','open','back','forward','rel
 const browserBatches = new WeakMap();
 const NAVIGATION_ACTIONS = new Set(['open', 'back', 'forward', 'reload', 'show_file']);
 const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 Windows 暂不支持），请改用 browser 工具。';
+// Windows 版还没有侧栏浏览器（Mac 是 App 原生的 WKWebView）。没有侧栏时，open / show_file / serve
+// 退回到系统默认浏览器或默认程序，让用户仍然看得到；看页面、点按钮这类操作明确指向 browser 工具，
+// 不再让碧琪对着一个永远连不上的侧栏反复重试。
+const SYSTEM_BROWSER_LIMIT = '这台电脑没有 App 侧栏浏览器，系统浏览器里的页面碧琪看不到也点不了。要查看、截图或操作网页，直接改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口），不要重试 app_browser，也不要告诉先生浏览器用不了。';
+export const WINDOWS_APP_BROWSER_NOTE = '【Windows 版】没有 App 侧栏浏览器：open / serve / show_file 会在系统默认浏览器或默认程序里打开给用户看（碧琪看不到页面内容）；snapshot、screenshot、click、type、batch 等查看和操作网页的动作请直接用 browser 工具。';
+function defaultSystemOpener(target) {
+  return new Promise((resolve, reject) => {
+    // rundll32 url.dll 交给用户的默认浏览器，不经过 cmd，网址里的 & 等字符不会被拆开。
+    const [command, args] = /^https?:/i.test(target)
+      ? ['rundll32.exe', ['url.dll,FileProtocolHandler', target]]
+      : ['explorer.exe', [target]];
+    let child;
+    try { child = spawn(command, args, {detached: true, stdio: 'ignore', windowsHide: true}); }
+    catch (error) { reject(error); return; }
+    child.once('error', reject);
+    child.once('spawn', () => { child.unref(); resolve(); });
+  });
+}
 const MAX_MESSAGE_BYTES = 4 * 1024 * 1024;
 const liveManagers = new Set();
 let exitCleanupInstalled = false;
@@ -255,8 +273,11 @@ function processAlive(record) {
 }
 
 export class AppBrowserServers {
-  constructor({environment = process.env, homeDirectory = os.homedir(), serveTimeoutMs = 60_000, stopGraceMs = 1_000, memoryFile} = {}) {
+  constructor({environment = process.env, homeDirectory = os.homedir(), serveTimeoutMs = 60_000, stopGraceMs = 1_000, memoryFile,
+    systemBrowser = process.platform === 'win32', systemOpener = defaultSystemOpener} = {}) {
     this.environment = environment;
+    this.systemBrowser = Boolean(systemBrowser);
+    this.systemOpener = systemOpener;
     this.home = fs.realpathSync(homeDirectory);
     this.memory = new BrowserSiteMemory(memoryFile ?? path.join(this.home, '.openclaw', 'pinkie-browser', 'site-memory.json'));
     this.serveTimeoutMs = Math.min(60_000, Math.max(1, serveTimeoutMs));
@@ -272,8 +293,35 @@ export class AppBrowserServers {
     }
   }
 
+  // 没有侧栏连接、又允许退回系统浏览器时（Windows），返回替代结果；否则返回 null 走侧栏。
+  async systemFallback(action, params = {}) {
+    if (!this.systemBrowser || String(this.environment.PINKIE_APP_BROWSER_ENDPOINT || '').trim()) return null;
+    if (action === 'open') {
+      const raw = String(params.url || '').trim();
+      let url;
+      try { url = new URL(raw); } catch { return failure('网址无效，请填写完整的 http(s) 网址。'); }
+      if (!['http:', 'https:'].includes(url.protocol)) return failure('Windows 版只能在系统浏览器里打开 http(s) 网址；本机文件请用 show_file。');
+      await this.systemOpener(url.href);
+      return {ok: true, result: {url: url.href, page: {url: url.href}, external: true, note: '已在系统默认浏览器打开给用户看。' + SYSTEM_BROWSER_LIMIT}};
+    }
+    if (action === 'show_file') {
+      let file;
+      try { file = fs.realpathSync(expandedPath(params.path, this.home)); }
+      catch (error) { return failure(error.code ? '这个文件不存在或没有读取权限。' : error.message); }
+      try { safeHomePath(this.home, file); } catch (error) { return failure(error.message); }
+      if (!fs.statSync(file).isFile()) return failure('show_file 只能打开文件。');
+      await this.systemOpener(file);
+      return {ok: true, result: {path: file, external: true, note: '已用系统默认程序打开给用户看。' + SYSTEM_BROWSER_LIMIT}};
+    }
+    if (action === 'status') return {ok: true, result: {connected: false, external: true, note: SYSTEM_BROWSER_LIMIT}};
+    if (action === 'close') return {ok: true, result: {external: true, note: '系统浏览器里的页面由用户自己关闭。'}};
+    return failure(SYSTEM_BROWSER_LIMIT);
+  }
+
   async request(action, params, {signal} = {}) {
     if (this.disposed) throw new Error('网关正在退出，App 浏览器操作已取消。');
+    const fallback = await this.systemFallback(action, params);
+    if (fallback) return fallback;
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, {once: true});
@@ -313,7 +361,8 @@ export class AppBrowserServers {
     if (this.disposed) throw new Error('网关正在退出，不能启动新的本地服务。');
     if (!sessionOwner(ctx)) throw new Error('缺少当前碧琪会话，不能启动本地服务。');
     // Fail before starting a process when there is no visible App browser.
-    appBrowserEndpoint(this.environment);
+    // Windows 没有侧栏时服务照样起，网页交给系统浏览器（见 systemFallback）。
+    if (!(this.systemBrowser && !String(this.environment.PINKIE_APP_BROWSER_ENDPOINT || '').trim())) appBrowserEndpoint(this.environment);
     const staticMode = typeof params.dir === 'string' && params.dir.trim();
     if (staticMode ? params.command !== undefined || params.cwd !== undefined || params.port !== undefined
       : !params.command || !params.cwd || !Number.isInteger(params.port) || params.port < 1 || params.port > 65535) {
@@ -380,6 +429,7 @@ export class AppBrowserServers {
         // the server they can open later; keep ownership and its stop handle.
         return {...failure(reason + ' 本地服务已启动，可稍后用 open 打开。'), url: record.url, pid: record.pid, port: record.port, kind: record.kind};
       }
+      if (reply.result?.external) return {ok: true, message: '本地服务已启动，并已在系统默认浏览器打开给用户看。' + SYSTEM_BROWSER_LIMIT, url: record.url, pid: record.pid, port: record.port, kind: record.kind, external: true};
       return {ok: true, message: '本地服务已启动，并已在 App 侧栏打开。', url: record.url, pid: record.pid, port: record.port, kind: record.kind};
     } catch (error) {
       await this.stopRecord(record);
@@ -771,7 +821,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
   return {
     name: 'app_browser',
     label: 'App 浏览器',
-    description: '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
+    description: (servers.systemBrowser ? WINDOWS_APP_BROWSER_NOTE : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -842,6 +892,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
           if (url) {
             const opened = await servers.request('open', {url, ...(params.focus !== undefined ? {focus: params.focus} : {})}, {signal: batchSignal});
             if (!opened.ok) return {ok: false, reason: String(opened.reason || '侧栏暂时无法打开这个网页。'), completed, failedIndex: -1, replay: false, mayHaveExecuted: false};
+            if (opened.result?.external) return {ok: false, reason: SYSTEM_BROWSER_LIMIT, opened: opened.result, completed, failedIndex: 0, replay: false, mayHaveExecuted: false};
             memory.start(owner, opened.result?.page?.url || url);
             memory.observe(owner, opened.result);
           }

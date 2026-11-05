@@ -342,6 +342,74 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     return before != json.dumps(data, ensure_ascii=False, sort_keys=True)
 
 
+def _probe_embeddings(base_url: str, api_key: str, timeout: float = 6.0):
+    """True/False when the embeddings endpoint answered, None when it was unreachable."""
+    import urllib.error
+    import urllib.request
+
+    body = json.dumps({"model": "text-embedding-3-small", "input": "碧琪"}).encode("utf-8")
+    request = urllib.request.Request(base_url.rstrip("/") + "/embeddings", data=body, method="POST", headers={
+        "Authorization": "Bearer " + api_key, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = json.loads(response.read(2_000_000) or b"{}")
+            return bool(data.get("data") and data["data"][0].get("embedding"))
+    except urllib.error.HTTPError:
+        return False
+    except (OSError, ValueError):
+        return None
+
+
+def _choose_memory_search(data: dict, state: Path, probe=_probe_embeddings) -> None:
+    """Keep memory search working on every machine.
+
+    OpenClaw's default memory search embeds with OpenAI text-embedding-3-small.
+    Most users' keys or relays do not offer that model (seen: 404 "不在当前 API
+    Key 的可用模型范围内"); the index then never builds and memory_search returns
+    nothing. Probe once per key: keep embeddings when they work, otherwise use the
+    built-in full-text index (no key, no network). A provider the user chose is
+    never touched; the probe repeats when the key or address changes.
+    """
+    defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+    current = defaults.get("memorySearch")
+    if current is not None and not isinstance(current, dict):
+        return
+    record_file = state / "memory-search-choice.json"
+    try:
+        record = json.loads(record_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        record = {}
+    ours = record.get("provider") == "none"
+    if isinstance(current, dict) and "provider" in current and not (ours and current.get("provider") == "none"):
+        return
+    provider = (data.get("models") or {}).get("providers", {}).get("openai") or {}
+    api_key = provider.get("apiKey") if isinstance(provider, dict) else None
+    if api_key is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+    base_url = (provider.get("baseUrl") if isinstance(provider, dict) else None) or "https://api.openai.com/v1"
+    if api_key is not None and not isinstance(api_key, str):
+        return  # a secret reference: leave OpenClaw's own resolution alone
+    import hashlib
+
+    fingerprint = hashlib.sha256(f"{base_url}\n{api_key or ''}".encode("utf-8")).hexdigest()
+    if record.get("fingerprint") == fingerprint and record.get("provider") in ("none", "auto"):
+        choice = record["provider"]
+    else:
+        works = probe(base_url, api_key) if api_key else False
+        choice = "auto" if works else "none"
+        # Unreachable (offline, proxy not up yet): use full-text now and keep no
+        # fingerprint, so the next start probes again.
+        state.mkdir(parents=True, exist_ok=True)
+        record_file.write_text(json.dumps({"fingerprint": fingerprint if works is not None else None,
+                                           "provider": choice}) + "\n", encoding="utf-8")
+    if choice == "none":
+        defaults.setdefault("memorySearch", {})["provider"] = "none"
+    elif ours and isinstance(current, dict) and current.get("provider") == "none":
+        current.pop("provider")
+        if not current:
+            defaults.pop("memorySearch")
+
+
 def install(home=None) -> bool:
     home = Path(home or Path.home())
     config = home / ".openclaw/openclaw.json"
@@ -381,7 +449,7 @@ def install(home=None) -> bool:
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
-            "app-browser.mjs", "file-delivery.mjs", "app-guide.mjs",
+            "app-browser.mjs", "web-search-fallback.mjs", "file-delivery.mjs", "app-guide.mjs",
             "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
             "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
             "package.json", "openclaw.plugin.json",
@@ -425,7 +493,12 @@ def install(home=None) -> bool:
 
     changed |= _install_web_gpt_collab(repo_root, state)
 
-    config_changed = _configure_plugin(data, extension)
+    before_choice = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    try:
+        _choose_memory_search(data, state)
+    except Exception as error:  # never block setup on a probe
+        print(f"记忆检索方式没有探测成功：{error}")
+    config_changed = _configure_plugin(data, extension) or json.dumps(data, ensure_ascii=False, sort_keys=True) != before_choice
     if config_changed:
         backup_root.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config, backup_root / "openclaw.json")

@@ -9,6 +9,9 @@ export async function runLearningCompute(kind, state) {
   if(kind==='memory_lab')kind='c_program';
   if(!['c_program','math_check'].includes(kind))throw Error('不支持这种运行');
   if(active>=2)throw Error('已有两项计算在运行，请稍后再试');
+  // learning-engine.py 用 macOS 的 clang + sandbox-exec 隔离运行 C 程序，还依赖 Unix 专有的 resource 模块；
+  // Windows 上没有对应环境，直接说清楚，而不是报含糊的「环境未就绪」。
+  if(process.platform==='win32'&&!process.env.PINKIE_LEARNING_PYTHON)throw Error('Windows 版暂不支持在本机真实运行 C 程序和数学核对；可以让碧琪在对话里逐步讲解执行过程。');
   const local=path.join(os.homedir(),'.openclaw/pinkie-learning-runtime/bin/python3');
   const python=process.env.PINKIE_LEARNING_PYTHON || (fs.existsSync(local)?local:'/usr/bin/python3');
   const script=fileURLToPath(new URL('./learning-engine.py',import.meta.url));

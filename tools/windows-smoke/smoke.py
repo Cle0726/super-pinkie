@@ -320,7 +320,14 @@ def drive_ui(out, label):
                     state = None
                     while time.monotonic() < deadline:
                         page.wait_for_timeout(500)
-                        state = page.evaluate(PAGE_STATE)
+                        try:
+                            state = page.evaluate(PAGE_STATE)
+                        except Exception as error:
+                            # Switching modes reloads the page on purpose; a poll that
+                            # lands mid-reload sees "Execution context was destroyed".
+                            if "context was destroyed" not in str(error) and "navigat" not in str(error):
+                                raise
+                            continue
                         # The URL may carry the alias "main"; the shell's
                         # resolved key says which agent really answers.
                         session = state["shellSession"] or state["session"]
@@ -328,7 +335,14 @@ def drive_ui(out, label):
                             entry["ok"] = True
                             break
                     page.wait_for_timeout(1500)
-                    entry["state"] = page.evaluate(PAGE_STATE)
+                    for attempt in range(3):
+                        try:
+                            entry["state"] = page.evaluate(PAGE_STATE)
+                            break
+                        except Exception as error:
+                            if attempt == 2 or ("context was destroyed" not in str(error) and "navigat" not in str(error)):
+                                raise
+                            page.wait_for_timeout(1000)
                     if entry["state"]["gatewayError"]:
                         entry["ok"] = False
                 except Exception as error:

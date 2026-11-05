@@ -103,6 +103,13 @@
       bridge.postMessage({ action: "open", url });
       return;
     }
+    // Windows 版没有侧栏浏览器；多数网站禁止被 iframe 嵌入，预览只会白屏。
+    // 网页直接交给系统默认浏览器，file: 等其他地址仍走下面的预览。
+    const windowsOpen = window.pywebview?.api?.open_external;
+    if (document.documentElement?.dataset.pinkiePlatform === "windows" && windowsOpen && /^https?:/i.test(url)) {
+      windowsOpen(url);
+      return;
+    }
     close();
 
     const viewer = document.createElement("div");

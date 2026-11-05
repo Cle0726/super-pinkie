@@ -94,7 +94,7 @@ jobs:
         run: |
           $node = Get-ChildItem -Path smoke-app -Filter node.exe -Recurse | Where-Object { $_.FullName -like '*runtime\bin\node.exe' } | Select-Object -First 1
           if (-not $node) { throw 'Bundled Node not found for the workbench test' }
-          & $node.FullName --test tests/windows-workbench.test.mjs
+          & $node.FullName --test tests/windows-workbench.test.mjs tests/app-browser-windows-fallback.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Windows workbench test failed' }
 
       - name: Run smoke test

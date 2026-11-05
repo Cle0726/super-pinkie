@@ -13,6 +13,7 @@ import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reason
 import {skillRouteBlock} from './skill-routes.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
+import {createPinkieSearchTool} from './web-search-fallback.mjs';
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
@@ -556,6 +557,8 @@ export const WORK_STANDARD_RULES = `
 9. 先生或老板让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
 10. 做出交给先生或老板的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。网页用 app_browser 打开，回复附截图并给出网页路径，HTML 文件不要写 MEDIA:（附件通道不支持）。
 11. 只附本轮实际完成、检查过的成品，不附中间产物、日志或临时文件；MEDIA: 行不要放进代码块。
+12. 本机环境的问题自己解决，不甩给先生。每台电脑的系统、网络和已装软件都不一样：工具报缺命令、缺依赖、没装 Python、连不上、没配 Key、这台电脑不支持某个工具时，先自己查原因、自己装好（装进工作区或用户目录，不用管理员权限）或换一条能走通的路（web_search 不行先用 pinkie_search、再用 browser 打开必应或百度搜，app_browser 或 computer 不可用用 browser 和 exec），做完再交付。不要对先生说「碧琪用不了」「这个功能不支持」「请你去安装」；只有确实需要先生本人提供账号、密码、付款或授权时才请他出手，并说清楚为什么。
+13. 记忆找不到时自己再翻。memory_search 没结果或报错，不代表没有记忆：换几个短关键词再搜，或直接用 read 读工作区的 MEMORY.md 和 memory/ 目录、用 exec 按关键词搜这些文件；clekk_memory 里的长期记忆也要看。都翻过仍没有，才说「这件事我这里没有记录」，不说「记忆功能用不了」。
 `.trim();
 
 const TOOL_PROGRESS_RULES = `
@@ -6445,6 +6448,8 @@ function computerToolResult(value, isError = false) {
 
 function cuaEndpoint(environment = process.env) {
   const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
+  // Windows 版没有桌面执行器（Mac 用 App 自带的 CuaDriver）；别让碧琪以为稍后会连上而反复重试。
+  if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试这个工具，也不要告诉先生它用不了：网页用 browser 工具；其他应用和系统操作用 exec 跑 PowerShell（如 Start-Process、Get-Process、UI Automation）；文件用 read、write。');
   if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
   let endpoint;
   try {
@@ -6564,6 +6569,7 @@ export default {
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
+    api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 无限制模式不带碧琪的主动提问卡。
