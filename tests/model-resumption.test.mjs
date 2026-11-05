@@ -82,8 +82,15 @@ test('a run that dies inside one very long model call resumes with "write it in 
   assert.equal(watchdog.stalledGenerationMs('quick'), 4_000);
   assert.match(watchdogResumeText({stalledMs: 4_000}), /临时上游连接中断/);
   assert.match(watchdogResumeText({incompleteToolTurn: true, stalledMs: 4_000}), /工具结果已经返回/);
-  // A long call that completed normally is not a stall, even if the turn failed later.
+  // A long call that completed normally and went on to call a tool is not a stall, even if the turn failed later.
   watchdog.modelStarted({runId: 'done', sessionKey: 'agent:project:four', provider: 'mm', model: 'flash'});
   watchdog.modelEnded({runId: 'done', durationMs: 400_000, outcome: 'completed'});
+  watchdog.toolStarted({toolName: 'exec'}, {runId: 'done'});
   assert.equal(watchdog.stalledGenerationMs('done'), 0);
+  // 11-04 routes-i R-ppt: stuck recovery cut the stream from outside and the runtime still reported
+  // outcome=completed (its iterator's finally). No tool ever followed: that is the stall.
+  watchdog.modelStarted({runId: 'cut', sessionKey: 'agent:project:five', provider: 'mm', model: 'flash'});
+  watchdog.modelEnded({runId: 'cut', durationMs: 361_000, outcome: 'completed'});
+  assert.equal(watchdog.stalledGenerationMs('cut'), 361_000);
+  assert.match(watchdogResumeText({stalledMs: watchdog.stalledGenerationMs('cut')}), /拆成几段/);
 });

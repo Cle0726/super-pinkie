@@ -1418,8 +1418,20 @@ const USER_SUPPLIED_MEDIA = /(?:这(?:个|段|些|条|几个?)(?:视频|片子|�
 const SOURCE_ORIGIN = /(?:来源|出处|来自|取自|生成|合成|AI|图库|曲库|素材库|(?:先生|你|您)(?:给|提供|发来)的|程序画|代码画|自己画|TTS|edge-tts|\bsay\b|晓晓|云希|婷婷|Xiaoxiao|Yunxi|Tingting)/i;
 const SOURCE_RIGHTS = /(?:可(?:以)?商用|不(?:能|可)商用|商用|版权|授权|免费可用|开源许可)/;
 
+// 回复里用 MEDIA: 交出去的文件。11-04 routes-i R-ad：成片是后台 Python 脚本里调 ffmpeg 写出来的，
+// 工具记录里一个 .mp4 都没有（exec 只有 python3 render.py），只看工具就认不出交了视频。
+function replyDeliveredKinds(reply = '') {
+  const kinds = new Set();
+  for (const match of String(reply || '').matchAll(/^\s*MEDIA:\s*(\S+)/gim)) {
+    const ext = DELIVERABLE_EXT.exec(match[1].replace(/[\s'"),;\]]+$/, ''));
+    if (ext && DELIVERABLE_KIND[ext[1].toLowerCase()]) kinds.add(DELIVERABLE_KIND[ext[1].toLowerCase()]);
+  }
+  return [...kinds];
+}
+
 function sourceDisclosureReason(state, reply = '') {
-  if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))) return '';
+  if (!state.tools.some(entry => producedDeliverables(entry, state.prompt).includes('视频'))
+      && !replyDeliveredKinds(reply).includes('视频')) return '';
   const prose = proseOnly(reply);
   if (SOURCE_ORIGIN.test(prose) && SOURCE_RIGHTS.test(prose)) return '';
   const madeAssets = state.tools.some(entry => !entry.failed && (ASSET_MAKING_TOOL.test(String(entry.name || ''))
@@ -2120,7 +2132,26 @@ export class CompletionIntegrityGuard {
     return {ok: true, verified: true, at: state.verification.at};
   }
 
+  // 一轮只提醒一次（remindOnce）：先命中的别的提醒（比如最后一个工具失败）会把「视频没说素材来源」挤掉。
+  // 11-04 routes-i R-ad-2：侧栏浏览器没连上 → 提醒「最后一次工具调用失败」→ 来源那条再也没机会发。所以并进同一条。
   finalize(event = {}, ctx = {}, options = {}) {
+    const decision = this.finalizeChecks(event, ctx, options);
+    if (decision?.action !== 'revise') return decision;
+    const key = completionRunKey(event, ctx);
+    const state = this.runs.get(key);
+    if (!state) return decision;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    // 只在这条回复是交付时并：「这就去做」那种预告还没到交付，不提来源。
+    const delivering = COMPLETION_CLAIM.test(reply) || DELIVERY_CLAIM.test(reply) || replyDeliveredKinds(reply).length > 0;
+    if (!delivering && (!isLikelyActionRequest(state.prompt) || promiseWithoutActionReason(reply))) return decision;
+    const note = sourceDisclosureReason(state, reply);
+    const reason = String(decision.reason || '').replace(/^全局交付真实性门禁：/, '');
+    if (!note || reason.includes(note)) return decision;
+    const merged = this.revise(key, `${reason}；另外，${note}`);
+    return {...decision, reason: merged.reason, retry: {...(decision.retry || {}), instruction: merged.retry.instruction}};
+  }
+
+  finalizeChecks(event = {}, ctx = {}, options = {}) {
     const key = completionRunKey(event, ctx);
     const state = this.runs.get(key);
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
@@ -3921,12 +3952,20 @@ export class UpstreamWatchdog {
     if (isTransientFailure(reason)) this.failures.set(event.runId, reason);
   }
 
-  // 这一轮最后一次模型调用卡了多久：还没结束就按到现在算；正常结束的不算卡住。
+  // 这一轮最后一次模型调用卡了多久：还没结束就按到现在算；正常结束、后面接着调了工具的不算卡住。
+  // 11-04 routes-i R-ppt：卡死恢复从外面掐断流时，运行时在 finally 里照样报 outcome=completed
+  // （observeModelCallIterator），只看 outcome 就把 6 分钟没输出当成正常结束，「拆成几段」的提示一次也没发出去。
   stalledGenerationMs(runId = '', now = Date.now()) {
     const call = runId ? this.lastCalls.get(String(runId)) : null;
     if (!call) return 0;
     if (call.durationMs == null) return now - call.startedAt;
-    return call.outcome === 'completed' ? 0 : call.durationMs;
+    return call.outcome === 'completed' && call.toolFollowed ? 0 : call.durationMs;
+  }
+
+  // 模型调用之后真的开始调工具了：那次调用是正常结束的，后面的失败与它无关。
+  toolStarted(event = {}, ctx = {}) {
+    const call = this.lastCalls.get(String(event.runId || ctx.runId || ''));
+    if (call) call.toolFollowed = true;
   }
 
   modelStarted(event = {}) {
@@ -6726,6 +6765,7 @@ export default {
         if (waiting) return waiting;
         cleKk.beforeTool({...event, params: decision?.params || event.params}, ctx);
       }
+      watchdog.toolStarted(event, ctx);
       return decision;
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
