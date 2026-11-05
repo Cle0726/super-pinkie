@@ -323,6 +323,8 @@
     button("连接更多", "pinkie-user-settings__text-button", connectionActions, () => openAdvanced("channels"));
     makeStatus(connectionCard, "connections");
 
+    buildBrowserProxy(scroll);
+
     const aboutCard = card(scroll, "🎂", "关于与更新", "查看版本和本机累计用量。" );
     const versionRow = row(aboutCard, "版本");
     state.version = element("span", "pinkie-user-settings__value", versionRow.control, "读取中…");
@@ -724,7 +726,65 @@
       else messagingControls(key);
     }
   }
+  // Windows 版：碧琪替你开网页用的浏览器走哪条网络。默认跟随系统代理（Clash、v2rayN 等会写系统代理）。
+  const proxyApi = () => window.pywebview?.api;
+  function buildBrowserProxy(parent) {
+    const proxyCard = card(parent, "🌐", "浏览器网络", "碧琪替你打开网页时用的网络。访问被墙的网站：开着代理软件，选「跟随系统」即可。");
+    proxyCard.hidden = true;
+    const modeRow = row(proxyCard, "代理方式");
+    const group = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", modeRow.control);
+    const serverRow = row(proxyCard, "代理地址", "例如 127.0.0.1:7890 或 socks5://127.0.0.1:7891");
+    const input = element("input", "pinkie-user-settings__messaging-input", serverRow.control);
+    input.type = "text"; input.placeholder = "127.0.0.1:7890"; input.spellcheck = false;
+    input.setAttribute("aria-label", "代理地址");
+    const saveButton = button("保存", "pinkie-user-settings__button pinkie-user-settings__button--small", serverRow.control, () => save("custom"));
+    const effective = element("p", "pinkie-user-settings__soft-note", proxyCard, "");
+    makeStatus(proxyCard, "proxy");
+    const proxy = {mode: "system", buttons: new Map()};
+    const show = (result) => {
+      proxy.mode = result?.mode || "system";
+      for (const [value, node] of proxy.buttons) setPressed(node, value === proxy.mode);
+      serverRow.item.hidden = proxy.mode !== "custom";
+      if (result?.server && document.activeElement !== input) input.value = result.server;
+      ownText(effective, [result?.effective, result?.system ? `系统代理：${result.system}` : ""].filter(Boolean).join(" · "));
+    };
+    async function save(mode) {
+      const api = proxyApi();
+      if (!api?.browser_proxy_set) return;
+      if (mode === "custom" && !input.value.trim()) { show({...proxy, mode: "custom"}); input.focus(); return; }
+      saveButton.disabled = true;
+      setStatus("proxy", "正在保存…");
+      try {
+        const result = await api.browser_proxy_set({mode, server: input.value});
+        if (!result?.ok) { setStatus("proxy", result?.message || "没有保存成功，请再试一次。", "error"); return; }
+        show(result);
+        setStatus("proxy", result.message || "已保存。", "success");
+      } catch (error) {
+        setStatus("proxy", error?.message || "没有保存成功，请再试一次。", "error");
+      } finally { saveButton.disabled = false; }
+    }
+    for (const [value, label] of [["system", "跟随系统"], ["custom", "自定义代理"], ["off", "不用代理"]]) {
+      const node = button(label, "pinkie-user-settings__choice", group, () => value === "custom" ? show({...proxy, mode: "custom"}) : save(value));
+      proxy.buttons.set(value, node);
+    }
+    input.addEventListener("keydown", event => { if (event.key === "Enter") save("custom"); });
+    const load = async () => {
+      const api = proxyApi();
+      if (!api?.browser_proxy_get) return;
+      proxyCard.hidden = false;
+      try {
+        const result = await api.browser_proxy_get();
+        show(result);
+        if (result && result.ok === false) setStatus("proxy", result.message || "", "error");
+      } catch {}
+    };
+    state.loadBrowserProxy = load;
+    void load();
+    window.addEventListener("pywebviewready", load, {once: true});
+  }
+
   async function loadInitialData() {
+    void state.loadBrowserProxy?.();
     const request = rpc();
     if (typeof request !== "function") {
       setStatus("permissions", "暂时无法读取设置，请检查连接后重试。", "error");
