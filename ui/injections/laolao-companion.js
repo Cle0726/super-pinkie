@@ -853,25 +853,25 @@
       chat: (w, h, id, t) => {
         const r = Math.min(h / 2, 30), kx = t;
         return `<path class="pq__body" d="${roundTail(w, h, r, {x: kx, tw: 0, tx: kx, ty: h})}" fill="url(#${id}g)"/>`
-          + `<path class="pq__knot" d="M${kx - 6},${h - 1}L${kx},${h + 8}L${kx + 6},${h - 1}Z"/>`
-          + `<path class="pq__string" d="M${kx},${h + 8}c4,7 -6,10 1,17s8,9 14,18"/>`
-          + `<ellipse class="pq__gloss" cx="${f(Math.min(40, w * .2))}" cy="11" rx="${f(Math.min(22, w * .1))}" ry="5.5" transform="rotate(-12 ${f(Math.min(40, w * .2))} 11)"/>`;
+          + `<path class="pq__knot" d="M${kx - 4},${h - 1}L${kx},${h + 5}L${kx + 4},${h - 1}Z"/>`
+          + `<path class="pq__string" d="M${kx},${h + 5}c2,3 -2,5 0,8"/>`
+          + `<ellipse class="pq__gloss" cx="${f(Math.min(22, w * .18))}" cy="7" rx="${f(Math.min(10, w * .08))}" ry="3" transform="rotate(-12 ${f(Math.min(22, w * .18))} 7)"/>`;
       },
-      project: (w, h, id, t) => `<path class="pq__body" d="${roundTail(w, h, 12, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}g)"/>`
-        + `<path class="pq__lines" d="${roundTail(w, h, 12, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}p)"/>`
-        + `<rect class="pq__clip" x="${f(w / 2 - 26)}" y="-9" width="52" height="17" rx="6"/><rect class="pq__clip-hole" x="${f(w / 2 - 9)}" y="-5" width="18" height="5" rx="2.5"/>`,
+      project: (w, h, id, t) => `<path class="pq__body" d="${roundTail(w, h, 8, {x: t + 8, tw: 12, tx: t, ty: h + 10})}" fill="url(#${id}g)"/>`
+        + `<path class="pq__lines" d="${roundTail(w, h, 8, {x: t + 8, tw: 12, tx: t, ty: h + 10})}" fill="url(#${id}p)"/>`
+        + `<rect class="pq__clip" x="${f(w / 2 - 16)}" y="-6" width="32" height="11" rx="4"/><rect class="pq__clip-hole" x="${f(w / 2 - 5)}" y="-3" width="10" height="3" rx="1.5"/>`,
       thinking: (w, h, id, t) => {
         const pts = perimeter(6, 6, w - 6, h - 6, Math.min(22, h / 2 - 6), 30);
         let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
         pts.forEach((pt, k) => { const q = pts[(k + 1) % pts.length], rr = f(Math.hypot(q[0] - pt[0], q[1] - pt[1]) * .62); d += `A${rr},${rr} 0 0 1 ${f(q[0])},${f(q[1])}`; });
         return `<path class="pq__body" d="${d}Z" fill="url(#${id}g)"/>`
-          + `<circle class="pq__body pq__puff" cx="${t + 8}" cy="${h + 13}" r="7.5" fill="url(#${id}g)"/><circle class="pq__body pq__puff" cx="${t - 2}" cy="${h + 29}" r="4.5" fill="url(#${id}g)"/>`;
+          + `<circle class="pq__body pq__puff" cx="${t + 6}" cy="${h + 7}" r="4" fill="url(#${id}g)"/><circle class="pq__body pq__puff" cx="${t}" cy="${h + 15}" r="2.4" fill="url(#${id}g)"/>`;
       },
       learning: (w, h, id, t) => {
         let rings = "";
         for (let x = 26; x < w - 20; x += 22) rings += `<circle class="pq__hole" cx="${x}" cy="9" r="2.6"/><path class="pq__ring" d="M${x - 4},10C${x - 6},-4 ${x + 6},-6 ${x + 3},9"/>`;
-        return `<path class="pq__body" d="${roundTail(w, h, 14, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}g)"/>`
-          + `<path class="pq__lines" d="${roundTail(w, h, 14, {x: t + 12, tw: 20, tx: t, ty: h + 18})}" fill="url(#${id}p)"/>${rings}`;
+        return `<path class="pq__body" d="${roundTail(w, h, 8, {x: t + 8, tw: 12, tx: t, ty: h + 10})}" fill="url(#${id}g)"/>`
+          + `<path class="pq__lines" d="${roundTail(w, h, 8, {x: t + 8, tw: 12, tx: t, ty: h + 10})}" fill="url(#${id}p)"/>${rings}`;
       },
       unrestricted: (w, h, id, t) => {
         const pts = perimeter(5, 5, w - 5, h - 5, Math.min(24, h / 2 - 5), 12);
@@ -880,9 +880,9 @@
           const prev = pts[(k + pts.length - 1) % pts.length], next = pts[(k + 1) % pts.length];
           const dx = next[0] - prev[0], dy = next[1] - prev[1], len = Math.hypot(dx, dy) || 1;
           let [x, y] = pt;
-          if (k % 2 === 0) { x += dy / len * 8; y -= dx / len * 8; }
-          // 底边上离她最近的那个尖拉长成尾巴
-          if (!tipped && y > h - 6 && x < t + 8 && x > t - 14) { x = t; y = h + 24; tipped = true; }
+          if (k % 2 === 0) { x += dy / len * 3; y -= dx / len * 3; }
+          // 底边上离她最近的那个尖轻轻拉出尾巴，不把框撑大
+          if (!tipped && y > h - 6 && x < t + 8 && x > t - 14) { x = t; y = h + 10; tipped = true; }
           d += `${k ? "L" : "M"}${f(x)},${f(y)}`;
         });
         return `<path class="pq__body" d="${d}Z" fill="url(#${id}g)" style="stroke:url(#${id}r)"/>`;
@@ -896,12 +896,11 @@
       const fr = figure.getBoundingClientRect(), br = bubble.getBoundingClientRect();
       const t = Math.round(Math.max(44, Math.min(w - 30, fr.left + fr.width * .3 - br.left)));
       const id = `pq${++shapeId}`;
-      const spin = reduced() ? "" : '<animateTransform attributeName="gradientTransform" type="rotate" from="0 .5 .5" to="360 .5 .5" dur="5s" repeatCount="indefinite"/>';
       const svg = `<svg class="pq__shape" width="${w + M * 2}" height="${h + M * 2}" viewBox="${-M} ${-M} ${w + M * 2} ${h + M * 2}" aria-hidden="true"><defs>`
         + `<linearGradient id="${id}g" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" style="stop-color:var(--pq-fill-a)"/><stop offset="1" style="stop-color:var(--pq-fill-b)"/></linearGradient>`
-        + `<pattern id="${id}p" width="14" height="${m === "project" ? 27 : 14}" patternUnits="userSpaceOnUse" y="${m === "project" ? 4 : 0}">`
-        + (m === "project" ? '<rect y="26" width="14" height="1" class="pq__rule"/>' : '<circle cx="7" cy="7" r="1.1" class="pq__rule"/>') + "</pattern>"
-        + `<linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4f8b"/><stop offset=".33" stop-color="#ffc93d"/><stop offset=".66" stop-color="#4fc3ff"/><stop offset="1" stop-color="#b47cff"/>${spin}</linearGradient>`
+        + `<pattern id="${id}p" width="12" height="${m === "project" ? 16 : 12}" patternUnits="userSpaceOnUse">`
+        + (m === "project" ? '<rect y="15" width="12" height="1" class="pq__rule"/>' : '<circle cx="6" cy="6" r=".8" class="pq__rule"/>') + "</pattern>"
+        + `<linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4f8b"/><stop offset=".33" stop-color="#ffc93d"/><stop offset=".66" stop-color="#4fc3ff"/><stop offset="1" stop-color="#b47cff"/></linearGradient>`
         + `</defs>${SHAPE[m](w, h, id, t)}</svg>`;
       card.querySelector(".pq__shape")?.remove();
       card.insertAdjacentHTML("afterbegin", svg);
@@ -920,8 +919,8 @@
       let i = 0;
       const text = (line.match(/[^，,；;：:！!？?。]+[，,；;：:！!？?。]*|[，,；;：:！!？?。]+/g) || [line])
         .map((seg) => `<span class="pq__seg">${[...seg].map((c) => `<span class="pq__c" style="--i:${i++}">${esc(c)}</span>`).join("")}</span>`).join("");
-      // 字号跟着句子长短走：短句大一点更有分量，长句小一点不挤成好几行
-      const n = chars.length, fs = n <= 8 ? 18 : n <= 12 ? 16.5 : n <= 18 ? 15.5 : 14.5;
+      // 字固定小号：气泡只是小马旁边的一句，不比聊天正文大，也不抢视线
+      const n = chars.length, fs = 12;
       say(`<div class="pq" data-m="${m}" style="--n:${n};--fs:${fs}px"><span class="pq__deco" aria-hidden="true">${DECO[m] || ""}</span>`
         + `<p class="pq__text" aria-label="${esc(line)}"><span aria-hidden="true">${text}</span></p>`
         + `<button class="pq__next" type="button" aria-label="换一句" title="换一句">${NEXT_ICON}</button></div>`, {ms: Math.min(12000, 6500 + chars.length * 140)});

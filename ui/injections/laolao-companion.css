@@ -310,26 +310,26 @@ html[data-pinkie-focus] .pinkie-focus-track { opacity: .8; }
    悬停时停住不消失；右上角「换一句」。字体用随包字体，Mac / Windows 一样。 */
 html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote {
   padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important;
-  border-radius: 0 !important; max-width: min(420px, 70vw); overflow: visible; color: inherit !important;
-  transition: opacity .2s ease, visibility .2s; transform: none; bottom: calc(100% + 26px);
+  border-radius: 0 !important; max-width: min(132px, 36vw); overflow: visible; color: inherit !important;
+  transition: opacity .2s ease, visibility .2s; transform: none; bottom: calc(100% + 6px);
 }
 html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !important; }
 .pq {
   --q-ink: #3a3230; --q-font: var(--pinkie-ui-font, "Pinkie UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   --pq-fill-a: #fff; --pq-fill-b: #fff; --pq-stroke: #3a3230; --pq-rule: rgba(0, 0, 0, .1);
-  position: relative; display: block; min-width: 96px; cursor: pointer; isolation: isolate;
-  padding: 11px 16px 12px; box-sizing: border-box;
+  position: relative; display: block; min-width: 64px; cursor: pointer; isolation: isolate;
+  padding: 5px 8px 6px; box-sizing: border-box;
 }
-.pq__shape { position: absolute; left: -56px; top: -56px; z-index: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(70, 30, 50, .16)); }
-.pq__body { stroke: var(--pq-stroke); stroke-width: 2.4; stroke-linejoin: round; }
+.pq__shape { position: absolute; left: -56px; top: -56px; z-index: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(70, 30, 50, .1)); }
+.pq__body { stroke: var(--pq-stroke); stroke-width: 1.5; stroke-linejoin: round; }
 .pq__lines { stroke: none; }
 .pq__rule { fill: var(--pq-rule); }
 .pq__text {
-  position: relative; z-index: 2; margin: 0; color: var(--q-ink); font: 500 var(--fs, 15.5px)/1.5 var(--q-font);
+  position: relative; z-index: 2; margin: 0; color: var(--q-ink); font: 500 var(--fs, 12px)/1.35 var(--q-font);
   letter-spacing: .01em; font-kerning: normal; -webkit-font-smoothing: antialiased;
 }
 .pq__seg { display: inline-block; }
-.pq__c { display: inline-block; white-space: pre; }
+.pq__c { display: inline-block; white-space: pre; vertical-align: baseline; line-height: inherit; }
 .pq__deco { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .pq__deco svg { display: block; width: 100%; height: 100%; }
 .pq__next {
@@ -345,17 +345,17 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-swap { to { opacity: 0; transform: translateY(-6px) scale(.96); } }
 
 /* ── 聊天 · 粉色气球 ── */
-.pq[data-m="chat"] { --q-ink: #8a2552; --pq-fill-a: #fff4f9; --pq-fill-b: #ffc4dd; --pq-stroke: #d8457f; padding: 12px 22px 13px; transform-origin: calc(100% - 38px) calc(100% + 40px); }
-.pq[data-m="chat"] .pq__text { font-weight: 600; }
+.pq[data-m="chat"] { --q-ink: #8a2552; --pq-fill-a: #fff4f9; --pq-fill-b: #ffc4dd; --pq-stroke: #d8457f; padding: 5px 8px 6px; transform-origin: calc(100% - 24px) calc(100% + 16px); }
+.pq[data-m="chat"] .pq__text { font-weight: 500; }
 .pq[data-m="chat"] .pq__knot { fill: #ffc4dd; stroke: var(--pq-stroke); stroke-width: 2; stroke-linejoin: round; }
 .pq[data-m="chat"] .pq__string { fill: none; stroke: var(--pq-stroke); stroke-width: 1.6; stroke-linecap: round; opacity: .75; }
 .pq[data-m="chat"] .pq__gloss { fill: #fff; opacity: .9; }
-.pq[data-m="chat"] .pq__dot { position: absolute; width: 7px; height: 7px; border-radius: 50%; }
-.pq[data-m="chat"] .pq__dot:nth-child(1) { left: -12px; top: 8px; background: #ffd84d; }
-.pq[data-m="chat"] .pq__dot:nth-child(2) { right: -8px; top: -8px; width: 9px; height: 9px; background: #7fd0ff; }
-.pq[data-m="chat"] .pq__dot:nth-child(3) { left: 30%; bottom: -12px; width: 5px; height: 5px; background: #e94f91; }
-.is-shown .pq[data-m="chat"] { animation: pq-inflate .7s cubic-bezier(.3, 1.6, .5, 1) both, pq-bob 3.2s .7s ease-in-out infinite; }
-.is-shown .pq[data-m="chat"] .pq__dot { animation: pq-float 2.6s ease-in-out infinite; }
+.pq[data-m="chat"] .pq__dot { position: absolute; width: 4px; height: 4px; border-radius: 50%; }
+.pq[data-m="chat"] .pq__dot:nth-child(1) { left: -6px; top: 4px; background: #ffd84d; }
+.pq[data-m="chat"] .pq__dot:nth-child(2) { right: -5px; top: -4px; width: 5px; height: 5px; background: #7fd0ff; }
+.pq[data-m="chat"] .pq__dot:nth-child(3) { left: 30%; bottom: -6px; width: 3px; height: 3px; background: #e94f91; }
+.is-shown .pq[data-m="chat"] { animation: pq-quiet .28s ease both; }
+.is-shown .pq[data-m="chat"] .pq__dot { animation: none; }
 .is-shown .pq[data-m="chat"] .pq__dot:nth-child(2) { animation-delay: -.9s; }
 .is-shown .pq[data-m="chat"] .pq__dot:nth-child(3) { animation-delay: -1.7s; }
 .pq[data-m="chat"].is-leaving { animation: pq-pop .38s cubic-bezier(.5, 0, .8, .4) both; }
@@ -365,17 +365,17 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-pop { 30% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(.2); opacity: 0; } }
 
 /* ── 项目 · 工作夹板 ── */
-.pq[data-m="project"] { --q-ink: #173f45; --pq-fill-a: #ffffff; --pq-fill-b: #eef7f6; --pq-stroke: #2f7275; --pq-rule: rgba(63, 143, 146, .16); padding: 22px 18px 11px; transform-origin: 50% 100%; }
+.pq[data-m="project"] { --q-ink: #173f45; --pq-fill-a: #ffffff; --pq-fill-b: #eef7f6; --pq-stroke: #2f7275; --pq-rule: rgba(63, 143, 146, .16); padding: 12px 8px 5px; transform-origin: 50% 100%; }
 .pq[data-m="project"] .pq__clip { fill: #bcd6d4; stroke: var(--pq-stroke); stroke-width: 2.2; }
 .pq[data-m="project"] .pq__clip-hole { fill: var(--pq-stroke); opacity: .55; }
-.pq[data-m="project"] .pq__label { position: absolute; left: 18px; top: 9px; font: 700 9.5px/1 var(--q-font); letter-spacing: .2em; color: #3f8f92; opacity: .85; }
-.pq[data-m="project"] .pq__check { position: absolute; left: -10px; bottom: -8px; width: 24px; height: 24px; padding: 3px; box-sizing: border-box; border-radius: 50%; background: #3f8f92; box-shadow: 0 0 0 2px #fff; transform: rotate(-8deg) scale(0); }
+.pq[data-m="project"] .pq__label { position: absolute; left: 8px; top: 3px; font: 700 8px/1 var(--q-font); letter-spacing: .12em; color: #3f8f92; opacity: .7; }
+.pq[data-m="project"] .pq__check { position: absolute; left: -6px; bottom: -5px; width: 14px; height: 14px; padding: 2px; box-sizing: border-box; border-radius: 50%; background: #3f8f92; box-shadow: 0 0 0 1px #fff; transform: rotate(-8deg) scale(.85); }
 .pq[data-m="project"] .pq__check path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 24; stroke-dashoffset: 24; }
-.pq[data-m="project"] .pq__text { font-weight: 550; line-height: 27px; }
-.is-shown .pq[data-m="project"] { animation: pq-slide .5s cubic-bezier(.2, 1.2, .4, 1) both; }
-.is-shown .pq[data-m="project"] .pq__c { opacity: 0; animation: pq-type .01s calc(.35s + var(--i) * 45ms) steps(1) forwards; }
-.is-shown .pq[data-m="project"] .pq__check { animation: pq-stamp .35s calc(.4s + var(--n) * 45ms) cubic-bezier(.3, 1.8, .5, 1) forwards; }
-.is-shown .pq[data-m="project"] .pq__check path { animation: pq-draw .3s calc(.55s + var(--n) * 45ms) ease-out forwards; }
+.pq[data-m="project"] .pq__text { font-weight: 500; line-height: 16px; }
+.is-shown .pq[data-m="project"] { animation: pq-quiet .28s ease both; }
+.is-shown .pq[data-m="project"] .pq__c { opacity: 1; animation: none; }
+.is-shown .pq[data-m="project"] .pq__check { animation: none; }
+.is-shown .pq[data-m="project"] .pq__check path { stroke-dashoffset: 0; }
 @keyframes pq-stamp { to { transform: rotate(-8deg) scale(1); } }
 .pq[data-m="project"].is-leaving { animation: pq-file .45s ease-in both; }
 @keyframes pq-slide { from { opacity: 0; transform: translateY(14px) rotate(-2deg); } }
@@ -384,17 +384,17 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-file { to { opacity: 0; transform: translateY(18px) scale(.94); } }
 
 /* ── 想法 · 思考云 ── */
-.pq[data-m="thinking"] { --q-ink: #4b2f63; --pq-fill-a: #fdfaff; --pq-fill-b: #efe3fb; --pq-stroke: #8a62a8; padding: 15px 22px 16px; transform-origin: calc(100% - 20px) calc(100% + 30px); }
-.pq[data-m="thinking"] .pq__text { font-weight: 420; letter-spacing: .03em; }
-.pq[data-m="thinking"] .pq__spark { position: absolute; width: 12px; height: 12px; color: #b38ad6; }
+.pq[data-m="thinking"] { --q-ink: #4b2f63; --pq-fill-a: #fdfaff; --pq-fill-b: #efe3fb; --pq-stroke: #8a62a8; padding: 6px 8px 7px; transform-origin: calc(100% - 16px) calc(100% + 12px); }
+.pq[data-m="thinking"] .pq__text { font-weight: 500; letter-spacing: 0; }
+.pq[data-m="thinking"] .pq__spark { position: absolute; width: 7px; height: 7px; color: #b38ad6; }
 .pq[data-m="thinking"] .pq__spark svg { fill: currentColor; }
-.pq[data-m="thinking"] .pq__spark:nth-child(1) { left: -16px; top: 2px; }
-.pq[data-m="thinking"] .pq__spark:nth-child(2) { right: -14px; top: 30%; width: 9px; height: 9px; color: #f2b84b; }
-.pq[data-m="thinking"] .pq__spark:nth-child(3) { left: 22%; bottom: -16px; width: 10px; height: 10px; }
-.is-shown .pq[data-m="thinking"] { animation: pq-puff .6s cubic-bezier(.3, 1.5, .5, 1) both, pq-bob 4s .6s ease-in-out infinite; }
-.is-shown .pq[data-m="thinking"] .pq__puff { animation: pq-pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
-.is-shown .pq[data-m="thinking"] .pq__c { animation: pq-dream .7s calc(.2s + var(--i) * 38ms) ease-out both; }
-.is-shown .pq[data-m="thinking"] .pq__spark { animation: pq-twinkle 1.8s ease-in-out infinite; }
+.pq[data-m="thinking"] .pq__spark:nth-child(1) { left: -8px; top: 1px; }
+.pq[data-m="thinking"] .pq__spark:nth-child(2) { right: -7px; top: 30%; width: 5px; height: 5px; color: #f2b84b; }
+.pq[data-m="thinking"] .pq__spark:nth-child(3) { left: 22%; bottom: -8px; width: 6px; height: 6px; }
+.is-shown .pq[data-m="thinking"] { animation: pq-quiet .28s ease both; }
+.is-shown .pq[data-m="thinking"] .pq__puff { animation: none; }
+.is-shown .pq[data-m="thinking"] .pq__c { animation: none; opacity: 1; filter: none; }
+.is-shown .pq[data-m="thinking"] .pq__spark { animation: none; }
 .is-shown .pq[data-m="thinking"] .pq__spark:nth-child(2) { animation-delay: -.6s; }
 .is-shown .pq[data-m="thinking"] .pq__spark:nth-child(3) { animation-delay: -1.2s; }
 .pq[data-m="thinking"].is-leaving { animation: pq-flutter .5s ease-in both; }
@@ -405,17 +405,17 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-flutter { to { opacity: 0; transform: translate(24px, -30px) scale(.85); filter: blur(2px); } }
 
 /* ── 学习 · 线圈笔记本 ── */
-.pq[data-m="learning"] { --q-ink: #30365f; --pq-fill-a: #ffffff; --pq-fill-b: #f3f2fc; --pq-stroke: #5d56a0; --pq-rule: rgba(125, 118, 181, .22); padding: 20px 18px 12px; transform-origin: 0 50%; }
+.pq[data-m="learning"] { --q-ink: #30365f; --pq-fill-a: #ffffff; --pq-fill-b: #f3f2fc; --pq-stroke: #5d56a0; --pq-rule: rgba(125, 118, 181, .22); padding: 11px 8px 6px; transform-origin: 0 50%; }
 .pq[data-m="learning"] .pq__hole { fill: #d9d6ef; stroke: var(--pq-stroke); stroke-width: 1.2; }
 .pq[data-m="learning"] .pq__ring { fill: none; stroke: #8f89c7; stroke-width: 2.4; stroke-linecap: round; }
 .pq[data-m="learning"] .pq__text { font-weight: 500; }
-.pq[data-m="learning"] .pq__sticker { position: absolute; right: -10px; top: -12px; width: 28px; height: 28px; color: #ffc93d; filter: drop-shadow(0 2px 2px rgba(48, 54, 95, .25)); }
+.pq[data-m="learning"] .pq__sticker { position: absolute; right: -6px; top: -7px; width: 14px; height: 14px; color: #ffc93d; filter: none; }
 .pq[data-m="learning"] .pq__sticker svg { fill: currentColor; stroke: #5d56a0; stroke-width: 1.4; stroke-linejoin: round; }
-.pq[data-m="learning"] .pq__seg { background: linear-gradient(transparent 62%, rgba(255, 214, 92, .6) 62% 92%, transparent 92%) 0 0 / 0 100% no-repeat; }
-.is-shown .pq[data-m="learning"] { animation: pq-open .55s cubic-bezier(.2, 1.1, .4, 1) both; }
-.is-shown .pq[data-m="learning"] .pq__c { animation: pq-write .22s calc(.3s + var(--i) * 55ms) ease-out both; }
-.is-shown .pq[data-m="learning"] .pq__seg { animation: pq-mark .6s calc(.4s + var(--n) * 55ms) ease-out forwards; }
-.is-shown .pq[data-m="learning"] .pq__sticker { animation: pq-sticker .5s calc(.5s + var(--n) * 55ms) cubic-bezier(.3, 1.8, .5, 1) both; }
+.pq[data-m="learning"] .pq__seg { background: none; }
+.is-shown .pq[data-m="learning"] { animation: pq-quiet .28s ease both; }
+.is-shown .pq[data-m="learning"] .pq__c { animation: none; opacity: 1; filter: none; }
+.is-shown .pq[data-m="learning"] .pq__seg { animation: none; }
+.is-shown .pq[data-m="learning"] .pq__sticker { animation: none; }
 .pq[data-m="learning"].is-leaving { animation: pq-turn .5s ease-in both; }
 @keyframes pq-open { from { opacity: 0; transform: perspective(600px) rotateY(-50deg); } }
 @keyframes pq-write { from { opacity: 0; transform: translateY(3px); filter: blur(1px); } }
@@ -424,19 +424,16 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-turn { to { opacity: 0; transform: perspective(600px) rotateY(-85deg); } }
 
 /* ── 自由 · 彩虹爆炸框 ── */
-.pq[data-m="unrestricted"] { --q-ink: #4a1a2d; --pq-fill-a: #fffafc; --pq-fill-b: #fff0f6; --pq-stroke: #d64f79; padding: 16px 22px; }
-.pq[data-m="unrestricted"] .pq__body { stroke-width: 3.2; }
-.pq[data-m="unrestricted"] .pq__text {
-  font-weight: 760; font-size: calc(var(--fs, 15.5px) + 1px); letter-spacing: .02em;
-  background: linear-gradient(100deg, #e43f7a, #b155d8 55%, #3d8fe0); -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.pq[data-m="unrestricted"] .pq__star { position: absolute; width: 14px; height: 14px; }
+.pq[data-m="unrestricted"] { --q-ink: #4a1a2d; --pq-fill-a: #fffafc; --pq-fill-b: #fff0f6; --pq-stroke: #d64f79; padding: 6px 8px; }
+.pq[data-m="unrestricted"] .pq__body { stroke-width: 1.6; }
+.pq[data-m="unrestricted"] .pq__text { font-weight: 500; font-size: var(--fs, 12px); letter-spacing: 0; color: var(--q-ink); }
+.pq[data-m="unrestricted"] .pq__star { position: absolute; width: 8px; height: 8px; }
 .pq[data-m="unrestricted"] .pq__star svg { fill: currentColor; }
-.pq[data-m="unrestricted"] .pq__star:nth-child(1) { left: -14px; top: -12px; color: #ffd84d; }
-.pq[data-m="unrestricted"] .pq__star:nth-child(2) { right: 26%; top: -18px; width: 10px; height: 10px; color: #6fd3ff; }
-.pq[data-m="unrestricted"] .pq__star:nth-child(3) { left: 36%; bottom: -18px; width: 11px; height: 11px; color: #ff4f8b; }
-.is-shown .pq[data-m="unrestricted"] { animation: pq-spin-in .6s cubic-bezier(.3, 1.5, .5, 1) both; }
-.is-shown .pq[data-m="unrestricted"] .pq__star { animation: pq-twinkle 1.6s ease-in-out infinite; }
+.pq[data-m="unrestricted"] .pq__star:nth-child(1) { left: -7px; top: -6px; color: #ffd84d; }
+.pq[data-m="unrestricted"] .pq__star:nth-child(2) { right: 26%; top: -8px; width: 6px; height: 6px; color: #6fd3ff; }
+.pq[data-m="unrestricted"] .pq__star:nth-child(3) { left: 36%; bottom: -8px; width: 6px; height: 6px; color: #ff4f8b; }
+.is-shown .pq[data-m="unrestricted"] { animation: pq-quiet .28s ease both; }
+.is-shown .pq[data-m="unrestricted"] .pq__star { animation: none; }
 .is-shown .pq[data-m="unrestricted"] .pq__star:nth-child(2) { animation-delay: -.5s; }
 .is-shown .pq[data-m="unrestricted"] .pq__star:nth-child(3) { animation-delay: -1.1s; }
 .pq[data-m="unrestricted"].is-leaving { animation: pq-burst .42s ease-in both; }
@@ -444,7 +441,7 @@ html:not(#_q):not(#_q2) .pinkie-buddy__bubble.is-quote::after { display: none !i
 @keyframes pq-burst { 40% { transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.25); filter: blur(4px); } }
 
 /* ── 夜间 ── */
-html[data-pinkie-night] .pq__shape { filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .45)); }
+html[data-pinkie-night] .pq__shape { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .35)); }
 html[data-pinkie-night] .pq[data-m="chat"] { --q-ink: #ffe3ef; --pq-fill-a: #9a3f68; --pq-fill-b: #5e2244; --pq-stroke: #ff8fbd; }
 html[data-pinkie-night] .pq[data-m="chat"] .pq__knot { fill: #5e2244; }
 html[data-pinkie-night] .pq[data-m="chat"] .pq__gloss { opacity: .3; }
@@ -455,9 +452,10 @@ html[data-pinkie-night] .pq[data-m="project"] .pq__check { background: #4fa3a5; 
 html[data-pinkie-night] .pq[data-m="thinking"] { --q-ink: #f3e9ff; --pq-fill-a: #4a3a5e; --pq-fill-b: #34283f; --pq-stroke: #c9a6e8; }
 html[data-pinkie-night] .pq[data-m="learning"] { --q-ink: #e7e6ff; --pq-fill-a: #2a2a44; --pq-fill-b: #20203a; --pq-stroke: #a9a3e6; --pq-rule: rgba(200, 196, 240, .16); }
 html[data-pinkie-night] .pq[data-m="learning"] .pq__hole { fill: #1a1a2e; }
-html[data-pinkie-night] .pq[data-m="learning"] .pq__seg { background-image: linear-gradient(transparent 62%, rgba(255, 201, 61, .3) 62% 92%, transparent 92%); }
+html[data-pinkie-night] .pq[data-m="learning"] .pq__seg { background-image: none; }
 html[data-pinkie-night] .pq[data-m="unrestricted"] { --pq-fill-a: #2e2132; --pq-fill-b: #231a28; }
-html[data-pinkie-night] .pq[data-m="unrestricted"] .pq__text { background-image: linear-gradient(100deg, #ff8fb6, #d6a2ff 55%, #8fd0ff); }
+html[data-pinkie-night] .pq[data-m="unrestricted"] .pq__text { color: #ffd6e6; }
+@keyframes pq-quiet { from { opacity: 0; } }
 
 /* 「减少动效」打开时：直接出现，不做进出场和循环动画 */
 @media (prefers-reduced-motion: reduce) {
