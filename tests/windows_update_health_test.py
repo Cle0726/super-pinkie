@@ -235,6 +235,24 @@ class NewHelperTest(unittest.TestCase):
         self.assertEqual(120, WindowsUpdater.health_start_seconds)
         self.assertEqual(900, WindowsUpdater.health_ready_seconds)
 
+    def test_previous_copy_is_not_deleted_until_the_new_one_is_ready(self):
+        # Clicking restart used to rename the desktop exe away, then delete it
+        # before the new window existed. The shortcut then said the program
+        # had been deleted, and a failed move left nothing to open.
+        onefile = WindowsUpdater._helper_source()
+        self.assertNotIn("Remove-Item -LiteralPath $Target -Force", onefile)
+        put_back = onefile.index("Move-Item -LiteralPath $Backup -Destination $Target -Force")
+        self.assertLess(put_back, onefile.index("Remove-Item -LiteralPath $failed -Force", put_back))
+        self.assertLess(onefile.index("if ($ready -and (Test-Path -LiteralPath $Target))"),
+                        onefile.index("Remove-Item -LiteralPath $Backup -Force"))
+        portable = WindowsUpdater._directory_helper_source()
+        put_back = portable.index("'previous version folder' $SwapSeconds")
+        self.assertLess(put_back, portable.index("Remove-Item -LiteralPath $failed -Recurse -Force"))
+        self.assertLess(portable.index("if ($ready -and (Test-Path -LiteralPath $TargetExe))"),
+                        portable.index("Remove-Item -LiteralPath $Backup -Recurse -Force"))
+        self.assertIn("请不要点击桌面上的图标", portable)
+        self.assertNotIn("新版本已经打开，正在完成首次启动", portable)
+
 
 if __name__ == "__main__":
     unittest.main()

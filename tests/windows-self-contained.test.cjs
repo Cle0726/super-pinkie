@@ -121,6 +121,8 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
   assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
   assert.match(loading, /mode: "no-cors"/);
+  assert.match(loading, /AbortController/);
+  assert.match(loading, /controller\.abort\(\), 2000\)/);
   assert.match(launcher, /frameless=True/);
 });
 
