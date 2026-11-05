@@ -58,4 +58,21 @@ test('first-person rendering keeps code, links, 我们 and idioms, and both copi
   const embedded = fs.readFileSync(new URL('../services/first-person-renderer/index.mjs', import.meta.url), 'utf8');
   const rules = text => text.slice(text.indexOf('const KEEP_WORDS'), text.indexOf('\n}\n', text.indexOf('function renderFirstPerson')) ).replace('export ', '');
   assert.equal(rules(embedded), rules(shared));
+  // The App chat window renders the same rules in the browser (indented inside an IIFE).
+  const ui = fs.readFileSync(new URL('../ui/injections/laolao-first-person.js', import.meta.url), 'utf8');
+  const uiRules = text => text.slice(text.indexOf('const KEEP_WORDS'), text.indexOf('// --- first-person rules end ---'))
+    .split('\n').map(line => line.replace(/^  /, '')).join('\n').trimEnd();
+  assert.equal(uiRules(ui), (rules(shared) + '\n}').trimEnd());
+});
+
+test('the App chat window shows 碧琪 for every mode through one display-only injection', () => {
+  const fragment = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
+  assert.match(fragment, /<script defer src="\/laolao-first-person\.js\?v=firstperson\d+"><\/script>/);
+  const ui = fs.readFileSync(new URL('../ui/injections/laolao-first-person.js', import.meta.url), 'utf8');
+  // Only text node values change: no element rewrites that would break Lit markers.
+  assert.doesNotMatch(ui, /\.(?:innerHTML|textContent|innerText)\s*=[^=]/);
+  // Never a whole-page subtree observer; the app mount and the study-desk event only.
+  assert.doesNotMatch(ui, /observe\(document\.body,\s*\{[^}]*subtree/);
+  assert.match(ui, /pinkie:desk-conversation-rendered/);
+  for (const skipped of ['.chat-tool-card', '.chat-timeline-tool-row', 'pre', 'code', 'textarea']) assert.ok(ui.includes(`'${skipped}'`), skipped);
 });
