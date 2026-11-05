@@ -121,3 +121,31 @@ test('a second wait in a row on a running job is turned into the while-waiting l
     assert.match(waitNudge([{command: 'x', startedAt: 0}], [], 5000), /写好交付说明/, 'generic list');
   } finally { shared.jobs.delete('bg-w1'); shared.waitStreak?.delete(sessionKey); shared.kinds?.delete(sessionKey); }
 });
+
+test('waiting right after a job goes to the background is turned into the while-waiting list the first time too', () => {
+  // 11-04 routes-m R-ad: both runs did exec (still running) → process poll at once; the judge marked both down.
+  const {jobs} = fresh();
+  const sessionKey = 'agent:thinking:first-wait';
+  const ctx = {sessionKey};
+  rememberKinds(sessionKey, ['video_motion']);
+  const poll = {toolName: 'process', params: {action: 'poll', sessionId: 'vivid-orbit', timeout: 15000}};
+  try {
+    jobs.afterTool({...running('vivid-orbit', 8630), params: {command: 'python3 render_video.py'}}, ctx);
+    const first = jobs.beforeTool(poll, ctx);
+    assert.equal(first?.block, true, 'no work since the start: blocked');
+    assert.match(first.blockReason, /「python3 render_video\.py」.*还在后台跑/);
+    assert.match(first.blockReason, /抽帧/);
+    assert.equal(jobs.beforeTool(poll, ctx)?.block, true, 'still nothing done: second wait in a row is blocked as before');
+    assert.equal(jobs.beforeTool({toolName: 'write', params: {path: 'cover.html'}}, ctx), null, 'real work');
+    assert.equal(jobs.beforeTool(poll, ctx), null, 'a wait after doing something is fine');
+
+    // Work between the start and the first wait: that wait is not blocked.
+    jobs.afterTool({...running('lucky-crest', 10428), params: {command: 'python3 render_video.py'}}, ctx);
+    assert.equal(jobs.beforeTool({toolName: 'exec', params: {command: 'python3 make_cover.py'}}, ctx), null);
+    assert.equal(jobs.beforeTool(poll, ctx), null);
+  } finally {
+    const shared = globalThis[Symbol.for('pinkie.backgroundJobs.v1')];
+    shared?.waitStreak?.delete(sessionKey); shared?.kinds?.delete(sessionKey); shared?.idleSinceStart?.delete(sessionKey);
+    if (shared?.timer) clearInterval(shared.timer);
+  }
+});
