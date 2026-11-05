@@ -396,6 +396,11 @@ def gateway_ui_url():
     return GATEWAY_CHAT_URL
 
 
+def openclaw_config_path():
+    config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
+    return Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
+
+
 def cleanup_orphan_webview(storage):
     """Remove only stale Edge WebView2 children owned by this app's storage path."""
     if os.name != "nt":
@@ -416,6 +421,253 @@ def cleanup_orphan_webview(storage):
         )
     except (OSError, subprocess.SubprocessError):
         append_log("launcher", "stale WebView2 cleanup skipped")
+
+
+# Brings a WPF window to the screen even when its process was started with
+# SW_HIDE: Windows applies the startup show state to a process's FIRST
+# ShowWindow call, so a later explicit SW_SHOWNORMAL is what makes it visible.
+FOREGROUND_PS = r'''function Show-Foreground($Window) {
+  try {
+    if (-not ('Pinkie.Win32' -as [type])) {
+      Add-Type -Namespace Pinkie -Name Win32 -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+"@
+    }
+    $handle = (New-Object System.Windows.Interop.WindowInteropHelper $Window).Handle
+    [void][Pinkie.Win32]::ShowWindow($handle, 1)
+    [void][Pinkie.Win32]::SetForegroundWindow($handle)
+    [void]$Window.Activate()
+  } catch {}
+}
+'''
+
+# The progress window. The App starts it itself (CREATE_NO_WINDOW, no SW_HIDE)
+# just before it closes, so the moment the old window goes this one is already
+# on screen. The replacer starts it only if the App could not.
+PROGRESS_WINDOW_PS = r'''param([string]$Status, [int]$Owner, [string]$Version)
+Add-Type -AssemblyName PresentationFramework
+''' + FOREGROUND_PS + r'''$window = New-Object Windows.Window
+$window.Title = '超級碧琪更新'; $window.Width = 400; $window.SizeToContent = 'Height'
+$window.WindowStartupLocation = 'CenterScreen'; $window.Topmost = $true; $window.ShowInTaskbar = $true
+$window.ResizeMode = 'NoResize'; $window.WindowStyle = 'ToolWindow'
+$panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
+$title = New-Object Windows.Controls.TextBlock; $title.FontSize = 15; $title.FontWeight = 'SemiBold'
+$title.Text = if ($Version) { "碧琪正在更新到 $Version" } else { '碧琪正在更新' }
+$line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'; $line.Text = '正在准备…'
+$bar = New-Object Windows.Controls.ProgressBar; $bar.Height = 8; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Margin = '0,12,0,8'
+$hint = New-Object Windows.Controls.TextBlock; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'
+$hint.Text = '窗口会关上一到两分钟。请不要点击桌面上的碧琪，也不要关机。换好后会自己打开。记忆和设置不会丢。'
+foreach ($node in @($title, $line, $bar, $hint)) { [void]$panel.Children.Add($node) }
+$window.Content = $panel
+$window.Add_Loaded({ Show-Foreground $window })
+$started = Get-Date
+# The App opens this window before the replacer exists (-Owner 0); the
+# replacer then writes its own PID into the status file.
+$script:ownerId = $Owner
+$script:closeAt = $null
+$script:ownerGoneAt = $null
+$timer = New-Object Windows.Threading.DispatcherTimer
+$timer.Interval = [TimeSpan]::FromMilliseconds(500)
+$timer.Add_Tick({
+  $seconds = [int]((Get-Date) - $started).TotalSeconds
+  try {
+    $data = Get-Content -LiteralPath $Status -Raw -Encoding UTF8 | ConvertFrom-Json
+    $line.Text = "第 $($data.step)/$($data.total) 步：$($data.text)（已用 $seconds 秒）"
+    $bar.Value = [Math]::Min(100, [double]$data.step / [double]$data.total * 100)
+    # The failure window has taken over; it is already on screen.
+    if (-not $script:ownerId -and $data.owner) { $script:ownerId = [int]$data.owner }
+    if ($data.state -eq 'problem') { $window.Close() }
+  } catch {}
+  # Stay up until the replacer has exited AND an App window is on screen (or
+  # 90 s later). Closing earlier left people with nothing to look at while the
+  # restored or new version was still opening, and they clicked the desktop
+  # icon in the middle of the swap.
+  $ownerAlive = $seconds -lt 30
+  if ($script:ownerId) {
+    try { $ownerAlive = [bool](Get-Process -Id $script:ownerId -ErrorAction SilentlyContinue) } catch { $ownerAlive = $false }
+  }
+  if (-not $ownerAlive) {
+    if (-not $script:ownerGoneAt) { $script:ownerGoneAt = Get-Date; $line.Text = '马上就好，正在打开碧琪…' }
+    $appShown = $false
+    try { $appShown = [bool](Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '超級碧琪' } | Select-Object -First 1) } catch {}
+    if ($appShown -and -not $script:closeAt) { $script:closeAt = (Get-Date).AddSeconds(2) }
+    if (((Get-Date) - $script:ownerGoneAt).TotalSeconds -gt 90) { $window.Close() }
+  }
+  if ($script:closeAt -and (Get-Date) -ge $script:closeAt) { $window.Close() }
+  if ($seconds -gt 1500) { $window.Close() }
+})
+$timer.Start()
+[void]$window.ShowDialog()
+Remove-Item -LiteralPath $Status -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'''
+
+# 「用管理员权限修复」: runs elevated (UAC) from the failure window. Stops what
+# still runs from the install, copies the previous (or else the new) copy back
+# with robocopy's backup mode, which reads past ACLs, and starts the App again
+# through Explorer so it runs as the signed-in user, never as administrator.
+REPAIR_PS = r'''param(
+  [string]$Mode = 'dir',
+  [Parameter(Mandatory=$true)][string]$Target,
+  [Parameter(Mandatory=$true)][string]$TargetExe,
+  [string]$Backup = '',
+  [string]$Failed = '',
+  [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+try { $Host.UI.RawUI.WindowTitle = '超級碧琪 · 管理员修复' } catch {}
+function Write-RepairLog([string]$Message) {
+  try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] admin repair: $Message" } catch {}
+}
+function Stop-Owned([string]$Root) {
+  if (-not $Root -or -not (Test-Path -LiteralPath $Root -PathType Container)) { return }
+  $prefix = (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') + '\'
+  foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $_.ProcessId -ne $PID -and $_.ExecutablePath -and
+      $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })) {
+    try { & taskkill.exe /PID $process.ProcessId /F | Out-Null } catch {}
+  }
+}
+try {
+  Write-Host '正在用管理员权限修复超級碧琪，大约一分钟，请不要关闭这个窗口……'
+  Write-RepairLog "started (mode $Mode, target $Target)"
+  $source = $null
+  foreach ($candidate in @($Backup, $Failed)) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate)) { $source = $candidate; break }
+  }
+  if ($Mode -eq 'file') {
+    if ($source) { Copy-Item -LiteralPath $source -Destination $TargetExe -Force; Write-RepairLog "restored $TargetExe from $source" }
+  } else {
+    foreach ($root in @($Target, $Backup, $Failed)) { Stop-Owned $root }
+    if ($source) {
+      Write-RepairLog "copying $source -> $Target"
+      & robocopy.exe $source $Target /E /B /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+      $code = $LASTEXITCODE
+      if ($code -ge 8) {
+        Write-RepairLog "robocopy /B exit code $code, retrying without backup mode"
+        & robocopy.exe $source $Target /E /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        $code = $LASTEXITCODE
+      }
+      if ($code -ge 8) { throw "robocopy exit code $code" }
+    }
+  }
+  if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw '找不到可以恢复的版本' }
+  Write-RepairLog 'repaired; starting the App as the signed-in user'
+  Write-Host '修好了，正在打开碧琪……'
+  & explorer.exe $TargetExe
+  Start-Sleep -Seconds 2
+} catch {
+  Write-RepairLog "failed: $($_.Exception.Message)"
+  try {
+    Add-Type -AssemblyName PresentationFramework
+    [void][System.Windows.MessageBox]::Show("管理员修复也没有完成：$($_.Exception.Message)`n`n可以重新下载便携版，解压到原来的位置，记忆和设置不受影响。`n`n详细记录：$LogPath", '超級碧琪更新', 'OK', 'Warning')
+  } catch {}
+}
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'''
+
+# Shared by both replacers (injected at "#@@UPDATE_UI@@").
+UPDATE_UI_PS = r'''$ProgressFile = Join-Path $UpdateRoot ('progress-' + $Token + '.json')
+$script:repairStarted = $false
+function Set-UpdateProgress([int]$Step, [string]$Text, [string]$State = 'running') {
+  try {
+    @{ step = $Step; total = 5; text = $Text; state = $State; owner = $PID } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath $ProgressFile -Encoding UTF8
+  } catch {}
+}
+function ConvertTo-Argument([string]$Value) { '"' + $Value + '"' }
+function Start-UpdateProgressWindow {
+  # The App normally opens the progress window itself before it closes. If it
+  # could not, open it here -- with CREATE_NO_WINDOW only. Start-Process
+  # -WindowStyle Hidden (2.5.36) passed SW_HIDE, and Windows applies that to
+  # the WPF window's first ShowWindow: the window existed but nobody saw it.
+  if ($ProgressShown -or -not $ProgressScript -or -not (Test-Path -LiteralPath $ProgressScript)) { return }
+  try {
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = Join-Path $PSHOME 'powershell.exe'
+    $info.Arguments = '-NoProfile -ExecutionPolicy Bypass -STA -File ' + (ConvertTo-Argument $ProgressScript) +
+      ' -Status ' + (ConvertTo-Argument $ProgressFile) + ' -Owner ' + $PID + ' -Version ' + (ConvertTo-Argument $Version)
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    [void][System.Diagnostics.Process]::Start($info)
+  } catch { Write-UpdateLog "could not show update progress: $($_.Exception.Message)" }
+}
+''' + FOREGROUND_PS + r'''function Start-AsUser([string]$Exe, [string]$HealthToken = '') {
+  if (-not $LaunchAsUser) {
+    if ($HealthToken) { return Start-Process -FilePath $Exe -ArgumentList "--update-health-token=$HealthToken" -PassThru }
+    return Start-Process -FilePath $Exe -PassThru
+  }
+  # This helper runs elevated. The App must not: Explorer starts it as the
+  # signed-in user. Explorer passes no arguments, so the token goes by file.
+  if ($HealthToken) {
+    @{ token = $HealthToken; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath (Join-Path $UpdateRoot 'health\pending-launch.json') -Encoding UTF8
+  }
+  $since = (Get-Date).AddSeconds(-2)
+  $full = [IO.Path]::GetFullPath($Exe)
+  & explorer.exe $full
+  $deadline = (Get-Date).AddSeconds(45)
+  while ((Get-Date) -lt $deadline) {
+    foreach ($item in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $full, [System.StringComparison]::OrdinalIgnoreCase) })) {
+      $process = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
+      if ($process -and $process.StartTime -ge $since) { return $process }
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  return $null
+}
+function Show-UpdateProblem([string]$Text) {
+  # Last resort when no App window will come back to explain what happened.
+  # A real window with a way out, not just an OK box: the admin button copies
+  # the previous version back even where this user may not write.
+  $offer = [bool]($RepairScript -and (Test-Path -LiteralPath $RepairScript))
+  Write-UpdateLog ('showing the update problem window' + $(if ($offer) { ' (admin repair offered)' } else { '' }))
+  try {
+    Add-Type -AssemblyName PresentationFramework
+    $script:problemWindow = New-Object Windows.Window
+    $script:problemWindow.Title = '超級碧琪更新 · 没有装上'; $script:problemWindow.Width = 480; $script:problemWindow.SizeToContent = 'Height'
+    $script:problemWindow.WindowStartupLocation = 'CenterScreen'; $script:problemWindow.Topmost = $true; $script:problemWindow.ResizeMode = 'NoResize'
+    $panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
+    $heading = New-Object Windows.Controls.TextBlock; $heading.FontSize = 15; $heading.FontWeight = 'SemiBold'; $heading.Text = '这次更新没有装好'
+    $body = New-Object Windows.Controls.TextBlock; $body.Margin = '0,10,0,0'; $body.TextWrapping = 'Wrap'; $body.Text = $Text
+    $script:problemResult = New-Object Windows.Controls.TextBlock; $script:problemResult.Margin = '0,10,0,0'; $script:problemResult.TextWrapping = 'Wrap'; $script:problemResult.Foreground = 'Firebrick'
+    $row = New-Object Windows.Controls.WrapPanel; $row.Margin = '0,14,0,0'
+    if ($offer) {
+      $admin = New-Object Windows.Controls.Button; $admin.Content = '用管理员权限修复'; $admin.Padding = '14,6,14,6'; $admin.Margin = '0,0,8,0'; $admin.IsDefault = $true
+      $admin.Add_Click({
+        try {
+          Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -ArgumentList $script:RepairArguments | Out-Null
+          $script:repairStarted = $true
+          Write-UpdateLog 'admin repair started'
+          $script:problemWindow.Close()
+        } catch {
+          Write-UpdateLog "admin repair not started: $($_.Exception.Message)"
+          $script:problemResult.Text = '没有拿到管理员权限（可能点了「否」）。可以再点一次，或者点「打开文件夹」按上面的说明处理。'
+        }
+      })
+      [void]$row.Children.Add($admin)
+    }
+    $open = New-Object Windows.Controls.Button; $open.Content = '打开文件夹'; $open.Padding = '14,6,14,6'; $open.Margin = '0,0,8,0'
+    $open.Add_Click({ try { Start-Process -FilePath explorer.exe -ArgumentList (ConvertTo-Argument $script:ProblemFolder) | Out-Null } catch {} })
+    $close = New-Object Windows.Controls.Button; $close.Content = '关闭'; $close.Padding = '14,6,14,6'; $close.IsCancel = $true
+    $close.Add_Click({ $script:problemWindow.Close() })
+    foreach ($node in @($open, $close)) { [void]$row.Children.Add($node) }
+    foreach ($node in @($heading, $body, $row, $script:problemResult)) { [void]$panel.Children.Add($node) }
+    $script:problemWindow.Content = $panel
+    $script:problemWindow.Add_Loaded({ Show-Foreground $script:problemWindow; Set-UpdateProgress 5 '没有装上' 'problem' })
+    [void]$script:problemWindow.ShowDialog()
+  } catch {
+    Write-UpdateLog "could not show update problem window: $($_.Exception.Message)"
+    Set-UpdateProgress 5 '没有装上' 'problem'
+    try { [void][System.Windows.MessageBox]::Show($Text, '超級碧琪更新', 'OK', 'Warning') } catch {}
+  }
+}
+function Remove-UnusedRepairScript {
+  if (-not $script:repairStarted -and $RepairScript) { Remove-Item -LiteralPath $RepairScript -Force -ErrorAction SilentlyContinue }
+}
+'''
 
 
 class WindowsUpdater:
@@ -721,6 +973,15 @@ class WindowsUpdater:
 
     @staticmethod
     def _helper_source():
+        return WindowsUpdater._onefile_helper_template().replace("#@@UPDATE_UI@@", UPDATE_UI_PS.rstrip())
+
+    @staticmethod
+    def _directory_helper_source():
+        """PowerShell replacer for the portable onedir package."""
+        return WindowsUpdater._directory_helper_template().replace("#@@UPDATE_UI@@", UPDATE_UI_PS.rstrip())
+
+    @staticmethod
+    def _onefile_helper_template():
         return r'''param(
   [Parameter(Mandatory=$true)][string]$Target,
   [Parameter(Mandatory=$true)][string]$Payload,
@@ -734,7 +995,12 @@ class WindowsUpdater:
   [Parameter(Mandatory=$true)][string]$ReadyMarker,
   [string]$Version = '',
   [int]$StartSeconds = 120,
-  [int]$ReadySeconds = 900
+  [int]$ReadySeconds = 900,
+  [string]$ProgressScript = '',
+  [string]$RepairScript = '',
+  [switch]$ProgressShown,
+  [switch]$LaunchAsUser,
+  [switch]$ProbeFailRollback
 )
 # pinkie-update-protocol: 2  (see the portable helper: started, then ready)
 $StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
@@ -755,6 +1021,12 @@ function Write-UpdateFailure([string]$Message) {
       Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
   } catch {}
 }
+#@@UPDATE_UI@@
+$script:ProblemFolder = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Target))
+$script:RepairArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (ConvertTo-Argument $RepairScript),
+  '-Mode', 'file', '-Target', (ConvertTo-Argument $Target), '-TargetExe', (ConvertTo-Argument $Target),
+  '-Backup', (ConvertTo-Argument $Backup), '-Failed', (ConvertTo-Argument ($Target + '.failed-' + $Token)),
+  '-LogPath', (ConvertTo-Argument $LogPath))
 function Test-UpdateWriteAccess([string]$Folder) {
   $probe = [IO.Path]::Combine($Folder, '.pinkie-write-test-' + $Token + '.tmp')
   $created = $false
@@ -777,6 +1049,7 @@ function Restore-PreviousVersion {
   # the previous exe back on that same path, and only then delete the failed
   # one. If the previous exe cannot return, put the failed file back so the
   # desktop shortcut never points at nothing.
+  if ($ProbeFailRollback) { throw 'probe: simulated rollback failure' }
   $failed = $null
   if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
     if (Test-Path -LiteralPath $Target) {
@@ -802,7 +1075,7 @@ function Restore-PreviousVersion {
       Remove-Item -LiteralPath $failed -Force -ErrorAction SilentlyContinue
     }
   }
-  if (Test-Path -LiteralPath $Target) { Start-Process -FilePath $Target | Out-Null }
+  if (Test-Path -LiteralPath $Target) { [void](Start-AsUser $Target) }
 }
 try {
   [void](Get-Command Get-FileHash -ErrorAction Stop)
@@ -810,6 +1083,8 @@ try {
   if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) { throw 'installed executable not found' }
   if (Test-Path -LiteralPath $Backup) { throw 'update backup path already exists' }
   Test-UpdateWriteAccess ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Target)))
+  Set-UpdateProgress 1 '正在关闭旧版本'
+  Start-UpdateProgressWindow
   [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
@@ -817,13 +1092,16 @@ try {
   }
   if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Set-UpdateProgress 3 '正在替换文件'
   Move-Item -LiteralPath $Target -Destination $Backup
   $script:backupCreated = $true
   Move-Item -LiteralPath $Payload -Destination $Target -Force
   $actual = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'installed update checksum mismatch' }
   Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
-  $launched = Start-Process -FilePath $Target -ArgumentList "--update-health-token=$Token" -PassThru
+  Set-UpdateProgress 5 '正在启动新版本'
+  $launched = Start-AsUser $Target $Token
+  if (-not $launched) { throw 'new version did not start' }
   $startDeadline = (Get-Date).AddSeconds($StartSeconds)
   $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
   $started = $false
@@ -831,7 +1109,10 @@ try {
   while (-not (Test-Path -LiteralPath $HealthMarker)) {
     $launched.Refresh()
     if ($launched.HasExited) { throw "new version exited before it was ready (exit code $($launched.ExitCode))" }
-    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) { $started = $true; Write-UpdateLog 'new version started; waiting for its gateway' }
+    if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) {
+      $started = $true; Write-UpdateLog 'new version started; waiting for its gateway'
+      Set-UpdateProgress 5 '新版本正在打开，请不要点击桌面上的图标'
+    }
     if (-not $started -and (Get-Date) -ge $startDeadline) {
       & taskkill.exe /PID $launched.Id /T /F | Out-Null
       try { Wait-Process -Id $launched.Id -Timeout 10 -ErrorAction SilentlyContinue } catch {}
@@ -851,32 +1132,31 @@ try {
       Where-Object { $_.Name -match '^[vV]?\d+(?:\.\d+){1,3}$' } |
       Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Force -ErrorAction SilentlyContinue
+    Set-UpdateProgress 5 '新版已经打开' 'done'
     Write-UpdateLog 'update completed'
   } else {
     Write-UpdateLog 'previous executable kept until the new version is ready'
   }
 } catch {
   Write-UpdateLog "update failed, restoring previous version: $($_.Exception.Message)"
+  Set-UpdateProgress 5 '这次没装上，正在恢复原来的版本' 'failed'
   Write-UpdateFailure $_.Exception.Message
   if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
     try { Restore-PreviousVersion }
     catch {
       Write-UpdateLog "rollback failed: $($_.Exception.Message)"
-      try {
-        Add-Type -AssemblyName PresentationFramework
-        [void][System.Windows.MessageBox]::Show("新版没有装上，原来的程序也没能自动放回去。请到原来的位置找带 previous 的文件，把它改回原来的名字就能继续用。`n`n$($_.Exception.Message)", '超級碧琪更新', 'OK', 'Warning')
-      } catch {}
+      Show-UpdateProblem ("新版 $Version 没有装上，原来的程序也没能自动放回去。`n请点「用管理员权限修复」；或者到原来的位置找带 previous 的文件，把它改回原来的名字。`n记忆和设置都在，不受影响。`n`n详细记录：$LogPath")
     }
   } else {
     Write-StartupFailure $_
   }
 }
+Remove-UnusedRepairScript
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
     @staticmethod
-    def _directory_helper_source():
-        """PowerShell replacer for the portable onedir package."""
+    def _directory_helper_template():
         return r'''param(
   [Parameter(Mandatory=$true)][string]$TargetDir,
   [Parameter(Mandatory=$true)][string]$Payload,
@@ -894,7 +1174,12 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [string]$Version = '',
   [int]$StartSeconds = 120,
   [int]$ReadySeconds = 900,
-  [int]$SwapSeconds = 90
+  [int]$SwapSeconds = 90,
+  [string]$ProgressScript = '',
+  [string]$RepairScript = '',
+  [switch]$ProgressShown,
+  [switch]$LaunchAsUser,
+  [switch]$ProbeFailRollback
 )
 # pinkie-update-protocol: 2
 # The new version reads this line from its own apply-<token>.ps1 to learn that
@@ -927,63 +1212,12 @@ function Write-UpdateFailure([string]$Message) {
 }
 # The App window is gone during the swap. A small always-on-top window shows
 # each step so the user knows the update is still running and when it is done.
-$ProgressFile = Join-Path $UpdateRoot ('progress-' + $Token + '.json')
-$ProgressScript = Join-Path $UpdateRoot ('progress-' + $Token + '.ps1')
-function Set-UpdateProgress([int]$Step, [string]$Text, [string]$State = 'running') {
-  try {
-    @{ step = $Step; total = 5; text = $Text; state = $State } | ConvertTo-Json -Compress |
-      Set-Content -LiteralPath $ProgressFile -Encoding UTF8
-  } catch {}
-}
-function Start-UpdateProgressWindow {
-  try {
-    $source = @'
-param([string]$Status, [int]$Owner, [string]$Version)
-Add-Type -AssemblyName PresentationFramework
-$window = New-Object Windows.Window
-$window.Title = '超級碧琪更新'; $window.Width = 400; $window.SizeToContent = 'Height'
-$window.WindowStartupLocation = 'CenterScreen'; $window.Topmost = $true
-$window.ResizeMode = 'NoResize'; $window.WindowStyle = 'ToolWindow'
-$panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
-$title = New-Object Windows.Controls.TextBlock; $title.FontSize = 15; $title.FontWeight = 'SemiBold'
-$title.Text = if ($Version) { "碧琪正在更新到 $Version" } else { '碧琪正在更新' }
-$line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'; $line.Text = '正在准备…'
-$bar = New-Object Windows.Controls.ProgressBar; $bar.Height = 8; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Margin = '0,12,0,8'
-$hint = New-Object Windows.Controls.TextBlock; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'
-$hint.Text = '请不要点击桌面上的碧琪，也不要关机。换好后会自己打开。记忆和设置不会丢。'
-foreach ($node in @($title, $line, $bar, $hint)) { [void]$panel.Children.Add($node) }
-$window.Content = $panel
-$started = Get-Date
-$closeAt = $null
-$timer = New-Object Windows.Threading.DispatcherTimer
-$timer.Interval = [TimeSpan]::FromMilliseconds(500)
-$timer.Add_Tick({
-  $seconds = [int]((Get-Date) - $started).TotalSeconds
-  try {
-    $data = Get-Content -LiteralPath $Status -Raw -Encoding UTF8 | ConvertFrom-Json
-    $line.Text = "第 $($data.step)/$($data.total) 步：$($data.text)（已用 $seconds 秒）"
-    $bar.Value = [Math]::Min(100, [double]$data.step / [double]$data.total * 100)
-  } catch {}
-  # Stay up until the replacer itself exits. Closing when the status flips
-  # made people click the desktop icon while the exe was still being moved,
-  # and Windows then said the program had been deleted.
-  $ownerAlive = $false
-  try { $ownerAlive = [bool](Get-Process -Id $Owner -ErrorAction SilentlyContinue) } catch {}
-  if (-not $ownerAlive -and -not $script:closeAt) { $script:closeAt = (Get-Date).AddSeconds(8) }
-  if ($script:closeAt -and (Get-Date) -ge $script:closeAt) { $window.Close() }
-  if ($seconds -gt 1200) { $window.Close() }
-})
-$timer.Start()
-[void]$window.ShowDialog()
-Remove-Item -LiteralPath $Status -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
-'@
-    [IO.File]::WriteAllText($ProgressScript, $source, (New-Object Text.UTF8Encoding $true))
-    Start-Process -FilePath powershell.exe -WindowStyle Hidden -ArgumentList @(
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', ('"' + $ProgressScript + '"'),
-      '-Status', ('"' + $ProgressFile + '"'), '-Owner', $PID, '-Version', ('"' + $Version + '"')) | Out-Null
-  } catch { Write-UpdateLog "could not show update progress: $($_.Exception.Message)" }
-}
+#@@UPDATE_UI@@
+$script:ProblemFolder = Split-Path -Parent ([IO.Path]::GetFullPath($TargetDir).TrimEnd('\'))
+$script:RepairArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (ConvertTo-Argument $RepairScript),
+  '-Mode', 'dir', '-Target', (ConvertTo-Argument $TargetDir), '-TargetExe', (ConvertTo-Argument $TargetExe),
+  '-Backup', (ConvertTo-Argument $Backup), '-Failed', (ConvertTo-Argument ($TargetDir.TrimEnd('\') + '.failed-' + $Token)),
+  '-LogPath', (ConvertTo-Argument $LogPath))
 function Test-UpdateWriteAccess([string]$Folder) {
   $probe = [IO.Path]::Combine($Folder, '.pinkie-write-test-' + $Token + '.tmp')
   $created = $false
@@ -992,13 +1226,6 @@ function Test-UpdateWriteAccess([string]$Folder) {
     $created = $true
     $stream.Dispose()
   } finally { if ($created) { [IO.File]::Delete($probe) } }
-}
-function Show-UpdateProblem([string]$Text) {
-  # Last resort when no App window will come back to explain what happened.
-  try {
-    Add-Type -AssemblyName PresentationFramework
-    [void][System.Windows.MessageBox]::Show($Text, '超級碧琪更新', 'OK', 'Warning')
-  } catch { Write-UpdateLog "could not show update problem: $($_.Exception.Message)" }
 }
 function Invoke-WithRetry([scriptblock]$Action, [string]$What, [int]$Seconds) {
   # Windows refuses to rename a folder while any file inside is open. Right
@@ -1140,6 +1367,7 @@ function Restore-PreviousVersion {
   # Put the previous folder back BEFORE deleting anything. Deleting the new
   # copy first left the desktop path empty: the shortcut said the program had
   # been deleted, and a failed move then removed the only remaining exe.
+  if ($ProbeFailRollback) { throw 'probe: simulated rollback failure' }
   $failed = $null
   if ($script:backupCreated -and (Test-Path -LiteralPath $Backup)) {
     if (Test-Path -LiteralPath $TargetDir) {
@@ -1168,7 +1396,7 @@ function Restore-PreviousVersion {
     }
   }
   Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
-  if (Test-Path -LiteralPath $TargetExe) { Start-Process -FilePath $TargetExe | Out-Null }
+  if (Test-Path -LiteralPath $TargetExe) { [void](Start-AsUser $TargetExe) }
   else { throw 'previous version is missing after rollback' }
 }
 try {
@@ -1245,7 +1473,8 @@ try {
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
   Set-UpdateProgress 5 '正在启动新版本'
-  $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
+  $launched = Start-AsUser $TargetExe $Token
+  if (-not $launched) { throw 'new version did not start' }
   $startDeadline = (Get-Date).AddSeconds($StartSeconds)
   $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
   $started = $false
@@ -1294,7 +1523,7 @@ try {
     try { Restore-PreviousVersion }
     catch {
       Write-UpdateLog "rollback failed: $($_.Exception.Message)"
-      $where = if (Test-Path -LiteralPath $Backup) { "原来的版本保存在：`n$Backup`n把这个文件夹改回「$(Split-Path -Leaf $TargetDir)」就能继续用。" } else { '请重新下载便携版。' }
+      $where = if (Test-Path -LiteralPath $Backup) { "原来的版本保存在：`n$Backup`n请点「用管理员权限修复」，或者把这个文件夹改回「$(Split-Path -Leaf $TargetDir)」。" } else { '请点「用管理员权限修复」，或者重新下载便携版。' }
       Show-UpdateProblem ("新版 $Version 没有装上，自动恢复也没有完成。`n$where`n记忆和设置都在，不受影响。`n`n详细记录：$LogPath")
     }
   } else {
@@ -1303,6 +1532,7 @@ try {
   if ($script:stage) { Remove-Item -LiteralPath $script:stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue
+Remove-UnusedRepairScript
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
@@ -1348,7 +1578,46 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             pass
         return False
 
-    def launch_replacer(self):
+    @staticmethod
+    def _start_progress_window(update_root, token, version):
+        """Open the progress window from the App itself, before it closes.
+
+        CREATE_NO_WINDOW without a STARTUPINFO show state: the window is shown
+        normally. The replacer (whose PID the window reads from the status
+        file) would otherwise be the one to start it, after this window is gone.
+        """
+        if os.name != "nt":
+            return None
+        script = update_root / f"progress-{token}.ps1"
+        status = update_root / f"progress-{token}.json"
+        try:
+            script.write_text(PROGRESS_WINDOW_PS, encoding="utf-8-sig")
+            status.write_text(json.dumps({"step": 1, "total": 5, "text": "正在关闭旧版本", "state": "running"},
+                                         ensure_ascii=False), encoding="utf-8")
+            return subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-File", str(script),
+                 "-Status", str(status), "-Owner", "0", "-Version", str(version)],
+                cwd=str(update_root), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, close_fds=True, **hidden_process_kwargs(hide_window=False),
+            )
+        except OSError as error:
+            append_log("updater", f"progress window not started by the App: {error}")
+            return None
+
+    @staticmethod
+    def _stop_progress_window(process, update_root, token):
+        if process is not None:
+            try:
+                process.terminate()
+            except (OSError, AttributeError):
+                pass
+        for name in (f"progress-{token}.json", f"progress-{token}.ps1", f"repair-{token}.ps1"):
+            try:
+                (update_root / name).unlink()
+            except OSError:
+                pass
+
+    def launch_replacer(self, elevated=False):
         with self.lock:
             if not self.prepared:
                 return {"started": False, "message": "新版还没有准备好"}
@@ -1367,6 +1636,12 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             helper = update_root / f"apply-{token}.ps1"
             marker = health_root / f"{token}.ready"
             ready_marker = health_root / f"{token}.helper-ready"
+            progress_script = update_root / f"progress-{token}.ps1"
+            repair_script = update_root / f"repair-{token}.ps1"
+            try:
+                repair_script.write_text(REPAIR_PS, encoding="utf-8-sig")
+            except OSError as error:
+                append_log("updater", f"admin repair script not written: {error}")
             if self.portable:
                 target_dir = self.executable.parent
                 backup = target_dir.with_name(target_dir.name + ".previous-" + token)
@@ -1412,20 +1687,46 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 "-StartSeconds", str(int(self.health_start_seconds)),
                 "-ReadySeconds", str(int(self.health_ready_seconds)),
                 ]
+            command += ["-ProgressScript", str(progress_script), "-RepairScript", str(repair_script)]
+            if elevated:
+                command.append("-LaunchAsUser")
+            if os.environ.get("PINKIE_UPDATE_PROBE_FAIL_ROLLBACK") == "1":
+                command.append("-ProbeFailRollback")  # update_probe.py only: shows the failure window
+            progress = self._start_progress_window(update_root, token, self.prepared["version"])
+            if progress is not None:
+                command.append("-ProgressShown")
+            elif not progress_script.exists():
+                try:
+                    progress_script.write_text(PROGRESS_WINDOW_PS, encoding="utf-8-sig")
+                except OSError:
+                    pass
             try:
-                process = subprocess.Popen(
-                    command,
-                    cwd=str(update_root),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    close_fds=True,
-                    **hidden_process_kwargs(),
-                )
+                if elevated:
+                    # -WindowStyle Hidden hides only PowerShell's own console;
+                    # every window the helper shows calls Show-Foreground.
+                    process = start_elevated([command[0], "-WindowStyle", "Hidden", *command[1:]], update_root)
+                else:
+                    # No SW_HIDE here: Windows applies a process's startup show
+                    # state to its first ShowWindow, which made the failure
+                    # window invisible. CREATE_NO_WINDOW alone keeps the
+                    # console away.
+                    process = subprocess.Popen(
+                        command,
+                        cwd=str(update_root),
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True,
+                        **hidden_process_kwargs(hide_window=False),
+                    )
             except OSError as error:
                 append_log("updater", f"cannot launch update helper: {error}")
-                return {"started": False, "message": "更新程序没有启动，请稍后再试"}
+                self._stop_progress_window(progress, update_root, token)
+                cancelled = getattr(error, "winerror", None) == 1223
+                return {"started": False, "message": "没有拿到管理员权限，当前版本仍在运行" if cancelled
+                        else "更新程序没有启动，请稍后再试"}
             if not self._wait_for_replacer(process, ready_marker, token):
+                self._stop_progress_window(progress, update_root, token)
                 append_log("updater", "update helper did not become ready; keeping the current window open")
                 failure_marker = Path(str(ready_marker) + ".error")
                 permission_denied = False
@@ -1447,9 +1748,66 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                            "网关端口被其他程序占用，无法安全更新；请先关闭占用该端口的程序，当前版本仍在运行"
                            if gateway_conflict else
                            "更新程序没有准备好，当前版本仍在运行，请稍后再试")
-                return {"started": False, "message": message}
+                # acl_denied: offer the same update through UAC instead.
+                return {"started": False, "message": message, "elevate": bool(permission_denied and not elevated)}
             append_log("updater", f"switching to {self.prepared['version']}")
             return {"started": True, "version": self.prepared["version"]}
+
+
+class ElevatedProcess:
+    """Just enough of Popen for _wait_for_replacer, over a ShellExecuteEx handle."""
+
+    def __init__(self, handle):
+        import ctypes
+
+        self._kernel = ctypes.windll.kernel32
+        self._handle = handle
+        self.pid = self._kernel.GetProcessId(handle)
+
+    def poll(self):
+        import ctypes
+
+        if self._kernel.WaitForSingleObject(self._handle, 0) != 0:
+            return None
+        code = ctypes.c_ulong()
+        self._kernel.GetExitCodeProcess(self._handle, ctypes.byref(code))
+        return code.value
+
+    def wait(self, timeout=None):
+        self._kernel.WaitForSingleObject(self._handle, 0xFFFFFFFF if timeout is None else int(timeout * 1000))
+        return self.poll()
+
+    def terminate(self):
+        self._kernel.TerminateProcess(self._handle, 1)
+
+
+def start_elevated(command, cwd):
+    """Run ``command`` through UAC ("runas"); OSError(winerror=1223) if declined."""
+    import ctypes
+    from ctypes import wintypes
+
+    class ShellExecuteInfo(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD), ("fMask", ctypes.c_ulong), ("hwnd", wintypes.HWND),
+            ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
+            ("lpDirectory", wintypes.LPCWSTR), ("nShow", ctypes.c_int), ("hInstApp", wintypes.HINSTANCE),
+            ("lpIDList", ctypes.c_void_p), ("lpClass", wintypes.LPCWSTR), ("hkeyClass", wintypes.HKEY),
+            ("dwHotKey", wintypes.DWORD), ("hIconOrMonitor", wintypes.HANDLE), ("hProcess", wintypes.HANDLE),
+        ]
+
+    info = ShellExecuteInfo()
+    info.cbSize = ctypes.sizeof(info)
+    info.fMask = 0x00000040 | 0x00000100  # SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC
+    info.lpVerb = "runas"
+    info.lpFile = command[0]
+    info.lpParameters = subprocess.list2cmdline(command[1:])
+    info.lpDirectory = str(cwd)
+    info.nShow = 7  # SW_SHOWMINNOACTIVE; never SW_HIDE (see Show-Foreground)
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    if not shell32.ShellExecuteExW(ctypes.byref(info)) or not info.hProcess:
+        code = ctypes.get_last_error()
+        raise OSError(0, ctypes.FormatError(code), None, code)
+    return ElevatedProcess(info.hProcess)
 
 
 def hidden_process_kwargs(hide_window=True):
@@ -1628,6 +1986,14 @@ class BundledRuntime:
         return environment
 
 
+def _config_repair_module():
+    try:
+        import config_repair
+    except ImportError:  # imported as app.windows_desktop (tests)
+        from app import config_repair
+    return config_repair
+
+
 class GatewaySupervisor:
     def __init__(self, runtime):
         self.runtime = runtime
@@ -1637,6 +2003,15 @@ class GatewaySupervisor:
         self.last_restart = 0.0
         self.failure_limit = 2
         self.version = app_version(runtime.root)
+        self.log_offset = 0
+        self.exit_inspected = True
+        self.good_saved = False
+        self.repairs = 0
+        self.repair_limit = 3
+        self.repairing = threading.Lock()
+        # Shown once on the startup page, e.g. 「碧琪发现设置文件有一处写错了，已经自动修好」.
+        self.notice = ""
+        self.exits = 0
 
     @staticmethod
     def _record_path():
@@ -1712,6 +2087,15 @@ class GatewaySupervisor:
             log_dir = state_root() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             output = (log_dir / "gateway.log").open("ab")
+            # Only what this process prints is read when it exits.
+            self.log_offset = 0
+            try:
+                output.seek(0, os.SEEK_END)
+                self.log_offset = output.tell()
+            except OSError:
+                pass
+            self.exit_inspected = False
+            self.good_saved = False
             command = [
                 str(self.runtime.node), str(self.runtime.openclaw),
                 "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none", "--allow-unconfigured",
@@ -1743,6 +2127,93 @@ class GatewaySupervisor:
             time.sleep(.2)
         return False
 
+    def _node_command(self, *arguments, timeout=60):
+        environment = self.runtime.environment()
+        environment["OPENCLAW_SERVICE_KIND"] = "cli"
+        return subprocess.run(
+            [str(self.runtime.node), str(self.runtime.openclaw), *arguments],
+            cwd=str(self.runtime.openclaw.parent), env=environment,
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout,
+            **hidden_process_kwargs(),
+        )
+
+    def validate_config(self):
+        try:
+            result = self._node_command("config", "validate", "--json", timeout=60)
+            data = json.loads(result.stdout.decode("utf-8", "replace"))
+            paths = [str(issue.get("path") or "<root>") for issue in data.get("issues") or [] if isinstance(issue, dict)]
+            return bool(data.get("valid")), paths
+        except (OSError, ValueError, subprocess.SubprocessError, AttributeError) as error:
+            append_log("launcher", f"config validate could not run: {error}")
+            return None, []
+
+    def doctor_fix(self):
+        try:
+            result = self._node_command("doctor", "--fix", "--non-interactive", timeout=240)
+            append_log("launcher", f"doctor --fix exited {result.returncode}")
+            return result.returncode == 0
+        except (OSError, subprocess.SubprocessError) as error:
+            append_log("launcher", f"doctor --fix could not run: {error}")
+            return False
+
+    def config_repair(self):
+        return _config_repair_module().ConfigRepair(
+            openclaw_config_path(), state_root(), validate=self.validate_config,
+            doctor=self.doctor_fix, log=lambda message: append_log("launcher", message),
+        )
+
+    def _new_gateway_output(self, limit=256 * 1024):
+        try:
+            with (state_root() / "logs/gateway.log").open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                end = handle.tell()
+                start = max(self.log_offset, end - limit) if end >= self.log_offset else max(0, end - limit)
+                handle.seek(start)
+                return handle.read().decode("utf-8", "replace")
+        except OSError:
+            return ""
+
+    def repair_config(self, paths=None, force=False):
+        """Repair openclaw.json once the gateway said it is invalid."""
+        if not self.repairing.acquire(blocking=False):
+            return {"repaired": False, "step": "busy", "message": "正在修复，请稍等"}
+        try:
+            if not force and self.repairs >= self.repair_limit:
+                return {"repaired": False, "step": "limit", "message": ""}
+            self.repairs += 1
+            result = self.config_repair().repair(paths)
+            if result.get("repaired"):
+                self.notice = result.get("message", "")
+            append_log("launcher", f"config repair result: {result.get('step')}")
+            return result
+        except Exception as error:
+            append_log("launcher", f"config repair failed: {error}")
+            return {"repaired": False, "step": "error", "message": "自动修复没有完成，请打开日志文件夹查看"}
+        finally:
+            self.repairing.release()
+
+    def inspect_exit(self):
+        """Read what the exited gateway printed; repair an invalid config."""
+        if self.exit_inspected:
+            return None
+        self.exit_inspected = True
+        self.exits += 1
+        paths = _config_repair_module().invalid_config_paths(self._new_gateway_output())
+        if paths is None:
+            return None
+        append_log("launcher", "gateway exited on an invalid config")
+        return self.repair_config(paths)
+
+    def note_ready(self):
+        if self.good_saved:
+            return
+        self.good_saved = True
+        self.repairs = 0
+        try:
+            self.config_repair().save_last_good()
+        except Exception as error:
+            append_log("launcher", f"last-good config not saved: {error}")
+
     def monitor(self):
         failures = 0
         while not self.closing.wait(.75):
@@ -1751,7 +2222,12 @@ class GatewaySupervisor:
                 alive = bool(process and process.poll() is None)
             if http_ready(GATEWAY_URL):
                 failures = 0
+                self.note_ready()
                 continue
+            if process is not None and not alive:
+                # A gateway that died on a bad openclaw.json would die again on
+                # every restart. Fix the file first, then restart.
+                self.inspect_exit()
             # A freshly copied onedir runtime may be scanned by Defender while
             # Node imports thousands of files. On slower disks this can exceed
             # any fixed grace period. Never kill a still-live Gateway merely
@@ -1955,6 +2431,7 @@ class NativeBridge:
         # freezing startup. Private fields are intentionally not exported.
         self._updater = updater
         self._window = None
+        self._gateway = None
         self.maximized = False
         self.dictation_stop = threading.Event()
         self.dictation_thread = None
@@ -2282,9 +2759,78 @@ class NativeBridge:
 
     def apply_update(self):
         result = self._updater.launch_replacer()
+        if not result.get("started") and result.get("elevate") and self._ask_elevated_install():
+            result = self._updater.launch_replacer(elevated=True)
         if result.get("started"):
             threading.Timer(.6, self._window.destroy).start()
         return result
+
+    def _ask_elevated_install(self):
+        """The install folder refused our write test: offer the UAC route."""
+        try:
+            import ctypes
+            owner = self._native_window_handle() or None
+            answer = ctypes.windll.user32.MessageBoxW(
+                owner,
+                "碧琪装在一个需要管理员权限才能改动的文件夹里，普通方式换不了新版。\n\n"
+                "点「是」后 Windows 会询问一次管理员权限，然后自动换好并重新打开碧琪。",
+                "超級碧琪更新", 0x4 | 0x20 | 0x40000)  # MB_YESNO | MB_ICONQUESTION | MB_TOPMOST
+            return answer == 6  # IDYES
+        except Exception as error:
+            append_log("updater", f"elevation prompt failed: {error}")
+            return False
+
+    # ---- startup page (file://): shown when the gateway is not up after ~60 s
+    def startup_status(self):
+        gateway = self._gateway
+        return {"notice": getattr(gateway, "notice", "") or "",
+                "exits": int(getattr(gateway, "exits", 0) or 0),
+                "version": getattr(self._updater, "current_version", "")}
+
+    def startup_repair(self):
+        gateway = self._gateway
+        if gateway is None:
+            return {"ok": False, "message": "本机网关还没有开始启动，请稍等"}
+        append_log("launcher", "startup page: user asked to repair settings")
+        result = gateway.repair_config(force=True)
+        if not (gateway.process and gateway.process.poll() is None):
+            gateway.start()
+        message = result.get("message") or "已经重新启动本机网关"
+        if result.get("step") == "none":
+            message = "设置文件没有发现问题，已经重新启动本机网关。还是不行的话，点「检查更新并安装」"
+        return {"ok": bool(result.get("repaired")) or result.get("step") == "none", "message": message}
+
+    def startup_update(self):
+        append_log("launcher", "startup page: user asked to check and install an update")
+        try:
+            info = self._updater.check(force=True)
+        except Exception as error:
+            append_log("updater", f"startup update check failed: {error}")
+            info = {"available": False, "message": "检查更新没有成功"}
+        if info.get("error") or info.get("temporaryError"):
+            try:
+                info = self._updater.check(force=True, route="mirror")
+            except Exception:
+                pass
+        if not info.get("available"):
+            return {"ok": False, "stage": "none",
+                    "message": info.get("message") or "已经是最新版。可以先点「自动修复设置」，或者打开日志文件夹把记录发给我们"}
+        prepared = self.prepare_update(route=info.get("route"))
+        if not prepared.get("ready"):
+            return {"ok": False, "stage": "download", "message": prepared.get("message") or "新版下载没有完成，稍后再点一次"}
+        applied = self.apply_update()
+        if not applied.get("started"):
+            return {"ok": False, "stage": "install", "message": applied.get("message") or "新版没有开始安装"}
+        return {"ok": True, "stage": "install", "message": "新版已经下载好，窗口会关上，换好后自动打开"}
+
+    def open_logs(self):
+        folder = state_root() / "logs"
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.Popen(["explorer.exe", str(folder)], **hidden_process_kwargs(hide_window=False))
+        except OSError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "path": str(folder)}
 
 
 BRIDGE_SCRIPT = r"""
@@ -2685,12 +3231,38 @@ def show_startup_error(window):
     """)
 
 
-def update_health_token_from_argv(arguments=None):
+def update_health_token_from_argv(arguments=None, root=None):
     for argument in arguments if arguments is not None else sys.argv[1:]:
         match = re.fullmatch(r"--update-health-token=([0-9a-f]{32})", str(argument))
         if match:
             return match.group(1)
+    if arguments is None:
+        return take_pending_launch_token(root)
     return None
+
+
+def take_pending_launch_token(root=None, max_age=900.0, now=None):
+    """Token an elevated replacer left for the start it made through Explorer.
+
+    Explorer passes no command line, so the elevated helper writes the token to
+    a file instead. Read once; only while that helper's script still exists.
+    """
+    path = Path(root or state_root()) / "updates/health/pending-launch.json"
+    try:
+        age = (now if now is not None else time.time()) - path.stat().st_mtime
+        token = str(json.loads(path.read_text(encoding="utf-8-sig")).get("token", ""))
+    except (OSError, ValueError, AttributeError):
+        return None
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    if not re.fullmatch(r"[0-9a-f]{32}", token) or not 0 <= age <= max_age:
+        return None
+    if not (path.parents[1] / f"apply-{token}.ps1").is_file():
+        return None
+    return token
 
 
 def update_helper_protocol(token, root=None):
@@ -2988,6 +3560,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
         loading += "?" + urllib.parse.urlencode({"updated": version or "1"})
     gateway = GatewaySupervisor(runtime)
+    bridge._gateway = gateway
     # A gateway kept alive by an older version would otherwise be adopted
     # below, and the new version would show the old one's page.
     gateway.retire_stale()

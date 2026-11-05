@@ -184,8 +184,9 @@ class InProgressGuardTest(unittest.TestCase):
         self.assertLess(written, helper.index("[IO.File]::WriteAllText($ReadyMarker, $Token"))
         restore = helper.index("function Restore-PreviousVersion")
         self.assertLess(helper.index("Remove-Item -LiteralPath $InProgress", restore),
-                        helper.index("Start-Process -FilePath $TargetExe | Out-Null", restore))
-        self.assertIn("Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue\nRemove-Item -LiteralPath $PSCommandPath", helper)
+                        helper.index("[void](Start-AsUser $TargetExe)", restore))
+        self.assertIn("Remove-Item -LiteralPath $InProgress -Force -ErrorAction SilentlyContinue\n"
+                      "Remove-UnusedRepairScript\nRemove-Item -LiteralPath $PSCommandPath", helper)
 
 
 class NewHelperTest(unittest.TestCase):

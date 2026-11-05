@@ -29,6 +29,17 @@
     html[data-pinkie-night] { color-scheme: dark; }
     html[data-pinkie-night], html[data-pinkie-night] body { background: #140f17; color: #efe5ea; }
     html[data-pinkie-night] .scene { background: #140f17; filter: brightness(.48) saturate(.8); }
+    #rescue { position: fixed; left: 50%; bottom: calc(7% + 46px); transform: translateX(-50%); width: min(440px, calc(100% - 32px)); padding: 14px 16px; border: 1px solid #fff8; border-radius: 18px; background: #f8dcebf2; color: #72455d; font: 13px system-ui; box-shadow: 0 12px 34px #7b3f5d33; }
+    #rescue[hidden] { display: none; }
+    #rescue p { margin: 0 0 10px; line-height: 1.5; }
+    #rescue .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    #rescue button { flex: 1 1 120px; padding: 8px 10px; border: 1px solid #c98aa7; border-radius: 12px; background: #fff; color: #72455d; font: inherit; cursor: pointer; }
+    #rescue button.primary { background: #c25b8a; border-color: #c25b8a; color: #fff; }
+    #rescue button:disabled { opacity: .55; cursor: default; }
+    #rescue-result { margin-top: 10px !important; min-height: 1em; }
+    html[data-pinkie-night] #rescue { color: #efe5ea; background: #2a2030f4; border-color: #ffffff18; }
+    html[data-pinkie-night] #rescue button { background: #3a2c40; color: #efe5ea; border-color: #ffffff30; }
+    html[data-pinkie-night] #rescue button.primary { background: #c25b8a; }
     html[data-pinkie-night] #status { color: #efe5ea !important; background: #2a2030ef !important; border-color: #ffffff18 !important; box-shadow: 0 12px 34px #0006 !important; }
   </style>
 </head>
@@ -37,12 +48,61 @@
     <source src="assets/laolao-splash.mp4" type="video/mp4">
   </video>
   <div id="status" style="position:fixed;left:50%;bottom:7%;transform:translateX(-50%);padding:9px 15px;border:1px solid #fff8;border-radius:18px;background:#f8dcebdd;color:#72455d;font:12px system-ui;box-shadow:0 12px 34px #7b3f5d22">正在启动本机服务…</div>
+  <section id="rescue" hidden role="dialog" aria-label="本机网关没有起来">
+    <p>本机网关一直没有起来。可以先让碧琪自己修一下；不行的话，检查并装上新版。</p>
+    <div class="actions">
+      <button type="button" class="primary" data-rescue="startup_repair">自动修复设置</button>
+      <button type="button" data-rescue="startup_update">检查更新并安装</button>
+      <button type="button" data-rescue="open_logs">打开日志文件夹</button>
+    </div>
+    <p id="rescue-result" aria-live="polite"></p>
+  </section>
   <script>
     const scene = document.querySelector(".scene");
     const status = document.getElementById("status");
     let elapsed = 0;
     const updated = new URLSearchParams(location.search).get("updated") || "";
     if (updated && status) status.textContent = "更新已装好，正在打开新版本…";
+    // Windows only: the native bridge (pywebview js_api) also exists on this
+    // file:// page. 2.5.36 users sat here for ever because nothing on this
+    // page could repair the config or fetch the fixed version.
+    const nativeApi = () => window.pywebview?.api;
+    const rescue = document.getElementById("rescue");
+    const rescueResult = document.getElementById("rescue-result");
+    const rescueAfter = updated ? 150 : 60;
+    let notice = "";
+    let noticeUntil = 0;
+    window.__pinkieUpdateProgress = event => {
+      if (!event || !rescueResult) return;
+      if (event.stage === "download" && event.total) rescueResult.textContent = `正在下载新版… ${Math.floor(event.downloaded / event.total * 100)}%`;
+      else if (event.stage === "download") rescueResult.textContent = `正在下载新版… ${Math.round((event.downloaded || 0) / 1048576)} MB`;
+      else if (event.stage === "verify") rescueResult.textContent = "正在校验新版…";
+    };
+    rescue?.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-rescue]");
+      const api = nativeApi();
+      if (!button || !api || typeof api[button.dataset.rescue] !== "function") return;
+      const buttons = [...rescue.querySelectorAll("button")];
+      buttons.forEach(item => { item.disabled = true; });
+      rescueResult.textContent = button.dataset.rescue === "startup_update" ? "正在检查更新…" : button.dataset.rescue === "startup_repair" ? "正在检查设置文件…" : "";
+      try {
+        const result = await api[button.dataset.rescue]();
+        if (result?.message) rescueResult.textContent = result.message;
+        else if (button.dataset.rescue === "open_logs") rescueResult.textContent = result?.ok ? "已经打开日志文件夹，把里面的 gateway.log 和 launcher.log 发给我们就好" : "没能打开日志文件夹";
+      } catch (_) {
+        rescueResult.textContent = "没有完成，请再试一次";
+      } finally {
+        buttons.forEach(item => { item.disabled = false; });
+      }
+    });
+    const pollNative = async () => {
+      const api = nativeApi();
+      if (!api || typeof api.startup_status !== "function") return;
+      try {
+        const state = await api.startup_status();
+        if (state?.notice && state.notice !== notice) { notice = state.notice; noticeUntil = elapsed + 12; }
+      } catch (_) {}
+    };
     const probe = async () => {
       // A socket that accepts TCP and never writes HTTP (the update
       // placeholder holds 18789 that way) makes fetch wait for the browser
@@ -65,7 +125,10 @@
       } catch (_) {
         clearTimeout(timer);
         elapsed += 1;
-        if (status) status.textContent = updated
+        if (elapsed % 3 === 0) void pollNative();
+        if (rescue && rescue.hidden && elapsed >= rescueAfter && typeof nativeApi()?.startup_repair === "function") rescue.hidden = false;
+        if (status && notice && elapsed < noticeUntil) status.textContent = `${notice}，正在重新启动… ${elapsed}s`;
+        else if (status) status.textContent = updated
           ? (elapsed < 180
             ? `更新已装好${updated === "1" ? "" : `（${updated}）`}，新版本第一次启动要多等一两分钟… ${elapsed}s`
             : "新版本还在做首次准备（杀毒软件第一次扫描新文件会更慢），请再等等，不用重新打开")
