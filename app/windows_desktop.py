@@ -1968,6 +1968,32 @@ class NativeBridge:
         except OSError:
             return {"ok": False, "message": "读取这个材料时出了点问题，请再试一次。"}
 
+    def _browser_proxy_paths(self):
+        config_name = os.environ.get("OPENCLAW_CONFIG_PATH")
+        config = Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
+        return config, state_root()
+
+    def browser_proxy_get(self):
+        import browser_proxy
+
+        config, state = self._browser_proxy_paths()
+        try:
+            return {"ok": True, **browser_proxy.apply(config, state)}
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error), **browser_proxy.status(browser_proxy.load_setting(state))}
+
+    def browser_proxy_set(self, payload):
+        import browser_proxy
+
+        payload = payload if isinstance(payload, dict) else {}
+        config, state = self._browser_proxy_paths()
+        try:
+            result = browser_proxy.apply(config, state, {"mode": payload.get("mode"), "server": payload.get("server")})
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        append_log("launcher", f"browser proxy set: {result['effective']}")
+        return {"ok": True, "message": "已保存。碧琪下次打开浏览器时生效；浏览器已经开着的话，关掉重开一次。", **result}
+
     def open_external(self, url):
         if isinstance(url, str) and url.startswith(("https://", "http://")):
             webbrowser.open(url)

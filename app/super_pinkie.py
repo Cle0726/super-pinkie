@@ -866,6 +866,18 @@ def ensure_gateway_auth_none(log, config_path=None):
         return False
 
 
+def apply_browser_proxy(log, config_path=None):
+    """Let the browser 碧琪 controls follow the user's proxy choice (default: the system proxy)."""
+    try:
+        import browser_proxy
+
+        state = Path(os.environ.get("PINKIE_STATE_ROOT") or windows_state_root())
+        result = browser_proxy.apply(Path(config_path or openclaw_config_path()), state)
+        log(f"  浏览器代理：{result['effective']}")
+    except Exception as exc:  # never block startup on this
+        log(f"  ⚠️ 设置浏览器代理失败：{exc}")
+
+
 def repair_provider_models(log, config_path=None):
     """Move a provider's stray "model" key into its models list.
 
@@ -1073,6 +1085,7 @@ def prepare_bundled_desktop(log):
 
     repair_provider_models(log)
     ensure_gateway_auth_none(log)
+    apply_browser_proxy(log)
     ensure_workspace_avatars(log)
     for service in ("party", "context", "project-scope", "mode-architecture", "first-person-renderer"):
         install_runtime_service(service, log)
