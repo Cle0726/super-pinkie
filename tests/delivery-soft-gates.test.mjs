@@ -176,3 +176,47 @@ test('a turn opened by a background completion event is judged against the user\
   assert.equal(v?.action, 'revise');
   assert.match(v.reason, /素材从哪来/);
 });
+
+test('a video handed over with MEDIA: counts as a video even when no tool call names the .mp4', (t) => {
+  // 11-04 routes-i R-ad: `python3 render_osmanthus_ad.py` ran in the background and wrote output/*.mp4 itself;
+  // nothing in the tool record ended in .mp4, so the source check never ran.
+  const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  guard.afterTool({toolName: 'write', toolCallId: 'script', params: {path: path.join(root, 'render_osmanthus_ad.py'), content: 'print(1)'}, result: 'ok'}, ctx);
+  guard.afterTool({toolName: 'exec', toolCallId: 'run', params: {command: 'python3 render_osmanthus_ad.py'}, result: 'Command still running (session neat-slug, pid 4242)'}, ctx);
+  guard.afterTool({toolName: 'process', toolCallId: 'poll', params: {action: 'poll', sessionId: 'neat-slug'}, result: 'Process exited with code 0'}, ctx);
+  guard.afterTool({toolName: 'exec', toolCallId: 'look', params: {command: 'look-video output/ad.mp4 12'}, result: 'ok'}, ctx);
+  guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'output/ad.preview.png')}, result: 'image'}, ctx);
+  const reply = '**15 秒桂花拿铁竖屏广告 MP4 已剪辑并渲染完成**，内置 Lo-fi BGM 和普通话旁白。\n\nMEDIA:' + path.join(root, 'output/ad.mp4');
+  const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
+  assert.equal(decision?.action, 'revise');
+  assert.match(decision.reason, /素材从哪来/);
+
+  // A picture delivered the same way is not a video: no source question.
+  const pic = setup(t, '帮我做个小红书封面，主题是「租房避坑 7 条」，直接出图给我');
+  pic.guard.afterTool({toolName: 'exec', toolCallId: 'run', params: {command: 'python3 cover.py'}, result: 'ok'}, pic.ctx);
+  pic.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(pic.root, 'cover.png')}, result: 'image'}, pic.ctx);
+  const cover = pic.guard.finalize({lastAssistantMessage: '封面做好了。\n\nMEDIA:' + path.join(pic.root, 'cover.png')}, pic.ctx, {verifyExternal: false});
+  assert.doesNotMatch(String(cover?.reason || ''), /素材从哪来/);
+});
+
+test('the sources note rides along when another reminder fires first', (t) => {
+  // 11-04 routes-i R-ad-2: the side-panel browser is not connected, so the last tool call failed;
+  // that reminder used up the single reminder of the turn and the sources were never asked for.
+  const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  const video = path.join(root, 'ad.mp4');
+  produce(guard, ctx, 'render', `ffmpeg -y -i raw_video.mp4 -i audio_track.wav -shortest "${video}"`, video);
+  guard.afterTool({toolName: 'exec', toolCallId: 'look', params: {command: `look-video "${video}" 9`}, result: 'ok'}, ctx);
+  guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
+  guard.beforeTool({toolName: 'app_browser', toolCallId: 'side', params: {action: 'open', url: 'file:///tmp/preview.html'}}, ctx);
+  guard.afterTool({toolName: 'app_browser', toolCallId: 'side', params: {action: 'open', url: 'file:///tmp/preview.html'}, error: '当前 App 的侧栏浏览器尚未连接', result: {ok: false}}, ctx);
+  const reply = '这支 15 秒的桂花拿铁抖音竖屏广告已经剪辑完成，自带配乐与中文旁白。\n\nMEDIA:' + video;
+  const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
+  assert.equal(decision?.action, 'revise');
+  assert.match(decision.reason, /最后一次工具调用失败/);
+  assert.match(decision.reason, /另外，交付的视频没说清素材从哪来/);
+  assert.match(decision.retry.instruction, /素材从哪来/);
+  // Said once is enough: the same check on the same reply does not stack the note twice.
+  const again = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
+  assert.equal((again.reason.match(/素材从哪来/g) || []).length, 1);
+});
+
