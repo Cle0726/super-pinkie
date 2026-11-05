@@ -101,7 +101,7 @@ jobs:
         run: |
           Expand-Archive -Path new-portable.zip -DestinationPath built-app
           python tools\windows-smoke\update_probe.py --case "build-to-build-chinese-path" --chinese-path `
-            --old-app built-app --old-source app\windows_desktop.py --new-zip new-portable.zip --out probe-out
+            --old-app built-app --old-source app\windows_desktop.py --new-zip new-portable.zip --out probe-out --require-visible
           if ($LASTEXITCODE -ne 0) { throw 'self update failed' }
 
       - name: A broken package is refused and the user is told
@@ -109,8 +109,16 @@ jobs:
         shell: pwsh
         run: |
           python tools\windows-smoke\update_probe.py --case "build-broken-package" --expect rolled-back `
-            --old-app built-app --old-source app\windows_desktop.py --new-zip broken-portable.zip --new-version 9.9.9 --out probe-out
+            --old-app built-app --old-source app\windows_desktop.py --new-zip broken-portable.zip --new-version 9.9.9 --out probe-out --require-visible
           if ($LASTEXITCODE -ne 0) { throw 'failed update was not handled' }
+
+      - name: A failed rollback shows the failure window with the admin repair button
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python tools\windows-smoke\update_probe.py --case "build-failure-window" --expect failure-window `
+            --old-app built-app --old-source app\windows_desktop.py --new-zip broken-portable.zip --new-version 9.9.9 --out probe-out --require-visible
+          if ($LASTEXITCODE -ne 0) { throw 'failure window was not shown' }
 
       - name: Upload evidence
         if: always()
