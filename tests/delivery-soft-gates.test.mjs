@@ -220,3 +220,45 @@ test('the sources note rides along when another reminder fires first', (t) => {
   assert.equal((again.reason.match(/素材从哪来/g) || []).length, 1);
 });
 
+
+test('next-step buttons after a delivered file do not turn the reply into an in-chat deliverable', (t) => {
+  // 11-04 routes-l R-ad: the MP4 was handed over with MEDIA:, followed by a ```ui``` block of three
+  // next-step buttons. The guard took the buttons for an in-chat mini app and skipped both delivery checks.
+  const buttons = '```ui\n{"text":"广告视频已生成，接下来需要：","buttons":["满意，直接导出投流（推荐）","微调优惠价格或文案","换一套轻快活泼的BGM"]}\n```';
+  const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  guard.afterTool({toolName: 'exec', toolCallId: 'run', params: {command: 'python3 render_full_mp4.py'}, result: 'Process exited with code 0'}, ctx);
+  guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
+  const reply = '**这杯「桂花拿铁」15 秒竖屏抖音广告 MP4 已经剪好交付**，自带卡点配音、BGM 与卡拉OK高亮字幕。\n\n' + buttons
+    + '\n\nMEDIA:' + path.join(root, '桂花拿铁_秋日限定广告_15s.mp4');
+  const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
+  assert.equal(decision?.action, 'revise');
+  assert.match(decision.reason, /素材从哪来/);
+
+  // routes-i R-ad-2: the attachment failed, so the runtime replaced MEDIA: with "Media failed";
+  // the reply still names the finished file's path, which is a delivery all the same.
+  const failed = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
+  failed.guard.afterTool({toolName: 'exec', toolCallId: 'run', params: {command: 'python3 render.py'}, result: 'ok'}, failed.ctx);
+  failed.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(failed.root, 'ad.preview.jpg')}, result: 'image'}, failed.ctx);
+  const named = '这支 15 秒广告已经剪好。\n视频文件路径：`' + path.join(failed.root, 'osmanthus_latte_ad_15s.mp4') + '`\n⚠️ Media failed.\n\n' + buttons;
+  const second = failed.guard.finalize({lastAssistantMessage: named}, failed.ctx, {verifyExternal: false});
+  assert.equal(second?.action, 'revise');
+  assert.match(second.reason, /素材从哪来/);
+
+  // Choice buttons that close a turn which already produced a file are not the deliverable either.
+  const made = setup(t, '帮我做一个 4 分钟的爱情故事视频');
+  const video = path.join(made.root, 'love.mp4');
+  produce(made.guard, made.ctx, 'render', `ffmpeg -y -i frames/%04d.png "${video}"`, video);
+  const unseen = made.guard.finalize({lastAssistantMessage: '视频做好了，4 分钟。\n\n' + buttons}, made.ctx, {verifyExternal: false});
+  assert.equal(unseen?.action, 'revise');
+  assert.match(unseen.reason, /亲眼|看/);
+});
+
+test('asking with buttons before any work, or answering with a chart, still passes as an in-chat reply', (t) => {
+  const ask = setup(t, '帮我做一张开业海报');
+  const question = '先定个方向，碧琪按你选的直接做。\n\n```ui\n{"text":"海报走哪种感觉？","buttons":["安静高级（推荐）","热闹年轻"]}\n```';
+  assert.notEqual(ask.guard.finalize({lastAssistantMessage: question}, ask.ctx, {verifyExternal: false})?.action, 'revise');
+
+  const chart = setup(t, '把这三个月的吃饭花销画成图：8月 2400，9月 2050，10月 1760');
+  const answer = '吃饭花销连降两个月。\n\n```chart\n{"type":"bar","title":"吃饭花销连降两个月","labels":["8月","9月","10月"],"series":[{"name":"吃饭","data":[2400,2050,1760]}],"unit":"元"}\n```';
+  assert.notEqual(chart.guard.finalize({lastAssistantMessage: answer}, chart.ctx, {verifyExternal: false})?.action, 'revise');
+});
