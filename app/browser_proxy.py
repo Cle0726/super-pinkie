@@ -14,8 +14,12 @@ Only the arguments this module wrote are ever removed again (recorded in the
 settings file), so hand-written ``extraArgs`` survive. A proxied browser
 cannot keep OpenClaw's DNS-based private-network check, and OpenClaw then
 refuses every navigation; while a proxy is applied the browser profile is
-therefore marked ``allowPrivateNetwork`` -- unless the user set that policy
-themselves -- and the mark is removed with the proxy.
+therefore marked ``dangerouslyAllowPrivateNetwork`` -- unless the user set that
+policy themselves -- and the mark is removed with the proxy.
+
+OpenClaw validates ``browser.ssrfPolicy`` strictly. 2.5.36 wrote the retired
+key ``allowPrivateNetwork``, which made the whole openclaw.json invalid and the
+gateway exit at every start; that key is renamed here on every App start.
 """
 
 import json
@@ -27,6 +31,8 @@ from pathlib import Path
 MODES = ("system", "custom", "off")
 PROXY_FLAGS = ("--proxy-server", "--proxy-pac-url", "--proxy-auto-detect", "--proxy-bypass-list", "--no-proxy-server")
 _HOST_PORT = re.compile(r"^(?:(?P<scheme>https?|socks4|socks5)://)?(?P<host>\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+):(?P<port>\d{1,5})/?$")
+POLICY_KEY = "dangerouslyAllowPrivateNetwork"
+LEGACY_KEY = "allowPrivateNetwork"  # retired; OpenClaw's strict schema rejects it
 _INTERNET_SETTINGS = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
 
 
@@ -101,6 +107,19 @@ def _flag(arg):
     return str(arg).split("=", 1)[0].strip().lower()
 
 
+def repair_policy(browser):
+    """Rename the retired ``allowPrivateNetwork`` key, keeping its value."""
+    policy = browser.get("ssrfPolicy")
+    if not isinstance(policy, dict) or LEGACY_KEY not in policy:
+        return False
+    legacy = policy.pop(LEGACY_KEY)
+    if POLICY_KEY not in policy and isinstance(legacy, bool):
+        policy[POLICY_KEY] = legacy
+    if not policy:
+        browser.pop("ssrfPolicy")
+    return True
+
+
 def apply_to_config(config, setting, reader=None):
     """Update an openclaw.json dict in place. Returns (setting, description)."""
     setting = dict(setting or {})
@@ -108,6 +127,7 @@ def apply_to_config(config, setting, reader=None):
     browser = config.setdefault("browser", {})
     if not isinstance(browser, dict):
         raise ValueError("openclaw.json 的 browser 设置不是对象")
+    repair_policy(browser)
     current = [arg for arg in browser.get("extraArgs") or [] if isinstance(arg, str)]
     owned = set(applied.get("args") or [])
     if any(_flag(arg) in PROXY_FLAGS and arg not in owned for arg in current):
@@ -120,17 +140,17 @@ def apply_to_config(config, setting, reader=None):
         browser.pop("extraArgs")
 
     policy = browser.get("ssrfPolicy") if isinstance(browser.get("ssrfPolicy"), dict) else None
-    if applied.get("allowPrivate") and policy and policy.get("allowPrivateNetwork") is True:
-        policy.pop("allowPrivateNetwork")
-        if not policy:
-            browser.pop("ssrfPolicy")
-            policy = None
+    if applied.get("allowPrivate") and policy and policy.get(POLICY_KEY) is True:
+        policy.pop(POLICY_KEY)
+    if policy is not None and not policy:
+        browser.pop("ssrfPolicy")
+        policy = None
     marked = False
     routed = any(_flag(arg) in ("--proxy-server", "--proxy-pac-url", "--proxy-auto-detect") for arg in args)
     if routed:
         policy = browser.setdefault("ssrfPolicy", {})
-        if "allowPrivateNetwork" not in policy and "dangerouslyAllowPrivateNetwork" not in policy:
-            policy["allowPrivateNetwork"] = True
+        if POLICY_KEY not in policy:
+            policy[POLICY_KEY] = True
             marked = True
     if not browser:
         config.pop("browser")

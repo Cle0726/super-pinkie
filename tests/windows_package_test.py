@@ -55,6 +55,11 @@ class WindowsPackageTests(unittest.TestCase):
             installer = root / "_internal/installer/windows/apply-theme.ps1"
             installer.parent.mkdir(parents=True)
             installer.write_text("safe")
+            with self.assertRaisesRegex(ValueError, "launcher-loading"):
+                cleaner.check_package(root)
+            loading = root / "_internal/ui/launcher-loading.html"
+            loading.parent.mkdir(parents=True)
+            loading.write_text("<!doctype html>")
             cleaner.check_package(root)
             forbidden = root / "_internal/installer/cle/overlay.json"
             forbidden.parent.mkdir(parents=True)

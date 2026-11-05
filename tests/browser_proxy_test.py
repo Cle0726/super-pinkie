@@ -31,7 +31,7 @@ class BrowserProxyTest(unittest.TestCase):
         browser = self.read()["browser"]
         self.assertEqual(browser["extraArgs"], ["--force-dark-mode", "--proxy-server=127.0.0.1:7890", "--proxy-bypass-list=localhost;127.*;<local>"])
         # OpenClaw refuses every navigation of a proxied browser under its default policy.
-        self.assertIs(browser["ssrfPolicy"]["allowPrivateNetwork"], True)
+        self.assertEqual(browser["ssrfPolicy"], {"dangerouslyAllowPrivateNetwork": True})
         self.assertEqual(result["mode"], "system")
         self.assertIn("127.0.0.1:7890", result["effective"])
         self.assertEqual(self.read()["gateway"], {"port": 18789})
@@ -69,6 +69,32 @@ class BrowserProxyTest(unittest.TestCase):
         self.apply(registry=CLASH)
         self.apply({"mode": "off"})
         self.assertEqual(self.read()["browser"], {"ssrfPolicy": {"dangerouslyAllowPrivateNetwork": True}})
+
+    def test_policy_keys_match_the_strict_openclaw_schema(self):
+        # OpenClaw 2026.7.1-2: browser.ssrfPolicy is .strict() with exactly these keys.
+        allowed = {"dangerouslyAllowPrivateNetwork", "allowedHostnames", "hostnameAllowlist"}
+        for registry in (CLASH, {"AutoConfigURL": "http://127.0.0.1:7890/pac"}):
+            self.apply(registry=registry)
+            self.assertLessEqual(set(self.read()["browser"].get("ssrfPolicy", {})), allowed)
+
+    def test_retired_key_written_by_2_5_36_is_repaired_on_start(self):
+        # 2.5.36 wrote allowPrivateNetwork and recorded it as its own mark.
+        self.config.write_text(json.dumps({"browser": {"extraArgs": ["--proxy-server=127.0.0.1:7897"],
+                                                        "ssrfPolicy": {"allowPrivateNetwork": True}}}), encoding="utf-8")
+        (self.root / "browser-proxy.json").write_text(json.dumps({"mode": "system", "applied": {
+            "args": ["--proxy-server=127.0.0.1:7897"], "allowPrivate": True}}), encoding="utf-8")
+        self.apply(registry={"ProxyEnable": 1, "ProxyServer": "127.0.0.1:7897"})
+        self.assertEqual(self.read()["browser"], {"extraArgs": ["--proxy-server=127.0.0.1:7897"],
+                                                  "ssrfPolicy": {"dangerouslyAllowPrivateNetwork": True}})
+        # Turning the proxy off still removes the mark under its new name.
+        self.apply(registry={})
+        self.assertNotIn("browser", self.read())
+
+    def test_retired_key_is_repaired_even_next_to_hand_written_proxy_flags(self):
+        self.config.write_text(json.dumps({"browser": {"extraArgs": ["--proxy-server=1.2.3.4:1"],
+                                                        "ssrfPolicy": {"allowPrivateNetwork": False, "allowedHostnames": ["a"]}}}), encoding="utf-8")
+        self.apply(registry=CLASH)
+        self.assertEqual(self.read()["browser"]["ssrfPolicy"], {"dangerouslyAllowPrivateNetwork": False, "allowedHostnames": ["a"]})
 
     def test_missing_registry_or_config_is_harmless(self):
         self.config.unlink()

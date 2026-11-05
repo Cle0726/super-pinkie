@@ -88,6 +88,7 @@ updater=WindowsUpdater(exe.parent/'_internal',executable=exe)
 assert updater.portable
 updater.prepared={'payload':payload,'sha256':digest,'version':'9.9.9'}
 if os.environ.get('FIXTURE_START_SECONDS'):updater.health_start_seconds=int(os.environ['FIXTURE_START_SECONDS'])
+if os.environ.get('FIXTURE_SWAP_SECONDS'):updater.swap_seconds=int(os.environ['FIXTURE_SWAP_SECONDS'])
 outcome=updater.launch_replacer()
 Path(result).write_text(json.dumps(outcome),encoding='utf-8')
 raise SystemExit(0 if outcome.get('started') else 1)
@@ -212,6 +213,12 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
     def test_unpacked_files_held_open_by_a_scanner_do_not_fail_the_swap(self):
         self._run_case('scanner_lock')
 
+    def test_rollback_copies_the_previous_version_when_its_folder_stays_locked(self):
+        # A user report (2.5.35 -> 2.5.36): the rollback renamed the failed copy
+        # away, the previous folder stayed "in use", and the install folder was
+        # left empty. Now the previous version is copied back instead.
+        self._run_case('locked_rollback')
+
     def _run_case(self, gateway_kind):
         with tempfile.TemporaryDirectory(prefix='pinkie-portable-update-') as temp:
             root=Path(temp).resolve()
@@ -252,7 +259,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             env.update(PINKIE_STATE_ROOT=str(state),FIXTURE_PORT=str(port),FIXTURE_CHILD_EXE=str(outside_exe),
                        FIXTURE_CHILD_PID=str(child_pid),FIXTURE_CHILD_STOP=str(child_stop),FIXTURE_NEW_PID=str(new_pid),
                        PSModulePath=str(shadow.parent)+os.pathsep+env.get('PSModulePath',''))
-            if gateway_kind=='external_reappears':env['FIXTURE_EXTERNAL_REAPPEARS']='1'
+            if gateway_kind in ('external_reappears','locked_rollback'):env['FIXTURE_EXTERNAL_REAPPEARS']='1'
+            if gateway_kind=='locked_rollback':env['FIXTURE_SWAP_SECONDS']='3'
             if gateway_kind=='slow_ready':env.update(FIXTURE_READY_DELAY_MS='12000',FIXTURE_START_SECONDS='5')
             locker=None;lock_seen=[]
             if gateway_kind=='scanner_lock':
@@ -270,6 +278,21 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                             except OSError:pass  # still being written; try again
                         time.sleep(.02)
                 locker=threading.Thread(target=hold_unpacked_file,daemon=True)
+            if gateway_kind=='locked_rollback':
+                def hold_previous_folder():
+                    # Like a scanner reading the renamed previous version for a
+                    # long time: reading still works, renaming its folder does not.
+                    until=time.monotonic()+60
+                    while time.monotonic()<until:
+                        found=list(root.glob('PortableFixture.previous-*/old-version.txt'))
+                        if found:
+                            try:
+                                with open(found[0],'rb'):
+                                    lock_seen.append(found[0]);time.sleep(25)
+                                return
+                            except OSError:pass
+                        time.sleep(.02)
+                locker=threading.Thread(target=hold_previous_folder,daemon=True)
             children=[];child_id=None;acl_changed=False;update_started=False
             stop_watch=threading.Event();revived=[];watcher=None
             acl_script=root/'acl-fixture.ps1';acl_script.write_text(ACL_FIXTURE,encoding='utf-8-sig')
@@ -290,10 +313,10 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertTrue(child_pid.is_file(),'test gateway did not start')
                 child_id=int(child_pid.read_text())
                 self.assertTrue(fixture_child_alive(child_id,outside_exe))
-                if gateway_kind in ('verified_external','mismatched_record','wrong_command','external_reappears'):
+                if gateway_kind in ('verified_external','mismatched_record','wrong_command','external_reappears','locked_rollback'):
                     recorded_exe=str(gateway_exe)+('.wrong' if gateway_kind=='mismatched_record' else '')
                     (state/'gateway-owner.json').write_text(json.dumps({'pid':gateway.pid,'node':recorded_exe}),encoding='utf-8')
-                if gateway_kind=='external_reappears':
+                if gateway_kind in ('external_reappears','locked_rollback'):
                     def revive_previous_gateway():
                         try:gateway.wait(timeout=40)
                         except subprocess.TimeoutExpired:return
@@ -337,7 +360,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     if log.exists():text=log.read_text(encoding='utf-8-sig',errors='replace')
                     if 'portable update completed' in text or 'portable update failed' in text:break
                     time.sleep(.2)
-                if gateway_kind=='external_reappears':
+                if gateway_kind in ('external_reappears','locked_rollback'):
                     self.assertTrue(revived and revived[0].poll() is None,'previous gateway did not reappear')
                     self.assertIn('portable update failed',text)
                     self.assertIn('new version attached to a different install gateway',text)
@@ -345,6 +368,14 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     while time.monotonic()<until and not (target/'old-version.txt').is_file():time.sleep(.2)
                     self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored')
                     self.assertFalse((target/'new-version.txt').exists())
+                    if gateway_kind=='locked_rollback':
+                        self.assertTrue(lock_seen,'the fixture never held the previous folder open')
+                        until=time.monotonic()+20
+                        while time.monotonic()<until and 'previous version restored by copy' not in text:
+                            time.sleep(.2);text=log.read_text(encoding='utf-8-sig',errors='replace')
+                        self.assertIn('previous version folder is busy, retrying',text)
+                        self.assertIn('previous version restored by copy',text)
+                        self.assertTrue(executable.is_file(),'the restored copy has no exe')
                     self.assertIsNone(other.poll())
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
@@ -364,6 +395,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertTrue(fixture_child_alive(child_id,outside_exe),'unrelated gateway child was killed')
                 self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
             finally:
+                if locker and locker.is_alive():locker.join(timeout=30)
                 if acl_changed:fixture_acl('restore')
                 stop_watch.set()
                 if watcher:watcher.join(timeout=5)

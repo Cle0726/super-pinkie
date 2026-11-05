@@ -112,7 +112,7 @@ class ReplacerTest(unittest.TestCase):
     def test_health_marker_is_not_enough_when_an_old_gateway_reappears(self):
         helper = WindowsUpdater._directory_helper_source()
         health = helper.index("if (Test-Path -LiteralPath $HealthMarker) { $ready = $true; break }")
-        validate = helper.index("if ($ready) { Confirm-NewInstallGateway }", health)
+        validate = helper.index("if ($ready -and (Test-Path -LiteralPath $TargetExe)) {\n    Confirm-NewInstallGateway", health)
         remove_backup = helper.index("Remove-Item -LiteralPath $Backup -Recurse", validate)
         self.assertLess(health, validate)
         self.assertLess(validate, remove_backup)
