@@ -892,6 +892,61 @@ function Write-UpdateFailure([string]$Message) {
       Set-Content -LiteralPath (Join-Path $UpdateRoot 'last-failure.json') -Encoding UTF8
   } catch {}
 }
+# The App window is gone during the swap. A small always-on-top window shows
+# each step so the user knows the update is still running and when it is done.
+$ProgressFile = Join-Path $UpdateRoot ('progress-' + $Token + '.json')
+$ProgressScript = Join-Path $UpdateRoot ('progress-' + $Token + '.ps1')
+function Set-UpdateProgress([int]$Step, [string]$Text, [string]$State = 'running') {
+  try {
+    @{ step = $Step; total = 5; text = $Text; state = $State } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath $ProgressFile -Encoding UTF8
+  } catch {}
+}
+function Start-UpdateProgressWindow {
+  try {
+    $source = @'
+param([string]$Status, [int]$Owner, [string]$Version)
+Add-Type -AssemblyName PresentationFramework
+$window = New-Object Windows.Window
+$window.Title = '超級碧琪更新'; $window.Width = 400; $window.SizeToContent = 'Height'
+$window.WindowStartupLocation = 'CenterScreen'; $window.Topmost = $true
+$window.ResizeMode = 'NoResize'; $window.WindowStyle = 'ToolWindow'
+$panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
+$title = New-Object Windows.Controls.TextBlock; $title.FontSize = 15; $title.FontWeight = 'SemiBold'
+$title.Text = if ($Version) { "碧琪正在更新到 $Version" } else { '碧琪正在更新' }
+$line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'; $line.Text = '正在准备…'
+$bar = New-Object Windows.Controls.ProgressBar; $bar.Height = 8; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Margin = '0,12,0,8'
+$hint = New-Object Windows.Controls.TextBlock; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'
+$hint.Text = '更新完成后碧琪会自动打开，请不要关机。记忆和设置不会丢。'
+foreach ($node in @($title, $line, $bar, $hint)) { [void]$panel.Children.Add($node) }
+$window.Content = $panel
+$started = Get-Date
+$closeAt = $null
+$timer = New-Object Windows.Threading.DispatcherTimer
+$timer.Interval = [TimeSpan]::FromMilliseconds(500)
+$timer.Add_Tick({
+  $seconds = [int]((Get-Date) - $started).TotalSeconds
+  try {
+    $data = Get-Content -LiteralPath $Status -Raw -Encoding UTF8 | ConvertFrom-Json
+    $line.Text = "第 $($data.step)/$($data.total) 步：$($data.text)（已用 $seconds 秒）"
+    $bar.Value = [Math]::Min(100, [double]$data.step / [double]$data.total * 100)
+    if ($data.state -ne 'running' -and -not $script:closeAt) { $script:closeAt = (Get-Date).AddSeconds(4) }
+  } catch {}
+  if ($script:closeAt -and (Get-Date) -ge $script:closeAt) { $window.Close() }
+  if (-not $script:closeAt -and -not (Get-Process -Id $Owner -ErrorAction SilentlyContinue)) { $script:closeAt = (Get-Date).AddSeconds(2) }
+  if ($seconds -gt 1200) { $window.Close() }
+})
+$timer.Start()
+[void]$window.ShowDialog()
+Remove-Item -LiteralPath $Status -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+'@
+    [IO.File]::WriteAllText($ProgressScript, $source, (New-Object Text.UTF8Encoding $true))
+    Start-Process -FilePath powershell.exe -WindowStyle Hidden -ArgumentList @(
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', ('"' + $ProgressScript + '"'),
+      '-Status', ('"' + $ProgressFile + '"'), '-Owner', $PID, '-Version', ('"' + $Version + '"')) | Out-Null
+  } catch { Write-UpdateLog "could not show update progress: $($_.Exception.Message)" }
+}
 function Test-UpdateWriteAccess([string]$Folder) {
   $probe = [IO.Path]::Combine($Folder, '.pinkie-write-test-' + $Token + '.tmp')
   $created = $false
@@ -1053,6 +1108,8 @@ try {
   Confirm-GatewayOwnership
   @{ pid = $PID; version = $Version; token = $Token } | ConvertTo-Json -Compress |
     Set-Content -LiteralPath $InProgress -Encoding UTF8
+  Set-UpdateProgress 1 '正在关闭旧版本'
+  Start-UpdateProgressWindow
   [IO.File]::WriteAllText($ReadyMarker, $Token, [Text.Encoding]::ASCII)
   $deadline = (Get-Date).AddSeconds(120)
   while ((Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
@@ -1060,6 +1117,7 @@ try {
   }
   if (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue) { throw 'old process did not exit' }
   Remove-Item -LiteralPath $HealthMarker -Force -ErrorAction SilentlyContinue
+  Set-UpdateProgress 2 '正在核对更新包'
   # 先验包、再动安装目录：包一旦损坏，展开和替换都不该发生。
   $actual = (Get-FileHash -LiteralPath $Payload -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'update package checksum mismatch' }
@@ -1082,6 +1140,7 @@ try {
   # The window is already closed here, so every second counts. ZipFile is
   # several times faster than Windows PowerShell 5.1's Expand-Archive on
   # ~30,000 entries (2-3 minutes on CI); Expand-Archive stays as a fallback.
+  Set-UpdateProgress 3 '正在解压新版本，大约需要一分钟'
   $unpackStarted = Get-Date
   try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -1094,6 +1153,7 @@ try {
   Write-UpdateLog ('unpacked in ' + [int]((Get-Date) - $unpackStarted).TotalSeconds + ' s')
   $newDir = Join-Path $stage '超級碧琪'
   if (-not (Test-Path -LiteralPath (Join-Path $newDir '超級碧琪.exe'))) { throw 'portable package layout is invalid' }
+  Set-UpdateProgress 4 '正在替换文件'
   Stop-InstallProcesses $TargetDir
   Stop-VerifiedGateway
   Invoke-WithRetry {
@@ -1107,6 +1167,7 @@ try {
   if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'new version is missing after the swap' }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
+  Set-UpdateProgress 5 '正在启动新版本'
   $launched = Start-Process -FilePath $TargetExe -ArgumentList "--update-health-token=$Token" -PassThru
   $startDeadline = (Get-Date).AddSeconds($StartSeconds)
   $readyDeadline = (Get-Date).AddSeconds($ReadySeconds)
@@ -1119,6 +1180,8 @@ try {
     if (-not $started -and (Test-Path -LiteralPath $StartedMarker)) {
       $started = $true
       Write-UpdateLog 'new version started; waiting for its gateway'
+      # The new window is open now and shows its own first-start progress.
+      Set-UpdateProgress 5 '新版本已经打开，正在完成首次启动' 'done'
     }
     if (-not $started -and (Get-Date) -ge $startDeadline) {
       & taskkill.exe /PID $launched.Id /T /F | Out-Null
@@ -1141,6 +1204,7 @@ try {
   Write-UpdateLog 'portable update completed'
 } catch {
   Write-UpdateLog "portable update failed, restoring previous version: $($_.Exception.Message)"
+  Set-UpdateProgress 5 '这次没装上，正在恢复原来的版本' 'failed'
   Write-UpdateFailure $_.Exception.Message
   if (-not (Get-Process -Id $CurrentPid -ErrorAction SilentlyContinue)) {
     try { Restore-PreviousVersion }
@@ -2832,6 +2896,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
     loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    if update_health_token:
+        # First start right after an update: the splash says so, instead of a
+        # bare gateway counter that looks like nothing happened.
+        version_file = Path(resource_root) / "VERSION"
+        version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
+        loading += "?" + urllib.parse.urlencode({"updated": version or "1"})
     gateway = GatewaySupervisor(runtime)
     # A gateway kept alive by an older version would otherwise be adopted
     # below, and the new version would show the old one's page.

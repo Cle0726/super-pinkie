@@ -41,6 +41,8 @@
     const scene = document.querySelector(".scene");
     const status = document.getElementById("status");
     let elapsed = 0;
+    const updated = new URLSearchParams(location.search).get("updated") || "";
+    if (updated && status) status.textContent = "更新已装好，正在打开新版本…";
     const probe = async () => {
       try {
         // Any HTTP response (including an auth response) means the listener
@@ -55,7 +57,11 @@
         return;
       } catch (_) {
         elapsed += 1;
-        if (status) status.textContent = elapsed < 120
+        if (status) status.textContent = updated
+          ? (elapsed < 180
+            ? `更新已装好${updated === "1" ? "" : `（${updated}）`}，新版本第一次启动要多等一两分钟… ${elapsed}s`
+            : "新版本还在做首次准备（杀毒软件第一次扫描新文件会更慢），请再等等，不用重新打开")
+          : elapsed < 120
           ? `正在启动本机网关… ${elapsed}s`
           : "网关启动较慢，请稍候；窗口仍可正常操作";
         setTimeout(probe, 1000);
