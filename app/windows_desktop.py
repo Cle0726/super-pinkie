@@ -1466,6 +1466,16 @@ class BundledRuntime:
         environment["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "false"
         environment["PYTHONUTF8"] = "1"
         environment.pop("CLAUDECODE", None)
+        # A proxy exported without a NO_PROXY exemption sent every call for
+        # the local model relay (127.0.0.1) through the proxy, and each one
+        # failed with "network connection error" (11-04 on the Mac). Loopback
+        # never goes through a proxy. Windows variable names are case-blind,
+        # so one NO_PROXY entry also answers node's process.env.no_proxy.
+        entries = [e for e in re.split(r"[,\s]+", environment.get("NO_PROXY", "")) if e]
+        for host in ("localhost", "127.0.0.1", "::1"):
+            if host not in (e.lower() for e in entries):
+                entries.append(host)
+        environment["NO_PROXY"] = ",".join(entries)
         return environment
 
 

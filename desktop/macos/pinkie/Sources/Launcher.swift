@@ -97,6 +97,21 @@ private enum BundledRuntime {
         if let endpoint = DesktopControlEndpoint.environmentValue() {
             environment["OPENCLAW_CUA_DRIVER_ENDPOINT"] = endpoint
         }
+        // Started from a shell that exported HTTP(S)_PROXY without a NO_PROXY
+        // exemption (11-04), the gateway sent every call for the local model
+        // relay (127.0.0.1:1467) through the proxy and each one failed with
+        // "network connection error". Loopback never goes through a proxy.
+        // OpenClaw reads no_proxy before NO_PROXY, so both get the entries.
+        for key in ["NO_PROXY", "no_proxy"] {
+            var entries = (environment[key] ?? "")
+                .split(whereSeparator: { $0 == "," || $0 == " " })
+                .map(String.init)
+            for host in ["localhost", "127.0.0.1", "::1"]
+            where !entries.contains(where: { $0.lowercased() == host }) {
+                entries.append(host)
+            }
+            environment[key] = entries.joined(separator: ",")
+        }
         return environment
     }
 
