@@ -842,7 +842,7 @@ class BrowserApp:
                 tab = self._ready_tab(deadline)
                 self._on_ui(lambda: self._navigate(tab, url))
             return self._status()
-        if action == "chrome_eval" and os.environ.get("PINKIE_INAPP_BROWSER_DEBUG") == "1":
+        if action == "chrome_eval" and (os.environ.get("PINKIE_INAPP_BROWSER_DEBUG") == "1" or (self.state_dir / "debug").is_file()):
             task = self._on_ui(lambda: self.chrome.CoreWebView2.ExecuteScriptAsync(str(body.get("js", ""))))
             return {"value": str(self._await(task, 5))}
         if action == "close":
