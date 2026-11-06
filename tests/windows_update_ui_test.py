@@ -275,5 +275,50 @@ class ProbeVisibilityTest(unittest.TestCase):
         self.assertIn("超級碧琪更新 · 没有装上", watch.report()["titles_seen"])
 
 
+class PinkieLookTest(unittest.TestCase):
+    """Update windows carry 碧琪's own look, never a gray system dialog."""
+
+    def xaml(self):
+        text = windows_desktop.PINKIE_WPF_PS.split("@'\n", 1)[1].split("\n'@", 1)[0]
+        return text.replace("@@TITLE@@", "t")
+
+    def test_card_xaml_is_well_formed_and_borderless(self):
+        import xml.dom.minidom
+        xaml = self.xaml()
+        xml.dom.minidom.parseString(xaml.encode("utf-8"))
+        for needed in ('WindowStyle="None"', 'AllowsTransparency="True"', 'x:Name="Mascot"',
+                       'x:Name="Fill"', 'x:Name="Buttons"', 'x:Key="PillPrimary"'):
+            self.assertIn(needed, xaml)
+
+    def test_progress_and_failure_windows_use_the_card_and_the_art(self):
+        self.assertIn("New-PinkieWindow '超級碧琪更新' $heading", PROGRESS_WINDOW_PS)
+        self.assertIn("Set-PinkieArt $mascot 'working'", PROGRESS_WINDOW_PS)
+        for helper in (WindowsUpdater._directory_helper_source(), WindowsUpdater._helper_source()):
+            self.assertIn("New-PinkieWindow '超級碧琪更新 · 没有装上'", helper)
+            self.assertIn("$script:PinkieArtDir = Join-Path $UpdateRoot 'art'", helper)
+            self.assertIn("'oops'", helper)
+
+    def test_art_is_copied_out_of_the_install_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "app"
+            (root / "ui/assets").mkdir(parents=True)
+            for name in WindowsUpdater.UPDATE_ART:
+                (root / f"ui/assets/laolao-pinkie-status-{name}.png").write_bytes(b"png-" + name.encode())
+            (root / "VERSION").write_text("2.5.38", encoding="utf-8")
+            updater = WindowsUpdater(root, executable=Path(folder) / "x.exe")
+            updates = Path(folder) / "updates"
+            updater._stage_update_art(updates)
+            for name in WindowsUpdater.UPDATE_ART:
+                self.assertEqual((updates / f"art/laolao-pinkie-status-{name}.png").read_bytes(), b"png-" + name.encode())
+
+    def test_missing_splash_gets_a_built_in_page_with_a_way_out(self):
+        page = windows_desktop.startup_fallback_html()
+        self.assertNotIn("file:", page)
+        self.assertNotIn("assets/", page)
+        for call in ("startup_repair", "startup_update", "open_logs"):
+            self.assertIn(f'data-call="{call}"', page)
+        self.assertIn("http://127.0.0.1:18789/chat", page)
+
+
 if __name__ == "__main__":
     unittest.main()
