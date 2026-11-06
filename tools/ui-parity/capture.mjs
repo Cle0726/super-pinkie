@@ -90,7 +90,7 @@ try {
   const browserName=args.browser||'webkit';
   browser=args.cdp ? await playwright.chromium.connectOverCDP(args.cdp)
     : await (browserName==='webkit'?playwright.webkit:playwright.chromium).launch({headless:!args.headed,...(['chrome','msedge'].includes(browserName)?{channel:browserName}:{})});
-  for(const view of String(args.views||'home,chat,cards,sidebar,learning').split(',')){
+  for(const view of String(args.views||'home,chat,cards,sidebar,learning,power').split(',')){
     console.log('capture',label,view);
     currentView=view;
     const entryAgent=view==='home'?(captureAgent==='main'?'project':'main'):(view==='learning'?'learning':captureAgent);
@@ -154,6 +154,16 @@ try {
     }
     if(view==='sidebar'){
       await page.locator('.shell-nav').hover().catch(()=>{});
+      await page.waitForTimeout(600);
+    }
+    if(view==='power'){
+      // 进阶调节, opened the way a user does: the workspace-rail button.
+      await page.waitForSelector('#pinkie-power-entry',{state:'visible',timeout:20000});
+      const untouched=await page.evaluate(()=>({level:window.PinkieTuning?.level,stored:localStorage.getItem('pinkie.tuning.v1'),snapshot:window.PinkieTuning?.snapshot()}));
+      if(untouched.level!=='standard'||untouched.stored!==null)throw Error('进阶调节 is not at its untouched default: '+JSON.stringify(untouched));
+      await page.locator('#pinkie-power-entry').click();
+      await page.waitForSelector('#pinkie-power.is-open .pinkie-power__level--standard.is-on',{state:'visible'});
+      await page.waitForFunction(()=>document.querySelectorAll('#pinkie-power .pinkie-power__row').length===14&&[...document.querySelectorAll('#pinkie-power img')].every(i=>i.complete&&i.naturalWidth));
       await page.waitForTimeout(600);
     }
     if(view==='learning'){
