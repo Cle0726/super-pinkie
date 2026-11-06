@@ -220,11 +220,15 @@ class BrowserApp:
         self.chrome_ready = threading.Event()
         self.vpn_state: Dict[str, Any] = {}
 
+        self.panel_open = False
+        self.chrome_px = 66  # device pixels; the chrome reports its real height
+        self.mode = "float"
+        self.float_bounds = None
         WinForms.Application.EnableVisualStyles()
         form = WinForms.Form()
         self.form = form
         form.Text = "碧琪的浏览器"
-        form.BackColor = Color.FromArgb(250, 248, 244)
+        form.BackColor = Color.FromArgb(255, 237, 247)  # Mac browser toolbar pink
         form.StartPosition = WinForms.FormStartPosition.Manual
         form.MinimumSize = Size(520, 360)
         try:
@@ -248,7 +252,6 @@ class BrowserApp:
         form.Resize += lambda *_: self._layout_chrome(self.panel_open)
         form.Move += lambda *_: self._save_window_soon()
         form.ResizeEnd += lambda *_: self._save_window_soon()
-        self.panel_open = False
         self.save_timer: Optional[threading.Timer] = None
         restore = self._load_window().get("tabs") if args.restore else None
         urls = [u for u in (restore or []) if isinstance(u, str) and u] or [HOME_URL]
@@ -277,6 +280,8 @@ class BrowserApp:
         WinForms = self.WinForms
         if self.args.owner:
             self.form.HandleCreated += lambda *_: self._set_owner()
+        self.form.HandleCreated += lambda *_: self._frameless()
+        self.form.Shown += lambda *_: self._frameless()
         if not self.args.hidden:
             self.form.Show()
         else:
@@ -294,6 +299,61 @@ class BrowserApp:
         except Exception:  # noqa: BLE001
             pass
 
+    def _hwnd(self):
+        import ctypes
+
+        return ctypes.c_void_p(int(self.form.Handle.ToInt64()))
+
+    def _frameless(self) -> None:
+        """Like the Mac floating panel: no title bar, rounded corners and a
+        shadow from DWM, edges still resizable (WS_THICKFRAME is kept)."""
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+            hwnd = self._hwnd()
+            style = user32.GetWindowLongPtrW(hwnd, -16)
+            user32.SetWindowLongPtrW(hwnd, -16, ctypes.c_ssize_t((style & ~0x00C00000) | 0x00040000))
+            corner = ctypes.c_int(2)  # DWMWCP_ROUND
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(corner), 4)
+            user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x0027)  # FRAMECHANGED|NOMOVE|NOSIZE|NOZORDER
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _drag(self) -> None:
+        try:
+            import ctypes
+
+            if self.mode == "full":
+                return
+            ctypes.windll.user32.ReleaseCapture()
+            ctypes.windll.user32.SendMessageW(self._hwnd(), 0x00A1, 2, 0)  # WM_NCLBUTTONDOWN, HTCAPTION
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _present(self, mode: str) -> None:
+        from System.Drawing import Rectangle
+
+        WinForms = self.WinForms
+        form = self.form
+        if self.mode == "float" and form.WindowState == WinForms.FormWindowState.Normal:
+            self.float_bounds = form.Bounds
+        if mode == "full":
+            form.WindowState = WinForms.FormWindowState.Maximized
+        elif mode == "dock":
+            form.WindowState = WinForms.FormWindowState.Normal
+            area = WinForms.Screen.FromControl(form).WorkingArea
+            width = max(520, min(int(area.Width * .42), 980))
+            form.Bounds = Rectangle(area.Right - width, area.Top, width, area.Height)
+        else:
+            mode = "float"
+            form.WindowState = WinForms.FormWindowState.Normal
+            if self.float_bounds is not None:
+                form.Bounds = self.float_bounds
+        self.mode = mode
+        self._sync_chrome()
+
     def _dpi(self) -> float:
         try:
             return max(1.0, float(self.form.DeviceDpi) / 96.0)
@@ -301,11 +361,12 @@ class BrowserApp:
             return 1.0
 
     def _layout_chrome(self, panel: bool) -> None:
+        # The sheet and the menu draw over the pages, so the chrome view
+        # grows to the whole window while they are open.
         if panel:
             self.chrome.Height = max(200, self.form.ClientSize.Height)
-            self.chrome.BringToFront()
         else:
-            self.chrome.Height = int(84 * self._dpi())
+            self.chrome.Height = int(self.chrome_px)
 
     # ── window persistence ──
     def _window_file(self) -> Path:
@@ -415,7 +476,7 @@ class BrowserApp:
         self._post_chrome({
             "type": "state", "tabs": tabs, "active": active.id if active else "",
             "canGoBack": bool(core and core.CanGoBack), "canGoForward": bool(core and core.CanGoForward),
-            "pinned": self.pinned, "agent": self.agent_busy > 0, "proxy": bool(self.args.proxy_port),
+            "pinned": self.pinned, "agent": self.agent_busy > 0, "proxy": bool(self.args.proxy_port), "mode": self.mode,
         })
 
     def _chrome_message(self, sender, args) -> None:
@@ -455,7 +516,23 @@ class BrowserApp:
             self.pinned = not self.pinned
             self.form.TopMost = self.pinned
             self._sync_chrome()
+        elif kind == "height":
+            self.chrome_px = max(30, min(400, int(message.get("px") or 66)))
+            self._layout_chrome(self.panel_open)
+        elif kind == "drag":
+            self._drag()
+        elif kind == "present":
+            self._present(str(message.get("mode", "float")))
+        elif kind == "close":
+            self._hide()
+        elif kind == "external" and tab and tab.url.startswith(("http://", "https://")):
+            try:
+                os.startfile(tab.url)
+            except OSError:
+                pass
         elif kind == "panel":
+            if message.get("menu") and tab and tab.core is not None:
+                self._send_backdrop(tab)
             self.panel_open = bool(message.get("open"))
             self._layout_chrome(self.panel_open)
         elif kind == "vpn":
@@ -463,6 +540,24 @@ class BrowserApp:
             payload = {k: v for k, v in message.items() if k not in ("type", "op", "rid")}
             rid = message.get("rid")
             threading.Thread(target=self._vpn_upcall, args=(op, payload, rid), daemon=True).start()
+
+    def _send_backdrop(self, tab: Tab) -> None:
+        """The menu covers the page view; show a still of the page under it."""
+        def done(task):
+            try:
+                data = json.loads(str(task.Result)).get("data")
+                if data:
+                    self._post_chrome({"type": "backdrop", "src": "data:image/jpeg;base64," + data})
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            from System import Action
+            from System.Threading.Tasks import Task
+
+            task = tab.core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", json.dumps({"format": "jpeg", "quality": 70}))
+            task.ContinueWith(Action[Task[str]](done))
+        except Exception:  # noqa: BLE001
+            pass
 
     def _vpn_upcall(self, op: str, payload: Dict[str, Any], rid: Any) -> None:
         reply = self.upcall("vpn." + op, payload, timeout=180)
@@ -596,9 +691,6 @@ class BrowserApp:
         for other in self.tabs:
             other.view.Visible = other is tab
         self.active = tab
-        tab.view.BringToFront()
-        if self.panel_open:
-            self.chrome.BringToFront()
         self._sync_chrome()
 
     def _close_tab(self, tab_id: str) -> None:
@@ -750,6 +842,9 @@ class BrowserApp:
                 tab = self._ready_tab(deadline)
                 self._on_ui(lambda: self._navigate(tab, url))
             return self._status()
+        if action == "chrome_eval" and os.environ.get("PINKIE_INAPP_BROWSER_DEBUG") == "1":
+            task = self._on_ui(lambda: self.chrome.CoreWebView2.ExecuteScriptAsync(str(body.get("js", ""))))
+            return {"value": str(self._await(task, 5))}
         if action == "close":
             self._on_ui(self._hide)
             return {"open": False}

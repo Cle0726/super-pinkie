@@ -148,6 +148,7 @@ class VpnService:
             "subscriptions": [{
                 "id": s.get("id"), "title": s.get("title") or "订阅", "host": s.get("host", ""),
                 "count": len(s.get("nodes") or []), "updatedAt": s.get("updatedAt"), "error": s.get("error", ""),
+                "refreshable": bool(s.get("url")),
                 "usage": usage_text(s.get("usage") or {}),
             } for s in self.store.subscriptions],
             "nodes": [{**subs.describe(p), "delay": self.delays.get(p["name"]), "tested": p["name"] in self.tested}
