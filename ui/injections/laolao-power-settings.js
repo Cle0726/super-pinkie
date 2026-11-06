@@ -2,8 +2,8 @@
  * Reads and writes only through window.PinkieTuning (laolao-tuning.js) and the
  * existing motion switch (window.__pinkieMotion) and 小碧琪 氛围 preference, so
  * nothing here can disagree with another switch. Nothing looks at the hardware:
- * every choice is the user's. Entry points: 常用设置 first card, 小碧琪 menu,
- * and window.__pinkiePower.open(). */
+ * every choice is the user's. Entry points: the workspace rail button (under
+ * 灵感圆桌), the 小碧琪 menu, and window.__pinkiePower.open(). */
 (() => {
   "use strict";
   if (window.__pinkiePower) return;
@@ -243,6 +243,34 @@
     document.documentElement.removeAttribute("data-pinkie-power-open");
     try { lastFocus?.focus?.({preventScroll: true}); } catch {}
   }
+
+  // ── Entry: a button in the workspace rail, under 派对空间 / 灵感圆桌 ──────────
+  // Same shape as those entries (art + vertical label, horizontal when the rail
+  // is expanded). Polled like them, never a subtree MutationObserver.
+  const mountRail = () => {
+    const rail = document.querySelector(".chat-workspace-rail");
+    let entry = document.getElementById("pinkie-power-entry");
+    if (!rail) { entry?.remove(); return; }
+    const roundtable = document.getElementById("pinkie-roundtable-entry");
+    const anchor = roundtable?.parentElement === rail ? roundtable : null;
+    if (entry?.parentElement === rail) {
+      if (anchor && entry.previousElementSibling !== anchor) anchor.after(entry);
+      return;
+    }
+    entry?.remove();
+    entry = el("button", "", null);
+    entry.id = "pinkie-power-entry";
+    entry.type = "button";
+    entry.title = "进阶调节：特效、聊天记录、渲染";
+    entry.setAttribute("aria-label", "打开进阶调节");
+    const art = el("img", "", entry); art.src = ART("status-done"); art.alt = ""; art.draggable = false;
+    el("span", "", entry, "进阶调节");
+    entry.addEventListener("click", open);
+    if (anchor) anchor.after(entry); else rail.append(entry);
+  };
+  setInterval(mountRail, 1500);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountRail, {once: true});
+  else mountRail();
 
   window.__pinkiePower = Object.freeze({open, close, summary, get isOpen() { return Boolean(root && !root.hidden); }, GROUPS, LEVELS});
 })();

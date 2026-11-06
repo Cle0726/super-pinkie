@@ -353,53 +353,46 @@ html[data-theme-mode="dark"] #pinkie-power .pinkie-power__foot { background: rgb
 html[data-pinkie-night] #pinkie-power .pinkie-power__cost,
 html[data-theme-mode="dark"] #pinkie-power .pinkie-power__cost { color: #a9849a; }
 
-/* 常用设置页里的入口卡 */
-#laolao-user-settings .pinkie-power-entry {
-  position: relative;
+/* 右侧工作栏里的入口：和「派对空间」「灵感圆桌」同一个样子 */
+#pinkie-power-entry {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  margin: 0 0 13px;
-  padding: 12px 18px 12px 10px;
-  overflow: hidden;
-  border: 1.5px solid rgba(224, 80, 143, .3);
-  border-radius: 20px;
-  background:
-    radial-gradient(90px 70px at 92% 20%, rgba(255, 211, 110, .45), transparent 70%),
-    radial-gradient(120px 80px at 75% 120%, rgba(143, 211, 255, .35), transparent 70%),
-    linear-gradient(135deg, #ffe3ef 0%, #ffd1e5 100%);
-  color: #5f2f48;
+  justify-content: center;
+  gap: 5px;
+  min-height: 100px;
+  margin: 0 2px 20px;
+  padding: 8px 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 18px;
+  color: #8d546b;
+  background: linear-gradient(180deg, #fffafc12, #fff8fbb8 48%, #f0d9e16b);
   font: inherit;
-  text-align: left;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(160, 50, 100, .12);
-  transition: transform .18s ease, box-shadow .18s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background .24s, transform .24s, box-shadow .24s;
 }
-#laolao-user-settings .pinkie-power-entry:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(160, 50, 100, .18); }
-#laolao-user-settings .pinkie-power-entry__art { flex: none; width: 96px; height: 56px; object-fit: contain; }
-#laolao-user-settings .pinkie-power-entry__copy { display: grid; gap: 2px; flex: 1; min-width: 0; }
-#laolao-user-settings .pinkie-power-entry__title { color: #b73473; font-size: 16px; font-weight: 800; }
-#laolao-user-settings .pinkie-power-entry__line { color: #8a5a72; font-size: 12px; }
-#laolao-user-settings .pinkie-power-entry__level {
-  flex: none;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: #fff;
-  color: #e0508f;
-  font-size: 12px;
-  font-weight: 800;
-  box-shadow: 0 2px 8px rgba(160, 50, 100, .12);
+#pinkie-power-entry img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #fff 0 55%, #ffd3e6 100%);
+  box-sizing: border-box;
+  border: 1.5px solid #ff8fbf;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 5px 7px #58263825);
+  transition: transform .32s;
 }
-html[data-pinkie-night] #laolao-user-settings .pinkie-power-entry,
-html[data-theme-mode="dark"] #laolao-user-settings .pinkie-power-entry {
-  border-color: rgba(255, 150, 200, .25);
-  background: linear-gradient(135deg, #4d2139 0%, #5e2748 100%);
-  color: #f6dce9;
-}
-html[data-pinkie-night] #laolao-user-settings .pinkie-power-entry__title,
-html[data-theme-mode="dark"] #laolao-user-settings .pinkie-power-entry__title { color: #ff9ac4; }
-html[data-pinkie-night] #laolao-user-settings .pinkie-power-entry__line,
-html[data-theme-mode="dark"] #laolao-user-settings .pinkie-power-entry__line { color: #d8b2c6; }
-html[data-pinkie-night] #laolao-user-settings .pinkie-power-entry__level,
-html[data-theme-mode="dark"] #laolao-user-settings .pinkie-power-entry__level { background: rgba(255, 255, 255, .1); color: #ff9ac4; }
+#pinkie-power-entry span { writing-mode: vertical-rl; font-size: 11px; font-weight: 550; letter-spacing: 3px; line-height: 1; }
+#pinkie-power-entry:hover { background: #fff9fbd9; box-shadow: inset 0 0 0 1px #c88aa126; }
+#pinkie-power-entry:hover img { transform: translateY(-2px) rotate(-3deg) scale(1.05); }
+#pinkie-power-entry:focus-visible { outline: 2px solid #c6819e; outline-offset: -2px; }
+.chat-workspace-rail:not(.chat-workspace-rail--collapsed) #pinkie-power-entry { flex-direction: row; min-height: 58px; margin: 0 12px 12px; padding: 7px 10px; }
+.chat-workspace-rail:not(.chat-workspace-rail--collapsed) #pinkie-power-entry img { width: 42px; height: 42px; }
+.chat-workspace-rail:not(.chat-workspace-rail--collapsed) #pinkie-power-entry span { writing-mode: horizontal-tb; letter-spacing: 2px; }
+html[data-pinkie-power-open] #pinkie-power-entry { background: #fff9fbd9; box-shadow: inset 0 0 0 1.5px #e0508f66; }
+@media (prefers-reduced-motion: reduce) { #pinkie-power-entry, #pinkie-power-entry img { transition: none; } }
