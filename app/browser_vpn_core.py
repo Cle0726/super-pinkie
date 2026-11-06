@@ -108,6 +108,16 @@ def hidden_kwargs() -> Dict[str, Any]:
     return {"startupinfo": startup, "creationflags": 0x08000000}  # CREATE_NO_WINDOW
 
 
+def window_process_kwargs() -> Dict[str, Any]:
+    """For a helper that shows its own window (碧琪的浏览器): no console, but no
+    SW_HIDE either. Windows applies STARTUPINFO's show state to the first
+    ShowWindow of a GUI process, so SW_HIDE kept the browser window invisible
+    while WinForms believed it was shown."""
+    if os.name != "nt":
+        return {}
+    return {"creationflags": 0x08000000}  # CREATE_NO_WINDOW
+
+
 class MihomoCore:
     """One mihomo process owned by this App process."""
 

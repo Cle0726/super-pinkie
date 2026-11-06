@@ -142,12 +142,15 @@ class ManagerScopeTest(unittest.TestCase):
         def popen(command, **kwargs):
             captured["command"] = command
             captured["env"] = kwargs["env"]
+            captured["startupinfo"] = kwargs.get("startupinfo")
             return Process()
 
         with mock.patch.object(inapp_browser.subprocess, "Popen", popen), mock.patch.object(inapp_browser, "assign_to_kill_job"):
             self.manager._spawn_host(0, hidden=True, restore=False)
             self.assertNotIn("--proxy-port", captured["command"])
             self.assertNotIn(inapp_browser.ENDPOINT_ENV, captured["env"])
+            # The browser is a window: an SW_HIDE STARTUPINFO would swallow its first Show().
+            self.assertIsNone(captured["startupinfo"])
             self.manager._spawn_host(50000, hidden=True, restore=True)
             command = captured["command"]
             self.assertEqual(command[command.index("--proxy-port") + 1], "50000")
