@@ -18,6 +18,11 @@
   const FOCUS_MINUTES = 25;
   const preview = window.__pinkieCompanionPreview === true;
   const prefs = (() => { try { return {ambient: true, narrate: false, quotes: true, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}")}; } catch { return {ambient: true, narrate: false, quotes: true}; } })();
+  // 进阶调节: frame rate, particle density and canvas resolution. Untouched they
+  // are the numbers below (30 fps, 1×, each canvas's own resolution cap).
+  const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
+  const density = (n) => Math.max(1, Math.round(n * tuned("effects.particles", 1)));
+  const canvasRatio = (cap) => window.PinkieTuning ? window.PinkieTuning.pixelRatio(cap) : Math.min(cap, devicePixelRatio || 1);
   const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {} };
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
@@ -32,6 +37,7 @@
     ambient: '<svg viewBox="0 0 24 24"><path class="draw" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/><path class="spark" d="M17 3v3M15.5 4.5h3"/></svg>',
     narrate: '<svg viewBox="0 0 24 24"><path class="draw" d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>',
     quote: '<svg viewBox="0 0 24 24"><path class="draw" d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path class="l1" d="M8 10.5h8"/><path class="l2" d="M8 13.5h5"/></svg>',
+    power: '<svg viewBox="0 0 24 24"><path class="draw" d="M13 2 5 13.5h6L10 22l9-12h-6.5L13 2Z"/></svg>',
     settings: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>',
   };
 
@@ -315,6 +321,7 @@
     item("quote", prefs.quotes ? "不说随机一句" : "随机说一句", () => { prefs.quotes = !prefs.quotes; savePrefs(); quotes.reschedule(); if (prefs.quotes) quotes.showSoon(); else if (bubble.classList.contains("is-quote")) hideBubble(); });
     item("narrate", prefs.narrate ? "不播报进度" : "播报干活进度", () => { prefs.narrate = !prefs.narrate; savePrefs(); if (!prefs.narrate) caption.classList.remove("is-shown"); });
     item("settings", "模型与参数", openSettings, "也可右键");
+    if (window.__pinkiePower) item("power", "进阶调节", () => window.__pinkiePower.open(), "特效 · 记录 · 渲染");
     if (menu.hasAttribute("popover")) menu.showPopover();
     else if (menu.parentElement !== document.body) document.body.append(menu);
     menu.inert = false; figure.setAttribute("aria-expanded", "true");
@@ -665,7 +672,7 @@
   /* ── 按模式的发送 / 完成点缀 ───────────────────────────────────────── */
   const fx = (() => {
     let canvas, ctx, parts = [], raf = 0;
-    const fit = () => { const d = Math.min(2, devicePixelRatio || 1); canvas.width = innerWidth * d; canvas.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
+    const fit = () => { const d = canvasRatio(2); canvas.width = innerWidth * d; canvas.height = innerHeight * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
     const ensure = () => { if (canvas) return; canvas = el("canvas", "pinkie-burst"); document.body.append(canvas); ctx = canvas.getContext("2d"); fit(); addEventListener("resize", fit); };
     const PALETTE = {
       chat: ["#ff8fbf", "#ffd36e", "#8fd3ff", "#c9a7ff"], project: ["#59b7b4", "#a8e0dc", "#ffd9a0", "#7fa8d6"],
@@ -677,7 +684,7 @@
       ensure();
       const m = mode(), colors = PALETTE[m], shape = SHAPE[m];
       // 发送只点到为止：四粒、小、飞得近；完成时多一点
-      const send = kind === "send", n = send ? 4 : 16;
+      const send = kind === "send", n = density(send ? 4 : 16);
       for (let i = 0; i < n; i++) {
         const spread = send ? .7 : 1.25, ang = -Math.PI / 2 + (Math.random() - .5) * Math.PI * spread;
         const sp = (send ? 1.1 : 2.2) + Math.random() * (shape === "balloon" ? (send ? .6 : 1.2) : (send ? 1.1 : 2.4));
@@ -1040,9 +1047,9 @@
     };
     const seed = () => {
       parts = []; const m = currentMode;
-      if (m === "chat") for (let i = 0; i < 7; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(9, 16), v: rnd(6, 13), sway: rnd(0, 6.28), hue: [340, 50, 200, 280][i % 4]});
-      if (m === "thinking") for (let i = 0; i < 26; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(1.5, 4.5), vx: rnd(-4, 4), vy: rnd(-7, -2), ph: rnd(0, 6.28)});
-      if (m === "learning") for (let i = 0; i < 34; i++) parts.push({x: rnd(0, w * .75), y: rnd(0, h), r: rnd(1.2, 3.2), vx: rnd(2, 7), vy: rnd(-3, 3), ph: rnd(0, 6.28)});
+      if (m === "chat") for (let i = 0, n = density(7); i < n; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(9, 16), v: rnd(6, 13), sway: rnd(0, 6.28), hue: [340, 50, 200, 280][i % 4]});
+      if (m === "thinking") for (let i = 0, n = density(26); i < n; i++) parts.push({x: rnd(0, w), y: rnd(0, h), r: rnd(1.5, 4.5), vx: rnd(-4, 4), vy: rnd(-7, -2), ph: rnd(0, 6.28)});
+      if (m === "learning") for (let i = 0, n = density(34); i < n; i++) parts.push({x: rnd(0, w * .75), y: rnd(0, h), r: rnd(1.2, 3.2), vx: rnd(2, 7), vy: rnd(-3, 3), ph: rnd(0, 6.28)});
       if (m === "unrestricted") for (let i = 0; i < 3; i++) parts.push({ph: rnd(0, 6.28), sp: rnd(.05, .12), hue: [330, 270, 190][i]});
     };
     const bakeLayer = (d) => {
@@ -1071,13 +1078,17 @@
       const r = canvas.parentElement.getBoundingClientRect();
       // 柔光类（学习、想法、无限制）糊糊的，一倍分辨率看不出差别，像素少一半多；气球和网格保留高清
       const soft = ["learning", "thinking", "unrestricted"].includes(currentMode);
-      const d = soft ? 1 : Math.min(1.5, devicePixelRatio || 1);
+      // 「渲染清晰度」：标准 keeps exactly this rule; 低 is 1×; 原生 is the screen's own density.
+      const pick = window.PinkieTuning?.get("render.pixelRatio", "standard") || "standard";
+      const d = pick === "standard" ? (soft ? 1 : Math.min(1.5, devicePixelRatio || 1)) : canvasRatio(1.5);
       w = r.width; h = r.height; canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); ctx.setTransform(d, 0, 0, d, 0, 0);
       seed(); bakeLayer(d);
     };
     const draw = (now) => {
       raf = requestAnimationFrame(draw);
-      if (now - last < 33) return;
+      // 30 fps unless 进阶调节 picks another rate.
+      const fps = tuned("effects.ambientFps", 30);
+      if (fps === 30 ? now - last < 33 : now - last < 1000 / fps - 1) return;
       const imm = window.__pinkieImmersion, ptr = imm?.pointer && now - imm.pointer.t < 1500 ? imm.pointer : null;
       // 你打字、碧琪干活时，氛围跟着稍微快一点；停下来又慢慢回到原样
       const boost = 1 + (document.documentElement.hasAttribute("data-pinkie-running") ? .7 : 0) + (imm?.energy || 0) * .9;
@@ -1140,6 +1151,10 @@
       if (!raf) { last = performance.now(); raf = requestAnimationFrame(draw); }
     };
     document.addEventListener("visibilitychange", sync);
+    window.addEventListener("pinkie:tuning-change", (event) => {
+      const keys = event.detail?.keys || [];
+      if (canvas && keys.some((key) => key === "effects.particles" || key === "render.pixelRatio")) resize();
+    });
     window.addEventListener("laolao:modechange", sync);
     window.addEventListener("laolao:mode-transition-start", () => { stop(); canvas?.classList.remove("is-on"); });
     window.addEventListener("laolao:mode-transition-finished", () => setTimeout(sync, 300));

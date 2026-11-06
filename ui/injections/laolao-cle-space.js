@@ -352,7 +352,7 @@ export class CleSpace {
     if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
 
     const r = this.renderer = new THREE.WebGLRenderer({alpha: true, antialias: false, powerPreference: 'low-power', preserveDrawingBuffer: !!opt.preserve});
-    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    r.setPixelRatio((window.PinkieTuning ? window.PinkieTuning.pixelRatio(2) : Math.min(2, window.devicePixelRatio || 1)));
     r.setClearColor(0x000000, 0);
     host.appendChild(r.domElement);
     r.domElement.style.cssText = 'position:absolute;inset:0;display:block;width:100%;height:100%';

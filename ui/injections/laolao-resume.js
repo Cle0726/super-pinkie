@@ -268,6 +268,12 @@
   // not visible chat records. Scan bounded pages until the live window is full.
   const HISTORY_MAX_SCAN_PAGES = 12;
   const HISTORY_MAX_CHARS = 240000;
+  // 进阶调节 can raise or lower these; with nothing chosen they are the constants above.
+  const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
+  const liveWindow = () => tuned("history.liveWindow", LIVE_MESSAGE_WINDOW);
+  const historyPageSize = () => tuned("history.pageSize", HISTORY_PAGE_SIZE);
+  const historyScanPages = () => tuned("history.scanPages", HISTORY_MAX_SCAN_PAGES);
+  const historyMaxChars = () => tuned("history.maxChars", HISTORY_MAX_CHARS);
   const historyStatusBySession = new Map();
   const historyEpochByState = new WeakMap();
   const historyEpoch = (state) => {
@@ -608,9 +614,9 @@
     const parsedAgent = String(sessionKey).match(/^agent:([^:]+):/);
     return {
       sessionKey,
-      limit: HISTORY_PAGE_SIZE,
+      limit: historyPageSize(),
       offset,
-      maxChars: HISTORY_MAX_CHARS,
+      maxChars: historyMaxChars(),
       ...(parsedAgent?.[1] ? {agentId: parsedAgent[1]} : {}),
     };
   };
@@ -637,7 +643,7 @@
       let snapshotSessionId = "";
       let renderable = [];
       let snapshotChanged = false;
-      while (hasMore && pageCount < HISTORY_MAX_SCAN_PAGES) {
+      while (hasMore && pageCount < historyScanPages()) {
         const page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
         if (gatewayClient() !== client || paneSessionKey(pane) !== sessionKey
             || pane.state !== expectedState || expectedState?.currentSessionId !== expectedSessionId
@@ -663,7 +669,7 @@
         offset = nextOffset;
         // A long single turn may fill 512 rows before its real user head is
         // reached. Continue the bounded scan until both requirements hold.
-        if (!hasMore || (renderable.length >= LIVE_MESSAGE_WINDOW
+        if (!hasMore || (renderable.length >= liveWindow()
             && renderable.some((message) => String(message?.role || "").toLowerCase() === "user"))) break;
       }
       if (snapshotChanged) continue;
@@ -735,7 +741,7 @@
       let offset = paging.nextOffset;
       let loaded = [];
       let page = null;
-      for (let scan = 0; scan < HISTORY_MAX_SCAN_PAGES; scan += 1) {
+      for (let scan = 0, pages = historyScanPages(); scan < pages; scan += 1) {
         page = await requestRecovery("chat.history", historyParams(sessionKey, offset), 20000, client);
         if (!valid()) return false;
         const pageSessionId = String(page?.sessionInfo?.sessionId || page?.sessionId || "");
@@ -1826,7 +1832,7 @@
   };
   const consumeQueueEvidence = (ledger, evidence) => {
     if (evidence) ledger.evidence.add(evidence);
-    while (ledger.evidence.size > LIVE_MESSAGE_WINDOW * 2) {
+    while (ledger.evidence.size > liveWindow() * 2) {
       ledger.evidence.delete(ledger.evidence.values().next().value);
     }
   };

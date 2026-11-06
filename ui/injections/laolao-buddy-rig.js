@@ -383,7 +383,7 @@ void main() {
     }
     resize() {
       const r = this.canvas.getBoundingClientRect();
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = (window.PinkieTuning ? window.PinkieTuning.pixelRatio(2) : Math.min(2, window.devicePixelRatio || 1));
       const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
       if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; this.kick(); }
     }

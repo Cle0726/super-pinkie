@@ -154,7 +154,9 @@ class SharedUiBundleTests(unittest.TestCase):
         source = (ROOT / 'ui/injections/laolao-companion.js').read_text()
         self.assertNotIn('data-pinkie-lite', source)
         self.assertIn('requestAnimationFrame(draw)', source)
-        self.assertIn('if (now - last < 33)', source)
+        # 30 fps by default on every machine; only 进阶调节 changes it.
+        self.assertIn('fps === 30 ? now - last < 33', source)
+        self.assertIn('tuned("effects.ambientFps", 30)', source)
         rig = (ROOT / 'ui/injections/laolao-buddy-rig.js').read_text()
         self.assertNotIn('data-pinkie-lite', rig)
         profile = (ROOT / 'ui/injections/laolao-platform-surface.js').read_text()

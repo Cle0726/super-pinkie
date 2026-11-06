@@ -203,6 +203,24 @@
     element("h2", "pinkie-user-settings__title", intro, "碧琪的常用设置");
     element("p", "pinkie-user-settings__intro-copy", intro, "把常用的几件事调成顺手的样子。修改后会自动保存。");
 
+    // 进阶调节 lives first: the place people already open to change things.
+    const power = button("", "pinkie-power-entry", scroll, () => window.__pinkiePower?.open());
+    power.dataset.pinkiePowerEntry = "settings";
+    const powerArt = element("img", "pinkie-power-entry__art", power);
+    powerArt.src = "./laolao-pinkie-buddy-unrestricted-happy.png"; powerArt.alt = "";
+    const powerCopy = element("span", "pinkie-power-entry__copy", power);
+    element("span", "pinkie-power-entry__title", powerCopy, "进阶调节 · 电脑够快就别省着");
+    element("span", "pinkie-power-entry__line", powerCopy, "特效、聊天记录、长回复、渲染、预加载，一键「省着用 / 标准 / 全开」，也能一项项调。");
+    const powerLevel = element("span", "pinkie-power-entry__level", power, "标准");
+    const syncPower = () => {
+      const info = window.__pinkiePower?.summary?.();
+      if (!info) return;
+      ownText(powerLevel, info.changed ? `${info.title} · 改了 ${info.changed} 项` : info.title);
+    };
+    syncPower();
+    window.addEventListener("pinkie:tuning-change", syncPower);
+    window.addEventListener("pinkie:power-summary", syncPower);
+
     const modeCard = card(scroll, "🌈", "碧琪", "选择新建聊天时先进入的模式。" );
     const modeRow = row(modeCard, "默认模式", "会影响之后新建的聊天。" );
     const modeGroup = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", modeRow.control);
@@ -278,7 +296,7 @@
       state.themeModeButtons.push([value, node]);
     }
     // Effects no longer follow the OS "reduce motion" flag; this is the one switch.
-    const motionRow = row(appearanceCard, "减少动效", "默认开启完整特效。容易晕动或想更安静时再打开。" );
+    const motionRow = row(appearanceCard, "减少动效", "默认开启完整特效。容易晕动或想更安静时再打开。更多特效和性能选项在上面的「进阶调节」。" );
     const motionGroup = element("div", "pinkie-user-settings__segments", motionRow.control);
     const motionButtons = [[false, "完整特效"], [true, "减少动效"]].map(([value, label]) => {
       const node = button(label, "pinkie-user-settings__choice", motionGroup, () => {

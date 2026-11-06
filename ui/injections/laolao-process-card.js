@@ -13,6 +13,11 @@
   const STORE = "laolao:process-thinking:v1";
   const MAX_CARDS = 80;
   const MAX_TEXT = 8000;
+  // 进阶调节 can change both; untouched they are the constants above.
+  const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
+  const maxCards = () => tuned("process.maxCards", MAX_CARDS);
+  const maxText = () => tuned("process.maxText", MAX_TEXT);
+  const confettiRatio = () => window.PinkieTuning ? window.PinkieTuning.pixelRatio(Infinity) : devicePixelRatio;
   const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
   const PHRASE = {
     thinking: "碧琪在动小脑瓜…", working: "碧琪在抛气球干活…", writing: "碧琪在比划着回你…",
@@ -85,7 +90,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       const keys = Object.keys(store).sort((a, b) => (store[b].at || 0) - (store[a].at || 0));
-      for (const key of keys.slice(MAX_CARDS)) { delete store[key]; keep.delete(key); }
+      for (const key of keys.slice(maxCards())) { delete store[key]; keep.delete(key); }
       try { localStorage.setItem(STORE, JSON.stringify(store)); } catch {}
     }, 400);
   };
@@ -153,7 +158,7 @@
   }
   function appendThinking(text) {
     const key = resolveKey();
-    if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
+    if (!key) { run.buffer = (run.buffer + text).slice(-maxText()); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
     record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
     if (!segmentedAllowed()) {
@@ -162,9 +167,9 @@
         if (record.text) record.text += "\n\n";
       }
       const before = record.text.length, combined = record.text + text;
-      const dropped = Math.max(0, combined.length - MAX_TEXT), id = epKey(key, 0), previous = typing.get(id);
+      const dropped = Math.max(0, combined.length - maxText()), id = epKey(key, 0), previous = typing.get(id);
       if (previous && dropped) { previous.from = Math.max(0, previous.from - dropped); previous.to = Math.max(0, previous.to - dropped); }
-      record.text = combined.slice(-MAX_TEXT);
+      record.text = combined.slice(-maxText());
       typeOut(id, Math.max(0, before - dropped), record.text.length);
       record.at = Date.now(); keep.add(key); save();
       return;
@@ -178,9 +183,9 @@
     }
     const index = record.eps.length - 1, ep = record.eps[index], before = ep.text.length;
     ep.text += text;
-    record.text = (record.text + text).slice(-MAX_TEXT);
+    record.text = (record.text + text).slice(-maxText());
     // Older bursts give up their text first; the live one is trimmed last.
-    let over = record.eps.reduce((sum, item) => sum + item.text.length, 0) - MAX_TEXT;
+    let over = record.eps.reduce((sum, item) => sum + item.text.length, 0) - maxText();
     for (const item of record.eps) {
       if (over <= 0 || item === ep) break;
       const cut = Math.min(over, item.text.length);
@@ -294,7 +299,7 @@
     const history = segmentedAllowed() && Array.isArray(slot.pinkieHistorySegments) ? slot.pinkieHistorySegments.filter(ep => ep?.text) : [];
     if (!record?.text && (history.length || slot.pinkieHistoryThinking)) {
       const text = history.length ? history.map(ep => ep.text).join("\n\n") : String(slot.pinkieHistoryThinking);
-      record = store[key] = {text: text.slice(-MAX_TEXT), ms: 0, count: history.length || 1,
+      record = store[key] = {text: text.slice(-maxText()), ms: 0, count: history.length || 1,
         ...(history.length ? {eps: history.map(ep => ({text: ep.text, ms: 0, anchor: ep.anchor}))} : {}),
         at: Date.now(), fromHistory: true};
       record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
@@ -579,12 +584,12 @@
     if (!canvas) {
       canvas = el("canvas", "pinkie-confetti");
       document.body.append(canvas);
-      const fit = () => { canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio; };
+      const fit = () => { const d = confettiRatio(); canvas.width = innerWidth * d; canvas.height = innerHeight * d; };
       fit(); addEventListener("resize", fit);
     }
     const rect = anchor.getBoundingClientRect();
     const colors = ["#e94f91", "#69bdea", "#ffd84d", "#ff9cc6"];
-    for (let index = 0; index < 22; index += 1) {
+    for (let index = 0, count = Math.max(1, Math.round(22 * tuned("effects.particles", 1))); index < count; index += 1) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1, speed = 2 + Math.random() * 2.8;
       parts.push({x: rect.left + rect.width * 0.6, y: rect.top + 8, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, w: 2.6 + Math.random() * 2.4, h: 4 + Math.random() * 3, c: colors[index % 4], life: 1});
@@ -593,7 +598,7 @@
   }
   function tick() {
     const ctx = canvas.getContext("2d");
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    const d = canvas.width / Math.max(1, innerWidth); ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, innerWidth, innerHeight);
     parts = parts.filter((p) => p.life > 0);
     for (const p of parts) {

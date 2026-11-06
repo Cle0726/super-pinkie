@@ -7,6 +7,8 @@
   const warmedRoutes = new Set();
   const MAX_IDLE_ROUTES = 3;
   const MAX_WARMED_ROUTES = 8;
+  // 进阶调节 can change both; untouched they are the constants above.
+  const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
 
   const hasConstrainedConnection = () => {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -35,7 +37,7 @@
 
   const warmRoute = (href) => {
     const route = routeFrom(href);
-    if (!route || warmedRoutes.has(route) || warmedRoutes.size >= MAX_WARMED_ROUTES) return;
+    if (!route || warmedRoutes.has(route) || warmedRoutes.size >= tuned("warmup.maxRoutes", MAX_WARMED_ROUTES)) return;
     warmedRoutes.add(route);
     const link = document.createElement("link");
     link.rel = "prefetch";
@@ -59,10 +61,12 @@
   const warmLikelyRoutes = () => {
     const links = [...document.querySelectorAll("aside.sidebar a[href], .dashboard-header a[href]")];
     let count = 0;
+    const limit = tuned("warmup.idleRoutes", MAX_IDLE_ROUTES);
+    if (limit <= 0) return;
     for (const link of links) {
       const before = warmedRoutes.size;
       warmRoute(link.href);
-      if (warmedRoutes.size > before && ++count >= MAX_IDLE_ROUTES) break;
+      if (warmedRoutes.size > before && ++count >= limit) break;
     }
   };
 

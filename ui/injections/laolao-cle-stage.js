@@ -13,7 +13,7 @@
  * - 运行期间 html[data-cle-live]：其他焦点退后（见 css）。
  * - WebGL 不可用、「减少动态效果」或软件渲染（html[data-pinkie-lite]）：只用静态签名小标，不压暗界面。
  */
-import {CleSpace} from './laolao-cle-space.js?v=5';
+import {CleSpace} from './laolao-cle-space.js?v=6';
 
 if (!window.__laolaoCleStage) {
   window.__laolaoCleStage = true;
