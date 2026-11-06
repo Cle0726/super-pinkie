@@ -260,10 +260,11 @@ PAGE_STATE = r"""() => {
     shellSession: shell?.context?.gateway?.snapshot?.sessionKey || '',
     transition: Boolean(document.querySelector('.laolao-mode-transition')),
     switcher: Boolean(document.querySelector('.laolao-mode-switcher')),
-    fonts: getComputedStyle(document.body).fontFamily,
-    text: (document.body.innerText || '').slice(0, 600),
+    // document.body is null for a moment while a mode switch reloads the page.
+    fonts: document.body ? getComputedStyle(document.body).fontFamily : '',
+    text: (document.body?.innerText || '').slice(0, 600),
     // Gateway errors surface as a banner, e.g. 'Unknown agent id "project"'.
-    gatewayError: ((document.body.innerText || '').match(/(GatewayRequestError[^\n]*|Unknown agent id[^\n]*)/) || [''])[0],
+    gatewayError: ((document.body?.innerText || '').match(/(GatewayRequestError[^\n]*|Unknown agent id[^\n]*)/) || [''])[0],
   };
 }"""
 
