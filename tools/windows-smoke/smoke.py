@@ -95,11 +95,11 @@ def capture_native_ui(exe, env, out, label, pid):
                "--desktop-python", sys.executable, "--app-pid", str(pid),
                "--out", str(out.resolve()), "--strict"]
     result = subprocess.run(command, env=env, capture_output=True, text=True,
-                            encoding="utf-8", errors="replace", timeout=360)
+                            encoding="utf-8", errors="replace", timeout=480)
     (out / f"{label}-native-capture.log").write_text(result.stdout + result.stderr, encoding="utf-8")
     if result.returncode:
         raise RuntimeError(f"packaged WebView2 UI capture failed: {result.returncode}")
-    return {"passed": True, "engine": "packaged WebView2", "views": ["home", "chat", "cards", "sidebar", "learning"]}
+    return {"passed": True, "engine": "packaged WebView2", "views": ["home", "chat", "cards", "sidebar", "learning", "power"]}
 
 
 def http_ready(url=GATEWAY):
