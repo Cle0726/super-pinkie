@@ -111,6 +111,9 @@ html[data-laolao-startup-reveal="1"] .laolao-startup-home__recent {
   /* The native welcome centres itself with auto margins; sit on the composer instead. */
   margin: 0 auto !important;
   padding: 16px 0 !important;
+  /* 碧琪头上冒气泡时让出位置（距离由 laolao-companion.js 量出来），不叠在字上。 */
+  transform: translateY(calc(-1 * var(--laolao-home-lift, 0px)));
+  transition: transform .3s cubic-bezier(.2, .78, .25, 1);
 }
 /* No portrait: the composer Pinkie is the only figure on the page. The line
    itself is the welcome, set a little larger in a book face. */
