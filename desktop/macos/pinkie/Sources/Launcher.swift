@@ -1713,9 +1713,127 @@ private enum BundledSetup {
     }
 }
 
+/// Stays on screen after the main App exits, while the updater replaces the bundle.
+/// Launched as a copy of this executable so deleting /Applications/超級碧琪.app does not kill it.
+private enum UpdateProgressHold {
+    static var controller: UpdateProgressController?
+}
+
+private final class UpdateProgressController: NSObject, NSApplicationDelegate {
+    let file: URL
+    let started = Date()
+    private var panel: NSPanel?
+    private var line: NSTextField?
+    private var clock: NSTextField?
+    private var steps: [NSTextField] = []
+    private var holdUntil: Date?
+    private let names = ["退出", "拉取", "打包", "换上", "打开"]
+
+    init(file: URL) { self.file = file }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 168),
+            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "超級碧琪更新"
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.center()
+        let content = NSView(frame: panel.contentView?.bounds ?? .zero)
+        content.autoresizingMask = [.width, .height]
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor(srgbRed: 1, green: 0.973, blue: 0.984, alpha: 1).cgColor
+
+        let title = label("碧琪正在换上新版", size: 18, bold: true, color: NSColor(srgbRed: 0.43, green: 0.23, blue: 0.34, alpha: 1))
+        title.frame = NSRect(x: 22, y: 118, width: 396, height: 28)
+        let line = label("正在退出旧版本", size: 13, bold: false, color: NSColor(srgbRed: 0.54, green: 0.35, blue: 0.45, alpha: 1))
+        line.frame = NSRect(x: 22, y: 90, width: 300, height: 22)
+        let clock = label("已用 0 秒", size: 12, bold: false, color: NSColor(srgbRed: 0.69, green: 0.48, blue: 0.58, alpha: 1))
+        clock.alignment = .right
+        clock.frame = NSRect(x: 300, y: 90, width: 118, height: 22)
+        content.addSubview(title)
+        content.addSubview(line)
+        content.addSubview(clock)
+        var stepLabels: [NSTextField] = []
+        for (index, name) in names.enumerated() {
+            let item = label(name, size: 12, bold: index == 0, color: NSColor(srgbRed: 0.76, green: 0.36, blue: 0.54, alpha: 1))
+            item.alignment = .center
+            item.frame = NSRect(x: 16 + index * 82, y: 28, width: 78, height: 20)
+            content.addSubview(item)
+            stepLabels.append(item)
+        }
+        panel.contentView?.addSubview(content)
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.panel = panel
+        self.line = line
+        self.clock = clock
+        self.steps = stepLabels
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
+        tick()
+    }
+
+    private func label(_ text: String, size: CGFloat, bold: Bool, color: NSColor) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.font = bold ? .systemFont(ofSize: size, weight: .bold) : .systemFont(ofSize: size)
+        field.textColor = color
+        field.lineBreakMode = .byTruncatingTail
+        return field
+    }
+
+    private func tick() {
+        let elapsed = Int(Date().timeIntervalSince(started))
+        clock?.stringValue = elapsed < 60 ? "已用 \(elapsed) 秒" : "已用 \(elapsed / 60) 分 \(String(format: "%02d", elapsed % 60)) 秒"
+        guard let data = try? Data(contentsOf: file),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if let text = json["text"] as? String { line?.stringValue = text }
+        let step = json["step"] as? Int ?? 1
+        let state = json["state"] as? String ?? "running"
+        let current = NSColor(srgbRed: 0.43, green: 0.23, blue: 0.34, alpha: 1)
+        let done = NSColor(srgbRed: 0.76, green: 0.36, blue: 0.54, alpha: 1)
+        let idle = NSColor(srgbRed: 0.8, green: 0.66, blue: 0.73, alpha: 1)
+        for (index, item) in steps.enumerated() {
+            let number = index + 1
+            if number < step || (number == step && (state == "done" || state == "failed")) {
+                item.stringValue = "✓ " + names[index]
+                item.textColor = done
+                item.font = .systemFont(ofSize: 12)
+            } else if number == step {
+                item.stringValue = names[index]
+                item.textColor = current
+                item.font = .systemFont(ofSize: 12, weight: .bold)
+            } else {
+                item.stringValue = names[index]
+                item.textColor = idle
+                item.font = .systemFont(ofSize: 12)
+            }
+        }
+        if state == "done" || state == "failed" {
+            if holdUntil == nil { holdUntil = Date().addingTimeInterval(state == "done" ? 2 : 8) }
+            if let holdUntil, Date() >= holdUntil { NSApp.terminate(nil) }
+        }
+    }
+}
+
 @main
 struct LauncherMain {
     static func main() {
+        let arguments = CommandLine.arguments
+        if let flag = arguments.firstIndex(of: "--update-progress"), flag + 1 < arguments.count {
+            let app = NSApplication.shared
+            let controller = UpdateProgressController(file: URL(fileURLWithPath: arguments[flag + 1]))
+            // NSApp.delegate is weak. Without this, the card is freed before it appears.
+            UpdateProgressHold.controller = controller
+            app.setActivationPolicy(.regular)
+            app.delegate = controller
+            app.run()
+            return
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.setActivationPolicy(.regular)
@@ -2234,6 +2352,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
     }
 
+    /// A copy of this executable, re-signed, so replacing the App bundle does not take the card with it.
+    private func spawnUpdateProgress(executable: URL?, file: URL, folder: URL) {
+        guard let executable else { return }
+        let staged = folder.appendingPathComponent("PinkieUpdateProgress")
+        do {
+            if FileManager.default.fileExists(atPath: staged.path) { try FileManager.default.removeItem(at: staged) }
+            try FileManager.default.copyItem(at: executable, to: staged)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staged.path)
+        } catch {
+            NSLog("[laolao] update progress copy failed: %@", error.localizedDescription)
+            return
+        }
+        let sign = Process()
+        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["--force", "--sign", "-", staged.path]
+        sign.standardInput = FileHandle.nullDevice
+        sign.standardOutput = FileHandle.nullDevice
+        sign.standardError = FileHandle.nullDevice
+        if (try? sign.run()) != nil { sign.waitUntilExit() }
+        let progress = Process()
+        progress.executableURL = staged
+        progress.arguments = ["--update-progress", file.path]
+        progress.standardInput = FileHandle.nullDevice
+        progress.standardOutput = FileHandle.nullDevice
+        progress.standardError = FileHandle.nullDevice
+        do { try progress.run() }
+        catch { NSLog("[laolao] update progress did not start: %@", error.localizedDescription) }
+    }
+
     @discardableResult private func launchDetachedUpdate(prepared: Bool) -> Bool {
         guard !updateLaunchInProgress, let root = BundledRuntime.resourceRoot else { return false }
         let bundledScript = root.appendingPathComponent("installer/macos/detached-update.sh")
@@ -2248,10 +2395,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if FileManager.default.fileExists(atPath: helper.path) { try FileManager.default.removeItem(at: helper) }
             try FileManager.default.copyItem(at: bundledScript, to: helper)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+            let progressFile = updateRoot.appendingPathComponent("progress.json")
+            let initial = #"{"step":1,"total":5,"text":"正在退出旧版本","state":"running"}"#
+            try initial.write(to: progressFile, atomically: true, encoding: .utf8)
+            spawnUpdateProgress(executable: Bundle.main.executableURL, file: progressFile, folder: updateRoot)
             task.executableURL = URL(fileURLWithPath: "/bin/zsh")
             task.arguments = [helper.path, String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
                 + (prepared ? ["--prepared", stageScript.path] : [])
-            task.environment = BundledRuntime.environment()
+            var environment = BundledRuntime.environment()
+            environment["PINKIE_UPDATE_PROGRESS_FILE"] = progressFile.path
+            task.environment = environment
             task.standardInput = FileHandle.nullDevice
             task.standardOutput = FileHandle.nullDevice
             task.standardError = FileHandle.nullDevice

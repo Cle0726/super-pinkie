@@ -21,6 +21,14 @@ notify() {
   /usr/bin/osascript -e "display notification \"${message//\"/\\\"}\" with title \"超級碧琪\"" >/dev/null 2>&1 || true
 }
 
+# The progress card is a second process started by the App before it exits.
+# It reads this file. Missing file means the card was not started; never fail the update for that.
+progress_status() {
+  local file="${PINKIE_UPDATE_PROGRESS_FILE:-}"
+  [[ -n "$file" ]] || return 0
+  printf '{"step":%s,"total":5,"text":"%s","state":"%s"}\n' "$1" "$2" "${3:-running}" > "$file" 2>/dev/null || true
+}
+
 reopen_app() {
   if [[ -d "$APP_PATH" ]]; then
     /usr/bin/open "$APP_PATH" >/dev/null 2>&1 || true
@@ -172,9 +180,11 @@ fi
 if [[ "${3:-}" == "--prepared" ]]; then
   worker="${4:-}"
   python="${PINKIE_PYTHON_BIN:-/usr/bin/python3}"
+  progress_status 4 "正在换上新版本" || true
   if [[ ! -f "$worker" ]] || ! prepared_result="$("$python" "$worker" apply)"; then
     echo "prepared update validation failed"
     notify "暂存更新已变化，本次没有安装；请重新打开更新窗口"
+    progress_status 4 "这次没有装上" failed || true
     reopen_app
     exit 1
   fi
@@ -196,11 +206,13 @@ if [[ "${3:-}" == "--prepared" ]]; then
      { [[ -z "$PROVIDER" ]] && PINKIE_APP_ROOT="$(dirname "$APP_PATH")" "$REPO/install-full.sh"; }; then
     echo "$(date '+%F %T') prepared update completed"
     notify "更新完成，正在重新打开"
+    progress_status 5 "正在打开新版本" done || true
     reopen_app
     exit 0
   fi
   echo "$(date '+%F %T') installer failed; install-full.sh handled App rollback"
   notify "更新失败，已保留或恢复旧版"
+  progress_status 5 "这次没有装上" failed || true
   reopen_app
   exit 1
 fi
@@ -233,23 +245,28 @@ if [[ -z "$REPO" ]]; then
   fi
 fi
 
+progress_status 2 "正在拉取新版本" || true
 branch="$(git -C "$REPO" branch --show-current 2>/dev/null || true)"
 branch="${branch:-main}"
 if ! git -C "$REPO" fetch --tags origin || ! git -C "$REPO" pull --ff-only origin "$branch"; then
   echo "git fast-forward failed for $REPO"
   notify "Git 拉取没有完成，旧版没有被改动"
+  progress_status 2 "这次没有装上" failed || true
   reopen_app
   exit 1
 fi
 
+progress_status 3 "正在打包新版本" || true
 if PINKIE_APP_ROOT="$(dirname "$APP_PATH")" "$REPO/update-full.sh"; then
   echo "$(date '+%F %T') detached update completed"
   notify "更新完成，正在重新打开"
+  progress_status 5 "正在打开新版本" done || true
   reopen_app
   exit 0
 fi
 
 echo "$(date '+%F %T') installer failed; install-full.sh handled App rollback"
 notify "更新失败，已保留或恢复旧版"
+progress_status 5 "这次没有装上" failed || true
 reopen_app
 exit 1

@@ -58,6 +58,7 @@ class HelperVisibilityTest(unittest.TestCase):
                 self.assertIn("pending-launch.json", helper)
 
     def test_progress_window_forces_itself_on_screen_and_waits_for_the_app(self):
+        self.assertLess(PROGRESS_WINDOW_PS.index("($Status + '.shown')"), PROGRESS_WINDOW_PS.index("ShowDialog()"))
         self.assertIn("$window.Add_Loaded({ Show-Foreground $window })", PROGRESS_WINDOW_PS)
         self.assertIn("ShowWindow($handle, 1)", PROGRESS_WINDOW_PS)
         self.assertIn("SetForegroundWindow", PROGRESS_WINDOW_PS)

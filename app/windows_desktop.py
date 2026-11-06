@@ -691,6 +691,9 @@ $timer.Add_Tick({
   if ($seconds -gt 1500) { $window.Close() }
 })
 $timer.Start()
+# The App waits for this file before it tells the replacer not to open a second
+# card. If we never get here, the replacer still opens one.
+try { Set-Content -LiteralPath ($Status + '.shown') -Value '1' -Encoding ascii } catch {}
 [void]$window.ShowDialog()
 Remove-Item -LiteralPath $Status -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
@@ -1811,12 +1814,26 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             script.write_text(PROGRESS_WINDOW_PS, encoding="utf-8-sig")
             status.write_text(json.dumps({"step": 1, "total": 5, "text": "正在关闭旧版本", "state": "running"},
                                          ensure_ascii=False), encoding="utf-8")
-            return subprocess.Popen(
+            process = subprocess.Popen(
                 ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-File", str(script),
                  "-Status", str(status), "-Owner", "0", "-Version", str(version)],
                 cwd=str(update_root), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, close_fds=True, **hidden_process_kwargs(hide_window=False),
             )
+            shown = Path(str(status) + ".shown")
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                if shown.is_file():
+                    return process
+                if process.poll() is not None:
+                    break
+                time.sleep(0.05)
+            append_log("updater", "progress window did not appear; the replacer will open it")
+            try:
+                process.terminate()
+            except OSError:
+                pass
+            return None
         except OSError as error:
             append_log("updater", f"progress window not started by the App: {error}")
             return None
