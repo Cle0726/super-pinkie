@@ -69,6 +69,8 @@ function Apply-UISkin {
         $networkFirst = "fetch(event.request)`n        .then((response) => {`n          if (response.ok) {`n            const clone = response.clone();`n            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));`n          }`n          return response;`n        })`n        .catch(() => caches.match(event.request))"
         $worker = $worker.Replace($cacheFirst, $networkFirst)
         Write-Utf8NoBom $serviceWorker $worker
+        # 文件没变（ETag 相同）就不再往 Service Worker 缓存里重写一遍。
+        python (Join-Path $RepoRoot 'tools\ui-parity\sw_cache.py') $serviceWorker
     }
     Write-Host "  patched shared UI: $UiRoot"
 }
@@ -113,6 +115,7 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-thinking-capabilities.mjs',
                 'apply-image-access.mjs',
                 'apply-material-preview-csp.mjs',
+                'apply-control-ui-cache.mjs',
                 'apply-local-unrestricted-policy.mjs',
                 'apply-computer-v2.mjs'
             ) | ForEach-Object { Join-Path $RepoRoot "patch\$_" } | Where-Object { Test-Path $_ }

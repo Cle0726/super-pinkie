@@ -1057,6 +1057,40 @@ html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pi
     })));
   }, true);
 
+  // Warm the menu's art in idle time, one tier per slice, so the first open
+  // shows every tier picture and animation at once instead of filling in.
+  // The gateway now answers 304 for unchanged files, so this also leaves
+  // them ready in the web view's cache for the next start.
+  const warmTierArt = () => {
+    const queue = TIERS.slice();
+    const idle = (callback) => (window.requestIdleCallback
+      ? window.requestIdleCallback(callback, { timeout: 4000 })
+      : window.setTimeout(callback, 900));
+    const next = () => {
+      const tier = queue.shift();
+      if (!tier) return;
+      if (window.Image) {
+        const image = new window.Image();
+        image.decoding = "async";
+        image.onload = () => { try { void image.decode?.().catch(() => {}); } catch { /* still usable */ } };
+        image.src = tier.art;
+      }
+      if (tier.motion && !document.head.querySelector(`link[data-laolao-tier-warm="${tier.id}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "prefetch";
+        link.as = "video";
+        link.href = tier.motion;
+        link.fetchPriority = "low";
+        link.dataset.laolaoTierWarm = tier.id;
+        document.head.append(link);
+      }
+      idle(next);
+    };
+    idle(next);
+  };
+
   ensureStyle();
   render();
+  if (document.readyState === "complete") warmTierArt();
+  else window.addEventListener("load", warmTierArt, { once: true });
 })();

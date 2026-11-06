@@ -83,7 +83,12 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const clone = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            // pinkie-sw-etag:v1 -- store again only when the file changed.
+            void caches.open(CACHE_NAME).then(async (cache) => {
+              const tag = clone.headers.get("etag");
+              const kept = tag ? await cache.match(event.request) : null;
+              if (!kept || kept.headers.get("etag") !== tag) await cache.put(event.request, clone);
+            });
           }
           return response;
         })
@@ -95,7 +100,12 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const clone = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            // pinkie-sw-etag:v1 -- store again only when the file changed.
+            void caches.open(CACHE_NAME).then(async (cache) => {
+              const tag = clone.headers.get("etag");
+              const kept = tag ? await cache.match(event.request) : null;
+              if (!kept || kept.headers.get("etag") !== tag) await cache.put(event.request, clone);
+            });
           }
           return response;
         })

@@ -28,6 +28,7 @@ const ORDER = [
   'apply-control-ui-workspace-media.mjs',
   'apply-control-ui-file-delivery.mjs',
   'apply-material-preview-csp.mjs',
+  'apply-control-ui-cache.mjs',
   'apply-local-unrestricted-policy.mjs',
   'apply-computer-v2.mjs',
   // install.sh (unrestricted kit), after the theme runtime patches.

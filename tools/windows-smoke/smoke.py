@@ -275,6 +275,10 @@ def drive_ui(out, label):
     console = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge", headless=True)
+        try:
+            result["load_metrics"] = measure_loads(browser, out, label)
+        except Exception as error:
+            result["load_metrics"] = {"error": repr(error)}
         for scheme in ("light", "dark"):
             context = browser.new_context(viewport={"width": 1280, "height": 800}, color_scheme=scheme, locale="zh-CN")
             page = context.new_page()
@@ -359,6 +363,73 @@ def drive_ui(out, label):
     result["console_errors"] = [item for item in console if item["type"] in ("error", "warning")]
     (out / f"{label}-console.json").write_text(json.dumps(console, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
+
+
+def measure_loads(browser, out, label, reloads=2):
+    """Cold load, then reloads: what the web view has to fetch again each start.
+
+    Not a pass/fail gate. It shows whether unchanged UI files come back as 304
+    or from cache, how many bytes cross the wire and how soon the page is
+    usable -- the numbers behind "does a second start feel faster".
+    """
+    context = browser.new_context(viewport={"width": 1280, "height": 800}, locale="zh-CN")
+    page = context.new_page()
+    cdp = context.new_cdp_session(page)
+    cdp.send("Network.enable")
+    current = {}
+
+    def on_response(event):
+        response = event.get("response", {})
+        current.setdefault(event["requestId"], {}).update({
+            "url": response.get("url", ""), "status": response.get("status"),
+            "disk": bool(response.get("fromDiskCache")), "worker": bool(response.get("fromServiceWorker")),
+        })
+
+    def on_finished(event):
+        current.setdefault(event["requestId"], {})["bytes"] = event.get("encodedDataLength", 0)
+
+    def on_cached(event):
+        current.setdefault(event["requestId"], {})["memory"] = True
+
+    cdp.on("Network.responseReceived", on_response)
+    cdp.on("Network.loadingFinished", on_finished)
+    cdp.on("Network.requestServedFromCache", on_cached)
+    runs = []
+    for index in range(reloads + 1):
+        current.clear()
+        started = time.monotonic()
+        if index == 0:
+            page.goto(CHAT, wait_until="domcontentloaded", timeout=120_000)
+        else:
+            page.reload(wait_until="domcontentloaded", timeout=120_000)
+        page.wait_for_selector(".laolao-mode-switcher", timeout=90_000)
+        usable = time.monotonic() - started
+        try:
+            page.wait_for_load_state("networkidle", timeout=30_000)
+        except Exception:
+            pass
+        settled = time.monotonic() - started
+        timing = page.evaluate("""() => { const n = performance.getEntriesByType('navigation')[0] || {};
+          return {dcl: Math.round(n.domContentLoadedEventEnd || 0), load: Math.round(n.loadEventEnd || 0)}; }""")
+        entries = [item for item in current.values() if item.get("url", "").startswith("http://127.0.0.1")]
+        run = {
+            "run": "cold" if index == 0 else f"reload-{index}",
+            "usable_s": round(usable, 2), "settled_s": round(settled, 2), **timing,
+            "requests": len(entries),
+            "status_200": sum(1 for item in entries if item.get("status") == 200 and not item.get("disk") and not item.get("memory")),
+            "status_304": sum(1 for item in entries if item.get("status") == 304),
+            "from_cache": sum(1 for item in entries if item.get("disk") or item.get("memory")),
+            "via_worker": sum(1 for item in entries if item.get("worker")),
+            "wire_bytes": sum(int(item.get("bytes") or 0) for item in entries),
+        }
+        runs.append(run)
+        log(f"[{label}] load {run['run']}: usable={run['usable_s']}s requests={run['requests']} "
+            f"200={run['status_200']} 304={run['status_304']} cache={run['from_cache']} bytes={run['wire_bytes']}")
+        page.wait_for_timeout(6000)
+        page.screenshot(path=str(out / f"{label}-load-{run['run']}.png"))
+    context.close()
+    (out / f"{label}-load-metrics.json").write_text(json.dumps(runs, indent=2), encoding="utf-8")
+    return runs
 
 
 def scenario(label, exe, profile, out, old_exe=None):

@@ -63,7 +63,7 @@
 
 - `services/mode-architecture/work-kinds.mjs`（新）、`index.mjs`（接入点见 `briefs/custom-tiers-upgrade/INDEX-PORT.md`）、`reasoning.mjs`。
 - 安装清单：`services/mode-architecture/setup.py`、`installer/macos/apply-theme.sh`、`desktop/macos/build.sh`、`desktop/windows/mac-runtime/services/mode-architecture/setup.py`（+ `SHA256SUMS`）都要带上 `work-kinds.mjs`，否则插件加载失败；`tests/mode-architecture.test.mjs` 有打包清单测试。
-- 界面：`ui/injections/laolao-deep-think.js`（卡片文案、进度面板「活儿种类」一行）、`laolao-model-picker.js`（补强说明），缓存键 `deepthink28` / `modelpicker50`。
+- 界面：`ui/injections/laolao-deep-think.js`（卡片文案、进度面板「活儿种类」一行）、`laolao-model-picker.js`（补强说明），缓存键 `deepthink29` / `modelpicker50`。
 - 文档：`skills/deep-think/SKILL.md`、本文件、四个模式 `AGENTS.md` 档位段、`playbooks/crafts.md`「选了思考强度档位时」、`playbooks/environment.md`「推送来的工具和技能在这台电脑用不了时」。
 - 测试：`tests/work-kinds.test.mjs`（新）、`mode-architecture`、`reasoning-enhance`、`deep-think-ui`、`model-picker-route`。
 
