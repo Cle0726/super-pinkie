@@ -137,6 +137,10 @@
   const FADE_MS = 600;    // evaporation duration once idle
   const MAX_POINTS = 480;
   const MAX_STROKE_POINTS = 1200;
+  // 进阶调节 「画笔笔迹长度」 scales both; untouched it is 1×.
+  const inkScale = () => (window.PinkieTuning ? window.PinkieTuning.num("ink.scale", 1) : 1);
+  const maxPoints = () => Math.round(MAX_POINTS * inkScale());
+  const maxStrokePoints = () => Math.round(MAX_STROKE_POINTS * inkScale());
 
   let active = false;
   let tool = 'laser';
@@ -153,7 +157,7 @@
 
   const resize = () => {
     if (!canvas) return;
-    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    dpr = window.PinkieTuning ? window.PinkieTuning.pixelRatio(2.5) : Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.round(window.innerWidth * dpr);
     canvas.height = Math.round(window.innerHeight * dpr);
   };
@@ -639,7 +643,8 @@
       const last = drawing.pts[drawing.pts.length - 1];
       if (!last || Math.hypot(event.clientX - last.x, event.clientY - last.y) >= 1.5) {
         drawing.pts.push({ x: event.clientX, y: event.clientY });
-        if (drawing.pts.length > MAX_STROKE_POINTS) drawing.pts.splice(0, drawing.pts.length - MAX_STROKE_POINTS);
+        const cap = maxStrokePoints();
+        if (drawing.pts.length > cap) drawing.pts.splice(0, drawing.pts.length - cap);
       }
       return;
     }
@@ -648,7 +653,8 @@
     // Sub-pixel jitter only pollutes the curve; demand ~1.5px of travel.
     if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 1.5) return;
     points.push({ x: event.clientX, y: event.clientY, t: now });
-    if (points.length > MAX_POINTS) points.splice(0, points.length - MAX_POINTS);
+    const cap = maxPoints();
+    if (points.length > cap) points.splice(0, points.length - cap);
     lastMoveAt = now;
   };
   const onDown = (event) => {
@@ -773,6 +779,9 @@
     tool: () => tool,
     settings,
     strokes: () => strokes.length,
+    // Read-only counts, used by the 进阶调节 checks.
+    strokePoints: () => strokes.map((stroke) => stroke.pts.length),
+    trailPoints: () => points.length,
     undo: undoStroke, redo: redoStroke, clear: clearStrokes,
   };
 

@@ -19,7 +19,7 @@
   const glyphBase = document.currentScript?.src;
   function mountCompactionGlyph(icon, phase) {
     if (window.__pinkieCompactionGlyph) { window.__pinkieCompactionGlyph.mount(icon,phase); return; }
-    glyphLoad ||= new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('./laolao-compaction-glyph.js?v=compactionglyph2',glyphBase||location.href).href;script.onload=resolve;script.onerror=reject;document.head.append(script);});
+    glyphLoad ||= new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('./laolao-compaction-glyph.js?v=compactionglyph3',glyphBase||location.href).href;script.onload=resolve;script.onerror=reject;document.head.append(script);});
     glyphLoad.then(()=>{if(icon.isConnected)window.__pinkieCompactionGlyph?.mount(icon,icon.closest('.laolao-compaction-notice')?.dataset.phase||phase);}).catch(()=>{});
   }
   const noticeMotionObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {

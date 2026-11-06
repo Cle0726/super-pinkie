@@ -74,7 +74,7 @@
     const w = Math.round(host.clientWidth);
     if (!w) return false;
     if (w === width && canvas.width) return true;
-    width = w; dpr = Math.min(2, window.devicePixelRatio || 1);
+    width = w; dpr = (window.PinkieTuning ? window.PinkieTuning.pixelRatio(2) : Math.min(2, window.devicePixelRatio || 1));
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(HEIGHT * dpr);
     canvas.style.width = `${w}px`; canvas.style.height = `${HEIGHT}px`;
     // Threads are "lines of conversation": word-length dashes on four rows
