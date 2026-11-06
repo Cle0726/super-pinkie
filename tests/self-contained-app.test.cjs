@@ -386,6 +386,9 @@ test('macOS manual update leaves the gateway page before replacing the App', () 
   assert.match(launcher, /主动拉取更新/);
   assert.match(launcher, /copyItem\(at: bundledScript, to: helper\)/);
   assert.match(launcher, /NSApp\.terminate\(nil\)/);
+  assert.match(launcher, /--update-progress/);
+  assert.match(updater, /PINKIE_UPDATE_PROGRESS_FILE/);
+  assert.match(updater, /progress_status 5 "正在打开新版本" done/);
   assert.doesNotMatch(launcher, /terminationHandler[\s\S]{0,500}更新完成/);
   assert.match(updater, /while .*kill -0.*CURRENT_PID/);
   assert.match(updater, /git -C "\$REPO" pull --ff-only/);
