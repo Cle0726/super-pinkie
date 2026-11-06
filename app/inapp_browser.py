@@ -561,6 +561,11 @@ class BrowserManager:
     def request(self, message: Dict[str, Any], launch: bool = True, timeout: Optional[float] = None) -> Dict[str, Any]:
         request_id = str(message.get("id") or uuid.uuid4().hex)
         action = str(message.get("action", ""))
+        if action == "vpn" and (self.folder / "debug").is_file():
+            # Test hook for driving the node panel in a packaged build; only
+            # with a debug file the user created in the browser state folder.
+            payload = {k: v for k, v in message.items() if k not in ("id", "action", "op", "token")}
+            return {"id": request_id, "ok": True, "result": self.vpn.handle(str(message.get("op", "status")), payload)}
         if action == "cancel":
             self._send_host({"id": request_id, "action": "cancel", "requestId": message.get("requestId")})
             return {"id": request_id, "ok": True, "result": {"cancelled": True}}
