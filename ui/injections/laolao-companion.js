@@ -100,6 +100,7 @@
     figure.append(imgA, imgB);
     caption = el("div", "pinkie-buddy__caption");
     bubble = el("div", "pinkie-buddy__bubble"); bubble.setAttribute("role", "status");
+    watchHomeLift();
     menu = el("div", "pinkie-buddy__menu"); menu.setAttribute("role", "menu");
     menu.id = "pinkie-buddy-menu"; menu.inert = true; bubble.inert = true;
     // A composer transform and the chat pane's overflow clip trap ordinary
@@ -290,6 +291,36 @@
     clearTimeout(bubbleTimer);
     if (!sticky) scheduleHide(ms);
   };
+  // 起始页的问候语就在输入框上方不远，碧琪头上的气泡一冒出来就压在字上。
+  // 气泡在时把问候语往上让出正好重叠的距离，气泡收起再落回。
+  const liftHome = () => {
+    const root = document.documentElement;
+    const welcome = document.querySelector(".laolao-startup-home .agent-chat__welcome");
+    const current = parseFloat(root.style.getPropertyValue("--laolao-home-lift")) || 0;
+    let lift = 0;
+    if (root.dataset.laolaoStartupHome === "1" && welcome && bubble.classList.contains("is-shown")) {
+      const b = bubble.getBoundingClientRect();
+      const w = welcome.getBoundingClientRect();
+      const home = welcome.closest(".laolao-startup-home")?.getBoundingClientRect();
+      const bottom = w.bottom + current;
+      if (b.width && b.left < w.right && b.right > w.left && b.top - 8 < bottom) {
+        lift = Math.ceil(bottom - b.top + 8);
+        if (home) lift = Math.min(lift, Math.max(0, Math.floor(w.top + current - home.top)));
+      }
+    }
+    if (lift !== current) root.style.setProperty("--laolao-home-lift", `${lift}px`);
+  };
+  let liftTimer = 0;
+  const liftHomeSoon = () => {
+    requestAnimationFrame(liftHome);
+    clearTimeout(liftTimer); liftTimer = setTimeout(liftHome, 340);
+  };
+  // 随机一句、引导卡片等各处都直接改 bubble 的 class，所以盯 class 和尺寸，而不是只挂在 showBubble 上。
+  const watchHomeLift = () => {
+    new MutationObserver(liftHomeSoon).observe(bubble, { attributes: true, attributeFilter: ["class"] });
+    if (typeof ResizeObserver === "function") new ResizeObserver(liftHomeSoon).observe(bubble);
+  };
+  window.addEventListener("resize", () => liftHomeSoon());
   const scheduleHide = (ms) => { clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, ms); };
   const hideBubble = () => { bubble.classList.remove("is-shown"); bubble.dataset.sticky = ""; bubble.inert = true; };
   const resetBubble = () => bubble.classList.remove("is-card", "is-quote");
