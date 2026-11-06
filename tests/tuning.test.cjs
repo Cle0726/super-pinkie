@@ -163,9 +163,11 @@ test('the config loads third and synchronously; the page loads with the settings
 });
 
 test('the page is easy to find and owns no second motion switch', () => {
-  const settings = read('ui/injections/laolao-settings-user.js');
-  assert.match(settings, /"pinkie-power-entry", scroll, \(\) => window\.__pinkiePower\?\.open\(\)/);
-  assert.ok(settings.indexOf('pinkie-power-entry') < settings.indexOf('const modeCard'), 'first card on 常用设置');
+  const page0 = read('ui/injections/laolao-power-settings.js');
+  assert.match(page0, /querySelector\(".chat-workspace-rail"\)/, 'entry lives in the workspace rail');
+  assert.match(page0, /getElementById\("pinkie-roundtable-entry"\)/, 'right under 灵感圆桌');
+  assert.match(page0, /setInterval\(mountRail, 1500\)/, 'polled like the other rail entries, no subtree observer');
+  assert.doesNotMatch(page0, /new MutationObserver/);
   assert.match(read('ui/injections/laolao-companion.js'), /item\("power", "进阶调节", \(\) => window\.__pinkiePower\.open\(\)/);
   const page = read('ui/injections/laolao-power-settings.js');
   assert.match(page, /window\.__pinkieMotion\?\.set\(value\)/, 'motion goes through the one existing switch');

@@ -223,13 +223,19 @@ check('预加载: 全开 warms 6 per idle pass, cap raised past 8 (≤ 16)', wMa
 // ── the page itself ───────────────────────────────────────────────────────────
 await open(BASE, null);
 const ui = await evaluate(`
+  for (let i = 0; i < 20 && !document.getElementById('pinkie-power-entry'); i++) await new Promise(r => setTimeout(r, 250));
+  const railEntry = document.getElementById('pinkie-power-entry');
+  const railInfo = {inRail: !!railEntry?.closest('.chat-workspace-rail'), afterRoundtable: railEntry?.previousElementSibling?.id === 'pinkie-roundtable-entry',
+    visible: !!railEntry && railEntry.getBoundingClientRect().width > 0};
+  railEntry?.click(); await new Promise(r => setTimeout(r, 400));
+  railInfo.opens = window.__pinkiePower.isOpen; window.__pinkiePower.close();
   window.__pinkieBuddy.toggleMenu();
   await new Promise(r => setTimeout(r, 200));
   const menuItem = [...document.querySelectorAll('.pinkie-buddy__item')].find(b => b.textContent.includes('进阶调节'));
   menuItem?.click();
   await new Promise(r => setTimeout(r, 500));
   const q = s => document.querySelector(s);
-  const out = {fromMenu: window.__pinkiePower.isOpen, rows: document.querySelectorAll('.pinkie-power__row').length};
+  const out = {rail: railInfo, fromMenu: window.__pinkiePower.isOpen, rows: document.querySelectorAll('.pinkie-power__row').length};
   q('.pinkie-power__level--max').click();
   out.max = window.PinkieTuning.level;
   const row = q('.pinkie-power__row[data-key="history.maxChars"]');
@@ -240,7 +246,8 @@ const ui = await evaluate(`
   q('.pinkie-power__reset').click();
   out.afterReset = {stored: localStorage.getItem('pinkie.tuning.v1'), motion: window.__pinkieMotion.reduce, level: window.PinkieTuning.level};
   return out;`);
-check('page opens from the 小碧琪 menu with every row', ui.fromMenu && ui.rows === 14, ui);
+check('rail button sits under 灵感圆桌 and opens the page', ui.rail.inRail && ui.rail.afterRoundtable && ui.rail.visible && ui.rail.opens, ui.rail);
+check('page also opens from the 小碧琪 menu, with every row', ui.fromMenu && ui.rows === 14);
 check('page: 全开 + one override + 减少动效, then 恢复默认 clears everything', ui.max === 'max' && ui.override['history.maxChars'] === 120000 && ui.mark && ui.motion === true
   && ui.afterReset.stored === null && ui.afterReset.motion === false && ui.afterReset.level === 'standard', ui);
 
@@ -255,16 +262,11 @@ const shot = async (name, theme) => {
 await shot('power-settings-light.png', 'light');
 await shot('power-settings-dark.png', 'dark');
 if (SHOTS) {
-  // Go to 设置 the way a user does (sidebar link from a chat), so the start-up splash is long gone.
-  await evaluate(`const link = [...document.querySelectorAll('a[href]')].find(a => /\\/settings/.test(a.pathname));
-    if (link) link.click(); else { history.pushState({}, '', '/settings/general'); dispatchEvent(new PopStateEvent('popstate')); }
-    for (let i = 0; i < 40 && !document.querySelector('#laolao-user-settings:not([hidden])'); i++) await new Promise(r => setTimeout(r, 250));
-    await new Promise(r => setTimeout(r, 1500));
-    document.documentElement.setAttribute('data-theme-mode', 'light'); document.documentElement.removeAttribute('data-pinkie-night'); return 1;`);
-  const entry = await evaluate(`return !!document.querySelector('#laolao-user-settings:not([hidden]) .pinkie-power-entry');`);
-  check('常用设置 shows the 进阶调节 card first', entry);
-  const {data} = await page('Page.captureScreenshot', {format: 'png'});
-  fs.writeFileSync(path.join(SHOTS, 'settings-entry.png'), Buffer.from(data, 'base64'));
+  const box = await evaluate(`const r = document.getElementById('pinkie-power-entry')?.closest('.chat-workspace-rail')?.getBoundingClientRect(); return r && {x: r.x, y: r.y, width: r.width, height: r.height};`);
+  if (box) {
+    const {data} = await page('Page.captureScreenshot', {format: 'png', clip: {...box, x: box.x - 8, width: box.width + 16, scale: 1}});
+    fs.writeFileSync(path.join(SHOTS, 'rail-entry.png'), Buffer.from(data, 'base64'));
+  }
 }
 
 const failed = results.filter((r) => !r.ok);
