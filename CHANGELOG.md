@@ -2,6 +2,10 @@
 
 ## 待发布
 
+### 2.5.38
+- Windows 更新：进度窗口和失败窗口换成碧琪自己的设计（粉色圆角卡片、碧琪表情随状态变化、进度条在长步骤里也会往前走、五个步骤名、已用时间），不再是灰色系统对话框。图片在更新前复制到 `<state>/updates/art`，安装目录改名时也能显示；界面加载失败时退回普通窗口。
+- Windows：开屏页文件缺失时不再显示 WebView2 的「未找到文件 ERR_FILE_NOT_FOUND」，改用内置开屏页，等网关起来自动进入，45 秒后给出「自动修复设置 / 检查更新并安装 / 打开日志文件夹」。每次启动在 launcher.log 记下开屏页路径。
+
 ### 2.5.37
 - Windows：开了系统代理时 2.5.36 往 openclaw.json 写了 OpenClaw 不认的 `browser.ssrfPolicy.allowPrivateNetwork`，网关一启动就退出。现在写新键 `dangerouslyAllowPrivateNetwork`，每次启动把旧键改名。
 - Windows：网关因为设置文件无效退出时自动修复：先跑已知迁移，再用上次能启动的副本换回出错的部分，最后才跑 `doctor --fix`；坏文件留成 `openclaw.json.invalid-<时间>`。
