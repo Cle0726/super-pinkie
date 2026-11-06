@@ -18,7 +18,7 @@ $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
 
-python -m pip install --disable-pip-version-check --upgrade pip pyinstaller "pywebview==6.2.1" pywin32 edge-tts aiohttp
+python -m pip install --disable-pip-version-check --upgrade pip pyinstaller "pywebview==6.2.1" pywin32 edge-tts aiohttp pyyaml
 if ($LASTEXITCODE -ne 0) { throw "Python 构建依赖安装失败，请检查本机网络或 Python 3.12 环境" }
 python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_version)"
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
@@ -35,6 +35,30 @@ if ($nodeVersion -ne $manifest.node) {
 if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $runtimeBin | Out-Null
 Copy-Item -LiteralPath $node -Destination (Join-Path $runtimeBin "node.exe") -Force
+
+# 碧琪的浏览器的「浏览器节点」：mihomo 内核（GPL-3.0，单独的未修改可执行文件，见 THIRD_PARTY_NOTICES）。
+# 固定版本 + SHA256，缓存到 build\cache，离线重建不用再下。只给内置浏览器的 WebView2 用，不碰系统代理。
+$mihomoVersion = "v1.19.33"
+$mihomoZipName = "mihomo-windows-amd64-compatible-$mihomoVersion.zip"
+$mihomoSha256 = "7aaf636a4f2172dcd8ec34ac4f52797b059195e5afd6409508c963e545f8864d"
+$buildCache = Join-Path $RepoRoot "build\cache"
+New-Item -ItemType Directory -Force -Path $buildCache | Out-Null
+$mihomoZip = Join-Path $buildCache $mihomoZipName
+if (-not (Test-Path -LiteralPath $mihomoZip) -or (Get-FileHash -LiteralPath $mihomoZip -Algorithm SHA256).Hash.ToLower() -ne $mihomoSha256) {
+    Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/MetaCubeX/mihomo/releases/download/$mihomoVersion/$mihomoZipName" -OutFile $mihomoZip
+}
+if ((Get-FileHash -LiteralPath $mihomoZip -Algorithm SHA256).Hash.ToLower() -ne $mihomoSha256) {
+    Remove-Item -LiteralPath $mihomoZip -Force
+    throw "mihomo 下载校验失败（SHA256 不一致）"
+}
+$browserVpnStage = Join-Path $runtimeStage "browser-vpn"
+New-Item -ItemType Directory -Force -Path $browserVpnStage | Out-Null
+$mihomoUnpack = Join-Path $buildCache "mihomo-unpack"
+if (Test-Path -LiteralPath $mihomoUnpack) { Remove-Item -LiteralPath $mihomoUnpack -Recurse -Force }
+Expand-Archive -LiteralPath $mihomoZip -DestinationPath $mihomoUnpack -Force
+$mihomoExe = Get-ChildItem -LiteralPath $mihomoUnpack -Filter "*.exe" -Recurse | Select-Object -First 1
+if (-not $mihomoExe) { throw "mihomo 压缩包里没有 exe" }
+Copy-Item -LiteralPath $mihomoExe.FullName -Destination (Join-Path $browserVpnStage "mihomo.exe") -Force
 
 npm install --prefix $runtimeStage --omit=dev --no-audit --no-fund "openclaw@$($manifest.openclaw)"
 if ($LASTEXITCODE -ne 0) { throw "OpenClaw 内置运行时下载失败" }
@@ -184,6 +208,8 @@ $pyInstallerCommonArgs = @(
     "--add-binary", "$(Join-Path $runtimeBin 'node.exe');runtime\bin",
     "--add-data", "$runtimeModules;runtime\node_modules",
     "--add-data", "$(Join-Path $runtimeStage 'runtime-manifest.json');runtime",
+    "--add-data", "$(Join-Path $runtimeStage 'browser-vpn');runtime\browser-vpn",
+    "--add-data", "desktop\macos\pinkie\Sources\BrowserControl.js;inapp-browser",
     "--add-data", "prompts;prompts",
     "--add-data", "proxy;proxy",
     "--add-data", "patch;patch",
