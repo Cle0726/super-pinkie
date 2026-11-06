@@ -442,26 +442,213 @@ FOREGROUND_PS = r'''function Show-Foreground($Window) {
 }
 '''
 
+# Shared look for every update window: a soft pink card with 碧琪 herself on
+# it, instead of a gray system dialog. The art is copied into
+# <state>/updates/art by the App before the update starts, because the install
+# folder is renamed away while these windows are open.
+PINKIE_WPF_PS = r'''function Get-PinkieArt([string]$Name) {
+  try {
+    $path = Join-Path $script:PinkieArtDir ('laolao-pinkie-status-' + $Name + '.png')
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    $image = New-Object Windows.Media.Imaging.BitmapImage
+    $image.BeginInit()
+    $image.CacheOption = [Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+    $image.UriSource = New-Object System.Uri ([IO.Path]::GetFullPath($path))
+    $image.EndInit()
+    $image.Freeze()
+    return $image
+  } catch { return $null }
+}
+function Set-PinkieArt($Target, [string]$Name) {
+  if ($script:PinkieArtShown -eq $Name) { return }
+  $art = Get-PinkieArt $Name
+  if ($art) { $Target.Source = $art; $script:PinkieArtShown = $Name }
+}
+function Start-PinkieBob($Target) {
+  try {
+    $bob = New-Object Windows.Media.Animation.DoubleAnimation
+    $bob.From = 0; $bob.To = -6
+    $bob.Duration = New-Object Windows.Duration ([TimeSpan]::FromMilliseconds(1100))
+    $bob.AutoReverse = $true
+    $bob.RepeatBehavior = [Windows.Media.Animation.RepeatBehavior]::Forever
+    $bob.EasingFunction = New-Object Windows.Media.Animation.SineEase
+    $Target.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::YProperty, $bob)
+  } catch {}
+}
+function New-PinkieWindow([string]$Title, [string]$Body) {
+  $xaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="@@TITLE@@" Width="520" SizeToContent="Height" WindowStartupLocation="CenterScreen"
+        Topmost="True" ShowInTaskbar="True" ResizeMode="NoResize" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent"
+        FontFamily="Microsoft YaHei UI, Microsoft YaHei, Segoe UI" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+    <Style x:Key="Pill" TargetType="Button">
+      <Setter Property="Foreground" Value="#7A3F5E"/>
+      <Setter Property="Background" Value="#FFFFFFFF"/>
+      <Setter Property="BorderBrush" Value="#FFE9A9C4"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Padding" Value="18,8,18,8"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Face" CornerRadius="17" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1.2" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Opacity" Value="0.86"/></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Opacity" Value="0.72"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="PillPrimary" TargetType="Button" BasedOn="{StaticResource Pill}">
+      <Setter Property="Foreground" Value="#FFFFFFFF"/>
+      <Setter Property="Background" Value="#FFC25B8A"/>
+      <Setter Property="BorderBrush" Value="#FFC25B8A"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </Window.Resources>
+  <Border Margin="22" CornerRadius="26" BorderBrush="#FFFFFFFF" BorderThickness="1.5" Padding="22,20,24,16">
+    <Border.Background>
+      <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FFFFF8FB" Offset="0"/>
+        <GradientStop Color="#FFFBDDEA" Offset="1"/>
+      </LinearGradientBrush>
+    </Border.Background>
+    <Border.Effect>
+      <DropShadowEffect BlurRadius="30" ShadowDepth="6" Direction="270" Color="#FF7B3F5D" Opacity="0.30"/>
+    </Border.Effect>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="116"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Grid Grid.Column="0" VerticalAlignment="Top" Width="108" Height="108">
+        <Ellipse Fill="#FFFFFFFF" Opacity="0.8"/>
+        <Image x:Name="Mascot" Margin="4" RenderOptions.BitmapScalingMode="HighQuality">
+          <Image.RenderTransform><TranslateTransform/></Image.RenderTransform>
+        </Image>
+      </Grid>
+      <StackPanel Grid.Column="1" Margin="16,2,0,0">
+        <Border HorizontalAlignment="Left" CornerRadius="9" Background="#FFF7CADC" Padding="10,2,10,3">
+          <TextBlock Text="超級碧琪 · 更新" FontSize="11" Foreground="#FFA24B76"/>
+        </Border>
+        <TextBlock x:Name="Heading" Margin="0,9,0,0" FontSize="19" FontWeight="Bold" Foreground="#FF6E3A57" TextWrapping="Wrap"/>
+        <TextBlock x:Name="Line" Margin="0,6,0,0" FontSize="13" Foreground="#FF8A5A72" TextWrapping="Wrap" LineHeight="20"/>
+        <StackPanel x:Name="ProgressArea">
+          <Grid Margin="0,14,0,0">
+            <Border x:Name="Track" Height="12" CornerRadius="6" Background="#FFF5CEDD"/>
+            <Border x:Name="Fill" Height="12" Width="0" CornerRadius="6" HorizontalAlignment="Left">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                  <GradientStop Color="#FFF793C0" Offset="0"/>
+                  <GradientStop Color="#FFC25B8A" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+          </Grid>
+          <UniformGrid x:Name="Steps" Rows="1" Columns="5" Margin="0,8,0,0"/>
+        </StackPanel>
+        <TextBlock x:Name="Result" Margin="0,10,0,0" FontSize="12.5" Foreground="#FFC2410C" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <WrapPanel x:Name="Buttons" Margin="0,14,0,0" Visibility="Collapsed"/>
+        <Grid Margin="0,12,0,0">
+          <TextBlock x:Name="Hint" FontSize="11.5" Foreground="#FF9A6F85" TextWrapping="Wrap" Margin="0,0,76,0" LineHeight="17"/>
+          <TextBlock x:Name="Clock" HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="11.5" Foreground="#FFB07B95"/>
+        </Grid>
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>
+'@
+  $xaml = $xaml.Replace('@@TITLE@@', [Security.SecurityElement]::Escape($Title))
+  $window = [Windows.Markup.XamlReader]::Parse($xaml)
+  $window.FindName('Heading').Text = $Body
+  # No title bar: the whole card is the handle.
+  $window.Add_MouseLeftButtonDown({ param($sender, $e) try { $sender.DragMove() } catch {} })
+  return $window
+}
+function Format-PinkieElapsed([int]$Seconds) {
+  if ($Seconds -lt 60) { return "已用 $Seconds 秒" }
+  return ('已用 {0} 分 {1:00} 秒' -f [int][Math]::Floor($Seconds / 60), ($Seconds % 60))
+}
+'''
+
 # The progress window. The App starts it itself (CREATE_NO_WINDOW, no SW_HIDE)
 # just before it closes, so the moment the old window goes this one is already
 # on screen. The replacer starts it only if the App could not.
 PROGRESS_WINDOW_PS = r'''param([string]$Status, [int]$Owner, [string]$Version)
 Add-Type -AssemblyName PresentationFramework
-''' + FOREGROUND_PS + r'''$window = New-Object Windows.Window
-$window.Title = '超級碧琪更新'; $window.Width = 400; $window.SizeToContent = 'Height'
-$window.WindowStartupLocation = 'CenterScreen'; $window.Topmost = $true; $window.ShowInTaskbar = $true
-$window.ResizeMode = 'NoResize'; $window.WindowStyle = 'ToolWindow'
-$panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
-$title = New-Object Windows.Controls.TextBlock; $title.FontSize = 15; $title.FontWeight = 'SemiBold'
-$title.Text = if ($Version) { "碧琪正在更新到 $Version" } else { '碧琪正在更新' }
-$line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'; $line.Text = '正在准备…'
-$bar = New-Object Windows.Controls.ProgressBar; $bar.Height = 8; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Margin = '0,12,0,8'
-$hint = New-Object Windows.Controls.TextBlock; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'
-$hint.Text = '窗口会关上一到两分钟。请不要点击桌面上的碧琪，也不要关机。换好后会自己打开。记忆和设置不会丢。'
-foreach ($node in @($title, $line, $bar, $hint)) { [void]$panel.Children.Add($node) }
-$window.Content = $panel
+''' + FOREGROUND_PS + PINKIE_WPF_PS + r'''$script:PinkieArtDir = Join-Path (Split-Path -Parent $Status) 'art'
+$heading = if ($Version) { "碧琪正在换上 $Version" } else { '碧琪正在换上新版' }
+$hintText = '窗口会关上一到两分钟。请不要点击桌面上的碧琪，也不要关机。换好后会自己打开，记忆和设置不会丢。'
+try {
+  $window = New-PinkieWindow '超級碧琪更新' $heading
+  $mascot = $window.FindName('Mascot'); $line = $window.FindName('Line'); $track = $window.FindName('Track')
+  $fill = $window.FindName('Fill'); $clock = $window.FindName('Clock'); $stepsRow = $window.FindName('Steps')
+  $window.FindName('Hint').Text = $hintText
+  Set-PinkieArt $mascot 'working'
+  Start-PinkieBob $mascot
+  $script:stepLabels = @()
+  foreach ($label in @('关旧版', '核对', '解压', '替换', '打开')) {
+    $block = New-Object Windows.Controls.TextBlock
+    $block.Text = $label; $block.FontSize = 11.5; $block.HorizontalAlignment = 'Center'
+    [void]$stepsRow.Children.Add($block); $script:stepLabels += $block
+  }
+} catch {
+  # The designed window failed to build (an old .NET, a broken font cache):
+  # a plain window still beats none.
+  $window = New-Object Windows.Window
+  $window.Title = '超級碧琪更新'; $window.Width = 400; $window.SizeToContent = 'Height'
+  $window.WindowStartupLocation = 'CenterScreen'; $window.Topmost = $true; $window.ResizeMode = 'NoResize'
+  $panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
+  $title = New-Object Windows.Controls.TextBlock; $title.FontSize = 15; $title.FontWeight = 'SemiBold'; $title.Text = $heading
+  $line = New-Object Windows.Controls.TextBlock; $line.Margin = '0,10,0,0'; $line.TextWrapping = 'Wrap'
+  $hint = New-Object Windows.Controls.TextBlock; $hint.Margin = '0,10,0,0'; $hint.Foreground = 'Gray'; $hint.TextWrapping = 'Wrap'; $hint.Text = $hintText
+  foreach ($node in @($title, $line, $hint)) { [void]$panel.Children.Add($node) }
+  $window.Content = $panel
+  $mascot = $null; $track = $null; $fill = $null; $clock = $null; $script:stepLabels = @()
+}
+$line.Text = '正在准备…'
 $window.Add_Loaded({ Show-Foreground $window })
 $started = Get-Date
+# Rough length of each step, only so the bar keeps creeping forward inside a
+# long step instead of sitting still for a minute.
+$script:expected = @{ 1 = 6; 2 = 6; 3 = 60; 4 = 20; 5 = 60 }
+$script:lastStep = 0
+$script:stepStarted = Get-Date
+$script:shownFraction = 0.0
+function Update-PinkieProgress([int]$Step, [int]$Total, [string]$State) {
+  if ($Step -ne $script:lastStep) { $script:lastStep = $Step; $script:stepStarted = Get-Date }
+  $inStep = ((Get-Date) - $script:stepStarted).TotalSeconds
+  $guess = $script:expected[$Step]; if (-not $guess) { $guess = 30 }
+  $part = if ($State -eq 'done') { 1.0 } else { 0.9 * (1 - [Math]::Exp(-$inStep / $guess)) }
+  $fraction = [Math]::Min(1.0, [Math]::Max(0.02, ($Step - 1 + $part) / [double]$Total))
+  if ($fraction -lt $script:shownFraction) { $fraction = $script:shownFraction }
+  if ($fill -and $track -and $track.ActualWidth -gt 0 -and [Math]::Abs($fraction - $script:shownFraction) -gt 0.002) {
+    $grow = New-Object Windows.Media.Animation.DoubleAnimation
+    $grow.To = $track.ActualWidth * $fraction
+    $grow.Duration = New-Object Windows.Duration ([TimeSpan]::FromMilliseconds(450))
+    $grow.EasingFunction = New-Object Windows.Media.Animation.QuadraticEase
+    $fill.BeginAnimation([Windows.FrameworkElement]::WidthProperty, $grow)
+    $script:shownFraction = $fraction
+  }
+  for ($i = 0; $i -lt $script:stepLabels.Count; $i++) {
+    $block = $script:stepLabels[$i]
+    if ($i + 1 -lt $Step -or ($i + 1 -eq $Step -and $State -eq 'done')) {
+      $block.Text = '✓ ' + @('关旧版', '核对', '解压', '替换', '打开')[$i]; $block.Foreground = '#FFC25B8A'; $block.FontWeight = 'Normal'
+    } elseif ($i + 1 -eq $Step) {
+      $block.Foreground = '#FF6E3A57'; $block.FontWeight = 'Bold'
+    } else {
+      $block.Foreground = '#FFCDA8BA'; $block.FontWeight = 'Normal'
+    }
+  }
+}
 # The App opens this window before the replacer exists (-Owner 0); the
 # replacer then writes its own PID into the status file.
 $script:ownerId = $Owner
@@ -471,10 +658,15 @@ $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(500)
 $timer.Add_Tick({
   $seconds = [int]((Get-Date) - $started).TotalSeconds
+  if ($clock) { $clock.Text = Format-PinkieElapsed $seconds }
   try {
     $data = Get-Content -LiteralPath $Status -Raw -Encoding UTF8 | ConvertFrom-Json
-    $line.Text = "第 $($data.step)/$($data.total) 步：$($data.text)（已用 $seconds 秒）"
-    $bar.Value = [Math]::Min(100, [double]$data.step / [double]$data.total * 100)
+    $line.Text = "第 $($data.step)/$($data.total) 步 · $($data.text)"
+    Update-PinkieProgress ([int]$data.step) ([int]$data.total) ([string]$data.state)
+    if ($mascot) {
+      if ($data.state -eq 'done') { Set-PinkieArt $mascot 'done' }
+      elseif ($data.state -eq 'failed') { Set-PinkieArt $mascot 'oops' }
+    }
     # The failure window has taken over; it is already on screen.
     if (-not $script:ownerId -and $data.owner) { $script:ownerId = [int]$data.owner }
     if ($data.state -eq 'problem') { $window.Close() }
@@ -569,6 +761,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 
 # Shared by both replacers (injected at "#@@UPDATE_UI@@").
 UPDATE_UI_PS = r'''$ProgressFile = Join-Path $UpdateRoot ('progress-' + $Token + '.json')
+$script:PinkieArtDir = Join-Path $UpdateRoot 'art'
 $script:repairStarted = $false
 function Set-UpdateProgress([int]$Step, [string]$Text, [string]$State = 'running') {
   try {
@@ -593,7 +786,7 @@ function Start-UpdateProgressWindow {
     [void][System.Diagnostics.Process]::Start($info)
   } catch { Write-UpdateLog "could not show update progress: $($_.Exception.Message)" }
 }
-''' + FOREGROUND_PS + r'''function Start-AsUser([string]$Exe, [string]$HealthToken = '') {
+''' + FOREGROUND_PS + PINKIE_WPF_PS + r'''function Start-AsUser([string]$Exe, [string]$HealthToken = '') {
   if (-not $LaunchAsUser) {
     if ($HealthToken) { return Start-Process -FilePath $Exe -ArgumentList "--update-health-token=$HealthToken" -PassThru }
     return Start-Process -FilePath $Exe -PassThru
@@ -626,16 +819,39 @@ function Show-UpdateProblem([string]$Text) {
   Write-UpdateLog ('showing the update problem window' + $(if ($offer) { ' (admin repair offered)' } else { '' }))
   try {
     Add-Type -AssemblyName PresentationFramework
-    $script:problemWindow = New-Object Windows.Window
-    $script:problemWindow.Title = '超級碧琪更新 · 没有装上'; $script:problemWindow.Width = 480; $script:problemWindow.SizeToContent = 'Height'
-    $script:problemWindow.WindowStartupLocation = 'CenterScreen'; $script:problemWindow.Topmost = $true; $script:problemWindow.ResizeMode = 'NoResize'
-    $panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
-    $heading = New-Object Windows.Controls.TextBlock; $heading.FontSize = 15; $heading.FontWeight = 'SemiBold'; $heading.Text = '这次更新没有装好'
-    $body = New-Object Windows.Controls.TextBlock; $body.Margin = '0,10,0,0'; $body.TextWrapping = 'Wrap'; $body.Text = $Text
-    $script:problemResult = New-Object Windows.Controls.TextBlock; $script:problemResult.Margin = '0,10,0,0'; $script:problemResult.TextWrapping = 'Wrap'; $script:problemResult.Foreground = 'Firebrick'
-    $row = New-Object Windows.Controls.WrapPanel; $row.Margin = '0,14,0,0'
+    try {
+      $script:problemWindow = New-PinkieWindow '超級碧琪更新 · 没有装上' '这次更新没有装好'
+      $script:problemWindow.Width = 600  # room for the three buttons on one row
+      $body = $script:problemWindow.FindName('Line')
+      $script:problemResult = $script:problemWindow.FindName('Result')
+      $row = $script:problemWindow.FindName('Buttons'); $row.Visibility = 'Visible'
+      $script:problemWindow.FindName('ProgressArea').Visibility = 'Collapsed'
+      $script:problemWindow.FindName('Hint').Text = '记忆和设置都在，不受影响。'
+      Set-PinkieArt ($script:problemWindow.FindName('Mascot')) 'oops'
+      $primaryStyle = $script:problemWindow.FindResource('PillPrimary'); $pillStyle = $script:problemWindow.FindResource('Pill')
+    } catch {
+      Write-UpdateLog "designed problem window unavailable, using a plain one: $($_.Exception.Message)"
+      $script:problemWindow = New-Object Windows.Window
+      $script:problemWindow.Title = '超級碧琪更新 · 没有装上'; $script:problemWindow.Width = 480; $script:problemWindow.SizeToContent = 'Height'
+      $script:problemWindow.WindowStartupLocation = 'CenterScreen'; $script:problemWindow.Topmost = $true; $script:problemWindow.ResizeMode = 'NoResize'
+      $panel = New-Object Windows.Controls.StackPanel; $panel.Margin = '22,18,22,18'
+      $heading = New-Object Windows.Controls.TextBlock; $heading.FontSize = 15; $heading.FontWeight = 'SemiBold'; $heading.Text = '这次更新没有装好'
+      $body = New-Object Windows.Controls.TextBlock; $body.Margin = '0,10,0,0'
+      $script:problemResult = New-Object Windows.Controls.TextBlock; $script:problemResult.Margin = '0,10,0,0'; $script:problemResult.Foreground = 'Firebrick'
+      $row = New-Object Windows.Controls.WrapPanel; $row.Margin = '0,14,0,0'
+      foreach ($node in @($heading, $body, $row, $script:problemResult)) { [void]$panel.Children.Add($node) }
+      $script:problemWindow.Content = $panel
+      $primaryStyle = $null; $pillStyle = $null
+    }
+    $body.TextWrapping = 'Wrap'; $body.Text = $Text
+    $script:problemResult.TextWrapping = 'Wrap'
+    function New-ProblemButton([string]$Label, $Style) {
+      $button = New-Object Windows.Controls.Button; $button.Content = $Label
+      if ($Style) { $button.Style = $Style } else { $button.Padding = '14,6,14,6'; $button.Margin = '0,0,8,0' }
+      return $button
+    }
     if ($offer) {
-      $admin = New-Object Windows.Controls.Button; $admin.Content = '用管理员权限修复'; $admin.Padding = '14,6,14,6'; $admin.Margin = '0,0,8,0'; $admin.IsDefault = $true
+      $admin = New-ProblemButton '用管理员权限修复' $primaryStyle; $admin.IsDefault = $true
       $admin.Add_Click({
         try {
           Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -ArgumentList $script:RepairArguments | Out-Null
@@ -644,18 +860,17 @@ function Show-UpdateProblem([string]$Text) {
           $script:problemWindow.Close()
         } catch {
           Write-UpdateLog "admin repair not started: $($_.Exception.Message)"
+          $script:problemResult.Visibility = 'Visible'
           $script:problemResult.Text = '没有拿到管理员权限（可能点了「否」）。可以再点一次，或者点「打开文件夹」按上面的说明处理。'
         }
       })
       [void]$row.Children.Add($admin)
     }
-    $open = New-Object Windows.Controls.Button; $open.Content = '打开文件夹'; $open.Padding = '14,6,14,6'; $open.Margin = '0,0,8,0'
+    $open = New-ProblemButton '打开文件夹' $(if ($offer) { $pillStyle } else { $primaryStyle })
     $open.Add_Click({ try { Start-Process -FilePath explorer.exe -ArgumentList (ConvertTo-Argument $script:ProblemFolder) | Out-Null } catch {} })
-    $close = New-Object Windows.Controls.Button; $close.Content = '关闭'; $close.Padding = '14,6,14,6'; $close.IsCancel = $true
+    $close = New-ProblemButton '关闭' $pillStyle; $close.IsCancel = $true
     $close.Add_Click({ $script:problemWindow.Close() })
     foreach ($node in @($open, $close)) { [void]$row.Children.Add($node) }
-    foreach ($node in @($heading, $body, $row, $script:problemResult)) { [void]$panel.Children.Add($node) }
-    $script:problemWindow.Content = $panel
     $script:problemWindow.Add_Loaded({ Show-Foreground $script:problemWindow; Set-UpdateProgress 5 '没有装上' 'problem' })
     [void]$script:problemWindow.ShowDialog()
   } catch {
@@ -680,6 +895,7 @@ class WindowsUpdater:
     swap_seconds = 90
 
     def __init__(self, resource_root, opener=None, executable=None):
+        self.resource_root = Path(resource_root)
         self.current_version = app_version(resource_root)
         self.opener = opener or urllib.request.urlopen
         self.executable = Path(executable or os.environ.get("PINKIE_EXECUTABLE_PATH") or sys.executable).resolve()
@@ -1604,6 +1820,31 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             append_log("updater", f"progress window not started by the App: {error}")
             return None
 
+    UPDATE_ART = ("working", "done", "oops")
+
+    def _stage_update_art(self, update_root):
+        """Copy 碧琪's pictures for the update windows out of the install folder.
+
+        The progress and failure windows stay open while the install folder is
+        renamed away, so they read the art from <state>/updates/art instead.
+        Missing art only means a card without a picture.
+        """
+        art = update_root / "art"
+        try:
+            art.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            append_log("updater", f"update art folder not created: {error}")
+            return
+        for name in self.UPDATE_ART:
+            file_name = f"laolao-pinkie-status-{name}.png"
+            source = self.resource_root / "ui" / "assets" / file_name
+            target = art / file_name
+            try:
+                if source.is_file() and (not target.is_file() or target.stat().st_size != source.stat().st_size):
+                    shutil.copyfile(source, target)
+            except OSError as error:
+                append_log("updater", f"update art {name} not copied: {error}")
+
     @staticmethod
     def _stop_progress_window(process, update_root, token):
         if process is not None:
@@ -1692,6 +1933,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 command.append("-LaunchAsUser")
             if os.environ.get("PINKIE_UPDATE_PROBE_FAIL_ROLLBACK") == "1":
                 command.append("-ProbeFailRollback")  # update_probe.py only: shows the failure window
+            self._stage_update_art(update_root)
             progress = self._start_progress_window(update_root, token, self.prepared["version"])
             if progress is not None:
                 command.append("-ProgressShown")
@@ -3533,6 +3775,54 @@ def show_update_in_progress(version):
         pass
 
 
+STARTUP_FALLBACK_HTML = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>超級碧琪正在准备</title>
+<style>
+html,body{margin:0;height:100%;background:#efcbd3;color:#6e3a57;font-family:"Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif}
+body{display:grid;place-items:center}
+.card{width:min(460px,calc(100% - 40px));padding:26px 26px 22px;border-radius:26px;border:1.5px solid #fff;
+background:linear-gradient(135deg,#fff8fb,#fbddea);box-shadow:0 14px 40px #7b3f5d40}
+.chip{display:inline-block;padding:2px 10px 3px;border-radius:9px;background:#f7cadc;color:#a24b76;font-size:11px}
+h1{margin:10px 0 6px;font-size:19px}
+p{margin:0;font-size:13px;line-height:1.6;color:#8a5a72}
+.bar{position:relative;height:12px;margin:16px 0 4px;border-radius:6px;background:#f5cedd;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;width:34%;border-radius:6px;background:linear-gradient(90deg,#f793c0,#c25b8a);animation:slide 1.6s ease-in-out infinite}
+@keyframes slide{0%{left:-34%}100%{left:100%}}
+.foot{display:flex;justify-content:space-between;font-size:11.5px;color:#9a6f85;margin-top:8px}
+.actions{display:none;flex-wrap:wrap;gap:8px;margin-top:16px}
+.actions.on{display:flex}
+button{flex:1 1 120px;padding:8px 14px;border-radius:17px;border:1.2px solid #e9a9c4;background:#fff;color:#7a3f5e;font:inherit;font-size:13px;cursor:pointer}
+button.primary{background:#c25b8a;border-color:#c25b8a;color:#fff;font-weight:600}
+#result{margin-top:10px;min-height:1em;color:#c2410c;font-size:12.5px}
+</style></head><body><main class="card">
+<span class="chip">超級碧琪</span>
+<h1 id="title">碧琪正在打开</h1>
+<p id="line">正在启动本机服务，第一次打开大约要一两分钟。请不要关掉这个窗口。</p>
+<div class="bar"><i></i></div>
+<div class="foot"><span id="state">正在等本机网关…</span><span id="clock">已用 0 秒</span></div>
+<div class="actions" id="actions">
+<button class="primary" data-call="startup_repair">自动修复设置</button>
+<button data-call="startup_update">检查更新并安装</button>
+<button data-call="open_logs">打开日志文件夹</button>
+</div><div id="result"></div>
+</main><script>
+const started=Date.now(),clock=document.getElementById("clock");
+function tick(){const s=Math.round((Date.now()-started)/1000);
+clock.textContent=s<60?"已用 "+s+" 秒":"已用 "+Math.floor(s/60)+" 分 "+String(s%60).padStart(2,"0")+" 秒";
+if(s>=45){document.getElementById("actions").classList.add("on");
+document.getElementById("line").textContent="碧琪的安装文件好像少了一部分（启动页找不到）。可以先自动修复；还不行就检查更新并安装，记忆和设置不会丢。";}}
+async function poll(){try{await fetch("http://127.0.0.1:18789/",{mode:"no-cors",cache:"no-store"});
+location.replace("http://127.0.0.1:18789/chat");return}catch(e){}setTimeout(poll,1500)}
+document.querySelectorAll("[data-call]").forEach(b=>b.onclick=async()=>{const r=document.getElementById("result");
+const api=window.pywebview&&window.pywebview.api;if(!api||!api[b.dataset.call]){r.textContent="这个按钮现在用不了，请重新打开碧琪。";return}
+b.disabled=true;try{const out=await api[b.dataset.call]();r.textContent=(out&&out.message)||"已经开始了。"}catch(e){r.textContent="没有成功："+e}b.disabled=false});
+setInterval(tick,1000);poll();
+</script></body></html>"""
+
+
+def startup_fallback_html():
+    return STARTUP_FALLBACK_HTML
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
     if not update_health_token:
@@ -3552,7 +3842,13 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     cleanup_orphan_webview(webview_storage)
     updater = WindowsUpdater(resource_root)
     bridge = NativeBridge(updater)
-    loading = (Path(resource_root) / "ui/launcher-loading.html").resolve().as_uri()
+    loading_file = (Path(resource_root) / "ui/launcher-loading.html").resolve()
+    loading = loading_file.as_uri()
+    # A missing splash file used to put WebView2's bare 「未找到文件
+    # ERR_FILE_NOT_FOUND」 page on screen, with no way out. Show 碧琪's own
+    # built-in page instead and record where the file was expected.
+    loading_html = None if loading_file.is_file() else startup_fallback_html()
+    append_log("launcher", f"splash {loading}" + ("" if loading_html is None else " is MISSING; using the built-in page"))
     if update_health_token:
         # First start right after an update: the splash says so, instead of a
         # bare gateway counter that looks like nothing happened.
@@ -3572,11 +3868,12 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # A warm Gateway can be shown directly. This avoids flashing or waiting on
     # the launcher page on the common second-start path.
     initial_url = gateway_ui_url() if http_ready(GATEWAY_URL) else loading
+    initial_html = loading_html if initial_url == loading else None
     # The official environment setting applies before WebView2's first paint;
     # setting the API only after navigation can leave a white flash.
     os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00000000"
     window = webview.create_window(
-        "超級碧琪", initial_url, js_api=bridge, width=1280, height=800,
+        "超級碧琪", None if initial_html else initial_url, html=initial_html, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
         shadow=False, background_color="#000000", transparent=True,
     )
