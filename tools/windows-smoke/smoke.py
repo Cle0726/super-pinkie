@@ -269,12 +269,19 @@ PAGE_STATE = r"""() => {
 
 
 def drive_ui(out, label):
+    # Let the context report the service worker's own requests (see measure_loads).
+    os.environ.setdefault("PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS", "1")
     from playwright.sync_api import sync_playwright
 
     result = {"modes": {}, "console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": []}
     console = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge", headless=True)
+        try:
+            result["cache_evidence"] = cache_evidence()
+            (out / f"{label}-cache-evidence.json").write_text(json.dumps(result["cache_evidence"], indent=2), encoding="utf-8")
+        except Exception as error:
+            result["cache_evidence"] = {"error": repr(error)}
         try:
             result["load_metrics"] = measure_loads(browser, out, label)
         except Exception as error:
@@ -365,6 +372,49 @@ def drive_ui(out, label):
     return result
 
 
+def cache_evidence(base=GATEWAY):
+    """Ask the gateway directly: does an unchanged UI file come back as 304?
+
+    The page cannot see this (its reloads are answered by the service worker),
+    so the server is asked the way a web view revalidates. index.html must
+    stay no-cache and keep answering 200 so a new version is never hidden.
+    """
+    import urllib.error
+
+    def get(path, etag=None):
+        request = urllib.request.Request(base.rstrip("/") + path, headers={"If-None-Match": etag} if etag else {})
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                body = response.read()
+                return response.status, dict(response.headers), len(body)
+        except urllib.error.HTTPError as error:
+            return error.code, dict(error.headers), len(error.read() or b"")
+
+    status, headers, size = get("/chat")
+    index = urllib.request.urlopen(base.rstrip("/") + "/chat", timeout=15).read().decode("utf-8", "replace")
+    paths = ["/laolao-theme.css", "/laolao-wallpaper.png", "/laolao-deep-think.js"]
+    bundle = re.search(r'src="(/assets/index-[^"?]+\.js)', index)
+    if bundle:
+        paths.append(bundle.group(1))
+    result = {"index": {"status": status, "cache_control": headers.get("Cache-Control"), "etag": headers.get("ETag"), "bytes": size},
+              "files": {}}
+    for path in paths:
+        first_status, first_headers, first_size = get(path)
+        etag = first_headers.get("ETag")
+        second = get(path, etag) if etag else (None, {}, None)
+        result["files"][path] = {
+            "status": first_status, "bytes": first_size, "etag": etag,
+            "cache_control": first_headers.get("Cache-Control"),
+            "revalidate_status": second[0], "revalidate_bytes": second[2],
+        }
+    files = result["files"].values()
+    result["proven"] = bool(files) and all(item["revalidate_status"] == 304 and item["revalidate_bytes"] == 0 for item in files) \
+        and status == 200 and "no-cache" in str(result["index"]["cache_control"])
+    log(f"cache evidence: proven={result['proven']} " + ", ".join(
+        f"{path}={item['status']}->{item['revalidate_status']}" for path, item in result["files"].items()))
+    return result
+
+
 def measure_loads(browser, out, label, reloads=2):
     """Cold load, then reloads: what the web view has to fetch again each start.
 
@@ -391,12 +441,26 @@ def measure_loads(browser, out, label, reloads=2):
     def on_cached(event):
         current.setdefault(event["requestId"], {})["memory"] = True
 
+    worker = {}
+
+    def on_context_response(response):
+        # Only reported with PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1:
+        # the worker's own trips to the gateway, where 304s actually happen.
+        try:
+            if response.request.service_worker is None or not response.url.startswith("http://127.0.0.1"):
+                return
+        except Exception:
+            return
+        worker[response.status] = worker.get(response.status, 0) + 1
+
+    context.on("response", on_context_response)
     cdp.on("Network.responseReceived", on_response)
     cdp.on("Network.loadingFinished", on_finished)
     cdp.on("Network.requestServedFromCache", on_cached)
     runs = []
     for index in range(reloads + 1):
         current.clear()
+        worker.clear()
         started = time.monotonic()
         if index == 0:
             page.goto(CHAT, wait_until="domcontentloaded", timeout=120_000)
@@ -421,10 +485,12 @@ def measure_loads(browser, out, label, reloads=2):
             "from_cache": sum(1 for item in entries if item.get("disk") or item.get("memory")),
             "via_worker": sum(1 for item in entries if item.get("worker")),
             "wire_bytes": sum(int(item.get("bytes") or 0) for item in entries),
+            "worker_statuses": {str(code): count for code, count in sorted(worker.items())},
         }
         runs.append(run)
         log(f"[{label}] load {run['run']}: usable={run['usable_s']}s requests={run['requests']} "
-            f"200={run['status_200']} 304={run['status_304']} cache={run['from_cache']} bytes={run['wire_bytes']}")
+            f"200={run['status_200']} 304={run['status_304']} cache={run['from_cache']} bytes={run['wire_bytes']} "
+            f"worker={run['worker_statuses']}")
         page.wait_for_timeout(6000)
         page.screenshot(path=str(out / f"{label}-load-{run['run']}.png"))
     context.close()
