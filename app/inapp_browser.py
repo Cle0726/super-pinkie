@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import browser_vpn_subscription as subs
-from browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, hidden_kwargs, locate_core
+from browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, locate_core, window_process_kwargs
 
 ENDPOINT_ENV = "PINKIE_APP_BROWSER_ENDPOINT"
 IP_CHECK_URL = "https://api.ip.sb/geoip"
@@ -529,7 +529,7 @@ class BrowserManager:
         try:
             self.host_process = subprocess.Popen(
                 host_command(arguments), stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file,
-                env=environment, **hidden_kwargs(),
+                env=environment, **window_process_kwargs(),
             )
         finally:
             log_file.close()
