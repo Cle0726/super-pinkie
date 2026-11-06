@@ -34,7 +34,14 @@ BUFFER = 64 * 1024
 
 # 上游节点连接超时。取值要短：节点挂了必须快速 fail-open 回直连，
 # 让用户感觉“慢一下”而不是“整个浏览器卡死十几秒”。
+# TCP 建连超时。取短值：节点死了必须快速 fail-open，不能让用户干等。
 UPSTREAM_CONNECT_TIMEOUT = 6.0
+
+# TLS 握手超时。必须比 TCP 更长 —— 跨境节点一次完整握手实测 1~1.5 秒，
+# 网络抖动时会到 3~5 秒。早期版本和 TCP 共用一个 6 秒值，握手稍慢就被
+# 判为失败、静默 fail-open 退回直连，用户看到的是"第一次打开没走代理，
+# 刷新一下才好"。这个 bug 在本地网络好时几乎复现不了。
+UPSTREAM_TLS_TIMEOUT = 12.0
 
 # 与扩展 v1.6.3 的 CN_BYPASS_LIST 等价的可执行子集。
 # Chrome 的 bypassList 支持 "<local>" 与 CIDR；这里把它们实现成真实判断。
@@ -324,7 +331,7 @@ class LocalProxy:
         try:
             return await asyncio.wait_for(
                 asyncio.open_connection(sock=raw, ssl=ctx, server_hostname=up.host),
-                timeout=UPSTREAM_CONNECT_TIMEOUT,
+                timeout=UPSTREAM_TLS_TIMEOUT,
             )
         except (ssl.SSLError, OSError) as exc:
             try:
