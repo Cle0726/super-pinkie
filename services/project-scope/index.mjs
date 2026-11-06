@@ -9,13 +9,21 @@ const defaultStateRoot = (home, useEnvironment) => useEnvironment && process.env
   ? process.env.PINKIE_STATE_ROOT
   : path.join(home, 'Library/Application Support/SuperPinkie');
 export const progressInstruction = '\n【工作过程展示】\n遇到需要多步执行或调用工具的任务，先用一两句说明准备做什么；实际完成关键步骤后，用一句话说明发现和下一步，然后继续工作。普通聊天和简短问答直接回答，不硬加计划或总结。说明只包含可公开的行动、证据和结果，不输出隐藏思维链，不假装调用工具，不编造进度。不要每次工具调用都复述，不重复已经给出的最终答案。保持当前模式原有身份、称呼、文风和用户要求；本规则不增加工具权限，也不改变上下文设置。';
+export const MISSING_FOLDER = 'PINKIE_PROJECT_FOLDER_MISSING';
+function missingFolder(raw) {
+  const error = new Error('项目文件夹不在了：' + raw + '。可能是 U 盘或移动硬盘没接上、盘符变了；接上后重试，或给这个项目重新选文件夹。');
+  error.code = MISSING_FOLDER;
+  return error;
+}
 export function canonical(raw) {
   let current = path.resolve(raw), suffix = [];
   while (!fs.existsSync(current)) {
     // A dangling symlink is not a new file and must not be followed later.
     try { if (fs.lstatSync(current).isSymbolicLink()) throw new Error('路径包含失效的符号链接'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
     const parent = path.dirname(current);
-    if (parent === current) throw new Error('目录无法解析');
+    // Windows: the whole drive is gone (USB stick / external disk unplugged,
+    // drive letter reassigned). Say so instead of a bare "cannot resolve".
+    if (parent === current) throw missingFolder(raw);
     suffix.unshift(path.basename(current)); current = parent;
   }
   return path.join(fs.realpathSync(current), ...suffix);
@@ -58,6 +66,10 @@ export class ProjectScope {
     const key=ctx.sessionKey||'';
     if(!modes.test(key)&&!this.inheritedBindings.has(key)) return null;
     const binding=this.load()[key]||this.inheritedBindings.get(key);
+    // A bound folder on a drive that is no longer attached must not turn every
+    // prompt and tool call of the session into an error. The session simply
+    // runs unanchored (its own mode workspace) until the folder is back.
+    if(binding && !fs.existsSync(binding.root)) return null;
     if(binding && this.validateRoot(binding.root)!==binding.root) throw new Error('项目目录发生变化，请检查原目录，不能自动跳到其他位置');
     return binding||null;
   }

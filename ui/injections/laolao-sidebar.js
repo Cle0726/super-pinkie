@@ -405,7 +405,14 @@
     const folder=name?snapshot.projectFolders[name]:null;
     if(name&&!folder) throw new Error('「'+name+'」还只是会话分组，请先选择项目文件夹。');
     if(!folder&&!scopeBindings.has(key))return null;
-    const result=await gwRequest('pinkie.project.bind',{key,path:folder||null,name:name||''},15000);
+    let result;
+    try{result=await gwRequest('pinkie.project.bind',{key,path:folder||null,name:name||''},15000);}
+    catch(error){
+      // 项目文件夹所在的盘不在了（Windows 上常见：U 盘拔了、盘符变了）。项目模式照旧拦下，
+      // 免得在别的目录里改文件；学习、想法等模式只把文件夹当参考，照常发送，标签里说明原因。
+      if(mode==='project'||!/项目文件夹不在了|目录无法解析/.test(error?.message||''))throw error;
+      scopeErrors.set(key,error.message);showScope(key,null,error.message);return null;
+    }
     scopeBindings.set(key,result.binding);scopeErrors.delete(key);showScope(key,result.binding);return result.binding;
   }
   function showScope(key,binding,error='') {
