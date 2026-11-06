@@ -31,7 +31,18 @@
   const SKIP_PROTOCOLS = /^(#|mailto:|tel:|javascript:|data:)/i;
   const ALLOW_PROTOCOLS = /^(https?:|file:)/i;
   const EMBED_TIMEOUT_MS = 5000;
-  const browserBridge = () => window.webkit?.messageHandlers?.laolaoBrowserWorkspace;
+  // Windows 版的「碧琪的浏览器」是 App 自己的 WebView2 窗口，经 pywebview 的 browser_workspace 打开；
+  // 这里把它包装成和 Mac messageHandlers 一样的 postMessage 接口，链接和地球按钮都走同一条路。
+  const windowsBrowserBridge = () => {
+    const api = window.pywebview?.api;
+    if (document.documentElement?.dataset.pinkiePlatform !== "windows" || typeof api?.browser_workspace !== "function") return null;
+    return {
+      postMessage: (message) => {
+        if (message?.action === "open") api.browser_workspace({ action: "open", url: message.url || "" });
+      },
+    };
+  };
+  const browserBridge = () => window.webkit?.messageHandlers?.laolaoBrowserWorkspace || windowsBrowserBridge();
 
   let removeKeyListener = null;
   let loadTimer = null;

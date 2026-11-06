@@ -2683,7 +2683,10 @@ class LocalServices:
                 process.kill()
 
 
-class NativeBridge:
+from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
+
+
+class NativeBridge(InAppBrowserBridge):
     def __init__(self, updater):
         # pywebview recursively exposes public js_api attributes. Keeping a
         # public reference to Window makes it walk Window.native/WebView2 COM
@@ -3943,6 +3946,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     if not runtime.valid():
         raise RuntimeError("Windows bundled runtime is incomplete")
     os.environ.update(runtime.environment())
+    # 碧琪的浏览器：控制端点必须在网关启动前写进环境变量（app_browser 工具靠它连过来）。
+    import inapp_browser
+
+    inapp_browser.install(state_root(), resource_root, lambda message: append_log("launcher", message))
     webview_storage = state_root() / "webview"
     cleanup_orphan_webview(webview_storage)
     updater = WindowsUpdater(resource_root)
@@ -3983,6 +3990,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
+    if inapp_browser.manager() is not None:
+        inapp_browser.manager().owner_hwnd = bridge._native_window_handle
     if update_health_token and updater.health_reporter is not None:
         # Old replacers only wait 120 s, so this still happens before setup
         # and the cold gateway. It just no longer happens before a window exists.

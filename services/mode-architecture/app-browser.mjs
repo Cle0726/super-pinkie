@@ -74,6 +74,7 @@ export function appBrowserEndpoint(environment = process.env) {
   let endpoint;
   try { endpoint = raw.startsWith('{') ? JSON.parse(raw) : {socketPath: raw}; }
   catch { throw new Error('App 浏览器连接信息无效，请改用 browser 工具。'); }
+  if (endpoint?.endpointFile) return loopbackEndpoint(endpoint.endpointFile);
   const socketPath = String(endpoint?.socketPath || '');
   if (!path.isAbsolute(socketPath) || socketPath.includes('\0')) {
     throw new Error('App 浏览器套接字路径无效，请改用 browser 工具。');
@@ -93,6 +94,35 @@ export function appBrowserEndpoint(environment = process.env) {
   return {socketPath, ...(endpoint.token ? {token: String(endpoint.token)} : {})};
 }
 
+// Windows: the App writes {host, port, token} to a file under its state root
+// on every start, and the gateway's environment names only that file. A
+// gateway kept alive across App restarts therefore still finds the current
+// window. Only loopback addresses with an authentication token are accepted.
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+function loopbackEndpoint(file) {
+  const endpointFile = String(file || '');
+  if (!path.isAbsolute(endpointFile) || endpointFile.includes('\0')) throw new Error('App 浏览器连接信息无效，请改用 browser 工具。');
+  let data;
+  try { data = JSON.parse(fs.readFileSync(endpointFile, 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') throw new Error(UNAVAILABLE);
+    throw new Error('App 浏览器连接信息无效，请改用 browser 工具。');
+  }
+  const host = String(data?.host || '');
+  const port = Number(data?.port);
+  const token = String(data?.token || '');
+  if (!LOOPBACK_HOSTS.has(host) || !Number.isInteger(port) || port < 1 || port > 65535 || token.length < 16) {
+    throw new Error('App 浏览器连接信息无效，请改用 browser 工具。');
+  }
+  return {host, port, token};
+}
+function connectEndpoint(endpoint) {
+  return endpoint.socketPath ? net.createConnection(endpoint.socketPath) : net.createConnection({host: endpoint.host, port: endpoint.port});
+}
+export function appBrowserAvailable(environment = process.env) {
+  try { appBrowserEndpoint(environment); return true; } catch { return false; }
+}
+
 export function requestAppBrowser(action, params = {}, {environment = process.env, timeoutMs = appBrowserTimeout(action, params), signal} = {}) {
   const endpoint = appBrowserEndpoint(environment);
   aborted(signal);
@@ -100,7 +130,7 @@ export function requestAppBrowser(action, params = {}, {environment = process.en
   const {action: _action, timeout_ms: _timeout, ...fields} = params;
   const request = {...fields, id, action, timeoutMs, ...(endpoint.token ? {token: endpoint.token} : {})};
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection(endpoint.socketPath);
+    const socket = connectEndpoint(endpoint);
     let buffered = '';
     let size = 0;
     let settled = false;
@@ -115,7 +145,7 @@ export function requestAppBrowser(action, params = {}, {environment = process.en
     const cancelNative = () => {
       // Cancellation uses the same authenticated private endpoint. This only
       // prevents pending work; a click already dispatched cannot be undone.
-      const cancel = net.createConnection(endpoint.socketPath);
+      const cancel = connectEndpoint(endpoint);
       const deadline = setTimeout(() => cancel.destroy(), 500); deadline.unref?.();
       cancel.unref();
       cancel.on('connect', () => cancel.end(JSON.stringify({id:randomUUID(),action:'cancel',requestId:id,...(endpoint.token?{token:endpoint.token}:{})})+'\n'));
@@ -295,7 +325,7 @@ export class AppBrowserServers {
 
   // 没有侧栏连接、又允许退回系统浏览器时（Windows），返回替代结果；否则返回 null 走侧栏。
   async systemFallback(action, params = {}) {
-    if (!this.systemBrowser || String(this.environment.PINKIE_APP_BROWSER_ENDPOINT || '').trim()) return null;
+    if (!this.systemBrowser || appBrowserAvailable(this.environment)) return null;
     if (action === 'open') {
       const raw = String(params.url || '').trim();
       let url;
@@ -362,7 +392,7 @@ export class AppBrowserServers {
     if (!sessionOwner(ctx)) throw new Error('缺少当前碧琪会话，不能启动本地服务。');
     // Fail before starting a process when there is no visible App browser.
     // Windows 没有侧栏时服务照样起，网页交给系统浏览器（见 systemFallback）。
-    if (!(this.systemBrowser && !String(this.environment.PINKIE_APP_BROWSER_ENDPOINT || '').trim())) appBrowserEndpoint(this.environment);
+    if (!(this.systemBrowser && !appBrowserAvailable(this.environment))) appBrowserEndpoint(this.environment);
     const staticMode = typeof params.dir === 'string' && params.dir.trim();
     if (staticMode ? params.command !== undefined || params.cwd !== undefined || params.port !== undefined
       : !params.command || !params.cwd || !Number.isInteger(params.port) || params.port < 1 || params.port > 65535) {
@@ -821,7 +851,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
   return {
     name: 'app_browser',
     label: 'App 浏览器',
-    description: (servers.systemBrowser ? WINDOWS_APP_BROWSER_NOTE : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
+    description: (servers.systemBrowser && !appBrowserAvailable(servers.environment) ? WINDOWS_APP_BROWSER_NOTE : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
