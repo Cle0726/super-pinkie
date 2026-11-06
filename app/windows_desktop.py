@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import atexit
 import importlib.util
 import hashlib
 import json
@@ -2862,6 +2863,93 @@ class NativeBridge:
         append_log("launcher", f"browser proxy set: {result['effective']}")
         return {"ok": True, "message": "已保存。碧琪下次打开浏览器时生效；浏览器已经开着的话，关掉重开一次。", **result}
 
+    # ── FanVPN：把节点挂到用户自己的浏览器上 ──────────────────────
+    #
+    # 和上面 browser_proxy_* 的区别要说清楚，两者不是一回事：
+    #   browser_proxy  -> 只给 OpenClaw 单独启动的那个浏览器实例加
+    #                     --proxy-server，用户自己双击打开的浏览器不受影响
+    #   fanvpn_*       -> 写 WinINET 系统代理 + PAC，用户双击 Chrome /
+    #                     Edge / Firefox 就默认走节点
+    #
+    # 所以这两个开关可以同时存在，互不覆盖。但都指向本机不同端口时，
+    # 用户会看到两套代理并行，UI 上要分开呈现。
+
+    def fanvpn_status(self):
+        try:
+            from fanvpn_bridge import get_bridge
+
+            return get_bridge().status()
+        except Exception as error:  # noqa: BLE001 - 状态查询永远不能抛给前端
+            append_log("launcher", f"fanvpn status failed: {error}")
+            return {"ok": False, "running": False, "enabled": False, "error": str(error)}
+
+    def fanvpn_start(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        try:
+            from fanvpn_bridge import get_bridge
+
+            bridge = get_bridge()
+            result = bridge.start(enable_system_proxy=bool(payload.get("enableSystemProxy", True)))
+            append_log("launcher", f"fanvpn start: running={result.get('running')} enabled={result.get('enabled')}")
+            return result
+        except Exception as error:  # noqa: BLE001
+            append_log("launcher", f"fanvpn start failed: {error}")
+            return {"ok": False, "running": False, "enabled": False, "error": str(error)}
+
+    def fanvpn_stop(self):
+        try:
+            from fanvpn_bridge import get_bridge
+
+            result = get_bridge().stop()
+            append_log("launcher", "fanvpn stopped, system proxy restored")
+            return result
+        except Exception as error:  # noqa: BLE001
+            append_log("launcher", f"fanvpn stop failed: {error}")
+            return {"ok": False, "running": False, "enabled": False, "error": str(error)}
+
+    def fanvpn_enable_browser_proxy(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        method = str(payload.get("method") or "pac")
+        try:
+            from fanvpn_bridge import get_bridge
+
+            result = get_bridge().enable_browser_proxy(method)
+            append_log("launcher", f"fanvpn browser proxy on ({method})")
+            return result
+        except Exception as error:  # noqa: BLE001
+            append_log("launcher", f"fanvpn enable failed: {error}")
+            return {"ok": False, "error": str(error)}
+
+    def fanvpn_disable_browser_proxy(self):
+        try:
+            from fanvpn_bridge import get_bridge
+
+            result = get_bridge().disable_browser_proxy()
+            append_log("launcher", "fanvpn browser proxy off, settings restored")
+            return result
+        except Exception as error:  # noqa: BLE001
+            append_log("launcher", f"fanvpn disable failed: {error}")
+            return {"ok": False, "error": str(error)}
+
+    def fanvpn_select_node(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        try:
+            from fanvpn_bridge import get_bridge
+
+            return get_bridge().select_node(str(payload.get("server", "")), int(payload.get("port", 0)))
+        except (TypeError, ValueError) as error:
+            return {"ok": False, "error": f"节点参数不对: {error}"}
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "error": str(error)}
+
+    def fanvpn_refresh_nodes(self):
+        try:
+            from fanvpn_bridge import get_bridge
+
+            return get_bridge().refresh_nodes()
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "error": str(error)}
+
     def open_external(self, url):
         if isinstance(url, str) and url.startswith(("https://", "http://")):
             webbrowser.open(url)
@@ -3964,6 +4052,22 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     window.events.closed += closed
     # Start local services independently of WebView2. A broken/slow renderer
     # must never prevent the Gateway from being launched.
+
+    # FanVPN 的系统代理必须跟着**进程**生命周期走，而不是窗口。
+    # 窗口关掉时 gateway 还在跑（上面那段逻辑刻意保活），此时还原代理
+    # 会让用户浏览器突然断掉；所以只在进程真正退出时还原。
+    # 不注册这个的话，用户点了开关后直接关掉进程，注册表里会留着
+    # 一个指向已死端口的 PAC，下次开机整个系统都没网。
+    def _restore_fanvpn_on_exit():
+        try:
+            import fanvpn_bridge
+
+            fanvpn_bridge.shutdown()
+        except Exception:  # noqa: BLE001 - 退出路径绝不能抛
+            pass
+
+    atexit.register(_restore_fanvpn_on_exit)
+
     threading.Thread(target=bootstrap, name="pinkie-bootstrap", daemon=True).start()
     webview.start(
         gui="edgechromium", debug=False, private_mode=False,
