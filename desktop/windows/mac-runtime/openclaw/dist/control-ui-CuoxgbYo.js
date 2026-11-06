@@ -589,6 +589,25 @@ function setStaticFileHeaders(res, filePath) {
 	res.setHeader("Content-Type", contentTypeForExt(ext));
 	res.setHeader("Cache-Control", "no-cache");
 }
+/* pinkie-control-ui-cache:v1 */
+function pinkieRespondNotModified(req, res, fd) {
+	let stat;
+	try {
+		stat = fs.fstatSync(fd);
+	} catch {
+		return false;
+	}
+	const etag = `"pk-${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+	res.setHeader("ETag", etag);
+	const header = req && req.headers ? req.headers["if-none-match"] : void 0;
+	if (!header) return false;
+	const matches = String(header).split(",").map((tag) => tag.trim()).some((tag) => tag === "*" || tag === etag || tag === `W/${etag}`);
+	if (!matches) return false;
+	res.statusCode = 304;
+	res.setHeader("Cache-Control", "no-cache");
+	res.end();
+	return true;
+}
 function serveResolvedFile(res, filePath, body) {
 	setStaticFileHeaders(res, filePath);
 	res.end(body);
@@ -826,6 +845,7 @@ async function handleControlUiHttpRequest(req, res, opts) {
 			serveResolvedIndexHtml(res, await readOpenedFileText(safeFile.fd), basePath, terminalEnabled);
 			return true;
 		}
+		if (pinkieRespondNotModified(req, res, safeFile.fd)) return true;
 		serveResolvedFile(res, safeFile.path, await readOpenedFile(safeFile.fd));
 		return true;
 	} finally {

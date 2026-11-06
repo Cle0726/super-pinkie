@@ -51,6 +51,8 @@ apply_ui_skin() {
       s{// Cache-first for hashed assets; network-first for HTML/other\.}{// Network-first for all UI files; cached copies remain an offline fallback.}g;
       s{caches\.match\(event\.request\)\.then\(\n        \(cached\) =>\n          cached \|\|\n          fetch\(event\.request\)\.then\(\(response\) => \{\n            if \(response\.ok\) \{\n              const clone = response\.clone\(\);\n              void caches\.open\(CACHE_NAME\)\.then\(\(cache\) => cache\.put\(event\.request, clone\)\);\n            \}\n            return response;\n          \}\),\n      \)}{fetch(event.request)\n        .then((response) => {\n          if (response.ok) {\n            const clone = response.clone();\n            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));\n          }\n          return response;\n        })\n        .catch(() => caches.match(event.request))}g;
     ' "$service_worker"
+    # Re-store a file in the worker's cache only when its ETag changed.
+    "$python_bin" "$REPO_ROOT/tools/ui-parity/sw_cache.py" "$service_worker"
   fi
 
   # Branding changes here contain no inline-script edits.
@@ -500,6 +502,9 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # strict Control UI CSP, but allow that one in-app scheme for image/PDF
     # rendering; this does not grant the agent any new filesystem or tool access.
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-material-preview-csp.mjs"
+    # Unchanged UI files answer 304 instead of being sent (and compiled) again
+    # on every start. Same files, same look; only the repeat work goes.
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-control-ui-cache.mjs"
     # The managed desktop gateway is loopback-only and belongs to the user.
     # OpenClaw's owner-only sender filter would otherwise strip gateway,
     # nodes and cron from every CLE Kk mode even when tools.profile=full.
