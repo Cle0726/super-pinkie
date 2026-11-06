@@ -826,7 +826,7 @@ function Show-UpdateProblem([string]$Text) {
       $script:problemResult = $script:problemWindow.FindName('Result')
       $row = $script:problemWindow.FindName('Buttons'); $row.Visibility = 'Visible'
       $script:problemWindow.FindName('ProgressArea').Visibility = 'Collapsed'
-      $script:problemWindow.FindName('Hint').Text = '记忆和设置都在，不受影响。'
+      $script:problemWindow.FindName('Hint').Text = '需要帮忙的话，把上面的详细记录发给我们。'
       Set-PinkieArt ($script:problemWindow.FindName('Mascot')) 'oops'
       $primaryStyle = $script:problemWindow.FindResource('PillPrimary'); $pillStyle = $script:problemWindow.FindResource('Pill')
     } catch {
