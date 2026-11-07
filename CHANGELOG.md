@@ -2,6 +2,13 @@
 
 ## 待发布
 
+### 2.5.43
+- Windows：碧琪操作自己的浏览器时，页面上显示粉色「碧琪」指针（点击波纹、目标高亮框、「碧琪在输入」标签、拖动轨迹），不挡点击、不进快照。
+- Windows：app_browser 新增 tab（list/new/switch/close）、window（悬浮/停靠/铺满/置顶）、vpn（status/test/best/select/enable/auto/ip/refresh/add）；status 带标签页、窗口状态和 network（当前节点、延迟、地区、最快可用节点、出口 IP，不含密钥）。
+- Windows：浏览器节点不通时自动切换（默认开，节点面板可关）：网页失败或 10 秒未加载时快速测速，当前节点确实不通才换最快的并重开一次；另有每 5 分钟检查。
+- Windows：WebView2 错误页不再被当成「已打开」（错误页先发 DOMContentLoaded，之前死网址也报成功）。
+- 实测：真实窗口逐项操作；死节点 → 约 10 秒自动换到可用节点并打开 example.com。
+
 ### 2.5.42
 - Windows：碧琪自己的浏览器窗口（独立进程、独立 WebView2 资料，外观照 Mac 浏览器面板：多标签、悬浮 / 停靠 / 铺满、置顶）。碧琪的 app_browser 工具和聊天里的链接都开在这里；App 没开时仍退回系统浏览器。
 - Windows：「浏览器节点」——粘贴订阅（Clash/Mihomo YAML、base64 列表、vmess/vless/trojan/ss/hysteria2/tuic），测速、选节点、开关。内置 mihomo v1.19.33（GPL-3.0，固定 SHA256），只监听 127.0.0.1、无 TUN，只有这个浏览器带 `--proxy-server`；系统代理、网关、模型中继都不碰。实测：假节点全流程 + 一个真实 hysteria2 节点出口切换。
