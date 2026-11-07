@@ -50,6 +50,7 @@ body.agent #agent{display:flex}#agent i{width:6px;height:6px;border-radius:3px;b
 #node:hover{background:var(--hover)}#node .d{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.55;flex:none}
 #node.on{color:var(--text)}#node.on .d{background:var(--ok);opacity:1;box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
 #node.bad .d{background:var(--warn);opacity:1}#node span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#node.flash{background:var(--accent-soft);color:var(--accent)}
 #menu{position:fixed;top:40px;right:40px;min-width:200px;padding:6px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);display:none;z-index:5}
 #menu.open{display:block}
 .mi{display:flex;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border-radius:8px;color:var(--text);text-align:left}
@@ -145,6 +146,7 @@ h2{font-size:12px;font-weight:650;color:var(--muted);margin:20px 2px 8px;letter-
     <div style="flex:1"><h1>浏览器节点</h1><div class="sub">只用于碧琪的这个浏览器。电脑的系统代理和碧琪自己的模型连接都不变。</div></div>
     <button class="btn ghost" id="sheetDone">完成</button></div>
   <div class="card sw"><div class="k"><b>浏览器走节点</b><small id="swHint">开启后浏览器会重新打开一次，当前网页会保留。</small></div><button class="tog" id="toggle" aria-label="浏览器走节点"></button></div>
+  <div class="card sw"><div class="k"><b>节点不通时自动切换</b><small>网页因节点打不开、或每 5 分钟检查发现当前节点不通时，自动换到最快的可用节点。碧琪也能自己查看和切换节点。</small></div><button class="tog" id="autoTog" aria-label="节点不通时自动切换"></button></div>
   <div class="card"><div class="row"><input class="inp" id="sub" placeholder="粘贴订阅链接（Clash / Mihomo / v2ray），或 vmess:// vless:// trojan:// ss:// hysteria2:// 链接" spellcheck="false"><button class="btn primary" id="addSub">添加订阅</button></div><div id="msg"></div></div>
   <h2>订阅</h2><div class="card" id="subs" style="padding:4px 14px"></div>
   <div class="tools"><h2>节点</h2><div class="row"><input class="inp" id="filter" placeholder="筛选节点" spellcheck="false"><button class="btn" id="test">测速</button><button class="btn" id="ipcheck">检查出口 IP</button></div></div>
@@ -169,9 +171,14 @@ function renderBar(){const t=state.tabs.find(x=>x.id===state.active);if(!editing
   $('pin').classList.toggle('on',!!state.pinned);
   for(const b of document.querySelectorAll('.mi[data-mode]'))b.classList.toggle('on',b.dataset.mode===(state.mode||'float'));}
 function lat(n){if(n.delay)return '<span class="lat '+(n.delay<300?'g':n.delay<800?'m':'b')+'">'+n.delay+' ms</span>';return n.tested?'<span class="lat x">超时</span>':'<span class="lat u">未测</span>';}
+let flashUntil=0,lastMsg='';
 function renderNode(){const b=$('node');b.classList.toggle('on',!!vpn.applied);b.classList.toggle('bad',!!vpn.enabled&&!vpn.applied);
+  const sel=(vpn.nodes||[]).find(n=>n.name===vpn.selected);b.title='浏览器节点：只影响这个浏览器'+(sel&&sel.delay?'（'+sel.delay+' ms）':'')+(vpn.auto!==false?'，不通时自动切换':'');
+  if(Date.now()<flashUntil)return;b.classList.remove('flash');
   $('nodeText').textContent=vpn.applied?(vpn.selected||'节点'):(vpn.enabled?'节点未生效':'直连');}
-function renderSheet(){renderNode();const t=$('toggle');t.classList.toggle('on',!!vpn.enabled);t.disabled=vpn.coreAvailable===false;
+function flashNode(text){flashUntil=Date.now()+4500;$('node').classList.add('flash');$('nodeText').textContent=text;setTimeout(renderNode,4600);}
+function renderSheet(){if(vpn.message&&vpn.message!==lastMsg&&/自动换到/.test(vpn.message)){const m=/自动换到[^「]*「([^」]+)」/.exec(vpn.message);flashNode('已换到 '+(m?m[1]:'新节点'));}lastMsg=vpn.message||'';
+  renderNode();const t=$('toggle');t.classList.toggle('on',!!vpn.enabled);t.disabled=vpn.coreAvailable===false;$('autoTog').classList.toggle('on',vpn.auto!==false);
   $('swHint').textContent=vpn.coreAvailable===false?'这个安装包缺少节点核心，无法开启。':vpn.enabled?('已开启'+(vpn.selected?'：'+vpn.selected:'')+'。只影响这个浏览器。'):'开启后浏览器会重新打开一次，当前网页会保留。';
   const subs=vpn.subscriptions||[];$('subs').innerHTML=subs.length?subs.map(s=>'<div class="sub-item"><div class="n"><b>'+esc(s.title)+'</b><small>'+esc(s.host||'')+' · '+(s.count||0)+' 个节点'+(s.updatedAt?' · '+new Date(s.updatedAt*1000).toLocaleString():'')+(s.usage?' · '+esc(s.usage):'')+'</small>'+(s.error?'<div class="e">'+esc(s.error)+'</div>':'')+'</div>'+(s.refreshable?'<button class="btn" data-r="'+esc(s.id)+'">刷新</button>':'')+'<button class="btn ghost" data-d="'+esc(s.id)+'">删除</button></div>').join(''):'<div class="empty" style="border:0">还没有订阅。把机场给的订阅链接粘贴到上面。</div>';
   const f=$('filter').value.trim().toLowerCase(),all=vpn.nodes||[],nodes=all.filter(n=>!f||String(n.name).toLowerCase().includes(f));
@@ -209,6 +216,7 @@ $('sub').onkeydown=e=>{if(e.key==='Enter')$('addSub').click();};
 $('subs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.r)act('refresh',{id:b.dataset.r},'正在刷新订阅…');if(b.dataset.d&&confirm('删除这个订阅和它的节点？'))act('remove',{id:b.dataset.d});};
 $('nodes').onclick=e=>{const b=e.target.closest('.nd');if(b)act('select',{name:b.dataset.n});};
 $('toggle').onclick=()=>act('enable',{on:!vpn.enabled},vpn.enabled?'正在关闭节点…':'正在开启节点，浏览器会重新打开…');
+$('autoTog').onclick=()=>act('auto',{on:vpn.auto===false});
 $('test').onclick=()=>act('test',{},'正在测速，最多需要十几秒…');$('ipcheck').onclick=()=>{act('open_ip_check');sheet(false);};
 $('filter').oninput=renderSheet;
 height();post({type:'hello'});
