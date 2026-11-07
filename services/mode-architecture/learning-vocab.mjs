@@ -83,6 +83,25 @@ function wordExams(word) {
   return legacy ? [{id: 'pretco-b', tier: legacy}] : [];
 }
 
+// 组卷只用这些字段。超纲标签不拿来当干扰项的「同一考试」。
+export function vocabDrillFields(word = {}) {
+  const exams = wordExams(word).filter(tag => tag && tag.tier !== '超纲').map(tag => tag.id);
+  return {
+    wordId: word.id, word: word.word || '', phonetic: word.phonetic || '',
+    meaning: word.meaning || word.hint || '', hint: word.hint || '',
+    homophone: word.homophone || word.userHomophone || '',
+    collocations: Array.isArray(word.collocations) ? word.collocations : [],
+    example: word.example && typeof word.example === 'object' ? word.example : {en: '', zh: ''},
+    exams, status: word.status || '',
+    reviewLevel: Number.isFinite(Number(word.reviewLevel)) ? Number(word.reviewLevel) : -1,
+    reviewCount: Math.max(0, Number(word.reviewCount) || 0),
+    lapses: Math.max(0, Number(word.lapses) || 0),
+    learnedAt: Number(word.learnedAt) || 0,
+    nextReviewAt: Number(word.nextReviewAt) || 0,
+    lastReviewedAt: Number(word.lastReviewedAt) || 0,
+  };
+}
+
 function readJson(file, fallback) {
   try { const value = JSON.parse(fs.readFileSync(file, 'utf8')); return value && typeof value === 'object' ? value : fallback; }
   catch { return fallback; }
@@ -285,13 +304,36 @@ export class LearningVocab {
     return {words: words.slice(0, Math.max(1, Math.min(50, Number(limit) || 20))), total: words.length};
   }
 
-  review(id, rating, now = Date.now()) {
+  review(id, rating, now = Date.now(), extra = {}) {
     const words = this.read().words, index = words.findIndex(word => word.id === id);
     if (index < 0) throw new Error('这个生词已经不在了');
+    if (extra?.source === 'drill' && extra.sessionId && words[index].drillSessions?.[extra.sessionId]) {
+      return {word: this.view(words[index], now), duplicate: true};
+    }
     const next = {...words[index], ...calculateReviewSchedule(words[index], rating, now)};
+    if (extra?.source === 'drill' && extra.sessionId) {
+      const seen = {...(words[index].drillSessions || {}), [extra.sessionId]: rating};
+      const keys = Object.keys(seen);
+      for (const key of keys.slice(0, Math.max(0, keys.length - 12))) delete seen[key];
+      next.drillSessions = seen;
+    }
     words[index] = next; this.write(words);
     try { this.store.pact?.recordReview?.({count: 1}); } catch {}
     return {word: this.view(next, now)};
+  }
+
+  drillWords() {
+    return this.read().words.filter(word => word.status === 'ready').map(vocabDrillFields);
+  }
+
+  markLearned(id, now = Date.now()) {
+    const words = this.read().words, index = words.findIndex(word => word.id === id);
+    if (index < 0) throw new Error('这个生词已经不在了');
+    if (!words[index].learnedAt) {
+      words[index] = {...words[index], learnedAt: now, updatedAt: now};
+      this.write(words);
+    }
+    return {ok: true};
   }
 
   // 今日页：今天要背几个、今天新收几个。

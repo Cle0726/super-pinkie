@@ -11,6 +11,7 @@ import {registerLearningCompanion} from './learning-companion.mjs';
 import {LearningMaterials, registerLearningMaterials} from './learning-materials.mjs';
 import {LearningLesson, registerLearningLesson} from './learning-lesson.mjs';
 import {LearningVocab, registerLearningVocab, parseVocabInput, validateMovedWords} from './learning-vocab.mjs';
+import {registerLearningDrill} from './learning-drill.mjs';
 import {LEARNING_EXAMS} from './learning-exams.mjs';
 import {LearningVisualStore, VISUAL_KINDS} from './learning-visuals.mjs';
 import {PRACTICE_KINDS, PRACTICE_LABELS} from './learning-practice.mjs';
@@ -2318,6 +2319,7 @@ export function registerLearningGateway(api, store, {organizer = new LearningNot
   // 碧琪手账 v2：条目 / 收进手账 / learning_desk 工具（P4），陪伴层（P5）。
   store.refs = registerLearningRefs(api, store);
   registerLearningRecall(api, store, {organizer, schedule: calculateReviewSchedule, recordReview: () => pactLedger(store, 'recordReview', {count: 1})});
+  registerLearningDrill(api, store, {organizer, schedule: calculateReviewSchedule, recall: store.recall, vocab: store.vocab, pact: store.pact});
   if (store.desk) store.companion = registerLearningCompanion(api, store, {requestModel: store.desk.requestModel});
   api.registerService?.({id: 'pinkie-learning-materials', start: () => store.materials.start(), stop: async () => { store.materials.stopController?.abort(); for (const item of store.materials.controllers?.values() || []) item.controller.abort(); await store.lessons.close(); await store.materials.close(); }});
 }
