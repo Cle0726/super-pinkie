@@ -10,12 +10,16 @@ export const APP_BROWSER_ACTIONS = Object.freeze([
   'open', 'status', 'snapshot', 'screenshot', 'click', 'type', 'press', 'scroll',
   'wait', 'back', 'forward', 'reload', 'eval', 'show_file', 'close', 'locate', 'read', 'select', 'batch',
   'serve', 'stop_serve', 'serve_logs', 'move', 'hover', 'drag', 'set_slider',
-  'fill', 'replay', 'remember', 'recipes', 'forget',
+  'fill', 'replay', 'remember', 'recipes', 'forget', 'tab', 'window', 'vpn',
 ]);
 const NODE_ACTIONS = new Set(['serve','stop_serve','serve_logs','batch','fill','replay','remember','recipes','forget']);
 const NATIVE_ACTIONS = new Set(APP_BROWSER_ACTIONS.filter(action => !NODE_ACTIONS.has(action)));
 const BATCH_ACTIONS = new Set(['click','type','select','press','scroll','wait','move','hover','drag','set_slider']);
-const WRITE_ACTIONS = new Set(['serve','stop_serve','open','back','forward','reload','eval','show_file','close','click','type','select','press','scroll','move','hover','drag','set_slider']);
+const WRITE_ACTIONS = new Set(['serve','stop_serve','open','back','forward','reload','eval','show_file','close','click','type','select','press','scroll','move','hover','drag','set_slider','tab','window','vpn']);
+// Only 碧琪's own Windows browser window has tabs, window modes and nodes she can drive.
+const WINDOWS_ONLY_ACTIONS = new Set(['tab','window','vpn']);
+export const VPN_OPS = Object.freeze(['status','test','best','select','enable','auto','ip','refresh','add']);
+const TAB_OPS = ['list','new','switch','close'];
 const browserBatches = new WeakMap();
 const NAVIGATION_ACTIONS = new Set(['open', 'back', 'forward', 'reload', 'show_file']);
 const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 Windows 暂不支持），请改用 browser 工具。';
@@ -23,6 +27,10 @@ const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 
 // 退回到系统默认浏览器或默认程序，让用户仍然看得到；看页面、点按钮这类操作明确指向 browser 工具，
 // 不再让碧琪对着一个永远连不上的侧栏反复重试。
 const SYSTEM_BROWSER_LIMIT = '这台电脑没有 App 侧栏浏览器，系统浏览器里的页面碧琪看不到也点不了。要查看、截图或操作网页，直接改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口），不要重试 app_browser，也不要告诉先生浏览器用不了。';
+export const WINDOWS_INAPP_BROWSER_NOTE = '【Windows 版·碧琪自己的浏览器】这是你自己的独立浏览器窗口（粉色工具栏，可悬浮、停靠右侧或铺满），先生看得到你的每一步：你操作时页面上会出现粉色「碧琪」指针、点击波纹和目标高亮框，工具栏显示「碧琪正在使用浏览器」。status 一次读到当前页、全部标签页 tabList、窗口状态和 network（直连还是走节点、当前节点、延迟、地区、出口 IP、最快的几个可用节点）。'
+  + '标签页：tab op=list/new/switch/close（tabId 来自 list，new 可带 url）。窗口：window mode=float/dock/full，pin=true 置顶；要给先生演示时先 window mode=dock 或 full。'
+  + '网络（只作用于这个浏览器，不改系统代理、不影响模型连接）：vpn op=status 精准读节点；op=test 测全部节点延迟；op=best 测速并切到最快（region=日本/香港/美国等限定地区，on=true 同时开启节点）；op=select node=节点名（写名称里独一无二的一段即可）；op=enable on=true/false 开关节点；op=auto on=true/false 开关自动切换；op=ip 查出口 IP；op=refresh 刷新订阅；op=add url=订阅链接。'
+  + '自动切换默认开启：经节点打开网页失败或超时，会自动测速换到最快的可用节点并重试一次，结果里的 nodeSwitched 告诉你换到了哪个，不要再手动重复切换。直连打不开海外网站（Google、YouTube、X 等）时先 vpn op=best on=true 再 open；国内网站直连更快，用完可 vpn op=enable on=false。nodeCount=0 说明还没有订阅：请先生在浏览器右上角「节点」里粘贴订阅链接，或把链接发给你用 vpn op=add。';
 export const WINDOWS_APP_BROWSER_NOTE = '【Windows 版】没有 App 侧栏浏览器：open / serve / show_file 会在系统默认浏览器或默认程序里打开给用户看（碧琪看不到页面内容）；snapshot、screenshot、click、type、batch 等查看和操作网页的动作请直接用 browser 工具。';
 function defaultSystemOpener(target) {
   return new Promise((resolve, reject) => {
@@ -62,6 +70,8 @@ function aborted(signal) {
 
 export function appBrowserTimeout(action, params = {}) {
   if (action === 'wait') return 15_000;
+  // Testing every node, then possibly relaunching the window with the proxy.
+  if (action === 'vpn') return 60_000;
   const ceiling = NAVIGATION_ACTIONS.has(action) ? 30_000 : 15_000;
   return Math.min(ceiling, Math.max(1, Number(params.timeout_ms) || ceiling));
 }
@@ -801,6 +811,24 @@ export class BrowserSiteMemory {
 }
 
 function validateNativeAction(action, params) {
+  if (action === 'vpn') {
+    const op = params.op ?? 'status';
+    if (!VPN_OPS.includes(op)) throw new Error(`vpn 的 op 只支持 ${VPN_OPS.join('、')}。`);
+    if (op === 'select' && !(typeof params.node === 'string' && params.node.trim())) throw new Error('切换节点需要 node（节点名称，或名称里独一无二的一段）。');
+    if (['enable', 'auto'].includes(op) && typeof params.on !== 'boolean') throw new Error(`vpn op=${op} 需要 on=true 或 on=false。`);
+    if (op === 'add' && !(typeof params.url === 'string' && params.url.trim())) throw new Error('添加订阅需要 url（订阅链接或节点链接）。');
+    return;
+  }
+  if (action === 'tab') {
+    const op = params.op ?? 'list';
+    if (!TAB_OPS.includes(op)) throw new Error('tab 的 op 只支持 list、new、switch、close。');
+    if (['switch', 'close'].includes(op) && !(typeof params.tabId === 'string' && params.tabId.trim())) throw new Error('切换或关闭标签页需要 tabId，先用 tab op=list 查看。');
+    return;
+  }
+  if (action === 'window') {
+    if (params.mode !== undefined && !['float', 'dock', 'full'].includes(params.mode)) throw new Error('window 的 mode 只支持 float、dock、full。');
+    return;
+  }
   const target = () => {
     if (!(typeof params.ref === 'string' && params.ref.trim()) && !(typeof params.selector === 'string' && params.selector.trim()) && !(typeof params.name === 'string' && params.name.trim())) {
       throw new Error('这个操作需要快照里的 ref 或网页 selector。');
@@ -851,7 +879,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
   return {
     name: 'app_browser',
     label: 'App 浏览器',
-    description: (servers.systemBrowser && !appBrowserAvailable(servers.environment) ? WINDOWS_APP_BROWSER_NOTE : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
+    description: (servers.systemBrowser ? (appBrowserAvailable(servers.environment) ? WINDOWS_INAPP_BROWSER_NOTE : WINDOWS_APP_BROWSER_NOTE) : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。用户正在操作或ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -878,6 +906,8 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
         vars: {type: 'array', maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {name: {type: 'string'}, value: {type: 'string'}}, required: ['name', 'value']}},
         fields: {type: 'array', minItems: 1, maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {name: {type: 'string'}, value: {type: 'string'}}, required: ['name', 'value']}},
         waitUntil: {type: 'string', enum: ['domcontentloaded','load']},
+        op: {type: 'string', enum: [...new Set([...VPN_OPS, ...TAB_OPS])]}, node: {type: 'string'}, region: {type: 'string'},
+        on: {type: 'boolean'}, tabId: {type: 'string'}, mode: {type: 'string', enum: ['float','dock','full']}, pin: {type: 'boolean'},
         waitFor: {type:'string',enum:['visible','hidden','attached','detached','enabled']},
         targetTimeoutMs: {type: 'integer', minimum: 0, maximum: 5000},
         steps: {type: 'array', minItems: 1, maxItems: 12, items: {type: 'object', additionalProperties: false,
@@ -986,18 +1016,24 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
         if (action === 'stop_serve') return toolResult(await servers.stop(activeContext, params));
         if (action === 'serve_logs') return toolResult(servers.logs(activeContext, params));
         if (!NATIVE_ACTIONS.has(action)) throw new Error('不支持这个 App 浏览器操作。');
+        if (WINDOWS_ONLY_ACTIONS.has(action) && !servers.systemBrowser) throw new Error(`${action} 只有 Windows 版碧琪自己的浏览器窗口支持；这里请用 open、snapshot 等操作。`);
         validateNativeAction(action, params);
         const {remember: _remember, ...native} = params;
         const reply = await servers.request(action, native, {signal});
-        if (!reply.ok) return toolResult({...failure(String(reply.reason || 'App 浏览器没有完成这个操作。')),mayHaveExecuted:reply.mayHaveExecuted===true,nextAction:reply.nextAction||'snapshot-before-retry'});
+        if (!reply.ok) {
+          if (action === 'vpn') return toolResult({...failure(String(reply.reason || '节点操作没有完成。')), ...(reply.result?.network ? {network: reply.result.network} : {})});
+          return toolResult({...failure(String(reply.reason || 'App 浏览器没有完成这个操作。')),mayHaveExecuted:reply.mayHaveExecuted===true,nextAction:reply.nextAction||'snapshot-before-retry'});
+        }
         const result = reply.result && typeof reply.result === 'object' ? reply.result : {};
-        if (['open', 'show_file'].includes(action)) memory.start(owner, result.page?.url || result.url || params.url || '');
+        if (['open', 'show_file'].includes(action) || (action === 'tab' && result.page)) memory.start(owner, result.page?.url || result.url || params.url || '');
         else memory.record(owner, params);
         const trail = memory.observe(owner, result);
         // Saved steps for this page ride along with the first observation of it.
         let known;
         if (trail.key && trail.announced !== trail.key) { known = memory.known(owner); trail.announced = trail.key; }
-        const message = action === 'screenshot' ? '浏览器截图已保存，用 image 工具查看。' : known ? '已打开。这一页有记住的操作（known），能用就直接 replay。' : 'App 浏览器操作已完成。';
+        const message = action === 'screenshot' ? '浏览器截图已保存，用 image 工具查看。' : known ? '已打开。这一页有记住的操作（known），能用就直接 replay。'
+          : action === 'vpn' && typeof result.message === 'string' && result.message ? result.message
+          : result.nodeSwitched?.message ? `已打开。${result.nodeSwitched.message}` : 'App 浏览器操作已完成。';
         return toolResult(saved({...result, ...(known ? {known} : {}), ok: true, message}));
       } catch (error) {
         return toolResult(failure(error instanceof Error ? error.message : 'App 浏览器调用失败，请检查后重试。'));

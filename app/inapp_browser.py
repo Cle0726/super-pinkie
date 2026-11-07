@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -33,6 +34,53 @@ from browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, locate_c
 ENDPOINT_ENV = "PINKIE_APP_BROWSER_ENDPOINT"
 IP_CHECK_URL = "https://api.ip.sb/geoip"
 HOST_START_TIMEOUT = 25
+FAILOVER_COOLDOWN = 20.0     # seconds between automatic node checks
+FAILOVER_TEST_MS = 3000      # per-node timeout of the quick test behind a failover
+HEALTH_INTERVAL = 300.0      # background check of the current node while proxied
+# Operations 碧琪 (the gateway's app_browser tool) may run on the node service.
+# Removing subscriptions stays with the user in the panel.
+AGENT_VPN_OPS = {"status", "test", "best", "select", "enable", "auto", "ip", "refresh", "add"}
+
+# Rough region from a node's display name; airports name nodes by place.
+REGION_HINTS = [
+    ("香港", ("香港", "hong kong", "hongkong", "hk")), ("台湾", ("台湾", "台灣", "taiwan", "tw")),
+    ("日本", ("日本", "japan", "tokyo", "osaka", "jp")), ("新加坡", ("新加坡", "singapore", "sg")),
+    ("美国", ("美国", "美國", "united states", "usa", "los angeles", "san jose", "seattle", "us")),
+    ("韩国", ("韩国", "韓國", "korea", "seoul", "kr")), ("英国", ("英国", "united kingdom", "london", "uk", "gb")),
+    ("德国", ("德国", "germany", "frankfurt", "de")), ("法国", ("法国", "france", "paris", "fr")),
+    ("加拿大", ("加拿大", "canada", "ca")), ("澳大利亚", ("澳大利亚", "澳洲", "australia", "au")),
+    ("俄罗斯", ("俄罗斯", "russia", "ru")), ("印度", ("印度", "india", "in")), ("土耳其", ("土耳其", "turkey", "tr")),
+    ("荷兰", ("荷兰", "netherlands", "nl")), ("马来西亚", ("马来西亚", "malaysia", "my")),
+    ("泰国", ("泰国", "thailand", "th")), ("越南", ("越南", "vietnam", "vn")), ("菲律宾", ("菲律宾", "philippines", "ph")),
+    ("阿根廷", ("阿根廷", "argentina", "ar")), ("巴西", ("巴西", "brazil", "br")),
+]
+FLAG_REGIONS = {"🇭🇰": "香港", "🇹🇼": "台湾", "🇯🇵": "日本", "🇸🇬": "新加坡", "🇺🇸": "美国", "🇰🇷": "韩国", "🇬🇧": "英国",
+                "🇩🇪": "德国", "🇫🇷": "法国", "🇨🇦": "加拿大", "🇦🇺": "澳大利亚", "🇷🇺": "俄罗斯", "🇮🇳": "印度", "🇹🇷": "土耳其",
+                "🇳🇱": "荷兰", "🇲🇾": "马来西亚", "🇹🇭": "泰国", "🇻🇳": "越南", "🇵🇭": "菲律宾", "🇦🇷": "阿根廷", "🇧🇷": "巴西"}
+
+
+def node_region(name: str) -> str:
+    text = str(name or "")
+    for flag, region in FLAG_REGIONS.items():
+        if flag in text:
+            return region
+    lowered = text.lower()
+    words = set(re.findall(r"[a-z]+", lowered))
+    for region, keys in REGION_HINTS:
+        for key in keys:
+            # Two-letter codes only count as whole words ("US 01", not "plus").
+            short = len(key) <= 2 and key.isascii()
+            if (short and key in words) or (not short and key in lowered):
+                return region
+    return ""
+
+
+def region_matches(name: str, wanted: str) -> bool:
+    wanted = str(wanted or "").strip().lower()
+    if not wanted:
+        return True
+    region = node_region(name)
+    return wanted in str(name).lower() or (region and (wanted in region.lower() or region.lower() in wanted))
 
 
 def browser_state_dir(state_root: Path) -> Path:
@@ -113,23 +161,49 @@ class VpnStore:
         return combined
 
 
+def fetch_exit_ip(proxy_port: int, timeout: float = 8.0) -> Dict[str, Any]:
+    """Where the browser's traffic comes out: through our core when proxied,
+    otherwise the same way a normal browser would go."""
+    import urllib.request
+
+    handlers = []
+    if proxy_port:
+        address = f"http://127.0.0.1:{int(proxy_port)}"
+        handlers.append(urllib.request.ProxyHandler({"http": address, "https": address}))
+    opener = urllib.request.build_opener(*handlers)
+    request = urllib.request.Request(IP_CHECK_URL, headers={"User-Agent": "Mozilla/5.0 PinkieBrowser"})
+    with opener.open(request, timeout=timeout) as response:
+        data = json.loads(response.read() or b"{}")
+    return {"ip": data.get("ip", ""), "country": data.get("country", ""), "region": data.get("region", ""),
+            "city": data.get("city", ""), "isp": data.get("organization") or data.get("isp") or ""}
+
+
 class VpnService:
     def __init__(self, folder: Path, resource_root: Optional[Path], log: Callable[[str], None],
-                 fetch: Callable[[str], Any] = subs.fetch_subscription):
+                 fetch: Callable[[str], Any] = subs.fetch_subscription,
+                 ip_lookup: Callable[[int], Dict[str, Any]] = fetch_exit_ip):
         self.folder = Path(folder)
         self.store = VpnStore(self.folder)
+        self.store.data.setdefault("auto", True)
         self.core = MihomoCore(self.folder / "core", locate_core(resource_root), log)
         self.log = log
         self.fetch = fetch
+        self.ip_lookup = ip_lookup
         self.delays: Dict[str, Optional[int]] = {}
         self.tested: set = set()
+        self.tested_at = 0.0
         self.testing = False
         self.applied_port = 0
         self.message = ""
         self.message_kind = ""
+        self.last_failover = 0.0
+        self.exit_info: Dict[str, Any] = {}
+        self.switches: List[Dict[str, Any]] = []
         self.lock = threading.RLock()
         self.on_change: Callable[[], None] = lambda: None
         self.restart_browser: Callable[[int], None] = lambda _port: None
+        self.health_stop = threading.Event()
+        self.health_thread: Optional[threading.Thread] = None
 
     # ── state for the panel (no secrets) ──
     def state(self) -> Dict[str, Any]:
@@ -140,6 +214,7 @@ class VpnService:
         return {
             "enabled": bool(self.store.data.get("enabled")),
             "applied": bool(self.applied_port),
+            "auto": bool(self.store.data.get("auto", True)),
             "coreAvailable": bool(self.core.binary),
             "selected": selected,
             "testing": self.testing,
@@ -169,9 +244,13 @@ class VpnService:
             "refresh": lambda: self.refresh(str(payload.get("id", ""))),
             "remove": lambda: self.remove(str(payload.get("id", ""))),
             "test": self.test,
-            "select": lambda: self.select(str(payload.get("name", ""))),
+            "select": lambda: self.select(str(payload.get("name") or payload.get("node") or "")),
             "enable": lambda: self.enable(bool(payload.get("on"))),
             "open_ip_check": lambda: {"ok": True, "url": IP_CHECK_URL},
+            "best": lambda: self.best(str(payload.get("region") or ""), bool(payload.get("on"))),
+            "auto": lambda: self.set_auto(bool(payload.get("on"))),
+            "failover": lambda: self.failover(str(payload.get("reason") or "")),
+            "ip": self.exit_ip,
         }.get(op)
         if not handler:
             return {"ok": False, "message": "不认识的节点操作。"}
@@ -184,7 +263,7 @@ class VpnService:
         except Exception as error:  # noqa: BLE001
             self.log(f"browser vpn {op} failed: {error!r}")
             result = {"ok": False, "message": f"操作没有完成：{error}"}
-        if op != "status":
+        if op != "status" and not (op == "failover" and result.get("ok") and not result.get("switched")):
             self._note(result.get("message", ""), "err" if not result.get("ok") else "ok")
         self.on_change()
         return result
@@ -276,57 +355,235 @@ class VpnService:
             elif not self.store.data.get("enabled"):
                 self.core.stop()
 
-    def test(self) -> Dict[str, Any]:
+    def _measure(self, timeout_ms: Optional[int] = None) -> bool:
+        """Test every node; False when another test is already running."""
         with self.lock:
             if self.testing:
-                return {"ok": True, "message": "正在测速…"}
+                return False
             self.testing = True
         self.on_change()
         try:
             self._ensure_core()
             names = [p["name"] for p in self.store.all_proxies()]
-            results = self.core.delays()
+            results = self.core.delays(timeout_ms=timeout_ms) if timeout_ms else self.core.delays()
             self.delays = {name: results.get(name) for name in names}
             self.tested = set(names)
+            self.tested_at = time.time()
         finally:
             self.testing = False
+            if not self.store.data.get("enabled") and not self.applied_port:
+                # Testing alone should not keep a core running in the background.
+                self.core.stop()
+        return True
+
+    def _fastest(self, region: str = "", exclude: Optional[str] = None) -> Optional[str]:
+        alive = [(delay, name) for name, delay in self.delays.items()
+                 if delay and name != exclude and region_matches(name, region)]
+        return min(alive)[1] if alive else None
+
+    def _switch(self, name: str, why: str) -> None:
+        previous = self.store.data.get("selected")
+        with self.lock:
+            self.store.data["selected"] = name
+            self.store.save()
+        if self.core.running():
+            self.core.select(name)
+        self.switches = ([{"at": int(time.time()), "from": previous, "to": name, "why": why}] + self.switches)[:5]
+        self.exit_info = {}
+        self.log(f"browser vpn switched node ({why})")
+
+    def test(self) -> Dict[str, Any]:
+        if not self._measure():
+            return {"ok": True, "message": "正在测速…"}
         good = sum(1 for v in self.delays.values() if v)
         if not good:
             return {"ok": False, "message": "所有节点都连不上：可能订阅过期、节点维护，或者本机网络限制了这些协议。"}
         selected = self.store.data.get("selected")
         hint = ""
         if selected and not self.delays.get(selected):
-            hint = "当前选中的节点连不上，换一个绿色的。"
-        if not self.store.data.get("enabled") and not self.applied_port:
-            # Testing alone should not keep a core running in the background.
-            self.core.stop()
+            fastest = self._fastest()
+            if self.store.data.get("auto", True) and fastest:
+                self._switch(fastest, "测速发现当前节点不通")
+                hint = f"原来的节点连不上，已自动换到最快的「{fastest}」（{self.delays[fastest]} ms）。"
+            else:
+                hint = "当前选中的节点连不上，换一个绿色的。"
         return {"ok": True, "message": f"测速完成：{good}/{len(self.delays)} 个节点可用。{hint}"}
 
-    def select(self, name: str) -> Dict[str, Any]:
+    def resolve_name(self, name: str) -> str:
+        """Exact node name, or the one node whose name contains what was asked."""
         names = [p["name"] for p in self.store.all_proxies()]
-        if name not in names:
-            raise subs.SubscriptionError("这个节点已经不在订阅里了，请刷新订阅。")
+        if name in names:
+            return name
+        wanted = name.strip().lower()
+        matches = [n for n in names if wanted and wanted in n.lower()] if wanted else []
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise subs.SubscriptionError(f"有 {len(matches)} 个节点名字里含「{name}」，请说完整名称，或用 best 加 region 自动挑最快的："
+                                         + "、".join(matches[:6]))
+        raise subs.SubscriptionError("这个节点已经不在订阅里了，请刷新订阅。")
+
+    def select(self, name: str) -> Dict[str, Any]:
+        name = self.resolve_name(name)
         with self.lock:
             self.store.data["selected"] = name
             self.store.save()
         if self.core.running():
             self.core.select(name)
+        self.exit_info = {}
         offline = name in self.tested and not self.delays.get(name)
         message = f"已切换到「{name}」。" + ("这个节点刚才测速连不上，网页可能打不开。" if offline else "")
         if not self.store.data.get("enabled"):
             message += "打开「浏览器走节点」后生效。"
-        return {"ok": True, "message": message}
+        return {"ok": True, "message": message, "node": name}
+
+    def best(self, region: str = "", turn_on: bool = False) -> Dict[str, Any]:
+        """Test all nodes and use the fastest (optionally in one region)."""
+        if not self._measure():
+            return {"ok": False, "message": "正在测速，请几秒后再试。"}
+        fastest = self._fastest(region)
+        if not fastest:
+            where = f"「{region}」的" if region else ""
+            return {"ok": False, "message": f"没有{where}可用节点：测速全部超时。可以刷新订阅后再试。"}
+        if fastest != self.store.data.get("selected"):
+            self._switch(fastest, f"挑最快节点{('（' + region + '）') if region else ''}")
+        message = f"已选最快的「{fastest}」（{self.delays[fastest]} ms）。"
+        if turn_on and not self.store.data.get("enabled"):
+            message += self.enable(True)["message"]
+        elif not self.store.data.get("enabled"):
+            message += "浏览器当前直连，要用这个节点请开启「浏览器走节点」。"
+        return {"ok": True, "message": message, "node": fastest, "delay": self.delays[fastest]}
+
+    def set_auto(self, on: bool) -> Dict[str, Any]:
+        with self.lock:
+            self.store.data["auto"] = bool(on)
+            self.store.save()
+        if on:
+            self._start_health()
+        return {"ok": True, "message": "已开启自动切换：当前节点不通时会自动换到最快的可用节点。" if on
+                else "已关闭自动切换，节点只会在手动选择时改变。"}
+
+    def failover(self, reason: str = "") -> Dict[str, Any]:
+        """The current node looks dead (a page failed to load through it):
+        switch to the fastest node that answers.  Rate limited."""
+        if not (self.store.data.get("enabled") and self.applied_port):
+            return {"ok": True, "switched": False, "message": "浏览器没有走节点，不需要切换。"}
+        if not self.store.data.get("auto", True):
+            return {"ok": True, "switched": False, "message": "自动切换已关闭。"}
+        now = time.monotonic()
+        if now - self.last_failover < FAILOVER_COOLDOWN:
+            return {"ok": True, "switched": False, "message": "刚刚已经检查过节点。"}
+        self.last_failover = now
+        current = self.store.data.get("selected")
+        # A short test: 碧琪 (or the user) is waiting on a page.
+        if not self._measure(timeout_ms=FAILOVER_TEST_MS):
+            return {"ok": True, "switched": False, "message": "正在测速。"}
+        if current and self.delays.get(current):
+            # The node answers; the site itself is the problem.
+            return {"ok": True, "switched": False, "node": current, "delay": self.delays[current],
+                    "message": f"当前节点「{current}」是通的（{self.delays[current]} ms），打不开可能是网站本身的问题。"}
+        fastest = self._fastest(exclude=current)
+        if not fastest:
+            return {"ok": False, "switched": False, "message": "所有节点都连不上：可能订阅过期，或本机网络限制了这些协议。"}
+        self._switch(fastest, reason or "网页打不开")
+        return {"ok": True, "switched": True, "node": fastest, "delay": self.delays[fastest], "from": current,
+                "message": f"节点「{current}」不通，已自动换到「{fastest}」（{self.delays[fastest]} ms）。"}
+
+    def exit_ip(self) -> Dict[str, Any]:
+        port = self.applied_port if self.store.data.get("enabled") else 0
+        try:
+            info = self.ip_lookup(port)
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "message": f"查不到出口 IP：{error}"[:200]}
+        self.exit_info = {**info, "via": self.store.data.get("selected") if port else "直连", "at": int(time.time())}
+        place = " ".join(x for x in (info.get("country"), info.get("city")) if x)
+        return {"ok": True, "message": f"浏览器出口 IP {info.get('ip')}（{place or '未知地区'}）。", "exit": self.exit_info}
+
+    def agent_view(self, limit: int = 12) -> Dict[str, Any]:
+        """What 碧琪 needs to reason about her browser's network, no secrets:
+        current node, its latency and region, the best alternatives."""
+        proxies = self.store.all_proxies()
+        names = [p["name"] for p in proxies]
+        selected = self.store.data.get("selected") if self.store.data.get("selected") in names else None
+        enabled = bool(self.store.data.get("enabled"))
+        types = {p["name"]: p.get("type") for p in proxies}
+
+        def node(name: str) -> Dict[str, Any]:
+            item: Dict[str, Any] = {"name": name, "type": types.get(name), "region": node_region(name)}
+            if name in self.tested:
+                item["delayMs"] = self.delays.get(name)  # None = timed out
+            return item
+
+        alive = sorted((n for n in names if self.delays.get(n)), key=lambda n: self.delays[n])
+        regions: Dict[str, int] = {}
+        for name in alive:
+            region = node_region(name) or "其他"
+            regions[region] = regions.get(region, 0) + 1
+        view: Dict[str, Any] = {
+            "mode": ("节点：" + str(selected)) if enabled and self.applied_port else ("直连" if not enabled else "节点已开启但未生效"),
+            "enabled": enabled, "applied": bool(self.applied_port), "autoSwitch": bool(self.store.data.get("auto", True)),
+            "coreAvailable": bool(self.core.binary), "current": node(selected) if selected else None,
+            "nodeCount": len(names), "testing": self.testing,
+            "subscriptions": [{"title": s.get("title") or "订阅", "count": len(s.get("nodes") or []),
+                               "usage": usage_text(s.get("usage") or {}), "error": s.get("error", "")}
+                              for s in self.store.subscriptions],
+        }
+        if self.tested:
+            view["testedAgoS"] = int(time.time() - self.tested_at) if self.tested_at else None
+            view["alive"] = len(alive)
+            view["fastest"] = [node(n) for n in alive[:limit]]
+            view["aliveByRegion"] = regions
+        else:
+            view["hint"] = "还没测过速：用 vpn op=test 或 op=best 拿到每个节点的延迟。"
+        if self.exit_info:
+            view["exit"] = self.exit_info
+        if self.switches:
+            view["recentSwitches"] = self.switches
+        if self.message:
+            view["lastMessage"] = self.message
+        return view
+
+    # ── background health check while proxied ──
+    def _start_health(self) -> None:
+        if self.health_thread and self.health_thread.is_alive():
+            return
+        self.health_stop.clear()
+        self.health_thread = threading.Thread(target=self._health_loop, name="browser-vpn-health", daemon=True)
+        self.health_thread.start()
+
+    def _health_loop(self) -> None:
+        while not self.health_stop.wait(HEALTH_INTERVAL):
+            if not (self.store.data.get("enabled") and self.applied_port and self.store.data.get("auto", True)):
+                continue
+            current = self.store.data.get("selected")
+            try:
+                if current and self.core.running() and self.core.delay(current):
+                    continue
+                result = self.failover("定时检查发现当前节点不通")
+                if result.get("switched"):
+                    self._note(result["message"], "ok")
+                    self.on_change()
+            except Exception as error:  # noqa: BLE001
+                self.log(f"browser vpn health check failed: {error!r}")
 
     def enable(self, on: bool) -> Dict[str, Any]:
         if on:
             if not self.core.binary:
                 raise CoreError("这个安装包里没有节点核心（mihomo），浏览器节点功能用不了。请重新安装最新版。")
+            selected = self.store.data.get("selected")
+            note = ""
+            if self.store.data.get("auto", True) and selected in self.tested and not self.delays.get(selected):
+                fastest = self._fastest()
+                if fastest:
+                    self._switch(fastest, "开启时当前节点不通")
+                    note = f"（原节点不通，已换成最快的「{fastest}」）"
             self._ensure_core()
             with self.lock:
                 self.store.data["enabled"] = True
                 self.store.save()
             self._apply(True)
-            return {"ok": True, "message": f"浏览器已走节点「{self.store.data.get('selected')}」。点「检查出口 IP」确认。"}
+            self._start_health()
+            return {"ok": True, "message": f"浏览器已走节点「{self.store.data.get('selected')}」{note}。点「检查出口 IP」确认。"}
         with self.lock:
             self.store.data["enabled"] = False
             self.store.save()
@@ -348,6 +605,7 @@ class VpnService:
         try:
             self._ensure_core()
             self.applied_port = self.core.mixed_port
+            self._start_health()
             return self.applied_port
         except CoreError as error:
             # Tell the user instead of silently browsing direct.
@@ -358,6 +616,7 @@ class VpnService:
             return 0
 
     def shutdown(self) -> None:
+        self.health_stop.set()
         self.core.stop()
 
 
@@ -561,17 +820,15 @@ class BrowserManager:
     def request(self, message: Dict[str, Any], launch: bool = True, timeout: Optional[float] = None) -> Dict[str, Any]:
         request_id = str(message.get("id") or uuid.uuid4().hex)
         action = str(message.get("action", ""))
-        if action == "vpn" and (self.folder / "debug").is_file():
-            # Test hook for driving the node panel in a packaged build; only
-            # with a debug file the user created in the browser state folder.
-            payload = {k: v for k, v in message.items() if k not in ("id", "action", "op", "token")}
-            return {"id": request_id, "ok": True, "result": self.vpn.handle(str(message.get("op", "status")), payload)}
+        if action == "vpn":
+            return self.vpn_request(request_id, message)
         if action == "cancel":
             self._send_host({"id": request_id, "action": "cancel", "requestId": message.get("requestId")})
             return {"id": request_id, "ok": True, "result": {"cancelled": True}}
         if not self.host_running():
             if not launch or action == "status":
-                return {"id": request_id, "ok": True, "result": {"open": False, "url": "", "title": "", "connected": True}} \
+                return {"id": request_id, "ok": True, "result": {"open": False, "url": "", "title": "", "connected": True,
+                                                                 "network": self.vpn.agent_view(limit=5)}} \
                     if action == "status" else {"id": request_id, "ok": False, "reason": "App 浏览器没有打开。"}
             if action == "close":
                 return {"id": request_id, "ok": True, "result": {"open": False}}
@@ -591,9 +848,30 @@ class BrowserManager:
                 return {"id": request_id, "ok": False, "reason": "App 浏览器操作超时，请先观察页面确认结果。"}
             reply = dict(slot["reply"] or {})
             reply["id"] = request_id
+            if action == "status" and reply.get("ok") and isinstance(reply.get("result"), dict):
+                reply["result"]["network"] = self.vpn.agent_view(limit=5)
             return reply
         finally:
             self.pending.pop(request_id, None)
+
+    def vpn_request(self, request_id: str, message: Dict[str, Any]) -> Dict[str, Any]:
+        """碧琪 reading or steering her browser's node from the app_browser tool."""
+        op = str(message.get("op") or "status")
+        debug = (self.folder / "debug").is_file()
+        if op not in AGENT_VPN_OPS and not debug:
+            return {"id": request_id, "ok": False, "reason": "app_browser 的 vpn 只支持 status、test、best、select、enable、auto、ip、refresh、add；删除订阅请让先生在浏览器「节点」面板里操作。"}
+        payload = {k: v for k, v in message.items() if k not in ("id", "action", "op", "token", "timeoutMs")}
+        if op == "enable" and "on" not in payload:
+            payload["on"] = True
+        if op == "refresh" and not payload.get("id"):
+            payload["id"] = ""
+        result = {"ok": True} if op == "status" else self.vpn.handle(op, payload)
+        if debug and op not in AGENT_VPN_OPS:
+            return {"id": request_id, "ok": True, "result": result}
+        body = {**{k: v for k, v in result.items() if k != "ok"}, "network": self.vpn.agent_view()}
+        if not result.get("ok", True):
+            return {"id": request_id, "ok": False, "reason": result.get("message") or "节点操作没有完成。", "result": body}
+        return {"id": request_id, "ok": True, "result": body}
 
     def open_url(self, url: str = "") -> Dict[str, Any]:
         """User-initiated open from the chat UI (link click, globe button)."""
@@ -607,6 +885,9 @@ class BrowserManager:
         payload = {k: v for k, v in message.items() if k not in ("up", "op")}
         if op.startswith("vpn."):
             reply = self.vpn.handle(op[4:], payload)
+            if op == "vpn.failover":
+                # The host retries the page itself; it only needs the outcome.
+                reply = {k: v for k, v in reply.items() if k in ("ok", "switched", "node", "delay", "from", "message")}
         else:
             reply = {"ok": False, "message": "不认识的请求。"}
         self._send_host({"upreply": message.get("up"), **reply})

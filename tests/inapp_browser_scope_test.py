@@ -45,8 +45,11 @@ class FakeCore:
     def select(self, name):
         self.selected.append(name)
 
-    def delays(self):
+    def delays(self, **_kwargs):
         return {"US": 120}
+
+    def delay(self, name):
+        return self.delays().get(name)
 
 
 class CoreConfigTest(unittest.TestCase):
@@ -175,6 +178,114 @@ class ManagerScopeTest(unittest.TestCase):
         self.assertEqual(nodes["US"]["delay"], 99)
         self.assertIsNone(nodes["DOWN"]["delay"])
         self.assertTrue(nodes["DOWN"]["tested"])
+
+
+
+THREE = chr(10).join([
+    "trojan://pw@hk.example.com:443#%F0%9F%87%AD%F0%9F%87%B0%20HK%2001",
+    "trojan://pw@jp.example.com:443#Tokyo%2002",
+    "trojan://pw@us.example.com:443#US%20Plus%2003",
+])
+
+
+class AgentNodeControlTest(unittest.TestCase):
+    """碧琪 reads and steers her browser's node herself, and a dead node is
+    replaced automatically."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        patcher = mock.patch.object(inapp_browser, "MihomoCore", FakeCore)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.manager = inapp_browser.BrowserManager(Path(self.dir.name), None)
+        self.addCleanup(self.manager.shutdown)
+        self.vpn = self.manager.vpn
+        self.vpn.restart_browser = lambda _port: None
+        self.vpn._start_health = lambda: None
+        self.assertTrue(self.vpn.handle("add", {"url": THREE})["ok"])
+        self.names = [p["name"] for p in self.vpn.store.all_proxies()]
+        self.hk, self.jp, self.us = self.names
+
+    def delays(self, values):
+        self.vpn.core.delays = lambda **_k: dict(values)
+
+    def test_regions_come_from_flags_names_and_whole_word_codes(self):
+        self.assertEqual(inapp_browser.node_region(self.hk), "香港")
+        self.assertEqual(inapp_browser.node_region(self.jp), "日本")
+        self.assertEqual(inapp_browser.node_region(self.us), "美国")
+        self.assertEqual(inapp_browser.node_region("Plus 03"), "")  # "us" inside a word is not the US
+
+    def test_failover_switches_only_when_proxied_and_the_node_is_dead(self):
+        self.delays({self.jp: 80, self.us: 150})
+        # Direct browsing: nothing to switch.
+        self.assertFalse(self.vpn.handle("failover", {})["switched"])
+        self.assertTrue(self.vpn.handle("enable", {"on": True})["ok"])
+        self.assertEqual(self.vpn.store.data["selected"], self.hk)
+        reply = self.vpn.handle("failover", {"reason": "网页打不开"})
+        self.assertTrue(reply["switched"])
+        self.assertEqual((reply["from"], reply["node"]), (self.hk, self.jp))
+        self.assertEqual(self.vpn.core.selected[-1], self.jp)
+        # Rate limited, and a live node is never swapped for "the site is down".
+        self.assertFalse(self.vpn.handle("failover", {})["switched"])
+        self.vpn.last_failover = 0
+        reply = self.vpn.handle("failover", {})
+        self.assertFalse(reply["switched"])
+        self.assertIn("网站本身", reply["message"])
+
+    def test_auto_switch_can_be_turned_off(self):
+        self.delays({self.jp: 80})
+        self.vpn.handle("enable", {"on": True})
+        self.vpn.handle("auto", {"on": False})
+        self.assertFalse(self.vpn.handle("failover", {})["switched"])
+        self.assertTrue(self.vpn.handle("test", {})["ok"])
+        self.assertEqual(self.vpn.store.data["selected"], self.hk)
+        self.vpn.handle("auto", {"on": True})
+        self.assertIn("自动换到", self.vpn.handle("test", {})["message"])
+        self.assertEqual(self.vpn.store.data["selected"], self.jp)
+
+    def test_best_picks_the_fastest_in_a_region_and_can_turn_the_node_on(self):
+        self.delays({self.hk: 60, self.jp: 90, self.us: 200})
+        reply = self.vpn.handle("best", {"region": "美国", "on": True})
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["node"], self.us)
+        self.assertTrue(self.vpn.store.data["enabled"])
+        self.assertFalse(self.vpn.handle("best", {"region": "火星"})["ok"])
+
+    def test_select_accepts_a_unique_part_of_the_name(self):
+        self.assertEqual(self.vpn.handle("select", {"node": "tokyo"})["node"], self.jp)
+        reply = self.vpn.handle("select", {"node": "0"})
+        self.assertFalse(reply["ok"])
+        self.assertIn("个节点名字里含", reply["message"])
+
+    def test_agent_view_is_compact_sorted_and_secret_free(self):
+        self.delays({self.hk: 300, self.jp: 80})
+        self.vpn.handle("test", {})
+        view = self.vpn.agent_view()
+        self.assertEqual([n["name"] for n in view["fastest"]], [self.jp, self.hk])
+        self.assertEqual(view["alive"], 2)
+        self.assertEqual(view["aliveByRegion"], {"日本": 1, "香港": 1})
+        self.assertEqual(view["current"]["region"], "香港")
+        text = json.dumps(view, ensure_ascii=False)
+        for secret in ("pw", "example.com"):
+            self.assertNotIn(secret, text)
+
+    def test_tool_requests_are_limited_and_always_carry_the_network_view(self):
+        reply = self.manager.request({"id": "1", "action": "vpn", "op": "remove", "id_": "x"})
+        self.assertFalse(reply["ok"])
+        self.assertIn("节点」面板", reply["reason"])
+        reply = self.manager.request({"id": "2", "action": "vpn", "op": "status"})
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["result"]["network"]["nodeCount"], 3)
+        reply = self.manager.request({"id": "3", "action": "vpn", "op": "enable"})
+        self.assertTrue(reply["ok"], reply)
+        self.assertTrue(reply["result"]["network"]["enabled"])
+        self.vpn.ip_lookup = lambda port: {"ip": "203.0.113.9", "country": "日本", "city": "东京", "port": port}
+        reply = self.manager.request({"id": "4", "action": "vpn", "op": "ip"})
+        self.assertEqual(reply["result"]["exit"]["ip"], "203.0.113.9")
+        self.assertEqual(reply["result"]["exit"]["port"], 54321)  # looked up through the node
+        status = self.manager.request({"id": "5", "action": "status"}, launch=False)
+        self.assertIn("network", status["result"])
 
 
 if __name__ == "__main__":
