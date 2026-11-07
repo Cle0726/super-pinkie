@@ -42,7 +42,7 @@ HOME_URL = "pinkie://start"
 SEARCH_URL = "https://www.bing.com/search?q="
 # WebView2 errors that mean "the network path is broken" rather than "the
 # site said no".  Through a node these usually mean the node is dead.
-NETWORK_ERRORS = {"ServerUnreachable", "Timeout", "ErrorHttpInvalidServerResponse", "ConnectionReset", "Disconnected",
+NETWORK_ERRORS = {"ServerUnreachable", "Timeout", "ErrorHttpInvalidServerResponse", "ConnectionAborted", "ConnectionReset", "Disconnected",
                   "CannotConnect", "HostNameNotResolved", "Unknown", "UnexpectedError"}
 WINDOW_MODES = {"float", "dock", "full"}
 
@@ -824,7 +824,7 @@ class BrowserApp:
                 # A fresh tab's events start cleared; its first navigation sets them.
                 if not tab.dom_event.wait(max(0.1, deadline - time.monotonic())):
                     raise RuntimeError("新标签页加载超时，请先观察页面。")
-                if tab.nav_event.is_set() and not tab.nav_ok:
+                if self._load_failed(tab, deadline):
                     raise RuntimeError(f"新标签页没有打开（{tab.nav_error}）。")
             else:
                 tab.ready.wait(max(0.1, deadline - time.monotonic()))
@@ -1086,7 +1086,7 @@ class BrowserApp:
         # even reached DOMContentLoaded by then is checked against the node.
         first = min(10.0, deadline - time.monotonic()) if guarded else deadline - time.monotonic()
         timed_out = not event.wait(max(0.1, first))
-        failed = tab.nav_event.is_set() and not tab.nav_ok
+        failed = not timed_out and self._load_failed(tab, deadline)
         switched: Dict[str, Any] = {}
         if (timed_out or failed) and guarded and (timed_out or self._node_suspect(tab.nav_error)):
             # A dead page usually means a dead node: let the manager test and
@@ -1095,13 +1095,14 @@ class BrowserApp:
             if reply.get("switched"):
                 switched = {"switched": True, "node": reply.get("node"), "from": reply.get("from"),
                             "delayMs": reply.get("delay"), "message": reply.get("message")}
-                self._on_ui(lambda: (tab.expect_navigation(tab.url), tab.core.Reload()))
+                target = url if action == "open" else tab.url
+                self._on_ui(lambda: self._navigate(tab, target))
             elif reply.get("message"):
                 switched = {"switched": False, "message": reply.get("message")}
             if timed_out or switched.get("switched"):
                 # Keep waiting (the old load, or the retry) for the rest of the time.
                 timed_out = not event.wait(max(0.1, deadline - time.monotonic()))
-                failed = tab.nav_event.is_set() and not tab.nav_ok
+                failed = not timed_out and self._load_failed(tab, deadline)
         if timed_out:
             extra = ("；" + switched["message"]) if switched.get("message") else ""
             raise RuntimeError("网页加载超时，请先观察页面确认结果" + extra + "。")
@@ -1110,6 +1111,8 @@ class BrowserApp:
                 hint = f"；已自动换到节点「{switched.get('node')}」重试过，仍打不开，可能是网站本身的问题"
             elif switched.get("message"):
                 hint = "；" + switched["message"]
+            elif local_page(tab.url):
+                hint = "；这是本机地址，请确认本地服务已经启动（serve_logs 可看日志）"
             elif self.args.proxy_port:
                 hint = "；浏览器节点已开启，可用 vpn op=best 换最快的节点后再试"
             else:
@@ -1121,6 +1124,25 @@ class BrowserApp:
             result["nodeSwitched"] = switched
         result["observation"] = self._observe(tab, deadline)
         return result
+
+    def _load_failed(self, tab: Tab, deadline: float) -> bool:
+        """WebView2 shows its own error page and fires DOMContentLoaded for it
+        before NavigationCompleted(IsSuccess=false), so "DOM ready" alone
+        reported a dead page as opened.  Settle that here."""
+        if tab.nav_event.is_set():
+            return not tab.nav_ok
+        if tab.nav_event.wait(0.3):
+            return not tab.nav_ok
+        try:
+            href = json.loads(self._execute(tab, "location.href", min(deadline, time.monotonic() + 2)) or '""')
+        except Exception:  # noqa: BLE001
+            return False
+        if str(href).startswith("chrome-error:"):
+            tab.nav_event.wait(2)
+            if tab.nav_ok or not tab.nav_error:
+                tab.nav_error = tab.nav_error or "Unknown"
+            return True
+        return False
 
     def _execute(self, tab: Tab, script: str, deadline: float) -> str:
         task = self._on_ui(lambda: tab.core.ExecuteScriptAsync(script))
