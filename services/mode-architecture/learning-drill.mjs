@@ -56,7 +56,14 @@ export const DRILL_LIMIT_MS = {
 };
 
 const clean = (value, limit = 4000) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, limit);
-export const foldDrillText = value => clean(value, 8000).toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+// 折叠只去掉空白和中英文标点。运算符、正负号、比较符和度数要留着：−10 和 10、a > b 和 a < b 不是一回事。
+const DRILL_KEEP = new Set(['+', '-', '*', '/', '=', '<', '>', '^', '%', '≤', '≥', '≠', '×', '÷', '±']);
+export const foldDrillText = value => clean(value, 8000).normalize('NFKC').toLowerCase()
+  .replace(/[\u2212\u2012\u2013\uFE63]/g, '-')
+  .replace(/°/g, '度')
+  .replace(/[\s\p{P}\p{S}]/gu, ch => (DRILL_KEEP.has(ch) ? ch : ''));
+// 只差运算符或正负号（写了 10、答案是 -10）不算「答了一部分」。
+const onlySymbols = value => [...value].every(ch => DRILL_KEEP.has(ch));
 
 export function drillCardHash(card = {}) {
   return createHash('sha256').update([card.question, card.answer, card.quote].map(value => String(value ?? '')).join('\n')).digest('hex').slice(0, 24);
@@ -94,20 +101,35 @@ export function localJudge({answer = '', keys = [], text = ''} = {}) {
   if (!list.length) {
     const folded = foldDrillText(answer);
     if (folded && written === folded) return {verdict: 'correct', missing: [], comment: FALLBACK_COMMENT};
-    if (folded && (written.includes(folded) || folded.includes(written))) return {verdict: 'partial', missing: [], comment: FALLBACK_COMMENT};
+    const rest = folded && written.includes(folded) ? written.replace(folded, '') : folded && folded.includes(written) ? folded.replace(written, '') : null;
+    if (rest !== null && !onlySymbols(rest)) return {verdict: 'partial', missing: [], comment: FALLBACK_COMMENT};
     return {verdict: 'wrong', missing: [String(answer)].filter(Boolean).slice(0, 3), comment: FALLBACK_COMMENT};
   }
   const missing = list.filter(key => !written.includes(foldDrillText(key)));
   const ratio = (list.length - missing.length) / list.length;
-  const verdict = ratio >= 0.8 ? 'correct' : ratio >= 0.4 ? 'partial' : 'wrong';
+  let verdict = ratio >= 0.8 ? 'correct' : ratio >= 0.4 ? 'partial' : 'wrong';
+  // 关键词都在、顺序却和答案相反（「MAC 解析为 IP」），多半是方向写反了，本地最多给部分对。
+  if (verdict === 'correct' && !missing.length && list.length >= 2 && swappedKeys(foldDrillText(answer), written, list)) verdict = 'partial';
   return {verdict, missing: missing.slice(0, 3), comment: FALLBACK_COMMENT};
 }
 
+// 结算页标题固定是「这一页背完啦」（安静版「这一页背完了」），这里的本地台词不能和标题重字。
+function swappedKeys(answer, written, keys) {
+  const tokens = keys.map(foldDrillText);
+  const at = text => tokens.map(token => text.indexOf(token));
+  const want = at(answer);
+  const got = at(written);
+  if (want.some(index => index < 0)) return false;
+  const order = list => list.map((index, key) => [index, key]).sort((a, b) => a[0] - b[0]).map(pair => pair[1]).join();
+  return order(want) !== order(got);
+}
+
 export function localCheer({accuracy = 0, jarFull = false, quiet = false, scored = 0} = {}) {
-  if (quiet) return '这一页背完了，早点休息';
+  if (quiet) return '稳住节奏，今晚早点睡';
   if (jarFull) return '今天的星星罐装满了';
-  if (scored > 0 && accuracy === 1) return '全对，一页满分';
-  return '这一页背完啦';
+  if (scored > 0 && accuracy === 1) return '一道没错，记得很牢';
+  if (scored > 0 && accuracy >= 0.8) return '大部分都记住了，错的下组先看';
+  return '错的那几道，下一组先看它们';
 }
 
 export function mixDrillCards(notes = [], words = []) {
@@ -264,6 +286,15 @@ function revealOf(card, answer, extra = '') {
   };
 }
 
+// 配对右栏：优先用出题时挑出的关键词 keys[0]（PLAN §4.3），没有才截答案前 12 个字并加「…」。
+export function pairLabel(card = {}) {
+  const key = clean(usableGenerated(card.generated)?.keys?.[0], 40);
+  if (key) return key;
+  const answer = clean(card.answer, 200);
+  if (!answer) return '…';
+  return answer.length > 12 ? `${answer.slice(0, 12)}…` : answer;
+}
+
 function choiceFromTexts(correct, wrongs, rng) {
   if (wrongs.length < 3) return null;
   const rows = shuffle([{text: correct, correct: true}, ...wrongs.slice(0, 3).map(text => ({text, correct: false}))], rng);
@@ -313,12 +344,12 @@ function materialize(item, index, rng, vocabPool) {
       reveal: revealOf(card, card.answer), keys: generated?.keys || []};
   }
   if (item.mode === 'pairs') {
-    const labels = cards.map(entry => clean(entry.answer, 24).slice(0, 12) || '…');
+    const labels = cards.map(pairLabel);
     const right = shuffle(labels.map((text, source) => ({text, source})), rng);
     return {...base, mode: 'pairs', prompt: '把问题和答案连起来',
       pairs: {left: cards.map(entry => entry.question), right: right.map(entry => entry.text)},
       answer: cards.map((_, left) => [left, right.findIndex(entry => entry.source === left)]),
-      reveal: {question: '配对', answer: cards.map(entry => `${entry.question} → ${clean(entry.answer, 24).slice(0, 12)}`).join('；')}};
+      reveal: {question: '配对', answer: cards.map((entry, source) => `${entry.question} → ${labels[source]}`).join('；')}};
   }
   if (item.mode === 'homophonePairs') {
     const right = shuffle(cards.map((entry, source) => ({text: entry.homophone, source})), rng);
@@ -390,7 +421,9 @@ export function buildSession(cards, {size = 10, now = Date.now(), source = 'note
   }
   if (!flipOnly && slots < target) {
     const pairable = pool.filter(card => !used.has(card.key) && card.book === 'notes' && (Number(card.strength) || 0) >= 1 && (Number(card.strength) || 0) <= 2);
-    if (pairable.length >= 4) {
+    const labels = new Set(pairable.slice(0, 5).map(card => foldDrillText(pairLabel(card))));
+    // 右栏标签折叠后有重复就分不清该连哪个，这组不出配对，卡片留给后面的单题。
+    if (pairable.length >= 4 && labels.size === Math.min(5, pairable.length)) {
       const group = pairable.slice(0, pairable.length >= 5 ? 5 : 4);
       group.forEach(take);
       bundles.push(planItem('pairs', group, 'pairs', context));
@@ -606,7 +639,10 @@ export class LearningDrill {
     const kind = scope?.kind || 'due';
     const ids = new Set(Array.isArray(scope?.ids) ? scope.ids.map(String) : []);
     const cards = [];
-    for (const note of this.recall.notes(sessionKey)) {
+    // 笔记本是全局的：不管从哪个聊天打开背一背，笔记都按笔记本的会话键取（和笔记本页一样），
+    // 否则只看得到在当前这个聊天里收的笔记。
+    void sessionKey;
+    for (const note of this.recall.notes(LIBRARY)) {
       if (kind === 'section') {
         if ((note.exam || 'other') !== (scope.exam || 'other')) continue;
         if ((note.subject || '未分类') !== (scope.subject || '未分类')) continue;
@@ -636,6 +672,35 @@ export class LearningDrill {
     }
     if (kind === 'more') cards.sort((a, b) => (a.nextReviewAt || 0) - (b.nextReviewAt || 0));
     return cards;
+  }
+
+  // 旧的「今天回顾」打开时会顺手给没有回忆卡的笔记拆卡；背一背接替了它，这件事也接过来：
+  // 这一组范围内、还没有当前回忆卡的笔记排进回忆卡队列（失败过的不自动重试，最多 20 条）。返回排进去和正在拆的条数。
+  prepareRecall(sessionKey, scope, now) {
+    if (!this.recall?.enqueue) return 0;
+    try {
+      const kind = scope?.kind || 'due';
+      const ids = new Set(Array.isArray(scope?.ids) ? scope.ids.map(String) : []);
+      const data = this.recall.read();
+      const wanted = [];
+      void sessionKey;
+      for (const note of this.recall.notes(LIBRARY)) {
+        if (kind === 'section') {
+          if ((note.exam || 'other') !== (scope.exam || 'other')) continue;
+          if ((note.subject || '未分类') !== (scope.subject || '未分类')) continue;
+          if (scope.topic && (note.topic || '未分类') !== scope.topic) continue;
+        }
+        if (kind === 'notes' && !ids.has(note.id)) continue;
+        if (this.recall.stateFor(note, data)) continue;
+        wanted.push(note.id);
+        if (wanted.length >= 20) break;
+      }
+      if (wanted.length) this.recall.enqueue(LIBRARY, {ids: wanted});
+      const fresh = this.recall.read();
+      return Object.values(fresh.records || {}).filter(record => record?.status === 'queued' || record?.status === 'running').length;
+    } catch {
+      return 0;
+    }
   }
 
   wordCards(scope, now) {
@@ -740,6 +805,7 @@ export class LearningDrill {
     const now = this.now();
     const noteScope = src === 'vocab' ? null : (scope || {kind: 'due'});
     const wordScope = src === 'notes' ? null : (src === 'mixed' ? {kind: 'due'} : (scope || {kind: 'due'}));
+    const splitting = src === 'vocab' ? 0 : this.prepareRecall(key, src === 'mixed' && scope?.kind !== 'section' ? {kind: 'due'} : noteScope, now);
     let notes = src === 'vocab' ? [] : this.noteCards(key, noteScope, now);
     let words = src === 'notes' ? [] : this.wordCards(wordScope, now);
     if (src === 'mixed' && scope?.kind === 'section') notes = this.noteCards(key, scope, now);
@@ -756,6 +822,7 @@ export class LearningDrill {
         drillStatus: stored && stored.hash === card.hash ? stored.status : card.drillStatus};
     });
     const pool = src === 'mixed' ? [...notes, ...words] : src === 'vocab' ? words : notes;
+    if (!pool.length && splitting) throw new Error('碧琪正在把笔记拆成回忆卡，过一两分钟再来背');
     if (!pool.length) throw new Error('今天没有可背的卡片');
     const items = buildSession(pool, {size: size || settings.size, now, source: src, flipOnly: settings.flipOnly});
     if (!items.length) throw new Error('今天没有可背的卡片');
@@ -811,7 +878,7 @@ export class LearningDrill {
   grade(session, ref, rating) {
     const now = this.now();
     if (ref.book === 'vocab') this.vocab?.review?.(ref.wordId, rating, now, {source: 'drill', sessionId: session.sessionId});
-    else this.recall?.review?.(session.sessionKey, {id: ref.noteId, recallId: ref.recallId, rating, now, source: 'drill', sessionId: session.sessionId});
+    else this.recall?.review?.(LIBRARY, {id: ref.noteId, recallId: ref.recallId, rating, now, source: 'drill', sessionId: session.sessionId});
   }
 
   learned({sessionId, itemId} = {}) {
@@ -822,7 +889,7 @@ export class LearningDrill {
     const now = this.now();
     for (const ref of itemRefs(item)) {
       if (ref.book === 'vocab') this.vocab?.markLearned?.(ref.wordId, now);
-      else this.recall?.markLearned?.(session.sessionKey, {id: ref.noteId, recallId: ref.recallId, now});
+      else this.recall?.markLearned?.(LIBRARY, {id: ref.noteId, recallId: ref.recallId, now});
     }
     session.learned[item.itemId] = true;
     this.save(session);
@@ -925,7 +992,8 @@ export class LearningDrill {
     try {
       const status = this.modelStatus(session.sessionKey);
       if (!status.available) return {line};
-      const payload = cheerPayload(session, stats, this.pact, now);
+      // stats 来自 summary()，没有今天第一组、罐子和 +5/+5 奖励；这些以结算结果为准。
+      const payload = cheerPayload(session, {...stats, ...(session.finished || {})}, this.pact, now);
       const result = await this.organizer.requestModel(status.model, DRILL_CHEER_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 400, timeoutMs: 15000});
       const modelLine = clean(result?.line, 80);
       return {line: modelLine || line};
@@ -997,9 +1065,9 @@ function cheerPayload(session, stats, pact, now) {
       .sort((a, b) => daysUntil(today, a.date) - daysUntil(today, b.date))[0];
     if (upcoming) countdown = {name: upcoming.name, days: daysUntil(today, upcoming.date)};
   } catch { countdown = null; }
-  const streak = pact?.drillStreak?.({now}) || {};
+  const streak = stats.streak || pact?.drillStreak?.({now}) || {};
   return {
-    book: session.source || 'notes', subjects, stars: stats.stars || stats.answerStars || 0,
+    book: session.source || 'notes', subjects, stars: stats.stars ?? stats.answerStars ?? 0,
     accuracy: stats.accuracy || 0, minutes: Math.round((stats.ms || 0) / 60_000), maxCombo: stats.maxCombo || 0,
     wrongTopics: wrong.slice(0, 3), streak: streak.current || 0, firstFinishToday: Boolean(stats.firstFinishToday),
     jarFull: Boolean(session.jarFull || stats.jar?.filledNow), beijingHour: beijingHour(now), examCountdown: countdown,

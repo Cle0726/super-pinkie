@@ -272,6 +272,8 @@
     const first = !item._pinkieReward;
     if (first) { item._pinkieReward = true; reward.sound(correct ? 'right' : 'wrong'); }
     if (getComputedStyle(stage).position === 'static') stage.style.position = 'relative';
+    // 每次渲染都会走到这里；先把这个舞台上一张贴纸拿掉，只留最新的一张。
+    stage.querySelectorAll(':scope > .pk-stage-react').forEach(node => node.remove());
     const host = el('div', 'pk-stage-react');
     host.style.cssText = 'position:absolute;right:8px;bottom:8px;width:72px;z-index:2;pointer-events:none';
     host.setAttribute('aria-hidden', 'true');

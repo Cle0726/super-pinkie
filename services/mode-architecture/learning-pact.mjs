@@ -762,7 +762,9 @@ export class LearningPact {
     return {today: day.stars || 0, goal};
   }
 
-  // 请假条只补连续章（drill.streak）。空白日从今天往前遇到就用掉一张，同一天不会用第二次。
+  // 请假条只补连续章（drill.streak）。从今天往前数，遇到空白日（含没达标的 partial 日）时，
+  // 只有这段空白不长于手里的请假条、而且更早一侧紧挨着一个已盖章或已请假的日子，才用请假条把缺口补上。
+  // 后面没有连续可保（新用户、很久没来）就不用，同一天不会用第二次。
   drillStreak({now = this.now()} = {}) {
     const meta = this.ensureLeaveGrant(now);
     const today = dayInZone(now, 'Asia/Shanghai');
@@ -778,24 +780,30 @@ export class LearningPact {
       if (state === 'partial') return 'partial';
       return 'empty';
     };
-    const consume = date => {
-      if (date >= today || balance <= 0 || kindOf(date) !== 'empty') return kindOf(date);
-      meta.used[date] = true;
-      balance -= 1;
-      changed = true;
-      return 'leave';
-    };
+    const kept = kind => kind === 'stamped' || kind === 'leave';
     let cursor = kindOf(today) === 'stamped' ? today : addDays(today, -1);
     let current = 0;
     let leaveUsedYesterday = Boolean(meta.used[yesterday]);
     for (let index = 0; index < 3660; index += 1) {
-      let kind = kindOf(cursor);
-      if (kind === 'partial') break;
-      if (kind === 'empty') kind = consume(cursor);
-      if (kind === 'empty' || kind === 'partial') break;
-      if (cursor === yesterday && kind === 'leave') leaveUsedYesterday = true;
-      current += 1;
-      cursor = addDays(cursor, -1);
+      if (kept(kindOf(cursor))) {
+        if (cursor === yesterday && kindOf(cursor) === 'leave') leaveUsedYesterday = true;
+        current += 1;
+        cursor = addDays(cursor, -1);
+        continue;
+      }
+      // cursor 是一段缺口的最新一天；往前量缺口有多长，看更早一侧是不是连着连续。
+      const gap = [];
+      let probe = cursor;
+      while (gap.length <= balance && !kept(kindOf(probe))) {
+        gap.push(probe);
+        probe = addDays(probe, -1);
+      }
+      if (!gap.length || gap.length > balance || gap.some(date => date >= today) || !kept(kindOf(probe))) break;
+      for (const date of gap) {
+        meta.used[date] = true;
+        balance -= 1;
+        changed = true;
+      }
     }
     meta.balance = balance;
     if (changed) this.writeDrillMeta(meta);

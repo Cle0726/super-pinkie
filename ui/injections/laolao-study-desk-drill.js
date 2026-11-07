@@ -75,9 +75,9 @@
     pending = null;
     local.drillRoute = null;
     const R = reward();
-    let alive = true, busy = false, phase = 'load', index = 0, combo = 0, stars = 0, shownAt = 0;
+    let alive = true, busy = false, phase = 'load', index = 0, combo = 0, maxCombo = 0, stars = 0, shownAt = 0, startedAt = Date.now();
     let queue = [], sessionId = '', pendingN = 0, original = 0, sheetApi = null, holdFinish = Boolean(route.demo);
-    const correctIds = new Set(), firstDone = new Set();
+    const correctIds = new Set(), firstDone = new Set(), firstRight = new Set();
     let pickAt = () => {}, selectedEl = null, selection = null, filled = null, typed = null, hinted = false, ready = false, judgeApply = () => {};
     root.classList.add('pk-drill');
     root.replaceChildren();
@@ -135,7 +135,7 @@
     }
     function backLabel() { return route.source === 'vocab' ? '回生词本' : route.source === 'mixed' ? '回今日' : '回笔记本'; }
     function snapshot() {
-      local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, stars, pendingN, original, correct: [...correctIds], first: [...firstDone]};
+      local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
     }
     async function rpc(name, params, timeout) {
       try { return await ctx.request('pinkie.learning.drill.' + name, params || {}, timeout || 20000); }
@@ -158,19 +158,38 @@
         if (text.includes('部分')) return {verdict: 'partial', missing: ['一个要点'], comment: '差在这一处'};
         return {verdict: 'correct', missing: [], comment: '意思对了'};
       }
-      if (name === 'finish') return demoSummary();
+      // 结算没有后端就不能编成绩：交给失败分支，用本地真数据。
+      if (name === 'finish') throw new Error('结算没记上');
       if (name === 'cheer') return {line: '这一页先放进手账，明天再遇见会更熟。'};
       if (name === 'settings.get') return {size: 10, jarGoal: 30, flipOnly: false};
       return {ok: true};
     }
     function demoSummary() {
-      return {stars: stars + 5, accuracy: original ? correctIds.size / original : 1, ms: 252000, maxCombo: Math.max(combo, 10), firstFinishToday: true, streak: {current: 4, best: 4, stampedToday: true, leaveUsedYesterday: false, week: [true, true, true, true, false, false, false]}, jar: {today: 30, goal: 30, filledNow: true}, leaveNotes: 1, quiet: Boolean(route.quiet), backLabel: backLabel()};
+      return {stars: stars + 5, accuracy: original ? correctIds.size / original : 1, ms: 252000, maxCombo: Math.max(combo, 10), firstFinishToday: true, streak: {current: 4, best: 4, stampedToday: true, leaveUsedYesterday: false, week: [true, true, true, true, false, false, false]}, jar: {today: 30, goal: 30, filledNow: true}, leaveNotes: 1, quiet: Boolean(route.quiet), backLabel: backLabel(), nextSuggestion: {source: 'notes', scope: {kind: 'more'}, label: '再背一组'}};
+    }
+    // 结算接口失败时只用这一组在本地真实发生的数：首答答对的比例、实际用时、星星、最大连对。不盖章、不动罐子。
+    function localSummary() {
+      const scored = firstDone.size;
+      return {failed: true, stars, accuracy: scored ? firstRight.size / scored : 0, ms: Math.max(0, Date.now() - startedAt), maxCombo, firstFinishToday: false, quiet: Boolean(route.quiet), backLabel: backLabel()};
     }
 
     function choiceCorrect(item, i) {
       if (typeof item.answer === 'number') return i === item.answer;
       if (typeof item.answer === 'boolean') return (i === 0) === item.answer;
       return norm(item.options?.[i]) === norm(item.answer);
+    }
+    // 答完把选项定格：选错的那项变灰加删除线，正确那项用荧光笔刷一下（PLAN §3.4）。
+    function markChoices(item, correct) {
+      const buttons = [...q.querySelectorAll('.pk-drill-options .pk-choice')];
+      buttons.forEach((button, i) => {
+        button.disabled = true;
+        button.classList.remove('is-on');
+        if (choiceCorrect(item, i)) {
+          button.classList.add('is-answer');
+          const text = button.querySelector('span');
+          if (text && !correct) text.className = 'pk-hl' + (ctx.motion?.reduced ? '' : ' pk-anim');
+        } else if (i === selection) button.classList.add('is-wrong');
+      });
     }
     function revealText(item) { return item.reveal?.answer || item.reveal?.question || ''; }
 
@@ -235,6 +254,10 @@
       let side = null;
       const box = el('div', 'pk-pairs');
       const colL = el('div', 'pk-pair-col'), colR = el('div', 'pk-pair-col');
+      let misses = 0;
+      const homophone = item.mode === 'homophonePairs';
+      colL.append(el('p', 'pk-pair-head', homophone ? '单词' : '问'));
+      colR.append(el('p', 'pk-pair-head', homophone ? '谐音' : '答'));
       left.forEach((text, i) => {
         const b = el('button', 'pk-choice pk-pair', text); b.type = 'button'; b.setAttribute('aria-label', '左 ' + (i + 1) + ' ' + text);
         b.addEventListener('click', () => {
@@ -254,13 +277,15 @@
             side.el.disabled = true; b.disabled = true; side.el.classList.add('is-lock'); b.classList.add('is-lock');
             fx('tick');
             if (matched.size >= left.length * 2) setReady(true, '检查');
-          } else { hinted = true; side.el.dataset.miss = '1'; b.dataset.miss = '1'; fx('wrong'); shake(side.el); shake(b); }
+          } else { hinted = true; misses += 1; side.el.dataset.miss = '1'; b.dataset.miss = '1'; fx('wrong'); shake(side.el); shake(b); }
           side = null; colL.querySelectorAll('.is-on').forEach(n => n.classList.remove('is-on'));
         });
         colR.append(b);
       });
       box.append(colL, colR);
-      box.grade = () => ({correct: matched.size >= left.length * 2, hinted, answerHtml: hi(revealText(item), ctx.motion?.reduced)});
+      // 连错过也算配完，但记成「差一点点」（rating 模糊），反馈条说清连错了几次。
+      box.grade = () => ({correct: matched.size >= left.length * 2, hinted, answerHtml: hi(revealText(item), ctx.motion?.reduced),
+        ...(misses ? {kind: 'partial', line: `连错了 ${misses} 次，记一下标了灰的那几组`} : {})});
       return box;
     }
     function renderOrder(item) {
@@ -325,10 +350,9 @@
       return box;
     }
     function renderFlip(item) {
+      // 题面由 show() 的 head 负责，这里只放答案和打分，不再多一个空标题。
       const box = el('div');
-      const title = el('h3', 'pk-drill-stem');
-      box.append(title);
-      const answer = el('div', 'pk-drill-extra'); answer.hidden = true;
+      const answer = el('div', 'pk-drill-extra pk-drill-answer'); answer.hidden = true;
       box.append(answer);
       let open = false;
       const flip = () => {
@@ -342,6 +366,8 @@
           rate.append(b);
         }
         box.append(rate);
+        // 翻面后 1 / 2 / 3 就是忘了 / 模糊 / 记得。
+        pickAt = i => rate.querySelectorAll('button')[i]?.click();
       };
       box.flip = flip;
       setReady(true, '翻面');
@@ -357,6 +383,7 @@
     function show(item = queue[index]) {
       if (!alive || !item) return maybeFinish();
       phase = 'ask'; selection = null; selectedEl = null; filled = null; typed = null; hinted = false; sheetApi = null;
+      pickAt = () => {};
       setReady(false, '检查');
       shownAt = performance.now();
       q.replaceChildren();
@@ -405,7 +432,7 @@
         result = {correct: verdict === 'correct', verdict, kind: verdict === 'partial' ? 'partial' : verdict === 'correct' ? 'right' : 'wrong', line: verdict === 'partial' ? '差一个字母。' : undefined, answerHtml: hi(String(item.answer), ctx.motion?.reduced), shake: verdict === 'correct' ? null : body};
       } else {
         const correct = choiceCorrect(item, selection);
-        result = {correct, answerHtml: hi(item.options?.[item.answer] || revealText(item), ctx.motion?.reduced), shake: correct ? null : selectedEl};
+        result = {correct, answerHtml: hi(item.options?.[item.answer] || revealText(item), ctx.motion?.reduced), shake: correct ? null : selectedEl, after: () => markChoices(item, correct)};
       }
       if (hinted) result.hinted = true;
       await settle(result);
@@ -450,9 +477,10 @@
         else response = await rpc('answer', {sessionId, itemId: item.itemId, correct: Boolean(result.correct), firstTry, hinted: Boolean(result.hinted), ms, ...(result.verdict ? {verdict: result.verdict} : {})}) || response;
       } catch (error) { busy = false; live.textContent = error.message || '没记上'; return; }
       if (!alive) return;
-      if (!result.learned && firstTry) firstDone.add(item.itemId);
+      result.after?.();
+      if (!result.learned && firstTry) { firstDone.add(item.itemId); if (result.correct && !result.hinted && result.verdict !== 'partial') firstRight.add(item.itemId); }
       if (result.correct) correctIds.add(item.itemId);
-      if (result.correct && !result.learned) { combo += 1; if (firstTry) stars += response.stars || (route.demo ? 1 : 0); }
+      if (result.correct && !result.learned) { combo += 1; maxCombo = Math.max(maxCombo, combo); if (firstTry) stars += response.stars || (route.demo ? 1 : 0); }
       else if (!result.learned) { combo = 0; if (!route.demo && response.requeue !== false) queue.push({...item, replay: true}); }
       starLabel.textContent = '⭐ ' + stars; starLabel.setAttribute('aria-label', '这组星星 ' + stars);
       R.paintProgress(prog, original ? correctIds.size / original : 0);
@@ -475,15 +503,28 @@
       phase = 'over'; check.hidden = true; bar.hidden = true;
       let summary;
       try { summary = route.demo ? demoSummary() : await rpc('finish', {sessionId}); }
-      catch (error) { summary = {...demoSummary(), quiet: false}; live.textContent = error.message || ''; }
-      summary = {...summary, backLabel: backLabel(), quiet: route.quiet || summary.quiet};
-      const cheer = route.demoCheer || (route.demo ? new Promise(resolve => setTimeout(() => resolve('计算机网络这组，握手的顺序你已经能自己排了。'), 2200)) : rpc('cheer', {sessionId}).then(r => r?.line || '').catch(() => ''));
+      catch (error) { summary = localSummary(); live.textContent = (error.message || '') + '。' + lines().failed; }
       local.drillSaved = null;
-      R.completeScreen(root, summary, {cheer, onAgain: () => again(summary), onBack: () => leave(summary)});
+      showDone(summary);
+    }
+    function showDone(raw) {
+      if (!alive) return;
+      const summary = {...raw, backLabel: backLabel(), quiet: route.quiet || raw.quiet};
+      const cheer = summary.failed ? null : route.demoCheer || (route.demo ? new Promise(resolve => setTimeout(() => resolve('计算机网络这组，握手的顺序你已经能自己排了。'), 2200)) : rpc('cheer', {sessionId}).then(r => r?.line || '').catch(() => ''));
+      R.completeScreen(root, summary, {cheer, requireSuggestion: true, onAgain: () => again(summary), onBack: () => leave(summary),
+        onRetry: async () => {
+          const done = await rpc('finish', {sessionId});
+          if (!alive || !done) return false;
+          // 先关掉失败版，再按真结果重放一遍（这回才盖章、进罐）。
+          setTimeout(() => showDone(done), 0);
+          return true;
+        }});
     }
     function again(summary) {
       const next = summary?.nextSuggestion;
-      local.drillRoute = next ? {source: next.source, scope: next.scope, size: route.size, returnTo: route.returnTo, task: route.task} : {source: route.source, scope: route.scope?.kind === 'due' ? {kind: 'more'} : (route.scope || {kind: 'more'}), size: route.size, returnTo: route.returnTo, task: route.task};
+      // 后端说没有下一组时结算页不显示这个按钮；这里再守一道，不去开一组注定落空的。
+      if (!next) { leave(summary); return; }
+      local.drillRoute = {source: next.source, scope: next.scope, size: route.size, returnTo: route.returnTo, task: route.task};
       ctx.go?.('drill');
     }
     function leave(summary) {
@@ -513,9 +554,9 @@
     }
     function sameSaved(saved) { return saved && saved.source === route.source && scopeKey(saved.scope) === scopeKey(route.scope); }
     function resume(saved) {
-      sessionId = saved.sessionId; queue = saved.queue || []; index = saved.index || 0; combo = saved.combo || 0; stars = saved.stars || 0;
-      pendingN = saved.pendingN || 0; original = saved.original || queue.length;
-      saved.correct?.forEach(id => correctIds.add(id)); saved.first?.forEach(id => firstDone.add(id));
+      sessionId = saved.sessionId; queue = saved.queue || []; index = saved.index || 0; combo = saved.combo || 0; maxCombo = saved.maxCombo || combo; stars = saved.stars || 0;
+      pendingN = saved.pendingN || 0; original = saved.original || queue.length; startedAt = saved.startedAt || Date.now();
+      saved.correct?.forEach(id => correctIds.add(id)); saved.first?.forEach(id => firstDone.add(id)); saved.firstRight?.forEach(id => firstRight.add(id));
       prog.setAttribute('aria-valuemax', String(original || 1));
       starLabel.textContent = '⭐ ' + stars;
       R.paintProgress(prog, original ? correctIds.size / original : 0);
@@ -542,7 +583,7 @@
         const size = route.size || settings.size || 10;
         const data = route.items ? {sessionId: 'demo', items: route.items, pending: route.pending || 0, dueLeft: route.items.length} : await rpc('session', {source: route.source || 'mixed', scope: route.scope || {kind: 'due'}, size});
         if (!alive) return;
-        sessionId = data.sessionId; pendingN = data.pending || 0;
+        sessionId = data.sessionId; pendingN = data.pending || 0; startedAt = Date.now();
         settings = {...settings, ...(data.settings || {})};
         queue = (data.items || []).map(item => settings.flipOnly && !['look', 'meet', 'flip'].includes(item.mode) ? {...item, mode: 'flip'} : item);
         original = queue.length; index = 0;
@@ -552,7 +593,16 @@
         root.dataset.demo = route.demo ? 'ready' : '';
         show();
         if (route.demo && route.auto !== false) autorun();
-      } catch (error) { if (alive) q.replaceChildren(el('p', 'pk-drill-empty', error.message || '这组没有打开')); }
+      } catch (error) {
+        if (!alive) return;
+        // 打不开时（没有可背的、回忆卡还在拆）不留一个点不动的「检查」，给一个再试一次。
+        check.hidden = true;
+        const retry = el('button', 'pk-link', '再试一次'); retry.type = 'button'; retry.setAttribute('aria-label', '再试一次');
+        retry.addEventListener('click', () => { check.hidden = false; openFresh(); });
+        const box = el('div', 'pk-drill-empty');
+        box.append(el('p', '', error.message || '这组没有打开'), retry);
+        q.replaceChildren(box);
+      }
     }
     async function autorun() {
       root.dataset.demo = 'playing';
