@@ -2157,6 +2157,73 @@ def configure_native_corners(window):
     append_log("launcher", "native corners enabled: 22 CSS px; physical-DPI HWND region; square only when maximized")
 
 
+RESIZE_EDGES = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+WINDOW_MIN_SIZE = (760, 500)
+
+
+def resized_window_rect(start, origin, cursor, edge, minimum):
+    """Return the (left, top, right, bottom) rectangle for an edge drag."""
+    left, top, right, bottom = start
+    dx, dy = cursor[0] - origin[0], cursor[1] - origin[1]
+    min_width, min_height = minimum
+    if "w" in edge:
+        left = min(left + dx, right - min_width)
+    if "e" in edge:
+        right = max(right + dx, left + min_width)
+    if "n" in edge:
+        top = min(top + dy, bottom - min_height)
+    if "s" in edge:
+        bottom = max(bottom + dy, top + min_height)
+    return left, top, right, bottom
+
+
+def follow_native_resize(handle, edge, user=None, sleep=time.sleep, deadline=120.0):
+    """Move one window edge with the cursor until the mouse button is released."""
+    import ctypes
+
+    class Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_int32), ("y", ctypes.c_int32)]
+
+    class Rect(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int32) for name in ("left", "top", "right", "bottom")]
+
+    if user is None:
+        user = ctypes.WinDLL("user32", use_last_error=True)
+        user.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(Rect)]
+        user.GetWindowRect.restype = ctypes.c_int32
+        user.GetCursorPos.argtypes = [ctypes.POINTER(Point)]
+        user.GetCursorPos.restype = ctypes.c_int32
+        user.GetAsyncKeyState.argtypes = [ctypes.c_int32]
+        user.GetAsyncKeyState.restype = ctypes.c_int16
+        user.GetSystemMetrics.argtypes = [ctypes.c_int32]
+        user.GetSystemMetrics.restype = ctypes.c_int32
+        user.GetDpiForWindow.argtypes = [ctypes.c_void_p]
+        user.GetDpiForWindow.restype = ctypes.c_uint32
+        user.SetWindowPos.argtypes = [ctypes.c_void_p, ctypes.c_void_p] + [ctypes.c_int32] * 4 + [ctypes.c_uint32]
+        user.SetWindowPos.restype = ctypes.c_int32
+    rect, point = Rect(), Point()
+    if not user.GetWindowRect(handle, ctypes.byref(rect)) or not user.GetCursorPos(ctypes.byref(point)):
+        return False
+    start = (rect.left, rect.top, rect.right, rect.bottom)
+    origin = (point.x, point.y)
+    scale = (user.GetDpiForWindow(handle) or 96) / 96
+    minimum = (round(WINDOW_MIN_SIZE[0] * scale), round(WINDOW_MIN_SIZE[1] * scale))
+    # GetAsyncKeyState reads the physical button; honour swapped buttons.
+    button = 0x02 if user.GetSystemMetrics(23) else 0x01  # SM_SWAPBUTTON
+    flags = 0x0004 | 0x0010 | 0x0200  # NOZORDER | NOACTIVATE | NOOWNERZORDER
+    last = start
+    ends = time.monotonic() + deadline
+    while user.GetAsyncKeyState(button) & 0x8000 and time.monotonic() < ends:
+        if user.GetCursorPos(ctypes.byref(point)):
+            target = resized_window_rect(start, origin, (point.x, point.y), edge, minimum)
+            if target != last:
+                left, top, right, bottom = target
+                user.SetWindowPos(handle, None, left, top, right - left, bottom - top, flags)
+                last = target
+        sleep(1 / 120)
+    return last != start
+
+
 def configure_native_glass(window):
     """Make the host transparent too, before its first paint on the GUI thread.
 
@@ -2696,6 +2763,8 @@ class NativeBridge(InAppBrowserBridge):
         self._window = None
         self._gateway = None
         self.maximized = False
+        self._resize_lock = threading.Lock()
+        self._resize_active = False
         self.dictation_stop = threading.Event()
         self.dictation_thread = None
         self.dictation_text = ""
@@ -3065,11 +3134,34 @@ class NativeBridge(InAppBrowserBridge):
             return False
 
     def begin_resize(self, direction):
-        hit_tests = {
-            "w": 10, "e": 11, "n": 12, "nw": 13,
-            "ne": 14, "s": 15, "sw": 16, "se": 17,
-        }
-        return self._begin_nonclient_action(hit_tests.get(str(direction).lower(), 0))
+        """Resize the borderless window by following the pointer ourselves.
+
+        pywebview's frameless WinForms host has no WS_THICKFRAME, and
+        DefWindowProc ignores SC_SIZE (what WM_NCLBUTTONDOWN + HTLEFT..
+        HTBOTTOMRIGHT turns into) for such a window. The old hand-off to
+        Windows therefore returned True and nothing moved. Track the cursor
+        while the button stays down and move the edges with SetWindowPos.
+        """
+        edge = str(direction).lower()
+        if edge not in RESIZE_EDGES or self.maximized:
+            return False
+        handle = self._native_window_handle()
+        if not handle:
+            return False
+        with self._resize_lock:
+            if self._resize_active:
+                return True
+            self._resize_active = True
+        def run():
+            try:
+                follow_native_resize(handle, edge)
+            except Exception as error:
+                append_log("launcher", f"window resize failed: {error}")
+            finally:
+                with self._resize_lock:
+                    self._resize_active = False
+        threading.Thread(target=run, name="pinkie-resize", daemon=True).start()
+        return True
 
     def toggle_maximize(self):
         previous = self.maximized
@@ -3927,6 +4019,35 @@ setInterval(tick,1000);poll();
 </script></body></html>"""
 
 
+# Startup timing is measured from interpreter start, which is what the user
+# waits through after double-clicking. Each line gives the elapsed total and,
+# for a phase, how long that phase took.
+PROCESS_STARTED = time.monotonic()
+
+
+def startup_timing(label, phase_started=None, now=None):
+    now = time.monotonic() if now is None else now
+    total = now - PROCESS_STARTED
+    phase = "" if phase_started is None else f" took={now - phase_started:.2f}s"
+    message = f"startup timing: {label} at +{total:.2f}s{phase}"
+    append_log("launcher", message)
+    return message
+
+
+def log_gateway_answer(timeout=300.0, interval=0.25):
+    """Record when the local gateway first answers, for before/after numbers."""
+    ends = time.monotonic() + timeout
+    while time.monotonic() < ends:
+        try:
+            if http_ready(GATEWAY_URL):
+                startup_timing("gateway answered")
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
 def startup_fallback_html():
     return STARTUP_FALLBACK_HTML
 
@@ -3984,6 +4105,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     # The official environment setting applies before WebView2's first paint;
     # setting the API only after navigation can leave a white flash.
     os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "00000000"
+    startup_timing("window create" + (" (gateway already warm)" if initial_html is None and initial_url != loading else ""))
     window = webview.create_window(
         "超級碧琪", None if initial_html else initial_url, html=initial_html, js_api=bridge, width=1280, height=800,
         min_size=(760, 500), resizable=True, frameless=True, easy_drag=False,
@@ -3997,12 +4119,18 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # and the cold gateway. It just no longer happens before a window exists.
         updater.health_reporter.start()
     services = LocalServices(runtime)
+    page_loads = []
 
     def loaded(*_):
         # pywebview fires `loaded` on WebView2's GUI thread. Calling its
         # synchronous evaluate_js there deadlocks: ExecuteScriptAsync needs the
         # very same GUI thread to complete. Return from the event immediately
         # and do all synchronous window calls from a worker instead.
+        # Count loads without touching the window here: the splash is #1 and
+        # the chat page #2 on a cold start; a warm start opens on the chat.
+        page_loads.append(1)
+        if len(page_loads) <= 3:
+            startup_timing(f"page loaded #{len(page_loads)}")
         threading.Thread(
             target=install_native_bridge,
             args=(window, updater, update_health_token, bundled_release_notes(resource_root)),
@@ -4019,17 +4147,29 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             except Exception as error:
                 append_log("launcher", f"native {label} setup failed: {error}")
 
-    def bootstrap():
-        # Setup can fail or take a long time. The splash only leaves when the
-        # gateway answers, so a setup error must not skip starting it.
-        try:
-            prepare(lambda message: append_log("setup", message))
-        except Exception as error:
-            append_log("launcher", f"startup setup failed: {error}")
+    def start_services():
+        started = time.monotonic()
         try:
             services.start()
         except Exception as error:
             append_log("launcher", f"local services failed: {error}")
+        startup_timing("services", started)
+
+    def bootstrap():
+        # Party, roundtable, TTS and the relay do not feed the gateway's
+        # startup. They used to run (with their port probes) between setup and
+        # the gateway, adding ~5 s to every start on Windows. Run them beside
+        # the gateway instead, like the Mac launcher does.
+        threading.Thread(target=start_services, name="pinkie-services", daemon=True).start()
+        # Setup can fail or take a long time. The splash only leaves when the
+        # gateway answers, so a setup error must not skip starting it.
+        started = time.monotonic()
+        try:
+            prepare(lambda message: append_log("setup", message))
+        except Exception as error:
+            append_log("launcher", f"startup setup failed: {error}")
+        startup_timing("setup", started)
+        threading.Thread(target=log_gateway_answer, name="pinkie-startup-timing", daemon=True).start()
         try:
             reporter = getattr(updater, "health_reporter", None)
             if reporter is not None:
@@ -4037,6 +4177,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
                 if not reporter.wait_for_gateway_port():
                     reporter.release_port()
             gateway.start()
+            startup_timing("gateway spawn")
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
             # The splash page polls the local gateway itself.  Do not call
             # pywebview window APIs from this worker thread: WebView2 can block

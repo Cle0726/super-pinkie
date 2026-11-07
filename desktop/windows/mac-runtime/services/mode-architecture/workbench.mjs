@@ -144,11 +144,17 @@ export class Workbench {
     if (!match) throw fail('没有找到当前会话，请先打开一段对话。');
     const agentId = match[1].toLowerCase();
     if (!WORKBENCH_AGENTS.has(agentId)) throw fail('工作台可在项目模式、学习模式和无限模式里使用。');
-    const bound = this.binding(key);
+    const binding = this.binding(key);
     const workspaceRoot = realish(this.agentWorkspace(agentId));
+    // Only the app's own mode workspace may be created here. A folder the user
+    // picked lives where they put it; when its drive is unplugged (Windows:
+    // "mkdir 'D:\…' ENOENT") fall back to the workspace instead of failing
+    // every workbench call for the session.
+    const unavailable = binding && !fs.existsSync(binding.root) ? binding.root : '';
+    const bound = unavailable ? null : binding;
     const root = realish(bound?.root || workspaceRoot);
     if (!fs.existsSync(root)) fs.mkdirSync(root, {recursive: true});
-    return {key, agentId, root, workspaceRoot, bound: Boolean(bound), name: bound?.name || path.basename(root), unrestricted: agentId === 'unrestricted'};
+    return {key, agentId, root, workspaceRoot, bound: Boolean(bound), unavailableRoot: unavailable, name: bound?.name || path.basename(root), unrestricted: agentId === 'unrestricted'};
   }
 
   resolve(scope, raw = '', {read = false} = {}) {
@@ -172,7 +178,7 @@ export class Workbench {
     try { repo = Boolean((await this.git(scope, ['rev-parse', '--is-inside-work-tree'])).trim()); } catch {}
     return {
       root: scope.root, projectRoot: scope.bound ? scope.root : null, workspaceRoot: scope.workspaceRoot,
-      name: scope.name, bound: scope.bound, agentId: scope.agentId, unrestricted: scope.unrestricted,
+      name: scope.name, bound: scope.bound, unavailableRoot: scope.unavailableRoot, agentId: scope.agentId, unrestricted: scope.unrestricted,
       home: this.home, separator: path.sep, repo, search: RG ? 'ripgrep' : 'node',
       terminal: {enabled: config.gateway?.terminal?.enabled === true},
     };
