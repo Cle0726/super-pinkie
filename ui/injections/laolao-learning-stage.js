@@ -265,6 +265,26 @@
     return label;
   };
 
+  const rewardAnswer = (stage, item, correct) => {
+    if ((correct !== true && correct !== false) || !stage || !item) return;
+    const reward = window.__pinkieDeskReward;
+    if (!reward) return;
+    const first = !item._pinkieReward;
+    if (first) { item._pinkieReward = true; reward.sound(correct ? 'right' : 'wrong'); }
+    if (getComputedStyle(stage).position === 'static') stage.style.position = 'relative';
+    const host = el('div', 'pk-stage-react');
+    host.style.cssText = 'position:absolute;right:8px;bottom:8px;width:72px;z-index:2;pointer-events:none';
+    host.setAttribute('aria-hidden', 'true');
+    stage.append(host);
+    if (first) reward.sticker(host, correct ? 'cheer' : 'oops');
+    else {
+      const img = el('img', 'pk-sticker pk-react');
+      img.alt = ''; img.width = 72; img.decoding = 'async';
+      img.src = window.__pinkieStudyDesk?.sticker?.(correct ? 'correct' : 'wrong-eraser') || '';
+      host.append(img);
+    }
+  };
+
   const renderStage = remote => {
     if (typeof CustomEvent === "function") window.dispatchEvent?.(new CustomEvent("pinkie:learning-state", {detail: remote}));
     const current = remote?.current;
@@ -354,6 +374,7 @@
         if (phase === "evaluating") {
           const immediate = item.submission?.correctness;
           body.append(el("div", `laolao-learning-result ${immediate === true ? "is-correct" : immediate === false ? "is-incorrect" : ""}`, immediate === true ? "答案正确，正在准备讲解…" : immediate === false ? "答案还不对，正在分析错因…" : "答案已保存，正在核对你的思路…"));
+          rewardAnswer(stage, item, immediate);
           if (item.result?.feedback) body.append(el("p", "laolao-learning-result__feedback", item.result.feedback));
           if (item.result?.criteria?.some(point => point.met == null)) body.append(el("p", "laolao-learning-stage__lead", "评分点还没核对完整，暂不更新掌握等级。可以重试讲解补齐。"));
           const retry = el("button", "laolao-learning-button", "重试讲解"); retry.type = "button";
@@ -362,6 +383,7 @@
           const result = item.result || {};
           const verdict = result.correct === true ? (item.submission?.hintUsed ? "提示后答对，下次独立试试" : "这题答对了") : result.correct === false ? "这个知识点还需要巩固" : "这题已讲解，掌握情况待确认";
           body.append(el("div", `laolao-learning-result ${result.correct === true ? "is-correct" : result.correct === false ? "is-incorrect" : ""}`, verdict));
+          rewardAnswer(stage, item, result.correct);
           let explanationRoot = body;
           if (result.gradingConflict || result.gradeSource === "user_correction") {
             body.append(el("p", "laolao-learning-result__error", result.gradeSource === "user_correction"

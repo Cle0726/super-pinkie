@@ -1,0 +1,96 @@
+/* 背一背播放器。容器查询看的是这一页的宽度，不看窗口。动画类只在 JS 确认没有减少动效时加上。 */
+
+#pinkie-study-desk .view.pk-drill{
+  container-type:inline-size;container-name:pkview drill;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:12px;overflow:hidden;max-width:100%;
+  padding:18px 20px 16px;color:var(--ink);background:var(--paper);
+  background-image:repeating-linear-gradient(to bottom,transparent 0 33px,var(--hair) 33px 34px);
+}
+#pinkie-study-desk .pk-drill-top,#pinkie-study-desk .pk-drill-stage,#pinkie-study-desk .pk-drill-q,#pinkie-study-desk .pk-sheet,#pinkie-study-desk .pk-sheet-host{min-width:0;max-width:100%;box-sizing:border-box}
+#pinkie-study-desk .pk-drill-progress,#pinkie-study-desk .pk-combo,#pinkie-study-desk .pk-drill-stars{min-width:0}
+#pinkie-study-desk .pk-drill button,#pinkie-study-desk .pk-drill input,#pinkie-study-desk .pk-drill textarea{font:inherit;color:inherit;box-sizing:border-box;max-width:100%}
+#pinkie-study-desk .pk-drill-top{display:flex;align-items:center;gap:12px;min-height:36px}
+#pinkie-study-desk .pk-drill-exit{
+  width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--ink-2);
+  font:24px/1 var(--serif);cursor:pointer;
+}
+#pinkie-study-desk .pk-drill-stars{font:600 16px var(--serif);color:var(--pink);min-width:3.2em;text-align:right}
+#pinkie-study-desk .pk-drill-pending{margin:0;font-size:13px;color:var(--ink-3)}
+#pinkie-study-desk .pk-drill-stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(72px,120px);gap:12px;align-items:start;overflow-x:hidden;overflow-y:auto}
+#pinkie-study-desk .pk-drill-q{min-width:0;display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}
+#pinkie-study-desk .pk-drill-cloze{max-width:100%;overflow-wrap:anywhere}
+#pinkie-study-desk .pk-drill-stem{margin:0;font:600 28px/1.35 var(--serif);color:var(--ink);overflow-wrap:anywhere}
+#pinkie-study-desk .pk-choice{
+  display:flex;align-items:center;gap:10px;width:100%;min-width:0;text-align:left;cursor:pointer;
+  border:1.5px solid var(--hair-2);background:var(--card);color:var(--ink);
+  border-radius:12px;padding:12px 14px;font:16px/1.45 var(--sans);
+}
+#pinkie-study-desk .pk-choice span{min-width:0;overflow-wrap:anywhere}
+#pinkie-study-desk .pk-drill-extra{margin:0;font-size:14px;color:var(--ink-2);line-height:1.5}
+#pinkie-study-desk .pk-drill-options,#pinkie-study-desk .pk-order-bank,#pinkie-study-desk .pk-pair-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+#pinkie-study-desk .pk-choice kbd{font:12px/1 var(--mono);color:var(--ink-3);min-width:1.2em}
+#pinkie-study-desk .pk-choice.is-on{border-color:var(--pink)}
+#pinkie-study-desk .pk-choice.is-lock{border-color:var(--pink);background:var(--pink-tint)}
+#pinkie-study-desk .pk-choice[data-miss="1"]{border-color:var(--ink-3)}
+#pinkie-study-desk .pk-choice:disabled{cursor:default}
+#pinkie-study-desk .pk-drill-bar{display:flex;justify-content:flex-end;gap:12px;align-items:center}
+#pinkie-study-desk .pk-drill-check{
+  position:relative;height:48px;min-width:148px;padding:0 28px;border:0;border-radius:99px;cursor:pointer;
+  background:var(--ink-3);color:#fff;font:600 16px var(--sans);
+}
+#pinkie-study-desk .pk-drill-check::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--pink-solid);opacity:0;transition:opacity .15s linear}
+#pinkie-study-desk .pk-drill-check.is-ready::before{opacity:1}
+#pinkie-study-desk .pk-drill-check span{position:relative;z-index:1}
+#pinkie-study-desk .pk-drill-check[aria-disabled="true"]{cursor:default}
+#pinkie-study-desk .pk-drill button:focus-visible,#pinkie-study-desk .pk-drill input:focus-visible,#pinkie-study-desk .pk-drill textarea:focus-visible{outline:2px solid var(--pink);outline-offset:3px}
+#pinkie-study-desk .pk-react-host .pk-react{width:112px;height:112px;object-fit:contain}
+#pinkie-study-desk .pk-blank{
+  display:inline-block;min-width:2.8em;max-width:100%;margin:0 .08em;padding:0 .2em;border-bottom:1.5px solid var(--pink);
+  font:600 18px var(--serif);color:var(--pink-ink);vertical-align:baseline;box-sizing:border-box;white-space:normal;
+}
+#pinkie-study-desk .pk-bank{display:flex;flex-wrap:wrap;gap:8px}
+#pinkie-study-desk .pk-chip{
+  border:1px solid var(--hair-2);background:var(--card);color:var(--ink);border-radius:99px;
+  padding:6px 12px;cursor:pointer;font:15px var(--sans);max-width:100%;box-sizing:border-box;
+}
+#pinkie-study-desk .pk-chip[aria-pressed="true"]{border-color:var(--pink);color:var(--pink-ink)}
+#pinkie-study-desk .pk-pairs{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0;max-width:100%}
+#pinkie-study-desk .pk-drill-stage > *{min-width:0;max-width:100%}
+#pinkie-study-desk .pk-order-slots{display:flex;flex-direction:column;gap:6px;min-height:44px;min-width:0}
+#pinkie-study-desk .pk-order-slots .pk-chip{white-space:normal;text-align:left}
+#pinkie-study-desk .pk-drill-input,#pinkie-study-desk .pk-drill textarea{
+  width:100%;box-sizing:border-box;border:1px solid var(--hair-2);border-radius:12px;background:var(--card);
+  color:var(--ink);padding:12px 14px;font:18px/1.5 var(--sans);resize:vertical;
+}
+#pinkie-study-desk .pk-rate{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#pinkie-study-desk .pk-rate button{height:44px;border-radius:99px;border:1px solid var(--hair-2);background:var(--card);cursor:pointer}
+#pinkie-study-desk .pk-rate button[data-rating="remembered"]{background:var(--pink-solid);color:#fff;border:0}
+#pinkie-study-desk .pk-drill-ask{
+  border:0;border-radius:16px;padding:22px;background:var(--paper);color:var(--ink);max-width:420px;
+}
+#pinkie-study-desk .pk-drill-ask p{font:20px/1.45 var(--serif);margin:0 0 16px}
+#pinkie-study-desk .pk-drill-ask .pk-btn{background:var(--pink-solid);color:#fff}
+#pinkie-study-desk .pk-drill-empty{margin:auto;text-align:center;color:var(--ink-2)}
+#pinkie-study-desk .pk-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);border:0}
+
+#pinkie-study-desk .pk-enter{animation:pk-drill-enter .22s ease-out both}
+#pinkie-study-desk .pk-fade{animation:pk-drill-fade .12s linear both}
+#pinkie-study-desk .pk-shake{animation:pk-drill-shake .3s linear}
+#pinkie-study-desk .pk-press{animation:pk-drill-press .12s linear}
+@keyframes pk-drill-enter{from{transform:translateX(24px);opacity:0}}
+@keyframes pk-drill-fade{from{opacity:0}}
+@keyframes pk-drill-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+@keyframes pk-drill-press{from{transform:scale(.96)}}
+
+@container drill (max-width:480px){
+  #pinkie-study-desk .pk-drill-stage{grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk .pk-react-host{justify-self:end}
+  #pinkie-study-desk .pk-react-host .pk-react{width:72px;height:72px}
+  #pinkie-study-desk .pk-drill-stem{font-size:22px}
+  #pinkie-study-desk .pk-pairs{grid-template-columns:1fr}
+}
+@container drill (max-width:720px){
+  #pinkie-study-desk .pk-drill-stem{font-size:24px}
+}
+/* 手账皮肤用 container 简写把名字收成 pkview，这里把 drill 加回去，窄卡的查询才生效。 */
+#pinkie-study-desk.pk-ink .view.pk-drill{container-name:pkview drill}
