@@ -291,6 +291,12 @@ function daysBetween(from, to) {
   return Math.round((b - a) / DAY_MS);
 }
 
+function mondayOf(date) {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return addDays(date, weekday === 0 ? -6 : 1 - weekday);
+}
+
 function emptyDay(date) {
   return {
     date,
@@ -301,6 +307,8 @@ function emptyDay(date) {
     questions: {answered: 0, correct: 0},
     reviews: {done: 0},
     notes: {added: 0},
+    stars: 0,
+    drillFinished: 0,
     firstActivityAt: null,
     completedAt: null,
   };
@@ -328,6 +336,8 @@ function sanitizeDay(raw, date) {
     },
     reviews: {done: Math.max(0, Math.round(finite(value.reviews?.done)))},
     notes: {added: Math.max(0, Math.round(finite(value.notes?.added)))},
+    stars: Math.max(0, Math.round(finite(value.stars))),
+    drillFinished: Math.max(0, Math.round(finite(value.drillFinished))),
     firstActivityAt: Number(value.firstActivityAt) || null,
     completedAt: Number(value.completedAt) || null,
   };
@@ -358,6 +368,7 @@ function meetsGoals(day, pact, dueAtCheck) {
 
 function hasActivity(day) {
   return Boolean(day) && (day.minutes > 0 || day.questions.answered > 0 || day.reviews.done > 0 || day.notes.added > 0
+    || (day.drillFinished || 0) > 0 || (day.stars || 0) > 0
     || (Array.isArray(day.focus) && day.focus.length > 0));
 }
 
@@ -477,11 +488,11 @@ export function composeNudgeContext(kind, today = {}) {
   } else if (complete) {
     return PACT_NO_REPLY;
   } else {
-    lines.push('lastcall：今天的最后提醒，态度坚定，把断掉的连续天数说清楚，催先生马上补完，不许挖苦。');
+    lines.push('lastcall：今天的最后提醒，态度坚定，告诉先生今天背一组就能把连续章盖下去，催先生马上补完。不许说「断」，不许挖苦。');
     if (streakCurrent > 0) {
-      lines.push(`现在就差：${remainders.join('，') || '补齐今天的目标'}；今天不做完，已经攒下的 ${streakCurrent} 天连续就断在这里。`);
+      lines.push(`现在就差：${remainders.join('，') || '补齐今天的目标'}；今天背一组，连续章就能盖到第 ${streakCurrent + 1} 天。`);
     } else {
-      lines.push(`现在就差：${remainders.join('，') || '补齐今天的目标'}；今天不做完，这一天的约定就白写了，重新开始的代价只会更大。`);
+      lines.push(`现在就差：${remainders.join('，') || '补齐今天的目标'}；今天背一组，连续章就能从第 1 天盖起来。`);
     }
   }
   lines.push([
@@ -588,7 +599,10 @@ export class LearningPact {
       if (receiptId && day.questionReceipts.includes(receiptId)) return;
       if (receiptId) day.questionReceipts.push(text(receiptId, 180));
       day.questions.answered += 1;
-      if (correct === true) day.questions.correct += 1;
+      if (correct === true) {
+        day.questions.correct += 1;
+        day.stars += 1;
+      }
     });
   }
 
@@ -608,6 +622,8 @@ export class LearningPact {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) || correct === previousCorrect) return;
     return this.mutateDay(date, day => {
       day.questions.correct = Math.max(0, Math.min(day.questions.answered, day.questions.correct + (correct ? 1 : -1)));
+      if (correct && !previousCorrect) day.stars += 1;
+      if (!correct && previousCorrect) day.stars = Math.max(0, day.stars - 1);
     });
   }
 
@@ -675,7 +691,12 @@ export class LearningPact {
   streak({now = this.now(), pact = null} = {}) {
     const activePact = pact || this.get();
     const today = dayInZone(now, activePact.timezone);
-    const complete = date => dayState(this.readDay(date), activePact, today) === 'complete';
+    // 完成一组背一背也算这天学过。请假条不写进这组 {current, best}，避免回溯改写原来的连续。
+    const complete = date => {
+      const day = this.readDay(date);
+      if ((day.drillFinished || 0) > 0) return true;
+      return dayState(day, activePact, today) === 'complete';
+    };
     // 今天的账本还没写满时，连续天数从昨天往前数；今天补完会自然接上。
     let current = 0;
     let cursor = complete(today) ? today : addDays(today, -1);
@@ -691,6 +712,116 @@ export class LearningPact {
       if (complete(cursorDay)) { run++; best = Math.max(best, run); } else run = 0;
     }
     return {current, best};
+  }
+
+  drillMetaFile() { return path.join(this.root, 'drill-meta.json'); }
+
+  readDrillMeta() {
+    const result = readJsonStrict(this.drillMetaFile());
+    if (result.missing || result.corrupt || !result.value || typeof result.value !== 'object') return {v: 1, balance: 0, grantedWeek: null, used: {}};
+    const used = result.value.used && typeof result.value.used === 'object' ? result.value.used : {};
+    return {
+      v: 1,
+      balance: Math.max(0, Math.min(2, Math.round(finite(result.value.balance)))),
+      grantedWeek: validDate(result.value.grantedWeek),
+      used: Object.fromEntries(Object.entries(used).filter(([date, flag]) => validDate(date) && flag).map(([date]) => [date, true])),
+    };
+  }
+
+  writeDrillMeta(meta) { writeJsonAtomic(this.drillMetaFile(), meta); }
+
+  // 每个北京时间的周一发 1 张，最多攒 2 张。没打开过 App 的周一，下次计算时补上，但不追溯到功能出现之前的每一周以外的当前周。
+  ensureLeaveGrant(now = this.now()) {
+    const today = dayInZone(now, 'Asia/Shanghai');
+    const monday = mondayOf(today);
+    const meta = this.readDrillMeta();
+    if (meta.grantedWeek && meta.grantedWeek >= monday) return meta;
+    const weeks = meta.grantedWeek ? Math.max(1, Math.round(daysBetween(meta.grantedWeek, monday) / 7)) : 1;
+    meta.balance = Math.min(2, meta.balance + weeks);
+    meta.grantedWeek = monday;
+    this.writeDrillMeta(meta);
+    return meta;
+  }
+
+  leaveNotes({now = this.now()} = {}) {
+    const meta = this.ensureLeaveGrant(now);
+    const yesterday = addDays(dayInZone(now, 'Asia/Shanghai'), -1);
+    return {balance: meta.balance, grantedWeek: meta.grantedWeek, usedYesterday: Boolean(meta.used[yesterday])};
+  }
+
+  recordDrill({stars = 0, finished = false} = {}) {
+    const date = dayInZone(this.now(), 'Asia/Shanghai');
+    return this.mutateDay(date, day => {
+      if (stars) day.stars += Math.max(0, Math.round(finite(stars)));
+      if (finished) day.drillFinished += 1;
+    });
+  }
+
+  jar({now = this.now(), goal = 30} = {}) {
+    const day = this.readDay(dayInZone(now, 'Asia/Shanghai'));
+    return {today: day.stars || 0, goal};
+  }
+
+  // 请假条只补连续章（drill.streak）。空白日从今天往前遇到就用掉一张，同一天不会用第二次。
+  drillStreak({now = this.now()} = {}) {
+    const meta = this.ensureLeaveGrant(now);
+    const today = dayInZone(now, 'Asia/Shanghai');
+    const yesterday = addDays(today, -1);
+    const activePact = this.get();
+    let balance = meta.balance;
+    let changed = false;
+    const kindOf = date => {
+      if (meta.used[date]) return 'leave';
+      const day = this.readDay(date);
+      const state = dayState(day, activePact, today);
+      if ((day.drillFinished || 0) > 0 || state === 'complete') return 'stamped';
+      if (state === 'partial') return 'partial';
+      return 'empty';
+    };
+    const consume = date => {
+      if (date >= today || balance <= 0 || kindOf(date) !== 'empty') return kindOf(date);
+      meta.used[date] = true;
+      balance -= 1;
+      changed = true;
+      return 'leave';
+    };
+    let cursor = kindOf(today) === 'stamped' ? today : addDays(today, -1);
+    let current = 0;
+    let leaveUsedYesterday = Boolean(meta.used[yesterday]);
+    for (let index = 0; index < 3660; index += 1) {
+      let kind = kindOf(cursor);
+      if (kind === 'partial') break;
+      if (kind === 'empty') kind = consume(cursor);
+      if (kind === 'empty' || kind === 'partial') break;
+      if (cursor === yesterday && kind === 'leave') leaveUsedYesterday = true;
+      current += 1;
+      cursor = addDays(cursor, -1);
+    }
+    meta.balance = balance;
+    if (changed) this.writeDrillMeta(meta);
+    let best = current;
+    let run = 0;
+    for (let cursorDay = addDays(today, -365); cursorDay <= today; cursorDay = addDays(cursorDay, 1)) {
+      const kind = kindOf(cursorDay);
+      if (kind === 'stamped' || kind === 'leave') { run += 1; best = Math.max(best, run); }
+      else run = 0;
+    }
+    const monday = mondayOf(today);
+    const week = [];
+    const weekKind = [];
+    for (let index = 0; index < 7; index += 1) {
+      const date = addDays(monday, index);
+      if (date > today) { week.push(false); weekKind.push('future'); continue; }
+      const kind = kindOf(date);
+      const mark = kind === 'stamped' || kind === 'leave' ? kind : 'empty';
+      weekKind.push(mark);
+      week.push(mark === 'stamped' || mark === 'leave');
+    }
+    return {
+      current, best, week, weekKind,
+      stampedToday: (this.readDay(today).drillFinished || 0) > 0,
+      leaveUsedYesterday, leaveNotes: meta.balance,
+    };
   }
 
   today({now = this.now(), sessionKey = ''} = {}) {
