@@ -40,6 +40,32 @@ POINTER_ACTIONS = {"move", "hover", "drag", "set_slider"}
 OBSERVE_AFTER = {"click", "type", "select", "press", "scroll", "move", "hover", "drag", "set_slider"}
 HOME_URL = "pinkie://start"
 SEARCH_URL = "https://www.bing.com/search?q="
+# WebView2 errors that mean "the network path is broken" rather than "the
+# site said no".  Through a node these usually mean the node is dead.
+NETWORK_ERRORS = {"ServerUnreachable", "Timeout", "ErrorHttpInvalidServerResponse", "ConnectionAborted", "ConnectionReset", "Disconnected",
+                  "CannotConnect", "HostNameNotResolved", "Unknown", "UnexpectedError"}
+WINDOW_MODES = {"float", "dock", "full"}
+
+# 碧琪's own pointer, drawn inside the page so the user sees where she works.
+# A zero-size, aria-hidden host with pointer-events:none and a closed shadow
+# root: page scripts, hit tests and BrowserControl.js snapshots never see it.
+POINTER_JS = r"""(()=>{if(!window.__pinkiePtr){const host=document.createElement('div');host.setAttribute('aria-hidden','true');
+host.style.cssText='position:fixed;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;z-index:2147483647;pointer-events:none;overflow:visible';
+const root=host.attachShadow({mode:'closed'}),reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+root.innerHTML='<style>*{pointer-events:none}.a{position:fixed;left:0;top:0;width:20px;height:22px;transform:translate(-100px,-100px);transition:transform .14s cubic-bezier(.2,.8,.3,1),opacity .2s;filter:drop-shadow(0 1px 1.6px #0004)}.a.still{transition:opacity .2s}'
++'.r{position:fixed;left:0;top:0;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid #d15491;opacity:0}.r.go{animation:p .36s ease-out}@keyframes p{from{opacity:.75;transform:var(--t) scale(.6)}to{opacity:0;transform:var(--t) scale(2.4)}}'
++'.b{position:fixed;left:0;top:0;border:2px solid #d1549199;border-radius:6px;background:#d1549112;opacity:0;transition:opacity .25s}.t{position:fixed;left:0;top:0;width:100vw;height:100vh}.tag{position:fixed;left:0;top:0;padding:2px 7px;border-radius:9px;background:#d15491;color:#fff;font:600 11px/16px "Segoe UI","Microsoft YaHei UI",sans-serif;white-space:nowrap;opacity:0;transition:opacity .2s}</style>'
++'<svg class="t"><polyline id="tr" fill="none" stroke="#d1549155" stroke-width="2" stroke-linecap="round"/></svg><div class="b" id="b"></div><div class="r" id="r"></div><div class="tag" id="g">碧琪</div>'
++'<svg class="a" id="a" viewBox="0 0 16 19"><path d="M1 0 1.5 15.5 5.5 11.8 8.8 18 11.1 16.7 7.9 10.7 14.2 10.6Z" fill="#fff" stroke="#d15491" stroke-width="1.1" stroke-linejoin="round"/></svg>';
+(document.documentElement||document.body).appendChild(host);const $=id=>root.getElementById(id);let timer=0,trail=[],first=true;
+window.__pinkiePtr=(x,y,phase,rect,label)=>{if(!host.isConnected)(document.documentElement||document.body).appendChild(host);const a=$('a'),r=$('r'),b=$('b'),g=$('g'),tr=$('tr');
+a.classList.toggle('still',reduce||first||phase==='drag');first=false;a.style.opacity=1;a.style.transform='translate('+(x-1)+'px,'+(y-1)+'px)';
+g.style.transform='translate('+(x+14)+'px,'+(y+16)+'px)';g.textContent=label||'碧琪';g.style.opacity=label?1:0;
+if(phase==='drag'){trail.push(x+','+y);trail=trail.slice(-24);tr.setAttribute('points',trail.join(' '));}else{trail=[];tr.setAttribute('points','');}
+if(rect&&rect.width>0){b.style.left=rect.x+'px';b.style.top=rect.y+'px';b.style.width=rect.width+'px';b.style.height=rect.height+'px';b.style.opacity=1;}else b.style.opacity=0;
+if(phase==='click'&&!reduce){r.style.setProperty('--t','translate('+x+'px,'+y+'px)');r.classList.remove('go');void r.offsetWidth;r.classList.add('go');}
+clearTimeout(timer);timer=setTimeout(()=>{a.style.opacity=0;b.style.opacity=0;g.style.opacity=0;tr.setAttribute('points','');trail=[];},phase==='type'?1800:1300);};}
+window.__pinkiePtr(%s);})();"""
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -650,6 +676,10 @@ class BrowserApp:
             tab.dom_event.set()
             self._sync_chrome()
             self._save_window_soon()
+            if not tab.nav_ok and self.agent_busy == 0 and self._node_suspect(tab.nav_error):
+                # The user's own page failed through the node: switch and
+                # reload in the background.  碧琪's navigations do this inline.
+                threading.Thread(target=self._user_failover, args=(tab,), daemon=True).start()
 
         def dom_loaded(sender, args):
             if not tab.awaiting_start and int(args.NavigationId) == tab.nav_id:
@@ -724,6 +754,111 @@ class BrowserApp:
             tab.core.NavigateToString(self.pages.START_HTML)
         else:
             tab.core.Navigate(url)
+
+    # ── node failover ──
+    def _node_suspect(self, error: str) -> bool:
+        return bool(self.args.proxy_port) and error in NETWORK_ERRORS
+
+    def _failover(self, reason: str) -> Dict[str, Any]:
+        reply = self.upcall("vpn.failover", {"reason": reason}, timeout=45)
+        return reply if isinstance(reply, dict) else {}
+
+    def _user_failover(self, tab: Tab) -> None:
+        reply = self._failover(f"网页打不开（{tab.nav_error}）")
+        if reply.get("switched"):
+            self._on_ui(lambda: tab.core and tab.core.Reload(), wait=False)
+
+    # ── 碧琪's visible pointer ──
+    def _show_pointer(self, tab: Tab, x: Any, y: Any, phase: str, rect: Any = None, label: str = "") -> None:
+        """Draw the pointer in the page without waiting for it."""
+        try:
+            fx, fy = float(x), float(y)
+        except (TypeError, ValueError):
+            return
+        if fx != fx or fy != fy:  # NaN
+            return
+        box = None
+        if isinstance(rect, dict):
+            try:
+                box = {k: float(rect[k]) for k in ("x", "y", "width", "height")}
+            except (KeyError, TypeError, ValueError):
+                box = None
+        script = POINTER_JS.replace("window.__pinkiePtr(%s)", "window.__pinkiePtr(" + ",".join(
+            json.dumps(v, ensure_ascii=False) for v in (round(fx, 1), round(fy, 1), phase, box, label)) + ")")
+
+        def run():
+            if tab.core is not None:
+                tab.core.ExecuteScriptAsync(script)
+        try:
+            self._on_ui(run, wait=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _pointer_feedback(self, tab: Tab, action: str, result: Dict[str, Any]) -> None:
+        info = result.get("pointer") if isinstance(result.get("pointer"), dict) else None
+        if info is None and result.get("x") is not None and action in ("click",):
+            info = {"x": result.get("x"), "y": result.get("y")}
+        if not info:
+            return
+        phase = {"click": "click", "type": "type", "select": "click"}.get(action, "move")
+        label = {"type": "碧琪在输入", "select": "碧琪在选择"}.get(action, "")
+        self._show_pointer(tab, info.get("x"), info.get("y"), phase, info.get("rect"), label)
+
+    # ── tabs and window, for 碧琪 ──
+    def _tab_list(self) -> List[Dict[str, Any]]:
+        return [{"id": t.id, "title": t.title or "新标签页", "active": t is self.active, "loading": t.loading,
+                 "url": "" if t.url.startswith(("pinkie:", "about:", "data:")) else t.url} for t in self.tabs]
+
+    def _tab_action(self, body: Dict[str, Any], deadline: float) -> Dict[str, Any]:
+        op = str(body.get("op") or "list")
+        tab_id = str(body.get("tabId") or "")
+        if op == "list":
+            return {"tabs": self._on_ui(self._tab_list)}
+        if op == "new":
+            url = str(body.get("url") or "").strip()
+            if url and not url.lower().startswith(("http://", "https://")):
+                raise RuntimeError("新标签页只能打开 http(s) 网址。")
+            self._on_ui(lambda: self._show(bool(body.get("focus", False))))
+            tab = self._on_ui(lambda: self._add_tab(url or HOME_URL, activate=True))
+            if url:
+                # A fresh tab's events start cleared; its first navigation sets them.
+                if not tab.dom_event.wait(max(0.1, deadline - time.monotonic())):
+                    raise RuntimeError("新标签页加载超时，请先观察页面。")
+                if self._load_failed(tab, deadline):
+                    raise RuntimeError(f"新标签页没有打开（{tab.nav_error}）。")
+            else:
+                tab.ready.wait(max(0.1, deadline - time.monotonic()))
+            result = {"tabs": self._on_ui(self._tab_list), "page": self._page(tab)}
+            if url:
+                result["observation"] = self._observe(tab, deadline)
+            return result
+        match = self._on_ui(lambda: next((t for t in self.tabs if t.id == tab_id), None))
+        if match is None:
+            raise RuntimeError("没有这个标签页；先用 tab op=list 看现有标签页的 tabId。")
+        if op == "switch":
+            self._on_ui(lambda: self._activate(match))
+            match.ready.wait(max(0.1, deadline - time.monotonic()))
+            return {"tabs": self._on_ui(self._tab_list), "page": self._page(match), "observation": self._observe(match, deadline)}
+        if op == "close":
+            self._on_ui(lambda: self._close_tab(tab_id))
+            return {"tabs": self._on_ui(self._tab_list)}
+        raise RuntimeError("tab 只支持 op=list、new、switch、close。")
+
+    def _window_action(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        mode = str(body.get("mode") or "")
+        if mode and mode not in WINDOW_MODES:
+            raise RuntimeError("window 的 mode 只支持 float（悬浮）、dock（停靠右侧）、full（铺满）。")
+
+        def apply():
+            self._show(bool(body.get("focus", False)))
+            if mode:
+                self._present(mode)
+            if body.get("pin") is not None and bool(body.get("pin")) != self.pinned:
+                self.pinned = bool(body.get("pin"))
+                self.form.TopMost = self.pinned
+                self._sync_chrome()
+        self._on_ui(apply)
+        return self._status()
 
     # ── window visibility ──
     def _show(self, focus: bool) -> None:
@@ -819,8 +954,11 @@ class BrowserApp:
                 "open": bool(self.form.Visible), "url": "" if url.startswith(("pinkie:", "about:", "data:")) else url,
                 "title": tab.title if tab else "", "loading": bool(tab and tab.loading),
                 "canGoBack": bool(core and core.CanGoBack), "canGoForward": bool(core and core.CanGoForward),
-                "tabs": len(self.tabs), "proxied": bool(self.args.proxy_port),
-                "capabilities": {"nativePointer": True, "setSlider": "native-range"},
+                "tabs": len(self.tabs), "tabList": self._tab_list(), "proxied": bool(self.args.proxy_port),
+                "window": {"mode": self.mode, "pinned": self.pinned, "focused": bool(self.form.ContainsFocus),
+                           "width": int(self.form.Width), "height": int(self.form.Height)},
+                "capabilities": {"nativePointer": True, "setSlider": "native-range", "visiblePointer": True,
+                                 "tabs": True, "window": True, "vpn": True, "autoNodeFailover": True},
             }
         return self._on_ui(read)
 
@@ -848,6 +986,10 @@ class BrowserApp:
         if action == "close":
             self._on_ui(self._hide)
             return {"open": False}
+        if action == "tab":
+            return self._tab_action(body, deadline)
+        if action == "window":
+            return self._window_action(body)
         if action in NAV_ACTIONS:
             return self._navigation(action, body, deadline)
         tab = self._ready_tab(deadline)
@@ -877,6 +1019,8 @@ class BrowserApp:
             result = self._press_native(tab, str(body.get("key", "")), deadline)
         elif action in DOM_ACTIONS:
             result = self._dom(tab, action, body, deadline)
+            if action in ("click", "type", "select"):
+                self._pointer_feedback(tab, action, result)
         else:
             raise RuntimeError("不支持这个浏览器操作。")
         if action in OBSERVE_AFTER:
@@ -937,15 +1081,68 @@ class BrowserApp:
             if not self._on_ui(go):
                 raise RuntimeError("没有可以" + ("后退" if action == "back" else "前进") + "的页面。")
         event = tab.nav_event if body.get("waitUntil") == "load" else tab.dom_event
-        if not event.wait(max(0.1, deadline - time.monotonic())):
-            raise RuntimeError("网页加载超时，请先观察页面确认结果。")
-        if tab.nav_event.is_set() and not tab.nav_ok:
-            hint = "；浏览器节点已开启，可能是当前节点不通，可在浏览器右上角「节点」里换一个" if self.args.proxy_port else ""
+        guarded = bool(self.args.proxy_port) and action in ("open", "reload")
+        # Through a node, give the page a first window; a page that has not
+        # even reached DOMContentLoaded by then is checked against the node.
+        first = min(10.0, deadline - time.monotonic()) if guarded else deadline - time.monotonic()
+        timed_out = not event.wait(max(0.1, first))
+        failed = not timed_out and self._load_failed(tab, deadline)
+        switched: Dict[str, Any] = {}
+        if (timed_out or failed) and guarded and (timed_out or self._node_suspect(tab.nav_error)):
+            # A dead page usually means a dead node: let the manager test and
+            # switch, then load the page once more.
+            reply = self._failover(f"网页打不开（{'超时' if timed_out else tab.nav_error}）")
+            if reply.get("switched"):
+                switched = {"switched": True, "node": reply.get("node"), "from": reply.get("from"),
+                            "delayMs": reply.get("delay"), "message": reply.get("message")}
+                target = url if action == "open" else tab.url
+                self._on_ui(lambda: self._navigate(tab, target))
+            elif reply.get("message"):
+                switched = {"switched": False, "message": reply.get("message")}
+            if timed_out or switched.get("switched"):
+                # Keep waiting (the old load, or the retry) for the rest of the time.
+                timed_out = not event.wait(max(0.1, deadline - time.monotonic()))
+                failed = not timed_out and self._load_failed(tab, deadline)
+        if timed_out:
+            extra = ("；" + switched["message"]) if switched.get("message") else ""
+            raise RuntimeError("网页加载超时，请先观察页面确认结果" + extra + "。")
+        if failed:
+            if switched.get("switched"):
+                hint = f"；已自动换到节点「{switched.get('node')}」重试过，仍打不开，可能是网站本身的问题"
+            elif switched.get("message"):
+                hint = "；" + switched["message"]
+            elif local_page(tab.url):
+                hint = "；这是本机地址，请确认本地服务已经启动（serve_logs 可看日志）"
+            elif self.args.proxy_port:
+                hint = "；浏览器节点已开启，可用 vpn op=best 换最快的节点后再试"
+            else:
+                hint = "；浏览器当前直连，被墙的海外网站可用 vpn op=best on=true 开启节点后再试"
             raise RuntimeError(f"网页没有打开（{tab.nav_error}）{hint}。")
         result = self._page(tab)
         result["page"] = dict(result)
+        if switched.get("switched"):
+            result["nodeSwitched"] = switched
         result["observation"] = self._observe(tab, deadline)
         return result
+
+    def _load_failed(self, tab: Tab, deadline: float) -> bool:
+        """WebView2 shows its own error page and fires DOMContentLoaded for it
+        before NavigationCompleted(IsSuccess=false), so "DOM ready" alone
+        reported a dead page as opened.  Settle that here."""
+        if tab.nav_event.is_set():
+            return not tab.nav_ok
+        if tab.nav_event.wait(0.3):
+            return not tab.nav_ok
+        try:
+            href = json.loads(self._execute(tab, "location.href", min(deadline, time.monotonic() + 2)) or '""')
+        except Exception:  # noqa: BLE001
+            return False
+        if str(href).startswith("chrome-error:"):
+            tab.nav_event.wait(2)
+            if tab.nav_ok or not tab.nav_error:
+                tab.nav_error = tab.nav_error or "Unknown"
+            return True
+        return False
 
     def _execute(self, tab: Tab, script: str, deadline: float) -> str:
         task = self._on_ui(lambda: tab.core.ExecuteScriptAsync(script))
@@ -1026,11 +1223,14 @@ class BrowserApp:
                 raise RuntimeError(plan["reason"])
         x, y = plan["x"], plan["y"]
         button = str(body.get("button") or "left")
+        rect = plan.get("rect")
         if action in ("move", "hover"):
+            self._show_pointer(tab, x, y, "move", rect)
             self._mouse(tab, "mouseMoved", x, y, deadline)
             return {"moved": True, "x": x, "y": y, **({"ref": plan["ref"]} if plan.get("ref") else {})}
         if action == "click":
             count = max(1, min(3, int(body.get("clickCount") or 1)))
+            self._show_pointer(tab, x, y, "click", rect, "右键" if button == "right" else ("双击" if count == 2 else ""))
             self._mouse(tab, "mouseMoved", x, y, deadline)
             for index in range(1, count + 1):
                 self._mouse(tab, "mousePressed", x, y, deadline, button, index)
@@ -1039,11 +1239,15 @@ class BrowserApp:
         to = plan.get("to") or {}
         if "x" not in to:
             raise RuntimeError("拖拽终点无效。")
+        self._show_pointer(tab, x, y, "drag", rect, "拖动")
         self._mouse(tab, "mouseMoved", x, y, deadline)
         self._mouse(tab, "mousePressed", x, y, deadline)
         steps = 12
         for i in range(1, steps + 1):
-            self._mouse(tab, "mouseMoved", x + (to["x"] - x) * i / steps, y + (to["y"] - y) * i / steps, deadline, "left")
+            px, py = x + (to["x"] - x) * i / steps, y + (to["y"] - y) * i / steps
+            self._mouse(tab, "mouseMoved", px, py, deadline, "left")
+            if i % 3 == 0:
+                self._show_pointer(tab, px, py, "drag", None, "拖动")
             time.sleep(0.01)
         self._mouse(tab, "mouseReleased", to["x"], to["y"], deadline)
         if action == "set_slider":
