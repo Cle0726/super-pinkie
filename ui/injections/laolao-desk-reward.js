@@ -247,25 +247,34 @@
     if (n > 0 && n % 5 === 0) return `${n} 连对，停不下来了吧`;
     return '';
   }
+  // 标题固定，不随事件变；罐满、请假这类事件放在标题下一行小字里，碧琪那句只说这一组。三处不重字。
   function titleFor(summary = {}) {
-    if (summary.quiet) return '这一页背完了，早点休息';
-    if (summary.jar?.filledNow) return '今天的星星罐装满了';
-    if (summary.accuracy === 1) return '全对，一页满分';
-    return '这一页背完啦';
+    if (summary.failed) return '这一页背完啦';
+    return summary.quiet ? '这一页背完了' : '这一页背完啦';
+  }
+  function eventLine(summary = {}) {
+    if (summary.failed) return '';
+    const days = summary.streak?.current | 0;
+    const out = [];
+    if (summary.jar?.filledNow) out.push('今天的星星罐装满了');
+    if (summary.streak?.leaveUsedYesterday) out.push('昨天用了一张请假条，连续还在');
+    else if (summary.firstFinishToday && days === 1) out.push('今天从第 1 天盖起');
+    return out.join(' · ');
   }
   function localLine(summary = {}) {
-    if (summary.streak?.leaveUsedYesterday) return '昨天碧琪帮你请了假，连续还在';
-    if (summary.quiet) return '这一页背完了，早点休息';
-    if (summary.jar?.filledNow) return '今天的星星罐装满了';
-    if (summary.accuracy === 1) return '全对，一页满分';
-    if (summary.firstFinishToday && summary.streak?.current === 1) return '回来啦，今天从第 1 天重新盖';
-    return '这一页背完啦';
+    const accuracy = Number(summary.accuracy) || 0;
+    if (summary.quiet) return '稳住节奏，今晚早点睡';
+    if (accuracy === 1) return '一道没错，记得很牢';
+    if (accuracy >= 0.8) return '大部分都记住了，错的下组先看';
+    return '错的那几道，下一组先看它们';
   }
   const lines = {
     pick,
     combo: comboLine,
     title: titleFor,
+    event: eventLine,
     local: localLine,
+    failed: '结算没记上，星星已经记了',
     exit: n => `还差 ${n} 题就盖章了，先放着？`,
     pending: n => `碧琪还在给 ${n} 张卡出题，这组先用翻卡和配对`,
     rightTitle: '对啦！',
@@ -301,10 +310,17 @@
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('viewBox', '0 0 48 48'); svg.setAttribute('aria-hidden', 'true');
     const path = document.createElementNS(SVG, 'path');
-    path.setAttribute('d', kind === 'wrong' ? 'M14 18h20M16 30c4 3 12 3 16 0' : 'M12 25l8 8 16-18');
+    path.setAttribute('d', 'M12 25l8 8 16-18');
     path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor');
     path.setAttribute('stroke-width', '3.2'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
-    svg.append(path); mark.append(svg);
+    if (kind === 'wrong') {
+      // 答错：一块斜放的小橡皮，套着纸套，旁边掉两粒橡皮屑。不是「=」号。
+      svg.innerHTML = '<g transform="rotate(-32 24 24)"><rect x="8" y="16" width="32" height="15" rx="3.5" class="pk-eraser-body"/>'
+        + '<path d="M24 16v15" class="pk-eraser-band"/><rect x="24" y="16" width="16" height="15" rx="0" class="pk-eraser-sleeve"/></g>'
+        + '<circle cx="10" cy="38" r="1.8" class="pk-eraser-crumb"/><circle cx="16" cy="41" r="1.3" class="pk-eraser-crumb"/>';
+      mark.dataset.mark = 'eraser';
+    } else svg.append(path);
+    mark.append(svg);
     const copy = el('div', 'pk-sheet-copy');
     const title = opts.title || (kind === 'wrong' ? lines.wrongTitle : kind === 'partial' ? lines.partialTitle : lines.rightTitle);
     const line = opts.line || (kind === 'wrong' ? pick('wrong') : kind === 'partial' ? '' : pick('right'));
@@ -371,7 +387,7 @@
     const num = badge.querySelector('b');
     const prev = Number(badge.dataset.n || 0);
     badge.dataset.n = String(count); badge.dataset.on = count ? '1' : '0';
-    badge.setAttribute('aria-label', count ? `连对 ${count}` : '连对中断');
+    badge.setAttribute('aria-label', count ? `连对 ${count}` : '连对从头数');
     if (count === prev) return badge;
     num.textContent = String(count);
     if (motion.reduced || !gsapOf(motion)) num.style.opacity = count ? '1' : '0.4';
@@ -457,13 +473,34 @@
       else { cell.dataset.state = 'open'; cell.setAttribute('aria-label', `周${name} 还没盖`); }
       row.append(cell);
     });
-    host.append(seal, row);
-    if (spec.caption) host.append(el('p', 'pk-seal-cap', spec.caption));
+    const press = el('i', 'pk-seal-press');
+    press.setAttribute('aria-hidden', 'true');
+    const sealWrap = el('div', 'pk-seal-wrap');
+    sealWrap.append(press, seal);
+    const side = el('div', 'pk-streak-side');
+    side.append(row);
+    if (spec.caption) side.append(el('p', 'pk-seal-cap', spec.caption));
+    host.append(sealWrap, side);
+    // 要盖新章时先藏起来，等星星进罐再「啪」地盖下去。
+    if (spec.pending) seal.style.opacity = '0';
     const api = {el: host, seal, stamp() {
       const motion = motionOf(host);
       sound('stamp');
-      if (motion.reduced || !gsapOf(motion)) return fade(seal, 0, 1, 120);
-      return tweenFrom(gsapOf(motion), seal, {scale: 1.25, rotate: -6, opacity: 0}, {scale: 1, rotate: 0, opacity: 1, duration: .18, ease: 'power2.out', transformOrigin: '50% 50%'});
+      if (motion.reduced || !gsapOf(motion)) { press.style.opacity = '0'; return fade(seal, 0, 1, 120); }
+      const gsap = gsapOf(motion);
+      // 印章从上方压下来，压到底比原尺寸略小（压痕），再回弹；印泥外圈的压痕淡出。
+      gsap.set(seal, {scale: 1.6, rotate: -14, opacity: 0, transformOrigin: '50% 50%'});
+      gsap.set(press, {scale: .86, opacity: 0, transformOrigin: '50% 50%'});
+      const down = tween(gsap, seal, {keyframes: [
+        {scale: .9, rotate: -4, opacity: 1, duration: .16, ease: 'power3.in'},
+        {scale: 1, rotate: -6, duration: .2, ease: 'back.out(3)'},
+      ]});
+      const ring = tween(gsap, press, {keyframes: [
+        {opacity: 0, duration: .15},
+        {scale: 1.18, opacity: .5, duration: .08, ease: 'power2.out'},
+        {scale: 1.32, opacity: 0, duration: .5, ease: 'power2.out'},
+      ]});
+      return Promise.all([down, ring]);
     }};
     return api;
   }
@@ -485,33 +522,55 @@
       <defs><clipPath id="${id}"><path d="M20 28h40v42a8 8 0 0 1-8 8H28a8 8 0 0 1-8-8V28z"/></clipPath></defs>
       <g clip-path="url(#${id})">
         <rect class="pk-jar-water" x="20" y="28" width="40" height="50"/>
-        <path class="pk-jar-star" transform="translate(32 58) scale(.42)" d="${STAR}"/>
-        <path class="pk-jar-star" transform="translate(46 68) scale(.32)" d="${STAR}"/>
+        <path class="pk-jar-star" transform="translate(30 60) scale(.42)" d="${STAR}"/>
+        <path class="pk-jar-star" transform="translate(44 66) scale(.34)" d="${STAR}"/>
+        <path class="pk-jar-star" transform="translate(36 46) scale(.3)" d="${STAR}"/>
       </g>
       <path class="pk-jar-glass" d="M32 26c1 7 1 11 0 16M48 26c-1 7-1 11 0 16"/>`;
-    const cap = el('figcaption', '', `${today} / ${goal}`);
+    const cap = el('figcaption', '', '');
+    const capNow = el('b', '', String(today));
+    cap.append(capNow, document.createTextNode(` / ${goal}`));
     fig.append(svg, cap); host.replaceChildren(fig);
     const level = svg.querySelector('.pk-jar-water');
-    level.style.transformBox = 'fill-box';
-    level.style.transformOrigin = 'center bottom';
     const stars = [...svg.querySelectorAll('.pk-jar-star')];
-    const paint = (animate) => {
-      const ratio = Math.max(0.001, Math.min(1, today / goal));
-      svg.setAttribute('aria-label', label());
-      cap.textContent = `${Math.round(today)} / ${goal}`;
-      stars.forEach(star => { star.style.opacity = ratio > 0.34 ? '1' : '0'; });
-      const motion = motionOf(host);
-      if (!animate || motion.reduced || !gsapOf(motion)) { level.style.transform = `scaleY(${ratio})`; return Promise.resolve(); }
-      return tween(gsapOf(motion), level, {scaleY: ratio, duration: .45, ease: 'power2.out', transformOrigin: 'center bottom'});
+    // 水位用 CSS transform 画，不交给 GSAP 写 SVG 属性：两套 transform 叠在一起时终态会和数字对不上。
+    level.style.transformBox = 'fill-box';
+    level.style.transformOrigin = '50% 100%';
+    const ratioOf = value => Math.max(0.001, Math.min(1, value / goal));
+    const setLevel = ratio => {
+      level.style.transform = `scaleY(${ratio})`;
+      stars.forEach((star, i) => { star.style.opacity = ratio > [0.34, 0.5, 0.75][i] ? '1' : '0'; });
     };
-    level.style.transform = `scaleY(${Math.max(0.001, Math.min(1, today / goal))})`;
-    stars.forEach(star => { star.style.opacity = today / goal > 0.34 ? '1' : '0'; });
+    let shown = ratioOf(today);
+    setLevel(shown);
+    const paint = (animate) => {
+      const target = ratioOf(today);
+      svg.setAttribute('aria-label', label());
+      const motion = motionOf(host);
+      const gsap = gsapOf(motion);
+      if (!animate || motion.reduced || !gsap) { shown = target; setLevel(target); capNow.textContent = String(Math.min(today, goal)); return Promise.resolve(); }
+      const from = shown;
+      const value = {t: 0};
+      const start = Number(capNow.textContent) || 0;
+      const end = Math.min(today, goal);
+      return tween(gsap, value, {t: 1, duration: .55, ease: 'power2.out', onUpdate() {
+        shown = from + (target - from) * value.t;
+        setLevel(shown);
+        capNow.textContent = String(Math.round(start + (end - start) * value.t));
+      }}).then(() => { shown = target; setLevel(target); capNow.textContent = String(end); });
+    };
     return {el: host, svg, get today() { return today; }, goal, paint,
       add(n = 1) { today = Math.min(goal, today + n); return paint(true); },
+      set(n = 0) { today = Math.max(0, Math.min(goal, n | 0)); return paint(false); },
+      bump() {
+        const motion = motionOf(host);
+        if (motion.reduced || !gsapOf(motion)) return Promise.resolve();
+        return tween(gsapOf(motion), svg, {keyframes: [{scale: 1.08, duration: .07}, {scale: 1, duration: .14}], transformOrigin: '50% 90%'});
+      },
       full() {
         const motion = motionOf(host);
         if (motion.reduced || !gsapOf(motion)) return fade(svg, 0.7, 1, 120);
-        return tween(gsapOf(motion), svg, {keyframes: [{rotate: -4, duration: .08}, {rotate: 3.5, duration: .08}, {rotate: -2, duration: .08}, {rotate: 0, duration: .1}], transformOrigin: '50% 80%'});
+        return tween(gsapOf(motion), svg, {keyframes: [{rotate: -5, duration: .08}, {rotate: 4.5, duration: .08}, {rotate: -2.5, duration: .08}, {rotate: 0, duration: .1}], transformOrigin: '50% 80%'});
       }};
   }
 
@@ -523,13 +582,15 @@
     const gsap = gsapOf(motion);
     if (motion.reduced || !gsap) { node.textContent = format(to); return Promise.resolve(); }
     const value = {n: 0};
-    return tween(gsap, value, {n: to, duration: .9, ease: 'power3.out', onUpdate() { if (node.isConnected) node.textContent = format(value.n); }});
+    return tween(gsap, value, {n: to, duration: .9, ease: 'power3.out', onUpdate() { if (node.isConnected) node.textContent = format(value.n); }})
+      .then(() => { if (node.isConnected) node.textContent = format(to); });
   }
+  const STICK_TILT = [-3.2, 2.4, -1.4];
   function stickNote(note, i, motion) {
-    const rest = [-1.6, 1.2, -0.5][i] || 0;
+    const rest = STICK_TILT[i] || 0;
     note.style.transform = `rotate(${rest}deg)`;
     if (motion.reduced || !gsapOf(motion)) return fade(note, 0, 1, 120);
-    return tweenFrom(gsapOf(motion), note, {y: -12, rotate: rest - 5, opacity: 0}, {y: 0, rotate: rest, opacity: 1, duration: .32, delay: i * .12, ease: 'back.out(1.4)'});
+    return tweenFrom(gsapOf(motion), note, {y: -18, rotate: rest - 8, scale: 1.06, opacity: 0}, {y: 0, rotate: rest, scale: 1, opacity: 1, duration: .34, delay: .1 + i * .14, ease: 'back.out(1.6)'});
   }
   function beijingIndex() {
     const name = new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Shanghai', weekday: 'short'}).format(new Date());
@@ -547,80 +608,110 @@
     if (!summary.streak?.leaveUsedYesterday) return [];
     return [(beijingIndex() + 6) % 7];
   }
+  // 结算页。summary.failed 表示结算接口没成功：只摆本地真数据（星星、首答正确率、用时），
+  // 不盖章、不撒纸屑、罐子和连续章都不出现，给一行说明和「再试一次」。
   function completeScreen(host, summary = {}, opts = {}) {
     const motion = motionOf(host);
+    const failed = Boolean(summary.failed);
     const screen = el('section', 'pk-done');
-    screen.setAttribute('aria-label', '这一页背完啦');
+    screen.dataset.state = failed ? 'failed' : summary.quiet ? 'quiet' : 'ok';
+    screen.setAttribute('aria-label', titleFor(summary));
     const stickerHost = el('div', 'pk-done-sticker pk-react-host');
     const heading = el('h2', 'pk-done-title', titleFor(summary));
+    const event = el('p', 'pk-done-event', failed ? '' : eventLine(summary));
+    event.hidden = !event.textContent;
+    const board = el('div', 'pk-done-board');
     const stats = el('div', 'pk-done-stats');
     const earned = Math.max(0, summary.stars | 0);
     const accuracy = Math.round((Number(summary.accuracy) || 0) * 100);
     const cards = [
-      ['星星', '+' + earned, earned],
-      ['正确', accuracy + '%', accuracy],
-      ['用时', clock(summary.ms), Math.max(0, Math.round((Number(summary.ms) || 0) / 1000))],
-    ].map(([label, , value]) => {
+      ['星星', earned, n => '+' + Math.round(n), 'star'],
+      ['正确', accuracy, n => Math.round(n) + '%', 'right'],
+      ['用时', Math.max(0, Math.round((Number(summary.ms) || 0) / 1000)), n => clock(n * 1000), 'time'],
+    ].map(([label, value, format, tone]) => {
       const note = el('div', 'pk-stick');
-      note.append(el('small', '', label), el('b', '', motion.reduced ? (label === '用时' ? clock(summary.ms) : label === '正确' ? accuracy + '%' : '+' + earned) : '0'));
+      note.dataset.tone = tone;
+      const num = el('b', '', motion.reduced ? format(value) : format(0));
+      note.append(el('small', '', label), num);
       stats.append(note);
-      return {note, label, value};
+      return {note, num, value, format};
     });
-    const jarHost = el('div', 'pk-done-jar');
-    const after = Math.max(0, summary.jar?.today | 0);
-    const before = Math.max(0, after - earned);
-    const jar = starJar(jarHost, {today: before, goal: summary.jar?.goal || 30});
+    board.append(stats);
+    let jar = null;
+    let streak = null;
     const streakHost = el('div', 'pk-done-streak');
-    const days = summary.streak?.current | 0;
-    const caption = summary.streak?.leaveUsedYesterday ? '昨天碧琪帮你请了假，连续还在'
-      : summary.firstFinishToday && days === 1 ? '回来啦，今天从第 1 天重新盖'
-      : summary.firstFinishToday ? `连续 ${days} 天` : '';
-    const streak = stampStreak(streakHost, {days, week: weekOf(summary), weekKind: summary.streak?.weekKind, leave: leaveOf(summary), caption});
-    const line = el('p', 'pk-done-line', localLine(summary));
+    if (!failed) {
+      const jarHost = el('div', 'pk-done-jar');
+      const after = Math.max(0, summary.jar?.today | 0);
+      const goal = summary.jar?.goal || 30;
+      jar = starJar(jarHost, {today: Math.max(0, after - earned), goal});
+      board.append(jarHost);
+      const days = summary.streak?.current | 0;
+      const caption = summary.firstFinishToday ? `连续 ${days} 天` : summary.streak?.stampedToday ? '今天的章已经盖了' : '';
+      streak = stampStreak(streakHost, {days, week: weekOf(summary), weekKind: summary.streak?.weekKind, leave: leaveOf(summary), caption, pending: Boolean(summary.firstFinishToday)});
+    } else streakHost.hidden = true;
+    const line = el('p', 'pk-done-line', failed ? '' : localLine(summary));
+    line.hidden = failed;
+    const failNote = el('div', 'pk-done-failed');
+    failNote.hidden = !failed;
     const actions = el('div', 'pk-done-actions');
     const again = el('button', 'pk-btn', '再背一组'); again.type = 'button'; again.dataset.kind = 'go'; again.setAttribute('aria-label', '再背一组');
+    // 后端说没有下一组可背，就不给这个按钮，免得点了落空。
+    again.hidden = failed || !opts.onAgain || summary.nextSuggestion === null || (summary.nextSuggestion === undefined && opts.requireSuggestion);
+    const retry = el('button', 'pk-btn', '再试一次'); retry.type = 'button'; retry.dataset.kind = 'go'; retry.setAttribute('aria-label', '再试一次');
+    if (failed) { failNote.append(el('p', '', lines.failed)); actions.append(retry); }
     const back = el('button', 'pk-link', summary.backLabel || '回笔记本'); back.type = 'button'; back.setAttribute('aria-label', back.textContent);
     actions.append(again, back);
-    screen.append(stickerHost, heading, stats, jarHost, streakHost, line, actions);
+    screen.append(stickerHost, heading, event, board, streakHost, line, failNote, actions);
     host.append(screen);
-    sticker(stickerHost, summary.quiet ? 'quiet' : summary.jar?.filledNow ? 'jar' : 'finish');
+    sticker(stickerHost, failed ? 'focus' : summary.quiet ? 'quiet' : summary.jar?.filledNow ? 'jar' : 'finish');
     if (!motion.reduced) motion.splitIn?.(heading, {duration: .35, stagger: .02});
     else fade(heading, 0, 1, 120);
-    cards.forEach((card, i) => {
+    const rolls = cards.map((card, i) => {
       stickNote(card.note, i, motion);
-      const num = card.note.querySelector('b');
-      if (card.label === '用时') roll(num, card.value, n => clock(n * 1000), motion);
-      else if (card.label === '正确') roll(num, card.value, n => Math.round(n) + '%', motion);
-      else roll(num, card.value, n => '+' + Math.round(n), motion);
+      return roll(card.num, card.value, card.format, motion);
     });
-    const starNote = cards[0].note;
-    later(() => {
+    const settle = () => { if (screen.isConnected) screen.dataset.settled = '1'; };
+    if (failed) Promise.all(rolls).then(settle);
+    else later(() => {
       if (!screen.isConnected) return;
-      starsFly(starNote, jar.svg, Math.min(12, Math.max(earned, 1)), {sound: true}).then(() => {
+      const flying = earned > 0 ? starsFly(cards[0].note, jar.svg, Math.min(12, earned), {sound: true}) : Promise.resolve();
+      flying.then(() => {
         if (!screen.isConnected) return;
-        return jar.add(earned);
+        return Promise.all([jar.add(earned), jar.bump()]);
       }).then(() => {
         if (!screen.isConnected) return;
-        if (summary.firstFinishToday) streak.stamp();
+        const jobs = [];
+        if (summary.firstFinishToday) jobs.push(streak.stamp());
         if (summary.jar?.filledNow) {
           sound('finish', {bell: true});
-          jar.full();
+          jobs.push(jar.full());
           if (!summary.quiet && !motion.reduced) motion.confettiAt?.(screen, 'large');
         } else sound('finish');
-      });
-    }, motion.reduced ? 140 : 420);
-    const cheer = opts.cheer;
+        return Promise.all([...jobs, ...rolls]);
+      }).then(settle, settle);
+    }, motion.reduced ? 140 : 380);
+    const cheer = failed ? null : opts.cheer;
     if (cheer) Promise.race([
       Promise.resolve(cheer).then(v => (v && typeof v === 'object' ? v.line : v) || ''),
       new Promise(resolve => later(() => resolve(''), 4000)),
     ]).then(text => {
-      if (!text || text === line.textContent || !line.isConnected) return;
+      if (!text || text === line.textContent || text === event.textContent || text === heading.textContent || !line.isConnected) return;
       fade(line, 1, 0, 120).then(() => { line.textContent = text; return fade(line, 0, 1, 120); });
-    });
+    }).catch(() => {});
     let closed = false;
     const close = () => { if (closed) return; closed = true; screen.remove(); };
     again.addEventListener('click', () => { close(); opts.onAgain?.(); });
     back.addEventListener('click', () => { close(); opts.onBack?.(); });
+    retry.addEventListener('click', async () => {
+      if (retry.disabled) return;
+      retry.disabled = true; retry.textContent = '正在记…';
+      try {
+        const ok = await opts.onRetry?.();
+        if (ok) { close(); return; }
+      } catch { /* 还是没记上 */ }
+      retry.disabled = false; retry.textContent = '再试一次';
+    });
     return {close, screen, jar, streak};
   }
 
@@ -668,7 +759,7 @@
 
   window.__pinkieDeskReward = {
     sound, soundKey: SOUND_KEY, soundPrefs, lines, feedbackSheet, comboBadge, starsFly, stampStreak, starJar,
-    completeScreen, sticker, paintProgress, slots: SLOTS,
+    completeScreen, sticker, paintProgress, slots: SLOTS, clock,
     suspend: suspendAudio, stop() { killMotion(); suspendAudio(); },
   };
 })();

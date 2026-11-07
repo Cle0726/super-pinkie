@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import os from 'node:os';
+import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {startHarness} from './harness.mjs';
 
@@ -18,72 +20,15 @@ try {
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const shots = path.join(repo, 'design/study-desk-drill/shots');
-const MODES = ['look', 'flip', 'choice', 'truefalse', 'cloze', 'pairs', 'order', 'write', 'meet', 'word2meaning', 'meaning2word', 'listen', 'collocation', 'homophonePairs', 'spell', 'dictate'];
-const item = (mode, fields) => ({itemId: mode, cardRef: {book: 'notes', noteId: 'n-' + mode, recallId: 'r-' + mode, wordId: 'w-' + mode}, mode, strength: 1, answer: '', reveal: {question: '', answer: ''}, ...fields, itemId: mode});
-export const FIXTURES = {
-  look: item('look', {strength: 0, prompt: 'TCP 三次握手的第二步是什么？', reveal: {question: 'TCP 三次握手的第二步是什么？', answer: '服务器回 SYN-ACK。'}}),
-  flip: item('flip', {prompt: 'sizeof 一个字符串为什么比 strlen 大 1？', reveal: {answer: '末尾还有一个 \\0。'}}),
-  choice: item('choice', {prompt: 'do-while 的循环体至少执行几次？', options: ['可能一次也不执行', '至少一次', '必须是偶数次', '和 while 完全一样'], answer: 1, reveal: {answer: '至少一次'}}),
-  truefalse: item('truefalse', {prompt: 'int a[10] 的合法下标是 0 到 9。', options: ['对', '错'], answer: 0, reveal: {answer: '对。下标从 0 到 9。'}}),
-  cloze: item('cloze', {prompt: 'be used to {{1}} 表示习惯于，这里的 to 是介词。', answer: ['doing'], bank: ['doing', 'do', 'done', 'to do'], reveal: {answer: 'doing'}}),
-  pairs: item('pairs', {prompt: '把左边的问题和右边的答案配上', pairs: {left: ['avoid 后面', 'do-while', '数组下标', 'sizeof 字符串'], right: ['接 doing', '至少一次', '从 0 开始', '比长度多 1']}, answer: [[0, 0], [1, 1], [2, 2], [3, 3]], reveal: {answer: '按左边顺序对应右边。'}}),
-  order: item('order', {strength: 3, prompt: '把 TCP 三次握手排成正确顺序', steps: ['客户端发送 SYN', '服务器回复 SYN-ACK', '客户端发送 ACK'], reveal: {answer: 'SYN → SYN-ACK → ACK'}}),
-  write: item('write', {strength: 3, prompt: '用一句话写出 do-while 和 while 的差别', judge: 'model', answer: 'do-while 至少执行一次', reveal: {answer: 'do-while 先执行再判断，至少一次。'}}),
-  meet: item('meet', {strength: 0, prompt: 'ambulance', speak: 'ambulance', reveal: {question: 'ambulance', answer: '救护车', extra: '/ˈæmbjələns/ · 谐音：俺不能死'}}),
-  word2meaning: item('word2meaning', {prompt: 'ambulance', options: ['救护车', '大使馆', '雄心', '含糊的'], answer: 0, reveal: {answer: '救护车'}}),
-  meaning2word: item('meaning2word', {prompt: '救护车', options: ['ambulance', 'embassy', 'ambition', 'ambiguous'], answer: 0, reveal: {answer: 'ambulance'}}),
-  listen: item('listen', {prompt: '听发音，选出听到的词', speak: 'ambition', options: ['ambition', 'ambulance', 'ambiguous', 'embassy'], answer: 0, reveal: {answer: 'ambition'}}),
-  collocation: item('collocation', {prompt: 'have an impact {{1}} the result', answer: ['on'], bank: ['on', 'in', 'to', 'at'], reveal: {answer: 'on'}}),
-  homophonePairs: item('homophonePairs', {prompt: '单词对上碧琪编的谐音', pairs: {left: ['ambulance', 'ambition', 'embassy'], right: ['俺不能死', '俺必胜', '安倍喜']}, answer: [[0, 0], [1, 1], [2, 2]], reveal: {answer: '谐音只帮记忆。'}}),
-  spell: item('spell', {strength: 3, prompt: '救护车', speak: 'ambulance', answer: 'ambulance', reveal: {answer: 'ambulance'}}),
-  dictate: item('dictate', {strength: 3, prompt: '听写这个词', speak: 'embassy', answer: 'embassy', reveal: {answer: 'embassy'}}),
-};
+import {FIXTURES, MODES, SUMMARIES, drillHandler} from './drill-fixtures.mjs';
 
-export function drillHandler() {
-  const sessions = new Map();
-  return async (method, params = {}) => {
-    const name = method.replace(/^pinkie\.learning\./, '');
-    if (name === 'drill.settings.get') return {size: 10, jarGoal: 30, flipOnly: false};
-    if (name === 'drill.settings.set') return {ok: true};
-    if (name === 'drill.session') {
-      const mode = params.scope?.ids?.[0];
-      const one = FIXTURES[mode] ? structuredClone(FIXTURES[mode]) : null;
-      const items = one ? [one] : MODES.map(id => structuredClone(FIXTURES[id]));
-      const sessionId = 'qa-' + Math.random().toString(16).slice(2);
-      sessions.set(sessionId, {items, answers: []});
-      return {sessionId, items, pending: params.scope?.flag === 'pending' ? 4 : 0, dueLeft: items.length, settings: {soundDefault: true}};
-    }
-    if (name === 'drill.answer') {
-      const session = sessions.get(params.sessionId);
-      session?.answers.push(params);
-      return {rating: params.correct ? (params.hinted || params.verdict === 'partial' ? 'fuzzy' : 'remembered') : 'forgot', stars: params.correct && params.firstTry ? 1 : 0, requeue: !params.correct};
-    }
-    if (name === 'drill.learned') return {ok: true};
-    if (name === 'drill.judge') {
-      const text = String(params.text || '');
-      if (!text.trim() || text.includes('错')) return {verdict: 'wrong', missing: ['至少一次'], comment: '先记「至少一次」'};
-      if (text.includes('部分')) return {verdict: 'partial', missing: ['while 可能一次也不执行'], comment: '差在 while 那边'};
-      return {verdict: 'correct', missing: [], comment: '意思对了'};
-    }
-    if (name === 'drill.finish') {
-      const session = sessions.get(params.sessionId);
-      const first = (session?.answers || []).filter(a => a.firstTry);
-      const right = first.filter(a => a.correct).length;
-      return {stars: right + 5, accuracy: first.length ? right / first.length : 1, ms: 240000, maxCombo: right, firstFinishToday: true, streak: {current: 3, best: 3, stampedToday: true, leaveUsedYesterday: false}, jar: {today: 12, goal: 30, filledNow: false}, leaveNotes: 1, quiet: false, nextSuggestion: {source: 'notes', scope: {kind: 'more'}, label: '再背一组新的'}};
-    }
-    if (name === 'drill.cheer') return {line: '计算机网络这组，握手的顺序你已经能自己排了。'};
-    if (name === 'chat.history') return {messages: []};
-    if (name === 'chat.send') return {runId: 'qa', status: 'started'};
-    return {};
-  };
-}
-
-function launch() {
+// 系统 Chrome 的 headless 录屏只截窗口实际大小（默认比视口矮约 90px，底下补灰条）；录像时把窗口设成和视口一样大。
+function launch(args = []) {
   const req = createRequire(import.meta.url);
   const root = '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/node_modules';
   let pw; try { pw = req('playwright'); } catch { pw = req(root + '/playwright-core'); }
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  return pw.chromium.launch({headless: true, ...(fs.existsSync(chrome) ? {executablePath: chrome} : {})});
+  return pw.chromium.launch({headless: true, args, ...(fs.existsSync(chrome) ? {executablePath: chrome} : {})});
 }
 async function theme(page, night) {
   await page.evaluate(night => { document.documentElement.dataset.themeMode = night ? 'dark' : 'light'; document.documentElement.toggleAttribute('data-pinkie-night', night); }, night);
@@ -110,7 +55,8 @@ async function answer(page, mode, verdict) {
   }
   if (mode === 'pairs' || mode === 'homophonePairs') {
     const cols = page.locator('.pk-pair-col');
-    if (verdict === 'wrong') { await cols.nth(0).locator('button').nth(0).click(); await cols.nth(1).locator('button').nth(1).click(); return true; }
+    // 答错：先连错一次（左 1 配右 2），再把整组配完，反馈条应是「差一点点」。
+    if (verdict === 'wrong') { await cols.nth(0).locator('button').nth(0).click(); await cols.nth(1).locator('button').nth(1).click(); await page.waitForTimeout(350); }
     const n = await cols.nth(0).locator('button').count();
     for (let i = 0; i < n; i++) {
       await cols.nth(0).locator('button:not([disabled])').first().click();
@@ -155,55 +101,137 @@ test('reward source only animates transform and opacity', () => {
   }
 });
 
-test('A1 reward demo recording', {timeout: 120_000}, async () => {
-  const say = message => fs.writeSync(1, message + '\n');
-  say('a1 enter');
-  fs.mkdirSync(path.dirname(shots), {recursive: true});
-  const log = path.join(repo, 'design/study-desk-drill/demo-a1-error.txt');
-  const note = text => fs.writeFileSync(log, text);
-  say('harness');
+// 等结算页的动画全部走完（星星进罐、盖章、滚数字），再截图；罐子终态要和数字一致。
+async function settled(page) {
+  await page.locator('.pk-done[data-settled="1"]').waitFor({timeout: 12_000});
+  await page.evaluate(async () => {
+    const gsap = window.__pinkieDeskVendors?.gsap;
+    for (const tween of gsap?.globalTimeline?.getChildren(true, true, true) || []) tween.progress?.(1);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+}
+async function jarMatches(page) {
+  const jar = await page.evaluate(() => {
+    const done = document.querySelector('.pk-done');
+    const cap = done?.querySelector('.pk-jar figcaption')?.textContent || '';
+    const level = done?.querySelector('.pk-jar-water')?.style.transform || '';
+    return {cap, level};
+  });
+  const [today, goal] = jar.cap.split('/').map(n => Number(n.trim()));
+  const scale = Number(/scaleY\(([\d.]+)\)/.exec(jar.level)?.[1]);
+  assert.ok(Math.abs(scale - Math.max(0.001, Math.min(1, today / goal))) < 0.01, `罐子水位 ${jar.level} 和数字 ${jar.cap} 对不上`);
+}
+function showDone(page, summary, cheer) {
+  return page.evaluate(({summary, cheer}) => {
+    document.querySelector('.pk-done')?.remove();
+    window.__pinkieDeskReward.completeScreen(document.querySelector('.pk-drill'), summary, {cheer: Promise.resolve(cheer), requireSuggestion: true, onAgain() {}, onBack() {}});
+  }, {summary, cheer});
+}
+
+test('A1 reward demo recording', {timeout: 180_000}, async () => {
+  // 录像：视口和视频同尺寸；依次录答对、答错、连对 3/5/10、普通结算、首次盖章 + 罐满、考前安静版。
+  // 原始录像先落在临时目录，学习台出现之前的几帧（harness 的红色占位层）用 ffmpeg 剪掉。
+  const size = {width: 1440, height: 900};
+  const raw = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-drill-video-'));
   const harness = await startHarness({handler: drillHandler()});
-  say('launch');
-  const browser = await launch();
-  say('context');
-  const context = await browser.newContext({viewport: {width: 1440, height: 900}, recordVideo: {dir: path.dirname(shots), size: {width: 1440, height: 900}}});
-  say('page');
-  let page;
-  try { page = await context.newPage(); say('page ok'); }
-  catch (error) { say('page fail ' + (error.stack || error.message)); throw error; }
+  const browser = await launch([`--window-size=${size.width},${size.height}`]);
+  const context = await browser.newContext({viewport: size, recordVideo: {dir: raw, size}});
+  const page = await context.newPage();
+  const born = Date.now();
   const errors = [];
-  const logLine = line => fs.appendFileSync(log, line + '\n');
-  page.on('pageerror', error => { errors.push(error.message); logLine('PAGE ' + error.message); });
-  page.on('console', msg => { if (msg.type() === 'error') { errors.push(msg.text()); logLine('CONSOLE ' + msg.text()); } });
+  page.on('pageerror', error => errors.push(error.message));
+  let offset = 0;
   try {
-    logLine('goto');
     await page.goto(harness.url);
-    logLine('wait symbols');
     await page.waitForFunction(() => window.__pinkieStudyDesk && window.__pinkieDrill && window.__pinkieDeskReward, null, {timeout: 15000});
-    logLine('start');
-    await start(page, {demo: true});
-    logLine('started');
-    await page.waitForFunction(() => document.querySelector('.pk-drill')?.dataset.demo === 'done', null, {timeout: 40_000});
+    const second = {...structuredClone(FIXTURES.choice), itemId: 'choice-2', prompt: 'for 循环里 continue 会怎样？', options: ['结束整个循环', '跳过这一次', '从头再来', '什么也不做'], answer: 1};
+    await start(page, {demo: true, auto: false, items: [structuredClone(FIXTURES.choice), second]});
+    await page.locator('.pk-drill-stem').waitFor();
+    await page.waitForTimeout(600);
+    offset = (Date.now() - born) / 1000;
+    const pick = async i => { await page.locator('.pk-drill-options .pk-choice').nth(i).click(); await page.waitForTimeout(350); await page.locator('.pk-drill-check').click(); };
+    await page.waitForTimeout(900);
+    await pick(1);                                        // 答对
+    await page.waitForTimeout(2200);
+    await page.locator('.pk-sheet .pk-btn').click();
+    await page.waitForTimeout(1000);
+    await pick(0);                                        // 答错
+    await page.waitForTimeout(2600);
+    await page.locator('.pk-sheet .pk-btn').click();
+    await page.waitForTimeout(500);
+    for (const n of [3, 5, 10]) {                         // 连对 3 / 5 / 10
+      await page.evaluate(n => window.__pinkieDeskReward.comboBadge(document.querySelector('.pk-drill-combo'), n), n);
+      await page.waitForTimeout(1500);
+    }
+    await showDone(page, SUMMARIES.normal, '握手的顺序你已经能自己排了');
+    await settled(page); await page.waitForTimeout(1800);
+    await showDone(page, SUMMARIES.full, '计网这组一道没错，ARP 那张也记住了');
+    await settled(page); await page.waitForTimeout(2600);
+    await showDone(page, SUMMARIES.quiet, '考前别熬，今晚早点睡');
+    await settled(page); await page.waitForTimeout(2200);
+    await jarMatches(page);
     await page.screenshot({path: path.join(shots, 'demo-a1-end.png')});
-    if (errors.length) throw new Error(errors.join('\n'));
-    note('ok');
-  } catch (error) {
-    logLine('FAIL ' + (error.stack || error.message));
-    throw error;
+    assert.equal(errors.length, 0, errors.join('\n'));
   } finally {
-    try { if (page) await Promise.race([page.close(), new Promise(resolve => setTimeout(resolve, 4000))]); } catch { /* 页面已关 */ }
-    try {
-      const video = page?.video?.();
-      if (video) {
-        const saved = path.join(repo, 'design/study-desk-drill/demo-a1.webm');
-        await Promise.race([video.saveAs(saved), new Promise(resolve => setTimeout(resolve, 8000))]);
-        try { fs.copyFileSync(saved, path.join(repo, 'design/study-desk-drill/demo.webm')); } catch { /* 录像还没落盘 */ }
-      }
-    } catch { /* 没有录像 */ }
-    try { await Promise.race([context?.close(), new Promise(resolve => setTimeout(resolve, 3000))]); } catch {}
-    try { await Promise.race([browser?.close(), new Promise(resolve => setTimeout(resolve, 3000))]); } catch {}
-    try { await harness?.close(); } catch {}
+    await page.close();
+    const video = page.video();
+    const source = video ? await video.path() : '';
+    await context.close(); await browser.close(); await harness.close();
+    if (source && fs.existsSync(source)) {
+      const saved = path.join(repo, 'design/study-desk-drill/demo-a1.webm');
+      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-ss', offset.toFixed(2), '-i', source, '-c:v', 'libvpx', '-b:v', '2500k', '-an', saved]);
+      fs.copyFileSync(saved, path.join(repo, 'design/study-desk-drill/demo.webm'));
+      const probe = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', saved], {encoding: 'utf8'});
+      const info = JSON.parse(probe);
+      assert.equal(info.streams[0].width, size.width);
+      assert.equal(info.streams[0].height, size.height);
+      assert.ok(Number(info.format.duration) >= 24, `录像只有 ${info.format.duration} 秒`);
+      fs.writeSync(1, `demo-a1.webm ${info.streams[0].width}x${info.streams[0].height} ${Number(info.format.duration).toFixed(1)}s\n`);
+    }
+    fs.rmSync(raw, {recursive: true, force: true});
   }
+});
+
+test('a failed finish shows real local numbers, no stamp, no confetti, and can retry', {timeout: 60_000}, async () => {
+  const control = {finishFails: 1};
+  const harness = await startHarness({handler: drillHandler(control)});
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+    await page.goto(harness.url);
+    await page.waitForFunction(() => window.__pinkieDrill && window.__pinkieStudyDesk);
+    await start(page, {source: 'notes', scope: {kind: 'notes', ids: ['choice']}, size: 5, force: true});
+    await page.locator('.pk-drill-options').waitFor();
+    await page.evaluate(() => {
+      window.__confetti = 0;
+      const desk = window.__pinkieStudyDesk;
+      for (const motion of new Set([desk.motion, ...(desk.contexts?.() || []).map(c => c.motion)].filter(Boolean))) {
+        const orig = motion.confettiAt;
+        motion.confettiAt = (...args) => { window.__confetti += 1; return orig?.apply(motion, args); };
+      }
+    });
+    await answer(page, 'choice', 'right');
+    await page.locator('.pk-sheet .pk-btn').click();
+    await page.locator('.pk-done[data-state="failed"]').waitFor();
+    await settled(page);
+    const failed = await page.evaluate(() => {
+      const done = document.querySelector('.pk-done');
+      return {text: done.innerText, seal: done.querySelectorAll('.pk-seal').length, jar: done.querySelectorAll('.pk-jar').length,
+        stars: done.querySelector('.pk-stick b')?.textContent, retry: Boolean(done.querySelector('.pk-btn[aria-label="再试一次"]')), confetti: window.__confetti};
+    });
+    assert.equal(failed.seal, 0, '结算失败还盖了章');
+    assert.equal(failed.jar, 0, '结算失败还摆了罐子');
+    assert.equal(failed.confetti, 0, '结算失败还撒了纸屑');
+    assert.equal(/4 天|30 \/ 30|30\/30/.test(failed.text), false, failed.text);
+    assert.match(failed.text, /结算没记上，星星已经记了/);
+    assert.equal(failed.stars, '+1');
+    assert.match(failed.text, /100%/);
+    assert.equal(failed.retry, true);
+    await page.locator('.pk-done .pk-btn[aria-label="再试一次"]').click();
+    await page.locator('.pk-done[data-state="ok"]').waitFor();
+    await settled(page);
+    assert.equal(await page.locator('.pk-done .pk-seal').count(), 1);
+  } finally { await browser.close(); await harness.close(); }
 });
 
 test('drill player shots, reduced motion and idle', {timeout: 600_000}, async () => {
@@ -223,7 +251,12 @@ test('drill player shots, reduced motion and idle', {timeout: 600_000}, async ()
       await page.locator('.pk-drill-q').waitFor();
       const showed = await answer(page, mode, verdict);
       assert.equal(showed, true);
-      if (!((mode === 'pairs' || mode === 'homophonePairs') && verdict === 'wrong')) await page.locator('.pk-sheet').waitFor({timeout: 8000});
+      // 每一种题型的「答错」截图都必须真的停在答错的反馈条上。
+      await page.locator('.pk-sheet').waitFor({timeout: 8000});
+      if (verdict === 'wrong' && mode !== 'flip') {
+        const kind = await page.locator('.pk-sheet').getAttribute('data-kind');
+        assert.ok(kind === 'wrong' || kind === 'partial', `${mode} 答错停在了 ${kind}`);
+      }
       await page.evaluate(async () => {
         const gsap = window.__pinkieDeskVendors?.gsap;
         for (const tween of gsap?.globalTimeline?.getChildren(true, true, true) || []) tween.progress?.(1);
@@ -239,6 +272,19 @@ test('drill player shots, reduced motion and idle', {timeout: 600_000}, async ()
           const worst = overflow.reduce((a, b) => b.over > a.over ? b : a, {over: 0, cls: ''});
           const detail = overflow.filter(item => item.over > 2).map(item => `${item.cls}:${item.over}`).join(' ');
           assert.ok(worst.over <= 2, `${label} 溢出 ${worst.over}px ${worst.cls} ${detail}`);
+          if (mode === 'pairs' || mode === 'homophonePairs') {
+            // 窄卡也保持两栏：两栏顶端对齐，各有「问 / 答」小标题。
+            const cols = await page.evaluate(() => [...document.querySelectorAll('.pk-pair-col')].map(col => ({top: Math.round(col.getBoundingClientRect().top), head: col.querySelector('.pk-pair-head')?.textContent || ''})));
+            assert.equal(cols.length, 2);
+            assert.equal(cols[0].top, cols[1].top, `${label} 配对两栏没有并排`);
+            assert.ok(cols[0].head && cols[1].head);
+          }
+          if (width === 1000) {
+            const sizes = await page.evaluate(() => ({stem: parseFloat(getComputedStyle(document.querySelector('.pk-drill-stem, .pk-drill-cloze')).fontSize),
+              option: parseFloat(getComputedStyle(document.querySelector('.pk-choice') || document.body).fontSize)}));
+            assert.ok(sizes.stem >= 22, `${label} 题干 ${sizes.stem}px`);
+            if (await page.locator('.pk-choice').count()) assert.ok(sizes.option >= 16, `${label} 选项 ${sizes.option}px`);
+          }
           await page.locator('.pk-drill').screenshot({path: path.join(shots, `${label}.png`), animations: 'disabled', timeout: 15000});
         }
       }
@@ -248,20 +294,29 @@ test('drill player shots, reduced motion and idle', {timeout: 600_000}, async ()
     await page.getByText('碧琪还在给 4 张卡出题').waitFor();
     await start(page, {demo: true, auto: false});
     await page.locator('.pk-drill-stem').waitFor();
-    const summaries = {
-      normal: {stars: 12, accuracy: .8, ms: 252000, maxCombo: 3, firstFinishToday: false, streak: {current: 2, week: [true, true, false, false, false, false, false]}, jar: {today: 12, goal: 30, filledNow: false}, quiet: false},
-      full: {stars: 20, accuracy: 1, ms: 180000, maxCombo: 10, firstFinishToday: true, streak: {current: 6, stampedToday: true, week: [true, true, true, true, true, true, false]}, jar: {today: 30, goal: 30, filledNow: true}, quiet: false},
-      quiet: {stars: 8, accuracy: .7, ms: 200000, maxCombo: 2, firstFinishToday: true, streak: {current: 5, week: [true, true, true, true, true, false, false]}, jar: {today: 18, goal: 30, filledNow: false}, quiet: true},
-    };
-    for (const [name, summary] of Object.entries(summaries)) {
-      await page.evaluate(summary => { document.querySelector('.pk-done')?.remove(); window.__pinkieDeskReward.completeScreen(document.querySelector('.pk-drill'), summary, {cheer: Promise.resolve(summary.quiet ? '这一页背完了，早点休息' : '这一页的握手你排对了。'), onAgain() {}, onBack() {}}); }, summary);
-      await page.locator('.pk-done-title').waitFor();
-      await page.waitForTimeout(2200);
-      await theme(page, false);
-      await page.locator('.pk-done').screenshot({path: path.join(shots, `complete-${name}-day-1000.png`)});
-      await theme(page, true);
-      await page.locator('.pk-done').screenshot({path: path.join(shots, `complete-${name}-night-1000.png`)});
+    for (const [name, summary] of Object.entries(SUMMARIES)) {
+      for (const width of [1000, 360]) {
+        await page.evaluate(width => { const node = document.querySelector('.pk-drill'); node.style.width = width + 'px'; node.style.maxWidth = width + 'px'; }, width);
+        await theme(page, false);
+        await showDone(page, summary, summary.quiet ? '考前别熬，今晚早点睡' : '握手的顺序你已经能自己排了');
+        await settled(page);
+        await jarMatches(page);
+        const title = await page.locator('.pk-done-title').textContent();
+        const line = await page.locator('.pk-done-line').textContent();
+        assert.notEqual(title, line, '标题和碧琪那句重复');
+        assert.equal(await page.locator('.pk-done .pk-btn[aria-label="再背一组"]').isVisible(), summary.nextSuggestion !== null, `${name} 再背一组按钮`);
+        const big = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pk-stick b')).fontSize));
+        assert.ok(big >= 32, `${name}-${width} 便签数字 ${big}px`);
+        await page.locator('.pk-done').screenshot({path: path.join(shots, `complete-${name}-day-${width}.png`)});
+        await theme(page, true);
+        await page.locator('.pk-done').screenshot({path: path.join(shots, `complete-${name}-night-${width}.png`)});
+      }
     }
+    await page.evaluate(() => { const node = document.querySelector('.pk-drill'); node.style.width = '1000px'; node.style.maxWidth = '1000px'; });
+    await theme(page, false);
+    await showDone(page, {failed: true, stars: 7, accuracy: .75, ms: 196000, maxCombo: 4}, '');
+    await settled(page);
+    await page.locator('.pk-done').screenshot({path: path.join(shots, 'complete-failed-day-1000.png')});
     assert.equal(errors.filter(message => !/ResizeObserver/.test(message)).length, 0, errors.join('\n'));
   } finally { await browser.close(); await harness.close(); }
 

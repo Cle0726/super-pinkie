@@ -10,7 +10,7 @@ import {LearningVocab} from '../services/mode-architecture/learning-vocab.mjs';
 import {LearningDesk} from '../services/mode-architecture/learning-desk.mjs';
 import {
   DRILL_CHEER_RULES, DRILL_JUDGE_RULES, DRILL_RULES, LearningDrill, buildSession, drillCardHash, drillStars, drillStrength,
-  localCheer, localJudge, mapDrillRating, mixDrillCards, validateDrillCards,
+  foldDrillText, localCheer, localJudge, mapDrillRating, mixDrillCards, pairLabel, validateDrillCards,
 } from '../services/mode-architecture/learning-drill.mjs';
 
 const KEY = 'agent:learning:drill-test';
@@ -77,8 +77,12 @@ function seedRecall(recall, store, cards) {
   recall.write({v: 1, records, days: {}});
 }
 
-test('prompts are copied verbatim from the product copy', () => {
+test('prompts are copied verbatim from the product copy', t => {
   const file = new URL('../../briefs/study-desk-drill/PROMPTS.md', import.meta.url);
+  if (!fs.existsSync(file)) {
+    t.skip('briefs 不在这个 checkout');
+    return;
+  }
   const text = fs.readFileSync(file, 'utf8');
   const fences = [...text.matchAll(/```\n([\s\S]*?)\n```/g)].map(match => match[1]);
   assert.equal(DRILL_RULES, fences[0]);
@@ -174,10 +178,14 @@ test('local judging and the session star formula', () => {
   assert.equal(localJudge({answer: 'x', keys: ['地址'], text: '完全不沾边'}).comment, '碧琪没来得及细看，按关键词判的');
   assert.equal(drillStars({answerStars: 3, scored: 4, correct: 3, finished: true}), 8);
   assert.equal(drillStars({answerStars: 4, scored: 4, correct: 4, finished: true}), 14);
-  assert.equal(localCheer({quiet: true, accuracy: 1, scored: 4, jarFull: true}), '这一页背完了，早点休息');
+  assert.equal(localCheer({quiet: true, accuracy: 1, scored: 4, jarFull: true}), '稳住节奏，今晚早点睡');
   assert.equal(localCheer({jarFull: true, accuracy: 0.4, scored: 4}), '今天的星星罐装满了');
-  assert.equal(localCheer({accuracy: 1, scored: 4}), '全对，一页满分');
-  assert.equal(localCheer({accuracy: 0.5, scored: 4}), '这一页背完啦');
+  assert.equal(localCheer({accuracy: 1, scored: 4}), '一道没错，记得很牢');
+  assert.equal(localCheer({accuracy: 0.5, scored: 4}), '错的那几道，下一组先看它们');
+  // 结算页标题是「这一页背完啦 / 了」，本地台词不能和它重字。
+  for (const args of [{quiet: true}, {jarFull: true}, {accuracy: 1, scored: 4}, {accuracy: 0.9, scored: 10}, {accuracy: 0, scored: 4}]) {
+    assert.equal(/背完/.test(localCheer(args)), false);
+  }
 });
 
 test('bad generated questions are dropped and the valid modes stay', () => {
@@ -260,7 +268,7 @@ test('finishing pays the set bonus, a perfect bonus, and only the first set stam
   if (second.items[0]) drill.answer({sessionId: second.sessionId, itemId: second.items[0].itemId, correct: true, firstTry: true, ms: 500});
   const again = drill.finish({sessionId: second.sessionId});
   assert.equal(again.firstFinishToday, false);
-  assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '全对，一页满分');
+  assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '一道没错，记得很牢');
 });
 
 test('leave slips are issued on Beijing Mondays, cap at two, and bridge a blank day', async t => {
@@ -281,15 +289,15 @@ test('leave slips are issued on Beijing Mondays, cap at two, and bridge a blank 
     }));
   }
   const bridged = pact.drillStreak();
-  // 两张请假条把 11-03 和 11-01 两天空白都补上，11-02 到 11-04 连成 4 天。
-  assert.equal(bridged.current, 4);
+  // 11-03 夹在两个盖章日中间，用一张补上；11-01 往前没有连续可保，不用。11-02 到 11-04 连成 3 天。
+  assert.equal(bridged.current, 3);
   assert.equal(bridged.leaveUsedYesterday, true);
   assert.equal(bridged.weekKind[1], 'leave');
-  assert.equal(bridged.leaveNotes, 0);
+  assert.equal(bridged.leaveNotes, 1);
   assert.deepEqual(pact.streak(), {current: 1, best: 1});
   const again = pact.drillStreak();
-  assert.equal(again.current, 4);
-  assert.equal(again.leaveNotes, 0);
+  assert.equal(again.current, 3);
+  assert.equal(again.leaveNotes, 1);
 });
 
 test('today.drill has the jar, the week and the due counts', async t => {
@@ -430,7 +438,7 @@ test('write judging and the closing line use the model, then fall back locally',
   assert.equal(done.quiet, true);
   assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '计网那组连对得很稳');
   mode = 'slow';
-  assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '这一页背完了，早点休息');
+  assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '稳住节奏，今晚早点睡');
 });
 
 function maxRun(modes) {
@@ -444,3 +452,120 @@ function maxRun(modes) {
   }
   return best;
 }
+
+function writeDay(pact, date, value) {
+  fs.mkdirSync(pact.daysRoot, {recursive: true});
+  fs.writeFileSync(path.join(pact.daysRoot, `${date}.json`), JSON.stringify({date, notes: {added: 0}, ...value}));
+}
+
+test('local judging keeps signs, operators and degrees', () => {
+  assert.equal(foldDrillText('−10'), foldDrillText('-10'));
+  assert.notEqual(foldDrillText('−10'), foldDrillText('10'));
+  assert.equal(localJudge({answer: '−10', keys: ['−10'], text: '10'}).verdict, 'wrong');
+  assert.equal(localJudge({answer: '−10', keys: [], text: '10'}).verdict, 'wrong');
+  assert.equal(localJudge({answer: '−10', keys: ['−10'], text: '－10'}).verdict, 'correct');
+  assert.equal(localJudge({answer: 'a > b', keys: ['a > b'], text: 'a < b'}).verdict, 'wrong');
+  assert.equal(localJudge({answer: 'a > b', keys: [], text: 'a < b'}).verdict, 'wrong');
+  assert.equal(localJudge({answer: '90°', keys: ['90°'], text: '90度'}).verdict, 'correct');
+  assert.equal(localJudge({answer: '90°', keys: [], text: '90 度'}).verdict, 'correct');
+  assert.equal(localJudge({answer: '“地址”。', keys: [], text: '地址'}).verdict, 'correct');
+  // 判题抽检里本地兜底把「MAC 解析为 IP」判成了对；关键词顺序反了只给部分对。
+  assert.equal(localJudge({answer: '将 IP 地址解析为 MAC 地址', keys: ['IP 地址', 'MAC 地址'], text: '将 MAC 地址解析为 IP 地址'}).verdict, 'partial');
+  assert.equal(localJudge({answer: '将 IP 地址解析为 MAC 地址', keys: ['IP 地址', 'MAC 地址'], text: '把ip地址解析成mac地址'}).verdict, 'correct');
+  const cloze = validateDrillCards({cards: [{id: 'n', keys: ['−10'], cloze: {text: '温度是 {{1}} 度', blanks: ['−10'], distractors: ['10', '-5']}}]},
+    [{id: 'n', answer: '温度是 −10 度'}]);
+  assert.deepEqual(cloze.get('n').cloze.blanks, ['−10']);
+});
+
+test('a brand-new learner keeps the leave slip and sees no streak', async t => {
+  const {pact, drill} = await fixture(t);
+  const streak = pact.drillStreak();
+  assert.equal(streak.current, 0);
+  assert.equal(streak.leaveUsedYesterday, false);
+  assert.equal(streak.leaveNotes, 1);
+  assert.equal(drill.today().streak.leaveUsedYesterday, false);
+  assert.equal(pact.readDrillMeta().balance, 1);
+  assert.deepEqual(pact.readDrillMeta().used, {});
+});
+
+test('a blank Tuesday between a stamped Monday and Wednesday becomes leave', async t => {
+  const {pact} = await fixture(t, {at: Date.parse('2026-11-04T02:00:00Z')});
+  writeDay(pact, '2026-11-02', {drillFinished: 1, stars: 10});
+  const wednesday = pact.drillStreak();
+  assert.equal(wednesday.current, 2);
+  assert.equal(wednesday.leaveUsedYesterday, true);
+  assert.deepEqual(wednesday.weekKind.slice(0, 3), ['stamped', 'leave', 'empty']);
+  assert.equal(wednesday.leaveNotes, 0);
+});
+
+test('a partial day can be bridged by a leave slip', async t => {
+  const {pact} = await fixture(t, {at: Date.parse('2026-11-04T02:00:00Z')});
+  writeDay(pact, '2026-11-02', {drillFinished: 1, stars: 10});
+  writeDay(pact, '2026-11-03', {minutes: 3, questions: {answered: 1, correct: 1}, reviews: {done: 0}});
+  writeDay(pact, '2026-11-04', {drillFinished: 1, stars: 8});
+  const streak = pact.drillStreak();
+  assert.equal(streak.current, 3);
+  assert.equal(streak.weekKind[1], 'leave');
+});
+
+test('the closing line sees the finish result, not the bare summary', async t => {
+  const {drill, recall, store, organizer, pact} = await fixture(t);
+  let payload = null;
+  organizer.status = () => ({available: true, model: 'qa/fake', modelName: 'QA'});
+  organizer.requestModel = async (_model, rules, input) => {
+    if (String(rules).includes('学习搭子')) { payload = input; return {line: '计网那组连对得很稳'}; }
+    return {cards: []};
+  };
+  drill.setSettings({jarGoal: 15, size: 5});
+  pact.recordDrill({stars: 10});
+  const cards = [1, 2, 3, 4, 5].map(i => noteCard('c' + i, 1, {nextReviewAt: 0}));
+  seedRecall(recall, store, cards);
+  const opened = drill.session({sessionKey: KEY, source: 'notes', size: 5});
+  for (const item of opened.items) drill.answer({sessionId: opened.sessionId, itemId: item.itemId, correct: true, firstTry: true, ms: 800});
+  const done = drill.finish({sessionId: opened.sessionId});
+  await drill.cheer({sessionId: opened.sessionId});
+  assert.ok(payload);
+  assert.equal(payload.firstFinishToday, true);
+  assert.equal(payload.stars, done.stars);
+  assert.equal(payload.stars, opened.items.filter(item => item.mode !== 'look').length + 10);
+  assert.equal(payload.jarFull, done.jar.filledNow);
+  assert.equal(payload.jarFull, true);
+});
+
+test('pairs use keys[0] on the right, truncate with an ellipsis, and skip duplicate labels', () => {
+  assert.equal(pairLabel(noteCard('k', 1, {answer: '存放另一个变量的地址的变量', generated: {keys: ['地址']}})), '地址');
+  assert.equal(pairLabel(noteCard('k', 1, {answer: '一二三四五六七八九十十一十二十三'})), '一二三四五六七八九十十一…');
+  const keyed = Array.from({length: 5}, (_, i) => noteCard('q' + i, 1, {generated: {keys: ['关键' + i]}}));
+  const items = buildSession(keyed, {size: 10, source: 'notes', rng: () => 0});
+  const pairs = items.find(item => item.mode === 'pairs');
+  assert.deepEqual([...pairs.pairs.right].sort(), ['关键0', '关键1', '关键2', '关键3', '关键4']);
+  const dupes = Array.from({length: 5}, (_, i) => noteCard('d' + i, 1, {generated: {keys: [i < 2 ? '地址' : '值' + i]}}));
+  const plain = buildSession(dupes, {size: 10, source: 'notes', rng: () => 0});
+  assert.equal(plain.some(item => item.mode === 'pairs'), false);
+  assert.equal(plain.length, 5);
+});
+
+test('notes without recall cards are sent to the recall queue instead of leaving an empty set', async t => {
+  const {drill, store, recall, organizer} = await fixture(t);
+  let calls = 0;
+  organizer.status = () => ({available: true, model: 'qa/fake', modelName: 'QA'});
+  organizer.requestModel = () => { calls += 1; return new Promise(() => {}); };
+  store.writeNotes([{id: 'bare', title: 'ARP', content: 'ARP 把 IP 地址解析为 MAC 地址。', original: 'ARP 把 IP 地址解析为 MAC 地址。',
+    sourceSessionKey: KEY, status: 'active', exam: 'zsb', subject: '计算机网络', topic: '协议', triagedAt: 1}]);
+  assert.throws(() => drill.session({sessionKey: KEY, source: 'notes'}), /正在把笔记拆成回忆卡/);
+  assert.equal(['queued', 'running'].includes(recall.read().records.bare?.status), true);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls, 1);
+});
+
+test('notes saved from any learning chat are drilled, whichever chat opens the drill', async t => {
+  const {drill, recall, store} = await fixture(t);
+  seedRecall(recall, store, [noteCard('elsewhere', 1, {nextReviewAt: 0})]);
+  const opened = drill.session({sessionKey: 'agent:learning:dashboard:other-chat', source: 'notes', size: 5});
+  assert.equal(opened.items.length, 1);
+  assert.equal(opened.items[0].cardRef.recallId, 'elsewhere');
+  const result = drill.answer({sessionId: opened.sessionId, itemId: opened.items[0].itemId, correct: true, firstTry: true, ms: 800});
+  assert.equal(result.rating, 'remembered');
+  const card = recall.read().records['note-elsewhere'].cards[0];
+  assert.ok(card.drillSessions?.[opened.sessionId]);
+});
