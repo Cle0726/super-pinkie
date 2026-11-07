@@ -694,7 +694,8 @@
     const cheer = failed ? null : opts.cheer;
     if (cheer) Promise.race([
       Promise.resolve(cheer).then(v => (v && typeof v === 'object' ? v.line : v) || ''),
-      new Promise(resolve => later(() => resolve(''), 4000)),
+      // 真模型一句要 10 秒上下（后端自己 15 秒超时）；先放本地那句，等得到就淡入替换。
+      new Promise(resolve => later(() => resolve(''), 18000)),
     ]).then(text => {
       if (!text || text === line.textContent || text === event.textContent || text === heading.textContent || !line.isConnected) return;
       fade(line, 1, 0, 120).then(() => { line.textContent = text; return fade(line, 0, 1, 120); });
