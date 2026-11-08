@@ -1042,8 +1042,25 @@
   });
   window.addEventListener("popstate", render);
   let renderQueued = false;
+  // A shell that installs its bridge after the page scripts announces it two
+  // ways: a `pinkie-native-bridge-ready` event, or by stamping
+  // data-pinkie-platform on <html>. The dock check is a plain property read
+  // with no DOM trace, so without an explicit wake-up an early render decides
+  // there is no dock and removes the split entry for the whole session.
+  let dockSettle = null;
+  const onDockSettled = () => {
+    if (!dockSettle || !hasWorkspaceDock()) return;
+    const done = dockSettle;
+    dockSettle = null;
+    window.removeEventListener("pinkie-native-bridge-ready", done);
+    render();
+  };
   const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, .topnav-shell__actions, #pinkie-study-desk, #pinkie-study-desk .rail, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
-  new MutationObserver(records => {
+  const modeObserver = new MutationObserver(records => {
+    // A late bridge install stamps data-pinkie-platform on <html>; settle the
+    // split-workspace entry before deciding whether a repaint is needed.
+    if (dockSettle && records.some(record => record.type === "attributes"
+        && record.target === document.documentElement)) onDockSettled();
     // Streaming text and our status clocks do not change the mode controls.
     // Only new/retired mount points and assistant avatars need reconciliation.
     const relevant = records.some(record => {
@@ -1056,11 +1073,12 @@
     if (!relevant || renderQueued) return;
     renderQueued = true;
     window.requestAnimationFrame(() => { renderQueued = false; render(); });
-  }).observe(document.documentElement, {
+  });
+  modeObserver.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock"],
+    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock", "data-pinkie-platform"],
   });
   const schedulePreload = () => window.setTimeout(() => {
     if (typeof window.requestIdleCallback === "function") {
@@ -1071,27 +1089,20 @@
   }, 120);
   // The Windows shell cannot inject its bridge until WebView2 reports the page
   // as loaded, so the scripts on that page routinely run first. The dock check
-  // is a plain property read with no DOM trace, which means the mode switcher's
-  // observers never wake up for it: one early render decided there was no dock,
-  // removed the entry, and the split stayed gone for the whole session.
+  // is a plain property read with no DOM trace, which means an observer that
+  // only watches mount points never wakes up for it: one early render decided
+  // there was no dock, removed the entry, and the split stayed gone for the
+  // whole session.
   //
-  // Two arrival signals, both event-driven. Newer shells announce themselves
-  // after defining the handlers; every shell also stamps data-pinkie-platform
-  // on <html> as the bridge installs, so watching the root element's attributes
-  // catches it either way. No polling: this file may not run background work.
+  // Two arrival signals, both event-driven, both handled without a second
+  // observer: newer shells fire `pinkie-native-bridge-ready` after defining the
+  // handlers; every shell also stamps data-pinkie-platform on <html> as the
+  // bridge installs, which modeObserver already watches. No polling: this file
+  // may not run background work, and one MutationObserver is the whole budget.
   const watchForWorkspaceDock = () => {
     if (hasWorkspaceDock()) return;
-    let done = false;
-    const settle = () => {
-      if (done || !hasWorkspaceDock()) return;
-      done = true;
-      window.removeEventListener("pinkie-native-bridge-ready", settle);
-      observer.disconnect();
-      render();
-    };
-    window.addEventListener("pinkie-native-bridge-ready", settle);
-    const observer = new MutationObserver(settle);
-    observer.observe(document.documentElement, { attributes: true });
+    dockSettle = onDockSettled;
+    window.addEventListener("pinkie-native-bridge-ready", onDockSettled);
   };
 
   window.addEventListener("load", schedulePreload, { once: true });
