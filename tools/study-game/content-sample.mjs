@@ -153,18 +153,26 @@ try {
   }
 
   if (want('line')) {
-    const events = ['setFinish', 'levelup', 'capture', 'boss', 'formSwitch', 'comeback', 'setFinish', 'capture', 'boss', 'examResult'];
+    // 台词池：第一次调用即时回本地并在后台写池子；等池子写好后再抽 20 条（平日 10 + 考前一周 10）。
+    const events = ['setFinish', 'levelup', 'capture', 'boss', 'formSwitch', 'comeback', 'huntWin', 'gacha', 'questDone', 'examResult'];
     const lines = [];
-    for (const [i, ev] of events.entries()) {
-      for (const quietDay of [false, true]) {
-        clock = quietDay ? Date.parse('2026-12-09T02:00:00Z') : Date.now();
-        const t0 = Date.now();
-        const r = await game.modules.content.line({event: ev, context: {n: i, form: '立冬碧琪', streak: 5}});
-        lines.push({ev, quiet: quietDay, ms: Date.now() - t0, ...r});
+    const pools = {};
+    for (const quietDay of [false, true]) {
+      clock = quietDay ? Date.parse('2026-12-09T02:00:00Z') : Date.now();
+      const t0 = Date.now();
+      const first = await game.modules.content.line({event: 'setFinish'});
+      const firstMs = Date.now() - t0;
+      const t1 = Date.now();
+      await game.modules.content.lineJob;
+      pools[quietDay ? 'quiet' : 'normal'] = {firstSource: first.source, firstMs, poolMs: Date.now() - t1, pool: game.read().lines?.pool || null};
+      for (const ev of events) {
+        const t2 = Date.now();
+        const r = await game.modules.content.line({event: ev, context: {form: '立冬碧琪', streak: 5}});
+        lines.push({ev, quiet: quietDay, ms: Date.now() - t2, ...r});
       }
     }
     clock = Date.now();
-    report.sections.line = {n: lines.length, model: lines.filter(l => l.source === 'model').length, lines};
+    report.sections.line = {n: lines.length, model: lines.filter(l => l.source === 'model').length, lines, pools};
     log(`lines: ${report.sections.line.model}/${lines.length} model`);
     save();
   }

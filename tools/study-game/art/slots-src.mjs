@@ -23,10 +23,11 @@ ${NOTEXT}`,
   },
   ult: {
     refs: ['refs/ref-face.png', 'refs/ref-body.png'],
-    text: `Use case: full-screen "ultimate move" cinematic key art for a study game, landscape 1536x1024. Character: ${PONY}. ${STYLE}
+    text: `Use case: premium cinematic "ultimate skill" cut-in key art for a study game, landscape 1536x1024, opaque. Character: ${PONY}. Keep her exactly on-model in the reference style (bold outlines, flat colors).
 Scene: {desc}
 {extra}
-Cinematic composition: low camera angle, strong rim backlight, dynamic diagonal, speed lines or magic light, rich but readable background in the same flat cartoon style, character large in frame (left or right third) leaving some calm space on the other side. No text, no letters, no numbers, no watermark, no UI.`,
+Composition (strict): medium shot from a slightly low camera; her face exactly at the horizontal center with her eyes about 40% down from the top edge; head and chest fill the central third; left and right thirds are background only; nothing important in the top or bottom 15%.
+Lighting: low-key and fairly dark so white titles read on top; one strong rim light / backlight; volumetric light shafts, haze, background depth with soft depth-of-field blur. Restrained grading on the given palette plus white; no rainbow, confetti, cartoon stars, hearts or sticker sparkles. Mature and cinematic, not childish. No text, letters, numbers, watermark or UI.`,
   },
   monster: {
     refs: ['refs/ref-face.png'],
@@ -150,37 +151,68 @@ add(3, 'exam/hall', 'scene', 'A quiet calm exam hall in muted papercraft: neat r
 // ④ 其余 ★ 形态立绘
 for (const id of ['pirate', 'astronaut', 'dragon-rider', 'knight', 'chef', 'magical-girl', 'astrologer', 'zhuangyuan', 'idol', 'cyber', 'ninja', 'xiaoxue', 'daxue', 'graduate', 'gold-master']) add(4, `form/${id}/portrait`, 'portrait', P[id]);
 
-// ⑤ 24 张大招立绘
-const U = {
-  daily: 'Confetti party burst: she leaps toward the camera from an exploding party cannon, rainbow confetti and balloons everywhere.',
-  learning: 'She slams down a giant golden approval stamp onto an open notebook, a shockwave of stars bursting out.',
-  project: 'She stands on a stack of finished project folders as a giant golden checklist stamp crashes down behind her, golden sparks.',
-  thinking: 'Deep-thought spell: she floats in front of a huge glowing crystal magic circle with geometric runes, eyes closed, crystals orbiting.',
-  unrestricted: 'Rainbow warp: she rides a rainbow streak through a starfield tunnel at hyperspeed, rainbow confetti trails.',
-  detective: 'Spotlight reveal: dark stage, a single dramatic spotlight on her pointing forward with the magnifying glass, glowing clue threads connecting pinned notes behind her.',
-  pirate: 'Treasure rain: on the deck of a paper ship at sunset, she raises the treasure map as gold coins rain from the sky.',
-  astronaut: 'Warp jump: she launches through a swirling galaxy portal, stars stretching into light streaks.',
-  'dragon-rider': 'Dragon breath: riding the pink baby dragon in the sky as it breathes a huge beam of warm pink-gold fire.',
-  queen: 'Royal entrance: curtains part on a grand stage, a red carpet shockwave rolls toward the camera, she stands under golden spotlights with the scepter raised.',
-  princess: 'Rose-petal rain: she twirls in a moonlit castle garden as a storm of pink rose petals and sparkles pours down.',
-  knight: 'Lightning slash: she swings her blunt practice sword leaving a giant crescent of pink lightning across the frame.',
-  chef: 'Sprinkle storm: a giant cupcake erupts like a volcano of colorful sugar sprinkles raining over a bakery kitchen.',
-  'magical-girl': 'Transformation: she spins inside a pillar of ribbons and hearts, a huge heart magic circle beneath her.',
-  astrologer: 'Starmap warp: she raises the crystal astrolabe, constellation lines connect across a deep indigo sky and a star-warp tunnel opens.',
-  zhuangyuan: 'Ink-splash golden list: she swings the giant brush, a massive ink wash explodes across a scroll sky, a red-gold honor banner unfurls (no readable characters).',
-  idol: 'Concert stage: she sings center stage, a sea of glowing light sticks in the crowd, heart-shaped spotlights.',
-  cyber: 'Neon beam: she fires a beam of neon light from the giant highlighter across a cyber city skyline at night, glitch sparks.',
-  ninja: 'Smoke dash: she dashes through a cloud of pink smoke leaving afterimages, soft paper shuriken stars flying.',
-  lidong: 'First snow: she stands on a quiet winter street holding the ginger tea as the first heavy snowfall of the year begins, warm lantern light, steam rising.',
-  xiaoxue: 'Snow shower: she and the snowman buddy throw up their arms as a gentle shower of big snowflakes swirls around them.',
-  daxue: 'Aurora warp: sledding down a snowy hill under a huge rippling aurora that bends into a warp tunnel.',
-  graduate: 'Graduation: she tosses the graduation cap high into a bright sky, confetti and paper airplanes everywhere.',
-  'gold-master': 'Gold stamp: she slams a giant gold medal stamp down, a golden shockwave lights up a pop-up-book world behind her.',
+// ⑤ 24 张大招立绘（11-08 v2：大厂电影感、克制配色、脸在水平中间距顶约 40%——前端斜切条带按这个取景，见 VFX.md §4）
+// 网页版 ChatGPT 不带参考图，所以 web 提示词里用文字把碧琪写清楚；costume 是网页版用的简写。
+const ULT_COSTUME = {
+  daily: 'her classic look (no costume)',
+  learning: 'a yellow pencil tucked behind her ear, holding a purple notebook with a star on the cover',
+  project: 'a pencil behind her ear, a rolled checklist scroll',
+  thinking: 'no costume, a calm focused expression',
+  unrestricted: 'rainbow-streaked mane (pink, yellow, blue stripes) and a blue bow with a yellow star',
+  detective: 'a pink-and-cream houndstooth deerstalker-style cap, short plum caped coat, a big brass magnifying glass',
+  pirate: 'a plum tricorne hat with a pink feather, captain coat with gold buttons, a treasure map (no eyepatch, no skulls)',
+  astronaut: 'a rounded pink spacesuit with white panels and a clear bubble helmet with her curly mane floating inside',
+  'dragon-rider': 'light pink riding armor, riding a small chubby friendly pink baby dragon with tiny wings',
+  queen: 'an ornate golden crown with pink gems, a long red velvet cape with white fur trim, a golden scepter topped with a balloon-shaped jewel',
+  princess: 'a small sparkly tiara and a fluffy layered pastel-pink ball gown, a star-tipped wand',
+  knight: 'shiny rose-pink plate armor, a round shield with three balloons, a short blunt practice sword, helmet visor pushed up',
+  chef: 'a tall white chef hat, a frilly apron, holding a big swirly-frosted cupcake',
+  'magical-girl': 'a big pink bow, a transformation outfit with ribbons and a heart brooch, a wand shaped like a giant red marker pen',
+  astrologer: 'a deep indigo star-map cloak with constellation patterns, a crystal astrolabe staff',
+  zhuangyuan: 'an ancient-Chinese top-scholar red robe with gold trim, a black scholar hat with two flat wings, a giant calligraphy brush',
+  idol: 'a sparkly idol stage outfit, a headset microphone, a glowing pink light stick',
+  cyber: 'glowing visor goggles pushed up on her forehead, a sleek techwear jacket with neon pink and cyan lines, a giant glowing highlighter pen',
+  ninja: 'a pink ninja outfit with a long scarf tail',
+  lidong: 'a long cozy red knitted scarf, holding a steaming mug of ginger tea',
+  xiaoxue: 'a knitted pom-pom beanie and mittens, a small cheerful snowman buddy beside her',
+  daxue: 'a thick hooded winter cloak with fur trim, on a small wooden sled',
+  graduate: 'a square graduation cap with tassel and a graduation gown',
+  'gold-master': 'a sash of shiny gold medal stamps across her chest and a golden laurel hair clip',
 };
-for (const [id, d] of Object.entries(U)) {
-  const costume = P[id] ? ` Costume: ${P[id]}` : ` Costume: her look in the attached mode reference image.`;
+const U = {
+  daily: ['Party-cannon release: she bursts toward the viewer out of a dark warm room as a single golden party-cannon blast flares behind her; a few soft out-of-focus balloon bokeh shapes far behind', 'rose pink, deep magenta and warm gold'],
+  learning: ['She brings a giant golden approval stamp down onto an open notebook in a quiet study at night; a ring of golden light blooms up from the page and backlights her', 'plum purple, warm gold and soft pink'],
+  project: ['She stands on top of a tall stack of finished project folders in a dim blue office at dusk, a huge amber checklist-stamp glow rising behind her like a sunrise', 'deep blue, amber gold and pale pink'],
+  thinking: ['Deep-thought spell: eyes closed, she hovers before a vast thin-line crystal magic circle of geometric runes; slow orbiting crystal shards catch cyan light in a dark violet void', 'deep violet, ice cyan and lavender'],
+  unrestricted: ['Warp: she dives forward through a dark hyperspace tunnel of thin streaking light lines converging behind her head', 'electric violet, teal and pink'],
+  detective: ['Reveal: a dark study at night lit by one hard spotlight from above-behind; she stands at an old desk and raises the brass magnifying glass toward the viewer, thin glowing red clue threads link blank pinned cards in the shadowy background', 'wine plum, warm tan and cream'],
+  pirate: ['On a ship deck at dusk she raises the open treasure map; gold coins fall in slow motion through the low golden sun backlight, sails in silhouette against a dark plum sky', 'ink plum, old gold and a magenta accent'],
+  astronaut: ['She floats before the dark curve of a huge navy planet, a swirling warp portal opening behind her, starlight stretched into thin lines', 'deep navy, ice blue and pale pink'],
+  'dragon-rider': ['Riding the chubby pink baby dragon above dark storm clouds at sunset as it breathes a long beam of amber fire out of frame to the side; embers drifting', 'crimson, amber ember and pink'],
+  queen: ['Royal entrance: a dark throne hall, heavy crimson curtains parting, one golden spotlight from above; she stands tall with the scepter raised, cape flowing, gold dust in the light shaft', 'crimson, gold and ivory'],
+  princess: ['A moonlit castle balcony at night; she twirls as a slow storm of rose petals swirls through a pale moonbeam', 'rose, blush pink and pale moon gold over deep blue-violet night'],
+  knight: ['Mid-swing of her blunt practice sword in a dark stone courtyard at night, one thin crescent of white-gold light trailing the blade, rain-wet stones reflecting', 'steel blue-grey, gold and rose pink'],
+  chef: ['A night bakery kitchen lit by a warm oven glow from behind; she lifts the giant frosted cupcake as a fine cascade of sugar sprinkles falls through the backlight', 'chocolate brown, strawberry pink and cream'],
+  'magical-girl': ['Transformation: she rises inside a column of thin glowing ribbons of light above a fine-line magic circle in a dark lilac void', 'hot pink, lilac and pale pink'],
+  astrologer: ['On an observatory rooftop under a deep midnight sky she raises the crystal astrolabe; thin gold constellation lines connect across the sky', 'midnight indigo, lavender and starlight gold'],
+  zhuangyuan: ['On a misty ink-wash landscape at dusk she swings the giant calligraphy brush; one huge black ink stroke sweeps across the sky behind her and a vermilion silk banner (blank, no characters) unfurls', 'vermilion, ink black and gold'],
+  idol: ['Center stage in a dark arena under one white spotlight from above, a sea of soft pink light-stick bokeh in the dark crowd below; she sings into the headset with one hoof raised', 'violet, pink and white'],
+  cyber: ['A rain-soaked rooftop in a dark cyber city at night; holding the giant glowing highlighter like a pen (clearly a chunky marker pen with a cap, not a gun), she draws one thin neon line that slashes across the frame; wet reflections', 'near-black, neon pink and cyan'],
+  ninja: ['A night bamboo forest under a pale moon; she dashes forward through a thin swirl of smoke leaving two faint afterimages', 'dark plum, moon silver and pink'],
+  lidong: ['A quiet winter street at blue hour as the first snow of the year begins; warm lantern light behind her, steam rising from the ginger tea, snowflakes in soft focus', 'scarf red, warm lantern cream and ice blue'],
+  xiaoxue: ['A still snowy field at dusk with her snowman buddy small beside her; big snowflakes drift through a cold backlight', 'slate grey-blue, snow white and a pink accent'],
+  daxue: ['Night: she sleds toward the viewer down a snowy slope under a vast rippling aquamarine aurora that bends into a tunnel behind her', 'navy, aquamarine and soft pink'],
+  graduate: ['Graduation night on a stone terrace; she tosses her cap upward into a dark navy sky as a golden backlight bursts from behind her', 'dark navy, gold and pink'],
+  'gold-master': ['She slams a giant gold medal stamp down; a ring shockwave of golden light spreads across a dark pop-up-book landscape behind her', 'gold, deep magenta and ivory'],
+};
+const ULT_WEB = (moment, costume, palette) => `Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: ${costume}. Moment: ${moment}.
+Composition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.
+Lighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on ${palette} plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.
+No text, letters, numbers, logos, watermark, frame or UI.`;
+for (const [id, [moment, palette]] of Object.entries(U)) {
+  const costume = ULT_COSTUME[id];
   const refs = P[id] ? null : ['refs/ref-face.png', id === 'daily' ? 'refs/ref-body.png' : `refs/mode-${id}.png`];
-  slots.push({ prio: 5, slot: `form/${id}/ult`, template: 'ult', desc: d + costume, extra: '', ...(refs ? { refs } : {}) });
+  slots.push({ prio: 5, slot: `form/${id}/ult`, template: 'ult', desc: `${moment}. Costume: ${costume}. Palette: ${palette}.`, extra: '', web: ULT_WEB(moment, costume, palette), ...(refs ? { refs } : {}) });
 }
 
 // ⑦ 欠下的 7 张贴纸

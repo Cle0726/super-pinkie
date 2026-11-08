@@ -93,25 +93,84 @@ export function validMonsterName(v) {
   return {name, blurb};
 }
 
-export const VARIANT_RULES = `你是英语 B 级 / 专升本的出题老师。输入先生做错过的一道题 {"subject","topic","question","answer","note"}。
-出一道**新的变体题**：考同一个知识点，但换掉句子、语境和选项（不能只是换个顺序或改一两个词），难度和英语 B 级相当（词汇约 2500 词以内、句子简单）。
+export const VARIANT_RULES = `你是英语 B 级 / 专升本的出题老师。输入先生做错过的一道题 {"subject","topic","question","answer","note","avoid"}。
+出一道**新的变体题**：考同一个知识点，但换掉句子、语境和选项（不能只是换个顺序或改一两个词），也不要和 avoid 里已经出过的题相同；难度和英语 B 级相当（词汇约 2500 词以内、句子简单）。
 要求：四个选项，只有一个正确；干扰项来自这个知识点的常见错误；不出「以上都对 / 都不对」。
 只输出 JSON：{"stem":"题干（英文题干可以，中文提示可以）","options":["","","",""],"answer":正确选项下标 0-3,"why":"一句中文解析","point":"考点（≤12 字）"}`;
 
 // ---------- 委托文案 / 台词 ----------
-export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托目标（代码算好的，不能改数字）{"date","term","quiet","quests":[{"id","kind","count"}]}。
-给每个委托写一个标题（≤8 字）和一句话（≤24 字），口吻俏皮温暖、像手账上的小便签；quiet=true 时更安静、不催。不改数字和种类。
+// 委托的「意思」由代码给（kind → meaning），模型只换说法；文案里出现数字时只能是 count。
+export const QUEST_MEANING = {
+  answers: n => `在背一背里答对 ${n} 道题`,
+  sets: n => `背一背做完 ${n} 组（一组约 10 张卡，不是卷子）`,
+  learn: n => `上 ${n} 节课，或者在背一背里学 5 张新卡`,
+  huntWins: n => `讨伐打赢 ${n} 只到期的错题怪`,
+  weekSets: n => `这一周背一背做完 ${n} 组`,
+};
+export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。
+给每个委托重写一个标题（≤8 字）和一句话（≤24 字）：
+- 意思必须和 meaning 完全一致：不能把「背一背的组」说成「卷子 / 套题」，不能把「答对」说成「做完」；
+- 出现数字时只能是 count，不要写别的数字；
+- 口吻俏皮温暖、像手账上的小便签；可以带一点节气（term）的氛围，但不要编造先生没说过的安排（吃饭、出门、约会之类）；
+- quiet=true（考前一周）时更安静、不催、不比较。
 只输出 JSON：{"quests":[{"id","title","text"}]}`;
-export function validQuestText(v, ids) {
+export function validQuestText(v, ids, counts = {}) {
   const list = Array.isArray(v?.quests) ? v.quests : [];
   const out = {};
   for (const q of list) {
     if (!ids.includes(q?.id)) continue;
     const title = clean(q.title, 12);
     const text = clean(q.text, 40);
-    if (title && text) out[q.id] = {title, text};
+    if (!title || !text) continue;
+    const nums = `${title} ${text}`.normalize('NFKC').match(/\d+/g) || [];
+    if (counts[q.id] != null && nums.some(n => Number(n) !== Number(counts[q.id]))) continue; // 改了数字
+    if (/卷子|套题|试卷/.test(`${title}${text}`) && !/exam/.test(String(q.kind || ''))) continue;
+    out[q.id] = {title, text};
   }
   return Object.keys(out).length === ids.length ? out : null;
+}
+
+// 台词池：模型一次写好今天每个事件 3 句（后台，约 20–40 s），game.line 从池里即时取（≤4 s 的要求靠池子满足，
+// 这个模型单句也要 15–20 s，现场调用 4 s 内回不来）。池子没好之前用本地台词并标 local。
+export const LINE_EVENTS = {
+  default: '随便打个招呼 / 陪伴',
+  setFinish: '背完一组',
+  perfect: '一组全对',
+  combo: '连击很高',
+  levelup: '形态亲密度升级',
+  capture: '收服一只错题怪',
+  huntWin: '讨伐打赢一次（还没收服）',
+  boss: '巴别兽掉血',
+  formSwitch: '换了一身形态',
+  awaken: '形态觉醒',
+  gacha: '扭蛋出了好东西',
+  chest: '打开委托宝箱',
+  questDone: '完成一个委托',
+  comeback: '隔了几天回来学习',
+  examResult: '模拟考出分',
+  examDay: '考试当天',
+};
+export const LINES_RULES = `你是碧琪（粉色小马，先生的学习搭子），用第一人称「我」或「碧琪」说话，叫用户「先生」。输入 {"date","term","quiet","form","events":{事件id:说明}}。
+给每个事件写 3 句不同的台词（每句 ≤30 字）：俏皮、温暖、具体到这个事件；可以偶尔带一点节气（term）氛围；不要编造先生没做过的事；永远不骂、不说「你忘了」「你又错了」、不拿别人比较；quiet=true（考前一周）时安静温柔、不催学习、不推销。
+只输出 JSON：{"lines":{"事件id":["","",""]}}`;
+export function validLines(v) {
+  const box = v?.lines && typeof v.lines === 'object' ? v.lines : null;
+  if (!box) return null;
+  const out = {};
+  for (const ev of Object.keys(LINE_EVENTS)) {
+    const list = Array.isArray(box[ev]) ? box[ev] : [];
+    const seen = new Set();
+    const ok = [];
+    for (const t of list) {
+      const r = validLine({text: t});
+      if (!r || r.text.length > 40 || seen.has(fold(r.text))) continue;
+      seen.add(fold(r.text));
+      ok.push(r.text);
+    }
+    if (ok.length) out[ev] = ok.slice(0, 4);
+  }
+  const full = Object.values(out).filter(l => l.length >= 2).length;
+  return full >= Math.ceil(Object.keys(LINE_EVENTS).length * 0.75) ? out : null;
 }
 
 export const LINE_RULES = `你是碧琪（粉色小马，先生的学习搭子），用第一人称「我」或「碧琪」说话，叫用户「先生」。输入一个游戏事件 {"event","context"}。
@@ -138,25 +197,51 @@ export function validLine(v) {
   return {text};
 }
 
-// ---------- 挂到 game.modules.content：台词（≤4 s）+ 委托文案（每天一次，后台） ----------
+// ---------- 挂到 game.modules.content：台词池（即时）+ 委托文案（每天一次，后台） ----------
+const LINE_RETRY_MS = 10 * 60000;
 export class GameContent {
   constructor(game) {
     this.game = game;
     this.questJobs = new Map();
+    this.lineJob = null;
+    this.lineTried = new Map();
+    this.lineTurn = {};
     game.modules.content = this;
   }
   async line({event = 'default', context = {}} = {}) {
+    void context;
     const date = this.game.today();
     const {isQuiet} = await import('./learning-game.mjs');
     const quiet = isQuiet(date);
     const ev = clean(event, 30) || 'default';
     const seed = Math.floor(this.game.now() / 60000);
-    const local = {text: localLine(ev, {quiet, seed}), source: 'local'};
-    if (!this.game.requestModel) return local;
-    const ctx = {...(context && typeof context === 'object' ? context : {}), quiet, date};
-    const job = modelJson(this.game.requestModel, LINE_RULES, {event: ev, context: JSON.parse(JSON.stringify(ctx).slice(0, 1500))}, {validate: validLine, retries: 0, timeoutMs: 4000, maxTokens: 200});
-    const r = await withTimeout(job, 4000, null);
-    return r ? {text: r.value.text, source: 'model'} : local;
+    const key = `${date}|${quiet ? 1 : 0}`;
+    const box = this.game.read().lines;
+    const list = box?.key === key ? (box.pool?.[ev] || box.pool?.default) : null;
+    if (list?.length) {
+      this.lineTurn[ev] = (this.lineTurn[ev] || 0) + 1;
+      return {text: list[(seed + this.lineTurn[ev]) % list.length], source: 'model'};
+    }
+    this.kickLines(date, quiet);
+    return {text: localLine(ev, {quiet, seed}), source: 'local'};
+  }
+  // 后台写今天的台词池（一天一次；失败 10 分钟后才再试）。
+  kickLines(date, quiet) {
+    if (!this.game.requestModel || this.lineJob) return this.lineJob;
+    const key = `${date}|${quiet ? 1 : 0}`;
+    const tried = this.lineTried.get(key);
+    if (tried && this.game.now() - tried < LINE_RETRY_MS) return null;
+    this.lineTried.set(key, this.game.now());
+    this.lineJob = (async () => {
+      const {seasonOn} = await import('./learning-game.mjs');
+      const state = this.game.read();
+      const form = this.game.catalog?.forms?.find?.(f => f.id === state.forms?.equipped)?.name || '碧琪';
+      const r = await modelJson(this.game.requestModel, LINES_RULES, {date, term: seasonOn(date)?.name || '', quiet, form, events: LINE_EVENTS}, {validate: validLines, retries: 1, timeoutMs: 90000, maxTokens: 3000});
+      if (!r) return null;
+      this.game.mutate(s => { s.lines = {key, pool: r.value, at: this.game.now()}; });
+      return r.value;
+    })().catch(() => null).finally(() => { this.lineJob = null; });
+    return this.lineJob;
   }
   // 当天委托的文案由模型补写（数字和种类不变）；写好前用本地文案。
   kickQuestText(date) {
@@ -167,7 +252,9 @@ export class GameContent {
     const job = (async () => {
       const {isQuiet, seasonOn} = await import('./learning-game.mjs');
       const ids = q.list.map(x => x.id);
-      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests: q.list.map(x => ({id: x.id, kind: x.target.kind, count: x.target.count}))}, {validate: v => validQuestText(v, ids), timeoutMs: 20000, maxTokens: 600});
+      const counts = Object.fromEntries(q.list.map(x => [x.id, x.target.count]));
+      const quests = q.list.map(x => ({id: x.id, kind: x.target.kind, count: x.target.count, meaning: (QUEST_MEANING[x.target.kind] || (n => `${x.text}（${n}）`))(x.target.count), draft: `${x.title}｜${x.text}`}));
+      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests}, {validate: v => validQuestText(v, ids, counts), timeoutMs: 60000, maxTokens: 800});
       this.game.mutate(s => {
         const day = s.quests?.[date];
         if (!day) return;
