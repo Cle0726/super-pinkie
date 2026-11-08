@@ -6,6 +6,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import * as E from './learning-game-economy.mjs';
+import {GameMonsters} from './learning-game-monsters.mjs';
 
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
@@ -62,6 +63,7 @@ function emptyState() {
     drill: {},
     quests: {},
     examSeals: {},
+    monsters: {list: {}, captured: 0},
   };
 }
 
@@ -76,6 +78,7 @@ export class LearningGame {
     this.file = path.join(this.root, 'game.json');
     this.backup = path.join(this.root, 'game.bak.json');
     this.modules = {};
+    new GameMonsters(this);
   }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
@@ -704,6 +707,7 @@ export function registerLearningGame(api, store, options = {}) {
     }
   }, {scope: 'operator.admin'});
   const mod = name => game.modules[name] || {};
+  const via = (name, fn, fallback) => p => (typeof mod(name)[fn] === 'function' ? mod(name)[fn](p) : fallback(p));
   const notReady = what => () => { throw new Error(`${what}还在准备中`); };
   register('state', () => game.state());
   register('awards.pending', () => game.pendingAwards());
@@ -721,21 +725,21 @@ export function registerLearningGame(api, store, options = {}) {
   register('quests.claim', p => game.claim(p));
   register('chest.open', p => game.openChest(p));
   // 世界 / 错题怪 / 考试 / 台词：由子模块挂到 game.modules（B2–B4）。没挂上时返回真实结构的空数据。
-  register('world', p => (mod('world').world || (() => ({exam: p.exam || GAME_EXAM, title: '第一卷 · 英语 B 级', regions: [], generatedAt: null, status: 'generating'})))(p));
-  register('world.regenerate', p => (mod('world').regenerate || notReady('考点地图'))(p));
-  register('node.start', p => (mod('world').nodeStart || notReady('考点'))(p));
-  register('guard.answer', p => (mod('world').guardAnswer || notReady('守关战'))(p));
-  register('guard.finish', p => (mod('world').guardFinish || notReady('守关战'))(p));
-  register('monsters.list', p => (mod('monsters').list || (() => ({monsters: []})))(p));
-  register('hunt.start', p => (mod('monsters').huntStart || notReady('讨伐'))(p));
-  register('exam.papers', p => (mod('exam').papers || (() => ({papers: [], format: null})))(p));
-  register('exam.generate', p => (mod('exam').generate || notReady('考卷'))(p));
-  register('exam.start', p => (mod('exam').start || notReady('考场'))(p));
-  register('exam.save', p => (mod('exam').save || notReady('考场'))(p));
-  register('exam.submit', p => (mod('exam').submit || notReady('考场'))(p));
-  register('exam.result', p => (mod('exam').result || notReady('成绩'))(p));
+  register('world', via('world', 'world', (p => ({exam: p.exam || GAME_EXAM, title: '第一卷 · 英语 B 级', regions: [], generatedAt: null, status: 'generating'}))));
+  register('world.regenerate', via('world', 'regenerate', notReady('考点地图')));
+  register('node.start', via('world', 'nodeStart', notReady('考点')));
+  register('guard.answer', via('world', 'guardAnswer', notReady('守关战')));
+  register('guard.finish', via('world', 'guardFinish', notReady('守关战')));
+  register('monsters.list', via('monsters', 'list', (() => ({monsters: []}))));
+  register('hunt.start', via('monsters', 'huntStart', notReady('讨伐')));
+  register('exam.papers', via('exam', 'papers', (() => ({papers: [], format: null}))));
+  register('exam.generate', via('exam', 'generate', notReady('考卷')));
+  register('exam.start', via('exam', 'start', notReady('考场')));
+  register('exam.save', via('exam', 'save', notReady('考场')));
+  register('exam.submit', via('exam', 'submit', notReady('考场')));
+  register('exam.result', via('exam', 'result', notReady('成绩')));
   register('boss.state', p => (mod('exam').bossState ? mod('exam').bossState(game.read(), p.exam || GAME_EXAM) : game.bossFallback()));
-  register('boss.realScore', p => (mod('exam').realScore || notReady('真实分数'))(p));
-  register('line', p => (mod('content').line || (async () => ({text: '我在呢，一起加油～', source: 'local'})))(p));
+  register('boss.realScore', via('exam', 'realScore', notReady('真实分数')));
+  register('line', via('content', 'line', (async () => ({text: '我在呢，一起加油～', source: 'local'}))));
   return game;
 }
