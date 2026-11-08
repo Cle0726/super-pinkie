@@ -11,6 +11,7 @@ import io
 import json
 import re
 import threading
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -113,6 +114,11 @@ class FullscreenTests(unittest.TestCase):
     def test_fullscreen_uses_the_win32_call_that_exists(self):
         # pywebview's Windows backend has no toggle_fullscreen, so the bridge
         # must not call one. SW_MAXIMIZE fills the work area; SW_RESTORE undoes it.
+        # ctypes.windll only exists on Windows; a Linux CI run must still be able
+        # to exercise this contract, so install the same mockable surface first.
+        if not hasattr(ctypes, "windll"):
+            ctypes.windll = types.SimpleNamespace(
+                user32=types.SimpleNamespace(ShowWindow=lambda handle, command: 1))
         bridge = make_bridge()
         calls = []
         real = ctypes.windll.user32.ShowWindow
