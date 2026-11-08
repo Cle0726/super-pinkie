@@ -3,6 +3,9 @@
 
 /* ---------- 今日页 ---------- */
 #pinkie-study-desk .pk-month-link{margin-left:12px;font-size:13px}
+#pinkie-study-desk .pk-today-reward{display:flex;gap:18px;align-items:flex-end;justify-content:flex-end;flex-wrap:wrap}
+#pinkie-study-desk .pk-drill-go{margin:8px 0 4px}
+#pinkie-study-desk .q-row.is-done .stroke{color:var(--ink-3)}
 #pinkie-study-desk .bubble .pk-daily-by{display:block;margin-top:6px;font:11px var(--pk-sans);color:var(--pk-ink-3);letter-spacing:.04em}
 #pinkie-study-desk .bubble[data-source]{font-family:var(--pk-hand);font-size:16px;line-height:1.5;color:var(--pk-pink-ink)}
 

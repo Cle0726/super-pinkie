@@ -295,6 +295,41 @@
     };
     syncMotion();
     window.addEventListener("pinkie:motion-change", syncMotion);
+    const soundKey = "pinkie.study.sound.v1";
+    const readSound = () => {
+      try {
+        const raw = JSON.parse(window.localStorage.getItem(soundKey) || "");
+        if (raw && typeof raw === "object") return {on: raw.on !== false, volume: raw.volume === "mid" ? "mid" : "low"};
+      } catch { /* 默认开、小音量 */ }
+      return {on: true, volume: "low"};
+    };
+    const sound = readSound();
+    const writeSound = () => {
+      window.localStorage.setItem(soundKey, JSON.stringify(sound));
+      window.dispatchEvent(new CustomEvent("pinkie:study-sound"));
+      setStatus("appearance", sound.on ? (sound.volume === "mid" ? "学习音效已开，音量中。" : "学习音效已开，音量小。") : "学习音效已关。", "success");
+    };
+    const soundRow = row(appearanceCard, "学习音效", "背一背和刷题时的提示音。");
+    const soundGroup = element("div", "pinkie-user-settings__segments", soundRow.control);
+    const soundOn = button("开", "pinkie-user-settings__choice", soundGroup, () => { sound.on = true; writeSound(); paintSound(); });
+    const soundOff = button("关", "pinkie-user-settings__choice", soundGroup, () => { sound.on = false; writeSound(); paintSound(); });
+    soundOn.setAttribute("aria-label", "打开学习音效");
+    soundOff.setAttribute("aria-label", "关闭学习音效");
+    const volumeRow = row(appearanceCard, "音量");
+    const volumeGroup = element("div", "pinkie-user-settings__segments", volumeRow.control);
+    const volumeLow = button("小", "pinkie-user-settings__choice", volumeGroup, () => { sound.volume = "low"; writeSound(); paintSound(); });
+    const volumeMid = button("中", "pinkie-user-settings__choice", volumeGroup, () => { sound.volume = "mid"; writeSound(); paintSound(); });
+    volumeLow.setAttribute("aria-label", "学习音效音量小");
+    volumeMid.setAttribute("aria-label", "学习音效音量中");
+    const paintSound = () => {
+      setPressed(soundOn, sound.on); setPressed(soundOff, !sound.on);
+      setPressed(volumeLow, sound.volume !== "mid"); setPressed(volumeMid, sound.volume === "mid");
+    };
+    paintSound();
+    // 学习台游戏：「游戏特效」四档 + 自定义细项，由 laolao-game-fx.js 生成（它晚加载时等就绪事件）。
+    const gameFxHost = element("div", "pinkie-user-settings__gamefx", appearanceCard);
+    const mountGameFx = () => window.__pinkieGameFx?.buildSettings?.(gameFxHost, {row, setPressed});
+    if (!mountGameFx()) window.addEventListener("pinkie:gamefx-ready", mountGameFx, {once: true});
     element("p", "pinkie-user-settings__soft-note", appearanceCard,
       "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。" );
     makeStatus(appearanceCard, "appearance");

@@ -1,0 +1,785 @@
+{
+ "version": 1,
+ "templates": {
+  "portrait": {
+   "refs": [
+    "refs/ref-face.png",
+    "refs/ref-body.png"
+   ],
+   "text": "Use case: full-body character portrait for a study game (碧琪上岸记). Character: the pink pony shown in the attached reference images (bright pink body, voluminous curly magenta-pink mane and tail, big blue eyes, a cutie mark of exactly three balloons — one yellow, two blue — on her flank). Keep exactly the same flat cartoon style as the references: clean bold dark-magenta outlines, flat bright colors, minimal soft cel shading, cute, warm and friendly. Original costume design — do not copy any specific character from any existing franchise.\nCostume and pose: {desc}\n{extra}\nFull body, standing in a confident lively three-quarter pose, all four hooves visible, the balloon cutie mark visible. Square 1024x1024 composition, character centered with generous margin, nothing cropped.\nPapercraft stand-up treatment: the whole figure and props are surrounded by one continuous thick clean WHITE die-cut border (about 8px at 512px size) with a very subtle soft grey drop shadow, like a pop-up-book paper figure / planner sticker. Isolated on a fully transparent background (if transparency is impossible, use plain flat pure white).\nNo text, no letters, no numbers, no watermark, no frame, no background scenery."
+  },
+  "ult": {
+   "refs": [
+    "refs/ref-face.png",
+    "refs/ref-body.png"
+   ],
+   "text": "Use case: premium cinematic \"ultimate skill\" cut-in key art for a study game, landscape 1536x1024, opaque. Character: the pink pony shown in the attached reference images (bright pink body, voluminous curly magenta-pink mane and tail, big blue eyes, a cutie mark of exactly three balloons — one yellow, two blue — on her flank). Keep her exactly on-model in the reference style (bold outlines, flat colors).\nScene: {desc}\n{extra}\nComposition (strict): medium shot from a slightly low camera; her face exactly at the horizontal center with her eyes about 40% down from the top edge; head and chest fill the central third; left and right thirds are background only; nothing important in the top or bottom 15%.\nLighting: low-key and fairly dark so white titles read on top; one strong rim light / backlight; volumetric light shafts, haze, background depth with soft depth-of-field blur. Restrained grading on the given palette plus white; no rainbow, confetti, cartoon stars, hearts or sticker sparkles. Mature and cinematic, not childish. No text, letters, numbers, watermark or UI."
+  },
+  "monster": {
+   "refs": [
+    "refs/ref-face.png"
+   ],
+   "text": "Use case: enemy creature for a cute study game — a \"mistake monster\" born from a wrong answer. Use the reference image ONLY for line and color style (bold dark outlines, flat colors, minimal cel shading); the creature is NOT a pony.\nCreature: {desc}\n{extra}\nRound, chubby, cute-not-scary papercraft little monster with big expressive eyes and a mischievous-but-harmless expression, readable silhouette, one main color plus one accent. Square 1024x1024, centered, generous margin, nothing cropped.\nPapercraft stand-up treatment: the whole figure and props are surrounded by one continuous thick clean WHITE die-cut border (about 8px at 512px size) with a very subtle soft grey drop shadow, like a pop-up-book paper figure / planner sticker. Isolated on a fully transparent background (if transparency is impossible, use plain flat pure white).\nNo text, no letters, no numbers, no watermark, no frame, no background scenery."
+  },
+  "boss": {
+   "refs": [
+    "refs/ref-face.png"
+   ],
+   "text": "Use case: boss creature for a cute study game, landscape 1536x1024. Use the reference image ONLY for line and color style (bold dark outlines, flat bright colors, minimal cel shading).\nBoss \"Babel Beast\": a big, majestic-but-cute guardian beast built from stacked hardcover books and wooden alphabet blocks, carrying a small spiral tower on its back (a tiny tower of Babel made of books), glowing pink-gold letter runes on its body (abstract glyph shapes, not readable words), round friendly face with big eyes.\nState: {desc}\n{extra}\nWhole creature visible with margin. Papercraft stand-up treatment: the whole figure and props are surrounded by one continuous thick clean WHITE die-cut border (about 8px at 512px size) with a very subtle soft grey drop shadow, like a pop-up-book paper figure / planner sticker. Isolated on a fully transparent background (if transparency is impossible, use plain flat pure white).\nNo readable text, no watermark, no frame, no background scenery."
+  },
+  "layer": {
+   "refs": [],
+   "text": "Use case: one layer of a pop-up book diorama for a study game; layers are stacked in 3D, so this layer must be isolated on a fully TRANSPARENT background with nothing outside the cut-paper shapes.\nStyle: handmade layered paper-cut / papercraft pop-up book, visible paper grain and slightly rough deckled edges, warm studio lighting, soft shadows, palette of cream paper #F6EEE6, ink plum #3A2A35 and accents of pink #DB1F74 plus the region colors given below. Cozy, whimsical, premium.\nRegion and layer: {desc}\n{extra}\nLandscape 1536x1024. No characters, no text, no letters, no numbers, no watermark."
+  },
+  "scene": {
+   "refs": [],
+   "text": "Use case: background scene for a study game, handmade papercraft pop-up diorama style: layered paper-cut shapes, visible paper grain and deckled edges, warm studio lighting, shallow depth of field. Palette cream paper #F6EEE6, ink plum #3A2A35, pink accents #DB1F74.\nScene: {desc}\n{extra}\nLandscape 1536x1024, full-bleed (opaque background). No characters, no text, no letters, no numbers, no watermark."
+  },
+  "sticker": {
+   "refs": [
+    "refs/ref-face.png",
+    "refs/ref-body.png"
+   ],
+   "text": "Use case: die-cut character sticker for a study-planner app (碧琪手账). Character: the pink pony shown in the attached reference images (bright pink body, voluminous curly magenta-pink mane and tail, big blue eyes, a cutie mark of exactly three balloons — one yellow, two blue — on her flank). Keep exactly the same flat cartoon style as the references: clean bold dark-magenta outlines, flat bright colors, minimal soft cel shading, cute, warm and friendly. Original costume design — do not copy any specific character from any existing franchise.\nScene: {desc}\n{extra}\nSticker treatment: the whole character and its props are surrounded by one continuous thick clean WHITE die-cut border (about 8px at 512px size) with a very subtle soft grey drop shadow, like a vinyl planner sticker. Isolated on a fully transparent background. Square 1024x1024 composition, character centered with generous margin, whole sticker visible, nothing cropped.\nNo text, no letters, no numbers, no watermark, no frame, no background scenery."
+  }
+ },
+ "slots": [
+  {
+   "prio": 1,
+   "slot": "form/lidong/portrait",
+   "template": "portrait",
+   "desc": "Beginning-of-Winter look: a long cozy red knitted scarf wrapped around the neck, holding a steaming mug of ginger tea with both front hooves, the very first snowflake resting on top of her curly mane, rosy cheeks, gentle happy smile.",
+   "extra": ""
+  },
+  {
+   "prio": 1,
+   "slot": "form/detective/portrait",
+   "template": "portrait",
+   "desc": "Great-detective look: a pink-and-cream houndstooth deerstalker-style cap, short caped coat in plum, holding a big brass magnifying glass up to one eye (the eye looks huge through the lens), a swirl lollipop held like a pipe, clever smug grin.",
+   "extra": ""
+  },
+  {
+   "prio": 1,
+   "slot": "form/queen/portrait",
+   "template": "portrait",
+   "desc": "Queen look: an ornate golden crown with pink gems, a long flowing red velvet cape with white fur trim, a golden scepter topped with a balloon-shaped jewel, golden horseshoes, chin raised in a proud but sweet regal pose.",
+   "extra": ""
+  },
+  {
+   "prio": 1,
+   "slot": "form/princess/portrait",
+   "template": "portrait",
+   "desc": "Princess look: a small sparkly tiara, a fluffy layered pastel-pink ball gown with ruffles and tiny stars, holding a star-tipped magic wand, twirling happily with sparkles.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/ink-slime",
+   "template": "monster",
+   "desc": "迷糊史莱姆 (grammar): a wobbly round ink-blot slime, plum-purple with a pink sheen, droopy confused eyes, a little ink drip on top like a hair curl.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/bookworm",
+   "template": "monster",
+   "desc": "书虫 (reading): a chubby green caterpillar-like bookworm peeking out of a hole bitten through a small book, big round glasses.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/lost-crane",
+   "template": "monster",
+   "desc": "迷路纸鹤 (translation): a folded origami paper crane with a dizzy spiral in its eyes, pale blue paper, one wing folded the wrong way.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/inkpot-imp",
+   "template": "monster",
+   "desc": "墨水瓶小鬼 (writing): a small round glass inkpot creature with tiny arms, a feather quill stuck in its lid like a hat, splashing a little ink.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/echo-bat",
+   "template": "monster",
+   "desc": "回声蝙蝠 (listening): a round fluffy paper bat with giant floppy ears and tiny sound-wave curls around them, lavender color.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/block-golem",
+   "template": "monster",
+   "desc": "字母积木魔像 (vocabulary): a tiny stocky golem made of three stacked wooden toy blocks with blank faces painted as eyes, warm wood and pink.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/tangle-yarn",
+   "template": "monster",
+   "desc": "时态毛线团 (grammar, tenses): a round ball of tangled pink-orange yarn with stubby legs, eyes peeking through the tangles.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/eraser-gnome",
+   "template": "monster",
+   "desc": "橡皮小精灵 (writing): a squishy pink rubber-eraser creature with a little paper-sleeve hat, rubbing crumbs off itself.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/sticky-ghost",
+   "template": "monster",
+   "desc": "便利贴幽灵 (vocabulary): a floating ghost made of a curled yellow sticky note, wavy tail, blank sticky-note body, shy blush.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/quiz-shroom",
+   "template": "monster",
+   "desc": "题目蘑菇 (vocabulary forest): a plump red-capped mushroom with cream spots shaped like question-mark curls, puzzled face, tiny feet.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/shell-crab",
+   "template": "monster",
+   "desc": "海螺小蟹 (listening port): a small round hermit crab living in a spiral seashell that looks like an ear, cupping a claw to listen.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/clock-beetle",
+   "template": "monster",
+   "desc": "时钟甲虫 (grammar, tenses): a round beetle whose shell is an alarm-clock face with no numbers, two clock hands as antennae, sleepy eyes.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/bridge-troll",
+   "template": "monster",
+   "desc": "小桥怪 (translation bridge): a tiny chubby moss-green troll holding a little wooden plank, cute underbite with one tooth, grumpy-cute.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/paper-fox",
+   "template": "monster",
+   "desc": "纸狐 (reading library): a folded origami fox with a tiny bookmark ribbon tail, sly smile, orange and cream paper.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/fog-puff",
+   "template": "monster",
+   "desc": "迷雾团 (forgetting fog): a soft round grey-lavender cloud puff with sleepy eyes, wisps trailing, slightly translucent edges.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "monster/shaving-hog",
+   "template": "monster",
+   "desc": "卷笔刀刺猬 (writing tower): a round hedgehog whose spikes are colored pencil tips and curly pencil shavings, holding a pencil sharpener.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "boss/babel/full",
+   "template": "boss",
+   "desc": "Full health: standing tall and proud, runes glowing brightly, tower upright, confident playful roar pose.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "boss/babel/hurt",
+   "template": "boss",
+   "desc": "Hurt: wobbling, a few book pages flying loose, some blocks cracked, runes flickering, sweat drop, still determined.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "boss/babel/broken",
+   "template": "boss",
+   "desc": "Defeated/broken guard: lying down flat on its belly, tower tilted sideways, little dizzy stars and swirls circling its head, smiling sheepishly, books spilled around.",
+   "extra": ""
+  },
+  {
+   "prio": 2,
+   "slot": "boss/babel/portrait",
+   "template": "monster",
+   "desc": "Head-and-shoulders portrait of the \"Babel Beast\": a cute majestic guardian beast made of stacked hardcover books and alphabet blocks, a tiny spiral book tower on its head, glowing pink-gold abstract rune glyphs, big friendly eyes.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/listening/bg",
+   "template": "layer",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/listening/mg",
+   "template": "layer",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/listening/fg",
+   "template": "layer",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/listening/base",
+   "template": "layer",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/vocab/bg",
+   "template": "layer",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/vocab/mg",
+   "template": "layer",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/vocab/fg",
+   "template": "layer",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/vocab/base",
+   "template": "layer",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/grammar/bg",
+   "template": "layer",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/grammar/mg",
+   "template": "layer",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/grammar/fg",
+   "template": "layer",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/grammar/base",
+   "template": "layer",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/reading/bg",
+   "template": "layer",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/reading/mg",
+   "template": "layer",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/reading/fg",
+   "template": "layer",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/reading/base",
+   "template": "layer",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/translation/bg",
+   "template": "layer",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/translation/mg",
+   "template": "layer",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/translation/fg",
+   "template": "layer",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/translation/base",
+   "template": "layer",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/writing/bg",
+   "template": "layer",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/writing/mg",
+   "template": "layer",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/writing/fg",
+   "template": "layer",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/pretco-b/writing/base",
+   "template": "layer",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/book/cover",
+   "template": "scene",
+   "desc": "The cover of a magical hardcover study journal \"the Book of Reaching the Shore\": pink fabric cover, gold foil corner ornaments, a ribbon bookmark, a small balloon-shaped emblem embossed in the center, lying on a wooden desk, viewed from above.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "world/book/page",
+   "template": "scene",
+   "desc": "A seamless, tileable texture of thick cream journal paper with subtle grain, faint fibers and very light ruled lines, flat even lighting, viewed straight on, edge-to-edge (no book edges).",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "camp/day",
+   "template": "scene",
+   "desc": "A cozy papercraft study camp at daytime: a small round tent-like cottage made of notebook pages, bunting flags, a desk with books, a campfire with paper flames, a signpost, a distant mountain with a castle on top (the goal), sunny warm light. Leave the center-left foreground open for a character to stand.",
+   "extra": "Landscape 2560x1440 feel (render 1536x1024)."
+  },
+  {
+   "prio": 3,
+   "slot": "camp/night",
+   "template": "scene",
+   "desc": "The same cozy papercraft study camp at night: deep indigo sky with paper stars, warm lamp light glowing from the cottage windows, campfire glow, fireflies made of paper dots, the distant castle with lit windows. Leave the center-left foreground open for a character to stand.",
+   "extra": ""
+  },
+  {
+   "prio": 3,
+   "slot": "exam/hall",
+   "template": "scene",
+   "desc": "A quiet calm exam hall in muted papercraft: neat rows of wooden desks, a big clock on the wall without numbers, tall windows with soft daylight, low saturation, very calm and focused atmosphere.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/pirate/portrait",
+   "template": "portrait",
+   "desc": "Pirate-captain look: a plum tricorne hat with a pink feather, a captain coat with gold buttons, holding a rolled treasure map that looks like an open pop-up book, a spyglass tucked under the arm, adventurous grin (no eyepatch, no skull symbols).",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/astronaut/portrait",
+   "template": "portrait",
+   "desc": "Astronaut look: a rounded pink spacesuit with white panels, a clear bubble helmet with her curly mane floating weightlessly inside, a small star patch, floating pose with a few tiny stars around.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/dragon-rider/portrait",
+   "template": "portrait",
+   "desc": "Dragon-rider look: light pink knight-ish riding armor, riding on the back of a small chubby friendly pink baby dragon with tiny wings (dragon is cute, round, and fully visible), both looking heroic.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/knight/portrait",
+   "template": "portrait",
+   "desc": "Knight look: shiny rose-pink plate armor, a round shield decorated with three balloons, a short blunt practice sword raised, brave determined smile, helmet visor pushed up.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/chef/portrait",
+   "template": "portrait",
+   "desc": "Pastry-chef look: a tall white chef hat, a frilly apron with sprinkles, holding a piping bag in one hoof and a big cupcake with swirly frosting in the other, frosting smudge on her nose.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/magical-girl/portrait",
+   "template": "portrait",
+   "desc": "Magical-girl look: a big pink bow, a sparkly transformation outfit with ribbons and a heart brooch, holding a magic wand shaped like a giant red marking pen with a heart tip, ribbons of light swirling around her.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/astrologer/portrait",
+   "template": "portrait",
+   "desc": "Star-sand astrologer look: a deep indigo star-map cloak with constellation patterns, holding a crystal compass astrolabe like a staff with a glowing crystal, tiny floating star particles, mysterious gentle smile.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/zhuangyuan/portrait",
+   "template": "portrait",
+   "desc": "Ancient-Chinese top-scholar (状元) look: a red scholar robe with gold trim, a black scholar hat with two flat wings, a big calligraphy brush held proudly, a red ribbon flower on the chest.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/idol/portrait",
+   "template": "portrait",
+   "desc": "Idol singer look: a sparkly stage outfit with a short pleated skirt, a headset microphone, holding a glowing pink light stick, winking with one hoof raised.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/cyber/portrait",
+   "template": "portrait",
+   "desc": "Cyber-neon look: glowing visor goggles, a sleek techwear jacket with neon pink and cyan lines, holding a big glowing neon highlighter pen leaving a light trail.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/ninja/portrait",
+   "template": "portrait",
+   "desc": "Ninja look: a pink ninja outfit with a scarf tail, holding a scroll, a few soft round paper shuriken stars, crouched in a playful sneaky pose.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/xiaoxue/portrait",
+   "template": "portrait",
+   "desc": "Light-Snow look: a knitted pom-pom beanie and mittens, standing next to a small cheerful snowman buddy, gentle snowflakes around.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/daxue/portrait",
+   "template": "portrait",
+   "desc": "Heavy-Snow look: a thick hooded winter cloak with fur trim, pulling a small wooden sled, a faint aurora ribbon swirl above her head.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/graduate/portrait",
+   "template": "portrait",
+   "desc": "Graduate look: a square graduation cap with tassel, a graduation gown, holding a rolled diploma tube with a ribbon, proud teary happy smile.",
+   "extra": ""
+  },
+  {
+   "prio": 4,
+   "slot": "form/gold-master/portrait",
+   "template": "portrait",
+   "desc": "Gold-master look: her outline glows with a gold rim light, a row of shiny gold medal stamps pinned across her chest like a sash, a golden laurel hair clip, triumphant pose.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
+   "slot": "form/daily/ult",
+   "template": "ult",
+   "desc": "Party-cannon release: she bursts toward the viewer out of a dark warm room as a single golden party-cannon blast flares behind her; a few soft out-of-focus balloon bokeh shapes far behind. Costume: her classic look (no costume). Palette: rose pink, deep magenta and warm gold.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: her classic look (no costume). Moment: Party-cannon release: she bursts toward the viewer out of a dark warm room as a single golden party-cannon blast flares behind her; a few soft out-of-focus balloon bokeh shapes far behind.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on rose pink, deep magenta and warm gold plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI.",
+   "refs": [
+    "refs/ref-face.png",
+    "refs/ref-body.png"
+   ]
+  },
+  {
+   "prio": 5,
+   "slot": "form/learning/ult",
+   "template": "ult",
+   "desc": "She brings a giant golden approval stamp down onto an open notebook in a quiet study at night; a ring of golden light blooms up from the page and backlights her. Costume: a yellow pencil tucked behind her ear, holding a purple notebook with a star on the cover. Palette: plum purple, warm gold and soft pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a yellow pencil tucked behind her ear, holding a purple notebook with a star on the cover. Moment: She brings a giant golden approval stamp down onto an open notebook in a quiet study at night; a ring of golden light blooms up from the page and backlights her.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on plum purple, warm gold and soft pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI.",
+   "refs": [
+    "refs/ref-face.png",
+    "refs/mode-learning.png"
+   ]
+  },
+  {
+   "prio": 5,
+   "slot": "form/project/ult",
+   "template": "ult",
+   "desc": "She stands on top of a tall stack of finished project folders in a dim blue office at dusk, a huge amber checklist-stamp glow rising behind her like a sunrise. Costume: a pencil behind her ear, a rolled checklist scroll. Palette: deep blue, amber gold and pale pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a pencil behind her ear, a rolled checklist scroll. Moment: She stands on top of a tall stack of finished project folders in a dim blue office at dusk, a huge amber checklist-stamp glow rising behind her like a sunrise.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on deep blue, amber gold and pale pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI.",
+   "refs": [
+    "refs/ref-face.png",
+    "refs/mode-project.png"
+   ]
+  },
+  {
+   "prio": 5,
+   "slot": "form/thinking/ult",
+   "template": "ult",
+   "desc": "Deep-thought spell: eyes closed, she hovers before a vast thin-line crystal magic circle of geometric runes; slow orbiting crystal shards catch cyan light in a dark violet void. Costume: no costume, a calm focused expression. Palette: deep violet, ice cyan and lavender.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: no costume, a calm focused expression. Moment: Deep-thought spell: eyes closed, she hovers before a vast thin-line crystal magic circle of geometric runes; slow orbiting crystal shards catch cyan light in a dark violet void.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on deep violet, ice cyan and lavender plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI.",
+   "refs": [
+    "refs/ref-face.png",
+    "refs/mode-thinking.png"
+   ]
+  },
+  {
+   "prio": 5,
+   "slot": "form/unrestricted/ult",
+   "template": "ult",
+   "desc": "Warp: she dives forward through a dark hyperspace tunnel of thin streaking light lines converging behind her head. Costume: rainbow-streaked mane (pink, yellow, blue stripes) and a blue bow with a yellow star. Palette: electric violet, teal and pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: rainbow-streaked mane (pink, yellow, blue stripes) and a blue bow with a yellow star. Moment: Warp: she dives forward through a dark hyperspace tunnel of thin streaking light lines converging behind her head.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on electric violet, teal and pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI.",
+   "refs": [
+    "refs/ref-face.png",
+    "refs/mode-unrestricted.png"
+   ]
+  },
+  {
+   "prio": 5,
+   "slot": "form/detective/ult",
+   "template": "ult",
+   "desc": "Reveal: a dark study at night lit by one hard spotlight from above-behind; she stands at an old desk and raises the brass magnifying glass toward the viewer, thin glowing red clue threads link blank pinned cards in the shadowy background. Costume: a pink-and-cream houndstooth deerstalker-style cap, short plum caped coat, a big brass magnifying glass. Palette: wine plum, warm tan and cream.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a pink-and-cream houndstooth deerstalker-style cap, short plum caped coat, a big brass magnifying glass. Moment: Reveal: a dark study at night lit by one hard spotlight from above-behind; she stands at an old desk and raises the brass magnifying glass toward the viewer, thin glowing red clue threads link blank pinned cards in the shadowy background.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on wine plum, warm tan and cream plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/pirate/ult",
+   "template": "ult",
+   "desc": "On a ship deck at dusk she raises the open treasure map; gold coins fall in slow motion through the low golden sun backlight, sails in silhouette against a dark plum sky. Costume: a plum tricorne hat with a pink feather, captain coat with gold buttons, a treasure map (no eyepatch, no skulls). Palette: ink plum, old gold and a magenta accent.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a plum tricorne hat with a pink feather, captain coat with gold buttons, a treasure map (no eyepatch, no skulls). Moment: On a ship deck at dusk she raises the open treasure map; gold coins fall in slow motion through the low golden sun backlight, sails in silhouette against a dark plum sky.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on ink plum, old gold and a magenta accent plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/astronaut/ult",
+   "template": "ult",
+   "desc": "She floats before the dark curve of a huge navy planet, a swirling warp portal opening behind her, starlight stretched into thin lines. Costume: a rounded pink spacesuit with white panels and a clear bubble helmet with her curly mane floating inside. Palette: deep navy, ice blue and pale pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a rounded pink spacesuit with white panels and a clear bubble helmet with her curly mane floating inside. Moment: She floats before the dark curve of a huge navy planet, a swirling warp portal opening behind her, starlight stretched into thin lines.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on deep navy, ice blue and pale pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/dragon-rider/ult",
+   "template": "ult",
+   "desc": "Riding the chubby pink baby dragon above dark storm clouds at sunset as it breathes a long beam of amber fire out of frame to the side; embers drifting. Costume: light pink riding armor, riding a small chubby friendly pink baby dragon with tiny wings. Palette: crimson, amber ember and pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: light pink riding armor, riding a small chubby friendly pink baby dragon with tiny wings. Moment: Riding the chubby pink baby dragon above dark storm clouds at sunset as it breathes a long beam of amber fire out of frame to the side; embers drifting.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on crimson, amber ember and pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/queen/ult",
+   "template": "ult",
+   "desc": "Royal entrance: a dark throne hall, heavy crimson curtains parting, one golden spotlight from above; she stands tall with the scepter raised, cape flowing, gold dust in the light shaft. Costume: an ornate golden crown with pink gems, a long red velvet cape with white fur trim, a golden scepter topped with a balloon-shaped jewel. Palette: crimson, gold and ivory.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: an ornate golden crown with pink gems, a long red velvet cape with white fur trim, a golden scepter topped with a balloon-shaped jewel. Moment: Royal entrance: a dark throne hall, heavy crimson curtains parting, one golden spotlight from above; she stands tall with the scepter raised, cape flowing, gold dust in the light shaft.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on crimson, gold and ivory plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/princess/ult",
+   "template": "ult",
+   "desc": "A moonlit castle balcony at night; she twirls as a slow storm of rose petals swirls through a pale moonbeam. Costume: a small sparkly tiara and a fluffy layered pastel-pink ball gown, a star-tipped wand. Palette: rose, blush pink and pale moon gold over deep blue-violet night.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a small sparkly tiara and a fluffy layered pastel-pink ball gown, a star-tipped wand. Moment: A moonlit castle balcony at night; she twirls as a slow storm of rose petals swirls through a pale moonbeam.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on rose, blush pink and pale moon gold over deep blue-violet night plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/knight/ult",
+   "template": "ult",
+   "desc": "Mid-swing of her blunt practice sword in a dark stone courtyard at night, one thin crescent of white-gold light trailing the blade, rain-wet stones reflecting. Costume: shiny rose-pink plate armor, a round shield with three balloons, a short blunt practice sword, helmet visor pushed up. Palette: steel blue-grey, gold and rose pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: shiny rose-pink plate armor, a round shield with three balloons, a short blunt practice sword, helmet visor pushed up. Moment: Mid-swing of her blunt practice sword in a dark stone courtyard at night, one thin crescent of white-gold light trailing the blade, rain-wet stones reflecting.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on steel blue-grey, gold and rose pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/chef/ult",
+   "template": "ult",
+   "desc": "A night bakery kitchen lit by a warm oven glow from behind; she lifts the giant frosted cupcake as a fine cascade of sugar sprinkles falls through the backlight. Costume: a tall white chef hat, a frilly apron, holding a big swirly-frosted cupcake. Palette: chocolate brown, strawberry pink and cream.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a tall white chef hat, a frilly apron, holding a big swirly-frosted cupcake. Moment: A night bakery kitchen lit by a warm oven glow from behind; she lifts the giant frosted cupcake as a fine cascade of sugar sprinkles falls through the backlight.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on chocolate brown, strawberry pink and cream plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/magical-girl/ult",
+   "template": "ult",
+   "desc": "Transformation: she rises inside a column of thin glowing ribbons of light above a fine-line magic circle in a dark lilac void. Costume: a big pink bow, a transformation outfit with ribbons and a heart brooch, a wand shaped like a giant red marker pen. Palette: hot pink, lilac and pale pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a big pink bow, a transformation outfit with ribbons and a heart brooch, a wand shaped like a giant red marker pen. Moment: Transformation: she rises inside a column of thin glowing ribbons of light above a fine-line magic circle in a dark lilac void.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on hot pink, lilac and pale pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/astrologer/ult",
+   "template": "ult",
+   "desc": "On an observatory rooftop under a deep midnight sky she raises the crystal astrolabe; thin gold constellation lines connect across the sky. Costume: a deep indigo star-map cloak with constellation patterns, a crystal astrolabe staff. Palette: midnight indigo, lavender and starlight gold.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a deep indigo star-map cloak with constellation patterns, a crystal astrolabe staff. Moment: On an observatory rooftop under a deep midnight sky she raises the crystal astrolabe; thin gold constellation lines connect across the sky.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on midnight indigo, lavender and starlight gold plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/zhuangyuan/ult",
+   "template": "ult",
+   "desc": "On a misty ink-wash landscape at dusk she swings the giant calligraphy brush; one huge black ink stroke sweeps across the sky behind her and a vermilion silk banner (blank, no characters) unfurls. Costume: an ancient-Chinese top-scholar red robe with gold trim, a black scholar hat with two flat wings, a giant calligraphy brush. Palette: vermilion, ink black and gold.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: an ancient-Chinese top-scholar red robe with gold trim, a black scholar hat with two flat wings, a giant calligraphy brush. Moment: On a misty ink-wash landscape at dusk she swings the giant calligraphy brush; one huge black ink stroke sweeps across the sky behind her and a vermilion silk banner (blank, no characters) unfurls.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on vermilion, ink black and gold plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/idol/ult",
+   "template": "ult",
+   "desc": "Center stage in a dark arena under one white spotlight from above, a sea of soft pink light-stick bokeh in the dark crowd below; she sings into the headset with one hoof raised. Costume: a sparkly idol stage outfit, a headset microphone, a glowing pink light stick. Palette: violet, pink and white.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a sparkly idol stage outfit, a headset microphone, a glowing pink light stick. Moment: Center stage in a dark arena under one white spotlight from above, a sea of soft pink light-stick bokeh in the dark crowd below; she sings into the headset with one hoof raised.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on violet, pink and white plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/cyber/ult",
+   "template": "ult",
+   "desc": "A rain-soaked rooftop in a dark cyber city at night; holding the giant glowing highlighter like a pen (clearly a chunky marker pen with a cap, not a gun), she draws one thin neon line that slashes across the frame; wet reflections. Costume: glowing visor goggles pushed up on her forehead, a sleek techwear jacket with neon pink and cyan lines, a giant glowing highlighter pen. Palette: near-black, neon pink and cyan.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: glowing visor goggles pushed up on her forehead, a sleek techwear jacket with neon pink and cyan lines, a giant glowing highlighter pen. Moment: A rain-soaked rooftop in a dark cyber city at night; holding the giant glowing highlighter like a pen (clearly a chunky marker pen with a cap, not a gun), she draws one thin neon line that slashes across the frame; wet reflections.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on near-black, neon pink and cyan plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/ninja/ult",
+   "template": "ult",
+   "desc": "A night bamboo forest under a pale moon; she dashes forward through a thin swirl of smoke leaving two faint afterimages. Costume: a pink ninja outfit with a long scarf tail. Palette: dark plum, moon silver and pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a pink ninja outfit with a long scarf tail. Moment: A night bamboo forest under a pale moon; she dashes forward through a thin swirl of smoke leaving two faint afterimages.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on dark plum, moon silver and pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/lidong/ult",
+   "template": "ult",
+   "desc": "A quiet winter street at blue hour as the first snow of the year begins; warm lantern light behind her, steam rising from the ginger tea, snowflakes in soft focus. Costume: a long cozy red knitted scarf, holding a steaming mug of ginger tea. Palette: scarf red, warm lantern cream and ice blue.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a long cozy red knitted scarf, holding a steaming mug of ginger tea. Moment: A quiet winter street at blue hour as the first snow of the year begins; warm lantern light behind her, steam rising from the ginger tea, snowflakes in soft focus.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on scarf red, warm lantern cream and ice blue plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/xiaoxue/ult",
+   "template": "ult",
+   "desc": "A still snowy field at dusk with her snowman buddy small beside her; big snowflakes drift through a cold backlight. Costume: a knitted pom-pom beanie and mittens, a small cheerful snowman buddy beside her. Palette: slate grey-blue, snow white and a pink accent.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a knitted pom-pom beanie and mittens, a small cheerful snowman buddy beside her. Moment: A still snowy field at dusk with her snowman buddy small beside her; big snowflakes drift through a cold backlight.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on slate grey-blue, snow white and a pink accent plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/daxue/ult",
+   "template": "ult",
+   "desc": "Night: she sleds toward the viewer down a snowy slope under a vast rippling aquamarine aurora that bends into a tunnel behind her. Costume: a thick hooded winter cloak with fur trim, on a small wooden sled. Palette: navy, aquamarine and soft pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a thick hooded winter cloak with fur trim, on a small wooden sled. Moment: Night: she sleds toward the viewer down a snowy slope under a vast rippling aquamarine aurora that bends into a tunnel behind her.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on navy, aquamarine and soft pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/graduate/ult",
+   "template": "ult",
+   "desc": "Graduation night on a stone terrace; she tosses her cap upward into a dark navy sky as a golden backlight bursts from behind her. Costume: a square graduation cap with tassel and a graduation gown. Palette: dark navy, gold and pink.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a square graduation cap with tassel and a graduation gown. Moment: Graduation night on a stone terrace; she tosses her cap upward into a dark navy sky as a golden backlight bursts from behind her.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on dark navy, gold and pink plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 5,
+   "slot": "form/gold-master/ult",
+   "template": "ult",
+   "desc": "She slams a giant gold medal stamp down; a ring shockwave of golden light spreads across a dark pop-up-book landscape behind her. Costume: a sash of shiny gold medal stamps across her chest and a golden laurel hair clip. Palette: gold, deep magenta and ivory.",
+   "extra": "",
+   "web": "Please generate an image, landscape 1536x1024, full-bleed opaque. Premium cinematic key art, the quality of a top-tier anime game character ultimate-skill cut-in splash. Fan-art of Pinkie Pie, the pink earth pony from My Little Pony: Friendship is Magic, kept exactly on-model in the show's clean flat vector style: bold dark-magenta outlines, flat colors, big blue eyes, voluminous curly magenta-pink mane and tail, bright pink body, cutie mark of exactly three balloons (one yellow, two blue). Costume: a sash of shiny gold medal stamps across her chest and a golden laurel hair clip. Moment: She slams a giant gold medal stamp down; a ring shockwave of golden light spreads across a dark pop-up-book landscape behind her.\nComposition (strict): medium shot from a slightly low camera. Her face sits exactly at the horizontal center of the image with her eyes about 40% down from the top edge; her head and chest fill the central third; the left and right thirds are background only; nothing important in the top 15% or bottom 15%.\nLighting and mood: low-key and fairly dark overall so white titles read on top; one strong rim light / backlight outlining her silhouette; volumetric light shafts and atmospheric haze; a background with real depth and soft depth-of-field blur; she is fully part of the scene (grounded and lit by the same light), not a cut-out pasted on the background. Restrained color grading built only on gold, deep magenta and ivory plus white. No rainbow colors, no confetti, no cartoon stars, no hearts, no sparkle stickers, no speed-line clutter. Mature, elegant, cinematic, not childish.\nNo text, letters, numbers, logos, watermark, frame or UI."
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/cheer",
+   "template": "sticker",
+   "desc": "jumping up joyfully holding a big red pen, drawing a check mark in the air.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/oops",
+   "template": "sticker",
+   "desc": "holding a pink eraser, sticking her tongue out with a sheepish laugh, \"no big deal\" vibe.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/combo",
+   "template": "sticker",
+   "desc": "hugging an armful of glowing golden stars, beaming.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/focus",
+   "template": "sticker",
+   "desc": "resting her chin on one hoof, nibbling the end of a pencil, concentrating.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/finish",
+   "template": "sticker",
+   "desc": "proudly holding up a big rubber stamp with a heart pattern, ready to stamp.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/jar",
+   "template": "sticker",
+   "desc": "hugging a glass jar overflowing with little golden stars.",
+   "extra": ""
+  },
+  {
+   "prio": 7,
+   "slot": "sticker/leave",
+   "template": "sticker",
+   "desc": "politely handing over a small pink folded note card with a little heart seal, warm smile.",
+   "extra": ""
+  }
+ ]
+}

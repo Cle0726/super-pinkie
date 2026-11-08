@@ -1,0 +1,207 @@
+{
+  "at": "2026-11-07T02:57:11.180Z",
+  "model": "Gemini 3.8 Flash Tiered",
+  "batches": "每批最多 6 张，这一次跑完 20 张",
+  "cards": [
+    {
+      "id": "c8-86",
+      "subject": "C语言",
+      "question": "若 int a[5] = {1,2,3,4,5}, *p = a; 则 *(p + 2) 的值为",
+      "answer": "3",
+      "quote": "p 指向 a[0]，p + 2 指向 a[2]，*(p + 2) = a[2] = 3。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "c5-75",
+      "subject": "C语言",
+      "question": "for (i = 0; i < 10; i += 3) 循环体执行的次数是",
+      "answer": "4",
+      "quote": "i 依次为 0、3、6、9，共 4 次。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "c7-84",
+      "subject": "C语言",
+      "question": "有宏定义 #define S(x) x*x，则 S(1+2) 的值为",
+      "answer": "5",
+      "quote": "宏是原样替换：1+2*1+2 = 5。想得到 9 要写成 #define S(x) ((x)*(x))。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "c1-60",
+      "subject": "C语言",
+      "question": "C 程序总是从哪里开始执行",
+      "answer": "main 函数",
+      "quote": "不管 main 写在什么位置，都从 main 开始执行。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "c6-79",
+      "subject": "C语言",
+      "question": "定义 char s[] = \"hello\"; 则 sizeof(s) 的值为",
+      "answer": "6",
+      "quote": "字符串末尾自动加 '\\0'，占 6 字节；strlen(s) 才是 5。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "net5-145",
+      "subject": "计算机网络",
+      "question": "TCP 建立连接的过程称为",
+      "answer": "三次握手",
+      "quote": "建立：三次握手（SYN、SYN+ACK、ACK）；释放：四次挥手。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "net4-137",
+      "subject": "计算机网络",
+      "question": "子网掩码 255.255.255.192 对应的每个子网可用主机数为",
+      "answer": "62",
+      "quote": "/26，主机位 6 位，2⁶ − 2 = 62。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "net3-131",
+      "subject": "计算机网络",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "quote": "ARP：IP → MAC（广播请求、单播应答）；DNS：域名 → IP；DHCP：分配 IP。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "net6-148",
+      "subject": "计算机网络",
+      "question": "HTTPS 默认使用的端口号是",
+      "answer": "443",
+      "quote": "HTTP 80、HTTPS 443、FTP 21（数据 20）、SMTP 25、POP3 110、DNS 53、Telnet 23、SSH 22、DHCP 67/68。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "net1-124",
+      "subject": "计算机网络",
+      "question": "网络协议的三要素是",
+      "answer": "语法、语义、时序",
+      "quote": "语法（格式）、语义（含义）、时序/同步（顺序）。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "ee2-7",
+      "subject": "电工电子",
+      "question": "戴维南定理指出，任何线性有源二端网络都可以等效为",
+      "answer": "电压源与电阻串联",
+      "quote": "戴维南：电压源（开路电压 Uoc）串联等效电阻 R0；诺顿：电流源并联电阻。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "ee3-10",
+      "subject": "电工电子",
+      "question": "在纯电感交流电路中，电压与电流的相位关系是",
+      "answer": "电压超前电流 90°",
+      "quote": "口诀 ELI：电感 L 中电压 E 超前电流 I；ICE：电容 C 中电流 I 超前电压 E。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "ee4-12",
+      "subject": "电工电子",
+      "question": "换路定律指出，换路瞬间不能突变的是",
+      "answer": "电容电压和电感电流",
+      "quote": "uC(0+) = uC(0−)，iL(0+) = iL(0−)。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "ee7-23",
+      "subject": "电工电子",
+      "question": "反相比例运算放大器中 Rf = 100 kΩ，R1 = 10 kΩ，其电压放大倍数为",
+      "answer": "−10",
+      "quote": "反相比例 Au = −Rf/R1 = −10；同相比例 Au = 1 + Rf/R1。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "ee6-20",
+      "subject": "电工电子",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "quote": "放大：发正集反；饱和：双正偏；截止：发射结反偏（或零偏）。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "e1-47",
+      "subject": "英语",
+      "question": "I am looking forward to ______ from you soon.",
+      "answer": "hearing",
+      "quote": "look forward to 中的 to 是介词，后接 doing。同类：be used to doing、devote…to doing。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "e1-38",
+      "subject": "英语",
+      "question": "If it ______ tomorrow, we will put off the sports meeting.",
+      "answer": "rains",
+      "quote": "条件状语从句“主将从现”。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "e1-53",
+      "subject": "英语",
+      "question": "By the end of last year, they ______ three new bridges.",
+      "answer": "had built",
+      "quote": "by the end of last year（过去的过去）→ 过去完成时。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "e1-44",
+      "subject": "英语",
+      "question": "Not until he came back ______ the truth.",
+      "answer": "did I know",
+      "quote": "Not until 放句首，主句部分倒装。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    },
+    {
+      "id": "e1-40",
+      "subject": "英语",
+      "question": "The meeting ______ by the manager yesterday afternoon.",
+      "answer": "was held",
+      "quote": "会议“被举行”，yesterday → 一般过去时被动 was done。",
+      "status": "failed",
+      "error": "笔记整理超时，请稍后再试；笔记保持原样",
+      "items": {}
+    }
+  ]
+}

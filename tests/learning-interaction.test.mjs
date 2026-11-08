@@ -138,10 +138,13 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   registerLearningGateway({registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); }}, store);
   // v2 (2026-10-26) adds materials.* and desk.lesson.* RPCs, some read-scoped; learning-lesson/materials tests cover them exactly.
   // 手账 v2 (2026-10-29) adds ref.*; learning-refs.test.mjs pins those names and scopes exactly.
-  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.') && !name.startsWith('pinkie.learning.ref.')));
+  // 学习台游戏 (2026-11-08) adds game.*; learning-game.test.mjs pins those names and scopes exactly.
+  const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.') && !name.startsWith('pinkie.learning.ref.') && !name.startsWith('pinkie.learning.game.')));
   assert.deepEqual([...legacyMethods.keys()].sort(), [
     'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
-    'pinkie.learning.current', 'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
+    'pinkie.learning.current',
+    'pinkie.learning.drill.answer', 'pinkie.learning.drill.cheer', 'pinkie.learning.drill.finish', 'pinkie.learning.drill.judge', 'pinkie.learning.drill.learned', 'pinkie.learning.drill.session', 'pinkie.learning.drill.settings.get', 'pinkie.learning.drill.settings.set',
+    'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
     'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',
     'pinkie.learning.notes.organize.undo', 'pinkie.learning.notes.organizer.setModel', 'pinkie.learning.notes.organizer.status', 'pinkie.learning.notes.quiz.prepare',
