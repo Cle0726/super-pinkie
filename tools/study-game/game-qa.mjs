@@ -134,7 +134,92 @@ async function awards() {
   fs.writeFileSync(path.join(out, 'awards.json'), JSON.stringify(r, null, 2)); console.log(JSON.stringify(r));
 }
 
+// 商店 / 扭蛋 / 衣橱 / 图鉴：截图 + 买形态 + 心愿单 + 十连（3D 扭蛋机逐段截图）。
+async function shop() {
+  const {harness, service, close} = await harnessWithGame({seed: {stars: 9600, seals: 24, shards: 30}});
+  const browser = await launch(); const r = {};
+  try {
+    for (const theme of (opt('theme') ? [opt('theme')] : ['light', 'dark'])) {
+      const width = Number(opt('width', 1440)), height = Math.round(width * 10 / 16), tag = `${theme}-${width}`;
+      const {page, context} = await openPage(browser, harness, {width, height, theme, tier: opt('tier', 'standard')});
+      await deskReady(page, 'gameshop'); await page.locator('.pks-sku').first().waitFor({timeout: 8000}); await wait(700);
+      await page.screenshot({path: path.join(out, `shop-${tag}.png`)});
+      if (theme === 'light') {
+        // 心愿单：钉一个买不起的 SSR（金印专柜），HUD 出进度条
+        const pin = page.locator('.pks-shelf[data-shelf="seal"] .pks-pin').first(); if (await pin.count()) { await pin.click(); await wait(600); }
+        // 买一个 R / SR 形态：两步确认 → 过场
+        const buy = page.locator('.pks-shelf[data-shelf="permanent"] .pks-sku[data-kind="form"]:not([data-owned]) .pks-buy').first();
+        await buy.click(); await wait(150); await buy.click();
+        await page.waitForFunction(() => window.__pinkieGameFx.stats().cine, null, {timeout: 6000}).catch(() => {}); await wait(900);
+        await page.screenshot({path: path.join(out, `shop-buy-cine-${tag}.png`)});
+        await page.waitForFunction(() => !window.__pinkieGameFx.stats().cine, null, {timeout: 8000}).catch(() => {}); await wait(1200);
+        r.afterBuy = await page.evaluate(() => ({stars: document.querySelector('[data-game-hud="stars"] b')?.textContent, owned: document.querySelectorAll('.pks-sku[data-owned]').length}));
+        r.wallet = service.store.game.read().wallet;
+      }
+      await page.evaluate(() => window.__pinkieStudyDesk.go('gamegacha')); await page.locator('.pks-pull').first().waitFor({timeout: 8000});
+      await page.waitForFunction(() => document.querySelector('.pks-ga__alcove')?.dataset.mode !== 'loading', null, {timeout: 12000}); await wait(1200);
+      await page.screenshot({path: path.join(out, `gacha-${tag}.png`)});
+      r[`gachaMode-${theme}`] = await page.evaluate(() => document.querySelector('.pks-ga__alcove').dataset.mode);
+      const ten = page.locator('.pks-pull.is-ten'); await ten.click();
+      for (const ms of [500, 1300, 2300, 3300]) { await wait(ms - (ms > 500 ? [500, 1300, 2300][[1300, 2300, 3300].indexOf(ms)] : 0)); await page.screenshot({path: path.join(out, `gacha-pull-${tag}-${ms}.png`)}); }
+      await page.locator('.pks-results').waitFor({timeout: 15000}).catch(() => {}); await wait(1400);
+      await page.screenshot({path: path.join(out, `gacha-results-${tag}.png`)});
+      await page.locator('.pks-results__ok').click().catch(() => {}); await wait(800);
+      await page.evaluate(() => window.__pinkieStudyDesk.go('gamewardrobe')); await page.locator('.pks-tile').first().waitFor({timeout: 8000}); await wait(900);
+      await page.screenshot({path: path.join(out, `wardrobe-${tag}.png`)});
+      await page.evaluate(() => window.__pinkieStudyDesk.go('gamecodex')); await page.locator('.pks-dex__card').first().waitFor({timeout: 8000}); await wait(700);
+      await page.screenshot({path: path.join(out, `codex-${tag}.png`)});
+      await page.evaluate(() => window.__pinkieStudyDesk.go('today')); await wait(2200);
+      await page.screenshot({path: path.join(out, `camp-after-shop-${tag}.png`)});
+      await context.close();
+    }
+    r.pending = service.store.game.read().pending.length;
+  } finally { await browser.close(); await close(); }
+  fs.writeFileSync(path.join(out, 'shop.json'), JSON.stringify(r, null, 2)); console.log(JSON.stringify(r));
+}
+
+// 上岸之书：3D 立体书（翻页、节点四态、怪物、起雾）+ 平面版。节点状态在隔离 store 里直接摆好。
+async function map() {
+  const {harness, service, close} = await harnessWithGame();
+  const browser = await launch(); const r = {};
+  try {
+    const game = service.store.game; const W = game.modules.world;
+    const world = W.world({exam: 'pretco-b'});
+    const first = world.regions[0];
+    // 摆四种状态 + 起雾 + 怪：第一区 1 金章、2 点亮、3 已探索（起雾）、其余迷雾；怪占领第 2 个节点
+    const ids = first.nodes.map(n => n.id);
+    game.mutate(s => { W.ensure(s); s.nodes[ids[0]] = {...(s.nodes[ids[0]] || {}), explored: true, lit: true, gold: true}; s.nodes[ids[1]] = {...(s.nodes[ids[1]] || {}), explored: true, lit: true}; s.nodes[ids[2]] = {...(s.nodes[ids[2]] || {}), explored: true}; });
+    W.fadeByRegion = () => ({[first.id]: {due: 4, ratio: .62}}); // 第一区一部分卡到期 → 起雾
+    seedMonsters(service, MONSTER_SEEDS.slice(0, 2).map((m, i) => ({...m, node: ids[1 + i]})), {due: false});
+    r.decorated = W.world({exam: 'pretco-b'}).regions[0].nodes.map(n => `${n.name}:${n.state}:${n.fade ?? 0}:${n.monsters}`);
+    for (const theme of (opt('theme') ? [opt('theme')] : ['light', 'dark'])) {
+      const width = Number(opt('width', 1440)), height = Math.round(width * 10 / 16), tag = `${theme}-${width}`;
+      const {page, context} = await openPage(browser, harness, {width, height, theme, tier: opt('tier', 'standard')});
+      await deskReady(page, 'gamemap'); await page.locator('.pkw-tab').first().waitFor({timeout: 10000});
+      await page.waitForFunction(() => !document.querySelector('.pkw-canvas[data-loading]'), null, {timeout: 15000}).catch(() => {}); await wait(2600);
+      await page.screenshot({path: path.join(out, `map-3d-${tag}.png`)});
+      r[`fx-${theme}`] = await page.evaluate(() => ({scene: window.__pinkieGameFx.stats().scene, webgl: window.__pinkieGameFx.stats().webgl}));
+      // 点第 2 个节点 → 卡片
+      const pos = await page.evaluate(() => { const h = document.querySelector('.pkw-canvas'); return h ? h.getBoundingClientRect().toJSON() : null; });
+      if (pos) { for (const [fx2, fy2] of [[.42, .55], [.5, .6], [.35, .62], [.45, .5]]) { await page.mouse.click(pos.x + pos.width * fx2, pos.y + pos.height * fy2); await wait(900); if (!(await page.locator('.pkw-card[hidden]').count())) break; } }
+      await page.screenshot({path: path.join(out, `map-3d-card-${tag}.png`)});
+      // 翻页到第二区
+      await page.locator('.pkw-tab').nth(1).click(); await wait(500); await page.screenshot({path: path.join(out, `map-3d-flip-${tag}.png`)}); await wait(2400);
+      await page.screenshot({path: path.join(out, `map-3d-region2-${tag}.png`)});
+      // 空闲：翻页结束 + 浮尘停了以后零帧
+      await wait(6500); r[`idle-${theme}`] = await page.evaluate(async () => { const a = window.__pinkieGameFx.stats().frames, raf = window.__rafCalls; await new Promise(res => setTimeout(res, 2000)); return {frames: window.__pinkieGameFx.stats().frames - a, raf: window.__rafCalls - raf}; });
+      // 平面版
+      await page.locator('.pkw-mode button', {hasText: '平面'}).click(); await page.locator('.pkw-tab').first().click(); await wait(900);
+      await page.screenshot({path: path.join(out, `map-flat-${tag}.png`)});
+      await context.close();
+    }
+  } finally { await browser.close(); await close(); }
+  fs.writeFileSync(path.join(out, 'map.json'), JSON.stringify(r, null, 2)); console.log(JSON.stringify(r));
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  if (cmd === 'map') await map();
+  if (cmd === 'shop') await shop();
   if (cmd === 'awards') await awards();
   if (cmd === 'shot') await shot();
   if (cmd === 'battle') await battle();

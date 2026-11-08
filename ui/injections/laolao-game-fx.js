@@ -1330,6 +1330,8 @@
     // 只给 QA 用：强制档位（不写存储）、统计、帧率测量
     _st: () => st,
     _forceTier(t) { forcedTier = TIERS[t] ? t : ''; applySettings(); },
+    _renderer() { return st.renderer || null; },
+    _kick() { kick(); },
     _timeScale(k = 1) { st.timeScale = k; for (const a of document.getAnimations?.() || []) if (a.effect?.target?.closest?.('.pk-gamefx-layer')) a.playbackRate = k; },
     stats() { const live = st.time < st.aliveUntil; return {...stats, frameTimes: undefined, alive: live, cine: Boolean(st.cine), scene: st.active?.name || '', time: st.time, webgl: Boolean(st.renderer)}; },
     fps(sinceMs = 2000) { const now = performance.now(), ts = stats.frameTimes.filter(t => t >= now - sinceMs); if (ts.length < 3) return {median: 0, p5: 0, frames: ts.length}; const dts = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b); const med = dts[Math.floor(dts.length / 2)], p95 = dts[Math.floor(dts.length * .95)]; return {median: Math.round(1000 / med), p5: Math.round(1000 / p95), frames: ts.length}; },
