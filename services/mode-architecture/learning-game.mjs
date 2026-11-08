@@ -7,6 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import * as E from './learning-game-economy.mjs';
 import {GameMonsters} from './learning-game-monsters.mjs';
+import {GameWorld} from './learning-game-world.mjs';
 
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
@@ -79,6 +80,7 @@ export class LearningGame {
     this.backup = path.join(this.root, 'game.bak.json');
     this.modules = {};
     new GameMonsters(this);
+    new GameWorld(this);
   }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
@@ -203,6 +205,8 @@ export class LearningGame {
       const eligible = {};
       for (const card of pool) if (card?.key) eligible[card.key] = E.cardEligible(card, now);
       state.drill[session.sessionId] = {at: now, source: session.source, eligible, combo: 0, maxCombo: 0, seen: [], ults: 0, writeAll: true};
+      const nodeId = session.scope?.nodeId;
+      if (nodeId) { state.nodeSessions ||= {}; state.nodeSessions[session.sessionId] = {nodeId: String(nodeId).slice(0, 80), at: now}; }
     });
   }
 
@@ -279,6 +283,7 @@ export class LearningGame {
         if (run.maxCombo >= 20) state.stats.combo20Sets += 1;
       }
       const out = this.grant(state, `drillset:${sid}`, {type: 'drill', id: sid}, awards);
+      out.push(...(this.modules.world?.onSetResult?.(state, {sessionId: sid, scored, correct}) || []));
       if (result.jar?.filledNow) out.push(...this.grant(state, `jar:${date}`, {type: 'jar', id: date}, [{kind: 'stars', amount: this.economy.earn.jarFull, reason: '星星罐装满了', fx: 'big'}]));
       if (result.streak?.stampedToday) out.push(...this.streakAwards(state, result.streak.current || 0));
       const rng = E.mulberry32(E.seedFrom('gift', sid));
