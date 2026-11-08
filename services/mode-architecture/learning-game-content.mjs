@@ -137,3 +137,46 @@ export function validLine(v) {
   if (!text || /你忘了|你又错|笨|蠢|废物|丢人/.test(text)) return null;
   return {text};
 }
+
+// ---------- 挂到 game.modules.content：台词（≤4 s）+ 委托文案（每天一次，后台） ----------
+export class GameContent {
+  constructor(game) {
+    this.game = game;
+    this.questJobs = new Map();
+    game.modules.content = this;
+  }
+  async line({event = 'default', context = {}} = {}) {
+    const date = this.game.today();
+    const {isQuiet} = await import('./learning-game.mjs');
+    const quiet = isQuiet(date);
+    const ev = clean(event, 30) || 'default';
+    const seed = Math.floor(this.game.now() / 60000);
+    const local = {text: localLine(ev, {quiet, seed}), source: 'local'};
+    if (!this.game.requestModel) return local;
+    const ctx = {...(context && typeof context === 'object' ? context : {}), quiet, date};
+    const job = modelJson(this.game.requestModel, LINE_RULES, {event: ev, context: JSON.parse(JSON.stringify(ctx).slice(0, 1500))}, {validate: validLine, retries: 0, timeoutMs: 4000, maxTokens: 200});
+    const r = await withTimeout(job, 4000, null);
+    return r ? {text: r.value.text, source: 'model'} : local;
+  }
+  // 当天委托的文案由模型补写（数字和种类不变）；写好前用本地文案。
+  kickQuestText(date) {
+    if (!this.game.requestModel || this.questJobs.has(date)) return;
+    const state = this.game.read();
+    const q = state.quests?.[date];
+    if (!q || q.text === 'model' || q.textTried) return;
+    const job = (async () => {
+      const {isQuiet, seasonOn} = await import('./learning-game.mjs');
+      const ids = q.list.map(x => x.id);
+      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests: q.list.map(x => ({id: x.id, kind: x.target.kind, count: x.target.count}))}, {validate: v => validQuestText(v, ids), timeoutMs: 20000, maxTokens: 600});
+      this.game.mutate(s => {
+        const day = s.quests?.[date];
+        if (!day) return;
+        day.textTried = true;
+        if (!r) return;
+        for (const item of day.list) if (r.value[item.id]) Object.assign(item, r.value[item.id]);
+        day.text = 'model';
+      });
+    })().catch(() => {}).finally(() => this.questJobs.delete(date));
+    this.questJobs.set(date, job);
+  }
+}
