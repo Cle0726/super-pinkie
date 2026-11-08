@@ -6,7 +6,11 @@ param(
     [switch]$LegacyOneFile,
     # Local developers may use a compatible Node 24.x patch release. CI keeps
     # the manifest's exact version for reproducible release artifacts.
-    [switch]$AllowLocalNodeVersion
+    [switch]$AllowLocalNodeVersion,
+    # Build into another folder so a running App is not overwritten. The
+    # launcher EXE is mapped while the App is open, so writing into the live
+    # dist\<app> folder fails with a sharing violation.
+    [string]$DistRoot = "dist"
 )
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = "1"
@@ -60,7 +64,12 @@ $mihomoExe = Get-ChildItem -LiteralPath $mihomoUnpack -Filter "*.exe" -Recurse |
 if (-not $mihomoExe) { throw "mihomo 压缩包里没有 exe" }
 Copy-Item -LiteralPath $mihomoExe.FullName -Destination (Join-Path $browserVpnStage "mihomo.exe") -Force
 
-npm install --prefix $runtimeStage --omit=dev --no-audit --no-fund "openclaw@$($manifest.openclaw)"
+# registry.npmjs.org stalled here for minutes at a time (15 idle
+# connections, zero CPU) while the mirror finished the same install in
+# six minutes. Only this build step is pointed at the mirror; the
+# package and its version still come from the manifest.
+$npmRegistry = if ($env:PINKIE_NPM_REGISTRY) { $env:PINKIE_NPM_REGISTRY } else { "https://registry.npmmirror.com" }
+npm install --prefix $runtimeStage --registry $npmRegistry --omit=dev --no-audit --no-fund "openclaw@$($manifest.openclaw)"
 if ($LASTEXITCODE -ne 0) { throw "OpenClaw 内置运行时下载失败" }
 $openclawRoot = Join-Path $runtimeModules "openclaw"
 if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
@@ -231,22 +240,25 @@ $pyInstallerCommonArgs = @(
 # Build the fast-starting directory layout by default.  PyInstaller keeps all
 # resources next to the launcher, so Windows no longer has to unpack ~700 MB
 # into a temporary _MEI directory before showing the window.
-pyinstaller @pyInstallerCommonArgs --onedir
+pyinstaller @pyInstallerCommonArgs --onedir --distpath $DistRoot
 if ($LASTEXITCODE -ne 0) { throw "Windows EXE 构建失败" }
-if (-not (Test-Path -LiteralPath 'dist\超級碧琪\超級碧琪.exe')) {
+if (-not (Test-Path -LiteralPath (Join-Path $DistRoot '超級碧琪\超級碧琪.exe'))) {
     throw "Windows onedir 构建产物缺失"
 }
-python tools/windows-package/clean_ui.py --check-package 'dist\超級碧琪'
+$packageDir = Join-Path $DistRoot '超級碧琪'
+python tools/windows-package/clean_ui.py --check-package $packageDir
 if ($LASTEXITCODE -ne 0) { throw "Windows 包含其他产品的素材或缺少安装器" }
-python tools/ui-parity/bundle.py check --control-ui 'dist\超級碧琪\_internal\runtime\node_modules\openclaw\dist\control-ui' --output 'dist\windows-ui-manifest.json'
+$controlUiPackage = Join-Path $packageDir '_internal\runtime\node_modules\openclaw\dist\control-ui'
+$uiManifest = Join-Path $DistRoot 'windows-ui-manifest.json'
+python tools/ui-parity/bundle.py check --control-ui $controlUiPackage --output $uiManifest
 if ($LASTEXITCODE -ne 0) { throw 'Packaged Control UI differs from the shared source' }
-python tools/windows-package/check_runtime.py --package 'dist\超級碧琪'
+python tools/windows-package/check_runtime.py --package $packageDir
 if ($LASTEXITCODE -ne 0) { throw "Windows 包缺少运行时文件，或打过补丁的文件被改回去了" }
 
 if ($LegacyOneFile) {
-    pyinstaller @pyInstallerCommonArgs --onefile
+    pyinstaller @pyInstallerCommonArgs --onefile --distpath $DistRoot
     if ($LASTEXITCODE -ne 0) { throw "Windows 兼容 EXE 构建失败" }
-    if (-not (Test-Path -LiteralPath 'dist\超級碧琪.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $DistRoot '超級碧琪.exe'))) {
         throw "Windows onefile 构建产物缺失"
     }
 }
