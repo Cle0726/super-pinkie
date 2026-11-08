@@ -2,9 +2,10 @@
 // 隔 ≥3 天两次打赢 = 收服。讨伐失败 = 进化一级（收服时奖励更多）。同一考点再错 = 升级，不重复刷怪。
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {MONSTER_NAME_RULES, VARIANT_RULES, blindCheck, fold, hashOf, modelJson, validChoice, validMonsterName} from './learning-game-content.mjs';
+import {MONSTER_NAME_RULES, VARIANT_RULES, blindCheck, fold, hashOf, modelJson, validChoice, validMonsterName, withTimeout} from './learning-game-content.mjs';
 
 const DAY = 86400000;
+export const HUNT_BUDGET_MS = 40000; // 讨伐开始时现场出变体的总预算；超过就先用原题（标 local）
 export const SPECIES = {
   listening: [['echo-bat', '回声蝙蝠'], ['shell-crab', '海螺小蟹']],
   vocab: [['block-golem', '字母积木魔像'], ['sticky-ghost', '便利贴幽灵'], ['quiz-shroom', '题目蘑菇']],
@@ -35,6 +36,7 @@ export class GameMonsters {
   constructor(game) {
     this.game = game;
     this.naming = null;
+    this.preparing = null;
     game.modules.monsters = this;
   }
   get economy() { return this.game.economy; }
@@ -73,6 +75,7 @@ export class GameMonsters {
     };
     box.list[id] = m;
     this.kickNaming();
+    this.kickVariantsSoon();
     return m;
   }
 
@@ -131,21 +134,29 @@ export class GameMonsters {
   }
 
   // ---------- 讨伐 ----------
-  async variantFor(m) {
+  // 变体题：这个模型出一道 + 盲答复核要 20 s 左右，所以怪一出生就在后台把「下一次讨伐」的变体备好（m.prepared，按回合 round 对号），
+  // 讨伐开始时直接用；没备好才现场出（总预算 HUNT_BUDGET_MS），再不行退回原题换选项顺序（标 local）。
+  round(m) { return `${m.wins.length}-${m.evolved}-${hashOf(m.seed?.question || '')}`; }
+  async generateVariant(m) {
     const rm = this.game.requestModel;
     const seed = m.seed || {};
-    if (rm && seed.question) {
-      for (let i = 0; i < 2; i += 1) {
-        const r = await modelJson(rm, VARIANT_RULES, {subject: m.subject, topic: m.topic, question: seed.question, answer: seed.answer, note: m.wins.length ? '先生已经打赢过一次，换一个角度' : ''}, {
-          validate: v => validChoice(v, {seedQuestion: seed.question}), timeoutMs: 30000, maxTokens: 1200,
-        });
-        if (!r) break;
-        const check = await blindCheck(rm, r.value);
-        if (check === false) continue; // 盲答对不上：答案可能不唯一，重出
-        return {...r.value, source: 'model', verified: check === true};
-      }
+    if (!rm || !seed.question) return null;
+    const used = (m.usedStems || []).map(fold);
+    for (let i = 0; i < 2; i += 1) {
+      const r = await modelJson(rm, VARIANT_RULES, {subject: m.subject, topic: m.topic, question: seed.question, answer: seed.answer,
+        note: m.wins.length ? '先生已经打赢过一次，换一个角度' : '', avoid: (m.usedStems || []).slice(-4)}, {
+        validate: v => { const c = validChoice(v, {seedQuestion: seed.question}); return c && !used.includes(fold(c.stem)) ? c : null; }, timeoutMs: 60000, maxTokens: 1200,
+      });
+      if (!r) break;
+      const check = await blindCheck(rm, r.value);
+      if (check === false) continue; // 盲答对不上：答案可能不唯一，重出
+      return {...r.value, source: 'model', verified: check === true};
     }
-    // 离线兜底：原题换选项顺序（不是新变体，标 local；前端可以显示「碧琪离线中，先用原题」）
+    return null;
+  }
+  localVariant(m) {
+    // 离线兜底：原题换选项顺序（不是新变体，标 local；前端显示「碧琪离线中，先用原题」）
+    const seed = m.seed || {};
     if (seed.options?.length >= 2 && seed.answer) {
       const idx = seed.options.findIndex(o => fold(o) === fold(seed.answer));
       if (idx >= 0) {
@@ -155,6 +166,42 @@ export class GameMonsters {
       }
     }
     return null;
+  }
+  // 备好的变体（回合对得上）→ 现场出（成功也存成 prepared）→ null
+  async variantFor(m) {
+    const round = this.round(m);
+    if (m.prepared?.round === round) { const {round: _r, ...v} = m.prepared; return v; }
+    const v = await this.generateVariant(m);
+    if (v) this.game.mutate(state => { const live = this.ensure(state).list[m.id]; if (live && this.round(live) === round) live.prepared = {...v, round}; });
+    return v;
+  }
+  kickVariantsSoon() {
+    if (!this.game.requestModel) return;
+    const t = setTimeout(() => this.kickVariants(), 0);
+    t.unref?.();
+  }
+  // 后台按到期顺序给没备好的怪出变体；一次最多 6 只，失败的 10 分钟内不再试。
+  kickVariants() {
+    if (this.preparing || !this.game.requestModel) return this.preparing;
+    this.preparing = (async () => {
+      for (let n = 0; n < 6; n += 1) {
+        const now = this.now();
+        const list = Object.values(this.ensure(this.game.read()).list)
+          .filter(m => m.state !== 'captured' && m.seed?.question && m.prepared?.round !== this.round(m) && !(m.variantTriedAt && now - m.variantTriedAt < 10 * 60000))
+          .sort((a, b) => a.dueAt - b.dueAt);
+        const target = list[0];
+        if (!target) break;
+        const round = this.round(target);
+        const v = await this.generateVariant(target).catch(() => null);
+        this.game.mutate(state => {
+          const m = this.ensure(state).list[target.id];
+          if (!m) return;
+          m.variantTriedAt = this.now();
+          if (v && this.round(m) === round) m.prepared = {...v, round};
+        });
+      }
+    })().catch(() => {}).finally(() => { this.preparing = null; });
+    return this.preparing;
   }
 
   async huntStart({monsterIds = null, requestId, sessionKey = ''} = {}) {
@@ -169,12 +216,17 @@ export class GameMonsters {
       return list.slice(0, 8).map(m => ({...m}));
     });
     if (!picked.length) throw new Error('现在没有到期的错题怪，过几天它们会回来');
-    const variants = await Promise.all(picked.map(m => this.variantFor(m).catch(() => null)));
+    const variants = await Promise.all(picked.map(async m => (await withTimeout(this.variantFor(m).catch(() => null), HUNT_BUDGET_MS, null)) || this.localVariant(m)));
     return this.game.once('hunt.start', requestId, state => {
       const items = [];
       picked.forEach((m, i) => {
         const v = variants[i];
         if (!v) return;
+        const live = state.monsters?.list?.[m.id];
+        if (live && v.source === 'model') {
+          live.usedStems = [...(live.usedStems || []), clean(v.stem, 200)].slice(-6);
+          delete live.prepared;
+        }
         items.push({itemId: `h${items.length + 1}`, cardRef: {book: 'hunt', monsterId: m.id}, mode: 'choice', subject: m.subject, topic: m.topic, strength: 0,
           prompt: v.stem, options: v.options, answer: v.answer, reveal: {question: v.stem, answer: v.options[v.answer], ...(v.why ? {extra: v.why} : {})}, keys: [],
           monster: this.view(m), variant: {source: v.source, verified: v.verified}});
@@ -229,6 +281,7 @@ export class GameMonsters {
       m.state = 'lurking';
       m.dueAt = now + DAY;
     }
+    this.kickVariantsSoon(); // 回合变了：后台备下一次的变体
     return this.game.grant(state, ev, {type: 'hunt', id: m.id}, awards);
   }
 

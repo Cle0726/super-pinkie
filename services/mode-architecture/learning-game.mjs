@@ -67,6 +67,7 @@ function emptyState() {
     quests: {},
     examSeals: {},
     monsters: {list: {}, captured: 0},
+    lines: {},
   };
 }
 

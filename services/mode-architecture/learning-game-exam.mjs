@@ -233,7 +233,7 @@ export class GameExam {
     }
     const score = Math.round(sections.reduce((n, s) => n + s.score, 0));
     let review = {text: localLine(score >= 70 ? 'boss' : 'default', {seed: score}), source: 'local'};
-    const line = await modelJson(this.game.requestModel, LINE_RULES, {event: 'examResult', context: {score, sections: sections.map(s => ({id: s.id, score: s.score, max: s.max})), passLine: 60, safeLine: 70}}, {validate: validLine, retries: 1, timeoutMs: 8000, maxTokens: 200});
+    const line = await modelJson(this.game.requestModel, LINE_RULES, {event: 'examResult', context: {score, sections: sections.map(s => ({id: s.id, score: s.score, max: s.max})), passLine: 60, safeLine: 70}}, {validate: validLine, retries: 1, timeoutMs: 45000, maxTokens: 200});
     if (line) review = {text: line.value.text, source: 'model'};
     this.game.mutate(state => {
       const ex = this.ensure(state);
