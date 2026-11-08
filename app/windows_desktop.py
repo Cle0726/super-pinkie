@@ -3943,6 +3943,12 @@ BRIDGE_SCRIPT = r"""
   window.__pinkieWorkspaceDockState = dockState;
   dockState({open: false});
 
+  // Page scripts run before this bridge exists on Windows: WebView2 only lets
+  // the shell inject after the document reports loaded. Anything that probed
+  // for these handlers earlier got `undefined` and moved on, so tell the page
+  // the bridge is live now and let it re-check.
+  window.dispatchEvent(new Event('pinkie-native-bridge-ready'));
+
   handlers.laolaoNativeDictation = { postMessage(payload) {
     if (payload?.action === 'stop') call('stop_dictation');
     else call('start_dictation');

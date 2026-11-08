@@ -347,6 +347,10 @@ test('the injected bridge waits for a document it can actually append to', () =>
       id: '', className: '', textContent: '', innerHTML: '', children: [],
       style: {}, dataset: {},
       classList: { add() {}, remove() {}, toggle() {} },
+      // dockState() mirrors the Mac shell's split attributes onto <html>. The
+      // stub used to omit toggleAttribute, so the whole bridge threw here before
+      // reaching anything this test cares about.
+      toggleAttribute() {},
       setAttribute() {}, append(...kids) { node.children.push(...kids); }, prepend() {},
       querySelector: () => null, remove() {}, addEventListener() {},
     };
@@ -364,8 +368,10 @@ test('the injected bridge waits for a document it can actually append to', () =>
   };
   const sandbox = {
     document,
-    window: { addEventListener() {} },
-    location: { protocol: 'http:', href: 'http://127.0.0.1:18789/' },
+    window: { addEventListener() {}, dispatchEvent() {} },
+    location: { protocol: 'http:', search: '', href: 'http://127.0.0.1:18789/' },
+    URLSearchParams,
+    Event: class { constructor(type) { this.type = type; } },
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
   };
 

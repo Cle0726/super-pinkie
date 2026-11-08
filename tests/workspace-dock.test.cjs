@@ -210,3 +210,37 @@ test('a split always keeps a reachable exit, even when the sidebar is hidden', (
   assert.match(theme, /html\[data-laolao-workspace-dock="1"\] \.laolao-dock-exit \{/);
   assert.match(theme, /html\[data-laolao-workspace-dock="1"\] \.laolao-dock-exit:focus-visible/);
 });
+
+test('the dock entry survives a bridge that arrives after the page scripts', () => {
+  const mode = read('ui/injections/laolao-mode-switcher.js');
+  const desktop = read('app/windows_desktop.py');
+
+  // WebView2 only lets the shell inject once the document reports loaded, so
+  // the page scripts have always run first. Reading the handler is a plain
+  // property access with no DOM trace, so nothing re-rendered when it appeared
+  // and the entry stayed removed for the whole session.
+  assert.match(mode, /const watchForWorkspaceDock = \(\) =>/);
+  const watcher = between(
+    mode,
+    'const watchForWorkspaceDock = () =>',
+    'window.addEventListener("load", schedulePreload'
+  );
+  // It re-renders when the native side announces the bridge, and only once.
+  assert.match(watcher, /addEventListener\("pinkie-native-bridge-ready"/);
+  assert.match(watcher, /\{ once: true \}/);
+  assert.match(watcher, /if \(hasWorkspaceDock\(\)\) render\(\)/);
+  // A shell that already has the bridge registers nothing at all.
+  assert.match(watcher, /if \(hasWorkspaceDock\(\)\) return;/);
+  // No polling: this file must not run background work (see brand-ui).
+  assert.doesNotMatch(watcher, /setInterval|setTimeout/);
+
+  // The Windows bridge announces itself after it defines the handlers.
+  const bridge = between(desktop, 'BRIDGE_SCRIPT = r"""', 'let spokenAudio = null;');
+  assert.match(bridge, /handlers\.laolaoWorkspaceDock = \{ postMessage\(payload\)/);
+  assert.match(bridge, /window\.dispatchEvent\(new Event\('pinkie-native-bridge-ready'\)\)/);
+  // Announced only after the handler object exists, never before.
+  assert.ok(
+    bridge.indexOf('handlers.laolaoWorkspaceDock') < bridge.indexOf('pinkie-native-bridge-ready'),
+    'the bridge must define the dock handler before announcing it'
+  );
+});
