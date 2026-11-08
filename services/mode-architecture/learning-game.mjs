@@ -8,6 +8,7 @@ import {dayInZone} from './learning-pact.mjs';
 import * as E from './learning-game-economy.mjs';
 import {GameMonsters} from './learning-game-monsters.mjs';
 import {GameWorld} from './learning-game-world.mjs';
+import {GameExam} from './learning-game-exam.mjs';
 
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
@@ -81,6 +82,7 @@ export class LearningGame {
     this.modules = {};
     new GameMonsters(this);
     new GameWorld(this);
+    new GameExam(this);
   }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
