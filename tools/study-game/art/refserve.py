@@ -18,7 +18,12 @@ class H(http.server.SimpleHTTPRequestHandler):
             fn = part.get_filename()
             if not fn or not fn.startswith('pk__') or '/' in fn or '..' in fn: continue
             data = part.get_payload(decode=True)
-            if not data or data[:4] != b'\x89PNG': continue
+            if not data: continue
+            if data[:4] == b'\x89PNG': ext = '.png'
+            elif data[:4] == b'GIF8': ext = '.gif'
+            elif data[:4] == b'RIFF' and data[8:12] == b'WEBP': ext = '.webp'
+            else: continue
+            fn = fn.rsplit('.', 1)[0] + ext
             tmp = os.path.join(OUT, '.' + fn + '.part')
             open(tmp, 'wb').write(data); os.rename(tmp, os.path.join(OUT, fn))
             got.append(part.get_param('name', header='content-disposition'))
