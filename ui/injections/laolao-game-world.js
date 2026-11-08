@@ -267,7 +267,7 @@
 
   function register() {
     const d = desk(); if (!d?.registerView) return false;
-    d.registerView('gamemap', {title: '上岸之书', mount: (h, c) => mountMap(h, c)});
+    d.registerView('gamemap', {title: '上岸之书', wide: true, mount: (h, c) => mountMap(h, c)});
     return true;
   }
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }

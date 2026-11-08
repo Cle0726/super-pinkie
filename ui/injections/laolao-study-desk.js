@@ -907,6 +907,18 @@
     else { pane.maximized = pane.rect; pane.rect = {x: 0, y: 0, w: 1, h: 1}; }
     w.tiled = false; state.root.dataset.tiled = 'false'; focusPage(pane); applyRect(pane); saveWorkspace();
   }
+  // 游戏场景页（地图 / 商店 / 扭蛋 / 衣橱 / 图鉴 / 讨伐 / 守关 / 考场，视图声明 wide）在窄卡片里打开时临时铺满桌面，回到普通页再还原。
+  // 用户自己双击最大化的不动；在场景里开背一背（讨伐 / 守关的战斗）也先不还原，打完回营地才还原。
+  function roomFor(pane, id) {
+    const w = workspace(), wide = views.get(id)?.wide;
+    if (wide && !pane.maximized && w.panes.length > 1) {
+      const box = state.root?.querySelector('.desk-content')?.getBoundingClientRect(), need = typeof wide === 'number' ? wide : 900;
+      if (box && (pane.rect?.w ?? 1) * box.width < need) { pane.roomFrom = {rect: pane.rect, tiled: w.tiled}; pane.maximized = pane.rect; pane.rect = {x: 0, y: 0, w: 1, h: 1}; pane.z = ++w.zTop; w.tiled = false; state.root.dataset.tiled = 'false'; saveWorkspace(); }
+    } else if (!wide && id !== 'drill' && pane.roomFrom) {
+      const from = pane.roomFrom; pane.roomFrom = null;
+      if (pane.maximized) { pane.rect = from.rect; pane.maximized = null; w.tiled = from.tiled; if (w.tiled) tileRects(w); state.root.dataset.tiled = String(w.tiled); saveWorkspace(); }
+    }
+  }
   // 新卡片：桌面是平铺的就重新平铺；已经被拖乱了，就叠在当前卡片右下方一点。
   function placeCard(pane) {
     const w = workspace();
@@ -1042,7 +1054,7 @@
         }
       }
       if (!views.has(id)) { notice('这一页正在准备，请稍后再试'); return; }
-      closeLibrary(); renderPane(pane, id); renderWorkspace();
+      roomFor(pane, id); closeLibrary(); renderPane(pane, id); renderWorkspace();
     }
     window.dispatchEvent(new CustomEvent('pinkie:study-desk-view', {detail: {view: id, paneId: pane.id, sessionKey: state.key}}));
   }

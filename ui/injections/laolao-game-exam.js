@@ -341,7 +341,7 @@
 
   function register() {
     const d = desk(); if (!d?.registerView) return false;
-    d.registerView('gameexam', {title: '考场', mount: (h, c) => mountExam(h, c)});
+    d.registerView('gameexam', {title: '考场', wide: true, mount: (h, c) => mountExam(h, c)});
     return true;
   }
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }
