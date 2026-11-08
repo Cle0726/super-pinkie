@@ -229,16 +229,26 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
   // data-pinkie-platform attribute it stamps on <html> as the bridge installs.
   // The attribute path matters because it is the only signal an already-built
   // shell gives, and it needs no repack.
-  assert.match(watcher, /addEventListener\("pinkie-native-bridge-ready", settle\)/);
-  assert.match(watcher, /new MutationObserver\(settle\)/);
-  assert.match(watcher, /observer\.observe\(document\.documentElement, \{ attributes: true \}\)/);
-  // It settles exactly once and re-renders, rather than observing forever.
-  assert.match(watcher, /if \(done \|\| !hasWorkspaceDock\(\)\) return;/);
-  assert.match(watcher, /observer\.disconnect\(\);\s*\n\s*render\(\)/);
+  assert.match(watcher, /addEventListener\("pinkie-native-bridge-ready", onDockSettled\)/);
   // A shell that already has the bridge registers nothing at all.
   assert.match(watcher, /if \(hasWorkspaceDock\(\)\) return;/);
   // No polling: this file must not run background work (see brand-ui).
   assert.doesNotMatch(watcher, /setInterval|setTimeout/);
+
+  // The attribute signal rides the single mode observer (one observer budget),
+  // and settles exactly once before re-rendering.
+  assert.equal((mode.match(/new MutationObserver\(/g) || []).length, 1,
+    'the dock watch must not add a second MutationObserver');
+  assert.match(mode, /"data-pinkie-platform"/);
+  const settle = between(
+    mode,
+    'const onDockSettled = () => {',
+    'const modeMountSelector'
+  );
+  assert.match(settle, /if \(!dockSettle \|\| !hasWorkspaceDock\(\)\) return;/);
+  assert.match(settle, /dockSettle = null;/);
+  assert.match(settle, /removeEventListener\("pinkie-native-bridge-ready", done\)/);
+  assert.match(settle, /render\(\)/);
 
   // The Windows bridge announces itself after every handler exists.
   const bridge = between(desktop, 'BRIDGE_SCRIPT = r"""', 'const installDictation = () =>');
