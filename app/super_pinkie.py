@@ -809,7 +809,9 @@ def proxy_health(port=DEFAULT_PROXY_PORT):
     fact that unrestricted-prompt injection is not actually in the path.
     """
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+        # Loopback only: the Windows registry proxy must not see this request.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(f"http://127.0.0.1:{port}/health", timeout=2) as r:
             if r.status != 200:
                 return False
             payload = json.loads(r.read(4096).decode("utf-8", "replace"))
