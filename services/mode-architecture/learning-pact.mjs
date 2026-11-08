@@ -594,9 +594,11 @@ export class LearningPact {
   recordQuestion({correct = null, receiptId = '', date = this.todayDate()} = {}) {
     const target = validDate(date);
     if (!target) throw new Error('账本日期无效');
-    return this.mutateDay(target, day => {
+    let counted = false;
+    const written = this.mutateDay(target, day => {
       day.questionReceipts ||= [];
       if (receiptId && day.questionReceipts.includes(receiptId)) return;
+      counted = true;
       if (receiptId) day.questionReceipts.push(text(receiptId, 180));
       day.questions.answered += 1;
       if (correct === true) {
@@ -604,18 +606,24 @@ export class LearningPact {
         day.stars += 1;
       }
     });
+    if (counted) try { this.store.game?.onQuestion?.({correct, receiptId, date: target, seq: written.questions.answered}); } catch {}
+    return written;
   }
 
   recordLesson({lessonId, minutes = 0, subject = '', chapter = '', date = this.todayDate()} = {}) {
     const target = validDate(date);
     if (!target || !lessonId) throw new Error('课程记账参数无效');
-    return this.mutateDay(target, day => {
+    let counted = false;
+    const written = this.mutateDay(target, day => {
       if (day.lessonReceipts.includes(lessonId)) return;
+      counted = true;
       day.lessonReceipts.push(String(lessonId)); day.lessons++;
       const credited = Math.max(0, Math.min(90, Math.floor(Number(minutes) || 0)));
       day.minutes += credited;
       day.focus.push({start: this.now() - credited * 60000, end: this.now(), minutes: credited, subject, chapter});
     });
+    if (counted) try { this.store.game?.onLesson?.({lessonId, subject, chapter}); } catch {}
+    return written;
   }
 
   recordQuestionResult({date, previousCorrect = false, correct = false} = {}) {
