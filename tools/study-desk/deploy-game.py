@@ -14,7 +14,7 @@ from pathlib import Path
 
 ARGS = sys.argv[1:]
 CHECK = '--check' in ARGS
-REV = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--rev=')), 'feat/study-game-fx')
+REV = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--rev=')), 'review/study-game')
 if [a for a in ARGS if a != '--check' and not a.startswith('--rev=')]:
     sys.exit('用法：deploy-game.py [--check] [--rev=<提交>]')
 
@@ -28,7 +28,7 @@ learning_data = home / 'Library/Application Support/SuperPinkie/learning'
 stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 backup = home / 'Library/Application Support/SuperPinkie/backups' / ('study-game-' + stamp)
 BASE = '069c5cc'
-VERSION = 'game2'
+VERSION = 'game3'
 
 
 def git(*a, text=False):
