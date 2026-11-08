@@ -38,6 +38,16 @@ function dims(file) {
 }
 
 let done = 0;
+// 复审撤销（verdict 不是 pass）或原图被换掉的槽位：先从 manifest 和 ui/assets 里拿掉，宁可前端用占位也不显示错图。
+for (const slot of Object.keys(manifest.slots)) {
+  const entry = manifest.slots[slot];
+  const owner = entry.from || slot;
+  if (review[owner]?.verdict === 'pass') continue;
+  try { fs.rmSync(path.join(OUT, entry.file)); } catch {}
+  delete manifest.slots[slot];
+  delete prov.items[slot];
+  console.log(`removed ${slot} (review: ${review[owner]?.verdict || 'none'})`);
+}
 const tmp = fs.mkdtempSync(path.join(ART, '.ingest-'));
 try {
   for (const s of slots) {
