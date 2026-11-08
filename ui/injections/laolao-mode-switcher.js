@@ -1045,7 +1045,23 @@
       void preloadTransitions();
     }
   }, 120);
+  // The Windows shell cannot inject its bridge until WebView2 reports the page
+  // as loaded, so the scripts on that page routinely run first. The dock check
+  // is a plain property read with no DOM trace, which means the mode switcher's
+  // observers never wake up for it: one early render decided there was no dock,
+  // removed the entry, and the split stayed gone for the whole session.
+  // The native side re-injects the bridge on every navigation and announces it
+  // with an event, so re-render once when that arrives. No polling: a repeating
+  // timer here would break the no-background-work rule this file follows.
+  const watchForWorkspaceDock = () => {
+    if (hasWorkspaceDock()) return;
+    window.addEventListener("pinkie-native-bridge-ready", () => {
+      if (hasWorkspaceDock()) render();
+    }, { once: true });
+  };
+
   window.addEventListener("load", schedulePreload, { once: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render, { once: true });
   else render();
+  watchForWorkspaceDock();
 })();
