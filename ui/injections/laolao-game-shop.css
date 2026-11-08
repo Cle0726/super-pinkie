@@ -95,6 +95,7 @@
 #pinkie-study-desk .pks-set{display:grid;grid-template-columns:1fr auto;row-gap:6px;padding:10px 12px;border-radius:10px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);font-size:12.5px}
 #pinkie-study-desk .pks-set b{font:900 13.5px/1 var(--pkg-display);letter-spacing:.1em}
 #pinkie-study-desk .pks-set__bar{grid-column:1/-1;height:2px;background:linear-gradient(90deg,var(--pkg-gold) var(--p,0%),var(--pkg-line) var(--p,0%))}
+#pinkie-study-desk.pk-ink .view.pks-page{container-type:inline-size;container-name:pkview pkspage}
 @container pkspage (max-width:860px){ .pks-wr{grid-template-columns:minmax(0,1fr)!important} }
 
 /* ── 图鉴 ── */

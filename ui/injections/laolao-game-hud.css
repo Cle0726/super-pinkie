@@ -227,23 +227,74 @@
 #pinkie-study-desk[data-reduced="true"] .pkg-camp *{animation:none!important;transition:none!important}
 
 /* ── 窄 / 卡片模式：按页面自己的宽度（容器查询），不按窗口 ── */
-#pinkie-study-desk .view.pkg-camp{container:pkgcamp/inline-size}
+/* 手账皮肤（.pk-ink）用 container 简写把每页的名字收成 pkview，这里把 pkgcamp 加回去，否则下面的窄屏查询永远不生效（真 App 四卡布局里营地整页叠在一起）。 */
+#pinkie-study-desk .view.pkg-camp,#pinkie-study-desk.pk-ink .view.pkg-camp{container-type:inline-size;container-name:pkview pkgcamp}
+/* 验收修（11-08）：原来这几条没带 #pinkie-study-desk 前缀，被上面的 ID 选择器盖掉 → 卡片模式里舞台高度塌成 0、入口叠在委托上（真 App 四卡布局复现）。
+   现在所有窄屏规则都带前缀；三档：≤1020 单栏、≤640 卡片、≤420 很窄的卡片。 */
 @container pkgcamp (max-width:1020px){
-  .pkg-camp__body{grid-template-columns:minmax(0,1fr)!important;overflow:auto}
-  .pkg-stage{min-height:440px}
-  .pkg-side{overflow:visible!important}
-  .pkg-jar,.pkg-wish{display:none!important}
+  #pinkie-study-desk .pkg-camp__body{grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;overflow:auto;overscroll-behavior:contain;margin-right:-12px;padding-right:12px;scrollbar-width:thin}
+  #pinkie-study-desk .pkg-left{grid-template-rows:max-content max-content;min-height:auto}
+  #pinkie-study-desk .pkg-side{min-height:auto}
+  #pinkie-study-desk .pkg-stage{min-height:440px}
+  #pinkie-study-desk .pkg-side{overflow:visible;padding:0}
+  #pinkie-study-desk .pkg-jar,#pinkie-study-desk .pkg-wish{display:none}
+  #pinkie-study-desk .pkg-entries{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #pinkie-study-desk .pkg-entry[data-entry="map"]{grid-column:span 2}
+  #pinkie-study-desk .pkg-boss{margin-top:22px}
 }
-@container pkgcamp (max-width:1020px){
-  .pkg-left{grid-template-rows:auto auto}
-  .pkg-entries{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+@container pkgcamp (max-width:640px){
+  #pinkie-study-desk .view.pkg-camp{padding:14px 14px 14px 16px;gap:12px}
+  #pinkie-study-desk .pkg-camp__top{flex-wrap:wrap;gap:10px;padding-bottom:10px}
+  #pinkie-study-desk .pkg-hud{flex-wrap:wrap;gap:8px 10px;flex:1 1 100%}
+  #pinkie-study-desk .pkg-who__face{width:34px;height:34px}
+  #pinkie-study-desk .pkg-who__xp{width:84px}
+  #pinkie-study-desk .pkg-purse{border-left:0;padding-left:0;margin-left:auto}
+  #pinkie-study-desk .pkg-cell{min-width:0;padding:0 9px;column-gap:5px}
+  #pinkie-study-desk .pkg-cell:last-child{border-right:0;padding-right:0}
+  #pinkie-study-desk .pkg-cell b{font-size:16px}
+  #pinkie-study-desk .pkg-cell small{display:none}
+  #pinkie-study-desk .pkg-glyph{width:16px;height:16px}
+  #pinkie-study-desk .pkg-hud .pkg-chip{display:none}
+  #pinkie-study-desk .pkg-seg{margin-left:auto}
+  #pinkie-study-desk .pkg-seg button{padding:5px 12px}
+  #pinkie-study-desk .pkg-stage{min-height:470px;border-radius:14px}
+  #pinkie-study-desk .pkg-stage__head{left:18px;top:18px;width:calc(100% - 36px);gap:6px}
+  #pinkie-study-desk .pkg-hello{font-size:26px}
+  #pinkie-study-desk .pkg-line{font-size:12.5px;max-width:62%}
+  #pinkie-study-desk .pkg-stage__tag{display:none}
+  #pinkie-study-desk .pkg-stage__figure{right:-4%;bottom:132px;height:calc(100% - 250px);max-width:66%}
+  #pinkie-study-desk .pkg-stage__plinth{bottom:120px;right:4%;width:60%}
+  #pinkie-study-desk .pkg-stage__copy{left:14px;right:14px;bottom:14px;width:auto;gap:8px}
+  #pinkie-study-desk .pkg-go{padding:13px 16px 12px 18px}
+  #pinkie-study-desk .pkg-go__text b{font-size:26px}
+  #pinkie-study-desk .pkg-go__rule{right:16px;width:30px}
+  #pinkie-study-desk .pkg-boss{grid-template-columns:100px minmax(0,1fr);padding:14px 14px 12px 4px}
+  #pinkie-study-desk .pkg-boss__art{height:78px}
+  #pinkie-study-desk .pkg-boss__art img{width:118px;left:-4px;bottom:-12px}
+  #pinkie-study-desk .pkg-boss h3{font-size:22px}
+  #pinkie-study-desk .pkg-quests,#pinkie-study-desk .pkg-today{padding:12px 14px 10px}
+  #pinkie-study-desk .pkg-entries{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #pinkie-study-desk .pkg-entry{min-height:66px}
+  #pinkie-study-desk .pkg-entry b{font-size:17px}
+  #pinkie-study-desk .pkg-entry[data-entry="map"] b{font-size:21px}
+  #pinkie-study-desk .pkg-journal__page{padding-left:0}
+  #pinkie-study-desk .pkg-camp__body.pkg-journal{margin:0 -14px -14px -16px}
 }
-@container pkgcamp (max-width:720px){
-  .pkg-camp__top{flex-wrap:wrap}
-  .pkg-purse .pkg-cell small{display:none}
-  .pkg-stage__copy{width:calc(100% - 44px)!important}
-  .pkg-stage__figure{opacity:.35}
-  .pkg-entries{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@container pkgcamp (max-width:420px){
+  #pinkie-study-desk .pkg-who__meta small{display:none}
+  #pinkie-study-desk .pkg-purse{margin-left:0;flex:1 1 100%;justify-content:space-between;border-top:1px solid var(--pkg-line);padding-top:8px}
+  #pinkie-study-desk .pkg-cell{flex:1;justify-content:center}
+  #pinkie-study-desk .pkg-seg{flex:1 1 100%;margin:0}
+  #pinkie-study-desk .pkg-seg button{flex:1}
+  #pinkie-study-desk .pkg-stage{min-height:430px}
+  #pinkie-study-desk .pkg-hello{font-size:23px}
+  #pinkie-study-desk .pkg-line{max-width:100%}
+  #pinkie-study-desk .pkg-stage__figure{height:calc(100% - 270px);max-width:78%;right:-10%}
+  #pinkie-study-desk .pkg-go__text{column-gap:10px}
+  #pinkie-study-desk .pkg-go__text b{font-size:23px}
+  #pinkie-study-desk .pkg-boss{grid-template-columns:76px minmax(0,1fr)}
+  #pinkie-study-desk .pkg-boss__art img{width:92px}
+  #pinkie-study-desk .pkg-boss h3{font-size:19px;letter-spacing:.08em}
 }
 /* 大屏（2560 宽 @1x 等）：主要字号和碧琪按比例放大，不让舞台空着。 */
 @container pkgcamp (min-width:1700px){
