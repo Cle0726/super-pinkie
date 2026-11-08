@@ -225,8 +225,8 @@ export function itemPrice(item, economy = loadEconomy()) {
 export function gachaPools(bannerId, catalog = loadForms()) {
   const src = bannerId === 'seal' ? 'gacha-seal' : 'gacha-star';
   const pools = {N: [], R: [], SR: [], SSR: []};
-  for (const form of catalog.forms) if (form.source.includes(src) && pools[form.rarity]) pools[form.rarity].push({kind: 'form', itemId: form.id});
-  if (bannerId !== 'seal') for (const item of catalog.items) if (!item.notForSale && ['stickers', 'title', 'hit'].includes(item.kind)) pools.N.push({kind: item.kind, itemId: item.id});
+  for (const form of catalog.forms) if (form.source.includes(src) && pools[form.rarity]) pools[form.rarity].push({kind: 'form', itemId: form.id, name: form.name});
+  if (bannerId !== 'seal') for (const item of catalog.items) if (!item.notForSale && ['stickers', 'title', 'hit'].includes(item.kind)) pools.N.push({kind: item.kind, itemId: item.id, name: item.name});
   return pools;
 }
 
