@@ -486,6 +486,54 @@
    "prompt": "art-slots.json · ult",
    "reviewed": "2026-11-08",
    "note": "v2 第 2 次：带笔帽的大荧光笔（不再像枪），雨夜天台霓虹线，脸居中"
+  },
+  "form/unrestricted/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：深紫超空间细光线（彩虹鬃毛是这个形态的设定）；脸略偏右约 7%，身体向左后方延伸"
+  },
+  "form/knight/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：雨夜石院、白金弧光挥剑、三气球盾"
+  },
+  "form/chef/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里烘焙间、炉火逆光、糖粒在光里落下"
+  },
+  "form/magical-girl/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：细光丝带柱 + 细线法阵，粉 / 丁香紫"
+  },
+  "form/astrologer/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：天文台屋顶、金色星座连线、星盘"
+  },
+  "form/zhuangyuan/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：黄昏水墨山水、一笔浓墨、朱红空白旗（无字）"
+  },
+  "form/idol/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：暗场顶光、粉色应援棒虚化人海"
+  },
+  "form/ninja/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：月下竹林、烟雾 + 两道残影"
   }
  }
 }
