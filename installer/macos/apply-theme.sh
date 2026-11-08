@@ -165,7 +165,7 @@ sync_launcher_resources() {
     copy_if_changed "$source_file" "$bundled_root/ui/injections/$(basename "$source_file")"
   done
   local nested_file nested_root nested_target
-  for nested_root in "$INJECTION_ROOT/vendor" "$ASSET_ROOT/study-desk" "$ASSET_ROOT/fonts"; do
+  for nested_root in "$INJECTION_ROOT/vendor" "$ASSET_ROOT/study-desk" "$ASSET_ROOT/study-game" "$ASSET_ROOT/fonts"; do
     [[ -d "$nested_root" ]] || continue
     if [[ "$nested_root" == "$INJECTION_ROOT/"* ]]; then nested_target="$bundled_root/ui/injections"; else nested_target="$bundled_root/ui/assets"; fi
     while IFS= read -r -d '' nested_file; do
