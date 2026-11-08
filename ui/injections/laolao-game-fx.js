@@ -1,6 +1,7 @@
 /* 碧琪上岸记 · 游戏特效引擎（window.__pinkieGameFx）
-   - 一个 WebGL 上下文（Three.js r185，本地打包），GPU 实例化粒子：每颗粒子的轨迹在顶点着色器里按出生时间解析计算，CPU 每帧只改一个 uniform。
-   - 22 种粒子（形状全部是片元着色器里的 SDF，不用贴图）、9 种大招过场、顿帧、震屏、辉光 / 景深。
+   视觉语言（briefs/study-desk-game/VFX.md）：光 / 墨 / 纸三类材质，分层叠加、白热核心、按速度拉伸的流光、3D 翻转受光的纸片金箔；
+   大招 = 压暗调色 + 斜切条带切入（立绘对焦、速度线、网点）+ 衬线大标题 + 收束闪光。不画卡通图标，不用 emoji。
+   - 一个 WebGL 上下文（Three.js r185，本地打包），GPU 实例化粒子：轨迹在顶点着色器里按出生时间解析计算，CPU 每帧只改 uniform。
    - 没东西在播时零 rAF；页面隐藏立刻停（画面和声音）。
    - 只认用户自己的「游戏特效」设置；不看内存 / GPU / 系统设置。唯一例外：WebGL 真起不来时退回 DOM 平面版。 */
 (() => {
@@ -48,35 +49,68 @@
   function setTier(tier) { if (!TIERS[tier]) return settings(); save({tier, custom: {}}); return settings(); }
   function setCustom(field, value) { const raw = read(); const tier = TIERS[raw.tier] ? raw.tier : 'cinematic'; const v = sanitize(field, value); if (v === undefined) return settings(); save({tier, custom: {...(raw.custom || {}), [field]: v}}); return settings(); }
 
-  // ───────────────────────── 粒子种类 ─────────────────────────
-  // shape = 片元着色器里的形状编号；add = 叠加发光；g = 重力（px/s²，正 = 往下）；drag = 空气阻力；sp = 初速；life = 寿命（s）；size = 直径（px）；spin = 转速；fl = 左右飘 [幅度 px, 频率]
-  const P = (shape, add, g, drag, sp, life, size, spin, fl, colors, count, extra = {}) => ({shape, add, g, drag, sp, life, size, spin, fl, colors, count, ...extra});
+  // ───────────────────────── 特效材质（光 / 墨 / 纸） ─────────────────────────
+  // 视觉语言见 briefs/study-desk-game/VFX.md。要点：每个特效由 3–6 层元素按时间错开叠成（闪光 → 冲击环 → 火花 → 余韵），
+  // 发光元素是「白热核心 + 本色 + 衰减」，火花按速度拉成流光，纸片 / 金箔 / 花瓣在 3D 里翻转受光。不画卡通图标。
+  const E = {STREAK: 0, MOTE: 1, GLINT: 2, RING: 3, FLASH: 4, SHARD: 5, FOIL: 6, PETAL: 7, INK: 8, PUFF: 9, EMBER: 10, BOKEH: 11, BUBBLE: 12,
+    FLAKE: 13, COIN: 14, ARC: 15, SIGIL: 16, LEAF: 17, FEATHER: 18, CARD: 19, NEON: 20, RIPPLE: 21, CRESCENT: 22, PILLAR: 23};
+  const LIGHT = new Set([E.STREAK, E.MOTE, E.GLINT, E.RING, E.FLASH, E.EMBER, E.BOKEH, E.FLAKE, E.ARC, E.SIGIL, E.NEON, E.RIPPLE, E.CRESCENT, E.PILLAR]);
+  const POINT = new Set([E.RING, E.FLASH, E.SIGIL, E.RIPPLE, E.PILLAR, E.CRESCENT, E.ARC]);   // 原地放的元素
+  // 一层 = 元素 + 数量 + 物理。c：数字 = 配色下标，'h' = 白热（白和主色之间），'w' = 白，或直接写颜色。
+  // sp 初速 px/s；life 秒；size 直径 px（流光是粗细）；g 重力 px/s²（正 = 往下）；drag 阻力；turb [幅度 px, 频率]；stretch 流光长度 = 速度 × stretch；
+  // grow 寿命内放大；aspect 宽高比；tumble 3D 翻转角速度；int 不透明度；delay 秒。
+  const L = (e, n, o = {}) => ({e, n, sp: [0, 0], life: [.6, 1], size: [4, 8], g: 0, drag: 2, spin: [0, 0], turb: [0, 0], stretch: 0, grow: 0, aspect: 1,
+    tumble: [0, 0], c: [0, 1, 2], int: 1, delay: 0, ...o});
+  const flash = (k = 1, o = {}) => L(E.FLASH, 1, {life: [.2, .24], size: [110 * k, 130 * k], c: ['h'], ...o});
+  const ring = (k = 1, o = {}) => L(E.RING, 1, {life: [.42, .5], size: [230 * k, 270 * k], c: [0], ...o});
+  const streaks = (n, o = {}) => L(E.STREAK, n, {sp: [420, 1150], life: [.22, .55], size: [1.7, 2.8], g: 280, drag: 3.4, stretch: .042, c: ['h', 0, 2], ...o});
+  const motes = (n, o = {}) => L(E.MOTE, n, {sp: [30, 220], life: [.9, 1.9], size: [5, 11], g: -24, drag: 1.7, turb: [10, 1.6], c: [0, 2, 'h'], int: .8, ...o});
+  const glints = (n, o = {}) => L(E.GLINT, n, {sp: [60, 360], life: [.5, 1.1], size: [16, 40], drag: 3, spin: [-1.2, 1.2], c: ['h', 0], ...o});
+  const crescent = (k = 1, o = {}) => L(E.CRESCENT, 1, {life: [.34, .38], size: [210 * k, 230 * k], c: ['h'], ...o});
+  const K = (pal, layers) => ({pal, layers});
+  // 22 个配方名沿用第一版（形态目录 learning-game-forms.json 的 particle 字段用这些名字），画法全部换成新材质。
   const KINDS = {
-    sparkle: P([20], 1, 60, 2.2, [220, 620], [.5, 1.1], [10, 26], [-2, 2], [0, 0], ['#fff6c8', '#ffd1ec', '#ffffff'], 70),
-    stars: P([1], 1, 380, 1.4, [260, 760], [.7, 1.3], [12, 30], [-5, 5], [0, 0], ['#ffd34d', '#ffe9a3', '#ff8ac4'], 60),
-    confetti: P([2], 0, 520, 1.6, [380, 980], [1.4, 2.4], [9, 16], [-9, 9], [18, 5], ['#DB1F74', '#ffd34d', '#57c7ff', '#7fe0a8', '#b58cff'], 90),
-    petals: P([3], 0, 70, 1.8, [120, 420], [2, 3.4], [12, 22], [-2.5, 2.5], [40, 2.2], ['#ffc2dc', '#ff9ec7', '#fff0f6'], 60),
-    hearts: P([4], 0, -90, 1.6, [160, 460], [1.2, 2], [14, 30], [-1.2, 1.2], [16, 3], ['#ff4f9a', '#ff86b8', '#ffd1e4'], 40),
-    ink: P([5], 0, 40, 3.2, [120, 420], [.9, 1.6], [12, 34], [-.6, .6], [0, 0], ['#2b1d27', '#4a3343', '#1a1a2e'], 36, {grow: 1}),
-    crystal: P([6], 1, 260, 1.5, [260, 700], [.8, 1.5], [12, 28], [-4, 4], [0, 0], ['#9fe8ff', '#d4b8ff', '#ffffff'], 50),
-    bubbles: P([7], 0, -160, 1.1, [80, 300], [1.4, 2.6], [12, 34], [0, 0], [22, 2.6], ['#bfefff', '#e4d8ff', '#ffffff'], 36),
-    snow: P([8], 0, 60, 1.2, [60, 260], [2.2, 3.6], [10, 22], [-1, 1], [26, 1.6], ['#ffffff', '#e6f4ff', '#cfe6ff'], 60),
-    embers: P([9], 1, -260, 1.3, [120, 520], [.8, 1.8], [5, 12], [0, 0], [14, 6], ['#ff9a3c', '#ffd25e', '#ff5a3c'], 70),
-    notes: P([10], 0, -120, 1.4, [140, 420], [1.3, 2.2], [16, 28], [-1, 1], [20, 3], ['#DB1F74', '#7a4cff', '#2aa8ff'], 30),
-    cards: P([11], 0, 420, 1.3, [300, 820], [1.4, 2.2], [20, 34], [-6, 6], [10, 3], ['#ffffff', '#ffe3ef', '#fff6d8'], 30),
-    smoke: P([12], 0, -60, 2.4, [40, 200], [1.2, 2.2], [40, 110], [-.4, .4], [10, 1], ['#d9cfd6', '#bfb4c0', '#efe8ee'], 24, {grow: 1.6}),
-    gold: P([20, 13], 1, 520, 1.4, [280, 800], [.9, 1.6], [10, 22], [-6, 6], [0, 0], ['#ffd34d', '#ffb800', '#fff1b0'], 70),
-    leaves: P([14], 0, 90, 1.7, [120, 420], [2, 3.2], [14, 26], [-3, 3], [44, 1.8], ['#7fbf5a', '#c9a227', '#e0782f'], 44),
-    lightning: P([15], 1, 0, 6, [40, 160], [.18, .4], [26, 56], [0, 0], [0, 0], ['#d8f1ff', '#9fd5ff', '#ffffff'], 16),
-    neon: P([16], 1, 0, 2.6, [200, 700], [.5, 1.1], [14, 50], [0, 0], [0, 0], ['#ff3fd1', '#3ff3ff', '#b3ff3f'], 30, {grow: 1.2}),
-    bats: P([17], 0, -40, 1.2, [180, 520], [1.3, 2.1], [18, 30], [-.3, .3], [30, 8], ['#3a2438', '#5b2a5a', '#2a1a33'], 26),
-    gears: P([18], 0, 520, 1.4, [260, 720], [1.2, 2], [16, 34], [-5, 5], [0, 0], ['#c9a24a', '#a0a7b4', '#e2c27a'], 30),
-    feathers: P([19], 0, 50, 2.2, [120, 380], [2.2, 3.4], [18, 34], [-1.6, 1.6], [46, 1.4], ['#ffffff', '#fff1f8', '#f2e9ff'], 30),
-    coins: P([13], 0, 760, 1.1, [380, 900], [1.1, 1.8], [16, 26], [-8, 8], [0, 0], ['#ffd34d', '#ffbf1f', '#fff0a8'], 40),
-    steam: P([21], 0, -180, 2, [40, 160], [1.1, 2], [30, 80], [-.3, .3], [12, 2], ['#ffffff', '#f2f2f7', '#e9eef5'], 26, {grow: 1.4}),
+    sparkle: K(['#fff1d0', '#ff9ccb', '#ffffff'], [flash(.7), glints(10), streaks(16), motes(22)]),
+    stars: K(['#ffd36e', '#ff8fc0', '#fff4d6'], [flash(.85), ring(.7), glints(12, {size: [18, 46]}), streaks(26), motes(18)]),
+    confetti: K(['#DB1F74', '#f2c35b', '#fbf4ee'], [flash(.55), L(E.FOIL, 44, {sp: [300, 920], life: [1.5, 2.5], size: [7, 12], aspect: .55, g: 380, drag: 2.3, turb: [26, 2.2], spin: [-4, 4], tumble: [5, 11]}), glints(6), motes(10)]),
+    petals: K(['#ffc6dc', '#f08ab4', '#fff2f7'], [L(E.PETAL, 26, {sp: [140, 460], life: [2, 3.3], size: [11, 18], aspect: .72, g: 55, drag: 1.9, turb: [36, 1.5], spin: [-2, 2], tumble: [2, 5]}), motes(16), glints(4)]),
+    hearts: K(['#ff5fa2', '#ffb3d1', '#fff0f6'], [flash(.5), L(E.BOKEH, 10, {sp: [80, 320], life: [1.2, 2.2], size: [9, 20], g: -60, drag: 2, turb: [12, 1.4], int: .6}), motes(18), streaks(10, {c: [0, 'h']})]),
+    ink: K(['#24171f', '#43303d', '#DB1F74'], [L(E.INK, 7, {sp: [40, 200], life: [1.1, 1.7], size: [60, 150], drag: 4, c: [0, 1]}), L(E.INK, 24, {sp: [320, 820], life: [.5, .9], size: [5, 12], g: 640, drag: 2.6, c: [0]}), motes(6, {c: [2]})]),
+    crystal: K(['#a6e6ff', '#c6b0ff', '#ffffff'], [flash(.7), ring(.6), L(E.SHARD, 22, {sp: [300, 900], life: [.9, 1.6], size: [10, 22], aspect: .55, g: 420, drag: 1.8, spin: [-5, 5], tumble: [4, 10], int: .86}), glints(10), motes(14)]),
+    bubbles: K(['#bfefff', '#e2d6ff', '#ffffff'], [L(E.BUBBLE, 16, {sp: [80, 300], life: [1.6, 2.8], size: [14, 40], g: -140, drag: 1.2, turb: [22, 2], c: [0, 1]}), motes(10)]),
+    snow: K(['#ffffff', '#cfe6ff', '#8fc6ff'], [L(E.FLAKE, 10, {sp: [160, 380], life: [2.2, 3.4], size: [22, 38], g: 50, drag: 1.6, turb: [24, 1.4], spin: [-.8, .8], c: [1, 2, 0]}), motes(30, {size: [3, 9], g: 40, c: [0, 1]}), glints(4, {c: ['h', 1]})]),
+    embers: K(['#ff9a3c', '#ffd25e', '#ff4a2a'], [flash(.6, {c: [1]}), L(E.EMBER, 46, {sp: [120, 520], life: [.8, 1.9], size: [3, 6], g: -220, drag: 1.4, turb: [18, 5], c: [0, 2, 1]}), streaks(14, {c: [1, 0]}), L(E.PUFF, 4, {sp: [20, 80], life: [1.2, 1.8], size: [60, 110], g: -60, drag: 2, grow: 1.4, c: ['#3a2a30'], int: .7})]),
+    notes: K(['#c46bff', '#ff6fb7', '#7fd3ff'], [L(E.RIPPLE, 2, {life: [.8, 1.1], size: [220, 320], c: [0, 2], delay: [0, .12]}), motes(22), glints(6), streaks(10)]),
+    cards: K(['#fffaf3', '#DB1F74', '#f2c35b'], [flash(.5), L(E.CARD, 16, {sp: [300, 820], life: [1.3, 2.1], size: [18, 30], aspect: .7, g: 420, drag: 1.6, spin: [-3, 3], tumble: [3, 8], c: [1, 2]}), glints(6)]),
+    smoke: K(['#d9cfd6', '#a99aa6', '#efe8ee'], [L(E.PUFF, 10, {sp: [40, 200], life: [1.2, 2.2], size: [60, 140], g: -50, drag: 2.4, grow: 1.6}), motes(6)]),
+    gold: K(['#ffd25e', '#c8902a', '#fff1c2'], [flash(.8), ring(.6), L(E.FOIL, 30, {sp: [300, 900], life: [1.3, 2.2], size: [6, 11], aspect: .6, g: 360, drag: 2.2, turb: [22, 2], spin: [-4, 4], tumble: [5, 12]}), streaks(22, {c: ['h', 0]}), glints(8), motes(14)]),
+    leaves: K(['#86b85f', '#c9a227', '#e0782f'], [L(E.LEAF, 22, {sp: [120, 420], life: [2, 3.2], size: [14, 24], aspect: .62, g: 90, drag: 1.7, turb: [44, 1.8], spin: [-3, 3], tumble: [2, 6]}), motes(8)]),
+    lightning: K(['#d8f1ff', '#7fb8ff', '#ffffff'], [flash(1), L(E.ARC, 6, {life: [.14, .26], size: [120, 240], c: ['h', 0], randomAngle: true}), streaks(28, {sp: [600, 1400], c: ['h', 1]}), glints(6), ring(.6, {c: [1]})]),
+    neon: K(['#ff3fd1', '#3ff3ff', '#b3ff3f'], [flash(.5), L(E.NEON, 18, {sp: [200, 700], life: [.4, .9], size: [3, 5], aspect: [6, 16], drag: 3, alignV: true}), streaks(16), ring(.5, {c: [1]})]),
+    bats: K(['#3a2438', '#7a2a6a', '#2a1a33'], [L(E.INK, 6, {sp: [40, 200], life: [1, 1.5], size: [50, 110], drag: 4, c: [0, 2]}), motes(12, {c: [1]})]),
+    gears: K(['#c9a24a', '#a0a7b4', '#e2c27a'], [flash(.6, {c: [2]}), L(E.SHARD, 16, {sp: [300, 800], life: [.9, 1.5], size: [8, 16], aspect: .8, g: 500, drag: 1.6, spin: [-6, 6], tumble: [6, 12]}), streaks(22, {c: ['#ffb347', 'h'], g: 520}), glints(4)]),
+    feathers: K(['#ffffff', '#f3e6ff', '#ffe1ee'], [L(E.FEATHER, 14, {sp: [120, 380], life: [2.2, 3.4], size: [18, 32], aspect: .5, g: 50, drag: 2.2, turb: [46, 1.4], spin: [-1.4, 1.4], tumble: [1.5, 4]}), motes(16, {c: [1, 2]})]),
+    coins: K(['#ffd25e', '#c8902a', '#fff1c2'], [flash(.6), L(E.COIN, 16, {sp: [380, 900], life: [1.1, 1.7], size: [14, 22], g: 760, drag: 1.1, spin: [-1, 1], tumble: [6, 14], c: [0]}), glints(8), streaks(12, {c: ['h', 0]})]),
+    steam: K(['#ffffff', '#eef2f7', '#dfe6ef'], [L(E.PUFF, 7, {sp: [60, 200], life: [1.1, 2], size: [36, 80], g: -180, drag: 2, grow: 1.5, int: .75}), motes(8)]),
+  };
+  // 命中招式：形态目录的 hit 字段 → [底层配方, 额外层]。fx.hit(name, 目标, {crit, palette, angle, form})。
+  const HITS = {
+    pop: ['confetti', [streaks(12)]], stamp: ['ink', [ring(.8, {c: [2]})]], shard: ['crystal', []],
+    rainbow: ['sparkle', [streaks(20, {c: ['#ff6f9f', '#ffd36e', '#6fd3ff', '#9be27f']})]], lens: ['sparkle', [flash(1.3), glints(8, {size: [30, 64]})]],
+    coin: ['coins', []], ping: ['sparkle', [L(E.RIPPLE, 1, {life: [.5, .6], size: [140, 160], c: [0]})]], flame: ['embers', []], carpet: ['gold', [streaks(10)]],
+    sparkle: ['sparkle', []], slash: ['sparkle', [crescent(1)]], sprinkle: ['confetti', []], heart: ['hearts', []], constellation: ['stars', [glints(10)]],
+    brush: ['ink', [crescent(1.1, {c: [0], normal: true})]], glow: ['sparkle', [motes(24)]], glitch: ['neon', []],
+    shuriken: ['sparkle', [crescent(.7), glints(6)]], steam: ['steam', []], flake: ['snow', []],
+    aurora: ['sparkle', [streaks(18, {c: ['#7dffc9', '#6fd3ff', '#c39bff'], stretch: .07, sp: [300, 700], g: -60})]],
   };
   const PRESETS = ['burst', 'slash', 'spell', 'curtain', 'ink', 'warp', 'rain', 'stamp', 'beam'];
-  const PRESET_LABEL = {burst: '推镜爆发', slash: '斩击', spell: '魔法阵', curtain: '舞台幕布', ink: '水墨晕开', warp: '星空跃迁', rain: '从天而降', stamp: '盖章砸下', beam: '光束'};
+  const PRESET_LABEL = {burst: '新星', slash: '一闪', spell: '法阵', curtain: '谢幕', ink: '泼墨', warp: '跃迁', rain: '星落', stamp: '落印', beam: '天光'};
+  const PRESET_EN = {burst: 'NOVA', slash: 'SEVER', spell: 'ARCANA', curtain: 'ENCORE', ink: 'SUMI-E', warp: 'HYPERDRIVE', rain: 'STARFALL', stamp: 'SEAL', beam: 'RADIANCE'};
+  // 过场构图：条带角度（弧度，逆时针为正）、条带半高（屏高比例）、条带中心（屏高单位，y 向上）。着色器和文字排版共用这一份。
+  const PRESET_GEO = {burst: {theta: -.16, h: .2, c: [0, .02]}, slash: {theta: -.36, h: .19, c: [0, .02]}, spell: {theta: -.12, h: .16, c: [0, .15]},
+    curtain: {theta: 0, h: .24, c: [0, .03]}, ink: {theta: 0, h: .27, c: [-.3, .02]}, warp: {theta: 0, h: .3, c: [-.3, .02]},
+    rain: {theta: -.08, h: .19, c: [0, .04]}, stamp: {theta: -.12, h: .19, c: [0, .03]}, beam: {theta: 0, h: .19, c: [0, .02]}};
+  const PRESET_TIMING = {burst: 1.8, slash: 1.7, spell: 2.3, curtain: 2.2, ink: 2.2, warp: 2, rain: 2.1, stamp: 1.9, beam: 1.9};
 
   // ───────────────────────── 运行状态 ─────────────────────────
   const stats = {frames: 0, rafActive: false, lastFrameAt: 0, contexts: 0, fallback: false, frameTimes: []};
@@ -108,188 +142,449 @@
   function loadAddons() { return st.addons ||= import(BASE + 'laolao-vendor-three-addons.module.min.js').catch(() => null); }
 
   // ───────────────────────── 着色器 ─────────────────────────
+  const GLSL_LIB = `
+    const float PI = 3.14159265;
+    float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+    mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+    float seg(vec2 p, vec2 a, vec2 b){ vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+    float fill(float d){ float w = max(fwidth(d), 1e-4); return 1.0 - smoothstep(-w, w, d); }
+    float hair(float d, float w){ return 1.0 - smoothstep(w * 0.45, w * 1.5, d); }
+    // 法阵：同心细环 + 刻度 + 符文环 + 六芒星 + 节点小圆。uv 是未压扁的圆坐标，draw 描线进度，w 线宽（uv 单位）。
+    float sigilLines(vec2 uv, float draw, float t, float w){
+      float r = length(uv), a01 = atan(uv.y, uv.x) / (2.0 * PI) + 0.5, L = 0.0;
+      L += hair(abs(r - 0.97), w) * step(a01, draw);
+      L += hair(abs(r - 0.935), w) * step(1.0 - a01, draw) * 0.8;
+      float ta = fract(a01 + t * 0.018), cell = fract(ta * 120.0), major = step(0.95, fract(floor(ta * 120.0) / 10.0 + 0.001));
+      float tlen = mix(0.022, 0.05, major);
+      L += hair(abs(cell - 0.5) * (2.0 * PI * r / 120.0), w) * step(0.902 - tlen, r) * step(r, 0.902) * step(ta, draw);
+      L += hair(abs(r - 0.845), w) * step(fract(a01 + 0.25), draw);
+      float ga = fract(a01 - t * 0.03), gi = floor(ga * 40.0);
+      vec2 gq = vec2((fract(ga * 40.0) - 0.5) * (2.0 * PI * 0.775 / 40.0) / 0.04, (r - 0.775) / 0.04);
+      float gd = 9.0;
+      for (int s = 0; s < 3; s++) {
+        float h1 = hash(vec2(gi, float(s) * 7.1)), h2 = hash(vec2(gi + 3.0, float(s) * 3.7 + 1.0));
+        vec2 A = vec2(floor(h1 * 3.0) - 1.0, floor(fract(h1 * 7.0) * 3.0) - 1.0) * vec2(0.42, 0.8);
+        vec2 B = vec2(floor(h2 * 3.0) - 1.0, floor(fract(h2 * 7.0) * 3.0) - 1.0) * vec2(0.42, 0.8);
+        if (length(A - B) > 0.1) gd = min(gd, seg(gq, A, B));
+      }
+      L += hair(gd * 0.04, w) * step(abs(gq.y), 1.2) * step(ga, draw) * 0.85;
+      L += hair(abs(r - 0.70), w) * step(fract(a01 + 0.5), draw);
+      vec2 hp = rot(t * 0.05) * uv;
+      float hd = 9.0, nd = 9.0;
+      for (int i = 0; i < 6; i++) {
+        float a0 = float(i) * PI / 3.0 + PI * 0.5;
+        vec2 A = 0.70 * vec2(cos(a0), sin(a0)), B = 0.70 * vec2(cos(a0 + 2.0 * PI / 3.0), sin(a0 + 2.0 * PI / 3.0));
+        hd = min(hd, seg(hp, A, mix(A, B, clamp(draw * 1.5 - float(i) * 0.07, 0.0, 1.0))));
+        nd = min(nd, abs(length(hp - A) - 0.055));
+      }
+      L += hair(hd, w) + hair(nd, w) * step(0.55, draw);
+      L += hair(abs(r - 0.36), w) * step(a01, draw) + hair(abs(r - 0.33), w) * step(1.0 - a01, draw) * 0.7;
+      return min(L, 1.6);
+    }`;
   const PARTICLE_VS = `
-    attribute vec2 aP0; attribute vec2 aVel; attribute vec4 aTime; attribute vec3 aColor; attribute vec4 aMot; attribute vec4 aRot;
-    uniform float uTime; uniform vec2 uRes; uniform vec2 uShake; uniform float uAdd;
-    varying vec2 vUv; varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vLife; varying float vSeed;
+    attribute vec2 aP0; attribute vec2 aVel; attribute vec2 aAcc; attribute vec4 aTime; attribute vec3 aColor; attribute vec4 aMot; attribute vec4 aRot; attribute vec4 aExt;
+    uniform float uTime; uniform vec2 uRes; uniform vec2 uShake;
+    varying vec2 vUv; varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vLife; varying float vSeed; varying vec2 vSize; varying float vSpin; varying float vTumble; varying float vInt;
     void main(){
-      float t = uTime - aTime.x; float life = aTime.y;
+      float t = uTime - aTime.x, life = aTime.y;
       if (t < 0.0 || t > life) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-      float k = aMot.y; float dt = k > 0.001 ? (1.0 - exp(-k * t)) / k : t;
-      vec2 p = aP0 + aVel * dt + vec2(0.0, 0.5 * aMot.x * t * t);
-      p.x += aMot.z * sin(aMot.w * t + aRot.w * 6.2831);
-      float u = t / life;
-      float grow = smoothstep(0.0, 0.07, u) * (1.0 + aRot.z * u) * (1.0 - smoothstep(0.75, 1.0, u) * 0.55);
-      float ang = aRot.x + aRot.y * t;
+      float shape = aTime.z, size = aTime.w, seed = aRot.w, u = t / life;
+      float k = aMot.x, e = exp(-k * t), dt = k > 0.001 ? (1.0 - e) / k : t;
+      vec2 p = aP0 + aVel * dt + 0.5 * aAcc * t * t;
+      vec2 v = aVel * (k > 0.001 ? e : 1.0) + aAcc * t;
+      float ta = aMot.y, tf = aMot.z, ph = seed * 37.0;
+      p += ta * vec2(sin(tf * t + ph) - sin(ph) + 0.5 * (sin(2.3 * tf * t + ph * 1.7) - sin(ph * 1.7)), 0.6 * (cos(0.7 * tf * t + ph * 0.9) - cos(ph * 0.9)));
+      v += ta * tf * vec2(cos(tf * t + ph) + 1.15 * cos(2.3 * tf * t + ph * 1.7), -0.42 * sin(0.7 * tf * t + ph * 0.9));
       vec2 q = position.xy;
-      float shape = aTime.z;
-      if (shape > 1.5 && shape < 2.5 || shape > 10.5 && shape < 11.5 || shape > 12.5 && shape < 13.5) q.x *= mix(0.25, 1.0, abs(cos(ang * 1.3 + aRot.w * 3.0)));
-      if (shape > 14.5 && shape < 15.5) q.y *= 2.2;
-      if (shape > 20.5) q.y *= 1.5;
+      vec2 sz = vec2(size * aExt.x, size);
+      float ang = aRot.x + aRot.y * t;
+      float tumble = cos(aExt.y * t + seed * 6.2831);
+      float scale = (1.0 + aRot.z * u) * smoothstep(0.0, 0.05, u);
+      if (shape < 0.5) {                                   // 流光：沿速度拉长，头在粒子位置，尾巴拖在后面
+        float len = clamp(length(v) * aMot.w, size * 2.0, size * 70.0);
+        sz = vec2(len, size * 3.0); ang = atan(v.y, v.x); scale = 1.0; q.x -= 0.42;
+      } else if (shape > 3.5 && shape < 4.5) { sz = vec2(size * 3.2, size); ang = 0.0; scale = 1.0; }          // 闪光（横向变形镜头光）
+      else if ((shape > 2.5 && shape < 3.5) || (shape > 20.5 && shape < 21.5)) { ang = 0.0; scale = 1.0; }    // 冲击环 / 声波：半径在片元里算
+      else if (shape > 14.5 && shape < 15.5) { sz = vec2(size, size * 0.34); scale = 1.0; }                    // 电弧
+      else if (shape > 15.5 && shape < 16.5) { sz = vec2(size, size * aExt.z); ang = 0.0; scale = 1.0; }       // 法阵：压扁成地面透视
+      else if (shape > 22.5) { sz = vec2(size * 0.36, size * 2.4); q.y -= 0.5; ang = 0.0; scale = 1.0; }       // 光柱：底边在粒子位置
+      else if (shape > 21.5) { scale = 1.0; }                                                                 // 弧形斩
+      bool flips = (shape > 4.5 && shape < 7.5) || (shape > 13.5 && shape < 14.5) || (shape > 16.5 && shape < 19.5);
+      if (flips) q.x *= mix(0.07, 1.0, abs(tumble));
+      vec2 local = q * sz * scale;
       float c = cos(ang), s = sin(ang);
-      q = vec2(c * q.x - s * q.y, s * q.x + c * q.y);
-      p += q * aTime.w * grow * (uAdd > 0.5 ? 1.7 : 1.0) + uShake;
+      p += vec2(c * local.x - s * local.y, s * local.x + c * local.y) + uShake;
       gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
-      vUv = position.xy * 2.0; vColor = aColor; vShape = shape; vLife = u; vSeed = aRot.w;
-      vAlpha = 1.0 - smoothstep(0.62, 1.0, u);
+      vUv = position.xy * 2.0; vColor = aColor; vShape = shape; vLife = u; vSeed = seed; vSize = sz * max(scale, 0.05); vSpin = ang; vTumble = tumble; vInt = aExt.w;
+      vAlpha = smoothstep(0.0, 0.03, u) * (1.0 - smoothstep(0.62, 1.0, u));
     }`;
   const PARTICLE_FS = `
     precision highp float;
-    uniform float uGlow; uniform float uAdd;
-    varying vec2 vUv; varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vLife; varying float vSeed;
-    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y); }
-    float sdStar(vec2 p, float r, float rf){ const vec2 k1 = vec2(0.809016994375, -0.587785252292); const vec2 k2 = vec2(-k1.x, k1.y);
-      p.x = abs(p.x); p -= 2.0*max(dot(k1,p),0.0)*k1; p -= 2.0*max(dot(k2,p),0.0)*k2; p.x = abs(p.x); p.y -= r;
-      vec2 ba = rf*vec2(-k1.y,k1.x) - vec2(0,1); float h = clamp(dot(p,ba)/dot(ba,ba), 0.0, r); return length(p-ba*h) * sign(p.y*ba.x-p.x*ba.y); }
-    float sdHeart(vec2 p){ p.y = -p.y + 0.55; p.x = abs(p.x); p *= 1.25;
-      if (p.y + p.x > 1.0) return sqrt(dot(p - vec2(0.25, 0.75), p - vec2(0.25, 0.75))) - sqrt(2.0) / 4.0;
-      return sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)), dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y); }
-    float box(vec2 p, vec2 b, float r){ vec2 d = abs(p) - b + r; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r; }
-    float seg(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return length(pa-ba*h); }
+    uniform float uGlow; uniform float uDark; uniform float uTime; uniform float uAdd;
+    varying vec2 vUv; varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vLife; varying float vSeed; varying vec2 vSize; varying float vSpin; varying float vTumble; varying float vInt;
+    ${GLSL_LIB}
+    // 发光：白热核心 → 本色 → 衰减。浅色纸面上核心不那么白、颜色更饱和，并且盖住一部分底色，否则在奶油色纸上看不见。
+    vec4 light(vec3 col, float core, float glow){
+      vec3 c = mix(col, vec3(1.0), clamp(core * mix(0.2, 1.0, uDark), 0.0, 1.0));
+      float a = clamp(core + glow * uGlow * mix(0.7, 1.0, uDark), 0.0, 1.0);
+      return vec4(c * a, a * mix(0.86, 0.0, uDark));
+    }
+    vec4 solid(vec3 col, float a){ return vec4(col * a, a); }
+    float star5(vec2 p, float r, float rf){
+      const vec2 k1 = vec2(0.809016994, -0.587785252), k2 = vec2(-0.809016994, -0.587785252);
+      p.x = abs(p.x); p -= 2.0 * max(dot(k1, p), 0.0) * k1; p -= 2.0 * max(dot(k2, p), 0.0) * k2; p.x = abs(p.x); p.y -= r;
+      vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0); float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+      return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+    }
+    vec4 fStreak(vec2 uv){
+      float along = uv.x * 0.5 + 0.5, d = abs(uv.y);
+      float w = mix(0.05, 0.34, pow(along, 1.3));
+      float body = (1.0 - smoothstep(0.8, 1.0, uv.x)) * pow(along, 1.5);
+      float age = 1.0 - vLife * 0.55;
+      return light(vColor, (1.0 - smoothstep(w * 0.45, w, d)) * body * age, exp(-d * d / (w * w * 5.0 + 0.002)) * body * 0.55 * age);
+    }
+    vec4 fMote(vec2 uv){
+      float r = length(uv), tw = 0.7 + 0.3 * sin(uTime * (5.0 + vSeed * 9.0) + vSeed * 50.0), edge = 1.0 - smoothstep(0.7, 1.0, r);
+      return light(vColor, exp(-r * r * 26.0) * tw * edge, exp(-r * r * 4.5) * 0.6 * tw * edge);
+    }
+    vec4 fGlint(vec2 uv){
+      vec2 p = rot(vSpin) * uv; float th = 2.6 / vSize.x;
+      float rh = (1.0 - smoothstep(th * 0.3, th * 1.6, abs(p.y))) * pow(max(0.0, 1.0 - abs(p.x)), 2.4);
+      float rv = (1.0 - smoothstep(th * 0.3, th * 1.6, abs(p.x))) * pow(max(0.0, 1.0 - abs(p.y)), 2.4);
+      vec2 d = rot(0.7854) * p;
+      float rd = ((1.0 - smoothstep(th * 0.2, th * 1.2, abs(d.y))) * pow(max(0.0, 1.0 - abs(d.x) * 1.9), 2.0) + (1.0 - smoothstep(th * 0.2, th * 1.2, abs(d.x))) * pow(max(0.0, 1.0 - abs(d.y) * 1.9), 2.0)) * 0.35;
+      float r = length(p), tw = 0.55 + 0.45 * sin(uTime * (7.0 + vSeed * 6.0) + vSeed * 40.0);
+      return light(vColor, (rh + rv + rd) * tw + exp(-r * r * 110.0), exp(-r * r * 14.0) * 0.35 * tw);
+    }
+    vec4 fRing(vec2 uv){
+      float r = length(uv), u = vLife, R = 0.06 + 0.9 * (1.0 - pow(1.0 - u, 3.0));
+      float th = mix(0.035, 1.8 / vSize.x, pow(u, 0.5)), dd = abs(r - R), fade = pow(1.0 - u, 1.8);
+      float inner = (1.0 - smoothstep(0.0, R, r)) * 0.07 * (1.0 - u);
+      return light(vColor, (1.0 - smoothstep(th * 0.4, th, dd)) * fade * 0.9, (exp(-dd * dd / (th * th * 8.0 + 1e-5)) * 0.35 + inner) * fade);
+    }
+    vec4 fFlash(vec2 uv){
+      vec2 c = vec2(uv.x * 3.2, uv.y); float r = length(c), u = vLife;
+      float k = smoothstep(0.0, 0.05, u) * pow(1.0 - u, 2.6);
+      float streak = exp(-uv.y * uv.y * 300.0) * pow(max(0.0, 1.0 - abs(uv.x)), 1.4);
+      return light(vColor, (exp(-r * r * 18.0) + streak * 0.75) * k, exp(-r * r * 3.0) * 0.32 * k);
+    }
+    vec4 fShard(vec2 uv){
+      float kx = 0.42 + 0.32 * hash(vec2(vSeed, 3.1)), sk = (hash(vec2(vSeed, 5.7)) - 0.5) * 0.5;
+      vec2 p = vec2(uv.x, uv.y + sk * uv.x);
+      float d = (abs(p.x) / kx + abs(p.y)) - 0.94;
+      float inside = fill(d * kx * 0.7);
+      float facet = step(0.0, p.x * vTumble + p.y * 0.3);
+      float lit = mix(0.42, 1.0, facet) * (0.55 + 0.45 * abs(vTumble));
+      float edge = 1.0 - smoothstep(0.0, 0.1, abs(d));
+      vec3 col = vColor * lit + vec3(1.0) * (pow(abs(vTumble), 22.0) * 0.9 + edge * 0.32);
+      return solid(col, inside * (0.8 + 0.2 * facet));
+    }
+    vec4 fFoil(vec2 uv){
+      float inside = fill(max(abs(uv.x), abs(uv.y)) - 0.92), f = abs(vTumble);
+      float sheen = 1.0 - smoothstep(0.0, 0.32, abs(uv.x * 0.6 + uv.y * 0.8 - vTumble * 1.6));
+      vec3 base = vColor * (vTumble > 0.0 ? 1.0 : 0.7);
+      vec3 col = base * (0.4 + 0.72 * f * f) + vec3(1.0) * (pow(f, 28.0) * 0.85 + sheen * 0.32 * f);
+      return solid(col, inside);
+    }
+    vec4 fPetal(vec2 uv){
+      float y = -uv.y, w = 0.72 * sqrt(max(0.0, 1.0 - y * y)) * (0.8 + 0.3 * y);
+      float notch = 0.2 * (1.0 - smoothstep(0.0, 0.1, abs(uv.x))) * smoothstep(0.55, 1.0, y);
+      float inside = fill(max(abs(uv.x) - w, y - 1.0 + notch));
+      vec3 col = mix(vColor * 0.8, mix(vColor, vec3(1.0), 0.42), smoothstep(-1.0, 1.0, y));
+      col -= (1.0 - smoothstep(0.0, 0.03, abs(uv.x))) * smoothstep(1.0, -0.6, y) * 0.1;
+      col *= (0.66 + 0.34 * abs(vTumble)) * (vTumble > 0.0 ? 1.0 : 0.88);
+      return solid(col, inside * 0.95);
+    }
+    vec4 fInk(vec2 uv){
+      float r = length(uv), n = fbm(uv * 2.4 + vSeed * 13.0), u = vLife;
+      float spread = mix(0.32, 0.92, 1.0 - pow(1.0 - min(u * 2.2, 1.0), 3.0));
+      float d = r - spread * (0.78 + (n - 0.5) * 0.55);
+      float inside = 1.0 - smoothstep(-0.04, 0.03, d), pool = smoothstep(-0.18, 0.0, d) * 0.22;
+      float erosion = smoothstep(0.55, 0.8, n + (1.0 - u) * 1.1), grain = 0.9 + 0.1 * noise(uv * 30.0 + vSeed);
+      float wash = 0.55 + 0.45 * fbm(uv * 4.0 + vSeed * 7.0);
+      return solid(vColor * (1.0 - pool * 0.5), inside * (0.5 + pool) * wash * grain * erosion);
+    }
+    vec4 fPuff(vec2 uv){
+      float r = length(uv), n = fbm(uv * 1.7 + vec2(vSeed * 9.0, uTime * 0.12));
+      float body = 1.0 - smoothstep(0.25, 1.0, r + (n - 0.5) * 0.7);
+      return solid(vColor * (0.86 + 0.24 * n), body * smoothstep(0.35, 0.7, n + (1.0 - vLife) * 0.8) * 0.42);
+    }
+    vec4 fEmber(vec2 uv){
+      float r = length(uv), fl = 0.55 + 0.45 * sin(uTime * (22.0 + vSeed * 18.0) + vSeed * 90.0);
+      vec3 col = mix(vec3(1.0, 0.93, 0.72), vColor, smoothstep(0.0, 0.7, vLife));
+      return light(col, exp(-r * r * 16.0) * fl, exp(-r * r * 3.5) * 0.5 * fl);
+    }
+    vec4 fBokeh(vec2 uv){
+      vec2 p = vec2(abs(uv.x), -uv.y) * 0.62 + vec2(0.0, 0.5);
+      float d;
+      if (p.y + p.x > 1.0) d = length(p - vec2(0.25, 0.75)) - 0.35355;
+      else d = sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)), dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
+      float a = (1.0 - smoothstep(-0.09, 0.07, d)) * 0.5 + (1.0 - smoothstep(0.0, 0.06, abs(d + 0.04))) * 0.22;
+      return light(vColor, a * 0.55, a * 0.3);
+    }
+    vec4 fBubble(vec2 uv){
+      float r = length(uv), rim = 1.0 - smoothstep(0.0, 0.07 + 4.0 / vSize.x, abs(r - 0.9));
+      vec3 film = 0.55 + 0.45 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + atan(uv.y, uv.x) * 0.16 + r * 1.3 + vSeed + uTime * 0.15));
+      float hl = exp(-dot(uv - vec2(-0.38, -0.42), uv - vec2(-0.38, -0.42)) * 40.0);
+      float body = (1.0 - smoothstep(0.86, 0.9, r)) * 0.06;
+      vec3 col = mix(vColor, film, 0.65);
+      return vec4(col * (rim * 0.6 + body) + vec3(1.0) * hl * 0.9, rim * 0.6 + body + hl * 0.9);
+    }
+    vec4 fFlake(vec2 uv){
+      vec2 p = rot(vSpin) * uv; float r = length(p), a = atan(p.y, p.x), sec = PI / 3.0;
+      a = mod(a + sec * 0.5, sec) - sec * 0.5;
+      vec2 q = vec2(cos(a), abs(sin(a))) * r; float px = 2.0 / vSize.x;
+      float d = min(min(seg(q, vec2(0.0), vec2(0.92, 0.0)), seg(q, vec2(0.42, 0.0), vec2(0.62, 0.2))), min(seg(q, vec2(0.66, 0.0), vec2(0.8, 0.13)), seg(q, vec2(0.22, 0.0), vec2(0.3, 0.09))));
+      return light(vColor, 1.0 - smoothstep(px * 0.45, px * 1.3, d), exp(-d * d / (px * px * 10.0)) * 0.15);
+    }
+    vec4 fCoin(vec2 uv){
+      float r = length(uv), inside = fill(r - 0.96), f = abs(vTumble);
+      float shade = 0.7 + 0.32 * (-uv.y) * (0.4 + 0.6 * f);
+      float emb = 1.0 - smoothstep(0.0, 0.035, abs(star5(uv / 0.5, 0.8, 0.45) * 0.5));
+      vec3 face = vColor * shade * (1.0 + emb * 0.3 * (uv.y < 0.0 ? 1.0 : -0.6));
+      vec3 col = mix(face, vColor * 0.7, smoothstep(0.78, 0.82, r) - (1.0 - smoothstep(0.0, 0.02, abs(r - 0.8))) * 0.3);
+      col = mix(vColor * 0.5, col, smoothstep(0.08, 0.3, f)) + vec3(1.0) * pow(f, 30.0) * 0.75 * (1.0 - r);
+      return solid(col, inside);
+    }
+    vec4 fArc(vec2 uv){
+      float x = uv.x, tt = floor(uTime * 24.0);
+      float off = ((noise(vec2(x * 3.0 + vSeed * 10.0, tt)) - 0.5) * 0.9 + (noise(vec2(x * 9.0 + vSeed * 20.0, tt * 1.7)) - 0.5) * 0.35) * (1.0 - smoothstep(0.6, 1.0, abs(x)));
+      float d = abs(uv.y - off), px = 2.0 / vSize.y, on = step(0.25, hash(vec2(tt, vSeed))), ends = 1.0 - smoothstep(0.85, 1.0, abs(x));
+      return light(vColor, (1.0 - smoothstep(px * 0.6, px * 2.0, d)) * on * ends, exp(-d * d * 30.0) * 0.6 * on * ends);
+    }
+    vec4 fSigil(vec2 uv){
+      float u = vLife, draw = smoothstep(0.0, 0.42, u), fade = 1.0 - smoothstep(0.8, 1.0, u), r = length(uv);
+      float w = max(2.2 / vSize.x, fwidth(r) * 1.4);
+      float lines = sigilLines(uv, draw, uTime, w);
+      float lock = smoothstep(0.4, 0.46, u) * (1.0 - smoothstep(0.46, 0.7, u));
+      float glow = exp(-abs(r - 0.7) * 30.0) * 0.12 + (1.0 - smoothstep(0.0, 0.97, r)) * 0.07;
+      return light(vColor, (lines * (1.0 + lock * 1.4) + exp(-r * r * 500.0) * 1.5) * fade, glow * fade * (1.0 + lock * 2.0));
+    }
+    vec4 fLeaf(vec2 uv){
+      float w = 0.56 * (1.0 - uv.y * uv.y) * (1.0 + 0.1 * uv.y);
+      float inside = fill(max(abs(uv.x) - w, abs(uv.y) - 1.0));
+      float vein = (1.0 - smoothstep(0.0, 0.035, abs(uv.x))) * 0.25 + (1.0 - smoothstep(0.0, 0.06, abs(fract((uv.y + abs(uv.x) * 0.8) * 4.0) - 0.5))) * 0.08 * step(abs(uv.x), w * 0.85);
+      vec3 col = vColor * (0.7 + 0.3 * abs(vTumble)) * (vTumble > 0.0 ? 1.0 : 0.82);
+      col = mix(col * 0.9, col * 1.12, smoothstep(-1.0, 1.0, uv.x * 0.6 - uv.y * 0.4)) * (1.0 - vein * 0.3);
+      return solid(col, inside);
+    }
+    vec4 fFeather(vec2 uv){
+      float bend = 0.06 * uv.y * uv.y, w = 0.42 * sqrt(max(0.0, 1.0 - uv.y * uv.y)) * (0.9 - 0.25 * uv.y);
+      float d = abs(uv.x + bend) - w, barbs = 0.75 + 0.25 * sin(uv.y * 26.0 + abs(uv.x) * 14.0);
+      float shaft = 1.0 - smoothstep(0.0, 0.03, abs(uv.x + bend));
+      vec3 col = mix(vColor, vColor * 0.74, shaft * 0.6) * (0.8 + 0.2 * abs(vTumble));
+      return solid(col, (1.0 - smoothstep(-0.12, 0.02, d)) * barbs * 0.92 * (1.0 - smoothstep(0.85, 1.0, abs(uv.y))));
+    }
+    vec4 fCard(vec2 uv){
+      vec2 b = abs(uv) - vec2(0.8); float rd = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - 0.12;
+      float inside = fill(rd), border = 1.0 - smoothstep(0.0, 0.045, abs(rd + 0.15));
+      vec3 paper = vec3(1.0, 0.985, 0.965);
+      vec3 col = vTumble > 0.0 ? mix(paper, vColor, border * 0.9) : mix(vColor, vColor * 0.76, step(0.5, fract((uv.x + uv.y) * 4.0)) * 0.35);
+      col = col * (0.72 + 0.28 * abs(vTumble)) + vec3(1.0) * pow(abs(vTumble), 26.0) * 0.35;
+      return solid(col, inside);
+    }
+    vec4 fNeon(vec2 uv){
+      vec2 pp = uv * vSize * 0.5; float L = max(0.0, vSize.x * 0.5 - vSize.y * 0.5), h = vSize.y * 0.5;
+      float d = seg(pp, vec2(-L, 0.0), vec2(L, 0.0)), fl = step(0.12, hash(vec2(floor(uTime * 20.0), vSeed)));
+      return light(vColor, (1.0 - smoothstep(h * 0.12, h * 0.3, d)) * fl, exp(-d * d / (h * h * 0.18)) * 0.7 * fl);
+    }
+    vec4 fRipple(vec2 uv){
+      float r = length(uv), acc = 0.0, th = 2.4 / vSize.x;
+      for (int i = 0; i < 3; i++) {
+        float k = clamp(vLife * 1.35 - float(i) * 0.17, 0.0, 1.0), R = 0.1 + 0.88 * (1.0 - pow(1.0 - k, 2.2));
+        acc += (1.0 - smoothstep(th * 0.4, th * 1.6, abs(r - R))) * (1.0 - k) * step(0.001, k);
+      }
+      return light(vColor, acc, acc * 0.4);
+    }
+    vec4 fCrescent(vec2 uv){
+      float r = length(uv), ang = atan(uv.y, uv.x), u = vLife;
+      float head = mix(-1.5, 1.6, 1.0 - pow(1.0 - min(u / 0.35, 1.0), 3.0)), trail = 2.2;
+      float tp = (ang - (head - trail)) / trail, inArc = step(0.0, tp) * step(tp, 1.0);
+      float wv = 0.11 * sin(PI * clamp(tp, 0.0, 1.0)) * (1.0 - u * 0.6) + 0.002, d = abs(r - 0.8);
+      float core = (1.0 - smoothstep(wv * 0.3, wv, d)) * inArc * pow(max(tp, 0.0), 0.6), fade = 1.0 - smoothstep(0.45, 1.0, u);
+      if (uAdd < 0.5) {   // 墨色斩：正常混合，带干笔飞白
+        float dry = smoothstep(0.35, 0.6, noise(vec2(ang * 30.0, d * 80.0) + vSeed * 10.0) + tp * 0.3);
+        return solid(vColor, core * fade * dry * 0.95);
+      }
+      return light(vColor, core * fade, exp(-d * d / (wv * wv * 3.0)) * inArc * max(tp, 0.0) * 0.5 * fade);
+    }
+    vec4 fPillar(vec2 uv){
+      float u = vLife, env = smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.6, 1.0, u));
+      float vf = smoothstep(-1.0, 0.1, uv.y) * (1.0 - smoothstep(0.85, 1.0, uv.y));
+      float stream = 0.6 + 0.4 * noise(vec2(uv.x * 6.0, uv.y * 4.0 + uTime * 3.0));
+      return light(vColor, exp(-uv.x * uv.x * 40.0) * vf * env * stream, exp(-uv.x * uv.x * 4.0) * 0.45 * vf * env);
+    }
     void main(){
-      vec2 p = vUv * (uAdd > 0.5 ? 1.7 : 1.0); float r = length(p); float d = 1.0; float shade = 1.0; float glowBoost = 0.0; vec3 col = vColor;
-      int s = int(vShape + 0.5);
-      if (s == 0) { d = r - 0.8; }
-      else if (s == 1) { d = sdStar(p * 1.05, 0.82, 0.45); shade = 1.0 - 0.25 * smoothstep(-0.4, 0.4, p.x + p.y); glowBoost = 0.4; }
-      else if (s == 2) { d = box(p, vec2(0.62, 0.95), 0.08); shade = 0.8 + 0.2 * sin(vLife * 30.0 + vSeed * 9.0); }
-      else if (s == 3) { vec2 q = p; q.x *= 1.7; d = length(q - vec2(0.0, 0.15)) - 0.75 + 0.35 * max(0.0, -p.y); shade = 0.85 + 0.15 * (1.0 - r); col = mix(col, vec3(1.0), 0.25 * (1.0 - r)); }
-      else if (s == 4) { d = sdHeart(p * 1.15); shade = 1.0 - 0.2 * smoothstep(-0.3, 0.6, p.x - p.y); col = mix(col, vec3(1.0), 0.35 * smoothstep(0.35, 0.0, length(p - vec2(-0.3, -0.25)))); }
-      else if (s == 5) { float n = noise(p * 3.0 + vSeed * 17.0) * 0.45 + noise(p * 7.0 - vSeed * 5.0) * 0.2; d = r - 0.55 - n * 0.5; shade = 0.75 + 0.35 * n; }
-      else if (s == 6) { vec2 q = abs(p); d = (q.x * 1.6 + q.y) - 0.95; shade = p.x > 0.0 ? (p.y > 0.0 ? 0.7 : 1.0) : (p.y > 0.0 ? 0.85 : 1.15); glowBoost = 0.5; }
-      else if (s == 7) { d = abs(r - 0.72) - 0.08; float hl = smoothstep(0.28, 0.0, length(p - vec2(-0.3, -0.32))); col = mix(col, vec3(1.0), 0.6); shade = 0.7 + hl * 2.0; d = min(d, length(p - vec2(-0.3, -0.32)) - 0.14); }
-      else if (s == 8) { float a = atan(p.y, p.x); float arm = abs(sin(a * 3.0)); d = min(abs(r * sin(mod(a, 1.0472) - 0.5236)) - 0.07, 9.0); d = max(d, r - 0.92); d = min(d, r - 0.2); float br = abs(fract(r * 3.0) - 0.5); d = min(d, max(abs(r*sin(mod(a,1.0472)-0.5236)) - 0.22 * step(0.35, r) * step(br, 0.12), r - 0.8)); }
-      else if (s == 9) { d = r - 0.55; glowBoost = 1.4; col = mix(col, vec3(1.0, 0.95, 0.8), smoothstep(0.4, 0.0, r)); }
-      else if (s == 10) { d = min(length((p - vec2(-0.25, 0.45)) * vec2(1.0, 1.35)) - 0.3, box(p - vec2(0.03, -0.1), vec2(0.07, 0.6), 0.03)); d = min(d, seg(p, vec2(0.05, -0.7), vec2(0.45, -0.35)) - 0.09); }
-      else if (s == 11) { d = box(p, vec2(0.62, 0.88), 0.14); float inner = sdHeart((p - vec2(0.0, 0.0)) * 3.4) / 3.4; float border = abs(box(p, vec2(0.52, 0.78), 0.1)) - 0.025; if (inner < 0.0) col = vec3(0.86, 0.12, 0.45); if (border < 0.0) col = mix(col, vec3(0.86, 0.12, 0.45), 0.6); shade = 1.0; }
-      else if (s == 12) { float n = noise(p * 2.2 + vSeed * 11.0 + vLife * 1.5); d = r - 0.55 - n * 0.4; shade = 0.9; }
-      else if (s == 13) { d = r - 0.88; float rim = smoothstep(0.62, 0.7, r); float shine = smoothstep(0.25, 0.0, abs(p.x + p.y * 0.6 - 0.2 + sin(vLife * 8.0) * 0.5)); col = mix(col, col * 0.72, rim); col = mix(col, vec3(1.0, 0.98, 0.85), shine * 0.8); glowBoost = 0.35; }
-      else if (s == 14) { vec2 q = p; q.x *= 2.0; d = length(q) - 0.95 + 0.25 * abs(p.y); float rib = smoothstep(0.06, 0.0, abs(p.x)); col = mix(col, col * 0.65, rib); }
-      else if (s == 15) { vec2 q = p * vec2(1.0, 1.0); float zz = abs(q.x - 0.35 * sign(sin(q.y * 4.5)) * fract(q.y * 2.25)); d = max(zz - 0.12 * (1.0 - abs(q.y)), abs(q.y) - 0.95); glowBoost = 0.8; col = mix(col, vec3(1.0), 0.35); }
-      else if (s == 16) { d = abs(r - 0.7) - 0.06; glowBoost = 0.9; }
-      else if (s == 17) { vec2 q = vec2(abs(p.x), p.y); float wing = q.y - 0.35 * sin(q.x * 6.0 + 1.2) * smoothstep(0.1, 0.9, q.x) + 0.12; d = max(max(-wing, q.y - 0.3 + 0.4 * q.x), q.x - 0.95); d = min(d, length(p * vec2(1.4, 1.0)) - 0.22); }
-      else if (s == 18) { float a = atan(p.y, p.x); float teeth = smoothstep(-0.2, 0.2, sin(a * 8.0)) * 0.16; d = max(r - 0.68 - teeth, 0.24 - r); shade = 0.75 + 0.35 * (1.0 - r); }
-      else if (s == 19) { vec2 q = p; q.x *= 2.6; float sp = length(q) - 0.95; float barbs = 0.5 + 0.5 * sin(p.y * 40.0 + sign(p.x) * 2.0); d = sp + barbs * 0.06 * smoothstep(0.0, 0.3, abs(p.x)); float rachis = smoothstep(0.05, 0.0, abs(p.x)); col = mix(col, col * 0.8, rachis); }
-      else if (s == 20) { float a = abs(p.x) * abs(p.y); d = min(abs(p.x) + abs(p.y) * 6.0, abs(p.y) + abs(p.x) * 6.0) - 0.9; d = min(d, r - 0.18); glowBoost = 1.2; col = mix(col, vec3(1.0), 0.4); }
-      else { float n = noise(p * 2.6 + vec2(vSeed * 7.0, -vLife * 2.0)); d = length(p * vec2(1.0, 0.7)) - 0.5 - n * 0.4; shade = 0.95; }
-      float aa = fwidth(d) * 1.2 + 0.015;
-      float soft = (s == 12 || s == 21) ? smoothstep(0.45, -0.6, d) * 0.55 : smoothstep(aa, -aa, d);
-      // 发光种类：实心部分正常叠（浅色纸面上也看得清），光晕只加亮、不遮挡，并收在圆形窗口里（不会露出方块边）。
-      float win = smoothstep(1.7, 1.1, r);
-      float glow = uAdd > 0.5 ? uGlow * (0.22 + glowBoost) * exp(-max(d, 0.0) * 3.2) * win : 0.0;
-      float core = soft * vAlpha;
-      vec3 c = col * shade;
-      gl_FragColor = vec4(c * core + mix(c, vec3(1.0), 0.35) * glow * vAlpha * 0.85, core);
+      int s = int(vShape + 0.5); vec2 uv = vUv; vec4 c;
+      if (s == 0) c = fStreak(uv); else if (s == 1) c = fMote(uv); else if (s == 2) c = fGlint(uv); else if (s == 3) c = fRing(uv);
+      else if (s == 4) c = fFlash(uv); else if (s == 5) c = fShard(uv); else if (s == 6) c = fFoil(uv); else if (s == 7) c = fPetal(uv);
+      else if (s == 8) c = fInk(uv); else if (s == 9) c = fPuff(uv); else if (s == 10) c = fEmber(uv); else if (s == 11) c = fBokeh(uv);
+      else if (s == 12) c = fBubble(uv); else if (s == 13) c = fFlake(uv); else if (s == 14) c = fCoin(uv); else if (s == 15) c = fArc(uv);
+      else if (s == 16) c = fSigil(uv); else if (s == 17) c = fLeaf(uv); else if (s == 18) c = fFeather(uv); else if (s == 19) c = fCard(uv);
+      else if (s == 20) c = fNeon(uv); else if (s == 21) c = fRipple(uv); else if (s == 22) c = fCrescent(uv); else c = fPillar(uv);
+      c *= vAlpha * vInt;
+      if (c.a < 0.0004 && max(c.r, max(c.g, c.b)) < 0.0004) discard;
+      gl_FragColor = c;
     }`;
-  // 大招过场：一张全屏四边形把背景、立绘、遮罩、光效一次画完；粒子在它上面再画一层。
+  // 大招切入：页面压暗调色 → 斜切条带（立绘 + 速度线 + 网点）滑入并对焦 → 标题 → 条带收成一线 → 闪光释放。
+  // 九种构图共用一套时间轴；角度 / 半高 / 中心由 PRESET_GEO 传进来，DOM 标题按同一份数据排版。
   const CINE_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
   const CINE_FS = `
     precision highp float;
-    uniform float uT; uniform float uTime; uniform int uPreset; uniform vec2 uRes; uniform vec3 uC0; uniform vec3 uC1; uniform vec3 uC2;
-    uniform sampler2D uArt; uniform float uArtOk; uniform float uArtAspect; uniform float uDof; uniform float uFade;
     varying vec2 vUv;
-    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y); }
-    float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=0.5; } return v; }
-    float ease(float x){ x = clamp(x, 0.0, 1.0); return 1.0 - pow(1.0 - x, 3.0); }
-    float back(float x){ x = clamp(x, 0.0, 1.0); float c1 = 1.70158, c3 = c1 + 1.0; return 1.0 + c3 * pow(x - 1.0, 3.0) + c1 * pow(x - 1.0, 2.0); }
-    vec4 art(vec2 uv, float scale, vec2 off, float blur){
-      float screenAspect = uRes.x / uRes.y; vec2 q = uv - 0.5; q /= scale; q -= off;
-      // 等比完整放进画面（contain），留出背景让过场本身被看见；方形立绘约占屏高 88%。
-      q /= 0.88;
-      if (uArtAspect > screenAspect) q.y *= uArtAspect / screenAspect; else q.x *= screenAspect / uArtAspect;
-      q += 0.5;
-      if (uArtOk < 0.5) { float g = smoothstep(0.9, 0.0, length(q - 0.5)); vec3 c = mix(uC1, uC0, g); float star = smoothstep(0.02, 0.0, abs(length(q - 0.5) - 0.28 - 0.04 * sin(atan(q.y - 0.5, q.x - 0.5) * 5.0))); return vec4(c + star * 0.8, 1.0); }
-      if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0);
-      vec4 c = texture2D(uArt, q);
-      if (blur > 0.001) { vec4 acc = c; float b = blur * 0.006; acc += texture2D(uArt, q + vec2(b, 0.0)); acc += texture2D(uArt, q - vec2(b, 0.0)); acc += texture2D(uArt, q + vec2(0.0, b)); acc += texture2D(uArt, q - vec2(0.0, b));
-        acc += texture2D(uArt, q + vec2(b, b) * 0.7); acc += texture2D(uArt, q - vec2(b, b) * 0.7); acc += texture2D(uArt, q + vec2(b, -b) * 0.7); acc += texture2D(uArt, q + vec2(-b, b) * 0.7); c = acc / 9.0; }
-      return c;
+    uniform float uT, uTime, uPreset, uDur, uArtOk, uArtAspect, uArtScale, uDof, uFade, uTheta, uH0;
+    uniform vec2 uRes, uFocus, uBc;
+    uniform vec3 uC0, uC1, uC2;
+    uniform sampler2D uArt;
+    ${GLSL_LIB}
+    float eOut(float x){ x = clamp(x, 0.0, 1.0); return 1.0 - pow(1.0 - x, 4.0); }
+    float eIn(float x){ x = clamp(x, 0.0, 1.0); return x * x * x; }
+    float win(float x, float a, float b){ return clamp((x - a) / (b - a), 0.0, 1.0); }
+    vec4 over(vec4 top, vec4 under){ return top + under * (1.0 - top.a); }
+    vec4 art(vec2 a, float bias){
+      if (uArtOk < 0.5 || a.x < 0.0 || a.y < 0.0 || a.x > 1.0 || a.y > 1.0) return vec4(0.0);
+      return texture2D(uArt, vec2(a.x, 1.0 - a.y), bias);
     }
     void main(){
-      vec2 uv = vUv; float aspect = uRes.x / uRes.y; vec2 p = (uv - 0.5) * vec2(aspect, 1.0); float r = length(p); float ang = atan(p.y, p.x);
-      float T = uT; vec3 col = vec3(0.0); float tilt = uDof * smoothstep(0.18, 0.5, abs(uv.y - 0.52));
-      if (uPreset == 0) { // burst 推镜爆发
-        float rays = pow(0.5 + 0.5 * sin(ang * 22.0 + uTime * 2.5), 6.0) * smoothstep(1.2, 0.0, r);
-        col = mix(uC1 * 0.35, uC0, smoothstep(1.1, 0.0, r)) + rays * uC2 * 1.2 * ease(T * 4.0);
-        vec4 a = art(uv, mix(1.35, 1.04, ease(T * 2.2)) + 0.03 * sin(uTime * 3.0) * (1.0 - T), vec2(0.0), tilt * 2.0);
-        col = mix(col, a.rgb, a.a * ease(T * 5.0));
-        col += vec3(1.0) * smoothstep(0.12, 0.0, T) * 1.2;
-      } else if (uPreset == 1) { // slash 斩击
-        float cut = dot(p, normalize(vec2(1.0, 0.55)));
-        float sweep = mix(-1.4, 1.4, ease((T - 0.05) * 5.0));
-        float line = exp(-abs(p.y * 0.9 - p.x * 0.5) * 60.0) * step(cut, sweep) * smoothstep(0.55, 0.2, T);
-        float speed = pow(fract(dot(p, vec2(0.48, -0.88)) * 9.0 + uTime * 6.0 + hash(floor(p * 12.0))), 18.0) * 0.5;
-        col = mix(vec3(0.06, 0.02, 0.07), uC1 * 0.5, smoothstep(1.2, 0.0, r)) + speed * uC2;
-        float split = (1.0 - ease((T - 0.25) * 3.0)) * 0.06; float side = sign(p.y * 0.9 - p.x * 0.5);
-        vec4 a = art(uv + vec2(split * side, -split * side * 0.5), 1.08, vec2(0.0), tilt * 2.0);
-        col = mix(col, a.rgb, a.a * smoothstep(0.15, 0.32, T));
-        col += (uC2 + vec3(0.6)) * line * 3.0;
-      } else if (uPreset == 2) { // spell 魔法阵
-        col = mix(vec3(0.05, 0.02, 0.12), uC1 * 0.4, smoothstep(1.3, 0.0, r));
-        float grow = back(T * 2.2); float rr = r / max(0.001, grow);
-        float rot = uTime * 0.8; float a2 = ang + rot;
-        float ring = smoothstep(0.012, 0.0, abs(rr - 0.42)) + smoothstep(0.008, 0.0, abs(rr - 0.36)) + smoothstep(0.01, 0.0, abs(rr - 0.2));
-        float runes = smoothstep(0.02, 0.0, abs(rr - 0.39)) * step(0.55, fract(a2 * 6.0)) * step(0.25, hash(vec2(floor(a2 * 6.0 / 1.0), 3.0)));
-        float star = 0.0; for (int i = 0; i < 6; i++) { float th = float(i) * 1.0472 - rot * 0.6; vec2 dir = vec2(cos(th), sin(th)); star += smoothstep(0.008, 0.0, abs(dot(p / max(0.001, grow), vec2(-dir.y, dir.x)) - 0.0) ) * step(abs(dot(p / max(0.001, grow), dir)), 0.36); }
-        float magic = (ring + runes + star * 0.5) * step(rr, 0.45) * 0.62;
-        vec4 a = art(uv, mix(0.9, 1.02, ease(T * 1.6)), vec2(0.0), tilt * 2.0);
-        col = mix(col, a.rgb, a.a * smoothstep(0.25, 0.55, T) * 0.92);
-        col += magic * mix(uC0, vec3(1.0), 0.4) * 1.6 * (1.0 - smoothstep(0.75, 1.0, T) * 0.6);
-      } else if (uPreset == 3) { // curtain 舞台幕布 + 聚光
-        float open = ease((T - 0.12) * 2.4) * 0.52; float edge = abs(uv.x - 0.5);
-        float folds = 0.5 + 0.5 * sin(uv.x * 70.0 + sin(uv.y * 3.0) * 2.0); vec3 velvet = mix(vec3(0.35, 0.02, 0.08), vec3(0.75, 0.08, 0.2), folds) * (0.6 + 0.4 * uv.y);
-        float spot = smoothstep(0.75, 0.0, length((uv - vec2(0.5, 0.45)) * vec2(aspect * 0.8, 1.0)));
-        vec4 a = art(uv, 1.02, vec2(0.0), tilt * 2.0);
-        vec3 stage = mix(vec3(0.03, 0.02, 0.04), a.rgb, a.a) * (0.25 + 1.1 * spot);
-        stage += vec3(1.0, 0.95, 0.8) * spot * 0.15 * (0.5 + 0.5 * noise(uv * 30.0 + uTime));
-        col = edge < open ? stage : velvet;
-        col *= 1.0 - 0.35 * smoothstep(0.03, 0.0, abs(edge - open));
-        col = mix(col, uC1 * 0.25, smoothstep(0.85, 1.0, uv.y) * 0.6);
-      } else if (uPreset == 4) { // ink 水墨晕开
-        vec3 paper = vec3(0.965, 0.93, 0.9) * (0.92 + 0.08 * fbm(uv * 8.0));
-        float spread = ease(T * 1.8) * 1.25; float n = fbm(p * 3.0 + 4.0);
-        float mask = smoothstep(spread, spread - 0.12, r + n * 0.45);
-        vec4 a = art(uv, 1.03, vec2(0.0), tilt * 2.0);
-        float lum = dot(a.rgb, vec3(0.3, 0.59, 0.11)); vec3 wash = mix(vec3(0.15, 0.1, 0.13), a.rgb, 0.45 + 0.55 * smoothstep(0.4, 1.0, T));
-        col = mix(paper, mix(paper, wash, a.a), mask);
-        float rim = smoothstep(0.08, 0.0, abs(r + n * 0.45 - spread)) * (1.0 - T);
-        col = mix(col, vec3(0.1, 0.06, 0.09), rim * 0.8);
-        col = mix(col, uC0 * 0.9, smoothstep(0.2, 0.0, abs(r + n * 0.4 - spread * 0.55)) * 0.15);
-      } else if (uPreset == 5) { // warp 星空跃迁
-        col = mix(vec3(0.01, 0.0, 0.05), uC1 * 0.3, smoothstep(1.3, 0.0, r));
-        float speed = 1.0 - smoothstep(0.55, 0.9, T);
-        for (int i = 0; i < 3; i++) { float fi = float(i); vec2 g = vec2(ang * 40.0 + fi * 13.0, 0.0); float id = floor(g.x); float h = hash(vec2(id, fi));
-          float z = fract(h * 7.0 - uTime * (0.6 + speed * 2.4) * (0.5 + h)); float sr = z * 1.4; float len = 0.02 + speed * 0.25 * z;
-          col += smoothstep(len, 0.0, abs(r - sr)) * smoothstep(0.06, 0.0, abs(fract(g.x) - 0.5) * 0.08 * (2.0 - z)) * mix(uC2, vec3(1.0), h) * z * 2.0; }
-        vec4 a = art(uv, mix(0.15, 1.04, ease((T - 0.1) * 2.2)), vec2(0.0), tilt * 2.0);
-        col = mix(col, a.rgb, a.a * smoothstep(0.1, 0.35, T));
-        col += vec3(1.0) * smoothstep(0.06, 0.0, abs(T - 0.32)) * 0.9;
-      } else if (uPreset == 6) { // rain 从天而降
-        col = mix(uC1 * 0.25 + vec3(0.04), uC0 * 0.55, uv.y);
-        vec4 a = art(uv + vec2(0.0, 0.01 * sin(uTime * 2.0)), mix(1.12, 1.04, ease(T)), vec2(0.0), tilt * 2.0);
-        col = mix(col, a.rgb, a.a * smoothstep(0.05, 0.3, T));
-        col += uC2 * 0.25 * smoothstep(0.6, 0.0, length((uv - vec2(0.5, 1.05)) * vec2(aspect, 2.0)));
-      } else if (uPreset == 7) { // stamp 盖章砸下
-        vec3 paper = vec3(0.97, 0.94, 0.9) * (0.94 + 0.06 * fbm(uv * 10.0));
-        vec4 a = art(uv, 1.03, vec2(0.0, 0.0), tilt * 2.0);
-        col = mix(paper, a.rgb, a.a * 0.9 * smoothstep(0.0, 0.25, T));
-        float drop = mix(3.2, 1.0, ease((T - 0.08) * 5.0)); float rr = r / (0.3 * drop);
-        float ring = smoothstep(0.06, 0.0, abs(rr - 0.92)) + smoothstep(0.04, 0.0, abs(rr - 0.78));
-        float grit = step(0.35, fbm(p * 30.0)); float stampA = ring * grit * smoothstep(0.05, 0.25, T);
-        col = mix(col, vec3(0.86, 0.12, 0.28), clamp(stampA, 0.0, 0.92));
-        float wave = (T - 0.28) * 2.2; col += vec3(1.0, 0.85, 0.9) * smoothstep(0.05, 0.0, abs(r - wave)) * step(0.28, T) * (1.0 - T);
-      } else { // beam 光束
-        col = mix(vec3(0.02, 0.01, 0.04), uC1 * 0.2, smoothstep(1.2, 0.0, r));
-        float w = mix(0.002, 0.65, ease((T - 0.08) * 1.8)); float beam = exp(-pow(abs(p.x) / max(0.002, w * 0.35), 2.0));
-        vec4 a = art(uv, 1.04, vec2(0.0), tilt * 2.0);
-        float reveal = smoothstep(w * 0.5, w * 0.5 - 0.1, abs(p.x));
-        col = mix(col, a.rgb, a.a * reveal);
-        float godray = pow(0.5 + 0.5 * sin(p.x * 50.0 + fbm(vec2(p.x * 8.0, uTime)) * 6.0), 4.0) * beam;
-        col += mix(uC2, vec3(1.0), 0.35) * (beam * 0.32 + godray * 0.22) * (1.0 - smoothstep(0.6, 1.0, T) * 0.7);
+      float asp = uRes.x / uRes.y, px = 1.0 / uRes.y, aa = px * 1.2;
+      vec2 p = (vUv - 0.5) * vec2(asp, 1.0);
+      float T = uT, s = uT * uDur;
+      int P = int(uPreset + 0.5);
+      bool paper = P == 4;
+      float dimIn = eOut(win(T, 0.0, 0.12)), bandK = eOut(win(T, 0.05, 0.27)), coll = eIn(win(T, 0.76, 0.86)), outK = win(T, 0.84, 1.0);
+      float dimA = dimIn * (1.0 - eOut(P == 4 ? win(T, 0.74, 0.92) : outK));
+      vec3 deep = mix(uC1 * 0.3, vec3(0.025, 0.018, 0.04), 0.6);
+      float vig = smoothstep(1.3, 0.2, length(p * vec2(0.72, 1.0)));
+      vec3 bgc = paper ? vec3(0.965, 0.94, 0.915) * (0.95 + 0.05 * vig) : deep * (0.5 + 0.7 * vig);
+      vec4 C = vec4(bgc, 1.0) * dimA * (paper ? 0.93 : 0.82);
+      vec3 hot = mix(uC2, vec3(1.0), 0.35);
+
+      // ── 底层：环境速度线 / 预设专属背景 ──
+      if (!paper) {
+        float row = floor((p.y + 2.0) * 150.0), hr = hash(vec2(row, 1.7));
+        float sl = step(0.84, hr) * smoothstep(0.72, 1.0, fract(p.x * (0.25 + hr * 0.4) - s * (0.6 + hr * 1.6) + hr * 9.0));
+        C.rgb += uC2 * sl * 0.09 * dimA * (1.0 - coll);
       }
-      col *= 1.0 - 0.45 * smoothstep(0.55, 1.3, r);
-      gl_FragColor = vec4(col * uFade, uFade);
+      if (P == 2) {        // 法阵：地面上的透视法阵 + 光柱
+        vec2 sc = vec2(-0.36, -0.3), sq = (p - sc) / vec2(0.56, 0.56 * 0.34);
+        float w = max(px * 1.4 / 0.56, fwidth(length(sq)) * 1.3);
+        float lines = sigilLines(sq, smoothstep(0.03, 0.42, T), uTime, w) * (1.0 - win(T, 0.8, 0.95));
+        float lock = smoothstep(0.42, 0.46, T) * (1.0 - smoothstep(0.46, 0.62, T));
+        C.rgb += hot * lines * dimA * (1.0 + lock * 0.7);
+        C.rgb += uC2 * exp(-abs(length(sq) - 0.7) * 12.0) * 0.06 * dimA;
+        float pil = exp(-(p.x + 0.36) * (p.x + 0.36) * 90.0) * smoothstep(-0.32, 0.5, p.y) * (1.0 - smoothstep(0.3, 0.9, p.y)) * smoothstep(0.2, 0.4, T) * (1.0 - coll);
+        C.rgb += hot * pil * 0.35;
+      } else if (P == 3) { // 谢幕：顶光聚光灯 + 体积雾
+        float cone = abs(p.x) - (0.06 + (0.5 - p.y) * 0.32);
+        float spot = (1.0 - smoothstep(-0.12, 0.02, cone)) * smoothstep(-0.6, 0.5, p.y) * smoothstep(0.02, 0.2, T);
+        float haze = 0.7 + 0.3 * fbm(p * 4.0 + vec2(0.0, -s * 0.15));
+        C.rgb += mix(vec3(1.0, 0.92, 0.78), uC2, 0.3) * spot * haze * 0.16 * dimA;
+      } else if (P == 5) { // 跃迁：向心星流
+        vec2 q = p - uBc; float r = length(q), an = atan(q.y, q.x) * 160.0 / PI, cell = floor(an), h = hash(vec2(cell, 9.1));
+        float lx = abs(fract(an) - 0.5) * (r * PI / 160.0) / px;          // 到本格中线的像素距离
+        float f = fract(r * (0.9 + h) - s * (1.4 + h * 2.0) + h * 7.0);
+        float line = (1.0 - smoothstep(0.4, 1.4, lx)) * step(0.78, h) * pow(smoothstep(0.55, 1.0, f), 2.0) * smoothstep(0.14, 0.7, r);
+        C.rgb += mix(uC2, vec3(1.0), 0.65) * line * 0.75 * dimA * (1.0 - coll);
+      } else if (P == 6) { // 星落：斜落的流星
+        vec2 q = rot(0.32) * p; float col = floor(q.x * 90.0), h = hash(vec2(col, 4.4));
+        float lx = abs(fract(q.x * 90.0) - 0.5) / 90.0 / px;
+        float f = fract(q.y * (0.35 + h * 0.5) + s * (0.9 + h * 1.4) + h * 5.0);
+        float line = (1.0 - smoothstep(0.35, 1.3, lx)) * step(0.8, h) * pow(smoothstep(0.7, 1.0, f), 4.0);
+        C.rgb += mix(uC2, vec3(1.0), 0.6) * line * 0.85 * dimA * (1.0 - coll);
+      }
+
+      // ── 条带 ──
+      vec2 b = rot(-uTheta) * (p - uBc);
+      float open = 1.0, lead = -9.0;
+      if (P == 0 || P == 2 || P == 6 || P == 7) lead = mix(asp * 1.3, -asp * 1.3, bandK);
+      else if (P == 1 || P == 8) open = eOut(win(T, 0.12, 0.3));
+      float H = uH0 * open * (1.0 - coll);
+      float leadM = lead > -8.0 ? smoothstep(lead - aa * 2.0, lead + aa * 2.0, b.x + b.y * 0.45) : 1.0;
+      if (P == 3) leadM = 1.0 - smoothstep(asp * 0.75 * bandK - aa, asp * 0.75 * bandK + aa, abs(b.x));
+      float mask = (1.0 - smoothstep(H - aa, H + aa, abs(b.y))) * leadM;
+      float inkRim = 0.0;
+      if (P == 4) {        // 泼墨：墨迹边缘的不规则遮罩
+        vec2 ip = (p - uBc) * vec2(0.6, 1.0);
+        float R = (0.06 + 0.3 * eOut(win(T, 0.04, 0.3))) * (1.0 - coll);
+        float d = length(ip) - R * (0.86 + (fbm(p * 3.0 + 4.0) - 0.5) * 0.55 + (fbm(p * 11.0 + 9.0) - 0.5) * 0.14);
+        mask = 1.0 - smoothstep(-0.006, 0.006, d);
+        inkRim = smoothstep(-0.07, 0.0, d) * mask;
+        leadM = 1.0;
+      } else if (P == 5) { // 跃迁：圆形光圈
+        float R = 0.34 * eOut(win(T, 0.07, 0.3)) * (1.0 - coll);
+        mask = 1.0 - smoothstep(R - aa, R + aa, length(p - uBc));
+      }
+      // 第二条（强调色）错开半拍跟进，做出层次
+      if (!paper && P != 5 && P != 3) {
+        vec2 b2 = rot(-(uTheta + 0.05)) * (p - uBc - vec2(0.0, -0.018));
+        float lead2 = lead > -8.0 ? mix(asp * 1.5, -asp * 1.3, eOut(win(T, 0.09, 0.33))) : -9.0;
+        float H2 = uH0 * 1.15 * open * (1.0 - eIn(win(T, 0.73, 0.83)));
+        float m2 = (1.0 - smoothstep(H2 - aa, H2 + aa, abs(b2.y))) * (lead2 > -8.0 ? smoothstep(lead2 - aa, lead2 + aa, b2.x + b2.y * 0.45) : 1.0);
+        C = over(vec4(mix(deep, uC2, 0.62), 1.0) * m2 * 0.9, C);
+      }
+      // 条带底：主色到深色的渐变、网点、速度线
+      vec3 bb = mix(deep * 1.4, mix(deep, uC1, 0.78), smoothstep(-asp * 0.6, asp * 0.55, b.x));
+      bb += uC0 * 0.16 * smoothstep(-uH0 * 0.2, uH0, b.y) * smoothstep(-asp * 0.3, asp * 0.5, b.x);
+      bb *= 0.8 + 0.2 * (1.0 - smoothstep(0.0, uH0, abs(b.y)));
+      if (paper) { float wash = fbm(p * 5.0 + 3.0); bb = mix(vec3(0.055, 0.04, 0.05), vec3(0.16, 0.12, 0.14), wash * wash) + uC1 * 0.04; }
+      vec2 hc = fract(rot(0.785) * p * uRes.y / 6.5) - 0.5;
+      float dotR = 0.12 + 0.24 * smoothstep(-0.1, asp * 0.5, b.x);
+      if (!paper) bb = mix(bb, bb * 1.22 + uC2 * 0.06, (1.0 - smoothstep(dotR - 0.07, dotR + 0.07, length(hc))) * 0.32);
+      float brow = floor(b.y * 130.0), bh = hash(vec2(brow, 3.3));
+      if (!paper) bb += vec3(1.0) * step(0.58, bh) * smoothstep(0.62, 1.0, fract(b.x * (0.3 + bh * 0.5) + s * (2.0 + bh * 3.0) + bh * 13.0)) * 0.11;
+      // 立绘：焦点落在条带中线偏左，轻微漂移；先虚后实（对焦）；残影；投影；轮廓光
+      float artH = uH0 * 2.0 * 2.15 * uArtScale;
+      vec2 artC = vec2(-asp * 0.17 - s * 0.022 + (1.0 - bandK) * 0.22, uH0 * 0.5);
+      if (P == 3) artC.x = -asp * 0.06 - s * 0.012;
+      if (P == 4) { artC = vec2(0.02 - s * 0.01, -0.02); artH *= 0.66; }
+      if (P == 5) { artC = vec2(0.0, uH0 * 0.12); artH *= 0.82; }
+      vec2 au = (b - artC) / artH; au = vec2(au.x / uArtAspect, -au.y) + uFocus;
+      float bias = uDof > 0.5 ? 4.5 * (1.0 - smoothstep(0.15, 0.42, T)) : 0.0;
+      vec4 A = art(au, bias);
+      vec4 Ec = art(au + vec2(0.06 * (1.0 - bandK) + 0.018, 0.0), 2.5);
+      vec4 Sh = art(au + vec2(-0.014, -0.02), 3.5);
+      vec4 Rm = art(au + vec2(-0.007, 0.007), 1.0);
+      float rim = clamp(A.a - Rm.a, 0.0, 1.0);
+      vec3 ar = A.rgb * 0.95 + uC1 * 0.05 * A.a + hot * rim * 1.4;
+      vec4 band = vec4(bb * (1.0 - Sh.a * 0.45), 1.0);
+      float echo = 0.42 * (1.0 - smoothstep(0.1, 0.42, T));
+      band = over(vec4(uC2 * Ec.a * echo, Ec.a * echo), band);
+      if (P == 4) band.rgb = mix(band.rgb, vec3(0.04, 0.03, 0.035), inkRim * 0.85);
+      C = over(band * mask * dimIn, C);
+      // 角色破框：下边被条带裁掉，头可以伸出条带上沿（泼墨 / 跃迁留在遮罩里）
+      float charM = (P == 4 || P == 5) ? mask : smoothstep(-H - aa, -H + aa, b.y) * leadM * (1.0 - smoothstep(H + uH0 * 1.3, H + uH0 * 1.4, b.y)) * (1.0 - coll) * step(0.0005, H);
+      C = over(vec4(ar, A.a) * charM * dimIn, C);
+      // 边线：强调色 2px + 外侧白色细线；天光 / 一闪打开时边线更亮
+      if (P != 4 && P != 5) {
+        float edgeBoost = (P == 8 || P == 1) ? 1.0 + 2.5 * (1.0 - open) : 1.0;
+        float e1 = (1.0 - smoothstep(px * 0.8, px * 2.4, abs(abs(b.y) - H))) * leadM * step(0.0005, H);
+        float e2 = (1.0 - smoothstep(px * 0.4, px * 1.3, abs(abs(b.y) - H - px * 7.0))) * leadM * step(0.0005, H) * 0.55;
+        C.rgb += (hot * e1 * edgeBoost + vec3(1.0) * e2) * dimIn; C.a = max(C.a, e1 * dimIn);
+      } else if (P == 5) {
+        float R = 0.34 * eOut(win(T, 0.07, 0.3)) * (1.0 - coll), e = 1.0 - smoothstep(px * 0.8, px * 2.6, abs(length(p - uBc) - R));
+        C.rgb += hot * e * step(0.001, R); C.a = max(C.a, e);
+      }
+      // 一闪：先划过一道光
+      if (P == 1) {
+        float head = mix(asp * 0.9, -asp * 0.9, eOut(win(T, 0.03, 0.12))), sd = abs(b.y);
+        float on = step(head, b.x) * (1.0 - win(T, 0.14, 0.3));
+        float sline = (1.0 - smoothstep(px * 1.0, px * 3.0, sd)) * on;
+        C.rgb += vec3(1.0) * sline + hot * exp(-sd * sd / (px * px * 90.0)) * on * 0.6; C.a = max(C.a, sline);
+      }
+      // 天光：横向光束先亮
+      if (P == 8) {
+        float bl = exp(-b.y * b.y / (px * px * (6.0 + 400.0 * open))) * (1.0 - win(T, 0.18, 0.36)) * smoothstep(0.02, 0.1, T);
+        C.rgb += mix(hot, vec3(1.0), 0.6) * bl; C.a = max(C.a, bl);
+      }
+      // 收束：条带压成一线，白热闪一下
+      float cl = sin(PI * win(T, 0.76, 0.9));
+      float fl = exp(-b.y * b.y / (px * px * (3.0 + 50.0 * (1.0 - coll)))) * cl * (P == 4 || P == 5 ? 0.0 : 1.0);
+      C.rgb += mix(hot, vec3(1.0), 0.7) * fl * 1.2; C.a = max(C.a, fl);
+      C.rgb += (hash(gl_FragCoord.xy + floor(s * 24.0)) - 0.5) * 0.03 * C.a;   // 胶片颗粒
+      gl_FragColor = C * uFade;
     }`;
 
   // ───────────────────────── 引擎 ─────────────────────────
@@ -298,12 +593,12 @@
     const g = new THREE.InstancedBufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-.5, -.5, 0, .5, -.5, 0, .5, .5, 0, -.5, .5, 0]), 3));
     g.setIndex([0, 1, 2, 0, 2, 3]);
-    const attrs = {aP0: 2, aVel: 2, aTime: 4, aColor: 3, aMot: 4, aRot: 4}, arrays = {};
+    const attrs = {aP0: 2, aVel: 2, aAcc: 2, aTime: 4, aColor: 3, aMot: 4, aRot: 4, aExt: 4}, arrays = {};
     for (const [name, size] of Object.entries(attrs)) { const a = new THREE.InstancedBufferAttribute(new Float32Array(MAX * size), size); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); arrays[name] = a; }
     for (let i = 0; i < MAX; i++) arrays.aTime.array[i * 4 + 1] = -1;
     g.instanceCount = MAX;
     const m = new THREE.ShaderMaterial({vertexShader: PARTICLE_VS, fragmentShader: PARTICLE_FS, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
-      uniforms: {uTime: {value: 0}, uRes: {value: new THREE.Vector2(1, 1)}, uShake: {value: new THREE.Vector2()}, uGlow: {value: 1}, uAdd: {value: add ? 1 : 0}},
+      uniforms: {uTime: {value: 0}, uRes: {value: new THREE.Vector2(1, 1)}, uShake: {value: new THREE.Vector2()}, uGlow: {value: 1}, uAdd: {value: add ? 1 : 0}, uDark: {value: 0}},
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor, premultipliedAlpha: true});
     // 四边形在像素坐标里拼好再翻 y，绕向会反过来，所以用双面（否则全部被背面剔除）。0 号属性钉成逐顶点的 position（ANGLE 的老要求）。
     m.index0AttributeName = 'position';
@@ -325,9 +620,11 @@
       st.scene = new THREE.Scene(); st.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       st.meshes.normal = makeSystem(THREE, false); st.meshes.add = makeSystem(THREE, true);
       st.scene.add(st.meshes.normal.mesh, st.meshes.add.mesh);
-      st.cineMat = new THREE.ShaderMaterial({vertexShader: CINE_VS, fragmentShader: CINE_FS, depthTest: false, depthWrite: false,
-        uniforms: {uT: {value: 0}, uTime: {value: 0}, uPreset: {value: 0}, uRes: {value: new THREE.Vector2(1, 1)}, uC0: {value: new THREE.Color()}, uC1: {value: new THREE.Color()}, uC2: {value: new THREE.Color()},
-          uArt: {value: null}, uArtOk: {value: 0}, uArtAspect: {value: 1.5}, uDof: {value: 0}, uFade: {value: 1}}});
+      const V2 = () => new THREE.Vector2();
+      st.cineMat = new THREE.ShaderMaterial({vertexShader: CINE_VS, fragmentShader: CINE_FS, depthTest: false, depthWrite: false, transparent: true,
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor, premultipliedAlpha: true,
+        uniforms: {uT: {value: 0}, uTime: {value: 0}, uPreset: {value: 0}, uDur: {value: 1.8}, uRes: {value: new THREE.Vector2(1, 1)}, uC0: {value: new THREE.Color()}, uC1: {value: new THREE.Color()}, uC2: {value: new THREE.Color()},
+          uArt: {value: null}, uArtOk: {value: 0}, uArtAspect: {value: 1}, uArtScale: {value: 1}, uFocus: {value: V2()}, uDof: {value: 0}, uFade: {value: 1}, uTheta: {value: 0}, uH0: {value: .2}, uBc: {value: V2()}}});
       st.cineQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), st.cineMat); st.cineQuad.frustumCulled = false; st.cineQuad.renderOrder = 0; st.cineQuad.visible = false;
       st.scene.add(st.cineQuad);
       layer().append(canvas); resize(); applySettings();
@@ -356,7 +653,7 @@
     document.documentElement.dataset.pinkieGamefx = s.tier;
     document.documentElement.toggleAttribute('data-pinkie-gamefx-flat', s.book === 'flat' || stats.fallback);
     if (!st.renderer) return;
-    for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = .3 + s.bloom * .75;
+    for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = .35 + s.bloom * .65;
     resize();
   }
   function want() { return st.time < st.aliveUntil || st.cine || performance.now() < st.hitUntil || st.shake || st.active?.instance?.animating?.(); }
@@ -372,7 +669,7 @@
     if (document.hidden) { stats.rafActive = false; return; }
     const s = settings(), cap = s.fps ? 1000 / s.fps : 0;
     if (cap && now - st.lastDraw < cap - 1.5) { st.raf = requestAnimationFrame(frame); return; }
-    const dt = Math.min(.05, Math.max(0, (now - st.last) / 1000)); st.last = now; st.lastDraw = now;
+    const dt = Math.min(.05, Math.max(0, (now - st.last) / 1000)) * (st.timeScale ?? 1); st.last = now; st.lastDraw = now;
     const frozen = now < st.hitUntil;
     if (!frozen) st.time += dt;
     stats.frames++; stats.lastFrameAt = now; stats.frameTimes.push(now); if (stats.frameTimes.length > 600) stats.frameTimes.splice(0, 300);
@@ -381,17 +678,18 @@
     if (!frozen) st.active?.instance?.update?.(dt, st.time);
     draw();
     if (want()) st.raf = requestAnimationFrame(frame);
-    else { stats.rafActive = false; clearSystems(); draw(); hideCanvasIfIdle(); }
+    else { stats.rafActive = false; draw(); hideCanvasIfIdle(); }
   }
   function flush(sys) {
     for (const [start, count] of sys.dirty) for (const a of Object.values(sys.arrays)) a.addUpdateRange(start * a.itemSize, count * a.itemSize);
     if (sys.dirty.length) for (const a of Object.values(sys.arrays)) a.needsUpdate = true;
     sys.dirty.length = 0;
   }
+  function themeDark() { const d = document.documentElement; return d.dataset.themeMode === 'dark' || d.hasAttribute('data-pinkie-night'); }
   function draw() {
     const r = st.renderer; if (!r) return;
-    const T = st.time;
-    for (const sys of Object.values(st.meshes)) { flush(sys); const u = sys.mesh.material.uniforms; u.uTime.value = T; u.uShake.value.set(st.shake?.x || 0, st.shake?.y || 0); }
+    const T = st.time, dark = st.cine ? (st.cine.preset === 'ink' ? 0 : 1) : (st.active?.instance?.opaque ? 1 : themeDark() ? 1 : 0);
+    for (const sys of Object.values(st.meshes)) { flush(sys); const u = sys.mesh.material.uniforms; u.uTime.value = T; u.uDark.value = dark; u.uShake.value.set(st.shake?.x || 0, st.shake?.y || 0); }
     const useComposer = st.composer && (st.cine || st.active?.instance?.opaque) && settings().bloom >= .6;
     r.setRenderTarget(null); r.clear();
     if (st.active?.instance?.render && !st.cine) st.active.instance.render(r, {composer: useComposer ? st.composer : null});
@@ -400,7 +698,6 @@
     st.canvas.dataset.live = '1';
   }
   function hideCanvasIfIdle() { if (st.canvas && !st.active && !st.cine) st.canvas.dataset.live = '0'; }
-  function clearSystems() { /* 全部粒子已在着色器里过期；保留缓冲，避免重新分配。 */ }
 
   function colorOf(THREE, hex) { const c = new THREE.Color(hex).convertLinearToSRGB(); return [c.r, c.g, c.b]; }
   function targetPoint(target) {
@@ -412,60 +709,138 @@
     if (!st.active?.host) return pt;
     const r = st.active.host.getBoundingClientRect(); return {...pt, x: pt.x - r.left, y: pt.y - r.top};
   }
-  // 发射：pattern = radial | fountain | rain | ring | stream（带 to，打向目标并在目标处炸开）| spray
-  function emit(kind, origin, opts = {}) {
-    const spec = KINDS[kind] || KINDS.sparkle, THREE = st.THREE, s = settings();
-    const add = Boolean(spec.add) && !opts.normal; const sys = st.meshes[add ? 'add' : 'normal'];
-    const density = opts.ignoreDensity ? 1 : s.density;
-    const n = Math.round((opts.count ?? spec.count) * (opts.scale ?? 1) * density);
+  const rr = v => Array.isArray(v) ? rand(v[0], v[1]) : (v || 0);
+  function paletteOf(list) { return (list?.length ? list : KINDS.sparkle.pal).slice(0, 4).map(c => colorOf(st.THREE, c)); }
+  // 纸面（浅色主题）上：提高饱和、压暗；接近白的颜色换成配色里最深的那个（太浅就用碧琪玫红），否则在奶油色纸上看不见。
+  const lum = c => .299 * c[0] + .587 * c[1] + .114 * c[2];
+  function paperTone(rgb, pal, lightEl) {
+    // 目标色：配色里最饱和的那个，压到中等明度（雪 → 深一点的冰蓝，金 → 古金，粉 → 玫红）；整组都是灰白才用碧琪玫红。
+    const sat = c => Math.max(...c) - Math.min(...c);
+    const vivid = pal.reduce((a, b) => sat(b) > sat(a) ? b : a, pal[0]);
+    const target = sat(vivid) < .12 ? [.78, .13, .4] : vivid.map(v => v * Math.min(1, .42 / Math.max(.05, lum(vivid))));
+    const l = lum(rgb), k = lightEl ? .8 : .96, w = clamp((l - .6) / .3, 0, 1) * (lightEl ? .85 : .3);
+    return rgb.map((v, i) => clamp((l + (v - l) * 1.45) * k * (1 - w) + target[i] * w, 0, 1));
+  }
+  function onPaper() { return !st.cine && !st.active?.instance?.opaque && !themeDark(); }
+  function pickColor(c, pal) {
+    if (typeof c === 'number') return pal[c % pal.length];
+    if (c === 'h') { const p = pal[0]; return [p[0] + (1 - p[0]) * .6, p[1] + (1 - p[1]) * .6, p[2] + (1 - p[2]) * .6]; }
+    if (c === 'w') return [1, 1, 1];
+    return colorOf(st.THREE, c);
+  }
+  // 发射一层。pattern = radial | fountain | rain | ring | spray（angle + spread）| stream（to + travel，弧线飞向目标）| point（原地）。
+  function emitLayer(l, origin, o) {
+    const sys = st.meshes[LIGHT.has(l.e) && !l.normal ? 'add' : 'normal'];
+    const single = POINT.has(l.e) && l.n <= 2;
+    const n = single ? l.n : Math.round(l.n * o.count);
     if (n <= 0) return 0;
-    const palette = (opts.palette?.length ? opts.palette : spec.colors).map(c => colorOf(THREE, c));
-    const pattern = opts.pattern || 'radial', power = opts.power ?? 1, delay = opts.delay || 0;
-    const to = opts.to ? localPoint(targetPoint(opts.to)) : null;
-    const a = sys.arrays; let longest = 0;
-    const start = sys.head;
+    const a = sys.arrays, start = sys.head; let longest = 0;
+    const pattern = POINT.has(l.e) ? 'point' : (l.pattern || o.pattern || 'radial');
+    const to = o.to ? localPoint(targetPoint(o.to)) : null, paper = onPaper(), lightEl = LIGHT.has(l.e);
     for (let i = 0; i < n; i++) {
       const j = sys.head; sys.head = (sys.head + 1) % MAX;
-      let x = origin.x, y = origin.y, vx, vy, life = rand(...spec.life) * (opts.lifeScale || 1), g = spec.g * (opts.gravity ?? 1), drag = spec.drag;
-      const sp = rand(...spec.sp) * power; let born = st.time + delay + (opts.stagger ? Math.random() * opts.stagger : 0);
-      if (pattern === 'fountain') { const th = -Math.PI / 2 + rand(-.5, .5) * (opts.spread ?? 1); vx = Math.cos(th) * sp; vy = Math.sin(th) * sp * 1.2; }
-      else if (pattern === 'rain') { x = rand(-40, st.w + 40); y = rand(-st.h * .25, -20); vx = rand(-40, 40); vy = rand(.4, 1) * sp; g = Math.abs(g) + 200; drag = .4; born = st.time + delay + Math.random() * (opts.window ?? 1.2); life = Math.max(life, (st.h + 80) / Math.max(120, vy) * .9); }
-      else if (pattern === 'ring') { const th = i / n * Math.PI * 2; vx = Math.cos(th) * sp; vy = Math.sin(th) * sp; g *= .2; }
-      else if (pattern === 'stream' && to) { const T = opts.travel || .45; const jx = rand(-60, 60), jy = rand(-80, 20); vx = (to.x - x) / T + jx; vy = (to.y - y) / T + jy; g = 0; drag = 0; life = T * rand(.92, 1.02); born = st.time + delay + (i / n) * .12; }
-      else if (pattern === 'spray') { const dir = opts.angle ?? 0, th = dir + rand(-.35, .35); vx = Math.cos(th) * sp; vy = Math.sin(th) * sp; }
-      else { const th = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()); vx = Math.cos(th) * sp * k; vy = Math.sin(th) * sp * k - (g > 0 ? sp * .35 : 0); }
-      if (opts.rect) { x = opts.rect.left + Math.random() * opts.rect.width; y = opts.rect.top + Math.random() * opts.rect.height; }
-      const shape = pick(spec.shape), c = pick(palette), size = rand(...spec.size) * (opts.size || 1);
-      a.aP0.array.set([x, y], j * 2); a.aVel.array.set([vx, vy], j * 2);
-      a.aTime.array.set([born, life, shape, size], j * 4); a.aColor.array.set(c, j * 3);
-      a.aMot.array.set([g, drag, spec.fl[0] * rand(.4, 1), spec.fl[1] * rand(.6, 1.4)], j * 4);
-      a.aRot.array.set([Math.random() * 6.283, rand(...spec.spin), spec.grow || 0, Math.random()], j * 4);
+      let x = origin.x, y = origin.y, vx = 0, vy = 0, ax = 0, ay = l.g * (o.gravity ?? 1), drag = l.drag, turb = l.turb;
+      let life = rr(l.life) * (o.lifeScale || 1), born = st.time + (o.delay || 0) + rr(l.delay) + (o.stagger ? Math.random() * o.stagger : 0);
+      const sp = rr(l.sp) * (o.power ?? 1);
+      let th = Math.random() * Math.PI * 2;
+      if (pattern === 'point') { if (l.e === E.ARC) th = Math.random() * Math.PI * 2; }
+      else if (pattern === 'fountain') { th = -Math.PI / 2 + rand(-.5, .5) * (o.spread ?? 1); vx = Math.cos(th) * sp; vy = Math.sin(th) * sp * 1.15; }
+      else if (pattern === 'rain') { x = rand(-40, st.w + 40); y = rand(-st.h * .2, -20); vx = rand(-40, 40) + (o.wind || 0); vy = rand(.5, 1) * sp + 200; ay = Math.abs(ay) + 160; drag = .3; born = st.time + (o.delay || 0) + Math.random() * (o.window ?? 1.2); life = Math.max(life, (st.h + 80) / Math.max(160, vy)); }
+      else if (pattern === 'ring') { th = i / n * Math.PI * 2 + rand(-.05, .05); vx = Math.cos(th) * sp; vy = Math.sin(th) * sp; ay *= .15; if (o.radius) { x += Math.cos(th) * o.radius; y += Math.sin(th) * o.radius; } }
+      else if (pattern === 'spray') { th = (o.angle ?? 0) + rand(-1, 1) * (o.spread ?? .35); vx = Math.cos(th) * sp; vy = Math.sin(th) * sp; }
+      else if (pattern === 'stream' && to) {
+        const T = o.travel || .55, dx = to.x - x, dy = to.y - y, dist = Math.max(1, Math.hypot(dx, dy));
+        const bend = (i % 2 ? 1 : -1) * rand(.25, 1) * dist * 2.6 / (T * T);
+        ax = -dy / dist * bend; ay = dx / dist * bend; vx = (dx - .5 * ax * T * T) / T; vy = (dy - .5 * ay * T * T) / T;
+        drag = 0; turb = [0, 0]; life = T * rand(.97, 1); born = st.time + (o.delay || 0) + (i / n) * .18;
+      } else { const k = Math.sqrt(Math.random()); vx = Math.cos(th) * sp * k; vy = Math.sin(th) * sp * k - (ay > 0 ? sp * .3 : 0); }
+      if (o.rect) { x = o.rect.left + Math.random() * o.rect.width; y = o.rect.top + Math.random() * o.rect.height; }
+      const size = rr(l.size) * (o.size || 1), aspect = rr(l.aspect) || 1;
+      const angle0 = l.alignV ? Math.atan2(vy, vx) : l.e === E.CRESCENT ? (o.angle ?? rand(-1.1, -.4)) : th;
+      const spin = l.alignV ? 0 : rr(l.spin), tumble = rr(l.tumble) * (Math.random() < .5 ? -1 : 1);
+      const c0 = pickColor(l.c[Math.floor(Math.random() * l.c.length)], o.pal), c = paper ? paperTone(c0, o.pal, lightEl) : c0;
+      a.aP0.array.set([x, y], j * 2); a.aVel.array.set([vx, vy], j * 2); a.aAcc.array.set([ax, ay], j * 2);
+      a.aTime.array.set([born, life, l.e, size], j * 4); a.aColor.array.set(c, j * 3);
+      a.aMot.array.set([drag, (turb[0] || 0) * rand(.4, 1), (turb[1] || 0) * rand(.6, 1.4), l.stretch || 0], j * 4);
+      a.aRot.array.set([angle0, spin, l.grow || 0, Math.random()], j * 4);
+      a.aExt.array.set([aspect, tumble, l.squash ?? 1, l.int ?? 1], j * 4);
       longest = Math.max(longest, born - st.time + life);
     }
     if (start + n <= MAX) sys.dirty.push([start, n]); else { sys.dirty.push([start, MAX - start]); sys.dirty.push([0, (start + n) % MAX]); }
     st.aliveUntil = Math.max(st.aliveUntil, st.time + longest);
-    if (pattern === 'stream' && to && opts.impact !== false) emit(opts.impactKind || kind, to, {...opts, pattern: 'radial', to: null, delay: delay + (opts.travel || .45), count: Math.round((opts.count ?? spec.count) * .7), power: .8});
     return n;
   }
+  // 一组层一起放。o.count 是数量倍数（已乘粒子密度）；o.pal 是 sRGB 数组。
+  function play(layers, origin, opts = {}) {
+    const s = settings();
+    const scale = (opts.scale ?? 1) * (opts.count ? clamp(opts.count / 60, .2, 3) : 1) * (opts.ignoreDensity ? 1 : s.density);
+    const o = {...opts, count: scale, pal: Array.isArray(opts.pal?.[0]) ? opts.pal : paletteOf(opts.pal || opts.palette)};
+    let n = 0; for (const l of layers) n += emitLayer(l, origin, o);
+    return n;
+  }
+  async function begin() {
+    if (hiddenOrQuiet()) return false;
+    if (!(await ensure())) return null;
+    showCanvas(); return true;
+  }
   async function burst(kind, at, opts = {}) {
-    if (hiddenOrQuiet()) return 0;
-    if (!(await ensure())) return domBurst(kind, at, opts);
-    showCanvas();
-    const n = emit(kind, localPoint(targetPoint(at)), opts);
+    if (opts.pattern === 'stream' && opts.to) return comet(at, opts.to, {...opts, palette: opts.palette || (KINDS[kind] || KINDS.sparkle).pal});
+    const ok = await begin(); if (ok === false) return 0; if (ok === null) return domBurst(kind, at, opts);
+    const spec = KINDS[kind] || KINDS.sparkle;
+    const n = play(spec.layers, localPoint(targetPoint(at)), {...opts, pal: opts.palette?.length ? opts.palette : spec.pal});
     kick(); return n;
+  }
+  // 命中：闪光 + 冲击环 + 形态的碎屑 + 招式特有的一层；暴击加顿帧、震屏、第二道环和更快的火花。
+  async function hit(name = 'sparkle', at, opts = {}) {
+    const def = HITS[name] || HITS.sparkle, spec = KINDS[def[0]] || KINDS.sparkle, crit = Boolean(opts.crit);
+    if (opts.sound !== false) sfx(crit ? 'crit' : 'hit', {form: opts.form});
+    if (crit) { shake(opts.shake ?? 1.1); hitstop(opts.hitstop ?? 80); }
+    const ok = await begin(); if (ok === false) return 0; if (ok === null) return domBurst(def[0], at, opts);
+    const k = crit ? 1.35 : 1;
+    const ringy = crit || ['stamp', 'ping', 'lens', 'shard'].includes(name);
+    const layers = [flash(.7 * k), ...(ringy ? [ring(.5 * k)] : []), ...spec.layers.filter(l => l.e !== E.FLASH && l.e !== E.RING).map(l => ({...l, n: Math.max(1, Math.round(l.n * (crit ? .9 : .62)))})), ...def[1]];
+    if (crit) layers.push(streaks(18, {sp: [700, 1500]}), ring(.95, {c: ['h'], delay: .06}));
+    const n = play(layers, localPoint(targetPoint(at)), {size: 1.3, ...opts, pal: opts.palette?.length ? opts.palette : spec.pal});
+    kick(); return n;
+  }
+  // 彗星：一串流光沿弧线飞向目标（HUD 计数器等），到达时一点闪光和小环。
+  async function comet(from, to, opts = {}) {
+    const ok = await begin(); if (!ok) return 0;
+    const T = opts.travel || .55, n = clamp(Math.round(opts.count ?? 12), 3, 36), pal = opts.palette;
+    const a = localPoint(targetPoint(from));
+    play([L(E.STREAK, n, {size: [2, 3.1], stretch: .05, c: ['h', 0, 2]}), L(E.MOTE, Math.ceil(n * .5), {size: [6, 10], c: ['h', 0], int: .9})], a, {pattern: 'stream', to, travel: T, scale: 1, ignoreDensity: true, pal});
+    play([flash(.32), ring(.3), glints(4, {sp: [40, 160], size: [12, 24]})], localPoint(targetPoint(to)), {delay: T * .92, scale: 1, ignoreDensity: true, pal});
+    kick(); return n;
+  }
+  // 法阵：地面透视的细线法阵（描线 → 锁定一闪 → 光柱 → 淡出），给施法 / 觉醒 / 守关用。
+  async function sigil(at, opts = {}) {
+    const ok = await begin(); if (!ok) return 0;
+    const size = opts.size || 320, dur = opts.duration || 1.9, pal = opts.palette || ['#ffd36e', '#ff8fc0', '#fff4d6'];
+    const p = localPoint(targetPoint(at));
+    play([L(E.SIGIL, 1, {life: [dur, dur], size: [size, size], squash: opts.flat === false ? 1 : .36, c: [0]}),
+      L(E.PILLAR, 1, {life: [dur * .6, dur * .6], size: [size * .55, size * .55], delay: dur * .24, c: ['h']}),
+      L(E.MOTE, 26, {sp: [10, 60], life: [1, 1.8], size: [4, 8], g: -160, drag: 1, turb: [8, 2], c: ['h', 0, 2], delay: [dur * .2, dur * .5]}),
+      glints(6, {delay: dur * .24, sp: [20, 120]})], p, {scale: 1, ignoreDensity: true, pal, rect: null});
+    kick(); return 1;
+  }
+  async function impact(at, opts = {}) {
+    const ok = await begin(); if (!ok) return 0;
+    const k = opts.scale || 1;
+    play([flash(.9 * k), ring(.8 * k), ring(.5 * k, {c: ['h'], delay: .05}), streaks(24), glints(6), motes(14)], localPoint(targetPoint(at)), {...opts, scale: k, pal: opts.palette});
+    kick(); return 1;
   }
   function hiddenOrQuiet() { return document.hidden || settings().density <= 0; }
   function showCanvas() { if (st.canvas) { if (!st.active && st.canvas.parentElement !== layer()) layer().append(st.canvas); st.canvas.dataset.live = '1'; } }
 
-  // WebGL 起不来时的平面版：几颗 CSS 星星，transform / opacity 动画，播完就删。
+  // WebGL 起不来时的平面版：几点柔光，transform / opacity 动画，播完就删。
   function domBurst(kind, at, opts = {}) {
     const pt = targetPoint(at), s = settings(); if (s.density <= 0) return 0;
     const spec = KINDS[kind] || KINDS.sparkle, n = Math.max(4, Math.round(10 * s.density * (opts.scale || 1))), host = layer();
     for (let i = 0; i < n; i++) {
-      const d = document.createElement('i'); d.className = 'pk-gamefx-dot'; d.style.left = pt.x + 'px'; d.style.top = pt.y + 'px'; d.style.background = pick(opts.palette || spec.colors);
+      const d = document.createElement('i'); d.className = 'pk-gamefx-dot'; d.style.left = pt.x + 'px'; d.style.top = pt.y + 'px'; d.style.setProperty('--c', pick(opts.palette || spec.pal));
       const th = Math.random() * Math.PI * 2, r = rand(40, 120) * (opts.power || 1);
       host.append(d);
-      const anim = d.animate([{transform: 'translate(-50%,-50%) scale(1)', opacity: 1}, {transform: `translate(calc(-50% + ${Math.cos(th) * r}px), calc(-50% + ${Math.sin(th) * r}px)) scale(.3)`, opacity: 0}], {duration: rand(450, 800), easing: 'cubic-bezier(.2,.7,.3,1)'});
+      const anim = d.animate([{transform: 'translate(-50%,-50%) scale(1)', opacity: 1}, {transform: `translate(calc(-50% + ${Math.cos(th) * r}px), calc(-50% + ${Math.sin(th) * r}px)) scale(.3)`, opacity: 0}], {duration: rand(450, 800), easing: 'cubic-bezier(.16,1,.3,1)'});
       anim.onfinish = () => d.remove();
     }
     return n;
@@ -493,12 +868,22 @@
     return node.animate(frames, {duration: ms, easing: 'linear', composite: 'add'});
   }
 
-  // ───────────────────────── 大招过场 ─────────────────────────
+  // ───────────────────────── 大招切入 ─────────────────────────
   const textures = new Map();
   function texture(url) {
     if (!url || !st.THREE) return Promise.resolve(null);
     if (textures.has(url)) return textures.get(url);
-    const p = new Promise(resolve => { const img = new Image(); img.decoding = 'async'; img.onload = () => { const t = new st.THREE.Texture(keyBackground(img)); t.colorSpace = st.THREE.NoColorSpace; t.needsUpdate = true; t.userData.aspect = img.naturalWidth / Math.max(1, img.naturalHeight); resolve(t); }; img.onerror = () => resolve(null); img.src = new URL(url, BASE).href; });
+    const p = new Promise(resolve => {
+      const img = new Image(); img.decoding = 'async';
+      img.onload = () => {
+        const THREE = st.THREE, src = keyBackground(img);
+        const t = new THREE.Texture(src); t.colorSpace = THREE.NoColorSpace; t.premultiplyAlpha = true; t.generateMipmaps = true;
+        t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 4; t.needsUpdate = true;
+        t.userData.aspect = img.naturalWidth / Math.max(1, img.naturalHeight); Object.assign(t.userData, subjectBox(src));
+        resolve(t);
+      };
+      img.onerror = () => resolve(null); img.src = new URL(url, BASE).href;
+    });
     textures.set(url, p); return p;
   }
   const DEFAULT_ART = {daily: 'laolao-mode-chat-hd.png', learning: 'laolao-mode-learning-hd.png', project: 'laolao-mode-project-hd.png', thinking: 'laolao-mode-thinking-hd.png', unrestricted: 'laolao-mode-unrestricted-hd.png'};
@@ -518,83 +903,153 @@
       g.putImageData(d, 0, 0); return c;
     } catch { return img; }
   }
-  const PRESET_TIMING = {burst: 1.5, slash: 1.35, spell: 1.9, curtain: 2, ink: 1.9, warp: 1.8, rain: 1.8, stamp: 1.4, beam: 1.7};
+  // 透明立绘：找角色的外框，焦点放在头部（外框上方 30%），并按角色高度归一化取景；整张不透明的大招图用默认取景。
+  function subjectBox(src) {
+    try {
+      const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height, S = 96, sh = Math.max(1, Math.round(S * h / w));
+      const c = document.createElement('canvas'); c.width = S; c.height = sh; const g = c.getContext('2d', {willReadFrequently: true}); g.drawImage(src, 0, 0, S, sh);
+      const d = g.getImageData(0, 0, S, sh).data; let x0 = S, y0 = sh, x1 = -1, y1 = -1;
+      for (let y = 0; y < sh; y++) for (let x = 0; x < S; x++) if (d[(y * S + x) * 4 + 3] > 140) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      if (x1 < 0) return {focus: [.5, .38], fill: 1, opaque: false};
+      const bw = (x1 - x0 + 1) / S, bh = (y1 - y0 + 1) / sh;
+      if (bw > .97 && bh > .97) return {focus: [.5, .42], fill: 1, opaque: true};
+      return {focus: [(x0 + x1 + 1) / 2 / S, (y0 + (y1 - y0 + 1) * .3) / sh], fill: clamp(.62 / bh, .7, 1.8), opaque: false};
+    } catch { return {focus: [.5, .38], fill: 1, opaque: false}; }
+  }
   function cinematic(preset, opts = {}) {
     const job = st.cineQueue.then(() => runCinematic(preset, opts));
     st.cineQueue = job.catch(() => {}); return job;
   }
+  const DEFAULT_PALETTE = ['#F7A8C8', '#DB1F74', '#FFD36E'];
   async function runCinematic(preset, opts) {
     const s = settings();
     if (!PRESETS.includes(preset)) preset = 'burst';
     if (document.hidden || s.cine === 'off') return {played: false, reason: s.cine === 'off' ? 'off' : 'hidden'};
     if (!(await ensure())) return domCinematic(preset, opts);
-    const palette = (opts.palette?.length ? opts.palette : ['#DB1F74', '#7a2a5c', '#ffd34d']).map(c => new st.THREE.Color(c).convertLinearToSRGB());
-    // 没给立绘时先用现成的模式碧琪图（App 里和注入脚本同一个根目录），B 的大招立绘到了就按形态换。
-    const tex = await Promise.race([texture(opts.art || DEFAULT_ART[opts.form?.id || opts.form] || DEFAULT_ART.daily), new Promise(r => setTimeout(() => r(null), 900))]);
+    const THREE = st.THREE, geo = PRESET_GEO[preset], pal = opts.palette?.length >= 3 ? opts.palette : DEFAULT_PALETTE;
+    const formId = typeof opts.form === 'string' ? opts.form : opts.form?.id;
+    // 没给立绘时先用现成的模式碧琪图，B 的大招立绘到了就按形态换。
+    const tex = await Promise.race([texture(opts.art || DEFAULT_ART[formId] || DEFAULT_ART.daily), new Promise(r => setTimeout(() => r(null), 900))]);
     const dur = (opts.duration || PRESET_TIMING[preset]) * (s.cine === 'short' ? .62 : 1);
-    const u = st.cineMat.uniforms;
-    u.uPreset.value = PRESETS.indexOf(preset); u.uC0.value.copy(palette[0]); u.uC1.value.copy(palette[1] || palette[0]); u.uC2.value.copy(palette[2] || palette[0]);
-    u.uArt.value = tex; u.uArtOk.value = tex ? 1 : 0; u.uArtAspect.value = tex?.userData.aspect || 1.5; u.uDof.value = s.dof ? 1 : 0; u.uT.value = 0; u.uFade.value = 0;
+    const u = st.cineMat.uniforms, col = c => new THREE.Color(c).convertLinearToSRGB();
+    u.uPreset.value = PRESETS.indexOf(preset); u.uDur.value = dur; u.uC0.value.copy(col(pal[0])); u.uC1.value.copy(col(pal[1])); u.uC2.value.copy(col(pal[2]));
+    u.uArt.value = tex; u.uArtOk.value = tex ? 1 : 0; u.uArtAspect.value = tex?.userData.aspect || 1;
+    const focus = opts.focus || tex?.userData.focus || [.5, .38]; u.uFocus.value.set(focus[0], focus[1]); u.uArtScale.value = opts.artScale || tex?.userData.fill || 1;
+    u.uDof.value = s.dof ? 1 : 0; u.uT.value = 0; u.uFade.value = 1; u.uTheta.value = geo.theta; u.uH0.value = geo.h; u.uBc.value.set(geo.c[0], geo.c[1]);
     if (s.bloom >= .6) await ensureComposer();
     // 过场期间画布挪到最上层全屏，结束后放回原处。
     const prevHost = st.active; if (prevHost) detachScene(true);
     layer().append(st.canvas); st.canvas.dataset.live = '1'; st.canvas.dataset.cine = '1'; resize();
     st.cineQuad.visible = true;
-    const text = cineText(preset, opts, dur);
+    const text = cineText(preset, opts, dur, geo, pal);
     return new Promise(resolve => {
       const done = (skipped = false) => {
         if (!st.cine) return; st.cine = null; st.cineQuad.visible = false; applySettings(); delete st.canvas.dataset.cine; text.remove();
         removeEventListener('keydown', onKey, true); text.removeEventListener('pointerdown', onSkip);
-        if (prevHost) attachScene(prevHost); else { draw(); }
+        if (prevHost) attachScene(prevHost); else { draw(); kick(); }
         resolve({played: true, skipped, preset});
       };
       const onSkip = () => done(true);
       const onKey = event => { if (event.key === 'Escape' || event.key === ' ' || event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); done(true); } };
       text.addEventListener('pointerdown', onSkip); addEventListener('keydown', onKey, true);
-      st.cine = {preset, t: 0, dur, opts, palette: opts.palette, particle: opts.particle || 'sparkle', fired: new Set(), done};
+      st.cine = {preset, t: 0, dur, opts, geo, pal, particle: opts.particle || 'sparkle', fired: new Set(), done};
       kick();
-      sfx('ult', {form: opts.form, preset});
+      sfx('ult', {form: opts.form, preset, dur});
     });
   }
   function stepCine(dt, frozen) {
     const c = st.cine; if (!frozen) c.t += dt;
     const T = clamp(c.t / c.dur, 0, 1), u = st.cineMat.uniforms;
     u.uT.value = T; u.uTime.value = st.time;
-    // 过场里立绘很亮：光晕减半，避免脸上一团过曝。
-    for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = (.3 + settings().bloom * .75) * .45; u.uFade.value = Math.min(1, c.t / .12) * (1 - clamp((T - .9) / .1, 0, 1));
-    const fire = (name, at, fn) => { if (T >= at && !c.fired.has(name)) { c.fired.add(name); fn(); } };
-    const cx = st.w / 2, cy = st.h / 2, kind = c.particle, pal = c.palette, P = c.preset;
-    fire('a', .12, () => {
-      if (P === 'rain') emit(kind, {x: cx, y: 0}, {pattern: 'rain', count: 520, palette: pal, window: c.dur * .7, ignoreDensity: false, scale: 1});
-      else if (P === 'warp') emit('sparkle', {x: cx, y: cy}, {pattern: 'ring', count: 160, power: 2.2, palette: pal});
-      else if (P === 'curtain') emit('confetti', {x: cx, y: -10}, {pattern: 'rain', count: 220, palette: pal, window: c.dur * .5});
-      else emit(kind, {x: cx, y: cy}, {pattern: 'ring', count: 90, power: 2.4, palette: pal});
-      if (P === 'stamp' || P === 'burst' || P === 'slash') { shake(P === 'stamp' ? 2 : 1.3); }
+    for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = (.35 + settings().bloom * .65) * .75;
+    const fire = (name, at, fn) => { if (T >= at && !c.fired.has(name)) { c.fired.add(name); try { fn(); } catch { /* 单个粒子事件失败不影响过场 */ } } };
+    const W = st.w, H = st.h, g = c.geo, P = c.preset, pal = c.pal, one = {scale: 1, ignoreDensity: true, pal};
+    const cx = W / 2 + g.c[0] * H, cy = H / 2 - g.c[1] * H;
+    const dir = [Math.cos(g.theta), -Math.sin(g.theta)], perp = [Math.sin(g.theta), Math.cos(g.theta)];
+    const at = (along, across = 0) => ({x: cx + dir[0] * along * H + perp[0] * across * H, y: cy + dir[1] * along * H + perp[1] * across * H});
+    const density = Math.max(.35, settings().density);
+    if (!['ink', 'warp', 'curtain'].includes(P)) fire('enter', .07, () => {
+      for (let i = -2; i <= 2; i++) play([streaks(Math.round(9 * density), {sp: [1200, 2200], g: 0, drag: .9, stretch: .07, life: [.35, .6], c: ['h', 2]})], at(W / H * .55, i * g.h * .38), {...one, pattern: 'spray', angle: Math.atan2(-dir[1], -dir[0]), spread: .025});
     });
-    fire('b', .3, () => { emit(kind, {x: st.w * .12, y: st.h * .95}, {pattern: 'fountain', count: 60, power: 1.5, palette: pal, spread: .8}); emit(kind, {x: st.w * .88, y: st.h * .95}, {pattern: 'fountain', count: 60, power: 1.5, palette: pal, spread: .8}); if (P === 'stamp') { emit('confetti', {x: cx, y: cy}, {pattern: 'ring', count: 70, power: 2.2}); } });
-    fire('c', .55, () => emit('sparkle', {x: cx, y: st.h * .2}, {pattern: 'rain', count: 60, palette: pal, window: .5}));
+    fire('focus', .32, () => { for (let i = 0; i < 6; i++) play([glints(1, {size: [22, 44], sp: [0, 30], c: ['h', 2]})], at(rand(-.6, .9) * W / H * .5, (i % 2 ? 1 : -1) * g.h), one); });
+    if (P === 'burst') fire('nova', .08, () => play([flash(2.4), ring(1.8, {c: [2]})], at(-W / H * .17), one));
+    if (P === 'slash') {
+      fire('cut', .06, () => { play([streaks(Math.round(34 * density), {sp: [500, 1400], g: 120, c: ['h', 2]})], at(0), {...one, pattern: 'spray', angle: Math.atan2(dir[1], dir[0]) + Math.PI, spread: .12}); play([streaks(Math.round(34 * density), {sp: [500, 1400], g: 120, c: ['h', 2]})], at(0), {...one, pattern: 'spray', angle: Math.atan2(dir[1], dir[0]), spread: .12}); });
+      fire('cut-shake', .11, () => shake(1.1));
+    }
+    if (P === 'spell') fire('pillar', .3, () => {
+      const base = {x: W / 2 - .36 * H, y: H / 2 + .3 * H};
+      play([L(E.MOTE, Math.round(40 * density), {sp: [10, 60], life: [1.2, 2], size: [4, 9], g: -150, drag: .8, turb: [10, 2], c: ['h', 2, 0]})], base, {...one, rect: {left: W / 2 - H * .5, top: base.y - H * .06, width: H, height: H * .12}});
+    });
+    if (P === 'curtain') {
+      fire('dust', .08, () => play([L(E.MOTE, Math.round(46 * density), {sp: [4, 30], life: [1.6, 2.4], size: [3, 7], g: -8, drag: .5, turb: [12, .8], c: ['w', 2], int: .7})], {x: W / 2, y: H / 2}, {...one, rect: {left: W / 2 - H * .32, top: 0, width: H * .64, height: H}}));
+      fire('foil', .3, () => play([L(E.FOIL, Math.round(60 * density), {sp: [80, 200], life: [1.8, 2.6], size: [6, 10], aspect: .6, g: 160, drag: 1.2, turb: [26, 2], spin: [-4, 4], tumble: [5, 11], c: [2, 0, 'w']})], {x: W / 2, y: 0}, {...one, pattern: 'rain', window: c.dur * .4}));
+    }
+    if (P === 'warp') fire('converge', .04, () => play([streaks(Math.round(70 * density), {sp: [900, 1600], g: 0, drag: 0, stretch: .06, life: [.32, .42], c: ['h', 2]})], at(0), {...one, pattern: 'ring', power: -1, radius: H * .75}));
+    if (P === 'rain') fire('fall', .05, () => play([streaks(Math.round(80 * density), {sp: [700, 1100], g: 400, drag: .2, stretch: .05, size: [1.6, 2.6], life: [1, 1.4], c: ['h', 2, 0]})], {x: W / 2, y: 0}, {...one, pattern: 'rain', window: c.dur * .62, wind: 260}));
+    if (P === 'stamp') fire('seal', .26, () => {
+      const p = sealPoint(c, W, H);
+      shake(1.6); hitstop(70); sfx('stamp');
+      play([ring(1.1, {c: [0]}), L(E.PUFF, Math.round(8 * density), {sp: [80, 260], life: [.8, 1.4], size: [50, 110], drag: 3, grow: 1.2, c: ['#e8ddd3', '#cbbcb0'], int: .7}), L(E.INK, Math.round(14 * density), {sp: [200, 600], life: [.4, .8], size: [4, 9], g: 500, drag: 2.4, c: [1]})], p, one);
+    });
+    if (P === 'beam') fire('flare', .1, () => play([flash(2.4, {c: ['h']}), glints(4, {size: [40, 70], sp: [0, 40]})], at(W / H * .2), one));
+    if (P === 'ink') fire('blot', .05, () => {
+      for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 + rand(-.2, .2), ex = cx + Math.cos(a) * H * .6 * rand(.95, 1.12), ey = cy + Math.sin(a) * H * .36 * rand(.95, 1.12);
+        if (i % 2) play([L(E.INK, 1, {sp: [10, 40], life: [1.6, 2.1], size: [H * .035, H * .07], drag: 4, delay: [.08, .22], int: .8, c: ['#1c1218']})], {x: ex, y: ey}, one);
+        play([L(E.INK, Math.round(4 * density), {sp: [260, 700], life: [.4, .8], size: [3, 8], g: 600, drag: 2.4, delay: [.1, .2], c: ['#1c1218']})], {x: ex, y: ey}, {...one, pattern: 'spray', angle: Math.atan2(Math.sin(a) * .6, Math.cos(a)), spread: .5}); }
+    });
+    fire('release', .84, () => {
+      const p = P === 'warp' ? at(0) : at(-W / H * .1);
+      if (P === 'ink') play([L(E.INK, Math.round(36 * density), {sp: [300, 1100], life: [.5, 1], size: [4, 12], g: 700, drag: 2.2, c: ['#1c1218']}), ring(1.6, {c: [1]})], p, one);
+      else play([flash(2.2), ring(2.4), ring(1.5, {c: ['h'], delay: .06}), streaks(Math.round(70 * density), {sp: [600, 1700]}), glints(14, {size: [20, 48]}), motes(Math.round(44 * density), {life: [1.4, 2.4], sp: [60, 420]})], p, one);
+      const kind = KINDS[c.particle] || KINDS.sparkle;
+      play(kind.layers.filter(l => l.e !== E.FLASH && l.e !== E.RING), p, {...one, scale: 1.1 * density, pal});
+      shake(.7); sfx('release', {form: c.opts.form});
+    });
     if (c.t >= c.dur) c.done(false);
   }
-  function cineText(preset, opts, dur) {
-    const n = document.createElement('div'); n.className = 'pk-gamefx-cine-text'; n.dataset.preset = preset; n.style.setProperty('--dur', dur + 's');
-    const title = document.createElement('strong'); title.textContent = opts.text || '碧琪大招！';
-    const sub = document.createElement('span'); sub.textContent = opts.sub || '';
-    const hint = document.createElement('em'); hint.textContent = '点一下跳过';
-    n.append(title, sub, hint); layer().append(n); return n;
+  function sealPoint(c, W, H) { const g = c.geo, dx = W * .78 - (W / 2 + g.c[0] * H); return {x: W * .78, y: H / 2 - g.c[1] * H + dx * Math.tan(g.theta) * -1}; }
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function cineText(preset, opts, dur, geo, pal) {
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+    const n = el('div', 'pk-cut'); n.dataset.preset = preset;
+    const formName = opts.kicker || (typeof opts.form === 'object' ? opts.form?.name : '') || '';
+    n.style.setProperty('--dur', dur + 's'); n.style.setProperty('--theta', (-geo.theta * 180 / Math.PI).toFixed(2) + 'deg');
+    n.style.setProperty('--h0', (geo.h * 100).toFixed(2) + 'vh'); n.style.setProperty('--cx', (geo.c[0] * 100).toFixed(2) + 'vh'); n.style.setProperty('--cy', (-geo.c[1] * 100).toFixed(2) + 'vh');
+    n.style.setProperty('--accent', pal[2] || '#FFD36E'); n.style.setProperty('--tone', pal[1] || '#DB1F74');
+    const frame = el('div', 'pk-cut__frame'), copy = el('div', 'pk-cut__copy');
+    const kicker = el('div', 'pk-cut__kicker'); kicker.append(el('i', '', 'ULTIMATE'), el('b', '', '')); if (formName) kicker.append(el('span', '', formName));
+    copy.append(kicker, el('strong', 'pk-cut__title', opts.text || '碧琪 · 大招'), el('i', 'pk-cut__rule'), el('span', 'pk-cut__sub', [PRESET_EN[preset], opts.sub].filter(Boolean).join('  ·  ')));
+    frame.append(copy);
+    if (preset === 'stamp') { const cxp = innerWidth / 2 + geo.c[0] * innerHeight; n.style.setProperty('--seal', ((innerWidth * .78 - cxp) / Math.cos(geo.theta)).toFixed(1) + 'px'); frame.append(sealSvg(opts.seal || '碧琪上岸')); }
+    n.append(frame, el('em', 'pk-cut__skip', '点击跳过'));
+    layer().append(n); return n;
+  }
+  // 白文印：朱红底、阴刻白字（右列从上往下读），噪声打出缺墨，轻微位移做出手按的毛边。
+  function sealSvg(text) {
+    const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'pk-cut__seal'); svg.setAttribute('viewBox', '0 0 120 120'); svg.setAttribute('aria-hidden', 'true');
+    const chars = [...String(text)].slice(0, 4); while (chars.length < 4) chars.push('');
+    const pos = [[86, 46], [86, 98], [34, 46], [34, 98]];
+    svg.innerHTML = `<defs><filter id="pk-seal-ink" x="-6%" y="-6%" width="112%" height="112%"><feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="7" result="n"/>`
+      + `<feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  7 0 0 0 -1.1" result="holes"/><feComposite in="SourceGraphic" in2="holes" operator="in" result="e"/>`
+      + `<feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="3" result="w"/><feDisplacementMap in="e" in2="w" scale="2.6" xChannelSelector="R" yChannelSelector="G"/></filter></defs>`
+      + `<g filter="url(#pk-seal-ink)"><rect x="5" y="5" width="110" height="110" rx="9" fill="#c4122f"/><rect x="12.5" y="12.5" width="95" height="95" rx="5" fill="none" stroke="#fbf1e8" stroke-width="2.6"/>`
+      + chars.map((ch, i) => `<text x="${pos[i][0]}" y="${pos[i][1]}" text-anchor="middle" font-size="44" font-weight="900" fill="#fbf1e8" font-family="Songti SC, STSong, Noto Serif SC, serif">${ch.replace(/[<&>]/g, '')}</text>`).join('') + `</g>`;
+    return svg;
   }
   function domCinematic(preset, opts) {
-    // 平面版：一张全屏手账卡片 + 文字，0.9 s，不需要 WebGL。
+    // 平面版（WebGL 起不来）：压暗 + 同一套标题排版，1 秒。
     return new Promise(resolve => {
-      const n = cineText(preset, opts, .9); n.classList.add('is-flat');
+      const n = cineText(preset, opts, 1, PRESET_GEO[preset] || PRESET_GEO.burst, opts.palette?.length >= 3 ? opts.palette : DEFAULT_PALETTE); n.classList.add('is-flat');
       const end = () => { n.remove(); resolve({played: true, flat: true, preset}); };
-      n.addEventListener('pointerdown', end); setTimeout(end, 900);
+      n.addEventListener('pointerdown', end); setTimeout(end, 1000);
     });
   }
   async function warm() {
     try {
       if (!st.renderer || st.warmed) return; st.warmed = true;
       st.cineQuad.visible = true; st.renderer.compile(st.scene, st.camera); st.cineQuad.visible = Boolean(st.cine);
-      if (settings().bloom >= .6 && await ensureComposer()) { const v = st.cineQuad.visible; st.cineQuad.visible = true; st.cineMat.uniforms.uFade.value = 0; st.composer.render(); st.cineQuad.visible = v; st.renderer.setRenderTarget(null); st.renderer.clear(); }
+      if (settings().bloom >= .6 && await ensureComposer()) { const v = st.cineQuad.visible; st.cineQuad.visible = true; st.cineMat.uniforms.uFade.value = 0; st.composer.render(); st.cineMat.uniforms.uFade.value = 1; st.cineQuad.visible = v; st.renderer.setRenderTarget(null); st.renderer.clear(); }
     } catch { /* 预热失败不影响正常播放 */ }
   }
   async function ensureComposer() {
@@ -603,7 +1058,7 @@
     const {EffectComposer, RenderPass, UnrealBloomPass, OutputPass} = addons;
     const composer = new EffectComposer(st.renderer); composer.setPixelRatio(st.dpr); composer.setSize(st.w, st.h);
     st.renderPass = new RenderPass(st.scene, st.camera); st.renderPass.clear = true;
-    st.bloomPass = new UnrealBloomPass(new st.THREE.Vector2(st.w, st.h), .34, .4, .93);
+    st.bloomPass = new UnrealBloomPass(new st.THREE.Vector2(st.w, st.h), .42, .35, .9);
     st.outputPass = new OutputPass();
     composer.addPass(st.renderPass); composer.addPass(st.bloomPass); composer.addPass(st.outputPass);
     st.composer = composer; return true;
@@ -657,6 +1112,18 @@
     const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); src.buffer = b; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.value = level;
     src.connect(f); f.connect(g); g.connect(audio.master); if (wet) { const w = ctx.createGain(); w.gain.value = wet; g.connect(w); w.connect(audio.wet); } src.start(t0);
   }
+  // 噪声扫频：起势（rise）或拖尾，配合滤波器频率指数滑动。
+  function sweep(ctx, {at = 0, dur = .6, from = 300, to = 4000, level = .15, q = .7, type = 'bandpass', wet = .3, rise = true}) {
+    const t0 = ctx.currentTime + at, len = Math.max(1, Math.floor(ctx.sampleRate * dur)), b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < len; i++) { const k = i / len; d[i] = (Math.random() * 2 - 1) * (rise ? k * k * (1 - k * k * k * .6) : (1 - k) ** 2); }
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); src.buffer = b; f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(from, t0); f.frequency.exponentialRampToValueAtTime(to, t0 + dur); g.gain.value = level;
+    src.connect(f); f.connect(g); g.connect(audio.master); if (wet) { const w = ctx.createGain(); w.gain.value = wet; g.connect(w); w.connect(audio.wet); } src.start(t0);
+  }
+  // 形态目录里出现的音色名补齐（没有的回落到钟声）。
+  Object.assign(TIMBRE, {sine: ['sine', [1], .6], bubbly: ['sine', [1, 2], .4], glass: ['sine', [1, 2.76, 5.4], 1.1], click: ['triangle', [1], .15], roar: ['sawtooth', [1, .5], .6],
+    fanfare: ['sawtooth', [1, 2, 3], .55], steel: ['triangle', [1, 2.4, 3.9], .9], pop: ['sine', [1], .2], twinkle: ['sine', [1, 4], 1.2], celesta: ['sine', [1, 4, 8], .9], guzheng: ['triangle', [1, 3], .5], whoosh: ['sine', [1, 2], .5]});
+  // 音效：不用方波 8-bit 音色；打击 = 高频瞬态 + 有音高的身体 + 形态音色；大招 = 起势扫频 + 和弦 + 释放时的低频冲击和闪光尾音。
   function sfx(name, opts = {}) {
     if (!audio.gesture || document.hidden || !soundOn() || (document.hasFocus && !document.hasFocus())) return false;
     const ctx = ensureAudio(); if (!ctx) return false;
@@ -665,20 +1132,24 @@
     const [type, partials, ring] = TIMBRE[opts.timbre || formTimbre(opts.form)] || TIMBRE.bell;
     const base = 523.25 * (opts.pitch || 1);
     switch (name) {
-      case 'hit': voice(ctx, {type, partials, freq: base * 1.5, dur: .18 + ring * .2, level: .22}); noiseHit(ctx, {dur: .06, level: .16, freq: 3200}); break;
-      case 'crit': voice(ctx, {type, partials, freq: base * 2, dur: .5 + ring * .3, level: .26}); voice(ctx, {type: 'sine', freq: 90, to: 45, dur: .32, level: .4, wet: 0}); noiseHit(ctx, {dur: .18, level: .3, freq: 900, q: .5}); break;
-      case 'combo': [0, 1, 2].forEach(i => voice(ctx, {type, partials, freq: base * [1, 1.25, 1.5][i] * (1 + (opts.n || 0) * .01), at: i * .05, dur: .25, level: .16})); break;
-      case 'ult': noiseHit(ctx, {dur: .9, level: .16, freq: 600, q: .3, type: 'lowpass', wet: .4}); voice(ctx, {type: 'sawtooth', freq: 110, to: 440, dur: .9, level: .1}); [0, 1, 2, 3].forEach(i => voice(ctx, {type, partials, freq: base * [1, 1.26, 1.5, 2][i], at: .55 + i * .07, dur: .9 + ring * .4, level: .17, wet: .5})); voice(ctx, {type: 'sine', freq: 70, to: 38, at: .5, dur: .6, level: .45, wet: 0}); break;
-      case 'coin': voice(ctx, {type: 'square', freq: 988, dur: .07, level: .08, wet: .1}); voice(ctx, {type: 'square', freq: 1319, at: .07, dur: .22, level: .08, wet: .2}); break;
-      case 'sparkle': [0, 1, 2, 3, 4].forEach(i => voice(ctx, {type: 'sine', partials: [1, 3], freq: 1760 * (1 + i * .19), at: i * .035, dur: .3, level: .05, wet: .6})); break;
-      case 'stamp': voice(ctx, {type: 'sine', freq: 140, to: 60, dur: .22, level: .45, wet: .1}); noiseHit(ctx, {dur: .1, level: .35, freq: 500, q: .6}); break;
-      case 'whoosh': noiseHit(ctx, {dur: .45, level: .18, freq: 1200, q: .4, wet: .3}); break;
-      case 'gacha-turn': [0, 1, 2, 3, 4, 5].forEach(i => noiseHit(ctx, {at: i * .07, dur: .03, level: .18, freq: 2600, q: 4, wet: .05})); break;
+      case 'hit': noiseHit(ctx, {dur: .035, level: .16, freq: 4200, q: .9, type: 'highpass', wet: .05}); voice(ctx, {type: 'sine', freq: base * 1.5, to: base * 1.05, dur: .14, level: .12, wet: .1}); voice(ctx, {type, partials, freq: base * 2, dur: .25 + ring * .15, level: .06, wet: .3}); break;
+      case 'crit': voice(ctx, {type: 'sine', freq: 72, to: 36, dur: .42, level: .42, wet: 0}); noiseHit(ctx, {dur: .16, level: .24, freq: 1100, q: .6}); voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * 3, dur: .7, level: .05, wet: .6}); voice(ctx, {type, partials, freq: base * 1.5, dur: .5 + ring * .3, level: .08, wet: .4}); break;
+      case 'combo': [0, 1, 2].forEach(i => voice(ctx, {type: 'sine', partials: [1, 2.76], freq: base * [1, 1.25, 1.5][i] * (1 + (opts.n || 0) * .01), at: i * .045, dur: .3, level: .07, wet: .4})); break;
+      case 'ult': { const d = opts.dur || 1.8; sweep(ctx, {dur: d * .7, from: 220, to: 5200, level: .11, q: .6, wet: .35}); voice(ctx, {type: 'sine', freq: 55, to: 82, dur: d * .78, level: .1, wet: 0, attack: .3});
+        [1, 1.26, 1.5, 1.89].forEach((r, i) => voice(ctx, {type, partials, freq: base * r * .5, at: .12 + i * .03, dur: 1.4 + ring * .4, level: .05, wet: .55, attack: .02})); break; }
+      case 'release': voice(ctx, {type: 'sine', freq: 64, to: 30, dur: .7, level: .48, wet: .05}); sweep(ctx, {dur: .55, from: 1800, to: 240, level: .2, type: 'lowpass', rise: false, wet: .5});
+        for (let i = 0; i < 6; i++) voice(ctx, {type: 'sine', partials: [1, 2.01], freq: 1800 + Math.random() * 2400, at: .05 + i * .06, dur: .5, level: .025, wet: .75}); break;
+      case 'coin': voice(ctx, {type: 'sine', partials: [1, 2.01], freq: 2637, dur: .18, level: .055, wet: .35}); voice(ctx, {type: 'sine', freq: 3951, at: .045, dur: .32, level: .04, wet: .5}); noiseHit(ctx, {dur: .02, level: .045, freq: 6000, type: 'highpass', wet: .1}); break;
+      case 'sparkle': [1, 1.25, 1.5, 2, 2.5].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 3], freq: 1318.5 * r, at: i * .04, dur: .5, level: .033, wet: .7, attack: .01})); break;
+      case 'stamp': voice(ctx, {type: 'sine', freq: 130, to: 52, dur: .26, level: .5, wet: .1}); noiseHit(ctx, {dur: .12, level: .3, freq: 700, type: 'lowpass', wet: .15}); noiseHit(ctx, {dur: .05, level: .08, freq: 2400, q: .5, wet: .1}); break;
+      case 'whoosh': sweep(ctx, {dur: .28, from: 500, to: 2600, level: .13, q: .5, wet: .3}); sweep(ctx, {at: .26, dur: .24, from: 2600, to: 900, level: .1, q: .5, rise: false, wet: .3}); break;
+      case 'gacha-turn': [0, 1, 2, 3, 4, 5].forEach(i => noiseHit(ctx, {at: i * .07, dur: .03, level: .16, freq: 2600, q: 4, wet: .05})); break;
       case 'capsule-drop': voice(ctx, {type: 'sine', freq: 300, to: 120, dur: .18, level: .25, wet: .2}); voice(ctx, {type: 'sine', freq: 260, to: 110, at: .22, dur: .12, level: .12, wet: .2}); break;
-      case 'open': { const lv = opts.rarity === 'SSR' ? 3 : opts.rarity === 'SR' ? 2 : 1; for (let i = 0; i < 2 + lv * 2; i++) voice(ctx, {type, partials, freq: base * [1, 1.25, 1.5, 2, 2.5, 3, 4, 5][i], at: i * .06, dur: .6 + lv * .3, level: .12 + lv * .03, wet: .5}); if (lv === 3) voice(ctx, {type: 'sine', partials: [1, 2, 3, 4], freq: 261.6, at: .4, dur: 2.2, level: .14, wet: .7}); break; }
-      case 'levelup': [0, 1, 2, 3].forEach(i => voice(ctx, {type, partials, freq: base * [1, 1.25, 1.5, 2][i], at: i * .09, dur: .5, level: .16, wet: .4})); break;
+      case 'open': { const lv = opts.rarity === 'SSR' ? 3 : opts.rarity === 'SR' ? 2 : 1; if (lv >= 2) sweep(ctx, {dur: .5, from: 400, to: 4800, level: .08, wet: .4});
+        for (let i = 0; i < 2 + lv * 2; i++) voice(ctx, {type, partials, freq: base * [1, 1.25, 1.5, 2, 2.5, 3, 4, 5][i], at: .05 + i * .06, dur: .6 + lv * .3, level: .06 + lv * .015, wet: .5}); break; }
+      case 'levelup': voice(ctx, {type: 'sine', freq: base * .5, dur: 1, level: .07, wet: .4}); [1, 1.25, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * r, at: i * .07, dur: .9, level: .07, wet: .55})); break;
       case 'boss-hit': voice(ctx, {type: 'sine', freq: 75, to: 35, dur: .5, level: .5, wet: .2}); noiseHit(ctx, {dur: .3, level: .35, freq: 400, q: .4, type: 'lowpass'}); break;
-      case 'miss': voice(ctx, {type: 'sine', freq: 392, to: 330, dur: .22, level: .08, wet: .2}); break;
+      case 'miss': voice(ctx, {type: 'sine', freq: 392, to: 330, dur: .22, level: .07, wet: .2}); break;
       default: return false;
     }
     return true;
@@ -688,9 +1159,27 @@
   function setFormTimbre(map) { Object.assign(FORM_TIMBRE, map || {}); }
 
   // ───────────────────────── 奖励播放（后端决定，前端只播） ─────────────────────────
-  const AWARD_ICON = {stars: '⭐', seals: '🟡', shards: '💎', item: '🎁', form: '🦄', levelup: '💗', awaken: '🌈', capture: '📖', node: '🔆', boss: '🗼', rank: '🎖️', chest: '🧰', gift: '🎀'};
+  // 图标是手画的多面体矢量（不用 emoji）；数字用等宽数字体滚动计数；奖励卡片是纸面 / 夜间玻璃两套。
+  function starFacets() {
+    const cx = 12, cy = 12.8, R = 10.2, r = 4.3, pts = [];
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? r : R; pts.push([cx + Math.cos(a) * k, cy + Math.sin(a) * k]); }
+    let out = '';
+    for (let i = 0; i < 10; i++) { const a = pts[i], b = pts[(i + 1) % 10]; const lightSide = (a[0] + b[0]) / 2 < cx + 1.5 && i % 2 === 1 || i % 2 === 0 && (a[0] + b[0]) / 2 < cx; out += `<path d="M${cx} ${cy}L${a[0].toFixed(2)} ${a[1].toFixed(2)}L${b[0].toFixed(2)} ${b[1].toFixed(2)}Z" fill="${lightSide ? '#f7d67e' : i % 2 ? '#c98f2b' : '#e0ad46'}"/>`; }
+    return out;
+  }
+  const ICON = {
+    stars: `<svg viewBox="0 0 24 24">${starFacets()}</svg>`,
+    seals: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3.2" fill="#c9952f"/><path d="M3 6.2A3.2 3.2 0 0 1 6.2 3H21v0L3 21z" fill="#e8bd5c" opacity=".55"/><rect x="5.4" y="5.4" width="13.2" height="13.2" rx="1.6" fill="none" stroke="#fbe7b0" stroke-width="1.1"/><text x="12" y="16.1" text-anchor="middle" font-size="9.6" font-weight="900" fill="#5c3a0c" font-family="Songti SC, STSong, serif">印</text></svg>',
+    shards: '<svg viewBox="0 0 24 24"><path d="M12 2l7.5 6.2L12 22 4.5 8.2z" fill="#7d68e8"/><path d="M12 2l7.5 6.2H4.5z" fill="#b9a9ff"/><path d="M12 2L8.6 8.2 12 22z" fill="#9c8af5"/><path d="M12 2l3.4 6.2L12 22z" fill="#6a55d6"/><path d="M4.5 8.2h15" stroke="#e6deff" stroke-width=".7"/></svg>',
+    badge: '<svg viewBox="0 0 24 24"><path d="M12 2.5l9.5 9.5-9.5 9.5L2.5 12z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 7.5l4.5 4.5-4.5 4.5L7.5 12z" fill="currentColor"/></svg>',
+  };
+  const KIND_COLOR = {stars: '#d9a23c', seals: '#c9952f', shards: '#7d68e8', levelup: '#DB1F74', awaken: '#e2589a', capture: '#3f8c80', node: '#d9a23c', boss: '#b5122c', rank: '#5266e0', chest: '#a8742f', gift: '#DB1F74', form: '#DB1F74', item: '#7d68e8'};
+  const AWARD_PAL = {stars: ['#ffd36e', '#ff8fc0', '#fff4d6'], seals: ['#ffd25e', '#c8902a', '#fff1c2'], shards: ['#b9a8ff', '#7fd3ff', '#ffffff']};
+  const UNIT = {stars: '星星', seals: '金印', shards: '碎片'};
+  const KIND_TEXT = {levelup: '亲密度升级', awaken: '觉醒', capture: '收服错题怪', node: '点亮新节点', boss: '巴别兽受创', rank: '段位提升', chest: '委托宝箱', gift: '碧琪的小礼物', form: '新形态', item: '新物品'};
   let awardQueue = Promise.resolve();
   const played = new Set();
+  const wait = ms => new Promise(r => setTimeout(r, ms));
   function playAward(award, opts = {}) {
     if (!award || typeof award !== 'object') return Promise.resolve(false);
     if (award.id && played.has(award.id)) return Promise.resolve(false);
@@ -699,42 +1188,62 @@
     awardQueue = job; return job;
   }
   function hudAnchor(kind) { return document.querySelector(`[data-game-hud="${kind === 'seals' ? 'seals' : kind === 'shards' ? 'shards' : 'stars'}"]`); }
+  function awardParts(a) {
+    const n = Math.max(0, Math.round(Number(a.amount) || 0));
+    if (UNIT[a.kind]) return {num: n, unit: UNIT[a.kind], title: `+${n} ${UNIT[a.kind]}`};
+    const t = a.reason && a.kind !== 'levelup' && a.kind !== 'awaken' ? (KIND_TEXT[a.kind] || a.reason) : (KIND_TEXT[a.kind] || a.reason || '奖励');
+    return {num: null, unit: '', title: a.kind === 'levelup' && n ? `${t} · Lv.${n}` : t};
+  }
   async function runAward(award, opts) {
     const s = settings(), level = ['small', 'medium', 'big', 'cinematic'].includes(award.fx) ? award.fx : 'small';
-    const text = awardText(award);
+    const parts = awardParts(award);
     const from = opts.from ? targetPoint(opts.from) : {x: innerWidth / 2, y: innerHeight * .42};
-    const anchor = hudAnchor(award.kind), kind = award.kind === 'seals' ? 'gold' : award.kind === 'shards' ? 'crystal' : opts.particle || 'stars';
+    const anchor = hudAnchor(award.kind), currency = Boolean(UNIT[award.kind]);
+    const kind = award.kind === 'seals' ? 'gold' : award.kind === 'shards' ? 'crystal' : opts.particle || 'stars';
+    const pal = opts.palette || AWARD_PAL[award.kind] || (KINDS[kind] || KINDS.stars).pal;
     if (level === 'cinematic' && s.cine !== 'off') {
-      await cinematic(opts.preset || (award.kind === 'boss' ? 'beam' : award.kind === 'awaken' ? 'spell' : 'stamp'), {text, sub: award.reason || '', art: opts.art, palette: opts.palette, particle: kind, form: opts.form});
-      chip(text, award, 'big'); return true;
+      await cinematic(opts.preset || (award.kind === 'boss' ? 'beam' : award.kind === 'awaken' ? 'spell' : 'stamp'), {text: parts.title, sub: award.reason && award.reason !== parts.title ? award.reason : '', kicker: opts.kicker, art: opts.art, palette: opts.palette, particle: kind, form: opts.form});
+      chip(award, parts, 'big'); return true;
     }
-    if (level === 'big') { sfx('levelup', opts); shake(.8); burst(kind, from, {count: 160, power: 1.5, palette: opts.palette}); burst('confetti', {x: from.x, y: from.y + 20}, {pattern: 'fountain', count: 90}); banner(text, award); }
-    else if (level === 'medium') { sfx('sparkle', opts); burst(kind, from, {count: 80, palette: opts.palette}); }
+    if (level === 'big') { sfx('levelup', opts); shake(.5); impact(from, {palette: pal, scale: 1.15}); burst(kind, from, {scale: 1.2, palette: pal}); titleCard(award, parts); }
+    else if (level === 'medium') { sfx('sparkle', opts); burst(kind, from, {scale: .8, palette: pal}); }
     else sfx('coin', opts);
-    if (anchor && (award.kind === 'stars' || award.kind === 'seals' || award.kind === 'shards')) burst(kind, from, {pattern: 'stream', to: anchor, count: clamp(Math.round((award.amount || 1) * 1.5), 6, 40), travel: .5, impactKind: 'sparkle'});
-    chip(text, award, level);
-    await new Promise(r => setTimeout(r, level === 'big' ? 900 : level === 'medium' ? 420 : 160));
+    const travel = .55;
+    if (anchor && currency) { comet(from, anchor, {count: clamp(Math.round((award.amount || 1) * 1.2), 5, 28), travel, palette: pal}); pulse(anchor, travel); }
+    chip(award, parts, level);
+    await wait(level === 'big' ? 900 : level === 'medium' ? 420 : 160);
     return true;
   }
-  function awardText(a) {
-    const n = Number(a.amount) || 0;
-    if (a.kind === 'stars') return `+${n} ⭐`;
-    if (a.kind === 'seals') return `+${n} 金印`;
-    if (a.kind === 'shards') return `+${n} 碎片`;
-    return a.reason || ({levelup: '亲密度升级', awaken: '觉醒！', capture: '收服错题怪', node: '点亮新节点', boss: '巴别兽受伤了', rank: '段位提升', chest: '委托宝箱', gift: '碧琪的小礼物', form: '新形态', item: '新物品'})[a.kind] || '奖励';
+  function pulse(node, delay) {
+    try { node.animate([{transform: 'scale(1)'}, {transform: 'scale(1.09)', offset: .28}, {transform: 'scale(1)'}], {duration: 460, delay: delay * 1000, easing: 'cubic-bezier(.2,.8,.2,1)', composite: 'add'}); } catch { /* 老 WebKit 不支持 composite 时不跳 */ }
   }
-  function chip(text, award, level) {
-    const host = layer(); let stack = host.querySelector('.pk-gamefx-chips'); if (!stack) { stack = document.createElement('div'); stack.className = 'pk-gamefx-chips'; host.append(stack); }
-    const c = document.createElement('div'); c.className = 'pk-gamefx-chip'; c.dataset.level = level; c.dataset.kind = award.kind || '';
-    const i = document.createElement('b'); i.textContent = AWARD_ICON[award.kind] || '✨'; const t = document.createElement('span'); t.textContent = text;
-    c.append(i, t); if (award.reason && level !== 'small' && award.reason !== text) { const r = document.createElement('small'); r.textContent = award.reason; c.append(r); }
-    stack.append(c); while (stack.children.length > 4) stack.firstElementChild.remove();
-    setTimeout(() => { c.classList.add('is-out'); setTimeout(() => c.remove(), 400); }, level === 'small' ? 1600 : 2600);
+  function countUp(node, to, ms = 520) {
+    if (!(to > 1)) { node.textContent = `+${to}`; return; }
+    const t0 = performance.now();
+    const step = () => { const k = Math.min(1, (performance.now() - t0) / ms), e = 1 - (1 - k) ** 3; node.textContent = `+${Math.round(to * e)}`; if (k < 1) setTimeout(step, 33); };
+    node.textContent = '+0'; step();
   }
-  function banner(text, award) {
-    const n = document.createElement('div'); n.className = 'pk-gamefx-banner'; const t = document.createElement('strong'); t.textContent = text; n.append(t);
-    if (award.reason) { const r = document.createElement('span'); r.textContent = award.reason; n.append(r); }
-    layer().append(n); setTimeout(() => n.remove(), 1800);
+  function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function iconFor(kind) { const i = el('span', 'pk-award__icon'); i.innerHTML = ICON[kind] || ICON.badge; return i; }
+  function chip(award, parts, level) {
+    const host = layer(); let stack = host.querySelector('.pk-awards'); if (!stack) { stack = el('div', 'pk-awards'); host.append(stack); }
+    const c = el('div', 'pk-award'); c.dataset.level = level; c.dataset.kind = award.kind || ''; c.style.setProperty('--k', KIND_COLOR[award.kind] || '#DB1F74');
+    c.append(iconFor(award.kind));
+    const body = el('div', 'pk-award__body'), line = el('div', 'pk-award__line');
+    if (parts.num != null) { const num = el('b', 'pk-award__num'); line.append(num, el('span', 'pk-award__unit', parts.unit)); countUp(num, parts.num); }
+    else line.append(el('b', 'pk-award__title', parts.title));
+    body.append(line);
+    if (award.reason && award.reason !== parts.title) body.append(el('small', 'pk-award__why', award.reason));
+    c.append(body); stack.append(c); while (stack.children.length > 4) stack.firstElementChild.remove();
+    setTimeout(() => { c.classList.add('is-out'); setTimeout(() => c.remove(), 420); }, level === 'small' ? 1800 : 2800);
+  }
+  function titleCard(award, parts) {
+    const n = el('div', 'pk-award-title'); n.style.setProperty('--k', KIND_COLOR[award.kind] || '#d9a23c');
+    const body = el('div', 'pk-award-title__body');
+    body.append(el('small', '', award.kind === 'levelup' ? 'LEVEL UP' : award.kind === 'awaken' ? 'AWAKENING' : 'REWARD'), el('strong', '', parts.title));
+    if (award.reason && award.reason !== parts.title) body.append(el('span', '', award.reason));
+    n.append(el('i', 'pk-award-title__rule'), body, el('i', 'pk-award-title__rule'));
+    layer().append(n); setTimeout(() => n.remove(), 2100);
   }
 
   // ───────────────────────── 生命周期 ─────────────────────────
@@ -814,12 +1323,14 @@
 
   // ───────────────────────── 对外接口 ─────────────────────────
   const api = {
-    burst, hitstop, shake, cinematic, scene, registerScene, closeScene, setTier, setCustom, settings, playAward, sfx, setFormTimbre, buildSettings,
-    kinds: Object.keys(KINDS), presets: PRESETS.slice(), presetLabel: {...PRESET_LABEL}, tiers: TIER_ORDER.map(id => ({id, label: TIERS[id].label, ...TIERS[id]})),
+    burst, hit, comet, sigil, impact, hitstop, shake, cinematic, scene, registerScene, closeScene, setTier, setCustom, settings, playAward, sfx, setFormTimbre, buildSettings,
+    kinds: Object.keys(KINDS), hits: Object.keys(HITS), presets: PRESETS.slice(), presetLabel: {...PRESET_LABEL}, presetEn: {...PRESET_EN}, presetTiming: {...PRESET_TIMING},
+    tiers: TIER_ORDER.map(id => ({id, label: TIERS[id].label, ...TIERS[id]})),
     ensure, loadThree, loadAddons, layer, base: BASE,
     // 只给 QA 用：强制档位（不写存储）、统计、帧率测量
     _st: () => st,
     _forceTier(t) { forcedTier = TIERS[t] ? t : ''; applySettings(); },
+    _timeScale(k = 1) { st.timeScale = k; for (const a of document.getAnimations?.() || []) if (a.effect?.target?.closest?.('.pk-gamefx-layer')) a.playbackRate = k; },
     stats() { const live = st.time < st.aliveUntil; return {...stats, frameTimes: undefined, alive: live, cine: Boolean(st.cine), scene: st.active?.name || '', time: st.time, webgl: Boolean(st.renderer)}; },
     fps(sinceMs = 2000) { const now = performance.now(), ts = stats.frameTimes.filter(t => t >= now - sinceMs); if (ts.length < 3) return {median: 0, p5: 0, frames: ts.length}; const dts = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b); const med = dts[Math.floor(dts.length / 2)], p95 = dts[Math.floor(dts.length * .95)]; return {median: Math.round(1000 / med), p5: Math.round(1000 / p95), frames: ts.length}; },
   };
