@@ -262,3 +262,15 @@ test('跨北京 00:00：同一张卡第二天又能给星', t => {
   answer(game, s2, it);
   assert.equal(game.read().wallet.stars, 2);
 });
+
+test('game.state 带 items:{owned, equipped}（衣橱 / 战斗层用），是拷贝不是引用', t => {
+  const {game} = gameFixture(t);
+  assert.deepEqual(game.state().items, {owned: [], equipped: {}});
+  const item = game.catalog.items.find(i => /^ult:/.test(i.id));
+  game.mutate(s => { s.items.owned.push(item.id); });
+  game.equipItem({slot: 'ult', itemId: item.id});
+  const st = game.state();
+  assert.deepEqual(st.items, {owned: [item.id], equipped: {ult: item.id}});
+  st.items.owned.push('x');
+  assert.deepEqual(game.state().items.owned, [item.id]);
+});

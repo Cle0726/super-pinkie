@@ -127,12 +127,6 @@
    "reviewed": "2026-11-08",
    "note": ""
   },
-  "world/pretco-b/vocab/base": {
-   "source": "chatgpt-web",
-   "prompt": "art-slots.json · layer",
-   "reviewed": "2026-11-08",
-   "note": ""
-  },
   "world/pretco-b/grammar/mg": {
    "source": "chatgpt-web",
    "prompt": "art-slots.json · layer",
@@ -144,6 +138,294 @@
    "prompt": "art-slots.json · portrait",
    "reviewed": "2026-11-08",
    "note": "网页版文字提示词首张，风格和 Codex 版一致"
+  },
+  "monster/echo-bat": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/tangle-yarn": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/sticky-ghost": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/quiz-shroom": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/shell-crab": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/clock-beetle": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/bridge-troll": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "boss/babel/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "重出版：积木上没有数字了（星星 / 漩涡花纹），书塔 + 符文"
+  },
+  "world/pretco-b/grammar/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "这张原本落在 vocab/base（网页版晚到的图被记到下一个槽位）：其实是语法工坊的远景雾天际线，正好是 bg 要的，改记到 grammar/bg"
+  },
+  "world/pretco-b/grammar/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框，中间留空"
+  },
+  "world/pretco-b/grammar/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板 + 两侧小工坊道具"
+  },
+  "world/pretco-b/reading/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：大图书馆 + 旋转楼梯"
+  },
+  "world/pretco-b/reading/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/translation/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：中西两岸的拱桥"
+  },
+  "world/pretco-b/translation/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/translation/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板（含桥基，和已过的 listening/base 带灯塔一致）"
+  },
+  "world/pretco-b/writing/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "远景雾天际线"
+  },
+  "world/pretco-b/writing/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：钢笔笔记本塔"
+  },
+  "world/pretco-b/writing/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/writing/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板 + 塔基"
+  },
+  "world/book/cover": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "粉色布面手账 + 金角 + 气球徽章"
+  },
+  "world/book/page": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "可平铺的奶油纸纹 + 浅横线"
+  },
+  "camp/day": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "纸艺营地白天，左中留空给角色"
+  },
+  "camp/night": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "纸艺营地夜晚，暖灯"
+  },
+  "exam/hall": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "安静考场，钟面无数字"
+  },
+  "form/astronaut/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/dragon-rider/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/knight/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/chef/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/magical-girl/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/astrologer/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/zhuangyuan/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/idol/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/cyber/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/ninja/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/xiaoxue/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/daxue/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/graduate/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/gold-master/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/queen/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：王座厅金色顶光 + 红幕，脸居中约 40%，配色克制（红金象牙）"
+  },
+  "form/lidong/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：蓝调雪夜、暖灯逆光、脸居中、眼睛约 40%，红围巾 + 姜茶，三气球对"
+  },
+  "sticker/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/oops": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/combo": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/focus": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/finish": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/jar": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/leave": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
   }
  }
 }
