@@ -73,6 +73,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152574933
   },
+  "form/astrologer/ult": {
+   "file": "form/astrologer/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 139774,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173432
+  },
   "form/astronaut/icon": {
    "file": "form/astronaut/icon.webp",
    "w": 256,
@@ -90,6 +99,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152574951
+  },
+  "form/astronaut/ult": {
+   "file": "form/astronaut/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 113088,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817700
   },
   "form/chef/icon": {
    "file": "form/chef/icon.webp",
@@ -109,6 +127,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152595288
   },
+  "form/chef/ult": {
+   "file": "form/chef/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 120410,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173444
+  },
   "form/cyber/icon": {
    "file": "form/cyber/icon.webp",
    "w": 256,
@@ -126,6 +153,24 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152595308
+  },
+  "form/cyber/ult": {
+   "file": "form/cyber/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 131680,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817710
+  },
+  "form/daily/ult": {
+   "file": "form/daily/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 69862,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817727
   },
   "form/daxue/icon": {
    "file": "form/daxue/icon.webp",
@@ -145,6 +190,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152595334
   },
+  "form/daxue/ult": {
+   "file": "form/daxue/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 131078,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351438
+  },
   "form/detective/icon": {
    "file": "form/detective/icon.webp",
    "w": 256,
@@ -162,6 +216,15 @@
    "source": "codex",
    "date": "2026-11-08",
    "rawMtime": 1794133602937
+  },
+  "form/detective/ult": {
+   "file": "form/detective/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 72188,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817735
   },
   "form/dragon-rider/icon": {
    "file": "form/dragon-rider/icon.webp",
@@ -181,6 +244,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152595363
   },
+  "form/dragon-rider/ult": {
+   "file": "form/dragon-rider/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 89256,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817743
+  },
   "form/gold-master/icon": {
    "file": "form/gold-master/icon.webp",
    "w": 256,
@@ -198,6 +270,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152595387
+  },
+  "form/gold-master/ult": {
+   "file": "form/gold-master/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 117704,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351448
   },
   "form/graduate/icon": {
    "file": "form/graduate/icon.webp",
@@ -217,6 +298,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152605153
   },
+  "form/graduate/ult": {
+   "file": "form/graduate/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 85658,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351456
+  },
   "form/idol/icon": {
    "file": "form/idol/icon.webp",
    "w": 256,
@@ -235,6 +325,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152605170
   },
+  "form/idol/ult": {
+   "file": "form/idol/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 93180,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173453
+  },
   "form/knight/icon": {
    "file": "form/knight/icon.webp",
    "w": 256,
@@ -252,6 +351,24 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152605189
+  },
+  "form/knight/ult": {
+   "file": "form/knight/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 134388,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173463
+  },
+  "form/learning/ult": {
+   "file": "form/learning/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 80206,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817750
   },
   "form/lidong/icon": {
    "file": "form/lidong/icon.webp",
@@ -298,6 +415,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152605226
   },
+  "form/magical-girl/ult": {
+   "file": "form/magical-girl/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 112398,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173471
+  },
   "form/ninja/icon": {
    "file": "form/ninja/icon.webp",
    "w": 256,
@@ -315,6 +441,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152605244
+  },
+  "form/ninja/ult": {
+   "file": "form/ninja/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 89472,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173480
   },
   "form/pirate/icon": {
    "file": "form/pirate/icon.webp",
@@ -334,6 +469,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794134934039
   },
+  "form/pirate/ult": {
+   "file": "form/pirate/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 100018,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817759
+  },
   "form/princess/icon": {
    "file": "form/princess/icon.webp",
    "w": 256,
@@ -351,6 +495,24 @@
    "source": "codex",
    "date": "2026-11-08",
    "rawMtime": 1794134054453
+  },
+  "form/princess/ult": {
+   "file": "form/princess/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 109756,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817768
+  },
+  "form/project/ult": {
+   "file": "form/project/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 104658,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817776
   },
   "form/queen/icon": {
    "file": "form/queen/icon.webp",
@@ -379,6 +541,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794153228771
   },
+  "form/thinking/ult": {
+   "file": "form/thinking/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 90638,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794153817784
+  },
+  "form/unrestricted/ult": {
+   "file": "form/unrestricted/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 115518,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173489
+  },
   "form/xiaoxue/icon": {
    "file": "form/xiaoxue/icon.webp",
    "w": 256,
@@ -397,6 +577,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152618693
   },
+  "form/xiaoxue/ult": {
+   "file": "form/xiaoxue/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 138984,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351466
+  },
   "form/zhuangyuan/icon": {
    "file": "form/zhuangyuan/icon.webp",
    "w": 256,
@@ -414,6 +603,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152618711
+  },
+  "form/zhuangyuan/ult": {
+   "file": "form/zhuangyuan/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 135850,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154173502
   },
   "monster/block-golem": {
    "file": "monster/block-golem.webp",
@@ -812,5 +1010,5 @@
    "rawMtime": 1794152656773
   }
  },
- "updatedAt": "2026-11-08T16:01:11.269Z"
+ "updatedAt": "2026-11-08T16:13:21.253Z"
 }
