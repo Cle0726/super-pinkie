@@ -308,6 +308,10 @@
       setPressed(volumeLow, sound.volume !== "mid"); setPressed(volumeMid, sound.volume === "mid");
     };
     paintSound();
+    // 学习台游戏：「游戏特效」四档 + 自定义细项，由 laolao-game-fx.js 生成（它晚加载时等就绪事件）。
+    const gameFxHost = element("div", "pinkie-user-settings__gamefx", appearanceCard);
+    const mountGameFx = () => window.__pinkieGameFx?.buildSettings?.(gameFxHost, {row, setPressed});
+    if (!mountGameFx()) window.addEventListener("pinkie:gamefx-ready", mountGameFx, {once: true});
     element("p", "pinkie-user-settings__soft-note", appearanceCard,
       "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。" );
     makeStatus(appearanceCard, "appearance");

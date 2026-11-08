@@ -22,6 +22,7 @@
   const reducedMotion = () => { try { if (localStorage.getItem(MOTION_KEY) === '1') return true; } catch { /* 读不到就当没开 */ } return document.documentElement.dataset.pinkieReduceMotion === '1'; };
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   function sanitize(field, v) {
+    if (v === undefined || v === null) return undefined;
     const base = TIERS.cinematic[field];
     if (typeof base === 'boolean') return Boolean(v);
     if (field === 'cine') return ['full', 'short', 'off'].includes(v) ? v : undefined;
@@ -194,7 +195,9 @@
     float back(float x){ x = clamp(x, 0.0, 1.0); float c1 = 1.70158, c3 = c1 + 1.0; return 1.0 + c3 * pow(x - 1.0, 3.0) + c1 * pow(x - 1.0, 2.0); }
     vec4 art(vec2 uv, float scale, vec2 off, float blur){
       float screenAspect = uRes.x / uRes.y; vec2 q = uv - 0.5; q /= scale; q -= off;
-      if (uArtAspect > screenAspect) q.x *= screenAspect / uArtAspect; else q.y *= uArtAspect / screenAspect;
+      // 等比完整放进画面（contain），留出背景让过场本身被看见；方形立绘约占屏高 88%。
+      q /= 0.88;
+      if (uArtAspect > screenAspect) q.y *= uArtAspect / screenAspect; else q.x *= screenAspect / uArtAspect;
       q += 0.5;
       if (uArtOk < 0.5) { float g = smoothstep(0.9, 0.0, length(q - 0.5)); vec3 c = mix(uC1, uC0, g); float star = smoothstep(0.02, 0.0, abs(length(q - 0.5) - 0.28 - 0.04 * sin(atan(q.y - 0.5, q.x - 0.5) * 5.0))); return vec4(c + star * 0.8, 1.0); }
       if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0);
@@ -283,7 +286,7 @@
         float reveal = smoothstep(w * 0.5, w * 0.5 - 0.1, abs(p.x));
         col = mix(col, a.rgb, a.a * reveal);
         float godray = pow(0.5 + 0.5 * sin(p.x * 50.0 + fbm(vec2(p.x * 8.0, uTime)) * 6.0), 4.0) * beam;
-        col += mix(uC2, vec3(1.0), 0.5) * (beam * 0.65 + godray * 0.35) * (1.0 - smoothstep(0.6, 1.0, T) * 0.7);
+        col += mix(uC2, vec3(1.0), 0.35) * (beam * 0.32 + godray * 0.22) * (1.0 - smoothstep(0.6, 1.0, T) * 0.7);
       }
       col *= 1.0 - 0.45 * smoothstep(0.55, 1.3, r);
       gl_FragColor = vec4(col * uFade, uFade);
@@ -315,6 +318,8 @@
       const canvas = document.createElement('canvas'); canvas.className = 'pk-gamefx-canvas';
       const renderer = new THREE.WebGLRenderer({canvas, alpha: true, antialias: false, premultipliedAlpha: true, powerPreference: 'high-performance'});
       renderer.setClearColor(0x000000, 0); renderer.autoClear = false;
+      // 全程按 sRGB 原值处理（贴图不解码、颜色不转线性、输出不再编码），直出和 OutputPass 两条路颜色一致。
+      renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
       canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); stats.contextLost = true; }, false);
       st.renderer = renderer; st.canvas = canvas; stats.contexts = 1;
       st.scene = new THREE.Scene(); st.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -327,6 +332,8 @@
       st.scene.add(st.cineQuad);
       layer().append(canvas); resize(); applySettings();
       window.addEventListener('resize', resize);
+      // 预热：空闲时把过场和粒子的着色器、辉光管线先编译好，第一次大招不卡（一次性，不起 rAF 循环）。
+      (window.requestIdleCallback || (fn => setTimeout(fn, 200)))(() => warm());
       return true;
     } catch (error) { stats.fallback = true; stats.fallbackReason = String(error?.message || error); return false; }
   }
@@ -395,7 +402,7 @@
   function hideCanvasIfIdle() { if (st.canvas && !st.active && !st.cine) st.canvas.dataset.live = '0'; }
   function clearSystems() { /* 全部粒子已在着色器里过期；保留缓冲，避免重新分配。 */ }
 
-  function colorOf(THREE, hex) { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; }
+  function colorOf(THREE, hex) { const c = new THREE.Color(hex).convertLinearToSRGB(); return [c.r, c.g, c.b]; }
   function targetPoint(target) {
     if (!target) return {x: innerWidth / 2, y: innerHeight / 2};
     if (target instanceof Element) { const r = target.getBoundingClientRect(); return {x: r.left + r.width / 2, y: r.top + r.height / 2, rect: r}; }
@@ -491,10 +498,26 @@
   function texture(url) {
     if (!url || !st.THREE) return Promise.resolve(null);
     if (textures.has(url)) return textures.get(url);
-    const p = new Promise(resolve => { const img = new Image(); img.decoding = 'async'; img.onload = () => { const t = new st.THREE.Texture(img); t.colorSpace = st.THREE.SRGBColorSpace; t.needsUpdate = true; t.userData.aspect = img.naturalWidth / Math.max(1, img.naturalHeight); resolve(t); }; img.onerror = () => resolve(null); img.src = new URL(url, BASE).href; });
+    const p = new Promise(resolve => { const img = new Image(); img.decoding = 'async'; img.onload = () => { const t = new st.THREE.Texture(keyBackground(img)); t.colorSpace = st.THREE.NoColorSpace; t.needsUpdate = true; t.userData.aspect = img.naturalWidth / Math.max(1, img.naturalHeight); resolve(t); }; img.onerror = () => resolve(null); img.src = new URL(url, BASE).href; });
     textures.set(url, p); return p;
   }
   const DEFAULT_ART = {daily: 'laolao-mode-chat-hd.png', learning: 'laolao-mode-learning-hd.png', project: 'laolao-mode-project-hd.png', thinking: 'laolao-mode-thinking-hd.png', unrestricted: 'laolao-mode-unrestricted-hd.png'};
+  // 立绘如果自带浅色底（现有模式图就是），从四边往里洪水填充，把和边连通的近白色抠成透明；带彩色背景的大招图不动。
+  function keyBackground(img) {
+    try {
+      const w = img.naturalWidth, h = img.naturalHeight; if (!w || !h || w * h > 4.2e6) return img;
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', {willReadFrequently: true}); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, w, h), px = d.data;
+      const light = i => px[i + 3] > 200 && Math.min(px[i], px[i + 1], px[i + 2]) > 228 && Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2]) < 26;
+      const corners = [0, (w - 1) * 4, (h - 1) * w * 4, (h * w - 1) * 4];
+      if (corners.filter(light).length < 3) return img;
+      const seen = new Uint8Array(w * h), stack = [];
+      for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x); for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+      while (stack.length) { const k = stack.pop(); if (seen[k]) continue; seen[k] = 1; const i = k * 4; if (!light(i)) continue; px[i + 3] = 0; const x = k % w, y = (k / w) | 0;
+        if (x > 0) stack.push(k - 1); if (x < w - 1) stack.push(k + 1); if (y > 0) stack.push(k - w); if (y < h - 1) stack.push(k + w); }
+      g.putImageData(d, 0, 0); return c;
+    } catch { return img; }
+  }
   const PRESET_TIMING = {burst: 1.5, slash: 1.35, spell: 1.9, curtain: 2, ink: 1.9, warp: 1.8, rain: 1.8, stamp: 1.4, beam: 1.7};
   function cinematic(preset, opts = {}) {
     const job = st.cineQueue.then(() => runCinematic(preset, opts));
@@ -505,7 +528,7 @@
     if (!PRESETS.includes(preset)) preset = 'burst';
     if (document.hidden || s.cine === 'off') return {played: false, reason: s.cine === 'off' ? 'off' : 'hidden'};
     if (!(await ensure())) return domCinematic(preset, opts);
-    const palette = (opts.palette?.length ? opts.palette : ['#DB1F74', '#7a2a5c', '#ffd34d']).map(c => new st.THREE.Color(c));
+    const palette = (opts.palette?.length ? opts.palette : ['#DB1F74', '#7a2a5c', '#ffd34d']).map(c => new st.THREE.Color(c).convertLinearToSRGB());
     // 没给立绘时先用现成的模式碧琪图（App 里和注入脚本同一个根目录），B 的大招立绘到了就按形态换。
     const tex = await Promise.race([texture(opts.art || DEFAULT_ART[opts.form?.id || opts.form] || DEFAULT_ART.daily), new Promise(r => setTimeout(() => r(null), 900))]);
     const dur = (opts.duration || PRESET_TIMING[preset]) * (s.cine === 'short' ? .62 : 1);
@@ -520,7 +543,7 @@
     const text = cineText(preset, opts, dur);
     return new Promise(resolve => {
       const done = (skipped = false) => {
-        if (!st.cine) return; st.cine = null; st.cineQuad.visible = false; delete st.canvas.dataset.cine; text.remove();
+        if (!st.cine) return; st.cine = null; st.cineQuad.visible = false; applySettings(); delete st.canvas.dataset.cine; text.remove();
         removeEventListener('keydown', onKey, true); text.removeEventListener('pointerdown', onSkip);
         if (prevHost) attachScene(prevHost); else { draw(); }
         resolve({played: true, skipped, preset});
@@ -536,18 +559,20 @@
   function stepCine(dt, frozen) {
     const c = st.cine; if (!frozen) c.t += dt;
     const T = clamp(c.t / c.dur, 0, 1), u = st.cineMat.uniforms;
-    u.uT.value = T; u.uTime.value = st.time; u.uFade.value = Math.min(1, c.t / .12) * (1 - clamp((T - .9) / .1, 0, 1));
+    u.uT.value = T; u.uTime.value = st.time;
+    // 过场里立绘很亮：光晕减半，避免脸上一团过曝。
+    for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = (.3 + settings().bloom * .75) * .45; u.uFade.value = Math.min(1, c.t / .12) * (1 - clamp((T - .9) / .1, 0, 1));
     const fire = (name, at, fn) => { if (T >= at && !c.fired.has(name)) { c.fired.add(name); fn(); } };
     const cx = st.w / 2, cy = st.h / 2, kind = c.particle, pal = c.palette, P = c.preset;
     fire('a', .12, () => {
       if (P === 'rain') emit(kind, {x: cx, y: 0}, {pattern: 'rain', count: 520, palette: pal, window: c.dur * .7, ignoreDensity: false, scale: 1});
       else if (P === 'warp') emit('sparkle', {x: cx, y: cy}, {pattern: 'ring', count: 160, power: 2.2, palette: pal});
       else if (P === 'curtain') emit('confetti', {x: cx, y: -10}, {pattern: 'rain', count: 220, palette: pal, window: c.dur * .5});
-      else emit(kind, {x: cx, y: cy}, {count: 150, power: 2.1, palette: pal});
+      else emit(kind, {x: cx, y: cy}, {pattern: 'ring', count: 90, power: 2.4, palette: pal});
       if (P === 'stamp' || P === 'burst' || P === 'slash') { shake(P === 'stamp' ? 2 : 1.3); }
     });
-    fire('b', .3, () => { emit(kind, {x: cx, y: st.h * .9}, {pattern: 'fountain', count: 200, power: 1.6, palette: pal, spread: 1.4}); if (P === 'stamp') { emit('ink', {x: cx, y: cy}, {pattern: 'ring', count: 80, power: 1.4}); } });
-    fire('c', .55, () => emit('sparkle', {x: cx, y: cy}, {count: 70, power: 1.6, palette: pal}));
+    fire('b', .3, () => { emit(kind, {x: st.w * .12, y: st.h * .95}, {pattern: 'fountain', count: 60, power: 1.5, palette: pal, spread: .8}); emit(kind, {x: st.w * .88, y: st.h * .95}, {pattern: 'fountain', count: 60, power: 1.5, palette: pal, spread: .8}); if (P === 'stamp') { emit('confetti', {x: cx, y: cy}, {pattern: 'ring', count: 70, power: 2.2}); } });
+    fire('c', .55, () => emit('sparkle', {x: cx, y: st.h * .2}, {pattern: 'rain', count: 60, palette: pal, window: .5}));
     if (c.t >= c.dur) c.done(false);
   }
   function cineText(preset, opts, dur) {
@@ -565,13 +590,20 @@
       n.addEventListener('pointerdown', end); setTimeout(end, 900);
     });
   }
+  async function warm() {
+    try {
+      if (!st.renderer || st.warmed) return; st.warmed = true;
+      st.cineQuad.visible = true; st.renderer.compile(st.scene, st.camera); st.cineQuad.visible = Boolean(st.cine);
+      if (settings().bloom >= .6 && await ensureComposer()) { const v = st.cineQuad.visible; st.cineQuad.visible = true; st.cineMat.uniforms.uFade.value = 0; st.composer.render(); st.cineQuad.visible = v; st.renderer.setRenderTarget(null); st.renderer.clear(); }
+    } catch { /* 预热失败不影响正常播放 */ }
+  }
   async function ensureComposer() {
     if (st.composer) return true;
     const addons = await loadAddons(); if (!addons || !st.renderer) return false;
     const {EffectComposer, RenderPass, UnrealBloomPass, OutputPass} = addons;
     const composer = new EffectComposer(st.renderer); composer.setPixelRatio(st.dpr); composer.setSize(st.w, st.h);
     st.renderPass = new RenderPass(st.scene, st.camera); st.renderPass.clear = true;
-    st.bloomPass = new UnrealBloomPass(new st.THREE.Vector2(st.w, st.h), .42, .45, .8);
+    st.bloomPass = new UnrealBloomPass(new st.THREE.Vector2(st.w, st.h), .34, .4, .93);
     st.outputPass = new OutputPass();
     composer.addPass(st.renderPass); composer.addPass(st.bloomPass); composer.addPass(st.outputPass);
     st.composer = composer; return true;
@@ -739,7 +771,7 @@
     const wrap = el('div', 'pk-gamefx-settings'); host.append(wrap);
     const rowOf = (label, hint) => {
       if (typeof h.row === 'function') return h.row(wrap, label, hint);
-      const item = el('div', 'pinkie-user-settings__row'); const copy = el('div', 'pinkie-user-settings__row-copy'); copy.append(el('strong', '', label)); if (hint) copy.append(el('span', '', hint)); const control = el('div', 'pinkie-user-settings__row-control'); item.append(copy, control); wrap.append(item); return {item, copy, control};
+      const item = el('div', 'pinkie-user-settings__row'); const copy = el('div', 'pinkie-user-settings__row-copy'); copy.append(el('span', 'pinkie-user-settings__row-title', label)); if (hint) copy.append(el('span', 'pinkie-user-settings__hint', hint)); const control = el('div', 'pinkie-user-settings__row-control'); item.append(copy, control); wrap.append(item); return {item, copy, control};
     };
     const pressed = (node, on) => { if (typeof h.setPressed === 'function') h.setPressed(node, on); else { node.setAttribute('aria-pressed', String(Boolean(on))); node.classList.toggle('is-active', Boolean(on)); } };
     const choice = (parent, label, fn) => { const b = el('button', 'pinkie-user-settings__choice', label); b.type = 'button'; b.addEventListener('click', fn); parent.append(b); return b; };

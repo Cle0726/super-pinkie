@@ -120,7 +120,46 @@ async function idle() {
   fs.writeFileSync(path.join(out, 'idle.json'), JSON.stringify(res, null, 2)); console.log(JSON.stringify(res));
 }
 
+// 设置页：真实的 laolao-settings-user.js + 引擎，裸页面里打开「外观与声音」，点档位和细项，读回 settings()。
+async function settingsPage() {
+  const http = await import('node:http');
+  const inj = path.join(repo, 'ui/injections');
+  const html = `<!doctype html><html data-theme-mode="light"><meta charset="utf-8"><link rel="stylesheet" href="/laolao-settings-user.css"><link rel="stylesheet" href="/laolao-game-fx.css"><body style="margin:0;background:#f6eee6"><div class="config-view-toggle"></div><script defer src="/laolao-settings-user.js"></script><script defer src="/laolao-game-fx.js"></script></body></html>`;
+  const server = http.createServer((req, res) => { const name = decodeURIComponent(new URL(req.url, 'http://x').pathname).slice(1); if (!name) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); return; } const f = path.join(inj, name); if (!name.includes('..') && fs.existsSync(f)) { res.setHeader('Content-Type', name.endsWith('.css') ? 'text/css' : 'text/javascript'); res.end(fs.readFileSync(f)); } else { res.writeHead(404); res.end(); } });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const browser = await launch(); const result = {};
+  try {
+    for (const theme of ['light', 'dark']) {
+      const context = await browser.newContext({viewport: {width: 1440, height: 1100}, deviceScaleFactor: 1});
+      const page = await context.newPage(); page.on('pageerror', e => console.error('[pageerror]', e.message));
+      await page.goto(`http://127.0.0.1:${server.address().port}/`);
+      await page.waitForFunction(() => document.querySelector('.pk-gamefx-settings'), null, {timeout: 8000});
+      await page.evaluate(theme => { document.documentElement.dataset.themeMode = theme; const root = document.getElementById('laolao-user-settings'); root.hidden = false; root.style.cssText += ';position:static;width:900px;margin:20px auto'; document.querySelector('.pk-gamefx-custom').open = true; document.querySelector('.pk-gamefx-tier-row').scrollIntoView({block: 'start'}); }, theme);
+      if (theme === 'light') {
+        const steps = [];
+        for (const label of ['华丽', '标准', '安静', '电影级（默认）']) { await page.locator('.pk-gamefx-tier-row button', {hasText: label}).click(); steps.push(await page.evaluate(() => { const s = window.__pinkieGameFx.settings(); return {tier: s.tier, density: s.density, bloom: s.bloom, cine: s.cine, fps: s.fps, res: s.res}; })); }
+        await page.locator('.pk-gamefx-custom .pinkie-user-settings__row', {hasText: '全屏过场'}).locator('button', {hasText: '简短'}).click();
+        await page.locator('.pk-gamefx-custom .pinkie-user-settings__row', {hasText: '景深'}).locator('button', {hasText: '关'}).click();
+        await page.locator('.pk-gamefx-custom input[aria-label="粒子密度"]').fill('35');
+        await page.locator('.pk-gamefx-custom input[aria-label="粒子密度"]').dispatchEvent('change');
+        steps.push(await page.evaluate(() => { const s = window.__pinkieGameFx.settings(); return {tier: s.tier, custom: s.custom, stored: localStorage.getItem('pinkie.gamefx.v1')}; }));
+        await page.evaluate(() => { localStorage.setItem('pinkie.motion.reduce.v1', '1'); dispatchEvent(new CustomEvent('pinkie:motion-change')); });
+        steps.push(await page.evaluate(() => { const s = window.__pinkieGameFx.settings(); return {reducedTier: s.tier, density: s.density, cine: s.cine, note: !document.querySelector('.pk-gamefx-reduced').hidden}; }));
+        await page.screenshot({path: path.join(out, 'settings-reduced-light.png'), fullPage: true});
+        await page.evaluate(() => { localStorage.setItem('pinkie.motion.reduce.v1', '0'); dispatchEvent(new CustomEvent('pinkie:motion-change')); });
+        await page.waitForTimeout(500);
+        steps.push(await page.evaluate(() => ({fps: window.__pinkieGameFx.settings().fps, pressed: [...document.querySelectorAll('.pk-gamefx-custom .pinkie-user-settings__row')].find(r => r.textContent.includes('帧率')).querySelector('[aria-pressed="true"]')?.textContent, tierPressed: document.querySelector('.pk-gamefx-tier-row [aria-pressed="true"]')?.textContent})));
+        result.steps = steps;
+      }
+      await page.screenshot({path: path.join(out, `settings-${theme}.png`), fullPage: true});
+      await context.close();
+    }
+  } finally { await browser.close(); server.close(); }
+  fs.writeFileSync(path.join(out, 'settings.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  if (cmd === 'settings') await settingsPage();
   if (cmd === 'demo' || cmd === 'all') await demo();
   if (cmd === 'fps' || cmd === 'all') await fps();
   if (cmd === 'idle' || cmd === 'all') await idle();
