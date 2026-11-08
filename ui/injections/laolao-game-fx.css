@@ -1,0 +1,67 @@
+/* 碧琪上岸记 · 特效层。画布和过场文字都不拦点击（过场文字除外：点一下跳过）。 */
+.pk-gamefx-layer{position:fixed;inset:0;z-index:2147482000;pointer-events:none;contain:strict;overflow:hidden}
+.pk-gamefx-canvas{position:absolute;left:0;top:0;display:block;pointer-events:none}
+.pk-gamefx-canvas[data-live="0"]{visibility:hidden}
+.pk-gamefx-canvas[data-cine="1"]{z-index:1}
+.pk-gamefx-dot{position:absolute;width:9px;height:9px;border-radius:50%;pointer-events:none;will-change:transform,opacity}
+html[data-pinkie-hitstop="1"] #pinkie-study-desk *{animation-play-state:paused!important}
+
+/* 大招过场文字：清晰的 DOM 文字叠在 WebGL 上 */
+.pk-gamefx-cine-text{position:absolute;inset:0;z-index:2;pointer-events:auto;cursor:pointer;display:grid;place-content:end center;padding:0 24px 11vh;text-align:center;gap:6px;
+  font-family:"HanziPen SC","Yuanti SC","PingFang SC",system-ui,sans-serif;color:#fff}
+.pk-gamefx-cine-text strong{font-size:clamp(34px,5.2vw,86px);line-height:1.05;letter-spacing:.04em;font-weight:800;
+  text-shadow:0 3px 0 #DB1F74,0 6px 0 rgba(58,42,53,.55),0 0 28px rgba(255,120,190,.75);
+  animation:pk-cine-title var(--dur,1.6s) cubic-bezier(.2,.9,.2,1) both}
+.pk-gamefx-cine-text span{font-size:clamp(15px,1.5vw,24px);font-weight:600;opacity:.92;text-shadow:0 2px 8px rgba(0,0,0,.5);animation:pk-cine-sub var(--dur,1.6s) ease both}
+.pk-gamefx-cine-text span:empty{display:none}
+.pk-gamefx-cine-text em{position:absolute;right:22px;bottom:18px;font-style:normal;font-size:12px;opacity:.55;letter-spacing:.08em}
+.pk-gamefx-cine-text[data-preset="ink"],.pk-gamefx-cine-text[data-preset="stamp"]{color:#3A2A35}
+.pk-gamefx-cine-text[data-preset="ink"] strong,.pk-gamefx-cine-text[data-preset="stamp"] strong{text-shadow:0 2px 0 rgba(255,255,255,.9),0 0 18px rgba(255,255,255,.8)}
+.pk-gamefx-cine-text[data-preset="ink"] span,.pk-gamefx-cine-text[data-preset="stamp"] span{text-shadow:0 1px 0 #fff}
+.pk-gamefx-cine-text.is-flat{background:radial-gradient(circle at 50% 45%,#ffe3ef 0,#f6eee6 60%);color:#3A2A35;place-content:center;padding:0}
+.pk-gamefx-cine-text.is-flat strong{text-shadow:0 3px 0 rgba(219,31,116,.25);animation-duration:.9s}
+@keyframes pk-cine-title{0%{opacity:0;transform:translateY(30px) scale(1.5);filter:blur(6px)}22%{opacity:1;transform:none;filter:none}86%{opacity:1;transform:scale(1.03)}100%{opacity:0;transform:scale(1.08)}}
+@keyframes pk-cine-sub{0%,25%{opacity:0;transform:translateY(10px)}40%{opacity:.92;transform:none}88%{opacity:.92}100%{opacity:0}}
+
+/* 奖励小签：右上角叠放，点不到（不挡学习） */
+.pk-gamefx-chips{position:absolute;top:64px;right:22px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.pk-gamefx-chip{display:grid;grid-template-columns:auto auto;align-items:center;column-gap:8px;padding:8px 14px 8px 10px;border-radius:14px;
+  background:#fffaf5;color:#3A2A35;border:1.5px solid rgba(219,31,116,.35);box-shadow:0 6px 18px rgba(58,42,53,.16),0 1px 0 #fff inset;
+  font:600 15px/1.2 "PingFang SC",system-ui,sans-serif;animation:pk-chip-in .32s cubic-bezier(.2,1.4,.4,1) both}
+.pk-gamefx-chip b{font-size:18px}
+.pk-gamefx-chip small{grid-column:2;font-weight:500;font-size:12px;opacity:.7}
+.pk-gamefx-chip[data-level="big"]{border-color:#DB1F74;background:linear-gradient(180deg,#fff 0,#ffeef6 100%);font-size:17px}
+.pk-gamefx-chip[data-kind="seals"]{border-color:#e0a800}
+.pk-gamefx-chip.is-out{animation:pk-chip-out .38s ease both}
+@keyframes pk-chip-in{from{opacity:0;transform:translateX(24px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes pk-chip-out{to{opacity:0;transform:translateY(-10px)}}
+html[data-pinkie-night] .pk-gamefx-chip,html[data-theme-mode="dark"] .pk-gamefx-chip{background:#2a2030;color:#f6eee6;border-color:rgba(255,120,190,.45);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+
+.pk-gamefx-banner{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:4px;padding:16px 34px;border-radius:18px;
+  background:#DB1F74;color:#fff;box-shadow:0 10px 0 rgba(58,42,53,.25),0 18px 40px rgba(219,31,116,.35);font-family:"HanziPen SC","PingFang SC",system-ui,sans-serif;
+  animation:pk-banner 1.8s cubic-bezier(.2,1.2,.3,1) both}
+.pk-gamefx-banner strong{font-size:30px;letter-spacing:.04em}
+.pk-gamefx-banner span{font-size:14px;opacity:.9}
+@keyframes pk-banner{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}14%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-2deg)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-60%) scale(.96) rotate(-2deg)}}
+
+/* 设置页：游戏特效 */
+.pk-gamefx-settings{display:contents}
+.pk-gamefx-custom{margin:4px 0 6px;border-radius:12px}
+.pk-gamefx-custom>summary{cursor:pointer;font-weight:600;padding:8px 2px;color:inherit;list-style-position:inside}
+.pk-gamefx-range{width:150px;accent-color:#DB1F74;vertical-align:middle}
+.pk-gamefx-range-value{display:inline-block;min-width:44px;text-align:right;font-variant-numeric:tabular-nums;opacity:.75;margin-left:6px}
+.pk-gamefx-reset{margin:8px 0 2px}
+.pk-gamefx-reduced[hidden]{display:none}
+
+/* ?game-demo 演示面板 */
+.pk-gamefx-demo{position:fixed;left:14px;top:14px;bottom:14px;width:300px;z-index:2147483000;overflow:auto;padding:14px;border-radius:16px;background:rgba(255,250,245,.96);color:#3A2A35;
+  box-shadow:0 10px 40px rgba(58,42,53,.25);font:13px/1.4 "PingFang SC",system-ui,sans-serif}
+.pk-gamefx-demo h2{font-size:16px;margin:0 0 8px}.pk-gamefx-demo h3{font-size:12px;margin:12px 0 6px;opacity:.65;letter-spacing:.06em}
+.pk-gamefx-demo .grid{display:flex;flex-wrap:wrap;gap:5px}
+.pk-gamefx-demo button{font:inherit;border:1px solid rgba(219,31,116,.35);background:#fff;color:inherit;border-radius:9px;padding:4px 8px;cursor:pointer}
+.pk-gamefx-demo button[aria-pressed="true"]{background:#DB1F74;color:#fff}
+.pk-gamefx-demo output{display:block;margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre-wrap;opacity:.8}
+.pk-gamefx-demo-stage{position:fixed;inset:0;left:330px;z-index:1;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#fff7fb,#f6eee6 70%);font:600 22px "HanziPen SC","PingFang SC",sans-serif;color:#3A2A35}
+html[data-theme-mode="dark"] .pk-gamefx-demo-stage{background:radial-gradient(circle at 50% 40%,#2b2133,#16121c 70%);color:#f6eee6}
+.pk-gamefx-demo-stage .target{display:grid;place-items:center;width:150px;height:150px;border-radius:28px;background:#fffaf5;box-shadow:0 8px 0 rgba(58,42,53,.12),0 20px 40px rgba(58,42,53,.12)}
+html[data-theme-mode="dark"] .pk-gamefx-demo-stage .target{background:#2a2030}
