@@ -64,8 +64,15 @@ def install(home=None):
     paths = plugins.setdefault('load', {}).setdefault('paths', [])
     if str(target) not in paths:
         paths.append(str(target))
-    if isinstance(plugins.get('allow'), list) and plugin_id not in plugins['allow']:
-        plugins['allow'].append(plugin_id)
+    # A brand-new profile has no allow list at all. Appending only when
+    # one already existed kept every bundled plugin outside the allowlist,
+    # which is why they loaded on some machines and silently did nothing
+    # on a fresh download.
+    allow = plugins.get("allow")
+    if allow is None:
+        allow = plugins["allow"] = []
+    if isinstance(allow, list) and plugin_id not in allow:
+        allow.append(plugin_id)
     config_changed = old_plugins != json.dumps(plugins, sort_keys=True)
     if not assets_changed and not config_changed:
         return False
