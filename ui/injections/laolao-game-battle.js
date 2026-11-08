@@ -291,8 +291,8 @@
 
   function register() {
     const d = desk(); if (!d?.registerView) return false;
-    d.registerView('gameguard', {title: '守关战', mount: (host, ctx) => mountGuard(host, ctx), keydown: (e, ctx) => ctx.pane?.runtime?.keydown?.(e)});
-    d.registerView('gamehunt', {title: '讨伐', mount: (host, ctx) => mountHunt(host, ctx)});
+    d.registerView('gameguard', {title: '守关战', wide: 720, mount: (host, ctx) => mountGuard(host, ctx), keydown: (e, ctx) => ctx.pane?.runtime?.keydown?.(e)});
+    d.registerView('gamehunt', {title: '讨伐', wide: 720, mount: (host, ctx) => mountHunt(host, ctx)});
     return true;
   }
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }

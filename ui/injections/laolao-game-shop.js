@@ -495,10 +495,10 @@
 
   function register() {
     const d = desk(); if (!d?.registerView) return false;
-    d.registerView('gameshop', {title: '商店', mount: (h, c) => mountShop(h, c)});
-    d.registerView('gamegacha', {title: '扭蛋', mount: (h, c) => mountGacha(h, c)});
-    d.registerView('gamewardrobe', {title: '衣橱', mount: (h, c) => mountWardrobe(h, c)});
-    d.registerView('gamecodex', {title: '图鉴', mount: (h, c) => mountCodex(h, c)});
+    d.registerView('gameshop', {title: '商店', wide: true, mount: (h, c) => mountShop(h, c)});
+    d.registerView('gamegacha', {title: '扭蛋', wide: true, mount: (h, c) => mountGacha(h, c)});
+    d.registerView('gamewardrobe', {title: '衣橱', wide: true, mount: (h, c) => mountWardrobe(h, c)});
+    d.registerView('gamecodex', {title: '图鉴', wide: true, mount: (h, c) => mountCodex(h, c)});
     return true;
   }
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }
