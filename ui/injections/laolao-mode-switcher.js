@@ -114,9 +114,33 @@
   const MODE_MENU_FX_BURST_LIFETIME = 760;
   const MODE_MENU_FX_SWAP_LIFETIME = 620;
 
-  const hasWorkspaceDock = () => Boolean(
-    window.webkit?.messageHandlers?.laolaoWorkspaceDock?.postMessage
-  );
+  // The dock is reachable through two transports, and a shell may expose either
+  // one. macOS registers a WKScriptMessageHandler; the Windows shell mirrors
+  // those names onto window.webkit, but older Windows builds merged only the
+  // handlers declared first in their bridge literal and silently dropped the
+  // dock one. pywebview's own api object carries open_workspace_dock regardless,
+  // so accept it and adapt it to the same postMessage shape. Without this a
+  // perfectly working shell looks like it has no dock and the entry disappears.
+  const dockBridge = () => {
+    const native = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
+    if (native?.postMessage) return native;
+    const api = window.pywebview?.api;
+    if (api && typeof api.open_workspace_dock === "function") {
+      return {
+        postMessage(payload) {
+          const action = payload?.action;
+          if (action === "close") return api.close_workspace_dock?.();
+          if (action === "open") {
+            return api.open_workspace_dock({ mode: payload?.mode, sessionKey: payload?.sessionKey });
+          }
+          return undefined;
+        },
+      };
+    }
+    return null;
+  };
+
+  const hasWorkspaceDock = () => Boolean(dockBridge());
 
   const isDockedWorkspace = () =>
     document.documentElement.getAttribute("data-laolao-workspace-dock") === "1";
@@ -816,8 +840,8 @@
   };
 
   const openWorkspaceDock = async (mode) => {
-    const bridge = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
-    if (!bridge?.postMessage || isDockedWorkspace()) return;
+    const bridge = dockBridge();
+    if (!bridge || isDockedWorkspace()) return;
     closeMenu();
     // A dock is a clean second workspace, not a copy of a cached recent chat.
     // Older native shells only accept the stable root session for each mode;
@@ -832,8 +856,8 @@
   // hosts the always-visible exit button (see syncDockExitButton). Refusing
   // the docked half here was what left a narrow split with no way back.
   const closeWorkspaceDock = () => {
-    const bridge = window.webkit?.messageHandlers?.laolaoWorkspaceDock;
-    if (!bridge?.postMessage) return;
+    const bridge = dockBridge();
+    if (!bridge) return;
     closeMenu();
     bridge.postMessage({ action: "close" });
   };
