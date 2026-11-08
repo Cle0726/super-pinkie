@@ -160,6 +160,18 @@ test('扭蛋：requestId 幂等，结果可复现；保底计数持久化（重�
   assert.equal(again.banners().find(x => x.id === 'star').cost.ten.stars, 1440);
 });
 
+test('收藏品带中文名：扭蛋结果、奖池条目、state.items.names', t => {
+  const {game} = gameFixture(t);
+  game.mutate(s => { s.wallet.stars = 5000; });
+  const cjk = /[\u4e00-\u9fff]/;
+  for (const b of game.banners()) for (const list of Object.values(b.pools)) for (const e of list) assert.ok(cjk.test(e.name || ''), `${b.id} ${e.itemId} 没有中文名`);
+  const r = game.pull({banner: 'star', count: 10, requestId: 'gn'});
+  for (const x of r.results) assert.ok(cjk.test(x.name || ''), `${x.itemId} 没有中文名`);
+  const st = game.state();
+  assert.ok(st.items.owned.length > 0);
+  for (const id of st.items.owned) assert.ok(cjk.test(st.items.names[id] || ''), `${id} 没有中文名`);
+});
+
 test('并发：同步读改写，两次快速购买不会花两份钱', t => {
   const {game} = gameFixture(t);
   game.mutate(s => { s.wallet.stars = 1300; });
@@ -265,12 +277,12 @@ test('跨北京 00:00：同一张卡第二天又能给星', t => {
 
 test('game.state 带 items:{owned, equipped}（衣橱 / 战斗层用），是拷贝不是引用', t => {
   const {game} = gameFixture(t);
-  assert.deepEqual(game.state().items, {owned: [], equipped: {}});
+  assert.deepEqual(game.state().items, {owned: [], equipped: {}, names: {}});
   const item = game.catalog.items.find(i => /^ult:/.test(i.id));
   game.mutate(s => { s.items.owned.push(item.id); });
   game.equipItem({slot: 'ult', itemId: item.id});
   const st = game.state();
-  assert.deepEqual(st.items, {owned: [item.id], equipped: {ult: item.id}});
+  assert.deepEqual(st.items, {owned: [item.id], equipped: {ult: item.id}, names: {[item.id]: item.name}});
   st.items.owned.push('x');
   assert.deepEqual(game.state().items.owned, [item.id]);
 });
