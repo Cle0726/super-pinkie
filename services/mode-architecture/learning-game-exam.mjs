@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool} from './learning-game-content.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 
 const clean = (v, n = 2000) => String(v ?? '').replace(/\u0000/g, '').trim().slice(0, n);
@@ -22,6 +22,12 @@ ITEM 按题型：
 - translate-passage：{"stem":"要翻译的英文实用文字（60–90 词）","reference":"参考译文","rubric":"意思准确 8 分 + 通顺 4 分的评分要点"}
 - writing：{"stem":"中文写作提示（应用文，写清要点）","reference":"范文（80–100 词）","rubric":"五档评分要点和必备格式"}
 题量必须和输入的 count 完全一致。`;
+
+// 盲做发现一道选择题可能不止一个对的选项：只改这一道
+export const FIX_ITEM_RULES = `你是 B 级命题老师。输入一道四选一题 {"material","tts","stem","options","answer","solver"}：另一位老师盲做时选了 solver（或认为不止一个选项都对）。
+改写这道题——可以改选项、题干，听力题可以改原文 tts——让只有 answer 下标对应的那个选项正确，其它三个明显不对；难度、话题和题型不变。
+只输出 JSON：{"tts":"听力题才写","stem":"","options":["","","",""],"answer":0-3}`;
+const choiceContext = (p, it) => (p.material && !p.kind.startsWith('listen') ? `${p.material.slice(0, 1500)}\n\n${it.stem}` : (it.tts ? `${it.tts}\n${it.stem || ''}` : it.stem));
 
 export const GRADE_RULES = `你是 B 级阅卷老师。输入 {"kind":"translate-passage|writing","task":题目,"reference":参考答案,"rubric":评分细则,"max":满分,"answer":考生作答}。
 严格按细则给分：空白或只抄题目 0 分；跑题最多给满分的三分之一；写作格式要件（称呼 / 落款 / 日期）缺失要扣分。
@@ -82,7 +88,7 @@ export function publicPaper(full) {
 
 export function gradeObjective(kind, item, answer) {
   if (answer == null || answer === '') return false;
-  if (item.options) return Number(answer) === item.answer;
+  if (item.options) return Number(answer) === item.answer || (Array.isArray(item.alt) && item.alt.includes(Number(answer)));
   if (kind === 'term-match') return String(answer).trim().toUpperCase() === item.answer;
   const a = fold(answer);
   return item.answer.some(x => fold(x) === a);
@@ -145,11 +151,44 @@ export class GameExam {
         return;
       }
       const full = {paperId, exam, createdAt: this.now(), sections};
+      full.verify = await this.verifyPaper(full).catch(() => null);
       this.writeFull(full);
       this.game.mutate(state => { this.ensure(state).papers[paperId] = {paperId, exam, title: `B 级仿真卷 · ${beijingDate(this.now()).slice(5)}`, createdAt: this.now(), status: 'ready'}; });
     })().catch(() => {}).finally(() => this.jobs.delete(paperId));
     this.jobs.set(paperId, job);
     return paperId;
+  }
+
+  // 出卷后逐题盲做所有选择题（4 路并发）：对不上的改写一次再盲做；还不行就把盲做选的那个也算对（item.alt，只在服务端）。
+  async verifyPaper(full) {
+    const rm = this.game.requestModel;
+    const out = {checked: 0, unique: 0, fixed: 0, ambiguous: 0, unknown: 0};
+    if (!rm) return out;
+    const jobs = [];
+    for (const sec of full.sections) for (const p of sec.parts) for (const it of p.items) if (it.options) jobs.push({p, it});
+    await pool(jobs, 4, async ({p, it}) => {
+      const solved = await blindSolve(rm, {stem: choiceContext(p, it), options: it.options});
+      out.checked += 1;
+      if (!solved) { out.unknown += 1; return; }
+      if (solved.unique && solved.answer === it.answer) { out.unique += 1; return; }
+      const listen = p.kind.startsWith('listen');
+      const r = await modelJson(rm, FIX_ITEM_RULES, {material: listen ? '' : String(p.material || '').slice(0, 1500), tts: it.tts || '', stem: it.stem || '', options: it.options, answer: it.answer, solver: solved.answer}, {
+        retries: 1, timeoutMs: 60000, maxTokens: 1200,
+        validate: v => { const c = validChoice({stem: v?.stem || it.stem || '(听录音选答案)', options: v?.options, answer: v?.answer}); return c ? {...c, stem: v?.stem ? c.stem : it.stem, tts: listen && v?.tts ? String(v.tts).slice(0, 1200) : it.tts} : null; },
+      });
+      if (r) {
+        const cand = {...it, stem: r.value.stem, options: r.value.options, answer: r.value.answer, ...(r.value.tts ? {tts: r.value.tts} : {})};
+        const again = await blindSolve(rm, {stem: choiceContext(p, cand), options: cand.options});
+        if (again?.unique && again.answer === cand.answer) {
+          Object.assign(it, {stem: cand.stem, options: cand.options, answer: cand.answer, why: '', ...(cand.tts ? {tts: cand.tts} : {})});
+          out.fixed += 1;
+          return;
+        }
+      }
+      if (solved.answer !== it.answer) it.alt = [solved.answer];
+      out.ambiguous += 1;
+    });
+    return out;
   }
 
   start({paperId, requestId} = {}) {
