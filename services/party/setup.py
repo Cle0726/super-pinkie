@@ -7,6 +7,12 @@ import shutil
 import tempfile
 import time
 
+# See services/context/setup.py: cp1252 stdout on a non-UTF-8 Windows locale
+# would break the Chinese status print below.
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 IDENTITIES = json.loads(Path(__file__).with_name('identities.json').read_text(encoding='utf-8'))
 
 # One definition, shared with every other service that writes into the state
@@ -59,7 +65,13 @@ def migrate_file(home, agent_id, target, known, replacement):
     if original == replacement or original not in known:
         return False
     backup = state_root(home) / 'backups' / ('party-identity-' + str(time.time_ns()))
-    backup.mkdir(parents=True, mode=0o700)
+    # On Windows time.time_ns() can return the same value for two calls made
+    # back-to-back (the clock's resolution is coarser than a nanosecond), and
+    # install() migrates several files in a row, so the two calls would pick
+    # the same directory name and the second mkdir raises FileExistsError.
+    # The per-file name below (agent_id + '-' + target.name) still differs, so
+    # letting an existing directory be reused is safe.
+    backup.mkdir(parents=True, mode=0o700, exist_ok=True)
     shutil.copy2(target, backup / (agent_id + '-' + target.name))
     if target.read_text(encoding='utf-8') != original:
         raise RuntimeError('派对身份文件正在被修改；已保留备份，未覆盖，请稍后重试。')

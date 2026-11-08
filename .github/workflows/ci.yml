@@ -119,7 +119,17 @@ jobs:
         # here is PowerShell, which does not expand globs for native commands.
         # Node expands them itself, but matching the ubuntu job exactly removes
         # a whole class of "does this differ by shell" doubt.
+        #
+        # PYTHONUTF8 pins the interpreter to UTF-8 mode: the test suites were
+        # written for a UTF-8 environment (Linux/macOS) and read/write Chinese
+        # files via Path.read_text()/write_text() without an explicit encoding,
+        # which the stock Windows runner's cp1252 locale then chokes on.  The
+        # product code already pins encoding='utf-8' explicitly for end users;
+        # the suites run only here, so fixing the environment is the correct,
+        # single-place remedy for them.
         shell: bash
+        env:
+          PYTHONUTF8: "1"
         run: |
           node --test tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
