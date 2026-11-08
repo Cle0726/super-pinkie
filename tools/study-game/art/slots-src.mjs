@@ -134,10 +134,10 @@ const R = {
   writing: ['写作塔 Writing Tower', 'a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink'],
 };
 const LAYER = {
-  bg: 'BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.',
+  bg: 'BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).',
   mg: 'MIDDLE layer: the main landmark of the region, centered, clear iconic silhouette.',
   fg: 'FRONT layer: foreground framing elements along the bottom and both side edges (foliage, props, small details), leaving the center open.',
-  base: 'GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.',
+  base: 'GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.',
 };
 for (const [rid, [name, d]] of Object.entries(R)) {
   for (const [lid, ld] of Object.entries(LAYER)) add(3, `world/pretco-b/${rid}/${lid}`, 'layer', `${name}: ${d}. ${ld}`);

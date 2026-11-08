@@ -216,7 +216,7 @@
    "prio": 3,
    "slot": "world/pretco-b/listening/bg",
    "template": "layer",
-   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -237,14 +237,14 @@
    "prio": 3,
    "slot": "world/pretco-b/listening/base",
    "template": "layer",
-   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "听力港 Listening Harbor: a cozy paper harbor with a lighthouse whose lamp is a big gramophone horn, small paper boats, sound-wave shaped waves, seagull silhouettes; region colors sea teal and sunrise peach. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
    "prio": 3,
    "slot": "world/pretco-b/vocab/bg",
    "template": "layer",
-   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -265,14 +265,14 @@
    "prio": 3,
    "slot": "world/pretco-b/vocab/base",
    "template": "layer",
-   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "词汇森林 Vocabulary Forest: a whimsical paper forest where tree leaves are tiny flash cards, mushrooms, a winding path; region colors leaf green and honey yellow. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
    "prio": 3,
    "slot": "world/pretco-b/grammar/bg",
    "template": "layer",
-   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -293,14 +293,14 @@
    "prio": 3,
    "slot": "world/pretco-b/grammar/base",
    "template": "layer",
-   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "语法工坊 Grammar Workshop: a cute paper workshop with gears, cogs, workbenches, sentence-building blocks and little conveyor belts; region colors copper orange and slate blue. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
    "prio": 3,
    "slot": "world/pretco-b/reading/bg",
    "template": "layer",
-   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -321,14 +321,14 @@
    "prio": 3,
    "slot": "world/pretco-b/reading/base",
    "template": "layer",
-   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "阅读图书馆 Reading Library: a grand cozy paper library with towering bookshelves, a spiral staircase, warm reading lamps, floating open books; region colors burgundy and warm gold. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
    "prio": 3,
    "slot": "world/pretco-b/translation/bg",
    "template": "layer",
-   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -349,14 +349,14 @@
    "prio": 3,
    "slot": "world/pretco-b/translation/base",
    "template": "layer",
-   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "翻译桥 Translation Bridge: an elegant arched paper bridge connecting a Chinese garden side (pagoda, willow) and a Western town side (clock tower, cottages) over a calm river; region colors jade and brick red. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
    "prio": 3,
    "slot": "world/pretco-b/writing/bg",
    "template": "layer",
-   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. BACK layer (far background): distant skyline / sky shapes and soft hills of the region, low contrast, misty.",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. BACK layer (far background): ONLY a pale misty distant silhouette skyline of the region across the lower-middle band plus a few soft clouds; very low contrast and desaturated; no foreground objects, no close-up buildings, and do NOT repeat the main landmark (it is a separate layer).",
    "extra": ""
   },
   {
@@ -377,7 +377,7 @@
    "prio": 3,
    "slot": "world/pretco-b/writing/base",
    "template": "layer",
-   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. GROUND / base board: a top-down-ish ground plate for the diorama (path, grass, water or floor appropriate to the region) filling the lower 60% of the frame as an organic paper shape, transparent above.",
+   "desc": "写作塔 Writing Tower: a tall whimsical tower shaped like a fountain pen and stacked notebooks, ink-cloud swirls, paper airplanes circling; region colors indigo ink and pink. GROUND / base board: a flat organic paper ground plate (path, grass, water or floor appropriate to the region) seen from a high three-quarter angle, filling the lower 60% of the frame; only small low props on it (stones, flowers, books); NO buildings, NO walls, NO ceilings, NO tall landmark; transparent above.",
    "extra": ""
   },
   {
