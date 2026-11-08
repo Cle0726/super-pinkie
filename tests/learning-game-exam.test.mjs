@@ -121,3 +121,31 @@ test('真实分数：考前不能填；考后 ≥60 解锁毕业碧琪，只能�
   assert.equal(game.modules.exam.bossState(game.read()).phase, 'done');
   assert.throws(() => game.modules.exam.realScore({score: 80, requestId: 'r2'}), /填过/);
 });
+
+test('出卷后盲做复核：对不上的选择题改写一次；改不好就把盲做的答案也算对（只在服务端，不泄题）', async t => {
+  const {SOLVE_RULES} = await import('../services/mode-architecture/learning-game-content.mjs');
+  const {FIX_ITEM_RULES} = await import('../services/mode-architecture/learning-game-exam.mjs');
+  const {game} = gameFixture(t);
+  const base = model();
+  game.requestModel = async (rules, payload) => {
+    if (rules === SOLVE_RULES) {
+      if (payload.stem.includes('Q1 ___')) return {value: {answer: 0, unique: false}}; // 第 2 题：歧义，改写后变好
+      if (payload.stem.includes('Q3 ___')) return {value: {answer: 1, unique: true}};  // 第 4 题：改写也救不回
+      if (payload.stem.includes('FIXED')) return {value: {answer: 2, unique: true}};
+      return {value: {answer: 2, unique: true}};
+    }
+    if (rules === FIX_ITEM_RULES) return payload.stem.includes('Q1 ___') ? {value: {stem: 'FIXED one ___ ?', options: ['p', 'q', 'RIGHT-FIX', 's'], answer: 2}} : {unavailable: true};
+    return base(rules, payload);
+  };
+  const paperId = await readyPaper(game);
+  const full = JSON.parse(fs.readFileSync(path.join(game.root, 'papers', `${paperId}.json`), 'utf8'));
+  const vocabA = full.sections.find(s => s.id === 'vocab').parts.find(p => p.id === 'A').items;
+  assert.equal(vocabA[1].stem, 'FIXED one ___ ?');
+  assert.deepEqual(vocabA[3].alt, [1]);
+  assert.ok(full.verify.checked >= 34 && full.verify.fixed >= 1 && full.verify.ambiguous >= 1, JSON.stringify(full.verify));
+  assert.equal(gradeObjective('choice', vocabA[3], 1), true, '盲做的答案也算对');
+  assert.equal(gradeObjective('choice', vocabA[3], 2), true);
+  assert.equal(gradeObjective('choice', vocabA[3], 0), false);
+  const s = game.modules.exam.start({paperId, requestId: 'v1'});
+  assert.ok(!JSON.stringify(s).includes('"alt"'), 'alt 不进公开卷');
+});
