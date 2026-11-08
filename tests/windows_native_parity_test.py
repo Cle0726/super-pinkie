@@ -244,6 +244,22 @@ class DesktopControlNodeTests(unittest.TestCase):
         self.assertEqual(arguments[arguments.index("--display-name") + 1],
                          windows_desktop.DesktopControlNode.DISPLAY_NAME)
 
+    def test_the_node_keeps_its_own_device_identity(self):
+        """The node must not reuse the gateway CLI's device record.
+
+        Registering the node from the shared state dir rewrote the device
+        metadata of the identity the CLI already had approved. The gateway then
+        reported "device metadata change pending approval" to every later CLI
+        connect, so the watchdog's chat.send retry was refused and a dropped
+        stream never resumed (smoke: disconnect requests stayed at 1).
+        """
+        environment = windows_desktop.DesktopControlNode.device_environment({})
+        state = Path(environment["OPENCLAW_STATE_DIR"])
+        root = windows_desktop.state_root()
+        self.assertNotEqual(state, root, "the node would rewrite the CLI's device record")
+        self.assertEqual(state, root / "desktop-control-node")
+        self.assertEqual(environment["OPENCLAW_SERVICE_KIND"], "node")
+
     def test_a_missing_runtime_reports_instead_of_starting(self):
         node = windows_desktop.DesktopControlNode.__new__(windows_desktop.DesktopControlNode)
         node.runtime = type("R", (), {"openclaw": Path("nope/openclaw.mjs"), "node": Path("nope/node.exe")})()
