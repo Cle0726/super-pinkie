@@ -268,3 +268,28 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
     'the bridge must publish every handler before announcing itself'
   );
 });
+
+test('the dock is reachable through either native transport', () => {
+  const mode = read('ui/injections/laolao-mode-switcher.js');
+
+  // macOS registers a WKScriptMessageHandler; Windows mirrors those names onto
+  // window.webkit. Older Windows bridges merged only the handlers declared
+  // first and dropped the dock one, so the entry vanished even though
+  // pywebview's api object could open a dock the whole time. Accept both.
+  assert.match(mode, /const dockBridge = \(\) => \{/);
+  const adapter = between(mode, 'const dockBridge = () => {', 'const hasWorkspaceDock = () => Boolean(dockBridge());');
+  assert.match(adapter, /window\.webkit\?\.messageHandlers\?\.laolaoWorkspaceDock/);
+  assert.match(adapter, /window\.pywebview\?\.api/);
+  assert.match(adapter, /typeof api\.open_workspace_dock === "function"/);
+  // The adapter must present the same postMessage shape so callers stay simple.
+  assert.match(adapter, /postMessage\(payload\)/);
+  assert.match(adapter, /api\.close_workspace_dock\?\.\(\)/);
+  assert.match(adapter, /api\.open_workspace_dock\(\{/);
+  assert.match(mode, /const hasWorkspaceDock = \(\) => Boolean\(dockBridge\(\)\)/);
+
+  // Every caller goes through the adapter, so no path can bypass the fallback.
+  const openBody = between(mode, 'const openWorkspaceDock = async (mode) => {', '// Either half may ask');
+  assert.match(openBody, /const bridge = dockBridge\(\);/);
+  const closeBody = between(mode, 'const closeWorkspaceDock = () => {', 'const DOCK_EXIT_ID');
+  assert.match(closeBody, /const bridge = dockBridge\(\);/);
+});
