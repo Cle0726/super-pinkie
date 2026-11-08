@@ -534,6 +534,30 @@
    "prompt": "art-slots.json · ult",
    "reviewed": "2026-11-08",
    "note": "v2：月下竹林、烟雾 + 两道残影"
+  },
+  "form/xiaoxue/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：雪原黄昏冷逆光、大雪花、小雪人在右下"
+  },
+  "form/daxue/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里雪坡滑雪橇，青绿极光"
+  },
+  "form/graduate/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里石台，抛帽、金色逆光"
+  },
+  "form/gold-master/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：金章大印砸下，金色冲击环扫过立体书世界"
   }
  }
 }

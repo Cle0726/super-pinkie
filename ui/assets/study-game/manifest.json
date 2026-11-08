@@ -190,6 +190,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152595334
   },
+  "form/daxue/ult": {
+   "file": "form/daxue/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 131078,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351438
+  },
   "form/detective/icon": {
    "file": "form/detective/icon.webp",
    "w": 256,
@@ -262,6 +271,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152595387
   },
+  "form/gold-master/ult": {
+   "file": "form/gold-master/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 117704,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351448
+  },
   "form/graduate/icon": {
    "file": "form/graduate/icon.webp",
    "w": 256,
@@ -279,6 +297,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152605153
+  },
+  "form/graduate/ult": {
+   "file": "form/graduate/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 85658,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351456
   },
   "form/idol/icon": {
    "file": "form/idol/icon.webp",
@@ -549,6 +576,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152618693
+  },
+  "form/xiaoxue/ult": {
+   "file": "form/xiaoxue/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 138984,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154351466
   },
   "form/zhuangyuan/icon": {
    "file": "form/zhuangyuan/icon.webp",
@@ -974,5 +1010,5 @@
    "rawMtime": 1794152656773
   }
  },
- "updatedAt": "2026-11-08T16:10:40.602Z"
+ "updatedAt": "2026-11-08T16:13:21.253Z"
 }
