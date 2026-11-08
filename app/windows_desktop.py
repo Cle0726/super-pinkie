@@ -3943,12 +3943,6 @@ BRIDGE_SCRIPT = r"""
   window.__pinkieWorkspaceDockState = dockState;
   dockState({open: false});
 
-  // Page scripts run before this bridge exists on Windows: WebView2 only lets
-  // the shell inject after the document reports loaded. Anything that probed
-  // for these handlers earlier got `undefined` and moved on, so tell the page
-  // the bridge is live now and let it re-check.
-  window.dispatchEvent(new Event('pinkie-native-bridge-ready'));
-
   handlers.laolaoNativeDictation = { postMessage(payload) {
     if (payload?.action === 'stop') call('stop_dictation');
     else call('start_dictation');
@@ -3970,6 +3964,18 @@ BRIDGE_SCRIPT = r"""
       .then(blob => { spokenAudio = new Audio(URL.createObjectURL(blob)); return spokenAudio.play(); })
       .catch(() => {});
   }};
+
+  // Object.assign copies the entries that exist *at the moment it is called*.
+  // The first merge above therefore published only the three handlers written
+  // into the literal; everything registered afterwards -- window controls,
+  // motion, the workspace dock, dictation, live voice -- stayed invisible to
+  // the page. On Windows that cost the split-workspace entry entirely, plus a
+  // fullscreen button that did nothing, no appearance sync and no dictation,
+  // while the identical page worked on macOS because WKScriptMessageHandlers
+  // are registered natively instead of being merged by JavaScript.
+  // Merge once more now that every handler exists, then announce the bridge.
+  window.webkit.messageHandlers = Object.assign(window.webkit.messageHandlers || {}, handlers);
+  window.dispatchEvent(new Event('pinkie-native-bridge-ready'));
 
   const installDictation = () => {
     const actions = document.querySelector('.agent-chat__composer-actions');

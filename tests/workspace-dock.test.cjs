@@ -240,13 +240,31 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
   // No polling: this file must not run background work (see brand-ui).
   assert.doesNotMatch(watcher, /setInterval|setTimeout/);
 
-  // The Windows bridge announces itself after it defines the handlers.
-  const bridge = between(desktop, 'BRIDGE_SCRIPT = r"""', 'let spokenAudio = null;');
+  // The Windows bridge announces itself after every handler exists.
+  const bridge = between(desktop, 'BRIDGE_SCRIPT = r"""', 'const installDictation = () =>');
   assert.match(bridge, /handlers\.laolaoWorkspaceDock = \{ postMessage\(payload\)/);
   assert.match(bridge, /window\.dispatchEvent\(new Event\('pinkie-native-bridge-ready'\)\)/);
-  // Announced only after the handler object exists, never before.
   assert.ok(
     bridge.indexOf('handlers.laolaoWorkspaceDock') < bridge.indexOf('pinkie-native-bridge-ready'),
     'the bridge must define the dock handler before announcing it'
+  );
+  // Object.assign copies only the keys present when it runs, so a single merge
+  // at the top of the script published three handlers and silently dropped the
+  // five registered after it -- the dock, window controls, motion, dictation and
+  // live voice. That is the actual reason the split entry was missing on
+  // Windows while the same page worked on macOS.
+  const merges = bridge.match(/window\.webkit\.messageHandlers = Object\.assign/g) || [];
+  assert.ok(merges.length >= 2, 'the bridge must merge its handlers again after registering them all');
+  const lastMerge = bridge.lastIndexOf('window.webkit.messageHandlers = Object.assign');
+  for (const name of ['laolaoWindowControl', 'pinkieMotion', 'laolaoWorkspaceDock',
+                      'laolaoNativeDictation', 'laolaoLiveVoice']) {
+    const at = bridge.indexOf('handlers.' + name + ' =');
+    assert.ok(at !== -1, name + ' must be registered');
+    assert.ok(at < lastMerge, name + ' must be registered before the final merge publishes it');
+  }
+  // And the announcement must come after that final merge, not before it.
+  assert.ok(
+    lastMerge < bridge.indexOf("pinkie-native-bridge-ready"),
+    'the bridge must publish every handler before announcing itself'
   );
 });
