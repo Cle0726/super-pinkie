@@ -1087,10 +1087,14 @@ def prepare_bundled_desktop(log):
         ensure_prompts(log, preserve_existing=True)
         install_personas(log)
         marker.write_text("preserved\n", encoding="utf-8")
-    else:
-        # The marker only covers the file copy.  Mode registration is checked
-        # on every launch, so one failed run is repaired by the next start.
-        ensure_mode_agents(log)
+
+    # Mode registration runs on every launch, including the very first one.
+    # It used to sit in the `else` branch, so a fresh download registered no
+    # mode agents at all and every mode plugin looked like it "did not take
+    # effect" until the *next* start -- the exact symptom users reported.
+    # It is cheap and idempotent: it reads openclaw.json and only calls the CLI
+    # when something is missing, so a failed run is repaired next time.
+    ensure_mode_agents(log)
 
     # Every step below is idempotent, but together they cost seconds on each
     # Windows start (module imports, hundreds of file compares, one memory
@@ -1106,6 +1110,7 @@ def prepare_bundled_desktop(log):
         return
 
     failures = []
+    config_before = _digest(config)
 
     def checked(message):
         if "失败" in message or "⚠️" in message:
@@ -1124,6 +1129,12 @@ def prepare_bundled_desktop(log):
     # The steps above may have rewritten the config; remember the result, so
     # the next start compares against what is on disk now.
     write_prepare_fingerprint(fingerprint_file, bundled_prepare_fingerprint(version, config, state))
+
+    # A gateway that is already running keeps the plugin set it started with.
+    # On a warm start the first launch's setup could add a plugin the live
+    # gateway never picked up, which looked like "the plugin did not take
+    # effect". Tell the caller so it can reload instead of guessing.
+    return _digest(config) != config_before
 
 
 PREPARE_SERVICES = ("party", "context", "project-scope", "mode-architecture", "first-person-renderer")

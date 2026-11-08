@@ -223,5 +223,117 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertFalse(self.logs)
 
 
+class FirstLaunchRegistrationTests(unittest.TestCase):
+    """A fresh download must register the modes on its very first launch.
+
+    The old flow ran ensure_mode_agents only when the per-version marker already
+    existed, so the first start registered nothing and every mode plugin looked
+    like it "did not take effect" until the next launch.
+    """
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        root = Path(self.directory.name)
+        self.home = root / "home"
+        self.state = root / "state"
+        self.resources = root / "resources"
+        (self.home / ".openclaw").mkdir(parents=True)
+        (self.resources / "personas/project").mkdir(parents=True)
+        (self.resources / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        self.logs = []
+        self.config = self.home / ".openclaw/openclaw.json"
+        self.config.write_text('{"agents": {"list": [{"id": "main"}]}}\n', encoding="utf-8")
+        self.calls = []
+        self.patches = [
+            mock.patch.object(super_pinkie.Path, "home", return_value=self.home),
+            mock.patch.object(super_pinkie, "openclaw_config_path", return_value=self.config),
+            mock.patch.object(super_pinkie, "prompts_dir", return_value=self.home / ".openclaw"),
+            mock.patch.object(super_pinkie, "windows_state_root", return_value=self.state),
+            mock.patch.object(super_pinkie, "resource_path", side_effect=lambda *parts: self.resources.joinpath(*parts)),
+            mock.patch.object(super_pinkie, "install_runtime_service", return_value=False),
+            mock.patch.object(super_pinkie, "ensure_prompts", return_value=None),
+            mock.patch.object(super_pinkie, "install_personas", return_value=None),
+            mock.patch.object(super_pinkie, "repair_provider_models", return_value=None),
+            mock.patch.object(super_pinkie, "ensure_gateway_auth_none", return_value=None),
+            mock.patch.object(super_pinkie, "apply_browser_proxy", return_value=None),
+            mock.patch.object(super_pinkie, "ensure_workspace_avatars", return_value=None),
+            mock.patch.object(super_pinkie, "bundled_prepare_fingerprint", return_value="fp"),
+            mock.patch.object(super_pinkie, "read_prepare_fingerprint", return_value="fp"),
+            mock.patch.object(super_pinkie, "write_prepare_fingerprint", return_value=None),
+            mock.patch.object(
+                super_pinkie, "ensure_mode_agents",
+                side_effect=lambda log: self.calls.append("ensure_mode_agents"),
+            ),
+        ]
+        for patch in self.patches:
+            patch.start()
+
+    def tearDown(self):
+        for patch in reversed(self.patches):
+            patch.stop()
+        self.directory.cleanup()
+
+    def test_a_first_launch_registers_the_modes(self):
+        # The regression this guards: the call used to sit in an `else` branch
+        # keyed on the per-version marker, so a fresh download never ran it.
+        # Assert only that a first launch (no marker on disk beforehand) calls
+        # ensure_mode_agents exactly once.
+        marker = self.state / "bundled-setup-9.9.9"
+        self.assertFalse(marker.exists(), "this test must start without the marker")
+        seen = []
+        super_pinkie.ensure_mode_agents.side_effect = lambda log: seen.append(1)
+        super_pinkie.prepare_bundled_desktop(self.logs.append)
+        self.assertEqual(len(seen), 1, "a first launch must register the mode agents")
+
+    def test_a_later_launch_still_registers_the_modes(self):
+        # Pretend the version marker already exists (second start of this version).
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / "bundled-setup-9.9.9").write_text("preserved\n", encoding="utf-8")
+        super_pinkie.prepare_bundled_desktop(self.logs.append)
+        self.assertIn("ensure_mode_agents", self.calls)
+
+
+class PluginAllowListTests(unittest.TestCase):
+    """A fresh profile must end up with every bundled plugin allowlisted.
+
+    The setup scripts appended to plugins.allow only when a list already
+    existed, so a brand-new config (no allow key) left every plugin outside
+    the allowlist -- installed on disk, enabled in entries, and silently
+    inactive. That is the "some plugins do not take effect" report.
+    """
+
+    SERVICES = ("project-scope", "first-person-renderer", "mode-architecture")
+    EXPECTED = {
+        "project-scope": "pinkie-project-scope",
+        "first-person-renderer": "pinkie-first-person-renderer",
+        "mode-architecture": "pinkie-mode-architecture",
+    }
+
+    def test_a_fresh_config_gets_an_allow_list(self):
+        import importlib.util
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / ".openclaw").mkdir(parents=True)
+            config = home / ".openclaw/openclaw.json"
+            config.write_text("{}\n", encoding="utf-8")
+            source_root = Path(super_pinkie.__file__).resolve().parent.parent
+            for name in self.SERVICES:
+                path = source_root / "services" / name / "setup.py"
+                if not path.is_file():
+                    self.skipTest(f"{name} setup.py is not present in this checkout")
+                spec = importlib.util.spec_from_file_location(
+                    "parity_" + name.replace("-", "_"), path
+                )
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                module.install(home=home)
+            data = json.loads(config.read_text(encoding="utf-8"))
+            allow = data.get("plugins", {}).get("allow")
+            self.assertIsInstance(allow, list, "plugins.allow must exist after a fresh install")
+            for name in self.SERVICES:
+                self.assertIn(self.EXPECTED[name], allow)
+
+
 if __name__ == "__main__":
     unittest.main()

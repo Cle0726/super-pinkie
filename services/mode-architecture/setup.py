@@ -339,8 +339,15 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     paths = plugins.setdefault("load", {}).setdefault("paths", [])
     if str(target) not in paths:
         paths.append(str(target))
-    if isinstance(plugins.get("allow"), list) and plugin_id not in plugins["allow"]:
-        plugins["allow"].append(plugin_id)
+    # A brand-new profile has no allow list at all. Appending only when
+    # one already existed kept every bundled plugin outside the allowlist,
+    # which is why they loaded on some machines and silently did nothing
+    # on a fresh download.
+    allow = plugins.get("allow")
+    if allow is None:
+        allow = plugins["allow"] = []
+    if isinstance(allow, list) and plugin_id not in allow:
+        allow.append(plugin_id)
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})

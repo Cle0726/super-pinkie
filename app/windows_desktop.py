@@ -2410,6 +2410,158 @@ def _gateway_proxy_module():
     return gateway_proxy
 
 
+class DesktopControlNode:
+    """The Mac shell's 「桌面控制」 service, wired the Windows way.
+
+    Mac installs a CUA driver for screen capture and input, then starts a node
+    host so the gateway's computer tool can reach it. Windows has no CUA driver,
+    so this starts the same headless node with the runtime already bundled:
+    without it 碧琪 has no computer target on Windows at all, and the tool
+    silently has nothing to call. The node is optional by design -- a failure
+    here only costs desktop control, never chat.
+    """
+
+    DISPLAY_NAME = "超級碧琪桌面控制"
+
+    def __init__(self, runtime):
+        self.runtime = runtime
+        self.process = None
+        self.closing = threading.Event()
+        self.lock = threading.RLock()
+        self.generation = 0
+        self.last_error = ""
+        self.restarts = 0
+        self.restart_limit = 5
+        self._restarting = False
+
+    def _entry(self):
+        entry = self.runtime.openclaw
+        return entry if entry.is_file() else None
+
+    def _arguments(self):
+        entry = self._entry()
+        if entry is None:
+            return None
+        parsed = urllib.parse.urlparse(GATEWAY_URL)
+        arguments = [
+            str(entry), "node", "run",
+            "--host", parsed.hostname or "127.0.0.1",
+            "--port", str(parsed.port or 18789),
+            "--display-name", self.DISPLAY_NAME,
+        ]
+        if parsed.scheme == "https":
+            arguments.append("--tls")
+        return arguments
+
+    def start(self):
+        arguments = self._arguments()
+        if not arguments:
+            self.last_error = "node runtime missing"
+            append_log("computer", "desktop control skipped: bundled OpenClaw entry is missing")
+            return False
+        with self.lock:
+            if self.process is not None and self.process.poll() is None:
+                return True
+            node = self.runtime.node
+            if not node.is_file():
+                self.last_error = "node binary missing"
+                append_log("computer", "desktop control skipped: bundled node is missing")
+                return False
+            environment = dict(os.environ)
+            environment.update(self.runtime.environment())
+            environment["OPENCLAW_SERVICE_KIND"] = "node"
+            environment["PINKIE_OPENCLAW_ENTRY"] = str(self._entry())
+            self.generation += 1
+            generation = self.generation
+            try:
+                process = subprocess.Popen(
+                    [str(node)] + arguments,
+                    cwd=str(self.runtime.root),
+                    env=environment,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    **hidden_process_kwargs(),
+                )
+            except OSError as error:
+                self.last_error = str(error)
+                append_log("computer", f"desktop control failed to start: {error}")
+                return False
+            self.process = process
+            self.last_error = ""
+            append_log("computer", f"desktop control node started (pid {process.pid})")
+            threading.Thread(
+                target=self._watch, args=(process, generation), name="pinkie-computer-watch", daemon=True
+            ).start()
+            return True
+
+    def _watch(self, process, generation):
+        code = process.wait()
+        with self.lock:
+            if generation != self.generation or self.closing.is_set():
+                return
+            self.process = None
+            self.last_error = f"node exited with {code}"
+        append_log("computer", f"desktop control node exited with {code}")
+        self._schedule_restart()
+
+    def _schedule_restart(self):
+        """Restart once, from a single worker, with backoff.
+
+        A node that dies on a bad gateway URL would die again on every retry, so
+        this backs off and gives up after restart_limit. The restart runs on its
+        own thread so close() can still cancel it: doing it inline would keep the
+        watcher alive after the window was gone.
+        """
+        if self.closing.is_set():
+            return
+        with self.lock:
+            if self._restarting or self.restarts >= self.restart_limit:
+                if self.restarts >= self.restart_limit:
+                    append_log("computer", "desktop control node stopped restarting after repeated failures")
+                return
+            self._restarting = True
+            self.restarts += 1
+            delay = min(30, 2 ** self.restarts)
+
+        def again():
+            try:
+                if self.closing.wait(delay):
+                    return
+                self.start()
+            finally:
+                with self.lock:
+                    self._restarting = False
+
+        threading.Thread(target=again, name="pinkie-computer-restart", daemon=True).start()
+
+    def close(self):
+        """Stop the node and cancel any pending restart. Safe to call twice."""
+        self.closing.set()
+        with self.lock:
+            process = self.process
+            self.process = None
+            # Bumping the generation makes a watcher for the old process return
+            # without scheduling another restart.
+            self.generation += 1
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+
+    def status(self):
+        process = self.process
+        return {
+            "running": bool(process is not None and process.poll() is None),
+            "pid": process.pid if process is not None and process.poll() is None else None,
+            "error": self.last_error,
+        }
+
+
 class GatewaySupervisor:
     def __init__(self, runtime):
         self.runtime = runtime
@@ -2716,6 +2868,22 @@ class GatewaySupervisor:
         except (OSError, subprocess.SubprocessError):
             process.kill()
 
+    def reload_for_config(self, seconds=90):
+        """Restart the gateway so it picks up config written while it was up.
+
+        OpenClaw reads plugins and agents once at startup. A gateway kept alive
+        after the previous window closed therefore keeps serving the old set,
+        and a plugin installed by this launch would look present-but-inactive
+        until the user restarted by hand. Stopping and waiting for the port
+        makes the next start read the new config.
+        """
+        self.stop_process()
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and http_ready(GATEWAY_URL):
+            time.sleep(0.2)
+        self.start()
+        return self.wait_ready(seconds)
+
     def close(self):
         self.closing.set()
         self.stop_process()
@@ -2882,6 +3050,97 @@ class LocalServices:
 from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
 
 
+def _describe_material(path: Path):
+    """Read-only file metadata for the chat's material list.
+
+    Mac asks its native preview for the same facts; Windows reports them from
+    the filesystem and, for images and PDFs, the header alone. Nothing here
+    opens the document with a renderer or touches the file's contents beyond
+    the bytes needed for width/height/page count.
+    """
+    import mimetypes
+
+    try:
+        stat = path.stat()
+    except OSError as error:
+        return {"ok": False, "message": str(error)}
+    suffix = path.suffix.lower()
+    mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    info = {
+        "ok": True,
+        "name": path.name,
+        "path": str(path),
+        "kind": suffix.lstrip("."),
+        "size": stat.st_size,
+        "mimeType": mime_type,
+        "modified": int(stat.st_mtime),
+    }
+    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+        try:
+            info.update(_image_dimensions(path, suffix))
+        except Exception:
+            pass
+    if suffix == ".pdf":
+        # Page count needs the page tree, and compressed object streams hide it
+        # from a byte scan. Only report a number when the whole file was read and
+        # the count is non-zero; otherwise say nothing rather than a wrong figure.
+        try:
+            if stat.st_size <= 64 * 1024 * 1024:
+                with open(path, "rb") as handle:
+                    whole = handle.read()
+                # /Type /Page but not /Type /Pages, which is the tree node.
+                pages = len(re.findall(rb"/Type\s*/Page(?![s\w])", whole))
+                if pages:
+                    info["pages"] = pages
+        except OSError:
+            pass
+    if suffix in {".txt", ".md", ".csv", ".json", ".py", ".js", ".mjs", ".ts", ".log", ".html", ".css", ".yaml", ".yml"}:
+        # A partial read would undercount a long file, so only claim a line count
+        # for files small enough to read completely.
+        try:
+            if stat.st_size <= 8 * 1024 * 1024:
+                with open(path, "rb") as handle:
+                    whole = handle.read()
+                info["lines"] = whole.count(b"\n") + (0 if whole.endswith(b"\n") or not whole else 1)
+        except OSError:
+            pass
+    return info
+
+
+def _image_dimensions(path: Path, suffix: str):
+    """Width/height from the file header only; no image decoder involved."""
+    import struct
+
+    with open(path, "rb") as handle:
+        head = handle.read(32)
+        if suffix == ".png" and head[:8] == b"\x89PNG\r\n\x1a\n":
+            width, height = struct.unpack(">II", head[16:24])
+            return {"width": width, "height": height}
+        if suffix in {".jpg", ".jpeg"} and head[:2] == b"\xff\xd8":
+            with open(path, "rb") as handle:
+                handle.read(2)
+                while True:
+                    marker = handle.read(2)
+                    if len(marker) < 2 or marker[0] != 0xFF:
+                        break
+                    length_bytes = handle.read(2)
+                    if len(length_bytes) < 2:
+                        break
+                    length = struct.unpack(">H", length_bytes)[0]
+                    if marker[1] in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                        data = handle.read(5)
+                        height, width = struct.unpack(">HH", data[1:5])
+                        return {"width": width, "height": height}
+                    handle.seek(length - 2, 1)
+        if suffix == ".gif" and head[:6] in (b"GIF87a", b"GIF89a"):
+            width, height = struct.unpack("<HH", head[6:10])
+            return {"width": width, "height": height}
+        if suffix == ".bmp" and head[:2] == b"BM":
+            width, height = struct.unpack("<ii", head[18:26])
+            return {"width": abs(width), "height": abs(height)}
+    return {}
+
+
 class NativeBridge(InAppBrowserBridge):
     def __init__(self, updater):
         # pywebview recursively exposes public js_api attributes. Keeping a
@@ -2894,6 +3153,13 @@ class NativeBridge(InAppBrowserBridge):
         self.maximized = False
         self._resize_lock = threading.Lock()
         self._resize_active = False
+        self.fullscreen = False
+        self._dock_window = None
+        self._dock_opening = False
+        self._dock_lock = threading.RLock()
+        self.appearance_dark = False
+        self.reduce_motion = False
+        self._computer = None
         self.dictation_stop = threading.Event()
         self.dictation_thread = None
         self.dictation_text = ""
@@ -2967,7 +3233,13 @@ class NativeBridge(InAppBrowserBridge):
         ):
             return {"ok": False, "message": "这个位置包含密钥或 CLE Kk 配置，不能从聊天里打开。"}
         if action == "check":
-            return {"ok": True, "name": path.name}
+            try:
+                return {"ok": True, "name": path.name, "size": path.stat().st_size}
+            except OSError:
+                return {"ok": True, "name": path.name}
+
+        if action == "describe":
+            return _describe_material(path)
 
         if action == "save":
             try:
@@ -3309,6 +3581,219 @@ class NativeBridge(InAppBrowserBridge):
             raise
         return {"maximized": self.maximized}
 
+    def toggle_fullscreen(self):
+        """Mac's ⌃⌘F equivalent, done with the Win32 call that actually exists.
+
+        pywebview ships Window.toggle_fullscreen, but its Windows backend does
+        not implement it: the call lands on a GUI method EdgeChrome never
+        defines, so relying on it would raise AttributeError and leave the
+        button doing nothing. ShowWindow(SW_MAXIMIZE) plus removing the resize
+        frame is what a frameless window needs here. The borderless window is
+        frameless already, so maximising fills the work area and the caption
+        chrome keeps working -- there is no separate fullscreen state to lose
+        sync with.
+        """
+        handle = self._native_window_handle()
+        if not handle:
+            return {"fullscreen": bool(getattr(self, "fullscreen", False))}
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            target = not getattr(self, "fullscreen", False)
+            # SW_MAXIMIZE restores the pre-maximise frame when SW_RESTORE is used.
+            user32.ShowWindow(ctypes.c_void_p(handle), 3 if target else 9)
+            self.fullscreen = target
+            return {"fullscreen": self.fullscreen}
+        except Exception as error:
+            append_log("launcher", f"toggle_fullscreen failed: {error}")
+            return {"fullscreen": bool(getattr(self, "fullscreen", False))}
+
+    def apply_appearance(self, payload=None):
+        """Follow the web UI's night switch on the native window.
+
+        Windows keeps one dark window chrome; matching Mac means the title area,
+        caption buttons and scrollbar tint follow the page instead of staying
+        light. DwmSetWindowAttribute's immersive-dark flag is what Explorer and
+        WinUI apps use, and it is ignored on Windows 10, which stays correct.
+        """
+        payload = payload if isinstance(payload, dict) else {}
+        dark = bool(payload.get("dark"))
+        self.appearance_dark = dark
+        if self._window is None:
+            return {"dark": dark}
+        try:
+            import ctypes
+
+            handle = self._native_window_handle()
+            if handle:
+                value = ctypes.c_int32(1 if dark else 0)
+                # Declare the signature: an undeclared HWND argument is truncated
+                # to a C int on 64-bit, which silently targets the wrong window.
+                setter = ctypes.windll.dwmapi.DwmSetWindowAttribute
+                setter.argtypes = [
+                    ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32
+                ]
+                setter.restype = ctypes.c_int32
+                # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (19 before Windows 10 2004).
+                for attribute in (20, 19):
+                    result = setter(ctypes.c_void_p(handle), attribute, ctypes.byref(value), ctypes.sizeof(value))
+                    if result == 0:
+                        break
+        except Exception as error:
+            append_log("launcher", f"appearance sync skipped: {error}")
+        return {"dark": dark}
+
+    # ── 分屏工作区 ──
+    # The Mac shell hosts a second WKWebView beside the primary one. Windows
+    # did not have that shell, so the dock button quietly disappeared. A
+    # separate window that shares the same gateway session is the honest
+    # equivalent here: independent scroll, independent mode, no overlay
+    # covering the primary chat, and the real 退出分屏 control the page draws.
+    WORKSPACE_SESSIONS = {
+        "chat": "agent:main:main",
+        "project": "agent:project:main",
+        "thinking": "agent:thinking:main",
+        "learning": "agent:learning:main",
+        "unrestricted": "agent:unrestricted:main",
+    }
+
+    def _dock_url(self, mode, session_key):
+        session = session_key or self.WORKSPACE_SESSIONS.get(mode, "")
+        if not session:
+            return ""
+        base = gateway_ui_url()
+        separator = "&" if "?" in base else "?"
+        params = urllib.parse.urlencode({"session": session, "laolao-dock": "1"})
+        return f"{base}{separator}{params}"
+
+    def _primary_mode(self):
+        try:
+            url = urllib.parse.urlparse(str(self._window.get_current_url() or ""))
+            query = urllib.parse.parse_qs(url.query)
+            session = (query.get("session") or [""])[0]
+            for mode, key in self.WORKSPACE_SESSIONS.items():
+                if key == session:
+                    return mode
+        except Exception:
+            pass
+        return "project"
+
+    def open_workspace_dock(self, payload=None):
+        """Open (or refocus) the companion chat that the split control asks for."""
+        payload = payload if isinstance(payload, dict) else {}
+        mode = str(payload.get("mode") or "")
+        if mode not in self.WORKSPACE_SESSIONS:
+            return {"ok": False, "message": "这个模式不能分屏"}
+        if mode == self._primary_mode():
+            return {"ok": False, "message": "左右两侧不能是同一个模式"}
+        target = self._dock_url(mode, str(payload.get("sessionKey") or ""))
+        if not target:
+            return {"ok": False, "message": "这个模式还没有可用的会话"}
+        with self._dock_lock:
+            dock = self._dock_window
+            if dock is not None:
+                try:
+                    dock.load_url(target)
+                    dock.show()
+                    self._notify_dock_state()
+                    return {"ok": True, "reused": True}
+                except Exception as error:
+                    append_log("launcher", f"dock reuse failed: {error}")
+                    self._dock_window = None
+            # Claim the slot before the worker starts. Two quick clicks used to
+            # both see None here and open two companion windows.
+            if self._dock_opening:
+                return {"ok": True, "pending": True}
+            self._dock_opening = True
+        threading.Thread(target=self._create_dock_window, args=(target,), name="pinkie-dock", daemon=True).start()
+        return {"ok": True}
+
+    def _create_dock_window(self, target):
+        import webview
+
+        try:
+            dock = webview.create_window(
+                "分屏工作区", target, width=620, height=760, min_size=(420, 420),
+                frameless=True, easy_drag=False, shadow=False, background_color="#000000",
+                transparent=True,
+                # The companion page draws the same 退出分屏 control as the
+                # primary one; without js_api that click has nowhere to go.
+                js_api=self,
+            )
+        except Exception as error:
+            append_log("launcher", f"dock window failed: {error}")
+            with self._dock_lock:
+                self._dock_opening = False
+            return
+        with self._dock_lock:
+            self._dock_opening = False
+        self._dock_window = dock
+        dock.events.closed += self._dock_closed
+        dock.events.loaded += self._dock_loaded
+
+        # The companion is frameless and transparent like the primary window,
+        # so it needs the same DWM glass treatment. Without it WebView2 paints
+        # an opaque rectangle where the primary window shows the desktop.
+        def dress(*_):
+            for label, configure in (("glass", configure_native_glass), ("corners", configure_native_corners)):
+                try:
+                    configure(dock)
+                except Exception as error:
+                    append_log("launcher", f"dock {label} setup failed: {error}")
+
+        dock.events.before_show += dress
+        try:
+            dock.evaluate_js(BRIDGE_SCRIPT)
+        except Exception as error:
+            append_log("launcher", f"dock bridge injection skipped: {error}")
+        self._notify_dock_state()
+
+    def _dock_loaded(self, *_):
+        try:
+            self._dock_window.evaluate_js(BRIDGE_SCRIPT)
+        except Exception:
+            pass
+
+    def _dock_closed(self, *_):
+        self._dock_window = None
+        self._notify_dock_state()
+
+    def close_workspace_dock(self, payload=None):
+        with self._dock_lock:
+            dock = self._dock_window
+            self._dock_window = None
+            self._dock_opening = False
+        if dock is not None:
+            try:
+                dock.destroy()
+            except Exception as error:
+                append_log("launcher", f"dock close failed: {error}")
+        self._notify_dock_state()
+        return {"ok": True}
+
+    def _notify_dock_state(self):
+        window = self._window
+        if window is None:
+            return
+        state = {"open": self._dock_window is not None}
+        try:
+            window.evaluate_js(
+                "window.__pinkieWorkspaceDockState?.(" + json.dumps(state) + ")"
+            )
+        except Exception:
+            pass
+
+    def apply_motion_preference(self, payload=None):
+        """Keep the native shell's own animations on the same switch as the page.
+
+        The web UI owns the preference; the shell only needs to know about it so
+        its chrome does not keep animating when the user asked for calmer motion.
+        """
+        payload = payload if isinstance(payload, dict) else {}
+        self.reduce_motion = bool(payload.get("reduce"))
+        return {"reduce": self.reduce_motion}
+
     def window_close(self):
         self._window.destroy()
 
@@ -3420,6 +3905,44 @@ BRIDGE_SCRIPT = r"""
   window.webkit = window.webkit || {};
   window.webkit.messageHandlers = Object.assign(window.webkit.messageHandlers || {}, handlers);
 
+  // The web UI talks to a native shell through these names on both platforms.
+  // Mac registers them as WKScriptMessageHandlers; here each one forwards to the
+  // matching pywebview method so the same page code works unchanged.
+  handlers.laolaoWindowControl = { postMessage(payload) {
+    const action = payload?.action;
+    if (action === 'toggle-fullscreen') return call('toggle_fullscreen');
+    if (action === 'appearance') return call('apply_appearance', {dark: Boolean(payload?.dark), mode: payload?.mode});
+    return undefined;
+  }};
+
+  handlers.pinkieMotion = { postMessage(payload) {
+    return call('apply_motion_preference', {reduce: Boolean(payload?.reduce)});
+  }};
+
+  handlers.laolaoWorkspaceDock = { postMessage(payload) {
+    const action = payload?.action;
+    if (action === 'close') return call('close_workspace_dock');
+    if (action === 'open') return call('open_workspace_dock', {
+      mode: payload?.mode, sessionKey: payload?.sessionKey,
+    });
+    return undefined;
+  }};
+
+  // The Mac shell stamps the dock state on <html> before the page runs. Mirror
+  // the same attributes here: the shared CSS and the mode switcher both read
+  // them to lay out the split and to offer the way back out.
+  const dockState = state => {
+    const root = document.documentElement;
+    root.toggleAttribute('data-laolao-workspace-split', Boolean(state?.open));
+    // `data-laolao-workspace-dock` marks the *companion* pane, which is this
+    // document only when it was opened with laolao-dock=1.
+    if (new URLSearchParams(location.search).get('laolao-dock') === '1') {
+      root.setAttribute('data-laolao-workspace-dock', '1');
+    }
+  };
+  window.__pinkieWorkspaceDockState = dockState;
+  dockState({open: false});
+
   handlers.laolaoNativeDictation = { postMessage(payload) {
     if (payload?.action === 'stop') call('stop_dictation');
     else call('start_dictation');
@@ -3509,6 +4032,7 @@ BRIDGE_SCRIPT = r"""
     const restoreIcon = '<path d="M7.5 4.5v-1h9v9h-1"/><rect x="3.5" y="6.5" width="10" height="10" rx="1.5"/>';
     controls.innerHTML = '<button type="button" class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="检查更新">'
       + captionIcon('<path d="m10 2 1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8Z"/><path d="M16 14v4m-2-2h4"/>') + '</button>'
+      + '<button type="button" data-act="full" aria-label="切换全屏" title="切换全屏（F11）">' + captionIcon('<path d="M7 3.5H3.5V7M13 3.5h3.5V7M7 16.5H3.5V13M13 16.5h3.5V13"/>') + '</button>'
       + '<button type="button" data-act="min" aria-label="最小化" title="最小化">' + captionIcon('<path d="M4.5 12.5h11"/>') + '</button>'
       + '<button type="button" data-act="max" aria-label="最大化" title="最大化" aria-pressed="false">' + captionIcon(maximizeIcon) + '</button>'
       + '<button type="button" data-act="close" aria-label="关闭" title="关闭">' + captionIcon('<path d="m5 5 10 10M15 5 5 15"/>') + '</button>';
@@ -3592,19 +4116,38 @@ BRIDGE_SCRIPT = r"""
       if (info?.available) { window.__pinkieUpdateAvailable(info); updateDialog(info); }
       else if (manual) toast(info?.temporaryError ? '现在没连上更新站，稍后再试～' : '已经是最新版啦');
     };
+    // Each field is optional. The maximize event and the fullscreen action both
+    // call this, and an absent key must leave the other control alone -- reading
+    // undefined as false made each one reset the other's indicator.
     window.__pinkieNativeWindowState = state => {
-      const maximized = Boolean(state?.maximized);
-      document.documentElement.toggleAttribute('data-pinkie-maximized', maximized);
-      const button = controls.querySelector('[data-act="max"]');
-      const label = maximized ? '还原窗口' : '最大化';
-      button?.setAttribute('aria-label', label); button?.setAttribute('title', label);
-      button?.setAttribute('aria-pressed', String(maximized));
-      const icon = button?.querySelector('svg');
-      if (icon) icon.innerHTML = maximized ? restoreIcon : maximizeIcon;
+      const has = key => state && Object.prototype.hasOwnProperty.call(state, key);
+      if (has('maximized')) {
+        const maximized = Boolean(state.maximized);
+        document.documentElement.toggleAttribute('data-pinkie-maximized', maximized);
+        const button = controls.querySelector('[data-act="max"]');
+        const label = maximized ? '还原窗口' : '最大化';
+        button?.setAttribute('aria-label', label); button?.setAttribute('title', label);
+        button?.setAttribute('aria-pressed', String(maximized));
+        const icon = button?.querySelector('svg');
+        if (icon) icon.innerHTML = maximized ? restoreIcon : maximizeIcon;
+      }
+      if (has('fullscreen')) {
+        const full = Boolean(state.fullscreen);
+        document.documentElement.toggleAttribute('data-pinkie-fullscreen', full);
+        const fullButton = controls.querySelector('[data-act="full"]');
+        const fullLabel = full ? '退出全屏' : '切换全屏';
+        fullButton?.setAttribute('aria-label', fullLabel);
+        fullButton?.setAttribute('title', full ? '退出全屏（Esc）' : '切换全屏（F11）');
+        fullButton?.setAttribute('aria-pressed', String(full));
+      }
     };
     controls.onclick = async event => {
       const action = event.target.closest('button')?.dataset.act;
       if (action === 'update') await inspectUpdate(true);
+      if (action === 'full') {
+        const state = await call('toggle_fullscreen');
+        window.__pinkieNativeWindowState({fullscreen: state?.fullscreen});
+      }
       if (action === 'min') call('minimize');
       if (action === 'max') {
         const state = await call('toggle_maximize');
@@ -3754,6 +4297,14 @@ BRIDGE_SCRIPT = r"""
   if (!installWindowChrome()) {
     document.addEventListener('DOMContentLoaded', installWindowChrome, {once: true});
   }
+  // F11 is the Windows convention for the Mac menu's ⌃⌘F "切换全屏".
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'F11' || event.altKey || event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    Promise.resolve(call('toggle_fullscreen')).then(state => {
+      window.__pinkieNativeWindowState?.({fullscreen: state?.fullscreen});
+    });
+  }, true);
   document.addEventListener('click', event => {
     const link = event.target.closest('a[href]');
     if (!link) return;
@@ -4286,6 +4837,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         updater.health_reporter.start()
     services = LocalServices(runtime)
     page_loads = []
+    computer = DesktopControlNode(runtime)
+    bridge._computer = computer
 
     def loaded(*_):
         # pywebview fires `loaded` on WebView2's GUI thread. Calling its
@@ -4331,11 +4884,23 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # Setup can fail or take a long time. The splash only leaves when the
         # gateway answers, so a setup error must not skip starting it.
         started = time.monotonic()
+        config_changed = False
         try:
-            prepare(lambda message: append_log("setup", message))
+            config_changed = bool(prepare(lambda message: append_log("setup", message)))
         except Exception as error:
             append_log("launcher", f"startup setup failed: {error}")
         startup_timing("setup", started)
+        if config_changed and http_ready(GATEWAY_URL):
+            # A gateway that was already running (kept alive after the last
+            # window closed) holds the plugin set it started with. Setup just
+            # wrote a new one, so reload instead of leaving the user with a
+            # plugin that looks installed but does nothing until a manual
+            # restart.
+            append_log("setup", "config changed while the gateway was up; reloading it")
+            try:
+                gateway.reload_for_config()
+            except Exception as error:
+                append_log("setup", f"gateway reload failed: {error}")
         threading.Thread(target=log_gateway_answer, name="pinkie-startup-timing", daemon=True).start()
         try:
             reporter = getattr(updater, "health_reporter", None)
@@ -4346,6 +4911,22 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             gateway.start()
             startup_timing("gateway spawn")
             threading.Thread(target=gateway.monitor, name="pinkie-gateway-watchdog", daemon=True).start()
+            # Desktop control pairs against the gateway, so it waits for the
+            # gateway to answer rather than racing its startup: `start()` only
+            # spawns the process and returns, so the node would otherwise try to
+            # pair against a port nobody is listening on yet.
+            def start_desktop_control():
+                if not gateway.wait_ready():
+                    append_log("computer", "desktop control skipped: gateway did not become ready")
+                    return
+                try:
+                    computer.start()
+                except Exception as error:
+                    append_log("computer", f"desktop control start failed: {error}")
+
+            threading.Thread(
+                target=start_desktop_control, name="pinkie-computer-start", daemon=True
+            ).start()
             # The splash page polls the local gateway itself.  Do not call
             # pywebview window APIs from this worker thread: WebView2 can block
             # its GUI message pump when load_url/evaluate_js crosses threads.
@@ -4370,7 +4951,14 @@ def run_desktop(resource_root, prepare, update_health_token=None):
 
     def closed(*_):
         bridge.stop_dictation()
+        # The companion has no life of its own: leaving it behind after the main
+        # window closes leaves a stray window with no app behind it.
+        try:
+            bridge.close_workspace_dock()
+        except Exception:
+            pass
         services.close()
+        computer.close()
         # Keep the gateway alive after the window closes so in-flight sessions
         # and background jobs are not terminated. The separate bundled
         # watchdog owns recovery; it will restart the process only if it dies.
