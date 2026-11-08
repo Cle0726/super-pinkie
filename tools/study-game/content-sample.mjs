@@ -72,7 +72,7 @@ try {
       const id = game.modules.exam.kick('pretco-b');
       await game.modules.exam.jobs.get(id);
       const full = game.modules.exam.readFull(id);
-      const entry = {ok: Boolean(full), ms: Date.now() - t0, paperId: id};
+      const entry = {ok: Boolean(full), ms: Date.now() - t0, paperId: id, verify: full?.verify || null};
       if (full) {
         let checked = 0, unique = 0, failedCheck = 0;
         const problems = [];

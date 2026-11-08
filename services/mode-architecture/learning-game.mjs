@@ -361,7 +361,7 @@ export class LearningGame {
       wallet: {stars: state.wallet.stars, seals: state.wallet.seals, shards: {...state.wallet.shards}},
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
       form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened]},
-      items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}},
+      items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}, names: Object.fromEntries((state.items.owned || []).map(id => [id, this.itemName(id)]))},
       today: {date, jar: {stars: pact?.today || 0, goal: pact?.goal || 30}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
       boss, monsters,
       season: {term: season?.term || null, name: season?.name || '', until: season?.to || null, limitedSkus: this.shelves(state).limited.map(s => s.sku)},
@@ -476,6 +476,9 @@ export class LearningGame {
       return {id, name: b.name, cost, rates: b.rates, pity: {sr: b.pity.sr || null, ssr: b.pity.ssr, softStart: b.pity.softStart || null, count: {sr: g.sr, ssr: g.ssr}}, pools: E.gachaPools(id, this.catalog)};
     });
   }
+  itemName(id) {
+    return this.catalog.items.find(i => i.id === id)?.name || this.catalog.forms.find(f => f.id === id)?.name || id;
+  }
   pull({banner, count = 1, requestId} = {}) {
     return this.once('gacha.pull', requestId, state => {
       const id = banner === 'seal' ? 'seal' : banner === 'star' ? 'star' : fail('没有这个扭蛋机');
@@ -501,7 +504,7 @@ export class LearningGame {
       // 扭蛋的结果自己有开蛋动画，awards 里照样记一份（前端可以按 source.type==='gacha' 跳过重复播放）
       const awards = this.grant(state, `gacha:${requestId}`, {type: 'gacha', id}, grants);
       awards.push(...this.setRewards(state));
-      return {results: out.results.map(r => ({itemId: r.itemId, kind: r.kind, rarity: r.rarity, dup: r.dup, shards: r.shards})),
+      return {results: out.results.map(r => ({itemId: r.itemId, kind: r.kind, name: r.name || this.itemName(r.itemId), rarity: r.rarity, dup: r.dup, shards: r.shards})),
         pity: {sr: g.sr, ssr: g.ssr, count: g.pulls}, wallet: walletView(state), awards};
     });
   }
