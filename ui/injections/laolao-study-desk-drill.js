@@ -105,6 +105,8 @@
     root.append(top, pendingLine, stage, bar, live);
     R.sticker(stickerHost, 'focus');
     exit.addEventListener('click', () => { askLeave(); });
+    // 碧琪上岸记：战斗层（laolao-game-battle.js）。没有游戏层时是 null，播放器照旧。
+    let battle = null; try { battle = window.__pinkieGameBattle?.attach(root, {route, top, stage}) || null; } catch { battle = null; }
     check.addEventListener('click', () => onCheck());
     check.addEventListener('pointerdown', () => { if (ready && !ctx.motion?.reduced) { check.classList.remove('pk-press'); void check.offsetWidth; check.classList.add('pk-press'); } });
 
@@ -410,6 +412,7 @@
       check.hidden = false;
       R.sticker(stickerHost, 'focus');
       q._body = body;
+      try { battle?.show(item, {total: original}); } catch { /* 游戏层出错不影响背一背 */ }
       bar.hidden = false;
       if (body?.focus) setTimeout(() => { if (alive && phase === 'ask') body.focus(); }, 40);
     }
@@ -471,6 +474,7 @@
       const firstTry = !firstDone.has(item.itemId);
       const ms = Math.max(0, Math.round(performance.now() - shownAt));
       let response = {stars: 0, requeue: !result.correct};
+      try { battle?.strike({correct: Boolean(result.correct), firstTry, learned: Boolean(result.learned), partial: result.verdict === 'partial', ms}); } catch { /* 同上 */ }
       try {
         if (route.demo) response = {stars: result.correct && firstTry && !result.learned ? 1 : 0, requeue: !result.correct && !result.learned};
         else if (result.learned) await rpc('learned', {sessionId, itemId: item.itemId});
@@ -485,6 +489,7 @@
       starLabel.textContent = '⭐ ' + stars; starLabel.setAttribute('aria-label', '这组星星 ' + stars);
       R.paintProgress(prog, original ? correctIds.size / original : 0);
       if (!result.learned) R.comboBadge(comboHost, combo);
+      try { if (!result.learned) battle?.settled({response, combo, ok: Boolean(result.correct), correctCount: correctIds.size, total: original}); } catch { /* 同上 */ }
       R.sticker(stickerHost, result.correct ? (combo >= 3 ? 'combo' : 'cheer') : 'oops');
       if (result.shake) shake(result.shake);
       phase = 'sheet'; busy = false; check.hidden = true;
@@ -505,6 +510,7 @@
       try { summary = route.demo ? demoSummary() : await rpc('finish', {sessionId}); }
       catch (error) { summary = localSummary(); live.textContent = (error.message || '') + '。' + lines().failed; }
       local.drillSaved = null;
+      try { battle?.finish(summary); } catch { /* 同上 */ }
       showDone(summary);
     }
     function showDone(raw) {
@@ -581,7 +587,7 @@
         let settings = {};
         try { settings = await rpc('settings.get', {}); } catch { settings = {}; }
         const size = route.size || settings.size || 10;
-        const data = route.items ? {sessionId: 'demo', items: route.items, pending: route.pending || 0, dueLeft: route.items.length} : await rpc('session', {source: route.source || 'mixed', scope: route.scope || {kind: 'due'}, size});
+        const data = route.session ? route.session : route.items ? {sessionId: 'demo', items: route.items, pending: route.pending || 0, dueLeft: route.items.length} : await rpc('session', {source: route.source || 'mixed', scope: route.scope || {kind: 'due'}, size});
         if (!alive) return;
         sessionId = data.sessionId; pendingN = data.pending || 0; startedAt = Date.now();
         settings = {...settings, ...(data.settings || {})};
@@ -627,7 +633,7 @@
     } else if (!route.force && sameSaved(saved)) askResume(saved);
     else openFresh();
 
-    return {unmount() { alive = false; clearTimeout(restId); window.speechSynthesis?.cancel(); root.querySelectorAll('dialog').forEach(d => { d.close(); d.remove(); }); R.stop?.(); },
+    return {unmount() { alive = false; try { battle?.detach(); } catch { /* 同上 */ } clearTimeout(restId); window.speechSynthesis?.cancel(); root.querySelectorAll('dialog').forEach(d => { d.close(); d.remove(); }); R.stop?.(); },
       keydown: onKey,
       pause() { window.speechSynthesis?.cancel(); },
       resume() {}};
