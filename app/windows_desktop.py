@@ -2438,6 +2438,23 @@ class DesktopControlNode:
         entry = self.runtime.openclaw
         return entry if entry.is_file() else None
 
+    @staticmethod
+    def device_environment(base):
+        """Environment for the node process, with its own device identity.
+
+        OpenClaw keys a device on its stored metadata. Running this node out of
+        the desktop state dir registered a second, differently-shaped record for
+        the same device, and the gateway then treated the CLI's next connect as
+        an unapproved metadata change -- every watchdog chat.send retry was
+        refused with "device metadata change pending approval", so a dropped
+        stream never resumed. A separate state dir makes the node pair as its
+        own device and leaves the CLI's approved identity alone.
+        """
+        environment = dict(base)
+        environment["OPENCLAW_SERVICE_KIND"] = "node"
+        environment["OPENCLAW_STATE_DIR"] = str(state_root() / "desktop-control-node")
+        return environment
+
     def _arguments(self):
         entry = self._entry()
         if entry is None:
@@ -2469,7 +2486,7 @@ class DesktopControlNode:
                 return False
             environment = dict(os.environ)
             environment.update(self.runtime.environment())
-            environment["OPENCLAW_SERVICE_KIND"] = "node"
+            environment = self.device_environment(environment)
             environment["PINKIE_OPENCLAW_ENTRY"] = str(self._entry())
             self.generation += 1
             generation = self.generation
