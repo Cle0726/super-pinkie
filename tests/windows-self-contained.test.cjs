@@ -78,6 +78,9 @@ test('both packages share the complete Mac browser renderer and preserve the bac
   assert.match(chat, /\/\* pinkie-chat-timeline:v26 \*\//);
   assert.match(chat, /pinkie-thinking-segments:v1/);
   assert.doesNotMatch(chat, /pinkie-chat-timeline:v25/);
+  // 追加消息时保留流式输出：ack 换新 runId 时不再清空 chatStream。
+  assert.match(chat, /pinkie-stream-survive-steer:v1/);
+  assert.match(chat, /keepPreviousStream/);
   const index = read('ui/control-ui.index.html');
   assert.match(index, /pinkie-surface=6/);
   assert.match(index, /pinkie-browser=3/);

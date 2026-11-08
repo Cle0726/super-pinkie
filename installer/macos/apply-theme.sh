@@ -516,6 +516,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     if ! OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-computer-v2.mjs"; then
       echo "warning: Computer Use v2 patch skipped because this runtime has no matching chunk" >&2
     fi
+    # 追加消息时保留流式输出：ack 携带新 runId 时不再清空 chatStream。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-stream-survive-steer.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.
