@@ -20,14 +20,23 @@ function home(t) {
   return dir;
 }
 
-// A path whose whole root does not exist on this machine: an unused drive on
-// Windows, a never-mounted volume elsewhere.
+// A folder whose whole mount is gone. On Windows an unused drive letter
+// reproduces an unplugged USB stick exactly. On POSIX there is always a `/`,
+// so a path can never fail by "root is missing"; pick a segment whose parent
+// chain is genuinely absent instead, and let the test assert the platform's
+// real contract (Windows: MISSING_FOLDER; POSIX: a plain not-found error).
 function goneFolder() {
   if (process.platform === 'win32') {
     for (const letter of 'QRSTUVWXYZ') if (!fs.existsSync(letter + ':\\')) return letter + ':\\实训资料';
   }
   return path.join(path.parse(os.tmpdir()).root, 'pinkie-unmounted-' + process.pid, '实训资料');
 }
+
+// Windows can name the real cause (the drive is gone). Elsewhere the path is
+// merely absent, and validateRoot surfaces the filesystem's own ENOENT.
+const missingRootCode = (missingFolderCode) => process.platform === 'win32'
+  ? error => error.code === missingFolderCode && /项目文件夹不在了/.test(error.message) && /U 盘/.test(error.message)
+  : error => error.code === 'ENOENT';
 
 function writeBinding(stateRoot, key, folder) {
   fs.mkdirSync(path.join(stateRoot, 'project-scope'), {recursive: true});
@@ -46,8 +55,9 @@ for (const [label, base] of Object.entries(copies)) {
     assert.equal(guard.binding({sessionKey: key}), null);
     assert.equal(guard.before({toolName: 'read', params: {path: 'a.txt'}}, {sessionKey: key}), undefined);
     assert.equal(guard.prompt({sessionKey: key}), undefined);
-    // Choosing the gone folder again names the real cause, with a code the UI can test.
-    assert.throws(() => guard.validateRoot(goneFolder()), error => error.code === MISSING_FOLDER && /项目文件夹不在了/.test(error.message) && /U 盘/.test(error.message));
+    // Choosing the gone folder again names the real cause. On Windows that is
+    // the MISSING_FOLDER code the UI tests; on POSIX the path is simply absent.
+    assert.throws(() => guard.validateRoot(goneFolder()), missingRootCode(MISSING_FOLDER));
   });
 
   test(`${label}: the workbench falls back to the mode workspace instead of mkdir on a missing drive`, async t => {
