@@ -423,6 +423,6 @@
   // 学习后端改了数据（作答、复习、上课）→ 状态和 pending 补播。
   window.addEventListener('pinkie:desk-changed', () => { refresh().catch(() => {}); });
 
-  window.__pinkieGame = {call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, play, pending, hud, glyph, open: openGame, startNode, toast, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
+  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, play, pending, hud, glyph, open: openGame, startNode, toast, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
   window.dispatchEvent(new CustomEvent('pinkie:game-ready'));
 })();
