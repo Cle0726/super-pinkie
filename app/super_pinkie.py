@@ -1085,12 +1085,103 @@ def prepare_bundled_desktop(log):
         # on every launch, so one failed run is repaired by the next start.
         ensure_mode_agents(log)
 
-    repair_provider_models(log)
-    ensure_gateway_auth_none(log)
-    apply_browser_proxy(log)
-    ensure_workspace_avatars(log)
+    # Every step below is idempotent, but together they cost seconds on each
+    # Windows start (module imports, hundreds of file compares, one memory
+    # search probe) while the user looks at the loading page, and they sit in
+    # front of the gateway. The Mac launcher runs none of them per launch.
+    # Skip the whole block when nothing it reads has changed since the last
+    # clean run; any change (new version, edited config, other system proxy,
+    # touched extension) runs it again in full.
+    fingerprint_file = state / "bundled-prepare.json"
+    expected = bundled_prepare_fingerprint(version, config, state)
+    if marker.exists() and read_prepare_fingerprint(fingerprint_file) == expected:
+        log("启动准备：输入没有变化，跳过重复部署")
+        return
+
+    failures = []
+
+    def checked(message):
+        if "失败" in message or "⚠️" in message:
+            failures.append(message)
+        log(message)
+
+    repair_provider_models(checked)
+    ensure_gateway_auth_none(checked)
+    apply_browser_proxy(checked)
+    ensure_workspace_avatars(checked)
     for service in ("party", "context", "project-scope", "mode-architecture", "first-person-renderer"):
-        install_runtime_service(service, log)
+        install_runtime_service(service, checked)
+    if failures:
+        fingerprint_file.unlink(missing_ok=True)
+        return
+    # The steps above may have rewritten the config; remember the result, so
+    # the next start compares against what is on disk now.
+    write_prepare_fingerprint(fingerprint_file, bundled_prepare_fingerprint(version, config, state))
+
+
+PREPARE_SERVICES = ("party", "context", "project-scope", "mode-architecture", "first-person-renderer")
+
+
+def _file_stamp(path):
+    try:
+        stat = Path(path).stat()
+        return [stat.st_size, stat.st_mtime_ns]
+    except OSError:
+        return None
+
+
+def _digest(path):
+    import hashlib
+
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def bundled_prepare_fingerprint(version, config, state):
+    """Everything prepare_bundled_desktop's per-start steps read, in one value."""
+    home = Path.home() / ".openclaw"
+    extensions = home / "extensions"
+    installed = {}
+    try:
+        for directory in sorted(extensions.iterdir()):
+            if directory.is_dir():
+                installed[directory.name] = {
+                    item.name: _file_stamp(item) for item in sorted(directory.iterdir()) if item.is_file()
+                }
+    except OSError:
+        pass
+    try:
+        import browser_proxy
+
+        system = browser_proxy.system_proxy()
+    except Exception as error:  # an unreadable proxy must not block startup
+        system = "unknown: " + type(error).__name__
+    workspaces = sorted(path.name for path in home.glob("workspace*") if path.is_dir())
+    return {
+        "version": version,
+        "config": _digest(config),
+        "browserProxy": _digest(Path(state) / "browser-proxy.json"),
+        "systemProxy": system,
+        "setup": {name: _file_stamp(resource_path("services", name, "setup.py")) for name in PREPARE_SERVICES},
+        "extensions": installed,
+        "workspaces": workspaces,
+    }
+
+
+def read_prepare_fingerprint(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8")).get("fingerprint")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def write_prepare_fingerprint(path, fingerprint):
+    try:
+        Path(path).write_text(json.dumps({"fingerprint": fingerprint}, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def run_control_center():
