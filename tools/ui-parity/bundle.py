@@ -49,7 +49,7 @@ def retired(path):
 
 
 def ui_resource(name):
-    return (name.startswith(('laolao-', 'vendor/', 'fonts/', 'study-desk/', 'provider-icons/', 'ProviderIcon-'))
+    return (name.startswith(('laolao-', 'vendor/', 'fonts/', 'study-desk/', 'study-game/', 'provider-icons/', 'ProviderIcon-'))
             or name in FRAGMENTS or name in {'PinkieAppIcon.icns', 'CLeAppIcon.icns'})
 
 
