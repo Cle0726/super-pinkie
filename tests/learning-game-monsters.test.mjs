@@ -96,3 +96,33 @@ test('讨伐失败：怪进化一级、明天再来', async t => {
   assert.equal(m.level, 2);
   assert.equal(m.wins, 0);
 });
+
+test('错题怪一出生就在后台备好下一次讨伐的变体；讨伐时直接用、不现场等模型；用过的变体记下来不再出', async t => {
+  const {game, drill, store, tick} = gameFixture(t);
+  store.drill = drill;
+  const model = fakeModel();
+  game.requestModel = model;
+  bornWrong(game, 's1', 'k9');
+  await new Promise(r => setTimeout(r, 10));
+  await game.modules.monsters.naming;
+  await game.modules.monsters.preparing;
+  const m = Object.values(game.read().monsters.list)[0];
+  assert.ok(m.prepared?.stem, '后台备好了变体');
+  assert.equal(m.prepared.verified, true);
+  const before = model.calls.length;
+  tick(1.1 * DAY);
+  const h = await game.modules.monsters.huntStart({requestId: 'p1', sessionKey: KEY});
+  assert.equal(model.calls.length, before, '讨伐开始时没有再调模型');
+  assert.equal(h.items[0].variant.source, 'model');
+  assert.equal(h.items[0].prompt, m.prepared.stem);
+  const after = Object.values(game.read().monsters.list)[0];
+  assert.equal(after.prepared, undefined, '用掉了');
+  assert.deepEqual(after.usedStems, [m.prepared.stem]);
+  // 同一道题干再出来会被拒（fakeModel 永远出同一道）→ 这一回合退回原题并标 local
+  drill.answer({sessionId: h.sessionId, itemId: 'h1', correct: true});
+  await new Promise(r => setTimeout(r, 10));
+  await game.modules.monsters.preparing;
+  tick(3.1 * DAY);
+  const h2 = await game.modules.monsters.huntStart({requestId: 'p2', sessionKey: KEY});
+  assert.equal(h2.items[0].variant.source, 'local');
+});

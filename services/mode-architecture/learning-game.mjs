@@ -67,6 +67,7 @@ function emptyState() {
     quests: {},
     examSeals: {},
     monsters: {list: {}, captured: 0},
+    lines: {},
   };
 }
 
@@ -360,6 +361,7 @@ export class LearningGame {
       wallet: {stars: state.wallet.stars, seals: state.wallet.seals, shards: {...state.wallet.shards}},
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
       form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened]},
+      items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}},
       today: {date, jar: {stars: pact?.today || 0, goal: pact?.goal || 30}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
       boss, monsters,
       season: {term: season?.term || null, name: season?.name || '', until: season?.to || null, limitedSkus: this.shelves(state).limited.map(s => s.sku)},
