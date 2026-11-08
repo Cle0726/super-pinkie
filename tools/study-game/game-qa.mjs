@@ -225,7 +225,93 @@ async function map() {
   fs.writeFileSync(path.join(out, 'map.json'), JSON.stringify(r, null, 2)); console.log(JSON.stringify(r));
 }
 
+// 考场：在隔离 store 里放一份按 PRETCO_B_FORMAT 摆好的整卷（离线，不调模型）。
+export async function seedPaper(service) {
+  const {PRETCO_B_FORMAT} = await import('../../services/mode-architecture/learning-game-content.mjs');
+  const ex = service.store.game.modules.exam;
+  const choice = (stem, options, answer) => ({stem, options, answer});
+  const bank = {
+    'listen-response': i => ({...choice('(听录音选答案)', [['Yes, I do.', 'Sure, here you are.', 'No, thanks.', 'It is on the desk.'], ['At nine o’clock.', 'By bus.', 'For two hours.', 'Last week.'], ['Nice to meet you, too.', 'I’m fine.', 'Not at all.', 'Go ahead.'], ['It’s sunny.', 'It’s Monday.', 'It’s ten dollars.', 'It’s mine.'], ['Room 302.', 'Mr. Li.', 'Tomorrow.', 'Very well.']][i], i % 4), tts: ['Could you pass me the report, please?', 'How do you usually get to work?', 'Nice to meet you, Mr. Brown.', 'How much is this notebook?', 'Where is the meeting room?'][i]}),
+    'listen-dialogue': i => ({...choice('What does the man mean?', ['He will be late.', 'He has finished the work.', 'He needs some help.', 'He forgot the time.'], i % 4), tts: 'W: Have you finished the sales report yet?\nM: Not yet. Could you give me a hand with the figures?'}),
+    'listen-dictation': i => ({stem: ['Our company was founded in ____.', 'We now have more than ____ employees.', 'Our main products are ____.', 'We sell them to ____ countries.', 'Please ____ us if you have any questions.'][i], answer: [['1998'], ['500', 'five hundred'], ['office furniture'], ['twenty', '20'], ['contact']][i]}),
+    'choice': i => choice(['The meeting has been ____ until next Friday.', 'She is used to ____ up early.', 'Neither Tom nor I ____ at home yesterday.', 'Please fill in the form and hand it ____ to the clerk.', 'This is the ____ hotel I have ever stayed in.', 'He asked me ____ I could help him.', 'The goods will be delivered ____ three days.', 'It was in this room ____ the agreement was signed.', 'You’d better ____ the doctor at once.', 'The price ____ the delivery charge.'][i], [['put off', 'put on', 'put up', 'put out'], ['get', 'getting', 'got', 'gets'], ['was', 'were', 'is', 'are'], ['in', 'on', 'off', 'out'], ['better', 'good', 'best', 'well'], ['that', 'if', 'what', 'which'], ['within', 'during', 'among', 'since'], ['which', 'where', 'that', 'when'], ['see', 'seeing', 'to see', 'saw'], ['includes', 'including', 'include', 'included']][i], [0, 1, 0, 0, 2, 1, 0, 2, 0, 0][i]),
+    'word-form': i => ({stem: ['The new machine works more ____ than the old one.', 'We are looking forward to ____ from you.', 'The ____ of the bridge took two years.', 'He ____ the company since 2015.', 'This book is ____ than that one.', 'All the products must be ____ before delivery.', 'She spoke ____ at the conference.', 'The manager has ____ the plan.', 'We need a ____ answer by Monday.', 'Thank you for ____ me.'][i], base: ['efficient', 'hear', 'build', 'join', 'interesting', 'check', 'confident', 'approve', 'decide', 'help'][i], answer: [['efficiently'], ['hearing'], ['building'], ['has joined'], ['more interesting'], ['checked'], ['confidently'], ['approved'], ['decisive'], ['helping']][i]}),
+    'passage-choice': i => choice(['What is the notice mainly about?', 'When will the library be closed?', 'Who should students contact?', 'What can we learn from the passage?', 'The word “renovation” probably means ____.'][i], [['A change in opening hours', 'A new book fair', 'A lost card', 'A job offer'], ['On Friday afternoon', 'On Monday morning', 'All next week', 'During holidays'], ['The teacher', 'The front desk', 'The manager', 'The cleaner'], ['The library is free', 'Books can be renewed online', 'Food is allowed', 'Cards are not needed'], ['repair work', 'new rules', 'price rise', 'a party']][i], [0, 0, 1, 1, 0][i]),
+    'passage-short': i => ({stem: ['The writer bought the printer from ____.', 'The printer stopped working after ____.', 'The writer wants the company to ____ it.', 'The order number is ____.', 'The writer can be reached by ____.'][i], answer: [['an online store'], ['two days'], ['replace'], ['A3087'], ['email']][i]}),
+    'term-match': i => ({stem: ['禁止吸烟', '请勿触摸', '紧急出口', '小心地滑', '营业时间'][i], answer: 'ACEFH'[i]}),
+    'practical-fill': i => ({stem: ['Name of the hotel: ____', 'Date of arrival: ____', 'Type of room: ____', 'Number of nights: ____', 'Contact phone: ____'][i], answer: [['Sunrise Hotel'], ['May 6th'], ['double room'], ['three', '3'], ['0771-3456789']][i]}),
+    'translate-choice': i => choice(['Please let me know if you have any questions.', 'The new rule will come into effect next month.', 'We have received your order and will ship it soon.', 'Smoking is not allowed in this building.'][i], [['如有疑问请告诉我。', '请让我知道你有没有问题。', '我会告诉你问题。', '你的问题请让我知道吗。'], ['新规定下个月生效。', '新规则下个月来。', '下个月会有新效果。', '新规则在下月起作用了。'], ['我们已收到您的订单，将尽快发货。', '我们收到了订单并很快运走。', '你的订单被收到，很快到。', '我们会收到订单。'], ['本楼禁止吸烟。', '这栋楼不允许吸。', '吸烟在楼里是不。', '楼里不能吸烟吗。']][i], 0),
+    'translate-passage': () => ({stem: 'Dear customers,\nOur store will be closed from May 1st to May 3rd for the holiday. During this period, you can still place orders on our website, and all orders will be delivered after May 4th. We are sorry for any inconvenience and thank you for your support.', reference: '亲爱的顾客：本店 5 月 1 日至 3 日放假休息……', rubric: '意思准确 8 + 通顺 4'}),
+    'writing': () => ({stem: '以王明的名义给 Smith 先生写一封感谢信：1. 感谢他上周带你参观工厂；2. 学到了很多关于产品质量管理的知识；3. 希望以后保持联系。词数 80–100。', reference: 'Dear Mr. Smith, ...', rubric: '五档'}),
+  };
+  const sections = PRETCO_B_FORMAT.sections.map(sec => ({id: sec.id, title: sec.title, timeMin: sec.timeMin, points: sec.points, instructions: sec.parts.map(p => p.note).join('；'),
+    parts: sec.parts.map(p => ({id: p.id, kind: p.kind, note: p.note, each: p.each,
+      material: {'listen-dictation': 'Welcome to Greenfield Company. Our company was founded in 1998. We now have more than 500 employees. Our main products are office furniture, and we sell them to twenty countries. Please contact us if you have any questions.', 'term-match': 'A — No Smoking\nB — Fragile\nC — Hands Off\nD — Keep Dry\nE — Emergency Exit\nF — Caution: Wet Floor\nG — Staff Only\nH — Business Hours\nI — Push\nJ — Lost and Found', 'passage-choice': 'NOTICE\nThe City Library will be closed on Friday afternoon for renovation. Books due on that day can be returned on Monday without a fine, or renewed online. For more information, please ask at the front desk.', 'passage-short': 'Dear Sir,\nI bought a printer (order number A3087) from your online store last week. It stopped working after two days. I would like you to replace it as soon as possible. You can reach me by email.\nYours faithfully,\nLinda', 'practical-fill': 'Room Booking\nHotel: Sunrise Hotel · Guest: Zhang Wei · Arrival: May 6th · Room: double room · Nights: 3 · Tel: 0771-3456789'}[p.kind] || '',
+      items: Array.from({length: p.count}, (_, i) => bank[p.kind](i))}))}));
+  const paperId = 'paper-qa-' + Date.now().toString(36);
+  ex.writeFull({paperId, exam: 'pretco-b', createdAt: Date.now(), sections});
+  service.store.game.mutate(state => { ex.ensure(state).papers[paperId] = {paperId, exam: 'pretco-b', title: 'B 级仿真卷 · 11-08', createdAt: Date.now(), status: 'ready'}; });
+  return paperId;
+}
+
+// 考场 QA：大厅 → 开考 → 答题 → 自动保存 → 刷新恢复 → 交卷 → 阅卷 → Boss 结算（慢放接触表）→ 报告。
+async function exam() {
+  const {harness, service, close} = await harnessWithGame();
+  const browser = await launch(); const r = {};
+  const {execFileSync} = await import('node:child_process');
+  const sheet = (frames, name, bg) => { try { execFileSync('magick', ['montage', '-font', '/System/Library/Fonts/Supplemental/Arial.ttf', ...frames, '-tile', '4x', '-geometry', '560x+5+5', '-background', bg, path.join(out, name)]); frames.forEach(f => fs.unlinkSync(f)); } catch (e) { console.warn('montage', e.message); } };
+  try {
+    for (const theme of (opt('theme') ? [opt('theme')] : ['light', 'dark'])) {
+      await seedPaper(service);
+      const width = Number(opt('width', 1440)), height = Math.round(width * 10 / 16), tag = `${theme}-${width}`;
+      let {page, context} = await openPage(browser, harness, {width, height, theme, tier: opt('tier', 'standard')});
+      const errs = []; page.on('pageerror', e => errs.push(e.message));
+      await deskReady(page, 'gameexam'); await page.locator('.pke-prow .pkg-btn').first().waitFor({timeout: 10000}); await wait(900);
+      await page.screenshot({path: path.join(out, `exam-lobby-${tag}.png`)});
+      if (opt('quick')) { await context.close(); continue; }
+      await page.locator('.pke-prow .pkg-btn').first().click(); await page.locator('.pke-hall').waitFor({timeout: 10000}); await wait(800);
+      r[`fx-during-${theme}`] = await page.evaluate(() => window.__pinkieGameFx?.stats?.().frames ?? null);
+      // 答几道：选择题点第一个选项，填空写 test
+      const t0 = Date.now(); await page.locator('.pke-opt').first().click(); r[`feedback-ms-${theme}`] = await page.evaluate(() => new Promise(res => requestAnimationFrame(() => res(document.querySelector('.pke-opt[aria-checked="true"]') ? 1 : 0)))) ? Date.now() - t0 : -1;
+      await page.locator('.pke-opt').nth(5).click(); await page.locator('.pke-fill').first().fill('1998'); await page.locator('.pke-flag').nth(2).click();
+      await page.screenshot({path: path.join(out, `exam-hall-listening-${tag}.png`)});
+      for (const [i, name] of [[1, 'vocab'], [2, 'reading'], [3, 'translation'], [4, 'writing']]) {
+        await page.locator('.pke-tab').nth(i).click(); await wait(400);
+        if (name === 'vocab') { await page.locator('.pke-opt').nth(1).click(); await page.locator('.pke-fill').first().fill('efficiently'); }
+        if (name === 'reading') { await page.locator('.pke-opt').first().click(); await page.locator('.pke-letter').first().click(); }
+        if (name === 'translation') { await page.locator('.pke-opt').first().click(); await page.locator('.pke-write').fill('亲爱的顾客：本店将于 5 月 1 日至 3 日放假休息。'); }
+        if (name === 'writing') await page.locator('.pke-write').fill('Dear Mr. Smith, Thank you very much for showing me around your factory last week. I learned a lot about quality management. I hope we can keep in touch. Yours sincerely, Wang Ming');
+        await wait(300); await page.screenshot({path: path.join(out, `exam-hall-${name}-${tag}.png`)});
+      }
+      // 自动保存
+      await wait(16000); r[`saved-${theme}`] = await page.locator('.pke-save').textContent();
+      const att = Object.values(service.store.game.read().exam.attempts).find(a => !a.submittedAt);
+      r[`serverAnswers-${theme}`] = Object.keys(att?.answers || {}).length;
+      // 刷新 → 接着考
+      await page.reload(); await deskReady(page, 'gameexam'); await page.locator('.pke-prow button').first().click(); await page.locator('.pke-hall').waitFor({timeout: 10000}); await wait(700);
+      r[`resumed-${theme}`] = {kicker: await page.locator('.pke-top__id small').textContent(), answeredCells: await page.locator('.pke-cell.is-done').count(), flags: await page.locator('.pke-cell.is-flag').count()};
+      await page.screenshot({path: path.join(out, `exam-hall-resumed-${tag}.png`)});
+      // 交卷
+      await page.locator('.pke-submit').click(); await wait(500); await page.screenshot({path: path.join(out, `exam-submit-confirm-${tag}.png`)});
+      await page.evaluate(() => window.__pinkieGameFx?._timeScale?.(1));
+      await page.addStyleTag({content: '#pinkie-study-desk .pke-boss,#pinkie-study-desk .pke-boss *{animation-duration:calc(var(--d,1)*1s)}'}).catch(() => {});
+      await page.locator('.pke-modal .pkg-btn').click();
+      await page.locator('.pke-boss, .pke-grading').first().waitFor({timeout: 30000}); await page.screenshot({path: path.join(out, `exam-grading-${tag}.png`)});
+      await page.locator('.pke-boss').waitFor({timeout: 60000});
+      const frames = []; for (let k = 0; k < 12; k++) { const f = path.join(out, `_boss-${tag}-${k}.png`); await page.screenshot({path: f}); frames.push(f); await wait(450); }
+      sheet(frames, `exam-boss-sheet-${tag}.png`, theme === 'dark' ? '#111' : '#eee');
+      await page.locator('.pke-report').waitFor({timeout: 40000}); await wait(1600);
+      await page.screenshot({path: path.join(out, `exam-report-${tag}.png`), fullPage: true});
+      r[`result-${theme}`] = await page.locator('.pke-score b').textContent();
+      r[`errors-${theme}`] = errs;
+      await context.close();
+    }
+  } finally { await browser.close(); await close(); }
+  fs.writeFileSync(path.join(out, 'exam.json'), JSON.stringify(r, null, 2)); console.log(JSON.stringify(r));
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  if (cmd === 'exam') await exam();
   if (cmd === 'map') await map();
   if (cmd === 'shop') await shop();
   if (cmd === 'awards') await awards();
