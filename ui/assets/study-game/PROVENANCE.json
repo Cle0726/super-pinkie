@@ -426,6 +426,66 @@
    "prompt": "art-slots.json · sticker",
    "reviewed": "2026-11-08",
    "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "form/daily/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：派对礼炮金色逆光、气球虚化；比其他张亮一些但仍克制"
+  },
+  "form/learning/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里书房，金色印章光从书页升起"
+  },
+  "form/project/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：文件夹堆顶上，琥珀色勾选光环，蓝调办公室黄昏"
+  },
+  "form/thinking/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：闭眼悬浮，细线水晶法阵，深紫 + 冰青"
+  },
+  "form/detective/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2 第 2 次：站在书桌前、和场景同光，顶光 + 红线索，脸居中约 40%"
+  },
+  "form/pirate/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：黄昏甲板、慢动作金币、藏宝图（地图上的 X 是记号不是文字）"
+  },
+  "form/astronaut/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：深蓝行星弧线 + 跃迁漩涡，头盔里鬃毛漂浮"
+  },
+  "form/dragon-rider/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：暴风云上的落日，小粉龙侧向喷琥珀火"
+  },
+  "form/princess/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：月夜阳台、玫瑰花瓣、远处城堡"
+  },
+  "form/cyber/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2 第 2 次：带笔帽的大荧光笔（不再像枪），雨夜天台霓虹线，脸居中"
   }
  }
 }
