@@ -9,6 +9,7 @@ import * as E from './learning-game-economy.mjs';
 import {GameMonsters} from './learning-game-monsters.mjs';
 import {GameWorld} from './learning-game-world.mjs';
 import {GameExam} from './learning-game-exam.mjs';
+import {GameContent} from './learning-game-content.mjs';
 
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
@@ -83,6 +84,7 @@ export class LearningGame {
     new GameMonsters(this);
     new GameWorld(this);
     new GameExam(this);
+    new GameContent(this);
   }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
@@ -392,7 +394,8 @@ export class LearningGame {
     const permanent = forms.filter(f => f.source.includes('shop')).map(f => formEntry(f));
     const seal = forms.filter(f => f.source.includes('seal-shop')).map(f => formEntry(f));
     const limited = [];
-    if (season) for (const f of forms.filter(x => x.season === season.term)) limited.push({...formEntry(f), until: season.to});
+    const quiet = isQuiet(date); // 考前 7 天：不上限时货架、不打限时折扣
+    if (season && !quiet) for (const f of forms.filter(x => x.season === season.term)) limited.push({...formEntry(f), until: season.to});
     // 过季限定：30 万能碎片复刻
     for (const f of forms.filter(x => x.season && SEASON_TERMS.some(t => t.term === x.season && t.to < date))) {
       seal.push({sku: `replica:${f.id}`, kind: 'form', itemId: f.id, name: `${f.name}（复刻）`, desc: f.bonus.text, price: {shards: this.economy.prices.limitedReplicaShards}});
@@ -410,7 +413,7 @@ export class LearningGame {
       do { i = pool[Math.floor(rng() * pool.length)]; } while (used.has(i.id));
       used.add(i.id);
       const base = E.itemPrice(i, this.economy);
-      const discount = k < this.economy.shop.dailyDiscountSlots ? this.economy.shop.dailyDiscount : null;
+      const discount = !quiet && k < this.economy.shop.dailyDiscountSlots ? this.economy.shop.dailyDiscount : null;
       const kind = {hit: 'fx', result: 'result', cover: 'cover', stickers: 'stickers', title: 'title'}[i.kind];
       daily.push({sku: `daily:${date}:${i.id}`, kind, itemId: i.id, name: i.name, price: discount ? {stars: Math.round(base.stars * discount)} : base, ...(discount ? {discount} : {})});
     }
@@ -590,7 +593,7 @@ export class LearningGame {
       return {...item, progress, done: progress >= item.target.count, claimed: Boolean(q.claimed[item.id])};
     });
     const allClaimed = list.length > 0 && list.every(i => i.claimed);
-    return {list, weekly: this.weeklyQuest(state, date), chest: {ready: allClaimed, opened: Boolean(q.chest)}, text: q.text || 'local'};
+    return {list: list.map(i => ({...i, source: q.text === 'model' ? 'model' : 'local'})), weekly: this.weeklyQuest(state, date), chest: {ready: allClaimed, opened: Boolean(q.chest)}, text: q.text || 'local'};
   }
   planQuests(state, date) {
     const dueCards = this.safe(() => (this.store.pact?.dueReviews?.(this.now()) || 0), 0);
@@ -616,8 +619,11 @@ export class LearningGame {
     if (keys.length > 21) for (const k of keys.sort().slice(0, keys.length - 14)) delete state.quests[k];
   }
   questsToday() {
+    const date = this.today();
+    if (!this.read().quests[date]) this.mutate(s => this.questTick(s));
+    this.modules.content?.kickQuestText?.(date);
     const state = this.read();
-    const q = this.questsFor(state, this.today());
+    const q = this.questsFor(state, date);
     return {quests: q.list, weekly: q.weekly, chest: q.chest};
   }
   claim({questId, requestId} = {}) {
