@@ -50,7 +50,8 @@ const addItem = (kind, id, name, extra = {}) => items.push({kind, id: `${kind}:$
 [['curtain', '舞台幕布', 'curtain'], ['ink', '水墨晕开', 'ink'], ['warp', '星空跃迁', 'warp'], ['stamp', '金印砸下', 'stamp']].forEach(([id, name, p]) => addItem('ult', id, name, {preset: p}));
 [['fireworks', '纸烟花'], ['ribbon', '彩带横幅'], ['stamp-rain', '印章雨'], ['popup', '立体书弹开']].forEach(([id, name]) => addItem('result', id, name, {preset: id}));
 [['sakura', '樱花书封'], ['night', '星夜书封'], ['kraft', '牛皮纸书封'], ['palace', '宫廷书封', {set: 'royal', notForSale: true}], ['ink', '水墨书封', {set: 'east'}], ['winter', '初冬书封', {season: 'lidong'}]].forEach(([id, name, extra]) => addItem('cover', id, name, extra || {}));
-for (let i = 1; i <= 8; i += 1) addItem('stickers', `pack${i}`, `贴纸包 ${i}`);
+// id 保持 pack1–8（已有存档里的 owned 不变），只给名字。
+['加油打气贴纸', '连击贴纸', '收工贴纸', '专注贴纸', '星星罐贴纸', '请假条贴纸', '小失误贴纸', '上岸贴纸'].forEach((name, i) => addItem('stickers', `pack${i + 1}`, name));
 [['early-bird', '早起的鸟'], ['night-owl', '夜读猫头鹰'], ['combo-king', '连击王'], ['monster-friend', '小怪的朋友'], ['ink-lover', '红笔达人'], ['shore-seeker', '寻岸人'], ['star-hoarder', '囤星星的人'], ['steady', '稳稳的'], ['comeback', '回来啦'], ['bookworm', '书虫'], ['planner', '计划家'], ['lucky', '欧气满满']].forEach(([id, name]) => addItem('title', id, name));
 // 套装奖励（不卖）
 addItem('title', 'royal-family', '王室全员', {reward: 'set:royal', notForSale: true});
