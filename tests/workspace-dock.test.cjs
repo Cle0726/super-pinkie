@@ -225,10 +225,16 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
     'const watchForWorkspaceDock = () =>',
     'window.addEventListener("load", schedulePreload'
   );
-  // It re-renders when the native side announces the bridge, and only once.
-  assert.match(watcher, /addEventListener\("pinkie-native-bridge-ready"/);
-  assert.match(watcher, /\{ once: true \}/);
-  assert.match(watcher, /if \(hasWorkspaceDock\(\)\) render\(\)/);
+  // Two arrival signals, both event-driven: the shell's announcement, and the
+  // data-pinkie-platform attribute it stamps on <html> as the bridge installs.
+  // The attribute path matters because it is the only signal an already-built
+  // shell gives, and it needs no repack.
+  assert.match(watcher, /addEventListener\("pinkie-native-bridge-ready", settle\)/);
+  assert.match(watcher, /new MutationObserver\(settle\)/);
+  assert.match(watcher, /observer\.observe\(document\.documentElement, \{ attributes: true \}\)/);
+  // It settles exactly once and re-renders, rather than observing forever.
+  assert.match(watcher, /if \(done \|\| !hasWorkspaceDock\(\)\) return;/);
+  assert.match(watcher, /observer\.disconnect\(\);\s*\n\s*render\(\)/);
   // A shell that already has the bridge registers nothing at all.
   assert.match(watcher, /if \(hasWorkspaceDock\(\)\) return;/);
   // No polling: this file must not run background work (see brand-ui).

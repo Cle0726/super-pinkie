@@ -1050,14 +1050,24 @@
   // is a plain property read with no DOM trace, which means the mode switcher's
   // observers never wake up for it: one early render decided there was no dock,
   // removed the entry, and the split stayed gone for the whole session.
-  // The native side re-injects the bridge on every navigation and announces it
-  // with an event, so re-render once when that arrives. No polling: a repeating
-  // timer here would break the no-background-work rule this file follows.
+  //
+  // Two arrival signals, both event-driven. Newer shells announce themselves
+  // after defining the handlers; every shell also stamps data-pinkie-platform
+  // on <html> as the bridge installs, so watching the root element's attributes
+  // catches it either way. No polling: this file may not run background work.
   const watchForWorkspaceDock = () => {
     if (hasWorkspaceDock()) return;
-    window.addEventListener("pinkie-native-bridge-ready", () => {
-      if (hasWorkspaceDock()) render();
-    }, { once: true });
+    let done = false;
+    const settle = () => {
+      if (done || !hasWorkspaceDock()) return;
+      done = true;
+      window.removeEventListener("pinkie-native-bridge-ready", settle);
+      observer.disconnect();
+      render();
+    };
+    window.addEventListener("pinkie-native-bridge-ready", settle);
+    const observer = new MutationObserver(settle);
+    observer.observe(document.documentElement, { attributes: true });
   };
 
   window.addEventListener("load", schedulePreload, { once: true });
