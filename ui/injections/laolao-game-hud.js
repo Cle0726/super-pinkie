@@ -64,9 +64,16 @@
   function ack(id) { ackIds.push(id); clearTimeout(ackTimer); ackTimer = setTimeout(flushAck, 400); }
   const ORDER = {small: 0, medium: 1, big: 2, cinematic: 3};
   function play(awards, opts = {}) {
-    const list = (Array.isArray(awards) ? awards : []).filter(a => a && a.id && !seen.has(a.id));
-    if (!list.length) return queue;
-    for (const a of list) seen.add(a.id); remember();
+    const fresh = (Array.isArray(awards) ? awards : []).filter(a => a && a.id && !seen.has(a.id));
+    if (!fresh.length) return queue;
+    for (const a of fresh) seen.add(a.id); remember();
+    // 同一批里同种货币的小奖励合成一张卡（一题「+1 命中」「+3 打赢」不要叠两张），ack 时全部 id 都确认。
+    const list = [], merged = {};
+    for (const a of fresh) {
+      const cur = ['stars', 'seals', 'shards'].includes(a.kind) && (a.fx === 'small' || a.fx === 'medium' || !a.fx) ? a.kind + (a.itemId || '') : null;
+      if (cur && merged[cur]) { const m = merged[cur]; m.amount = (m.amount || 0) + (a.amount || 0); m.ids.push(a.id); if (a.reason && !m.reason.includes(a.reason)) m.reason = m.reason ? `${m.reason} · ${a.reason}` : a.reason; if (a.fx === 'medium') m.fx = 'medium'; continue; }
+      const copy = {...a, ids: [a.id], reason: a.reason || ''}; if (cur) merged[cur] = copy; list.push(copy);
+    }
     // 同一批里先播小的，最后播最大的（结算时「+5 星」不要压在大招之后）。
     list.sort((a, b) => (ORDER[a.fx] || 0) - (ORDER[b.fx] || 0));
     queue = queue.then(async () => {
@@ -78,7 +85,7 @@
           if (engine && !document.hidden) await engine.playAward(a, {from: opts.from, form: fxForm(own), palette: own?.palette, kicker: own?.name, art: a.kind === 'form' || a.kind === 'awaken' ? (ultArt(own?.id) || portrait(own?.id)) : undefined, particle: own?.particle});
           bump(a);
         } catch (e) { console.warn('[game] award', e); }
-        ack(a.id);
+        for (const id of a.ids || [a.id]) ack(id);
       }
       refresh().catch(() => {});
     });
@@ -154,7 +161,7 @@
   }
 
   // 其它游戏页（商店 / 衣橱 / 地图 / 讨伐 / 考场 / 图鉴）由各自的文件注册成学习台视图；还没注册时提示。
-  const PAGES = {map: 'gamemap', hunt: 'gamehunt', exam: 'gameexam', shop: 'gameshop', gacha: 'gamegacha', wardrobe: 'gamewardrobe', codex: 'gamecodex'};
+  const PAGES = {guard: 'gameguard', map: 'gamemap', hunt: 'gamehunt', exam: 'gameexam', shop: 'gameshop', gacha: 'gamegacha', wardrobe: 'gamewardrobe', codex: 'gamecodex'};
   function openGame(id, opts) {
     const d = desk(); const view = PAGES[id] || id;
     window.dispatchEvent(new CustomEvent('pinkie:game-open', {detail: {id, view, opts}}));
@@ -205,7 +212,7 @@
     const plinth = el('div', 'pkg-stage__plinth');
     const copy = el('div', 'pkg-stage__copy');
     const hour = beijingHour();
-    const hello = s.quiet ? '这几天只做该做的。' : hour < 5 ? '夜深了，做一小段就睡。' : hour < 12 ? '早上好，先生。' : hour < 18 ? '下午好，先生。' : '晚上好，先生。';
+    const hello = s.quiet ? '考前，稳住。' : hour < 5 ? '夜深了，先生。' : hour < 12 ? '早上好，先生。' : hour < 18 ? '下午好，先生。' : '晚上好，先生。';
     const head = el('div', 'pkg-stage__head');
     head.append(el('small', 'pkg-kicker', `CAMP · ${s.season?.name ? s.season.name + '季' : '营地'}`), el('h2', 'pkg-hello', hello));
     const line = el('p', 'pkg-line', '…'); head.append(line);

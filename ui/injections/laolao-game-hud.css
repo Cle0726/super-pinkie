@@ -264,3 +264,5 @@
   .pkg-entry b{font-size:23px!important}
   .pkg-entry[data-entry="map"] b{font-size:30px!important}
 }
+/* 营地里奖励卡片让开顶栏（HUD + 营地 / 手账切换）。 */
+html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
