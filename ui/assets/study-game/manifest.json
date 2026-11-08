@@ -19,6 +19,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794135568431
   },
+  "boss/babel/hurt": {
+   "file": "boss/babel/hurt.webp",
+   "w": 1506,
+   "h": 1024,
+   "bytes": 255386,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154657895
+  },
   "boss/babel/portrait": {
    "file": "boss/babel/portrait.webp",
    "w": 512,
@@ -721,6 +730,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152634842
   },
+  "monster/shaving-hog": {
+   "file": "monster/shaving-hog.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 131830,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154657904
+  },
   "monster/shell-crab": {
    "file": "monster/shell-crab.webp",
    "w": 1024,
@@ -901,6 +919,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794134142721
   },
+  "world/pretco-b/reading/base": {
+   "file": "world/pretco-b/reading/base.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 182426,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154456971
+  },
+  "world/pretco-b/reading/bg": {
+   "file": "world/pretco-b/reading/bg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 423158,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154456989
+  },
   "world/pretco-b/reading/fg": {
    "file": "world/pretco-b/reading/fg.webp",
    "w": 1536,
@@ -945,6 +981,15 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794152641881
+  },
+  "world/pretco-b/vocab/base": {
+   "file": "world/pretco-b/vocab/base.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 357808,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794154457019
   },
   "world/pretco-b/vocab/bg": {
    "file": "world/pretco-b/vocab/bg.webp",
@@ -1010,5 +1055,5 @@
    "rawMtime": 1794152656773
   }
  },
- "updatedAt": "2026-11-08T16:13:21.253Z"
+ "updatedAt": "2026-11-08T16:18:15.772Z"
 }

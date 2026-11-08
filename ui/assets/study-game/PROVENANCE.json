@@ -558,6 +558,36 @@
    "prompt": "art-slots.json · ult",
    "reviewed": "2026-11-08",
    "note": "v2：金章大印砸下，金色冲击环扫过立体书世界"
+  },
+  "world/pretco-b/vocab/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：林间小路地面板，两侧小树 + 蘑菇（和 listening/base 带地标的先例一致）"
+  },
+  "world/pretco-b/reading/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：图书馆后墙 + 大窗（窗外雾中远景），和中景大厅不重复，当后板用"
+  },
+  "world/pretco-b/reading/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：地面板（石板 + 地毯徽章 + 小书堆），没有建筑"
+  },
+  "monster/shaving-hog": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "重排后出：铅笔尖刺 + 卷笔刀，白切边"
+  },
+  "boss/babel/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "重排后出：书页飞散、裂纹、汗滴，和 full / broken 同一只"
   }
  }
 }
