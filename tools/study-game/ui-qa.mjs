@@ -83,10 +83,10 @@ async function fps() {
       const r = await page.evaluate(async () => {
         const fx = window.__pinkieGameFx, demo = window.__pinkieGameDemo, sleep = ms => new Promise(r => setTimeout(r, ms));
         const from = {x: 520, y: innerHeight - 120}; let i = 0;
-        const t0 = performance.now(); const timer = setInterval(() => { i++; fx.burst('stars', from, {pattern: 'stream', to: demo.target, count: 24}); if (i % 10 === 0) { fx.burst('sparkle', demo.center(), {count: 120, power: 1.6}); fx.shake(1.2); fx.hitstop(80); } }, 140);
+        const hits = fx.hits; const t0 = performance.now(); const timer = setInterval(() => { i++; fx.hit(hits[i % hits.length], demo.center(), {sound: false, crit: i % 10 === 0}); if (i % 3 === 0) fx.comet(from, demo.target, {count: 14}); }, 140);
         await sleep(5000); const battle = fx.fps(4500);
         clearInterval(timer); await sleep(200);
-        const cineP = fx.cinematic('spell', {text: '碧琪大招！', particle: 'stars'}); await sleep(900); const cine = fx.fps(800); await cineP;
+        const cineP = fx.cinematic('spell', {text: '星砂 · 流转', particle: 'stars'}); await sleep(1400); const cine = fx.fps(1200); await cineP;
         return {battle, cine, ms: Math.round(performance.now() - t0)};
       });
       rows.push({tier, ...r}); await context.close();
