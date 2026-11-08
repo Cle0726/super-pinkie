@@ -259,9 +259,21 @@ def append_log(name, message):
         handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
 
 
+# Loopback probes must never go through a proxy. Without an HTTP(S)_PROXY
+# variable, urllib on Windows falls back to the registry proxy that Clash and
+# v2rayN write; when its bypass list has no 127.*, every health check went to
+# the proxy, the gateway looked dead, and the watchdog started a new gateway
+# every ~40 s that then failed on "gateway already running".
+_LOOPBACK_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def loopback_urlopen(url, timeout):
+    return _LOOPBACK_OPENER.open(url, timeout=timeout)
+
+
 def http_alive(url, expected_service=None):
     try:
-        with urllib.request.urlopen(url, timeout=.8) as response:
+        with loopback_urlopen(url, timeout=.8) as response:
             if expected_service:
                 value = json.loads(response.read().decode("utf-8"))
                 return value.get("service") == expected_service
@@ -275,7 +287,7 @@ def http_alive(url, expected_service=None):
 def http_ready(url):
     """A 2xx/3xx response means the gateway is ready; auth errors are not ready."""
     try:
-        with urllib.request.urlopen(url, timeout=.8) as response:
+        with loopback_urlopen(url, timeout=.8) as response:
             return 200 <= int(response.status) < 400
     except urllib.error.HTTPError:
         return False
@@ -290,7 +302,7 @@ def http_identity(url):
     process is reported by its own answer instead of being guessed at.
     """
     try:
-        with urllib.request.urlopen(url, timeout=.8) as response:
+        with loopback_urlopen(url, timeout=.8) as response:
             payload = json.loads(response.read(4096).decode("utf-8", "replace"))
         return payload if isinstance(payload, dict) else {}
     except (OSError, ValueError, urllib.error.URLError):
@@ -449,8 +461,18 @@ FOREGROUND_PS = r'''function Show-Foreground($Window) {
 # folder is renamed away while these windows are open.
 PINKIE_WPF_PS = r'''function Get-PinkieArt([string]$Name) {
   try {
-    $path = Join-Path $script:PinkieArtDir ('laolao-pinkie-status-' + $Name + '.png')
-    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    # <state>/updates/art first. An update started by an older version (2.5.37
+    # and earlier) never copied the art there, and the failure card showed an
+    # empty circle instead of 碧琪, so fall back to the install folders. OnLoad
+    # caching closes each file at once, so no folder rename is ever blocked.
+    $file = 'laolao-pinkie-status-' + $Name + '.png'
+    $path = $null
+    foreach ($folder in @(@($script:PinkieArtDir) + @($script:PinkieArtFallbacks))) {
+      if (-not $folder) { continue }
+      $candidate = Join-Path $folder $file
+      if (Test-Path -LiteralPath $candidate) { $path = $candidate; break }
+    }
+    if (-not $path) { return $null }
     $image = New-Object Windows.Media.Imaging.BitmapImage
     $image.BeginInit()
     $image.CacheOption = [Windows.Media.Imaging.BitmapCacheOption]::OnLoad
@@ -1220,7 +1242,8 @@ class WindowsUpdater:
   [string]$RepairScript = '',
   [switch]$ProgressShown,
   [switch]$LaunchAsUser,
-  [switch]$ProbeFailRollback
+  [switch]$ProbeFailRollback,
+  [string]$StateRoot = ''
 )
 # pinkie-update-protocol: 2  (see the portable helper: started, then ready)
 $StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
@@ -1399,7 +1422,8 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
   [string]$RepairScript = '',
   [switch]$ProgressShown,
   [switch]$LaunchAsUser,
-  [switch]$ProbeFailRollback
+  [switch]$ProbeFailRollback,
+  [string]$StateRoot = ''
 )
 # pinkie-update-protocol: 2
 # The new version reads this line from its own apply-<token>.ps1 to learn that
@@ -1434,6 +1458,11 @@ function Write-UpdateFailure([string]$Message) {
 # each step so the user knows the update is still running and when it is done.
 #@@UPDATE_UI@@
 $script:ProblemFolder = Split-Path -Parent ([IO.Path]::GetFullPath($TargetDir).TrimEnd('\'))
+# Wherever a complete copy is at this moment: the install, or the previous one.
+$script:PinkieArtFallbacks = @(
+  (Join-Path $TargetDir '_internal\ui\assets'),
+  (Join-Path $Backup '_internal\ui\assets'),
+  (Join-Path ($TargetDir.TrimEnd('\') + '.failed-' + $Token) '_internal\ui\assets'))
 $script:RepairArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (ConvertTo-Argument $RepairScript),
   '-Mode', 'dir', '-Target', (ConvertTo-Argument $TargetDir), '-TargetExe', (ConvertTo-Argument $TargetExe),
   '-Backup', (ConvertTo-Argument $Backup), '-Failed', (ConvertTo-Argument ($TargetDir.TrimEnd('\') + '.failed-' + $Token)),
@@ -1472,11 +1501,61 @@ function Write-StartupFailure($Record) {
     [IO.File]::WriteAllText($ReadyMarker + '.error', $data, [Text.Encoding]::UTF8)
   } catch {}
 }
+function Stop-InstallLeftovers([string]$Root) {
+  # Processes that keep files of the install open without running from it:
+  # WebView2 (msedgewebview2.exe lives in Program Files), a browser started
+  # with an extension from the install, python/cmd children of the gateway.
+  # Any of them makes the folder rename fail with "Access denied" / "in use"
+  # (the 11-04 and 11-05 rollbacks). Only a helper whose command line names
+  # the install folder or one of the App's own WebView2 profiles is stopped,
+  # and only that process (no /T): a program 碧琪 opened for the user from
+  # elsewhere -- even a node.exe -- keeps running.
+  $stopped = @()
+  $alive = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+  $helpers = @('msedgewebview2.exe', 'msedge.exe', 'chrome.exe', 'node.exe', 'python.exe', 'pythonw.exe', 'cmd.exe', 'conhost.exe')
+  $rootText = if ($Root -and (Test-Path -LiteralPath $Root)) { (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') } else { '' }
+  $stateText = if ($StateRoot) { [IO.Path]::GetFullPath($StateRoot).TrimEnd('\') } else { '' }
+  foreach ($process in $alive) {
+    if ($process.ProcessId -eq $PID -or -not $process.CommandLine) { continue }
+    if ($helpers -notcontains $process.Name.ToLowerInvariant()) { continue }
+    $line = [string]$process.CommandLine
+    $ours = ($rootText -and $line.IndexOf($rootText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+      ($stateText -and $line -match '--user-data-dir=' -and $line.IndexOf($stateText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+    if ($ours) { $stopped += $process }
+  }
+  $stopped = @($stopped | Sort-Object ProcessId -Unique)
+  if ($stopped.Count -eq 0) { return }
+  Write-UpdateLog ('stopping leftover processes of the App: ' + (($stopped | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ', '))
+  foreach ($process in $stopped) { try { & taskkill.exe /PID $process.ProcessId /F | Out-Null } catch {} }
+  Start-Sleep -Milliseconds 500
+}
+function Register-RestoreAtLogon {
+  # Last safety net: when neither rename nor copy could put the previous
+  # version back, the desktop shortcut points at nothing. After a restart no
+  # process holds the folder, so move it back once at the next sign-in.
+  try {
+    if ((Test-Path -LiteralPath $TargetDir) -or -not (Test-Path -LiteralPath $Backup)) { return }
+    $restore = Join-Path $UpdateRoot ('restore-' + $Token + '.ps1')
+    $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
+    @(
+      "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
+      "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target'; Add-Content -LiteralPath '$log' -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] previous version restored at sign-in') }",
+      "  catch { Add-Content -LiteralPath '$log' -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] restore at sign-in failed: ' + `$_.Exception.Message) }",
+      "}",
+      "Remove-Item -LiteralPath `$PSCommandPath -Force -ErrorAction SilentlyContinue"
+    ) | Set-Content -LiteralPath $restore -Encoding UTF8
+    $command = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $restore + '"'
+    New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Force | Out-Null
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name ('SuperPinkieRestore-' + $Token.Substring(0, 8)) -Value $command
+    Write-UpdateLog "previous version will be moved back at the next sign-in ($restore)"
+  } catch { Write-UpdateLog "could not schedule the restore at sign-in: $($_.Exception.Message)" }
+}
 function Stop-InstallProcesses([string]$Root) {
   # The window keeps its gateway (node.exe from runtime\bin) alive after it
   # closes. Windows may even rename the folder while the old gateway keeps
   # serving the old UI, so stop only processes owned by this install first.
   if (-not (Test-Path -LiteralPath $Root)) { return }
+  try { Stop-InstallLeftovers $Root } catch { Write-UpdateLog "leftover process check failed: $($_.Exception.Message)" }
   $prefix = (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') + '\'
   for ($round = 0; $round -lt 20; $round++) {
     # A failed process query is not evidence that there are no old processes.
@@ -1743,6 +1822,7 @@ try {
     try { Restore-PreviousVersion }
     catch {
       Write-UpdateLog "rollback failed: $($_.Exception.Message)"
+      Register-RestoreAtLogon
       $where = if (Test-Path -LiteralPath $Backup) { "原来的版本保存在：`n$Backup`n请点「用管理员权限修复」，或者把这个文件夹改回「$(Split-Path -Leaf $TargetDir)」。" } else { '请点「用管理员权限修复」，或者重新下载便携版。' }
       Show-UpdateProblem ("新版 $Version 没有装上，自动恢复也没有完成。`n$where`n记忆和设置都在，不受影响。`n`n详细记录：$LogPath")
     }
@@ -1925,6 +2005,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-StartSeconds", str(int(self.health_start_seconds)),
                     "-ReadySeconds", str(int(self.health_ready_seconds)),
                     "-SwapSeconds", str(int(self.swap_seconds)),
+                    "-StateRoot", str(state_root()),
                 ]
             else:
                 backup = self.executable.with_name(self.executable.stem + ".previous-" + token + self.executable.suffix)
@@ -2254,6 +2335,14 @@ def _config_repair_module():
     return config_repair
 
 
+def _gateway_proxy_module():
+    try:
+        import gateway_proxy
+    except ImportError:  # imported as app.windows_desktop (tests)
+        from app import gateway_proxy
+    return gateway_proxy
+
+
 class GatewaySupervisor:
     def __init__(self, runtime):
         self.runtime = runtime
@@ -2272,6 +2361,33 @@ class GatewaySupervisor:
         # Shown once on the startup page, e.g. 「碧琪发现设置文件有一处写错了，已经自动修好」.
         self.notice = ""
         self.exits = 0
+        self.proxy_checked = 0.0
+        self.proxy_mtime = None
+
+    def root_proxy(self, force=False):
+        """Take over a root ``proxy`` block before it reroutes the model relay.
+
+        Returns the proxy URL the gateway should get as environment variables.
+        Cheap enough for the watchdog: the file is only read when it changed.
+        """
+        module = _gateway_proxy_module()
+        path = openclaw_config_path()
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            mtime = None
+        if force or mtime != self.proxy_mtime:
+            self.proxy_mtime = mtime
+            module.repair(path, state_root(), log=lambda message: append_log("launcher", message))
+            try:
+                self.proxy_mtime = path.stat().st_mtime_ns
+            except OSError:
+                pass
+        try:
+            config = json.loads(path.read_text(encoding="utf-8-sig") or "{}")
+        except (OSError, ValueError, UnicodeError):
+            return None
+        return module.proxy_url(state_root(), config)
 
     @staticmethod
     def _record_path():
@@ -2363,6 +2479,10 @@ class GatewaySupervisor:
             try:
                 gateway_environment = self.runtime.environment()
                 gateway_environment["OPENCLAW_SERVICE_KIND"] = "gateway"
+                try:
+                    _gateway_proxy_module().apply_environment(gateway_environment, self.root_proxy(force=True))
+                except Exception as error:  # never block the gateway on this
+                    append_log("launcher", f"gateway proxy check failed: {error}")
                 self.process = subprocess.Popen(
                     command,
                     cwd=str(self.runtime.openclaw.parent),
@@ -2483,6 +2603,15 @@ class GatewaySupervisor:
             if http_ready(GATEWAY_URL):
                 failures = 0
                 self.note_ready()
+                # 碧琪 can edit openclaw.json herself (11-05: she added a root
+                # proxy after a failed web_fetch and restarted the gateway).
+                # Undo that within seconds; the gateway hot-reloads "proxy".
+                if time.monotonic() - self.proxy_checked >= 5:
+                    self.proxy_checked = time.monotonic()
+                    try:
+                        self.root_proxy()
+                    except Exception as error:
+                        append_log("launcher", f"gateway proxy check failed: {error}")
                 continue
             if process is not None and not alive:
                 # A gateway that died on a bad openclaw.json would die again on
@@ -3931,6 +4060,43 @@ def startup_fallback_html():
     return STARTUP_FALLBACK_HTML
 
 
+def watch_failed_file_navigation(window, log=None, limit=3):
+    """Replace WebView2's bare error page for a failed file:// load.
+
+    The splash is checked once at start, but a user still saw 「未找到文件
+    ERR_FILE_NOT_FOUND」 on 2.5.40 right after an update: the file existed at
+    start and a later load of it failed. Whenever a file:// navigation fails,
+    show the built-in page (no files needed; it waits for the gateway and
+    offers repair) instead of an error with no way out. Runs on the GUI thread.
+    """
+    log = log or (lambda message: append_log("launcher", message))
+    control = getattr(getattr(getattr(window, "native", None), "browser", None), "webview", None)
+    if control is None:
+        log("failed-navigation guard not installed: WebView2 control not found")
+        return None
+    state = {"count": 0}
+
+    def completed(sender, args):
+        try:
+            if bool(args.IsSuccess):
+                return
+            source = str(sender.Source or "")
+            if not source.lower().startswith("file:"):
+                return
+            status = str(getattr(args, "WebErrorStatus", "unknown"))
+            if state["count"] >= limit:
+                log(f"file page failed again ({status}): {source}; built-in page already shown {limit} times")
+                return
+            state["count"] += 1
+            log(f"file page failed to load ({status}): {source}; showing the built-in page")
+            sender.CoreWebView2.NavigateToString(startup_fallback_html())
+        except Exception as error:  # an event handler must never raise into WebView2
+            log(f"failed-navigation guard error: {error}")
+
+    control.NavigationCompleted += completed
+    return completed
+
+
 def run_desktop(resource_root, prepare, update_health_token=None):
     import webview
     if not update_health_token:
@@ -4013,7 +4179,8 @@ def run_desktop(resource_root, prepare, update_health_token=None):
     def before_show():
         # This event runs synchronously on WinForms' GUI thread. Do not call
         # evaluate_js or marshal back to the same thread from here.
-        for label, configure in (("glass", configure_native_glass), ("corners", configure_native_corners)):
+        for label, configure in (("glass", configure_native_glass), ("corners", configure_native_corners),
+                                 ("failed-navigation guard", watch_failed_file_navigation)):
             try:
                 configure(window)
             except Exception as error:
