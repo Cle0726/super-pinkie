@@ -74,13 +74,22 @@ export function validChoice(v, {seedQuestion = ''} = {}) {
 
 // 盲答复核：另起一次调用，不给答案，让模型自己做；做出来和出题答案一致才算「答案唯一」。
 export const SOLVE_RULES = `你是严谨的英语老师。输入一道四选一题 {"stem","options"}。独立做题，只输出 JSON：{"answer":0-3 的整数,"unique":true/false}。如果你认为有两个或以上选项都对、或者没有正确选项，unique 写 false。`;
-export async function blindCheck(requestModel, choice) {
+export async function blindSolve(requestModel, choice) {
   const r = await modelJson(requestModel, SOLVE_RULES, {stem: choice.stem, options: choice.options}, {
-    retries: 1, timeoutMs: 20000, maxTokens: 300,
-    validate: v => (v && Number.isInteger(Number(v.answer)) ? {answer: Number(v.answer), unique: v.unique !== false} : null),
+    retries: 1, timeoutMs: 30000, maxTokens: 300,
+    validate: v => (v && Number.isInteger(Number(v.answer)) && Number(v.answer) >= 0 && Number(v.answer) <= 3 ? {answer: Number(v.answer), unique: v.unique !== false} : null),
   });
-  if (!r) return null; // 复核调用失败：不确定
-  return r.value.unique && r.value.answer === choice.answer;
+  return r ? r.value : null; // null = 复核调用失败：不确定
+}
+export async function blindCheck(requestModel, choice) {
+  const r = await blindSolve(requestModel, choice);
+  if (!r) return null;
+  return r.unique && r.answer === choice.answer;
+}
+// 小并发池：items 逐个交给 fn，最多 n 个同时跑
+export async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } }));
 }
 
 // ---------- 错题怪 ----------
@@ -107,11 +116,12 @@ export const QUEST_MEANING = {
   huntWins: n => `讨伐打赢 ${n} 只到期的错题怪`,
   weekSets: n => `这一周背一背做完 ${n} 组`,
 };
-export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。
+export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}],"recent":[前几天已经用过的文案]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。
 给每个委托重写一个标题（≤8 字）和一句话（≤24 字）：
 - 意思必须和 meaning 完全一致：不能把「背一背的组」说成「卷子 / 套题」，不能把「答对」说成「做完」；
 - 出现数字时只能是 count，不要写别的数字；
 - 口吻俏皮温暖、像手账上的小便签；可以带一点节气（term）的氛围，但不要编造先生没说过的安排（吃饭、出门、约会之类）；
+- 不要和 recent 里的说法重复（换个比喻和句式，每天读起来都是新的）；
 - quiet=true（考前一周）时更安静、不催、不比较。
 只输出 JSON：{"quests":[{"id","title","text"}]}`;
 export function validQuestText(v, ids, counts = {}) {
@@ -254,7 +264,9 @@ export class GameContent {
       const ids = q.list.map(x => x.id);
       const counts = Object.fromEntries(q.list.map(x => [x.id, x.target.count]));
       const quests = q.list.map(x => ({id: x.id, kind: x.target.kind, count: x.target.count, meaning: (QUEST_MEANING[x.target.kind] || (n => `${x.text}（${n}）`))(x.target.count), draft: `${x.title}｜${x.text}`}));
-      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests}, {validate: v => validQuestText(v, ids, counts), timeoutMs: 60000, maxTokens: 800});
+      const recent = Object.entries(state.quests || {}).filter(([d, day]) => d < date && day?.text === 'model').sort(([a], [b]) => b.localeCompare(a)).slice(0, 3)
+        .flatMap(([, day]) => day.list.map(x => `${x.title}｜${x.text}`));
+      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests, recent}, {validate: v => validQuestText(v, ids, counts), timeoutMs: 60000, maxTokens: 800});
       this.game.mutate(s => {
         const day = s.quests?.[date];
         if (!day) return;
