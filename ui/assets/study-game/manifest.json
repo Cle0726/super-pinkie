@@ -964,6 +964,15 @@
    "date": "2026-11-08",
    "rawMtime": 1794152641835
   },
+  "world/pretco-b/translation/bg": {
+   "file": "world/pretco-b/translation/bg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 104858,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794174510744
+  },
   "world/pretco-b/translation/fg": {
    "file": "world/pretco-b/translation/fg.webp",
    "w": 1536,
@@ -1055,5 +1064,5 @@
    "rawMtime": 1794152656773
   }
  },
- "updatedAt": "2026-11-08T16:18:15.772Z"
+ "updatedAt": "2026-11-08T21:48:55.733Z"
 }

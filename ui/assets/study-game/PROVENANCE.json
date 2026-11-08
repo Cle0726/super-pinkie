@@ -588,6 +588,12 @@
    "prompt": "art-slots.json · boss",
    "reviewed": "2026-11-08",
    "note": "重排后出：书页飞散、裂纹、汗滴，和 full / broken 同一只"
+  },
+  "world/pretco-b/translation/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 3 次（专用描述，明确禁桥）：远山一条，左塔柳、右钟楼，云和鸟，透明、低对比；不和中景重复"
   }
  }
 }
