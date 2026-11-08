@@ -1,0 +1,267 @@
+{
+ "version": 1,
+ "slots": {
+  "boss/babel/broken": {
+   "file": "boss/babel/broken.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 234370,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135957377
+  },
+  "boss/babel/full": {
+   "file": "boss/babel/full.webp",
+   "w": 1512,
+   "h": 1024,
+   "bytes": 233684,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135568431
+  },
+  "form/detective/icon": {
+   "file": "form/detective/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 21946,
+   "source": "derived",
+   "from": "form/detective/portrait",
+   "date": "2026-11-08"
+  },
+  "form/detective/portrait": {
+   "file": "form/detective/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 155436,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794133602937
+  },
+  "form/lidong/icon": {
+   "file": "form/lidong/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 20888,
+   "source": "derived",
+   "from": "form/lidong/portrait",
+   "date": "2026-11-08"
+  },
+  "form/lidong/portrait": {
+   "file": "form/lidong/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 131896,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794133591638
+  },
+  "form/pirate/icon": {
+   "file": "form/pirate/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 24010,
+   "source": "derived",
+   "from": "form/pirate/portrait",
+   "date": "2026-11-08"
+  },
+  "form/pirate/portrait": {
+   "file": "form/pirate/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 159312,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794134934039
+  },
+  "form/princess/icon": {
+   "file": "form/princess/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 24140,
+   "source": "derived",
+   "from": "form/princess/portrait",
+   "date": "2026-11-08"
+  },
+  "form/princess/portrait": {
+   "file": "form/princess/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 173564,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794134054453
+  },
+  "form/queen/icon": {
+   "file": "form/queen/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 21920,
+   "source": "derived",
+   "from": "form/queen/portrait",
+   "date": "2026-11-08"
+  },
+  "form/queen/portrait": {
+   "file": "form/queen/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 168876,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794133775383
+  },
+  "monster/block-golem": {
+   "file": "monster/block-golem.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 138020,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135766892
+  },
+  "monster/bookworm": {
+   "file": "monster/bookworm.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 124698,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794134193345
+  },
+  "monster/eraser-gnome": {
+   "file": "monster/eraser-gnome.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 106926,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135281664
+  },
+  "monster/fog-puff": {
+   "file": "monster/fog-puff.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 88082,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135507662
+  },
+  "monster/ink-slime": {
+   "file": "monster/ink-slime.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 98918,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794133789943
+  },
+  "monster/inkpot-imp": {
+   "file": "monster/inkpot-imp.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 121606,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135244381
+  },
+  "monster/lost-crane": {
+   "file": "monster/lost-crane.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 100918,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794134301265
+  },
+  "monster/paper-fox": {
+   "file": "monster/paper-fox.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 105226,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794135447752
+  },
+  "world/pretco-b/grammar/mg": {
+   "file": "world/pretco-b/grammar/mg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 342098,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136295734
+  },
+  "world/pretco-b/listening/base": {
+   "file": "world/pretco-b/listening/base.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 321458,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136152958
+  },
+  "world/pretco-b/listening/bg": {
+   "file": "world/pretco-b/listening/bg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 213894,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794134099471
+  },
+  "world/pretco-b/listening/fg": {
+   "file": "world/pretco-b/listening/fg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 322526,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136152973
+  },
+  "world/pretco-b/listening/mg": {
+   "file": "world/pretco-b/listening/mg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 274662,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794134142721
+  },
+  "world/pretco-b/vocab/base": {
+   "file": "world/pretco-b/vocab/base.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 158330,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136152984
+  },
+  "world/pretco-b/vocab/bg": {
+   "file": "world/pretco-b/vocab/bg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 384214,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136153000
+  },
+  "world/pretco-b/vocab/fg": {
+   "file": "world/pretco-b/vocab/fg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 273474,
+   "source": "chatgpt-web",
+   "date": "2026-11-08",
+   "rawMtime": 1794136295766
+  },
+  "world/pretco-b/vocab/mg": {
+   "file": "world/pretco-b/vocab/mg.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 376622,
+   "source": "codex",
+   "date": "2026-11-08",
+   "rawMtime": 1794133899766
+  }
+ },
+ "updatedAt": "2026-11-08T11:15:20.354Z"
+}

@@ -1,0 +1,149 @@
+{
+ "note": "碧琪是 Pinkie Pie（孩之宝）的同人二创；本目录图片均由用户的 GPT 会员生成（Codex image_gen / chatgpt.com 网页版），提示词见 tools/study-game/art/art-slots.json 与 PROGRESS-B。",
+ "items": {
+  "form/lidong/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "红围巾、姜茶、头顶雪花、三气球正确；B0 风格测试"
+  },
+  "form/detective/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "格纹帽、放大镜放大眼睛、棒棒糖烟斗，原创造型"
+  },
+  "form/queen/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "王冠、红丝绒披风、权杖、金马蹄"
+  },
+  "form/princess/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/ink-slime": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "可爱不吓人、白切边干净"
+  },
+  "monster/bookworm": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/lost-crane": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/inkpot-imp": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/block-golem": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/eraser-gnome": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/paper-fox": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/fog-puff": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "boss/babel/full": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "书本+字母积木+背上小塔，威风但萌"
+  },
+  "boss/babel/broken": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "趴下、塔歪、冒星星"
+  },
+  "world/pretco-b/listening/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/mg": {
+   "source": "codex",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "更像小岛底板，可用"
+  },
+  "world/pretco-b/vocab/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "整张不透明，作远景层可用"
+  },
+  "world/pretco-b/vocab/mg": {
+   "source": "codex",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "剪纸层透明背景、纸纹毛边、闪卡树叶"
+  },
+  "world/pretco-b/vocab/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/vocab/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/grammar/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "form/pirate/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "网页版文字提示词首张，风格和 Codex 版一致"
+  }
+ }
+}
