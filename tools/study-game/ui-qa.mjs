@@ -17,6 +17,9 @@ export function launch({headed = args.includes('--headed'), video = null, width 
   const req = createRequire(import.meta.url);
   const root = '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/node_modules';
   let pw; try { pw = req('playwright'); } catch { pw = req(root + '/playwright-core'); }
+  // --engine=webkit（或 QA_ENGINE=webkit）：用 Playwright WebKit，最接近 App 的 WKWebView。
+  const engine = opt('engine') || process.env.QA_ENGINE || 'chromium';
+  if (engine === 'webkit') return pw.webkit.launch({headless: !headed});
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   // 录屏时窗口必须和视口一样大，否则底部约 90px 是灰条（已知坑）。
   const flags = ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=metal', `--window-size=${width},${height}`, '--autoplay-policy=no-user-gesture-required'];
