@@ -198,16 +198,24 @@ async function map() {
       await deskReady(page, 'gamemap'); await page.locator('.pkw-tab').first().waitFor({timeout: 10000});
       await page.waitForFunction(() => !document.querySelector('.pkw-canvas[data-loading]'), null, {timeout: 15000}).catch(() => {}); await wait(2600);
       await page.screenshot({path: path.join(out, `map-3d-${tag}.png`)});
+      if (opt('quick')) { await context.close(); continue; }
       r[`fx-${theme}`] = await page.evaluate(() => ({scene: window.__pinkieGameFx.stats().scene, webgl: window.__pinkieGameFx.stats().webgl}));
       // 点第 2 个节点 → 卡片
       const pos = await page.evaluate(() => { const h = document.querySelector('.pkw-canvas'); return h ? h.getBoundingClientRect().toJSON() : null; });
-      if (pos) { for (const [fx2, fy2] of [[.42, .55], [.5, .6], [.35, .62], [.45, .5]]) { await page.mouse.click(pos.x + pos.width * fx2, pos.y + pos.height * fy2); await wait(900); if (!(await page.locator('.pkw-card[hidden]').count())) break; } }
+      const pt = await page.evaluate(() => { const inst = window.__pinkieGameWorld._page?.handle()?.instance; const mk = inst && inst._markers?.()[1]; return mk ? inst.screenOf(mk) : null; });
+      if (pt) { await page.mouse.click(pt.x, pt.y); await wait(1200); }
+      r[`card-${theme}`] = !(await page.locator('.pkw-card[hidden]').count());
       await page.screenshot({path: path.join(out, `map-3d-card-${tag}.png`)});
       // 翻页到第二区
       await page.locator('.pkw-tab').nth(1).click(); await wait(500); await page.screenshot({path: path.join(out, `map-3d-flip-${tag}.png`)}); await wait(2400);
       await page.screenshot({path: path.join(out, `map-3d-region2-${tag}.png`)});
       // 空闲：翻页结束 + 浮尘停了以后零帧
       await wait(6500); r[`idle-${theme}`] = await page.evaluate(async () => { const a = window.__pinkieGameFx.stats().frames, raf = window.__rafCalls; await new Promise(res => setTimeout(res, 2000)); return {frames: window.__pinkieGameFx.stats().frames - a, raf: window.__rafCalls - raf}; });
+      // 翻页慢放接触表（0.2 倍）：折下 → 翻页 → 立起 → 节点出现
+      await page.evaluate(() => window.__pinkieGameFx._timeScale(.2)); await page.locator('.pkw-tab').nth(2).click();
+      const frames = []; for (let k = 0; k < 12; k++) { const f = path.join(out, `_flip-${tag}-${k}.png`); await page.screenshot({path: f, clip: await page.locator('.pkw-stage').boundingBox()}); frames.push(f); await wait(820); }
+      await page.evaluate(() => window.__pinkieGameFx._timeScale(1));
+      try { const {execFileSync} = await import('node:child_process'); execFileSync('magick', ['montage', '-font', '/System/Library/Fonts/Supplemental/Arial.ttf', ...frames, '-tile', '4x', '-geometry', '640x+6+6', '-background', theme === 'dark' ? '#111' : '#eee', path.join(out, `map-flip-sheet-${tag}.png`)]); frames.forEach(f => fs.unlinkSync(f)); } catch (e) { console.warn('montage', e.message); }
       // 平面版
       await page.locator('.pkw-mode button', {hasText: '平面'}).click(); await page.locator('.pkw-tab').first().click(); await wait(900);
       await page.screenshot({path: path.join(out, `map-flat-${tag}.png`)});
