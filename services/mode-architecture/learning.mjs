@@ -12,6 +12,7 @@ import {LearningMaterials, registerLearningMaterials} from './learning-materials
 import {LearningLesson, registerLearningLesson} from './learning-lesson.mjs';
 import {LearningVocab, registerLearningVocab, parseVocabInput, validateMovedWords} from './learning-vocab.mjs';
 import {registerLearningDrill} from './learning-drill.mjs';
+import {registerLearningGame} from './learning-game.mjs';
 import {LEARNING_EXAMS} from './learning-exams.mjs';
 import {LearningVisualStore, VISUAL_KINDS} from './learning-visuals.mjs';
 import {PRACTICE_KINDS, PRACTICE_LABELS} from './learning-practice.mjs';
@@ -2320,6 +2321,7 @@ export function registerLearningGateway(api, store, {organizer = new LearningNot
   store.refs = registerLearningRefs(api, store);
   registerLearningRecall(api, store, {organizer, schedule: calculateReviewSchedule, recordReview: () => pactLedger(store, 'recordReview', {count: 1})});
   registerLearningDrill(api, store, {organizer, schedule: calculateReviewSchedule, recall: store.recall, vocab: store.vocab, pact: store.pact});
+  try { registerLearningGame(api, store, {requestModel}); } catch (error) { api.logger?.warn?.(`learning game disabled: ${error?.message || error}`); }
   if (store.desk) store.companion = registerLearningCompanion(api, store, {requestModel: store.desk.requestModel});
   api.registerService?.({id: 'pinkie-learning-materials', start: () => store.materials.start(), stop: async () => { store.materials.stopController?.abort(); for (const item of store.materials.controllers?.values() || []) item.controller.abort(); await store.lessons.close(); await store.materials.close(); }});
 }

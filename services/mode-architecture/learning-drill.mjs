@@ -554,6 +554,7 @@ export function itemRefs(item = {}) {
       : {book: 'notes', key: `notes:${entry.recallId}`, noteId: entry.noteId, recallId: entry.recallId});
   }
   if (ref.book === 'vocab') return [{book: 'vocab', key: `vocab:${ref.wordId}`, wordId: ref.wordId}];
+  if (ref.book === 'hunt') return [{book: 'hunt', key: `hunt:${ref.monsterId}`, monsterId: ref.monsterId}];
   return [{book: 'notes', key: `notes:${ref.recallId}`, noteId: ref.noteId, recallId: ref.recallId}];
 }
 
@@ -836,6 +837,7 @@ export class LearningDrill {
     const data = this.read();
     data.sessions[session.sessionId] = session;
     this.write(data);
+    try { this.store?.game?.onDrillSession?.(session, pool); } catch {}
     const pending = notes.filter(card => card.drillStatus === 'queued' || card.drillStatus === 'running' || fresh.cards[card.recallId]?.status === 'queued' || fresh.cards[card.recallId]?.status === 'running').length;
     return {
       sessionId: session.sessionId, items, pending, dueLeft: duePool.filter(card => !used.has(card.key)).length,
@@ -872,10 +874,13 @@ export class LearningDrill {
     if (stars) this.pact?.recordDrill?.({stars});
     session.answers.push({itemId, mode: item.mode, correct: correct === true, firstTry: firstTry !== false, hinted: Boolean(hinted), ms: Number(ms) || 0, verdict: verdict || null, stars, at: this.now()});
     this.save(session);
-    return {rating: fresh ? rating : null, stars, requeue: correct !== true || verdict === 'wrong'};
+    let game = {awards: []};
+    try { game = {awards: this.store?.game?.onDrillAnswer?.({session, item, correct, firstTry, verdict, fresh, refs}) || []}; } catch {}
+    return {rating: fresh ? rating : null, stars, requeue: correct !== true || verdict === 'wrong', game};
   }
 
   grade(session, ref, rating) {
+    if (ref.book === 'hunt') return; // 错题怪变体题：怪的状态由 learning-game 推进，不进回忆卡 / 生词曲线
     const now = this.now();
     if (ref.book === 'vocab') this.vocab?.review?.(ref.wordId, rating, now, {source: 'drill', sessionId: session.sessionId});
     else this.recall?.review?.(LIBRARY, {id: ref.noteId, recallId: ref.recallId, rating, now, source: 'drill', sessionId: session.sessionId});
@@ -962,7 +967,7 @@ export class LearningDrill {
     session.quiet = quiet;
     session.jarFull = filledNow;
     this.save(session);
-    return result;
+    try { return {...result, game: {awards: this.store?.game?.onDrillFinish?.({session, result}) || []}}; } catch { return result; }
   }
 
   nextSuggestion(session, now) {
