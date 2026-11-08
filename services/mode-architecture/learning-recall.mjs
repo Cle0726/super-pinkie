@@ -115,6 +115,9 @@ export class LearningRecall {
             data.records[note.id] = {hash: recallHash(note), status: cards?.length ? 'ready' : 'failed', cards: cards || [], model: status.modelName || status.model, at: Date.now(), ...(cards?.length ? {} : {error: '模型给出的提问包含答案或缺少原文依据，请点重新拆分'})};
           }
           this.write(data);
+          // 回忆卡就绪后再排队出背一背的题。推迟到当前调用栈之后，避免把这一次模型调用算进正在计数的回忆卡测试。
+          const readyIds = batch.map(note => note.id);
+          setTimeout(() => { try { this.store.drill?.enqueueNotes?.(sessionKey, readyIds); } catch {} }, 0).unref?.();
         } catch (error) {
           const data = this.read();
           for (const note of batch) if (data.records[note.id]?.hash === recallHash(note)) data.records[note.id] = {...data.records[note.id], status: 'failed', error: clean(error.message, 300), cards: []};
@@ -156,16 +159,30 @@ export class LearningRecall {
     return {notes: cards.slice(0, Math.min(Number(limit) || 10, count)), dueCount: cards.length, todayCount: count, dailyLimit: cap, completedToday: done.size, dailyRemaining: remaining,
       backlog: Math.max(0, cards.length - count), pending, missing, problems, remainingCount: Math.max(0, cards.length - count)};
   }
-  review(sessionKey, {id, recallId, rating, now = Date.now()} = {}) {
+  review(sessionKey, {id, recallId, rating, now = Date.now(), source, sessionId} = {}) {
     const note = this.notes(sessionKey).find(note => note.id === id); if (!note) throw Error('没有找到这条笔记');
     const data = this.read(), record = this.stateFor(note, data), card = record?.cards?.find(card => card.id === recallId);
     if (!card || record.status !== 'ready') throw Error('这张回忆卡已更新，请重新打开回顾');
+    if (source === 'drill' && sessionId && card.drillSessions?.[sessionId]) return {ok: true, duplicate: true, note: {...note, recallId}};
     if (card.nextReviewAt > now && this.store.noteDay(card.lastReviewedAt) === this.store.noteDay(now)) return {ok: true, duplicate: true, note: {...note, recallId}};
     Object.assign(card, this.schedule(card, rating, now));
+    if (source === 'drill' && sessionId) {
+      card.drillSessions = {...(card.drillSessions || {}), [sessionId]: rating};
+      const seen = Object.keys(card.drillSessions);
+      for (const key of seen.slice(0, Math.max(0, seen.length - 12))) delete card.drillSessions[key];
+    }
     const day = this.store.noteDay(now); data.days[day] = [...new Set([...(data.days[day] || []), card.id])];
     for (const old of Object.keys(data.days).sort().slice(0, -32)) delete data.days[old];
     this.write(data); this.recordReview();
     return {ok: true, note: {...note, ...card, recallId: card.id}};
+  }
+  markLearned(sessionKey, {id, recallId, now = Date.now()} = {}) {
+    const note = this.notes(sessionKey).find(note => note.id === id); if (!note) throw Error('没有找到这条笔记');
+    const data = this.read(), record = this.stateFor(note, data), card = record?.cards?.find(card => card.id === recallId);
+    if (!card || record.status !== 'ready') throw Error('这张回忆卡已更新，请重新打开回顾');
+    if (!card.learnedAt) card.learnedAt = now;
+    this.write(data);
+    return {ok: true};
   }
 }
 

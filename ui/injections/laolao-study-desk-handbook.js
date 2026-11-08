@@ -153,6 +153,61 @@
     askChip(host, data);
     fitHost = host; fit(host);
     void daily(host, request);
+    decorateDrill(host, data, ctx);
+  }
+
+  function decorateDrill(host, data, ctx) {
+    const reward = window.__pinkieDeskReward;
+    if (!reward || !host.isConnected) return;
+    const drill = data.drill || {};
+    const streak = host.querySelector('.pk-streak');
+    if (streak) {
+      streak.replaceChildren();
+      const row = el('div', 'pk-today-reward');
+      const seal = el('div');
+      const jar = el('div');
+      row.append(seal, jar);
+      streak.append(row);
+      const week = Array.isArray(drill.streak?.week) ? drill.streak.week : Array(7).fill(false);
+      const days = drill.streak?.current || data.streak?.current || 0;
+      const leave = [];
+      if (drill.streak?.leaveUsedYesterday || drill.leaveUsedYesterday) {
+        const name = new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Shanghai', weekday: 'short'}).format(new Date());
+        const index = {Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6}[name] ?? 0;
+        leave.push((index + 6) % 7);
+      }
+      const caption = drill.streak?.leaveUsedYesterday || drill.leaveUsedYesterday ? '昨天碧琪帮你请了假，连续还在' : days ? `连续 ${days} 天` : '';
+      reward.stampStreak(seal, {days, week, weekKind: drill.streak?.weekKind, leave, caption});
+      reward.starJar(jar, {today: drill.jar?.today || 0, goal: drill.jar?.goal || 30});
+    }
+    const left = host.querySelector('.h-left');
+    if (left && !left.querySelector('.pk-drill-go')) {
+      const go = kit().button('背一组', () => window.__pinkieDrill?.start({source: 'mixed', scope: {kind: 'due'}, returnTo: 'today', task: 'mixed'}), {kind: 'go', withStar: true});
+      go.classList.add('pk-drill-go');
+      go.setAttribute('aria-label', '背一组');
+      const quiet = left.querySelector('.quiet');
+      if (quiet) quiet.before(go); else left.append(go);
+    }
+    host.querySelectorAll('.q-row').forEach(row => {
+      const label = row.querySelector('.stroke')?.textContent || '';
+      if (label !== '背单词' && label !== '笔记回顾') return;
+      const clone = row.cloneNode(true);
+      row.replaceWith(clone);
+      clone.addEventListener('click', event => {
+        event.preventDefault();
+        const source = label === '背单词' ? 'vocab' : 'notes';
+        window.__pinkieDrill?.start({source, scope: {kind: 'due'}, returnTo: 'today', task: source});
+      });
+    });
+    const finished = ctx.local?.().drillJustFinished;
+    if (!finished) return;
+    ctx.local().drillJustFinished = null;
+    const row = [...host.querySelectorAll('.q-row')].find(item => (finished.task === 'vocab' && item.textContent.includes('背单词')) || (finished.task === 'notes' && item.textContent.includes('笔记回顾')));
+    const mark = row?.querySelector('.stroke');
+    if (mark) { mark.classList.add('pk-hl'); if (!ctx.motion?.reduced) mark.classList.add('pk-anim'); }
+    const from = row || host.querySelector('.pk-drill-go');
+    const to = host.querySelector('.pk-jar-svg');
+    if (from && to) reward.starsFly(from, to, Math.min(12, Math.max(1, finished.stars | 0)));
   }
 
   // ---------- 本月：手账月历跨页 ----------

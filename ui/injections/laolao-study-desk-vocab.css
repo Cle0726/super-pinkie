@@ -63,20 +63,6 @@
 #pinkie-study-desk .v-empty strong{display:block;font:600 18px var(--serif);color:var(--ink)}
 #pinkie-study-desk .v-empty p{margin:8px 0 0;font-size:14px}
 
-#pinkie-study-desk .v-stage[hidden]{display:none}
-#pinkie-study-desk .v-stage{display:flex;flex-direction:column;gap:18px;align-items:center}
-#pinkie-study-desk .v-stage-bar{align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-2)}
-#pinkie-study-desk .v-flash{width:min(560px,100%);display:flex;flex-direction:column;gap:16px}
-#pinkie-study-desk .v-front{min-height:300px;border:1px solid var(--hair);border-radius:20px;background:var(--card);box-shadow:var(--lift);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--ink)}
-#pinkie-study-desk .v-front .v-word{font-size:40px}
-#pinkie-study-desk .v-front .v-phonetic{margin:0}
-#pinkie-study-desk .v-hint{margin-top:18px;font-size:13px;color:var(--ink-3)}
-#pinkie-study-desk .v-flash .v-card{padding:24px}
-#pinkie-study-desk .v-rate{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-#pinkie-study-desk .v-rate button{height:var(--ctl-lg,48px);border:1px solid var(--hair-2);border-radius:99px;background:var(--card);color:var(--ink);font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
-#pinkie-study-desk .v-rate button[data-rating="remembered"]{border:0;background:var(--pink-solid,#DB1F74);color:var(--on-pink,#fff)}
-#pinkie-study-desk .v-rate kbd{font:11px var(--mono);opacity:.6}
-
 #pinkie-study-desk .v-toast[hidden]{display:none}
 #pinkie-study-desk .v-toast{position:sticky;bottom:0;align-self:center;display:flex;gap:14px;align-items:center;padding:10px 16px;border-radius:99px;background:var(--ink);color:var(--paper);font-size:13px;box-shadow:var(--lift);z-index:5}
 #pinkie-study-desk .v-toast button{border:0;background:none;color:inherit;text-decoration:underline;text-underline-offset:4px;padding:0}

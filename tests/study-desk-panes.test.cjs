@@ -118,13 +118,21 @@ test('the desk and its card handles never show over the ordinary chat',{timeout:
   assert.equal(await page.locator('.desk-content').isVisible(),false);assert.equal(await page.locator('.desk-page-grip:visible').count(),0);
  });
 });
-test('recall front never falls back to the pasted answer, even for an old uncategorized note',{timeout:45000},async()=>{
- const base=handler();await run(async page=>{
-  await page.evaluate(()=>__pinkieStudyDesk.go('notes',{view:'review'}));await page.locator('.n-q').waitFor();
-  assert.equal(await page.locator('.n-q').innerText(),'“避免犯错”用英语怎么说？');assert.equal(await page.locator('.n-ans').count(),0);
-  assert.equal(await page.locator('.n-review').innerText().then(t=>t.includes('avoid making mistakes')),false);
-  await page.locator('.n-q').click();await page.keyboard.press('Space');await page.locator('.n-ans').waitFor();assert.match(await page.locator('.n-ans').innerText(),/avoid making mistakes/);
- },{custom:async(method,p)=>method.endsWith('notes.recall.queue')?{notes:[{id:'raw',title:'avoid making mistakes（避免犯错）',content:'avoid making mistakes（避免犯错）',recallId:'recall',recallQuestion:'“避免犯错”用英语怎么说？',recallAnswer:'avoid making mistakes'}],todayCount:1,backlog:0,dailyLimit:10}:base(method,p)});
+test('notes review opens the drill, shows the question before the answer, and finishes one card',{timeout:45000},async()=>{
+ // 旧的「今天回顾」翻面舞台已经换成背一背：从笔记本「今天要背」进来，题面只有问题，翻面后才有答案，打分后出反馈条。
+ const base=handler();const item={itemId:'d1',mode:'flip',strength:1,cardRef:{book:'notes',noteId:'raw',recallId:'recall'},prompt:'“避免犯错”用英语怎么说？',answer:'avoid making mistakes',reveal:{question:'“避免犯错”用英语怎么说？',answer:'avoid making mistakes'}};
+ await run(async(page,server)=>{
+  await page.evaluate(()=>__pinkieStudyDesk.go('notes',{view:'review'}));await page.locator('.pk-drill .pk-drill-stem').waitFor();
+  assert.equal(await page.locator('.pk-drill .pk-drill-stem').innerText(),'“避免犯错”用英语怎么说？');
+  assert.equal(await page.locator('.pk-drill').innerText().then(t=>t.includes('avoid making mistakes')),false);
+  await page.locator('.pk-drill-stem').click();await page.keyboard.press('Space');await page.getByText('avoid making mistakes').waitFor();
+  await page.getByRole('button',{name:/记得/}).click();await page.locator('.pk-sheet').waitFor();
+  const answered=server.calls.filter(c=>c.method.endsWith('drill.answer'));
+  assert.equal(answered.length,1);assert.equal(answered[0].params.itemId,'d1');assert.equal(answered[0].params.correct,true);
+ },{custom:async(method,p)=>method.endsWith('drill.session')?{sessionId:'s1',items:[item],pending:0,dueLeft:0,settings:{soundDefault:true,size:10,jarGoal:30,flipOnly:false}}
+  :method.endsWith('drill.settings.get')?{size:10,jarGoal:30,flipOnly:false}
+  :method.endsWith('drill.answer')?{rating:'remembered',stars:1,requeue:false}
+  :method.endsWith('notes.toc')?{inbox:0,today:{count:1},mistakes:0,moved:0,exams:[]}:base(method,p)});
 });
 test('paper remains visible when a background WebView suspends its first animation frame',{timeout:45000},async()=>{
  for(const engine of ['chromium','webkit']){
