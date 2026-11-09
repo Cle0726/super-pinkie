@@ -72,7 +72,8 @@ function emptyState() {
 }
 
 export class LearningGame {
-  constructor(store, {now = () => Date.now(), requestModel = null, economy = E.loadEconomy(), catalog = E.loadForms()} = {}) {
+  constructor(store, {now = () => Date.now(), requestModel = null, economy = E.loadEconomy(), catalog = E.loadForms(), autoReal = true} = {}) {
+    this.autoReal = autoReal;
     this.store = store;
     this.now = now;
     this.requestModel = requestModel;
@@ -770,6 +771,35 @@ export function registerLearningGame(api, store, options = {}) {
   register('exam.save', via('exam', 'save', notReady('考场')));
   register('exam.submit', via('exam', 'submit', notReady('考场')));
   register('exam.result', via('exam', 'result', notReady('成绩')));
+  // 插着 U 盘时手动「再扫一遍」（大厅按钮）；没插盘就只返回状态
+  register('exam.realSync', () => { const ex = mod('exam'); if (!ex.real) return {state: 'idle'}; ex.real.sync({force: false}).then(() => ex.keepSpare?.()).catch(() => {}); return {...ex.real.status, mounted: Boolean(ex.real.usbBase())}; });
+  // 真题原录音：/pinkie-exam-audio/<paperId>?key=<开考时发的 key>，支持 Range（拖进度条）
+  try {
+    api.registerHttpRoute?.({path: '/pinkie-exam-audio/', match: 'prefix', auth: 'plugin', handler(req, res) {
+      const url = new URL(req.url, 'http://localhost');
+      const file = mod('exam').audioFile?.(decodeURIComponent(url.pathname.slice('/pinkie-exam-audio/'.length)), url.searchParams.get('key'));
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (!file || !['GET', 'HEAD'].includes(req.method)) { res.statusCode = file ? 405 : 404; res.end(); return true; }
+      let size = 0;
+      try { size = fs.statSync(file).size; } catch { res.statusCode = 404; res.end(); return true; }
+      res.setHeader('Content-Type', /\.m4a$/i.test(file) ? 'audio/mp4' : /\.wav$/i.test(file) ? 'audio/wav' : 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers?.range || ''));
+      let start = 0, end = size - 1;
+      if (m) {
+        start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+        end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+        if (start > end || start >= size) { res.statusCode = 416; res.setHeader('Content-Range', `bytes */${size}`); res.end(); return true; }
+        res.statusCode = 206;
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+      } else res.statusCode = 200;
+      res.setHeader('Content-Length', String(end - start + 1));
+      if (req.method === 'HEAD') { res.end(); return true; }
+      fs.createReadStream(file, {start, end}).on('error', () => res.destroy()).pipe(res);
+      return true;
+    }});
+  } catch (error) { api.logger?.warn?.(`exam audio route: ${error?.message || error}`); }
   register('boss.state', p => (mod('exam').bossState ? mod('exam').bossState(game.read(), p.exam || GAME_EXAM) : game.bossFallback()));
   register('boss.realScore', via('exam', 'realScore', notReady('真实分数')));
   register('line', via('content', 'line', (async () => ({text: '我在呢，一起加油～', source: 'local'}))));

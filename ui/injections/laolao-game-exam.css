@@ -19,6 +19,38 @@
 #pinkie-study-desk .pke-hp i{background:linear-gradient(90deg,#8E1E3E,#D2405C);transition:transform .7s var(--pkg-out)}
 #pinkie-study-desk .pke-hp u{background:rgba(255,236,200,.75);transition:transform .9s var(--pkg-in)}
 /* 卷子 */
+/* 卷架：左历年真题（年份 × 月份），右仿真卷 */
+#pinkie-study-desk .pke-lobby > section.pke-papers{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:0;padding:0}
+#pinkie-study-desk .pke-shelf{padding:18px 20px;min-width:0}
+#pinkie-study-desk .pke-shelf--sim{border-left:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-prep{position:relative;margin:-4px 0 12px;font-size:12px;color:var(--pkg-ink-2);line-height:1.6}
+#pinkie-study-desk .pke-prep__bar{display:block;height:2px;margin-top:8px;background:var(--pkg-line);overflow:hidden}
+#pinkie-study-desk .pke-prep__bar u{display:block;height:100%;background:var(--pkg-ink);transform-origin:0 50%;transition:transform .7s var(--pkg-out)}
+#pinkie-study-desk .pke-years{display:grid;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-year{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-year > b{font:600 19px/1 var(--pkg-num);font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-year.is-mock > b{font:900 13px/1.2 var(--pkg-display);letter-spacing:.08em;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-chips{display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pke-chip{appearance:none;display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;column-gap:3px;align-items:baseline;min-width:76px;padding:7px 11px 6px;border:0;border-radius:9px;background:none;color:var(--pkg-ink);cursor:pointer;text-align:left;box-shadow:inset 0 0 0 1px var(--pkg-line-2);transition:box-shadow .25s var(--pkg-out),background .25s var(--pkg-out)}
+#pinkie-study-desk .pke-chip b{font:600 18px/1 var(--pkg-num);font-variant-numeric:tabular-nums}
+#pinkie-study-desk .pke-chip small{font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-chip em{grid-column:1/3;min-height:13px;margin-top:3px;font:500 10.5px/1.2 var(--pkg-num);font-style:normal;letter-spacing:.04em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-chip[data-done="1"] em{color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-chip:hover{box-shadow:inset 0 0 0 1px var(--pkg-ink)}
+#pinkie-study-desk .pke-chip:focus-visible{outline:2px solid var(--pkg-ink);outline-offset:2px}
+#pinkie-study-desk .pke-chip:disabled{opacity:.5;cursor:default}
+#pinkie-study-desk .pke-shelf--real > .pkb-link{margin-top:10px}
+@media (max-width:860px){#pinkie-study-desk .pke-lobby > section.pke-papers{grid-template-columns:1fr}#pinkie-study-desk .pke-shelf--sim{border-left:0;border-top:1px solid var(--pkg-line)}}
+/* 真题原录音播放条（考场 Part I 顶部） */
+#pinkie-study-desk .pke-record{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:14px;margin:0 0 18px;padding:12px 16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--pkg-line-2)}
+#pinkie-study-desk .pke-record__meta b{display:block;margin-top:3px;font:900 13px/1.2 var(--pkg-display);letter-spacing:.05em;white-space:nowrap}
+#pinkie-study-desk .pke-record__track{position:relative;height:18px;cursor:pointer;touch-action:none}
+#pinkie-study-desk .pke-record__track::before,#pinkie-study-desk .pke-record__track i{content:'';position:absolute;left:0;right:0;top:8px;height:2px;background:var(--pkg-line)}
+#pinkie-study-desk .pke-record__track i{background:var(--pkg-ink);transform-origin:0 50%;transform:scaleX(0)}
+#pinkie-study-desk .pke-record__track:focus-visible{outline:2px solid var(--pkg-ink);outline-offset:2px;border-radius:4px}
+#pinkie-study-desk .pke-record__time{font:500 13px/1 var(--pkg-num);font-variant-numeric:tabular-nums;color:var(--pkg-ink-2);white-space:nowrap}
+#pinkie-study-desk .pke-record[data-on="1"] .pke-play{background:#B5304E}
+#pinkie-study-desk .pke-record[data-err] .pke-record__time{color:#B5304E;font-family:inherit;font-size:12px}
 #pinkie-study-desk .pke-plist{display:grid;border-top:1px solid var(--pkg-line)}
 #pinkie-study-desk .pke-prow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--pkg-line)}
 #pinkie-study-desk .pke-prow b{display:block;font:900 15px/1.3 var(--pkg-display);letter-spacing:.04em}
