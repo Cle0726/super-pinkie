@@ -1,6 +1,7 @@
 // 验收用：WebKit（最接近 App 的 WKWebView）+ App 真实窗口尺寸 1280×800@2x + 用户真实的多卡布局，截游戏各页。隔离 harness，不碰 18789。
 // 用法：NODE_PATH=<App>/runtime/openclaw/node_modules node tools/study-game/review-qa.mjs <views|...> [--engine=webkit] [--layout=triple-chat|single] [--theme=dark]
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {harnessWithGame, deskReady, seedMonsters, seedPaper} from './game-qa.mjs';
@@ -234,4 +235,54 @@ async function motion() {
   } finally { await close(); }
   console.log(JSON.stringify(res, null, 1)); fs.writeFileSync(path.join(out, 'mo-motion.json'), JSON.stringify(res, null, 2));
 }
-if (process.argv[1] === fileURLToPath(import.meta.url)) await ({views, drill, keys, motion}[cmd] || (() => { throw Error('unknown ' + cmd); }))();
+// 历年真题：把已经拆好的卷装进隔离考场，截大厅卷架（年份 × 月份）和考场 Part I 原录音条。日 / 夜。
+async function real() {
+  const dir = opt('papers', '/private/tmp/claude-502/-Users-Admin-release-superpinkie/b1bc8c33-0a7e-4449-be7f-4d0da4cafa41/scratchpad/papers');
+  const ids = opt('ids', 'real-2024-06,real-2014-06,mock-1').split(',').filter(Boolean);
+  const {harness, service, close} = await harnessWithGame({monsters: false});
+  const exam = service.store.game.modules.exam;
+  service.store.game.requestModel = null;
+  clearInterval(exam.realTimer);
+  const liveAudio = path.join(os.homedir(), 'Library/Application Support/SuperPinkie/learning-materials/pretco-b-audio');
+  fs.mkdirSync(path.dirname(exam.real.audioRoot()), {recursive: true});
+  if (!fs.existsSync(exam.real.audioRoot()) && fs.existsSync(liveAudio)) fs.symlinkSync(liveAudio, exam.real.audioRoot());
+  for (const id of ids) exam.installReal(JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8')));
+  const tag = opt('tag', 'real');
+  const shot = async (page, name) => { await wait(Number(opt('settle', 900))); const f = path.join(out, `${tag}-${name}.png`); await page.screenshot({path: f}); console.log(f); };
+  try {
+    for (const theme of (opt('theme') ? [opt('theme')] : ['light', 'dark'])) {
+      const page = await openWk(harness, {theme, width: W, height: H});
+      await deskReady(page, 'gameexam');
+      await page.locator('.pke-shelf--real .pke-chip').first().waitFor({timeout: 15000});
+      await shot(page, `lobby-${theme}`);
+      const shelf = await page.evaluate(() => ({
+        chips: [...document.querySelectorAll('.pke-shelf--real .pke-chip')].map(e => e.getAttribute('title')),
+        prep: document.querySelector('.pke-prep')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        years: [...document.querySelectorAll('.pke-year')].map(e => e.querySelector('b')?.textContent?.trim()),
+      }));
+      console.log(theme, 'shelf', JSON.stringify(shelf));
+      if (!opt('lobby-only')) {
+        await page.locator('.pke-shelf--real .pke-chip').first().click();
+        await page.locator('.pke-record').waitFor({timeout: 15000});
+        await wait(1200);
+        const audio = await page.evaluate(() => {
+          const a = document.querySelector('.pke-record');
+          const el = [...document.querySelectorAll('audio')][0];
+          return {bar: Boolean(a), label: a?.querySelector('b')?.textContent || '', err: a?.dataset.err || '', src: el?.currentSrc || el?.src || '', ready: el?.readyState ?? null, part: document.querySelector('.pke-tab, .pke-part')?.textContent?.slice(0, 40) || ''};
+        });
+        console.log(theme, 'audio', JSON.stringify(audio));
+        await shot(page, `hall-listening-${theme}`);
+        if (theme === 'dark') {
+          await page.locator('.pke-play').click();
+          await wait(800);
+          const playing = await page.evaluate(() => { const el = document.querySelector('audio'); return {paused: el?.paused, t: el?.currentTime, err: document.querySelector('.pke-record')?.dataset.err || ''}; });
+          console.log('playing', JSON.stringify(playing));
+          await page.locator('.pke-play').click();
+        }
+      }
+      console.log('errors', JSON.stringify(await page.evaluate(() => window.__qaErrors)));
+      await page.close();
+    }
+  } finally { await close(); }
+}
+if (process.argv[1] === fileURLToPath(import.meta.url)) await ({views, drill, keys, motion, real}[cmd] || (() => { throw Error('unknown ' + cmd); }))();
