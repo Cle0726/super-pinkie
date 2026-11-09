@@ -641,6 +641,8 @@ export class LearningGame {
         const w = this.weeklyQuest(state, date);
         if (w.id !== id) fail('这个委托已经过期了');
         if (!w.done) fail('还没完成哦');
+        // 换 requestId 重领：钱有 ledger 挡着，但计数（questsDone 驱动觉醒挑战）以前会一直涨。
+        if (state.ledger[id]) fail('已经领过了');
         state.stats.questsDone += 1;
         return {awards: this.grant(state, id, {type: 'quest', id}, [
           {kind: 'stars', amount: E.boosted(w.reward.stars, {event: 'quest', form, economy: this.economy}).value, reason: '本周委托完成', fx: 'big'},
