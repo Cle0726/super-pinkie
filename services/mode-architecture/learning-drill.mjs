@@ -90,6 +90,9 @@ export function mapDrillRating(mode, {correct = false, firstTry = true, hinted =
   return 'remembered';
 }
 
+// 罐子记的是今天背完几组，每天 2 组就算完成。星星只进钱包，不再拿来灌罐子。
+export const JAR_SETS = 2;
+
 export function drillStars({answerStars = 0, scored = 0, correct = 0, finished = false} = {}) {
   const perfect = finished && scored > 0 && correct === scored;
   return Math.max(0, answerStars) + (finished ? 5 : 0) + (perfect ? 5 : 0);
@@ -972,21 +975,22 @@ export class LearningDrill {
     if (session.finished) return session.finished;
     const now = this.now();
     const stats = this.summary(session, now);
-    const settings = this.settings();
-    const day = this.pact?.readDay?.(dayInZone(now, 'Asia/Shanghai'));
-    const firstFinishToday = (day?.drillFinished || 0) === 0;
+    const dayKey = dayInZone(now, 'Asia/Shanghai');
+    const day = this.pact?.readDay?.(dayKey);
+    const beforeSets = day?.drillFinished || 0;
+    const firstFinishToday = beforeSets === 0;
     const bonus = drillStars({answerStars: 0, scored: stats.scored, correct: stats.correct, finished: true});
     const stars = stats.answerStars + bonus;
     if (bonus) this.pact?.recordDrill?.({stars: bonus, finished: true});
     else this.pact?.recordDrill?.({finished: true});
-    const jarNow = this.pact?.jar?.({now, goal: settings.jarGoal}) || {today: stars, goal: settings.jarGoal};
-    const filledNow = (session.jarAtStart || 0) < settings.jarGoal && jarNow.today >= settings.jarGoal;
+    const afterSets = this.pact?.readDay?.(dayKey)?.drillFinished || beforeSets + 1;
+    const filledNow = beforeSets < JAR_SETS && afterSets >= JAR_SETS;
     const streak = this.pact?.drillStreak?.({now}) || {current: 0, best: 0, stampedToday: firstFinishToday, leaveUsedYesterday: false};
     const quiet = examQuiet(this.pact, now);
     const result = {
       stars, accuracy: stats.accuracy, ms: stats.ms, maxCombo: stats.maxCombo, firstFinishToday,
       streak: {current: streak.current || 0, best: streak.best || 0, stampedToday: Boolean(streak.stampedToday), leaveUsedYesterday: Boolean(streak.leaveUsedYesterday)},
-      jar: {today: jarNow.today || 0, goal: settings.jarGoal, filledNow},
+      jar: {today: afterSets, goal: JAR_SETS, unit: 'sets', filledNow},
       leaveNotes: streak.leaveNotes ?? this.pact?.leaveNotes?.({now})?.balance ?? 0,
       quiet, nextSuggestion: this.nextSuggestion(session, now),
     };
@@ -1036,15 +1040,14 @@ export class LearningDrill {
   }
 
   today(now = this.now()) {
-    const settings = this.settings();
     const streak = this.pact?.drillStreak?.({now}) || {current: 0, best: 0, week: Array(7).fill(false), weekKind: Array(7).fill('empty'), stampedToday: false, leaveUsedYesterday: false, leaveNotes: 0};
-    const jar = this.pact?.jar?.({now, goal: settings.jarGoal}) || {today: 0, goal: settings.jarGoal};
+    const sets = this.pact?.readDay?.(dayInZone(now, 'Asia/Shanghai'))?.drillFinished || 0;
     let dueNotes = 0;
     let dueWords = 0;
     try { dueNotes = this.recall?.snapshot?.(LIBRARY, {now})?.dueCount || 0; } catch { dueNotes = 0; }
     try { dueWords = this.vocab?.today?.(now)?.due || 0; } catch { dueWords = 0; }
     return {
-      jar: {today: jar.today || 0, goal: settings.jarGoal},
+      jar: {today: sets, goal: JAR_SETS, unit: 'sets'},
       streak: {
         current: streak.current || 0, best: streak.best || 0, week: streak.week || Array(7).fill(false),
         weekKind: streak.weekKind || Array(7).fill('empty'), stampedToday: Boolean(streak.stampedToday),

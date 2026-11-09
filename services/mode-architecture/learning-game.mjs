@@ -355,7 +355,7 @@ export class LearningGame {
     const owned = new Set(state.forms.owned);
     const levels = {};
     for (const id of state.forms.owned) levels[id] = E.affinityLevel(state.forms.xp[id] || 0, this.economy);
-    const pact = this.safe(() => this.store.pact?.jar?.({now: this.now()}), null);
+    const pactDay = this.safe(() => this.store.pact?.readDay?.(date), null);
     const streak = this.safe(() => this.store.pact?.drillStreak?.({now: this.now()}), null);
     const monsters = this.modules.monsters?.summary?.(state) || {active: 0, due: 0, captured: state.stats.captures};
     const boss = this.modules.exam?.bossState?.(state, GAME_EXAM) || this.bossFallback(state);
@@ -364,7 +364,7 @@ export class LearningGame {
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
       form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened]},
       items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}, names: Object.fromEntries((state.items.owned || []).map(id => [id, this.itemName(id)]))},
-      today: {date, jar: {stars: pact?.today || 0, goal: pact?.goal || 30}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
+      today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: 2, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
       boss, monsters,
       season: {term: season?.term || null, name: season?.name || '', until: season?.to || null, limitedSkus: this.shelves(state).limited.map(s => s.sku)},
       wishlist: this.wishlistView(state),
