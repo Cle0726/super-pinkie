@@ -1,5 +1,7 @@
 /* 碧琪上岸记 · 考场（大厅 / 真考场 / Boss 结算 / 成绩报告）。视觉语言：VFX.md。考场本身是安静的考卷排版，没有游戏装饰、没有循环动画。 */
 #pinkie-study-desk .view.pke-page{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-page > .pkb-page__head{position:sticky;top:0;z-index:2;background:var(--pkg-paper,var(--paper))}
+#pinkie-study-desk .pke-report__act{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px;padding:12px 0;background:linear-gradient(to top,var(--pkg-paper,var(--paper)) 70%,transparent)}
 #pinkie-study-desk .pke-page h2,#pinkie-study-desk .pke-page h3{margin:0;font-family:var(--pkg-display);font-weight:900;letter-spacing:.06em}
 #pinkie-study-desk .pke-lobby{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,1.15fr);gap:14px;align-content:start}
 #pinkie-study-desk .pke-lobby.is-report{display:block}

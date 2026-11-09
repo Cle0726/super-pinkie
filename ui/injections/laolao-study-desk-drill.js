@@ -145,8 +145,16 @@
       else if (!ctx.motion?.reduced) node.classList.add('pk-fade');
       restTicker();
     }
-    const RETURN_LABEL = {gamehunt: '回讨伐', gamemap: '回地图', vocab: '回生词本', notes: '回笔记本'};
-    function backLabel() { return RETURN_LABEL[route.returnTo] || (route.source === 'vocab' ? '回生词本' : route.source === 'mixed' ? '回今日' : '回笔记本'); }
+    const RETURN_LABEL = {today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', gameexam: '回考场', vocab: '回生词本', notes: '回笔记本', stage: '回舞台'};
+    function destination() {
+      if (route.returnTo) return route.returnTo;
+      const remembered = local.returnView;
+      if (remembered && remembered !== 'drill') return remembered;
+      if (route.source === 'vocab') return 'vocab';
+      if (route.source === 'mixed') return 'today';
+      return 'notes';
+    }
+    function backLabel() { return RETURN_LABEL[destination()] || '返回'; }
     function snapshot() {
       local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
     }
@@ -572,16 +580,12 @@
       local.drillRoute = {source: next.source, scope: next.scope, size: route.size, returnTo: route.returnTo, task: route.task};
       ctx.go?.('drill');
     }
-    function leave(summary) {
-      if (route.returnTo === 'today') {
-        local.drillJustFinished = {task: route.task || route.source, stars: summary?.stars || stars};
-        ctx.go?.('today');
-        return;
-      }
-      // 从讨伐 / 地图进来的，回原处（以前讨伐打完会掉进笔记本）。
-      if (RETURN_LABEL[route.returnTo]) { ctx.go?.(route.returnTo); return; }
-      ctx.go?.(route.source === 'vocab' ? 'vocab' : route.source === 'mixed' ? 'today' : 'notes');
+    function goBack(summary) {
+      const to = destination();
+      if (summary && to === 'today') local.drillJustFinished = {task: route.task || route.source, stars: summary.stars || stars};
+      ctx.go?.(to);
     }
+    function leave(summary) { goBack(summary); }
     async function askLeave() {
       if (phase === 'over') { leave(); return; }
       const n = Math.max(0, original - correctIds.size);
@@ -596,7 +600,7 @@
       row.append(stay, quit); dialog.append(row); root.append(dialog); dialog.showModal();
       dialog.addEventListener('close', () => {
         const go = dialog.returnValue === 'leave'; dialog.remove();
-        if (go) { snapshot(); ctx.go?.(route.returnTo === 'today' ? 'today' : route.source === 'vocab' ? 'vocab' : 'notes'); }
+        if (go) { snapshot(); goBack(); }
       }, {once: true});
     }
     function sameSaved(saved) { return saved && saved.source === route.source && scopeKey(saved.scope) === scopeKey(route.scope); }

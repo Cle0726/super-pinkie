@@ -190,7 +190,9 @@
     const title = el('div', 'pkb-guard__title'); title.append(el('small', 'pkb-kicker', 'GUARD BATTLE'), el('b', '', opts.node?.name ? `守关 · ${opts.node.name}` : '守关战'));
     const count = el('span', 'pk-drill-count pkb-guard__count pkb-num', '');
     top.append(back, title, count); host.append(top);
-    back.addEventListener('click', () => ctx.go?.('gamemap') ?? desk()?.go('today'));
+    const backTo = () => { const v = local.returnView; return v && v !== 'gameguard' ? v : 'gamemap'; };
+    const backName = v => ({today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', stage: '回舞台'}[v] || '返回');
+    back.addEventListener('click', () => ctx.go?.(backTo()) ?? desk()?.go('today'));
     const payload = opts.payload;
     if (!payload?.items?.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
     const a = arena({form: g.equippedForm(), strip: true}); top.append(a.root);
@@ -256,9 +258,13 @@
         card.append(el('small', 'pkb-kicker', r.perfect ? 'PERFECT' : r.passed ? 'CLEARED' : 'RETREAT'), el('h3', '', r.passed ? (r.perfect ? '满分守关' : '守关成功') : '这次没守住'),
           el('p', 'pkb-result__score', ''), el('p', 'pkb-result__line', r.passed ? '这一区的路通了。' : '没关系，错的题已经记成错题怪，过几天打回来。'));
         card.querySelector('.pkb-result__score').append(el('b', 'pkb-num', String(r.score ?? right)), document.createTextNode(` / ${items.length}`));
-        const actions = el('div', 'pkb-result__act'); const toMap = el('button', 'pkg-btn', '回地图'); toMap.type = 'button'; toMap.addEventListener('click', () => G()?.open('map'));
-        const toCamp = el('button', 'pkb-link', '回营地'); toCamp.type = 'button'; toCamp.addEventListener('click', () => desk()?.go('today'));
-        actions.append(toMap, toCamp); card.append(actions); qWrap.replaceChildren(card);
+        const actions = el('div', 'pkb-result__act');
+        const home = backTo();
+        const primary = el('button', 'pkg-btn', backName(home)); primary.type = 'button'; primary.addEventListener('click', () => ctx.go?.(home));
+        actions.append(primary);
+        if (home !== 'gamemap') { const toMap = el('button', 'pkb-link', '回地图'); toMap.type = 'button'; toMap.addEventListener('click', () => ctx.go?.('gamemap')); actions.append(toMap); }
+        if (home !== 'today') { const toCamp = el('button', 'pkb-link', '回营地'); toCamp.type = 'button'; toCamp.addEventListener('click', () => desk()?.go('today')); actions.append(toCamp); }
+        card.append(actions); qWrap.replaceChildren(card);
         if (r.awards?.length) g.play(r.awards, {from: a.foe});
       } catch (e) { qWrap.replaceChildren(el('p', 'pkb-empty', e.message || '结算失败，再点一次')); }
     }

@@ -414,7 +414,7 @@
       const r = await call('node.start', {nodeId: node.id, mode});
       if (r?.flow === 'lesson' && window.__pinkieStudyDeskLesson?.open) window.__pinkieStudyDeskLesson.open({k: r.payload.k, i: r.payload.i});
       else if (r?.flow === 'lesson') d.go('today');
-      else if (r?.flow === 'drill') window.__pinkieDrill?.start({source: r.payload.source, scope: r.payload.scope, returnTo: 'today', node: node.id});
+      else if (r?.flow === 'drill') window.__pinkieDrill?.start({source: r.payload.source, scope: r.payload.scope, returnTo: 'gamemap', node: node.id});
       else if (r?.flow === 'guard') openGame('guard', {node, payload: r.payload});
       return r;
     } catch (e) { toast(e.message || '没打开'); }

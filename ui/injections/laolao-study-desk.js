@@ -504,7 +504,8 @@
     const say = host.querySelector('.say'); if (say) { say.replaceChildren(); speak(say, [feedback(stage, result, q)], result.explanation || ''); }
   }
   function stageHeader(host, stage) {
-    const top = el('header', 's-top'), back = button('', () => go('today'), 'back'); back.setAttribute('aria-label', '返回今日'); back.append(icon('arrow-left'));
+    const backTo = (current().returnView && current().returnView !== 'stage') ? current().returnView : 'today';
+    const top = el('header', 's-top'), back = button('', () => go(backTo), 'back'); back.setAttribute('aria-label', backTo === 'today' ? '返回今日' : '返回'); back.append(icon('arrow-left'));
     const heading = el('div', 's-heading'); heading.append(el('div', 'crumb', '舞台 · ' + (stage?.set?.title || '学习舞台')));
     if (stage?.set && !stage.summary) heading.append(el('h2', 's-number', `第 ${stage.index + 1} 题`));
     top.append(back, heading);
@@ -538,7 +539,8 @@
       const summary = el('div', 'summary on'), done = el('span', 'pk-stamp pk-anim pk-done-stamp', '这一组 · 完成'); done.dataset.size = 'lg';
       summary.append(done, el('h3', '', `这一组，答对 ${correct} 题。`), el('p', '', `${[independent && `其中 ${independent} 题是独立且确定的`, stage.results.length - independent && `${independent ? '其余' : '这一组'} ${stage.results.length - independent} 题明天再考一次`].filter(Boolean).join('；')}。用时 ${Math.floor(sec / 60)} 分 ${sec % 60} 秒。`));
       const dots = el('div', 'sum-dots'); stage.results.forEach((r, i) => { const n = el('i', r.correct ? 'l' : ''); n.style.animationDelay = 300 + i * 120 + 'ms'; dots.append(n); });
-      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button('回到今日', () => go('today'), 'link')); summary.append(dots, actions); column.append(summary);
+      const backTo = (current().returnView && current().returnView !== 'stage') ? current().returnView : 'today';
+      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button(backTo === 'today' ? '回到今日' : '返回', () => go(backTo), 'link')); summary.append(dots, actions); column.append(summary);
       speak(say, ['先生，这一组做完啦。', '休息一下，再一起补薄弱的地方。']);
     } else {
       const {stem, code, part, judge} = stemParts(q);
@@ -932,6 +934,9 @@
     if (id === 'chat') { w.chat = true; pane.state.view = 'chat'; pane.state.deskView = pane.view; for (const p of w.panes) { unmountPane(p); p.body?.replaceChildren(); } renderWorkspace(); }
     else {
       if (!allowHeavy(pane, id)) return;
+      // 做题页记住从哪进来，打完回到那一页（营地、地图、讨伐……），不要一律掉回今日或笔记本。
+      const playing = ['drill', 'stage', 'gameguard', 'gameexam'];
+      if (pane.view && pane.view !== id && playing.includes(id) && !playing.includes(pane.view)) pane.state.returnView = pane.view;
       const chat = id === 'deskchat' && chatCard(); if (chat && chat !== pane) { focusPage(chat); return; }
       w.chat = false; w.chatFocus = false; w.focus = w.panes.indexOf(pane);
       if (!pane.host) createPane(pane);
@@ -999,7 +1004,13 @@
     }
     if (event.target.closest?.('input, textarea, select, [contenteditable="true"], dialog, .pinkie-library, .laolao-learning-notes')) return;
     if (event.key === 'Escape') { focusedPane().runtime?.keydown?.(event); if (event.defaultPrevented) return; }
-    if (event.key === 'Escape' && current().view !== 'chat') { event.preventDefault(); go('today'); return; }
+    if (event.key === 'Escape' && current().view !== 'chat') {
+      event.preventDefault();
+      const playing = ['drill', 'stage', 'gameguard', 'gameexam'];
+      const back = playing.includes(current().view) ? current().returnView : '';
+      go(back && back !== current().view ? back : 'today');
+      return;
+    }
     if (workspace().chat || workspace().chatFocus) return;
     const pane = focusedPane(); (pane.runtime?.keydown || views.get(pane.view)?.keydown)?.(event, context(pane));
   }
