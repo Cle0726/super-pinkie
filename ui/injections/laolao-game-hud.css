@@ -196,7 +196,21 @@
 #pinkie-study-desk .pkg-trow.is-focus{position:relative;padding-left:12px}
 #pinkie-study-desk .pkg-trow.is-focus::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:2px;background:var(--pkg-b,#DB1F74)}
 #pinkie-study-desk .pkg-trow:hover b{color:var(--pkg-b,#DB1F74)}
-#pinkie-study-desk .pkg-entries{display:grid;grid-template-columns:1.6fr repeat(6,minmax(0,1fr));gap:8px}
+/* 今日闭环：编号细圈 → 做完变金色对勾；下一站一条品红细线 */
+#pinkie-study-desk .pkg-loop{list-style:none;margin:0;padding:0}
+#pinkie-study-desk .pkg-loop__li{margin:0;padding:0;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pkg-loop__li:first-child{border-top:0}
+#pinkie-study-desk .pkg-loop .pkg-trow{align-items:center;border-top:0;position:relative;padding-left:0}
+#pinkie-study-desk .pkg-loop__n{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--pkg-line-2);font:600 10.5px/1 var(--pkg-num);font-style:normal;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkg-loop__t{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0}
+#pinkie-study-desk .pkg-loop__t small{flex:none;font:600 10.5px/1 var(--pk-sans,system-ui);letter-spacing:.12em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-done="true"] .pkg-loop__n{box-shadow:none;background:var(--pkg-gold)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-done="true"] .pkg-loop__n::after{content:"";width:8px;height:4px;margin-top:-2px;border-left:1.6px solid #fff;border-bottom:1.6px solid #fff;transform:rotate(-45deg)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-done="true"] b{color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-next] .pkg-loop__n{box-shadow:inset 0 0 0 1.4px var(--pkg-b,#DB1F74);color:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-next] b{font-family:var(--pkg-display);font-weight:900;letter-spacing:.03em}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-next] em{color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkg-entries{display:grid;grid-template-columns:1.35fr repeat(7,minmax(0,1fr));gap:8px}
 #pinkie-study-desk .pkg-entry{appearance:none;position:relative;display:grid;align-content:end;gap:4px;min-height:80px;padding:11px 12px 10px;min-width:0;border-radius:12px;border:0;cursor:pointer;text-align:left;color:var(--pkg-ink);
   background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}
 #pinkie-study-desk .pkg-entry[data-entry="map"]{background:linear-gradient(135deg,color-mix(in srgb,var(--pkg-a,#F7A8C8) 20%,var(--pkg-card-solid)),var(--pkg-card-solid))}
@@ -243,7 +257,6 @@
   #pinkie-study-desk .pkg-side{overflow:visible;padding:0}
   #pinkie-study-desk .pkg-jar,#pinkie-study-desk .pkg-wish{display:none}
   #pinkie-study-desk .pkg-entries{grid-template-columns:repeat(4,minmax(0,1fr))}
-  #pinkie-study-desk .pkg-entry[data-entry="map"]{grid-column:span 2}
   #pinkie-study-desk .pkg-boss{margin-top:22px}
 }
 @container pkgcamp (max-width:640px){
@@ -324,7 +337,7 @@
 /* 营地里奖励卡片让开顶栏（HUD + 营地 / 手账切换）。 */
 html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
 /* 验收修：手账皮肤给每页画的那条粉色页边竖线（.view 背景渐变）在游戏页上会从卡片、立绘、Boss 中间直穿过去，游戏页不要。 */
-#pinkie-study-desk.pk-ink .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard,.pk-drill),#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard,.pk-drill){--pk-page-margin:transparent}
+#pinkie-study-desk.pk-ink .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkp-home,.pkb-guard,.pk-drill),#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkp-home,.pkb-guard,.pk-drill){--pk-page-margin:transparent}
 
 /* ── 待机氛围（11-08 验收 R5）：只动 transform / opacity；data-still 时全部静止。 ── */
 #pinkie-study-desk .pkg-amb{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;contain:strict}

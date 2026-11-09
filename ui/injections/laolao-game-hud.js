@@ -51,13 +51,15 @@
     return null;
   }
   // 游戏页左上角 ×：回到上一个游戏页（栈在 laolao-study-desk.js 的 goPane 里记），没有就回营地
-  const BACK_NAME = {gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
+  const BACK_NAME = {gamepractice: '回题库', gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
   const backTarget = () => desk()?.pane?.()?.state?.gameStack?.at(-1) || 'today';
   const backLabel = () => desk()?.backName?.(backTarget()) || BACK_NAME[backTarget()] || '回营地';
   const goBack = () => desk()?.go(backTarget());
   const portrait = id => art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
   const ultArt = id => art(`form/${id}/ult`) || art(`form/${id}/portrait`) || null;
-  const iconArt = id => art(`form/${id}/icon`) || art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
+  // 头像：v3 起每个形态单独画一张胸像（avatar，按圆形裁切构图）；还没到的退回从主视觉裁的 icon。
+  const avatarArt = id => art(`form/${id}/avatar`);
+  const iconArt = id => avatarArt(id) || art(`form/${id}/icon`) || art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
   function fxForm(form) { return form ? {id: form.id, name: form.name, palette: form.palette, particle: form.particle, hit: form.hit, ult: form.ult, sig: form.sig, sound: form.sound} : null; }
   function equippedForm() { return formOf(cache.state?.form?.equipped) || (cache.forms || [])[0] || null; }
 
@@ -173,7 +175,7 @@
   }
 
   // 其它游戏页（商店 / 衣橱 / 地图 / 讨伐 / 考场 / 图鉴）由各自的文件注册成学习台视图；还没注册时提示。
-  const PAGES = {guard: 'gameguard', map: 'gamemap', hunt: 'gamehunt', exam: 'gameexam', shop: 'gameshop', gacha: 'gamegacha', wardrobe: 'gamewardrobe', codex: 'gamecodex'};
+  const PAGES = {guard: 'gameguard', practice: 'gamepractice', map: 'gamemap', hunt: 'gamehunt', exam: 'gameexam', shop: 'gameshop', gacha: 'gamegacha', wardrobe: 'gamewardrobe', codex: 'gamecodex'};
   function openGame(id, opts) {
     const d = desk(); const view = PAGES[id] || id;
     window.dispatchEvent(new CustomEvent('pinkie:game-open', {detail: {id, view, opts}}));
@@ -182,8 +184,8 @@
 
   // ───────────── 营地 ─────────────
   const ENTRIES = [
-    ['map', '地图', 'ATLAS', '上岸之书'], ['hunt', '讨伐', 'HUNT', '错题怪'], ['exam', '考场', 'EXAM', '模拟考'],
-    ['shop', '商店', 'SHOP', '每日刷新'], ['gacha', '扭蛋', 'GACHA', '两个池子'], ['wardrobe', '衣橱', 'FORMS', '形态与觉醒'], ['codex', '图鉴', 'CODEX', '收服与收藏'],
+    ['map', '地图', 'ATLAS', '上岸之书'], ['practice', '刷题', 'DRILL', '真题题库'], ['hunt', '讨伐', 'HUNT', '错题怪'], ['exam', '考场', 'EXAM', '模拟考'],
+    ['shop', '商店', 'SHOP', '每日刷新'], ['gacha', '扭蛋', 'GACHA', '两个池子'], ['wardrobe', '衣橱', 'FORMS', '形态觉醒'], ['codex', '图鉴', 'CODEX', '收藏'],
   ];
   function beijingHour() { return Number(new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Shanghai', hour: 'numeric', hourCycle: 'h23'}).format(new Date())); }
 
@@ -216,6 +218,11 @@
       const conv = (v2.converted || []).map(([a, b]) => `${formOf(a)?.name || a} → ${formOf(b)?.name || b}`);
       const back = [v2.refund?.stars ? `${fmt(v2.refund.stars)} 星星` : '', v2.refund?.seals ? `${v2.refund.seals} 金印` : ''].filter(Boolean).join('、');
       toast(`碧琪形态换新了。${conv.length ? '你的旧形态换成了：' + conv.join('，') + '。' : ''}${back ? '没有对应新形态的已按原价退还 ' + back + '。' : ''}`);
+      call('forms.v2seen').catch(() => {});
+    }
+    const v3 = s.form?.v3note;
+    if (v3?.returned?.length) {
+      toast(`${v3.returned.map(id => formOf(id)?.name || id).join('、')}按新画风回来了，已经放回你的衣橱。`);
       call('forms.v2seen').catch(() => {});
     }
     if (form?.palette) host.style.cssText += `;--pkg-a:${form.palette[0]};--pkg-b:${form.palette[1]};--pkg-c:${form.palette[2]}`;
@@ -276,7 +283,7 @@
     copy.append(askBox(ctx));
 
     // 原今日页的数据：今日任务（碧琪替你挑的）+ 今晚条，填进「今日」。
-    loadToday(today, ctx).catch(() => {});
+    loadToday(today, ctx, s).catch(() => {});
     planGo(go, goSub, goTitle, ctx, s).catch(() => { goSub.textContent = '先做今天这一组'; });
     host.querySelectorAll('.pkg-rv').forEach((n, i) => n.style.setProperty('--i', i));
     pending();
@@ -378,30 +385,44 @@
     return parts.join(' ') || (typeof r === 'number' ? `+${r} 星` : '');
   }
 
-  async function loadToday(host, ctx) {
+  // 今日（REDO-1109 §5）：一条固定的线 学 → 练（真题）→ 背生词 → 笔记回顾 → 讨伐 →（周末）整套模考。做完一行亮一行，下一站高亮。
+  async function loadToday(host, ctx, s) {
     const d = desk();
     let data = null;
     try { data = await d.request('pinkie.learning.desk.today', {}); } catch { /* 学习后端照常时才有 */ }
     if (!host.isConnected) return;
     if (ctx.local) ctx.local().today = data || ctx.local().today;
+    const loop = s?.today?.loop || {};
     const head = el('header', 'pkg-sec'); head.append(el('small', 'pkg-kicker', 'TODAY'), el('h3', '', '今日'));
     host.append(head);
-    const list = el('div', 'pkg-tlist'); host.append(list);
-    const row = (title, meta, run, cls = '') => { const b = el('button', 'pkg-trow ' + cls); b.type = 'button'; b.append(el('b', '', title), el('em', '', meta || '')); b.addEventListener('click', run); list.append(b); return b; };
+    const list = el('ol', 'pkg-tlist pkg-loop'); host.append(list);
+    const rows = [];
+    const row = ({step, title, meta, done, run, id}) => {
+      const li = el('li', 'pkg-loop__li');
+      const b = el('button', 'pkg-trow'); b.type = 'button'; b.dataset.step = id; b.dataset.done = String(Boolean(done));
+      const n = el('i', 'pkg-loop__n', done ? '' : String(rows.length + 1));
+      const txt = el('span', 'pkg-loop__t'); txt.append(el('small', '', step), el('b', '', title));
+      b.append(n, txt, el('em', '', meta || ''));
+      b.addEventListener('click', run); li.append(b); list.append(li); rows.push(b); return b;
+    };
     const focus = data?.focus;
-    if (focus) {
-      const kind = focus.kind;
-      row(focus.title || '今日练习', kind === 'learn' ? '碧琪替你挑的 · 先学' : kind === 'lesson' ? '上次没讲完' : '碧琪替你挑的', () => {
-        if (focus.payload?.practiceInChat) d.askBiqi?.(`请围绕「${focus.title || '这个考点'}」出一道理解练习题，一次只出一题。`);
-        else if ((kind === 'learn' || kind === 'lesson') && window.__pinkieStudyDeskLesson?.openFocus) window.__pinkieStudyDeskLesson.openFocus(focus);
-        else d.startSet?.(focus.payload || {});
-      }, 'is-focus');
-    }
-    for (const item of data?.quiet || []) {
-      const open = {vocab: () => d.go('vocab', {review: true}), notes: () => d.go('notes', {view: 'review'}), review: () => d.switchStageMode?.('flashcard')}[item.kind] || (() => d.startSet?.({mode: 'retest', size: 6}));
-      row(item.label, item.meta, open);
-    }
-    if (!focus && !(data?.quiet || []).length) list.append(el('p', 'pkg-empty', '今天的安排会出现在这里。'));
+    const learnFocus = focus && (focus.kind === 'learn' || focus.kind === 'lesson') ? focus : null;
+    row({id: 'learn', step: '学', title: String(learnFocus?.title || focus?.title || '上一节课').replace(/^\s*学\s*[·・:：]\s*/, ''), meta: loop.lessons ? `今天上了 ${loop.lessons} 节` : learnFocus?.kind === 'lesson' ? '上次没讲完' : '碧琪替你挑的考点', done: loop.lessons > 0,
+      run: () => {
+        if (focus?.payload?.practiceInChat) d.askBiqi?.(`请围绕「${focus.title || '这个考点'}」出一道理解练习题，一次只出一题。`);
+        else if (learnFocus && window.__pinkieStudyDeskLesson?.openFocus) window.__pinkieStudyDeskLesson.openFocus(learnFocus);
+        else if (focus) d.startSet?.(focus.payload || {});
+        else openGame('map');
+      }});
+    const sg = loop.suggest;
+    row({id: 'real', step: '练 · 真题', title: sg ? sg.name : '刷真题', meta: loop.realSets ? `做了 ${loop.realSets} 组 · 答对 ${loop.realCorrect}` : sg?.reason === 'lesson' ? '刚讲完的考点 · 8 题' : sg?.reason === 'weak' ? `弱项${sg.acc != null ? ' · 正确率 ' + sg.acc + '%' : ''} · 8 题` : '真题题库', done: loop.realSets > 0,
+      run: e => { const P = window.__pinkieGamePractice; if (sg && P) P.startPoint(sg.point, {nodeId: sg.nodeId || '', from: e.currentTarget}); else openGame('practice'); }});
+    row({id: 'vocab', step: '背', title: '生词', meta: loop.words ? `背了 ${loop.words} 个` : '打开生词复习', done: loop.words > 0, run: () => d.go('vocab', {review: true})});
+    row({id: 'notes', step: '背', title: '笔记回顾', meta: loop.notes ? `回顾了 ${loop.notes} 条` : '今天最多 10 条', done: loop.notes > 0, run: () => d.go('notes', {view: 'review'})});
+    row({id: 'hunt', step: '讨伐', title: '到期的错题怪', meta: loop.huntDue ? `${loop.huntDue} 只到期` : loop.huntWins ? `打赢 ${loop.huntWins} 只` : '现在没有到期的', done: loop.huntDue === 0 && (loop.huntWins > 0 || loop.realSets > 0 || loop.lessons > 0), run: () => openGame('hunt')});
+    if (loop.weekend) row({id: 'exam', step: '周末', title: '整套模考', meta: loop.examWeek ? '这周考过了' : '120 分钟 · 历年真题', done: loop.examWeek, run: () => openGame('exam')});
+    const next = rows.find(r => r.dataset.done !== 'true');
+    if (next) next.dataset.next = '1';
   }
 
   async function planGo(go, sub, title, ctx, s) {
@@ -417,6 +438,16 @@
     if (next) {
       const mode = next.kind === 'guard' ? 'guard' : next.state === 'fog' ? 'learn' : 'drill';
       title.textContent = '出发'; sub.textContent = `${next.regionName} · ${next.name}`;
+      // 讲完课（已探索、还没点亮）的下一站 = 这个考点的真题（题库里够 5 题时），不再直接跳下一节课 / 背一背
+      if (mode === 'drill' && window.__pinkieGamePractice) {
+        const sg = await call('practice.suggest', {nodeId: next.id}).catch(() => null);
+        if (!go.isConnected) return;
+        if (sg?.point && sg.reason === 'node') {
+          go.dataset.mode = 'real'; sub.textContent = `练真题 · ${sg.name}`;
+          go.addEventListener('click', () => window.__pinkieGamePractice.startPoint(sg.point, {nodeId: next.id, from: go}));
+          return;
+        }
+      }
       go.dataset.mode = mode;
       go.addEventListener('click', () => startNode(next, mode, go));
       return;
@@ -478,6 +509,6 @@
   // 学习后端改了数据（作答、复习、上课）→ 状态和 pending 补播。
   window.addEventListener('pinkie:desk-changed', () => { refresh().catch(() => {}); });
 
-  window.__pinkieGame = {backTarget, backLabel, goBack, markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, plain, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
+  window.__pinkieGame = {backTarget, backLabel, goBack, avatarArt, markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, plain, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
   window.dispatchEvent(new CustomEvent('pinkie:game-ready'));
 })();

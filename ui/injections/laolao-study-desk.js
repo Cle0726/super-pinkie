@@ -46,9 +46,9 @@
   const focusedPane = () => workspace().panes[workspace().focus] || workspace().panes[0];
   const current = () => focusedPane().state;
   // 「回哪」统一一个说法：按钮上写清回哪一页。今日页开了游戏层就是营地。
-  const PLAYING = ['drill', 'stage', 'gameguard', 'gameexam'];
-  const GAME_PAGES = ['gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
-  const BACK_NAMES = {gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场', notes: '回笔记本', vocab: '回生词本', stage: '回舞台', board: '回看板', library: '回书架', drill: '回背一背', gameguard: '回守关'};
+  const PLAYING = ['drill', 'stage', 'gameguard', 'gameexam', 'gamepracset'];
+  const GAME_PAGES = ['gamepractice', 'gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
+  const BACK_NAMES = {gamepractice: '回题库', gamepracset: '回刷题', gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场', notes: '回笔记本', vocab: '回生词本', stage: '回舞台', board: '回看板', library: '回书架', drill: '回背一背', gameguard: '回守关'};
   const backName = view => (!view || view === 'today' ? (window.__pinkieGame ? '回营地' : '回今日') : BACK_NAMES[view] || '返回');
   // 做题页（背一背、舞台、守关、考场）退出时回进来的那一页；没有记录就回今日 / 营地。
   const backViewOf = st => { const v = PLAYING.includes(st?.view) ? st.returnView : ''; return v && v !== st.view ? v : 'today'; };

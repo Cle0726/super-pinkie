@@ -48,6 +48,7 @@ const STAR_EVENTS = {
   streakStarsPct: ['streak'],
   huntStarsPct: ['huntWin'],
   examStarsPct: ['exam'],
+  realStarsPct: ['realAnswer'],
 };
 export function boosted(base, {event, currency = 'stars', form = null, ctx = {}, economy = loadEconomy()} = {}) {
   const raw = Math.max(0, Math.round(Number(base) || 0));
@@ -58,6 +59,7 @@ export function boosted(base, {event, currency = 'stars', form = null, ctx = {},
     if (STAR_EVENTS[b.kind]?.includes(event)) value = raw * (1 + b.pct);
     if (b.kind === 'writeStarsMul' && event === 'answer' && ctx.write) value = raw * b.mul;
     if (b.kind === 'notesStarsPct' && event === 'answer' && ctx.book === 'notes') value = raw * (1 + b.pct);
+    if (b.kind === 'vocabStarsPct' && ctx.book === 'vocab' && ['answer', 'setFinish', 'setPerfect'].includes(event)) value = raw * (1 + b.pct);
     if (b.kind === 'comboStarsMul' && event === 'combo') value = raw * b.mul;
     if (b.kind === 'comboStepAdd' && event === 'combo') value = raw + b.add;
     if (b.kind === 'streakMilestoneMul' && event === 'streak') value = raw * b.mul;
@@ -109,14 +111,14 @@ export function comboStars(combo, {form = null, economy = loadEconomy(), ultsSoF
 }
 
 // 一组做完。
-export function setStars({scored = 0, correct = 0, firstSetToday = false, form = null, economy = loadEconomy()} = {}) {
+export function setStars({scored = 0, correct = 0, firstSetToday = false, form = null, book = '', economy = loadEconomy()} = {}) {
   const e = economy.earn;
   const parts = [];
   if (scored >= e.setFinishMinScored) {
-    parts.push({reason: '这一组背完了', value: boosted(e.setFinish, {event: 'setFinish', form, economy}).value});
+    parts.push({reason: '这一组背完了', value: boosted(e.setFinish, {event: 'setFinish', form, ctx: {book}, economy}).value});
     const perfect = correct === scored && scored > 0;
     const noPerfect = form?.bonus?.kind === 'comboStarsMul' && form.bonus.noPerfect;
-    if (perfect && !noPerfect) parts.push({reason: '一组全对', value: boosted(e.setPerfect, {event: 'setPerfect', form, economy}).value});
+    if (perfect && !noPerfect) parts.push({reason: '一组全对', value: boosted(e.setPerfect, {event: 'setPerfect', form, ctx: {book}, economy}).value});
   }
   if (firstSetToday && scored >= e.setFinishMinScored) {
     const gift = firstSetGift(form);

@@ -136,28 +136,48 @@ test('商店：requestId 幂等、钱不够写清还差多少、买过的不能�
   assert.throws(() => game.buy({sku: 'form:crystal'}), /requestId/);
 });
 
-test('形态 v2：退场的旧形态（含节气限定）不上任何货架，也不能复刻', t => {
+test('形态 v3：退场的旧形态（含节气限定）不上任何货架，也不能复刻；名侦探回商店、立冬当季限定、过季复刻', t => {
   const {game, setClock} = gameFixture(t);
   const skus = c => [...c.shelves.permanent, ...c.shelves.limited, ...c.shelves.seal, ...c.shelves.daily].map(s => s.sku);
   for (const at of [undefined, '2026-11-22T01:00:00Z', '2027-02-01T01:00:00Z']) {
     if (at) setClock(Date.parse(at));
-    const all = skus(game.catalogView());
-    for (const id of ['learning', 'lidong', 'xiaoxue', 'queen', 'detective']) assert.ok(!all.some(x => x.endsWith(':' + id)), id + ' 不该上架');
+    const c = game.catalogView();
+    const all = skus(c);
+    for (const id of ['learning', 'xiaoxue', 'queen', 'princess']) assert.ok(!all.some(x => x.endsWith(':' + id)), id + ' 不该上架');
+    assert.ok(c.shelves.permanent.some(s => s.sku === 'form:detective'), '名侦探在常驻货架');
+    assert.ok(c.shelves.permanent.some(s => s.sku === 'form:breezie'), '微风仙子在常驻货架');
+    if (!at) assert.ok(c.shelves.limited.some(s => s.sku === 'form:lidong'), '立冬季：立冬限定');
+    else assert.ok(c.shelves.seal.some(s => s.sku === 'replica:lidong') && !c.shelves.limited.some(s => s.sku === 'form:lidong'), '过季：碎片复刻');
   }
+  const active = game.catalog.forms.filter(f => !f.retired);
+  assert.equal(active.length, 12);
+  assert.deepEqual(active.filter(f => f.look === 'outfit').map(f => f.id).sort(), ['detective', 'lidong']);
+  assert.ok(active.every(f => f.art.avatar === `form/${f.id}/avatar`));
 });
 
 test('形态 v2：已拥有的旧形态换成新形态（亲密度带过去），没有对应的按原价退', t => {
   const {game} = gameFixture(t);
-  game.mutate(s => { s.forms.owned.push('detective', 'learning', 'queen'); s.forms.equipped = 'detective'; s.forms.xp.detective = 500; s.wallet.stars = 0; });
+  game.mutate(s => { s.forms.owned.push('thinking', 'learning', 'queen'); s.forms.equipped = 'thinking'; s.forms.xp.thinking = 500; s.wallet.stars = 0; });
   const st = game.read();
-  assert.ok(st.forms.owned.includes('serious') && st.forms.owned.includes('alicorn'));
-  assert.ok(!st.forms.owned.some(id => ['detective', 'learning', 'queen'].includes(id)));
-  assert.equal(st.forms.equipped, 'serious');
-  assert.equal(st.forms.xp.serious, 500);
+  assert.ok(st.forms.owned.includes('crystal') && st.forms.owned.includes('alicorn'));
+  assert.ok(!st.forms.owned.some(id => ['thinking', 'learning', 'queen'].includes(id)));
+  assert.equal(st.forms.equipped, 'crystal');
+  assert.equal(st.forms.xp.crystal, 500);
   assert.equal(st.wallet.stars, 1200, '学习碧琪（R）退 1200');
   assert.ok(game.state().form.v2note);
   game.mutate(s => { s.forms.v2note.seen = true; });
   assert.equal(game.state().form.v2note, null);
+});
+
+test('形态 v3 迁移：v2 时名侦探换成较真的，较真留着、名侦探还回来；买过立冬的还回来；只做一次', t => {
+  const {game} = gameFixture(t);
+  game.mutate(s => { s.forms.owned.push('serious'); s.forms.v2note = {converted: [['detective', 'serious']], refund: {stars: 1800, seals: 0}, seen: true}; s.forms.xp.lidong = 40; delete s.forms.v3done; });
+  const st = game.read();
+  assert.ok(st.forms.owned.includes('serious') && st.forms.owned.includes('detective') && st.forms.owned.includes('lidong'));
+  assert.deepEqual(game.state().form.v3note.returned.sort(), ['detective', 'lidong']);
+  game.mutate(s => { s.forms.owned = s.forms.owned.filter(x => x !== 'detective'); s.forms.v3note.seen = true; });
+  assert.ok(!game.read().forms.owned.includes('detective'), '只还一次');
+  assert.equal(game.state().form.v3note, null);
 });
 
 test('扭蛋：requestId 幂等，结果可复现；保底计数持久化（重开进程还在）', t => {

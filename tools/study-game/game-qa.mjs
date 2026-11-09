@@ -318,3 +318,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (cmd === 'shot') await shot();
   if (cmd === 'battle') await battle();
 }
+
+// 真题题库（REDO-1109）：把真实学习数据里的真题卷拷进隔离数据（只读源），登记进考场；标注文件用 QA_BANK_TAGS（默认用户学习数据里的那份，没有就不带标注）；
+// 原录音目录在隔离数据里做一个只读软链。
+export function seedBank(service, {tags = process.env.QA_BANK_TAGS} = {}) {
+  const os = process.env.HOME;
+  const live = path.join(os, 'Library/Application Support/SuperPinkie/learning/game');
+  const game = service.store.game, ex = game.modules.exam;
+  const dir = path.join(game.root, 'papers');
+  fs.mkdirSync(dir, {recursive: true});
+  let n = 0;
+  for (const f of fs.readdirSync(path.join(live, 'papers'))) {
+    if (!/^(real|mock)-[\w-]+\.json$/.test(f)) continue;
+    const full = JSON.parse(fs.readFileSync(path.join(live, 'papers', f), 'utf8'));
+    ex.installReal(full); n += 1;
+  }
+  const tagFile = tags || path.join(live, 'bank/pretco-b.json');
+  if (fs.existsSync(tagFile)) { fs.mkdirSync(path.join(game.root, 'bank'), {recursive: true}); fs.copyFileSync(tagFile, path.join(game.root, 'bank/pretco-b.json')); }
+  const audio = ex.real.audioRoot(), liveAudio = path.join(os, 'Library/Application Support/SuperPinkie/learning-materials/pretco-b-audio');
+  if (!fs.existsSync(audio) && fs.existsSync(liveAudio)) { fs.mkdirSync(path.dirname(audio), {recursive: true}); fs.symlinkSync(liveAudio, audio); }
+  game.modules.practice.bank.cache = null;
+  return n;
+}

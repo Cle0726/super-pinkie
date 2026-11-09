@@ -120,19 +120,28 @@
       const detail = el('section', 'pks-wr__detail'), grid = el('section', 'pks-wr__grid');
       const shown = forms.filter(f => !f.retired || f.owned), owned = shown.filter(f => f.owned).length;
       const gh = el('header', 'pkg-sec'); gh.append(el('h3', '', '全部形态'), el('span', 'pkg-sec__meta', `${owned} / ${shown.length}`), el('small', 'pkg-kicker', 'COLLECTION')); grid.append(gh);
-      const list = el('div', 'pks-wr__list');
-      for (const f of forms) {
-        if (f.retired && !f.owned) continue;
-        const b = el('button', 'pks-tile'); b.type = 'button'; b.dataset.rarity = f.rarity; b.toggleAttribute('data-owned', f.owned); b.toggleAttribute('data-equipped', f.equipped); b.setAttribute('aria-pressed', String(f.id === pick));
+      // v3：衣橱分两栏——变身（身体 / 物种变了）和时装（穿戴，发型跟着变）。退场的旧换装只给拥有的人看，排在时装最后。
+      const tile = f => {
+        const b = el('button', 'pks-tile'); b.type = 'button'; b.dataset.rarity = f.rarity; b.dataset.form = f.id; b.toggleAttribute('data-owned', f.owned); b.toggleAttribute('data-equipped', f.equipped); b.setAttribute('aria-pressed', String(f.id === pick));
         b.style.setProperty('--tone', RARITY[f.rarity]?.tone || '#B9AEA4'); b.style.setProperty('--fa', f.palette?.[0] || '#F7A8C8');
-        const real = g.cache.manifest?.[`form/${f.id}/portrait`]; if (f.owned || real) { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = f.owned ? (g.iconArt(f.id) || g.portrait(f.id)) : g.portrait(f.id); b.append(i); } else b.append(el('span', 'pks-tile__q', '？'));
-        b.append(el('small', 'pks-tile__r', RARITY[f.rarity]?.label || f.rarity), el('span', 'pks-tile__n', f.owned || window.__pinkieFormStage?.has(f.id) ? f.name : '？？？'));
+        const real = g.cache.manifest?.[`form/${f.id}/portrait`] || g.avatarArt?.(f.id); if (f.owned || real) { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = g.iconArt(f.id); b.append(i); } else b.append(el('span', 'pks-tile__q', '？'));
+        b.append(el('small', 'pks-tile__r', RARITY[f.rarity]?.label || f.rarity), el('span', 'pks-tile__n', f.owned || window.__pinkieFormStage?.has(f.id) || !f.retired ? f.name : '？？？'));
         if (f.equipped) b.append(el('em', 'pks-tile__on', '装备中'));
-        b.setAttribute('aria-label', f.owned ? f.name : `未获得：${f.howToGet || ''}`);
+        b.setAttribute('aria-label', f.owned ? f.name : `${f.name}，未获得：${f.howToGet || ''}`);
         b.addEventListener('click', () => { pick = f.id; local.wardrobePick = f.id; paint(); });
-        list.append(b);
+        return b;
+      };
+      const cols = el('div', 'pks-wr__cols');
+      for (const [look, zh, en] of [['transform', '变身', 'TRANSFORM'], ['outfit', '时装', 'OUTFIT']]) {
+        const mine = forms.filter(f => (f.retired ? look === 'outfit' && f.owned : (f.look || 'transform') === look));
+        if (!mine.length) continue;
+        const col = el('div', 'pks-wr__col'); col.dataset.look = look;
+        const ch = el('header', 'pks-wr__colhead'); ch.append(el('small', 'pkg-kicker', en), el('b', '', zh), el('span', 'pkg-num', `${mine.filter(f => f.owned).length} / ${mine.length}`));
+        const list = el('div', 'pks-wr__list');
+        for (const f of mine) list.append(tile(f));
+        col.append(ch, list); cols.append(col);
       }
-      grid.append(list);
+      grid.append(cols);
       // 套装
       const sets = el('div', 'pks-sets');
       for (const st of [['v2', '八面碧琪', ['daily', 'unrestricted', 'alicorn', 'crystal', 'seapony', 'kirin', 'batpony', 'serious']]]) {

@@ -31,7 +31,13 @@
     const hero = el('div', 'pkb-hero'); const heroImg = el('img'); heroImg.alt = ''; heroImg.decoding = 'async'; heroImg.src = G()?.portrait(form?.id || 'daily') || ''; hero.append(el('i', 'pkb-shadow'), heroImg);
     // 形态 v2：头像是活的（呼吸、眨眼、看鼠标），答对换成 GPT 出的欢呼姿势、答错换成一缩的姿势
     let live = null;
-    const mountLive = (id) => { live?.destroy?.(); live = null; const FS = window.__pinkieFormStage; if (!FS?.has(id) || reduced()) { heroImg.hidden = false; hero.classList.remove('is-live'); return; } heroImg.hidden = true; hero.classList.add('is-live'); live = FS.mount(hero, id, {mode: 'avatar', poke: false}); };
+    // v3：有单独画的头像（avatar）就用它待机（圆形胸像 + 呼吸），答对 / 答错短暂换成 GPT 姿势；没有时照旧用活体网格。
+    const avatarLive = (id, src) => {
+      heroImg.hidden = false; heroImg.src = src; hero.classList.add('is-avatar'); hero.classList.remove('is-live');
+      let t = 0;
+      return {state(kind) { const pose = kind === 'cheer' || kind === 'hurt' ? G()?.art(`form/${id}/${kind}`) : null; clearTimeout(t); if (!pose) return; hero.dataset.pose = kind; heroImg.src = pose; t = setTimeout(() => { heroImg.src = src; delete hero.dataset.pose; }, 1300); }, destroy() { clearTimeout(t); hero.classList.remove('is-avatar'); delete hero.dataset.pose; }};
+    };
+    const mountLive = (id) => { live?.destroy?.(); live = null; const av = G()?.avatarArt?.(id); if (av) { live = avatarLive(id, av); return; } const FS = window.__pinkieFormStage; if (!FS?.has(id) || reduced()) { heroImg.hidden = false; hero.classList.remove('is-live'); return; } heroImg.hidden = true; hero.classList.add('is-live'); live = FS.mount(hero, id, {mode: 'avatar', poke: false}); };
     mountLive(form?.id || 'daily');
     const combo = el('div', 'pkb-combo'); const comboN = el('b', 'pkb-combo__n', '0'); combo.append(comboN, el('small', '', 'COMBO')); combo.dataset.on = '0';
     const meter = el('i', 'pkb-ultmeter'); const meterFill = el('i'); meter.append(meterFill); combo.append(meter);
@@ -227,7 +233,7 @@
       const it = items[i]; if (!it) return finish();
       const q = el('div', 'pk-drill-q');
       const stem = el('h3', 'pk-drill-stem', it.prompt); if (String(it.prompt || '').length > 90) stem.classList.add('is-long');
-      q.append(el('p', 'pk-drill-kicker', it.point ? `第 ${i + 1} 题 · 考点 · ${it.point}` : `第 ${i + 1} 题 · 单选`), stem);
+      q.append(el('p', 'pk-drill-kicker', [`第 ${i + 1} 题`, it.point ? `考点 · ${it.point}` : '单选', it.source ? `真题 · ${it.source}` : ''].filter(Boolean).join(' · ')), stem);
       const list = el('div', 'pk-drill-options pkb-guard__opts');
       it.options.forEach((o, k) => { const b = el('button', 'pk-choice pkb-opt'); b.type = 'button'; b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => pick(k, b)); list.append(b); });
       q.append(list);
