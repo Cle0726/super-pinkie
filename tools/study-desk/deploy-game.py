@@ -15,8 +15,11 @@ from pathlib import Path
 ARGS = sys.argv[1:]
 CHECK = '--check' in ARGS
 REV = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--rev=')), 'review/study-game')
-if [a for a in ARGS if a != '--check' and not a.startswith('--rev=')]:
-    sys.exit('用法：deploy-game.py [--check] [--rev=<提交>]')
+# --base：三方合并的共同祖先 = 线上那份上次装的是哪个提交（默认 069c5cc；上次装过游戏就传那次的 --rev，例如 game3 = 4121bdc）。
+# 文件清单仍按 069c5cc → REV 算（新文件整份覆盖，不受影响）。
+MERGE_BASE = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--base=')), None)
+if [a for a in ARGS if a != '--check' and not a.startswith(('--rev=', '--base='))]:
+    sys.exit('用法：deploy-game.py [--check] [--rev=<提交>] [--base=<线上上次装的提交>]')
 
 home = Path.home()
 repo = Path('/Users/Admin/release-superpinkie/repo')
@@ -28,6 +31,7 @@ learning_data = home / 'Library/Application Support/SuperPinkie/learning'
 stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 backup = home / 'Library/Application Support/SuperPinkie/backups' / ('study-game-' + stamp)
 BASE = '069c5cc'
+MERGE_BASE = MERGE_BASE or BASE
 VERSION = 'game4'
 
 
@@ -79,7 +83,7 @@ for name in NEW_BACKEND:
     for d in (ext, root / 'services/mode-architecture'):
         copies.append((d / name, data)); report[str(d / name)] = 'replace' if (d / name).exists() else 'new'
 for name in MERGE_BACKEND:
-    base, theirs = branded(show(BASE, f'services/mode-architecture/{name}')), branded(show(REV, f'services/mode-architecture/{name}'))
+    base, theirs = branded(show(MERGE_BASE, f'services/mode-architecture/{name}')), branded(show(REV, f'services/mode-architecture/{name}'))
     for d in (ext, root / 'services/mode-architecture'):
         live = (d / name).read_bytes(); out = merge(live, base, theirs, str(d / name))
         assert b'Li An' not in out, f'{d / name} 合并后还有 Li An'
@@ -89,7 +93,7 @@ for name in NEW_UI:
     for d in (ui, root / 'ui/injections'):
         copies.append((d / name, data)); report[str(d / name)] = 'replace' if (d / name).exists() else 'new'
 for name in MERGE_UI:
-    base, theirs = show(BASE, f'ui/injections/{name}'), show(REV, f'ui/injections/{name}')
+    base, theirs = show(MERGE_BASE, f'ui/injections/{name}'), show(REV, f'ui/injections/{name}')
     for d in (ui, root / 'ui/injections'):
         live = (d / name).read_bytes(); out = merge(live, base, theirs, str(d / name))
         copies.append((d / name, out)); report[str(d / name)] = 'same' if out == live else ('clean' if live == base else 'merged')
