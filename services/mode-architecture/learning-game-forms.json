@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 3,
  "forms": [
   {
    "id": "daily",
@@ -33,15 +33,17 @@
     "portrait": "form/daily/portrait",
     "ult": "form/daily/ult",
     "icon": "form/daily/icon",
+    "avatar": "form/daily/avatar",
     "idle": "form/daily/idle",
     "stage": "form/daily/plate"
    },
    "season1": true,
-   "form": "原本的碧琪"
+   "form": "原本的碧琪",
+   "look": "transform"
   },
   {
    "id": "unrestricted",
-   "name": "无限制碧琪",
+   "name": "彩虹之力碧琪",
    "series": "v2",
    "rarity": "SR",
    "source": [
@@ -72,11 +74,13 @@
     "portrait": "form/unrestricted/portrait",
     "ult": "form/unrestricted/ult",
     "icon": "form/unrestricted/icon",
+    "avatar": "form/unrestricted/avatar",
     "idle": "form/unrestricted/idle",
     "stage": "form/unrestricted/plate"
    },
    "season1": true,
-   "form": "鬃毛尾巴变长、彩虹挑染"
+   "form": "鬃毛尾巴变长、彩虹挑染、蹄上花纹",
+   "look": "transform"
   },
   {
    "id": "alicorn",
@@ -113,10 +117,12 @@
     "portrait": "form/alicorn/portrait",
     "ult": "form/alicorn/ult",
     "icon": "form/alicorn/icon",
+    "avatar": "form/alicorn/avatar",
     "idle": "form/alicorn/idle",
     "stage": "form/alicorn/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
   },
   {
    "id": "crystal",
@@ -153,10 +159,12 @@
     "portrait": "form/crystal/portrait",
     "ult": "form/crystal/ult",
     "icon": "form/crystal/icon",
+    "avatar": "form/crystal/avatar",
     "idle": "form/crystal/idle",
     "stage": "form/crystal/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
   },
   {
    "id": "seapony",
@@ -192,10 +200,12 @@
     "portrait": "form/seapony/portrait",
     "ult": "form/seapony/ult",
     "icon": "form/seapony/icon",
+    "avatar": "form/seapony/avatar",
     "idle": "form/seapony/idle",
     "stage": "form/seapony/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
   },
   {
    "id": "kirin",
@@ -231,10 +241,12 @@
     "portrait": "form/kirin/portrait",
     "ult": "form/kirin/ult",
     "icon": "form/kirin/icon",
+    "avatar": "form/kirin/avatar",
     "idle": "form/kirin/idle",
     "stage": "form/kirin/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
   },
   {
    "id": "batpony",
@@ -270,10 +282,12 @@
     "portrait": "form/batpony/portrait",
     "ult": "form/batpony/ult",
     "icon": "form/batpony/icon",
+    "avatar": "form/batpony/avatar",
     "idle": "form/batpony/idle",
     "stage": "form/batpony/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
   },
   {
    "id": "serious",
@@ -309,10 +323,175 @@
     "portrait": "form/serious/portrait",
     "ult": "form/serious/ult",
     "icon": "form/serious/icon",
+    "avatar": "form/serious/avatar",
     "idle": "form/serious/idle",
     "stage": "form/serious/plate"
    },
-   "season1": true
+   "season1": true,
+   "look": "transform"
+  },
+  {
+   "id": "breezie",
+   "name": "微风仙子碧琪",
+   "series": "v3",
+   "rarity": "SR",
+   "source": [
+    "shop",
+    "gacha-star",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#E4F6DA",
+    "#E2649E",
+    "#9AD3F0"
+   ],
+   "particle": "petals",
+   "hit": "sparkle",
+   "ult": "rain",
+   "sig": "aurora",
+   "sound": "harp",
+   "bonus": {
+    "kind": "vocabStarsPct",
+    "pct": 0.3,
+    "text": "顺风：生词本背一背 ⭐ +30%"
+   },
+   "awaken": {
+    "stat": "setsDone",
+    "count": 40,
+    "text": "做完 40 组"
+   },
+   "form": "触角、半透明蝶翼、细长腿、更蓬的鬃毛",
+   "art": {
+    "portrait": "form/breezie/portrait",
+    "ult": "form/breezie/ult",
+    "icon": "form/breezie/icon",
+    "avatar": "form/breezie/avatar",
+    "idle": "form/breezie/idle",
+    "stage": "form/breezie/plate"
+   },
+   "season1": true,
+   "look": "transform"
+  },
+  {
+   "id": "changeling",
+   "name": "幻形灵碧琪",
+   "series": "v3",
+   "rarity": "SSR",
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#1F2A2E",
+    "#3FD6B5",
+    "#E35FA0"
+   ],
+   "particle": "stars",
+   "hit": "shard",
+   "ult": "warp",
+   "sig": "smokeclone",
+   "sound": "synth",
+   "bonus": {
+    "kind": "comboShield",
+    "text": "拟态：一组里第一次答错不断连击"
+   },
+   "awaken": {
+    "stat": "perfectSets",
+    "count": 10,
+    "text": "一组全对 10 次"
+   },
+   "form": "珠光甲壳翅鞘 + 薄翼、弯角、半透明纱质卷鬃",
+   "art": {
+    "portrait": "form/changeling/portrait",
+    "ult": "form/changeling/ult",
+    "icon": "form/changeling/icon",
+    "avatar": "form/changeling/avatar",
+    "idle": "form/changeling/idle",
+    "stage": "form/changeling/plate"
+   },
+   "season1": true,
+   "look": "transform"
+  },
+  {
+   "id": "lidong",
+   "name": "立冬碧琪",
+   "series": "season",
+   "rarity": "limited",
+   "source": [
+    "limited:lidong"
+   ],
+   "palette": [
+    "#C62828",
+    "#FFF4E0",
+    "#BFE3FF"
+   ],
+   "particle": "snow",
+   "hit": "steam",
+   "ult": "rain",
+   "sig": "lantern",
+   "sound": "bell",
+   "bonus": {
+    "kind": "firstSetStars",
+    "add": 15,
+    "text": "暖冬：每天第一组 +15 ⭐"
+   },
+   "awaken": {
+    "stat": "streak",
+    "count": 10,
+    "text": "连续盖章 10 天"
+   },
+   "season": "lidong",
+   "art": {
+    "portrait": "form/lidong/portrait",
+    "ult": "form/lidong/ult",
+    "icon": "form/lidong/icon",
+    "avatar": "form/lidong/avatar",
+    "idle": "form/lidong/idle",
+    "stage": "form/lidong/plate"
+   },
+   "season1": true,
+   "form": "红围巾把鬃毛扎成低马尾、毛线耳罩、卷毛尖挂霜",
+   "look": "outfit"
+  },
+  {
+   "id": "detective",
+   "name": "名侦探碧琪",
+   "series": "v3",
+   "rarity": "SR",
+   "source": [
+    "shop"
+   ],
+   "palette": [
+    "#E8C9A0",
+    "#7A2E4F",
+    "#F6EEE6"
+   ],
+   "particle": "cards",
+   "hit": "lens",
+   "ult": "curtain",
+   "sig": "lens",
+   "sound": "pluck",
+   "bonus": {
+    "kind": "realStarsPct",
+    "pct": 0.3,
+    "text": "推理：真题刷题 ⭐ +30%"
+   },
+   "awaken": {
+    "stat": "realCorrect",
+    "count": 200,
+    "text": "真题答对 200 道"
+   },
+   "art": {
+    "portrait": "form/detective/portrait",
+    "ult": "form/detective/ult",
+    "icon": "form/detective/icon",
+    "avatar": "form/detective/avatar",
+    "idle": "form/detective/idle",
+    "stage": "form/detective/plate"
+   },
+   "season1": true,
+   "form": "猎鹿帽压住卷毛只露刘海和低马尾、短披风、胸前挂放大镜",
+   "look": "outfit"
   },
   {
    "id": "learning",
@@ -415,41 +594,6 @@
     "ult": "form/thinking/ult",
     "icon": "form/thinking/icon",
     "idle": "form/thinking/idle"
-   },
-   "season1": false,
-   "retired": true
-  },
-  {
-   "id": "detective",
-   "name": "名侦探碧琪",
-   "series": "mystery",
-   "rarity": "SR",
-   "source": [],
-   "palette": [
-    "#E8C9A0",
-    "#7A2E4F",
-    "#F6EEE6"
-   ],
-   "particle": "cards",
-   "hit": "lens",
-   "ult": "curtain",
-   "sig": "lens",
-   "sound": "pluck",
-   "bonus": {
-    "kind": "captureStarsPct",
-    "pct": 0.4,
-    "text": "推理：收服错题怪 ⭐ +40%"
-   },
-   "awaken": {
-    "stat": "captures",
-    "count": 30,
-    "text": "收服 30 只"
-   },
-   "art": {
-    "portrait": "form/detective/portrait",
-    "ult": "form/detective/ult",
-    "icon": "form/detective/icon",
-    "idle": "form/detective/idle"
    },
    "season1": false,
    "retired": true
@@ -905,42 +1049,6 @@
     "ult": "form/ninja/ult",
     "icon": "form/ninja/icon",
     "idle": "form/ninja/idle"
-   },
-   "season1": false,
-   "retired": true
-  },
-  {
-   "id": "lidong",
-   "name": "立冬碧琪",
-   "series": "season",
-   "rarity": "limited",
-   "source": [],
-   "palette": [
-    "#C62828",
-    "#FFF4E0",
-    "#BFE3FF"
-   ],
-   "particle": "snow",
-   "hit": "steam",
-   "ult": "rain",
-   "sig": "lantern",
-   "sound": "bell",
-   "bonus": {
-    "kind": "firstSetStars",
-    "add": 15,
-    "text": "暖冬：每天第一组 +15 ⭐"
-   },
-   "awaken": {
-    "stat": "streak",
-    "count": 10,
-    "text": "连续盖章 10 天"
-   },
-   "season": "lidong",
-   "art": {
-    "portrait": "form/lidong/portrait",
-    "ult": "form/lidong/ult",
-    "icon": "form/lidong/icon",
-    "idle": "form/lidong/idle"
    },
    "season1": false,
    "retired": true

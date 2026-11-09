@@ -10,6 +10,7 @@ import {GameMonsters} from './learning-game-monsters.mjs';
 import {GameWorld} from './learning-game-world.mjs';
 import {GameExam} from './learning-game-exam.mjs';
 import {GameContent} from './learning-game-content.mjs';
+import {GamePractice} from './learning-game-bank.mjs';
 
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
@@ -60,7 +61,7 @@ function emptyState() {
     wishlist: null,
     stats: {setsDone: 0, perfectSets: 0, writePerfectSets: 0, maxCombo: 0, combo20Sets: 0, ults: 0, crits: 0,
       huntWins: 0, captures: 0, capturesEvolved2: 0, questsDone: 0, dailyQuests: 0, lessons: 0, notesDrilled: 0,
-      guardPerfect: 0, examBest: 0, examsSafe: 0, nodesLit: 0, regionsLit: 0, gold: 0, streak: 0, realPass: 0, allGold: 0},
+      guardPerfect: 0, examBest: 0, examsSafe: 0, nodesLit: 0, regionsLit: 0, gold: 0, streak: 0, realPass: 0, allGold: 0, realCorrect: 0},
     days: {},
     cardDays: {},
     drill: {},
@@ -87,6 +88,7 @@ export class LearningGame {
     new GameWorld(this);
     new GameExam(this);
     new GameContent(this);
+    new GamePractice(this);
   }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
@@ -111,6 +113,7 @@ export class LearningGame {
     for (const k of ['stars', 'seals']) state.wallet[k] = Math.max(0, Math.floor(Number(state.wallet[k]) || 0));
     if (!state.forms.owned.includes('daily')) state.forms.owned.unshift('daily');
     this.migrateFormsV2(state);
+    this.migrateFormsV3(state);
     return state;
   }
   // 形态 v2（11-09）：旧的换装 / 贴纸形态退场。已拥有的换成最接近的新形态（亲密度带过去）；没有对应的按原价退星星 / 金印。
@@ -138,6 +141,19 @@ export class LearningGame {
     }
     if (byId.get(state.forms.equipped)?.retired && !KEEP.has(state.forms.equipped)) state.forms.equipped = 'daily';
     state.forms.v2note = {...note, at: note.at || new Date().toISOString(), seen: false};
+  }
+  // 形态 v3（REDO-1109）：立冬、名侦探按新画风回归。v2 时被「名侦探 → 较真」换掉的，较真留着、名侦探还回来；买过立冬的也还回来（v2 退的星星不收回）。
+  // 只做一次（forms.v3done），还了东西就写 forms.v3note，营地提示一次。
+  migrateFormsV3(state) {
+    if (state.forms.v3done) return;
+    const had = new Set();
+    for (const [from] of state.forms.v2note?.converted || []) if (from === 'detective') had.add('detective');
+    for (const id of ['detective', 'lidong']) if (state.forms.xp?.[id] != null) had.add(id);
+    for (const r of Object.values(state.requests || {})) for (const a of r?.result?.awards || []) if (a?.kind === 'form' && ['detective', 'lidong'].includes(a.itemId)) had.add(a.itemId);
+    const returned = [...had].filter(id => !state.forms.owned.includes(id) && this.catalog.forms.some(f => f.id === id && !f.retired));
+    for (const id of returned) state.forms.owned.push(id);
+    state.forms.v3done = true;
+    if (returned.length) state.forms.v3note = {returned, at: new Date().toISOString(), seen: false};
   }
   write(state) {
     fs.mkdirSync(this.root, {recursive: true, mode: 0o700});
@@ -305,7 +321,7 @@ export class LearningGame {
       const firstSetToday = d.sets === 0;
       const scored = stats.scored || 0;
       const correct = stats.correct || 0;
-      const awards = E.setStars({scored, correct, firstSetToday, form, economy: this.economy}).map(p => ({kind: 'stars', amount: p.value, reason: p.reason, fx: 'medium'}));
+      const awards = E.setStars({scored, correct, firstSetToday, form, book: session.source === 'vocab' ? 'vocab' : '', economy: this.economy}).map(p => ({kind: 'stars', amount: p.value, reason: p.reason, fx: 'medium'}));
       if (scored >= this.economy.earn.setFinishMinScored) {
         d.sets += 1;
         state.stats.setsDone += 1;
@@ -389,14 +405,24 @@ export class LearningGame {
     return {
       wallet: {stars: state.wallet.stars, seals: state.wallet.seals, shards: {...state.wallet.shards}},
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
-      form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened], v2note: state.forms.v2note && !state.forms.v2note.seen ? state.forms.v2note : null},
+      form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened], v2note: state.forms.v2note && !state.forms.v2note.seen ? state.forms.v2note : null, v3note: state.forms.v3note && !state.forms.v3note.seen ? state.forms.v3note : null},
       items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}, names: Object.fromEntries((state.items.owned || []).map(id => [id, this.itemName(id)]))},
-      today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: 2, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
+      today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: 2, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened, loop: this.loopToday(state, date, monsters)},
       boss, monsters,
       season: {term: season?.term || null, name: season?.name || '', until: season?.to || null, limitedSkus: this.shelves(state).limited.map(s => s.sku)},
       wishlist: this.wishlistView(state),
       quiet: isQuiet(date),
     };
+  }
+  // 今日闭环（REDO-1109 §5）：学 → 练（真题）→ 背生词 → 笔记回顾 → 讨伐 →（周末）整套模考。每一行做没做完都从当天真实数据算。
+  loopToday(state, date, monsters) {
+    const d = state.days[date] || {};
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const monday = mondayOf(date);
+    const examWeek = (state.exam?.scores || []).some(x => beijingDate(x.at) >= monday);
+    return {lessons: d.lessons || 0, realSets: d.realSets || 0, realCorrect: d.realCorrect || 0, words: d.words || 0, notes: d.notes || 0,
+      huntWins: d.huntWins || 0, huntDue: monsters?.due || 0, weekend: dow === 0 || dow === 6, examWeek,
+      suggest: this.safe(() => this.modules.practice?.suggest?.(state) || null, null)};
   }
   safe(fn, fallback) { try { return fn(); } catch { return fallback; } }
   bossFallback() {
@@ -555,7 +581,7 @@ export class LearningGame {
     const map = {streak: s.streak, nodesLit: s.nodesLit, questsDone: s.questsDone, writePerfectSets: s.writePerfectSets, maxCombo: s.maxCombo,
       captures: s.captures, regionsLit: s.regionsLit, examBest: s.examBest, guardPerfect: s.guardPerfect, huntWins: s.huntWins, setsDone: s.setsDone,
       ults: s.ults, combo20Sets: s.combo20Sets, examsSafe: s.examsSafe, dailyQuests: s.dailyQuests, notesDrilled: s.notesDrilled, perfectSets: s.perfectSets,
-      realPass: s.realPass, allGold: s.allGold};
+      realPass: s.realPass, allGold: s.allGold, realCorrect: s.realCorrect};
     return Math.min(form.awaken.count, map[form.awaken.stat] || 0);
   }
   equip({formId} = {}) {
@@ -636,11 +662,15 @@ export class LearningGame {
     list.push({id: `${date}-a`, title: '今天的到期卡', text: dueCards > 0 ? `先把到期的 ${Math.min(dueCards, 30)} 张浇浇水` : '背 20 道题，让手账亮起来', target: {kind: 'answers', count: dueCards > 0 ? Math.min(Math.max(dueCards, 10), 30) : 20}, reward: {stars: this.economy.earn.quests[0]}});
     if (activeDue > 0) list.push({id: `${date}-b`, title: '讨伐错题怪', text: `去打 ${Math.min(activeDue, 3)} 只到期的错题怪`, target: {kind: 'huntWins', count: Math.min(activeDue, 3)}, reward: {stars: this.economy.earn.quests[1]}});
     else {
-      // 没有到期的怪时，第二个委托按日子轮换（两组 / 一次大招 / 一组全对），不要天天同一件事。
-      const turn = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000) % 3;
+      // 没有到期的怪时，第二个委托按日子轮换，一半的日子是「真题答对 n 道」（REDO-1109：今日闭环要有「练」），不要天天同一件事。
+      const turn = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000) % 6;
+      const real = {title: '真题答对 10 道', text: '去刷题，真题答对 10 道', target: {kind: 'realCorrect', count: 10}};
       const b = [
+        real,
         {title: '背完两组', text: '背一背做完两组', target: {kind: 'sets', count: 2}},
+        real,
         {title: '打出一次大招', text: `一组里连对 ${this.economy.earn.ultCombo} 题，看碧琪放大招`, target: {kind: 'ults', count: 1}},
+        real,
         {title: '一组全对', text: '背一背里有一组一题不错', target: {kind: 'perfectSets', count: 1}},
       ][turn];
       list.push({id: `${date}-b`, ...b, reward: {stars: this.economy.earn.quests[1]}});
@@ -735,6 +765,7 @@ function questProgress(target, d) {
   if (target.kind === 'huntWins') return d.huntWins || 0;
   if (target.kind === 'ults') return d.ults || 0;
   if (target.kind === 'perfectSets') return d.perfectSets || 0;
+  if (target.kind === 'realCorrect') return d.realCorrect || 0;
   if (target.kind === 'learn') return (d.lessons || 0) + Math.floor((d.newCards || 0) / 5);
   return 0;
 }
@@ -777,7 +808,7 @@ export function registerLearningGame(api, store, options = {}) {
   register('gacha.banners', () => game.banners());
   register('gacha.pull', p => game.pull(p));
   register('forms.list', () => game.formsList());
-  register('forms.v2seen', () => game.mutate(state => { if (state.forms.v2note) state.forms.v2note.seen = true; return {ok: true}; }));
+  register('forms.v2seen', () => game.mutate(state => { if (state.forms.v2note) state.forms.v2note.seen = true; if (state.forms.v3note) state.forms.v3note.seen = true; return {ok: true}; }));
   register('forms.equip', p => game.equip(p));
   register('forms.awaken', p => game.awaken(p));
   register('wishlist.set', p => game.setWishlist(p));
@@ -831,6 +862,13 @@ export function registerLearningGame(api, store, options = {}) {
   } catch (error) { api.logger?.warn?.(`exam audio route: ${error?.message || error}`); }
   register('boss.state', p => (mod('exam').bossState ? mod('exam').bossState(game.read(), p.exam || GAME_EXAM) : game.bossFallback()));
   register('boss.realScore', via('exam', 'realScore', notReady('真实分数')));
+  register('practice.overview', via('practice', 'overview', (() => ({total: 0, points: [], kinds: []}))));
+  register('practice.start', via('practice', 'start', notReady('刷题')));
+  register('practice.answer', via('practice', 'answer', notReady('刷题')));
+  register('practice.explain', via('practice', 'explain', notReady('刷题')));
+  register('practice.finish', via('practice', 'finish', notReady('刷题')));
+  register('practice.unlock', via('practice', 'unlock', notReady('刷题')));
+  register('practice.suggest', p => mod('practice').suggest?.(game.read(), p) || null);
   register('line', via('content', 'line', (async () => ({text: '我在呢，一起加油～', source: 'local'}))));
   return game;
 }

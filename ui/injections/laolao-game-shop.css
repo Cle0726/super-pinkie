@@ -78,6 +78,13 @@
 #pinkie-study-desk .pks-items__row span{width:72px}
 #pinkie-study-desk .pks-items__row select{flex:1;min-width:0;padding:5px 8px;border-radius:7px;border:1px solid var(--pkg-line-2);background:var(--pkg-card-solid);color:var(--pkg-ink);font:12.5px var(--pk-sans,system-ui)}
 #pinkie-study-desk .pks-wr__grid{display:flex;flex-direction:column;min-height:0}
+#pinkie-study-desk .pks-wr__cols{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:18px;min-height:0;overflow:auto;padding:2px}
+#pinkie-study-desk .pks-wr__col{display:flex;flex-direction:column;gap:8px;min-width:0}
+#pinkie-study-desk .pks-wr__col + .pks-wr__col{padding-left:18px;border-left:1px solid var(--pkg-line)}
+#pinkie-study-desk .pks-wr__colhead{display:flex;align-items:baseline;gap:10px}
+#pinkie-study-desk .pks-wr__colhead b{font:900 15px/1 var(--pkg-display);letter-spacing:.14em}
+#pinkie-study-desk .pks-wr__colhead .pkg-num{margin-left:auto;font-size:12px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pks-wr__cols .pks-wr__list{overflow:visible}
 #pinkie-study-desk .pks-wr__list{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;overflow:auto;padding:2px}
 #pinkie-study-desk .pks-tile{appearance:none;position:relative;display:grid;justify-items:center;gap:3px;padding:8px 6px 9px;border:0;border-radius:12px;cursor:pointer;color:var(--pkg-ink);
   background:radial-gradient(70% 60% at 50% 40%,color-mix(in srgb,var(--fa) 22%,transparent),transparent 70%),var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);transition:transform .3s var(--pkg-out),box-shadow .3s var(--pkg-out)}

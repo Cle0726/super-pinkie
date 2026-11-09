@@ -3,6 +3,7 @@
   "note": "后端 learning-game-economy.mjs 和 tools/study-game/economy-sim.mjs 读同一份。改数值后必须重跑 node --test tests/learning-game-economy-sim.test.mjs。",
   "earn": {
     "answer": 1,
+    "realAnswer": 2,
     "setFinish": 5,
     "setFinishMinScored": 5,
     "setPerfect": 5,

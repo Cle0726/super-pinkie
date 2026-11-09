@@ -233,6 +233,8 @@ export class GameWorld {
     const rec = state.nodes[best.id] ||= {};
     rec.explored ||= this.now();
     delete rec.learnStartedAt;
+    // 讲完课的下一站是这个考点的真题（营地「练」那一行、「出发」都看它）
+    state.lastLesson = {date: this.game.today(), nodeId: best.id, name: best.name, region: best.region, at: this.now()};
   }
 
   // ---------- 守关战 ----------
@@ -244,6 +246,16 @@ export class GameWorld {
     const map = this.game.read().world?.[GAME_EXAM] || localWorld();
     const nodes = map.regions.find(r => r.id === node.region)?.nodes.filter(n => n.kind !== 'guard').map(n => ({name: n.name, summary: n.summary})) || [];
     const weak = Object.values(this.game.read().monsters?.list || {}).filter(m => m.region === node.region && m.state !== 'captured').slice(0, 10).map(m => m.topic);
+    // 题库里这个区域的真题单选够 5 道就用真题（官方答案，不用盲答复核）；不够才让模型出
+    const real = this.game.modules.practice?.guardItems?.(node.region) || [];
+    if (real.length >= 5) {
+      return this.game.once('guard.start', requestId, state => {
+        this.ensure(state);
+        const attemptId = `guard-${randomUUID()}`;
+        state.guards[attemptId] = {nodeId: node.id, region: node.region, sessionKey, at: this.now(), items: real, answers: {}, combo: 0, finished: null, real: true};
+        return {flow: 'guard', payload: {attemptId, nodeId: node.id, real: true, items: real.map((x, i) => ({itemId: `g${i + 1}`, mode: 'choice', prompt: x.stem, options: x.options, point: x.point, source: x.source}))}};
+      });
+    }
     const r = await modelJson(this.game.requestModel, GUARD_RULES, {region: region.name, format: sec, nodes, weak}, {
       validate: v => {
         const items = (Array.isArray(v?.items) ? v.items : []).map(x => validChoice(x)).filter(Boolean);
