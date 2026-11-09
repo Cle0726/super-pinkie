@@ -207,7 +207,7 @@
     host.classList.add('pkw-page');
     const g = G(); const local = ctx.local?.() || {};
     const head = el('header', 'pkb-page__head pks-head');
-    const x = el('button', 'pkb-x', '×'); x.type = 'button'; x.setAttribute('aria-label', '回营地'); x.addEventListener('click', () => desk()?.go('today'));
+    const x = el('button', 'pkb-x', '×'); x.type = 'button'; x.setAttribute('aria-label', window.__pinkieGame?.backLabel?.() || '回营地'); x.addEventListener('click', () => (window.__pinkieGame?.goBack ? window.__pinkieGame.goBack() : desk()?.go('today')));
     const t = el('div'); const title = el('h2', '', '上岸之书'); t.append(el('small', 'pkb-kicker', 'ATLAS · VOLUME I'), title);
     const hudBox = el('div', 'pkb-page__hud'); head.append(x, t, hudBox); host.append(head);
     const bar = el('div', 'pkw-bar'); const tabs = el('nav', 'pkw-tabs'); tabs.setAttribute('aria-label', '区域'); const modeSeg = el('div', 'pkg-seg pkw-mode'); bar.append(tabs, modeSeg); host.append(bar);

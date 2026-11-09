@@ -286,7 +286,7 @@
     const g = G();
     host.classList.add('pkb-hunt');
     const head = el('header', 'pkb-page__head');
-    const back = el('button', 'pkb-x', '×'); back.type = 'button'; back.setAttribute('aria-label', '回营地'); back.addEventListener('click', () => desk()?.go('today'));
+    const back = el('button', 'pkb-x', '×'); back.type = 'button'; back.setAttribute('aria-label', G()?.backLabel?.() || '回营地'); back.addEventListener('click', () => (G()?.goBack ? G().goBack() : desk()?.go('today')));
     const t = el('div'); t.append(el('small', 'pkb-kicker', 'HUNT'), el('h2', '', '讨伐错题怪'));
     const hudHost = el('div', 'pkb-page__hud');
     head.append(back, t, hudHost); host.append(head);

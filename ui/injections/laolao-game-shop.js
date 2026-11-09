@@ -25,7 +25,8 @@
   }
   function pageHead(host, {kicker, title, back = 'today', sub}) {
     const head = el('header', 'pkb-page__head pks-head');
-    const x = el('button', 'pkb-x', '×'); x.type = 'button'; x.setAttribute('aria-label', '回营地'); x.addEventListener('click', () => desk()?.go(back));
+    const x = el('button', 'pkb-x', '×'); x.type = 'button'; const g0 = G(); const useStack = back === 'today' && g0?.goBack;
+    x.setAttribute('aria-label', useStack ? g0.backLabel() : '返回'); x.addEventListener('click', () => (useStack ? g0.goBack() : desk()?.go(back)));
     const t = el('div'); t.append(el('small', 'pkb-kicker', kicker), el('h2', '', title)); if (sub) t.append(el('p', 'pks-sub', sub));
     const hud = el('div', 'pkb-page__hud'); head.append(x, t, hud); host.append(head);
     try { G().hud(hud, {compact: true}); } catch { /* HUD 可选 */ }
