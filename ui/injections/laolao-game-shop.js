@@ -433,6 +433,8 @@
       panel.append(el('small', 'pkg-kicker', b.id === 'seal' ? 'SEAL GACHA' : 'STAR GACHA'), el('h3', 'pks-ga__name', b.name));
       const rates = el('div', 'pks-rates'); rates.append(el('small', 'pkg-kicker', 'RATES'));
       for (const [r, p] of Object.entries(b.rates || {})) { const row = el('div', 'pks-rate'); row.dataset.r = r; row.style.setProperty('--tone', RARITY[r]?.tone || '#B9AEA4'); row.append(el('b', '', RARITY[r]?.label || r), el('span', '', r === 'N' ? '贴纸 / 称号 / 小特效' : `${RARITY[r]?.name || r}形态或特效`), el('em', 'pkg-num', (p * 100).toFixed(p < .1 ? 1 : 0) + '%')); rates.append(row); }
+      // 含保底的综合概率也公示（后端按同一套规则算）。
+      if (b.effectiveSSR) rates.append(el('p', 'pks-note', `含保底，SSR 综合约 ${(b.effectiveSSR * 100).toFixed(1)}%（平均 ${Math.round(1 / b.effectiveSSR)} 抽一个）。`));
       panel.append(rates);
       const pity = el('div', 'pks-pity'); pity.append(el('small', 'pkg-kicker', 'PITY'));
       const meter = (label, cur, max) => { if (!max) return; const m = el('div', 'pks-meter'); m.append(el('span', '', label), el('em', 'pkg-num', `${cur} / ${max}`), el('i', 'pks-meter__bar')); m.querySelector('i').style.setProperty('--p', Math.min(100, cur / max * 100) + '%'); pity.append(m); };

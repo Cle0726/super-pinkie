@@ -473,7 +473,7 @@ export class LearningGame {
     return Object.entries(this.economy.gacha).map(([id, b]) => {
       const g = state.gacha[id];
       const cost = {single: b.cost.single, ...(b.cost.ten ? {ten: g.tens === 0 && b.cost.firstTen ? b.cost.firstTen : b.cost.ten} : {}), ...(g.tens === 0 && b.cost.firstTen ? {firstTen: b.cost.firstTen} : {})};
-      return {id, name: b.name, cost, rates: b.rates, pity: {sr: b.pity.sr || null, ssr: b.pity.ssr, softStart: b.pity.softStart || null, count: {sr: g.sr, ssr: g.ssr}}, pools: E.gachaPools(id, this.catalog)};
+      return {id, name: b.name, cost, rates: b.rates, effectiveSSR: E.effectiveSSR(id, this.economy), pity: {sr: b.pity.sr || null, ssr: b.pity.ssr, softStart: b.pity.softStart || null, count: {sr: g.sr, ssr: g.ssr}}, pools: E.gachaPools(id, this.catalog)};
     });
   }
   itemName(id) {
