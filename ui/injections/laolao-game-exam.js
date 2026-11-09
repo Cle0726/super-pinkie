@@ -287,8 +287,10 @@
     if (notes.length) { const n = el('div', 'pke-notes'); n.append(el('small', 'pkb-kicker', 'MARKER’S NOTES')); for (const [id, v] of notes) { const it = el('div', 'pke-note'); it.append(el('b', '', /^writing/.test(id) ? '作文' : '翻译段落'), el('em', 'pkg-num', `${v.score} 分`)); if (v.standard) it.append(el('p', 'pke-miss__key', `标准答案：${v.standard}`)); it.append(el('p', '', v.reason || '')); if (v.source === 'local') it.append(el('small', '', '碧琪稍后会再细看一遍')); n.append(it); } box.append(n); }
     if (result.review?.text) { const rv = el('blockquote', 'pke-review'); rv.append(el('p', '', result.review.text), el('cite', '', '— 碧琪')); box.append(rv); }
     const act = el('div', 'pke-report__act'); const mons = (result.monstersSpawned || []).length;
+    const backView = (() => { const v = desk()?.pane?.()?.state?.returnView; return v && v !== 'gameexam' ? v : 'today'; })();
+    const backName = {today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', vocab: '回生词本', notes: '回笔记本', stage: '回舞台'}[backView] || '返回';
     if (mons) { act.append(el('span', 'pke-mons', `${mons} 道错题变成了错题怪，回到了地图上`), btn('去地图看看', 'pkg-btn', onMap), btn('去讨伐', 'pks-pull pke-nav', onHunt)); }
-    act.append(btn('再考一份', mons ? 'pkb-link' : 'pkg-btn', onAgain));
+    act.append(btn('再考一份', mons ? 'pkb-link' : 'pkg-btn', onAgain), btn(backName, mons ? 'pkb-link' : 'pks-pull pke-nav', () => desk()?.go(backView)));
     box.append(act); host.append(box); return box;
   }
 
@@ -388,6 +390,8 @@
       // 交卷后考场关掉、焦点掉回页面：落到成绩页上，下一次 Tab 就进成绩页的按钮。
       if (!main.contains(document.activeElement)) { main.tabIndex = -1; main.focus({preventScroll: true}); }
       const wait1 = el('div', 'pke-grading'); wait1.append(el('small', 'pkb-kicker', 'GRADING'), el('h3', '', '阅卷中'), el('p', '', '客观题已经判完，碧琪在按评分细则看翻译和作文。'), el('i', 'pke-grading__rule'));
+      const backView = (() => { const v = desk()?.pane?.()?.state?.returnView; return v && v !== 'gameexam' ? v : 'today'; })();
+      wait1.append(btn(backView === 'today' ? '先回营地' : '先返回', 'pkb-link', () => desk()?.go(backView)));
       main.append(wait1);
       let res = null; const t0 = Date.now();
       while (alive) { try { res = await call('exam.result', {attemptId}); } catch (e) { wait1.querySelector('p').textContent = e.message || '成绩取不到'; return; } if (res.status === 'done' || res.status === 'open') break; await wait(Date.now() - t0 < 20000 ? 1500 : 4000); }
