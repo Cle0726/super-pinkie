@@ -9,6 +9,9 @@ import {openclawStateDir} from './openclaw-paths.mjs';
 export const SKILL_ROUTES = Object.freeze([
   // 证件照 / 抠图 / 练习纸 / 简历（碧琪自己写的薄技能，底下是开源工具）
   {skill: 'pinkie-id-photo', kinds: ['image_print', 'craft', 'document'], when: /证件照|一寸照?|二寸照?|换底色?|蓝底|红底|白底照|签证照|报名照|简历照|护照照/, why: '证件照：换白 / 蓝 / 红底、标准尺寸、六寸排版（本地跑，不上传照片）'},
+  // 批量出图 / 出片：网页版出图 + 豆包图生视频 + 本地加工脚本。排在抠图技能前面：
+  // 「抠图做成贴纸」「切贴纸表」这类要的是整套加工链，不是单纯去背景。
+  {skill: 'pinkie-script-image', kinds: ['image_print', 'craft', 'automation', 'video_motion'], when: /脚本.{0,6}出图|跑脚本|批量.{0,4}(?:出图|生图|生成图)|一次.{0,3}(?:出|生)\d+张|出一批|连出|多出几张|图生视频|首帧|切贴纸|贴纸表|对比表|深度图|剪影矢量化|去水印|豆包.{0,4}(?:生成|出)|ChatGPT.{0,4}出图|网页.{0,4}生图|做成贴纸/i, why: '批量出图/出片：网页版 ChatGPT 或 Gemini 出图、桌面豆包图生视频，加本地加工（抠图、切贴纸、拼对比表、深度图、剪影、去水印）'},
   {skill: 'pinkie-remove-background', kinds: ['image_print', 'craft', 'automation'], when: /抠图|抠出来|去背景|去掉背景|透明底|透明背景|换背景|白底图/, why: '抠图去背景、换底、批量处理（本地跑）'},
   {skill: 'pinkie-kids-worksheets', kinds: ['document', 'tutoring', 'image_print', 'craft', 'writing', 'standard_answer'], when: /字帖|练字|描红|田字格|米字格|回宫格|生字本|口算|计算题|算术题|练习纸|作业纸/, why: '字帖（田字格 / 米字格、拼音、描红）和口算题卡（带答案），A4 PDF'},
   {skill: 'pinkie-resume', kinds: ['document', 'writing', 'craft'], when: /简历|履历|\bcv\b|resume/i, why: '简历：填一份 YAML 出排版好的 PDF，多套主题，中英文都行'},

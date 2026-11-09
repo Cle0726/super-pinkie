@@ -253,6 +253,7 @@
     {"name": "pinkie-id-photo", "zh": "证件照：换白 / 蓝 / 红底、一寸二寸等标准尺寸、六寸排版冲印（底层 HivisionIDPhotos，Apache-2.0，本地跑）"},
     {"name": "pinkie-remove-background", "zh": "抠图去背景、换纯色底或背景图、批量处理（底层 rembg，MIT，本地跑）"},
     {"name": "pinkie-kids-worksheets", "zh": "字帖（田字格 / 米字格 / 回宫格、拼音、描红）和口算题卡（带答案页），A4 PDF"},
-    {"name": "pinkie-resume", "zh": "简历：填一份 YAML 出排版好的 PDF，多套主题，中英文（底层 RenderCV，MIT）"}
+    {"name": "pinkie-resume", "zh": "简历：填一份 YAML 出排版好的 PDF，多套主题，中英文（底层 RenderCV，MIT）"},
+    {"name": "pinkie-script-image", "zh": "批量出图 / 出片脚本流水线：网页版 ChatGPT 或 Gemini 出图、桌面豆包图生视频，加本地加工（抠图、切贴纸、拼对比表、深度图、剪影矢量化、去水印）"}
   ]
 }
