@@ -515,54 +515,53 @@
     const fig = el('figure', 'pk-jar');
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('viewBox', '0 0 80 104'); svg.setAttribute('class', 'pk-jar-svg'); svg.setAttribute('role', 'img');
-    const label = () => `星星罐 ${Math.min(today, goal)} / ${goal}`;
-    svg.setAttribute('aria-label', label());
+    // 左边是今天真实得到的颗数，右边是每日目标。水位只表示离目标还有多远，满了就停在罐口，数字继续往上加。
     svg.innerHTML = `<path class="pk-jar-lid" d="M16 4h48a4 4 0 0 1 4 4v6H12V8a4 4 0 0 1 4-4z"/>
       <path class="pk-jar-glass" d="M26 14h28v8H26z"/>
       <path class="pk-jar-glass" d="M16 24h48v48a12 12 0 0 1-12 12H28a12 12 0 0 1-12-12V24z"/>
       <defs><clipPath id="${id}"><path d="M20 28h40v42a8 8 0 0 1-8 8H28a8 8 0 0 1-8-8V28z"/></clipPath></defs>
       <g clip-path="url(#${id})">
         <rect class="pk-jar-water" x="20" y="28" width="40" height="50"/>
-        <path class="pk-jar-star" transform="translate(30 60) scale(.42)" d="${STAR}"/>
-        <path class="pk-jar-star" transform="translate(44 66) scale(.34)" d="${STAR}"/>
-        <path class="pk-jar-star" transform="translate(36 46) scale(.3)" d="${STAR}"/>
       </g>
       <path class="pk-jar-glass" d="M32 26c1 7 1 11 0 16M48 26c-1 7-1 11 0 16"/>`;
     const cap = el('figcaption', '', '');
     const capNow = el('b', '', String(today));
-    cap.append(capNow, document.createTextNode(` / ${goal}`));
+    const capRest = document.createTextNode('');
+    cap.append(capNow, capRest);
     fig.append(svg, cap); host.replaceChildren(fig);
     const level = svg.querySelector('.pk-jar-water');
-    const stars = [...svg.querySelectorAll('.pk-jar-star')];
-    // 水位用 CSS transform 画，不交给 GSAP 写 SVG 属性：两套 transform 叠在一起时终态会和数字对不上。
+    // 水位只用这一处 CSS transform。不要再往罐子里放几颗星：那会变成另一套数字。
     level.style.transformBox = 'fill-box';
     level.style.transformOrigin = '50% 100%';
-    const ratioOf = value => Math.max(0.001, Math.min(1, value / goal));
-    const setLevel = ratio => {
-      level.style.transform = `scaleY(${ratio})`;
-      stars.forEach((star, i) => { star.style.opacity = ratio > [0.34, 0.5, 0.75][i] ? '1' : '0'; });
+    const ratioOf = value => Math.max(0, Math.min(1, value / goal));
+    const writeCap = n => {
+      capNow.textContent = String(Math.max(0, Math.round(n)));
+      capRest.textContent = n >= goal ? ` · 目标 ${goal}` : ` / ${goal}`;
+      fig.classList.toggle('is-full', n >= goal);
+      svg.setAttribute('aria-label', n >= goal ? `星星罐已满，今天 ${Math.round(n)} 颗，目标 ${goal}` : `星星罐 ${Math.round(n)} / ${goal}`);
     };
+    const setLevel = ratio => { level.style.transform = `scaleY(${Math.max(0.001, ratio)})`; };
     let shown = ratioOf(today);
     setLevel(shown);
+    writeCap(today);
     const paint = (animate) => {
       const target = ratioOf(today);
-      svg.setAttribute('aria-label', label());
       const motion = motionOf(host);
       const gsap = gsapOf(motion);
-      if (!animate || motion.reduced || !gsap) { shown = target; setLevel(target); capNow.textContent = String(Math.min(today, goal)); return Promise.resolve(); }
+      if (!animate || motion.reduced || !gsap) { shown = target; setLevel(target); writeCap(today); return Promise.resolve(); }
       const from = shown;
       const value = {t: 0};
       const start = Number(capNow.textContent) || 0;
-      const end = Math.min(today, goal);
+      const end = today;
       return tween(gsap, value, {t: 1, duration: .55, ease: 'power2.out', onUpdate() {
         shown = from + (target - from) * value.t;
         setLevel(shown);
-        capNow.textContent = String(Math.round(start + (end - start) * value.t));
-      }}).then(() => { shown = target; setLevel(target); capNow.textContent = String(end); });
+        writeCap(start + (end - start) * value.t);
+      }}).then(() => { shown = target; setLevel(target); writeCap(end); });
     };
     return {el: host, svg, get today() { return today; }, goal, paint,
-      add(n = 1) { today = Math.min(goal, today + n); return paint(true); },
-      set(n = 0) { today = Math.max(0, Math.min(goal, n | 0)); return paint(false); },
+      add(n = 1) { today = Math.max(0, today + Math.round(n) || 0); return paint(true); },
+      set(n = 0) { today = Math.max(0, n | 0); return paint(false); },
       bump() {
         const motion = motionOf(host);
         if (motion.reduced || !gsapOf(motion)) return Promise.resolve();
