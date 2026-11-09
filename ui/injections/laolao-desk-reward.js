@@ -328,7 +328,7 @@
     if (line) copy.append(el('p', 'pk-sheet-line', line));
     if (opts.answerHtml) { const ans = el('div', 'pk-sheet-answer'); ans.innerHTML = opts.answerHtml; copy.append(ans); }
     if (opts.missing?.length) copy.append(el('p', 'pk-sheet-missing', '还差：' + opts.missing.join('、')));
-    if (kind === 'wrong') copy.append(el('p', 'pk-sheet-again', lines.again));
+    if (kind === 'wrong' && opts.again !== false) copy.append(el('p', 'pk-sheet-again', lines.again));
     const btn = el('button', 'pk-btn', '继续');
     btn.type = 'button'; btn.dataset.kind = 'go'; btn.setAttribute('aria-label', '继续');
     sheet.append(mark, copy, btn); sheetHost.append(sheet); sheetHost.hidden = false;
@@ -339,7 +339,8 @@
     if (motion.reduced) fade(sheet, 0, 1, 120);
     else {
       const gsap = gsapOf(motion);
-      if (gsap) tweenFrom(gsap, sheet, {yPercent: 100}, {yPercent: 0, duration: .28, ease: 'back.out(1.6)'});
+      // 反馈卡就在选项下面：轻轻落座（expo-out，不回弹，VFX.md §3.6）。
+      if (gsap) tweenFrom(gsap, sheet, {y: 10, opacity: 0}, {y: 0, opacity: 1, duration: .26, ease: 'expo.out'});
       else sheet.style.transform = 'none';
       if (kind === 'right') drawCheck(path, motion);
     }
@@ -349,7 +350,7 @@
       shut = true; btn.disabled = true;
       const remove = () => { sheet.remove(); if (!sheetHost.childElementCount) sheetHost.hidden = true; };
       if (motion.reduced || !gsapOf(motion)) return fade(sheet, 1, 0, 120).then(remove);
-      return tween(gsapOf(motion), sheet, {yPercent: 100, duration: .18, ease: 'power2.in'}).then(remove);
+      return tween(gsapOf(motion), sheet, {opacity: 0, duration: .12, ease: 'power2.in'}).then(remove);
     };
     btn.addEventListener('click', () => { const ret = opts.onContinue?.(); Promise.resolve(ret).then(close); });
     later(() => { if (!shut && btn.isConnected) btn.focus(); }, 20);

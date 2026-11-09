@@ -324,7 +324,7 @@
 /* 营地里奖励卡片让开顶栏（HUD + 营地 / 手账切换）。 */
 html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
 /* 验收修：手账皮肤给每页画的那条粉色页边竖线（.view 背景渐变）在游戏页上会从卡片、立绘、Boss 中间直穿过去，游戏页不要。 */
-#pinkie-study-desk.pk-ink .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard),#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard){--pk-page-margin:transparent}
+#pinkie-study-desk.pk-ink .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard,.pk-drill),#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard,.pk-drill){--pk-page-margin:transparent}
 
 /* ── 待机氛围（11-08 验收 R5）：只动 transform / opacity；data-still 时全部静止。 ── */
 #pinkie-study-desk .pkg-amb{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;contain:strict}

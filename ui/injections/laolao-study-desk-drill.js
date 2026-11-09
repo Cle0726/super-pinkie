@@ -7,6 +7,8 @@
   const norm = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   const reward = () => window.__pinkieDeskReward;
   const lines = () => reward().lines;
+  const CHOICE_MODES = new Set(['choice', 'truefalse', 'word2meaning', 'meaning2word', 'listen']);
+  const MODE_LABEL = {choice: '单选', truefalse: '判断', word2meaning: '看词选义', meaning2word: '看义选词', listen: '听音选择', cloze: '填空', collocation: '搭配', pairs: '配对', homophonePairs: '谐音配对', order: '排序', write: '默写', spell: '拼写', dictate: '听写', flip: '回想', look: '认识一下', meet: '认识一下'};
   let pending = null, registered = false, restId = 0;
 
   function distance(a, b) {
@@ -89,20 +91,27 @@
     const nib = el('i', 'pk-drill-nib'); nib.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6 L7 2.5 L11 6 L7 9.5 Z" fill="currentColor"/></svg>';
     prog.append(ink, nib);
     const comboHost = el('div', 'pk-drill-combo');
-    const starLabel = el('span', 'pk-drill-stars', '⭐ 0'); starLabel.setAttribute('aria-label', '这组星星 0');
-    top.append(exit, prog, comboHost, starLabel);
+    const count = el('span', 'pk-drill-count', ''); count.setAttribute('aria-hidden', 'true');
+    // 星星用矢量小星，不用 emoji（VFX.md）。
+    const starLabel = el('span', 'pk-drill-stars'); starLabel.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2l1.9 4.3 4.7.4-3.6 3.1 1.1 4.6L8 11.2l-4.1 2.4 1.1-4.6L1.4 5.9l4.7-.4z"/></svg><b>0</b>';
+    const starNum = starLabel.querySelector('b'); starLabel.setAttribute('aria-label', '这组星星 0');
+    top.append(exit, prog, count, comboHost, starLabel);
     const pendingLine = el('p', 'pk-drill-pending'); pendingLine.hidden = true;
+    // 题目是第一视觉：一栏（最宽 760）从上往下 = 题型小字 → 题干 → 选项 → 检查 / 反馈卡。反馈卡就落在选项下面，不盖题、不推走题。
     const stage = el('div', 'pk-drill-stage');
+    const col = el('div', 'pk-drill-col');
     const q = el('div', 'pk-drill-q');
     const stickerHost = el('div', 'pk-drill-sticker pk-react-host');
-    stage.append(q, stickerHost);
     const bar = el('footer', 'pk-drill-bar');
+    const keys = el('span', 'pk-drill-keys');
     const check = el('button', 'pk-drill-check'); check.type = 'button';
     const checkLabel = el('span', 'pk-drill-check-label', '检查');
     check.append(checkLabel); check.setAttribute('aria-disabled', 'true');
-    bar.append(check);
+    bar.append(keys, check);
+    col.append(q, bar);
+    stage.append(col, stickerHost);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite');
-    root.append(top, pendingLine, stage, bar, live);
+    root.append(top, pendingLine, stage, live);
     R.sticker(stickerHost, 'focus');
     exit.addEventListener('click', () => { askLeave(); });
     // 碧琪上岸记：战斗层（laolao-game-battle.js）。没有游戏层时是 null，播放器照旧。
@@ -110,6 +119,7 @@
     check.addEventListener('click', () => onCheck());
     check.addEventListener('pointerdown', () => { if (ready && !ctx.motion?.reduced) { check.classList.remove('pk-press'); void check.offsetWidth; check.classList.add('pk-press'); } });
 
+    function paintCount() { count.textContent = original ? `${Math.min(correctIds.size, original)} / ${original}` : ''; }
     function focused() { return !ctx.desk?.isFocused || ctx.desk.isFocused(); }
     function fx(name, opts) { if (focused()) R.sound(name, opts); }
     function setReady(on, label) {
@@ -135,7 +145,8 @@
       else if (!ctx.motion?.reduced) node.classList.add('pk-fade');
       restTicker();
     }
-    function backLabel() { return route.source === 'vocab' ? '回生词本' : route.source === 'mixed' ? '回今日' : '回笔记本'; }
+    const RETURN_LABEL = {gamehunt: '回讨伐', gamemap: '回地图', vocab: '回生词本', notes: '回笔记本'};
+    function backLabel() { return RETURN_LABEL[route.returnTo] || (route.source === 'vocab' ? '回生词本' : route.source === 'mixed' ? '回今日' : '回笔记本'); }
     function snapshot() {
       local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
     }
@@ -199,7 +210,7 @@
       const box = el('div', 'pk-drill-options');
       const buttons = (item.options || ['对', '错']).map((text, i) => {
         const b = el('button', 'pk-choice'); b.type = 'button';
-        b.append(el('kbd', '', String(i + 1)), el('span', '', text));
+        b.append(el('kbd', '', 'ABCDEFGHI'[i] || String(i + 1)), el('span', '', text));
         b.addEventListener('pointerdown', () => { if (!ctx.motion?.reduced) { b.classList.remove('pk-press'); void b.offsetWidth; b.classList.add('pk-press'); } });
         b.addEventListener('click', () => {
           selection = i; selectedEl = b;
@@ -336,7 +347,8 @@
       return wrap;
     }
     function hear(text) {
-      const b = el('button', 'pk-link', '再听一遍'); b.type = 'button'; b.setAttribute('aria-label', '再听一遍');
+      const b = el('button', 'pk-drill-hear'); b.type = 'button'; b.setAttribute('aria-label', '再听一遍');
+      b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5.2v9.6L14.6 10z"/></svg><span>再听一遍</span><i aria-hidden="true"></i>';
       b.addEventListener('click', () => speak(text));
       return b;
     }
@@ -404,10 +416,23 @@
       else body = renderFlip(item);
       if (mode === 'look' || mode === 'meet' || mode === 'cloze' || mode === 'collocation') q.append(body);
       else q.append(head, body);
-      if (item.speak) { if (mode !== 'meet' && mode !== 'look') q.append(hear(item.speak)); speak(item.speak); }
+      // 听力：播放控件放在题干的位置（题干上方），不是选项下面的小链接。
+      if (item.speak) { if (mode !== 'meet' && mode !== 'look') { const h = hear(item.speak); const s0 = q.querySelector('.pk-drill-stem, .pk-drill-cloze'); if (s0) s0.before(h); else q.prepend(h); } speak(item.speak); }
       const stemNode = q.querySelector('.pk-drill-stem');
       if (stemNode && mode !== 'cloze' && mode !== 'collocation') stem(stemNode, stemNode.textContent || item.prompt || '');
       if (choice || mode === 'write' || mode === 'spell' || mode === 'dictate') setReady(false, '检查');
+      const topic = item.point || item.topic || item.monster?.topic || '';
+      q.prepend(el('p', 'pk-drill-kicker', [MODE_LABEL[mode] || '作答', topic].filter(Boolean).join(' · ')));
+      if (stemNode && (stemNode.textContent || '').length > 90) {
+        // 长题干在自己的框里滚；全露出来了就去掉下沿淡出。
+        stemNode.classList.add('is-long');
+        const fit = () => stemNode.classList.toggle('is-fit', stemNode.scrollHeight - stemNode.clientHeight < 2 || stemNode.scrollTop + stemNode.clientHeight >= stemNode.scrollHeight - 2);
+        stemNode.addEventListener('scroll', fit, {passive: true}); setTimeout(fit, 60);
+        try { const ro = new ResizeObserver(fit); ro.observe(stemNode); stemNode._ro = ro; } catch { /* 老 WebKit */ }
+      }
+      const nOpt = Math.min(9, (item.options || [0, 0]).length);
+      keys.textContent = choice ? `${nOpt > 1 ? `1–${nOpt} 或 A–${'ABCDEFGHI'[nOpt - 1]} 选择 · ` : ''}Enter 检查` : (mode === 'flip' ? '空格翻面' : mode === 'look' || mode === 'meet' ? 'Enter 记住了' : 'Enter 检查');
+      paintCount();
       if (index > 0) enter(q);
       check.hidden = false;
       R.sticker(stickerHost, 'focus');
@@ -486,15 +511,15 @@
       if (result.correct) correctIds.add(item.itemId);
       if (result.correct && !result.learned) { combo += 1; maxCombo = Math.max(maxCombo, combo); if (firstTry) stars += response.stars || (route.demo ? 1 : 0); }
       else if (!result.learned) { combo = 0; if (!route.demo && response.requeue !== false) queue.push({...item, replay: true}); }
-      starLabel.textContent = '⭐ ' + stars; starLabel.setAttribute('aria-label', '这组星星 ' + stars);
+      starNum.textContent = String(stars); starLabel.setAttribute('aria-label', '这组星星 ' + stars); paintCount();
       R.paintProgress(prog, original ? correctIds.size / original : 0);
       if (!result.learned) R.comboBadge(comboHost, combo);
       try { if (!result.learned) battle?.settled({response, combo, ok: Boolean(result.correct), correctCount: correctIds.size, total: original}); } catch { /* 同上 */ }
       R.sticker(stickerHost, result.correct ? (combo >= 3 ? 'combo' : 'cheer') : 'oops');
       if (result.shake) shake(result.shake);
-      phase = 'sheet'; busy = false; check.hidden = true;
+      phase = 'sheet'; busy = false; check.hidden = true; bar.hidden = true;
       const kind = result.kind || (result.correct ? 'right' : 'wrong');
-      sheetApi = R.feedbackSheet(root, {kind, title: result.title, line: result.line, answerHtml: result.answerHtml, missing: result.missing, silent: result.silent, onContinue: advance});
+      sheetApi = R.feedbackSheet(col, {kind, title: result.title, line: result.line, answerHtml: result.answerHtml, missing: result.missing, silent: result.silent, onContinue: advance});
       live.textContent = (result.title || (result.correct ? '对啦' : '差一点')) + '。' + (result.line || '');
     }
     function advance() {
@@ -539,6 +564,8 @@
         ctx.go?.('today');
         return;
       }
+      // 从讨伐 / 地图进来的，回原处（以前讨伐打完会掉进笔记本）。
+      if (RETURN_LABEL[route.returnTo]) { ctx.go?.(route.returnTo); return; }
       ctx.go?.(route.source === 'vocab' ? 'vocab' : route.source === 'mixed' ? 'today' : 'notes');
     }
     async function askLeave() {
@@ -564,7 +591,7 @@
       pendingN = saved.pendingN || 0; original = saved.original || queue.length; startedAt = saved.startedAt || Date.now();
       saved.correct?.forEach(id => correctIds.add(id)); saved.first?.forEach(id => firstDone.add(id)); saved.firstRight?.forEach(id => firstRight.add(id));
       prog.setAttribute('aria-valuemax', String(original || 1));
-      starLabel.textContent = '⭐ ' + stars;
+      starNum.textContent = String(stars); paintCount();
       R.paintProgress(prog, original ? correctIds.size / original : 0);
       R.comboBadge(comboHost, combo);
       if (pendingN > 0) { pendingLine.hidden = false; pendingLine.textContent = lines().pending(pendingN); }
@@ -624,7 +651,9 @@
       if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
       if (event.key === 'Enter') { event.preventDefault(); onCheck(); return; }
       if (event.code === 'Space') { event.preventDefault(); if (queue[index]?.mode === 'flip' && phase === 'ask') q._body?.flip?.(); return; }
-      if (phase === 'ask' && /^[1-9]$/.test(event.key)) { event.preventDefault(); pickAt(Number(event.key) - 1); }
+      if (phase === 'ask' && /^[1-9]$/.test(event.key)) { event.preventDefault(); pickAt(Number(event.key) - 1); return; }
+      // A–D 也能选（只在选择题，且焦点不在输入框里）。
+      if (phase === 'ask' && /^[a-i]$/i.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey && CHOICE_MODES.has(queue[index]?.mode) && !event.target?.closest?.('input,textarea')) { event.preventDefault(); pickAt('abcdefghi'.indexOf(event.key.toLowerCase())); }
     }
     const saved = local.drillSaved;
     if (route.demo) {

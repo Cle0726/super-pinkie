@@ -74,37 +74,68 @@
 @keyframes pkb-pop{0%{opacity:0;translate:0 14px;scale:.86}12%{opacity:1;translate:0 0;scale:1}70%{opacity:1;translate:0 -26px}100%{opacity:0;translate:0 -40px}}
 @keyframes pkb-pop-crit{0%{opacity:0;translate:0 10px;scale:1.5}10%{opacity:1;translate:0 0;scale:1}72%{opacity:1;translate:0 -30px}100%{opacity:0;translate:0 -46px}}
 #pinkie-study-desk .pkb-arena.is-compact{height:116px;--foe-w:86px}
-/* 背一背挂上战斗层时：旧的连对徽章和碧琪贴纸让给竞技场。 */
+/* ── 状态条（作答页顶上一条）：× · 碧琪 · 连击 · 进度 / 题号 · 怪名牌 + 血条 · 怪 · 星星。
+   竞技场根节点 display:contents，子元素直接排进这一行（order 定位置）；命中 / 闪开在两端头像和血条上发生，大招过场照旧全屏。 */
+#pinkie-study-desk .pkb-top{position:relative;z-index:3;min-height:64px;gap:14px;padding:0 2px 12px;border-bottom:1px solid var(--pkg-line,var(--hair))}
+#pinkie-study-desk .pkb-top > .pkb-x,#pinkie-study-desk .pkb-top > .pk-drill-exit{order:0}
+#pinkie-study-desk .pkb-arena.is-strip{display:contents;--foe-w:56px}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-ground{display:none}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero{order:1;position:relative;left:auto;bottom:auto;flex:none;width:58px;height:58px;margin:-4px -2px -2px 0}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero .pkb-shadow,#pinkie-study-desk .pkb-arena.is-strip > .pkb-foe > .pkb-shadow{left:18%;right:18%;bottom:-3%;height:14%}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero img{filter:drop-shadow(0 3px 4px rgba(60,20,50,.22))}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-combo{order:2;position:relative;left:auto;top:auto;transform:none;flex:none;width:58px;justify-items:start;gap:4px;opacity:.38}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-combo[data-on="1"]{opacity:1}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-combo__n{font-size:24px;line-height:.9}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-combo small{font-size:8.5px;letter-spacing:.34em;padding-left:0}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-ultmeter{width:52px;margin-top:1px}
+#pinkie-study-desk .pkb-top > .pk-drill-progress,#pinkie-study-desk .pkb-top > .pkb-guard__title{order:3}
+#pinkie-study-desk .pkb-top > .pk-drill-progress{height:8px}
+#pinkie-study-desk .pkb-top > .pk-drill-count{order:4}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-plate{order:5;position:static;flex:none;width:clamp(150px,22cqi,250px);gap:5px;padding-left:4px}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-plate b{font-size:14px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-plate__note{font-size:10.5px}
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-foe{order:6;position:relative;right:auto;bottom:auto;flex:none;width:56px;height:56px;margin:-4px 0 -2px}
+#pinkie-study-desk .pkb-top > .pk-drill-stars{order:7}
+#pinkie-study-desk .pkb-top > .pk-drill-combo{display:none}
+/* 伤害数字挂在怪身上：从怪脚下冒出来、升到怪身前淡掉。 */
+#pinkie-study-desk .pkb-arena.is-strip .pkb-pops{left:50%;right:auto;top:calc(100% + 34px);bottom:auto;width:0;z-index:4}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-pop b{font-size:24px}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-pop.is-crit b{font-size:34px}
+#pinkie-study-desk .pkb-arena.is-strip .pkb-pop.is-miss b{font-size:15px}
+@container drill (max-width:860px){
+  #pinkie-study-desk .pkb-arena.is-strip .pkb-plate__note{display:none}
+  #pinkie-study-desk .pkb-arena.is-strip > .pkb-plate{width:clamp(110px,24cqi,180px)}
+}
+@container drill (max-width:560px){
+  #pinkie-study-desk .pkb-arena.is-strip > .pkb-combo,#pinkie-study-desk .pkb-top > .pk-drill-count{display:none}
+  #pinkie-study-desk .pkb-arena.is-strip > .pkb-plate small{display:none}
+  #pinkie-study-desk .pkb-arena.is-strip > .pkb-hero,#pinkie-study-desk .pkb-arena.is-strip > .pkb-foe{width:44px;height:44px}
+}
+
+/* 背一背挂上战斗层时：旧的连对徽章和碧琪贴纸让给状态条。 */
 #pinkie-study-desk .pk-drill[data-battle] .pk-drill-combo{display:none}
-@container drill (max-width:859px){ #pinkie-study-desk .pk-drill[data-battle] .pk-drill-stage{grid-template-columns:minmax(0,1fr)} }
 #pinkie-study-desk .pk-drill[data-battle] .pk-drill-sticker{display:none}
 #pinkie-study-desk[data-reduced="true"] .pkb-arena *{animation:none!important;transition:none!important}
-@container drill (max-width:560px){ .pkb-arena{height:108px;--foe-w:80px} .pkb-plate{width:42%} .pkb-combo{display:none} }
+@container drill (max-width:560px){ #pinkie-study-desk .pkb-arena:not(.is-strip){height:108px;--foe-w:80px} #pinkie-study-desk .pkb-arena:not(.is-strip) .pkb-plate{width:42%} #pinkie-study-desk .pkb-arena:not(.is-strip) .pkb-combo{display:none} }
 /* 战斗中奖励卡片让到竞技场下面，不压敌人名牌。 */
 html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards,html:has(#pinkie-study-desk .pkb-guard) .pk-awards{top:max(64px,calc(var(--pkb-arena-bottom,260px) + 12px))}
 
 /* ── 守关战 / 讨伐页 ── */
-#pinkie-study-desk .view.pkb-guard,#pinkie-study-desk .view.pkb-hunt{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
-#pinkie-study-desk .pkb-guard__top,#pinkie-study-desk .pkb-page__head{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--pkg-line)}
-#pinkie-study-desk .pkb-guard__title{display:grid;gap:5px;flex:1;min-width:0}
-#pinkie-study-desk .pkb-guard__title b,#pinkie-study-desk .pkb-page__head h2{margin:0;font:900 20px/1.1 var(--pkg-display,serif);letter-spacing:.08em}
+#pinkie-study-desk .view.pkb-hunt{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
+/* 守关战跟背一背同一套作答页（状态条 + 760 栏）。 */
+#pinkie-study-desk .view.pkb-guard{container-type:inline-size;container-name:pkview drill;display:flex;flex-direction:column;gap:0;padding:14px 20px 0;overflow:hidden;color:var(--pkg-ink)}
+#pinkie-study-desk.pk-ink .view.pkb-guard{container-name:pkview drill}
+#pinkie-study-desk .pkb-page__head{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pkb-guard__top{display:flex;align-items:center}
+#pinkie-study-desk .pkb-guard__title{display:grid;gap:5px;flex:1;min-width:0;padding-left:6px}
+#pinkie-study-desk .pkb-page__head h2{margin:0;font:900 20px/1.1 var(--pkg-display,serif);letter-spacing:.08em}
+#pinkie-study-desk .pkb-guard__title b{margin:0;font:900 16px/1.1 var(--pkg-display,serif);letter-spacing:.08em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #pinkie-study-desk .pkb-page__head > div:nth-child(2){display:grid;gap:6px;flex:1}
 #pinkie-study-desk .pkb-guard__count{font:600 15px/1 var(--pkg-num,sans-serif);color:var(--pkg-ink-2)}
-#pinkie-study-desk .pkb-guard__q{display:grid;gap:12px;max-width:820px;width:100%;margin:6px auto 0}
-#pinkie-study-desk .pkb-guard__stem{margin:0;font:600 24px/1.45 var(--pkg-display,serif);letter-spacing:.01em}
-#pinkie-study-desk .pkb-guard__opts{display:grid;gap:8px}
-#pinkie-study-desk .pkb-opt{appearance:none;display:flex;align-items:center;gap:12px;min-height:50px;padding:11px 16px;border-radius:11px;border:1px solid var(--pkg-line-2);background:var(--pkg-card);color:var(--pkg-ink);font:16px/1.45 var(--pk-sans,system-ui);text-align:left;cursor:pointer;transition:border-color .2s,transform .2s var(--pkb-out)}
-#pinkie-study-desk .pkb-opt:hover:not(:disabled){border-color:color-mix(in srgb,var(--pkg-b,#DB1F74) 60%,transparent);transform:translateX(2px)}
-#pinkie-study-desk .pkb-opt kbd{font:600 11px/1 var(--pkg-latin,sans-serif);letter-spacing:.1em;color:var(--pkg-ink-3);min-width:1.2em}
-#pinkie-study-desk .pkb-opt.is-lock{border-color:var(--pkg-b,#DB1F74);box-shadow:0 0 0 1px var(--pkg-b,#DB1F74) inset}
-#pinkie-study-desk .pkb-opt.is-answer{border-color:var(--pkg-gold,#B8893A);background:color-mix(in srgb,var(--pkg-gold-hi,#E2C07A) 18%,var(--pkg-card-solid));font-weight:600}
-#pinkie-study-desk .pkb-opt.is-wrong{color:var(--pkg-ink-3);border-color:var(--pkg-line)}
-#pinkie-study-desk .pkb-opt.is-wrong span{text-decoration:line-through;text-decoration-color:var(--pkg-ink-3)}
-#pinkie-study-desk .pkb-opt:disabled{cursor:default}
+#pinkie-study-desk .pkb-opt.is-lock{border-color:var(--pink);box-shadow:0 0 0 1px var(--pink) inset}
 #pinkie-study-desk .pkb-guard__explain{display:grid;gap:6px;padding:12px 14px;border-left:2px solid var(--pkg-gold,#B8893A);background:var(--pkg-card)}
 #pinkie-study-desk .pkb-guard__explain b{font:700 13.5px/1.3 var(--pk-sans,system-ui)}
 #pinkie-study-desk .pkb-guard__explain p{margin:0;font-size:13.5px;line-height:1.6;color:var(--pkg-ink-2)}
-#pinkie-study-desk .pkb-guard__next{justify-self:end}
 #pinkie-study-desk .pkb-result{display:grid;justify-items:center;gap:8px;padding:26px 20px;text-align:center}
 #pinkie-study-desk .pkb-result h3{margin:0;font:900 34px/1.1 var(--pkg-display,serif);letter-spacing:.14em}
 #pinkie-study-desk .pkb-result__score{margin:0;font-size:15px;color:var(--pkg-ink-2)}
