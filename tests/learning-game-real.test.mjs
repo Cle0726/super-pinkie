@@ -64,6 +64,27 @@ test('按部分切：罗马数字认错（Part H / Part Il）也能切开', () =
   assert.match(p.writing, /Writing v$/);
 });
 
+test('按部分切：标题和部分名之间的认字圆点也能切开，卷首备注里的 Part IV 不抢真标题', () => {
+  const t = [
+    '备注：部分省份的 Part II和Part IV Translation 的第67 题采用了不同的试题，内容请见本册第20页。',
+    'Part I    ••Listening Comprehension••\n（25 minutes）\nDirections: listen',
+    'Part I    ••Vocabulary & Structure ••\n（10 minutes）\nDirections: vocab',
+    'Part 皿    ••Reading Comprehension••\n（35 minutes）\nDirections: read',
+    'Part N ••Translation—English into Chinese• •（25 minutes）\nDirections: translate',
+    'Part V    ••Writing••\n（25 minutes）\nDirections: write the form',
+  ].join('\n');
+  const p = splitParts(t);
+  assert.match(p.listening, /Listening Comprehension/);
+  assert.ok(!p.listening.includes('Vocabulary'));
+  assert.match(p.vocab, /Vocabulary & Structure/);
+  assert.match(p.reading, /Reading Comprehension/);
+  assert.match(p.translation, /Translation—English into Chinese/);
+  assert.ok(!p.translation.startsWith('备注'));
+  assert.ok(!p.translation.includes('Writing••'));
+  assert.match(p.writing, /Writing••/);
+  assert.match(p.writing, /write the form$/);
+});
+
 test('拆卷校验：题型不对整部分不收；选项答案越界的题去掉并标出；分值按官方部分满分折算；翻译选择三选一', () => {
   assert.equal(validRealSection('vocab', {parts: [{id: 'A', kind: 'writing', items: []}]}), null);
   const v = validRealSection('vocab', {parts: [

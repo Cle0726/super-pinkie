@@ -157,13 +157,39 @@ export async function ocrPdf(file, {tmpRoot, vision, signal, dpi = 220, columns 
 
 // ---------- 拆卷 ----------
 // 试卷 / 答案文字按 Part I–V 切开；切不出来就整份给模型。
-// 认字常把罗马数字认错（Part H / Part Il），所以按部分名找。
-const PART_HEAD = [/Part\s*\S{0,4}\s*Listening/i, /Part\s*\S{0,4}\s*(?:Vocabulary|Structure)/i, /Part\s*\S{0,4}\s*Reading/i, /Part\s*\S{0,4}\s*Translation/i, /Part\s*\S{0,4}\s*Writing/i];
+// 认字常把罗马数字认错（Part H / Part Il / Part N / Part 皿），标题和部分名之间还会插进 ••。
+// 按部分名找；同一词出现多次时，优先「后面跟着 minutes / Directions」的那处（卷首备注里的 “Part IV Translation 的第 67 题……” 不是标题）。
+const SECTION_WORD = {listening: 'Listening', vocab: 'Vocabulary|Structure', reading: 'Reading', translation: 'Translation', writing: 'Writing'};
 export const SECTION_IDS = ['listening', 'vocab', 'reading', 'translation', 'writing'];
+function sectionIndex(text, id) {
+  const word = SECTION_WORD[id];
+  const re = new RegExp(`Part\\s*\\S{0,8}(?:\\s|[^A-Za-z]){0,16}(?:${word})`, 'gi');
+  const score = index => {
+    const after = text.slice(index, index + 180);
+    let s = 0;
+    if (/minutes/i.test(after)) s += 4;
+    if (/Directions/i.test(after)) s += 1;
+    if (/采用了不同|见本册|check your\s+writing/i.test(after)) s -= 8;
+    return s;
+  };
+  const ranked = [...text.matchAll(re)].map(m => ({index: m.index, score: score(m.index)})).sort((a, b) => b.score - a.score || a.index - b.index);
+  if (ranked.length && ranked[0].score >= 4) return ranked[0].index;
+  // 解析册常把部分名印在 Part 前面：「Listening Comprehension / Part I / Section A」，后面没有 minutes。
+  if (id === 'listening') {
+    const lead = /Listening Comprehension[\s\S]{0,40}?Part\s+\S{1,6}[\s\S]{0,40}?Section A/i.exec(text);
+    if (lead) return lead.index;
+  }
+  if (ranked.length && ranked[0].score >= 0) return ranked[0].index;
+  // 有的卷「Vocabulary & Structure」印在 Part II 前面，中间还换行，Part 规则对不上。
+  const titleWord = id === 'vocab' ? 'Vocabulary' : id === 'reading' ? 'Reading Comprehension' : word;
+  const titles = [...text.matchAll(new RegExp(`(?:${titleWord})[\\s\\S]{0,90}?minutes`, 'gi'))].filter(m => score(m.index) >= 4);
+  if (titles.length) return Math.min(...titles.map(m => m.index));
+  return ranked.length ? ranked[0].index : -1;
+}
 // pad：往后多带一点（两栏页上一部分的尾巴常排在下一部分标题后面），模型按题号只取本部分。
 export function splitParts(text, {pad = 0} = {}) {
   const t = String(text || '');
-  const at = PART_HEAD.map(re => { const m = re.exec(t); return m ? m.index : -1; });
+  const at = SECTION_IDS.map(id => sectionIndex(t, id));
   const out = {};
   SECTION_IDS.forEach((id, i) => {
     if (at[i] < 0) { out[id] = null; return; }
@@ -369,9 +395,16 @@ export class RealPapers {
     const [paper, answer] = await Promise.all([this.pdfText(base, set.paper, {vision, signal}), this.pdfText(base, set.answer, {vision, signal, columns: true})]);
     const ptext = paper.pages.join('\n\n'), atext = answer.pages.join('\n\n');
     const P = splitParts(ptext, {pad: 600}), A = splitParts(atext, {pad: 1800});
+    // 标题没切开时：写作 / 翻译在文末，不能拿全文的开头代替（16k 截断会把它们切掉）。
+    const windowOf = (parts, id, full, limit) => {
+      if (parts[id]) return clean(parts[id], limit);
+      if (id === 'writing') return clean(full.slice(-8000), limit);
+      if (id === 'translation') return clean(full.slice(-14000), limit);
+      return clean(full, limit);
+    };
     // 五个部分同时拆（互不依赖）；哪一部分拆不出来整套就不上架，下一轮再试
     const done = await Promise.all(SECTION_IDS.map(async id => {
-      const payload = {section: id, kinds: KINDS[id], paper: clean(P[id] || ptext, 16000), answers: clean(A[id] || atext, 22000)};
+      const payload = {section: id, kinds: KINDS[id], paper: windowOf(P, id, ptext, 16000), answers: windowOf(A, id, atext, 24000)};
       const r = await modelJson(this.model(), SPLIT_RULES, payload, {validate: v => validRealSection(id, v), timeoutMs: 300000, maxTokens: 16000, retries: 2});
       return r ? {id, ...REAL_SECTIONS[id], instructions: r.value.parts.map(p => p.note).filter(Boolean).join('；'), parts: r.value.parts, flags: r.value.flags} : {id, failed: true};
     }));
