@@ -14,6 +14,9 @@ function binary() {
   return bin;
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
+const KEYS = {Tab: [48, '\t'], 'Shift+Tab': [48, '\x19', true], Enter: [36, '\r'], Space: [49, ' '], Escape: [53, '\x1b'], ArrowLeft: [123, '\uF702'], ArrowRight: [124, '\uF703'], ArrowDown: [125, '\uF701'], ArrowUp: [126, '\uF700'],
+  1: [18, '1'], 2: [19, '2'], 3: [20, '3'], 4: [21, '4'], a: [0, 'a'], b: [11, 'b'], c: [8, 'c'], d: [2, 'd']};
+const keySpec = name => { const k = KEYS[name]; if (!k) throw Error('unknown key ' + name); return k; };
 export async function wkPage({width = 1280, height = 800, dark = false} = {}) {
   const proc = spawn(binary(), [], {env: {...process.env, WK_W: String(width), WK_H: String(height), WK_DARK: dark ? '1' : '0'}, stdio: ['pipe', 'pipe', 'inherit']});
   const pending = new Map(); let seq = 0, ready, loaded = [];
@@ -34,6 +37,8 @@ export async function wkPage({width = 1280, height = 800, dark = false} = {}) {
     async waitForFunction(fn, arg, {timeout = 15000} = {}) { const t = Date.now(); for (;;) { try { if (await page.evaluate(fn, arg)) return true; } catch {} if (Date.now() - t > timeout) throw Error('waitForFunction timeout'); await wait(150); } },
     async screenshot({path: file}) { await send({op: 'shot', path: file}); return file; },
     async windowId() { return (await send({op: 'winid'})).winid; },
+    // 真键盘：page.keys('Tab', 'Tab', 'Enter', '1', 'a')
+    async keys(...names) { await send({op: 'key', keys: names.map(keySpec)}); await wait(60); },
     async setDark(on) { await send({op: 'dark', on}); },
     // Playwright locator 子集：waitFor / click / count / first()。点击用 DOM click()（足够驱动界面，不是可信事件）。
     locator(sel, nth = 0) {
