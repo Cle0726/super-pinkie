@@ -151,6 +151,16 @@ add(3, 'exam/hall', 'scene', 'A quiet calm exam hall in muted papercraft: neat r
 // ④ 其余 ★ 形态立绘
 for (const id of ['pirate', 'astronaut', 'dragon-rider', 'knight', 'chef', 'magical-girl', 'astrologer', 'zhuangyuan', 'idol', 'cyber', 'ninja', 'xiaoxue', 'daxue', 'graduate', 'gold-master']) add(4, `form/${id}/portrait`, 'portrait', P[id]);
 
+// ④b 模式系列 5 个形态的全身立绘（11-09 验收 R3：原来退回贴边裁切的模式头像，营地舞台上是白底方块）。网页版 GPT 出图。
+const MODE_PORTRAIT = {
+  daily: 'her classic everyday look, no costume. Bouncing happily mid-step with one front hoof raised in a cheerful wave, huge open-mouthed delighted smile, mane extra bouncy.',
+  learning: 'study look: a yellow pencil tucked behind her ear, hugging a purple notebook with a yellow star on its cover against her chest with one front hoof, bright eager smile, the other front hoof raised.',
+  project: 'project-manager look: a pencil tucked behind her ear, holding up a long unrolled cream checklist scroll with neat tick marks in one front hoof, a small teal file folder tucked under the other leg, confident can-do grin.',
+  thinking: 'thinker look, no costume: standing calmly, chin resting on one raised front hoof, eyes looking up thoughtfully, a gentle knowing half-smile, relaxed and focused.',
+  unrestricted: 'free-spirit look: her mane and tail streaked with pink, yellow and sky-blue stripes, a big sky-blue bow with a yellow star in her mane, playful wink and grin, bold energetic pose with one front hoof pointing forward.',
+};
+for (const [id, desc] of Object.entries(MODE_PORTRAIT)) add(5, `form/${id}/portrait`, 'portrait', desc);
+
 // ⑤ 24 张大招立绘（11-08 v2：大厂电影感、克制配色、脸在水平中间距顶约 40%——前端斜切条带按这个取景，见 VFX.md §4）
 // 网页版 ChatGPT 不带参考图，所以 web 提示词里用文字把碧琪写清楚；costume 是网页版用的简写。
 const ULT_COSTUME = {

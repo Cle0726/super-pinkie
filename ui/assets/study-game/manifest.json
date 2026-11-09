@@ -172,6 +172,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794153817710
   },
+  "form/daily/icon": {
+   "file": "form/daily/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 17150,
+   "source": "derived",
+   "from": "form/daily/portrait",
+   "date": "2026-11-09"
+  },
+  "form/daily/portrait": {
+   "file": "form/daily/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 128550,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "rawMtime": 1794220403328
+  },
   "form/daily/ult": {
    "file": "form/daily/ult.webp",
    "w": 1536,
@@ -370,6 +388,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794154173463
   },
+  "form/learning/icon": {
+   "file": "form/learning/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 19186,
+   "source": "derived",
+   "from": "form/learning/portrait",
+   "date": "2026-11-09"
+  },
+  "form/learning/portrait": {
+   "file": "form/learning/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 125390,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "rawMtime": 1794220403460
+  },
   "form/learning/ult": {
    "file": "form/learning/ult.webp",
    "w": 1536,
@@ -514,6 +550,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794153817768
   },
+  "form/project/icon": {
+   "file": "form/project/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 13078,
+   "source": "derived",
+   "from": "form/project/portrait",
+   "date": "2026-11-09"
+  },
+  "form/project/portrait": {
+   "file": "form/project/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 81910,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "rawMtime": 1794220411279
+  },
   "form/project/ult": {
    "file": "form/project/ult.webp",
    "w": 1536,
@@ -550,6 +604,24 @@
    "date": "2026-11-08",
    "rawMtime": 1794153228771
   },
+  "form/thinking/icon": {
+   "file": "form/thinking/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 9854,
+   "source": "derived",
+   "from": "form/thinking/portrait",
+   "date": "2026-11-09"
+  },
+  "form/thinking/portrait": {
+   "file": "form/thinking/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 62132,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "rawMtime": 1794220412109
+  },
   "form/thinking/ult": {
    "file": "form/thinking/ult.webp",
    "w": 1536,
@@ -558,6 +630,24 @@
    "source": "chatgpt-web",
    "date": "2026-11-08",
    "rawMtime": 1794153817784
+  },
+  "form/unrestricted/icon": {
+   "file": "form/unrestricted/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 17108,
+   "source": "derived",
+   "from": "form/unrestricted/portrait",
+   "date": "2026-11-09"
+  },
+  "form/unrestricted/portrait": {
+   "file": "form/unrestricted/portrait.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 118862,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "rawMtime": 1794220560779
   },
   "form/unrestricted/ult": {
    "file": "form/unrestricted/ult.webp",
@@ -1064,5 +1154,5 @@
    "rawMtime": 1794152656773
   }
  },
- "updatedAt": "2026-11-08T21:48:55.733Z"
+ "updatedAt": "2026-11-09T10:36:01.781Z"
 }
