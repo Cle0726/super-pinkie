@@ -139,3 +139,10 @@
 #pinkie-study-desk .pk-drill-col .pk-sheet-answer{font-size:17px}
 /* 程序把焦点给到「继续」时只留一圈细的焦点环，不要两层粉圈。 */
 #pinkie-study-desk .pk-drill-col .pk-sheet .pk-btn:focus-visible{outline:1.5px solid color-mix(in srgb,var(--pink) 55%,transparent);outline-offset:3px}
+/* 很宽的页（2K / 4K 屏铺满）：栏放到 880、字大一号，不在一大片纸中间缩成一小条。 */
+@container drill (min-width:1700px){
+  #pinkie-study-desk .pk-drill-col{width:min(880px,100%)}
+  #pinkie-study-desk .pk-drill-stem,#pinkie-study-desk .pk-drill-cloze{font-size:34px}
+  #pinkie-study-desk .pk-drill-q > .pk-drill-stem.is-long{font-size:23px}
+  #pinkie-study-desk .pk-choice{min-height:60px;font-size:19px}
+}
