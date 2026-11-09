@@ -125,6 +125,14 @@ html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award__why,html:has(#pin
 html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards,html:has(#pinkie-study-desk .pkb-guard) .pk-awards{right:18px;gap:6px}
 html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards > :nth-last-child(n+3),html:has(#pinkie-study-desk .pkb-guard) .pk-awards > :nth-last-child(n+3){display:none}
 
+/* 作答页：大奖标题卡（升级 / 觉醒 / 大奖）不放在屏幕 31%（那里是题干），改成一行贴在状态条上：小字 + 标题，垫一块纸面 / 深色玻璃，两侧细线收短。 */
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title,html:has(#pinkie-study-desk .pkb-guard) .pk-award-title{left:var(--pkb-arena-cx,50%);top:calc(var(--pkb-arena-bottom,88px) - 38px);gap:14px;padding:9px 22px;border-radius:14px;background:rgba(251,247,241,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 0 0 1px rgba(43,29,39,.06),0 14px 34px -20px rgba(43,29,39,.5)}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title__body,html:has(#pinkie-study-desk .pkb-guard) .pk-award-title__body{grid-auto-flow:column;align-items:baseline;gap:12px}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title__body strong,html:has(#pinkie-study-desk .pkb-guard) .pk-award-title__body strong{font-size:26px}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title__body span,html:has(#pinkie-study-desk .pkb-guard) .pk-award-title__body span{display:none}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title__rule,html:has(#pinkie-study-desk .pkb-guard) .pk-award-title__rule{width:48px}
+html[data-pinkie-night]:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title,html[data-theme-mode="dark"]:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award-title,html[data-pinkie-night]:has(#pinkie-study-desk .pkb-guard) .pk-award-title,html[data-theme-mode="dark"]:has(#pinkie-study-desk .pkb-guard) .pk-award-title{background:rgba(30,23,33,.9);box-shadow:0 0 0 1px rgba(255,243,223,.08),0 14px 34px -18px rgba(0,0,0,.7)}
+
 /* ── 守关战 / 讨伐页 ── */
 #pinkie-study-desk .view.pkb-hunt{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
 /* 守关战跟背一背同一套作答页（状态条 + 760 栏）。 */

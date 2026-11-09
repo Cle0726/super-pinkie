@@ -94,7 +94,7 @@
             const r = await g.call('shop.buy', {sku: it.sku});
             await g.play(r.awards || [], {from: c});
             [cat, s] = await Promise.all([g.call('shop.catalog'), g.refresh()]); paint();
-          } catch (e) { buy.disabled = false; armed = false; buy.textContent = '购买'; buy.classList.remove('is-armed'); g.toast(e.message || '没买成'); const why = c.querySelector('.pks-why') || el('p', 'pks-why'); why.textContent = e.message || ''; c.append(why); }
+          } catch (e) { buy.disabled = false; armed = false; buy.textContent = '购买'; buy.classList.remove('is-armed'); g.toast(e.message || '没买成'); const why = c.querySelector('.pks-why') || el('p', 'pks-why'); why.textContent = g.plain?.(e.message) ?? (e.message || ''); c.append(why); }
         });
         foot.append(wish, buy);
       }
@@ -454,7 +454,7 @@
       const b = banners.find(x => x.id === bannerId);
       let r;
       try { r = await g.call('gacha.pull', {banner: bannerId, count: n}); }
-      catch (e) { busy = false; panel.classList.remove('is-busy'); g.toast(e.message || '没扭成'); const why = panel.querySelector('.pks-why') || el('p', 'pks-why'); why.textContent = e.message || ''; panel.append(why); return; }
+      catch (e) { busy = false; panel.classList.remove('is-busy'); g.toast(e.message || '没扭成'); const why = panel.querySelector('.pks-why') || el('p', 'pks-why'); why.textContent = g.plain?.(e.message) ?? (e.message || ''); panel.append(why); return; }
       learnNames(r.results);
       // 后端的 awards 里有同一批结果（source.type==='gacha'），开蛋动画已经播了：只 ack，不再播一遍。
       const shown = (r.awards || []).filter(a => a.source?.type === 'gacha'), other = (r.awards || []).filter(a => a.source?.type !== 'gacha');

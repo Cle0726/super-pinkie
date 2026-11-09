@@ -25,7 +25,7 @@
 #pinkie-study-desk .pk-sheet-mark .pk-eraser-sleeve{fill:var(--card);stroke:currentColor;stroke-width:2.2;stroke-linejoin:round}
 #pinkie-study-desk .pk-sheet-mark .pk-eraser-band{stroke:currentColor;stroke-width:2.2}
 #pinkie-study-desk .pk-sheet-mark .pk-eraser-crumb{fill:var(--ink-3)}
-#pinkie-study-desk .pk-sheet-title{display:block;margin:0;font:40px/1 "HanziPen SC","LXGW WenKai","Kaiti SC",cursive;color:var(--pink-ink)}
+#pinkie-study-desk .pk-sheet-title{display:block;margin:0;font:600 30px/1.1 var(--serif);letter-spacing:.02em;color:var(--pink-ink)}
 #pinkie-study-desk .pk-sheet[data-kind="wrong"] .pk-sheet-title{color:var(--ink-2)}
 #pinkie-study-desk .pk-sheet-line,#pinkie-study-desk .pk-sheet-again,#pinkie-study-desk .pk-sheet-missing{margin:4px 0 0;font-size:14px;line-height:1.45;color:var(--ink-2)}
 #pinkie-study-desk .pk-sheet-again{font-size:12px}
@@ -40,7 +40,7 @@
 #pinkie-study-desk .pk-combo[data-on="0"] b{color:var(--ink-3)}
 #pinkie-study-desk .pk-margin-line{
   position:absolute;z-index:3;right:148px;top:62px;max-width:9em;margin:0;text-align:right;
-  font:22px/1.35 "HanziPen SC","LXGW WenKai","Kaiti SC",cursive;color:var(--pink-ink);
+  font:500 16px/1.45 var(--serif);color:var(--pink-ink);
   pointer-events:none;
 }
 
@@ -62,7 +62,7 @@
 #pinkie-study-desk .pk-seal small{font:600 13px/1 var(--serif);letter-spacing:.2em;margin-top:2px}
 /* 盖下去时纸上被压出的一圈印子，只在 stamp() 时闪一下。 */
 #pinkie-study-desk .pk-seal-press{position:absolute;inset:-6px;border-radius:50%;border:3px solid var(--pink-solid);opacity:0;pointer-events:none}
-#pinkie-study-desk .pk-seal-cap{margin:0;max-width:14em;font:18px/1.4 "HanziPen SC","LXGW WenKai","Kaiti SC",cursive;color:var(--pink-ink)}
+#pinkie-study-desk .pk-seal-cap{margin:0;max-width:14em;font:500 15px/1.45 var(--serif);color:var(--pink-ink)}
 #pinkie-study-desk .pk-week{display:grid;grid-template-columns:repeat(7,32px);gap:4px}
 #pinkie-study-desk .pk-week-cell{
   height:32px;border-radius:6px;display:grid;place-items:center;
@@ -72,7 +72,7 @@
 #pinkie-study-desk .pk-week-cell[data-state="stamped"]{border-style:solid;border-color:var(--pink-solid);background:var(--pink-solid);color:#fff}
 #pinkie-study-desk .pk-week-cell[data-state="leave"]{
   border:none;background:var(--pink-tint);color:var(--pink-ink);transform:rotate(-8deg);
-  font-family:"HanziPen SC","Kaiti SC",cursive;
+  font-family:var(--serif);
 }
 #pinkie-study-desk .pk-week-cell[data-state="future"]{opacity:.4}
 
@@ -94,32 +94,28 @@
 #pinkie-study-desk .pk-done-sticker img{width:120px;height:120px;object-fit:contain}
 #pinkie-study-desk .pk-done-title{margin:0;font:600 40px/1.15 var(--serif);color:var(--ink)}
 #pinkie-study-desk .pk-done-event{margin:-6px 0 0;font:15px/1.4 var(--sans);color:var(--pink-ink);letter-spacing:.02em}
-/* 便签和星星罐摆在同一排，星星从「星星」那张飞进右边的罐子。 */
+/* 结算数据卡（VFX.md：不用手写体 / 便利贴）：纸面卡片 + 左侧 2 px 类型色条，等宽数字滚动，标签小字加字距。星星从「星星」那张飞进右边的罐子。 */
 #pinkie-study-desk .pk-done-board{display:flex;align-items:center;justify-content:center;gap:28px;margin:6px 0 2px;flex-wrap:wrap}
-#pinkie-study-desk .pk-done-stats{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
+#pinkie-study-desk .pk-done-stats{display:flex;flex-wrap:wrap;gap:14px;justify-content:center}
 #pinkie-study-desk .pk-stick{
-  position:relative;min-width:132px;padding:18px 18px 14px;background:var(--card);border-radius:2px 3px 2px 3px;
-  box-shadow:0 1px 0 rgba(46,34,54,.06),0 14px 22px -14px rgba(90,40,70,.5);color:var(--ink);
+  --k:var(--pink-solid);position:relative;min-width:132px;padding:14px 20px 13px 22px;background:var(--card);border:1px solid var(--hair);border-radius:12px;
+  box-shadow:0 1px 0 rgba(46,34,54,.04),0 16px 28px -22px rgba(60,30,50,.55);color:var(--ink);text-align:left;
 }
-#pinkie-study-desk .pk-stick[data-tone="star"]{background:var(--pink-tint)}
-#pinkie-study-desk .pk-stick[data-tone="right"]{background:#FFF3C4}
-#pinkie-study-desk[data-theme="night"] .pk-stick[data-tone="right"]{background:#3A3322}
-/* 一截半透明胶带把便签贴在纸上。 */
-#pinkie-study-desk .pk-stick::before{
-  content:"";position:absolute;left:50%;top:-9px;width:56px;height:18px;margin-left:-28px;transform:rotate(-4deg);
-  background:var(--pk-tape,rgba(241,213,138,.55));opacity:.85;pointer-events:none;
-}
-#pinkie-study-desk .pk-stick small{display:block;font-size:13px;color:var(--ink-3);letter-spacing:.08em}
-#pinkie-study-desk .pk-stick b{display:block;margin-top:4px;font:700 44px/1.05 "HanziPen SC","LXGW WenKai","Kaiti SC",cursive;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+#pinkie-study-desk .pk-stick[data-tone="right"]{--k:#C99232}
+#pinkie-study-desk .pk-stick[data-tone="time"]{--k:var(--ink-3)}
+#pinkie-study-desk .pk-stick::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:2px;border-radius:2px;background:var(--k);pointer-events:none}
+#pinkie-study-desk .pk-stick small{display:block;font:600 12px/1 var(--sans);color:var(--ink-3);letter-spacing:.18em}
+#pinkie-study-desk .pk-stick b{display:block;margin-top:8px;font:700 40px/1 "DIN Alternate","Avenir Next Condensed","Bahnschrift",ui-monospace,sans-serif;letter-spacing:.01em;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 #pinkie-study-desk .pk-stick[data-tone="star"] b{color:var(--pink-ink)}
 #pinkie-study-desk .pk-done-jar .pk-jar-svg{width:96px;height:125px}
 #pinkie-study-desk .pk-done-jar figcaption{font-size:14px}
 #pinkie-study-desk .pk-done-streak{justify-content:center;margin-top:2px}
-#pinkie-study-desk .pk-done-line{margin:0;max-width:28em;min-height:1.5em;font:22px/1.5 "HanziPen SC","LXGW WenKai","Kaiti SC",cursive;color:var(--pink-ink)}
+#pinkie-study-desk .pk-done-line{margin:0;max-width:30em;min-height:1.6em;font:500 17px/1.6 var(--serif);letter-spacing:.01em;color:var(--ink-2);text-wrap:balance}
 #pinkie-study-desk .pk-done-failed p{margin:0;font:16px/1.5 var(--sans);color:var(--ink-2)}
 #pinkie-study-desk .pk-done-actions{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:center}
 #pinkie-study-desk .pk-done .pk-btn[data-kind="go"]{background:var(--pink-solid);color:#fff}
 #pinkie-study-desk .pk-done [hidden]{display:none!important}
+#pinkie-study-desk .pk-done:focus{outline:none}
 
 #pinkie-study-desk .pk-react-host{display:grid;place-items:end center}
 #pinkie-study-desk .pk-react-host .pk-react{width:112px;height:112px;object-fit:contain}
@@ -133,8 +129,8 @@
 @container drill (max-width:640px){
   #pinkie-study-desk .pk-done-board{gap:16px}
   #pinkie-study-desk .pk-done-stats{gap:12px}
-  #pinkie-study-desk .pk-stick{min-width:96px;padding:14px 12px 10px}
-  #pinkie-study-desk .pk-stick b{font-size:34px}
+  #pinkie-study-desk .pk-stick{min-width:96px;padding:12px 14px 11px 16px}
+  #pinkie-study-desk .pk-stick b{font-size:32px}
 }
 @container drill (max-width:420px){
   #pinkie-study-desk .pk-sheet{grid-template-columns:auto minmax(0,1fr);padding:12px}
@@ -144,9 +140,9 @@
   #pinkie-study-desk .pk-done-sticker,#pinkie-study-desk .pk-done-sticker img{width:84px;height:84px}
   #pinkie-study-desk .pk-done-board{gap:10px;width:100%}
   #pinkie-study-desk .pk-done-stats{gap:8px;flex-wrap:nowrap;width:100%}
-  #pinkie-study-desk .pk-stick{min-width:0;flex:1 1 0;padding:14px 4px 8px}
-  #pinkie-study-desk .pk-stick::before{width:40px;margin-left:-20px}
-  #pinkie-study-desk .pk-stick b{font-size:32px}
+  #pinkie-study-desk .pk-stick{min-width:0;flex:1 1 0;padding:11px 8px 10px 12px}
+  #pinkie-study-desk .pk-stick small{letter-spacing:.1em}
+  #pinkie-study-desk .pk-stick b{font-size:26px}
   #pinkie-study-desk .pk-done-jar .pk-jar-svg{width:60px;height:78px}
   #pinkie-study-desk .pk-seal-wrap{width:76px;height:76px}
   #pinkie-study-desk .pk-seal b{font-size:30px}

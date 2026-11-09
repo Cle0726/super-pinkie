@@ -133,7 +133,7 @@
     root.dataset.battle = '1';
     // 状态条：× · 碧琪 · 连击 · 本组进度 · 怪的名牌和血条 · 怪 · 星星，一行。
     top.classList.add('pkb-top'); top.append(a.root);
-    const mark = () => { const r = top.getBoundingClientRect(); if (r.height) document.documentElement.style.setProperty('--pkb-arena-bottom', Math.round(r.bottom) + 'px'); };
+    const mark = () => { const r = top.getBoundingClientRect(); if (!r.height) return; const s = document.documentElement.style; s.setProperty('--pkb-arena-bottom', Math.round(r.bottom) + 'px'); s.setProperty('--pkb-arena-cx', Math.round(r.left + r.width / 2) + 'px'); };
     requestAnimationFrame(mark);
     let alive = true, original = 0, correct = 0, combo = 0, shown = 0;
     a.setHp(1, {instant: true}); a.setCombo(0);

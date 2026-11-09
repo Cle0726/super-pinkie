@@ -586,12 +586,10 @@
     return tween(gsap, value, {n: to, duration: .9, ease: 'power3.out', onUpdate() { if (node.isConnected) node.textContent = format(value.n); }})
       .then(() => { if (node.isConnected) node.textContent = format(to); });
   }
-  const STICK_TILT = [-3.2, 2.4, -1.4];
+  // 数据卡依次上浮落位（不歪、不回弹）。
   function stickNote(note, i, motion) {
-    const rest = STICK_TILT[i] || 0;
-    note.style.transform = `rotate(${rest}deg)`;
     if (motion.reduced || !gsapOf(motion)) return fade(note, 0, 1, 120);
-    return tweenFrom(gsapOf(motion), note, {y: -18, rotate: rest - 8, scale: 1.06, opacity: 0}, {y: 0, rotate: rest, scale: 1, opacity: 1, duration: .34, delay: .1 + i * .14, ease: 'back.out(1.6)'});
+    return tweenFrom(gsapOf(motion), note, {y: 14, opacity: 0}, {y: 0, opacity: 1, duration: .42, delay: .08 + i * .09, ease: 'power3.out'});
   }
   function beijingIndex() {
     const name = new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Shanghai', weekday: 'short'}).format(new Date());
@@ -665,6 +663,9 @@
     actions.append(again, back);
     screen.append(stickerHost, heading, event, board, streakHost, line, failNote, actions);
     host.append(screen);
+    // 键盘：焦点落在结算页本身（不落在按钮上，免得连按 Enter 又开一组），下一次 Tab 就是「再背一组」。
+    const active = document.activeElement;
+    if (!active || active === document.body || host.contains(active) || !active.isConnected) { screen.tabIndex = -1; screen.focus({preventScroll: true}); }
     sticker(stickerHost, failed ? 'focus' : summary.quiet ? 'quiet' : summary.jar?.filledNow ? 'jar' : 'finish');
     if (!motion.reduced) motion.splitIn?.(heading, {duration: .35, stagger: .02});
     else fade(heading, 0, 1, 120);
