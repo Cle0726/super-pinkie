@@ -1,4 +1,4 @@
-# 确保豆包桌面版在跑，并且带调试端口 9225
+﻿# 确保豆包桌面版在跑，并且带调试端口 9225
 # 豆包没带端口就没法被脚本操作；它已经开着但没端口时，只能先退出再重开（托盘也要退）。
 # 用法: powershell -ExecutionPolicy Bypass -File ensure-doubao.ps1
 $ErrorActionPreference = 'Stop'
