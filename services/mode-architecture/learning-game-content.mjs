@@ -114,6 +114,8 @@ export const QUEST_MEANING = {
   sets: n => `背一背做完 ${n} 组（一组约 10 张卡，不是卷子）`,
   learn: n => `上 ${n} 节课，或者在背一背里学 5 张新卡`,
   huntWins: n => `讨伐打赢 ${n} 只到期的错题怪`,
+  ults: n => `背一背的一组里连续答对 10 题、打出 ${n} 次碧琪大招`,
+  perfectSets: n => `背一背做完 ${n} 组，而且这一组一题都没错`,
   weekSets: n => `这一周背一背做完 ${n} 组`,
 };
 export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}],"recent":[前几天已经用过的文案]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。

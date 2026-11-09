@@ -194,7 +194,7 @@ test('委托：目标从真实数据算、领取幂等、三个领完才能开�
   const q = game.questsToday();
   assert.equal(q.quests.length, 3);
   assert.throws(() => game.claim({questId: q.quests[0].id, requestId: 'c0'}), /还没完成/);
-  game.mutate(s => { const d = game.day(s); d.correct = 50; d.sets = 3; d.lessons = 1; });
+  game.mutate(s => { const d = game.day(s); d.correct = 50; d.sets = 3; d.lessons = 1; d.ults = 1; d.perfectSets = 1; });
   const ids = game.questsToday().quests.map(x => x.id);
   const first = game.claim({questId: ids[0], requestId: 'c1'});
   assert.deepEqual(game.claim({questId: ids[0], requestId: 'c1'}), first);

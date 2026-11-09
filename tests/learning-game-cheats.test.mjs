@@ -105,3 +105,13 @@ test('扭蛋公示和代码一致：公示概率 > 0 的档位池子里都有东
     assert.ok(Math.abs(ssr / N - b.effectiveSSR) < 0.006, `${b.id} 实抽 ${ssr / N} vs 公示 ${b.effectiveSSR}`);
   }
 });
+
+test('每日委托第二项按日子轮换（两组 / 大招 / 全对），进度从当天真实计数算', t => {
+  const {game, setClock} = gameFixture(t);
+  const kinds = new Set();
+  for (let i = 0; i < 3; i++) { setClock(Date.parse('2026-11-08T04:00:00Z') + i * 86400000); const q = game.questsToday(); kinds.add(q.quests[1].target?.kind || q.quests[1].kind); }
+  assert.equal(kinds.size, 3, [...kinds].join(','));
+  const id = game.questsToday().quests[1].id;
+  game.mutate(s => { const d = game.day(s); d.ults = 1; d.perfectSets = 1; d.sets = 2; });
+  assert.ok(game.questsToday().quests.find(x => x.id === id).done);
+});
