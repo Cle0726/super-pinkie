@@ -120,7 +120,7 @@
   function monsterEnemy(m, variant) {
     if (!m) return null;
     return {kind: 'monster', id: m.id, species: m.species, name: m.name, level: m.level, evolved: m.evolved,
-      note: variant?.source === 'local' ? '碧琪离线 · 用原题换了选项顺序' : (m.wins ? `已打赢 ${m.wins} 次 · 再赢 ${Math.max(0, 2 - m.wins)} 次收服` : '第一次讨伐')};
+      note: variant?.source === 'local' ? '碧琪离线 · 原题换了顺序，这次不算收服' : (m.wins ? `已打赢 ${m.wins} 次 · 再赢 ${Math.max(0, 2 - m.wins)} 次收服` : '第一次讨伐')};
   }
 
   // ───────────── 背一背挂点 ─────────────

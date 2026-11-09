@@ -256,7 +256,12 @@ export class GameMonsters {
       awards.push({kind: 'stars', amount: E.boosted(this.economy.earn.huntWin, {event: 'huntWin', form, economy: this.economy}).value, reason: `讨伐 ${m.name}`, fx: 'medium'});
       const gap = this.economy.monsters.captureGapDays * DAY;
       const prev = m.wins[m.wins.length - 1];
-      if (prev && now - prev >= gap) {
+      // 离线兜底用的是原题（只换了选项顺序，source = local）：背原题答案就能赢。给讨伐星、照常冷却，但不算收服进度。
+      if (item.variant?.source === 'local') {
+        awards[0].reason = `讨伐 ${m.name}（原题，不算收服进度）`;
+        m.state = 'lurking';
+        m.dueAt = now + gap;
+      } else if (prev && now - prev >= gap) {
         m.state = 'captured';
         m.capturedAt = now;
         state.stats.captures += 1;
