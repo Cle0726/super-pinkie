@@ -119,6 +119,11 @@
 @container drill (max-width:560px){ #pinkie-study-desk .pkb-arena:not(.is-strip){height:108px;--foe-w:80px} #pinkie-study-desk .pkb-arena:not(.is-strip) .pkb-plate{width:42%} #pinkie-study-desk .pkb-arena:not(.is-strip) .pkb-combo{display:none} }
 /* 战斗中奖励卡片让到竞技场下面，不压敌人名牌。 */
 html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards,html:has(#pinkie-study-desk .pkb-guard) .pk-awards{top:max(64px,calc(var(--pkb-arena-bottom,260px) + 12px))}
+/* 作答页：题目栏最宽 760 居中，右边只剩一条窄边。奖励卡收成只有数额的小卡（原因进不了这么窄的边，战斗条和反馈卡里已经有），贴在状态条下面的右边，不压选项和反馈卡。 */
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award,html:has(#pinkie-study-desk .pkb-guard) .pk-award{min-width:0;max-width:176px;padding:7px 12px 7px 10px;column-gap:8px;white-space:nowrap}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award__why,html:has(#pinkie-study-desk .pkb-guard) .pk-award__why{display:none}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards,html:has(#pinkie-study-desk .pkb-guard) .pk-awards{right:18px;gap:6px}
+html:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-awards > :nth-last-child(n+3),html:has(#pinkie-study-desk .pkb-guard) .pk-awards > :nth-last-child(n+3){display:none}
 
 /* ── 守关战 / 讨伐页 ── */
 #pinkie-study-desk .view.pkb-hunt{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
