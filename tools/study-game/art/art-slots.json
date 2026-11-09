@@ -522,6 +522,41 @@
   },
   {
    "prio": 5,
+   "slot": "form/daily/portrait",
+   "template": "portrait",
+   "desc": "her classic everyday look, no costume. Bouncing happily mid-step with one front hoof raised in a cheerful wave, huge open-mouthed delighted smile, mane extra bouncy.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
+   "slot": "form/learning/portrait",
+   "template": "portrait",
+   "desc": "study look: a yellow pencil tucked behind her ear, hugging a purple notebook with a yellow star on its cover against her chest with one front hoof, bright eager smile, the other front hoof raised.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
+   "slot": "form/project/portrait",
+   "template": "portrait",
+   "desc": "project-manager look: a pencil tucked behind her ear, holding up a long unrolled cream checklist scroll with neat tick marks in one front hoof, a small teal file folder tucked under the other leg, confident can-do grin.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
+   "slot": "form/thinking/portrait",
+   "template": "portrait",
+   "desc": "thinker look, no costume: standing calmly, chin resting on one raised front hoof, eyes looking up thoughtfully, a gentle knowing half-smile, relaxed and focused.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
+   "slot": "form/unrestricted/portrait",
+   "template": "portrait",
+   "desc": "free-spirit look: her mane and tail streaked with pink, yellow and sky-blue stripes, a big sky-blue bow with a yellow star in her mane, playful wink and grin, bold energetic pose with one front hoof pointing forward.",
+   "extra": ""
+  },
+  {
+   "prio": 5,
    "slot": "form/daily/ult",
    "template": "ult",
    "desc": "Party-cannon release: she bursts toward the viewer out of a dark warm room as a single golden party-cannon blast flares behind her; a few soft out-of-focus balloon bokeh shapes far behind. Costume: her classic look (no costume). Palette: rose pink, deep magenta and warm gold.",

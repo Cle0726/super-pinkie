@@ -594,6 +594,36 @@
    "prompt": "art-slots.json · layer",
    "reviewed": "2026-11-08",
    "note": "第 3 次（专用描述，明确禁桥）：远山一条，左塔柳、右钟楼，云和鸟，透明、低对比；不和中景重复"
+  },
+  "form/daily/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: classic look waving, on-model, white die-cut; transparent from GPT"
+  },
+  "form/learning/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: pencil + star notebook (matches learning mode art); transparent from GPT"
+  },
+  "form/project/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: pencil + checklist scroll + teal folder; white bg cut by corner flood fill (5%), edges clean"
+  },
+  "form/thinking/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: chin on hoof, calm; white bg cut by corner flood fill (5%), edges clean"
+  },
+  "form/unrestricted/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: rainbow mane + star bow, wink; 1st try had grey shadow ring after cutout → asked GPT for transparent re-render (try 2), clean"
   }
  }
 }
