@@ -259,7 +259,10 @@ test('finishing pays the set bonus, a perfect bonus, and only the first set stam
   assert.equal(done.accuracy, 1);
   assert.equal(done.stars, opened.items.length + 10);
   assert.equal(done.firstFinishToday, true);
-  assert.equal(done.jar.filledNow, done.jar.today >= 15);
+  assert.equal(done.jar.unit, 'sets');
+  assert.equal(done.jar.today, 1);
+  assert.equal(done.jar.goal, 2);
+  assert.equal(done.jar.filledNow, false);
   assert.equal(done.streak.stampedToday, true);
   assert.equal(pact.streak().current >= 1, true);
   const repeat = drill.finish({sessionId: opened.sessionId});
@@ -269,6 +272,8 @@ test('finishing pays the set bonus, a perfect bonus, and only the first set stam
   if (second.items[0]) drill.answer({sessionId: second.sessionId, itemId: second.items[0].itemId, correct: true, firstTry: true, ms: 500});
   const again = drill.finish({sessionId: second.sessionId});
   assert.equal(again.firstFinishToday, false);
+  assert.equal(again.jar.today, 2);
+  assert.equal(again.jar.filledNow, true);
   assert.equal((await drill.cheer({sessionId: opened.sessionId})).line, '一道没错，记得很牢');
 });
 
@@ -311,7 +316,8 @@ test('today.drill has the jar, the week and the due counts', async t => {
   }]);
   const desk = new LearningDesk(store, {now: () => Date.parse('2026-11-04T02:00:00Z')});
   const today = desk.today({sessionKey: KEY});
-  assert.equal(today.drill.jar.goal, 30);
+  assert.equal(today.drill.jar.goal, 2);
+  assert.equal(today.drill.jar.unit, 'sets');
   assert.equal(today.drill.streak.week.length, 7);
   assert.equal(today.drill.streak.weekKind.length, 7);
   assert.equal(typeof today.drill.streak.stampedToday, 'boolean');
@@ -530,7 +536,7 @@ test('the closing line sees the finish result, not the bare summary', async t =>
   assert.equal(payload.stars, done.stars);
   assert.equal(payload.stars, opened.items.filter(item => item.mode !== 'look').length + 10);
   assert.equal(payload.jarFull, done.jar.filledNow);
-  assert.equal(payload.jarFull, true);
+  assert.equal(payload.jarFull, false);
 });
 
 test('pairs use keys[0] on the right, truncate with an ellipsis, and skip duplicate labels', () => {

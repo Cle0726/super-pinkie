@@ -256,7 +256,7 @@
     if (summary.failed) return '';
     const days = summary.streak?.current | 0;
     const out = [];
-    if (summary.jar?.filledNow) out.push('今天的星星罐装满了');
+    if (summary.jar?.filledNow) out.push(summary.jar?.unit === 'sets' ? '今天的两组背完了' : '今天的星星罐装满了');
     if (summary.streak?.leaveUsedYesterday) out.push('昨天用了一张请假条，连续还在');
     else if (summary.firstFinishToday && days === 1) out.push('今天从第 1 天盖起');
     return out.join(' · ');
@@ -508,14 +508,15 @@
 
   let jarSeq = 0;
   function starJar(host, spec = {}) {
-    const goal = Math.max(1, spec.goal | 0 || 30);
+    const unit = spec.unit || 'sets';
+    const goal = Math.max(1, spec.goal | 0 || (unit === 'sets' ? 2 : 30));
     let today = Math.max(0, spec.today | 0);
     const id = 'pk-jar-clip-' + (++jarSeq);
     host.classList.add('pk-jar');
     const fig = el('figure', 'pk-jar');
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('viewBox', '0 0 80 104'); svg.setAttribute('class', 'pk-jar-svg'); svg.setAttribute('role', 'img');
-    // 左边是今天真实得到的颗数，右边是每日目标。水位只表示离目标还有多远，满了就停在罐口，数字继续往上加。
+    // 罐子记今天背完几组。满 2 组就是今天完成；多出来的组数写在旁边，星星不进这个罐子。
     svg.innerHTML = `<path class="pk-jar-lid" d="M16 4h48a4 4 0 0 1 4 4v6H12V8a4 4 0 0 1 4-4z"/>
       <path class="pk-jar-glass" d="M26 14h28v8H26z"/>
       <path class="pk-jar-glass" d="M16 24h48v48a12 12 0 0 1-12 12H28a12 12 0 0 1-12-12V24z"/>
@@ -535,29 +536,42 @@
     level.style.transformOrigin = '50% 100%';
     const ratioOf = value => Math.max(0, Math.min(1, value / goal));
     const writeCap = n => {
-      capNow.textContent = String(Math.max(0, Math.round(n)));
-      capRest.textContent = n >= goal ? ` · 目标 ${goal}` : ` / ${goal}`;
-      fig.classList.toggle('is-full', n >= goal);
-      svg.setAttribute('aria-label', n >= goal ? `星星罐已满，今天 ${Math.round(n)} 颗，目标 ${goal}` : `星星罐 ${Math.round(n)} / ${goal}`);
+      const v = Math.max(0, Math.round(n));
+      fig.classList.toggle('is-full', v >= goal);
+      if (unit === 'sets' && v >= goal) {
+        capNow.textContent = '完成';
+        capRest.textContent = v > goal ? ` · 今天 ${v} 组` : '';
+        svg.setAttribute('aria-label', `今天的学习完成了，背了 ${v} 组`);
+      } else if (unit === 'sets') {
+        capNow.textContent = String(v);
+        capRest.textContent = ` / ${goal} 组`;
+        svg.setAttribute('aria-label', `今天 ${v} / ${goal} 组`);
+      } else {
+        capNow.textContent = String(v);
+        capRest.textContent = ` / ${goal}`;
+        svg.setAttribute('aria-label', `星星罐 ${v} / ${goal}`);
+      }
     };
     const setLevel = ratio => { level.style.transform = `scaleY(${Math.max(0.001, ratio)})`; };
     let shown = ratioOf(today);
+    let shownCount = today;
     setLevel(shown);
     writeCap(today);
     const paint = (animate) => {
       const target = ratioOf(today);
       const motion = motionOf(host);
       const gsap = gsapOf(motion);
-      if (!animate || motion.reduced || !gsap) { shown = target; setLevel(target); writeCap(today); return Promise.resolve(); }
+      if (!animate || motion.reduced || !gsap) { shown = target; shownCount = today; setLevel(target); writeCap(today); return Promise.resolve(); }
       const from = shown;
       const value = {t: 0};
-      const start = Number(capNow.textContent) || 0;
+      const start = shownCount;
       const end = today;
       return tween(gsap, value, {t: 1, duration: .55, ease: 'power2.out', onUpdate() {
         shown = from + (target - from) * value.t;
+        shownCount = start + (end - start) * value.t;
         setLevel(shown);
-        writeCap(start + (end - start) * value.t);
-      }}).then(() => { shown = target; setLevel(target); writeCap(end); });
+        writeCap(shownCount);
+      }}).then(() => { shown = target; shownCount = end; setLevel(target); writeCap(end); });
     };
     return {el: host, svg, get today() { return today; }, goal, paint,
       add(n = 1) { today = Math.max(0, today + Math.round(n) || 0); return paint(true); },
@@ -641,8 +655,10 @@
     if (!failed) {
       const jarHost = el('div', 'pk-done-jar');
       const after = Math.max(0, summary.jar?.today | 0);
-      const goal = summary.jar?.goal || 30;
-      jar = starJar(jarHost, {today: Math.max(0, after - earned), goal});
+      const sets = summary.jar?.unit === 'sets' || summary.jar?.unit == null;
+      const goal = summary.jar?.goal || (sets ? 2 : 30);
+      const gained = sets ? 1 : earned;
+      jar = starJar(jarHost, {today: Math.max(0, after - gained), goal, unit: sets ? 'sets' : 'stars'});
       board.append(jarHost);
       const days = summary.streak?.current | 0;
       const caption = summary.firstFinishToday ? `连续 ${days} 天` : summary.streak?.stampedToday ? '今天的章已经盖了' : '';
@@ -679,7 +695,7 @@
       const flying = earned > 0 ? starsFly(cards[0].note, jar.svg, Math.min(12, earned), {sound: true}) : Promise.resolve();
       flying.then(() => {
         if (!screen.isConnected) return;
-        return Promise.all([jar.add(earned), jar.bump()]);
+        return Promise.all([jar.add(summary.jar?.unit === 'stars' ? earned : 1), jar.bump()]);
       }).then(() => {
         if (!screen.isConnected) return;
         const jobs = [];

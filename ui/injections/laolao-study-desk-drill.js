@@ -186,7 +186,7 @@
       return {ok: true};
     }
     function demoSummary() {
-      return {stars: stars + 5, accuracy: original ? correctIds.size / original : 1, ms: 252000, maxCombo: Math.max(combo, 10), firstFinishToday: true, streak: {current: 4, best: 4, stampedToday: true, leaveUsedYesterday: false, week: [true, true, true, true, false, false, false]}, jar: {today: 30, goal: 30, filledNow: true}, leaveNotes: 1, quiet: Boolean(route.quiet), backLabel: backLabel(), nextSuggestion: {source: 'notes', scope: {kind: 'more'}, label: '再背一组'}};
+      return {stars: stars + 5, accuracy: original ? correctIds.size / original : 1, ms: 252000, maxCombo: Math.max(combo, 10), firstFinishToday: true, streak: {current: 4, best: 4, stampedToday: true, leaveUsedYesterday: false, week: [true, true, true, true, false, false, false]}, jar: {today: 2, goal: 2, unit: 'sets', filledNow: true}, leaveNotes: 1, quiet: Boolean(route.quiet), backLabel: backLabel(), nextSuggestion: {source: 'notes', scope: {kind: 'more'}, label: '再背一组'}};
     }
     // 结算接口失败时只用这一组在本地真实发生的数：首答答对的比例、实际用时、星星、最大连对。不盖章、不动罐子。
     function localSummary() {
