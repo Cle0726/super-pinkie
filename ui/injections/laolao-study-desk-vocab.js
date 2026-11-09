@@ -83,12 +83,9 @@
     const toastHost = el('div', 'v-toast'); toastHost.setAttribute('role', 'status'); toastHost.hidden = true;
     const compactTitle = el('h2', 'v-spread-title', '生词本'); heading.append(compactTitle);
     const compactList = el('div', 'v-spread-list'); compactList.setAttribute('aria-label', '手账词表');
-    const foot = el('footer', 'v-foot'), layouts = el('div', 'v-book-layouts'); layouts.setAttribute('aria-label', '摊开方式');
-    for (const [value, label, lines] of [['single', '单页', ''], ['spread', '对开', '<path d="M11 1v14"/>'], ['spread-chat', '对开加便签', '<path d="M8 1v14M15 1v14"/>']]) {
-      const b = el('button'); b.type = 'button'; b.setAttribute('aria-label', label); b.innerHTML = '<svg viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="20" height="14" rx="2"/>' + lines + '</svg>'; b.addEventListener('click', () => window.__pinkieStudyDesk.setLayout(value)); layouts.append(b);
-    }
+    const foot = el('footer', 'v-foot');
     const manage = el('button', 'v-text-button', '管理'); manage.type = 'button'; manage.addEventListener('click', manageDialog);
-    foot.append(layouts, manage, reviewButton);
+    foot.append(manage, reviewButton);
     root.append(shelfStamp, top, aside, examsRow, cover, add, tools, list, compactList, foot, toastHost);
 
     function toast(text, action) {
